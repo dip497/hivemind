@@ -41,8 +41,19 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
   // id guarded against dissolves here — detach is harmless and attach is
   // idempotent (the daemon replays the buffer). Non-persistent: keep the
   // per-mount unique id + kill-on-unmount (unchanged legacy behavior).
+  //
+  // ID is tileId-only, NOT keyed on cwd. tileIds are already unique
+  // (timestamp-derived). Earlier `hm:${cwd}:${tileId}` orphaned a session
+  // whenever the containing frame's workspacePath rebound, because mkTile
+  // re-threads the new zoneRepo into the cwd prop → ptyId mutates →
+  // daemon's stored session becomes unreachable → fresh spawn at new cwd
+  // (and the old session leaks until idle GC). Session identity should
+  // follow the TILE/FRAME, not the path. The original spawn cwd is still
+  // preserved inside the daemon's frozen spec, so claude resumes at the
+  // path where its history lives — which is the correct semantics for
+  // claude (its session JSONL is tied to that repo).
   const persistent = window.hive.persistentPty === true;
-  const ptyId = persistent ? `hm:${cwd}:${tileId}` : `${tileId}-${reactId}`;
+  const ptyId = persistent ? `hm:${tileId}` : `${tileId}-${reactId}`;
   // True only when the user clicks × (explicit close) — then we KILL even in
   // persistent mode. App-close / view-cull unmounts leave it false → detach.
   const killOnUnmountRef = useRef(false);
