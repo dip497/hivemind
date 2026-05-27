@@ -1,0 +1,44 @@
+name: ci
+
+# Lightweight CI on every push to main + PRs targeting main.
+# Heavier e2e (Playwright + xvfb) is intentionally NOT run here yet — the
+# release workflow validates the full build path. CI focuses on the fast
+# signals that catch most regressions in <2 minutes.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "10"
+          run_install: false
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.1"
+
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm --filter @hivemind/desktop run typecheck
+
+      - name: Build (renderer + main + CLI)
+        run: pnpm -r --parallel build
+
+      - name: Unit tests (desktop)
+        run: pnpm --filter @hivemind/desktop run test:unit

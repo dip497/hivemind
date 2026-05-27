@@ -28,7 +28,7 @@ The terminals survive everything:
 
 ## Install
 
-Linux only for now. The same script installs and upgrades.
+Linux x86_64 only for now. **No build toolchain needed** — the installer downloads prebuilt binaries from the latest [GitHub Release](https://github.com/dip497/hivemind/releases).
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/dip497/hivemind/main/install.sh)
@@ -36,20 +36,26 @@ bash <(curl -fsSL https://raw.githubusercontent.com/dip497/hivemind/main/install
 
 The script will:
 
-1. Verify deps — `git`, `node` ≥ 22, `pnpm` ≥ 10, `bun` ≥ 1.1, `claude` CLI.
-2. Clone or `git pull --ff-only` into `~/.hivemind-app`.
-3. `pnpm install` the workspace, build the `hive` CLI binary and the Electron AppImage.
-4. Symlink `hive` and `hivemind` into `~/.local/bin/`.
+1. Resolve the latest release tag from GitHub.
+2. Download the `hive` CLI single-binary and the Electron AppImage into `~/.hivemind-app/`.
+3. Symlink them into `~/.local/bin/` (`hive`, `hivemind`).
+4. Verify `claude` is on PATH (warning only — desktop app runs without it).
 
-Re-run anytime to upgrade in place. Set `HIVEMIND_SKIP_APPIMAGE=1` to skip the slow electron-builder step (the CLI still installs).
+Re-run anytime to upgrade — the installer is a no-op if you're already on the latest tag, otherwise downloads + relinks. Pin a specific version with `HIVEMIND_VERSION=v0.1.0 bash <(curl …)`.
 
-### Manual install
+### Build from source (hackers)
+
+If you want to hack on hivemind or run pre-release code:
 
 ```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/dip497/hivemind/main/install.sh) --dev
+# or:
 git clone https://github.com/dip497/hivemind.git
 cd hivemind
-./install.sh
+./install.sh --dev
 ```
+
+Requires `git`, `node` ≥ 22, `pnpm` ≥ 10, `bun` ≥ 1.1. Set `HIVEMIND_SKIP_APPIMAGE=1` to skip the slow electron-builder step (the CLI still installs).
 
 ---
 
