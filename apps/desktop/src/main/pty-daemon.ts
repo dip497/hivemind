@@ -138,17 +138,25 @@ const manager = new SessionManager(factory, {
     const cmd = (spec.cmd ?? "").split("/").pop();
     if (cmd !== "claude") return spec;
     const args = spec.args ?? [];
-    // Extract the UUID we bound at original spawn (`--session-id <uuid>`).
-    const sidIdx = args.indexOf("--session-id");
-    if (sidIdx >= 0 && sidIdx + 1 < args.length) {
-      const uuid = args[sidIdx + 1]!;
-      // Drop `--session-id <uuid>` and swap in `--resume <uuid>`. claude will
-      // load EXACTLY that session and loud-error if its .jsonl is missing
-      // (vs --continue's silent fresh-start fallback).
-      const next = [...args.slice(0, sidIdx), ...args.slice(sidIdx + 2)];
-      return { ...spec, args: ["--resume", uuid, ...next] };
-    }
-    // Legacy snapshot (pre-bind era) — fall back to --continue best-effort.
+    // KEEP `--session-id <uuid>` on restore (do NOT swap to `--resume`).
+    //
+    // Earlier this swapped `--session-id <uuid>` → `--resume <uuid>` to get a
+    // loud error when claude's .jsonl was missing. That loud error crashed
+    // the tile dead: "No conversation found with session ID: …" → exit code 1
+    // → blank tile until manual restart. Common causes that hit the user:
+    //   - claude config / sessions dir wiped between reboots
+    //   - claude major-version upgrade rewrote session storage
+    //   - user signed out & back in
+    //   - first-run on a fresh machine (the snapshot survives, the JSONL
+    //     was never there).
+    //
+    // `--session-id <uuid>` is idempotent in claude: if the JSONL exists it
+    // RESUMES, if not it CREATES a new session with that exact id. Same
+    // deterministic-id guarantee, no crash on miss. Documented in
+    // anthropics/claude-code CLI reference.
+    if (args.includes("--session-id")) return spec;
+    // Legacy snapshot (pre-bind era) had no `--session-id` — fall back to
+    // --continue best-effort.
     const claimed = args.some((a) =>
       a === "--resume" || a === "-r" || a === "--continue" || a === "-c",
     );

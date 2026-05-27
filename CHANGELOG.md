@@ -7,6 +7,9 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Fixed
+- **Claude tile no longer crashes on resume when the JSONL is missing.** `pty-daemon` swapped `--session-id <uuid>` → `--resume <uuid>` on snapshot restore so claude would loud-error on a missing session. That loud error killed the tile dead ("No conversation found with session ID: …" → exit 1) whenever claude's session storage had been wiped (config reset, signout/in, major-version upgrade, fresh machine with a surviving snapshot). Keep `--session-id <uuid>` on restore instead — claude treats it as idempotent (resume if JSONL exists, create-fresh-with-same-id if not). Same deterministic-id semantics, no crash. `apps/desktop/src/main/pty-daemon.ts:137`.
+
 ### Fixed (review pass)
 - **`readConfig` self-heal race + non-atomic write.** Multiple IPC handlers (`createIssue`, `listIssues`, `resolveProject`, …) hit `readConfig` in parallel on first launch; when the file was invalid, every caller raced into `writeConfig` and a bare `fs.writeFile` could half-truncate. Now an in-process `Map<root, Promise<Config>>` coalesces concurrent reads to share one repair pass, and `writeConfig` writes to `config.yaml.<pid>.<ts>.tmp` then `fs.rename` (atomic). New test pins 20-way concurrent readConfig + verifies the file stays valid.
 - **Editor `diffMode` map no longer leaks.** Closed tabs left their `diffMode[path]` entry behind; opening a stale path resurrected `true` and triggered an unwanted `gitFileContents` fetch. Tab-prune effect now drops `diffMode` entries alongside `meta` + `buffers`.
