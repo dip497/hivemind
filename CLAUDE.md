@@ -97,3 +97,72 @@ Summaries must be specific — "Mamba achieves linear-time sequence modeling via
 - After editing `.md` files directly, run `/home/dipendra-sharma/projects/hivemind/.venv/bin/hyperresearch sync` to update the index
 - Run `/home/dipendra-sharma/projects/hivemind/.venv/bin/hyperresearch --help` for the full command list
 <!-- hyperresearch:end -->
+
+<!-- release:start -->
+## Release management
+
+This project ships prebuilt binaries via [GitHub Releases](https://github.com/dip497/hivemind/releases). End users install with `install.sh`, which downloads the latest release assets — no toolchain on the user's box. The release pipeline is fully automated; you (Claude or the maintainer) do NOT build locally.
+
+### How to cut a release
+
+```bash
+# from a clean main branch, in sync with origin/main:
+./scripts/release.sh patch       # 0.0.1 → 0.0.2
+./scripts/release.sh minor       # 0.0.1 → 0.1.0
+./scripts/release.sh major       # 0.0.1 → 1.0.0
+./scripts/release.sh 0.4.2       # explicit version
+./scripts/release.sh patch --dry-run   # preview without writing
+```
+
+What it does (`scripts/release.sh`):
+
+1. Pre-flight: rejects a dirty tree, requires `main`, requires sync with `origin/main`.
+2. Bumps `version` in every workspace `package.json` in lockstep.
+3. Inserts a `[X.Y.Z] — YYYY-MM-DD` section into `CHANGELOG.md` under `[Unreleased]`.
+4. Commits `chore(release): vX.Y.Z` and creates an annotated tag.
+5. Pushes branch + tag → fires `.github/workflows/release.yml` on GitHub Actions.
+
+### What the workflows do
+
+- **`.github/workflows/ci.yml`** runs on every push to `main` and PR: typecheck + build + unit tests (`pnpm test:unit`). Heavy Playwright e2e is intentionally NOT run here — release builds validate the full build path.
+- **`.github/workflows/release.yml`** runs on `v*.*.*` tags (and manual `workflow_dispatch`). Builds the CLI single-binary (`bun build --compile`), the Electron renderer + main (`electron-vite`), packages the AppImage via `pnpm deploy` + `electron-builder`, then creates the GitHub Release and uploads `hive-linux-x86_64` + `hivemind-<version>-x86_64.AppImage`.
+
+### Pre-release checklist
+
+Before running `./scripts/release.sh`:
+
+- [ ] All e2e tests green locally: `cd apps/desktop && pnpm test:e2e` (30 + known resize flake).
+- [ ] Unit tests green: `pnpm test:unit` from `apps/desktop`.
+- [ ] CHANGELOG `[Unreleased]` section has at least one entry describing the user-visible change.
+- [ ] No uncommitted changes (`git status` clean).
+
+### Debugging a failed release workflow
+
+```bash
+gh run list --limit 5 --json status,conclusion,name,databaseId    # find failed run id
+gh run view <id> --log-failed | tail -50                          # tail the error
+gh run rerun <id>                                                  # retry (rare)
+```
+
+Common failure modes seen so far:
+
+- **"package.json must be under apps/desktop"** — electron-builder rejects pnpm symlinks to sibling workspace packages. Fixed by `pnpm --filter @hivemind/desktop deploy desktop-deploy` BEFORE running electron-builder inside the deploy dir.
+- **"Cannot compute electron version"** — `pnpm deploy --prod` strips devDeps (including electron itself). Use `pnpm deploy --legacy` without `--prod`.
+- **"Multiple versions of pnpm specified"** — `pnpm/action-setup` shouldn't pin `version` when `packageManager` is set in root `package.json`.
+
+If the release workflow fails but the tag is pushed: delete the tag (`git tag -d vX.Y.Z && git push origin :refs/tags/vX.Y.Z`), fix the workflow, re-tag.
+
+### Semver guidance
+
+| Change | Bump |
+|---|---|
+| New tile type, new MCP tool, new agent integration, new install path | minor |
+| Bug fix in PTY daemon, CSS tweak, tile spawn-position fix | patch |
+| Breaking change to `hive` CLI, breaking change to `.hivemind/` schema, breaking change to MCP tool shape | major |
+
+`0.x.x` versions: minor can break things; document loudly in CHANGELOG.
+
+### Hand-off rule
+
+If you (Claude) made any change that ships to users — code, dependency, install behavior, MCP tool surface — append a one-line entry to `CHANGELOG.md` under `## [Unreleased]` BEFORE handing the session back. The maintainer can then cut a release with `./scripts/release.sh <bump>` and the changelog is ready.
+<!-- release:end -->
