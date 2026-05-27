@@ -332,8 +332,16 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
     // array on every render so reference equality would always fail and cause
     // a PTY respawn on every parent re-render. We freeze args on first mount.
     // (For real argv changes, change the cmd or destroy/recreate the tile.)
+    //
+    // `cwd` is excluded too in PERSISTENT mode: ptyId is now keyed on tileId
+    // only (frame-stable across workspace rebinding), and the daemon owns the
+    // original spawn cwd inside the frozen spec. A cwd-only prop change with
+    // a live session would otherwise tear down → re-attach silently (daemon
+    // ignores new cwd on re-attach), looking like "nothing happened" with no
+    // visible signal that the rebind didn't apply. Keep cwd in deps for the
+    // non-persistent path where a fresh PTY at the new cwd IS the right thing.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ptyId, cwd, cmd]);
+  }, persistent ? [ptyId, cmd] : [ptyId, cwd, cmd]);
 
   return (
     <div className="flex h-full flex-col rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] overflow-hidden shadow-[0_8px_22px_rgba(0,0,0,0.45)]">

@@ -54,13 +54,24 @@ function loadAllSnapshots(): SessionSnapshot[] {
   try { names = fs.readdirSync(sessionsDir); } catch { return out; }
   for (const name of names) {
     if (!name.endsWith(".json")) continue;
+    const filePath = path.join(sessionsDir, name);
     try {
-      const raw = fs.readFileSync(path.join(sessionsDir, name), "utf8");
+      const raw = fs.readFileSync(filePath, "utf8");
       const snap = JSON.parse(raw) as SessionSnapshot;
       // Basic shape sanity — old/corrupt snapshots are silently dropped.
-      if (snap && typeof snap.id === "string" && typeof snap.replay === "string" && snap.spec) {
-        out.push(snap);
+      if (!snap || typeof snap.id !== "string" || typeof snap.replay !== "string" || !snap.spec) {
+        continue;
       }
+      // Legacy key shape (`hm:<absolute-path>:<tileId>` — 3+ colon-segments
+      // after `hm:`). The new key is `hm:<tileId>` (single segment). No
+      // renderer asks for the legacy id anymore — they'd be loaded into the
+      // frozen map every daemon boot and never attached, leaking memory
+      // forever. Drop both the in-memory load AND the on-disk file.
+      if (snap.id.startsWith("hm:") && snap.id.slice(3).split(":").length > 1) {
+        try { fs.unlinkSync(filePath); } catch { /* already gone */ }
+        continue;
+      }
+      out.push(snap);
     } catch {
       /* corrupt — skip */
     }
@@ -138,30 +149,45 @@ const manager = new SessionManager(factory, {
     const cmd = (spec.cmd ?? "").split("/").pop();
     if (cmd !== "claude") return spec;
     const args = spec.args ?? [];
-    // KEEP `--session-id <uuid>` on restore (do NOT swap to `--resume`).
+    // Swap `--session-id <uuid>` → `--resume <uuid>` for deterministic
+    // resume. claude does NOT auto-resume on a bare `--session-id <uuid>`
+    // when the JSONL already exists (verified by user: resume was broken
+    // when we kept --session-id). `--resume` is the only way to actually
+    // continue an existing conversation.
     //
-    // Earlier this swapped `--session-id <uuid>` → `--resume <uuid>` to get a
-    // loud error when claude's .jsonl was missing. That loud error crashed
-    // the tile dead: "No conversation found with session ID: …" → exit code 1
-    // → blank tile until manual restart. Common causes that hit the user:
-    //   - claude config / sessions dir wiped between reboots
-    //   - claude major-version upgrade rewrote session storage
-    //   - user signed out & back in
-    //   - first-run on a fresh machine (the snapshot survives, the JSONL
-    //     was never there).
-    //
-    // `--session-id <uuid>` is idempotent in claude: if the JSONL exists it
-    // RESUMES, if not it CREATES a new session with that exact id. Same
-    // deterministic-id guarantee, no crash on miss. Documented in
-    // anthropics/claude-code CLI reference.
-    if (args.includes("--session-id")) return spec;
-    // Legacy snapshot (pre-bind era) had no `--session-id` — fall back to
-    // --continue best-effort.
+    // `--resume` LOUD-errors when JSONL is missing ("No conversation found
+    // with session ID: …" → exit 1). That used to kill the tile dead. Now
+    // SessionManager has a `restoreRetryTransform` that respawns once with
+    // `--session-id <uuid>` (creates a new session bound to the same uuid)
+    // when the first attempt exits non-zero within ~5s — preserves both
+    // resume-on-happy-path AND no-crash-on-miss.
+    const sidIdx = args.indexOf("--session-id");
+    if (sidIdx >= 0 && sidIdx + 1 < args.length) {
+      const uuid = args[sidIdx + 1]!;
+      const next = [...args.slice(0, sidIdx), ...args.slice(sidIdx + 2)];
+      return { ...spec, args: ["--resume", uuid, ...next] };
+    }
+    // Legacy snapshot (pre-bind era) — fall back to --continue best-effort.
     const claimed = args.some((a) =>
       a === "--resume" || a === "-r" || a === "--continue" || a === "-c",
     );
     if (claimed) return spec;
     return { ...spec, args: ["--continue", ...args] };
+  },
+  // When a restored session exits with non-zero within this window, respawn
+  // it once with this transform — turns "claude --resume <uuid> → No
+  // conversation found → exit 1" into "claude --session-id <uuid>" (fresh
+  // session, same deterministic id for future restores).
+  restoreRetryMs: 5000,
+  restoreRetryTransform: (spec) => {
+    const cmd = (spec.cmd ?? "").split("/").pop();
+    if (cmd !== "claude") return null;
+    const args = spec.args ?? [];
+    const rIdx = args.indexOf("--resume");
+    if (rIdx < 0 || rIdx + 1 >= args.length) return null;
+    const uuid = args[rIdx + 1]!;
+    const next = [...args.slice(0, rIdx), ...args.slice(rIdx + 2)];
+    return { ...spec, args: ["--session-id", uuid, ...next] };
   },
 });
 

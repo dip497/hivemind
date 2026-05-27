@@ -88,6 +88,14 @@ interface Session {
    *  it is FRESH. The headless term already contains the pre-reboot screen so
    *  attach replays correctly; the live shell takes over from here. */
   frozen?: boolean;
+  /** Snapshot the spec came from (only set when frozen). Used by the quick-fail
+   *  retry path to recompute the retry spec from the ORIGINAL stored args, not
+   *  the transformed `--resume` ones. */
+  frozenSpec?: SpawnSpec;
+  /** Wall-clock ms when this PTY was spawned. Used by `restoreRetryMs`. */
+  spawnedAt: number;
+  /** Whether the manager already exhausted its one retry for this session. */
+  retried?: boolean;
 }
 
 const DEFAULT_SCROLLBACK = 5000; // lines of replay scrollback per session
@@ -121,6 +129,17 @@ export interface SessionManagerOptions {
    *  Applied BEFORE the spec is stored on the session, so the value survives
    *  into snapshots. */
   transformSpecOnSpawn?: (spec: SpawnSpec) => SpawnSpec;
+  /** OPTIONAL — if a RESTORED session (frozen → live) exits with non-zero
+   *  within `restoreRetryMs`, the manager respawns it ONCE using this
+   *  transform. Lets claude's `--resume <uuid>` fall back to
+   *  `--session-id <uuid>` (fresh session, same deterministic id) when the
+   *  on-disk JSONL is missing — turns "dead tile with No-conversation-found
+   *  error" into "tile keeps working, new conversation, banner injected". */
+  restoreRetryTransform?: (spec: SpawnSpec) => SpawnSpec | null;
+  /** Window after restore spawn during which a non-zero exit triggers
+   *  retry. Default 5s — long enough for claude to print its error and
+   *  bail, short enough to skip retry for legitimate later exits. */
+  restoreRetryMs?: number;
 }
 
 /** Persisted snapshot shape — the daemon serializes this to disk so a reboot
@@ -151,6 +170,8 @@ export class SessionManager {
   private readonly snapshotDebounceMs: number;
   private readonly transformSpecOnRestore?: (spec: SpawnSpec) => SpawnSpec;
   private readonly transformSpecOnSpawn?: (spec: SpawnSpec) => SpawnSpec;
+  private readonly restoreRetryTransform?: (spec: SpawnSpec) => SpawnSpec | null;
+  private readonly restoreRetryMs: number;
 
   constructor(
     private readonly factory: PtyFactory,
@@ -164,6 +185,8 @@ export class SessionManager {
     this.snapshotDebounceMs = opts.snapshotDebounceMs ?? 2000;
     this.transformSpecOnRestore = opts.transformSpecOnRestore;
     this.transformSpecOnSpawn = opts.transformSpecOnSpawn;
+    this.restoreRetryTransform = opts.restoreRetryTransform;
+    this.restoreRetryMs = opts.restoreRetryMs ?? 5000;
   }
 
   /** Pre-load a snapshot (called during daemon boot for each *.json on disk).
@@ -238,6 +261,8 @@ export class SessionManager {
       client,
       dirty: !!frozenSnap, // restored sessions should re-persist with their new PTY's first activity
       frozen: !!frozenSnap,
+      frozenSpec: frozenSnap ? frozenSnap.spec : undefined,
+      spawnedAt: Date.now(),
     };
     this.sessions.set(id, session);
     p.onData((d) => {
@@ -248,6 +273,37 @@ export class SessionManager {
     });
     p.onExit((code, signal) => {
       session.exited = true;
+      // Quick-fail retry: a RESTORED session that died non-zero within
+      // restoreRetryMs almost certainly hit `claude --resume <uuid>` with a
+      // missing JSONL ("No conversation found" → exit 1). Re-spawn ONCE
+      // with the retry transform (`--session-id <uuid>` — fresh session,
+      // same id) so the user keeps a working tile instead of seeing it die.
+      const sinceSpawn = Date.now() - session.spawnedAt;
+      const shouldRetry =
+        !session.retried &&
+        session.frozenSpec !== undefined &&
+        code !== 0 &&
+        sinceSpawn < this.restoreRetryMs &&
+        this.restoreRetryTransform !== undefined;
+      if (shouldRetry) {
+        const retrySpec = this.restoreRetryTransform!(session.frozenSpec!);
+        if (retrySpec) {
+          session.retried = true;
+          // One-shot banner in the headless term so the user sees the
+          // history is gone (Mosh-style replay would otherwise show the
+          // old transcript and a blank prompt — invisible amnesia).
+          const banner =
+            "\r\n\x1b[33m[hivemind] previous claude session not found — starting fresh with same id\x1b[0m\r\n";
+          session.term.write(banner);
+          session.client?.onData(banner);
+          // Replace the dead PTY in-place; keep the same `session` object
+          // (same id, same headless term, same client) so attach state is
+          // continuous. Don't fire onExit on the client — the dead process
+          // is replaced, not gone from the user's POV.
+          this.respawnInPlace(session, retrySpec);
+          return;
+        }
+      }
       session.client?.onExit(code, signal);
       this.flushSnapshot(session); // last write before drop
       this.sessions.delete(id);
@@ -266,6 +322,32 @@ export class SessionManager {
     // !isNew path is the early-return up top for a still-live existing session.
     return { pid: p.pid, isNew: true, replay };
   }
+  /** Replace a dead session's PTY with a fresh one using `retrySpec`. Keeps
+   *  the same id, headless term, serializer, and client — the user sees a
+   *  continuous tile that just spawned a different process underneath. Used
+   *  by the quick-fail retry path on restored sessions whose first spawn
+   *  hard-failed (e.g. `claude --resume <uuid>` with a missing JSONL). */
+  private respawnInPlace(session: Session, retrySpec: SpawnSpec): void {
+    const p = this.factory(retrySpec);
+    session.pty = p;
+    session.spec = retrySpec;
+    session.exited = false;
+    session.spawnedAt = Date.now();
+    p.onData((d) => {
+      session.term.write(d);
+      session.dirty = true;
+      this.scheduleSnapshot(session);
+      session.client?.onData(d);
+    });
+    p.onExit((code, signal) => {
+      session.exited = true;
+      session.client?.onExit(code, signal);
+      this.flushSnapshot(session);
+      this.sessions.delete(session.id);
+      this.scheduleIdle();
+    });
+  }
+
   /** Wait for the xterm.js write queue to drain, then serialize. xterm batches
    *  writes via setTimeout(0); calling serialize() before drain returns "". */
   private serializeDrained(s: Session): Promise<string> {
