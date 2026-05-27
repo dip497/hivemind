@@ -41,7 +41,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: "10"
+          # version pinned via `packageManager` in package.json (avoid dupes)
           run_install: false
 
       - name: Setup Bun
