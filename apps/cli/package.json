@@ -1,0 +1,27 @@
+{
+  "name": "@hivemind/cli",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "bin": { "hive": "./dist/hive" },
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "build": "bun build src/index.ts --compile --outfile=dist/hive --target=bun-linux-x64",
+    "build:all": "bun build src/index.ts --compile --outfile=dist/hive-linux-x64 --target=bun-linux-x64 && bun build src/index.ts --compile --outfile=dist/hive-darwin-arm64 --target=bun-darwin-arm64 && bun build src/index.ts --compile --outfile=dist/hive-windows-x64.exe --target=bun-windows-x64",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@hivemind/core": "workspace:*",
+    "@hivemind/mcp": "workspace:*",
+    "citty": "catalog:",
+    "yaml": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@hivemind/tsconfig": "workspace:*",
+    "@types/bun": "^1.1.13",
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  }
+}

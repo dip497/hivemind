@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "hive": {
+      "command": "bun",
+      "args": ["run", "${HIVE_CLI_SRC}", "mcp-stdio"],
+      "env": {
+        "HIVE_ROOT": "${workspaceFolder}/.hivemind",
+        "HIVE_AGENT_ID": "claude"
+      }
+    }
+  }
+}

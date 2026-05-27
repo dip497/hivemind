@@ -1,0 +1,601 @@
+/**
+ * Filesystem layer for `.hivemind/`.
+ *
+ * Layout:
+ *   .hivemind/
+ *   ├── config.yaml
+ *   ├── issues/
+ *   │   ├── PAY-118.md
+ *   │   ├── PAY-122.md
+ *   │   └── PAY-122/        <- sub-issue directory (children of PAY-122)
+ *   │       ├── PAY-122.1.md
+ *   │       └── PAY-122.2.md
+ *   ├── cycles/
+ *   │   └── cycle-14.md
+ *   └── .agent.md            <- auto-generated context for AI agents
+ */
+
+import { promises as fs } from "node:fs";
+import path from "node:path";
+import matter from "gray-matter";
+import YAML from "yaml";
+import {
+  ConfigZ,
+  CycleFrontmatterZ,
+  IssueFrontmatterZ,
+  type AcceptanceItem,
+  type ActivityEntry,
+  type Config,
+  type Cycle,
+  type Issue,
+  type IssueSections,
+  type IssueSummary,
+} from "./types.js";
+
+const DIR = ".hivemind";
+
+/** Find the nearest `.hivemind/` directory walking up from `cwd`. */
+export async function findRoot(cwd: string = process.cwd()): Promise<string | null> {
+  let dir = path.resolve(cwd);
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const candidate = path.join(dir, DIR);
+    try {
+      const st = await fs.stat(candidate);
+      if (st.isDirectory()) return candidate;
+    } catch {
+      /* not here */
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}
+
+export async function requireRoot(cwd?: string): Promise<string> {
+  const r = await findRoot(cwd);
+  if (!r) {
+    throw new HiveError(
+      "no_root",
+      "no .hivemind/ found in this directory or any parent. run `hive init` first."
+    );
+  }
+  return r;
+}
+
+export class HiveError extends Error {
+  constructor(public code: string, message: string) {
+    super(message);
+    this.name = "HiveError";
+  }
+}
+
+// ── config ────────────────────────────────────────────────────────
+
+export async function readConfig(root: string): Promise<Config> {
+  const p = path.join(root, "config.yaml");
+  const raw = await fs.readFile(p, "utf8");
+  const parsed = YAML.parse(raw);
+  const result = ConfigZ.safeParse(parsed);
+  if (!result.success) {
+    throw new HiveError("bad_config", `.hivemind/config.yaml invalid: ${result.error.message}`);
+  }
+  return result.data;
+}
+
+export async function writeConfig(root: string, cfg: Config): Promise<void> {
+  const p = path.join(root, "config.yaml");
+  // Validate before writing.
+  const parsed = ConfigZ.parse(cfg);
+  await fs.writeFile(p, YAML.stringify(parsed), "utf8");
+}
+
+/** Reserve and increment the next ID atomically (read-modify-write). */
+export async function allocateId(root: string): Promise<{ id: string; cfg: Config }> {
+  const cfg = await readConfig(root);
+  const id = `${cfg.prefix}-${cfg.next_id}`;
+  cfg.next_id += 1;
+  await writeConfig(root, cfg);
+  return { id, cfg };
+}
+
+// ── issues: paths ──────────────────────────────────────────────────
+
+/**
+ * Resolve the on-disk path for an issue id. Sub-issues live in directories
+ * named after their parent: e.g. PAY-122/PAY-122.1.md.
+ *
+ * - "PAY-118"    → .hivemind/issues/PAY-118.md
+ * - "PAY-122.1"  → .hivemind/issues/PAY-122/PAY-122.1.md
+ * - "PAY-1.2.3"  → .hivemind/issues/PAY-1/PAY-1.2/PAY-1.2.3.md
+ */
+// Issue id format: prefix (one uppercase letter + 1-9 uppercase/digit chars) +
+// "-" + decimal number, optionally followed by dotted sub-decimals. Validates
+// every callsite (CLI + IPC) so a malicious id like "../../etc/passwd" can't
+// escape `.hivemind/issues/` and the resulting `fs.unlink`/`fs.writeFile` /
+// `fs.readFile` is bounded. (Defense-in-depth — IPC validates separately.)
+const ISSUE_ID_RE = /^[A-Z][A-Z0-9]{1,9}-\d+(\.\d+)*$/;
+export function assertValidIssueId(id: string): void {
+  if (!ISSUE_ID_RE.test(id)) {
+    throw new HiveError("invalid_arg", `invalid issue id: ${id}`);
+  }
+}
+export function issuePath(root: string, id: string): string {
+  assertValidIssueId(id);
+  const parts = id.split(".");
+  const dir = path.join(root, "issues");
+  if (parts.length === 1) {
+    return path.join(dir, `${id}.md`);
+  }
+  const segs: string[] = [];
+  for (let i = 0; i < parts.length - 1; i++) {
+    segs.push(parts.slice(0, i + 1).join("."));
+  }
+  return path.join(dir, ...segs, `${id}.md`);
+}
+
+/** Read an issue file by id (throws HiveError if missing). */
+export async function readIssue(root: string, id: string): Promise<Issue> {
+  const p = issuePath(root, id);
+  let raw: string;
+  try {
+    raw = await fs.readFile(p, "utf8");
+  } catch {
+    throw new HiveError("not_found", `issue ${id} not found`);
+  }
+  return parseIssueFile(p, raw);
+}
+
+export function parseIssueFile(p: string, raw: string): Issue {
+  const parsed = matter(raw);
+  const fmResult = IssueFrontmatterZ.safeParse(parsed.data);
+  if (!fmResult.success) {
+    throw new HiveError("bad_issue", `${p}: invalid frontmatter: ${fmResult.error.message}`);
+  }
+  const sections = parseSections(parsed.content);
+  return {
+    ...fmResult.data,
+    path: p,
+    sections,
+    raw: parsed.content,
+  };
+}
+
+/** Serialize an Issue back to a markdown file string. */
+export function serializeIssue(issue: Issue): string {
+  const fm = IssueFrontmatterZ.parse({
+    id: issue.id,
+    title: issue.title,
+    state: issue.state,
+    parent: issue.parent,
+    labels: issue.labels,
+    assignee: issue.assignee,
+    github: issue.github,
+    cycle: issue.cycle,
+    created: issue.created,
+    updated: issue.updated,
+  });
+  const body = serializeSections(issue.sections);
+  return matter.stringify(body, fm);
+}
+
+export async function writeIssue(issue: Issue): Promise<void> {
+  await fs.mkdir(path.dirname(issue.path), { recursive: true });
+  await fs.writeFile(issue.path, serializeIssue(issue), "utf8");
+}
+
+export async function deleteIssueFile(root: string, id: string): Promise<void> {
+  const p = issuePath(root, id);
+  try {
+    await fs.unlink(p);
+  } catch {
+    throw new HiveError("not_found", `issue ${id} not found`);
+  }
+  // Clean up empty parent dirs (best-effort, ignore errors).
+  let dir = path.dirname(p);
+  const issuesRoot = path.join(root, "issues");
+  while (dir.startsWith(issuesRoot) && dir !== issuesRoot) {
+    try {
+      const entries = await fs.readdir(dir);
+      if (entries.length > 0) break;
+      await fs.rmdir(dir);
+    } catch {
+      break;
+    }
+    dir = path.dirname(dir);
+  }
+}
+
+// ── issues: list / summary ────────────────────────────────────────
+
+/**
+ * Walk .hivemind/issues/ and return frontmatter-only summaries. Faster than
+ * full parse; used by `list` and by chokidar-fed UI queries.
+ */
+export async function listIssues(root: string): Promise<IssueSummary[]> {
+  const issuesDir = path.join(root, "issues");
+  const files = await walk(issuesDir, ".md");
+  const out: IssueSummary[] = [];
+  for (const p of files) {
+    try {
+      const raw = await fs.readFile(p, "utf8");
+      const parsed = matter(raw);
+      const fm = IssueFrontmatterZ.safeParse(parsed.data);
+      if (!fm.success) continue; // skip invalid files in list view
+      const d = fm.data;
+      out.push({
+        id: d.id,
+        title: d.title,
+        state: d.state,
+        parent: d.parent,
+        labels: d.labels,
+        assignee: d.assignee,
+        github: d.github,
+        cycle: d.cycle,
+        created: d.created,
+        updated: d.updated,
+        path: p,
+      });
+    } catch {
+      /* skip unreadable files */
+    }
+  }
+  // Stable ID-major-first sort.
+  out.sort((a, b) => compareIds(a.id, b.id));
+  return out;
+}
+
+function compareIds(a: string, b: string): number {
+  const ap = a.split(/[-.]/).map((s, i) => (i === 0 ? s : Number(s)));
+  const bp = b.split(/[-.]/).map((s, i) => (i === 0 ? s : Number(s)));
+  const len = Math.max(ap.length, bp.length);
+  for (let i = 0; i < len; i++) {
+    const av = ap[i] ?? 0;
+    const bv = bp[i] ?? 0;
+    if (av < bv) return -1;
+    if (av > bv) return 1;
+  }
+  return 0;
+}
+
+async function walk(dir: string, ext: string): Promise<string[]> {
+  const out: string[] = [];
+  let entries: import("node:fs").Dirent[];
+  try {
+    entries = (await fs.readdir(dir, { withFileTypes: true })) as import("node:fs").Dirent[];
+  } catch {
+    return out;
+  }
+  for (const e of entries) {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) {
+      out.push(...(await walk(p, ext)));
+    } else if (e.isFile() && e.name.endsWith(ext)) {
+      out.push(p);
+    }
+  }
+  return out;
+}
+
+// ── cycles ─────────────────────────────────────────────────────────
+
+export async function readCycle(root: string, id: string): Promise<Cycle> {
+  const p = path.join(root, "cycles", `${id}.md`);
+  let raw: string;
+  try {
+    raw = await fs.readFile(p, "utf8");
+  } catch {
+    throw new HiveError("not_found", `cycle ${id} not found`);
+  }
+  const parsed = matter(raw);
+  const fm = CycleFrontmatterZ.safeParse(parsed.data);
+  if (!fm.success) {
+    throw new HiveError("bad_cycle", `${p}: invalid frontmatter: ${fm.error.message}`);
+  }
+  return { ...fm.data, path: p, raw: parsed.content };
+}
+
+export async function writeCycle(cycle: Cycle): Promise<void> {
+  const fm = CycleFrontmatterZ.parse({
+    id: cycle.id,
+    name: cycle.name,
+    start_at: cycle.start_at,
+    end_at: cycle.end_at,
+    state: cycle.state,
+    issues: cycle.issues,
+  });
+  await fs.mkdir(path.dirname(cycle.path), { recursive: true });
+  await fs.writeFile(cycle.path, matter.stringify(cycle.raw, fm), "utf8");
+}
+
+export async function listCycles(root: string): Promise<Cycle[]> {
+  const dir = path.join(root, "cycles");
+  const files = await walk(dir, ".md");
+  const out: Cycle[] = [];
+  for (const p of files) {
+    try {
+      const raw = await fs.readFile(p, "utf8");
+      const parsed = matter(raw);
+      const fm = CycleFrontmatterZ.safeParse(parsed.data);
+      if (!fm.success) continue;
+      out.push({ ...fm.data, path: p, raw: parsed.content });
+    } catch {
+      /* skip */
+    }
+  }
+  out.sort((a, b) => a.id.localeCompare(b.id));
+  return out;
+}
+
+// ── markdown body parsing ──────────────────────────────────────────
+
+// Accept any heading level (# … ######) so users can write `# Description`
+// without breaking parse. Serializer always emits `##`, so the file
+// normalises after one round-trip.
+const SEC_DESC = /^#{1,6}\s+Description\s*$/im;
+const SEC_AC = /^#{1,6}\s+Acceptance\s+criteria\s*$/im;
+const SEC_ACT = /^#{1,6}\s+Activity\s*$/im;
+
+/** Split the body into our three known sections + extra. Tolerant: missing sections become empty. */
+export function parseSections(body: string): IssueSections {
+  const sections: IssueSections = {
+    description: "",
+    acceptanceCriteria: [],
+    activity: [],
+    extra: "",
+  };
+
+  // Find offsets of known headings.
+  const heads: Array<{ name: "desc" | "ac" | "act"; idx: number; end: number }> = [];
+  const push = (name: "desc" | "ac" | "act", re: RegExp) => {
+    const m = re.exec(body);
+    if (m && m.index !== undefined) {
+      heads.push({ name, idx: m.index, end: m.index + m[0].length });
+    }
+  };
+  push("desc", SEC_DESC);
+  push("ac", SEC_AC);
+  push("act", SEC_ACT);
+  heads.sort((a, b) => a.idx - b.idx);
+
+  if (heads.length === 0) {
+    sections.description = body.trim();
+    return sections;
+  }
+
+  // Slice each section.
+  for (let i = 0; i < heads.length; i++) {
+    const h = heads[i]!;
+    const next = heads[i + 1];
+    const sliceEnd = next ? next.idx : body.length;
+    const text = body.slice(h.end, sliceEnd).trim();
+    if (h.name === "desc") sections.description = text;
+    else if (h.name === "ac") sections.acceptanceCriteria = parseAcceptance(text);
+    else if (h.name === "act") sections.activity = parseActivity(text);
+  }
+
+  // Text BEFORE the first known heading is also description.
+  if (heads[0]!.idx > 0) {
+    const pre = body.slice(0, heads[0]!.idx).trim();
+    if (pre && !sections.description) sections.description = pre;
+    else if (pre) sections.description = `${pre}\n\n${sections.description}`;
+  }
+  return sections;
+}
+
+const TODO_RE = /^- \[( |x|X)\]\s+(.*)$/;
+function parseAcceptance(text: string): AcceptanceItem[] {
+  const items: AcceptanceItem[] = [];
+  for (const line of text.split("\n")) {
+    const m = TODO_RE.exec(line.trim());
+    if (m) items.push({ done: m[1]!.toLowerCase() === "x", text: m[2]!.trim() });
+  }
+  return items;
+}
+
+const ACT_RE = /^-\s+(\S+ \S+)\s+·\s+(\S+)\s+·\s+(.+)$/;
+function parseActivity(text: string): ActivityEntry[] {
+  const out: ActivityEntry[] = [];
+  for (const line of text.split("\n")) {
+    const m = ACT_RE.exec(line.trim());
+    if (m) out.push({ at: m[1]!, who: m[2]!, message: m[3]! });
+  }
+  return out;
+}
+
+export function serializeSections(s: IssueSections): string {
+  const parts: string[] = [];
+  if (s.description) parts.push(`## Description\n\n${s.description.trim()}`);
+  if (s.acceptanceCriteria.length > 0) {
+    const lines = s.acceptanceCriteria.map((a) => `- [${a.done ? "x" : " "}] ${a.text}`);
+    parts.push(`## Acceptance criteria\n\n${lines.join("\n")}`);
+  }
+  if (s.activity.length > 0) {
+    const lines = s.activity.map((e) => `- ${e.at} · ${e.who} · ${e.message}`);
+    parts.push(`## Activity\n\n${lines.join("\n")}`);
+  }
+  if (s.extra.trim()) parts.push(s.extra.trim());
+  return parts.join("\n\n") + "\n";
+}
+
+/** Append an activity line. Mutates the issue and returns it. */
+export function appendActivity(issue: Issue, who: string, message: string, at?: Date): Issue {
+  const ts = (at ?? new Date()).toISOString().replace("T", " ").slice(0, 16);
+  issue.sections.activity.push({ at: ts, who, message });
+  issue.updated = new Date().toISOString();
+  return issue;
+}
+
+// ── high-level issue helpers (used by IPC + CLI) ─────────────────────
+
+import { SAMPLE_ISSUE_BODY } from "./templates.js";
+
+export interface CreateIssueOpts {
+  title: string;
+  state?: IssueSummary["state"];
+  parent?: string;
+  labels?: string[];
+  assignee?: Issue["assignee"];
+  cycle?: string;
+  description?: string;
+}
+
+/**
+ * Allocate a fresh top-level id (or next sub-issue id under `parent`),
+ * build a new Issue object with a sane default body, and write it to disk.
+ * Returns the freshly written Issue.
+ */
+export async function createIssue(root: string, opts: CreateIssueOpts): Promise<Issue> {
+  let finalId: string;
+  if (opts.parent) {
+    finalId = await nextSubIssueId(root, opts.parent);
+  } else {
+    const { id } = await allocateId(root);
+    finalId = id;
+  }
+  const now = new Date().toISOString();
+  const issue: Issue = {
+    id: finalId,
+    title: opts.title.trim() || "(untitled)",
+    state: opts.state ?? "todo",
+    parent: opts.parent ?? null,
+    labels: opts.labels ?? [],
+    assignee: opts.assignee ?? null,
+    github: null,
+    cycle: opts.cycle ?? null,
+    created: now,
+    updated: now,
+    path: issuePath(root, finalId),
+    sections: {
+      description: (opts.description ?? "").trim(),
+      acceptanceCriteria: [],
+      activity: [
+        {
+          at: now.replace("T", " ").slice(0, 16),
+          who: "ui",
+          message: opts.parent ? `created as sub-issue of ${opts.parent}` : "created",
+        },
+      ],
+      extra: "",
+    },
+    raw: SAMPLE_ISSUE_BODY,
+  };
+  await writeIssue(issue);
+  return issue;
+}
+
+/** Find the next available `.N` suffix under an existing parent issue. */
+async function nextSubIssueId(root: string, parentId: string): Promise<string> {
+  // Sub-issue files live in .hivemind/issues/<parent-segs>/<parentId>.N.md
+  const parentDir = path.dirname(issuePath(root, `${parentId}.0`));
+  let highest = 0;
+  try {
+    const entries = await fs.readdir(parentDir);
+    for (const e of entries) {
+      const m = e.match(new RegExp(`^${parentId.replace(/\./g, "\\.")}\\.(\\d+)\\.md$`));
+      if (m) {
+        const n = parseInt(m[1]!, 10);
+        if (n > highest) highest = n;
+      }
+    }
+  } catch {
+    /* parent dir doesn't exist yet → start at 1 */
+  }
+  return `${parentId}.${highest + 1}`;
+}
+
+export type IssuePatch = Partial<{
+  title: string;
+  state: IssueSummary["state"];
+  parent: string | undefined;
+  labels: string[];
+  assignee: Issue["assignee"];
+  github: number | undefined;
+  cycle: string | undefined;
+  description: string;
+  acceptanceCriteria: Issue["sections"]["acceptanceCriteria"];
+  extra: string;
+}>;
+
+/**
+ * Read-merge-write update. Patches frontmatter and/or sections, appends an
+ * activity entry summarizing the diff, and writes back.
+ */
+export async function updateIssue(
+  root: string,
+  id: string,
+  patch: IssuePatch,
+  who: string = "ui",
+): Promise<Issue> {
+  const issue = await readIssue(root, id);
+  const summary: string[] = [];
+
+  if (patch.title !== undefined && patch.title !== issue.title) {
+    summary.push(`title: "${issue.title}" → "${patch.title}"`);
+    issue.title = patch.title;
+  }
+  if (patch.state !== undefined && patch.state !== issue.state) {
+    summary.push(`state: ${issue.state} → ${patch.state}`);
+    issue.state = patch.state;
+  }
+  if (patch.parent !== undefined && patch.parent !== issue.parent) {
+    summary.push(`parent: ${issue.parent ?? "—"} → ${patch.parent ?? "—"}`);
+    issue.parent = patch.parent;
+  }
+  if (patch.labels !== undefined) {
+    if (JSON.stringify(patch.labels) !== JSON.stringify(issue.labels)) {
+      summary.push(`labels: [${issue.labels.join(",")}] → [${patch.labels.join(",")}]`);
+      issue.labels = patch.labels;
+    }
+  }
+  if (patch.assignee !== undefined) {
+    const before = issue.assignee ? `@${issue.assignee.id}` : "—";
+    const after = patch.assignee ? `@${patch.assignee.id}` : "—";
+    if (before !== after) {
+      summary.push(`assignee: ${before} → ${after}`);
+      issue.assignee = patch.assignee;
+    }
+  }
+  if (patch.github !== undefined) issue.github = patch.github;
+  if (patch.cycle !== undefined && patch.cycle !== issue.cycle) {
+    summary.push(`cycle: ${issue.cycle ?? "—"} → ${patch.cycle ?? "—"}`);
+    issue.cycle = patch.cycle;
+  }
+  if (patch.description !== undefined) {
+    issue.sections.description = patch.description;
+  }
+  if (patch.acceptanceCriteria !== undefined) {
+    issue.sections.acceptanceCriteria = patch.acceptanceCriteria;
+  }
+  if (patch.extra !== undefined) {
+    issue.sections.extra = patch.extra;
+  }
+
+  if (summary.length > 0) appendActivity(issue, who, summary.join(" · "));
+  issue.updated = new Date().toISOString();
+  await writeIssue(issue);
+  return issue;
+}
+
+/**
+ * Append a free-form activity message (comment). Returns the updated issue.
+ */
+export async function commentOnIssue(
+  root: string,
+  id: string,
+  message: string,
+  who: string = "ui",
+): Promise<Issue> {
+  const issue = await readIssue(root, id);
+  appendActivity(issue, who, message);
+  await writeIssue(issue);
+  return issue;
+}
+
+/**
+ * Delete an issue file (and clean up empty parent dirs). Doesn't touch
+ * sub-issues — caller must handle children explicitly.
+ */
+export async function deleteIssue(root: string, id: string): Promise<void> {
+  await deleteIssueFile(root, id);
+}

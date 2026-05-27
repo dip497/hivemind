@@ -1,0 +1,30 @@
+{
+  "name": "hivemind",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Canvas-per-project AI agent orchestrator. Terminals + git diff + Plane-style PM. Local-first.",
+  "license": "MIT",
+  "packageManager": "pnpm@10.12.2",
+  "engines": { "node": ">=22", "pnpm": ">=10" },
+  "scripts": {
+    "build": "pnpm -r --parallel build",
+    "typecheck": "pnpm -r --parallel typecheck",
+    "test": "pnpm -r --parallel test",
+    "lint": "pnpm -r --parallel lint",
+    "dev:cli": "pnpm --filter @hivemind/cli dev",
+    "dev:desktop": "pnpm --filter @hivemind/desktop dev",
+    "hive": "pnpm --filter @hivemind/cli exec bun run src/index.ts --"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "@types/node": "catalog:"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "esbuild",
+      "@lydell/node-pty",
+      "better-sqlite3"
+    ]
+  }
+}

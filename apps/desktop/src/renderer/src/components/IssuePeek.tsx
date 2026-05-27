@@ -1,0 +1,515 @@
+import { useEffect, useRef, useState } from "react";
+import type { AcceptanceItem, IssueState } from "@hivemind/core/types";
+import {
+  useCommentOnIssue,
+  useDeleteIssue,
+  useIssue,
+  useUpdateIssue,
+  useUpdateState,
+} from "../queries";
+import {
+  STATE_COLOR,
+  STATE_LABEL,
+  STATE_ORDER,
+  StateIcon,
+  LabelChip,
+  Avatar,
+} from "./StateMeta";
+
+interface Props {
+  root: string | null;
+  id: string | null;
+  onClose: () => void;
+}
+
+export function IssuePeek({ root, id, onClose }: Props) {
+  const { data: issue, isLoading } = useIssue(root, id ?? undefined);
+  const update = useUpdateState();
+  const patch = useUpdateIssue();
+  const comment = useCommentOnIssue();
+  const del = useDeleteIssue();
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      // Don't close on Esc while typing into an input — let the field swallow it.
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  if (!id) return null;
+
+  return (
+    <div className="fixed inset-0 z-40 pointer-events-none">
+      <div
+        onClick={onClose}
+        className="absolute inset-0 bg-black/40 pointer-events-auto animate-in fade-in duration-150"
+      />
+      <aside
+        ref={ref}
+        className="absolute right-0 top-0 h-full w-[560px] max-w-[80vw] bg-[var(--color-bg2)] border-l border-[var(--color-line)] flex flex-col pointer-events-auto shadow-2xl animate-in slide-in-from-right duration-200"
+      >
+        {isLoading || !issue ? (
+          <div className="grid place-items-center h-full text-[var(--color-fg3)] text-[12px]">loading…</div>
+        ) : (
+          <>
+            <header className="flex items-center gap-2 px-4 py-3 border-b border-[var(--color-line)]">
+              <span className="font-mono text-[11px] text-[var(--color-fg3)] tabular-nums">{issue.id}</span>
+              {issue.github != null && (
+                <span className="font-mono text-[11px] text-[var(--color-info)]">#{issue.github}</span>
+              )}
+              <div className="ml-auto flex items-center gap-1">
+                <button
+                  onClick={async () => {
+                    // 1. Ensure the repo has the hive MCP + hive-work skill so a
+                    //    spawned claude can actually work the issue (idempotent).
+                    //    Without this, claude has no hive_* tools and silently
+                    //    does nothing — the gap users hit.
+                    const repoDir = root ? root.replace(/\/\.hivemind\/?$/, "") : null;
+                    if (repoDir) {
+                      try { await window.hive.installAgentic(repoDir); } catch { /* best-effort */ }
+                    }
+                    // 2. Spawn claude (Canvas auto-focuses + selects the new tile).
+                    //    The hive-work skill auto-triggers on the issue key.
+                    window.dispatchEvent(new CustomEvent("hivemind:spawn-claude"));
+                    setTimeout(() => {
+                      const prompt = `Work on ${issue.id}: load it via hive_get_issue, complete the acceptance criteria, and end with hive_set_state. Title: "${issue.title}".`;
+                      window.dispatchEvent(
+                        new CustomEvent<string>("hivemind:send-to-claude", { detail: prompt }),
+                      );
+                    }, 2500);
+                    // 3. Close the peek so the focused claude tile is visible.
+                    onClose();
+                  }}
+                  className="inline-flex items-center gap-1 h-7 px-2 rounded text-[11px] font-medium text-white bg-[var(--color-brand)] hover:opacity-90"
+                  title="Set up agents (if needed), spawn claude, and tell it to work on this issue"
+                >
+                  ▶ Work on this
+                </button>
+                <button
+                  onClick={() => {
+                    if (!root) return;
+                    if (!confirm(`Delete ${issue.id}? This removes the markdown file.`)) return;
+                    del.mutate(
+                      { root, id: issue.id },
+                      { onSuccess: onClose },
+                    );
+                  }}
+                  className="size-7 grid place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-err)]"
+                  title="Delete issue"
+                  disabled={del.isPending}
+                >
+                  <svg width="14" height="14" viewBox="0 0 14 14"><path d="M3 4h8M5 4V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1M4 4l1 8a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1l1-8" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                </button>
+                <button
+                  onClick={onClose}
+                  className="size-7 grid place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)]"
+                  title="Close (Esc)"
+                >
+                  <svg width="14" height="14" viewBox="0 0 14 14"><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
+                </button>
+              </div>
+            </header>
+            <div className="flex-1 overflow-y-auto grid grid-cols-[1fr_200px]">
+              <div className="px-5 py-4 border-r border-[var(--color-line)] min-w-0">
+                <EditableTitle
+                  value={issue.title}
+                  onSave={(v) => root && patch.mutate({ root, id: issue.id, patch: { title: v } })}
+                />
+                <Section title="Description">
+                  <EditableDescription
+                    value={issue.sections.description}
+                    onSave={(v) =>
+                      root && patch.mutate({ root, id: issue.id, patch: { description: v } })
+                    }
+                  />
+                </Section>
+                <Section title="Acceptance criteria">
+                  <AcEditor
+                    items={issue.sections.acceptanceCriteria}
+                    onChange={(next) =>
+                      root &&
+                      patch.mutate({
+                        root,
+                        id: issue.id,
+                        patch: { acceptanceCriteria: next },
+                      })
+                    }
+                  />
+                </Section>
+                <Section title="Activity">
+                  {issue.sections.activity.length > 0 && (
+                    <ol className="space-y-2 mb-3">
+                      {issue.sections.activity.slice().reverse().map((a, i) => (
+                        <li key={i} className="text-[12px] text-[var(--color-fg2)]">
+                          <div className="flex items-baseline gap-2">
+                            <span className="font-mono text-[10.5px] text-[var(--color-fg3)]">{relTime(a.at)}</span>
+                            <span className="font-medium text-[var(--color-fg)]">{a.who}</span>
+                          </div>
+                          <div className="mt-0.5 pl-0">{a.message}</div>
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                  <CommentComposer
+                    pending={comment.isPending}
+                    onSubmit={(msg) =>
+                      root && comment.mutate({ root, id: issue.id, message: msg })
+                    }
+                  />
+                </Section>
+              </div>
+              <aside className="px-3 py-4 space-y-3">
+                <PropRow label="State">
+                  <StateSelect
+                    value={issue.state}
+                    onChange={(s) => root && update.mutate({ root, id: issue.id, state: s, note: "set from peek" })}
+                  />
+                </PropRow>
+                <PropRow label="Assignee">
+                  {issue.assignee ? (
+                    <div className="flex items-center gap-1.5">
+                      <Avatar id={issue.assignee.id} size={18} />
+                      <span className="text-[12px] text-[var(--color-fg)] truncate">{issue.assignee.id}</span>
+                    </div>
+                  ) : (
+                    <span className="text-[11.5px] text-[var(--color-fg3)]">Unassigned</span>
+                  )}
+                </PropRow>
+                <PropRow label="Parent">
+                  {issue.parent ? (
+                    <span className="font-mono text-[11px] text-[var(--color-fg)]">{issue.parent}</span>
+                  ) : (
+                    <span className="text-[11.5px] text-[var(--color-fg3)]">—</span>
+                  )}
+                </PropRow>
+                <PropRow label="Labels">
+                  {issue.labels.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {issue.labels.map((l) => <LabelChip key={l} label={l} />)}
+                    </div>
+                  ) : (
+                    <span className="text-[11.5px] text-[var(--color-fg3)]">—</span>
+                  )}
+                </PropRow>
+                <PropRow label="Created">
+                  <span className="text-[11.5px] text-[var(--color-fg2)]">{relTime(issue.created)}</span>
+                </PropRow>
+                <PropRow label="Updated">
+                  <span className="text-[11.5px] text-[var(--color-fg2)]">{relTime(issue.updated)}</span>
+                </PropRow>
+                {issue.github != null && (
+                  <PropRow label="GitHub">
+                    <span className="font-mono text-[11px] text-[var(--color-info)]">#{issue.github}</span>
+                  </PropRow>
+                )}
+              </aside>
+            </div>
+          </>
+        )}
+      </aside>
+    </div>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="mt-5">
+      <div className="u-eyebrow mb-2">{title}</div>
+      {children}
+    </div>
+  );
+}
+
+function PropRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="text-[10px] uppercase tracking-wider font-semibold text-[var(--color-fg3)] mb-1">{label}</div>
+      {children}
+    </div>
+  );
+}
+
+function StateSelect({ value, onChange }: { value: IssueState; onChange: (s: IssueState) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const fn = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", fn);
+    return () => document.removeEventListener("mousedown", fn);
+  }, [open]);
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="w-full inline-flex items-center gap-1.5 px-2 py-1 text-[11.5px] bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded hover:border-[var(--color-fg3)]"
+        style={{ color: STATE_COLOR[value] }}
+      >
+        <StateIcon state={value} size={12} />
+        <span>{STATE_LABEL[value]}</span>
+        <svg width="9" height="9" viewBox="0 0 10 10" className="ml-auto text-[var(--color-fg3)]"><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" /></svg>
+      </button>
+      {open && (
+        <div className="absolute z-30 mt-1 w-full bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded shadow-xl p-1">
+          {STATE_ORDER.map((s) => (
+            <button
+              key={s}
+              onClick={() => { onChange(s); setOpen(false); }}
+              className="w-full flex items-center gap-1.5 px-1.5 py-1 rounded text-[11.5px] text-left hover:bg-[var(--color-bg4)]"
+              style={{ color: STATE_COLOR[s] }}
+            >
+              <StateIcon state={s} size={12} />
+              <span>{STATE_LABEL[s]}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Markdownish({ text }: { text: string }) {
+  // minimal markdown — paragraphs, bullets, code. No external dep.
+  const lines = text.trim().split("\n");
+  const blocks: React.ReactNode[] = [];
+  let para: string[] = [];
+  let ul: string[] = [];
+  const flush = () => {
+    if (para.length) {
+      blocks.push(<p key={blocks.length} className="text-[13px] text-[var(--color-fg)] leading-relaxed mb-2">{para.join(" ")}</p>);
+      para = [];
+    }
+    if (ul.length) {
+      blocks.push(
+        <ul key={blocks.length} className="list-disc pl-5 mb-2 space-y-1 text-[13px] text-[var(--color-fg)]">
+          {ul.map((b, i) => <li key={i}>{b}</li>)}
+        </ul>
+      );
+      ul = [];
+    }
+  };
+  for (const ln of lines) {
+    if (/^\s*[-*]\s/.test(ln)) {
+      if (para.length) flush();
+      ul.push(ln.replace(/^\s*[-*]\s/, ""));
+    } else if (!ln.trim()) {
+      flush();
+    } else {
+      if (ul.length) flush();
+      para.push(ln.trim());
+    }
+  }
+  flush();
+  return <div>{blocks}</div>;
+}
+
+// ── editable widgets ──────────────────────────────────────────────────
+
+function EditableTitle({ value, onSave }: { value: string; onSave: (v: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  if (!editing) {
+    return (
+      <h1
+        onDoubleClick={() => setEditing(true)}
+        title="Double-click to edit"
+        className="text-[18px] font-semibold text-[var(--color-fg)] tracking-tight leading-tight cursor-text hover:bg-[var(--color-bg3)] rounded px-1 -mx-1"
+      >
+        {value}
+      </h1>
+    );
+  }
+  return (
+    <input
+      autoFocus
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => {
+        if (draft.trim() && draft !== value) onSave(draft.trim());
+        setEditing(false);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.currentTarget as HTMLInputElement).blur();
+        if (e.key === "Escape") {
+          setDraft(value);
+          setEditing(false);
+        }
+      }}
+      className="w-full text-[18px] font-semibold tracking-tight leading-tight bg-[var(--color-bg3)] border border-[var(--color-brand)] rounded px-1 -mx-1 text-[var(--color-fg)] focus:outline-none"
+    />
+  );
+}
+
+function EditableDescription({ value, onSave }: { value: string; onSave: (v: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  if (!editing) {
+    return (
+      <div className="group relative">
+        {value.trim() ? (
+          <Markdownish text={value} />
+        ) : (
+          <p className="text-[12.5px] text-[var(--color-fg3)] italic">No description.</p>
+        )}
+        <button
+          onClick={() => setEditing(true)}
+          className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity text-[10.5px] text-[var(--color-fg3)] hover:text-[var(--color-fg)] px-1.5 py-0.5 bg-[var(--color-bg3)] rounded border border-[var(--color-line2)]"
+        >
+          edit
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      <textarea
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        rows={Math.max(4, draft.split("\n").length + 1)}
+        className="w-full font-mono text-[12px] bg-[var(--color-bg)] border border-[var(--color-line2)] rounded p-2 text-[var(--color-fg)] focus:outline-none focus:border-[var(--color-brand)]"
+      />
+      <div className="flex gap-2 justify-end">
+        <button
+          onClick={() => { setDraft(value); setEditing(false); }}
+          className="text-[11px] text-[var(--color-fg2)] hover:text-[var(--color-fg)] px-2 py-0.5"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={() => { if (draft !== value) onSave(draft); setEditing(false); }}
+          className="text-[11px] font-medium text-white bg-[var(--color-brand)] hover:opacity-90 px-2 py-0.5 rounded"
+        >
+          Save
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function AcEditor({
+  items,
+  onChange,
+}: {
+  items: AcceptanceItem[];
+  onChange: (next: AcceptanceItem[]) => void;
+}) {
+  const [draft, setDraft] = useState("");
+  function toggle(i: number) {
+    onChange(items.map((c, idx) => (idx === i ? { ...c, done: !c.done } : c)));
+  }
+  function remove(i: number) {
+    onChange(items.filter((_, idx) => idx !== i));
+  }
+  function add() {
+    if (!draft.trim()) return;
+    onChange([...items, { done: false, text: draft.trim() }]);
+    setDraft("");
+  }
+  return (
+    <>
+      <ul className="space-y-1">
+        {items.map((c, i) => (
+          <li key={i} className="group flex items-start gap-2 text-[12.5px] text-[var(--color-fg)]">
+            <button
+              onClick={() => toggle(i)}
+              className="mt-0.5 size-3.5 shrink-0 rounded-sm border grid place-items-center cursor-pointer"
+              style={{
+                background: c.done ? "var(--color-state-done)" : "transparent",
+                borderColor: c.done ? "var(--color-state-done)" : "var(--color-line2)",
+              }}
+              title={c.done ? "Mark incomplete" : "Mark done"}
+            >
+              {c.done && (
+                <svg width="10" height="10" viewBox="0 0 10 10"><path d="M2 5L4 7L8 3" stroke="#ffffff" strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              )}
+            </button>
+            <span className={`flex-1 ${c.done ? "text-[var(--color-fg3)] line-through" : ""}`}>{c.text}</span>
+            <button
+              onClick={() => remove(i)}
+              className="opacity-0 group-hover:opacity-100 text-[var(--color-fg3)] hover:text-[var(--color-err)] text-[14px] leading-none"
+              title="Remove"
+            >×</button>
+          </li>
+        ))}
+      </ul>
+      <div className="mt-2 flex gap-2">
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }}
+          placeholder="+ Add criterion"
+          className="flex-1 bg-[var(--color-bg)] border border-[var(--color-line2)] rounded px-2 py-1 text-[12px] text-[var(--color-fg)] focus:outline-none focus:border-[var(--color-brand)]"
+        />
+        <button
+          onClick={add}
+          disabled={!draft.trim()}
+          className="text-[11px] px-2 py-1 rounded bg-[var(--color-bg3)] text-[var(--color-fg2)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg4)] disabled:opacity-40"
+        >
+          Add
+        </button>
+      </div>
+    </>
+  );
+}
+
+function CommentComposer({
+  pending,
+  onSubmit,
+}: {
+  pending: boolean;
+  onSubmit: (msg: string) => void;
+}) {
+  const [draft, setDraft] = useState("");
+  function send() {
+    if (!draft.trim()) return;
+    onSubmit(draft.trim());
+    setDraft("");
+  }
+  return (
+    <div className="space-y-1">
+      <textarea
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+            e.preventDefault();
+            send();
+          }
+        }}
+        placeholder="Add a comment…  (⌘↵ to post)"
+        rows={2}
+        className="w-full font-mono text-[12px] bg-[var(--color-bg)] border border-[var(--color-line2)] rounded p-2 text-[var(--color-fg)] focus:outline-none focus:border-[var(--color-brand)] resize-y"
+      />
+      <div className="flex justify-end">
+        <button
+          onClick={send}
+          disabled={!draft.trim() || pending}
+          className="text-[11px] font-medium px-2 py-1 rounded bg-[var(--color-brand)] text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {pending ? "Posting…" : "Comment"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function relTime(iso: string): string {
+  const t = new Date(iso).getTime();
+  if (!Number.isFinite(t)) return iso;
+  const s = Math.floor((Date.now() - t) / 1000);
+  if (s < 60) return `${s}s ago`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  if (s < 86400 * 30) return `${Math.floor(s / 86400)}d ago`;
+  return new Date(iso).toISOString().slice(0, 10);
+}
