@@ -58,10 +58,27 @@ jobs:
       - name: Build renderer + main
         run: pnpm --filter @hivemind/desktop run build
 
+      - name: pnpm deploy (materialize workspace deps for electron-builder)
+        # electron-builder rejects workspace symlinks that point outside the
+        # app dir (it expects every node_module to live under apps/desktop/).
+        # `pnpm deploy` copies the package + all transitive deps (including
+        # other workspace packages, dereferenced) into a self-contained dir.
+        run: pnpm --filter @hivemind/desktop deploy --prod --legacy desktop-deploy
+
+      - name: Copy build output into deploy
+        # electron-vite emits to apps/desktop/out — the deploy copy has only
+        # source. The AppImage just needs `out/**/*` + package.json (per the
+        # `build.files` config).
+        run: cp -r apps/desktop/out desktop-deploy/
+
       - name: Package AppImage
-        run: pnpm --filter @hivemind/desktop run dist
+        # Run electron-builder INSIDE the deployed copy so node_modules are
+        # all under the app dir (no more "package.json must be under …" error).
+        run: |
+          cd desktop-deploy
+          npx --yes electron-builder --linux AppImage \
+            --config.directories.output=dist-electron
         env:
-          # Quiet electron-builder's auto-snap detection on GH runners.
           DEBUG: electron-builder
 
       - name: Stage release artifacts
@@ -73,7 +90,7 @@ jobs:
           cp apps/cli/dist/hive release-assets/hive-linux-x86_64
           chmod +x release-assets/hive-linux-x86_64
           # AppImage (electron-builder names it from package.json version)
-          appimage=$(ls -1 apps/desktop/dist-electron/*.AppImage 2>/dev/null | head -1)
+          appimage=$(ls -1 desktop-deploy/dist-electron/*.AppImage 2>/dev/null | head -1)
           test -n "$appimage" || { echo "no AppImage built"; exit 1; }
           cp "$appimage" release-assets/
           ls -la release-assets/
