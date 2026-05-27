@@ -63,7 +63,10 @@ jobs:
         # app dir (it expects every node_module to live under apps/desktop/).
         # `pnpm deploy` copies the package + all transitive deps (including
         # other workspace packages, dereferenced) into a self-contained dir.
-        run: pnpm --filter @hivemind/desktop deploy --prod --legacy desktop-deploy
+        # NOT --prod: electron itself is a devDependency in apps/desktop, and
+        # electron-builder needs it installed in the deploy dir to read the
+        # version it should bundle ("Cannot compute electron version" otherwise).
+        run: pnpm --filter @hivemind/desktop deploy --legacy desktop-deploy
 
       - name: Copy build output into deploy
         # electron-vite emits to apps/desktop/out — the deploy copy has only
