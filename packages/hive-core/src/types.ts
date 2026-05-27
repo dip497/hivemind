@@ -51,7 +51,13 @@ export interface AcceptanceItem {
 }
 
 export interface ActivityEntry {
-  at: string; // ISO
+  /** Always a parseable ISO-with-Z string after `parseActivity` normalization. */
+  at: string;
+  /** Raw on-disk timestamp form (legacy `YYYY-MM-DD HH:MM` or ISO). When set,
+   *  the serializer round-trips it as-is so loading + re-writing an issue
+   *  doesn't churn timestamp tokens across the file (would otherwise produce
+   *  noisy diffs on the very first updateIssue after upgrade). */
+  rawAt?: string;
   who: string; // user id or agent id
   message: string;
 }

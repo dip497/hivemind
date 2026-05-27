@@ -1188,10 +1188,16 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
       return { ...base, position: { x: px, y: py } };
     };
 
-    // Apply user-resized dimensions over the initial spec, if any.
+    // Apply user-resized dimensions over the initial spec, if any. Clamp
+    // the default to the visible viewport: a 1400px-wide tile on a 1366px
+    // laptop screen spawns wider than the window with no way to grab the
+    // right resize handle without scrolling first.
+    const vw = typeof window !== "undefined" ? window.innerWidth : 1920;
+    const vh = typeof window !== "undefined" ? window.innerHeight : 1080;
     const sized = (id: string, w: number, h: number) => {
       const s = sizes[id];
-      return s ? { width: s.width, height: s.height } : { width: w, height: h };
+      if (s) return { width: s.width, height: s.height };
+      return { width: Math.min(w, Math.max(640, vw - 80)), height: Math.min(h, Math.max(420, vh - 120)) };
     };
 
     // Frames FIRST. React-flow requires parent nodes to appear before their

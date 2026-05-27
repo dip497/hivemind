@@ -31,8 +31,7 @@ import { tags as t } from "@lezer/highlight";
 // is marimo-team/codemirror-ai + aziis98's review-tool walkthrough. The
 // standalone DiffTile stays for browsing branch/commit diffs (no editable
 // buffer there).
-import { unifiedMergeView, getOriginalDoc } from "@codemirror/merge";
-void getOriginalDoc;
+import { unifiedMergeView } from "@codemirror/merge";
 
 interface Props {
   repoPath: string;
@@ -187,19 +186,21 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, embedded = fal
     }
   }, [tabs, active]);
 
-  // Drop cached buffers + meta for closed tabs (avoid unbounded growth).
+  // Drop cached buffers + meta + diffMode for closed tabs (avoid unbounded growth).
   useEffect(() => {
     const set = new Set(tabs);
     for (const k of buffers.current.keys()) if (!set.has(k)) buffers.current.delete(k);
-    setMeta((m) => {
+    const prune = <T,>(m: Record<string, T>): Record<string, T> => {
       let changed = false;
-      const next: Record<string, TabState> = {};
+      const next: Record<string, T> = {};
       for (const k of Object.keys(m)) {
         if (set.has(k)) next[k] = m[k]!;
         else changed = true;
       }
       return changed ? next : m;
-    });
+    };
+    setMeta(prune);
+    setDiffMode(prune);
   }, [tabs]);
 
   const markDirty = useCallback((path: string, dirty: boolean) => {

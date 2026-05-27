@@ -82,6 +82,22 @@ describe("readConfig self-heal", () => {
     expect(cfg.prefix).toMatch(/^[A-Z][A-Z0-9]{1,9}$/);
     expect(cfg.next_id).toBe(1);
   });
+  test("concurrent self-heal callers share one write (race coalesced)", async () => {
+    const root = await mkRoot();
+    await fs.writeFile(path.join(root, "config.yaml"), "next_id: 7\nagents: {}\n", "utf8");
+    // Race 20 readConfig() calls in parallel — they must all resolve to the
+    // same repaired value and the file must be valid YAML afterward (no
+    // half-truncated content from interleaved writes).
+    const results = await Promise.all(Array.from({ length: 20 }, () => readConfig(root)));
+    const first = results[0]!;
+    for (const r of results) {
+      expect(r.prefix).toBe(first.prefix);
+      expect(r.next_id).toBe(first.next_id);
+    }
+    const after = await fs.readFile(path.join(root, "config.yaml"), "utf8");
+    expect(after).toMatch(/^prefix:/m);
+    expect(after).toMatch(/next_id:\s*7/);
+  });
   test("garbage prefix → falls back to derived", async () => {
     const root = await mkRoot();
     await fs.writeFile(path.join(root, "config.yaml"), "prefix: 123\nnext_id: 1\nagents: {}\n", "utf8");
@@ -246,8 +262,8 @@ describe("parseSections", () => {
       "## Activity\n\n- 2026-05-17 10:00 · sarah · created\n- 2026-05-17 11:00 · claude · changed state"
     );
     expect(s.activity).toEqual([
-      { at: "2026-05-17T10:00:00.000Z", who: "sarah", message: "created" },
-      { at: "2026-05-17T11:00:00.000Z", who: "claude", message: "changed state" },
+      { at: "2026-05-17T10:00:00.000Z", rawAt: "2026-05-17 10:00", who: "sarah", message: "created" },
+      { at: "2026-05-17T11:00:00.000Z", rawAt: "2026-05-17 11:00", who: "claude", message: "changed state" },
     ]);
   });
 });
@@ -301,7 +317,35 @@ describe("appendActivity", () => {
     expect(back.sections.activity[0]?.at).toBe(at);
     expect(new Date(back.sections.activity[0]!.at).getTime()).toBe(fixed.getTime());
   });
-  test("legacy `YYYY-MM-DD HH:MM` activity timestamps are normalized to ISO-Z", async () => {
+  test("legacy `YYYY-MM-DD HH:MM` activity rows round-trip without churn", async () => {
+    const root = await mkRoot();
+    const md = `---
+id: PAY-1
+title: T
+state: todo
+parent: null
+labels: []
+assignee: null
+github: null
+created: "2026-05-17T10:00:00Z"
+updated: "2026-05-17T10:00:00Z"
+---
+
+## Activity
+
+- 2026-05-17 10:00 · ui · created
+`;
+    await fs.writeFile(issuePath(root, "PAY-1"), md, "utf8");
+    const issue = await readIssue(root, "PAY-1");
+    // After writeIssue the legacy timestamp tokens must NOT have been
+    // rewritten to ISO — that would produce noisy diffs on every first
+    // updateIssue after upgrade.
+    await writeIssue(issue);
+    const after = await fs.readFile(issuePath(root, "PAY-1"), "utf8");
+    expect(after).toMatch(/- 2026-05-17 10:00 · ui · created/);
+    expect(after).not.toMatch(/2026-05-17T10:00:00\.000Z · ui · created/);
+  });
+  test("legacy `YYYY-MM-DD HH:MM` activity timestamps are normalized to ISO-Z for `at`", async () => {
     const root = await mkRoot();
     const md = `---
 id: PAY-1

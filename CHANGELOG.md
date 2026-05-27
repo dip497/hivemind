@@ -7,6 +7,16 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Fixed (review pass)
+- **`readConfig` self-heal race + non-atomic write.** Multiple IPC handlers (`createIssue`, `listIssues`, `resolveProject`, …) hit `readConfig` in parallel on first launch; when the file was invalid, every caller raced into `writeConfig` and a bare `fs.writeFile` could half-truncate. Now an in-process `Map<root, Promise<Config>>` coalesces concurrent reads to share one repair pass, and `writeConfig` writes to `config.yaml.<pid>.<ts>.tmp` then `fs.rename` (atomic). New test pins 20-way concurrent readConfig + verifies the file stays valid.
+- **Editor `diffMode` map no longer leaks.** Closed tabs left their `diffMode[path]` entry behind; opening a stale path resurrected `true` and triggered an unwanted `gitFileContents` fetch. Tab-prune effect now drops `diffMode` entries alongside `meta` + `buffers`.
+- **Activity timestamps no longer churn the file on first update.** `ActivityEntry` now carries `rawAt` (the on-disk form); serializer round-trips `rawAt ?? at`, so legacy `YYYY-MM-DD HH:MM` rows stay verbatim until a NEW entry is appended (the new one uses ISO-Z). Previously, the first `updateIssue` after upgrade rewrote every activity line and produced huge noisy diffs. New test pins zero churn.
+- Dropped unused `getOriginalDoc` re-export in `EditorTile.tsx` (dead-import workaround).
+- Editor + diff tile defaults now clamped to `window.innerWidth − 80` so 1400×900 doesn't spawn off-screen on 1366px laptop screens.
+
+### Note
+- **Frame selection: click the header to select.** With `pointer-events: none` on the frame body (the pan fix), clicking the dashed body region no longer selects the frame. Header bar remains the selection / drag handle.
+
 ### Added
 - **Editor: inline diff toggle per tab (`@codemirror/merge` `unifiedMergeView`).** Each open tab now has a `⇄` button (active tab in the tab bar, plus a duplicate in the standalone tile header). Clicking it overlays the buffer's diff against `HEAD:<path>` in the SAME editor — deletions as widget rows, additions inline, per-chunk accept/reject controls. Toggle off returns to plain edit mode without rebuilding state (CodeMirror `Compartment.reconfigure`). Standalone `DiffTile` stays for browsing branch/commit diffs (where there's no editable buffer). Research: marimo-team/codemirror-ai, aziis98 review-tool walkthrough, Sourcegraph blob view — all use the same `unifiedMergeView` extension pattern instead of a separate diff view class.
 

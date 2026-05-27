@@ -68,47 +68,61 @@ export class HiveError extends Error {
 
 // ── config ────────────────────────────────────────────────────────
 
-export async function readConfig(root: string): Promise<Config> {
-  const p = path.join(root, "config.yaml");
-  let raw = "";
-  try {
-    raw = await fs.readFile(p, "utf8");
-  } catch {
-    /* missing file → treat as empty, self-heal below */
-  }
-  const parsed = (raw ? YAML.parse(raw) : {}) ?? {};
-  const result = ConfigZ.safeParse(parsed);
-  if (result.success) return result.data;
+// In-process read coalescer: every IPC handler on first launch hits
+// `readConfig` in parallel. When the file is broken, naive code lets each
+// caller race into `writeConfig` — even with idempotent repair the file
+// can be half-truncated if two writes interleave. Cache the IN-FLIGHT
+// promise per root so callers share the same repair pass.
+const readConfigInFlight = new Map<string, Promise<Config>>();
 
-  // Self-heal: an early hive init wrote configs without `prefix`, and users
-  // sometimes hand-edit the file and drop fields. Refusing to read the config
-  // hard-blocks every IPC handler (createIssue, listIssues, …) and surfaces
-  // as a raw stack trace in the UI. Instead, fill in defaults and write the
-  // repaired config back so the next read is clean. Prefix derived from the
-  // repo dir name (uppercase, alphanumeric, capped at 10 chars per ConfigZ).
-  const obj = (typeof parsed === "object" && parsed !== null ? parsed : {}) as Record<string, unknown>;
-  const repaired: Config = {
-    prefix: deriveDefaultPrefix(typeof obj.prefix === "string" ? obj.prefix : undefined, root),
-    next_id:
-      typeof obj.next_id === "number" && Number.isInteger(obj.next_id) && obj.next_id > 0
-        ? obj.next_id
-        : 1,
-    agents:
-      obj.agents && typeof obj.agents === "object" && !Array.isArray(obj.agents)
-        ? (obj.agents as Config["agents"])
-        : {},
-  };
-  // Validate the repaired shape (defensive — if deriveDefaultPrefix returns
-  // garbage we'd rather throw than silently corrupt the file).
-  const final = ConfigZ.safeParse(repaired);
-  if (!final.success) {
-    throw new HiveError(
-      "bad_config",
-      `.hivemind/config.yaml invalid and self-repair failed: ${final.error.message}`
-    );
+export async function readConfig(root: string): Promise<Config> {
+  const existing = readConfigInFlight.get(root);
+  if (existing) return existing;
+  const promise = (async () => {
+    const p = path.join(root, "config.yaml");
+    let raw = "";
+    try {
+      raw = await fs.readFile(p, "utf8");
+    } catch {
+      /* missing file → treat as empty, self-heal below */
+    }
+    const parsed = (raw ? YAML.parse(raw) : {}) ?? {};
+    const result = ConfigZ.safeParse(parsed);
+    if (result.success) return result.data;
+
+    // Self-heal: an early hive init wrote configs without `prefix`, and users
+    // sometimes hand-edit the file and drop fields. Refusing to read the
+    // config hard-blocks every IPC handler (createIssue, listIssues, …) and
+    // surfaces as a raw stack trace in the UI. Instead, fill in defaults
+    // and write the repaired config back so the next read is clean.
+    const obj = (typeof parsed === "object" && parsed !== null ? parsed : {}) as Record<string, unknown>;
+    const repaired: Config = {
+      prefix: deriveDefaultPrefix(typeof obj.prefix === "string" ? obj.prefix : undefined, root),
+      next_id:
+        typeof obj.next_id === "number" && Number.isInteger(obj.next_id) && obj.next_id > 0
+          ? obj.next_id
+          : 1,
+      agents:
+        obj.agents && typeof obj.agents === "object" && !Array.isArray(obj.agents)
+          ? (obj.agents as Config["agents"])
+          : {},
+    };
+    const final = ConfigZ.safeParse(repaired);
+    if (!final.success) {
+      throw new HiveError(
+        "bad_config",
+        `.hivemind/config.yaml invalid and self-repair failed: ${final.error.message}`
+      );
+    }
+    await writeConfig(root, final.data);
+    return final.data;
+  })();
+  readConfigInFlight.set(root, promise);
+  try {
+    return await promise;
+  } finally {
+    readConfigInFlight.delete(root);
   }
-  await writeConfig(root, final.data);
-  return final.data;
 }
 
 /** Sanitize a candidate string into a valid Config.prefix, or derive one
@@ -136,7 +150,12 @@ export async function writeConfig(root: string, cfg: Config): Promise<void> {
   const p = path.join(root, "config.yaml");
   // Validate before writing.
   const parsed = ConfigZ.parse(cfg);
-  await fs.writeFile(p, YAML.stringify(parsed), "utf8");
+  // Atomic write: write to a sibling temp + rename. Bare `fs.writeFile` can
+  // produce a half-truncated file if two processes interleave (or a crash
+  // hits mid-write). rename is atomic on the same filesystem.
+  const tmp = `${p}.${process.pid}.${Date.now()}.tmp`;
+  await fs.writeFile(tmp, YAML.stringify(parsed), "utf8");
+  await fs.rename(tmp, p);
 }
 
 /** Reserve and increment the next ID atomically (read-modify-write). */
@@ -398,7 +417,13 @@ function parseActivity(text: string): ActivityEntry[] {
   const out: ActivityEntry[] = [];
   for (const line of text.split("\n")) {
     const m = ACT_RE.exec(line.trim());
-    if (m) out.push({ at: normalizeActivityTs(m[1]!), who: m[2]!, message: m[3]! });
+    if (m) {
+      const raw = m[1]!;
+      // Preserve the on-disk form so serializeSections can round-trip without
+      // rewriting every legacy `YYYY-MM-DD HH:MM` row to ISO on the next
+      // update (would create huge noisy diffs across the workspace).
+      out.push({ at: normalizeActivityTs(raw), rawAt: raw, who: m[2]!, message: m[3]! });
+    }
   }
   return out;
 }
@@ -420,7 +445,9 @@ export function serializeSections(s: IssueSections): string {
     parts.push(`## Acceptance criteria\n\n${lines.join("\n")}`);
   }
   if (s.activity.length > 0) {
-    const lines = s.activity.map((e) => `- ${e.at} · ${e.who} · ${e.message}`);
+    // Prefer `rawAt` (preserved from disk) so loaded-then-rewritten issues
+    // keep their legacy timestamp form. New entries (no rawAt) emit ISO-Z.
+    const lines = s.activity.map((e) => `- ${e.rawAt ?? e.at} · ${e.who} · ${e.message}`);
     parts.push(`## Activity\n\n${lines.join("\n")}`);
   }
   if (s.extra.trim()) parts.push(s.extra.trim());
