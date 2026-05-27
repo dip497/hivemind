@@ -1009,7 +1009,14 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
       : null;
     if (!id) return;
     placeInFrame(id, ensureFrame());
-  }, [placeInFrame, ensureFrame]);
+    // Spawn-to-focus: a tile that lands off-screen but is never centered feels
+    // like "nothing happened" — user clicks Open and the canvas doesn't react.
+    // rAF lets the node mount before we pan/select.
+    requestAnimationFrame(() => {
+      setSelectedTileId(id);
+      focusTile(id);
+    });
+  }, [placeInFrame, ensureFrame, focusTile]);
 
   const killExtra = useCallback((id: string) => {
     // TerminalTile's unmount cleanup ptyKills its own (per-mount unique) ptyId.
@@ -1039,8 +1046,12 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
       const tid = kind === "tree" ? WORKBENCH_TILE_ID : kind === "diff" ? "tile-diff-1" : "tile-issues-1";
       setVis((v) => ({ ...v, [kind]: true }));
       placeInFrame(tid, frame);
+      requestAnimationFrame(() => {
+        setSelectedTileId(tid);
+        focusTile(tid);
+      });
     }
-  }, [doSpawnClaude, placeInFrame, autoPileSpawn]);
+  }, [doSpawnClaude, placeInFrame, autoPileSpawn, focusTile]);
 
   // Wire palette events + keyboard shortcuts. CommandPalette dispatches events
   // (decoupled from Canvas state); plus ⌘\ → spawn claude, ⌘B/T/D → toggle.
@@ -1227,7 +1238,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     }
 
     if (vis.tree && repoPath) {
-      const sz = sized(WORKBENCH_TILE_ID, 760, 520);
+      const sz = sized(WORKBENCH_TILE_ID, 1400, 900);
       out.push(
         mkTile(
           {
@@ -1278,7 +1289,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
       x += sz.width + gap;
     }
     if (vis.diff && repoPath) {
-      const sz = sized("tile-diff-1", 720, 460);
+      const sz = sized("tile-diff-1", 1400, 900);
       out.push(
         mkTile(
           {
@@ -1561,21 +1572,24 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   useEffect(() => {
     if (extras.length > prevExtrasLen.current) {
       const last = extras[extras.length - 1];
-      // Select the new tile so it's highlighted + brought to front (works even
-      // when it's the only tile). Pan to it only when other tiles already exist
-      // (else it's already framed by the default viewport).
+      // Always select + pan to the new tile. The previous `nodes.length > 1`
+      // gate skipped focus on the first spawn, but a newly-spawned tile can
+      // land anywhere (inside a frame far from the default viewport, e.g.
+      // bound workspace, or off-screen from auto-layout) — "I clicked spawn
+      // and nothing happened" was the user complaint. Pan unconditionally;
+      // setCenter on a tile that's already centered is a no-op visually.
       if (last) {
         setSelectedTileId(last.id);
-        if (nodes.length > 1) focusTile(last.id);
+        focusTile(last.id);
       }
     }
     prevExtrasLen.current = extras.length;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [extras, focusTile]);
-  // Newly-toggled-on shell terminal.
+  // Newly-toggled-on shell terminal — always focus (see note above).
   const prevShell = useRef(vis.shell);
   useEffect(() => {
-    if (vis.shell && !prevShell.current && nodes.length > 1) focusTile("tile-terminal-1");
+    if (vis.shell && !prevShell.current) focusTile("tile-terminal-1");
     prevShell.current = vis.shell;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vis.shell, focusTile]);
@@ -2122,13 +2136,16 @@ function FocusOnTile({ req }: { req: { id: string; n: number } | null }) {
     let tries = 0;
     const tick = () => {
       const n = getNode(req.id);
-      if (n && n.measured?.width && n.measured?.height) {
-        // fitView resolves absolute coords (handles parented tiles); setCenter
-        // on parented n.position was using RELATIVE coords → no pan happened.
+      if (n) {
+        // Don't gate on `measured` — xyflow resolves position from internal
+        // state, so fitView works even if the node hasn't been DOM-measured
+        // yet. The earlier `measured?.width` gate was the reason the very
+        // first spawn never focused: a culled / not-yet-rendered node has
+        // no measured dims, so the retry loop expired before xyflow rendered.
         void fitView({ nodes: [{ id: req.id }], padding: 0.3, duration: 400, maxZoom: 1 });
         return;
       }
-      if (tries++ < 30) raf = requestAnimationFrame(tick);
+      if (tries++ < 60) raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);

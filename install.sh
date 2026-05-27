@@ -94,8 +94,17 @@ install_prebuilt() {
   say "downloading desktop AppImage"
   if curl -fL --progress-bar -o "$APP_DIR/hivemind.AppImage" "$APPIMG_URL"; then
     chmod +x "$APP_DIR/hivemind.AppImage"
-    ln -sf "$APP_DIR/hivemind.AppImage" "$BIN_DIR/hivemind"
-    ok "linked $BIN_DIR/hivemind → $APP_DIR/hivemind.AppImage"
+    # Extract instead of FUSE-mount at runtime. Ubuntu 22.04+ ships without
+    # libfuse2; running the AppImage directly errors with "dlopen():
+    # libfuse.so.2". Extract sidesteps the dependency — `AppRun` is a normal
+    # ELF that re-execs the bundled Electron. ~5s one-time cost, zero sudo.
+    say "extracting AppImage (no libfuse2 needed)"
+    rm -rf "$APP_DIR/hivemind-extracted"
+    (cd "$APP_DIR" && ./hivemind.AppImage --appimage-extract >/dev/null) \
+      || die "AppImage extract failed. Check $APP_DIR/hivemind.AppImage"
+    mv "$APP_DIR/squashfs-root" "$APP_DIR/hivemind-extracted"
+    ln -sf "$APP_DIR/hivemind-extracted/AppRun" "$BIN_DIR/hivemind"
+    ok "linked $BIN_DIR/hivemind → $APP_DIR/hivemind-extracted/AppRun"
   else
     warn "AppImage download failed (CLI still installed). Run \`hivemind\` via --dev or re-run later."
   fi
@@ -163,8 +172,14 @@ install_dev() {
       APPIMAGE=$(ls -1 "$HIVE_ROOT"/apps/desktop/dist-electron/*.AppImage 2>/dev/null | head -1)
       if [ -n "$APPIMAGE" ]; then
         chmod +x "$APPIMAGE"
-        ln -sf "$APPIMAGE" "$BIN_DIR/hivemind"
-        ok "linked $BIN_DIR/hivemind → $APPIMAGE"
+        # Extract — Ubuntu 22.04+ lacks libfuse2 by default.
+        EXTRACT_DIR="$APP_DIR/hivemind-extracted"
+        rm -rf "$EXTRACT_DIR"
+        (cd "$APP_DIR" && "$APPIMAGE" --appimage-extract >/dev/null) \
+          || die "AppImage extract failed"
+        mv "$APP_DIR/squashfs-root" "$EXTRACT_DIR"
+        ln -sf "$EXTRACT_DIR/AppRun" "$BIN_DIR/hivemind"
+        ok "linked $BIN_DIR/hivemind → $EXTRACT_DIR/AppRun"
       else
         warn "no AppImage produced; check electron-builder output"
       fi

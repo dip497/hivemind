@@ -70,7 +70,6 @@ export const initCmd = defineCommand({
 
     try {
       await fs.mkdir(path.join(root, "issues"), { recursive: true });
-      await fs.mkdir(path.join(root, "cycles"), { recursive: true });
       await writeConfig(root, { prefix, next_id: 1, agents: {} });
       await writeAgentContext(root);
 

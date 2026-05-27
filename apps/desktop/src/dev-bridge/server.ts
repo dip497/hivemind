@@ -46,7 +46,6 @@ import {
   createIssue,
   deleteIssue as deleteIssueCore,
   findRoot,
-  listCycles,
   listIssues,
   readIssue,
   updateIssue,
@@ -206,7 +205,6 @@ const PREVIEW_SCRIPT = `
     resolveProject:    (h) => call("resolveProject", h),
     listIssues:        (r) => call("listIssues", r),
     readIssue:         (r,i) => call("readIssue", r, i),
-    listCycles:        (r) => call("listCycles", r),
     updateIssueState:  (r,i,s,n) => call("updateIssueState", r, i, s, n),
     createIssue:       (r,o) => call("createIssue", r, o),
     updateIssue:       (r,i,p) => call("updateIssue", r, i, p),
@@ -247,7 +245,6 @@ const RPC: Record<string, (...args: unknown[]) => Promise<unknown> | unknown> = 
   },
   listIssues: (root: string) => listIssues(root),
   readIssue: (root: string, id: string) => readIssue(root, id),
-  listCycles: (root: string) => listCycles(root),
   updateIssueState: async (root: string, id: string, state: IssueState, note?: string) => {
     const issue = await readIssue(root, id);
     appendActivity(issue, "ui", `state ${issue.state} → ${state}${note ? ` · ${note}` : ""}`);

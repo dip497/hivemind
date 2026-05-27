@@ -2,7 +2,6 @@ import type { Issue, IssueSummary, IssueState, Assignee } from "./types.js";
 
 export interface QueryFilter {
   state?: IssueState | IssueState[];
-  cycle?: string;
   parent?: string | null;
   assignee?: string; // matches assignee.id
   label?: string;
@@ -18,7 +17,6 @@ export function filterIssues<T extends IssueSummary | Issue>(
       const states = Array.isArray(q.state) ? q.state : [q.state];
       if (!states.includes(i.state)) return false;
     }
-    if (q.cycle !== undefined && i.cycle !== q.cycle) return false;
     if (q.parent !== undefined && i.parent !== q.parent) return false;
     if (q.assignee !== undefined) {
       const a = i.assignee as Assignee | null;

@@ -1,5 +1,5 @@
 /** Typed contract for IPC between main and renderer. */
-import type { Cycle, Issue, IssueSummary, IssueState, AcceptanceItem, Assignee } from "@hivemind/core/types";
+import type { Issue, IssueSummary, IssueState, AcceptanceItem, Assignee } from "@hivemind/core/types";
 
 /**
  * Patch shape for `updateIssue`. Duplicated from `@hivemind/core/storage`
@@ -12,7 +12,6 @@ export type IssuePatch = Partial<{
   labels: string[];
   assignee: Assignee | null | undefined;
   github: number | null | undefined;
-  cycle: string | null | undefined;
   description: string;
   acceptanceCriteria: AcceptanceItem[];
   extra: string;
@@ -112,10 +111,9 @@ export interface HiveIpc {
    *  Returns the new root path. Renderer should re-resolve afterwards. */
   initWorkspace(dir: string, prefix: string): Promise<{ root: string }>;
 
-  // ── hive-core (issues / cycles) ───────────────────────────
+  // ── hive-core (issues) ───────────────────────────
   listIssues(root: string): Promise<IssueSummary[]>;
   readIssue(root: string, id: string): Promise<Issue>;
-  listCycles(root: string): Promise<Cycle[]>;
   updateIssueState(
     root: string,
     id: string,
@@ -130,7 +128,6 @@ export interface HiveIpc {
       parent?: string;
       labels?: string[];
       assignee?: Issue["assignee"];
-      cycle?: string;
       description?: string;
     }
   ): Promise<Issue>;

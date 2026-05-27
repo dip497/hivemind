@@ -19,7 +19,6 @@ import {
   createIssue,
   deleteIssue,
   findRoot,
-  listCycles,
   listIssues,
   readIssue,
   updateIssue,
@@ -54,7 +53,6 @@ function issueToJson(i: Issue) {
     labels: i.labels,
     assignee: i.assignee,
     github: i.github,
-    cycle: i.cycle,
     created: i.created,
     updated: i.updated,
     description: i.sections.description,
@@ -123,7 +121,7 @@ const TOOLS: Tool[] = [
   {
     name: "hive_update_issue",
     description:
-      "Patch an issue's fields: title, description, labels, assignee, parent, cycle. For state changes use hive_set_state instead.",
+      "Patch an issue's fields: title, description, labels, assignee, parent. For state changes use hive_set_state instead.",
     inputSchema: {
       type: "object",
       properties: {
@@ -141,7 +139,6 @@ const TOOLS: Tool[] = [
           required: ["type", "id"],
         },
         parent: { type: ["string", "null"] },
-        cycle: { type: ["string", "null"] },
       },
       required: ["id"],
     },
@@ -189,11 +186,6 @@ const TOOLS: Tool[] = [
       required: ["id"],
     },
   },
-  {
-    name: "hive_list_cycles",
-    description: "List all cycles (sprints) in the workspace.",
-    inputSchema: { type: "object", properties: {} },
-  },
 ];
 
 const GetIssueArgs = z.object({ id: z.string() });
@@ -214,7 +206,6 @@ const UpdateIssueArgs = z.object({
     .nullable()
     .optional(),
   parent: z.string().nullable().optional(),
-  cycle: z.string().nullable().optional(),
 });
 const MarkAcceptanceArgs = z.object({
   id: z.string(),
@@ -288,7 +279,6 @@ export function buildServer(): Server {
           if (a.assignee !== undefined) patch.assignee = a.assignee;
           // IssuePatch uses `undefined` (not null) to mean "clear"; map both.
           if (a.parent !== undefined) patch.parent = a.parent ?? undefined;
-          if (a.cycle !== undefined) patch.cycle = a.cycle ?? undefined;
           await updateIssue(root, a.id, patch, actorTag());
           const after = await readIssue(root, a.id);
           return jsonResult(issueToJson(after));
@@ -332,10 +322,6 @@ export function buildServer(): Server {
           const a = DeleteIssueArgs.parse(args);
           await deleteIssue(root, a.id);
           return jsonResult({ ok: true, deleted: a.id });
-        }
-        case "hive_list_cycles": {
-          const cycles = await listCycles(root);
-          return jsonResult(cycles);
         }
         default:
           throw new Error(`unknown tool: ${name}`);

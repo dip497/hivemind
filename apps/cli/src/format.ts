@@ -61,10 +61,9 @@ export function renderIssueList(items: IssueSummary[]): string {
       const state = c(stateColor[i.state], i.state.padEnd(stateW));
       const labels = i.labels.length > 0 ? c(C.dim, ` [${i.labels.join(",")}]`) : "";
       const a = i.assignee ? c(C.cyan, ` @${i.assignee.id}`) : "";
-      const cyc = i.cycle ? c(C.dim, ` ${i.cycle}`) : "";
       const gh = i.github ? c(C.dim, ` gh#${i.github}`) : "";
       const parent = i.parent ? c(C.dim, ` ↳${i.parent}`) : "";
-      return `${id}  ${state}  ${i.title}${labels}${a}${cyc}${gh}${parent}`;
+      return `${id}  ${state}  ${i.title}${labels}${a}${gh}${parent}`;
     })
     .join("\n");
 }
@@ -76,7 +75,6 @@ export function renderIssue(i: Issue): string {
   if (i.parent) meta.push(`parent: ${i.parent}`);
   if (i.labels.length > 0) meta.push(`labels: ${i.labels.join(", ")}`);
   if (i.assignee) meta.push(`assignee: @${i.assignee.id} (${i.assignee.type})`);
-  if (i.cycle) meta.push(`cycle: ${i.cycle}`);
   if (i.github) meta.push(`gh: #${i.github}`);
   meta.push(`created: ${i.created.slice(0, 16).replace("T", " ")}`);
   meta.push(`updated: ${i.updated.slice(0, 16).replace("T", " ")}`);

@@ -14,7 +14,6 @@ import { updateCmd } from "./commands/update.js";
 import { closeCmd, reopenCmd } from "./commands/close.js";
 import { taskCmd } from "./commands/task.js";
 import { linkCmd } from "./commands/link.js";
-import { cycleCmd } from "./commands/cycle.js";
 import { agentCmd } from "./commands/agent.js";
 import { resolveCmd } from "./commands/mention.js";
 import { mcpStdioCmd } from "./commands/mcp.js";
@@ -51,7 +50,6 @@ const main = defineCommand({
     reopen: reopenCmd,
     task: taskCmd,
     link: linkCmd,
-    cycle: cycleCmd,
     agent: agentCmd,
     resolve: resolveCmd,
     "mcp-stdio": mcpStdioCmd,

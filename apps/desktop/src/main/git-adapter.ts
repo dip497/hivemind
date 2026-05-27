@@ -111,6 +111,12 @@ export async function gitStatus(repoPath: string): Promise<GitStatusSnapshot> {
     "--porcelain=v2",
     "--branch",
     "--untracked-files=normal",
+    // Explicit: gitignored files MUST NOT appear in DiffTile / FileTreeTile.
+    // `--ignored=no` is the default but stating it locks the behavior against
+    // future flag drift. Note: a file that was tracked BEFORE being added to
+    // .gitignore still surfaces — git only skips gitignored UNtracked files.
+    // To hide such files use `git rm --cached <path> && commit`.
+    "--ignored=no",
   ]);
 
   const snap: GitStatusSnapshot = {

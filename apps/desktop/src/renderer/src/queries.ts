@@ -9,7 +9,7 @@
 import { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import type { Cycle, Issue, IssueSummary, IssueState } from "@hivemind/core/types";
+import type { Issue, IssueSummary, IssueState } from "@hivemind/core/types";
 import type {
   DiffPayload,
   DiffScope,
@@ -25,7 +25,7 @@ import type {
 export const inElectron =
   typeof window !== "undefined" && !!(window as unknown as { hive?: unknown }).hive;
 
-// ── project / issues / cycles ────────────────────────────────────────────
+// ── project / issues ────────────────────────────────────────────
 
 export function useProject(rootHint?: string | null) {
   return useQuery<{ root: string | null; cwd: string; repoPath: string | null }>({
@@ -50,14 +50,6 @@ export function useIssue(root: string | null | undefined, id: string | undefined
     queryFn: () =>
       root && id ? window.hive.readIssue(root, id) : Promise.resolve(null),
     enabled: !!root && !!id,
-  });
-}
-
-export function useCycles(root: string | null | undefined) {
-  return useQuery<Cycle[]>({
-    queryKey: ["cycles", root],
-    queryFn: () => (root ? window.hive.listCycles(root) : Promise.resolve([])),
-    enabled: !!root,
   });
 }
 
@@ -93,7 +85,6 @@ export function useUpdateState() {
     onSettled: (_data, _err, vars) => {
       qc.invalidateQueries({ queryKey: ["issues", vars.root] });
       qc.invalidateQueries({ queryKey: ["issue", vars.root, vars.id] });
-      qc.invalidateQueries({ queryKey: ["cycles", vars.root] });
     },
   });
 }
@@ -110,7 +101,6 @@ export function useCreateIssue() {
     mutationFn: ({ root, opts }) => window.hive.createIssue(root, opts),
     onSuccess: (issue, { root }) => {
       qc.invalidateQueries({ queryKey: ["issues", root] });
-      qc.invalidateQueries({ queryKey: ["cycles", root] });
       toast.success(`created ${issue.id}`, { description: issue.title });
     },
     onError: (e) => toast.error("create failed", { description: e.message }),
@@ -137,7 +127,6 @@ export function useUpdateIssue() {
             state: patch.state ?? i.state,
             labels: patch.labels ?? i.labels,
             assignee: patch.assignee !== undefined ? patch.assignee : i.assignee,
-            cycle: patch.cycle !== undefined ? patch.cycle : i.cycle,
           };
         }) ?? old,
       );
@@ -149,7 +138,6 @@ export function useUpdateIssue() {
               state: patch.state ?? old.state,
               labels: patch.labels ?? old.labels,
               assignee: patch.assignee !== undefined ? patch.assignee : old.assignee,
-              cycle: patch.cycle !== undefined ? patch.cycle : old.cycle,
               sections: {
                 ...old.sections,
                 description: patch.description ?? old.sections.description,
@@ -363,7 +351,6 @@ export function useFsChangedInvalidation(repoPath: string | null | undefined) {
       }
       if (hivePending) {
         qc.invalidateQueries({ queryKey: ["issues"] });
-        qc.invalidateQueries({ queryKey: ["cycles"] });
         qc.invalidateQueries({ queryKey: ["issue"] });
         hivePending = false;
       }

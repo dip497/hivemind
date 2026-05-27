@@ -24,7 +24,6 @@ const api: HiveIpc & {
   installAgentic: (dir) => ipcRenderer.invoke("installAgentic", dir),
   listIssues: (root) => ipcRenderer.invoke("listIssues", root),
   readIssue: (root, id) => ipcRenderer.invoke("readIssue", root, id),
-  listCycles: (root) => ipcRenderer.invoke("listCycles", root),
   updateIssueState: (root, id, state, note) =>
     ipcRenderer.invoke("updateIssueState", root, id, state, note),
   createIssue: (root, opts) => ipcRenderer.invoke("createIssue", root, opts),

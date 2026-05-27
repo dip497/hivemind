@@ -7,7 +7,6 @@ export const listCmd = defineCommand({
   meta: { name: "list", description: "List issues (filterable)" },
   args: {
     state: { type: "string", description: "Filter by state (repeatable)" },
-    cycle: { type: "string", description: "Filter by cycle id" },
     assignee: { type: "string", description: "Filter by assignee id" },
     label: { type: "string", description: "Filter by label" },
     parent: { type: "string", description: "Filter by parent (use 'none' for top-level)" },
@@ -21,7 +20,6 @@ export const listCmd = defineCommand({
 
       const filter: {
         state?: ReturnType<typeof parseState>[];
-        cycle?: string;
         assignee?: string;
         label?: string;
         parent?: string | null;
@@ -34,7 +32,6 @@ export const listCmd = defineCommand({
         }
         filter.state = parsed;
       }
-      if (args.cycle) filter.cycle = String(args.cycle);
       if (args.assignee) filter.assignee = String(args.assignee).toLowerCase();
       if (args.label) filter.label = String(args.label);
       if (args.parent !== undefined && args.parent !== "") {

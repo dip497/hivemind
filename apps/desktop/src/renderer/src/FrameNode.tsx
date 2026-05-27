@@ -99,6 +99,12 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
   return (
     <div
       className="w-full h-full rounded-xl relative"
+      // Frame node is pointer-transparent at the .react-flow__node-frame
+      // wrapper level (styles.css). Pan/right-drag/Space+left/rubber-band
+      // selection all need pointer events to reach the pane container —
+      // xyflow auto-adds `.nopan` to every draggable node which blocks pan
+      // starting from a node element. Header bar + NodeResizer handles
+      // re-enable events on themselves below.
       style={{
         // A grouping ZONE, not a tile: faint fill + a DASHED, lower-saturation
         // border so it reads as a region behind the tiles (a solid 2px high-sat
@@ -134,7 +140,10 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
           so child tiles inside the frame remain clickable. */}
       <div
         className="absolute top-0 left-0 right-0 h-7 flex items-center gap-2 px-2 rounded-t-xl tile-drag-handle cursor-grab active:cursor-grabbing"
-        style={{ background: `color-mix(in oklab, ${data.color} 20%, transparent)` }}
+        // Re-enable events here — the body wrapper sets pointer-events:none
+        // to pass pan/selection through. Header IS the drag handle + holds
+        // all the chrome (rename, binding, color, delete).
+        style={{ background: `color-mix(in oklab, ${data.color} 20%, transparent)`, pointerEvents: "auto" }}
         onPointerDown={() => data.onBringToFront(data.id)}
       >
         {editing ? (
@@ -347,6 +356,7 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
       {showPicker && (
         <div
           className="absolute top-8 right-1 z-20 bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-md p-1 flex gap-1 shadow-xl"
+          style={{ pointerEvents: "auto" }}
           onClick={(e) => e.stopPropagation()}
         >
           {COLORS.map((c) => (

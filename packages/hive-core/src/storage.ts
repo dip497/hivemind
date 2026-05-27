@@ -10,8 +10,6 @@
  *   │   └── PAY-122/        <- sub-issue directory (children of PAY-122)
  *   │       ├── PAY-122.1.md
  *   │       └── PAY-122.2.md
- *   ├── cycles/
- *   │   └── cycle-14.md
  *   └── .agent.md            <- auto-generated context for AI agents
  */
 
@@ -21,12 +19,10 @@ import matter from "gray-matter";
 import YAML from "yaml";
 import {
   ConfigZ,
-  CycleFrontmatterZ,
   IssueFrontmatterZ,
   type AcceptanceItem,
   type ActivityEntry,
   type Config,
-  type Cycle,
   type Issue,
   type IssueSections,
   type IssueSummary,
@@ -74,13 +70,66 @@ export class HiveError extends Error {
 
 export async function readConfig(root: string): Promise<Config> {
   const p = path.join(root, "config.yaml");
-  const raw = await fs.readFile(p, "utf8");
-  const parsed = YAML.parse(raw);
-  const result = ConfigZ.safeParse(parsed);
-  if (!result.success) {
-    throw new HiveError("bad_config", `.hivemind/config.yaml invalid: ${result.error.message}`);
+  let raw = "";
+  try {
+    raw = await fs.readFile(p, "utf8");
+  } catch {
+    /* missing file → treat as empty, self-heal below */
   }
-  return result.data;
+  const parsed = (raw ? YAML.parse(raw) : {}) ?? {};
+  const result = ConfigZ.safeParse(parsed);
+  if (result.success) return result.data;
+
+  // Self-heal: an early hive init wrote configs without `prefix`, and users
+  // sometimes hand-edit the file and drop fields. Refusing to read the config
+  // hard-blocks every IPC handler (createIssue, listIssues, …) and surfaces
+  // as a raw stack trace in the UI. Instead, fill in defaults and write the
+  // repaired config back so the next read is clean. Prefix derived from the
+  // repo dir name (uppercase, alphanumeric, capped at 10 chars per ConfigZ).
+  const obj = (typeof parsed === "object" && parsed !== null ? parsed : {}) as Record<string, unknown>;
+  const repaired: Config = {
+    prefix: deriveDefaultPrefix(typeof obj.prefix === "string" ? obj.prefix : undefined, root),
+    next_id:
+      typeof obj.next_id === "number" && Number.isInteger(obj.next_id) && obj.next_id > 0
+        ? obj.next_id
+        : 1,
+    agents:
+      obj.agents && typeof obj.agents === "object" && !Array.isArray(obj.agents)
+        ? (obj.agents as Config["agents"])
+        : {},
+  };
+  // Validate the repaired shape (defensive — if deriveDefaultPrefix returns
+  // garbage we'd rather throw than silently corrupt the file).
+  const final = ConfigZ.safeParse(repaired);
+  if (!final.success) {
+    throw new HiveError(
+      "bad_config",
+      `.hivemind/config.yaml invalid and self-repair failed: ${final.error.message}`
+    );
+  }
+  await writeConfig(root, final.data);
+  return final.data;
+}
+
+/** Sanitize a candidate string into a valid Config.prefix, or derive one
+ *  from the workspace folder name when no candidate is usable. Always
+ *  returns something that matches ConfigZ's prefix regex. */
+function deriveDefaultPrefix(candidate: string | undefined, root: string): string {
+  const tryClean = (s: string): string | null => {
+    const cleaned = s.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (cleaned.length >= 2 && /^[A-Z]/.test(cleaned)) return cleaned.slice(0, 10);
+    return null;
+  };
+  if (candidate) {
+    const c = tryClean(candidate);
+    if (c) return c;
+  }
+  // root is `<repo>/.hivemind` — use the repo dir name.
+  const repoDir = path.basename(path.dirname(root));
+  const fromDir = tryClean(repoDir);
+  if (fromDir) return fromDir;
+  // Last resort: a stable fallback that satisfies the schema.
+  return "HIV";
 }
 
 export async function writeConfig(root: string, cfg: Config): Promise<void> {
@@ -171,7 +220,6 @@ export function serializeIssue(issue: Issue): string {
     labels: issue.labels,
     assignee: issue.assignee,
     github: issue.github,
-    cycle: issue.cycle,
     created: issue.created,
     updated: issue.updated,
   });
@@ -231,7 +279,6 @@ export async function listIssues(root: string): Promise<IssueSummary[]> {
         labels: d.labels,
         assignee: d.assignee,
         github: d.github,
-        cycle: d.cycle,
         created: d.created,
         updated: d.updated,
         path: p,
@@ -274,56 +321,6 @@ async function walk(dir: string, ext: string): Promise<string[]> {
       out.push(p);
     }
   }
-  return out;
-}
-
-// ── cycles ─────────────────────────────────────────────────────────
-
-export async function readCycle(root: string, id: string): Promise<Cycle> {
-  const p = path.join(root, "cycles", `${id}.md`);
-  let raw: string;
-  try {
-    raw = await fs.readFile(p, "utf8");
-  } catch {
-    throw new HiveError("not_found", `cycle ${id} not found`);
-  }
-  const parsed = matter(raw);
-  const fm = CycleFrontmatterZ.safeParse(parsed.data);
-  if (!fm.success) {
-    throw new HiveError("bad_cycle", `${p}: invalid frontmatter: ${fm.error.message}`);
-  }
-  return { ...fm.data, path: p, raw: parsed.content };
-}
-
-export async function writeCycle(cycle: Cycle): Promise<void> {
-  const fm = CycleFrontmatterZ.parse({
-    id: cycle.id,
-    name: cycle.name,
-    start_at: cycle.start_at,
-    end_at: cycle.end_at,
-    state: cycle.state,
-    issues: cycle.issues,
-  });
-  await fs.mkdir(path.dirname(cycle.path), { recursive: true });
-  await fs.writeFile(cycle.path, matter.stringify(cycle.raw, fm), "utf8");
-}
-
-export async function listCycles(root: string): Promise<Cycle[]> {
-  const dir = path.join(root, "cycles");
-  const files = await walk(dir, ".md");
-  const out: Cycle[] = [];
-  for (const p of files) {
-    try {
-      const raw = await fs.readFile(p, "utf8");
-      const parsed = matter(raw);
-      const fm = CycleFrontmatterZ.safeParse(parsed.data);
-      if (!fm.success) continue;
-      out.push({ ...fm.data, path: p, raw: parsed.content });
-    } catch {
-      /* skip */
-    }
-  }
-  out.sort((a, b) => a.id.localeCompare(b.id));
   return out;
 }
 
@@ -393,14 +390,26 @@ function parseAcceptance(text: string): AcceptanceItem[] {
   return items;
 }
 
-const ACT_RE = /^-\s+(\S+ \S+)\s+·\s+(\S+)\s+·\s+(.+)$/;
+// Activity line: either the new ISO form (`2026-05-27T09:55:00.000Z`, single
+// non-whitespace token) OR the legacy 2-token form (`2026-05-27 09:55`). The
+// timestamp is the first capture, who is the second, message the rest.
+const ACT_RE = /^-\s+(\S+(?:\s\S+)?)\s+·\s+(\S+)\s+·\s+(.+)$/;
 function parseActivity(text: string): ActivityEntry[] {
   const out: ActivityEntry[] = [];
   for (const line of text.split("\n")) {
     const m = ACT_RE.exec(line.trim());
-    if (m) out.push({ at: m[1]!, who: m[2]!, message: m[3]! });
+    if (m) out.push({ at: normalizeActivityTs(m[1]!), who: m[2]!, message: m[3]! });
   }
   return out;
+}
+
+/** Convert legacy `YYYY-MM-DD HH:MM` (UTC, stored without Z) into a full ISO
+ *  with Z so renderers parse it as UTC, not local. ISO inputs pass through. */
+function normalizeActivityTs(raw: string): string {
+  if (/^\d{4}-\d{2}-\d{2}T/.test(raw)) return raw; // already ISO
+  const m = /^(\d{4}-\d{2}-\d{2})\s(\d{2}:\d{2})$/.exec(raw);
+  if (m) return `${m[1]}T${m[2]}:00.000Z`;
+  return raw;
 }
 
 export function serializeSections(s: IssueSections): string {
@@ -418,9 +427,18 @@ export function serializeSections(s: IssueSections): string {
   return parts.join("\n\n") + "\n";
 }
 
-/** Append an activity line. Mutates the issue and returns it. */
+/** Append an activity line. Mutates the issue and returns it.
+ *
+ * `at` is stored as a full ISO-8601 timestamp WITH the `Z` (UTC) suffix.
+ * Older versions stored a truncated `YYYY-MM-DD HH:MM` form, which JS
+ * `new Date(str)` parses as local time — that misrendered every activity
+ * row by the user's TZ offset (e.g. IST +5:30 showed every entry as "5h
+ * ago" the moment it was written). Full ISO removes the ambiguity. The
+ * parser accepts the legacy format for backward compatibility (existing
+ * notes on disk keep loading).
+ */
 export function appendActivity(issue: Issue, who: string, message: string, at?: Date): Issue {
-  const ts = (at ?? new Date()).toISOString().replace("T", " ").slice(0, 16);
+  const ts = (at ?? new Date()).toISOString();
   issue.sections.activity.push({ at: ts, who, message });
   issue.updated = new Date().toISOString();
   return issue;
@@ -436,7 +454,6 @@ export interface CreateIssueOpts {
   parent?: string;
   labels?: string[];
   assignee?: Issue["assignee"];
-  cycle?: string;
   description?: string;
 }
 
@@ -462,7 +479,6 @@ export async function createIssue(root: string, opts: CreateIssueOpts): Promise<
     labels: opts.labels ?? [],
     assignee: opts.assignee ?? null,
     github: null,
-    cycle: opts.cycle ?? null,
     created: now,
     updated: now,
     path: issuePath(root, finalId),
@@ -511,7 +527,6 @@ export type IssuePatch = Partial<{
   labels: string[];
   assignee: Issue["assignee"];
   github: number | undefined;
-  cycle: string | undefined;
   description: string;
   acceptanceCriteria: Issue["sections"]["acceptanceCriteria"];
   extra: string;
@@ -557,10 +572,6 @@ export async function updateIssue(
     }
   }
   if (patch.github !== undefined) issue.github = patch.github;
-  if (patch.cycle !== undefined && patch.cycle !== issue.cycle) {
-    summary.push(`cycle: ${issue.cycle ?? "—"} → ${patch.cycle ?? "—"}`);
-    issue.cycle = patch.cycle;
-  }
   if (patch.description !== undefined) {
     issue.sections.description = patch.description;
   }

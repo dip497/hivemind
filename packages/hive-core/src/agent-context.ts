@@ -55,10 +55,9 @@ export async function buildAgentContext(
     for (const i of items) {
       const labels = i.labels.length > 0 ? ` [${i.labels.join(", ")}]` : "";
       const a = i.assignee ? ` · @${i.assignee.id}` : "";
-      const cyc = i.cycle ? ` · ${i.cycle}` : "";
       const gh = i.github ? ` · gh#${i.github}` : "";
       const child = i.parent ? ` · ↳ ${i.parent}` : "";
-      lines.push(`- \`@${i.id}\` — ${i.title}${labels}${a}${cyc}${gh}${child}`);
+      lines.push(`- \`@${i.id}\` — ${i.title}${labels}${a}${gh}${child}`);
     }
     lines.push("");
   }
@@ -66,15 +65,14 @@ export async function buildAgentContext(
   lines.push(`## Commands`);
   lines.push("");
   lines.push("```");
-  lines.push("hive new \"title\" [--label X] [--cycle 14] [--parent ID] [--assignee NAME]");
-  lines.push("hive list [--state in_progress] [--cycle 14] [--json]");
+  lines.push("hive new \"title\" [--label X] [--parent ID] [--assignee NAME]");
+  lines.push("hive list [--state in_progress] [--json]");
   lines.push("hive show <ID>");
   lines.push("hive update <ID> --state in_review --note \"...\"");
   lines.push("hive task add <ID> \"title\"     # subtask");
   lines.push("hive task done <ID> <SUBID>");
   lines.push("hive link <ID> --parent <ID>");
   lines.push("hive close <ID>    /    hive reopen <ID>");
-  lines.push("hive cycle add 14 <ID>");
   lines.push("hive @<ID>         # resolve a mention (= show)");
   lines.push("```");
 

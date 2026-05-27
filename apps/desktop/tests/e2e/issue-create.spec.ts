@@ -1,6 +1,6 @@
 // Full E2E for issue creation:
 //   1. Set up a temp hivemind workspace on disk (`.hivemind/config.yaml`,
-//      empty `issues/` dir, empty `cycles/` dir).
+//      empty `issues/` dir).
 //   2. Launch Electron with cwd = that temp dir → resolveProject() finds the
 //      .hivemind root and seeds the renderer.
 //   3. Open the New-Issue modal via the header "+ New" button (the modal
@@ -27,8 +27,7 @@ test.beforeAll(async () => {
   // Seed an isolated workspace so this test is hermetic.
   workspace = await fs.mkdtemp(path.join(os.tmpdir(), "hivemind-e2e-"));
   await fs.mkdir(path.join(workspace, ".hivemind", "issues"), { recursive: true });
-  await fs.mkdir(path.join(workspace, ".hivemind", "cycles"), { recursive: true });
-  // ConfigZ expects: prefix, next_id, agents{}, (optionally) cycle_state, parents{}
+  // ConfigZ expects: prefix, next_id, agents{}
   await fs.writeFile(
     path.join(workspace, ".hivemind", "config.yaml"),
     "prefix: XX\nnext_id: 1\nagents: {}\n",
@@ -94,9 +93,7 @@ test("creates an issue via the modal and persists it to disk", async () => {
   expect(md).toMatch(/id:\s*XX-1/m);
   expect(md).toMatch(new RegExp(`title:\\s*['"]?${title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
   expect(md).toMatch(/state:\s*todo/m);
-  // NOT cycle — we removed the cycle UI; the field must not appear unless
-  // the core added one as a default (which it doesn't).
-  expect(md).not.toMatch(/cycle:\s+[^n]/m);
+  expect(md).not.toMatch(/^cycle:/m);
 
   // The config's next_id should now be 2.
   const cfg = await fs.readFile(path.join(workspace, ".hivemind", "config.yaml"), "utf8");

@@ -25,6 +25,14 @@ import {
 } from "@codemirror/language";
 import { languages } from "@codemirror/language-data";
 import { tags as t } from "@lezer/highlight";
+// @codemirror/merge: unifiedMergeView is an Extension[] (NOT a separate view
+// class), so we toggle it on/off via a Compartment.reconfigure on the same
+// EditorView — same tab, same buffer, no new tab. Strongest OSS precedent
+// is marimo-team/codemirror-ai + aziis98's review-tool walkthrough. The
+// standalone DiffTile stays for browsing branch/commit diffs (no editable
+// buffer there).
+import { unifiedMergeView, getOriginalDoc } from "@codemirror/merge";
+void getOriginalDoc;
 
 interface Props {
   repoPath: string;
@@ -138,22 +146,43 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, embedded = fal
   // keep saved snapshot + dirty/loaded flags here keyed by repo-relative path.
   const [meta, setMeta] = useState<Record<string, TabState>>({});
   const [saving, setSaving] = useState(false);
+  // Per-tab diff mode (toggleable). When true the active EditorView wears the
+  // `unifiedMergeView` extension comparing the buffer against `HEAD:<path>`.
+  // Same tab, same buffer — no DiffTile spawned. Keyed by repo-relative path.
+  const [diffMode, setDiffMode] = useState<Record<string, boolean>>({});
 
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const langCompartment = useRef(new Compartment());
+  // unifiedMergeView is reconfigured per tab — also a Compartment so we can
+  // toggle without rebuilding state.
+  const diffCompartment = useRef(new Compartment());
   // Cache live document text per tab so switching tabs doesn't re-read disk or
   // lose unsaved edits. Keyed by repo-relative path. Updated on every doc change.
   const buffers = useRef<Map<string, string>>(new Map());
 
-  // Keep `active` valid as tabs open/close.
+  // Keep `active` valid as tabs open/close, AND focus any newly-opened tab.
+  //
+  // Previous version only re-targeted `active` when the current active was
+  // removed from `tabs`. That meant clicking a SECOND file in the tree
+  // appended a new tab but kept focus on the first — the user's complaint.
+  // We now diff `tabs` against the previous render: any path that's new gets
+  // focused, with the most-recently-added winning when several arrive at once.
+  const prevTabsRef = useRef<string[]>(tabs);
   useEffect(() => {
+    const prev = prevTabsRef.current;
+    prevTabsRef.current = tabs;
     if (tabs.length === 0) {
       setActive(null);
       return;
     }
+    const added = tabs.filter((p) => !prev.includes(p));
+    if (added.length > 0) {
+      setActive(added[added.length - 1]!);
+      return;
+    }
     if (!active || !tabs.includes(active)) {
-      // A freshly-opened tab is appended last → focus it; else fall back to first.
+      // Active tab was closed externally → fall back to the last remaining.
       setActive(tabs[tabs.length - 1] ?? null);
     }
   }, [tabs, active]);
@@ -223,6 +252,7 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, embedded = fal
         extensions: [
           baseExtensions,
           langCompartment.current.of([]),
+          diffCompartment.current.of([]),
           keymap.of([
             {
               key: "Mod-s",
@@ -265,6 +295,7 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, embedded = fal
         extensions: [
           baseExtensions,
           langCompartment.current.of(lang ? lang : []),
+          diffCompartment.current.of([]),
           keymap.of([
             { key: "Mod-s", preventDefault: true, run: () => { void saveRef.current(); return true; } },
           ]),
@@ -309,7 +340,39 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, embedded = fal
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, repoPath]);
 
+  // Apply / clear unifiedMergeView when diffMode flips for the active tab.
+  // Fetches `HEAD:<path>` via the existing IPC (gitFileContents). Same buffer,
+  // same EditorView — no new tab, no DiffTile spawned. Errors quietly drop
+  // diff mode back off (e.g. file is untracked → no HEAD blob).
+  useEffect(() => {
+    const view = viewRef.current;
+    const path = active;
+    if (!view || !path) return;
+    const on = !!diffMode[path];
+    let cancelled = false;
+    void (async () => {
+      if (!on) {
+        view.dispatch({ effects: diffCompartment.current.reconfigure([]) });
+        return;
+      }
+      try {
+        const original = await window.hive.gitFileContents(repoPath, path, "HEAD");
+        if (cancelled || view !== viewRef.current) return;
+        view.dispatch({
+          effects: diffCompartment.current.reconfigure(
+            unifiedMergeView({ original, mergeControls: true, gutter: true }),
+          ),
+        });
+      } catch {
+        if (cancelled) return;
+        setDiffMode((m) => ({ ...m, [path]: false }));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [diffMode, active, repoPath]);
+
   const activeMeta = active ? meta[active] : undefined;
+  const activeDiff = active ? !!diffMode[active] : false;
 
   return (
     <div
@@ -328,7 +391,23 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, embedded = fal
             <span className="text-[10px] text-[var(--color-warn)]" title="unsaved changes">●</span>
           )}
           {saving && <span className="text-[10px] text-[var(--color-fg3)]">saving…</span>}
-          <span className="ml-auto text-[9.5px] text-[var(--color-fg3)]">⌘S to save</span>
+          <span className="ml-auto flex items-center gap-2">
+            {active && (
+              <button
+                onClick={() => setDiffMode((m) => ({ ...m, [active]: !m[active] }))}
+                className={`nodrag text-[9.5px] px-1.5 py-0.5 rounded border ${
+                  activeDiff
+                    ? "border-[var(--color-brand)] text-[var(--color-brand)]"
+                    : "border-[var(--color-line2)] text-[var(--color-fg3)] hover:text-[var(--color-fg)]"
+                }`}
+                title="Toggle diff vs HEAD (⇄)"
+                aria-label="toggle diff"
+              >
+                ⇄ {activeDiff ? "diff" : "edit"}
+              </button>
+            )}
+            <span className="text-[9.5px] text-[var(--color-fg3)]">⌘S to save</span>
+          </span>
           <button
             onClick={onClose}
             className="nodrag size-4 grid place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--color-line2)] hover:text-[var(--color-fg)]"
@@ -361,6 +440,21 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, embedded = fal
                 }`}
               >
                 <span className="truncate font-mono">{name}</span>
+                {isActive && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDiffMode((m) => ({ ...m, [path]: !m[path] }));
+                    }}
+                    className={`text-[9px] leading-none px-1 rounded ${
+                      diffMode[path]
+                        ? "bg-[var(--color-brand)] text-white"
+                        : "text-[var(--color-fg3)] hover:text-[var(--color-fg)]"
+                    }`}
+                    title={diffMode[path] ? "exit diff (show as editor)" : "show diff vs HEAD"}
+                    aria-label="toggle diff"
+                  >⇄</button>
+                )}
                 <span className="grid place-items-center w-3.5 h-3.5">
                   {dirty ? (
                     <span

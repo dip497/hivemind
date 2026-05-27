@@ -31,7 +31,6 @@ export const IssueFrontmatterZ = z.object({
   labels: z.array(z.string()).default([]),
   assignee: AssigneeZ.nullable().default(null),
   github: z.number().int().positive().nullable().default(null),
-  cycle: z.string().nullable().default(null),
   created: IsoZ,
   updated: IsoZ,
 });
@@ -76,25 +75,10 @@ export interface IssueSummary
     | "labels"
     | "assignee"
     | "github"
-    | "cycle"
     | "created"
     | "updated"
   > {
   path: string;
-}
-
-export const CycleFrontmatterZ = z.object({
-  id: z.string().regex(/^cycle-\d+$/),
-  name: z.string(),
-  start_at: IsoZ.nullable().default(null),
-  end_at: IsoZ.nullable().default(null),
-  state: z.enum(["upcoming", "active", "completed"]).default("upcoming"),
-  issues: z.array(z.string()).default([]),
-});
-export type CycleFrontmatter = z.infer<typeof CycleFrontmatterZ>;
-export interface Cycle extends CycleFrontmatter {
-  path: string;
-  raw: string;
 }
 
 export const ConfigZ = z.object({

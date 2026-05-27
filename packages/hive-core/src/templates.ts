@@ -13,7 +13,7 @@ markdown-backed; lives in \`.hivemind/\`).
 
 Run \`hive --help\` for commands. The single source of truth for project
 conventions is **CLAUDE.md** at the project root — read that first. The
-current cycle's open issues are summarized in \`.hivemind/.agent.md\`
+active open issues are summarized in \`.hivemind/.agent.md\`
 (auto-regenerated on every change).
 
 Reference issues with \`@<ID>\` syntax (e.g. \`@PAY-118\`).
@@ -35,15 +35,13 @@ Activity sections.
 │   ├── <ID>.md              # one file per issue
 │   └── <PARENT>/            # sub-issues nested under parent dir
 │       └── <PARENT>.N.md
-├── cycles/
-│   └── cycle-N.md           # cycle metadata + issue refs
 └── .agent.md                # auto-generated context (READ ME FIRST)
 \`\`\`
 
 ### Reading state
 
 - **Start every session by \`cat .hivemind/.agent.md\`** — it lists active
-  issues for the current cycle, grouped by state, with \`@<ID>\` mentions.
+  issues grouped by state, with \`@<ID>\` mentions.
 - To read a specific issue: \`hive show @PAY-118\` (or \`hive @PAY-118\`).
 - To list filtered: \`hive list --state in_progress --json\`.
 
@@ -53,14 +51,13 @@ Always call \`hive\` instead of editing markdown by hand — it keeps the
 activity log, \`updated\` timestamp, and \`.agent.md\` regenerated.
 
 \`\`\`
-hive new "Title" [--label bug] [--cycle 14] [--parent ID] [--assignee NAME]
+hive new "Title" [--label bug] [--parent ID] [--assignee NAME]
 hive update <ID> --state in_review --note "what changed"
 hive task add <ID> "subtask title"
 hive task done <ID> <SUBID>
 hive link <ID> --parent <PARENT>
 hive close <ID>   # state → done
 hive reopen <ID>
-hive cycle add 14 <ID>
 \`\`\`
 
 ### Mention syntax
@@ -126,7 +123,6 @@ When you (claude) act on an issue, use \`mcp__hive__*\` tools — NOT the
 - \`mcp__hive__mark_acceptance({ id, index, done })\` — 0-based
 - \`mcp__hive__update_issue({ id, title?, description?, labels?, ... })\`
 - \`mcp__hive__create_issue({ title, parent?, labels?, state? })\`
-- \`mcp__hive__list_cycles()\`
 - \`mcp__hive__delete_issue({ id })\` — destructive; only on explicit ask
 
 ### Execution contract (REQUIRED)

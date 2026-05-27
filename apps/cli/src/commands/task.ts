@@ -66,7 +66,6 @@ const addSub = defineCommand({
           ? { type: "agent", id: String(args.assignee).toLowerCase() }
           : null,
         github: null,
-        cycle: null,
         created: now,
         updated: now,
         path: issuePath(root, id),

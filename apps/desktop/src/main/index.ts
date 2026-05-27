@@ -9,7 +9,6 @@ import {
   createIssue,
   deleteIssue as deleteIssueCore,
   findRoot,
-  listCycles,
   listIssues,
   readIssue,
   updateIssue,
@@ -271,7 +270,7 @@ ipcMain.handle("resolveProject", wrap(async (e, rootHint?: string) => {
   // dir. The diff + file-tree tiles only need a git repo (they call `git
   // diff`, `git ls-files`, `git show :file`) — gating them on .hivemind/
   // existing made them dead-on-arrival for any user who hadn't run
-  // `hive init` yet. Issues + cycles still need a real root.
+  // `hive init` yet. Issues still need a real root.
   const repoPath = root ? path.dirname(root) : await findGitRoot(cwd);
   if (repoPath) watchRepo(repoPath, e.sender);
   return { root, cwd, repoPath };
@@ -338,7 +337,6 @@ ipcMain.handle(
     const existing = await findRoot(dir);
     if (existing === root) throw new Error(`.hivemind/ already exists at ${root}`);
     await fsp.mkdir(path.join(root, "issues"), { recursive: true });
-    await fsp.mkdir(path.join(root, "cycles"), { recursive: true });
     await writeConfig(root, { prefix, next_id: 1, agents: {} });
     await writeAgentContext(root);
     // Install the agentic stack by default — a brand-new workspace should be
@@ -422,7 +420,6 @@ ipcMain.handle(
 );
 ipcMain.handle("listIssues", wrap(async (_e, root: string) => listIssues(root)));
 ipcMain.handle("readIssue", wrap(async (_e, root: string, id: string) => readIssue(root, id)));
-ipcMain.handle("listCycles", wrap(async (_e, root: string) => listCycles(root)));
 ipcMain.handle(
   "updateIssueState",
   wrap(async (_e, root: string, id: string, state: IssueState, note?: string) => {

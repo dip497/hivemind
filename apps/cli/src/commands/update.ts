@@ -17,7 +17,6 @@ export const updateCmd = defineCommand({
     id: { type: "positional", required: true, description: "Issue ID" },
     state: { type: "string", description: "New state" },
     title: { type: "string", description: "New title" },
-    cycle: { type: "string", description: "Cycle id (or 'none' to unset)" },
     assignee: { type: "string", description: "Assignee id (or 'none' to unset)" },
     "assignee-type": { type: "string" },
     "assignee-model": { type: "string" },
@@ -49,13 +48,6 @@ export const updateCmd = defineCommand({
         if (t !== issue.title) {
           changes.push(`title → "${t}"`);
           issue.title = t;
-        }
-      }
-      if (args.cycle !== undefined) {
-        const next = args.cycle === "none" || args.cycle === "" ? null : String(args.cycle);
-        if (next !== issue.cycle) {
-          changes.push(`cycle ${issue.cycle ?? "—"} → ${next ?? "—"}`);
-          issue.cycle = next;
         }
       }
       if (args.assignee !== undefined) {

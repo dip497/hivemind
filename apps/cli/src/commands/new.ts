@@ -22,7 +22,6 @@ export const newCmd = defineCommand({
   args: {
     title: { type: "positional", description: "Issue title", required: true },
     label: { type: "string", description: "Label (repeatable)" },
-    cycle: { type: "string", description: "Cycle id (e.g. cycle-14)" },
     parent: { type: "string", description: "Parent issue ID for sub-issues" },
     assignee: { type: "string", description: "Assignee id (e.g. claude, sarah)" },
     "assignee-type": { type: "string", description: "agent | member (auto-detected)" },
@@ -83,7 +82,6 @@ export const newCmd = defineCommand({
         labels,
         assignee,
         github: githubNum && githubNum > 0 ? githubNum : null,
-        cycle: args.cycle ? String(args.cycle) : null,
         created: now,
         updated: now,
         path: issuePath(root, id),

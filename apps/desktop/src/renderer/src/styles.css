@@ -263,6 +263,26 @@ a {
      (.4,0,.2,1) felt sluggish. 280ms keeps it snappy. */
   transition: transform 280ms cubic-bezier(.32, .72, 0, 1);
 }
+
+/* Frames must be event-transparent at the .react-flow__node wrapper level.
+   xyflow auto-adds the `.nopan` class to every draggable node — meaning any
+   pointerdown that lands on a node element is blocked from triggering pan
+   (see d3-zoom filter, @xyflow/system noPanClassName check). Frames cover
+   huge canvas regions, so pan/right-drag/Space+left-drag/rubber-band all
+   died inside them. Setting `pointer-events: none` here makes the browser
+   skip the entire frame node in hit-testing and route the event to the
+   underlying `.react-flow__pane` — which IS the container the Pane handler
+   checks via `event.target === container.current` to start rubber-band
+   selection. Re-enabled on the header (drag handle) + NodeResizer handles so
+   they remain interactive. Tiles live in sibling DOM (separate nodes), not
+   inside this element, so their click/drag is unaffected. */
+.react-flow__node-frame {
+  pointer-events: none !important;
+}
+.react-flow__node-frame .tile-drag-handle,
+.react-flow__node-frame .react-flow__resize-control {
+  pointer-events: auto;
+}
 /* Layer pre-promotion is NOT done in CSS — MDN explicitly warns against putting
    `will-change` on hover/active because (a) cursor parking promotes every tile
    under the pointer simultaneously (layer explosion across 5+ heavy tiles inc.

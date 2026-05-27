@@ -13,7 +13,6 @@ let workspace: string;
 test.beforeAll(async () => {
   workspace = await fs.mkdtemp(path.join(os.tmpdir(), "hm-issues-"));
   await fs.mkdir(path.join(workspace, ".hivemind", "issues"), { recursive: true });
-  await fs.mkdir(path.join(workspace, ".hivemind", "cycles"), { recursive: true });
   await fs.writeFile(path.join(workspace, ".hivemind", "config.yaml"), "prefix: XX\nnext_id: 2\nagents: {}\n", "utf8");
   await fs.writeFile(
     path.join(workspace, ".hivemind", "issues", "XX-1.md"),
@@ -25,7 +24,6 @@ parent: null
 labels: []
 assignee: null
 github: null
-cycle: null
 created: "2026-05-21T00:00:00.000Z"
 updated: "2026-05-21T00:00:00.000Z"
 ---
