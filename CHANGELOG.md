@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [0.1.1] — 2026-05-28
+
 ### Fixed
 - **Branch-diff no longer errors in repos without `origin/main`.** The diff tile's branch mode ran `git diff origin/main...HEAD` literally — repos that use `master`, haven't fetched `origin`, or have no remote hit `fatal: ambiguous argument 'origin/main...HEAD'` (exit 128) surfaced as a raw error. Now the base ref is resolved authoritatively from the remote's recorded default branch (`git symbolic-ref --short refs/remotes/origin/HEAD`) — no guessing-cascade through `main`/`master`/upstream (those return the wrong base in real repos). An explicit user-chosen base is honored if it exists; otherwise the authoritative default is used; if neither resolves (no remote / `origin/HEAD` unset — fix with `git remote set-head origin -a`), an empty diff renders instead of crashing. `apps/desktop/src/main/git-adapter.ts`.
 
@@ -73,6 +75,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/dip497/hivemind/releases/tag/v0.1.1
 [0.1.0]: https://github.com/dip497/hivemind/releases/tag/v0.1.0
 [0.0.1]: https://github.com/dip497/hivemind/releases/tag/v0.0.1
