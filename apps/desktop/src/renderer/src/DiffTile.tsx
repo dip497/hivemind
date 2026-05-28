@@ -60,6 +60,8 @@ import {
   workerPoolOptions,
 } from "./pierre-codeview";
 import { latestClaude } from "./claude-bus";
+import { DiffReviewPanel } from "./DiffReviewPanel";
+import { normalizeComments, newCid, type ReviewComment } from "./diff-comments";
 
 interface Props {
   repoPath: string;
@@ -71,16 +73,6 @@ interface Props {
 type Mode = "working" | "branch";
 type Layout = "split" | "unified";
 type Overflow = "scroll" | "wrap";
-
-/** Persisted review comment. `side` matches Pierre's AnnotationSide. */
-interface ReviewComment {
-  file: string;
-  line: number;
-  side: AnnotationSide;
-  body: string;
-  author: string;
-  at: string;
-}
 
 const COMMENTS_KEY_PREFIX = "hivemind:comments:";
 const VIEWED_KEY_PREFIX = "hivemind:viewed:";
@@ -108,14 +100,19 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
   const [search, setSearch] = useState("");
 
   const [comments, setComments] = useState<ReviewComment[]>(() =>
-    loadJson<ReviewComment[]>(COMMENTS_KEY_PREFIX + repoPath, []),
+    normalizeComments(loadJson<unknown>(COMMENTS_KEY_PREFIX + repoPath, [])),
   );
+  // Review panel (Figma/GitHub-style) open state — persisted.
+  const [reviewOpen, setReviewOpen] = useState<boolean>(
+    () => localStorage.getItem("hivemind:review-open") === "1",
+  );
+  useEffect(() => { localStorage.setItem("hivemind:review-open", reviewOpen ? "1" : "0"); }, [reviewOpen]);
   const [viewed, setViewed] = useState<Set<string>>(
     () => new Set(loadJson<string[]>(VIEWED_KEY_PREFIX + repoPath, [])),
   );
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [composer, setComposer] = useState<
-    { file: string; line: number; side: AnnotationSide } | null
+    { file: string; startLine: number; endLine: number; side: AnnotationSide } | null
   >(null);
 
   const codeViewRef = useRef<CodeViewHandle<ReviewComment>>(null);
@@ -165,9 +162,11 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
   }, []);
 
   function commentsForFile(file: string): DiffLineAnnotation<ReviewComment>[] {
+    // Anchor the annotation at the range's END line (where the comment "lands");
+    // the annotation body shows the full L{start}–{end} range.
     return comments
       .filter((c) => c.file === file)
-      .map((c) => ({ side: c.side, lineNumber: c.line, metadata: c }));
+      .map((c) => ({ side: c.side, lineNumber: c.endLine, metadata: c }));
   }
 
   // ── git:file cache invalidation on fs change (owned here, not in queries.ts) ──
@@ -276,12 +275,14 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
       itemMetrics: { diffHeaderHeight: HEADER_H },
       layout: { gap: 10, paddingTop: 8, paddingBottom: 8 },
       onGutterUtilityClick: (range, context) => {
-        // Comments work in BOTH working- and branch-diff modes (was gated to
-        // working only, which made the gutter "+" silently dead in branch mode).
+        // Comments work in BOTH working- and branch-diff modes. The gutter "+"
+        // carries the CURRENT line selection range, so dragging across several
+        // lines then clicking + comments on the whole range (not one line).
         if (context.item.type !== "diff") return;
         const side: AnnotationSide = range.side ?? range.endSide ?? "additions";
-        const line = Math.max(range.start, range.end);
-        setComposer({ file: context.item.fileDiff.name, line, side });
+        const startLine = Math.min(range.start, range.end);
+        const endLine = Math.max(range.start, range.end);
+        setComposer({ file: context.item.fileDiff.name, startLine, endLine, side });
       },
     }),
     [layout, overflow],
@@ -340,7 +341,18 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
           }}
         >
           <span style={{ color: "var(--color-fg)", fontWeight: 600 }}>{c.author}</span>
-          <span style={{ marginLeft: 8 }}>{c.body}</span>
+          {c.startLine !== c.endLine && (
+            <span style={{ marginLeft: 6, color: "var(--color-fg3)", fontSize: 10 }}>
+              L{c.startLine}–{c.endLine}
+            </span>
+          )}
+          {c.resolved && (
+            <span style={{ marginLeft: 6, color: "var(--color-ok)", fontSize: 10 }}>✓ resolved</span>
+          )}
+          <span style={{ marginLeft: 8, color: c.resolved ? "var(--color-fg3)" : undefined }}>{c.body}</span>
+          {!!c.replies?.length && (
+            <span style={{ marginLeft: 6, color: "var(--color-fg3)", fontSize: 10 }}>💬 {c.replies.length}</span>
+          )}
           <span style={{ color: "var(--color-fg3)", float: "right", fontSize: 10 }}>{c.at}</span>
         </div>
       );
@@ -350,46 +362,86 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
 
   function submitComposer(body: string) {
     if (!composer || !body.trim()) return setComposer(null);
-    // Add to the review batch (GitHub/Nyx model). Sending to claude is an
-    // explicit action via the ReviewBar's "Send review" button — not a silent
-    // per-comment dispatch that drops when no claude tile is listening.
+    // Add to the review batch (GitHub model). Sending to claude is explicit
+    // (review panel / ReviewBar) — not a silent per-comment dispatch that drops
+    // when no claude tile is listening.
     const next: ReviewComment[] = [
       ...comments,
       {
+        id: newCid(),
         file: composer.file,
-        line: composer.line,
+        startLine: composer.startLine,
+        endLine: composer.endLine,
         side: composer.side,
         body,
         author: "you",
         at: new Date().toISOString().slice(0, 16).replace("T", " "),
+        resolved: false,
+        replies: [],
       },
     ];
     persistComments(next);
     setComposer(null);
   }
 
+  // ── review-comment mutations (used by the review panel) ──────────────────
+  const replyToComment = useCallback((id: string, body: string) => {
+    if (!body.trim()) return;
+    persistComments(comments.map((c) =>
+      c.id === id
+        ? { ...c, replies: [...(c.replies ?? []), { author: "you", body, at: new Date().toISOString().slice(0, 16).replace("T", " ") }] }
+        : c,
+    ));
+  }, [comments, persistComments]);
+  const toggleResolved = useCallback((id: string) => {
+    persistComments(comments.map((c) => (c.id === id ? { ...c, resolved: !c.resolved } : c)));
+  }, [comments, persistComments]);
+  const deleteComment = useCallback((id: string) => {
+    persistComments(comments.filter((c) => c.id !== id));
+  }, [comments, persistComments]);
+
+  // Jump the diff to a comment's range (scroll + select its lines).
+  const jumpToComment = useCallback((c: ReviewComment) => {
+    const cv = codeViewRef.current;
+    if (!cv) return;
+    const id = `diff:${c.file}`;
+    cv.scrollTo({ type: "line", id, lineNumber: c.startLine, side: c.side, align: "center" });
+    cv.setSelectedLines({ id, range: { start: c.startLine, end: c.endLine, side: c.side } });
+  }, []);
+
+  // Send arbitrary review text to claude — spawn a tile first if none is live
+  // (otherwise the bus event vanishes). Shared by batch + per-thread sends.
+  const sendToClaude = useCallback((msg: string) => {
+    if (!latestClaude()) {
+      window.dispatchEvent(new CustomEvent("hivemind:spawn-claude"));
+      setTimeout(() => window.dispatchEvent(new CustomEvent<string>("hivemind:send-to-claude", { detail: msg })), 2500);
+    } else {
+      window.dispatchEvent(new CustomEvent<string>("hivemind:send-to-claude", { detail: msg }));
+    }
+  }, []);
+  const sendComment = useCallback((c: ReviewComment) => {
+    const range = c.startLine === c.endLine ? `${c.startLine}` : `${c.startLine}-${c.endLine}`;
+    const thread = [c.body, ...(c.replies ?? []).map((r) => `  ↳ ${r.author}: ${r.body}`)].join("\n");
+    sendToClaude(`Address this review comment — ${c.file}:${range}:\n${thread}`);
+  }, [sendToClaude]);
+
   // Send the whole review to claude as ONE message. If no claude tile is alive
   // (latestClaude() === undefined → the send would vanish), spawn one first,
   // then send after it boots. This is the answer to "how do my diff comments
   // reach claude?": leave comments, click Send review.
   const sendReview = useCallback(() => {
-    if (comments.length === 0) return;
-    const lines = comments
+    const open = comments.filter((c) => !c.resolved);
+    if (open.length === 0) return;
+    const lines = open
       .map((c) => {
         const side = c.side === "deletions" ? "old/left" : "new/right";
-        return `- ${c.file}:${c.line} (${side}): ${c.body}`;
+        const range = c.startLine === c.endLine ? `${c.startLine}` : `${c.startLine}-${c.endLine}`;
+        const thread = (c.replies ?? []).map((r) => ` ↳ ${r.author}: ${r.body}`).join("\n");
+        return `- ${c.file}:${range} (${side}): ${c.body}${thread ? "\n" + thread : ""}`;
       })
       .join("\n");
-    const msg = `Code review — ${comments.length} comment${comments.length > 1 ? "s" : ""} to address:\n${lines}`;
-    if (!latestClaude()) {
-      window.dispatchEvent(new CustomEvent("hivemind:spawn-claude"));
-      setTimeout(() => {
-        window.dispatchEvent(new CustomEvent<string>("hivemind:send-to-claude", { detail: msg }));
-      }, 2500);
-    } else {
-      window.dispatchEvent(new CustomEvent<string>("hivemind:send-to-claude", { detail: msg }));
-    }
-  }, [comments]);
+    sendToClaude(`Code review — ${open.length} unresolved comment${open.length > 1 ? "s" : ""} to address:\n${lines}`);
+  }, [comments, sendToClaude]);
 
   const loading = mode === "working" ? workingItems.isLoading : branch.isLoading;
   const modeError = mode === "branch" ? branch.error : workingItems.error;
@@ -521,6 +573,22 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
             </span>
           )}
           <button
+            className={`nodrag inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] transition-colors ${
+              reviewOpen
+                ? "border-[var(--color-brand)] text-[var(--color-brand)]"
+                : "border-[var(--color-line2)] text-[var(--color-fg3)] hover:text-[var(--color-fg2)]"
+            }`}
+            onClick={() => setReviewOpen((o) => !o)}
+            title="Toggle the review panel"
+          >
+            review
+            {comments.some((c) => !c.resolved) && (
+              <span className="px-1 rounded-full bg-[var(--color-warn)] text-[9px] text-black font-semibold leading-none py-0.5">
+                {comments.filter((c) => !c.resolved).length}
+              </span>
+            )}
+          </button>
+          <button
             className="nodrag size-4 grid place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--color-line2)] hover:text-[var(--color-fg)] transition-colors cursor-pointer"
             aria-label="close tile"
             title="close"
@@ -535,6 +603,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
           flex-col so conflicts (flex-none) stack above the CodeView (flex-1
           min-h-0) without clipping it. */}
       <WorkerPoolContextProvider poolOptions={workerPoolOptions} highlighterOptions={workerHighlighterOptions}>
+       <div className="flex-1 min-h-0 flex overflow-hidden">
         <div className="flex-1 min-h-0 flex flex-col overflow-hidden nowheel" data-pierre-tile>
           {statusLoading && <div className="p-3 text-[11px] text-[var(--color-fg3)]">loading git status…</div>}
           {statusError && (
@@ -596,6 +665,19 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
             </div>
           )}
         </div>
+        {reviewOpen && !activeFile && (
+          <DiffReviewPanel
+            comments={comments}
+            onJump={jumpToComment}
+            onReply={replyToComment}
+            onResolve={toggleResolved}
+            onDelete={deleteComment}
+            onSend={sendComment}
+            onSendAll={sendReview}
+            onClose={() => setReviewOpen(false)}
+          />
+        )}
+       </div>
       </WorkerPoolContextProvider>
 
       {/* Review batch — leave comments via the gutter "+", then send them all
@@ -1042,15 +1124,18 @@ function Composer({
   onSubmit,
   onCancel,
 }: {
-  composer: { file: string; line: number; side: AnnotationSide };
+  composer: { file: string; startLine: number; endLine: number; side: AnnotationSide };
   onSubmit: (body: string) => void;
   onCancel: () => void;
 }) {
   const [body, setBody] = useState("");
+  const range = composer.startLine === composer.endLine
+    ? `${composer.startLine}`
+    : `${composer.startLine}-${composer.endLine}`;
   return (
     <div className="border-t border-[var(--color-line)] bg-[var(--color-bg3)] p-2 flex items-center gap-2">
       <span className="text-[10px] font-mono text-[var(--color-fg3)] shrink-0">
-        {composer.file}:{composer.line} ({composer.side})
+        {composer.file}:{range} ({composer.side})
       </span>
       <input
         autoFocus
