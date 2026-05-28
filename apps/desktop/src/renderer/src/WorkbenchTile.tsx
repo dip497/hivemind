@@ -9,7 +9,7 @@
  * open-tab list + active selection (lifted state, persisted by Canvas via the
  * `tabs` prop); clicking a file in the embedded tree opens/dedupes a tab.
  */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FileTreeTile } from "./FileTreeTile";
 import { EditorTile } from "./EditorTile";
 
@@ -25,10 +25,22 @@ interface Props {
   onClose: () => void;
 }
 
-const SIDEBAR_WIDTH = 240;
+const SIDEBAR_DEFAULT = 240;
+const SIDEBAR_MIN = 140;
+const SIDEBAR_MAX = 640;
+const SIDEBAR_KEY = "hivemind:workbench-sidebar";
+const clampW = (w: number) => Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, w));
 
 export function WorkbenchTile({ repoPath, tabs, onOpenFile, onCloseTab, onClose }: Props) {
   const [collapsed, setCollapsed] = useState(false);
+  // Explorer width is user-resizable via the divider; persisted globally so it
+  // survives reopen + applies to every workbench tile.
+  const [sidebarW, setSidebarW] = useState<number>(() => {
+    const v = Number(localStorage.getItem(SIDEBAR_KEY));
+    return Number.isFinite(v) && v > 0 ? clampW(v) : SIDEBAR_DEFAULT;
+  });
+  useEffect(() => { localStorage.setItem(SIDEBAR_KEY, String(sidebarW)); }, [sidebarW]);
+  const dragRef = useRef<{ startX: number; startW: number } | null>(null);
   const repoName = repoPath.split("/").filter(Boolean).pop() ?? "workbench";
 
   return (
@@ -62,17 +74,42 @@ export function WorkbenchTile({ repoPath, tabs, onOpenFile, onCloseTab, onClose 
         >×</button>
       </header>
 
-      {/* body: explorer (left) + editor (right) */}
+      {/* body: explorer (left) + draggable divider + editor (right) */}
       <div className="flex flex-1 min-h-0">
         {!collapsed && (
-          <div
-            className="shrink-0 min-w-0 border-r border-[var(--color-line)]"
-            style={{ width: SIDEBAR_WIDTH }}
-          >
-            {/* key on repoPath → remounts the tree when the tile gets moved into
-                a zone bound to a different repo (stale internal cache fixed). */}
-            <FileTreeTile key={repoPath} repoPath={repoPath} onSelectFile={onOpenFile} embedded />
-          </div>
+          <>
+            <div
+              className="shrink-0 min-w-0 border-r border-[var(--color-line)]"
+              style={{ width: sidebarW }}
+            >
+              {/* key on repoPath → remounts the tree when the tile gets moved into
+                  a zone bound to a different repo (stale internal cache fixed). */}
+              <FileTreeTile key={repoPath} repoPath={repoPath} onSelectFile={onOpenFile} embedded />
+            </div>
+            {/* Resize handle. `nodrag`/`nowheel` so the canvas doesn't drag the
+                tile or pan while dragging the divider. Pointer-capture tracks
+                the drag past the thin hit area. */}
+            <div
+              className="nodrag nowheel shrink-0 w-1 cursor-col-resize bg-transparent hover:bg-[var(--color-brand)] active:bg-[var(--color-brand)] -mx-px relative z-10"
+              role="separator"
+              aria-orientation="vertical"
+              title="Drag to resize explorer"
+              onPointerDown={(e) => {
+                dragRef.current = { startX: e.clientX, startW: sidebarW };
+                (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                e.preventDefault();
+              }}
+              onPointerMove={(e) => {
+                const d = dragRef.current;
+                if (!d) return;
+                setSidebarW(clampW(d.startW + (e.clientX - d.startX)));
+              }}
+              onPointerUp={(e) => {
+                dragRef.current = null;
+                (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+              }}
+            />
+          </>
         )}
         <div className="flex-1 min-w-0">
           <EditorTile repoPath={repoPath} tabs={tabs} onCloseTab={onCloseTab} embedded />

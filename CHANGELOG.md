@@ -8,6 +8,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 ## [Unreleased]
 
 ### Added
+- **Workbench explorer is resizable.** A draggable divider between the file tree and the editor (drag to set width, 140–640px, persisted globally). Handle is `nodrag`/`nowheel` so the canvas doesn't pan/move the tile while resizing.
 - **Editor: find/replace + proper selection.** Wired `@codemirror/search` (Ctrl-F find panel, themed to app tokens) plus the canonical CM6 affordances that were missing: `drawSelection`, `rectangularSelection` + `crosshairCursor` (Alt-drag multi-cursor), `highlightSelectionMatches`. e2e covers the search panel opening.
 
 ### Fixed
