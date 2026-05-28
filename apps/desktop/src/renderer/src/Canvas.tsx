@@ -1111,14 +1111,14 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   );
 
   const spawnClaude = useCallback((mode?: string) => {
-    const sel = selectedFrameIdRef.current;
-    const selActive = !!sel && framesRef.current.some((f) => f.id === sel);
-    // Multiple frames + nothing explicitly active → ask which workspace.
-    if (!selActive && framesRef.current.length >= 2) {
+    // With 2+ workspaces, ALWAYS ask which one — don't silently spawn into a
+    // (possibly stale) selected frame. The picker pre-highlights the selected
+    // frame for convenience but requires an explicit pick. Single frame (or
+    // none) → spawn into it / lazily create the base frame.
+    if (framesRef.current.length >= 2) {
       setSpawnPick({ mode });
       return;
     }
-    // Otherwise spawn into the active frame (or lazily create the base one).
     doSpawnClaude(mode, ensureFrame().id);
   }, [doSpawnClaude, ensureFrame]);
 
@@ -2027,17 +2027,25 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
                 <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-fg3)]">
                   Spawn claude in
                 </div>
-                {frames.map((f) => (
-                  <button
-                    key={f.id}
-                    onClick={() => { doSpawnClaude(spawnPick.mode, f.id); setSpawnPick(null); }}
-                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[12px] text-[var(--color-fg)] hover:bg-[var(--color-bg3)] transition-colors"
-                  >
-                    <span aria-hidden className="size-2 rounded-full" style={{ background: f.color }} />
-                    <span className="truncate">{f.title}</span>
-                    <span className="ml-auto text-[10px] text-[var(--color-fg3)]">workspace</span>
-                  </button>
-                ))}
+                {frames.map((f) => {
+                  const isSel = f.id === selectedFrameId;
+                  return (
+                    <button
+                      key={f.id}
+                      autoFocus={isSel}
+                      onClick={() => { doSpawnClaude(spawnPick.mode, f.id); setSpawnPick(null); }}
+                      className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[12px] text-[var(--color-fg)] hover:bg-[var(--color-bg3)] transition-colors ${
+                        isSel ? "bg-[var(--color-bg3)] ring-1 ring-[var(--color-brand)]" : ""
+                      }`}
+                    >
+                      <span aria-hidden className="size-2 rounded-full" style={{ background: f.color }} />
+                      <span className="truncate">{f.title}</span>
+                      <span className="ml-auto text-[10px] text-[var(--color-fg3)]">
+                        {isSel ? "selected" : "workspace"}
+                      </span>
+                    </button>
+                  );
+                })}
                 <button
                   onClick={() => setSpawnPick(null)}
                   className="w-full text-left px-2 py-1 mt-0.5 rounded-md text-[11px] text-[var(--color-fg3)] hover:bg-[var(--color-bg3)] transition-colors"
