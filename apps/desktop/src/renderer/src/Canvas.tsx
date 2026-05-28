@@ -281,6 +281,12 @@ interface PersistedLayout {
   extras?: ExtraTerm[];
   /** Repo-relative paths open as tabs in the single editor tile. */
   editorTabs?: string[];
+  /** EXPLICIT tile→frame membership. Authoritative — frame geometry is derived
+   *  from this, NOT the reverse. Set when a tile is spawned into or dropped
+   *  inside a frame; cleared when dropped outside all frames. Decoupling
+   *  membership from geometry avoids the bootstrap deadlock where a big tile
+   *  whose center sits outside a collapsed frame never gets claimed. */
+  frameOf?: Record<string, string>;
   /** Last viewport position so reopen drops user back where they were instead
    *  of resetting to (16, 24, zoom=1). Empty canvas + tiles persisted at high
    *  content coords used to read as "blank" — viewport reset stranded them
@@ -352,10 +358,29 @@ function loadLayout(repoPath: string | null): PersistedLayout {
     const frames = Array.isArray(p.frames)
       ? p.frames.map((f, i) => ({ ...f, z: typeof f.z === "number" ? f.z : i })) as FrameState[]
       : [];
+    const positions = p.positions ?? {};
+    const sizes = p.sizes ?? {};
+    // Migration: layouts saved before explicit `frameOf` existed have no
+    // membership map. Seed it ONCE from geometry (tile center inside the
+    // topmost frame) — a one-time snapshot, not a runtime feedback loop. After
+    // this, membership is tracked explicitly on drop/spawn.
+    let frameOf = p.frameOf;
+    if (!frameOf && frames.length > 0) {
+      frameOf = {};
+      const sorted = [...frames].sort((a, b) => b.z - a.z);
+      for (const [tid, pos] of Object.entries(positions)) {
+        const s = sizes[tid] ?? { width: 700, height: 480 };
+        const cx = pos.x + s.width / 2;
+        const cy = pos.y + s.height / 2;
+        const owner = sorted.find((f) => cx >= f.x && cx <= f.x + f.w && cy >= f.y && cy <= f.y + f.h);
+        if (owner) frameOf[tid] = owner.id;
+      }
+    }
     return {
-      sizes: p.sizes ?? {},
-      positions: p.positions ?? {},
+      sizes,
+      positions,
       frames,
+      frameOf,
       tileNames: p.tileNames ?? {},
       vis: p.vis,
       extras: Array.isArray(p.extras) ? p.extras : undefined,
@@ -497,6 +522,11 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // Mirror frames to a ref so async bind/unbind handlers read the latest list
   // without re-creating the callback on every frame change.
   const framesRef = useRef<FrameState[]>(frames);
+  // Explicit tile→frame membership (see PersistedLayout.frameOf). Authoritative
+  // for auto-fit, parenting, and the chip strip — geometry never decides it.
+  const [frameOf, setFrameOf] = useState<Record<string, string>>(initial.frameOf ?? {});
+  const frameOfRef = useRef(frameOf);
+  useEffect(() => { frameOfRef.current = frameOf; }, [frameOf]);
   useEffect(() => { framesRef.current = frames; }, [frames]);
   const repoPathRef = useRef(repoPath);
   useEffect(() => { repoPathRef.current = repoPath; }, [repoPath]);
@@ -533,6 +563,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     setVis(next.vis ?? { tree: false, shell: false, diff: false, issues: false });
     setExtras(next.extras ?? []);
     setEditorTabs(next.editorTabs ?? []);
+    setFrameOf(next.frameOf ?? {});
     if (next.viewport) setViewport(next.viewport);
   }, [repoPath]);
 
@@ -560,7 +591,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
       try {
         window.localStorage.setItem(
           LAYOUT_KEY(repoPath),
-          JSON.stringify({ sizes, positions, frames, tileNames, vis, extras, editorTabs, viewport }),
+          JSON.stringify({ sizes, positions, frames, tileNames, vis, extras, editorTabs, viewport, frameOf }),
         );
       } catch {
         // QuotaExceeded / private-mode etc — swallow; layout is best-effort.
@@ -569,7 +600,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     return () => {
       if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
     };
-  }, [repoPath, sizes, positions, frames, tileNames, vis, extras, editorTabs, viewport]);
+  }, [repoPath, sizes, positions, frames, tileNames, vis, extras, editorTabs, viewport, frameOf]);
   // Flush on tab close / app quit so the debounced write doesn't lose the
   // last ~250ms of edits. `beforeunload` fires sync before localStorage is
   // torn down; we set the latest snapshot then.
@@ -582,13 +613,13 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
       try {
         window.localStorage.setItem(
           LAYOUT_KEY(repoPath),
-          JSON.stringify({ sizes, positions, frames, tileNames, vis, extras, editorTabs, viewport }),
+          JSON.stringify({ sizes, positions, frames, tileNames, vis, extras, editorTabs, viewport, frameOf }),
         );
       } catch { /* swallow */ }
     };
     window.addEventListener("beforeunload", flush);
     return () => window.removeEventListener("beforeunload", flush);
-  }, [repoPath, sizes, positions, frames, tileNames, vis, extras, editorTabs, viewport]);
+  }, [repoPath, sizes, positions, frames, tileNames, vis, extras, editorTabs, viewport, frameOf]);
 
   // Viewport-focus request (a {id, nonce} so re-requesting the same id still
   // fires). Declared here so addFrame can pan to a freshly-created frame; the
@@ -641,35 +672,30 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // tiles whose CENTER falls inside it, + padding. Empty frames collapse to a
   // small labeled placeholder so a workspace zone stays a visible drop target.
   //
-  // Loop-safety: members are computed against the PREVIOUS frame rects, and the
-  // fitted bbox always CONTAINS those members (bbox + pad ⊇ every member) — so
-  // the next pass sees the same members and produces the same geometry. A 2px
-  // dead-band absorbs rounding. `frames` is NOT a dependency (the updater reads
-  // `prev`), so this effect never re-triggers itself.
+  // Membership is EXPLICIT (frameOf), not derived from geometry — that avoids
+  // the bootstrap deadlock where a big tile whose center sits outside a
+  // collapsed frame would never be claimed, so the frame could never grow to
+  // it. `frames` is NOT a dependency (updater reads `prev`) → never self-fires.
   useEffect(() => {
-    const ids: string[] = [];
-    if (vis.tree && repoPath) ids.push(WORKBENCH_TILE_ID);
-    if (vis.shell) ids.push("tile-terminal-1");
-    if (vis.diff && repoPath) ids.push("tile-diff-1");
-    if (vis.issues) ids.push("tile-issues-1");
-    for (const e of extras) ids.push(e.id);
+    // Tiles that actually exist right now (closed tiles' stale frameOf ignored).
+    const present = new Set<string>();
+    if (vis.tree && repoPath) present.add(WORKBENCH_TILE_ID);
+    if (vis.shell) present.add("tile-terminal-1");
+    if (vis.diff && repoPath) present.add("tile-diff-1");
+    if (vis.issues) present.add("tile-issues-1");
+    for (const e of extras) present.add(e.id);
 
     setFrames((prev) => {
-      const sorted = [...prev].sort((a, b) => b.z - a.z);
       const members = new Map<string, Array<{ x: number; y: number; r: number; b: number }>>();
-      for (const tid of ids) {
+      for (const tid of present) {
+        const fid = frameOf[tid];
+        if (!fid) continue;
         const p = positions[tid];
         if (!p) continue;
         const s = sizes[tid] ?? defaultTileSize(tid);
-        // Membership by tile CENTER (forgiving "drag out to remove"), topmost
-        // frame wins. Relative render position stays top-left (mkTile).
-        const cx = p.x + s.width / 2;
-        const cy = p.y + s.height / 2;
-        const owner = sorted.find((f) => cx >= f.x && cx <= f.x + f.w && cy >= f.y && cy <= f.y + f.h);
-        if (!owner) continue;
-        const arr = members.get(owner.id) ?? [];
+        const arr = members.get(fid) ?? [];
         arr.push({ x: p.x, y: p.y, r: p.x + s.width, b: p.y + s.height });
-        members.set(owner.id, arr);
+        members.set(fid, arr);
       }
       let changed = false;
       const next = prev.map((f) => {
@@ -699,7 +725,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
       });
       return changed ? next : prev;
     });
-  }, [positions, sizes, vis, extras, repoPath]);
+  }, [positions, sizes, vis, extras, repoPath, frameOf]);
   // Drag synced on stop (not per-tick) — react-flow renders the live drag
   // internally via transform, we just persist the final x/y to our source-
   // of-truth state so the next render rebuilds the node at the right place.
@@ -846,22 +872,14 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     if (vis.shell) candidates.push("tile-terminal-1");
     for (const e of extras) candidates.push(e.id);
     for (const tid of candidates) {
-      const pos = positions[tid];
-      if (!pos) continue;
-      const s = sizes[tid] ?? defaultTileSize(tid);
-      const cx = pos.x + s.width / 2;
-      const cy = pos.y + s.height / 2;
-      for (const f of sortedFrames) {
-        if (cx >= f.x && cx <= f.x + f.w && cy >= f.y && cy <= f.y + f.h) {
-          const arr = map.get(f.id) ?? [];
-          arr.push(tid);
-          map.set(f.id, arr);
-          break;
-        }
-      }
+      const fid = frameOf[tid];
+      if (!fid) continue;
+      const arr = map.get(fid) ?? [];
+      arr.push(tid);
+      map.set(fid, arr);
     }
     return map;
-  }, [positions, sizes, sortedFrames, vis.shell, extras]);
+  }, [frameOf, vis.shell, extras]);
 
   // Display-name map for FrameNode chip strip: tile id → user/auto name.
   // Memoized to keep node memoization stable.
@@ -895,6 +913,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
 
     // Boxes of every OTHER tile whose CENTER is in this frame (matches the
     // auto-fit membership rule).
+    // Existing members of THIS frame (explicit frameOf), to pack beside.
     const rects: Array<{ x: number; y: number; r: number; b: number }> = [];
     const candidates: string[] = [];
     if (visRef.current.tree && repoPath) candidates.push(WORKBENCH_TILE_ID);
@@ -904,12 +923,10 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     for (const e of extrasRef.current) candidates.push(e.id);
     for (const tid of candidates) {
       if (tid === id) continue;
+      if (frameOfRef.current[tid] !== frame.id) continue;
       const p = pos[tid];
       if (!p) continue;
       const s = sizeOf(tid);
-      const cx = p.x + s.width / 2;
-      const cy = p.y + s.height / 2;
-      if (cx < frame.x || cy < frame.y || cx > frame.x + frame.w || cy > frame.y + frame.h) continue;
       rects.push({ x: p.x, y: p.y, r: p.x + s.width, b: p.y + s.height });
     }
 
@@ -920,9 +937,11 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
       placeY = Math.min(...rects.map((rc) => rc.y));
     }
 
+    // Record membership EXPLICITLY + set position. The auto-fit effect grows
+    // the frame to contain it (membership is no longer geometry-derived, so
+    // there's no deadlock if the new tile's center lands outside the frame).
+    setFrameOf((m) => ({ ...m, [id]: frame.id }));
     setPositions((p) => ({ ...p, [id]: { x: placeX, y: placeY } }));
-    // Auto-fit effect handles frame resize. Just fly the viewport to the new
-    // tile once it has mounted.
     requestAnimationFrame(() => focusTile(id));
   }, [repoPath]);
 
@@ -992,6 +1011,15 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     };
     setFrames((fs) => (fs.length ? fs : [frame]));
     setSelectedFrameId(id);
+    // Adopt any pre-existing loose tiles into this base frame (explicit
+    // membership) so they're treated as members by auto-fit + parenting.
+    if (tileEntries.length > 0) {
+      setFrameOf((m) => {
+        const copy = { ...m };
+        for (const [tid] of tileEntries) if (!copy[tid]) copy[tid] = id;
+        return copy;
+      });
+    }
     // Sync the ref NOW so an immediately-following placeInFrame / doSpawnClaude
     // (both read framesRef) see the new frame before the next render commits.
     if (!framesRef.current.length) framesRef.current = [frame];
@@ -1223,23 +1251,18 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     const y = 60;
     const gap = 24;
 
-    /** Build a node spec; if the tile's CENTER falls inside a frame, attach
-     *  parentId + relative position so dragging the frame moves the tile.
-     *  NO extent:'parent' — tiles must be free to leave the frame (that's how
-     *  the auto-fit effect detects a tile has left and collapses the frame). */
+    /** Build a node spec; parenting comes from the EXPLICIT frameOf map (not
+     *  geometry), so a tile stays a child of its frame regardless of the
+     *  frame's current auto-fitted size. NO extent:'parent' — tiles move
+     *  freely; membership changes only on drop (onNodeDragStop). */
     const mkTile = (base: Omit<Node, "position">, ax: number, ay: number): Node => {
       // Override with user-dragged position if any.
       const p = positions[base.id];
       const px = p?.x ?? ax;
       const py = p?.y ?? ay;
-      const ts = sizes[base.id] ?? defaultTileSize(base.id);
-      const parent = parentFrameOf(px + ts.width / 2, py + ts.height / 2);
-      if (parent) {
-        // If the containing frame is bound to a worktree, the tile's cwd/repoPath
-        // must point at that isolated worktree — not the shared repo. This is the
-        // crux of worktree-bound zones: agents inside a bound frame run on its
-        // branch. Unbound frames leave cwd/repoPath untouched (== repoPath).
-        const owner = frames.find((f) => f.id === parent.parentId);
+      const parentFrame = frameOf[base.id] ? frames.find((f) => f.id === frameOf[base.id]) : undefined;
+      if (parentFrame) {
+        const owner = parentFrame;
         // Zone repo for tiles inside this frame: a worktree (branch zone) wins,
         // else a bound workspace folder (workspace zone), else nothing (the
         // tile keeps the canvas's base repoPath/cwd/root).
@@ -1259,8 +1282,8 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
         return {
           ...base,
           data,
-          position: { x: px - parent.fx, y: py - parent.fy },
-          parentId: parent.parentId,
+          position: { x: px - parentFrame.x, y: py - parentFrame.y },
+          parentId: parentFrame.id,
         };
       }
       return { ...base, position: { x: px, y: py } };
@@ -1457,9 +1480,9 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     extras,
     editorTabs,
     frames,
+    frameOf,
     sizes,
     positions,
-    parentFrameOf,
     openFile,
     closeTab,
     closeWorkbench,
@@ -1829,36 +1852,19 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
             // mkTile's parentFrameOf can detect frame containment on
             // re-render. Convert via positionAbsolute when available.
             if (node.type === "frame") {
-              // Dragging a frame must carry its tiles with it. react-flow moves
-              // parented children visually during the drag, but our positions
-              // map (absolute) is stale on drop — so we translate every member
-              // tile by the frame's delta. Members stay members (everything
-              // shifts together → centers still inside the moved frame), and
-              // the auto-fit effect re-derives the frame at its new spot.
+              // Dragging a frame carries its tiles. react-flow moves parented
+              // children visually during the drag, but our positions map
+              // (absolute) is stale on drop — translate every EXPLICIT member
+              // (frameOf === this frame) by the frame's delta.
               const old = framesRef.current.find((f) => f.id === node.id);
               if (old) {
                 const dx = node.position.x - old.x;
                 const dy = node.position.y - old.y;
                 if (dx !== 0 || dy !== 0) {
-                  // Member tile ids by CENTER inside the OLD frame rect.
-                  const ids: string[] = [];
-                  if (visRef.current.tree && repoPath) ids.push(WORKBENCH_TILE_ID);
-                  if (visRef.current.shell) ids.push("tile-terminal-1");
-                  if (visRef.current.diff && repoPath) ids.push("tile-diff-1");
-                  if (visRef.current.issues) ids.push("tile-issues-1");
-                  for (const e of extrasRef.current) ids.push(e.id);
-                  const sorted = [...framesRef.current].sort((a, b) => b.z - a.z);
-                  const moveIds = new Set<string>();
-                  for (const tid of ids) {
-                    const p = positionsRef.current[tid];
-                    if (!p) continue;
-                    const s = sizesRef.current[tid] ?? defaultTileSize(tid);
-                    const cx = p.x + s.width / 2;
-                    const cy = p.y + s.height / 2;
-                    const owner = sorted.find((f) => cx >= f.x && cx <= f.x + f.w && cy >= f.y && cy <= f.y + f.h);
-                    if (owner?.id === node.id) moveIds.add(tid);
-                  }
-                  if (moveIds.size > 0) {
+                  const moveIds = Object.keys(frameOfRef.current).filter(
+                    (tid) => frameOfRef.current[tid] === node.id,
+                  );
+                  if (moveIds.length > 0) {
                     setPositions((prev) => {
                       const next = { ...prev };
                       for (const tid of moveIds) {
@@ -1895,6 +1901,21 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
               }
             }
             commitPosition(node.id, ax, ay);
+            // Update EXPLICIT membership from the drop location: the tile joins
+            // whichever frame contains its CENTER (topmost), or becomes loose if
+            // dropped outside every frame. This is the ONLY place geometry maps
+            // to membership — a one-shot user action, not a feedback loop.
+            const s = sizesRef.current[node.id] ?? defaultTileSize(node.id);
+            const hit = parentFrameOf(ax + s.width / 2, ay + s.height / 2);
+            setFrameOf((m) => {
+              const cur = m[node.id];
+              const nextId = hit?.parentId;
+              if (cur === nextId) return m;
+              const copy = { ...m };
+              if (nextId) copy[node.id] = nextId;
+              else delete copy[node.id];
+              return copy;
+            });
           }}
           // Cull off-viewport tiles ONLY past a threshold. xyflow's guidance:
           // culling helps with MANY nodes, but with few it adds expensive
