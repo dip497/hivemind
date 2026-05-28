@@ -344,6 +344,27 @@ function defaultTileSize(id: string): { width: number; height: number } {
   return { width: 1200, height: 820 };
 }
 
+/** Default size by KIND — the single source of truth for a fresh tile's box.
+ *  Node-building, the frame auto-fit effect, and placeInFrame all derive from
+ *  this so the frame grows to the tile's ACTUAL rendered size. (defaultTileSize
+ *  above keyed off fixed ids, which broke once tiles became per-instance with
+ *  timestamped ids — claude rendered 1480×1000 but the frame fit it to 1200×820
+ *  and the tile spilled out.) */
+function defaultSizeForKind(kind: TileKind): { width: number; height: number } {
+  switch (kind) {
+    case "editor":
+    case "diff":
+      return { width: 1400, height: 900 };
+    case "issues":
+      return { width: 680, height: 460 };
+    case "claude":
+      return { width: 1480, height: 1000 };
+    case "shell":
+    default:
+      return { width: 1200, height: 820 };
+  }
+}
+
 // Frame auto-fit geometry. Frames are sized to the bbox of their member tiles
 // + these paddings; an empty frame collapses to the placeholder so a bound
 // workspace zone stays a visible, droppable target with its header chrome.
@@ -765,9 +786,11 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     // Tiles that actually exist right now (closed tiles' stale frameOf ignored).
     // editor/diff need a repo — they're not rendered without one.
     const present = new Set<string>();
+    const kindOf = new Map<string, TileKind>();
     for (const t of tiles) {
       if ((t.kind === "editor" || t.kind === "diff") && !repoPath) continue;
       present.add(t.id);
+      kindOf.set(t.id, t.kind);
     }
 
     setFrames((prev) => {
@@ -777,7 +800,8 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
         if (!fid) continue;
         const p = positions[tid];
         if (!p) continue;
-        const s = sizes[tid] ?? defaultTileSize(tid);
+        const k = kindOf.get(tid);
+        const s = sizes[tid] ?? (k ? defaultSizeForKind(k) : defaultTileSize(tid));
         const arr = members.get(fid) ?? [];
         arr.push({ x: p.x, y: p.y, r: p.x + s.width, b: p.y + s.height });
         members.set(fid, arr);
@@ -1022,7 +1046,11 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     const padTop = 48;
     const gap = 24;
     const pos = positionsRef.current;
-    const sizeOf = (tid: string) => sizesRef.current[tid] ?? defaultTileSize(tid);
+    const sizeOf = (tid: string) => {
+      if (sizesRef.current[tid]) return sizesRef.current[tid]!;
+      const k = tilesRef.current.find((t) => t.id === tid)?.kind;
+      return k ? defaultSizeForKind(k) : defaultTileSize(tid);
+    };
 
     // Boxes of every OTHER tile whose CENTER is in this frame (matches the
     // auto-fit membership rule).
@@ -1416,10 +1444,11 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     for (const t of tiles) {
       if ((t.kind === "editor" || t.kind === "diff") && !repoPath) continue;
       let node: Omit<Node, "position">;
-      let w: number;
-      let h: number;
+      // Single source of truth for the default box — keep in lockstep with the
+      // auto-fit effect (both use defaultSizeForKind) so the frame grows to the
+      // tile's real size.
+      const { width: w, height: h } = defaultSizeForKind(t.kind);
       if (t.kind === "editor") {
-        w = 1400; h = 900;
         node = {
           id: t.id,
           type: "workbench",
@@ -1435,7 +1464,6 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
           dragHandle: ".tile-drag-handle",
         };
       } else if (t.kind === "diff") {
-        w = 1400; h = 900;
         node = {
           id: t.id,
           type: "diff",
@@ -1450,7 +1478,6 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
           dragHandle: ".tile-drag-handle",
         };
       } else if (t.kind === "issues") {
-        w = 680; h = 460;
         node = {
           id: t.id,
           type: "issues",
@@ -1463,7 +1490,6 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
         // BIGGER (long transcripts + inline diffs); shell stays compact.
         const cmd = t.cmd ?? defaultShell().cmd;
         const args = t.args ?? defaultShell().args;
-        if (t.kind === "claude") { w = 1480; h = 1000; } else { w = 1200; h = 820; }
         node = {
           id: t.id,
           type: "terminal",
@@ -1913,7 +1939,8 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
             // whichever frame contains its CENTER (topmost), or becomes loose if
             // dropped outside every frame. This is the ONLY place geometry maps
             // to membership — a one-shot user action, not a feedback loop.
-            const s = sizesRef.current[node.id] ?? defaultTileSize(node.id);
+            const dragKind = tilesRef.current.find((t) => t.id === node.id)?.kind;
+            const s = sizesRef.current[node.id] ?? (dragKind ? defaultSizeForKind(dragKind) : defaultTileSize(node.id));
             const hit = parentFrameOf(ax + s.width / 2, ay + s.height / 2);
             setFrameOf((m) => {
               const cur = m[node.id];
