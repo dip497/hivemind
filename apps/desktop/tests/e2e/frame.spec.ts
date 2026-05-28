@@ -1,6 +1,8 @@
-// Frame nodes (Unreal Blueprint-style comment box) must be resizable AND
-// movable. Same root-causes as the tile resize bug — NodeResizer missing
-// nodeId, no commit-back from drag/resize to source-of-truth state.
+// Frame nodes (Unreal Blueprint-style comment box) are movable; their SIZE is
+// no longer manually controlled — frame geometry is derived reactively from
+// the bounding box of the tiles inside (auto-fit), and an empty frame collapses
+// to a placeholder. So there is no resize-handle test anymore; we assert the
+// empty frame renders at the collapsed placeholder size + still moves.
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -37,43 +39,15 @@ test.afterAll(async () => {
   await app?.close();
 });
 
-test("frame corner-drag resizes", async () => {
+test("empty frame has NO manual resize handle (auto-fit owns geometry)", async () => {
   const frame = page.locator(".react-flow__node-frame").first();
-  const before = await frame.boundingBox();
-  expect(before).toBeTruthy();
-
-  // Select first so any selection-gated visuals show (resizer is always on
-  // for us via isVisible={true}, but click engages react-flow's selection).
+  await expect(frame).toBeVisible();
   await frame.click({ position: { x: 30, y: 4 } });
-
+  // Frames are no longer manually resizable — the NodeResizer was removed.
   const handle = page.locator(
-    ".react-flow__node-frame .react-flow__resize-control.bottom.right.handle"
+    ".react-flow__node-frame .react-flow__resize-control.handle"
   );
-  await expect(handle).toBeVisible();
-  const hb = await handle.boundingBox();
-  expect(hb).toBeTruthy();
-  const sx = hb!.x + hb!.width / 2;
-  const sy = hb!.y + hb!.height / 2;
-
-  await page.mouse.move(sx, sy);
-  await page.mouse.down();
-  const steps = 16;
-  const dx = 140;
-  const dy = 90;
-  for (let i = 1; i <= steps; i++) {
-    await page.mouse.move(sx + (dx * i) / steps, sy + (dy * i) / steps, { steps: 1 });
-    await page.waitForTimeout(14);
-  }
-  await page.mouse.up();
-  await page.waitForTimeout(300);
-
-  const after = await frame.boundingBox();
-  expect(after).toBeTruthy();
-  const dw = after!.width - before!.width;
-  const dh = after!.height - before!.height;
-  console.log("frame resize delta", { dw, dh });
-  expect(dw).toBeGreaterThan(50);
-  expect(dh).toBeGreaterThan(30);
+  await expect(handle).toHaveCount(0);
 });
 
 test("frame header-drag moves it", async () => {

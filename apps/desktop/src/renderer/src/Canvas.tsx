@@ -312,13 +312,22 @@ const WORKBENCH_TILE_ID = "tile-workbench-1";
 
 /** Fallback tile dimensions for tiles never explicitly resized (so they have
  *  no entry in the `sizes` map). Mirrors the defaults in the nodes useMemo.
- *  Used by fitFrame to estimate a child's box without a DOM measurement. */
+ *  Used by the frame auto-fit effect to estimate a child's box without a DOM
+ *  measurement. */
 function defaultTileSize(id: string): { width: number; height: number } {
   if (id === WORKBENCH_TILE_ID || id === "tile-diff-1") return { width: 1400, height: 900 };
   if (id === "tile-issues-1") return { width: 680, height: 460 };
   // terminals + claude extras
   return { width: 1200, height: 820 };
 }
+
+// Frame auto-fit geometry. Frames are sized to the bbox of their member tiles
+// + these paddings; an empty frame collapses to the placeholder so a bound
+// workspace zone stays a visible, droppable target with its header chrome.
+const FRAME_PAD = 28;
+const FRAME_HEADER = 36;
+const FRAME_EMPTY_W = 460;
+const FRAME_EMPTY_H = 200;
 const LAYOUT_KEY = (repoPath: string | null) => `hivemind:canvas-layout:${repoPath ?? "__global__"}`;
 // One-time cleanup: an earlier version persisted the no-repo case under
 // `__global__`, which leaked test/welcome layouts across unrelated sessions.
@@ -425,24 +434,8 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
         return { ...p, [id]: { x, y } };
       });
     }
-    // Auto-grow the parent frame if the resized tile now extends past it.
-    // Position is absolute (commitPosition stores absolute); frames are parents
-    // → tile-right = (x ?? positions[id].x) + width. Find the owning frame and
-    // expand. Without this, resize hits extent:'parent' and the tile is capped.
-    const pos = positionsRef.current[id];
-    const tx = x ?? pos?.x;
-    const ty = y ?? pos?.y;
-    if (tx == null || ty == null) return;
-    const right = tx + width + 24;
-    const bottom = ty + height + 24;
-    const owner = framesRef.current.find(
-      (f) => tx >= f.x - 2 && ty >= f.y - 2 && tx < f.x + f.w && ty < f.y + f.h,
-    );
-    if (!owner) return;
-    const neededW = Math.max(owner.w, right - owner.x);
-    const neededH = Math.max(owner.h, bottom - owner.y);
-    if (neededW === owner.w && neededH === owner.h) return;
-    setFrames((fs) => fs.map((f) => (f.id === owner.id ? { ...f, w: neededW, h: neededH } : f)));
+    // Frame resize is handled reactively by the auto-fit effect — committing
+    // the new size/position above triggers it. No manual frame-grow here.
   }, []);
 
   // Same pattern for positions — useMemo rebuilds nodes with hardcoded x/y
@@ -640,55 +633,73 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   const deleteFrame = useCallback((id: string) => {
     setFrames((fs) => fs.filter((f) => f.id !== id));
   }, []);
-  const resizeFrame = useCallback((id: string, w: number, h: number, x?: number, y?: number) => {
-    // Commit x/y too (top/left handles move the frame's origin as it resizes).
-    setFrames((fs) => fs.map((f) => (f.id === id ? { ...f, w, h, ...(x != null && y != null ? { x, y } : {}) } : f)));
-  }, []);
-
-  // Autofit a frame to the bounding box of its child tiles (grows AND shrinks,
-  // unlike the resize/place auto-grow which only ever expands). Moving the
-  // frame's x/y is safe: mkTile recomputes each child's RELATIVE position as
-  // (absolutePos − frame.origin) on the next render, so children stay put
-  // absolutely while the frame reflows around them.
-  const fitFrame = useCallback((frameId: string) => {
-    const frame = framesRef.current.find((f) => f.id === frameId);
-    if (!frame) return;
-    const PAD = 28;        // breathing room on left/right/bottom
-    const HEADER = 36;     // extra top room for the frame's 28px header bar
-    // Every possibly-visible tile id + its absolute box.
+  // ── reactive frame auto-fit ───────────────────────────────────────────────
+  // Frame geometry is DERIVED from its member tiles, not stored-and-grown.
+  // Whenever tile positions / sizes / visibility / extras change (all of which
+  // fire at human-action frequency — drag-STOP, resize-commit, spawn, toggle —
+  // never per-animation-frame) we recompute every frame to the bbox of the
+  // tiles whose CENTER falls inside it, + padding. Empty frames collapse to a
+  // small labeled placeholder so a workspace zone stays a visible drop target.
+  //
+  // Loop-safety: members are computed against the PREVIOUS frame rects, and the
+  // fitted bbox always CONTAINS those members (bbox + pad ⊇ every member) — so
+  // the next pass sees the same members and produces the same geometry. A 2px
+  // dead-band absorbs rounding. `frames` is NOT a dependency (the updater reads
+  // `prev`), so this effect never re-triggers itself.
+  useEffect(() => {
     const ids: string[] = [];
-    if (visRef.current.tree && repoPath) ids.push(WORKBENCH_TILE_ID);
-    if (visRef.current.shell) ids.push("tile-terminal-1");
-    if (visRef.current.diff && repoPath) ids.push("tile-diff-1");
-    if (visRef.current.issues) ids.push("tile-issues-1");
-    for (const e of extrasRef.current) ids.push(e.id);
-    const boxes: Array<{ x: number; y: number; r: number; b: number }> = [];
-    for (const tid of ids) {
-      const pos = positionsRef.current[tid];
-      if (!pos) continue;
-      // Topmost-frame ownership (matches frameTiles / parentFrameOf).
-      const owner = [...framesRef.current]
-        .sort((a, b) => b.z - a.z)
-        .find((f) => pos.x >= f.x && pos.x <= f.x + f.w && pos.y >= f.y && pos.y <= f.y + f.h);
-      if (owner?.id !== frameId) continue;
-      const sz = sizesRef.current[tid] ?? defaultTileSize(tid);
-      boxes.push({ x: pos.x, y: pos.y, r: pos.x + sz.width, b: pos.y + sz.height });
-    }
-    if (boxes.length === 0) return; // empty frame — leave it as-is
-    const minX = Math.min(...boxes.map((b) => b.x));
-    const minY = Math.min(...boxes.map((b) => b.y));
-    const maxR = Math.max(...boxes.map((b) => b.r));
-    const maxB = Math.max(...boxes.map((b) => b.b));
-    const nx = Math.round(minX - PAD);
-    const ny = Math.round(minY - HEADER);
-    const nw = Math.round(maxR - minX + PAD * 2);
-    const nh = Math.round(maxB - minY + HEADER + PAD);
-    setFrames((fs) => fs.map((f) => (f.id === frameId ? { ...f, x: nx, y: ny, w: nw, h: nh } : f)));
-  }, [repoPath]);
-  // Ref so placeInFrame (declared later) can call the latest fitFrame without
-  // taking it as a dependency.
-  const fitFrameRef = useRef(fitFrame);
-  useEffect(() => { fitFrameRef.current = fitFrame; }, [fitFrame]);
+    if (vis.tree && repoPath) ids.push(WORKBENCH_TILE_ID);
+    if (vis.shell) ids.push("tile-terminal-1");
+    if (vis.diff && repoPath) ids.push("tile-diff-1");
+    if (vis.issues) ids.push("tile-issues-1");
+    for (const e of extras) ids.push(e.id);
+
+    setFrames((prev) => {
+      const sorted = [...prev].sort((a, b) => b.z - a.z);
+      const members = new Map<string, Array<{ x: number; y: number; r: number; b: number }>>();
+      for (const tid of ids) {
+        const p = positions[tid];
+        if (!p) continue;
+        const s = sizes[tid] ?? defaultTileSize(tid);
+        // Membership by tile CENTER (forgiving "drag out to remove"), topmost
+        // frame wins. Relative render position stays top-left (mkTile).
+        const cx = p.x + s.width / 2;
+        const cy = p.y + s.height / 2;
+        const owner = sorted.find((f) => cx >= f.x && cx <= f.x + f.w && cy >= f.y && cy <= f.y + f.h);
+        if (!owner) continue;
+        const arr = members.get(owner.id) ?? [];
+        arr.push({ x: p.x, y: p.y, r: p.x + s.width, b: p.y + s.height });
+        members.set(owner.id, arr);
+      }
+      let changed = false;
+      const next = prev.map((f) => {
+        const mem = members.get(f.id);
+        let d: { x: number; y: number; w: number; h: number };
+        if (!mem || mem.length === 0) {
+          // Collapse empty frame to a placeholder (keep origin so it doesn't jump).
+          d = { x: f.x, y: f.y, w: FRAME_EMPTY_W, h: FRAME_EMPTY_H };
+        } else {
+          const minX = Math.min(...mem.map((m) => m.x));
+          const minY = Math.min(...mem.map((m) => m.y));
+          const maxR = Math.max(...mem.map((m) => m.r));
+          const maxB = Math.max(...mem.map((m) => m.b));
+          d = {
+            x: Math.round(minX - FRAME_PAD),
+            y: Math.round(minY - FRAME_HEADER),
+            w: Math.round(maxR - minX + FRAME_PAD * 2),
+            h: Math.round(maxB - minY + FRAME_HEADER + FRAME_PAD),
+          };
+        }
+        if (
+          Math.abs(d.x - f.x) < 2 && Math.abs(d.y - f.y) < 2 &&
+          Math.abs(d.w - f.w) < 2 && Math.abs(d.h - f.h) < 2
+        ) return f;
+        changed = true;
+        return { ...f, ...d };
+      });
+      return changed ? next : prev;
+    });
+  }, [positions, sizes, vis, extras, repoPath]);
   // Drag synced on stop (not per-tick) — react-flow renders the live drag
   // internally via transform, we just persist the final x/y to our source-
   // of-truth state so the next render rebuilds the node at the right place.
@@ -806,11 +817,16 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     () => [...frames].sort((a, b) => b.z - a.z),
     [frames],
   );
+  // Membership by the tile's CENTER point (cx,cy), topmost frame wins. Center
+  // (not top-left) makes "drag a tile out of the frame" intuitive — you drag
+  // until its middle crosses the edge — and matches the auto-fit effect's rule.
+  // Returns the owning frame's origin so the caller can compute the tile's
+  // top-left RELATIVE position (relX = topLeftX − frame.x).
   const parentFrameOf = useCallback(
-    (x: number, y: number): { parentId: string; relX: number; relY: number } | null => {
+    (cx: number, cy: number): { parentId: string; fx: number; fy: number } | null => {
       for (const f of sortedFrames) {
-        if (x >= f.x && x <= f.x + f.w && y >= f.y && y <= f.y + f.h) {
-          return { parentId: f.id, relX: x - f.x, relY: y - f.y };
+        if (cx >= f.x && cx <= f.x + f.w && cy >= f.y && cy <= f.y + f.h) {
+          return { parentId: f.id, fx: f.x, fy: f.y };
         }
       }
       return null;
@@ -832,8 +848,11 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     for (const tid of candidates) {
       const pos = positions[tid];
       if (!pos) continue;
+      const s = sizes[tid] ?? defaultTileSize(tid);
+      const cx = pos.x + s.width / 2;
+      const cy = pos.y + s.height / 2;
       for (const f of sortedFrames) {
-        if (pos.x >= f.x && pos.x <= f.x + f.w && pos.y >= f.y && pos.y <= f.y + f.h) {
+        if (cx >= f.x && cx <= f.x + f.w && cy >= f.y && cy <= f.y + f.h) {
           const arr = map.get(f.id) ?? [];
           arr.push(tid);
           map.set(f.id, arr);
@@ -842,7 +861,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
       }
     }
     return map;
-  }, [positions, sortedFrames, vis.shell, extras]);
+  }, [positions, sizes, sortedFrames, vis.shell, extras]);
 
   // Display-name map for FrameNode chip strip: tile id → user/auto name.
   // Memoized to keep node memoization stable.
@@ -863,23 +882,19 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // on the canvas, ask WHERE a new claude should run instead of guessing.
   const [spawnPick, setSpawnPick] = useState<{ mode?: string } | null>(null);
 
-  // Place a tile inside a frame WITHOUT overlapping the tiles already there.
-  // The old version used a fixed 1240×860 grid + Math.round bucketing, which
-  // broke once tile defaults grew to 1400×900: a wide tile straddled two
-  // buckets, occupancy mis-detected, and the new tile stacked on top of an
-  // existing one. This version does real rectangle collision: gather the
-  // actual boxes of every OTHER tile in the frame, then scan a coarse grid of
-  // candidate slots and pick the first that overlaps nothing. Frame grows to
-  // contain the chosen slot, then fitFrame snaps it tight around everything.
+  // Position a new tile inside a frame, snug to the RIGHT of the tiles already
+  // there (top-aligned). The frame's SIZE is no longer our concern — the
+  // reactive auto-fit effect derives it from the member bbox once this position
+  // commits. We only choose a non-overlapping spot for the new tile.
   const placeInFrame = useCallback((id: string, frame: FrameState) => {
     const padX = 24;
     const padTop = 48;
     const gap = 24;
     const pos = positionsRef.current;
     const sizeOf = (tid: string) => sizesRef.current[tid] ?? defaultTileSize(tid);
-    const me = sizeOf(id);
 
-    // Rectangles of every OTHER tile currently inside this frame (absolute).
+    // Boxes of every OTHER tile whose CENTER is in this frame (matches the
+    // auto-fit membership rule).
     const rects: Array<{ x: number; y: number; r: number; b: number }> = [];
     const candidates: string[] = [];
     if (visRef.current.tree && repoPath) candidates.push(WORKBENCH_TILE_ID);
@@ -891,44 +906,24 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
       if (tid === id) continue;
       const p = pos[tid];
       if (!p) continue;
-      // inside this frame?
-      if (p.x < frame.x - 2 || p.y < frame.y - 2 || p.x > frame.x + frame.w || p.y > frame.y + frame.h) continue;
       const s = sizeOf(tid);
+      const cx = p.x + s.width / 2;
+      const cy = p.y + s.height / 2;
+      if (cx < frame.x || cy < frame.y || cx > frame.x + frame.w || cy > frame.y + frame.h) continue;
       rects.push({ x: p.x, y: p.y, r: p.x + s.width, b: p.y + s.height });
     }
 
-    const overlaps = (x: number, y: number) =>
-      rects.some((rc) => x < rc.r + gap && x + me.width + gap > rc.x && y < rc.b + gap && y + me.height + gap > rc.y);
-
-    // Scan slots: left→right across a few columns, then wrap down. Column
-    // step = widest existing tile (or this tile) so columns don't interleave.
-    const baseX = frame.x + padX;
-    const baseY = frame.y + padTop;
-    const colStep = Math.max(me.width, ...rects.map((rc) => rc.r - rc.x), 600) + gap;
-    const rowStep = Math.max(me.height, ...rects.map((rc) => rc.b - rc.y), 400) + gap;
-    let placeX = baseX;
-    let placeY = baseY;
-    outer: for (let row = 0; row < 8; row++) {
-      for (let col = 0; col < 4; col++) {
-        const x = baseX + col * colStep;
-        const y = baseY + row * rowStep;
-        if (!overlaps(x, y)) { placeX = x; placeY = y; break outer; }
-      }
+    let placeX = frame.x + padX;
+    let placeY = frame.y + padTop;
+    if (rects.length > 0) {
+      placeX = Math.max(...rects.map((rc) => rc.r)) + gap;
+      placeY = Math.min(...rects.map((rc) => rc.y));
     }
 
     setPositions((p) => ({ ...p, [id]: { x: placeX, y: placeY } }));
-    // Grow the frame so the chosen slot is inside it (fitFrame then tightens).
-    const neededW = placeX + me.width + padX - frame.x;
-    const neededH = placeY + me.height + padX - frame.y;
-    setFrames((fs) =>
-      fs.map((f) => (f.id === frame.id ? { ...f, w: Math.max(f.w, neededW), h: Math.max(f.h, neededH) } : f)),
-    );
-    // After the new position commits, autofit the frame to its content and
-    // fly the viewport to the freshly placed tile.
-    requestAnimationFrame(() => {
-      fitFrameRef.current?.(frame.id);
-      focusTile(id);
-    });
+    // Auto-fit effect handles frame resize. Just fly the viewport to the new
+    // tile once it has mounted.
+    requestAnimationFrame(() => focusTile(id));
   }, [repoPath]);
 
   // Wrap legacy loose tiles on mount: layouts persisted before frame=workspace
@@ -1228,15 +1223,17 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     const y = 60;
     const gap = 24;
 
-    /** Build a node spec; if (x,y) falls inside a frame, attach parentId +
-     *  relative position + extent:'parent' so dragging the frame moves the
-     *  tile, and the tile is constrained to the frame's bounds. */
+    /** Build a node spec; if the tile's CENTER falls inside a frame, attach
+     *  parentId + relative position so dragging the frame moves the tile.
+     *  NO extent:'parent' — tiles must be free to leave the frame (that's how
+     *  the auto-fit effect detects a tile has left and collapses the frame). */
     const mkTile = (base: Omit<Node, "position">, ax: number, ay: number): Node => {
       // Override with user-dragged position if any.
       const p = positions[base.id];
       const px = p?.x ?? ax;
       const py = p?.y ?? ay;
-      const parent = parentFrameOf(px, py);
+      const ts = sizes[base.id] ?? defaultTileSize(base.id);
+      const parent = parentFrameOf(px + ts.width / 2, py + ts.height / 2);
       if (parent) {
         // If the containing frame is bound to a worktree, the tile's cwd/repoPath
         // must point at that isolated worktree — not the shared repo. This is the
@@ -1262,9 +1259,8 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
         return {
           ...base,
           data,
-          position: { x: parent.relX, y: parent.relY },
+          position: { x: px - parent.fx, y: py - parent.fy },
           parentId: parent.parentId,
-          extent: "parent",
         };
       }
       return { ...base, position: { x: px, y: py } };
@@ -1310,8 +1306,6 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
           onTitleChange: updateFrameTitle,
           onColorChange: updateFrameColor,
           onDelete: deleteFrame,
-          onResize: resizeFrame,
-          onFit: fitFrame,
           onBringToFront: bringFrameToFront,
           onBindBranch: bindBranch,
           onUnbindBranch: unbindBranch,
@@ -1472,8 +1466,6 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     updateFrameTitle,
     updateFrameColor,
     deleteFrame,
-    resizeFrame,
-    fitFrame,
     bringFrameToFront,
     bindBranch,
     unbindBranch,
@@ -1837,6 +1829,47 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
             // mkTile's parentFrameOf can detect frame containment on
             // re-render. Convert via positionAbsolute when available.
             if (node.type === "frame") {
+              // Dragging a frame must carry its tiles with it. react-flow moves
+              // parented children visually during the drag, but our positions
+              // map (absolute) is stale on drop — so we translate every member
+              // tile by the frame's delta. Members stay members (everything
+              // shifts together → centers still inside the moved frame), and
+              // the auto-fit effect re-derives the frame at its new spot.
+              const old = framesRef.current.find((f) => f.id === node.id);
+              if (old) {
+                const dx = node.position.x - old.x;
+                const dy = node.position.y - old.y;
+                if (dx !== 0 || dy !== 0) {
+                  // Member tile ids by CENTER inside the OLD frame rect.
+                  const ids: string[] = [];
+                  if (visRef.current.tree && repoPath) ids.push(WORKBENCH_TILE_ID);
+                  if (visRef.current.shell) ids.push("tile-terminal-1");
+                  if (visRef.current.diff && repoPath) ids.push("tile-diff-1");
+                  if (visRef.current.issues) ids.push("tile-issues-1");
+                  for (const e of extrasRef.current) ids.push(e.id);
+                  const sorted = [...framesRef.current].sort((a, b) => b.z - a.z);
+                  const moveIds = new Set<string>();
+                  for (const tid of ids) {
+                    const p = positionsRef.current[tid];
+                    if (!p) continue;
+                    const s = sizesRef.current[tid] ?? defaultTileSize(tid);
+                    const cx = p.x + s.width / 2;
+                    const cy = p.y + s.height / 2;
+                    const owner = sorted.find((f) => cx >= f.x && cx <= f.x + f.w && cy >= f.y && cy <= f.y + f.h);
+                    if (owner?.id === node.id) moveIds.add(tid);
+                  }
+                  if (moveIds.size > 0) {
+                    setPositions((prev) => {
+                      const next = { ...prev };
+                      for (const tid of moveIds) {
+                        const p = next[tid];
+                        if (p) next[tid] = { x: p.x + dx, y: p.y + dy };
+                      }
+                      return next;
+                    });
+                  }
+                }
+              }
               moveFrame(node.id, node.position.x, node.position.y);
               return;
             }

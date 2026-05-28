@@ -8,8 +8,7 @@
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { NodeResizer } from "@xyflow/react";
-import { GitBranch, FolderGit2, Plus, Maximize2 } from "lucide-react";
+import { GitBranch, FolderGit2, Plus } from "lucide-react";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 
 /** Dropdown anchored under a trigger button, rendered in a portal to
@@ -61,9 +60,6 @@ export interface FrameNodeData {
   onTitleChange: (id: string, title: string) => void;
   onColorChange: (id: string, color: string) => void;
   onDelete: (id: string) => void;
-  onResize: (id: string, w: number, h: number, x?: number, y?: number) => void;
-  /** Autofit the frame to the bounding box of its child tiles. */
-  onFit: (id: string) => void;
   onBringToFront: (id: string) => void;
   onBindBranch: (id: string, branch: string) => void;
   onUnbindBranch: (id: string) => void;
@@ -154,27 +150,10 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
           : `1.5px dashed color-mix(in oklab, ${data.color} 45%, transparent)`,
       }}
     >
-      <NodeResizer
-        nodeId={id}
-        isVisible={true}
-        // Transparent resize LINE — the loud solid outline made the zone look
-        // like a selected tile. The frame's own dashed border defines it; the
-        // resizer just provides small, quiet corner handles for resizing.
-        color="transparent"
-        minWidth={200}
-        minHeight={120}
-        handleStyle={{
-          width: 8,
-          height: 8,
-          borderRadius: 2,
-          zIndex: 20,
-          pointerEvents: "all",
-          background: `color-mix(in oklab, ${data.color} 60%, transparent)`,
-          border: "1px solid var(--color-bg)",
-        }}
-        lineStyle={{ zIndex: 19, pointerEvents: "all", borderColor: "transparent" }}
-        onResizeEnd={(_e, p) => data.onResize(id, p.width, p.height, p.x, p.y)}
-      />
+      {/* No NodeResizer — frames are NOT manually resizable. Their geometry is
+          derived reactively from the bounding box of their member tiles (see
+          Canvas auto-fit effect): a tile entering grows the frame, leaving
+          shrinks it, an empty frame collapses to a placeholder. */}
       {/* Header bar IS the drag handle — body stays transparent + non-grabbing
           so child tiles inside the frame remain clickable. */}
       <div
@@ -367,14 +346,6 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
             </button>
           ))}
         </AnchoredMenu>
-        <button
-          onClick={() => data.onFit(data.id)}
-          className="size-4 grid place-items-center rounded text-[var(--color-fg2)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)]"
-          title="Fit frame to its tiles"
-          aria-label="fit to content"
-        >
-          <Maximize2 size={11} />
-        </button>
         <button
           ref={colorBtnRef}
           onClick={() => setShowPicker((x) => !x)}
