@@ -220,6 +220,54 @@ test("kill before pty onExit: no orphan snapshot resurrection, no disposed-term 
   assert.equal(saved, undefined, "snapshot must not be resurrected post-kill");
 });
 
+test("restore retry: --resume failure output respawns with --session-id, no client exit", async () => {
+  const made: FakePty[] = [];
+  const mgr = new SessionManager(
+    (spec) => { const p = new FakePty(spec); made.push(p); return p; },
+    {
+      // Mirror pty-daemon: restore swaps --session-id -> --resume; the retry
+      // swaps it back to --session-id (fresh session, same id).
+      transformSpecOnRestore: (s) => {
+        const a = s.args ?? [];
+        const i = a.indexOf("--session-id");
+        if (i >= 0) return { ...s, args: ["--resume", a[i + 1]!, ...a.slice(0, i), ...a.slice(i + 2)] };
+        return s;
+      },
+      restoreRetryTransform: (s) => {
+        const a = s.args ?? [];
+        const i = a.indexOf("--resume");
+        if (i < 0) return null;
+        return { ...s, args: ["--session-id", a[i + 1]!, ...a.slice(0, i), ...a.slice(i + 2)] };
+      },
+      restoreRetryMs: 5000,
+    },
+  );
+  // Frozen snapshot from a prior run: claude bound to a uuid via --session-id.
+  mgr.restoreSnapshot({
+    id: "repo:c1",
+    spec: { cwd: "/r", cmd: "claude", args: ["--session-id", "u-123"], cols: 80, rows: 24 },
+    replay: "old screen\r\n",
+    savedAt: Date.now(),
+  });
+  let clientExited = false;
+  await mgr.createOrAttach(
+    "repo:c1",
+    { cwd: "/r", cmd: "claude", args: [], cols: 80, rows: 24 },
+    { onData: () => {}, onExit: () => { clientExited = true; } },
+  );
+  // First spawn used --resume.
+  assert.deepEqual(made[0]!.spec.args, ["--resume", "u-123"]);
+  // claude prints the resume failure.
+  made[0]!.emit("\x1b[31mNo conversation found with session ID: u-123\x1b[0m\r\n");
+  await new Promise((r) => setTimeout(r, 5));
+  // A SECOND pty was spawned with --session-id (same uuid), old one killed.
+  assert.equal(made.length, 2, "respawned once");
+  assert.deepEqual(made[1]!.spec.args, ["--session-id", "u-123"]);
+  assert.equal(made[0]!.killed, true, "old --resume pty killed");
+  // Client must NOT see an exit — the tile stays live.
+  assert.equal(clientExited, false);
+});
+
 test("flushAll resolves AFTER every snapshot is written (SIGTERM safety)", async () => {
   const writes: string[] = [];
   const made: FakePty[] = [];

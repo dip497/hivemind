@@ -96,7 +96,17 @@ interface Session {
   spawnedAt: number;
   /** Whether the manager already exhausted its one retry for this session. */
   retried?: boolean;
+  /** Small rolling buffer of recent output for a restored session spawned with
+   *  `--resume`, scanned for claude's "No conversation found" error so the
+   *  retry fires the instant the error prints — not when the PTY finally exits
+   *  (a slow SessionEnd hook can delay exit well past restoreRetryMs). */
+  retryWatch?: string;
 }
+
+// claude's resume-failure message (stable across recent versions). Matched
+// against a restored session's output to fire the fresh-restart retry the
+// instant it prints. Loose enough to survive minor wording changes.
+const RESUME_FAIL_RE = /No conversation found with session ID|session ID:\s*\S+\s*(?:not found|does not exist)/i;
 
 const DEFAULT_SCROLLBACK = 5000; // lines of replay scrollback per session
 
@@ -263,6 +273,12 @@ export class SessionManager {
       frozen: !!frozenSnap,
       frozenSpec: frozenSnap ? frozenSnap.spec : undefined,
       spawnedAt: Date.now(),
+      // Watch output for a resume failure only when this is a restored session
+      // spawned with --resume and a retry transform exists.
+      retryWatch:
+        frozenSnap && this.restoreRetryTransform && (effectiveSpec.args ?? []).includes("--resume")
+          ? ""
+          : undefined,
     };
     this.sessions.set(id, session);
     p.onData((d) => {
@@ -270,40 +286,24 @@ export class SessionManager {
       session.dirty = true;
       this.scheduleSnapshot(session);
       session.client?.onData(d);
+      // Output-driven resume retry: scan a small rolling buffer for claude's
+      // "No conversation found" error. Firing here (not on PTY exit) is robust
+      // to a slow SessionEnd hook that delays the exit past restoreRetryMs.
+      if (session.retryWatch !== undefined && !session.retried) {
+        session.retryWatch = (session.retryWatch + d).slice(-4096);
+        if (RESUME_FAIL_RE.test(session.retryWatch)) {
+          session.retryWatch = undefined;
+          if (this.tryRestoreRetry(session)) return;
+        }
+      }
     });
     p.onExit((code, signal) => {
       session.exited = true;
-      // Quick-fail retry: a RESTORED session that died non-zero within
-      // restoreRetryMs almost certainly hit `claude --resume <uuid>` with a
-      // missing JSONL ("No conversation found" → exit 1). Re-spawn ONCE
-      // with the retry transform (`--session-id <uuid>` — fresh session,
-      // same id) so the user keeps a working tile instead of seeing it die.
+      // Timing fallback (in case the error string changed / wasn't captured):
+      // a restored session that died non-zero within restoreRetryMs almost
+      // certainly hit `--resume` with a missing JSONL. Retry once.
       const sinceSpawn = Date.now() - session.spawnedAt;
-      const shouldRetry =
-        !session.retried &&
-        session.frozenSpec !== undefined &&
-        code !== 0 &&
-        sinceSpawn < this.restoreRetryMs &&
-        this.restoreRetryTransform !== undefined;
-      if (shouldRetry) {
-        const retrySpec = this.restoreRetryTransform!(session.frozenSpec!);
-        if (retrySpec) {
-          session.retried = true;
-          // One-shot banner in the headless term so the user sees the
-          // history is gone (Mosh-style replay would otherwise show the
-          // old transcript and a blank prompt — invisible amnesia).
-          const banner =
-            "\r\n\x1b[33m[hivemind] previous claude session not found — starting fresh with same id\x1b[0m\r\n";
-          session.term.write(banner);
-          session.client?.onData(banner);
-          // Replace the dead PTY in-place; keep the same `session` object
-          // (same id, same headless term, same client) so attach state is
-          // continuous. Don't fire onExit on the client — the dead process
-          // is replaced, not gone from the user's POV.
-          this.respawnInPlace(session, retrySpec);
-          return;
-        }
-      }
+      if (code !== 0 && sinceSpawn < this.restoreRetryMs && this.tryRestoreRetry(session)) return;
       session.client?.onExit(code, signal);
       this.flushSnapshot(session); // last write before drop
       this.sessions.delete(id);
@@ -322,6 +322,33 @@ export class SessionManager {
     // !isNew path is the early-return up top for a still-live existing session.
     return { pid: p.pid, isNew: true, replay };
   }
+  /** Fire the one-shot restore retry for a session whose `--resume` failed.
+   *  Returns true if a retry was launched (caller should NOT proceed to the
+   *  normal exit/cleanup path). Guards: not already retried, is a restored
+   *  session, retry transform produces a spec. */
+  private tryRestoreRetry(session: Session): boolean {
+    if (session.retried || session.frozenSpec === undefined || !this.restoreRetryTransform) return false;
+    // Pass the EFFECTIVE spec (the one actually spawned — carries `--resume`),
+    // NOT the original frozen spec (which still has `--session-id`). The retry
+    // transform swaps `--resume <uuid>` → `--session-id <uuid>`.
+    const retrySpec = this.restoreRetryTransform(session.spec);
+    if (!retrySpec) return false;
+    session.retried = true;
+    // Kill the old PTY if it's still alive (output-driven path fires before
+    // the process exits — e.g. claude printed the error but a SessionEnd hook
+    // is still running). Ignore errors on an already-dead pty.
+    try { session.pty.kill(); } catch { /* already gone */ }
+    // One-shot banner so the user sees history is gone (the Mosh-style replay
+    // would otherwise show the old transcript + a blank prompt — invisible
+    // amnesia).
+    const banner =
+      "\r\n\x1b[33m[hivemind] previous claude session not found — starting fresh with same id\x1b[0m\r\n";
+    session.term.write(banner);
+    session.client?.onData(banner);
+    this.respawnInPlace(session, retrySpec);
+    return true;
+  }
+
   /** Replace a dead session's PTY with a fresh one using `retrySpec`. Keeps
    *  the same id, headless term, serializer, and client — the user sees a
    *  continuous tile that just spawned a different process underneath. Used
