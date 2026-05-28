@@ -16,6 +16,7 @@ import { TerminalTile } from "./TerminalTile";
 import { DiffTile } from "./DiffTile";
 import { WorkbenchTile } from "./WorkbenchTile";
 import { FrameNode, type FrameNodeData } from "./FrameNode";
+import { LayersPanel, type LayerTile, type LayerFrame } from "./LayersPanel";
 import { IssuesTile } from "./IssuesTile";
 import { Sparkles } from "lucide-react";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
@@ -902,6 +903,39 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // Display-name map for FrameNode chip strip: tile id → user/auto name.
   // Memoized to keep node memoization stable.
   const framesChipNames = useMemo(() => ({ ...tileNames }), [tileNames]);
+
+  // ── Figma-style Layers panel data ─────────────────────────────────────────
+  // Every open tile flattened to { id, kind, name, frameId } for the left rail.
+  const layerFrames: LayerFrame[] = useMemo(
+    () => frames.map((f) => ({ id: f.id, title: f.title, color: f.color })),
+    [frames],
+  );
+  const layerTiles: LayerTile[] = useMemo(() => {
+    const out: LayerTile[] = [];
+    const fo = frameOf;
+    if (vis.tree && repoPath)
+      out.push({ id: WORKBENCH_TILE_ID, kind: "editor", name: "Editor", frameId: fo[WORKBENCH_TILE_ID] ?? null });
+    if (vis.shell)
+      out.push({ id: "tile-terminal-1", kind: "terminal", name: tileNames["tile-terminal-1"] ?? "terminal", frameId: fo["tile-terminal-1"] ?? null });
+    if (vis.diff && repoPath)
+      out.push({ id: "tile-diff-1", kind: "diff", name: "Diff", frameId: fo["tile-diff-1"] ?? null });
+    if (vis.issues)
+      out.push({ id: "tile-issues-1", kind: "issues", name: "Issues", frameId: fo["tile-issues-1"] ?? null });
+    for (const e of extras) {
+      const kind: LayerTile["kind"] = identifyAgent(e.cmd) === "claude" ? "claude" : "terminal";
+      out.push({ id: e.id, kind, name: tileNames[e.id] ?? e.label, frameId: fo[e.id] ?? null });
+    }
+    return out;
+  }, [vis, repoPath, extras, frameOf, tileNames]);
+  const focusTileFromPanel = useCallback((id: string) => {
+    setSelectedTileId(id);
+    focusTile(id);
+  }, [focusTile]);
+  const focusFrameFromPanel = useCallback((id: string) => {
+    setSelectedFrameId(id);
+    setSelectedTileId(null);
+    focusTile(id);
+  }, [focusTile]);
 
   // Permission mode the next Claude spawn launches in. Verified flag values
   // (code.claude.com/docs cli-reference): default | acceptEdits | plan | auto |
@@ -2056,6 +2090,17 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
             </Panel>
           )}
         </ReactFlow>
+        {/* Figma-style layers rail — overlay (outside ReactFlow), only when
+            there's something to list. */}
+        {layerTiles.length > 0 && (
+          <LayersPanel
+            frames={layerFrames}
+            tiles={layerTiles}
+            selectedTileId={selectedTileId}
+            onFocusTile={focusTileFromPanel}
+            onFocusFrame={focusFrameFromPanel}
+          />
+        )}
         {isEmpty && (
           <CanvasEmptyState
             repoPath={repoPath}

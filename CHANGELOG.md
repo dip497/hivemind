@@ -8,6 +8,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 ## [Unreleased]
 
 ### Added
+- **Figma-style Layers panel.** A collapsible left rail that lists every open tile **grouped by frame** (workspace), each with a live status dot (synced from the same `agent-status-bus` as the frame chips) and click-to-focus; click a frame group to focus the whole zone. Per-group collapse + whole-panel hide, both persisted. Defaults hidden (a small Layers pill) so it never occludes tile controls; open on demand. `apps/desktop/src/renderer/src/LayersPanel.tsx`.
 - **Workbench explorer is resizable.** A draggable divider between the file tree and the editor (drag to set width, 140–640px, persisted globally). Handle is `nodrag`/`nowheel` so the canvas doesn't pan/move the tile while resizing.
 - **Editor: find/replace + proper selection.** Wired `@codemirror/search` (Ctrl-F find panel, themed to app tokens) plus the canonical CM6 affordances that were missing: `drawSelection`, `rectangularSelection` + `crosshairCursor` (Alt-drag multi-cursor), `highlightSelectionMatches`. e2e covers the search panel opening.
 
