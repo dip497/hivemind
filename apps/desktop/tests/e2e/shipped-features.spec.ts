@@ -85,7 +85,11 @@ test("in-diff search finds line matches and navigates", async () => {
   expect(c1).toMatch(/^\d+\/\d+$/);
   const total = Number(c1.split("/")[1]);
   expect(total).toBeGreaterThan(0);
-  await page.click('button[title^="next match"]');
+  // Advance match via the keyboard (the button is title="next match (enter)")
+  // — the real UX, and avoids the floating ToolIsland overlapping the tiny nav
+  // button when the diff tile is centered under it.
+  await page.focus('input[placeholder="search diff…"]');
+  await page.keyboard.press("Enter");
   await page.waitForTimeout(400);
   await page.fill('input[placeholder="search diff…"]', "");
 });
