@@ -25,6 +25,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **Frame selection: click the header to select.** With `pointer-events: none` on the frame body (the pan fix), clicking the dashed body region no longer selects the frame. Header bar remains the selection / drag handle.
 
 ### Added
+- **Frame "fit to content" button.** A new ⤢ button in each frame's header reflows the frame to the bounding box of its child tiles — grows AND shrinks (the existing resize/place logic only ever auto-grew, so frames accumulated dead space). Moving the frame origin is safe: child relative positions recompute against the new origin on the next render, so tiles stay put while the frame snaps around them. `apps/desktop/src/renderer/src/Canvas.tsx` (`fitFrame`), `FrameNode.tsx` (header button).
 - **Editor: inline diff toggle per tab (`@codemirror/merge` `unifiedMergeView`).** Each open tab now has a `⇄` button (active tab in the tab bar, plus a duplicate in the standalone tile header). Clicking it overlays the buffer's diff against `HEAD:<path>` in the SAME editor — deletions as widget rows, additions inline, per-chunk accept/reject controls. Toggle off returns to plain edit mode without rebuilding state (CodeMirror `Compartment.reconfigure`). Standalone `DiffTile` stays for browsing branch/commit diffs (where there's no editable buffer). Research: marimo-team/codemirror-ai, aziis98 review-tool walkthrough, Sourcegraph blob view — all use the same `unifiedMergeView` extension pattern instead of a separate diff view class.
 
 ### Fixed

@@ -309,6 +309,16 @@ interface FrameState {
 /** Single workbench tile id — there is only ever one workbench (explorer +
  *  tabbed editor, attached) on the canvas. */
 const WORKBENCH_TILE_ID = "tile-workbench-1";
+
+/** Fallback tile dimensions for tiles never explicitly resized (so they have
+ *  no entry in the `sizes` map). Mirrors the defaults in the nodes useMemo.
+ *  Used by fitFrame to estimate a child's box without a DOM measurement. */
+function defaultTileSize(id: string): { width: number; height: number } {
+  if (id === WORKBENCH_TILE_ID || id === "tile-diff-1") return { width: 1400, height: 900 };
+  if (id === "tile-issues-1") return { width: 680, height: 460 };
+  // terminals + claude extras
+  return { width: 1200, height: 820 };
+}
 const LAYOUT_KEY = (repoPath: string | null) => `hivemind:canvas-layout:${repoPath ?? "__global__"}`;
 // One-time cleanup: an earlier version persisted the no-repo case under
 // `__global__`, which leaked test/welcome layouts across unrelated sessions.
@@ -634,6 +644,47 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     // Commit x/y too (top/left handles move the frame's origin as it resizes).
     setFrames((fs) => fs.map((f) => (f.id === id ? { ...f, w, h, ...(x != null && y != null ? { x, y } : {}) } : f)));
   }, []);
+
+  // Autofit a frame to the bounding box of its child tiles (grows AND shrinks,
+  // unlike the resize/place auto-grow which only ever expands). Moving the
+  // frame's x/y is safe: mkTile recomputes each child's RELATIVE position as
+  // (absolutePos − frame.origin) on the next render, so children stay put
+  // absolutely while the frame reflows around them.
+  const fitFrame = useCallback((frameId: string) => {
+    const frame = framesRef.current.find((f) => f.id === frameId);
+    if (!frame) return;
+    const PAD = 28;        // breathing room on left/right/bottom
+    const HEADER = 36;     // extra top room for the frame's 28px header bar
+    // Every possibly-visible tile id + its absolute box.
+    const ids: string[] = [];
+    if (visRef.current.tree && repoPath) ids.push(WORKBENCH_TILE_ID);
+    if (visRef.current.shell) ids.push("tile-terminal-1");
+    if (visRef.current.diff && repoPath) ids.push("tile-diff-1");
+    if (visRef.current.issues) ids.push("tile-issues-1");
+    for (const e of extrasRef.current) ids.push(e.id);
+    const boxes: Array<{ x: number; y: number; r: number; b: number }> = [];
+    for (const tid of ids) {
+      const pos = positionsRef.current[tid];
+      if (!pos) continue;
+      // Topmost-frame ownership (matches frameTiles / parentFrameOf).
+      const owner = [...framesRef.current]
+        .sort((a, b) => b.z - a.z)
+        .find((f) => pos.x >= f.x && pos.x <= f.x + f.w && pos.y >= f.y && pos.y <= f.y + f.h);
+      if (owner?.id !== frameId) continue;
+      const sz = sizesRef.current[tid] ?? defaultTileSize(tid);
+      boxes.push({ x: pos.x, y: pos.y, r: pos.x + sz.width, b: pos.y + sz.height });
+    }
+    if (boxes.length === 0) return; // empty frame — leave it as-is
+    const minX = Math.min(...boxes.map((b) => b.x));
+    const minY = Math.min(...boxes.map((b) => b.y));
+    const maxR = Math.max(...boxes.map((b) => b.r));
+    const maxB = Math.max(...boxes.map((b) => b.b));
+    const nx = Math.round(minX - PAD);
+    const ny = Math.round(minY - HEADER);
+    const nw = Math.round(maxR - minX + PAD * 2);
+    const nh = Math.round(maxB - minY + HEADER + PAD);
+    setFrames((fs) => fs.map((f) => (f.id === frameId ? { ...f, x: nx, y: ny, w: nw, h: nh } : f)));
+  }, [repoPath]);
   // Drag synced on stop (not per-tick) — react-flow renders the live drag
   // internally via transform, we just persist the final x/y to our source-
   // of-truth state so the next render rebuilds the node at the right place.
@@ -1229,6 +1280,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
           onColorChange: updateFrameColor,
           onDelete: deleteFrame,
           onResize: resizeFrame,
+          onFit: fitFrame,
           onBringToFront: bringFrameToFront,
           onBindBranch: bindBranch,
           onUnbindBranch: unbindBranch,
@@ -1390,6 +1442,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     updateFrameColor,
     deleteFrame,
     resizeFrame,
+    fitFrame,
     bringFrameToFront,
     bindBranch,
     unbindBranch,

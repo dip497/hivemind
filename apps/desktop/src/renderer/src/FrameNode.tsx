@@ -8,7 +8,7 @@
  */
 import { useEffect, useState } from "react";
 import { NodeResizer } from "@xyflow/react";
-import { GitBranch, FolderGit2, Plus } from "lucide-react";
+import { GitBranch, FolderGit2, Plus, Maximize2 } from "lucide-react";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 
 export interface FrameNodeData {
@@ -27,6 +27,8 @@ export interface FrameNodeData {
   onColorChange: (id: string, color: string) => void;
   onDelete: (id: string) => void;
   onResize: (id: string, w: number, h: number, x?: number, y?: number) => void;
+  /** Autofit the frame to the bounding box of its child tiles. */
+  onFit: (id: string) => void;
   onBringToFront: (id: string) => void;
   onBindBranch: (id: string, branch: string) => void;
   onUnbindBranch: (id: string) => void;
@@ -337,6 +339,14 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
             </div>
           )}
         </div>
+        <button
+          onClick={() => data.onFit(data.id)}
+          className="size-4 grid place-items-center rounded text-[var(--color-fg2)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)]"
+          title="Fit frame to its tiles"
+          aria-label="fit to content"
+        >
+          <Maximize2 size={11} />
+        </button>
         <button
           onClick={() => setShowPicker((x) => !x)}
           className="size-4 rounded-full border border-[var(--color-line2)]"
