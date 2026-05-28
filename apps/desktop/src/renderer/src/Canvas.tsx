@@ -454,10 +454,20 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
       return { ...s, [id]: { width, height } };
     });
     if (x != null && y != null) {
+      // NodeResizer reports x/y RELATIVE to the parent frame for a child node,
+      // but our positions map is ABSOLUTE world coords (mkTile + the auto-fit
+      // effect both assume absolute). Without converting, resizing a framed
+      // tile from a top/left handle stored a relative coord as absolute → the
+      // tile jumped left/up by the frame offset on the next render, and the
+      // frame mis-grew. Add the frame origin back when the tile lives in one.
+      const fid = frameOfRef.current[id];
+      const fr = fid ? framesRef.current.find((f) => f.id === fid) : undefined;
+      const ax = fr ? fr.x + x : x;
+      const ay = fr ? fr.y + y : y;
       setPositions((p) => {
         const cur = p[id];
-        if (cur && cur.x === x && cur.y === y) return p;
-        return { ...p, [id]: { x, y } };
+        if (cur && cur.x === ax && cur.y === ay) return p;
+        return { ...p, [id]: { x: ax, y: ay } };
       });
     }
     // Frame resize is handled reactively by the auto-fit effect — committing
@@ -1494,7 +1504,11 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
       x += sz.width + gap;
     }
     for (const e of extras) {
-      const sz = sized(e.id, 1200, 820);
+      // Claude tiles default BIGGER than a plain shell — you read long agent
+      // transcripts + diffs in them, a 1200px box clipped that. Shell stays
+      // compact. User-resize (sizes[id]) still wins via `sized`.
+      const isClaude = identifyAgent(e.cmd) === "claude";
+      const sz = isClaude ? sized(e.id, 1480, 1000) : sized(e.id, 1200, 820);
       out.push(
         mkTile(
           {
@@ -2335,7 +2349,11 @@ function FocusMode({ req }: { req: { id: string | null; n: number } | null }) {
   useEffect(() => {
     if (!req) return;
     if (req.id) {
-      void fitView({ nodes: [{ id: req.id }], padding: 0.12, duration: 400 });
+      // Near-fullscreen: tiny padding so the tile fills the window edge-to-edge
+      // (neighbors no longer peek in), and maxZoom up to 1.6 so a small tile
+      // enlarges to fill instead of sitting tiny + centered. Big tiles (claude)
+      // land at zoom<1 and show whole, which is the maximized feel.
+      void fitView({ nodes: [{ id: req.id }], padding: 0.03, duration: 400, maxZoom: 1.6 });
     } else {
       void fitView({ padding: 0.2, duration: 400 });
     }
