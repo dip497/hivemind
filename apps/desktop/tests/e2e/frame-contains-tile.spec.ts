@@ -39,7 +39,7 @@ test.afterAll(async () => {
 
 test("drag terminal into frame: ends up visually inside but NOT reparented", async () => {
   // 1. Spawn a frame (via "f" hotkey) + a terminal tile.
-  await page.keyboard.press("f");
+  await page.keyboard.press("6"); // frame hotkey (letter aliases removed)
   await page.waitForSelector(".react-flow__node-frame", { timeout: 3_000 });
 
   await page.evaluate(() => {

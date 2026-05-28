@@ -32,7 +32,7 @@ test("open tiles restore after restart (same repo)", async () => {
     const k = Object.keys(localStorage).find((k) => k.includes("canvas-layout"));
     return k ? localStorage.getItem(k) : "";
   });
-  expect(saved).toMatch(/"shell":true/);
+  expect(saved).toMatch(/"kind":"shell"/);
   await app.close();
 
   // ── session 2: relaunch same ud + repo → terminal tile restored, no clicks ──

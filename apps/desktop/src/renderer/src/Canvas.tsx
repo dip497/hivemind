@@ -258,14 +258,27 @@ function defaultShell(): { cmd: string; args: string[] } {
   return { cmd: "/bin/bash", args: ["-il"] };
 }
 
-type Visibility = { tree: boolean; shell: boolean; diff: boolean; issues: boolean };
-
-interface ExtraTerm {
+// Every tile on the canvas is an INSTANCE now (was: claude/shell instanced via
+// `extras`, but editor/diff/issues were global singletons keyed off a fixed id
+// + a `vis` boolean). Unifying them means each workspace frame can hold its own
+// editor/diff/issues, and terminals are instances everywhere. claude + shell
+// are unlimited per frame; editor/diff/issues are one-per-frame (spawn focuses
+// the existing one if that frame already has it).
+type TileKind = "claude" | "shell" | "editor" | "diff" | "issues";
+interface TileInstance {
   id: string;
+  kind: TileKind;
   label: string;
-  cmd: string;
-  args: string[];
+  /** claude / shell only. */
+  cmd?: string;
+  args?: string[];
 }
+/** Kinds that are one-per-frame (spawn → focus existing). claude/shell are not. */
+const SINGLETON_KINDS: ReadonlySet<TileKind> = new Set(["editor", "diff", "issues"]);
+
+// Legacy persisted shapes (pre-unification) — migrated to TileInstance[] on load.
+type LegacyVisibility = { tree: boolean; shell: boolean; diff: boolean; issues: boolean };
+interface LegacyExtraTerm { id: string; label: string; cmd: string; args: string[]; }
 
 // Persisted layout — survives app restarts. Keyed by repoPath (or a sentinel
 // for the no-repo case) so each project's canvas comes back the way the user
@@ -276,12 +289,15 @@ interface PersistedLayout {
   frames: FrameState[];
   /** User-renamed tile labels (per tile id). */
   tileNames?: Record<string, string>;
-  // Which tiles were open — so a restart resumes exactly where you left off
-  // (the PTY is gone, but the tile + a fresh shell respawn in place).
-  vis?: Visibility;
-  extras?: ExtraTerm[];
-  /** Repo-relative paths open as tabs in the single editor tile. */
-  editorTabs?: string[];
+  // Open tiles — so a restart resumes exactly where you left off (the PTY is
+  // gone, but the tile + a fresh shell/claude respawn in place).
+  tiles?: TileInstance[];
+  /** Repo-relative paths open as tabs, keyed by editor tile id. */
+  editorTabs?: Record<string, string[]>;
+  // ── legacy (pre tile-unification) — read for migration, never written. ──
+  vis?: LegacyVisibility;
+  extras?: LegacyExtraTerm[];
+  legacyEditorTabs?: string[];
   /** EXPLICIT tile→frame membership. Authoritative — frame geometry is derived
    *  from this, NOT the reverse. Set when a tile is spawned into or dropped
    *  inside a frame; cleared when dropped outside all frames. Decoupling
@@ -377,21 +393,49 @@ function loadLayout(repoPath: string | null): PersistedLayout {
         if (owner) frameOf[tid] = owner.id;
       }
     }
+    // Tiles: new format persists a `tiles` array. Old layouts persisted
+    // `vis` (singleton editor/diff/issues) + `extras` (instanced claude/shell)
+    // + a single `editorTabs` array — migrate them to instances, REUSING the
+    // canonical fixed ids so the saved sizes/positions/frameOf keep resolving.
+    let tiles: TileInstance[];
+    let editorTabs: Record<string, string[]>;
+    if (Array.isArray(p.tiles)) {
+      tiles = p.tiles;
+      editorTabs = (p.editorTabs && typeof p.editorTabs === "object" && !Array.isArray(p.editorTabs))
+        ? (p.editorTabs as Record<string, string[]>)
+        : {};
+    } else {
+      tiles = [];
+      editorTabs = {};
+      for (const e of Array.isArray(p.extras) ? p.extras : []) {
+        const kind: TileKind = identifyAgent(e.cmd) === "claude" ? "claude" : "shell";
+        tiles.push({ id: e.id, kind, label: e.label, cmd: e.cmd, args: e.args });
+      }
+      const v = p.vis;
+      if (v?.tree) {
+        tiles.push({ id: WORKBENCH_TILE_ID, kind: "editor", label: "Editor" });
+        const legacyTabs = Array.isArray(p.editorTabs)
+          ? (p.editorTabs as unknown as string[])
+          : Array.isArray((p as { fileTiles?: { file: string }[] }).fileTiles)
+            ? (p as { fileTiles: { file: string }[] }).fileTiles.map((f) => f.file)
+            : [];
+        if (legacyTabs.length) editorTabs[WORKBENCH_TILE_ID] = legacyTabs;
+      }
+      if (v?.shell) {
+        const sh = defaultShell();
+        tiles.push({ id: "tile-terminal-1", kind: "shell", label: "shell", cmd: sh.cmd, args: sh.args });
+      }
+      if (v?.diff) tiles.push({ id: "tile-diff-1", kind: "diff", label: "Diff" });
+      if (v?.issues) tiles.push({ id: "tile-issues-1", kind: "issues", label: "Issues" });
+    }
     return {
       sizes,
       positions,
       frames,
       frameOf,
       tileNames: p.tileNames ?? {},
-      vis: p.vis,
-      extras: Array.isArray(p.extras) ? p.extras : undefined,
-      // Back-compat: an earlier version persisted one tile per file under
-      // `fileTiles`. Fold those paths into the single editor's tab list.
-      editorTabs: Array.isArray(p.editorTabs)
-        ? p.editorTabs
-        : Array.isArray((p as { fileTiles?: { file: string }[] }).fileTiles)
-          ? (p as { fileTiles: { file: string }[] }).fileTiles.map((f) => f.file)
-          : undefined,
+      tiles,
+      editorTabs,
       viewport: p.viewport && typeof p.viewport.x === "number" && typeof p.viewport.y === "number"
         ? { x: p.viewport.x, y: p.viewport.y, zoom: Number(p.viewport.zoom) || 1 }
         : undefined,
@@ -410,18 +454,15 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // Lazy-mount: nothing on screen until the user clicks a toggle — OR restored
   // from a prior session so a restart resumes where you left off. Avoids
   // mounting all three tiles + spawning a PTY + git ls-files just to look.
-  const [vis, setVis] = useState<Visibility>(initial.vis ?? { tree: false, shell: false, diff: false, issues: false });
-  const visRef = useRef(vis);
-  useEffect(() => { visRef.current = vis; }, [vis]);
-  const [extras, setExtras] = useState<ExtraTerm[]>(initial.extras ?? []);
-  // Mirror to a ref so doSpawnClaude (which is declared before spawnInPile and
-  // needs the auto-pile lookup) can read the latest list without re-creating
-  // the callback on every change.
-  const extrasRef = useRef(extras);
-  useEffect(() => { extrasRef.current = extras; }, [extras]);
-  // Files opened from the FileTreeTile — one SINGLE editor tile with these as
-  // tabs (repo-relative paths, deduped). Empty ⇒ editor tile not shown.
-  const [editorTabs, setEditorTabs] = useState<string[]>(initial.editorTabs ?? []);
+  // All open tiles, every kind, as instances. Replaces the old `vis` singletons
+  // + `extras` list. Mirror to a ref so callbacks declared before later state
+  // can read the latest list without re-creating on every change.
+  const [tiles, setTiles] = useState<TileInstance[]>(initial.tiles ?? []);
+  const tilesRef = useRef(tiles);
+  useEffect(() => { tilesRef.current = tiles; }, [tiles]);
+  // Files opened in each editor tile — tabs keyed by editor tile id (repo-
+  // relative paths, deduped). Each editor instance has its own tab set.
+  const [editorTabs, setEditorTabs] = useState<Record<string, string[]>>(initial.editorTabs ?? {});
 
   // Runtime per-tile dimension overrides. Initial size lives in the node
   // spec's style; once the user drags a NodeResizer corner, react-flow's
@@ -507,17 +548,33 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // Open a file as a tab in the workbench's embedded editor (mounting the
   // workbench if it isn't open yet). The EditorTile picks the newly-appended
   // tab as active.
-  const openFile = useCallback((file: string) => {
-    setVis((v) => (v.tree ? v : { ...v, tree: true }));
-    setEditorTabs((tabs) => (tabs.includes(file) ? tabs : [...tabs, file]));
-    setSelectedTileId(WORKBENCH_TILE_ID);
+  // Open a file as a tab in a SPECIFIC editor tile (bound per-instance at node-
+  // build time). The EditorTile picks the newly-appended tab as active.
+  const openFileInTile = useCallback((tileId: string, file: string) => {
+    setEditorTabs((m) => {
+      const cur = m[tileId] ?? [];
+      if (cur.includes(file)) return m;
+      return { ...m, [tileId]: [...cur, file] };
+    });
+    setSelectedTileId(tileId);
   }, []);
-  const closeTab = useCallback((file: string) => {
-    setEditorTabs((tabs) => tabs.filter((f) => f !== file));
+  const closeTabInTile = useCallback((tileId: string, file: string) => {
+    setEditorTabs((m) => {
+      const cur = m[tileId];
+      if (!cur) return m;
+      return { ...m, [tileId]: cur.filter((f) => f !== file) };
+    });
   }, []);
-  const closeWorkbench = useCallback(() => {
-    setVis((v) => ({ ...v, tree: false }));
-    setEditorTabs([]);
+  // Close an editor tile entirely (the WorkbenchTile's × ): drop the instance
+  // and its tabs. (closeTile below handles the generic case; editor needs the
+  // tab cleanup too.)
+  const closeTile = useCallback((id: string) => {
+    setTiles((ts) => ts.filter((t) => t.id !== id));
+    setEditorTabs((m) => {
+      if (!(id in m)) return m;
+      const { [id]: _drop, ...rest } = m;
+      return rest;
+    });
   }, []);
 
   // Manual tile selection. react-flow's built-in click-to-select is dead in our
@@ -571,9 +628,8 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     setPositions(next.positions);
     setFrames(next.frames);
     setTileNames(next.tileNames ?? {});
-    setVis(next.vis ?? { tree: false, shell: false, diff: false, issues: false });
-    setExtras(next.extras ?? []);
-    setEditorTabs(next.editorTabs ?? []);
+    setTiles(next.tiles ?? []);
+    setEditorTabs(next.editorTabs ?? {});
     setFrameOf(next.frameOf ?? {});
     if (next.viewport) setViewport(next.viewport);
   }, [repoPath]);
@@ -602,7 +658,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
       try {
         window.localStorage.setItem(
           LAYOUT_KEY(repoPath),
-          JSON.stringify({ sizes, positions, frames, tileNames, vis, extras, editorTabs, viewport, frameOf }),
+          JSON.stringify({ sizes, positions, frames, tileNames, tiles, editorTabs, viewport, frameOf }),
         );
       } catch {
         // QuotaExceeded / private-mode etc — swallow; layout is best-effort.
@@ -611,7 +667,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     return () => {
       if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
     };
-  }, [repoPath, sizes, positions, frames, tileNames, vis, extras, editorTabs, viewport, frameOf]);
+  }, [repoPath, sizes, positions, frames, tileNames, tiles, editorTabs, viewport, frameOf]);
   // Flush on tab close / app quit so the debounced write doesn't lose the
   // last ~250ms of edits. `beforeunload` fires sync before localStorage is
   // torn down; we set the latest snapshot then.
@@ -624,13 +680,13 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
       try {
         window.localStorage.setItem(
           LAYOUT_KEY(repoPath),
-          JSON.stringify({ sizes, positions, frames, tileNames, vis, extras, editorTabs, viewport, frameOf }),
+          JSON.stringify({ sizes, positions, frames, tileNames, tiles, editorTabs, viewport, frameOf }),
         );
       } catch { /* swallow */ }
     };
     window.addEventListener("beforeunload", flush);
     return () => window.removeEventListener("beforeunload", flush);
-  }, [repoPath, sizes, positions, frames, tileNames, vis, extras, editorTabs, viewport, frameOf]);
+  }, [repoPath, sizes, positions, frames, tileNames, tiles, editorTabs, viewport, frameOf]);
 
   // Viewport-focus request: we resolve the target's CENTER from our own state
   // (positions/sizes/frames) and hand absolute coords to <FocusOnTile>, which
@@ -707,12 +763,12 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // it. `frames` is NOT a dependency (updater reads `prev`) → never self-fires.
   useEffect(() => {
     // Tiles that actually exist right now (closed tiles' stale frameOf ignored).
+    // editor/diff need a repo — they're not rendered without one.
     const present = new Set<string>();
-    if (vis.tree && repoPath) present.add(WORKBENCH_TILE_ID);
-    if (vis.shell) present.add("tile-terminal-1");
-    if (vis.diff && repoPath) present.add("tile-diff-1");
-    if (vis.issues) present.add("tile-issues-1");
-    for (const e of extras) present.add(e.id);
+    for (const t of tiles) {
+      if ((t.kind === "editor" || t.kind === "diff") && !repoPath) continue;
+      present.add(t.id);
+    }
 
     setFrames((prev) => {
       const members = new Map<string, Array<{ x: number; y: number; r: number; b: number }>>();
@@ -754,7 +810,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
       });
       return changed ? next : prev;
     });
-  }, [positions, sizes, vis, extras, repoPath, frameOf]);
+  }, [positions, sizes, tiles, repoPath, frameOf]);
   // Drag synced on stop (not per-tick) — react-flow renders the live drag
   // internally via transform, we just persist the final x/y to our source-
   // of-truth state so the next render rebuilds the node at the right place.
@@ -897,22 +953,24 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // claim the same tile twice.
   const frameTiles = useMemo(() => {
     const map = new Map<string, string[]>();
-    const candidates: string[] = [];
-    if (vis.shell) candidates.push("tile-terminal-1");
-    for (const e of extras) candidates.push(e.id);
-    for (const tid of candidates) {
-      const fid = frameOf[tid];
+    for (const t of tiles) {
+      const fid = frameOf[t.id];
       if (!fid) continue;
       const arr = map.get(fid) ?? [];
-      arr.push(tid);
+      arr.push(t.id);
       map.set(fid, arr);
     }
     return map;
-  }, [frameOf, vis.shell, extras]);
+  }, [frameOf, tiles]);
 
   // Display-name map for FrameNode chip strip: tile id → user/auto name.
   // Memoized to keep node memoization stable.
   const framesChipNames = useMemo(() => ({ ...tileNames }), [tileNames]);
+
+  // Which tile kinds currently have ≥1 instance — drives the ToolIsland active
+  // highlight (the buttons now SPAWN rather than toggle, so "active" just means
+  // "you have one of these open somewhere").
+  const presentKinds = useMemo(() => new Set<TileKind>(tiles.map((t) => t.kind)), [tiles]);
 
   // ── Figma-style Layers panel data ─────────────────────────────────────────
   // Every open tile flattened to { id, kind, name, frameId } for the left rail.
@@ -923,20 +981,13 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   const layerTiles: LayerTile[] = useMemo(() => {
     const out: LayerTile[] = [];
     const fo = frameOf;
-    if (vis.tree && repoPath)
-      out.push({ id: WORKBENCH_TILE_ID, kind: "editor", name: "Editor", frameId: fo[WORKBENCH_TILE_ID] ?? null });
-    if (vis.shell)
-      out.push({ id: "tile-terminal-1", kind: "terminal", name: tileNames["tile-terminal-1"] ?? "terminal", frameId: fo["tile-terminal-1"] ?? null });
-    if (vis.diff && repoPath)
-      out.push({ id: "tile-diff-1", kind: "diff", name: "Diff", frameId: fo["tile-diff-1"] ?? null });
-    if (vis.issues)
-      out.push({ id: "tile-issues-1", kind: "issues", name: "Issues", frameId: fo["tile-issues-1"] ?? null });
-    for (const e of extras) {
-      const kind: LayerTile["kind"] = identifyAgent(e.cmd) === "claude" ? "claude" : "terminal";
-      out.push({ id: e.id, kind, name: tileNames[e.id] ?? e.label, frameId: fo[e.id] ?? null });
+    for (const t of tiles) {
+      if ((t.kind === "editor" || t.kind === "diff") && !repoPath) continue;
+      const kind: LayerTile["kind"] = t.kind === "shell" ? "terminal" : t.kind;
+      out.push({ id: t.id, kind, name: tileNames[t.id] ?? t.label, frameId: fo[t.id] ?? null });
     }
     return out;
-  }, [vis, repoPath, extras, frameOf, tileNames]);
+  }, [tiles, repoPath, frameOf, tileNames]);
   const focusTileFromPanel = useCallback((id: string) => {
     setSelectedTileId(id);
     focusTile(id);
@@ -960,7 +1011,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   const claudeSeqRef = useRef(0);
   // Spawn-target picker: when 2+ workspaces (base + workspace-zone frames) live
   // on the canvas, ask WHERE a new claude should run instead of guessing.
-  const [spawnPick, setSpawnPick] = useState<{ mode?: string } | null>(null);
+  const [spawnPick, setSpawnPick] = useState<{ kind: TileKind; mode?: string } | null>(null);
 
   // Position a new tile inside a frame, snug to the RIGHT of the tiles already
   // there (top-aligned). The frame's SIZE is no longer our concern — the
@@ -977,12 +1028,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     // auto-fit membership rule).
     // Existing members of THIS frame (explicit frameOf), to pack beside.
     const rects: Array<{ x: number; y: number; r: number; b: number }> = [];
-    const candidates: string[] = [];
-    if (visRef.current.tree && repoPath) candidates.push(WORKBENCH_TILE_ID);
-    if (visRef.current.shell) candidates.push("tile-terminal-1");
-    if (visRef.current.diff && repoPath) candidates.push("tile-diff-1");
-    if (visRef.current.issues) candidates.push("tile-issues-1");
-    for (const e of extrasRef.current) candidates.push(e.id);
+    const candidates = tilesRef.current.map((t) => t.id);
     for (const tid of candidates) {
       if (tid === id) continue;
       if (frameOfRef.current[tid] !== frame.id) continue;
@@ -1100,122 +1146,78 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // via the clip-to-pile button on the tile header. Caller passes a
   // `targetFrameId` to land the new tile inside a frame's grid (placeInFrame
   // cascades into free slots + auto-grows the frame).
-  const autoPileSpawn = useCallback(
-    (opts: {
-      idPrefix: string;
-      labelPrefix: string;
-      labelSuffix?: string;
-      cmd: string;
-      args: string[];
-      targetFrameId?: string | null;
-    }): void => {
-      const newId = `${opts.idPrefix}-${Date.now()}`;
+  // Create a tile of `kind` inside `targetFrameId` (or the resolved active
+  // frame). claude/shell are unlimited per frame; editor/diff/issues are
+  // one-per-frame — if the frame already has one, focus it instead of making a
+  // duplicate. placeInFrame lays it out + auto-grows the frame + selects/foci.
+  const spawnTile = useCallback(
+    (kind: TileKind, targetFrameId: string | null, opts?: { mode?: string }): void => {
+      const frame = (targetFrameId ? framesRef.current.find((f) => f.id === targetFrameId) : undefined) ?? ensureFrame();
+      const fid = frame.id;
+      if (SINGLETON_KINDS.has(kind)) {
+        const existing = tilesRef.current.find((t) => t.kind === kind && frameOfRef.current[t.id] === fid);
+        if (existing) { setSelectedTileId(existing.id); focusTile(existing.id); return; }
+      }
       const n = ++claudeSeqRef.current;
-      const label = `${opts.labelPrefix} #${n}${opts.labelSuffix ?? ""}`;
-      const owner = opts.targetFrameId
-        ? framesRef.current.find((f) => f.id === opts.targetFrameId)
-        : undefined;
-      if (owner) placeInFrame(newId, owner);
-      setExtras((cur) => [...cur, { id: newId, label, cmd: opts.cmd, args: opts.args }]);
-      // Tile display name: include the spawn sequence so two open claudes show
-      // as "claude #1" / "claude #2" instead of two identical "claude" chips
-      // (which is what was happening — see [Image #4]: top-left strip rendered
-      // two unrecognizable "claude idle" pills). User-rename via the pencil
-      // icon overrides this default.
-      setTileNames((map) => (map[newId] ? map : { ...map, [newId]: `${autoNameFromCmd(opts.cmd)} #${n}` }));
-    },
-    [placeInFrame],
-  );
-
-  // Actually spawn a claude tile, optionally INSIDE a frame (so mkTile parents
-  // it + threads the zone's cwd/repoPath/root). targetFrameId null = base repo.
-  const doSpawnClaude = useCallback(
-    (mode: string | undefined, targetFrameId: string | null) => {
-      const m = mode || claudeMode;
-      // bypassPermissions is gated behind its own flag — `--permission-mode
-      // bypassPermissions` is refused at startup; the canonical entry is
-      // `--dangerously-skip-permissions` (cli-reference).
-      const args =
-        m === "bypassPermissions"
+      const newId = `tile-${kind}-${Date.now()}`;
+      let cmd: string | undefined;
+      let args: string[] | undefined;
+      let label: string;
+      if (kind === "claude") {
+        const m = opts?.mode || claudeMode;
+        // bypassPermissions is gated behind its own flag — `--permission-mode
+        // bypassPermissions` is refused at startup; the canonical entry is
+        // `--dangerously-skip-permissions` (cli-reference).
+        args = m === "bypassPermissions"
           ? ["--dangerously-skip-permissions"]
-          : m && m !== "default"
-            ? ["--permission-mode", m]
-            : [];
-      const tag = m && m !== "default" ? ` · ${m}` : "";
-      autoPileSpawn({
-        idPrefix: "tile-claude",
-        labelPrefix: "claude",
-        labelSuffix: tag,
-        cmd: "claude",
-        args,
-        targetFrameId,
-      });
+          : m && m !== "default" ? ["--permission-mode", m] : [];
+        cmd = "claude";
+        label = `claude #${n}${m && m !== "default" ? ` · ${m}` : ""}`;
+      } else if (kind === "shell") {
+        const sh = defaultShell();
+        cmd = sh.cmd; args = sh.args;
+        label = `shell #${n}`;
+      } else {
+        label = kind === "editor" ? "Editor" : kind === "diff" ? "Diff" : "Issues";
+      }
+      placeInFrame(newId, frame);
+      setTiles((cur) => [...cur, { id: newId, kind, label, cmd, args }]);
+      // claude/shell get a sequenced display name so two open claudes read as
+      // "claude #1" / "claude #2"; user-rename via the pencil overrides it.
+      if (cmd) setTileNames((map) => (map[newId] ? map : { ...map, [newId]: `${autoNameFromCmd(cmd!)} #${n}` }));
     },
-    [claudeMode, autoPileSpawn],
+    [claudeMode, placeInFrame, ensureFrame, focusTile],
   );
 
-  const spawnClaude = useCallback((mode?: string) => {
-    // With 2+ workspaces, ALWAYS ask which one — don't silently spawn into a
-    // (possibly stale) selected frame. The picker pre-highlights the selected
-    // frame for convenience but requires an explicit pick. Single frame (or
-    // none) → spawn into it / lazily create the base frame.
+  // Spawn from a global surface (ToolIsland / palette / hotkey). With 2+
+  // workspaces, ALWAYS ask which one (the picker pre-highlights the selected
+  // frame but requires an explicit pick) — never silently spawn into a stale
+  // selection. Single frame (or none) → spawn into it / lazily create base.
+  const spawnInto = useCallback((kind: TileKind, opts?: { mode?: string }) => {
     if (framesRef.current.length >= 2) {
-      setSpawnPick({ mode });
+      setSpawnPick({ kind, mode: opts?.mode });
       return;
     }
-    doSpawnClaude(mode, ensureFrame().id);
-  }, [doSpawnClaude, ensureFrame]);
+    spawnTile(kind, ensureFrame().id, opts);
+  }, [spawnTile, ensureFrame]);
 
-  // Toggle a panel tile (explorer/diff/issues/shell). frame = workspace: when
-  // turning ON it always lands INSIDE a frame (active, else a lazily-created
-  // base frame) so no tile floats loose on the canvas, and it targets that
-  // frame's repo (mkTile threads cwd/repoPath/root).
-  const toggleTile = useCallback((which: keyof Visibility) => {
-    const turningOn = !visRef.current[which];
-    setVis((v) => ({ ...v, [which]: !v[which] }));
-    if (!turningOn) return;
-    const id =
-      which === "tree" ? WORKBENCH_TILE_ID
-      : which === "diff" ? "tile-diff-1"
-      : which === "issues" ? "tile-issues-1"
-      : which === "shell" ? "tile-terminal-1"
-      : null;
-    if (!id) return;
-    // placeInFrame selects + focuses (single authority) — don't duplicate it.
-    placeInFrame(id, ensureFrame());
-  }, [placeInFrame, ensureFrame]);
+  // Back-compat thin wrappers for the many existing call sites.
+  const spawnClaude = useCallback((mode?: string) => spawnInto("claude", { mode }), [spawnInto]);
+  const spawnVis = useCallback(
+    (which: "tree" | "shell" | "diff" | "issues") =>
+      spawnInto(which === "tree" ? "editor" : which),
+    [spawnInto],
+  );
 
-  const killExtra = useCallback((id: string) => {
-    // TerminalTile's unmount cleanup ptyKills its own (per-mount unique) ptyId.
-    setExtras((xs) => xs.filter((x) => x.id !== id));
-  }, []);
-
-  // Open a tile INSIDE a specific frame (the frame's launcher toolbar). Makes a
-  // workspace zone self-contained: terminal/claude are instanced into it;
-  // editor/diff/issues (singletons) are turned on + moved into it. Everything
-  // lands via placeInFrame → auto-laid-out + the frame auto-grows.
+  // Open a tile INSIDE a specific frame (the frame's launcher toolbar) — always
+  // targets that frame, no picker. Same one-per-frame rule via spawnTile.
   const frameOpen = useCallback((frameId: string, kind: string) => {
-    const frame = framesRef.current.find((f) => f.id === frameId);
-    if (!frame) return;
-    if (kind === "claude") { doSpawnClaude(undefined, frameId); return; }
-    if (kind === "shell") {
-      const sh = defaultShell();
-      autoPileSpawn({
-        idPrefix: "tile-term",
-        labelPrefix: "shell",
-        cmd: sh.cmd,
-        args: sh.args,
-        targetFrameId: frameId,
-      });
-      return;
-    }
-    if (kind === "tree" || kind === "diff" || kind === "issues") {
-      const tid = kind === "tree" ? WORKBENCH_TILE_ID : kind === "diff" ? "tile-diff-1" : "tile-issues-1";
-      setVis((v) => ({ ...v, [kind]: true }));
-      // placeInFrame selects + focuses (single authority) — no duplicate.
-      placeInFrame(tid, frame);
-    }
-  }, [doSpawnClaude, placeInFrame, autoPileSpawn]);
+    const k: TileKind =
+      kind === "tree" ? "editor"
+      : kind === "claude" || kind === "shell" || kind === "diff" || kind === "issues" ? kind
+      : "shell";
+    spawnTile(k, frameId);
+  }, [spawnTile]);
 
   // Wire palette events + keyboard shortcuts. CommandPalette dispatches events
   // (decoupled from Canvas state); plus ⌘\ → spawn claude, ⌘B/T/D → toggle.
@@ -1225,9 +1227,9 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
       spawnClaude(d && typeof d === "object" ? d.mode : undefined);
     };
     const onToggle = (e: Event) => {
-      const which = (e as CustomEvent<keyof Visibility>).detail;
+      const which = (e as CustomEvent<"tree" | "shell" | "diff" | "issues">).detail;
       if (which === "tree" || which === "shell" || which === "diff" || which === "issues") {
-        toggleTile(which);
+        spawnVis(which);
       }
     };
     const inEditable = (t: EventTarget | null): boolean => {
@@ -1238,9 +1240,9 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
       // ── modifier shortcuts (kept for muscle memory) ──
       if (e.metaKey || e.ctrlKey) {
         if (e.key === "\\") { e.preventDefault(); spawnClaude(); }
-        else if ((e.key === "b" || e.key === "B") && repoPath) { e.preventDefault(); toggleTile("tree"); }
-        else if (e.key === "t" || e.key === "T") { e.preventDefault(); toggleTile("shell"); }
-        else if ((e.key === "d" || e.key === "D") && repoPath) { e.preventDefault(); toggleTile("diff"); }
+        else if ((e.key === "b" || e.key === "B") && repoPath) { e.preventDefault(); spawnVis("tree"); }
+        else if (e.key === "t" || e.key === "T") { e.preventDefault(); spawnVis("shell"); }
+        else if ((e.key === "d" || e.key === "D") && repoPath) { e.preventDefault(); spawnVis("diff"); }
         return;
       }
       // Focus mode hotkeys fire even when typing in a tile (xterm/CodeMirror
@@ -1264,15 +1266,15 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
       if (inEditable(e.target)) return;
       switch (e.key) {
         case "1":
-          e.preventDefault(); toggleTile("shell"); break;
+          e.preventDefault(); spawnVis("shell"); break;
         case "2":
           e.preventDefault(); spawnClaude(); break;
         case "3":
-          if (repoPath) { e.preventDefault(); toggleTile("tree"); } break;
+          if (repoPath) { e.preventDefault(); spawnVis("tree"); } break;
         case "4":
-          if (repoPath) { e.preventDefault(); toggleTile("diff"); } break;
+          if (repoPath) { e.preventDefault(); spawnVis("diff"); } break;
         case "5":
-          if (repoPath) { e.preventDefault(); toggleTile("issues"); } break;
+          if (repoPath) { e.preventDefault(); spawnVis("issues"); } break;
         case "6":
           e.preventDefault(); addFrame(); break;
         case "F2": {
@@ -1408,131 +1410,80 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
       });
     }
 
-    if (vis.tree && repoPath) {
-      const sz = sized(WORKBENCH_TILE_ID, 1400, 900);
-      out.push(
-        mkTile(
-          {
-            id: WORKBENCH_TILE_ID,
-            type: "workbench",
-            style: sz,
-            data: {
-              repoPath,
-              tabs: editorTabs,
-              onOpenFile: openFile,
-              onCloseTab: closeTab,
-              onClose: closeWorkbench,
-              onResize: onNodeResizeCommit,
-            },
-            dragHandle: ".tile-drag-handle",
+    // One loop, every tile is an instance. editor/diff/issues need a repo —
+    // skip them (close them) if the active repo went away. Each kind maps to
+    // its node `type` + default size + data shape.
+    for (const t of tiles) {
+      if ((t.kind === "editor" || t.kind === "diff") && !repoPath) continue;
+      let node: Omit<Node, "position">;
+      let w: number;
+      let h: number;
+      if (t.kind === "editor") {
+        w = 1400; h = 900;
+        node = {
+          id: t.id,
+          type: "workbench",
+          style: sized(t.id, w, h),
+          data: {
+            repoPath,
+            tabs: editorTabs[t.id] ?? [],
+            onOpenFile: (file: string) => openFileInTile(t.id, file),
+            onCloseTab: (file: string) => closeTabInTile(t.id, file),
+            onClose: () => closeTile(t.id),
+            onResize: onNodeResizeCommit,
           },
-          x,
-          y,
-        ),
-      );
-      x += sz.width + gap;
-    }
-    if (vis.shell) {
-      const sh = defaultShell();
-      const sz = sized("tile-terminal-1", 1200, 820);
-      out.push(
-        mkTile(
-          {
-            id: "tile-terminal-1",
-            type: "terminal",
-            style: sz,
-            data: {
-              tileId: "tile-terminal-1",
-              cwd,
-              cmd: sh.cmd,
-              args: sh.args,
-              name: tileNames["tile-terminal-1"] ?? autoNameFromCmd(sh.cmd),
-              onRename: renameTile,
-              onResize: onNodeResizeCommit,
-              onClose: () => setVis((v) => ({ ...v, shell: false })),
-            },
-            dragHandle: ".tile-drag-handle",
+          dragHandle: ".tile-drag-handle",
+        };
+      } else if (t.kind === "diff") {
+        w = 1400; h = 900;
+        node = {
+          id: t.id,
+          type: "diff",
+          style: sized(t.id, w, h),
+          data: {
+            repoPath,
+            initialMode: "working" as const,
+            initialBase: "origin/main",
+            onResize: onNodeResizeCommit,
+            onClose: () => closeTile(t.id),
           },
-          x,
-          y,
-        ),
-      );
-      x += sz.width + gap;
-    }
-    if (vis.diff && repoPath) {
-      const sz = sized("tile-diff-1", 1400, 900);
-      out.push(
-        mkTile(
-          {
-            id: "tile-diff-1",
-            type: "diff",
-            style: sz,
-            data: {
-              repoPath,
-              initialMode: "working" as const,
-              initialBase: "origin/main",
-              onResize: onNodeResizeCommit,
-              onClose: () => setVis((v) => ({ ...v, diff: false })),
-            },
-            dragHandle: ".tile-drag-handle",
+          dragHandle: ".tile-drag-handle",
+        };
+      } else if (t.kind === "issues") {
+        w = 680; h = 460;
+        node = {
+          id: t.id,
+          type: "issues",
+          style: sized(t.id, w, h),
+          data: { root, onResize: onNodeResizeCommit, onClose: () => closeTile(t.id) },
+          dragHandle: ".tile-drag-handle",
+        };
+      } else {
+        // claude / shell — both render as a TerminalTile. Claude defaults
+        // BIGGER (long transcripts + inline diffs); shell stays compact.
+        const cmd = t.cmd ?? defaultShell().cmd;
+        const args = t.args ?? defaultShell().args;
+        if (t.kind === "claude") { w = 1480; h = 1000; } else { w = 1200; h = 820; }
+        node = {
+          id: t.id,
+          type: "terminal",
+          style: sized(t.id, w, h),
+          data: {
+            tileId: t.id,
+            cwd,
+            cmd,
+            args,
+            label: t.label,
+            name: tileNames[t.id] ?? autoNameFromCmd(cmd),
+            onRename: renameTile,
+            onResize: onNodeResizeCommit,
+            onClose: () => closeTile(t.id),
           },
-          x,
-          y,
-        ),
-      );
-      x += sz.width + gap;
-    }
-    if (vis.issues) {
-      const sz = sized("tile-issues-1", 680, 460);
-      out.push(
-        mkTile(
-          {
-            id: "tile-issues-1",
-            type: "issues",
-            style: sz,
-            data: {
-              root,
-              onResize: onNodeResizeCommit,
-              onClose: () => setVis((v) => ({ ...v, issues: false })),
-            },
-            dragHandle: ".tile-drag-handle",
-          },
-          x,
-          y,
-        ),
-      );
-      x += sz.width + gap;
-    }
-    for (const e of extras) {
-      // Claude tiles default BIGGER than a plain shell — you read long agent
-      // transcripts + diffs in them, a 1200px box clipped that. Shell stays
-      // compact. User-resize (sizes[id]) still wins via `sized`.
-      const isClaude = identifyAgent(e.cmd) === "claude";
-      const sz = isClaude ? sized(e.id, 1480, 1000) : sized(e.id, 1200, 820);
-      out.push(
-        mkTile(
-          {
-            id: e.id,
-            type: "terminal",
-            style: sz,
-            data: {
-              tileId: e.id,
-              cwd,
-              cmd: e.cmd,
-              args: e.args,
-              label: e.label,
-              name: tileNames[e.id] ?? autoNameFromCmd(e.cmd),
-              onRename: renameTile,
-              onResize: onNodeResizeCommit,
-              onClose: () => killExtra(e.id),
-            },
-            dragHandle: ".tile-drag-handle",
-          },
-          x,
-          y,
-        ),
-      );
-      x += sz.width + gap;
+          dragHandle: ".tile-drag-handle",
+        };
+      }
+      out.push(mkTile(node, x, y));
+      x += (sizes[t.id]?.width ?? w) + gap;
     }
     return out;
     // Selection (selectedTileId) is applied in a SEPARATE useMemo below — it
@@ -1542,19 +1493,18 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     // defeating React.memo on heavy node wrappers mid-interaction (P1 from
     // perf review).
   }, [
-    vis,
     repoPath,
     root,
     cwd,
-    extras,
+    tiles,
     editorTabs,
     frames,
     frameOf,
     sizes,
     positions,
-    openFile,
-    closeTab,
-    closeWorkbench,
+    openFileInTile,
+    closeTabInTile,
+    closeTile,
     updateFrameTitle,
     updateFrameColor,
     deleteFrame,
@@ -1567,7 +1517,6 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     bindWorkspace,
     unbindWorkspace,
     renameTile,
-    killExtra,
     framesChipNames,
   ]);
   // Derive selection-aware nodes from baseNodes. Shallow-clones ONLY the
@@ -1742,36 +1691,21 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // the new tile is then appended off to the side and would otherwise land
   // off-screen. The first tile on an empty canvas is already framed by the
   // default viewport, so panning to it is both pointless and jarring.
-  const prevExtrasLen = useRef(extras.length);
+  const prevExtrasLen = useRef(tiles.length);
   useEffect(() => {
-    if (extras.length > prevExtrasLen.current) {
-      const last = extras[extras.length - 1];
-      // Always select + pan to the new tile. The previous `nodes.length > 1`
-      // gate skipped focus on the first spawn, but a newly-spawned tile can
-      // land anywhere (inside a frame far from the default viewport, e.g.
-      // bound workspace, or off-screen from auto-layout) — "I clicked spawn
-      // and nothing happened" was the user complaint. Pan unconditionally;
-      // FALLBACK ONLY: framed spawns are already selected+focused by
-      // placeInFrame (the single authority). Fire here only for a LOOSE tile
-      // (no frameOf entry) so we don't double-animate.
+    if (tiles.length > prevExtrasLen.current) {
+      const last = tiles[tiles.length - 1];
+      // Pan to the newly-spawned tile. FALLBACK ONLY: framed spawns are already
+      // selected+focused by placeInFrame (the single authority); fire here only
+      // for a LOOSE tile (no frameOf entry) so we don't double-animate.
       if (last && !frameOfRef.current[last.id]) {
         setSelectedTileId(last.id);
         focusTile(last.id);
       }
     }
-    prevExtrasLen.current = extras.length;
+    prevExtrasLen.current = tiles.length;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [extras, focusTile]);
-  // Newly-toggled-on shell terminal — fallback only (placeInFrame focuses
-  // framed shells; this catches a hypothetical loose one).
-  const prevShell = useRef(vis.shell);
-  useEffect(() => {
-    if (vis.shell && !prevShell.current && !frameOfRef.current["tile-terminal-1"]) {
-      focusTile("tile-terminal-1");
-    }
-    prevShell.current = vis.shell;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vis.shell, focusTile]);
+  }, [tiles, focusTile]);
 
   // ── herdr-style agent awareness ───────────────────────────────────────────
   // Tiles publish their detected state to agent-status-bus; we mirror it here to
@@ -2012,10 +1946,9 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
           {/* Excalidraw-style floating tool island — top-center. */}
           <Panel position="top-center" className="!m-0 !mt-3">
             <ToolIsland
-              vis={vis}
+              present={presentKinds}
               repoPath={repoPath}
-              extrasCount={extras.length}
-              onToggle={(k) => toggleTile(k)}
+              onToggle={(k) => spawnVis(k)}
               onClaude={() => spawnClaude()}
               onFrame={addFrame}
               claudeMode={claudeMode}
@@ -2047,7 +1980,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
               tileCount={nodes.length}
               minimapOn={minimapOn}
               onToggleMinimap={() => setMinimapOn((v) => !v)}
-              onReset={() => { setSizes({}); setPositions({}); setFrames([]); }}
+              onReset={() => { setSizes({}); setPositions({}); setFrames([]); setTiles([]); setEditorTabs({}); setFrameOf({}); }}
               onFocus={() => {
                 const id = selectedTileIdRef.current ?? selectedFrameIdRef.current;
                 setFocusModeReq({ id, n: ++focusModeNonceRef.current });
@@ -2077,7 +2010,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
                     <button
                       key={f.id}
                       autoFocus={isSel}
-                      onClick={() => { doSpawnClaude(spawnPick.mode, f.id); setSpawnPick(null); }}
+                      onClick={() => { spawnTile(spawnPick.kind, f.id, { mode: spawnPick.mode }); setSpawnPick(null); }}
                       className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[12px] text-[var(--color-fg)] hover:bg-[var(--color-bg3)] transition-colors ${
                         isSel ? "bg-[var(--color-bg3)] ring-1 ring-[var(--color-brand)]" : ""
                       }`}
@@ -2114,9 +2047,9 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
         {isEmpty && (
           <CanvasEmptyState
             repoPath={repoPath}
-            onShowTree={() => toggleTile("tree")}
-            onShowShell={() => toggleTile("shell")}
-            onShowDiff={() => toggleTile("diff")}
+            onShowTree={() => spawnVis("tree")}
+            onShowShell={() => spawnVis("shell")}
+            onShowDiff={() => spawnVis("diff")}
             onSpawnClaude={() => spawnClaude()}
             onInitWorkspace={onInitWorkspace}
           />
@@ -2129,19 +2062,17 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
 /** Excalidraw-style floating tool island — rounded panel of icon buttons,
  *  each with a single-key hotkey hint. Active tools highlight in brand color. */
 function ToolIsland({
-  vis,
+  present,
   repoPath,
-  extrasCount,
   onToggle,
   onClaude,
   onFrame,
   claudeMode,
   onClaudeModeChange,
 }: {
-  vis: Visibility;
+  present: ReadonlySet<TileKind>;
   repoPath: string | null;
-  extrasCount: number;
-  onToggle: (k: keyof Visibility) => void;
+  onToggle: (k: "tree" | "shell" | "diff" | "issues") => void;
   onClaude: () => void;
   onFrame: () => void;
   claudeMode: string;
@@ -2149,9 +2080,9 @@ function ToolIsland({
 }) {
   return (
     <div className="hm-island flex items-center gap-0.5 p-1.5">
-      <ToolButton label="Terminal" hint="1" active={vis.shell} onClick={() => onToggle("shell")}
+      <ToolButton label="Terminal" hint="1" active={present.has("shell")} onClick={() => onToggle("shell")}
         icon={<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M4 6l2 2-2 2M8 10h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>} />
-      <ToolButton label="Claude" hint="2" accent active={extrasCount > 0} onClick={onClaude}
+      <ToolButton label="Claude" hint="2" accent active={present.has("claude")} onClick={onClaude}
         icon={<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5.5" stroke="currentColor" strokeWidth="1.2"/><circle cx="8" cy="8" r="1.8" fill="currentColor"/></svg>} />
       <select
         value={claudeMode}
@@ -2167,11 +2098,11 @@ function ToolIsland({
         <option value="bypassPermissions">bypass</option>
       </select>
       <div className="mx-0.5 h-5 w-px bg-[var(--color-line2)]" aria-hidden />
-      <ToolButton label="Explorer" hint="3" active={vis.tree} disabled={!repoPath} onClick={() => onToggle("tree")}
+      <ToolButton label="Explorer" hint="3" active={present.has("editor")} disabled={!repoPath} onClick={() => onToggle("tree")}
         icon={<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M2 4.5C2 3.7 2.7 3 3.5 3h3l1.5 1.5h4.5c.8 0 1.5.7 1.5 1.5v5.5c0 .8-.7 1.5-1.5 1.5h-9C2.7 13 2 12.3 2 11.5v-7Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>} />
-      <ToolButton label="Diff" hint="4" active={vis.diff} disabled={!repoPath} onClick={() => onToggle("diff")}
+      <ToolButton label="Diff" hint="4" active={present.has("diff")} disabled={!repoPath} onClick={() => onToggle("diff")}
         icon={<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M4 2v8m0 0a2 2 0 1 0 0 0Zm8-4v2m0 0a2 2 0 1 0 0 0Zm0 0v2a2 2 0 0 1-2 2H6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>} />
-      <ToolButton label="Issues" hint="5" active={vis.issues} disabled={!repoPath} onClick={() => onToggle("issues")}
+      <ToolButton label="Issues" hint="5" active={present.has("issues")} disabled={!repoPath} onClick={() => onToggle("issues")}
         icon={<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><rect x="2" y="2.5" width="5" height="11" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="9" y="2.5" width="5" height="7" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg>} />
       <div className="mx-0.5 h-5 w-px bg-[var(--color-line2)]" aria-hidden />
       <ToolButton label="Frame" hint="6" onClick={onFrame}

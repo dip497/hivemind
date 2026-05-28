@@ -30,7 +30,7 @@ test.beforeAll(async () => {
 
   // Switch to canvas + add a frame via the "f" tool hotkey (Excalidraw style).
   await page.waitForTimeout(300);
-  await page.keyboard.press("f");
+  await page.keyboard.press("6"); // frame hotkey (letter aliases removed)
   await page.waitForSelector(".react-flow__node-frame", { timeout: 4_000 });
   await page.waitForTimeout(300);
 });
