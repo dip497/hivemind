@@ -6,10 +6,45 @@
  * remain clickable. Pure visual grouping in v1 — moving the frame does NOT
  * move tiles inside (use react-flow `parentId` later for strong containment).
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { NodeResizer } from "@xyflow/react";
 import { GitBranch, FolderGit2, Plus, Maximize2 } from "lucide-react";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
+
+/** Dropdown anchored under a trigger button, rendered in a portal to
+ *  document.body. Frame nodes have a low zIndex (≤90, BELOW tiles), and a
+ *  child popover can't escape its parent's stacking context — so a normal
+ *  absolute-positioned menu renders BEHIND any tile inside the frame.
+ *  Portaling to body + fixed positioning lifts it above everything. */
+function AnchoredMenu({
+  anchor,
+  open,
+  onClose,
+  children,
+}: {
+  anchor: HTMLElement | null;
+  open: boolean;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  if (!open || !anchor) return null;
+  const r = anchor.getBoundingClientRect();
+  return createPortal(
+    <>
+      {/* click-away catcher */}
+      <div className="fixed inset-0 z-[9998]" onClick={onClose} />
+      <div
+        className="fixed z-[9999] bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-md p-1 shadow-xl flex flex-col"
+        style={{ top: r.bottom + 4, left: Math.max(8, r.right - 160), minWidth: 150 }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {children}
+      </div>
+    </>,
+    document.body,
+  );
+}
 
 export interface FrameNodeData {
   title: string;
@@ -62,6 +97,8 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
   const [showAdd, setShowAdd] = useState(false);
   const [binding, setBinding] = useState(false);
   const [branchDraft, setBranchDraft] = useState("");
+  const addBtnRef = useRef<HTMLButtonElement>(null);
+  const colorBtnRef = useRef<HTMLButtonElement>(null);
   // Live status per child tile — chips show a colored dot for working/blocked.
   // Subscribe filters by data.tileIds so unrelated tile events are skipped.
   const [chipStatus, setChipStatus] = useState<Map<string, TileStatusKind>>(new Map());
@@ -300,45 +337,36 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
             )}
           </div>
         )}
-        <div className="relative">
-          <button
-            onClick={() => setShowAdd((x) => !x)}
-            className="size-4 grid place-items-center rounded text-[var(--color-fg2)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)]"
-            title="Open a tile in this zone (terminal / Claude / editor / diff / issues)"
-            aria-label="add tile"
-          >
-            <Plus size={12} />
-          </button>
-          {showAdd && (
-            // Drop straight DOWN from the `+` button (not floated to the
-            // frame's right edge — that landed the popover behind unrelated
-            // chrome and looked detached from the trigger).
-            <div
-              className="absolute top-full right-0 mt-1 z-20 bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-md p-1 min-w-[150px] shadow-xl flex flex-col"
-              onClick={(e) => e.stopPropagation()}
+        <button
+          ref={addBtnRef}
+          onClick={() => setShowAdd((x) => !x)}
+          className="size-4 grid place-items-center rounded text-[var(--color-fg2)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)]"
+          title="Open a tile in this zone (terminal / Claude / editor / diff / issues)"
+          aria-label="add tile"
+        >
+          <Plus size={12} />
+        </button>
+        <AnchoredMenu anchor={addBtnRef.current} open={showAdd} onClose={() => setShowAdd(false)}>
+          <div className="px-2 py-1 text-[9px] uppercase tracking-[0.12em] text-[var(--color-fg3)] font-semibold">open in zone</div>
+          {([
+            ["claude", "Claude"],
+            ["shell", "Terminal"],
+            ["tree", "Editor"],
+            ["diff", "Diff"],
+            ["issues", "Issues"],
+          ] as const).map(([kind, label]) => (
+            <button
+              key={kind}
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent("hivemind:frame-open", { detail: { frameId: data.id, kind } }));
+                setShowAdd(false);
+              }}
+              className="text-left px-2 py-1 rounded text-[11px] text-[var(--color-fg)] hover:bg-[var(--color-bg4)]"
             >
-              <div className="px-2 py-1 text-[9px] uppercase tracking-[0.12em] text-[var(--color-fg3)] font-semibold">open in zone</div>
-              {([
-                ["claude", "Claude"],
-                ["shell", "Terminal"],
-                ["tree", "Editor"],
-                ["diff", "Diff"],
-                ["issues", "Issues"],
-              ] as const).map(([kind, label]) => (
-                <button
-                  key={kind}
-                  onClick={() => {
-                    window.dispatchEvent(new CustomEvent("hivemind:frame-open", { detail: { frameId: data.id, kind } }));
-                    setShowAdd(false);
-                  }}
-                  className="text-left px-2 py-1 rounded text-[11px] text-[var(--color-fg)] hover:bg-[var(--color-bg4)]"
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+              {label}
+            </button>
+          ))}
+        </AnchoredMenu>
         <button
           onClick={() => data.onFit(data.id)}
           className="size-4 grid place-items-center rounded text-[var(--color-fg2)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)]"
@@ -348,6 +376,7 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
           <Maximize2 size={11} />
         </button>
         <button
+          ref={colorBtnRef}
           onClick={() => setShowPicker((x) => !x)}
           className="size-4 rounded-full border border-[var(--color-line2)]"
           style={{ background: data.color }}
@@ -363,12 +392,8 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
           ×
         </button>
       </div>
-      {showPicker && (
-        <div
-          className="absolute top-8 right-1 z-20 bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-md p-1 flex gap-1 shadow-xl"
-          style={{ pointerEvents: "auto" }}
-          onClick={(e) => e.stopPropagation()}
-        >
+      <AnchoredMenu anchor={colorBtnRef.current} open={showPicker} onClose={() => setShowPicker(false)}>
+        <div className="flex gap-1">
           {COLORS.map((c) => (
             <button
               key={c.value}
@@ -382,7 +407,7 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
             />
           ))}
         </div>
-      )}
+      </AnchoredMenu>
     </div>
   );
 }
