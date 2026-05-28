@@ -28,12 +28,24 @@ export function detectClaudeState(screen: string): ClaudeState {
     return "question";
   }
 
+  // Working — checked BEFORE idle because the input prompt (❯) stays visible
+  // while Claude works (you can queue input), so an idle-prompt match must not
+  // win over an active-work signal. Two signals, either ⇒ working:
+  //   1. the interrupt hint ("(esc to interrupt …)") on the status line.
+  //   2. the animated spinner glyph + a present-progressive "…" gerund, e.g.
+  //      "✻ Cogitating…", "* Forging…", "✳ Crunching…". This catches versions /
+  //      states where the interrupt hint scrolls out but the spinner is live.
+  //      (Spinner glyphs Claude cycles: ✻ ✶ ✳ ✢ ✽ ⋆ ● * · — match any, then a
+  //      word, then the ellipsis. Box-drawing prefixes like "│ " are tolerated.)
   if (/esc to interrupt/i.test(last)) return "working";
+  if (/[✻✶✳✢✽⋆●*·]\s+\w[\w' -]*…/u.test(last)) return "working";
 
-  // Idle: the prompt line (❯ + space/nbsp, not followed by a digit).
-  if (/^❯[\s\xa0](?![\d])/m.test(last)) return "idle";
-  // Idle: Claude Code splash / welcome screen.
-  if (/⏵⏵\s*bypass permissions/i.test(last)) return "idle";
+  // Idle: the prompt line (❯ or > + space/nbsp, not followed by a digit) AND no
+  // active-work signal above. `>` covers newer prompt rendering.
+  if (/^[❯>][\s\xa0](?![\d])/m.test(last)) return "idle";
+  // Idle: Claude Code splash / welcome screen (persistent mode footer alone is
+  // NOT treated as idle — it shows during work too — only the splash variant).
+  if (/⏵⏵\s*(bypass permissions|accept edits)/i.test(last) && !/[│╭╰]/.test(last)) return "idle";
 
   return "working";
 }

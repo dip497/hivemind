@@ -47,3 +47,27 @@ test("default falls back to working", () => {
 test("trailing blank lines ignored", () => {
   assert.equal(detectClaudeState("❯ \n\n\n\n"), "idle");
 });
+
+// The reported bug: claude working in bypass/auto mode showed idle because the
+// persistent prompt + mode footer stayed on screen. Working signals must win.
+test("working: spinner glyph + gerund ellipsis (no interrupt hint)", () => {
+  assert.equal(detectClaudeState("✻ Cogitating…\n❯ "), "working");
+  assert.equal(detectClaudeState("* Forging…\n❯ "), "working");
+  assert.equal(detectClaudeState("✳ Crunching the diff…"), "working");
+});
+
+test("working wins over the queued-input prompt during work", () => {
+  // Claude shows the spinner status line ABOVE the still-visible input box.
+  const screen = [
+    "✻ Reticulating splines… (12s · ↑ 1.2k tokens · esc to interrupt)",
+    "╭───────────────────────────╮",
+    "│ > ",
+    "╰───────────────────────────╯",
+    "⏵⏵ bypass permissions on",
+  ].join("\n");
+  assert.equal(detectClaudeState(screen), "working");
+});
+
+test("idle in bypass mode (boxed prompt, no spinner) is still idle", () => {
+  assert.equal(detectClaudeState("done.\n❯ \n⏵⏵ bypass permissions on"), "idle");
+});
