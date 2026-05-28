@@ -244,18 +244,55 @@ export async function gitListFiles(repoPath: string): Promise<string[]> {
   return Array.from(seen).sort();
 }
 
+/** True if `ref` resolves to a commit in this repo. Non-throwing. */
+async function refExists(repoPath: string, ref: string): Promise<boolean> {
+  try {
+    await rawGit(repoPath, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Resolve the base ref for a branch-diff. NO fallback guessing (main/master/
+ *  upstream cascades return the wrong base in real repos — see SO 28666357).
+ *  Resolution order, each AUTHORITATIVE:
+ *    1. an explicit user-chosen base (only if it actually exists), else
+ *    2. the remote's recorded default branch via `origin/HEAD` — the canonical,
+ *       network-free source (`git symbolic-ref --short refs/remotes/origin/HEAD`).
+ *  Returns null when neither resolves (no remote, or origin/HEAD not set — fix
+ *  with `git remote set-head origin -a`). Caller renders an empty diff, never
+ *  crashes and never diffs against a guessed/wrong base. */
+async function resolveBranchBase(repoPath: string, requested?: string): Promise<string | null> {
+  const r = requested?.trim();
+  if (r && (await refExists(repoPath, r))) return r;
+  try {
+    const head = (await rawGit(repoPath, ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"])).trim();
+    if (head && (await refExists(repoPath, head))) return head; // e.g. "origin/main"
+  } catch { /* origin/HEAD not set / no remote */ }
+  return null;
+}
+
 export async function gitDiff(
   repoPath: string,
   scope: DiffScope,
   file?: string
 ): Promise<DiffPayload> {
   const args = ["diff", "--no-color", "--no-ext-diff"];
+  let branchBase: string | null = null;
   if (scope.kind === "working") {
     if (scope.staged) args.push("--staged");
     else args.push("HEAD");
   } else if (scope.kind === "branch") {
-    const base = scope.base ?? "origin/main";
-    args.push(`${base}...HEAD`);
+    branchBase = await resolveBranchBase(repoPath, scope.base);
+    if (!branchBase) {
+      // No authoritative base ref — return an empty diff instead of letting
+      // `git diff bad-ref...HEAD` exit 128 and bubble a raw error. (No guessed
+      // main/master fallback by design.)
+      const head = (await rawGit(repoPath, ["rev-parse", "HEAD"])).trim();
+      return { patch: "", cacheKey: `${repoPath}:${head}:branch-none${file ? `:${file}` : ""}` };
+    }
+    args.push(`${branchBase}...HEAD`);
   } else if (scope.kind === "commit") {
     args.push(`${scope.sha}^!`);
   }
@@ -269,7 +306,7 @@ export async function gitDiff(
     scope.kind === "working"
       ? `working${scope.staged ? "-staged" : ""}`
       : scope.kind === "branch"
-        ? `branch-${scope.base ?? "origin/main"}`
+        ? `branch-${branchBase ?? scope.base ?? "origin/main"}`
         : `commit-${scope.sha}`;
   const cacheKey = `${repoPath}:${head}:${scopeKey}${file ? `:${file}` : ""}`;
   return { patch, cacheKey };
