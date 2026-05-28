@@ -13,8 +13,12 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EditorState, type Extension, Compartment } from "@codemirror/state";
-import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter } from "@codemirror/view";
+import {
+  EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter,
+  drawSelection, rectangularSelection, crosshairCursor,
+} from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
+import { search, searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import {
   HighlightStyle,
   syntaxHighlighting,
@@ -62,8 +66,12 @@ const cmTheme = EditorView.theme(
         "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace",
       lineHeight: "1.55",
       overflow: "auto",
+      // Mouse cursor: text I-beam over the editor body. react-flow nodes carry
+      // a default arrow / grab cursor; without this it leaks onto the editable
+      // surface and the editor doesn't feel like a text field.
+      cursor: "text",
     },
-    ".cm-content": { caretColor: "var(--color-brand)" },
+    ".cm-content": { caretColor: "var(--color-brand)", cursor: "text" },
     "&.cm-focused": { outline: "none" },
     ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--color-brand)" },
     "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection":
@@ -84,6 +92,33 @@ const cmTheme = EditorView.theme(
       backgroundColor: "rgba(91,108,255,0.25)",
       outline: "none",
     },
+    // Highlight of all matches of the current selection (highlightSelectionMatches).
+    ".cm-selectionMatch": { backgroundColor: "rgba(56,189,248,0.20)" },
+    // Find/replace panel (search({ top: true })) — themed to the app tokens so
+    // it doesn't render as the default light-grey browser bar.
+    ".cm-panels": {
+      backgroundColor: "var(--color-bg3)",
+      color: "var(--color-fg)",
+      borderBottom: "1px solid var(--color-line2)",
+    },
+    ".cm-panel.cm-search": { padding: "5px 8px", fontFamily: "var(--font-sans)", fontSize: "11.5px" },
+    ".cm-panel.cm-search label": { color: "var(--color-fg2)", fontSize: "11px" },
+    ".cm-textfield": {
+      backgroundColor: "var(--color-bg)",
+      color: "var(--color-fg)",
+      border: "1px solid var(--color-line2)",
+      borderRadius: "4px",
+      padding: "2px 6px",
+    },
+    ".cm-button": {
+      backgroundColor: "var(--color-bg4)",
+      color: "var(--color-fg)",
+      border: "1px solid var(--color-line2)",
+      borderRadius: "4px",
+      backgroundImage: "none",
+    },
+    ".cm-button:hover": { backgroundColor: "var(--color-bg2)" },
+    ".cm-search .cm-button:active": { backgroundColor: "var(--color-brand)" },
   },
   { dark: true },
 );
@@ -113,9 +148,18 @@ const baseExtensions: Extension = [
   indentOnInput(),
   bracketMatching(),
   syntaxHighlighting(highlightStyle),
+  // Proper selection rendering + multi-cursor (Alt-drag) + a crosshair while
+  // holding Alt, and live highlight of all matches of the current selection.
+  drawSelection(),
+  rectangularSelection(),
+  crosshairCursor(),
+  highlightSelectionMatches(),
+  // Find/replace panel (Mod-f). `top: true` docks it above the editor body.
+  search({ top: true }),
   cmTheme,
   EditorView.lineWrapping,
-  keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
+  // searchKeymap LAST so Mod-f / Mod-g / etc. win over any default binding.
+  keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
 ];
 
 /** Resolve a CodeMirror LanguageSupport for a path via @codemirror/language-data.

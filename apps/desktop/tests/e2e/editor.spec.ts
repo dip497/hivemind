@@ -83,3 +83,13 @@ test("Ctrl+S saves edits to disk", async () => {
   await expect.poll(async () => fs.readFile(path.join(repo, FILE), "utf8"), { timeout: 6_000, intervals: [300] })
     .toContain("// edited");
 });
+
+test("Ctrl+F opens the CodeMirror search panel", async () => {
+  const editor = page.locator(".react-flow__node-workbench");
+  await editor.locator(".cm-content").click();
+  await page.keyboard.press("ControlOrMeta+f");
+  // @codemirror/search renders a docked panel with a 'search…' input.
+  await expect(editor.locator(".cm-panel.cm-search input[name='search']"))
+    .toBeVisible({ timeout: 4_000 });
+  await page.keyboard.press("Escape");
+});

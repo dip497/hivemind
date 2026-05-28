@@ -7,7 +7,11 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Added
+- **Editor: find/replace + proper selection.** Wired `@codemirror/search` (Ctrl-F find panel, themed to app tokens) plus the canonical CM6 affordances that were missing: `drawSelection`, `rectangularSelection` + `crosshairCursor` (Alt-drag multi-cursor), `highlightSelectionMatches`. e2e covers the search panel opening.
+
 ### Fixed
+- **Editor mouse cursor is a text I-beam now.** The react-flow node cursor leaked onto the editing surface; `.cm-scroller`/`.cm-content` now set `cursor: text`.
 - **Desktop app no longer aborts with the SUID-sandbox error after install.** Extracting the AppImage (to avoid the libfuse2 requirement) strips the SUID-root bit from `chrome-sandbox`, so Electron's setuid sandbox aborted: *"The SUID sandbox helper binary was found, but is not configured correctly … aborting"* — and on Ubuntu 24.04 the unprivileged-userns fallback is also AppArmor-blocked. `install.sh` now installs `hivemind` as a launcher **wrapper** that runs the extracted app with `--no-sandbox` instead of a bare symlink to `AppRun`. Acceptable tradeoff: hivemind renders only local trusted content (terminals/diffs/editor) and already has full local access by design; same approach Obsidian/Cursor/LM-Studio AppImages take. Re-running the installer **self-heals** an existing symlink install (no sudo, no manual `chmod 4755` needed). `install.sh`.
 
 ## [0.1.1] — 2026-05-28
