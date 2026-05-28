@@ -621,12 +621,30 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     return () => window.removeEventListener("beforeunload", flush);
   }, [repoPath, sizes, positions, frames, tileNames, vis, extras, editorTabs, viewport, frameOf]);
 
-  // Viewport-focus request (a {id, nonce} so re-requesting the same id still
-  // fires). Declared here so addFrame can pan to a freshly-created frame; the
-  // <FocusOnTile> child consumes it and setCenters on the node.
-  const [focusReq, setFocusReq] = useState<{ id: string; n: number } | null>(null);
+  // Viewport-focus request: we resolve the target's CENTER from our own state
+  // (positions/sizes/frames) and hand absolute coords to <FocusOnTile>, which
+  // setCenters on them. Resolving here (not via xyflow getNode) means focus
+  // works even when the node hasn't been DOM-measured yet OR is culled
+  // off-screen — fitView on an unmeasured node centers on a 0×0 box and does
+  // nothing, which is why freshly-spawned tiles weren't centering.
+  const [focusReq, setFocusReq] = useState<{ cx: number; cy: number; n: number } | null>(null);
   const focusTile = useCallback(
-    (id: string) => setFocusReq((p) => ({ id, n: (p?.n ?? 0) + 1 })),
+    (id: string) => {
+      // Frame? center on its rect. Tile? center on pos + size.
+      const frame = framesRef.current.find((f) => f.id === id);
+      let cx: number, cy: number;
+      if (frame) {
+        cx = frame.x + frame.w / 2;
+        cy = frame.y + frame.h / 2;
+      } else {
+        const p = positionsRef.current[id];
+        if (!p) return;
+        const s = sizesRef.current[id] ?? defaultTileSize(id);
+        cx = p.x + s.width / 2;
+        cy = p.y + s.height / 2;
+      }
+      setFocusReq((prev) => ({ cx, cy, n: (prev?.n ?? 0) + 1 }));
+    },
     [],
   );
 
@@ -942,7 +960,10 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     // there's no deadlock if the new tile's center lands outside the frame).
     setFrameOf((m) => ({ ...m, [id]: frame.id }));
     setPositions((p) => ({ ...p, [id]: { x: placeX, y: placeY } }));
-    requestAnimationFrame(() => focusTile(id));
+    // Center the viewport on the new tile's KNOWN coords (don't wait for the
+    // positions ref to update — center directly so it pans reliably).
+    const me = sizeOf(id);
+    setFocusReq((prev) => ({ cx: placeX + me.width / 2, cy: placeY + me.height / 2, n: (prev?.n ?? 0) + 1 }));
   }, [repoPath]);
 
   // Wrap legacy loose tiles on mount: layouts persisted before frame=workspace
@@ -2272,28 +2293,17 @@ function FocusMode({ req }: { req: { id: string | null; n: number } | null }) {
   return null;
 }
 
-function FocusOnTile({ req }: { req: { id: string; n: number } | null }) {
-  const { getNode, fitView } = useReactFlow();
+function FocusOnTile({ req }: { req: { cx: number; cy: number; n: number } | null }) {
+  const { setCenter, getZoom } = useReactFlow();
   useEffect(() => {
     if (!req) return;
-    let raf = 0;
-    let tries = 0;
-    const tick = () => {
-      const n = getNode(req.id);
-      if (n) {
-        // Don't gate on `measured` — xyflow resolves position from internal
-        // state, so fitView works even if the node hasn't been DOM-measured
-        // yet. The earlier `measured?.width` gate was the reason the very
-        // first spawn never focused: a culled / not-yet-rendered node has
-        // no measured dims, so the retry loop expired before xyflow rendered.
-        void fitView({ nodes: [{ id: req.id }], padding: 0.3, duration: 400, maxZoom: 1 });
-        return;
-      }
-      if (tries++ < 60) raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [req, getNode, fitView]);
+    // Center on the resolved absolute coords. setCenter doesn't need the node
+    // to be measured or even rendered (unlike fitView) — so a freshly-spawned
+    // or culled-off-screen tile still pans into view. Keep the current zoom
+    // (clamped to a readable range) so we pan, not jarringly re-zoom.
+    const z = Math.min(Math.max(getZoom(), 0.5), 1);
+    void setCenter(req.cx, req.cy, { zoom: z, duration: 400 });
+  }, [req, setCenter, getZoom]);
   return null;
 }
 
