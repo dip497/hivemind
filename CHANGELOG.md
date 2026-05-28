@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [0.1.0] — 2026-05-28
+
 ### Fixed
 - **Spawn focus matches the "." focus-selected feel + no double-animation.** Two-stage: `setCenter` on the new tile's known coords immediately (instant, works before the node is DOM-measured), then once xyflow measures it, `fitView` to frame it nicely (zoom-to-fit, same as the `.` hotkey). `placeInFrame` is now the single focus+select authority for placed tiles — the extras-effect, shell-effect, `toggleTile`, and `frameOpen` no longer also focus (that fired the animation twice); they fall back to focusing only a LOOSE tile with no frame membership. `apps/desktop/src/renderer/src/Canvas.tsx`.
 - **Spawning a tile now reliably centers the viewport on it.** `FocusOnTile` used `fitView({ nodes: [id] })`, which needs the node's **measured** DOM dimensions — a freshly-spawned (or culled off-screen) tile isn't measured yet, so fitView centered on a 0×0 box and did nothing. Now the focus path resolves the target's absolute center from our own `positions`/`sizes`/`frames` state and calls `setCenter` (keeping current zoom, clamped 0.5–1) — no dependency on xyflow having measured or rendered the node. `placeInFrame` centers on the exact coords it just assigned. `apps/desktop/src/renderer/src/Canvas.tsx`.
@@ -68,5 +70,6 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v0.0.1...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/dip497/hivemind/releases/tag/v0.1.0
 [0.0.1]: https://github.com/dip497/hivemind/releases/tag/v0.0.1
