@@ -2006,19 +2006,9 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
           {/* Roster removed — the top-left WorkspaceSwitcher (App) is the
               single workspace UI. Click a frame on the canvas to set active. */}
 
-          {/* Live agent sessions — top-left chips (herdr's "sidebar"). Each dot
-              reflects the tile's live state; click a chip to fly to its tile. */}
-          {extras.length > 0 && (
-            <Panel position="top-left" className="!m-0 !ml-3 !mt-3">
-              <SessionChips
-                extras={extras}
-                statuses={statuses}
-                tileNames={tileNames}
-                onKill={killExtra}
-                onView={(id) => markSeen([id])}
-              />
-            </Panel>
-          )}
+          {/* Live agent sessions now live in the Figma-style LayersPanel
+              (bottom-left rail). The old top-left SessionChips strip was
+              redundant with it and has been removed. */}
 
           {/* Background-event toasts — BOTTOM-right. (Was top-right, where it
               collided with + hid behind the Board/List/Canvas view switcher.)
@@ -2433,62 +2423,6 @@ function useTileFocus(): (id: string) => void {
       void fitView({ nodes: [{ id }], padding: 0.3, duration: 400, maxZoom: 1 });
     },
     [getNode, fitView],
-  );
-}
-
-/** Live session list — herdr's sidebar. One chip per spawned agent, dot colored
- *  by live state, done-unseen tiles ringed. Click flies to the tile. */
-function SessionChips({
-  extras,
-  statuses,
-  tileNames,
-  onKill,
-  onView,
-}: {
-  extras: ExtraTerm[];
-  statuses: Map<string, ChipMeta>;
-  tileNames: Record<string, string>;
-  onKill: (id: string) => void;
-  onView: (id: string) => void;
-}) {
-  const focus = useTileFocus();
-  return (
-    <div className="flex flex-col items-start gap-1 max-h-[40vh] overflow-y-auto">
-      {extras.map((e) => {
-        const meta = statuses.get(e.id);
-        const v = statusViz(meta);
-        const unseenDone = meta?.status === "idle" && meta.seen === false;
-        // User-rename (tileNames) wins; fall back to spawn-label. Updates live
-        // when the user clicks the pencil icon on the tile header.
-        const display = tileNames[e.id]?.trim() || e.label;
-        return (
-          <span
-            key={e.id}
-            role="button"
-            tabIndex={0}
-            onClick={() => { focus(e.id); onView(e.id); }}
-            onKeyDown={(ev) => { if (ev.key === "Enter") { focus(e.id); onView(e.id); } }}
-            title={`${display} — ${v.text} · click to focus`}
-            className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[10.5px] bg-[var(--color-bg3)] border text-[var(--color-fg2)] shadow-sm cursor-pointer hover:bg-[var(--color-bg4)] transition-colors ${
-              unseenDone ? "border-[var(--color-accent)] ring-1 ring-[var(--color-accent)]" : "border-[var(--color-line2)]"
-            }`}
-          >
-            <span
-              aria-hidden
-              className={`size-1.5 rounded-full ${v.pulse ? "animate-pulse" : ""}`}
-              style={{ background: v.color }}
-            />
-            <span className="font-mono">{display}</span>
-            <span className="text-[9px]" style={{ color: v.color }}>{v.text}</span>
-            <button
-              onClick={(ev) => { ev.stopPropagation(); onKill(e.id); }}
-              className="text-[var(--color-fg3)] hover:text-[var(--color-err)] transition-colors ml-0.5"
-              title="close session"
-            >×</button>
-          </span>
-        );
-      })}
-    </div>
   );
 }
 

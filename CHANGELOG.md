@@ -13,6 +13,9 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **Workbench explorer is resizable.** A draggable divider between the file tree and the editor (drag to set width, 140–640px, persisted globally). Handle is `nodrag`/`nowheel` so the canvas doesn't pan/move the tile while resizing.
 - **Editor: find/replace + proper selection.** Wired `@codemirror/search` (Ctrl-F find panel, themed to app tokens) plus the canonical CM6 affordances that were missing: `drawSelection`, `rectangularSelection` + `crosshairCursor` (Alt-drag multi-cursor), `highlightSelectionMatches`. e2e covers the search panel opening.
 
+### Removed
+- **Old top-left session chips strip.** The floating `claude #N idle` pills in the top-left were redundant with the new Figma-style Layers panel (same live-status source, same click-to-focus). Removed; the Layers rail is now the single session list. `apps/desktop/src/renderer/src/Canvas.tsx`.
+
 ### Fixed
 - **Claude "working" status shows reliably (esp. in bypass / auto-approve mode).** The persistent input prompt + mode footer stay on screen while Claude works, so the idle branch could win. Working detection now also matches Claude's spinner-glyph + gerund ellipsis status line (`✻ Cogitating…`, `* Forging…`) in addition to the `esc to interrupt` hint, and the mode footer alone no longer counts as idle. New unit tests cover working-during-bypass. `apps/desktop/src/renderer/src/claude-state.ts`.
 - **Spawn always asks which workspace when 2+ frames exist.** A sticky `selectedFrameId` made `spawnClaude` silently spawn into the selected frame and skip the picker — so a new claude/terminal could land in the wrong workspace. Now 2+ workspaces always show the picker (which pre-highlights + autofocuses the selected frame for one-key confirm); single frame still spawns directly.
