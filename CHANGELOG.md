@@ -25,6 +25,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **Frame selection: click the header to select.** With `pointer-events: none` on the frame body (the pan fix), clicking the dashed body region no longer selects the frame. Header bar remains the selection / drag handle.
 
 ### Fixed
+- **Opening a tile in a frame no longer stacks it on top of an existing one.** `placeInFrame` used a fixed 1240×860 grid with `Math.round` bucketing; once tile defaults grew to 1400×900 a wide tile straddled two buckets, occupancy mis-detected, and the new tile landed on top of a sibling. Replaced with real rectangle collision: gather the actual boxes of every tile already in the frame, scan candidate slots left→right / top→down, place in the first that overlaps nothing, grow the frame to contain it, then `fitFrame` snaps it tight. New tile lands beside the others.
 - **Frame `+` / color popovers render on top instead of behind tiles.** Frame nodes sit at zIndex ≤ 90 (below tiles); a child popover can't escape its parent's stacking context, so the "open in zone" menu and the color picker rendered BEHIND any tile inside the frame. Both now portal to `document.body` with fixed positioning anchored under their trigger button (z-9999) via a shared `AnchoredMenu` component with a click-away catcher.
 
 ### Added

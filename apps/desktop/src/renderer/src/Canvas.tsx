@@ -685,6 +685,10 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     const nh = Math.round(maxB - minY + HEADER + PAD);
     setFrames((fs) => fs.map((f) => (f.id === frameId ? { ...f, x: nx, y: ny, w: nw, h: nh } : f)));
   }, [repoPath]);
+  // Ref so placeInFrame (declared later) can call the latest fitFrame without
+  // taking it as a dependency.
+  const fitFrameRef = useRef(fitFrame);
+  useEffect(() => { fitFrameRef.current = fitFrame; }, [fitFrame]);
   // Drag synced on stop (not per-tick) — react-flow renders the live drag
   // internally via transform, we just persist the final x/y to our source-
   // of-truth state so the next render rebuilds the node at the right place.
@@ -859,46 +863,73 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // on the canvas, ask WHERE a new claude should run instead of guessing.
   const [spawnPick, setSpawnPick] = useState<{ mode?: string } | null>(null);
 
-  // Per-frame placement counter — cascades each tile dropped into a zone into a
-  // fresh grid slot instead of stacking them all at the same corner (they piled
-  // on top of each other before). Wraps into columns sized to the frame width.
+  // Place a tile inside a frame WITHOUT overlapping the tiles already there.
+  // The old version used a fixed 1240×860 grid + Math.round bucketing, which
+  // broke once tile defaults grew to 1400×900: a wide tile straddled two
+  // buckets, occupancy mis-detected, and the new tile stacked on top of an
+  // existing one. This version does real rectangle collision: gather the
+  // actual boxes of every OTHER tile in the frame, then scan a coarse grid of
+  // candidate slots and pick the first that overlaps nothing. Frame grows to
+  // contain the chosen slot, then fitFrame snaps it tight around everything.
   const placeInFrame = useCallback((id: string, frame: FrameState) => {
-    // 2-col grid sized to widest tile so big tiles never overlap. Scan EXISTING
-    // positions for the first FREE slot (session counter alone ignored persisted
-    // tiles → new spawn could land on a restored tile). Auto-grow frame to fit.
     const padX = 24;
     const padTop = 48;
-    const padBot = 24;
-    const stepX = 1240;
-    const stepY = 860;
-    const cols = 2;
+    const gap = 24;
     const pos = positionsRef.current;
-    const occupied = new Set<string>();
-    for (const [k, p] of Object.entries(pos)) {
-      if (k === id) continue;
-      const dx = p.x - (frame.x + padX);
-      const dy = p.y - (frame.y + padTop);
-      if (dx < -8 || dy < -8) continue;
-      const c = Math.round(dx / stepX);
-      const r = Math.round(dy / stepY);
-      if (c >= 0 && c < cols && r >= 0) occupied.add(`${c},${r}`);
+    const sizeOf = (tid: string) => sizesRef.current[tid] ?? defaultTileSize(tid);
+    const me = sizeOf(id);
+
+    // Rectangles of every OTHER tile currently inside this frame (absolute).
+    const rects: Array<{ x: number; y: number; r: number; b: number }> = [];
+    const candidates: string[] = [];
+    if (visRef.current.tree && repoPath) candidates.push(WORKBENCH_TILE_ID);
+    if (visRef.current.shell) candidates.push("tile-terminal-1");
+    if (visRef.current.diff && repoPath) candidates.push("tile-diff-1");
+    if (visRef.current.issues) candidates.push("tile-issues-1");
+    for (const e of extrasRef.current) candidates.push(e.id);
+    for (const tid of candidates) {
+      if (tid === id) continue;
+      const p = pos[tid];
+      if (!p) continue;
+      // inside this frame?
+      if (p.x < frame.x - 2 || p.y < frame.y - 2 || p.x > frame.x + frame.w || p.y > frame.y + frame.h) continue;
+      const s = sizeOf(tid);
+      rects.push({ x: p.x, y: p.y, r: p.x + s.width, b: p.y + s.height });
     }
-    let idx = 0;
-    while (occupied.has(`${idx % cols},${Math.floor(idx / cols)}`)) idx++;
-    const col = idx % cols;
-    const row = Math.floor(idx / cols);
-    setPositions((p) => ({ ...p, [id]: { x: frame.x + padX + col * stepX, y: frame.y + padTop + row * stepY } }));
-    const usedCols = Math.min(idx + 1, cols);
-    const neededW = padX + usedCols * stepX + padX;
-    const neededH = padTop + (row + 1) * stepY + padBot;
+
+    const overlaps = (x: number, y: number) =>
+      rects.some((rc) => x < rc.r + gap && x + me.width + gap > rc.x && y < rc.b + gap && y + me.height + gap > rc.y);
+
+    // Scan slots: left→right across a few columns, then wrap down. Column
+    // step = widest existing tile (or this tile) so columns don't interleave.
+    const baseX = frame.x + padX;
+    const baseY = frame.y + padTop;
+    const colStep = Math.max(me.width, ...rects.map((rc) => rc.r - rc.x), 600) + gap;
+    const rowStep = Math.max(me.height, ...rects.map((rc) => rc.b - rc.y), 400) + gap;
+    let placeX = baseX;
+    let placeY = baseY;
+    outer: for (let row = 0; row < 8; row++) {
+      for (let col = 0; col < 4; col++) {
+        const x = baseX + col * colStep;
+        const y = baseY + row * rowStep;
+        if (!overlaps(x, y)) { placeX = x; placeY = y; break outer; }
+      }
+    }
+
+    setPositions((p) => ({ ...p, [id]: { x: placeX, y: placeY } }));
+    // Grow the frame so the chosen slot is inside it (fitFrame then tightens).
+    const neededW = placeX + me.width + padX - frame.x;
+    const neededH = placeY + me.height + padX - frame.y;
     setFrames((fs) =>
       fs.map((f) => (f.id === frame.id ? { ...f, w: Math.max(f.w, neededW), h: Math.max(f.h, neededH) } : f)),
     );
-    // Auto-focus the freshly placed tile so the viewport flies to it (user
-    // can SEE what they opened — without this, big frames or off-screen slots
-    // make new tiles look like nothing happened).
-    requestAnimationFrame(() => focusTile(id));
-  }, []);
+    // After the new position commits, autofit the frame to its content and
+    // fly the viewport to the freshly placed tile.
+    requestAnimationFrame(() => {
+      fitFrameRef.current?.(frame.id);
+      focusTile(id);
+    });
+  }, [repoPath]);
 
   // Wrap legacy loose tiles on mount: layouts persisted before frame=workspace
   // landed have positions but no frames → create the base frame sized to their
