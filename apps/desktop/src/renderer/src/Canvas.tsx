@@ -627,7 +627,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // works even when the node hasn't been DOM-measured yet OR is culled
   // off-screen — fitView on an unmeasured node centers on a 0×0 box and does
   // nothing, which is why freshly-spawned tiles weren't centering.
-  const [focusReq, setFocusReq] = useState<{ cx: number; cy: number; n: number } | null>(null);
+  const [focusReq, setFocusReq] = useState<{ id: string; cx: number; cy: number; n: number } | null>(null);
   const focusTile = useCallback(
     (id: string) => {
       // Frame? center on its rect. Tile? center on pos + size.
@@ -643,7 +643,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
         cx = p.x + s.width / 2;
         cy = p.y + s.height / 2;
       }
-      setFocusReq((prev) => ({ cx, cy, n: (prev?.n ?? 0) + 1 }));
+      setFocusReq((prev) => ({ id, cx, cy, n: (prev?.n ?? 0) + 1 }));
     },
     [],
   );
@@ -960,10 +960,13 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     // there's no deadlock if the new tile's center lands outside the frame).
     setFrameOf((m) => ({ ...m, [id]: frame.id }));
     setPositions((p) => ({ ...p, [id]: { x: placeX, y: placeY } }));
-    // Center the viewport on the new tile's KNOWN coords (don't wait for the
-    // positions ref to update — center directly so it pans reliably).
+    // SINGLE focus+select authority for placed tiles. Every spawn path routes
+    // through placeInFrame, so callers must NOT also focus/select (that fired
+    // the animation twice). Center on the KNOWN coords directly (don't wait
+    // for the positions ref to settle).
     const me = sizeOf(id);
-    setFocusReq((prev) => ({ cx: placeX + me.width / 2, cy: placeY + me.height / 2, n: (prev?.n ?? 0) + 1 }));
+    setSelectedTileId(id);
+    setFocusReq((prev) => ({ id, cx: placeX + me.width / 2, cy: placeY + me.height / 2, n: (prev?.n ?? 0) + 1 }));
   }, [repoPath]);
 
   // Wrap legacy loose tiles on mount: layouts persisted before frame=workspace
@@ -1134,15 +1137,9 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
       : which === "shell" ? "tile-terminal-1"
       : null;
     if (!id) return;
+    // placeInFrame selects + focuses (single authority) — don't duplicate it.
     placeInFrame(id, ensureFrame());
-    // Spawn-to-focus: a tile that lands off-screen but is never centered feels
-    // like "nothing happened" — user clicks Open and the canvas doesn't react.
-    // rAF lets the node mount before we pan/select.
-    requestAnimationFrame(() => {
-      setSelectedTileId(id);
-      focusTile(id);
-    });
-  }, [placeInFrame, ensureFrame, focusTile]);
+  }, [placeInFrame, ensureFrame]);
 
   const killExtra = useCallback((id: string) => {
     // TerminalTile's unmount cleanup ptyKills its own (per-mount unique) ptyId.
@@ -1171,13 +1168,10 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     if (kind === "tree" || kind === "diff" || kind === "issues") {
       const tid = kind === "tree" ? WORKBENCH_TILE_ID : kind === "diff" ? "tile-diff-1" : "tile-issues-1";
       setVis((v) => ({ ...v, [kind]: true }));
+      // placeInFrame selects + focuses (single authority) — no duplicate.
       placeInFrame(tid, frame);
-      requestAnimationFrame(() => {
-        setSelectedTileId(tid);
-        focusTile(tid);
-      });
     }
-  }, [doSpawnClaude, placeInFrame, autoPileSpawn, focusTile]);
+  }, [doSpawnClaude, placeInFrame, autoPileSpawn]);
 
   // Wire palette events + keyboard shortcuts. CommandPalette dispatches events
   // (decoupled from Canvas state); plus ⌘\ → spawn claude, ⌘B/T/D → toggle.
@@ -1703,8 +1697,10 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
       // land anywhere (inside a frame far from the default viewport, e.g.
       // bound workspace, or off-screen from auto-layout) — "I clicked spawn
       // and nothing happened" was the user complaint. Pan unconditionally;
-      // setCenter on a tile that's already centered is a no-op visually.
-      if (last) {
+      // FALLBACK ONLY: framed spawns are already selected+focused by
+      // placeInFrame (the single authority). Fire here only for a LOOSE tile
+      // (no frameOf entry) so we don't double-animate.
+      if (last && !frameOfRef.current[last.id]) {
         setSelectedTileId(last.id);
         focusTile(last.id);
       }
@@ -1712,10 +1708,13 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     prevExtrasLen.current = extras.length;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [extras, focusTile]);
-  // Newly-toggled-on shell terminal — always focus (see note above).
+  // Newly-toggled-on shell terminal — fallback only (placeInFrame focuses
+  // framed shells; this catches a hypothetical loose one).
   const prevShell = useRef(vis.shell);
   useEffect(() => {
-    if (vis.shell && !prevShell.current) focusTile("tile-terminal-1");
+    if (vis.shell && !prevShell.current && !frameOfRef.current["tile-terminal-1"]) {
+      focusTile("tile-terminal-1");
+    }
     prevShell.current = vis.shell;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vis.shell, focusTile]);
@@ -2293,17 +2292,31 @@ function FocusMode({ req }: { req: { id: string | null; n: number } | null }) {
   return null;
 }
 
-function FocusOnTile({ req }: { req: { cx: number; cy: number; n: number } | null }) {
-  const { setCenter, getZoom } = useReactFlow();
+function FocusOnTile({ req }: { req: { id: string; cx: number; cy: number; n: number } | null }) {
+  const { setCenter, getZoom, getNode, fitView } = useReactFlow();
   useEffect(() => {
     if (!req) return;
-    // Center on the resolved absolute coords. setCenter doesn't need the node
-    // to be measured or even rendered (unlike fitView) — so a freshly-spawned
-    // or culled-off-screen tile still pans into view. Keep the current zoom
-    // (clamped to a readable range) so we pan, not jarringly re-zoom.
-    const z = Math.min(Math.max(getZoom(), 0.5), 1);
-    void setCenter(req.cx, req.cy, { zoom: z, duration: 400 });
-  }, [req, setCenter, getZoom]);
+    // Two-stage focus, same end result as the "." focus-selected hotkey but
+    // robust for a brand-new tile that isn't DOM-measured yet:
+    //   1. setCenter on the resolved absolute coords NOW — needs no
+    //      measurement/render, so the viewport pans to the tile immediately.
+    //   2. once xyflow has measured the node, fitView to frame it nicely
+    //      (zoom-to-fit, the focus-selected feel). Poll up to ~1s.
+    const z0 = Math.min(Math.max(getZoom(), 0.5), 1);
+    void setCenter(req.cx, req.cy, { zoom: z0, duration: 400 });
+    let raf = 0;
+    let tries = 0;
+    const tick = () => {
+      const n = getNode(req.id);
+      if (n && n.measured?.width && n.measured?.height) {
+        void fitView({ nodes: [{ id: req.id }], padding: 0.18, duration: 400, maxZoom: 1 });
+        return;
+      }
+      if (tries++ < 60) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [req, setCenter, getZoom, getNode, fitView]);
   return null;
 }
 
