@@ -84,16 +84,39 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
       return next;
     });
 
-  // Collapsed pill when hidden — a single button to bring it back.
+  // Aggregate status across open tiles — drives the at-a-glance summary in the
+  // header AND the badge on the collapsed pill (so a hidden panel still signals
+  // "an agent needs you" / "agents are working"). needs-you wins over working.
+  const needsYou = tiles.filter((t) => {
+    const s = status.get(t.id);
+    return s === "blocked" || s === "permission" || s === "question";
+  }).length;
+  const working = tiles.filter((t) => status.get(t.id) === "working").length;
+
+  // Collapsed pill when hidden — a single button to bring it back. A status dot
+  // rides the corner so you don't have to open the panel to know an agent is
+  // waiting on you (warn) or busy (brand).
   if (hidden) {
+    const badge = needsYou > 0 ? "var(--color-warn)" : working > 0 ? "var(--color-brand)" : null;
     return (
       <button
         onClick={() => setHidden(false)}
         className="pointer-events-auto absolute left-3 top-16 z-20 size-8 grid place-items-center rounded-lg hm-island text-[var(--color-fg2)] hover:text-[var(--color-fg)]"
-        title="Show layers"
+        title={
+          needsYou > 0 ? `Show layers — ${needsYou} agent(s) need you`
+          : working > 0 ? `Show layers — ${working} working`
+          : "Show layers"
+        }
         aria-label="show layers"
       >
         <Layers size={15} />
+        {badge && (
+          <span
+            aria-hidden
+            className={`absolute -top-0.5 -right-0.5 size-2.5 rounded-full ring-2 ring-[var(--color-bg2)] ${needsYou > 0 ? "animate-pulse" : ""}`}
+            style={{ background: badge }}
+          />
+        )}
       </button>
     );
   }
@@ -112,8 +135,20 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
       <header className="flex items-center gap-2 px-2.5 h-8 border-b border-[var(--color-line2)] text-[11px] font-semibold text-[var(--color-fg2)]">
         <Layers size={13} className="text-[var(--color-fg3)]" />
         <span>Layers</span>
-        <span className="ml-auto font-mono text-[10px] text-[var(--color-fg3)] tabular-nums">
-          {tiles.length}
+        <span className="ml-auto flex items-center gap-1.5 font-mono text-[10px] tabular-nums">
+          {needsYou > 0 && (
+            <span className="flex items-center gap-0.5 text-[var(--color-warn)]" title={`${needsYou} need you`}>
+              <span aria-hidden className="size-1.5 rounded-full animate-pulse" style={{ background: "var(--color-warn)" }} />
+              {needsYou}
+            </span>
+          )}
+          {working > 0 && (
+            <span className="flex items-center gap-0.5 text-[var(--color-brand)]" title={`${working} working`}>
+              <span aria-hidden className="size-1.5 rounded-full" style={{ background: "var(--color-brand)" }} />
+              {working}
+            </span>
+          )}
+          <span className="text-[var(--color-fg3)]">{tiles.length}</span>
         </span>
         <button
           onClick={() => setHidden(true)}
@@ -171,9 +206,14 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
                       {KIND_GLYPH[t.kind]}
                     </span>
                     <span className="truncate flex-1">{t.name}</span>
+                    {st !== "idle" && (
+                      <span className="shrink-0 text-[9px] tabular-nums" style={{ color: STATUS_COLOR[st] }}>
+                        {st === "permission" || st === "question" ? "needs you" : st}
+                      </span>
+                    )}
                     <span
                       aria-hidden
-                      className="size-1.5 rounded-full shrink-0"
+                      className={`size-1.5 rounded-full shrink-0 ${st === "working" || st === "blocked" || st === "permission" || st === "question" ? "animate-pulse" : ""}`}
                       style={{ background: STATUS_COLOR[st] }}
                       title={st}
                     />

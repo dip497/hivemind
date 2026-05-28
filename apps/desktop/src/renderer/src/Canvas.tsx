@@ -1246,18 +1246,24 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
         setFocusModeReq({ id: null, n: ++focusModeNonceRef.current });
         return;
       }
-      // ── single-key tool hotkeys (Excalidraw style) — only when NOT typing ──
+      // ── single-key tool hotkeys (number row only) — when NOT typing ──
+      // NOTE: bare LETTER aliases (a/t/b/d/f/c) were removed — in a dev tool you
+      // type letters constantly, and a stray `a` on the canvas spawned a whole
+      // claude session. Numbers match the ToolIsland hint badges 1-6; letter
+      // combos still work behind Cmd/Ctrl (handled above).
       if (inEditable(e.target)) return;
       switch (e.key) {
-        case "1": case "t": case "T":
+        case "1":
           e.preventDefault(); toggleTile("shell"); break;
-        case "2": case "a": case "A":
+        case "2":
           e.preventDefault(); spawnClaude(); break;
-        case "3": case "b": case "B":
+        case "3":
           if (repoPath) { e.preventDefault(); toggleTile("tree"); } break;
-        case "4": case "d": case "D":
+        case "4":
           if (repoPath) { e.preventDefault(); toggleTile("diff"); } break;
-        case "5": case "f": case "F": case "c": case "C":
+        case "5":
+          if (repoPath) { e.preventDefault(); toggleTile("issues"); } break;
+        case "6":
           e.preventDefault(); addFrame(); break;
         case "F2": {
           const sel = selectedFrameIdRef.current;
@@ -2151,10 +2157,10 @@ function ToolIsland({
         icon={<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M2 4.5C2 3.7 2.7 3 3.5 3h3l1.5 1.5h4.5c.8 0 1.5.7 1.5 1.5v5.5c0 .8-.7 1.5-1.5 1.5h-9C2.7 13 2 12.3 2 11.5v-7Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>} />
       <ToolButton label="Diff" hint="4" active={vis.diff} disabled={!repoPath} onClick={() => onToggle("diff")}
         icon={<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M4 2v8m0 0a2 2 0 1 0 0 0Zm8-4v2m0 0a2 2 0 1 0 0 0Zm0 0v2a2 2 0 0 1-2 2H6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>} />
-      <ToolButton label="Issues" hint="6" active={vis.issues} disabled={!repoPath} onClick={() => onToggle("issues")}
+      <ToolButton label="Issues" hint="5" active={vis.issues} disabled={!repoPath} onClick={() => onToggle("issues")}
         icon={<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><rect x="2" y="2.5" width="5" height="11" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="9" y="2.5" width="5" height="7" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg>} />
       <div className="mx-0.5 h-5 w-px bg-[var(--color-line2)]" aria-hidden />
-      <ToolButton label="Frame" hint="5" onClick={onFrame}
+      <ToolButton label="Frame" hint="6" onClick={onFrame}
         icon={<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M5 2v12M11 2v12M2 5h12M2 11h12" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>} />
     </div>
   );
@@ -2191,7 +2197,9 @@ function ToolButton({
       } ${disabled ? "opacity-30 cursor-not-allowed" : ""}`}
     >
       {icon}
-      <kbd className="absolute bottom-0.5 right-1 font-mono text-[8px] leading-none text-[var(--color-fg3)]">{hint}</kbd>
+      {/* Inherit text color (currentColor) so the hint stays legible on the
+          active/accent fill — a fixed gray vanished on claude's blue bg. */}
+      <kbd className="absolute bottom-0.5 right-1 font-mono text-[8px] leading-none opacity-60">{hint}</kbd>
     </button>
   );
 }

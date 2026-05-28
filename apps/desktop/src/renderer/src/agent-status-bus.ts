@@ -40,6 +40,12 @@ export function publishStatus(e: StatusEvent): void {
 
 export function subscribeStatus(l: Listener): () => void {
   listeners.add(l);
+  // Replay the last-known status of every live tile to the NEW subscriber.
+  // publishStatus() no-ops unchanged statuses, so a tile sitting in a steady
+  // state (e.g. claude "working" for minutes) never re-emits — a panel that
+  // mounts late (the Layers rail opens on demand) would otherwise show stale
+  // "idle" until the next transition. Replay closes that gap.
+  for (const e of last.values()) l(e);
   return () => {
     listeners.delete(l);
   };
