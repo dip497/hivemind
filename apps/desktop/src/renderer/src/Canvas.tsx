@@ -105,6 +105,30 @@ const RESIZER_PROPS = {
 // useMemo rebuilds nodes with the old style and the change disappears.
 type WithResize<T> = T & { onResize: (id: string, w: number, h: number, x?: number, y?: number) => void };
 
+// Ctrl/⌘ + wheel zoom OVER a tile. Heavy tiles (terminal/diff/editor) carry
+// `.nowheel` so plain scroll reaches their content (xterm scrollback, diff,
+// editor) — but that also makes react-flow ignore the wheel entirely, so the
+// canvas couldn't zoom while the cursor was over a tile (you had to move to
+// empty space first). This intercepts the zoom gesture (ctrl/meta+wheel) and
+// zooms the canvas toward the cursor; plain wheel falls through to the tile.
+function useTileWheelZoom(): (e: React.WheelEvent) => void {
+  const { getViewport, setViewport, screenToFlowPosition } = useReactFlow();
+  return useCallback(
+    (e: React.WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return; // plain scroll → tile content
+      e.preventDefault();
+      e.stopPropagation();
+      const { x, y, zoom } = getViewport();
+      const f = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+      const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+      const next = Math.min(2.5, Math.max(0.25, zoom * factor));
+      // Keep the flow point under the cursor fixed: vp' = vp + f*(zoom - next).
+      setViewport({ x: x + f.x * (zoom - next), y: y + f.y * (zoom - next), zoom: next });
+    },
+    [getViewport, setViewport, screenToFlowPosition],
+  );
+}
+
 const TerminalNode = memo(function TerminalNode({
   id,
   data,
@@ -114,8 +138,9 @@ const TerminalNode = memo(function TerminalNode({
   data: WithResize<TerminalNodeData>;
   selected: boolean;
 }) {
+  const onWheel = useTileWheelZoom();
   return (
-    <div className={`w-full h-full${selected ? " hm-node-selected" : ""}`}>
+    <div className={`w-full h-full${selected ? " hm-node-selected" : ""}`} onWheel={onWheel}>
       <NodeResizer
         nodeId={id}
         isVisible={selected}
@@ -136,8 +161,9 @@ const DiffNode = memo(function DiffNode({
   data: WithResize<DiffNodeData>;
   selected: boolean;
 }) {
+  const onWheel = useTileWheelZoom();
   return (
-    <div className={`w-full h-full${selected ? " hm-node-selected" : ""}`}>
+    <div className={`w-full h-full${selected ? " hm-node-selected" : ""}`} onWheel={onWheel}>
       <NodeResizer
         nodeId={id}
         isVisible={selected}
@@ -160,8 +186,9 @@ const WorkbenchNode = memo(function WorkbenchNode({
   data: WithResize<WorkbenchNodeData>;
   selected: boolean;
 }) {
+  const onWheel = useTileWheelZoom();
   return (
-    <div className={`w-full h-full${selected ? " hm-node-selected" : ""}`}>
+    <div className={`w-full h-full${selected ? " hm-node-selected" : ""}`} onWheel={onWheel}>
       <NodeResizer
         nodeId={id}
         isVisible={selected}
@@ -191,8 +218,9 @@ const IssuesNode = memo(function IssuesNode({
   data: WithResize<IssuesNodeData>;
   selected: boolean;
 }) {
+  const onWheel = useTileWheelZoom();
   return (
-    <div className={`w-full h-full${selected ? " hm-node-selected" : ""}`}>
+    <div className={`w-full h-full${selected ? " hm-node-selected" : ""}`} onWheel={onWheel}>
       <NodeResizer
         nodeId={id}
         isVisible={selected}
