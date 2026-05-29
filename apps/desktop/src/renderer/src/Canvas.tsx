@@ -21,6 +21,7 @@ import { IssuesTile } from "./IssuesTile";
 import { Sparkles } from "lucide-react";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { identifyAgent } from "./agent-state";
+import { resolveFrameCollisions, nextSlotInFrame, FRAME_ROW_MAX } from "./frame-layout";
 
 /** Auto-derive a short tile name from the command. Uses identifyAgent for
  *  known agents (claude, codex, gemini, …), falls back to the basename of
@@ -617,6 +618,10 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   const frameOfRef = useRef(frameOf);
   useEffect(() => { frameOfRef.current = frameOf; }, [frameOf]);
   useEffect(() => { framesRef.current = frames; }, [frames]);
+  // The frame the user most recently touched (spawned into / dragged). The
+  // collision-separation pass keeps THIS frame fixed and pushes neighbours, so
+  // growing a frame never makes your focus jump.
+  const lastActiveFrameRef = useRef<string | null>(null);
   const repoPathRef = useRef(repoPath);
   useEffect(() => { repoPathRef.current = repoPath; }, [repoPath]);
   const rootRef = useRef(root);
@@ -793,52 +798,100 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
       kindOf.set(t.id, t.kind);
     }
 
-    setFrames((prev) => {
-      const members = new Map<string, Array<{ x: number; y: number; r: number; b: number }>>();
-      for (const tid of present) {
-        const fid = frameOf[tid];
-        if (!fid) continue;
-        const p = positions[tid];
-        if (!p) continue;
-        const k = kindOf.get(tid);
-        const s = sizes[tid] ?? (k ? defaultSizeForKind(k) : defaultTileSize(tid));
-        const arr = members.get(fid) ?? [];
-        arr.push({ x: p.x, y: p.y, r: p.x + s.width, b: p.y + s.height });
-        members.set(fid, arr);
+    // Member tile rects + ids per frame (absolute coords).
+    const memberRects = new Map<string, Array<{ x: number; y: number; r: number; b: number }>>();
+    const memberIds = new Map<string, string[]>();
+    for (const tid of present) {
+      const fid = frameOf[tid];
+      if (!fid) continue;
+      const p = positions[tid];
+      if (!p) continue;
+      const k = kindOf.get(tid);
+      const s = sizes[tid] ?? (k ? defaultSizeForKind(k) : defaultTileSize(tid));
+      const arr = memberRects.get(fid) ?? [];
+      arr.push({ x: p.x, y: p.y, r: p.x + s.width, b: p.y + s.height });
+      memberRects.set(fid, arr);
+      const ids = memberIds.get(fid) ?? [];
+      ids.push(tid);
+      memberIds.set(fid, ids);
+    }
+
+    // 1) DESIRED geometry: each frame fits its members' bbox (empty → collapse
+    //    to a placeholder at its current origin).
+    const cur = framesRef.current;
+    const desired = cur.map((f) => {
+      const mem = memberRects.get(f.id);
+      if (!mem || mem.length === 0) {
+        return { id: f.id, x: f.x, y: f.y, w: FRAME_EMPTY_W, h: FRAME_EMPTY_H };
       }
+      const minX = Math.min(...mem.map((m) => m.x));
+      const minY = Math.min(...mem.map((m) => m.y));
+      const maxR = Math.max(...mem.map((m) => m.r));
+      const maxB = Math.max(...mem.map((m) => m.b));
+      return {
+        id: f.id,
+        x: Math.round(minX - FRAME_PAD),
+        y: Math.round(minY - FRAME_HEADER),
+        w: Math.round(maxR - minX + FRAME_PAD * 2),
+        h: Math.round(maxB - minY + FRAME_HEADER + FRAME_PAD),
+      };
+    });
+
+    // 2) SEPARATE: nudge frames so none overlap, keeping the last-touched frame
+    //    fixed. Apply each frame's delta to its MEMBER TILES (absolute coords)
+    //    so the next derive lands the frame at the separated spot — and to empty
+    //    frames' origins directly (they have no members to carry them).
+    const deltas = resolveFrameCollisions(desired, lastActiveFrameRef.current);
+    const tileShifts: Record<string, { dx: number; dy: number }> = {};
+    const finalById = new Map<string, { x: number; y: number; w: number; h: number }>();
+    for (const d of desired) {
+      const del = deltas[d.id] ?? { dx: 0, dy: 0 };
+      finalById.set(d.id, { x: d.x + del.dx, y: d.y + del.dy, w: d.w, h: d.h });
+      if ((del.dx !== 0 || del.dy !== 0) && (memberIds.get(d.id)?.length ?? 0) > 0) {
+        for (const tid of memberIds.get(d.id)!) tileShifts[tid] = del;
+      }
+    }
+
+    // Commit frame geometry (2px dead-band → no churn / no self-fire loop).
+    setFrames((prev) => {
       let changed = false;
       const next = prev.map((f) => {
-        const mem = members.get(f.id);
-        let d: { x: number; y: number; w: number; h: number };
-        if (!mem || mem.length === 0) {
-          // Collapse empty frame to a placeholder (keep origin so it doesn't jump).
-          d = { x: f.x, y: f.y, w: FRAME_EMPTY_W, h: FRAME_EMPTY_H };
-        } else {
-          const minX = Math.min(...mem.map((m) => m.x));
-          const minY = Math.min(...mem.map((m) => m.y));
-          const maxR = Math.max(...mem.map((m) => m.r));
-          const maxB = Math.max(...mem.map((m) => m.b));
-          d = {
-            x: Math.round(minX - FRAME_PAD),
-            y: Math.round(minY - FRAME_HEADER),
-            w: Math.round(maxR - minX + FRAME_PAD * 2),
-            h: Math.round(maxB - minY + FRAME_HEADER + FRAME_PAD),
-          };
-        }
+        const fin = finalById.get(f.id);
+        if (!fin) return f;
         if (
-          Math.abs(d.x - f.x) < 2 && Math.abs(d.y - f.y) < 2 &&
-          Math.abs(d.w - f.w) < 2 && Math.abs(d.h - f.h) < 2
+          Math.abs(fin.x - f.x) < 2 && Math.abs(fin.y - f.y) < 2 &&
+          Math.abs(fin.w - f.w) < 2 && Math.abs(fin.h - f.h) < 2
         ) return f;
         changed = true;
-        return { ...f, ...d };
+        return { ...f, ...fin };
       });
       return changed ? next : prev;
     });
+
+    // Commit member-tile shifts (drives the NEXT derive to the separated spot;
+    // converges because once separated the resolver returns zero deltas).
+    const shiftIds = Object.keys(tileShifts);
+    if (shiftIds.length) {
+      setPositions((p) => {
+        let changed = false;
+        const np = { ...p };
+        for (const id of shiftIds) {
+          const c = p[id];
+          const s = tileShifts[id]!;
+          if (!c || (Math.abs(s.dx) < 1 && Math.abs(s.dy) < 1)) continue;
+          np[id] = { x: c.x + s.dx, y: c.y + s.dy };
+          changed = true;
+        }
+        return changed ? np : p;
+      });
+    }
   }, [positions, sizes, tiles, repoPath, frameOf]);
   // Drag synced on stop (not per-tick) — react-flow renders the live drag
   // internally via transform, we just persist the final x/y to our source-
   // of-truth state so the next render rebuilds the node at the right place.
   const moveFrame = useCallback((id: string, x: number, y: number) => {
+    // The dragged frame is the anchor — neighbours yield to where you drop it.
+    lastActiveFrameRef.current = id;
     setFrames((fs) => fs.map((f) => (f.id === id ? { ...f, x, y } : f)));
   }, []);
   // Bring a frame above all other frames. Useful when two frames overlap
@@ -1037,10 +1090,11 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // on the canvas, ask WHERE a new claude should run instead of guessing.
   const [spawnPick, setSpawnPick] = useState<{ kind: TileKind; mode?: string } | null>(null);
 
-  // Position a new tile inside a frame, snug to the RIGHT of the tiles already
-  // there (top-aligned). The frame's SIZE is no longer our concern — the
-  // reactive auto-fit effect derives it from the member bbox once this position
-  // commits. We only choose a non-overlapping spot for the new tile.
+  // Position a new tile inside a frame. Tiles pack left-to-right then WRAP to a
+  // new row past FRAME_ROW_MAX (so a frame grows DOWN, not infinitely right).
+  // The frame's SIZE is the auto-fit effect's job — it derives geometry from
+  // the member bbox once this position commits, then separates frames so the
+  // grown frame never overlaps a neighbour. We only pick the new tile's slot.
   const placeInFrame = useCallback((id: string, frame: FrameState) => {
     const padX = 24;
     const padTop = 48;
@@ -1052,26 +1106,27 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
       return k ? defaultSizeForKind(k) : defaultTileSize(tid);
     };
 
-    // Boxes of every OTHER tile whose CENTER is in this frame (matches the
-    // auto-fit membership rule).
     // Existing members of THIS frame (explicit frameOf), to pack beside.
-    const rects: Array<{ x: number; y: number; r: number; b: number }> = [];
-    const candidates = tilesRef.current.map((t) => t.id);
-    for (const tid of candidates) {
-      if (tid === id) continue;
-      if (frameOfRef.current[tid] !== frame.id) continue;
-      const p = pos[tid];
+    const members: Array<{ id: string; x: number; y: number; w: number; h: number }> = [];
+    for (const t of tilesRef.current) {
+      if (t.id === id) continue;
+      if (frameOfRef.current[t.id] !== frame.id) continue;
+      const p = pos[t.id];
       if (!p) continue;
-      const s = sizeOf(tid);
-      rects.push({ x: p.x, y: p.y, r: p.x + s.width, b: p.y + s.height });
+      const s = sizeOf(t.id);
+      members.push({ id: t.id, x: p.x, y: p.y, w: s.width, h: s.height });
     }
-
-    let placeX = frame.x + padX;
-    let placeY = frame.y + padTop;
-    if (rects.length > 0) {
-      placeX = Math.max(...rects.map((rc) => rc.r)) + gap;
-      placeY = Math.min(...rects.map((rc) => rc.y));
-    }
+    const me = sizeOf(id);
+    const slot = nextSlotInFrame(
+      { x: frame.x, y: frame.y },
+      members,
+      { w: me.width, h: me.height },
+      { padX, padTop, gap, maxRowWidth: FRAME_ROW_MAX },
+    );
+    const placeX = slot.x;
+    const placeY = slot.y;
+    // This frame is now the user's focus — keep it anchored during separation.
+    lastActiveFrameRef.current = frame.id;
 
     // Record membership EXPLICITLY + set position. The auto-fit effect grows
     // the frame to contain it (membership is no longer geometry-derived, so
@@ -1082,7 +1137,6 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     // through placeInFrame, so callers must NOT also focus/select (that fired
     // the animation twice). Center on the KNOWN coords directly (don't wait
     // for the positions ref to settle).
-    const me = sizeOf(id);
     setSelectedTileId(id);
     setFocusReq((prev) => ({ id, cx: placeX + me.width / 2, cy: placeY + me.height / 2, n: (prev?.n ?? 0) + 1 }));
   }, [repoPath]);
