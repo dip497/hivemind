@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [0.1.2] — 2026-05-30
+
 ### Added
 - **Diff: multi-line comments + full review panel.** Drag-select lines in the diff then click the gutter "+" to comment on the whole **range** (was single-line only). New collapsible **Review panel** (toggle in the diff header, badge = unresolved count) lists every comment grouped by file, unresolved-first, as threads you can **reply** to, **resolve**/reopen, **jump** to (scrolls + selects the lines), **delete**, or **send to claude** per-thread — plus "send all unresolved". Comments are a range model now (`startLine`/`endLine`/`resolved`/`replies`); old single-line comments migrate on load (unit-tested). `apps/desktop/src/renderer/src/{DiffTile,DiffReviewPanel,diff-comments}.tsx`.
 - **Figma-style Layers panel.** A collapsible left rail that lists every open tile **grouped by frame** (workspace), each with a live status dot (synced from the same `agent-status-bus` as the frame chips) and click-to-focus; click a frame group to focus the whole zone. Per-group collapse + whole-panel hide, both persisted. Defaults hidden (a small Layers pill) so it never occludes tile controls; open on demand. `apps/desktop/src/renderer/src/LayersPanel.tsx`.
@@ -101,7 +103,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/dip497/hivemind/releases/tag/v0.1.2
 [0.1.1]: https://github.com/dip497/hivemind/releases/tag/v0.1.1
 [0.1.0]: https://github.com/dip497/hivemind/releases/tag/v0.1.0
 [0.0.1]: https://github.com/dip497/hivemind/releases/tag/v0.0.1
