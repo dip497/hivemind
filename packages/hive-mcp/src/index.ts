@@ -19,27 +19,54 @@ import {
   createIssue,
   deleteIssue,
   findRoot,
+  linkIssues,
   listIssues,
+  listWorkspaces,
+  prefixOf,
+  readConfig,
   readIssue,
+  registerWorkspace,
+  resolveWorkspaceByPrefix,
+  transferIssue,
   updateIssue,
   IssueStateZ,
+  LinkTypeZ,
   type Issue,
   type IssueState,
 } from "@hivemind/core";
 import type { IssuePatch } from "@hivemind/core/storage";
 
 /** Resolve the repo root from $HIVE_ROOT (set by `hive mcp-stdio --root`)
- *  or by walking up from cwd. Throws if no .hivemind found. */
+ *  or by walking up from cwd. Throws if no .hivemind found. Also registers
+ *  the workspace so cross-repo tools elsewhere can resolve its prefix. */
 async function resolveRoot(): Promise<string> {
   const envRoot = process.env.HIVE_ROOT;
-  if (envRoot) return envRoot;
-  const root = await findRoot(process.cwd());
+  const root = envRoot ?? (await findRoot(process.cwd()));
   if (!root) {
     throw new Error(
       "no .hivemind found — set HIVE_ROOT env var or run from a repo with `.hivemind/` at or above cwd",
     );
   }
+  await registerWorkspace(root).catch(() => {});
   return root;
+}
+
+/** Resolve which workspace root owns `id`. If the id's prefix matches the
+ *  local workspace, returns `localRoot`; otherwise resolves the owning repo via
+ *  the registry — letting every tool operate on issues in OTHER repos by id
+ *  alone. Throws a clear error when the foreign workspace isn't registered. */
+async function rootForId(localRoot: string, id: string): Promise<string> {
+  const prefix = prefixOf(id);
+  if (!prefix) return localRoot; // malformed → let readIssue throw a clean error
+  const localPrefix = (await readConfig(localRoot)).prefix;
+  if (prefix === localPrefix) return localRoot;
+  const ws = await resolveWorkspaceByPrefix(prefix);
+  if (!ws) {
+    throw new Error(
+      `issue ${id} belongs to workspace '${prefix}', which isn't registered — open it in hivemind once, or run \`hive workspace register\` in that repo`,
+    );
+  }
+  return ws.root;
 }
 
 /** Compact JSON representation of an issue for tool responses (drops raw
@@ -55,6 +82,7 @@ function issueToJson(i: Issue) {
     github: i.github,
     created: i.created,
     updated: i.updated,
+    links: i.links ?? [],
     description: i.sections.description,
     acceptanceCriteria: i.sections.acceptanceCriteria,
     activity: i.sections.activity,
@@ -65,7 +93,7 @@ const TOOLS: Tool[] = [
   {
     name: "hive_get_issue",
     description:
-      "Get a single issue by id (e.g. 'PAY-42'). Returns title, state, description, acceptance criteria, recent activity, labels, assignee.",
+      "Get a single issue by id (e.g. 'PAY-42'). Works cross-repo: an id whose prefix belongs to another registered workspace is resolved automatically. Returns title, state, description, acceptance criteria, recent activity, labels, assignee, and cross-repo links.",
     inputSchema: {
       type: "object",
       properties: { id: { type: "string", description: "Issue id like 'PAY-42'" } },
@@ -75,7 +103,7 @@ const TOOLS: Tool[] = [
   {
     name: "hive_list_issues",
     description:
-      "List issues in the workspace. Optionally filter by state, label, or assignee. Returns lightweight summaries (no body).",
+      "List issues in a workspace. Optionally filter by state, label, or assignee. Pass `workspace` (a prefix like 'OPS') to list issues in ANOTHER registered repo; omit it for the current workspace. Returns lightweight summaries (no body).",
     inputSchema: {
       type: "object",
       properties: {
@@ -85,6 +113,10 @@ const TOOLS: Tool[] = [
         },
         label: { type: "string" },
         assignee: { type: "string", description: "assignee id (agent or member id)" },
+        workspace: {
+          type: "string",
+          description: "Workspace prefix to list (e.g. 'OPS'). Omit for the current repo.",
+        },
       },
     },
   },
@@ -160,7 +192,7 @@ const TOOLS: Tool[] = [
   {
     name: "hive_create_issue",
     description:
-      "Create a new issue. Returns the new issue with allocated id. Use for sub-tasks discovered during work.",
+      "Create a new issue. Returns the new issue with allocated id. Use for sub-tasks discovered during work. Put acceptance criteria in `acceptance_criteria` (a string array), NOT inside `description` — that keeps them in the dedicated checklist you can later tick with hive_mark_acceptance.",
     inputSchema: {
       type: "object",
       properties: {
@@ -168,6 +200,11 @@ const TOOLS: Tool[] = [
         description: { type: "string" },
         parent: { type: "string", description: "parent issue id for sub-tasks" },
         labels: { type: "array", items: { type: "string" } },
+        acceptance_criteria: {
+          type: "array",
+          items: { type: "string" },
+          description: "Acceptance criteria, one per item — kept as a structured checklist.",
+        },
         state: {
           type: "string",
           enum: ["backlog", "todo", "in_progress", "in_review", "done", "cancelled"],
@@ -186,6 +223,44 @@ const TOOLS: Tool[] = [
       required: ["id"],
     },
   },
+  {
+    name: "hive_list_workspaces",
+    description:
+      "List every registered hivemind workspace (other repos) with its prefix, title, and path. Use this to discover which repos you can move issues to or link against in a multi-repo setup.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "hive_move_issue",
+    description:
+      "Transfer an issue into another workspace (by destination prefix). mode 'move' deletes the source and stamps the new issue 'moved-from'; mode 'copy' keeps the source and links both with 'relates'. Refuses to move an issue that has sub-issues. Returns the new id.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Source issue id (in the current or any registered repo)" },
+        to_workspace: { type: "string", description: "Destination workspace prefix, e.g. 'OPS'" },
+        mode: { type: "string", enum: ["move", "copy"], description: "default 'move'" },
+      },
+      required: ["id", "to_workspace"],
+    },
+  },
+  {
+    name: "hive_link_issue",
+    description:
+      "Create a cross-repo (or intra-repo non-parent) link between two issues by id. The reciprocal is recorded on the other end automatically (blocks↔blocked-by, parent-of↔child-of; relates/duplicates are symmetric). For the single-repo parent hierarchy use hive_update_issue's `parent` instead.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Source issue id" },
+        other_id: { type: "string", description: "Target issue id (any registered workspace)" },
+        type: {
+          type: "string",
+          enum: ["relates", "blocks", "blocked-by", "duplicates", "parent-of", "child-of"],
+          description: "default 'relates'",
+        },
+      },
+      required: ["id", "other_id"],
+    },
+  },
 ];
 
 const GetIssueArgs = z.object({ id: z.string() });
@@ -193,6 +268,7 @@ const ListIssuesArgs = z.object({
   state: IssueStateZ.optional(),
   label: z.string().optional(),
   assignee: z.string().optional(),
+  workspace: z.string().optional(),
 });
 const SetStateArgs = z.object({ id: z.string(), state: IssueStateZ, note: z.string().optional() });
 const AddCommentArgs = z.object({ id: z.string(), message: z.string().min(1) });
@@ -217,9 +293,20 @@ const CreateIssueArgs = z.object({
   description: z.string().optional(),
   parent: z.string().optional(),
   labels: z.array(z.string()).optional(),
+  acceptance_criteria: z.array(z.string()).optional(),
   state: IssueStateZ.optional(),
 });
 const DeleteIssueArgs = z.object({ id: z.string() });
+const MoveIssueArgs = z.object({
+  id: z.string(),
+  to_workspace: z.string(),
+  mode: z.enum(["move", "copy"]).default("move"),
+});
+const LinkIssueArgs = z.object({
+  id: z.string(),
+  other_id: z.string(),
+  type: LinkTypeZ.default("relates"),
+});
 
 /** Build and return an MCP Server bound to hive-core. Caller transports it. */
 export function buildServer(): Server {
@@ -237,12 +324,19 @@ export function buildServer(): Server {
       switch (name) {
         case "hive_get_issue": {
           const { id } = GetIssueArgs.parse(args);
-          const issue = await readIssue(root, id);
+          const issue = await readIssue(await rootForId(root, id), id);
           return jsonResult(issueToJson(issue));
         }
         case "hive_list_issues": {
           const a = ListIssuesArgs.parse(args ?? {});
-          const all = await listIssues(root);
+          // `workspace` (a prefix) lists ANOTHER registered repo's issues.
+          let listRoot = root;
+          if (a.workspace) {
+            const ws = await resolveWorkspaceByPrefix(a.workspace.toUpperCase());
+            if (!ws) throw new Error(`no registered workspace with prefix '${a.workspace}'`);
+            listRoot = ws.root;
+          }
+          const all = await listIssues(listRoot);
           const filtered = all.filter((i) => {
             if (a.state && i.state !== a.state) return false;
             if (a.label && !i.labels.includes(a.label)) return false;
@@ -253,25 +347,28 @@ export function buildServer(): Server {
         }
         case "hive_set_state": {
           const a = SetStateArgs.parse(args);
+          const r = await rootForId(root, a.id);
           // updateIssue already appends a state-change activity row internally.
           // We only add an extra comment when the user supplied a note (avoids
           // duplicate "state: todo → in_progress" entries in the activity log).
-          await updateIssue(root, a.id, { state: a.state as IssueState }, actorTag());
+          await updateIssue(r, a.id, { state: a.state as IssueState }, actorTag());
           if (a.note) {
-            await commentOnIssue(root, a.id, a.note, actorTag());
+            await commentOnIssue(r, a.id, a.note, actorTag());
           }
-          const after = await readIssue(root, a.id);
+          const after = await readIssue(r, a.id);
           return jsonResult(issueToJson(after));
         }
         case "hive_add_comment": {
           const a = AddCommentArgs.parse(args);
+          const r = await rootForId(root, a.id);
           // Signature: commentOnIssue(root, id, message, who?).
-          await commentOnIssue(root, a.id, a.message, actorTag());
-          const after = await readIssue(root, a.id);
+          await commentOnIssue(r, a.id, a.message, actorTag());
+          const after = await readIssue(r, a.id);
           return jsonResult({ ok: true, activity: after.sections.activity.slice(-3) });
         }
         case "hive_update_issue": {
           const a = UpdateIssueArgs.parse(args);
+          const r = await rootForId(root, a.id);
           const patch: IssuePatch = {};
           if (a.title !== undefined) patch.title = a.title;
           if (a.description !== undefined) patch.description = a.description;
@@ -279,13 +376,14 @@ export function buildServer(): Server {
           if (a.assignee !== undefined) patch.assignee = a.assignee;
           // IssuePatch uses `undefined` (not null) to mean "clear"; map both.
           if (a.parent !== undefined) patch.parent = a.parent ?? undefined;
-          await updateIssue(root, a.id, patch, actorTag());
-          const after = await readIssue(root, a.id);
+          await updateIssue(r, a.id, patch, actorTag());
+          const after = await readIssue(r, a.id);
           return jsonResult(issueToJson(after));
         }
         case "hive_mark_acceptance": {
           const a = MarkAcceptanceArgs.parse(args);
-          const cur = await readIssue(root, a.id);
+          const r = await rootForId(root, a.id);
+          const cur = await readIssue(r, a.id);
           const ac = [...cur.sections.acceptanceCriteria];
           if (a.index >= ac.length) {
             throw new Error(
@@ -293,9 +391,9 @@ export function buildServer(): Server {
             );
           }
           ac[a.index] = { ...ac[a.index]!, done: a.done };
-          await updateIssue(root, a.id, { acceptanceCriteria: ac }, actorTag());
+          await updateIssue(r, a.id, { acceptanceCriteria: ac }, actorTag());
           await commentOnIssue(
-            root,
+            r,
             a.id,
             `acceptance[${a.index}] ${a.done ? "done" : "reopened"}: ${ac[a.index]!.text}`,
             actorTag(),
@@ -304,24 +402,45 @@ export function buildServer(): Server {
         }
         case "hive_create_issue": {
           const a = CreateIssueArgs.parse(args);
-          // createIssue opts don't include `description` — only frontmatter
-          // fields. If user provided description we add it via updateIssue after.
-          const issue = await createIssue(root, {
+          // Sub-issues must be created in the same repo as their parent; a plain
+          // issue lands in the current workspace.
+          const r = a.parent ? await rootForId(root, a.parent) : root;
+          const issue = await createIssue(r, {
             title: a.title,
             state: a.state,
             parent: a.parent,
             labels: a.labels,
+            description: a.description,
+            acceptanceCriteria: a.acceptance_criteria?.map((text) => ({ done: false, text })),
           });
-          if (a.description) {
-            await updateIssue(root, issue.id, { description: a.description }, actorTag());
-          }
-          const after = await readIssue(root, issue.id);
+          const after = await readIssue(r, issue.id);
           return jsonResult(issueToJson(after));
         }
         case "hive_delete_issue": {
           const a = DeleteIssueArgs.parse(args);
-          await deleteIssue(root, a.id);
+          await deleteIssue(await rootForId(root, a.id), a.id);
           return jsonResult({ ok: true, deleted: a.id });
+        }
+        case "hive_list_workspaces": {
+          const ws = await listWorkspaces({ persistPrune: true });
+          return jsonResult(
+            ws.map((w) => ({ prefix: w.prefix, title: w.title, repo: w.repo })),
+          );
+        }
+        case "hive_move_issue": {
+          const a = MoveIssueArgs.parse(args);
+          const r = await rootForId(root, a.id);
+          const res = await transferIssue(r, a.id, a.to_workspace.toUpperCase(), {
+            mode: a.mode,
+            actor: actorTag(),
+          });
+          return jsonResult({ ok: true, mode: res.mode, from: res.from, newId: res.newId });
+        }
+        case "hive_link_issue": {
+          const a = LinkIssueArgs.parse(args);
+          const r = await rootForId(root, a.id);
+          const res = await linkIssues(r, a.id, a.other_id, a.type, actorTag());
+          return jsonResult({ ok: true, ...res });
         }
         default:
           throw new Error(`unknown tool: ${name}`);
