@@ -25,6 +25,7 @@ import { Sparkles } from "lucide-react";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { identifyAgent } from "./agent-state";
 import { queueWork } from "./claude-bus";
+import { TileErrorBoundary } from "./TileErrorBoundary";
 import { resolveFrameCollisions, nextSlotInFrame, FRAME_ROW_MAX } from "./frame-layout";
 
 /** Auto-derive a short tile name from the command. Uses identifyAgent for
@@ -230,7 +231,9 @@ const TerminalNode = memo(function TerminalNode({
         {...RESIZER_PROPS}
         onResizeEnd={(_e, p) => data.onResize(id, p.width, p.height, p.x, p.y)}
       />
-      <TerminalTile {...data} selected={selected} />
+      <TileErrorBoundary label={data.label ?? "terminal"} onClose={data.onClose}>
+        <TerminalTile {...data} selected={selected} />
+      </TileErrorBoundary>
     </div>
   );
 });
@@ -255,9 +258,11 @@ const DiffNode = memo(function DiffNode({
         minHeight={240}
         onResizeEnd={(_e, p) => data.onResize(id, p.width, p.height, p.x, p.y)}
       />
-      <Suspense fallback={<TileLoading label="Loading diff…" />}>
-        <DiffTile {...data} />
-      </Suspense>
+      <TileErrorBoundary label="Diff" onClose={data.onClose}>
+        <Suspense fallback={<TileLoading label="Loading diff…" />}>
+          <DiffTile {...data} />
+        </Suspense>
+      </TileErrorBoundary>
     </div>
   );
 });
@@ -282,15 +287,17 @@ const WorkbenchNode = memo(function WorkbenchNode({
         minHeight={360}
         onResizeEnd={(_e, p) => data.onResize(id, p.width, p.height, p.x, p.y)}
       />
-      <Suspense fallback={<TileLoading label="Loading editor…" />}>
-        <WorkbenchTile
-          repoPath={data.repoPath}
-          tabs={data.tabs}
-          onOpenFile={data.onOpenFile}
-          onCloseTab={data.onCloseTab}
-          onClose={data.onClose}
-        />
-      </Suspense>
+      <TileErrorBoundary label="Editor" onClose={data.onClose}>
+        <Suspense fallback={<TileLoading label="Loading editor…" />}>
+          <WorkbenchTile
+            repoPath={data.repoPath}
+            tabs={data.tabs}
+            onOpenFile={data.onOpenFile}
+            onCloseTab={data.onCloseTab}
+            onClose={data.onClose}
+          />
+        </Suspense>
+      </TileErrorBoundary>
     </div>
   );
 });
@@ -315,7 +322,9 @@ const IssuesNode = memo(function IssuesNode({
         minWidth={280}
         onResizeEnd={(_e, p) => data.onResize(id, p.width, p.height, p.x, p.y)}
       />
-      <IssuesTile root={data.root} onClose={data.onClose} />
+      <TileErrorBoundary label="Issues" onClose={data.onClose}>
+        <IssuesTile root={data.root} onClose={data.onClose} />
+      </TileErrorBoundary>
     </div>
   );
 });
