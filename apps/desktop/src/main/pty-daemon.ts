@@ -109,6 +109,17 @@ function persistSnapshot(id: string, snap: SessionSnapshot): void {
 }
 function evictSnapshot(id: string): void {
   try { fs.unlinkSync(snapshotPath(id)); } catch { /* already gone */ }
+  // Also drop the tile's tracked-session entry so tile-sessions.json doesn't
+  // accumulate stale ids for killed tiles.
+  try {
+    const map = JSON.parse(fs.readFileSync(tileSessionsPath, "utf8"));
+    if (map && id in map) {
+      delete map[id];
+      const tmp = `${tileSessionsPath}.tmp`;
+      fs.writeFileSync(tmp, JSON.stringify(map));
+      fs.renameSync(tmp, tileSessionsPath);
+    }
+  } catch { /* no map yet / unreadable — nothing to clean */ }
 }
 function loadAllSnapshots(): SessionSnapshot[] {
   const out: SessionSnapshot[] = [];
