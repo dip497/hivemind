@@ -2132,13 +2132,17 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
               return copy;
             });
           }}
-          // Cull off-viewport tiles ONLY past a threshold. xyflow's guidance:
-          // culling helps with MANY nodes, but with few it adds expensive
-          // mount/unmount churn on every pan — and our tiles are heavy (xterm +
-          // WebGL context, Pierre diff). So keep all mounted for small canvases
-          // (smooth pan, no teardown), and cull once there are enough tiles that
-          // steady-state cost + WebGL-context pressure outweigh the churn.
-          onlyRenderVisibleElements={nodes.length > 8}
+          // NEVER cull off-viewport tiles. Our tiles wrap LIVE PTY sessions
+          // (claude/shell): react-flow unmounts a culled node, which tears the
+          // tile's PTY down — detach+reattach (banner + full xterm/WebGL rebuild
+          // + replay, reads as "the session restarted") in daemon mode, or an
+          // outright kill+respawn (a genuinely NEW claude session) in the
+          // in-process/non-persistent path. Spawning a new tile recenters the
+          // viewport onto it, which pushed existing claude tiles off-screen →
+          // they got culled → existing sessions were disturbed/recreated. So we
+          // keep every node mounted; xterm's WebGL addon already falls back to
+          // the DOM renderer if the GPU context cap is hit on huge boards.
+          onlyRenderVisibleElements={false}
           // Perf: skip focus rings + ARIA per tile (we manage focus inside
           // tiles ourselves via xterm/Pierre).
           nodesFocusable={false}
