@@ -32,6 +32,15 @@ const api: HiveIpc & {
     ipcRenderer.invoke("commentOnIssue", root, id, message),
   deleteIssue: (root, id) => ipcRenderer.invoke("deleteIssue", root, id),
 
+  listWorkspaces: () => ipcRenderer.invoke("listWorkspaces"),
+  resolveIssueRoot: (id) => ipcRenderer.invoke("resolveIssueRoot", id),
+  moveIssue: (root, id, destPrefix, mode) =>
+    ipcRenderer.invoke("moveIssue", root, id, destPrefix, mode),
+  linkIssue: (root, id, otherId, type) =>
+    ipcRenderer.invoke("linkIssue", root, id, otherId, type),
+  unlinkIssue: (root, id, otherId) =>
+    ipcRenderer.invoke("unlinkIssue", root, id, otherId),
+
   gitStatus: (repoPath) => ipcRenderer.invoke("gitStatus", repoPath),
   gitListFiles: (repoPath) => ipcRenderer.invoke("gitListFiles", repoPath),
   gitDiff: (repoPath, scope: DiffScope, file?: string) =>

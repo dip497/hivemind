@@ -87,6 +87,10 @@ export function App() {
   // removed — the canvas IS the workspace (issues live as the IssuesTile, the
   // ⌘K palette, and IssuePeek). No view switcher.
   const [peekId, setPeekId] = useState<string | null>(null);
+  // The workspace root the peek reads from. Defaults to the app's base root,
+  // but a cross-repo link (an id whose prefix belongs to another registered
+  // workspace) resolves to that repo's root so the peek shows the right issue.
+  const [peekRoot, setPeekRoot] = useState<string | null>(null);
   const [newOpen, setNewOpen] = useState(false);
   const [initing, setIniting] = useState(false);
   const [initOpen, setInitOpen] = useState(false);
@@ -126,7 +130,15 @@ export function App() {
   useEffect(() => {
     const onOpen = (e: Event) => {
       const id = (e as CustomEvent<string>).detail;
-      if (typeof id === "string") setPeekId(id);
+      if (typeof id !== "string") return;
+      setPeekId(id);
+      // Optimistically read from the base root; if the id belongs to another
+      // registered workspace, repoint at its root once resolved.
+      setPeekRoot(root);
+      void window.hive
+        .resolveIssueRoot(id)
+        .then((r) => { if (r.root) setPeekRoot(r.root); })
+        .catch(() => { /* fall back to base root */ });
     };
     const onNew = () => setNewOpen(true);
     // Canvas is always mounted now (canvas-only), so spawn-claude is handled
@@ -137,7 +149,7 @@ export function App() {
       window.removeEventListener("hivemind:open-issue", onOpen as EventListener);
       window.removeEventListener("hivemind:new-issue", onNew);
     };
-  }, []);
+  }, [root]);
 
   // ⌘N global shortcut to open the new-issue modal.
   useEffect(() => {
@@ -224,7 +236,7 @@ export function App() {
         </div>
       </div>
 
-      <IssuePeek root={root} id={peekId} onClose={() => setPeekId(null)} />
+      <IssuePeek root={peekRoot ?? root} id={peekId} onClose={() => setPeekId(null)} />
       <NewIssueModal
         root={root}
         open={newOpen}

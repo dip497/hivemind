@@ -1,5 +1,14 @@
 /** Typed contract for IPC between main and renderer. */
-import type { Issue, IssueSummary, IssueState, AcceptanceItem, Assignee } from "@hivemind/core/types";
+import type { Issue, IssueSummary, IssueState, AcceptanceItem, Assignee, LinkType } from "@hivemind/core/types";
+
+/** A registered workspace (subset of the core registry entry — display shape
+ *  for the renderer; avoids pulling node-only registry deps into the web tsconfig). */
+export interface WorkspaceInfo {
+  prefix: string;
+  root: string;
+  repo: string;
+  title: string;
+}
 
 /**
  * Patch shape for `updateIssue`. Duplicated from `@hivemind/core/storage`
@@ -129,11 +138,35 @@ export interface HiveIpc {
       labels?: string[];
       assignee?: Issue["assignee"];
       description?: string;
+      acceptanceCriteria?: AcceptanceItem[];
     }
   ): Promise<Issue>;
   updateIssue(root: string, id: string, patch: IssuePatch): Promise<Issue>;
   commentOnIssue(root: string, id: string, message: string): Promise<Issue>;
   deleteIssue(root: string, id: string): Promise<void>;
+
+  // ── cross-repo (registry + transfer + links) ───────────────
+  /** Every registered workspace (other repos) whose root still exists. */
+  listWorkspaces(): Promise<WorkspaceInfo[]>;
+  /** Resolve the `.hivemind` root that owns an issue id (via its prefix), or
+   *  null if its workspace isn't registered. Used to open a cross-repo link. */
+  resolveIssueRoot(id: string): Promise<{ root: string | null }>;
+  /** Transfer an issue into another workspace (by destination prefix). */
+  moveIssue(
+    root: string,
+    id: string,
+    destPrefix: string,
+    mode: "move" | "copy"
+  ): Promise<{ newId: string; mode: "move" | "copy"; from: string }>;
+  /** Cross-repo link between two issues; reciprocal recorded on the other end. */
+  linkIssue(
+    root: string,
+    id: string,
+    otherId: string,
+    type: LinkType
+  ): Promise<{ from: string; to: string; type: LinkType; reciprocal: LinkType }>;
+  /** Remove all links between two issues (both ends). */
+  unlinkIssue(root: string, id: string, otherId: string): Promise<{ removed: number }>;
 
   // ── git ───────────────────────────────────────────────────
   gitStatus(repoPath: string): Promise<GitStatusSnapshot>;

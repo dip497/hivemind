@@ -9,14 +9,21 @@ import {
   createIssue,
   deleteIssue as deleteIssueCore,
   findRoot,
+  linkIssues,
   listIssues,
+  listWorkspaces,
   readIssue,
+  registerWorkspace,
+  resolveRootForIssue,
+  transferIssue,
+  unlinkIssues,
   updateIssue,
   writeAgentContext,
   writeConfig,
   writeIssue,
   templates,
   type IssueState,
+  type LinkType,
 } from "@hivemind/core";
 import os from "node:os";
 import type { IssuePatch } from "@hivemind/core/storage";
@@ -273,6 +280,8 @@ ipcMain.handle("resolveProject", wrap(async (e, rootHint?: string) => {
   // `hive init` yet. Issues still need a real root.
   const repoPath = root ? path.dirname(root) : await findGitRoot(cwd);
   if (repoPath) watchRepo(repoPath, e.sender);
+  // Index this workspace so cross-repo move/link/open can resolve its prefix.
+  if (root) await registerWorkspace(root).catch(() => {});
   return { root, cwd, repoPath };
 }));
 
@@ -423,6 +432,30 @@ ipcMain.handle(
   }),
 );
 ipcMain.handle("listIssues", wrap(async (_e, root: string) => listIssues(root)));
+// ── cross-repo: registry + transfer + links ─────────────────────────────
+ipcMain.handle("listWorkspaces", wrap(async () => listWorkspaces({ persistPrune: true })));
+ipcMain.handle(
+  "resolveIssueRoot",
+  wrap(async (_e, id: string) => ({ root: await resolveRootForIssue(id) })),
+);
+ipcMain.handle(
+  "moveIssue",
+  wrap(async (_e, root: string, id: string, destPrefix: string, mode: "move" | "copy") =>
+    transferIssue(root, id, String(destPrefix).toUpperCase(), { mode, actor: "ui" }),
+  ),
+);
+ipcMain.handle(
+  "linkIssue",
+  wrap(async (_e, root: string, id: string, otherId: string, type: LinkType) =>
+    linkIssues(root, id, otherId, type, "ui"),
+  ),
+);
+ipcMain.handle(
+  "unlinkIssue",
+  wrap(async (_e, root: string, id: string, otherId: string) => ({
+    removed: await unlinkIssues(root, id, otherId, "ui"),
+  })),
+);
 ipcMain.handle("readIssue", wrap(async (_e, root: string, id: string) => readIssue(root, id)));
 ipcMain.handle(
   "updateIssueState",

@@ -9,7 +9,7 @@
 import { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import type { Issue, IssueSummary, IssueState } from "@hivemind/core/types";
+import type { Issue, IssueSummary, IssueState, LinkType } from "@hivemind/core/types";
 import type {
   DiffPayload,
   DiffScope,
@@ -185,6 +185,69 @@ export function useCommentOnIssue() {
       qc.invalidateQueries({ queryKey: ["issues", root] });
     },
     onError: (e, { id }) => toast.error(`comment failed: ${id}`, { description: e.message }),
+  });
+}
+
+// ── cross-repo: workspaces, transfer, links ───────────────────────────────
+
+export function useWorkspaces() {
+  return useQuery<import("../../shared/ipc").WorkspaceInfo[]>({
+    queryKey: ["workspaces"],
+    queryFn: () => window.hive.listWorkspaces(),
+    staleTime: 30_000,
+  });
+}
+
+export function useMoveIssue() {
+  const qc = useQueryClient();
+  return useMutation<
+    { newId: string; mode: "move" | "copy"; from: string },
+    Error,
+    { root: string; id: string; destPrefix: string; mode: "move" | "copy" }
+  >({
+    mutationFn: ({ root, id, destPrefix, mode }) =>
+      window.hive.moveIssue(root, id, destPrefix, mode),
+    onSuccess: (res, { root, id }) => {
+      // Source board changes on move (issue gone) or copy (reciprocal link).
+      qc.invalidateQueries({ queryKey: ["issues", root] });
+      qc.invalidateQueries({ queryKey: ["issue", root, id] });
+      qc.invalidateQueries({ queryKey: ["issues"] }); // dest repo board too
+      toast.success(`${res.mode === "copy" ? "copied" : "moved"} ${id} → ${res.newId}`);
+    },
+    onError: (e, { id }) => toast.error(`transfer failed: ${id}`, { description: e.message }),
+  });
+}
+
+export function useLinkIssue() {
+  const qc = useQueryClient();
+  return useMutation<
+    { from: string; to: string; type: LinkType; reciprocal: LinkType },
+    Error,
+    { root: string; id: string; otherId: string; type: LinkType }
+  >({
+    mutationFn: ({ root, id, otherId, type }) => window.hive.linkIssue(root, id, otherId, type),
+    onSuccess: (_res, { root, id }) => {
+      qc.invalidateQueries({ queryKey: ["issue", root, id] });
+      qc.invalidateQueries({ queryKey: ["issues"] });
+      toast.success(`linked ${id}`);
+    },
+    onError: (e, { id }) => toast.error(`link failed: ${id}`, { description: e.message }),
+  });
+}
+
+export function useUnlinkIssue() {
+  const qc = useQueryClient();
+  return useMutation<
+    { removed: number },
+    Error,
+    { root: string; id: string; otherId: string }
+  >({
+    mutationFn: ({ root, id, otherId }) => window.hive.unlinkIssue(root, id, otherId),
+    onSuccess: (_res, { root, id }) => {
+      qc.invalidateQueries({ queryKey: ["issue", root, id] });
+      qc.invalidateQueries({ queryKey: ["issues"] });
+    },
+    onError: (e, { id }) => toast.error(`unlink failed: ${id}`, { description: e.message }),
   });
 }
 

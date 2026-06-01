@@ -1,11 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import type { AcceptanceItem, IssueState } from "@hivemind/core/types";
+import type { AcceptanceItem, Issue, IssueState, LinkType } from "@hivemind/core/types";
 import {
   useCommentOnIssue,
   useDeleteIssue,
   useIssue,
+  useLinkIssue,
+  useMoveIssue,
+  useUnlinkIssue,
   useUpdateIssue,
   useUpdateState,
+  useWorkspaces,
 } from "../queries";
 import {
   STATE_COLOR,
@@ -140,6 +144,9 @@ export function IssuePeek({ root, id, onClose }: Props) {
                       })
                     }
                   />
+                </Section>
+                <Section title="Relations">
+                  <RelationsSection root={root} issue={issue} onClose={onClose} />
                 </Section>
                 <Section title="Activity">
                   {issue.sections.activity.length > 0 && (
@@ -499,6 +506,132 @@ function CommentComposer({
           {pending ? "Posting…" : "Comment"}
         </button>
       </div>
+    </div>
+  );
+}
+
+// Link types a user can set by hand (moved-to/from are provenance, set by
+// transfer). Reciprocal is recorded automatically on the other issue.
+const LINK_TYPES: LinkType[] = ["relates", "blocks", "blocked-by", "duplicates", "parent-of", "child-of"];
+
+function RelationsSection({ root, issue, onClose }: { root: string | null; issue: Issue; onClose: () => void }) {
+  const workspaces = useWorkspaces().data ?? [];
+  const move = useMoveIssue();
+  const link = useLinkIssue();
+  const unlink = useUnlinkIssue();
+  const [linking, setLinking] = useState(false);
+  const [linkId, setLinkId] = useState("");
+  const [linkType, setLinkType] = useState<LinkType>("relates");
+  const [dest, setDest] = useState("");
+
+  const links = issue.links ?? [];
+  const myPrefix = issue.id.split("-")[0];
+  const otherWorkspaces = workspaces.filter((w) => w.prefix !== myPrefix);
+
+  function submitLink() {
+    const other = linkId.trim().toUpperCase();
+    if (!root || !/^[A-Z][A-Z0-9]{1,9}-\d+(\.\d+)*$/.test(other)) return;
+    link.mutate(
+      { root, id: issue.id, otherId: other, type: linkType },
+      { onSuccess: () => { setLinkId(""); setLinking(false); } },
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {links.length > 0 ? (
+        <ul className="space-y-1">
+          {links.map((l) => (
+            <li key={`${l.id}:${l.type}`} className="group flex items-center gap-1.5 text-[12px]">
+              <span className="shrink-0 rounded px-1 py-0.5 text-[9.5px] font-mono uppercase tracking-wide bg-[var(--color-bg3)] text-[var(--color-fg3)]">
+                {l.type}
+              </span>
+              <button
+                className="font-mono text-[11.5px] text-[var(--color-info)] hover:underline truncate"
+                title={`open ${l.id}`}
+                onClick={() => window.dispatchEvent(new CustomEvent<string>("hivemind:open-issue", { detail: l.id }))}
+              >
+                {l.id}
+              </button>
+              <button
+                onClick={() => root && unlink.mutate({ root, id: issue.id, otherId: l.id })}
+                className="ml-auto opacity-0 group-hover:opacity-100 text-[var(--color-fg3)] hover:text-[var(--color-err)] text-[14px] leading-none"
+                title="Remove link"
+              >×</button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-[11.5px] text-[var(--color-fg3)] italic">No linked issues.</p>
+      )}
+
+      {linking ? (
+        <div className="flex items-center gap-1.5">
+          <input
+            autoFocus
+            value={linkId}
+            onChange={(e) => setLinkId(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") submitLink(); if (e.key === "Escape") setLinking(false); }}
+            placeholder="OTHER-ID"
+            className="flex-1 min-w-0 bg-[var(--color-bg)] border border-[var(--color-line2)] rounded px-2 py-1 text-[12px] font-mono text-[var(--color-fg)] focus:outline-none focus:border-[var(--color-brand)]"
+          />
+          <select
+            value={linkType}
+            onChange={(e) => setLinkType(e.target.value as LinkType)}
+            className="bg-[var(--color-bg)] border border-[var(--color-line2)] rounded px-1 py-1 text-[10.5px] text-[var(--color-fg2)] focus:outline-none"
+          >
+            {LINK_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+          <button
+            onClick={submitLink}
+            disabled={link.isPending}
+            className="text-[11px] px-2 py-1 rounded bg-[var(--color-brand)] text-white hover:opacity-90 disabled:opacity-40"
+          >Add</button>
+        </div>
+      ) : (
+        <button
+          onClick={() => setLinking(true)}
+          className="text-[11px] text-[var(--color-fg2)] hover:text-[var(--color-fg)] px-1.5 py-0.5 rounded border border-[var(--color-line2)] hover:bg-[var(--color-bg3)]"
+        >+ Link issue</button>
+      )}
+
+      {otherWorkspaces.length > 0 && (
+        <div className="flex items-center gap-1.5 pt-1">
+          <span className="text-[10.5px] text-[var(--color-fg3)]">Transfer:</span>
+          <select
+            value={dest}
+            onChange={(e) => setDest(e.target.value)}
+            className="bg-[var(--color-bg)] border border-[var(--color-line2)] rounded px-1 py-1 text-[10.5px] text-[var(--color-fg2)] focus:outline-none"
+          >
+            <option value="">workspace…</option>
+            {otherWorkspaces.map((w) => <option key={w.prefix} value={w.prefix}>{w.title} ({w.prefix})</option>)}
+          </select>
+          <button
+            disabled={!root || !dest || move.isPending}
+            onClick={() => root && dest && move.mutate({ root, id: issue.id, destPrefix: dest, mode: "copy" })}
+            className="text-[10.5px] px-1.5 py-1 rounded bg-[var(--color-bg3)] text-[var(--color-fg2)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg4)] disabled:opacity-40"
+            title="Copy this issue into the selected workspace (source kept, linked)"
+          >Copy</button>
+          <button
+            disabled={!root || !dest || move.isPending}
+            onClick={() =>
+              root && dest && move.mutate(
+                { root, id: issue.id, destPrefix: dest, mode: "move" },
+                {
+                  // Source is gone after a move — close this peek and open the
+                  // freshly-created issue in its new workspace.
+                  onSuccess: (res) => {
+                    onClose();
+                    setTimeout(() => window.dispatchEvent(new CustomEvent<string>("hivemind:open-issue", { detail: res.newId })), 60);
+                  },
+                },
+              )
+            }
+            className="text-[10.5px] px-1.5 py-1 rounded bg-[var(--color-bg3)] text-[var(--color-fg2)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg4)] disabled:opacity-40"
+            title="Move this issue into the selected workspace (source deleted)"
+          >Move</button>
+        </div>
+      )}
     </div>
   );
 }
