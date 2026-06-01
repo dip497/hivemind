@@ -1918,7 +1918,9 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
 
   return (
     <div className="relative h-full w-full flex flex-col">
-      <div ref={flowWrapRef} className="relative flex-1 min-h-0">
+      {/* Suppress the native context menu inside the canvas so RIGHT-mouse drag
+          pans (panOnDrag=[1,2]) instead of popping a menu that aborts the drag. */}
+      <div ref={flowWrapRef} className="relative flex-1 min-h-0" onContextMenu={(e) => e.preventDefault()}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
