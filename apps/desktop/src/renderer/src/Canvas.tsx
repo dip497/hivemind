@@ -105,36 +105,49 @@ const RESIZER_PROPS = {
 // useMemo rebuilds nodes with the old style and the change disappears.
 type WithResize<T> = T & { onResize: (id: string, w: number, h: number, x?: number, y?: number) => void };
 
-// Ctrl/⌘ + wheel zoom OVER a tile. Heavy tiles (terminal/diff/editor) carry
-// `.nowheel` so plain scroll reaches their content (xterm scrollback, diff,
-// editor) — but that also makes react-flow ignore the wheel entirely, so the
-// canvas couldn't zoom while the cursor was over a tile (you had to move to
-// empty space first). This intercepts the zoom gesture (ctrl/meta+wheel) and
-// zooms the canvas toward the cursor; plain wheel falls through to the tile.
-function useTileWheelZoom(): React.RefObject<HTMLDivElement | null> {
+// Single wheel authority for a tile, via a NATIVE non-passive CAPTURE listener
+// (React's synthetic wheel handlers are passive — preventDefault is a no-op —
+// and xterm/diff/editor consume the wheel with their own listeners before any
+// canvas logic runs). Capture + non-passive lets us decide first:
+//   • Ctrl/⌘ + wheel        → zoom the canvas toward the cursor (always).
+//   • UNSELECTED tile       → PAN the canvas (and block the tile content from
+//                             scrolling) — so trackpad/wheel moves the board
+//                             even with the cursor over a tile.
+//   • SELECTED tile         → let the content scroll (xterm scrollback / diff /
+//                             editor); just stop the canvas from also panning.
+// Click a tile to select it → it captures the wheel; click empty canvas to
+// deselect → the wheel pans the board again.
+function useTileWheelZoom(selected: boolean): React.RefObject<HTMLDivElement | null> {
   const { getViewport, setViewport, screenToFlowPosition } = useReactFlow();
   const ref = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    // NATIVE non-passive CAPTURE listener — React's synthetic wheel handlers are
-    // passive (preventDefault is a no-op) and bubble (xterm/diff consume it
-    // first). Capture + non-passive intercepts ctrl/⌘+wheel before the tile
-    // content and actually stops it so we can zoom the canvas instead.
     const onWheel = (e: WheelEvent) => {
-      if (!e.ctrlKey && !e.metaKey) return; // plain scroll → tile content
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        const { x, y, zoom } = getViewport();
+        const f = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+        const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+        const next = Math.min(2.5, Math.max(0.25, zoom * factor));
+        setViewport({ x: x + f.x * (zoom - next), y: y + f.y * (zoom - next), zoom: next });
+        return;
+      }
+      if (selected) {
+        // Let the tile content scroll; just stop react-flow from panning too.
+        e.stopPropagation();
+        return;
+      }
+      // Unselected → pan the canvas, block the content's own scroll.
       e.preventDefault();
       e.stopPropagation();
       const { x, y, zoom } = getViewport();
-      const f = screenToFlowPosition({ x: e.clientX, y: e.clientY });
-      const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
-      const next = Math.min(2.5, Math.max(0.25, zoom * factor));
-      // Keep the flow point under the cursor fixed: vp' = vp + f*(zoom - next).
-      setViewport({ x: x + f.x * (zoom - next), y: y + f.y * (zoom - next), zoom: next });
+      setViewport({ x: x - e.deltaX, y: y - e.deltaY, zoom });
     };
     el.addEventListener("wheel", onWheel, { passive: false, capture: true });
     return () => el.removeEventListener("wheel", onWheel, { capture: true });
-  }, [getViewport, setViewport, screenToFlowPosition]);
+  }, [selected, getViewport, setViewport, screenToFlowPosition]);
   return ref;
 }
 
@@ -147,9 +160,9 @@ const TerminalNode = memo(function TerminalNode({
   data: WithResize<TerminalNodeData>;
   selected: boolean;
 }) {
-  const wheelRef = useTileWheelZoom();
+  const wheelRef = useTileWheelZoom(selected);
   return (
-    <div className={`w-full h-full${selected ? " hm-node-selected nowheel" : ""}`} ref={wheelRef}>
+    <div className={`w-full h-full${selected ? " hm-node-selected" : ""}`} ref={wheelRef}>
       <NodeResizer
         nodeId={id}
         isVisible={selected}
@@ -170,9 +183,9 @@ const DiffNode = memo(function DiffNode({
   data: WithResize<DiffNodeData>;
   selected: boolean;
 }) {
-  const wheelRef = useTileWheelZoom();
+  const wheelRef = useTileWheelZoom(selected);
   return (
-    <div className={`w-full h-full${selected ? " hm-node-selected nowheel" : ""}`} ref={wheelRef}>
+    <div className={`w-full h-full${selected ? " hm-node-selected" : ""}`} ref={wheelRef}>
       <NodeResizer
         nodeId={id}
         isVisible={selected}
@@ -195,9 +208,9 @@ const WorkbenchNode = memo(function WorkbenchNode({
   data: WithResize<WorkbenchNodeData>;
   selected: boolean;
 }) {
-  const wheelRef = useTileWheelZoom();
+  const wheelRef = useTileWheelZoom(selected);
   return (
-    <div className={`w-full h-full${selected ? " hm-node-selected nowheel" : ""}`} ref={wheelRef}>
+    <div className={`w-full h-full${selected ? " hm-node-selected" : ""}`} ref={wheelRef}>
       <NodeResizer
         nodeId={id}
         isVisible={selected}
@@ -227,9 +240,9 @@ const IssuesNode = memo(function IssuesNode({
   data: WithResize<IssuesNodeData>;
   selected: boolean;
 }) {
-  const wheelRef = useTileWheelZoom();
+  const wheelRef = useTileWheelZoom(selected);
   return (
-    <div className={`w-full h-full${selected ? " hm-node-selected nowheel" : ""}`} ref={wheelRef}>
+    <div className={`w-full h-full${selected ? " hm-node-selected" : ""}`} ref={wheelRef}>
       <NodeResizer
         nodeId={id}
         isVisible={selected}
