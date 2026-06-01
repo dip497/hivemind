@@ -4,6 +4,7 @@ import path from "node:path";
 import {
   HiveError,
   findRoot,
+  registerWorkspace,
   templates,
   writeConfig,
   writeAgentContext,
@@ -72,6 +73,8 @@ export const initCmd = defineCommand({
       await fs.mkdir(path.join(root, "issues"), { recursive: true });
       await writeConfig(root, { prefix, next_id: 1, agents: {} });
       await writeAgentContext(root);
+      // Index this workspace so cross-repo move/link can resolve its prefix.
+      await registerWorkspace(root).catch(() => {});
 
       // AGENTS.md — write only if missing.
       const agentsPath = path.join(cwd, "AGENTS.md");
