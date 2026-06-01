@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-06-01
+
 ### Fixed
 - **Spawning a tile in a new frame disturbed existing claude sessions.** Off-viewport node culling (`onlyRenderVisibleElements`, on past 8 nodes) UNMOUNTS culled nodes — and our tiles wrap live PTY sessions. Each spawn recenters the viewport onto the new tile, pushing existing claude tiles off-screen → they got culled → their PTY was torn down (detach + xterm/WebGL rebuild + replay, which reads as "the session restarted") in daemon mode, or outright killed and respawned (a genuinely NEW claude session) in the in-process path. Culling is now disabled — every terminal node stays mounted regardless of viewport (xterm's WebGL addon already falls back to the DOM renderer if the GPU context cap is hit). Regression e2e: 12 tiles stay mounted past the old cull threshold and across a hard pan. `apps/desktop/src/renderer/src/Canvas.tsx`.
 - **claude session resume was unreliable with multiple frames.** Each claude tile records its live session id (to follow `/resume` switches) via a SessionStart hook. The old hook did an unsynchronized read-modify-write on a single shared `tile-sessions.json` through one fixed `.tmp` path — so when several frames' claude tiles fired their hooks at once on restart, writers lost each other's updates (reproduced: 7/24 survived) and a tile's tracked id vanished, breaking its resume. Tracking is now one file per tile (no shared state, unique tmp), so concurrent tiles can't clobber each other. The legacy map is still read as a migration fallback. `apps/desktop/src/main/tile-session-store.ts`.
@@ -139,7 +141,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/dip497/hivemind/releases/tag/v0.2.0
 [0.1.3]: https://github.com/dip497/hivemind/releases/tag/v0.1.3
 [0.1.2]: https://github.com/dip497/hivemind/releases/tag/v0.1.2
 [0.1.1]: https://github.com/dip497/hivemind/releases/tag/v0.1.1
