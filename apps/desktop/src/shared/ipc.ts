@@ -239,7 +239,10 @@ export interface AgentNotice {
   label: string;
   /** "needs" = blocked/permission/question; "done" = finished (working→idle). */
   kind: "needs" | "done";
-  /** Tile's repo cwd, if known — its basename is shown as context. */
+  /** The frame (workspace) the tile lives in — shown as context so you know
+   *  WHICH project's agent wants you. */
+  frame?: string;
+  /** Tile's repo cwd, if known — basename shown when no frame name. */
   repo?: string;
 }
 

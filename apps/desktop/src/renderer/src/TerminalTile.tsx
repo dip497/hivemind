@@ -2,9 +2,9 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
-import { identifyAgent, detectTileStatus, stabilizeClaudeStatus, type TileStatus } from "./agent-state";
+import { identifyAgent, detectTileStatus, stabilizeClaudeStatus, normalizeAgentTitle, type TileStatus } from "./agent-state";
 import { registerClaude, unregisterClaude, shouldDeliver, claimWork, clearWork, type SendToClaudeDetail } from "./claude-bus";
-import { publishStatus, clearStatus } from "./agent-status-bus";
+import { publishStatus, clearStatus, type TileStatusKind } from "./agent-status-bus";
 import { Pencil } from "lucide-react";
 
 interface Props {
@@ -14,9 +14,13 @@ interface Props {
   args?: string[];
   /** Display label for the canvas session chip / toasts (e.g. "claude #2"). */
   label?: string;
-  /** User-renamed tile name (overrides default "Terminal" header text). */
+  /** Display name: user rename ?? agent OSC title ?? auto label. Resolved by
+   *  Canvas, so it already reflects claude's live session title. */
   name?: string;
   onRename?: (id: string, name: string) => void;
+  /** Report this agent's live OSC window title (claude's task summary) so Canvas
+   *  can show it as the session name. */
+  onAgentTitle?: (id: string, title: string) => void;
   /** Clip-to-pile: open Canvas-level popover to add this tile to a pile. */
   onClose?: () => void;
   /** Tile selection — when false, xterm stdin is disabled + blurred so an
@@ -25,7 +29,7 @@ interface Props {
   selected?: boolean;
 }
 
-export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, onClose, selected }: Props) {
+export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, onAgentTitle, onClose, selected }: Props) {
   // Editable header name: starts in display mode; double-click opens input.
   // Persists via onRename → Canvas tileNames → LAYOUT_KEY localStorage.
   const [editing, setEditing] = useState(false);
@@ -75,7 +79,23 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
   // send-to-claude bus wiring claude-only.
   const agent = identifyAgent(cmd);
   const isClaude = agent === "claude";
-  const chipLabel = label ?? agent ?? cmd.split("/").slice(-1)[0] ?? "shell";
+  // The label shown on canvas chips / toasts / notifications. `name` already
+  // resolves user-rename ?? agent OSC title ?? auto label (Canvas), so the
+  // session title claude writes flows through here. Kept in a ref so the
+  // long-lived status effect always publishes the CURRENT label.
+  const effLabel = name?.trim() || label || agent || cmd.split("/").slice(-1)[0] || "shell";
+  const chipLabelRef = useRef(effLabel);
+  const lastStatusRef = useRef<TileStatusKind | null>(null);
+  // When the session name changes (claude wrote a new title, or a rename), keep
+  // the ref current and re-publish the last status under the new label so the
+  // chip / toast / pending notification re-label without waiting for the next
+  // status transition.
+  useEffect(() => {
+    chipLabelRef.current = effLabel;
+    if ((agent || lastStatusRef.current === "exited") && lastStatusRef.current) {
+      publishStatus({ tileId, label: effLabel, status: lastStatusRef.current });
+    }
+  }, [effLabel, agent, tileId]);
 
   useEffect(() => {
     // [color, label, pulse]. permission/question = needs the human (from the
@@ -104,10 +124,11 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       dot.classList.toggle("animate-pulse", pulse);
       label.textContent = text;
       label.style.color = color;
+      lastStatusRef.current = s;
       // Broadcast to the Canvas (chips / toasts / done-unseen). Only agent tiles
       // and exits are interesting — a plain shell's working/idle churn is noise.
       if (agent || s === "exited") {
-        publishStatus({ tileId, label: chipLabel, status: s });
+        publishStatus({ tileId, label: chipLabelRef.current, status: s });
       }
     };
     const markActivity = () => {
@@ -197,6 +218,16 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
     }
     fit.fit();
     termRef.current = term;
+
+    // Agents set the terminal window title (OSC 0/2) to a live task summary —
+    // claude's "session name". Surface it to Canvas as this tile's name. Skip
+    // plain shells, whose titles are noisy "user@host:cwd" chrome.
+    const offTitle = agent
+      ? term.onTitleChange((t) => {
+          const title = normalizeAgentTitle(t);
+          if (title) onAgentTitle?.(tileId, title);
+        })
+      : undefined;
 
     let cancelled = false;
     let exited = false;
@@ -341,6 +372,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       unsubData?.();
       unsubExit?.();
       unsubClaude?.();
+      offTitle?.dispose();
       clearStatus(tileId);
       clearWork(tileId);
       ro.disconnect();

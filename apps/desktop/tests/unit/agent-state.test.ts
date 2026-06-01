@@ -9,7 +9,17 @@ import {
   detectTileStatus,
   stabilizeClaudeStatus,
   CLAUDE_WORKING_HOLD_MS,
+  normalizeAgentTitle,
 } from "../../src/renderer/src/agent-state.ts";
+
+test("normalizeAgentTitle: trims, strips control chars, collapses whitespace, caps length", () => {
+  assert.equal(normalizeAgentTitle("  Refactor auth  "), "Refactor auth");
+  assert.equal(normalizeAgentTitle("Fixing\tthe\nflaky   test"), "Fixing the flaky test");
+  assert.equal(normalizeAgentTitle("\x1b]0;hi\x07"), "]0;hi"); // C0 escape byte dropped, payload kept
+  assert.equal(normalizeAgentTitle(""), "");
+  assert.equal(normalizeAgentTitle("   "), "");
+  assert.equal(normalizeAgentTitle("x".repeat(120)).length, 80);
+});
 
 test("stabilizeClaudeStatus: holds a lone idle blip, releases after the window", () => {
   const lw = { t: null as number | null };

@@ -21,12 +21,14 @@ export function composeNotice(rec: AgentNotice, focused: boolean): ComposedNotic
   if (focused) return null;
 
   const needs = rec.kind === "needs";
-  const repo = rec.repo ? path.basename(rec.repo) : "";
+  // Frame (workspace) name is the most useful context — which project wants you.
+  // Fall back to the repo basename, then to a bare verb.
+  const ctx = (rec.frame || (rec.repo ? path.basename(rec.repo) : "")).trim();
   const who = rec.label || "agent";
   return {
     title: needs ? `${who} needs you` : `${who} finished`,
-    body: repo
-      ? `${needs ? "Waiting for you" : "Done"} · ${repo}`
+    body: ctx
+      ? `${needs ? "Waiting for you" : "Done"} · ${ctx}`
       : needs
         ? "Waiting for your input"
         : "Task finished",

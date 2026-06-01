@@ -35,6 +35,16 @@ test("repo basename is appended as context when provided", () => {
   assert.equal(r.body, "Waiting for you · motadata-itsm-server");
 });
 
+test("frame name is preferred over repo as the context", () => {
+  const r = composeNotice(
+    { tileId: "t1", label: "Refactor auth", kind: "done", frame: "billing-api", repo: "/x/y/repo" },
+    false,
+  );
+  assert.ok(r);
+  assert.equal(r.title, "Refactor auth finished");
+  assert.equal(r.body, "Done · billing-api");
+});
+
 test("ignores unknown kinds and missing tileId", () => {
   // @ts-expect-error — exercising the runtime guard
   assert.equal(composeNotice({ tileId: "t1", label: "x", kind: "bogus" }, false), null);

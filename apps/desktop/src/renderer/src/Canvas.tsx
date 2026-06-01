@@ -609,7 +609,8 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // playwright: onResize callback DID fire with 460→620 px, but
   // getBoundingClientRect still read 460 because style.width won the race).
   const [sizes, setSizes] = useState<Record<string, { width: number; height: number }>>(initial.sizes);
-  // User-renamed tile labels (per tile id). Persisted with layout.
+  // User-renamed tile labels (per tile id). Persisted with layout. Holds USER
+  // renames ONLY — an absent entry means "use the auto/agent name".
   const [tileNames, setTileNames] = useState<Record<string, string>>(initial.tileNames ?? {});
   const renameTile = useCallback((id: string, name: string) => {
     const trimmed = name.trim();
@@ -622,6 +623,13 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
       if (m[id] === trimmed) return m;
       return { ...m, [id]: trimmed };
     });
+  }, []);
+  // Live agent session titles from the terminal OSC window-title (claude writes
+  // a task summary there). NOT persisted — it's a moment-to-moment overlay that
+  // a user rename (tileNames) takes precedence over. Cleared when a tile closes.
+  const [agentTitles, setAgentTitles] = useState<Record<string, string>>({});
+  const setAgentTitle = useCallback((id: string, title: string) => {
+    setAgentTitles((m) => (m[id] === title ? m : { ...m, [id]: title }));
   }, []);
   const sizesRef = useRef(sizes);
   useEffect(() => { sizesRef.current = sizes; }, [sizes]);
@@ -722,6 +730,11 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     setEditorTabs((m) => {
       if (!(id in m)) return m;
       const { [id]: _drop, ...rest } = m;
+      return rest;
+    });
+    setAgentTitles((m) => {
+      if (!(id in m)) return m;
+      const { [id]: _t, ...rest } = m;
       return rest;
     });
   }, []);
@@ -1169,7 +1182,8 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
 
   // Display-name map for FrameNode chip strip: tile id → user/auto name.
   // Memoized to keep node memoization stable.
-  const framesChipNames = useMemo(() => ({ ...tileNames }), [tileNames]);
+  // Agent title overlays the auto label; a user rename overlays both.
+  const framesChipNames = useMemo(() => ({ ...agentTitles, ...tileNames }), [agentTitles, tileNames]);
 
   // Which tile kinds currently have ≥1 instance — drives the ToolIsland active
   // highlight (the buttons now SPAWN rather than toggle, so "active" just means
@@ -1188,10 +1202,10 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     for (const t of tiles) {
       if ((t.kind === "editor" || t.kind === "diff") && !repoPath) continue;
       const kind: LayerTile["kind"] = t.kind === "shell" ? "terminal" : t.kind;
-      out.push({ id: t.id, kind, name: tileNames[t.id] ?? t.label, frameId: fo[t.id] ?? null });
+      out.push({ id: t.id, kind, name: tileNames[t.id] ?? agentTitles[t.id] ?? t.label, frameId: fo[t.id] ?? null });
     }
     return out;
-  }, [tiles, repoPath, frameOf, tileNames]);
+  }, [tiles, repoPath, frameOf, tileNames, agentTitles]);
   const focusTileFromPanel = useCallback((id: string) => {
     setSelectedTileId(id);
     focusTile(id);
@@ -1395,9 +1409,10 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
       // itself the first time it's ready (see claude-bus queueWork/claimWork) —
       // survives the picker and never races claude's startup.
       if (kind === "claude" && opts?.work) queueWork(newId, opts.work);
-      // claude/shell get a sequenced display name so two open claudes read as
-      // "claude #1" / "claude #2"; user-rename via the pencil overrides it.
-      if (cmd) setTileNames((map) => (map[newId] ? map : { ...map, [newId]: `${autoNameFromCmd(cmd!)} #${n}` }));
+      // No name is seeded: tileNames holds USER renames only. The default
+      // display name falls back to t.label ("claude #2"), and an agent's live
+      // OSC title (agentTitles) overlays it until the user renames. This keeps
+      // user names distinguishable from auto names across reloads.
     },
     [claudeMode, placeInFrame, ensureFrame, focusTile],
   );
@@ -1705,8 +1720,9 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
             cmd,
             args,
             label: t.label,
-            name: tileNames[t.id] ?? autoNameFromCmd(cmd),
+            name: tileNames[t.id] ?? agentTitles[t.id] ?? autoNameFromCmd(cmd),
             onRename: renameTile,
+            onAgentTitle: setAgentTitle,
             onResize: onNodeResizeCommit,
             onClose: () => closeTile(t.id),
           },
@@ -1749,6 +1765,8 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     unbindWorkspace,
     renameTile,
     framesChipNames,
+    agentTitles,
+    setAgentTitle,
   ]);
   // Derive selection-aware nodes from baseNodes. Shallow-clones ONLY the
   // currently-selected and previously-selected tile so other nodes keep their
@@ -2018,11 +2036,14 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
       // what's selected. Main suppresses it when the window IS focused (the
       // in-app toast above covers that case). One state machine, two surfaces.
       if (needsHuman || finished) {
+        const fid = frameOfRef.current[e.tileId];
+        const fr = fid ? framesRef.current.find((f) => f.id === fid) : undefined;
         try {
           window.hive.notifyAgent({
             tileId: e.tileId,
             label: e.label,
             kind: needsHuman ? "needs" : "done",
+            frame: fr?.title,
           });
         } catch { /* preload missing in some test harnesses */ }
       }
