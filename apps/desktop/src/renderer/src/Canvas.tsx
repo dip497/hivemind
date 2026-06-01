@@ -1533,16 +1533,23 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
         // else a bound workspace folder (workspace zone), else nothing (the
         // tile keeps the canvas's base repoPath/cwd/root).
         const zoneRepo = owner?.worktreePath ?? owner?.workspacePath;
-        const zoneRoot = owner?.worktreePath ? undefined : owner?.workspaceRoot;
+        // A workspace zone is a DIFFERENT repo bound to the frame. A worktree
+        // zone is the SAME repo on another branch (its dir has no .hivemind of
+        // its own — issues stay the project's, so it keeps the base root).
+        const isWorkspaceZone = !owner?.worktreePath && owner?.workspacePath != null;
         const bd = base.data as Record<string, unknown>;
         const data = zoneRepo
           ? {
               ...bd,
               ...("cwd" in bd ? { cwd: zoneRepo } : {}),
               ...("repoPath" in bd ? { repoPath: zoneRepo } : {}),
-              // Issues/diff/tree tiles scope by `root` (.hivemind) — point them
-              // at the zone workspace's root so they show THAT repo's data.
-              ...("root" in bd && zoneRoot != null ? { root: zoneRoot } : {}),
+              // Issues/diff/tree tiles scope by `root` (.hivemind). For a
+              // workspace zone, point them at THAT repo's root — or null when it
+              // has no workspace. CRITICAL: never fall through to the canvas
+              // base root here; that leaked the launch repo's issues into an
+              // unrelated frame (a frame bound to a repo with no .hivemind
+              // showed the launch repo's board — the cross-repo leak bug).
+              ...("root" in bd && isWorkspaceZone ? { root: owner?.workspaceRoot ?? null } : {}),
             }
           : base.data;
         return {

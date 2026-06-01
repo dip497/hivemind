@@ -413,9 +413,13 @@ ipcMain.handle(
   "installAgentic",
   wrap(async (_e, dir: string) => {
     const root = await findRoot(dir);
-    if (!root) throw new Error("no .hivemind workspace at " + dir);
+    // No-op (don't throw) when the dir has no .hivemind workspace. This handler
+    // is fired best-effort on bind / switch; a repo without `hive init` simply
+    // has nothing to install, and throwing here surfaced a noisy main-process
+    // "Error occurred in handler for 'installAgentic'" for an expected state.
+    if (!root) return { ok: false, reason: "no-workspace" as const };
     await installAgenticStack(dir, root);
-    return { ok: true };
+    return { ok: true as const };
   }),
 );
 ipcMain.handle("listIssues", wrap(async (_e, root: string) => listIssues(root)));
