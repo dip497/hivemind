@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-06-02
+
 ### Added
 - **Tiles show the agent's own session title, and notifications name the workspace.** Agents set the terminal window title (OSC 0/2) to a live summary of what they're doing — claude writes a task title like "Refactor auth". hivemind now reads it (via xterm's title event) and shows it as the tile's session name on the header, the canvas session chips, toasts, and OS notifications, instead of a generic "claude #2". A user rename still wins and persists; the agent title is a live, non-persisted overlay. OS notifications also include the **frame (workspace) name** so a background ping tells you *which* project's agent wants you. `apps/desktop/src/renderer/src/{TerminalTile,Canvas,agent-state}.tsx`, `src/main/agent-notify-core.ts`, `src/shared/ipc.ts`.
 - **Native OS notifications when an agent needs you or finishes.** When the hivemind window is unfocused, a desktop notification fires the moment any agent tile (all 15 detected CLIs, not just claude) transitions to a needs-you state (permission/question/blocked) or finishes a task (working→idle). Clicking it restores + focuses the window and flies the canvas to that tile; the window also flashes its taskbar entry until you look. The notification is driven off the existing in-app agent-status bus — one state machine, two surfaces (in-app toast when the window is focused but the tile isn't selected; OS popup when you're away) — so it is transition-deduped and covers every agent. `apps/desktop/src/main/{agent-notify,agent-notify-core}.ts`, `src/renderer/src/Canvas.tsx`.
@@ -150,7 +152,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/dip497/hivemind/releases/tag/v0.3.0
 [0.2.0]: https://github.com/dip497/hivemind/releases/tag/v0.2.0
 [0.1.3]: https://github.com/dip497/hivemind/releases/tag/v0.1.3
 [0.1.2]: https://github.com/dip497/hivemind/releases/tag/v0.1.2
