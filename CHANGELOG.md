@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [0.1.3] — 2026-06-01
+
 ### Performance
 - **Agent status polls pause when the window is hidden.** Each active agent tile scans its screen every 1.2s to update its status dot; with `backgroundThrottling` off (so PTY output keeps flowing) those scans ran even while the window was minimized, with no UI to update. They now skip when `document.hidden`. `apps/desktop/src/renderer/src/TerminalTile.tsx`.
 - **Heavy tiles load on demand (faster startup).** The diff tile (`@pierre/diffs` + its ~1.25MB WASM/cpp syntax engine) and the workbench editor (CodeMirror) are now `React.lazy` code-split, so a terminal-only session no longer pays to parse/compile them at launch — they fetch their chunk on first open (with a small "Loading…" placeholder). The WASM/cpp grammar chunks are fully out of the startup path now. (GPU accel is already tuned: async GPU-channel establishment, xterm WebGL renderer with DOM fallback, raised WebGL-context cap, no background throttling — no cargo-cult flags.) `apps/desktop/src/renderer/src/Canvas.tsx`.
@@ -115,7 +117,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/dip497/hivemind/releases/tag/v0.1.3
 [0.1.2]: https://github.com/dip497/hivemind/releases/tag/v0.1.2
 [0.1.1]: https://github.com/dip497/hivemind/releases/tag/v0.1.1
 [0.1.0]: https://github.com/dip497/hivemind/releases/tag/v0.1.0
