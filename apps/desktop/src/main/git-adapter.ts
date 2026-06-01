@@ -91,6 +91,34 @@ function spawnGit(repoPath: string, args: string[], timeoutMs: number): Promise<
   });
 }
 
+/** Of `paths` (repo-relative), the subset that a `.gitignore` rule matches —
+ *  even when the file is TRACKED. Plain `git status`/`diff` surface a file that
+ *  was committed and only LATER added to `.gitignore`, because `.gitignore`
+ *  never un-tracks; and plain `git check-ignore` reports a tracked path as NOT
+ *  ignored. `--no-index` applies the ignore rules regardless of the index, which
+ *  is what lets us hide such files from the diff / file tree. NUL-delimited I/O
+ *  so paths with spaces/newlines are safe. Best-effort: any failure (git
+ *  missing, exit 128) yields an empty set — we never hide MORE than git says. */
+async function ignoredPaths(repoPath: string, paths: string[]): Promise<Set<string>> {
+  const ignored = new Set<string>();
+  if (paths.length === 0) return ignored;
+  const out = await new Promise<string>((resolve) => {
+    // exit 0 = some ignored, 1 = none, 128 = error — all fine; we only read stdout.
+    const p = spawn("git", ["check-ignore", "--no-index", "-z", "--stdin"], {
+      cwd: repoPath,
+      env: process.env,
+    });
+    const chunks: Buffer[] = [];
+    p.stdout.on("data", (d) => chunks.push(d as Buffer));
+    p.on("error", () => resolve("")); // git not found → hide nothing
+    p.on("close", () => resolve(Buffer.concat(chunks).toString("utf8")));
+    p.stdin.on("error", () => { /* EPIPE if git exits before we finish writing */ });
+    p.stdin.end(paths.join("\0"));
+  });
+  for (const m of out.split("\0")) if (m) ignored.add(m);
+  return ignored;
+}
+
 // ── status (porcelain v2 parser) ───────────────────────────────────────
 
 const XY_TO_STATUS: Record<string, GitFileStatus> = {
@@ -211,6 +239,16 @@ export async function gitStatus(repoPath: string): Promise<GitStatusSnapshot> {
       /* not rebasing */
     }
   }
+
+  // Drop TRACKED files that match a .gitignore rule. `--ignored=no` above
+  // already hides untracked-ignored files; this hides the leftover case — a
+  // file committed before being gitignored, which git still surfaces because
+  // .gitignore can't untrack. Now the diff respects .gitignore for those too.
+  const ignored = await ignoredPaths(repoPath, snap.files.map((f) => f.path));
+  if (ignored.size) {
+    snap.files = snap.files.filter((f) => !ignored.has(f.path));
+    snap.conflictedFiles = snap.conflictedFiles.filter((p) => !ignored.has(p));
+  }
   return snap;
 }
 
@@ -241,7 +279,12 @@ export async function gitListFiles(repoPath: string): Promise<string[]> {
   for (const p of raw.split("\0")) {
     if (p) seen.add(p);
   }
-  return Array.from(seen).sort();
+  // `--exclude-standard` already drops untracked-ignored files; this also drops
+  // TRACKED files that match .gitignore (committed before being ignored), so the
+  // file tree respects .gitignore the same way the diff now does.
+  const all = Array.from(seen);
+  const ignored = await ignoredPaths(repoPath, all);
+  return all.filter((p) => !ignored.has(p)).sort();
 }
 
 /** True if `ref` resolves to a commit in this repo. Non-throwing. */

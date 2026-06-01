@@ -8,6 +8,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 ## [Unreleased]
 
 ### Fixed
+- **Diff / file tree showed gitignored files that were already tracked.** `.gitignore` only affects *untracked* files — a file committed before being added to `.gitignore` keeps showing in `git status`/`diff`, and plain `git check-ignore` reports a tracked path as "not ignored". The diff and file-tree now filter their file lists through `git check-ignore --no-index`, which applies the ignore rules regardless of tracking, so a gitignored-but-tracked file (e.g. a committed `config.json` you later added to `.gitignore`) no longer clutters the diff. Untracked-ignored files were already excluded; this closes the tracked case. `apps/desktop/src/main/git-adapter.ts`.
 - **One crashing tile no longer blacks the entire app.** Tiles are arbitrary React (xterm, the pierre diff `CodeView`, CodeMirror) and any one can throw during render — with no error boundary a single throw unmounts the whole React tree, so the entire canvas goes black (hit in practice by a diff tile). Because the layout persists, that tile reopened on every launch and re-blacked the app. Each tile is now wrapped in a `TileErrorBoundary`: a crash is isolated to that one tile (shown as a readable fallback with the error + Retry/Close), the rest of the canvas keeps working, and live PTY sessions are untouched (they live in the daemon). `apps/desktop/src/renderer/src/TileErrorBoundary.tsx`, `Canvas.tsx`.
 
 ## [0.3.0] — 2026-06-02
