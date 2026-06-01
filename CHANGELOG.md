@@ -7,6 +7,9 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Fixed
+- **Scrolling inside a selected tile (claude / diff / editor) didn't work.** The per-tile wheel handler ran in the CAPTURE phase and called `stopPropagation()` for a selected tile — which stops the event before it ever reaches the terminal/editor, so xterm scrollback and claude's mouse-reporting scroll got nothing. The handler now binds in the BUBBLE phase when the tile is selected (content scrolls first, then react-flow is blocked from also panning) and only uses the capture phase when unselected (to intercept the wheel before the content and pan the canvas). Affects every tile type via the shared `useTileWheelZoom`. `apps/desktop/src/renderer/src/Canvas.tsx`.
+
 ## [0.2.0] — 2026-06-01
 
 ### Fixed
