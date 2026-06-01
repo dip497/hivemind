@@ -169,7 +169,7 @@ const TerminalNode = memo(function TerminalNode({
         {...RESIZER_PROPS}
         onResizeEnd={(_e, p) => data.onResize(id, p.width, p.height, p.x, p.y)}
       />
-      <TerminalTile {...data} />
+      <TerminalTile {...data} selected={selected} />
     </div>
   );
 });
@@ -612,6 +612,18 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   const [selectedTileId, setSelectedTileId] = useState<string | null>(null);
   const selectedTileIdRef = useRef<string | null>(null);
   useEffect(() => { selectedTileIdRef.current = selectedTileId; }, [selectedTileId]);
+  // Keyboard gate: a tile only takes input while selected. `tile-locked`'s
+  // pointer-events:none blocks the mouse but NOT the keyboard, so a focused
+  // input (CodeMirror, an issue field, …) keeps eating keystrokes after its
+  // tile is deselected. Blur whatever's focused inside a now-unselected tile.
+  // (Terminals also self-gate via xterm disableStdin.)
+  useEffect(() => {
+    const active = document.activeElement as HTMLElement | null;
+    if (!active || active === document.body) return;
+    const node = active.closest(".react-flow__node");
+    if (!node) return;
+    if (!selectedTileId || node.getAttribute("data-id") !== selectedTileId) active.blur();
+  }, [selectedTileId]);
   // Focus mode: fitView to one node (`.`) / fit all (Esc). Reuses same nonce
   // pattern as focusReq so re-firing the same id still triggers.
   const [focusModeReq, setFocusModeReq] = useState<{ id: string | null; n: number } | null>(null);

@@ -19,9 +19,13 @@ interface Props {
   onRename?: (id: string, name: string) => void;
   /** Clip-to-pile: open Canvas-level popover to add this tile to a pile. */
   onClose?: () => void;
+  /** Tile selection — when false, xterm stdin is disabled + blurred so an
+   *  unselected tile can't receive keystrokes (pointer-events:none only blocks
+   *  the mouse, not the keyboard). Click the tile to select → typing works. */
+  selected?: boolean;
 }
 
-export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, onClose }: Props) {
+export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, onClose, selected }: Props) {
   // Editable header name: starts in display mode; double-click opens input.
   // Persists via onRename → Canvas tileNames → LAYOUT_KEY localStorage.
   const [editing, setEditing] = useState(false);
@@ -342,6 +346,18 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
     // non-persistent path where a fresh PTY at the new cwd IS the right thing.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, persistent ? [ptyId, cmd] : [ptyId, cwd, cmd]);
+
+  // Gate keyboard on selection. pointer-events:none (tile-locked) blocks the
+  // mouse but NOT the keyboard — a focused xterm keeps eating keystrokes after
+  // you deselect the tile. disableStdin makes xterm ignore input entirely when
+  // unselected; selecting re-enables + focuses so one click puts you in.
+  useEffect(() => {
+    const term = termRef.current;
+    if (!term) return;
+    term.options.disableStdin = !selected;
+    if (selected) term.focus();
+    else term.blur();
+  }, [selected]);
 
   return (
     <div className="flex h-full flex-col rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] overflow-hidden shadow-[0_8px_22px_rgba(0,0,0,0.45)]">
