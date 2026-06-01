@@ -3,7 +3,7 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { identifyAgent, detectTileStatus, stabilizeClaudeStatus, type TileStatus } from "./agent-state";
-import { registerClaude, unregisterClaude, shouldDeliver, type SendToClaudeDetail } from "./claude-bus";
+import { registerClaude, unregisterClaude, shouldDeliver, claimWork, clearWork, type SendToClaudeDetail } from "./claude-bus";
 import { publishStatus, clearStatus } from "./agent-status-bus";
 import { Pencil } from "lucide-react";
 
@@ -296,6 +296,14 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
                 : raw;
               lastReported = next;
               setStatus(next);
+              // First time claude reaches a ready input prompt, deliver any
+              // queued "Work on this" prompt to ITSELF (claimWork is one-shot).
+              // This replaces the old blind 2500ms send and waits for real
+              // readiness instead of racing claude+MCP startup.
+              if (isClaude && next === "idle") {
+                const work = claimWork(tileId);
+                if (work) window.hive.ptyWrite(ptyId, work + "\n");
+              }
             } catch { /* buffer not ready */ }
           }, 1200);
         }
@@ -334,6 +342,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       unsubExit?.();
       unsubClaude?.();
       clearStatus(tileId);
+      clearWork(tileId);
       ro.disconnect();
       try {
         // Persistent + not an explicit close → detach (keep the session alive

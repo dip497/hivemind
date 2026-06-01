@@ -24,6 +24,7 @@ import { IssuesTile } from "./IssuesTile";
 import { Sparkles } from "lucide-react";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { identifyAgent } from "./agent-state";
+import { queueWork } from "./claude-bus";
 import { resolveFrameCollisions, nextSlotInFrame, FRAME_ROW_MAX } from "./frame-layout";
 
 /** Auto-derive a short tile name from the command. Uses identifyAgent for
@@ -1214,7 +1215,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   const claudeSeqRef = useRef(0);
   // Spawn-target picker: when 2+ workspaces (base + workspace-zone frames) live
   // on the canvas, ask WHERE a new claude should run instead of guessing.
-  const [spawnPick, setSpawnPick] = useState<{ kind: TileKind; mode?: string } | null>(null);
+  const [spawnPick, setSpawnPick] = useState<{ kind: TileKind; mode?: string; work?: string } | null>(null);
 
   // Position a new tile inside a frame. Tiles pack left-to-right then WRAP to a
   // new row past FRAME_ROW_MAX (so a frame grows DOWN, not infinitely right).
@@ -1359,7 +1360,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // one-per-frame — if the frame already has one, focus it instead of making a
   // duplicate. placeInFrame lays it out + auto-grows the frame + selects/foci.
   const spawnTile = useCallback(
-    (kind: TileKind, targetFrameId: string | null, opts?: { mode?: string }): void => {
+    (kind: TileKind, targetFrameId: string | null, opts?: { mode?: string; work?: string }): void => {
       const frame = (targetFrameId ? framesRef.current.find((f) => f.id === targetFrameId) : undefined) ?? ensureFrame();
       const fid = frame.id;
       if (SINGLETON_KINDS.has(kind)) {
@@ -1390,6 +1391,10 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
       }
       placeInFrame(newId, frame);
       setTiles((cur) => [...cur, { id: newId, kind, label, cmd, args }]);
+      // "Work on this": hand the fresh claude tile its prompt. It delivers it to
+      // itself the first time it's ready (see claude-bus queueWork/claimWork) —
+      // survives the picker and never races claude's startup.
+      if (kind === "claude" && opts?.work) queueWork(newId, opts.work);
       // claude/shell get a sequenced display name so two open claudes read as
       // "claude #1" / "claude #2"; user-rename via the pencil overrides it.
       if (cmd) setTileNames((map) => (map[newId] ? map : { ...map, [newId]: `${autoNameFromCmd(cmd!)} #${n}` }));
@@ -1401,16 +1406,19 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // workspaces, ALWAYS ask which one (the picker pre-highlights the selected
   // frame but requires an explicit pick) — never silently spawn into a stale
   // selection. Single frame (or none) → spawn into it / lazily create base.
-  const spawnInto = useCallback((kind: TileKind, opts?: { mode?: string }) => {
+  const spawnInto = useCallback((kind: TileKind, opts?: { mode?: string; work?: string }) => {
     if (framesRef.current.length >= 2) {
-      setSpawnPick({ kind, mode: opts?.mode });
+      setSpawnPick({ kind, mode: opts?.mode, work: opts?.work });
       return;
     }
     spawnTile(kind, ensureFrame().id, opts);
   }, [spawnTile, ensureFrame]);
 
   // Back-compat thin wrappers for the many existing call sites.
-  const spawnClaude = useCallback((mode?: string) => spawnInto("claude", { mode }), [spawnInto]);
+  const spawnClaude = useCallback(
+    (mode?: string, work?: string) => spawnInto("claude", { mode, work }),
+    [spawnInto],
+  );
   const spawnVis = useCallback(
     (which: "tree" | "shell" | "diff" | "issues") =>
       spawnInto(which === "tree" ? "editor" : which),
@@ -1432,7 +1440,8 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   useEffect(() => {
     const onSpawn = (e: Event) => {
       const d = (e as CustomEvent).detail;
-      spawnClaude(d && typeof d === "object" ? d.mode : undefined);
+      const obj = d && typeof d === "object" ? (d as { mode?: string; work?: string }) : undefined;
+      spawnClaude(obj?.mode, obj?.work);
     };
     const onToggle = (e: Event) => {
       const which = (e as CustomEvent<"tree" | "shell" | "diff" | "issues">).detail;
@@ -2252,7 +2261,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
                     <button
                       key={f.id}
                       autoFocus={isSel}
-                      onClick={() => { spawnTile(spawnPick.kind, f.id, { mode: spawnPick.mode }); setSpawnPick(null); }}
+                      onClick={() => { spawnTile(spawnPick.kind, f.id, { mode: spawnPick.mode, work: spawnPick.work }); setSpawnPick(null); }}
                       className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[12px] text-[var(--color-fg)] hover:bg-[var(--color-bg3)] transition-colors ${
                         isSel ? "bg-[var(--color-bg3)] ring-1 ring-[var(--color-brand)]" : ""
                       }`}

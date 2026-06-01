@@ -77,15 +77,16 @@ export function IssuePeek({ root, id, onClose }: Props) {
                     if (repoDir) {
                       try { await window.hive.installAgentic(repoDir); } catch { /* best-effort */ }
                     }
-                    // 2. Spawn claude (Canvas auto-focuses + selects the new tile).
+                    // 2. Spawn claude with the work prompt ATTACHED. The tile
+                    //    delivers it to itself the first time it's ready (see
+                    //    claude-bus queueWork/claimWork) — this survives the
+                    //    workspace picker and never races claude+MCP startup,
+                    //    unlike the old blind setTimeout(2500) send-to-"latest".
                     //    The hive-work skill auto-triggers on the issue key.
-                    window.dispatchEvent(new CustomEvent("hivemind:spawn-claude"));
-                    setTimeout(() => {
-                      const prompt = `Work on ${issue.id}: load it via hive_get_issue, complete the acceptance criteria, and end with hive_set_state. Title: "${issue.title}".`;
-                      window.dispatchEvent(
-                        new CustomEvent<string>("hivemind:send-to-claude", { detail: prompt }),
-                      );
-                    }, 2500);
+                    const work = `Work on ${issue.id}: load it via hive_get_issue, complete the acceptance criteria, and end with hive_set_state. Title: "${issue.title}".`;
+                    window.dispatchEvent(
+                      new CustomEvent("hivemind:spawn-claude", { detail: { work } }),
+                    );
                     // 3. Close the peek so the focused claude tile is visible.
                     onClose();
                   }}

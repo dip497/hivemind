@@ -38,14 +38,10 @@ export function IssuesTile({ root, onClose }: Props) {
     if (repoDir) {
       try { await window.hive.installAgentic(repoDir); } catch { /* best-effort */ }
     }
-    window.dispatchEvent(new CustomEvent("hivemind:spawn-claude"));
-    setTimeout(() => {
-      window.dispatchEvent(
-        new CustomEvent<string>("hivemind:send-to-claude", {
-          detail: `Work on ${issue.id}: load it via hive_get_issue, complete the acceptance criteria, and end with hive_set_state. Title: "${issue.title}".`,
-        }),
-      );
-    }, 2500);
+    // Spawn claude with the work prompt ATTACHED — it delivers it to itself once
+    // ready (survives the workspace picker; no startup race). See claude-bus.
+    const work = `Work on ${issue.id}: load it via hive_get_issue, complete the acceptance criteria, and end with hive_set_state. Title: "${issue.title}".`;
+    window.dispatchEvent(new CustomEvent("hivemind:spawn-claude", { detail: { work } }));
   };
 
   return (
