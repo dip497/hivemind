@@ -146,7 +146,46 @@ function useTileWheelZoom(selected: boolean): React.RefObject<HTMLDivElement | n
       setViewport({ x: x - e.deltaX, y: y - e.deltaY, zoom });
     };
     el.addEventListener("wheel", onWheel, { passive: false, capture: true });
-    return () => el.removeEventListener("wheel", onWheel, { capture: true });
+
+    // Middle/right-mouse drag pans the canvas EVEN over a tile. react-flow's
+    // pane-pan only fires on the pane itself — a tile (a node) captures the
+    // pointer, so panOnDrag=[1,2] does nothing once the cursor is over a tile.
+    // Drive the pan ourselves when the tile is unselected (a selected tile keeps
+    // middle/right for its own use, e.g. terminal middle-click paste).
+    let panning = false;
+    let lastX = 0, lastY = 0;
+    const onMove = (ev: PointerEvent) => {
+      if (!panning) return;
+      const { x, y, zoom } = getViewport();
+      setViewport({ x: x + (ev.clientX - lastX), y: y + (ev.clientY - lastY), zoom });
+      lastX = ev.clientX; lastY = ev.clientY;
+    };
+    const endPan = (ev: PointerEvent) => {
+      if (!panning) return;
+      panning = false;
+      try { el.releasePointerCapture(ev.pointerId); } catch { /* already released */ }
+    };
+    const onDown = (ev: PointerEvent) => {
+      if (selected) return;                 // selected tile handles its own input
+      if (ev.button !== 1 && ev.button !== 2) return; // middle / right only
+      ev.preventDefault();
+      ev.stopPropagation();
+      panning = true;
+      lastX = ev.clientX; lastY = ev.clientY;
+      try { el.setPointerCapture(ev.pointerId); } catch { /* ignore */ }
+    };
+    el.addEventListener("pointerdown", onDown, { capture: true });
+    el.addEventListener("pointermove", onMove);
+    el.addEventListener("pointerup", endPan);
+    el.addEventListener("pointercancel", endPan);
+
+    return () => {
+      el.removeEventListener("wheel", onWheel, { capture: true });
+      el.removeEventListener("pointerdown", onDown, { capture: true });
+      el.removeEventListener("pointermove", onMove);
+      el.removeEventListener("pointerup", endPan);
+      el.removeEventListener("pointercancel", endPan);
+    };
   }, [selected, getViewport, setViewport, screenToFlowPosition]);
   return ref;
 }
