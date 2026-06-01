@@ -279,6 +279,10 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
         setStatus("idle");
         if (agent && !agentPoll) {
           agentPoll = setInterval(() => {
+            // Skip while the window is hidden/minimized — backgroundThrottling
+            // is off (keeps PTY output flowing) but there's no UI to update, so
+            // scanning every tile's screen there is wasted CPU.
+            if (typeof document !== "undefined" && document.hidden) return;
             if (!agentDirty) return; // no output since last scan → nothing changed
             agentDirty = false;
             try { setStatus(detectTileStatus(agent, readScreen())); } catch { /* buffer not ready */ }

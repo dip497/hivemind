@@ -8,6 +8,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 ## [Unreleased]
 
 ### Performance
+- **Agent status polls pause when the window is hidden.** Each active agent tile scans its screen every 1.2s to update its status dot; with `backgroundThrottling` off (so PTY output keeps flowing) those scans ran even while the window was minimized, with no UI to update. They now skip when `document.hidden`. `apps/desktop/src/renderer/src/TerminalTile.tsx`.
 - **Heavy tiles load on demand (faster startup).** The diff tile (`@pierre/diffs` + its ~1.25MB WASM/cpp syntax engine) and the workbench editor (CodeMirror) are now `React.lazy` code-split, so a terminal-only session no longer pays to parse/compile them at launch — they fetch their chunk on first open (with a small "Loading…" placeholder). The WASM/cpp grammar chunks are fully out of the startup path now. (GPU accel is already tuned: async GPU-channel establishment, xterm WebGL renderer with DOM fallback, raised WebGL-context cap, no background throttling — no cargo-cult flags.) `apps/desktop/src/renderer/src/Canvas.tsx`.
 
 ### Added
