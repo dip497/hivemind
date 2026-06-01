@@ -257,6 +257,28 @@ describe("parseSections", () => {
       { done: false, text: "todo item" },
     ]);
   });
+  test("plain `Acceptance criteria:` label inside description is split out", () => {
+    // Agents (hive_create_issue) embed the checklist under a plain label line
+    // inside the free-text description — not a `## ` heading. It must still
+    // reach the acceptanceCriteria section, and the real description must NOT
+    // include the checklist lines.
+    const s = parseSections(
+      "## Description\n\nReal desc text.\n\nAcceptance criteria:\n- [ ] first\n- [x] second\n\n## Activity\n\n- 2026-05-17 10:00 · ui · created",
+    );
+    expect(s.description).toBe("Real desc text.");
+    expect(s.acceptanceCriteria).toEqual([
+      { done: false, text: "first" },
+      { done: true, text: "second" },
+    ]);
+    expect(s.activity.length).toBe(1);
+  });
+  test("bold `**Acceptance criteria:**` label is split out", () => {
+    const s = parseSections(
+      "## Description\n\nD.\n\n**Acceptance criteria:**\n- [ ] x",
+    );
+    expect(s.description).toBe("D.");
+    expect(s.acceptanceCriteria).toEqual([{ done: false, text: "x" }]);
+  });
   test("activity entries parsed", () => {
     const s = parseSections(
       "## Activity\n\n- 2026-05-17 10:00 · sarah · created\n- 2026-05-17 11:00 · claude · changed state"

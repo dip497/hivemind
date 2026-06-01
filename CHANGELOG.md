@@ -7,6 +7,11 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Fixed
+- **Cross-repo issue leak — a frame bound to a repo with no `.hivemind` showed another repo's issues.** Issues/diff/tree tiles inside a workspace zone fall back to the canvas's base root only when the zone is a *worktree* (same repo, other branch). For a bound *workspace* zone whose repo has no `.hivemind`, the tile now scopes to `root: null` (empty board) instead of inheriting the launch repo's root — which had been rendering, e.g., the `manageark` board inside a frame labelled `motadata-itsm-server`. `apps/desktop/src/renderer/src/Canvas.tsx`.
+- **`installAgentic` no longer throws for a repo without a workspace.** Binding/switching to a repo that has never been `hive init`'d fired a best-effort `installAgentic` that threw `no .hivemind workspace at …`, surfacing a noisy main-process handler error for an entirely expected state. It now returns `{ ok: false, reason: "no-workspace" }`. `apps/desktop/src/main/index.ts`.
+- **Agent-written acceptance criteria now show in the Acceptance Criteria panel.** `hive_create_issue` only takes free-text `description`, so agents embed the checklist under a plain `Acceptance criteria:` label line (not a `## ` heading) inside the description — the parser only recognised a markdown heading, so those items stayed buried in the description and the dedicated panel showed empty. `parseSections` now also splits on a plain or bold `Acceptance criteria:` label; `serializeSections` rewrites it to a canonical heading on next save. `packages/hive-core/src/storage.ts`.
+
 ## [0.1.3] — 2026-06-01
 
 ### Performance

@@ -349,7 +349,14 @@ async function walk(dir: string, ext: string): Promise<string[]> {
 // without breaking parse. Serializer always emits `##`, so the file
 // normalises after one round-trip.
 const SEC_DESC = /^#{1,6}\s+Description\s*$/im;
-const SEC_AC = /^#{1,6}\s+Acceptance\s+criteria\s*$/im;
+// Accept a real markdown heading (`## Acceptance criteria`) OR a plain/bold
+// label line (`Acceptance criteria:` / `**Acceptance criteria:**`). Agents
+// (via hive_create_issue, which only had a free-text `description`) routinely
+// embed the checklist under a plain `Acceptance criteria:` line inside the
+// description — those items then never reached the dedicated section and the
+// board showed an empty Acceptance Criteria panel. Matching the label line
+// splits them out; serializeSections rewrites it canonically on next save.
+const SEC_AC = /^\s*(?:#{1,6}\s+|\*\*\s*)?Acceptance\s+criteria\s*:?\s*\**\s*$/im;
 const SEC_ACT = /^#{1,6}\s+Activity\s*$/im;
 
 /** Split the body into our three known sections + extra. Tolerant: missing sections become empty. */
