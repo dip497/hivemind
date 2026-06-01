@@ -1500,16 +1500,25 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
       const d = (e as CustomEvent<{ frameId: string; kind: string }>).detail;
       if (d?.frameId && d?.kind) frameOpen(d.frameId, d.kind);
     };
+    // A native agent notification was clicked → select + fly to that tile.
+    const onFocusTile = (e: Event) => {
+      const id = (e as CustomEvent<string>).detail;
+      if (!id || !tilesRef.current.some((t) => t.id === id)) return;
+      setSelectedTileId(id);
+      focusTile(id);
+    };
     window.addEventListener("hivemind:spawn-claude", onSpawn);
     window.addEventListener("hivemind:canvas-toggle", onToggle as EventListener);
     window.addEventListener("hivemind:add-frame", onAddFrame);
     window.addEventListener("hivemind:frame-open", onFrameOpen as EventListener);
+    window.addEventListener("hivemind:focus-tile", onFocusTile as EventListener);
     window.addEventListener("keydown", onKey);
     return () => {
       window.removeEventListener("hivemind:spawn-claude", onSpawn);
       window.removeEventListener("hivemind:canvas-toggle", onToggle as EventListener);
       window.removeEventListener("hivemind:add-frame", onAddFrame);
       window.removeEventListener("hivemind:frame-open", onFrameOpen as EventListener);
+      window.removeEventListener("hivemind:focus-tile", onFocusTile as EventListener);
       window.removeEventListener("keydown", onKey);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1994,6 +2003,19 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
       // (you're already looking at it). herdr does the same tab-aware suppression.
       if (!selected && (needsHuman || finished)) {
         pushToast({ tileId: e.tileId, label: e.label, status: e.status });
+      }
+      // Native OS notification for the SAME transitions, but NOT gated on
+      // selection — if the whole window is unfocused you're away regardless of
+      // what's selected. Main suppresses it when the window IS focused (the
+      // in-app toast above covers that case). One state machine, two surfaces.
+      if (needsHuman || finished) {
+        try {
+          window.hive.notifyAgent({
+            tileId: e.tileId,
+            label: e.label,
+            kind: needsHuman ? "needs" : "done",
+          });
+        } catch { /* preload missing in some test harnesses */ }
       }
     });
     return off;

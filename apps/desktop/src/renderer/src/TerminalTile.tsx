@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
-import { identifyAgent, detectTileStatus } from "./agent-state";
+import { identifyAgent, detectTileStatus, stabilizeClaudeStatus, type TileStatus } from "./agent-state";
 import { registerClaude, unregisterClaude, shouldDeliver, type SendToClaudeDetail } from "./claude-bus";
 import { publishStatus, clearStatus } from "./agent-status-bus";
 import { Pencil } from "lucide-react";
@@ -278,14 +278,25 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
         term.writeln(`\x1b[2m[hivemind] spawned ${cmd} (pid ${pid})\x1b[0m`);
         setStatus("idle");
         if (agent && !agentPoll) {
+          // Stabilizer state for claude's between-tool idle blip (see
+          // stabilizeClaudeStatus). Tracks the previous reported status and the
+          // last time work was seen, across poll ticks.
+          let lastReported: TileStatus = "idle";
+          const lastWorkingAt = { t: null as number | null };
           agentPoll = setInterval(() => {
-            // Skip while the window is hidden/minimized — backgroundThrottling
-            // is off (keeps PTY output flowing) but there's no UI to update, so
-            // scanning every tile's screen there is wasted CPU.
-            if (typeof document !== "undefined" && document.hidden) return;
+            // Keep scanning even while the window is hidden/minimized — that is
+            // exactly when an OS notification matters. Cost is bounded by
+            // agentDirty: a quiet, hidden tile never materializes its viewport.
             if (!agentDirty) return; // no output since last scan → nothing changed
             agentDirty = false;
-            try { setStatus(detectTileStatus(agent, readScreen())); } catch { /* buffer not ready */ }
+            try {
+              const raw = detectTileStatus(agent, readScreen());
+              const next = isClaude
+                ? stabilizeClaudeStatus(lastReported, raw, Date.now(), lastWorkingAt)
+                : raw;
+              lastReported = next;
+              setStatus(next);
+            } catch { /* buffer not ready */ }
           }, 1200);
         }
       } catch (e) {

@@ -57,6 +57,7 @@ import {
   worktreeRemove,
 } from "./git-adapter.js";
 import { unwatchAll, watchRepo } from "./fs-watcher.js";
+import { registerAgentNotifications } from "./agent-notify.js";
 import type {
   DiffScope,
   WorktreeCreateOpts,
@@ -188,6 +189,9 @@ async function createWindow(): Promise<void> {
   if (state.maximized) mainWindow.maximize();
   attachWinStateSaver(mainWindow);
   mainWindow.on("ready-to-show", () => mainWindow?.show());
+  // Stop the taskbar/dock attention (set by a native agent notification) the
+  // moment the user looks at the window.
+  mainWindow.on("focus", () => { try { mainWindow?.flashFrame(false); } catch { /* unsupported */ } });
 
   // xterm's Terminal captures Ctrl+K (sends ^K / VT to the PTY) via
   // preventDefault on its hidden textarea — so window-level keydown for
@@ -668,6 +672,10 @@ if (!gotLock) {
   });
   app.whenReady().then(() => {
     void createWindow();
+    // Native OS notifications for agents that need you — driven by the renderer's
+    // agent-status bus over IPC (multi-agent, transition-deduped). Reads
+    // `mainWindow` lazily; gated on window-not-focused inside the bridge.
+    registerAgentNotifications(() => mainWindow);
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) void createWindow();
     });

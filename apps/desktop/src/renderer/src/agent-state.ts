@@ -356,6 +356,39 @@ export function detectAgentState(agent: Exclude<Agent, "claude">, screen: string
 }
 
 /**
+ * Claude briefly renders its idle prompt BETWEEN tool calls — a sub-second blip
+ * that the raw scrape reads as "idle" before work resumes. Left alone that blip
+ * fires a false "finished" notification. Hold a working→idle flip for
+ * CLAUDE_WORKING_HOLD_MS: if Claude was working that recently, keep reporting
+ * working until it has been genuinely quiet for the full window. Set above the
+ * 1200ms scan interval so "finished" needs a second confirming idle scan — one
+ * lone idle poll is treated as a between-tool blip, not completion. claude-only
+ * (other detectors are already steady). `lastWorkingAt.t` mutates across polls.
+ */
+export const CLAUDE_WORKING_HOLD_MS = 2000;
+
+export function stabilizeClaudeStatus(
+  prev: TileStatus,
+  raw: TileStatus,
+  now: number,
+  lastWorkingAt: { t: number | null },
+): TileStatus {
+  if (raw === "working") {
+    lastWorkingAt.t = now;
+    return "working";
+  }
+  // Needs-human states are authoritative — never hold them back.
+  if (raw === "permission" || raw === "question" || raw === "blocked") return raw;
+  if (raw === "idle" && prev === "working") {
+    if (lastWorkingAt.t !== null && now - lastWorkingAt.t < CLAUDE_WORKING_HOLD_MS) {
+      return "working";
+    }
+    return "idle";
+  }
+  return raw;
+}
+
+/**
  * One call → the UI status bucket for any agent. Claude uses its richer
  * detector (permission/question); the rest map blocked → "blocked".
  */

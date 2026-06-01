@@ -77,6 +77,8 @@ const api: HiveIpc & {
   ptyDetach: (tileId) => ipcRenderer.send("ptyDetach", tileId),
   persistentPty: process.env.HIVEMIND_PTY_DAEMON !== "0",
 
+  notifyAgent: (notice) => ipcRenderer.send("notify:agent", notice),
+
   onPtyData: (tileId, cb) => {
     const ch = `pty:data:${tileId}`;
     const listener = (_e: unknown, data: string) => cb(data);
@@ -128,5 +130,11 @@ const api: HiveIpc & {
     return () => ipcRenderer.removeListener("open-project", listener);
   },
 };
+
+// A native agent notification was clicked → focus that tile on the canvas.
+// Bridge the IPC to the same CustomEvent the canvas already uses for fly-to.
+ipcRenderer.on("notify:focus-tile", (_e, tileId: string) => {
+  window.dispatchEvent(new CustomEvent<string>("hivemind:focus-tile", { detail: tileId }));
+});
 
 contextBridge.exposeInMainWorld("hive", api);

@@ -7,7 +7,32 @@ import {
   identifyAgent,
   detectAgentState,
   detectTileStatus,
+  stabilizeClaudeStatus,
+  CLAUDE_WORKING_HOLD_MS,
 } from "../../src/renderer/src/agent-state.ts";
+
+test("stabilizeClaudeStatus: holds a lone idle blip, releases after the window", () => {
+  const lw = { t: null as number | null };
+  // first working scan records the timestamp
+  assert.equal(stabilizeClaudeStatus("idle", "working", 1000, lw), "working");
+  assert.equal(lw.t, 1000);
+  // idle within the hold window (between-tool blip) → still working
+  assert.equal(stabilizeClaudeStatus("working", "idle", 1000 + CLAUDE_WORKING_HOLD_MS - 1, lw), "working");
+  // idle past the hold window → genuinely finished
+  assert.equal(stabilizeClaudeStatus("working", "idle", 1000 + CLAUDE_WORKING_HOLD_MS + 1, lw), "idle");
+});
+
+test("stabilizeClaudeStatus: needs-human states are never held back", () => {
+  const lw = { t: 1000 };
+  assert.equal(stabilizeClaudeStatus("working", "permission", 1100, lw), "permission");
+  assert.equal(stabilizeClaudeStatus("working", "question", 1100, lw), "question");
+  assert.equal(stabilizeClaudeStatus("working", "blocked", 1100, lw), "blocked");
+});
+
+test("stabilizeClaudeStatus: idle stays idle when not coming from working", () => {
+  const lw = { t: null as number | null };
+  assert.equal(stabilizeClaudeStatus("idle", "idle", 5000, lw), "idle");
+});
 
 test("identifyAgent: bare names + path + aliases", () => {
   assert.equal(identifyAgent("claude"), "claude");

@@ -33,15 +33,19 @@ export interface ClaudeResumeDeps {
 
 const isClaude = (spec: SpawnSpec): boolean => (spec.cmd ?? "").split("/").pop() === "claude";
 
-/** The merged SessionStart hook settings JSON for a given tile id. claude
- *  merges this with the project's own hooks (doesn't clobber e.g. claude-mem). */
+/** The merged hooks settings JSON for a tile. claude MERGES this with the
+ *  project's own hooks (doesn't clobber e.g. claude-mem). One hook:
+ *   - SessionStart → records the tile's live session id (resume tracking).
+ *  OS notifications are driven separately off the renderer's agent-status bus
+ *  (multi-agent, transition-deduped) — see agent-notify.ts — not a claude hook. */
 export function trackerSettings(deps: ClaudeResumeDeps, id: string): string {
-  const hookCmd =
+  const sessionCmd =
     `HIVEMIND_TILE='${id}' ELECTRON_RUN_AS_NODE=1 ` +
     `'${deps.execPath}' '${deps.trackerPath}' '${deps.tileSessionsDir}'`;
-  return JSON.stringify({
-    hooks: { SessionStart: [{ hooks: [{ type: "command", command: hookCmd }] }] },
-  });
+  const hooks: Record<string, unknown[]> = {
+    SessionStart: [{ hooks: [{ type: "command", command: sessionCmd }] }],
+  };
+  return JSON.stringify({ hooks });
 }
 
 /** Prepend our merged `--settings` (tracker hook) to a claude spec. Idempotent;

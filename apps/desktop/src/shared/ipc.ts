@@ -225,6 +225,22 @@ export interface HiveIpc {
   ptyDetach(tileId: string): void;
   /** True when HIVEMIND_PTY_DAEMON=1 — terminals persist across window close. */
   persistentPty: boolean;
+
+  // ── notifications ─────────────────────────────────────────
+  /** Forward a notable agent-status transition to the main process, which fires
+   *  a native OS notification IF the window is unfocused. Fire-and-forget. */
+  notifyAgent(notice: AgentNotice): void;
+}
+
+/** A notable agent-status transition worth a native OS notification. */
+export interface AgentNotice {
+  tileId: string;
+  /** Human label for the popup, e.g. "claude #2 · plan". */
+  label: string;
+  /** "needs" = blocked/permission/question; "done" = finished (working→idle). */
+  kind: "needs" | "done";
+  /** Tile's repo cwd, if known — its basename is shown as context. */
+  repo?: string;
 }
 
 export type IpcChannel =
