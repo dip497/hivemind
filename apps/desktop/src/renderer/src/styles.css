@@ -371,3 +371,16 @@ body.canvas-resizing .react-flow__node * {
   outline-offset: 2px;
   border-radius: 12px;
 }
+
+/* A tile is INERT until selected (Figma-style): its content ignores pointer
+   events so the first click selects the tile (lands on the node) rather than
+   typing into the terminal / hitting a button. The header drag-handle stays
+   live so you can still move + select a tile by its header without entering it.
+   The wheel listener lives on the wrapper (still pointer-active) so unselected-
+   tile scroll pans the canvas. Click a tile to select → content goes live. */
+.tile-locked > * {
+  pointer-events: none;
+}
+.tile-locked .tile-drag-handle {
+  pointer-events: auto;
+}
