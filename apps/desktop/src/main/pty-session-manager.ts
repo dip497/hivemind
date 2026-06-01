@@ -282,6 +282,9 @@ export class SessionManager {
     };
     this.sessions.set(id, session);
     p.onData((d) => {
+      // Stale-pty guard: after a retry respawn, the old pty may still flush a
+      // trailing chunk — it must not write to the now-retried session.
+      if (session.pty !== p) return;
       session.term.write(d);
       session.dirty = true;
       this.scheduleSnapshot(session);
@@ -298,6 +301,12 @@ export class SessionManager {
       }
     });
     p.onExit((code, signal) => {
+      // Ignore a STALE pty's late exit: tryRestoreRetry kills this pty and
+      // swaps in a fresh one (session.pty), so the kill-induced exit arrives
+      // AFTER the replacement. Without this guard it would delete the live
+      // retried session — turning the missing-JSONL recovery into "tile
+      // vanishes". (Caught by claude-resume.integration.test.ts.)
+      if (session.pty !== p) return;
       session.exited = true;
       // Timing fallback (in case the error string changed / wasn't captured):
       // a restored session that died non-zero within restoreRetryMs almost
@@ -361,12 +370,17 @@ export class SessionManager {
     session.exited = false;
     session.spawnedAt = Date.now();
     p.onData((d) => {
+      // Ignore output from a pty that's already been replaced by a later retry.
+      if (session.pty !== p) return;
       session.term.write(d);
       session.dirty = true;
       this.scheduleSnapshot(session);
       session.client?.onData(d);
     });
     p.onExit((code, signal) => {
+      // Stale-pty guard (see the spawn path) — a replaced pty's late exit must
+      // not tear down the live session.
+      if (session.pty !== p) return;
       session.exited = true;
       session.client?.onExit(code, signal);
       this.flushSnapshot(session);
