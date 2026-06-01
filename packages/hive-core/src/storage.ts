@@ -239,9 +239,13 @@ export function serializeIssue(issue: Issue): string {
     labels: issue.labels,
     assignee: issue.assignee,
     github: issue.github,
+    links: issue.links,
     created: issue.created,
     updated: issue.updated,
-  });
+  }) as Record<string, unknown>;
+  // Omit `links` entirely when empty/absent so issues without cross-repo links
+  // don't grow a noisy `links: []` line across the whole vault on first save.
+  if (!Array.isArray(fm.links) || fm.links.length === 0) delete fm.links;
   const body = serializeSections(issue.sections);
   return matter.stringify(body, fm);
 }
@@ -489,6 +493,9 @@ export interface CreateIssueOpts {
   labels?: string[];
   assignee?: Issue["assignee"];
   description?: string;
+  /** Structured acceptance criteria. Without this, agents cram the checklist
+   *  into `description` as raw `- [ ]` lines and the dedicated panel is empty. */
+  acceptanceCriteria?: AcceptanceItem[];
 }
 
 /**
@@ -518,7 +525,7 @@ export async function createIssue(root: string, opts: CreateIssueOpts): Promise<
     path: issuePath(root, finalId),
     sections: {
       description: (opts.description ?? "").trim(),
-      acceptanceCriteria: [],
+      acceptanceCriteria: opts.acceptanceCriteria ?? [],
       activity: [
         {
           at: now.replace("T", " ").slice(0, 16),

@@ -22,15 +22,48 @@ export const IsoZ = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/);
 
+/** Full issue id incl. dotted sub-issues — `PAY-42`, `PAY-1.2.3`. The prefix
+ *  (chars before `-`) names the workspace, so a full id is globally unique and
+ *  is itself the cross-repo address — no extra repo qualifier needed. */
+export const IssueIdZ = z.string().regex(/^[A-Z][A-Z0-9]{1,9}-\d+(\.\d+)*$/);
+
+/** Relationship types for cross-repo (and intra-repo non-parent) links. Each
+ *  has a reciprocal recorded on the other end (see `reciprocalLinkType`):
+ *  blocks↔blocked-by, parent-of↔child-of, moved-to↔moved-from; relates &
+ *  duplicates are symmetric. The `parent` frontmatter field stays the
+ *  single-repo hierarchy; these links span repos and express softer links. */
+export const LinkTypeZ = z.enum([
+  "relates",
+  "blocks",
+  "blocked-by",
+  "duplicates",
+  "parent-of",
+  "child-of",
+  "moved-to",
+  "moved-from",
+]);
+export type LinkType = z.infer<typeof LinkTypeZ>;
+
+export const IssueLinkZ = z.object({
+  /** Target issue id (may live in another workspace — resolve via registry). */
+  id: IssueIdZ,
+  type: LinkTypeZ.default("relates"),
+});
+export type IssueLink = z.infer<typeof IssueLinkZ>;
+
 /** YAML frontmatter schema for an issue file. */
 export const IssueFrontmatterZ = z.object({
-  id: z.string().regex(/^[A-Z][A-Z0-9]{1,9}-\d+(\.\d+)*$/),
+  id: IssueIdZ,
   title: z.string().min(1),
   state: IssueStateZ.default("backlog"),
   parent: z.string().nullable().default(null),
   labels: z.array(z.string()).default([]),
   assignee: AssigneeZ.nullable().default(null),
   github: z.number().int().positive().nullable().default(null),
+  // Cross-repo / soft links. Optional (not `.default([])`) so existing issue
+  // literals and on-disk files without the field stay valid without churn;
+  // read it as `issue.links ?? []`.
+  links: z.array(IssueLinkZ).optional(),
   created: IsoZ,
   updated: IsoZ,
 });

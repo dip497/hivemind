@@ -11,6 +11,8 @@
     "./storage": "./src/storage.ts",
     "./query": "./src/query.ts",
     "./agent-context": "./src/agent-context.ts",
+    "./registry": "./src/registry.ts",
+    "./cross-repo": "./src/cross-repo.ts",
     "./templates": "./src/templates.ts"
   },
   "scripts": {
