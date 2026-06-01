@@ -422,7 +422,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       {/* `nowheel` tells react-flow to ignore wheel events inside this element
           (default class react-flow checks for) — without it, scrolling the
           terminal pans the entire canvas. */}
-      <div ref={hostRef} className="flex-1 bg-black p-1.5 nowheel" />
+      <div ref={hostRef} className="flex-1 bg-black p-1.5" />
     </div>
   );
 }

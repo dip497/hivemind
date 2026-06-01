@@ -526,7 +526,7 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, embedded = fal
       </div>
 
       {/* editor body — nowheel so scrolling doesn't pan the canvas */}
-      <div className="relative flex-1 min-h-0 nowheel">
+      <div className="relative flex-1 min-h-0">
         {tabs.length === 0 ? (
           <div className="p-4 text-[11px] text-[var(--color-fg3)]">
             Open a file from the tree to start editing.

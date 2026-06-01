@@ -604,7 +604,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
           min-h-0) without clipping it. */}
       <WorkerPoolContextProvider poolOptions={workerPoolOptions} highlighterOptions={workerHighlighterOptions}>
        <div className="flex-1 min-h-0 flex overflow-hidden">
-        <div className="flex-1 min-h-0 flex flex-col overflow-hidden nowheel" data-pierre-tile>
+        <div className="flex-1 min-h-0 flex flex-col overflow-hidden" data-pierre-tile>
           {statusLoading && <div className="p-3 text-[11px] text-[var(--color-fg3)]">loading git status…</div>}
           {statusError && (
             <div className="p-3 text-[11px] font-mono text-[var(--color-err)]">
@@ -1066,7 +1066,7 @@ function FileView(props: { repoPath: string; file: string; onClose: () => void }
         <span className="text-[var(--color-fg3)]">· working copy</span>
         <button className="ml-auto text-[10px] text-[var(--color-fg3)]" onClick={props.onClose}>close</button>
       </div>
-      <div className="flex-1 overflow-auto nowheel">
+      <div className="flex-1 overflow-auto">
         {q.isLoading && <div className="p-3 text-[11px] text-[var(--color-fg3)]">loading {props.file}…</div>}
         {q.error && (
           <div className="p-3 text-[11px] text-[var(--color-err)] font-mono">{(q.error as Error).message}</div>

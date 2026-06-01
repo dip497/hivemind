@@ -90,7 +90,7 @@ export function WorkbenchTile({ repoPath, tabs, onOpenFile, onCloseTab, onClose 
                 tile or pan while dragging the divider. Pointer-capture tracks
                 the drag past the thin hit area. */}
             <div
-              className="nodrag nowheel shrink-0 w-1 cursor-col-resize bg-transparent hover:bg-[var(--color-brand)] active:bg-[var(--color-brand)] -mx-px relative z-10"
+              className="nodrag shrink-0 w-1 cursor-col-resize bg-transparent hover:bg-[var(--color-brand)] active:bg-[var(--color-brand)] -mx-px relative z-10"
               role="separator"
               aria-orientation="vertical"
               title="Drag to resize explorer"

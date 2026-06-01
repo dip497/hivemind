@@ -62,7 +62,7 @@ export function IssuesTile({ root, onClose }: Props) {
         >×</button>
       </div>
 
-      <div className="flex-1 overflow-auto nowheel p-2">
+      <div className="flex-1 overflow-auto p-2">
         {!root ? (
           <div className="p-3 text-[11px] text-[var(--color-fg3)]">no workspace — open a project with a .hivemind/ folder</div>
         ) : isLoading ? (

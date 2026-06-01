@@ -149,7 +149,7 @@ const TerminalNode = memo(function TerminalNode({
 }) {
   const wheelRef = useTileWheelZoom();
   return (
-    <div className={`w-full h-full${selected ? " hm-node-selected" : ""}`} ref={wheelRef}>
+    <div className={`w-full h-full${selected ? " hm-node-selected nowheel" : ""}`} ref={wheelRef}>
       <NodeResizer
         nodeId={id}
         isVisible={selected}
@@ -172,7 +172,7 @@ const DiffNode = memo(function DiffNode({
 }) {
   const wheelRef = useTileWheelZoom();
   return (
-    <div className={`w-full h-full${selected ? " hm-node-selected" : ""}`} ref={wheelRef}>
+    <div className={`w-full h-full${selected ? " hm-node-selected nowheel" : ""}`} ref={wheelRef}>
       <NodeResizer
         nodeId={id}
         isVisible={selected}
@@ -197,7 +197,7 @@ const WorkbenchNode = memo(function WorkbenchNode({
 }) {
   const wheelRef = useTileWheelZoom();
   return (
-    <div className={`w-full h-full${selected ? " hm-node-selected" : ""}`} ref={wheelRef}>
+    <div className={`w-full h-full${selected ? " hm-node-selected nowheel" : ""}`} ref={wheelRef}>
       <NodeResizer
         nodeId={id}
         isVisible={selected}
@@ -229,7 +229,7 @@ const IssuesNode = memo(function IssuesNode({
 }) {
   const wheelRef = useTileWheelZoom();
   return (
-    <div className={`w-full h-full${selected ? " hm-node-selected" : ""}`} ref={wheelRef}>
+    <div className={`w-full h-full${selected ? " hm-node-selected nowheel" : ""}`} ref={wheelRef}>
       <NodeResizer
         nodeId={id}
         isVisible={selected}

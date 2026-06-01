@@ -7,6 +7,9 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Changed
+- **Canvas scroll/pan keeps working over tiles until you select one.** Heavy tiles always carried `.nowheel`, so wheel-scroll (which pans the canvas) died whenever the cursor was over a tile — you had to find empty space to move the board. Now `.nowheel` is gated on selection (moved to the node wrapper): an **unselected** tile lets the wheel pan/zoom the canvas; **click a tile to select it** and then the wheel scrolls its content (xterm scrollback / diff / editor). Ctrl/⌘ + wheel still zooms over any tile. `apps/desktop/src/renderer/src/{Canvas,TerminalTile,DiffTile,WorkbenchTile,IssuesTile,EditorTile}.tsx`.
+
 ## [0.1.2] — 2026-05-30
 
 ### Added
