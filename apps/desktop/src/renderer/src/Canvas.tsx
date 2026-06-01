@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
 import {
   Background,
   BackgroundVariant,
@@ -13,8 +13,11 @@ import {
   type NodeTypes,
 } from "@xyflow/react";
 import { TerminalTile } from "./TerminalTile";
-import { DiffTile } from "./DiffTile";
-import { WorkbenchTile } from "./WorkbenchTile";
+// Lazy-loaded: the diff tile pulls in @pierre/diffs + its WASM/cpp syntax
+// engine (~2.7MB), and the workbench pulls in CodeMirror. Code-split so a
+// terminal-only session never pays to load them — they fetch on first open.
+const DiffTile = lazy(() => import("./DiffTile").then((m) => ({ default: m.DiffTile })));
+const WorkbenchTile = lazy(() => import("./WorkbenchTile").then((m) => ({ default: m.WorkbenchTile })));
 import { FrameNode, type FrameNodeData } from "./FrameNode";
 import { LayersPanel, type LayerTile, type LayerFrame } from "./LayersPanel";
 import { IssuesTile } from "./IssuesTile";
@@ -190,6 +193,15 @@ function useTileWheelZoom(selected: boolean): React.RefObject<HTMLDivElement | n
   return ref;
 }
 
+// Fallback shown while a lazy-loaded heavy tile (diff/editor) fetches its chunk.
+function TileLoading({ label }: { label: string }) {
+  return (
+    <div className="w-full h-full grid place-items-center rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] text-[12px] text-[var(--color-fg3)]">
+      {label}
+    </div>
+  );
+}
+
 const TerminalNode = memo(function TerminalNode({
   id,
   data,
@@ -233,7 +245,9 @@ const DiffNode = memo(function DiffNode({
         minHeight={240}
         onResizeEnd={(_e, p) => data.onResize(id, p.width, p.height, p.x, p.y)}
       />
-      <DiffTile {...data} />
+      <Suspense fallback={<TileLoading label="Loading diff…" />}>
+        <DiffTile {...data} />
+      </Suspense>
     </div>
   );
 });
@@ -258,13 +272,15 @@ const WorkbenchNode = memo(function WorkbenchNode({
         minHeight={360}
         onResizeEnd={(_e, p) => data.onResize(id, p.width, p.height, p.x, p.y)}
       />
-      <WorkbenchTile
-        repoPath={data.repoPath}
-        tabs={data.tabs}
-        onOpenFile={data.onOpenFile}
-        onCloseTab={data.onCloseTab}
-        onClose={data.onClose}
-      />
+      <Suspense fallback={<TileLoading label="Loading editor…" />}>
+        <WorkbenchTile
+          repoPath={data.repoPath}
+          tabs={data.tabs}
+          onOpenFile={data.onOpenFile}
+          onCloseTab={data.onCloseTab}
+          onClose={data.onClose}
+        />
+      </Suspense>
     </div>
   );
 });

@@ -7,6 +7,9 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Performance
+- **Heavy tiles load on demand (faster startup).** The diff tile (`@pierre/diffs` + its ~1.25MB WASM/cpp syntax engine) and the workbench editor (CodeMirror) are now `React.lazy` code-split, so a terminal-only session no longer pays to parse/compile them at launch — they fetch their chunk on first open (with a small "Loading…" placeholder). The WASM/cpp grammar chunks are fully out of the startup path now. (GPU accel is already tuned: async GPU-channel establishment, xterm WebGL renderer with DOM fallback, raised WebGL-context cap, no background throttling — no cargo-cult flags.) `apps/desktop/src/renderer/src/Canvas.tsx`.
+
 ### Added
 - **Tracks each claude tile's LIVE session — resume follows `/resume` switches.** hivemind spawned `claude --session-id <uuid>` and resumed that fixed id, so if you switched the active session inside a tile (`/resume <other>`, `--continue`, or claude reassigning its id) a restart resumed the *original*, not what you were actually in. The daemon now injects a **merged** SessionStart hook (fires on start/resume/clear, doesn't clobber existing hooks like claude-mem) that records `tileId → live session_id` into `<userData>/tile-sessions.json`; restore prefers that tracked id (`--resume <live>`). The tile id is baked into the hook command so it's correct even with several claude tiles in one cwd. Proven end-to-end through the daemon. `apps/desktop/src/main/{pty-daemon,pty-session-manager}.ts`.
 
