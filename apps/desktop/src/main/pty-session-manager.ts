@@ -132,13 +132,13 @@ export interface SessionManagerOptions {
    *  reboot replay isn't just a screen image but an actual resume of the
    *  agent's task. If unset, the original spec is used verbatim (the user
    *  sees their last screen but the agent forgets prior context). */
-  transformSpecOnRestore?: (spec: SpawnSpec) => SpawnSpec;
+  transformSpecOnRestore?: (spec: SpawnSpec, id: string) => SpawnSpec;
   /** OPTIONAL — transform the SpawnSpec when spawning a BRAND-NEW session.
    *  Used to inject e.g. `--session-id <uuid>` for claude so the snapshot
    *  remembers the binding and restore can `--resume <uuid>` deterministically.
    *  Applied BEFORE the spec is stored on the session, so the value survives
    *  into snapshots. */
-  transformSpecOnSpawn?: (spec: SpawnSpec) => SpawnSpec;
+  transformSpecOnSpawn?: (spec: SpawnSpec, id: string) => SpawnSpec;
   /** OPTIONAL — if a RESTORED session (frozen → live) exits with non-zero
    *  within `restoreRetryMs`, the manager respawns it ONCE using this
    *  transform. Lets claude's `--resume <uuid>` fall back to
@@ -178,8 +178,8 @@ export class SessionManager {
   private readonly onSnapshot?: (id: string, snap: SessionSnapshot) => void;
   private readonly onSnapshotEvict?: (id: string) => void;
   private readonly snapshotDebounceMs: number;
-  private readonly transformSpecOnRestore?: (spec: SpawnSpec) => SpawnSpec;
-  private readonly transformSpecOnSpawn?: (spec: SpawnSpec) => SpawnSpec;
+  private readonly transformSpecOnRestore?: (spec: SpawnSpec, id: string) => SpawnSpec;
+  private readonly transformSpecOnSpawn?: (spec: SpawnSpec, id: string) => SpawnSpec;
   private readonly restoreRetryTransform?: (spec: SpawnSpec) => SpawnSpec | null;
   private readonly restoreRetryMs: number;
 
@@ -240,12 +240,12 @@ export class SessionManager {
       ? { ...frozenSnap.spec, cols: spec.cols, rows: spec.rows }
       : spec;
     if (frozenSnap && this.transformSpecOnRestore) {
-      effectiveSpec = this.transformSpecOnRestore(effectiveSpec);
+      effectiveSpec = this.transformSpecOnRestore(effectiveSpec, id);
     } else if (!frozenSnap && this.transformSpecOnSpawn) {
       // Brand-new session: inject e.g. `--session-id <uuid>` BEFORE the spec
       // is stored on the session — snapshots persist this so future restores
       // can swap `--session-id` → `--resume <uuid>` for deterministic resume.
-      effectiveSpec = this.transformSpecOnSpawn(effectiveSpec);
+      effectiveSpec = this.transformSpecOnSpawn(effectiveSpec, id);
     }
     const p = this.factory(effectiveSpec);
     const term = new HeadlessTerminal({

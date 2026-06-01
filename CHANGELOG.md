@@ -7,6 +7,9 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Added
+- **Tracks each claude tile's LIVE session — resume follows `/resume` switches.** hivemind spawned `claude --session-id <uuid>` and resumed that fixed id, so if you switched the active session inside a tile (`/resume <other>`, `--continue`, or claude reassigning its id) a restart resumed the *original*, not what you were actually in. The daemon now injects a **merged** SessionStart hook (fires on start/resume/clear, doesn't clobber existing hooks like claude-mem) that records `tileId → live session_id` into `<userData>/tile-sessions.json`; restore prefers that tracked id (`--resume <live>`). The tile id is baked into the hook command so it's correct even with several claude tiles in one cwd. Proven end-to-end through the daemon. `apps/desktop/src/main/{pty-daemon,pty-session-manager}.ts`.
+
 ### Changed
 - **Canvas scroll/pan keeps working over tiles until you select one.** Heavy tiles always carried `.nowheel`, so wheel-scroll (which pans the canvas) died whenever the cursor was over a tile — you had to find empty space to move the board. Now `.nowheel` is gated on selection (moved to the node wrapper): an **unselected** tile lets the wheel pan/zoom the canvas; **click a tile to select it** and then the wheel scrolls its content (xterm scrollback / diff / editor). Ctrl/⌘ + wheel still zooms over any tile. `apps/desktop/src/renderer/src/{Canvas,TerminalTile,DiffTile,WorkbenchTile,IssuesTile,EditorTile}.tsx`.
 
