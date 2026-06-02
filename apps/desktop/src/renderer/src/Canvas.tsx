@@ -142,17 +142,23 @@ function useTileWheelZoom(selected: boolean): React.RefObject<HTMLDivElement | n
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
+    // Ctrl/Cmd+wheel ZOOMS the canvas — even over a tile and even when the tile
+    // is selected. Runs in the CAPTURE phase (always) so it beats xterm's own
+    // wheel handler; otherwise a selected terminal would scroll instead of zoom.
+    const onZoom = (e: WheelEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const { x, y, zoom } = getViewport();
+      const f = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+      const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+      const next = Math.min(2.5, Math.max(0.25, zoom * factor));
+      setViewport({ x: x + f.x * (zoom - next), y: y + f.y * (zoom - next), zoom: next });
+    };
+    el.addEventListener("wheel", onZoom, { passive: false, capture: true });
+
     const onWheel = (e: WheelEvent) => {
-      if (e.ctrlKey || e.metaKey) {
-        e.preventDefault();
-        e.stopPropagation();
-        const { x, y, zoom } = getViewport();
-        const f = screenToFlowPosition({ x: e.clientX, y: e.clientY });
-        const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
-        const next = Math.min(2.5, Math.max(0.25, zoom * factor));
-        setViewport({ x: x + f.x * (zoom - next), y: y + f.y * (zoom - next), zoom: next });
-        return;
-      }
+      if (e.ctrlKey || e.metaKey) return; // zoom handled by onZoom (capture phase)
       if (selected) {
         // Selected: this listener runs in the BUBBLE phase (capture:false
         // below), so xterm/diff/editor has ALREADY received + handled the
@@ -208,6 +214,7 @@ function useTileWheelZoom(selected: boolean): React.RefObject<HTMLDivElement | n
     el.addEventListener("pointercancel", endPan);
 
     return () => {
+      el.removeEventListener("wheel", onZoom, { capture: true });
       el.removeEventListener("wheel", onWheel, { capture: !selected });
       el.removeEventListener("pointerdown", onDown, { capture: true });
       el.removeEventListener("pointermove", onMove);

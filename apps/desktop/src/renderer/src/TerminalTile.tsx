@@ -296,6 +296,36 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       window.hive.ptyWrite(ptyId, d);
     });
     term.onResize(({ cols, rows }) => window.hive.ptyResize(ptyId, cols, rows));
+    // Clipboard: xterm does NOT copy/paste on its own (Ctrl+C just sends SIGINT).
+    // Wire the standard terminal behavior:
+    //   • Cmd/Ctrl(+Shift)+C → copy the selection (and clear it, so a second
+    //     press still sends SIGINT). Plain Ctrl+C with NOTHING selected falls
+    //     through to the PTY as ^C. This is the VS Code / Windows Terminal rule.
+    //   • Cmd/Ctrl(+Shift)+V → paste (term.paste respects bracketed-paste mode).
+    // Returning false stops xterm from also forwarding the key to the PTY.
+    term.attachCustomKeyEventHandler((e) => {
+      if (e.type !== "keydown") return true;
+      if (!(e.ctrlKey || e.metaKey)) return true;
+      const k = e.key.toLowerCase();
+      if (k === "c") {
+        const sel = term.getSelection();
+        if (sel) {
+          e.preventDefault();
+          void navigator.clipboard.writeText(sel).catch(() => {});
+          term.clearSelection();
+          return false; // copied → don't send ^C
+        }
+        return true; // nothing selected → ^C / SIGINT
+      }
+      if (k === "v") {
+        e.preventDefault(); // stop the browser pasting into xterm's helper textarea too
+        void navigator.clipboard.readText().then((t) => {
+          if (t && !exited) term.paste(t);
+        }).catch(() => {});
+        return false;
+      }
+      return true;
+    });
     // Cross-tile bus: if this PTY is a claude session, accept ADDRESSED text
     // (see claude-bus.ts). Registering makes this the "latest" claude so a
     // bare/`latest` send lands here only — no more broadcast to every agent.
