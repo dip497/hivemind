@@ -2,10 +2,23 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
+import { WebLinksAddon } from "@xterm/addon-web-links";
 import { identifyAgent, detectTileStatus, stabilizeClaudeStatus, normalizeAgentTitle, type TileStatus } from "./agent-state";
 import { registerClaude, unregisterClaude, shouldDeliver, claimWork, clearWork, type SendToClaudeDetail } from "./claude-bus";
 import { publishStatus, clearStatus, type TileStatusKind } from "./agent-status-bus";
 import { Pencil } from "lucide-react";
+
+/** Open a terminal link in the OS browser. window.open is intercepted by main's
+ *  setWindowOpenHandler → shell.openExternal (and the in-app navigation denied),
+ *  so no popup window appears. Only http(s) — never file:/ javascript: etc. */
+function openExternalLink(uri: string): void {
+  try {
+    const u = new URL(uri);
+    if (u.protocol === "http:" || u.protocol === "https:") {
+      window.open(uri, "_blank", "noopener,noreferrer");
+    }
+  } catch { /* not a parseable URL — ignore */ }
+}
 
 interface Props {
   tileId: string;
@@ -194,6 +207,12 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       minimumContrastRatio: 4.5,          // auto-adjust low-contrast cells to WCAG AA
                                           // (color only — doesn't affect sharpness)
       letterSpacing: 0,
+      // OSC 8 hyperlinks (claude emits these) → open in the OS browser. Plain
+      // http(s) URLs are handled by WebLinksAddon below; both route through
+      // window.open, which main's setWindowOpenHandler sends to shell.openExternal.
+      linkHandler: {
+        activate: (_e, uri) => openExternalLink(uri),
+      },
       // Rescale glyphs that overflow their cell (powerline, wide Unicode,
       // ligature-ish forms) instead of letting them clip/smear — sharper edges.
       rescaleOverlappingGlyphs: true,
@@ -203,6 +222,9 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       // Atlas (glyph cache) — "dynamic" is default in xterm 5 but be explicit.
       // The WebGL renderer (loaded below) reuses the atlas across frames.
     });
+    // Make plain http(s) URLs in terminal output clickable (claude, build logs,
+    // etc.) — single click opens in the OS browser.
+    term.loadAddon(new WebLinksAddon((_e, uri) => openExternalLink(uri)));
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(host);

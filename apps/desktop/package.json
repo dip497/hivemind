@@ -71,6 +71,7 @@
     "@tanstack/react-query": "catalog:",
     "@xterm/addon-fit": "catalog:",
     "@xterm/addon-serialize": "^0.14.0",
+    "@xterm/addon-web-links": "^0.12.0",
     "@xterm/addon-webgl": "catalog:",
     "@xterm/headless": "catalog:",
     "@xterm/xterm": "catalog:",
