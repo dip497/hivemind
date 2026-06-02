@@ -234,6 +234,27 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
     let unsubData: (() => void) | undefined;
     let unsubExit: (() => void) | undefined;
     let unsubClaude: (() => void) | undefined;
+
+    // Rebuild the glyph atlas once the web font is truly loaded. xterm measures
+    // the font at open(); "JetBrains Mono" loads async (web font), so the first
+    // atlas is often built from the FALLBACK metrics → permanently blurry /
+    // misaligned glyphs that never self-correct. Force-load the exact faces, then
+    // re-fit + clear the WebGL texture atlas + refresh so glyphs re-rasterize at
+    // the correct metrics. Usually instant (font is cached after the first tile).
+    if (typeof document !== "undefined" && document.fonts?.ready) {
+      const fams = ['400 12px "JetBrains Mono"', '700 12px "JetBrains Mono"'];
+      Promise.all(fams.map((f) => document.fonts.load(f).catch(() => undefined)))
+        .then(() => document.fonts.ready)
+        .then(() => {
+          if (cancelled) return;
+          try {
+            fit.fit();
+            webgl?.clearTextureAtlas();
+            term.refresh(0, term.rows - 1);
+          } catch { /* terminal torn down mid-load */ }
+        })
+        .catch(() => { /* fonts API unavailable */ });
+    }
     // Dirty flag for the agent-status poll: only re-scan the (expensive to
     // stringify) xterm viewport when the PTY has emitted output since the last
     // scan. A state change is always preceded by output, so gating on this

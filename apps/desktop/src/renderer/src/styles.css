@@ -3,9 +3,10 @@
 @import "@xterm/xterm/css/xterm.css";
 @import "@xyflow/react/dist/style.css";
 
-/* Geist (sans body+display) + JetBrains Mono (code/paths/IDs only) — distinctive,
-   not Inter/Roboto; mono is namespaced to technical surfaces per i-frontend-design */
-@import url("https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap");
+/* Geist (sans body+display). JetBrains Mono (code/paths/IDs + terminals) is
+   SELF-HOSTED via @fontsource (imported in main.tsx) so it's offline-safe and
+   loads before xterm measures it — no flash-of-fallback. Geist stays on the CDN. */
+@import url("https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&display=swap");
 
 @custom-variant dark (&:is(.dark *));
 
