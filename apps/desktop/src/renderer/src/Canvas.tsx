@@ -1848,6 +1848,11 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   const inMomentumRef = useRef(false);
   const momentumNonce = useRef(0);
   const [momentumReq, setMomentumReq] = useState<{ vx: number; vy: number; n: number } | null>(null);
+  // Bumped to snap the LIVE viewport crisp (ViewportSnap child applies it): on
+  // pan/zoom settle, on fling settle, and on tile select — the moments a tile is
+  // promoted to its own layer and a fractional transform would blur it.
+  const [snapReq, setSnapReq] = useState(0);
+  const bumpSnap = useCallback(() => setSnapReq((n) => n + 1), []);
   const onMove = useCallback((_: unknown, vp: { x: number; y: number; zoom: number }) => {
     currentViewportRef.current = vp;
     if (inMomentumRef.current) return; // ignore self-generated moves
@@ -1898,7 +1903,8 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     const committed = flung ? currentViewportRef.current : snapViewportCrisp(currentViewportRef.current);
     currentViewportRef.current = committed;
     setViewport(committed);
-  }, []);
+    if (!flung) bumpSnap(); // snap the LIVE transform too (a fling snaps on settle)
+  }, [bumpSnap]);
   // Dragging a TILE is a node drag (not a viewport move) so onMoveStart never
   // fires for it — that's why drag still felt laggy. Use a SEPARATE class with
   // compositing hints only (NOT pointer-events:none, which would drop the drag
@@ -2139,6 +2145,10 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
               setSelectedTileId(node.id);
               selectedTileIdsRef.current = new Set([node.id]);
               markSeen([node.id]);
+              // Selecting promotes the tile to its own compositing layer; snap
+              // the viewport so that layer lands on whole pixels (sharp, not
+              // blurry). See ViewportSnap.
+              bumpSnap();
             }
           }}
           onPaneClick={() => {
@@ -2254,7 +2264,8 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
           <Background variant={BackgroundVariant.Dots} gap={22} size={1.5} color="rgba(155,161,173,0.10)" />
           <FocusOnTile req={focusReq} />
           <FocusMode req={focusModeReq} />
-          <PanMomentum req={momentumReq} activeRef={inMomentumRef} />
+          <PanMomentum req={momentumReq} activeRef={inMomentumRef} onSettle={bumpSnap} />
+          <ViewportSnap req={snapReq} activeRef={inMomentumRef} />
 
           {/* Excalidraw-style floating tool island — top-center. */}
           <Panel position="top-center" className="!m-0 !mt-3">
@@ -2640,9 +2651,11 @@ function FocusOnTile({ req }: { req: { id: string; cx: number; cy: number; n: nu
 function PanMomentum({
   req,
   activeRef,
+  onSettle,
 }: {
   req: { vx: number; vy: number; n: number } | null;
   activeRef: React.MutableRefObject<boolean>;
+  onSettle?: () => void;
 }) {
   const { getViewport, setViewport } = useReactFlow();
   useEffect(() => {
@@ -2663,6 +2676,7 @@ function PanMomentum({
       vy *= 0.85;
       if (Math.abs(vx) < 0.02 && Math.abs(vy) < 0.02) {
         activeRef.current = false;
+        onSettle?.(); // glide stopped → snap the resting viewport crisp
         return;
       }
       const vp = getViewport();
@@ -2674,6 +2688,36 @@ function PanMomentum({
       cancelAnimationFrame(raf);
       activeRef.current = false;
     };
+  }, [req, getViewport, setViewport, activeRef, onSettle]);
+  return null;
+}
+
+/** Snaps the LIVE viewport transform to whole device pixels (and a near-1 zoom
+ *  to exactly 1) whenever `req` bumps. This is the real fix for blurry tiles:
+ *  xterm rasterizes glyphs to a canvas, and react-flow CSS-transforms the
+ *  viewport, so a fractional translate or off-by-epsilon zoom lands that bitmap
+ *  on sub-pixels → blur — worst when a SELECTED tile is promoted to its own
+ *  compositing layer (xyflow#3282). Snapping the real transform on settle and on
+ *  select makes the promoted layer rasterize sharp. `activeRef` (shared with the
+ *  fling) tells the parent's onMove/onMoveEnd to ignore our own setViewport.
+ *  Rendered inside <ReactFlow> so useReactFlow resolves. */
+function ViewportSnap({
+  req,
+  activeRef,
+}: {
+  req: number;
+  activeRef: React.MutableRefObject<boolean>;
+}) {
+  const { getViewport, setViewport } = useReactFlow();
+  useEffect(() => {
+    if (req === 0) return;
+    const vp = getViewport();
+    const snapped = snapViewportCrisp(vp);
+    if (snapped.x === vp.x && snapped.y === vp.y && snapped.zoom === vp.zoom) return;
+    activeRef.current = true;
+    setViewport(snapped);
+    const raf = requestAnimationFrame(() => { activeRef.current = false; });
+    return () => { cancelAnimationFrame(raf); activeRef.current = false; };
   }, [req, getViewport, setViewport, activeRef]);
   return null;
 }
