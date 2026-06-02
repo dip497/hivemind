@@ -37,6 +37,20 @@ function autoNameFromCmd(cmd: string): string {
   return cmd.split("/").pop()?.split(/\s+/)[0] ?? "terminal";
 }
 
+/** Snap a settled viewport so canvas-rendered text stays crisp: round the pan to
+ *  whole DEVICE pixels (fractional CSS translate puts the xterm bitmap on
+ *  sub-pixels → blur) and pull a near-1 zoom to exactly 1.0 (the only zoom where
+ *  the bitmap maps 1:1 to screen pixels). Pure; only applied at rest. */
+function snapViewportCrisp(vp: { x: number; y: number; zoom: number }): {
+  x: number;
+  y: number;
+  zoom: number;
+} {
+  const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
+  const zoom = Math.abs(vp.zoom - 1) < 0.02 ? 1 : vp.zoom;
+  return { zoom, x: Math.round(vp.x * dpr) / dpr, y: Math.round(vp.y * dpr) / dpr };
+}
+
 type TerminalNodeData = {
   tileId: string;
   cwd: string;
@@ -1426,11 +1440,19 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     [claudeMode, placeInFrame, ensureFrame, focusTile],
   );
 
-  // Spawn from a global surface (ToolIsland / palette / hotkey). With 2+
-  // workspaces, ALWAYS ask which one (the picker pre-highlights the selected
-  // frame but requires an explicit pick) — never silently spawn into a stale
-  // selection. Single frame (or none) → spawn into it / lazily create base.
+  // Spawn from a global surface (ToolIsland / palette / hotkey). A current
+  // selection IS the target: a selected frame — or the frame holding the
+  // selected tile — spawns straight in, no picker. Only ask when nothing is
+  // selected to disambiguate AND 2+ frames exist. Single frame (or none) →
+  // spawn into it / lazily create the base frame.
   const spawnInto = useCallback((kind: TileKind, opts?: { mode?: string; work?: string }) => {
+    const selTile = selectedTileIdRef.current;
+    const selFrame =
+      selectedFrameIdRef.current ?? (selTile ? frameOfRef.current[selTile] ?? null : null);
+    if (selFrame && framesRef.current.some((f) => f.id === selFrame)) {
+      spawnTile(kind, selFrame, opts);
+      return;
+    }
     if (framesRef.current.length >= 2) {
       setSpawnPick({ kind, mode: opts?.mode, work: opts?.work });
       return;
@@ -1850,6 +1872,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     if (inMomentumRef.current) return;
     // Velocity (px/ms) from the last two recent samples; fling only on a real flick.
     const s = panSamplesRef.current;
+    let flung = false;
     if (s.length >= 2) {
       const a = s[s.length - 2]!;
       const b = s[s.length - 1]!;
@@ -1859,13 +1882,22 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
         const vy = (b.y - a.y) / dt;
         if (Math.abs(vx) > 0.15 || Math.abs(vy) > 0.15) {
           setMomentumReq({ vx, vy, n: ++momentumNonce.current });
+          flung = true;
         }
       }
     }
     panSamplesRef.current = [];
     // Commit the post-pan viewport to state so the layout-save effect persists
     // it. Triggers ONE re-render at the end of the pan (not per pointermove).
-    setViewport(currentViewportRef.current);
+    // When the canvas comes to REST (no fling), snap it crisp: xterm rasterizes
+    // its glyphs to a canvas that the react-flow viewport then CSS-transforms, so
+    // a fractional translate or an off-by-epsilon zoom lands that bitmap on
+    // sub-pixels → fuzzy text. Rounding the pan to the device-pixel grid and
+    // snapping a near-1 zoom to exactly 1 makes text sharp whenever it's at rest
+    // around 100%. (Other zoom levels still scale the bitmap — inherent.)
+    const committed = flung ? currentViewportRef.current : snapViewportCrisp(currentViewportRef.current);
+    currentViewportRef.current = committed;
+    setViewport(committed);
   }, []);
   // Dragging a TILE is a node drag (not a viewport move) so onMoveStart never
   // fires for it — that's why drag still felt laggy. Use a SEPARATE class with
