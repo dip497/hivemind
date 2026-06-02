@@ -7,6 +7,9 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Fixed
+- **Image paste into claude was broken (regression in 0.3.1).** The clipboard work in 0.3.1 added a Cmd/Ctrl+V handler that called `preventDefault()` and pasted clipboard **text only** — so an image on the clipboard was swallowed and never reached claude (which reads images from the system clipboard on paste). Paste is no longer intercepted at all; the copy shortcut stays. `apps/desktop/src/renderer/src/TerminalTile.tsx`.
+
 ## [0.3.1] — 2026-06-02
 
 ### Changed

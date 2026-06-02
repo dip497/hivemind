@@ -302,18 +302,19 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       window.hive.ptyWrite(ptyId, d);
     });
     term.onResize(({ cols, rows }) => window.hive.ptyResize(ptyId, cols, rows));
-    // Clipboard: xterm does NOT copy/paste on its own (Ctrl+C just sends SIGINT).
-    // Wire the standard terminal behavior:
-    //   • Cmd/Ctrl(+Shift)+C → copy the selection (and clear it, so a second
-    //     press still sends SIGINT). Plain Ctrl+C with NOTHING selected falls
-    //     through to the PTY as ^C. This is the VS Code / Windows Terminal rule.
-    //   • Cmd/Ctrl(+Shift)+V → paste (term.paste respects bracketed-paste mode).
-    // Returning false stops xterm from also forwarding the key to the PTY.
+    // Clipboard COPY only. xterm doesn't copy on its own (Ctrl+C just sends
+    // SIGINT): Cmd/Ctrl(+Shift)+C copies the selection (and clears it, so a
+    // second press still sends SIGINT); plain Ctrl+C with NOTHING selected falls
+    // through to the PTY as ^C (VS Code / Windows Terminal rule).
+    //
+    // PASTE is intentionally NOT intercepted. The terminal's native paste path
+    // already works, and — crucially — claude reads IMAGES from the system
+    // clipboard on paste. Grabbing Ctrl/Cmd+V here (text-only readText) would
+    // swallow image pastes, so we leave paste entirely to xterm/the PTY/claude.
     term.attachCustomKeyEventHandler((e) => {
       if (e.type !== "keydown") return true;
       if (!(e.ctrlKey || e.metaKey)) return true;
-      const k = e.key.toLowerCase();
-      if (k === "c") {
+      if (e.key.toLowerCase() === "c") {
         const sel = term.getSelection();
         if (sel) {
           e.preventDefault();
@@ -322,13 +323,6 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
           return false; // copied → don't send ^C
         }
         return true; // nothing selected → ^C / SIGINT
-      }
-      if (k === "v") {
-        e.preventDefault(); // stop the browser pasting into xterm's helper textarea too
-        void navigator.clipboard.readText().then((t) => {
-          if (t && !exited) term.paste(t);
-        }).catch(() => {});
-        return false;
       }
       return true;
     });
