@@ -1,7 +1,7 @@
 {
   "name": "hivemind",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Canvas-per-project AI agent orchestrator. Terminals + git diff + Plane-style PM. Local-first.",
   "license": "MIT",
   "packageManager": "pnpm@10.12.2",

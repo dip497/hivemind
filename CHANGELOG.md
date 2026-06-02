@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [0.3.1] — 2026-06-02
+
 ### Changed
 - **Spawning honors the current selection instead of always asking.** With 2+ frames, opening a tile (claude/shell/diff/…) from the ToolIsland, palette, or hotkey used to always pop the workspace picker. Now a selected frame — or the frame holding the selected tile — IS the target, so it spawns straight in; the picker only appears when nothing is selected to disambiguate. `apps/desktop/src/renderer/src/Canvas.tsx`.
 - **Crisper terminal text — especially when a tile is selected.** xterm rasterizes its glyphs to a canvas that the pan/zoom viewport then CSS-transforms; a fractional pan offset or an off-by-epsilon zoom lands that bitmap on sub-pixels and looks blurry, and it got *worse* on select because selecting promotes the tile to its own compositing layer (the known xyflow#3282 "viewport transform not rounded to integers" issue). The live viewport transform now snaps to whole device pixels (and a near-1 zoom to exactly 1.0) whenever it settles — after a pan, after a fling, and on tile select — so text is sharp at rest and selecting a tile no longer fuzzes it. (Zoom levels other than 100% still scale the bitmap — inherent to canvas content.) `apps/desktop/src/renderer/src/Canvas.tsx`.
@@ -165,7 +167,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/dip497/hivemind/releases/tag/v0.3.1
 [0.3.0]: https://github.com/dip497/hivemind/releases/tag/v0.3.0
 [0.2.0]: https://github.com/dip497/hivemind/releases/tag/v0.2.0
 [0.1.3]: https://github.com/dip497/hivemind/releases/tag/v0.1.3
