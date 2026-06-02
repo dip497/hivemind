@@ -192,7 +192,13 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       smoothScrollDuration: 0,            // no smooth-scroll animation; cuts paints
       drawBoldTextInBrightColors: true,   // crisper bold rendering on dark bg
       minimumContrastRatio: 4.5,          // auto-adjust low-contrast cells to WCAG AA
+                                          // (color only — doesn't affect sharpness)
       letterSpacing: 0,
+      // Rescale glyphs that overflow their cell (powerline, wide Unicode,
+      // ligature-ish forms) instead of letting them clip/smear — sharper edges.
+      rescaleOverlappingGlyphs: true,
+      // box-drawing / block chars drawn as crisp vectors, not font bitmaps.
+      customGlyphs: true,
       windowsMode: false,
       // Atlas (glyph cache) — "dynamic" is default in xterm 5 but be explicit.
       // The WebGL renderer (loaded below) reuses the atlas across frames.
