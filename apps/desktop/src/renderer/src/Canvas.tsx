@@ -13,7 +13,7 @@ import { LayersPanel, type LayerTile, type LayerFrame } from "./LayersPanel";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { identifyAgent } from "./agent-state";
 import { queueWork } from "./claude-bus";
-import { computeFrameLayout, nextSlotInFrame, arrangeBoxes, FRAME_ROW_MAX, FRAME_GAP, type ArrangeMode, type ArrangeBox } from "./frame-layout";
+import { FRAME_ROW_MAX } from "./frame-layout";
 import { ToolIsland, ZoomIsland } from "./canvas-islands";
 import { Toasts, CanvasEmptyState } from "./canvas-overlays";
 import { nodeTypes } from "./canvas-nodes";
@@ -37,16 +37,10 @@ import {
 } from "./canvas-persistence";
 import { useStateWithRef } from "./use-state-with-ref";
 import { inEditable, inTextField } from "./dom-focus";
-import {
-  defaultTileSize,
-  defaultSizeForKind,
-  FRAME_PAD,
-  FRAME_HEADER,
-  FRAME_EMPTY_W,
-  FRAME_EMPTY_H,
-} from "./canvas-sizing";
+import { defaultTileSize, defaultSizeForKind } from "./canvas-sizing";
 import { useWorktrees } from "./useWorktrees";
 import { useSpawn } from "./useSpawn";
+import { useFrameOps } from "./useFrameOps";
 import type { WorktreeEntry } from "../../shared/ipc";
 
 /** Auto-derive a short tile name from the command. Uses identifyAgent for
@@ -376,208 +370,14 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     [],
   );
 
-  const addFrame = useCallback(() => {
-    const id = `frame-${Date.now()}`;
-    setFrames((fs) => {
-      const n = fs.length + 1;
-      const maxZ = fs.reduce((m, f) => (f.z > m ? f.z : m), 0);
-      // Big enough to hold a tile (workbench/diff are 720-760px wide) — a
-      // 520x360 frame let dropped tiles sprawl past its edges and occlude each
-      // other, so the zone looked empty.
-      const w = 840;
-      const h = 580;
-      // Place each new frame to the RIGHT of all existing frames (not stacked
-      // at a fixed point — that piled them on top of each other). Auto-pan
-      // below then flies the viewport to it, so it's always visible.
-      const rightEdge = fs.reduce((m, f) => Math.max(m, f.x + f.w), 0);
-      const x = fs.length ? rightEdge + 48 : 120;
-      const y = 120;
-      return [
-        ...fs,
-        { id, x, y, w, h, title: `Group ${n}`, color: "var(--color-brand)", z: maxZ + 1 },
-      ];
-    });
-    // Pan to the new frame — otherwise it spawns off-screen and is invisible
-    // (the #1 frame complaint). rAF lets the node mount before we center on it.
-    requestAnimationFrame(() => focusTile(id));
-  }, [focusTile]);
-  const updateFrameTitle = useCallback((id: string, title: string) => {
-    setFrames((fs) => fs.map((f) => (f.id === id ? { ...f, title } : f)));
-  }, []);
-  const updateFrameColor = useCallback((id: string, color: string) => {
-    setFrames((fs) => fs.map((f) => (f.id === id ? { ...f, color } : f)));
-  }, []);
-  const deleteFrame = useCallback((id: string) => {
-    // Removing a repo frame also removes its worktree SUB-frames from the
-    // canvas — otherwise a child's parentFrameId dangles and computeFrameLayout
-    // silently promotes it to a top-level frame (it "jumps out"). The worktrees
-    // stay on DISK (re-attachable via the picker); the destructive removal is
-    // the explicit detach (×) on a worktree frame, not a canvas delete.
-    setFrames((fs) => fs.filter((f) => f.id !== id && f.parentFrameId !== id));
-  }, []);
-
-  // Opt-in "tidy": snap a frame's contents — its member tiles AND its worktree
-  // sub-frames — into Columns / Rows / Grid. Free drag stays the default; this
-  // only runs when the user picks a mode from the frame header. A child frame
-  // moves with its member tiles (its geometry derives from them, like a drag).
-  const arrangeFrame = useCallback((frameId: string, mode: ArrangeMode) => {
-    const frame = framesRef.current.find((f) => f.id === frameId);
-    if (!frame) return;
-    const boxes: ArrangeBox[] = [];
-    const directTiles: string[] = [];
-    for (const t of tilesRef.current) {
-      if (frameOfRef.current[t.id] !== frameId) continue;
-      const p = positionsRef.current[t.id];
-      if (!p) continue;
-      const s = sizesRef.current[t.id] ?? defaultSizeForKind(t.kind);
-      boxes.push({ id: t.id, x: p.x, y: p.y, w: s.width, h: s.height });
-      directTiles.push(t.id);
-    }
-    const childFrames = framesRef.current.filter((f) => f.parentFrameId === frameId);
-    for (const cf of childFrames) boxes.push({ id: cf.id, x: cf.x, y: cf.y, w: cf.w, h: cf.h });
-    if (boxes.length === 0) return;
-    const placed = arrangeBoxes(boxes, mode, {
-      originX: frame.x, originY: frame.y,
-      padX: FRAME_PAD, padTop: FRAME_HEADER + FRAME_PAD, gap: FRAME_GAP, maxRowWidth: FRAME_ROW_MAX,
-    });
-    lastActiveFrameRef.current = frameId;
-    const tileUpdates: Record<string, { x: number; y: number }> = {};
-    const frameUpdates: Record<string, { x: number; y: number }> = {};
-    for (const cf of childFrames) {
-      const np = placed.get(cf.id);
-      if (!np) continue;
-      const dx = np.x - cf.x, dy = np.y - cf.y;
-      frameUpdates[cf.id] = np;
-      for (const t of tilesRef.current) {
-        if (frameOfRef.current[t.id] !== cf.id) continue;
-        const p = positionsRef.current[t.id];
-        if (p) tileUpdates[t.id] = { x: p.x + dx, y: p.y + dy };
-      }
-    }
-    for (const tid of directTiles) {
-      const np = placed.get(tid);
-      if (np) tileUpdates[tid] = np;
-    }
-    if (Object.keys(tileUpdates).length) setPositions((prev) => ({ ...prev, ...tileUpdates }));
-    if (Object.keys(frameUpdates).length) {
-      setFrames((fs) => fs.map((f) => (frameUpdates[f.id] ? { ...f, ...frameUpdates[f.id] } : f)));
-    }
-  }, []);
-  // ── reactive frame auto-fit ───────────────────────────────────────────────
-  // Frame geometry is DERIVED from its member tiles, not stored-and-grown.
-  // Whenever tile positions / sizes / visibility / extras change (all of which
-  // fire at human-action frequency — drag-STOP, resize-commit, spawn, toggle —
-  // never per-animation-frame) we recompute every frame to the bbox of the
-  // tiles whose CENTER falls inside it, + padding. Empty frames collapse to a
-  // small labeled placeholder so a workspace zone stays a visible drop target.
-  //
-  // Membership is EXPLICIT (frameOf), not derived from geometry — that avoids
-  // the bootstrap deadlock where a big tile whose center sits outside a
-  // collapsed frame would never be claimed, so the frame could never grow to
-  // it. `frames` is NOT a dependency (updater reads `prev`) → never self-fires.
-  useEffect(() => {
-    // Tiles that actually exist right now (closed tiles' stale frameOf ignored).
-    // editor/diff need a repo — they're not rendered without one.
-    const present = new Set<string>();
-    const kindOf = new Map<string, TileKind>();
-    for (const t of tiles) {
-      if ((t.kind === "editor" || t.kind === "diff") && !repoPath) continue;
-      present.add(t.id);
-      kindOf.set(t.id, t.kind);
-    }
-
-    // Member tile rects + ids per frame (absolute coords).
-    const memberRects = new Map<string, Array<{ x: number; y: number; r: number; b: number }>>();
-    const memberIds = new Map<string, string[]>();
-    for (const tid of present) {
-      const fid = frameOf[tid];
-      if (!fid) continue;
-      const p = positions[tid];
-      if (!p) continue;
-      const k = kindOf.get(tid);
-      const s = sizes[tid] ?? (k ? defaultSizeForKind(k) : defaultTileSize(tid));
-      const arr = memberRects.get(fid) ?? [];
-      arr.push({ x: p.x, y: p.y, r: p.x + s.width, b: p.y + s.height });
-      memberRects.set(fid, arr);
-      const ids = memberIds.get(fid) ?? [];
-      ids.push(tid);
-      memberIds.set(fid, ids);
-    }
-
-    // Geometry is PURE: feed member rects to computeFrameLayout (nesting-aware)
-    // and commit what it returns. A repo frame that owns worktree sub-frames
-    // grows to wrap them; sibling frames separate but a child stays nested in
-    // its parent. See frame-layout.ts.
-    const { geometry, tileShift } = computeFrameLayout(
-      framesRef.current,
-      memberRects,
-      lastActiveFrameRef.current,
-      { pad: FRAME_PAD, header: FRAME_HEADER, emptyW: FRAME_EMPTY_W, emptyH: FRAME_EMPTY_H },
-    );
-
-    // Commit frame geometry (2px dead-band → no churn / no self-fire loop).
-    setFrames((prev) => {
-      let changed = false;
-      const next = prev.map((f) => {
-        const fin = geometry.get(f.id);
-        if (!fin) return f;
-        if (
-          Math.abs(fin.x - f.x) < 2 && Math.abs(fin.y - f.y) < 2 &&
-          Math.abs(fin.w - f.w) < 2 && Math.abs(fin.h - f.h) < 2
-        ) return f;
-        changed = true;
-        return { ...f, ...fin };
-      });
-      return changed ? next : prev;
-    });
-
-    // Apply each frame's separation delta to ITS member tiles (absolute) so the
-    // next derive re-lands the frame at the separated spot; converges because
-    // once separated the resolver returns zero deltas. Child-frame shifts
-    // already fold in the parent's delta (see computeFrameLayout).
-    const tileShifts: Record<string, { dx: number; dy: number }> = {};
-    for (const [fid, d] of tileShift) {
-      if (d.dx === 0 && d.dy === 0) continue;
-      for (const tid of memberIds.get(fid) ?? []) tileShifts[tid] = d;
-    }
-    const shiftIds = Object.keys(tileShifts);
-    if (shiftIds.length) {
-      setPositions((p) => {
-        let changed = false;
-        const np = { ...p };
-        for (const id of shiftIds) {
-          const c = p[id];
-          const s = tileShifts[id]!;
-          // Match the frame-geometry dead-band (2px). A 1px threshold here let a
-          // sub-2px separation residue shift positions → re-fire the effect →
-          // settle a tick later. Same band on both = no self-fire on residue.
-          if (!c || (Math.abs(s.dx) < 2 && Math.abs(s.dy) < 2)) continue;
-          np[id] = { x: c.x + s.dx, y: c.y + s.dy };
-          changed = true;
-        }
-        return changed ? np : p;
-      });
-    }
-  }, [positions, sizes, tiles, repoPath, frameOf]);
-  // Drag synced on stop (not per-tick) — react-flow renders the live drag
-  // internally via transform, we just persist the final x/y to our source-
-  // of-truth state so the next render rebuilds the node at the right place.
-  const moveFrame = useCallback((id: string, x: number, y: number) => {
-    // The dragged frame is the anchor — neighbours yield to where you drop it.
-    lastActiveFrameRef.current = id;
-    setFrames((fs) => fs.map((f) => (f.id === id ? { ...f, x, y } : f)));
-  }, []);
-  // Bring a frame above all other frames. Useful when two frames overlap
-  // and the one you want is buried. We bump its z to max+1 (no full
-  // renumber — the integers grow but that's harmless until 2^53).
-  const bringFrameToFront = useCallback((id: string) => {
-    setFrames((fs) => {
-      const maxZ = fs.reduce((m, f) => (f.z > m ? f.z : m), 0);
-      const target = fs.find((f) => f.id === id);
-      if (!target || target.z === maxZ) return fs;
-      return fs.map((f) => (f.id === id ? { ...f, z: maxZ + 1 } : f));
-    });
-  }, []);
+  // Frame CRUD + opt-in arrange + the reactive auto-fit effect. See useFrameOps.
+  const {
+    addFrame, updateFrameTitle, updateFrameColor, deleteFrame, arrangeFrame, moveFrame, bringFrameToFront,
+  } = useFrameOps({
+    repoPath, positions, sizes, tiles, frameOf,
+    framesRef, tilesRef, frameOfRef, positionsRef, sizesRef, lastActiveFrameRef,
+    setFrames, setPositions, focusTile,
+  });
 
   // Worktree + workspace-zone lifecycle (IPC, in-flight guard, detach confirm).
   const {
