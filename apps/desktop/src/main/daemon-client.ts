@@ -31,7 +31,12 @@ let conn: net.Socket | null = null;
 let connecting: Promise<net.Socket> | null = null;
 const cbs = new Map<string, Callbacks>();
 const pendingAttach = new Map<string, (r: { pid: number }) => void>();
+// The attach spec per LIVE tile, kept so we can RE-attach after a socket drop
+// (the daemon's createOrAttach is idempotent — it replays the existing session).
+type AttachSpec = Extract<ClientMsg, { t: "attach" }>["spec"];
+const specs = new Map<string, AttachSpec>();
 let reqSeq = 0;
+let reattaching = false;
 
 const socketPath = () => path.join(app.getPath("userData"), SOCKET_NAME);
 const daemonScript = () => path.join(__dirname, "pty-daemon.js");
@@ -80,10 +85,44 @@ function setupConn(s: net.Socket): void {
   s.on("data", decode);
   s.on("close", () => {
     if (conn === s) conn = null;
+    // The socket dropped (daemon restarted / transient error). Two repairs:
+    //  1) Fail any in-flight attach NOW instead of making spawnPty wait the full
+    //     6s timeout for a socket that's already gone.
+    //  2) Proactively RE-attach every live session — data flows daemon→client,
+    //     so nothing else would re-trigger ensureConn and the tiles would go
+    //     silently dead until the user typed.
+    for (const [reqId, resolve] of [...pendingAttach]) {
+      pendingAttach.delete(reqId);
+      resolve({ pid: -1 });
+    }
+    if (cbs.size > 0) void reattachLive();
   });
   s.on("error", () => {
     /* handled via close */
   });
+}
+
+/** Reconnect and re-issue `attach` for every still-live session after a drop. */
+async function reattachLive(): Promise<void> {
+  if (reattaching || cbs.size === 0) return;
+  reattaching = true;
+  try {
+    await ensureConn();
+    for (const [id, spec] of specs) {
+      if (!cbs.has(id)) continue; // detached/killed since the drop
+      // Fire-and-forget: the "attached" reply replays buffered output via
+      // cbs.get(id).onData; there's no pendingAttach resolver for a re-attach.
+      try {
+        await send({ t: "attach", reqId: `re${++reqSeq}`, id, spec });
+      } catch {
+        /* will retry on the next close if the reconnect failed */
+      }
+    }
+  } catch {
+    /* daemon unreachable — a later spawn/write will retry the connect */
+  } finally {
+    reattaching = false;
+  }
 }
 
 function spawnDaemon(sp: string): void {
@@ -143,6 +182,15 @@ async function send(msg: ClientMsg): Promise<void> {
 
 export async function spawnPty(opts: SpawnOpts, cb: Callbacks): Promise<{ pid: number }> {
   cbs.set(opts.tileId, cb);
+  const spec: AttachSpec = {
+    cwd: opts.cwd,
+    cmd: opts.cmd,
+    args: opts.args ?? [],
+    cols: opts.cols,
+    rows: opts.rows,
+    env: opts.env,
+  };
+  specs.set(opts.tileId, spec); // remembered for re-attach after a socket drop
   const reqId = `r${++reqSeq}`;
   const result = new Promise<{ pid: number }>((resolve) => {
     pendingAttach.set(reqId, resolve);
@@ -153,19 +201,7 @@ export async function spawnPty(opts: SpawnOpts, cb: Callbacks): Promise<{ pid: n
     }, 6000);
     t.unref?.();
   });
-  await send({
-    t: "attach",
-    reqId,
-    id: opts.tileId,
-    spec: {
-      cwd: opts.cwd,
-      cmd: opts.cmd,
-      args: opts.args ?? [],
-      cols: opts.cols,
-      rows: opts.rows,
-      env: opts.env,
-    },
-  });
+  await send({ t: "attach", reqId, id: opts.tileId, spec });
   return result;
 }
 
@@ -178,11 +214,13 @@ export function resizePty(tileId: string, cols: number, rows: number): void {
 /** Explicit close (× button): terminate the session in the daemon. */
 export function killPty(tileId: string): void {
   cbs.delete(tileId);
+  specs.delete(tileId);
   void send({ t: "kill", id: tileId });
 }
 /** Window closed / tile unmounted: stop streaming but KEEP the session alive. */
 export function detachPty(tileId: string): void {
   cbs.delete(tileId);
+  specs.delete(tileId); // we won't auto-re-attach a deliberately detached tile
   void send({ t: "detach", id: tileId });
 }
 /** App quit: sessions PERSIST in the daemon (that's the point) — we don't kill

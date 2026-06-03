@@ -198,6 +198,12 @@ const flushOnExit = async (): Promise<void> => {
 };
 process.on("SIGTERM", () => { void flushOnExit().then(() => process.exit(0)); });
 process.on("SIGINT", () => { void flushOnExit().then(() => process.exit(0)); });
+// Last-resort net: an un-`.catch`'d rejection anywhere in the daemon (it has no
+// renderer to surface errors) would otherwise crash the whole daemon and drop
+// every persisted session. Log and keep serving.
+process.on("unhandledRejection", (reason) => {
+  console.error("[pty-daemon] unhandledRejection:", reason);
+});
 
 // Clean up a stale socket from a previous (crashed) daemon before binding.
 try {
@@ -232,6 +238,15 @@ const server = net.createServer((sock) => {
           })
           .then((r) => {
             send({ t: "attached", reqId: msg.reqId, id: msg.id, pid: r.pid, isNew: r.isNew, replay: r.replay });
+          })
+          .catch((e: unknown) => {
+            // Bad cwd / node-pty ABI / ENOENT cmd. Without this catch the
+            // promise rejects, no "attached" is ever sent, and the client's
+            // pendingAttach hangs until its 6s timeout — with nothing logged.
+            // Reply with a failure pid so spawnPty resolves immediately.
+            attached.delete(msg.id);
+            console.error(`[pty-daemon] attach ${msg.id} failed:`, e);
+            send({ t: "attached", reqId: msg.reqId, id: msg.id, pid: -1, isNew: false, replay: "" });
           });
         break;
       }
