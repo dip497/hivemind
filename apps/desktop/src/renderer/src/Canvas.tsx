@@ -11,7 +11,6 @@ import {
 } from "@xyflow/react";
 import { LayersPanel, type LayerTile, type LayerFrame } from "./LayersPanel";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
-import { identifyAgent } from "./agent-state";
 import { queueWork } from "./claude-bus";
 import { FRAME_ROW_MAX } from "./frame-layout";
 import { ToolIsland, ZoomIsland } from "./canvas-islands";
@@ -41,16 +40,8 @@ import { defaultTileSize, defaultSizeForKind } from "./canvas-sizing";
 import { useWorktrees } from "./useWorktrees";
 import { useSpawn } from "./useSpawn";
 import { useFrameOps } from "./useFrameOps";
+import { buildBaseNodes } from "./canvas-node-build";
 import type { WorktreeEntry } from "../../shared/ipc";
-
-/** Auto-derive a short tile name from the command. Uses identifyAgent for
- *  known agents (claude, codex, gemini, …), falls back to the basename of
- *  the cmd. User double-click rename still wins via tileNames map. */
-function autoNameFromCmd(cmd: string): string {
-  const agent = identifyAgent(cmd);
-  if (agent) return agent;
-  return cmd.split("/").pop()?.split(/\s+/)[0] ?? "terminal";
-}
 
 // snapViewportCrisp moved to canvas-camera.tsx
 
@@ -606,243 +597,21 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // selection-derived `nodes` below shallow-clones only the selected and
   // previously-selected nodes — so a click-to-select doesn't trigger a full
   // rebuild + data-ref churn that would defeat React.memo on heavy wrappers.
-  const baseNodes: Node[] = useMemo(() => {
-    const out: Node[] = [];
-    let x = 40;
-    const y = 60;
-    const gap = 24;
-
-    /** Build a node spec; parenting comes from the EXPLICIT frameOf map (not
-     *  geometry), so a tile stays a child of its frame regardless of the
-     *  frame's current auto-fitted size. NO extent:'parent' — tiles move
-     *  freely; membership changes only on drop (onNodeDragStop). */
-    const mkTile = (base: Omit<Node, "position">, ax: number, ay: number): Node => {
-      // Override with user-dragged position if any.
-      const p = positions[base.id];
-      const px = p?.x ?? ax;
-      const py = p?.y ?? ay;
-      // Bake the baseline tile zIndex (100, above frames) HERE so the selection
-      // `nodes` memo's no-selection path can return baseNodes VERBATIM — without
-      // it that path re-spread every tile node to inject zIndex, allocating new
-      // refs on every rebuild and defeating React.memo on the xterm wrappers.
-      const style = { ...(base.style as Record<string, unknown>), zIndex: 100 };
-      const parentFrame = frameOf[base.id] ? frames.find((f) => f.id === frameOf[base.id]) : undefined;
-      if (parentFrame) {
-        const owner = parentFrame;
-        // Zone repo for tiles inside this frame: a worktree (branch zone) wins,
-        // else a bound workspace folder (workspace zone), else nothing (the
-        // tile keeps the canvas's base repoPath/cwd/root).
-        const zoneRepo = owner?.worktreePath ?? owner?.workspacePath;
-        // A workspace zone is a DIFFERENT repo bound to the frame. A worktree
-        // zone is the SAME repo on another branch (its dir has no .hivemind of
-        // its own — issues stay the project's, so it keeps the base root).
-        const isWorkspaceZone = !owner?.worktreePath && owner?.workspacePath != null;
-        const bd = base.data as Record<string, unknown>;
-        const data = zoneRepo
-          ? {
-              ...bd,
-              ...("cwd" in bd ? { cwd: zoneRepo } : {}),
-              ...("repoPath" in bd ? { repoPath: zoneRepo } : {}),
-              // Issues/diff/tree tiles scope by `root` (.hivemind). For a
-              // workspace zone, point them at THAT repo's root — or null when it
-              // has no workspace. CRITICAL: never fall through to the canvas
-              // base root here; that leaked the launch repo's issues into an
-              // unrelated frame (a frame bound to a repo with no .hivemind
-              // showed the launch repo's board — the cross-repo leak bug).
-              ...("root" in bd && isWorkspaceZone ? { root: owner?.workspaceRoot ?? null } : {}),
-            }
-          : base.data;
-        return {
-          ...base,
-          style,
-          data,
-          position: { x: px - parentFrame.x, y: py - parentFrame.y },
-          parentId: parentFrame.id,
-        };
-      }
-      return { ...base, style, position: { x: px, y: py } };
-    };
-
-    // Apply user-resized dimensions over the initial spec, if any. Clamp
-    // the default to the visible viewport: a 1400px-wide tile on a 1366px
-    // laptop screen spawns wider than the window with no way to grab the
-    // right resize handle without scrolling first.
-    const vw = typeof window !== "undefined" ? window.innerWidth : 1920;
-    const vh = typeof window !== "undefined" ? window.innerHeight : 1080;
-    const sized = (id: string, w: number, h: number) => {
-      const s = sizes[id];
-      if (s) return { width: s.width, height: s.height };
-      return { width: Math.min(w, Math.max(640, vw - 80)), height: Math.min(h, Math.max(420, vh - 120)) };
-    };
-
-    // Frames FIRST, and PARENTS before their worktree CHILD frames. React-flow
-    // requires a parent node to appear before any node referencing it via
-    // parentId — else "Parent node X not found" + the parentId is silently
-    // dropped. Top-level frames have no parent, so emitting them, then child
-    // (worktree) frames, then tiles satisfies the 2-level nest ordering.
-    const frameById = new Map(frames.map((f) => [f.id, f]));
-    const orderedFrames = [
-      ...frames.filter((f) => !f.parentFrameId || !frameById.has(f.parentFrameId)),
-      ...frames.filter((f) => f.parentFrameId && frameById.has(f.parentFrameId)),
-    ];
-    for (const f of orderedFrames) {
-      const parent = f.parentFrameId ? frameById.get(f.parentFrameId) : undefined;
-      // A worktree CHILD frame nests inside its parent: react-flow wants its
-      // position RELATIVE to the parent. zIndex tiers: parent repo frame (≤40)
-      // < worktree child frame (50–90) < tiles (≥100) < selected (1000) — so a
-      // child frame's chrome sits above the parent body but under every tile.
-      const position = parent ? { x: f.x - parent.x, y: f.y - parent.y } : { x: f.x, y: f.y };
-      const zIndex = parent ? 50 + Math.min(f.z, 40) : Math.min(f.z, 40);
-      out.push({
-        id: f.id,
-        type: "frame",
-        position,
-        ...(parent ? { parentId: parent.id } : {}),
-        style: { width: f.w, height: f.h, zIndex },
-        data: {
-          id: f.id,
-          title: f.title,
-          color: f.color,
-          branch: f.branch,
-          worktreePath: f.worktreePath,
-          head: f.head,
-          parentFrameId: f.parentFrameId,
-          // Repo this frame's worktrees list/create under: a workspace zone's
-          // bound repo, else the canvas base repo. (Unused on child frames.)
-          repoPath: f.workspacePath ?? repoPath ?? undefined,
-          workspacePath: f.workspacePath,
-          workspaceRoot: f.workspaceRoot,
-          canBind: !!repoPath,
-          onTitleChange: updateFrameTitle,
-          onColorChange: updateFrameColor,
-          onDelete: deleteFrame,
-          onArrange: arrangeFrame,
-          onBringToFront: bringFrameToFront,
-          onAttachWorktree,
-          onCreateWorktree,
-          onUnbindBranch: unbindBranch,
-          onBindWorkspace: bindWorkspace,
-          onUnbindWorkspace: unbindWorkspace,
-          tileIds: frameTiles.get(f.id) ?? [],
-          // Merge pile names so pile ids resolve to their label in the chip
-          // strip. Without this a pile chip would render as "terminal".
-          tileNames: framesChipNames,
-        },
-        dragHandle: ".tile-drag-handle",
-      });
-    }
-
-    // One loop, every tile is an instance. editor/diff/issues need a repo —
-    // skip them (close them) if the active repo went away. Each kind maps to
-    // its node `type` + default size + data shape.
-    for (const t of tiles) {
-      if ((t.kind === "editor" || t.kind === "diff") && !repoPath) continue;
-      let node: Omit<Node, "position">;
-      // Single source of truth for the default box — keep in lockstep with the
-      // auto-fit effect (both use defaultSizeForKind) so the frame grows to the
-      // tile's real size.
-      const { width: w, height: h } = defaultSizeForKind(t.kind);
-      if (t.kind === "editor") {
-        node = {
-          id: t.id,
-          type: "workbench",
-          style: sized(t.id, w, h),
-          data: {
-            repoPath,
-            tabs: editorTabs[t.id] ?? [],
-            onOpenFile: (file: string) => openFileInTile(t.id, file),
-            onCloseTab: (file: string) => closeTabInTile(t.id, file),
-            onClose: () => closeTile(t.id),
-            onResize: onNodeResizeCommit,
-          },
-          dragHandle: ".tile-drag-handle",
-        };
-      } else if (t.kind === "diff") {
-        node = {
-          id: t.id,
-          type: "diff",
-          style: sized(t.id, w, h),
-          data: {
-            repoPath,
-            initialMode: "working" as const,
-            initialBase: "origin/main",
-            onResize: onNodeResizeCommit,
-            onClose: () => closeTile(t.id),
-          },
-          dragHandle: ".tile-drag-handle",
-        };
-      } else if (t.kind === "issues") {
-        node = {
-          id: t.id,
-          type: "issues",
-          style: sized(t.id, w, h),
-          data: { root, onResize: onNodeResizeCommit, onClose: () => closeTile(t.id) },
-          dragHandle: ".tile-drag-handle",
-        };
-      } else {
-        // claude / shell — both render as a TerminalTile. Claude defaults
-        // BIGGER (long transcripts + inline diffs); shell stays compact.
-        const cmd = t.cmd ?? defaultShell().cmd;
-        const args = t.args ?? defaultShell().args;
-        node = {
-          id: t.id,
-          type: "terminal",
-          style: sized(t.id, w, h),
-          data: {
-            tileId: t.id,
-            cwd,
-            cmd,
-            args,
-            label: t.label,
-            name: tileNames[t.id] ?? agentTitles[t.id] ?? autoNameFromCmd(cmd),
-            onRename: renameTile,
-            onAgentTitle: setAgentTitle,
-            onResize: onNodeResizeCommit,
-            onClose: () => closeTile(t.id),
-          },
-          dragHandle: ".tile-drag-handle",
-        };
-      }
-      out.push(mkTile(node, x, y));
-      x += (sizes[t.id]?.width ?? w) + gap;
-    }
-    return out;
-    // Selection (selectedTileId) is applied in a SEPARATE useMemo below — it
-    // shallow-clones only the affected tiles. Keeping it OUT of this dep list
-    // means a click that just changes selection no longer rebuilds the entire
-    // nodes array + reallocates every tile's `data` object — which was
-    // defeating React.memo on heavy node wrappers mid-interaction (P1 from
-    // perf review).
-  }, [
-    repoPath,
-    root,
-    cwd,
-    tiles,
-    editorTabs,
-    frames,
-    frameOf,
-    sizes,
-    positions,
-    openFileInTile,
-    closeTabInTile,
-    closeTile,
-    updateFrameTitle,
-    updateFrameColor,
-    deleteFrame,
-    arrangeFrame,
-    bringFrameToFront,
-    onAttachWorktree,
-    onCreateWorktree,
-    unbindBranch,
-    onNodeResizeCommit,
-    frameTiles,
-    tileNames,
-    bindWorkspace,
-    unbindWorkspace,
-    renameTile,
-    framesChipNames,
-    agentTitles,
-    setAgentTitle,
+  // Heavy node-array build (frames + tiles). Pure — see canvas-node-build.ts.
+  // Rebuilds on any layout/frame/size/position change; the selection-derived
+  // `nodes` memo below clones only the selected node so a click doesn't churn.
+  const baseNodes: Node[] = useMemo(() => buildBaseNodes({
+    repoPath, root, cwd, tiles, frames, frameOf, sizes, positions, editorTabs,
+    tileNames, agentTitles, frameTiles, framesChipNames,
+    updateFrameTitle, updateFrameColor, deleteFrame, arrangeFrame, bringFrameToFront,
+    onAttachWorktree, onCreateWorktree, unbindBranch, bindWorkspace, unbindWorkspace,
+    openFileInTile, closeTabInTile, closeTile, onNodeResizeCommit, renameTile, setAgentTitle,
+  }), [
+    repoPath, root, cwd, tiles, editorTabs, frames, frameOf, sizes, positions,
+    openFileInTile, closeTabInTile, closeTile, updateFrameTitle, updateFrameColor,
+    deleteFrame, arrangeFrame, bringFrameToFront, onAttachWorktree, onCreateWorktree,
+    unbindBranch, onNodeResizeCommit, frameTiles, tileNames, bindWorkspace,
+    unbindWorkspace, renameTile, framesChipNames, agentTitles, setAgentTitle,
   ]);
   // Derive selection-aware nodes from baseNodes. Shallow-clones ONLY the
   // currently-selected and previously-selected tile so other nodes keep their
