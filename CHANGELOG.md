@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-06-03
+
 ### Added
 - **Nested git-worktree sub-frames with a Zed-style picker.** A repo frame (the base workspace or a bound workspace zone) now owns nested **worktree** sub-frames. The frame header's new "worktree" control opens a picker modeled on Zed's — it lists the repo's existing worktrees (directory name · branch · short-sha · truncated path) and offers "Create new worktree based on `<branch>`". Attaching or creating one spawns a real nested child frame (react-flow `parentId`) bound to that branch; **every tile inside scopes to the worktree** — terminal/Claude `cwd`, the editor, and the diff all run against `worktreePath`, so each branch's work is isolated on one canvas. The child frame shows a `branch · sha` pill and detaches (removes the worktree + closes its tiles) via ×. Issues stay the project's shared `.hivemind` (a worktree has none of its own). Dragging a repo frame carries its worktree children and their tiles; the parent auto-fits to wrap them. `apps/desktop/src/renderer/src/{Canvas,FrameNode,WorktreePicker,frame-layout}.{ts,tsx}`.
 
@@ -188,7 +190,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/dip497/hivemind/releases/tag/v0.5.0
 [0.4.0]: https://github.com/dip497/hivemind/releases/tag/v0.4.0
 [0.3.2]: https://github.com/dip497/hivemind/releases/tag/v0.3.2
 [0.3.1]: https://github.com/dip497/hivemind/releases/tag/v0.3.1
