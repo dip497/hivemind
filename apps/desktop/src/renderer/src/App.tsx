@@ -80,7 +80,7 @@ export function App() {
   // where we still discovered a .git/ ancestor); fall back to deriving from
   // root for older builds.
   const repoPath = project?.repoPath ?? (root ? path.dirname(root) : null);
-  useFsChangedInvalidation(repoPath);
+  useFsChangedInvalidation(repoPath, root);
   const { data: issues = [] } = useIssues(root);
 
   // Canvas-only: the Board/List views + their sidebar/filter chrome were

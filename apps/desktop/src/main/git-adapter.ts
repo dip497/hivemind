@@ -387,16 +387,29 @@ export async function gitUnstage(repoPath: string, files: string[]): Promise<voi
 }
 export async function gitDiscard(repoPath: string, files: string[]): Promise<void> {
   if (files.length === 0) return;
-  // Restore working tree to HEAD for tracked files; remove untracked files.
-  await repo(repoPath).checkout(["--", ...files]).catch(() => {
-    /* untracked files; fall through */
-  });
+  // Classify each path: a TRACKED file is RESTORED to HEAD; an UNTRACKED file is
+  // REMOVED. The old code ran one batch `checkout`, swallowed its error, then
+  // `fs.rm`'d EVERY file — so a tracked file batched with an untracked one (the
+  // batch checkout errors on the untracked path, was swallowed) got DELETED
+  // instead of restored: "discard my edits" became data loss. Separate them.
+  const tracked: string[] = [];
+  const untracked: string[] = [];
   for (const f of files) {
-    try {
-      await fs.rm(path.join(repoPath, f), { force: true });
-    } catch {
-      /* may have been resolved by checkout already */
-    }
+    // `git ls-files --error-unmatch` exits non-zero for an untracked path.
+    const isTracked = await rawGit(repoPath, ["ls-files", "--error-unmatch", "--", f])
+      .then(() => true)
+      .catch(() => false);
+    (isTracked ? tracked : untracked).push(f);
+  }
+  if (tracked.length > 0) {
+    // Restore tracked files; let a real failure (e.g. index.lock) propagate
+    // instead of swallowing it and then rm'ing the file.
+    await repo(repoPath).checkout(["--", ...tracked]);
+  }
+  for (const f of untracked) {
+    await fs.rm(path.join(repoPath, f), { force: true, recursive: true }).catch(() => {
+      /* best-effort: untracked file may already be gone */
+    });
   }
 }
 export async function gitCommit(

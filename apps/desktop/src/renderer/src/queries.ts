@@ -410,7 +410,10 @@ export function useRemoveWorktree() {
 
 // ── fs:changed subscription → Query cache invalidation ───────────────────
 
-export function useFsChangedInvalidation(repoPath: string | null | undefined) {
+export function useFsChangedInvalidation(
+  repoPath: string | null | undefined,
+  root?: string | null,
+) {
   const qc = useQueryClient();
   useEffect(() => {
     if (!repoPath) return;
@@ -438,8 +441,17 @@ export function useFsChangedInvalidation(repoPath: string | null | undefined) {
         headPending = false;
       }
       if (hivePending) {
-        qc.invalidateQueries({ queryKey: ["issues"] });
-        qc.invalidateQueries({ queryKey: ["issue"] });
+        // Scope to THIS workspace's root. A bare ["issues"] prefix-nukes every
+        // open workspace board on a single .hivemind write — pathological with
+        // the multi-workspace canvas while an agent edits issues. Fall back to
+        // the broad invalidation only when we don't know the root.
+        if (root) {
+          qc.invalidateQueries({ queryKey: ["issues", root] });
+          qc.invalidateQueries({ queryKey: ["issue", root] });
+        } else {
+          qc.invalidateQueries({ queryKey: ["issues"] });
+          qc.invalidateQueries({ queryKey: ["issue"] });
+        }
         hivePending = false;
       }
     };
@@ -463,5 +475,5 @@ export function useFsChangedInvalidation(repoPath: string | null | undefined) {
       if (timer) clearTimeout(timer);
       unsub();
     };
-  }, [repoPath, qc]);
+  }, [repoPath, root, qc]);
 }

@@ -395,9 +395,13 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
             agentDirty = false;
             try {
               const raw = detectTileStatus(agent, readScreen());
-              const next = isClaude
-                ? stabilizeClaudeStatus(lastReported, raw, Date.now(), lastWorkingAt)
-                : raw;
+              // Anti-flicker for the between-tool idle blip — applied to EVERY
+              // agent, not just claude. A momentary idle during work used to
+              // publish straight through for non-claude agents, and Canvas
+              // re-derives "finished" from working→idle → a spurious done toast
+              // + OS notification on the flicker. Debounce uniformly here so the
+              // published status is the single source the rest of the app trusts.
+              const next = stabilizeClaudeStatus(lastReported, raw, Date.now(), lastWorkingAt);
               lastReported = next;
               setStatus(next);
               // First time claude reaches a ready input prompt, deliver any
