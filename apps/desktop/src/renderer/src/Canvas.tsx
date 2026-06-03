@@ -1860,6 +1860,9 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // promoted to its own layer and a fractional transform would blur it.
   const [snapReq, setSnapReq] = useState(0);
   const bumpSnap = useCallback(() => setSnapReq((n) => n + 1), []);
+  // Bumped to reset zoom to exactly 100% when a terminal is selected (xterm
+  // selection/clicks are only pixel-accurate at zoom 1). Applied by SelectZoomReset.
+  const [selZoomReq, setSelZoomReq] = useState(0);
   const onMove = useCallback((_: unknown, vp: { x: number; y: number; zoom: number }) => {
     currentViewportRef.current = vp;
     if (inMomentumRef.current) return; // ignore self-generated moves
@@ -2156,6 +2159,13 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
               // the viewport so that layer lands on whole pixels (sharp, not
               // blurry). See ViewportSnap.
               bumpSnap();
+              // xterm maps mouse→cell using the UNSCALED cell size, so at any
+              // zoom ≠ 1 text selection / link clicks land on the wrong row
+              // (off by the zoom factor — a known xterm limitation under CSS
+              // transform). Snap to exactly 100% when you click into a terminal
+              // to interact, so selection + clicks are pixel-accurate. Terminals
+              // only — editor/diff use DOM coords that already scale correctly.
+              if (node.type === "terminal") setSelZoomReq((n) => n + 1);
             }
           }}
           onPaneClick={() => {
@@ -2273,6 +2283,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
           <FocusMode req={focusModeReq} />
           <PanMomentum req={momentumReq} activeRef={inMomentumRef} onSettle={bumpSnap} />
           <ViewportSnap req={snapReq} activeRef={inMomentumRef} />
+          <SelectZoomReset req={selZoomReq} />
 
           {/* Excalidraw-style floating tool island — top-center. */}
           <Panel position="top-center" className="!m-0 !mt-3">
@@ -2708,6 +2719,20 @@ function PanMomentum({
  *  select makes the promoted layer rasterize sharp. `activeRef` (shared with the
  *  fling) tells the parent's onMove/onMoveEnd to ignore our own setViewport.
  *  Rendered inside <ReactFlow> so useReactFlow resolves. */
+/** Reset zoom to exactly 100% (around the viewport center) when `req` bumps —
+ *  fired when a terminal tile is selected. xterm maps the mouse to a cell using
+ *  the UNSCALED cell size, so at zoom ≠ 1 selection and link clicks land on the
+ *  wrong row; at 100% they're pixel-accurate. Skips if already at 1. Rendered
+ *  inside <ReactFlow> so useReactFlow resolves. */
+function SelectZoomReset({ req }: { req: number }) {
+  const { getZoom, zoomTo } = useReactFlow();
+  useEffect(() => {
+    if (req === 0) return;
+    if (Math.abs(getZoom() - 1) > 0.001) void zoomTo(1, { duration: 150 });
+  }, [req, getZoom, zoomTo]);
+  return null;
+}
+
 function ViewportSnap({
   req,
   activeRef,
