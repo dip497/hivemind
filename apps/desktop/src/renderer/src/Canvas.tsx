@@ -445,12 +445,16 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     const out: LayerTile[] = [];
     const fo = frameOf;
     for (const t of tiles) {
-      if ((t.kind === "editor" || t.kind === "diff") && !repoPath) continue;
+      // Same effective-repo rule as node-build: a worktree/workspace frame can
+      // supply the repo even when the canvas has no global one.
+      const owner = fo[t.id] ? frames.find((f) => f.id === fo[t.id]) : undefined;
+      const effRepo = owner?.worktreePath ?? owner?.workspacePath ?? repoPath ?? null;
+      if ((t.kind === "editor" || t.kind === "diff") && !effRepo) continue;
       const kind: LayerTile["kind"] = t.kind === "shell" ? "terminal" : t.kind;
       out.push({ id: t.id, kind, name: tileNames[t.id] ?? agentTitles[t.id] ?? t.label, frameId: fo[t.id] ?? null });
     }
     return out;
-  }, [tiles, repoPath, frameOf, tileNames, agentTitles]);
+  }, [tiles, repoPath, frameOf, frames, tileNames, agentTitles]);
   const focusTileFromPanel = useCallback((id: string) => {
     setSelectedTileId(id);
     focusTile(id);

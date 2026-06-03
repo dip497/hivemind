@@ -168,10 +168,20 @@ export function buildBaseNodes(ctx: NodeBuildCtx): Node[] {
     });
   }
 
-  // Every tile is an instance. editor/diff/issues need a repo — skip them if the
-  // active repo went away. Each kind maps to its node type + default size + data.
+  // Every tile is an instance. editor/diff/issues need a repo — skip them only
+  // if NO repo is available. The repo can come from the tile's owner frame
+  // (a worktree branch zone or a bound workspace folder) even when the canvas
+  // has no global repo (e.g. launched into an empty playground, then a worktree
+  // was attached). Gating on the global `repoPath` alone dropped the editor/diff
+  // inside such a frame — "editor won't open in the worktree". Use the effective
+  // zone repo; mkTile applies the same override to the node's data.
+  const tileRepo = (id: string): string | null => {
+    const owner = frameOf[id] ? frames.find((f) => f.id === frameOf[id]) : undefined;
+    return owner?.worktreePath ?? owner?.workspacePath ?? repoPath ?? null;
+  };
   for (const t of tiles) {
-    if ((t.kind === "editor" || t.kind === "diff") && !repoPath) continue;
+    const effRepo = tileRepo(t.id);
+    if ((t.kind === "editor" || t.kind === "diff") && !effRepo) continue;
     let node: Omit<Node, "position">;
     const { width: w, height: h } = defaultSizeForKind(t.kind);
     if (t.kind === "editor") {
@@ -180,7 +190,7 @@ export function buildBaseNodes(ctx: NodeBuildCtx): Node[] {
         type: "workbench",
         style: sized(t.id, w, h),
         data: {
-          repoPath,
+          repoPath: effRepo,
           tabs: editorTabs[t.id] ?? [],
           onOpenFile: (file: string) => openFileInTile(t.id, file),
           onCloseTab: (file: string) => closeTabInTile(t.id, file),
@@ -195,7 +205,7 @@ export function buildBaseNodes(ctx: NodeBuildCtx): Node[] {
         type: "diff",
         style: sized(t.id, w, h),
         data: {
-          repoPath,
+          repoPath: effRepo,
           initialMode: "working" as const,
           initialBase: "origin/main",
           onResize: onNodeResizeCommit,
