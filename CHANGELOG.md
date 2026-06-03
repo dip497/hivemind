@@ -7,6 +7,12 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Added
+- **`hivemind upgrade` / `hive upgrade` — self-update to the latest release.** Re-runs the official installer (downloads the newest GitHub release if newer, no-op if already current; `--dev` rebuilds a source install). Works as a `hive` CLI subcommand and as `hivemind upgrade` on the desktop launcher. `apps/cli/src/commands/upgrade.ts`, `install.sh`.
+
+### Fixed
+- **Pressing `.` (or Escape) while renaming a tile triggered focus-mode instead of typing.** The canvas focus hotkeys intentionally fire even over a terminal/editor, but they also hijacked real text fields — so a `.` in the tile-rename input (or palette/forms) jumped to focus-mode. Those hotkeys now skip genuine text inputs (`<input>` / non-terminal `<textarea>`) while still working over the terminal/editor. `apps/desktop/src/renderer/src/Canvas.tsx`.
+
 ## [0.3.2] — 2026-06-03
 
 ### Fixed

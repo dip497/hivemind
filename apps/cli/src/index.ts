@@ -18,6 +18,7 @@ import { relateCmd } from "./commands/relate.js";
 import { moveCmd } from "./commands/move.js";
 import { workspaceCmd } from "./commands/workspace.js";
 import { agentCmd } from "./commands/agent.js";
+import { upgradeCmd } from "./commands/upgrade.js";
 import { resolveCmd } from "./commands/mention.js";
 import { mcpStdioCmd } from "./commands/mcp.js";
 import { readIssue, requireRoot } from "@hivemind/core";
@@ -57,6 +58,7 @@ const main = defineCommand({
     move: moveCmd,
     workspace: workspaceCmd,
     agent: agentCmd,
+    upgrade: upgradeCmd,
     resolve: resolveCmd,
     "mcp-stdio": mcpStdioCmd,
   },
