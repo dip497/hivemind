@@ -196,3 +196,24 @@ test("nested: a parent's separation delta cascades to its child (geometry + tile
   assert.ok(dP2.dx !== 0 || dP2.dy !== 0, "P2 actually moved");
   assert.ok(contains(geometry.get("P2")!, geometry.get("C2")!), "P2 still contains C2 after move");
 });
+
+test("nested: anchoring on a worktree CHILD pins its parent in the top-level pass", () => {
+  // Same overlap as above, but the anchor is the worktree child C1 (as happens
+  // when you just spawned/dragged a worktree). The top-level pass must pin C1's
+  // PARENT (P1) so the nest stays put and the sibling repo (P2) yields.
+  const frames: FrameGeom[] = [
+    { id: "P1", x: 0, y: 0, w: 460, h: 200 },
+    { id: "C1", x: 0, y: 0, w: 460, h: 200, parentFrameId: "P1" },
+    { id: "P2", x: 0, y: 0, w: 460, h: 200 },
+    { id: "C2", x: 0, y: 0, w: 460, h: 200, parentFrameId: "P2" },
+  ];
+  const members = new Map([
+    ["C1", [mem(0, 0, 700, 500)]],
+    ["C2", [mem(300, 0, 700, 500)]],
+  ]);
+  const { tileShift } = computeFrameLayout(frames, members, "C1", K);
+  assert.deepEqual(tileShift.get("P1"), { dx: 0, dy: 0 }, "anchor's parent P1 is pinned");
+  assert.deepEqual(tileShift.get("C1"), { dx: 0, dy: 0 }, "the anchored child stays put");
+  const dP2 = tileShift.get("P2")!;
+  assert.ok(dP2.dx !== 0 || dP2.dy !== 0, "the sibling repo P2 yields instead");
+});

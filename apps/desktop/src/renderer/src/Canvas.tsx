@@ -1734,6 +1734,11 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
       const p = positions[base.id];
       const px = p?.x ?? ax;
       const py = p?.y ?? ay;
+      // Bake the baseline tile zIndex (100, above frames) HERE so the selection
+      // `nodes` memo's no-selection path can return baseNodes VERBATIM — without
+      // it that path re-spread every tile node to inject zIndex, allocating new
+      // refs on every rebuild and defeating React.memo on the xterm wrappers.
+      const style = { ...(base.style as Record<string, unknown>), zIndex: 100 };
       const parentFrame = frameOf[base.id] ? frames.find((f) => f.id === frameOf[base.id]) : undefined;
       if (parentFrame) {
         const owner = parentFrame;
@@ -1762,12 +1767,13 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
           : base.data;
         return {
           ...base,
+          style,
           data,
           position: { x: px - parentFrame.x, y: py - parentFrame.y },
           parentId: parentFrame.id,
         };
       }
-      return { ...base, position: { x: px, y: py } };
+      return { ...base, style, position: { x: px, y: py } };
     };
 
     // Apply user-resized dimensions over the initial spec, if any. Clamp
@@ -1953,26 +1959,15 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // currently-selected and previously-selected tile so other nodes keep their
   // object identity → React.memo skips them. Frames keep their own z stacking.
   const nodes: Node[] = useMemo(() => {
-    if (!selectedTileId) {
-      // Most renders: no selection → reuse baseNodes verbatim (cheapest path).
-      // Apply baseline zIndex if not set so xyflow layers tiles above frames.
-      return baseNodes.map((n) => {
-        if (n.type === "frame") return n;
-        if (n.style?.zIndex != null) return n;
-        return { ...n, style: { ...(n.style ?? {}), zIndex: 100 } };
-      });
-    }
+    // No selection (the common case): baseNodes already carries every node's
+    // zIndex (tiles 100 via mkTile, frames their own), so return it VERBATIM —
+    // same array + node refs, zero allocation, no memo break.
+    if (!selectedTileId) return baseNodes;
+    // Selection: clone ONLY the selected node (zIndex 1000 + selected flag for
+    // the ring + resize handles); every other node keeps its identity.
     return baseNodes.map((n) => {
-      if (n.type === "frame") return n;
-      const sel = n.id === selectedTileId;
-      // Selected: zIndex 1000 + selected flag → highlight ring + resize handles.
-      // Non-selected: keep identity (avoid memo break) unless we need to set
-      // a default zIndex.
-      if (sel) {
-        return { ...n, selected: true, style: { ...(n.style ?? {}), zIndex: 1000 } };
-      }
-      if (n.style?.zIndex != null) return n;
-      return { ...n, style: { ...(n.style ?? {}), zIndex: 100 } };
+      if (n.type === "frame" || n.id !== selectedTileId) return n;
+      return { ...n, selected: true, style: { ...(n.style ?? {}), zIndex: 1000 } };
     });
   }, [baseNodes, selectedTileId]);
   const edges = EMPTY_EDGES;

@@ -7,6 +7,13 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Added
+- **Worktree sub-frames now nest in the Layers panel** and each repo/workspace frame shows its **current branch** as a Zed-style badge. `apps/desktop/src/renderer/src/{LayersPanel,FrameNode}.tsx`.
+
+### Fixed
+- **Worktree nesting hardening (architecture + performance review).** Deleting a repo frame no longer orphans its worktree children (they're removed from the canvas; the worktrees stay on disk, detach `×` is the destructive path). A tile dropped inside a worktree frame now reliably joins *that* worktree (its PTY runs on the right branch/cwd) — `parentFrameOf` prefers the innermost frame. Spawning/dragging a worktree no longer makes the nest jump (the separation pass pins the anchor's parent). A worktree frame dragged out of its parent now **detaches** instead of snapping back. Guards against >2-level nesting and double-create races. Tiles and worktree sub-frames share one occupancy model so the parent divides space without overlap. `apps/desktop/src/renderer/src/{Canvas,frame-layout}.{ts,tsx}`.
+- **Performance: the branch badge stays off the hot path.** It uses a dedicated long-`staleTime` `git:branch` query (HEAD-gated refresh), not `git:status` — so it doesn't refetch/re-render on every file write during agent work. The selection pipeline returns the node array verbatim when nothing is selected (baked tile zIndex), and the frame auto-fit geometry uses single-pass min/max + capped collision iterations + a consistent dead-band (no self-fire on sub-pixel residue). `apps/desktop/src/renderer/src/{queries,Canvas,frame-layout}.{ts,tsx}`.
+
 ## [0.5.0] — 2026-06-03
 
 ### Added
