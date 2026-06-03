@@ -6,6 +6,7 @@
  * this module owns how it sleeps + wakes.
  */
 import type { TileKind } from "./tile-kinds";
+import { frameColorFor, LEGACY_FRAME_COLOR } from "./frame-color";
 import { identifyAgent } from "./agent-state";
 
 /** Linux only. `-i` keeps the shell interactive so it doesn't exit, `-l`
@@ -114,9 +115,16 @@ export function loadLayout(repoPath: string | null): PersistedLayout {
     const raw = window.localStorage.getItem(LAYOUT_KEY(repoPath));
     if (!raw) return { sizes: {}, positions: {}, frames: [], tileNames: {} };
     const p = JSON.parse(raw) as Partial<PersistedLayout>;
-    // Backfill `z` for frames persisted before z existed.
+    // Backfill `z` for frames persisted before z existed, and migrate frames
+    // still on the pre-randomization default accent to a distinct hashed color
+    // (a user's explicit pick via the header swatch is anything else, so it's
+    // preserved).
     const frames = Array.isArray(p.frames)
-      ? p.frames.map((f, i) => ({ ...f, z: typeof f.z === "number" ? f.z : i })) as FrameState[]
+      ? p.frames.map((f, i) => ({
+          ...f,
+          z: typeof f.z === "number" ? f.z : i,
+          color: f.color === LEGACY_FRAME_COLOR ? frameColorFor(f.id) : f.color,
+        })) as FrameState[]
       : [];
     const positions = p.positions ?? {};
     const sizes = p.sizes ?? {};

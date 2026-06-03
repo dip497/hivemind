@@ -8,6 +8,7 @@
  * state refs + setters as context and wires the returned handlers into FrameNode.
  */
 import { useCallback, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import { frameColorFor } from "./frame-color";
 import { nextSlotInFrame, FRAME_ROW_MAX, FRAME_GAP } from "./frame-layout";
 import { defaultSizeForKind, FRAME_PAD, FRAME_HEADER, FRAME_EMPTY_W, FRAME_EMPTY_H } from "./canvas-sizing";
 import type { FrameState, TileInstance } from "./canvas-persistence";
@@ -78,7 +79,7 @@ export function useWorktrees(ctx: WorktreesCtx) {
       const maxZ = framesRef.current.reduce((m, f) => (f.z > m ? f.z : m), 0);
       const child: FrameState = {
         id, x: slot.x, y: slot.y, w: FRAME_EMPTY_W, h: FRAME_EMPTY_H,
-        title: wt.branch, color: parent.color, z: maxZ + 1,
+        title: wt.branch, color: frameColorFor(id), z: maxZ + 1,
         branch: wt.branch, worktreePath: wt.path, head: wt.head,
         parentFrameId: parentId,
       };

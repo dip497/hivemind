@@ -6,6 +6,7 @@
  * refs + setters as context; the handlers read/update them exactly as before.
  */
 import { useCallback, useEffect, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import { frameColorFor } from "./frame-color";
 import { nextSlotInFrame, FRAME_ROW_MAX } from "./frame-layout";
 import { defaultSizeForKind, defaultTileSize } from "./canvas-sizing";
 import { defaultShell, type FrameState, type TileInstance } from "./canvas-persistence";
@@ -152,7 +153,7 @@ export function useSpawn(ctx: SpawnCtx) {
       w: Math.max(w, 2520),
       h: Math.max(h, 1780),
       title: rp?.split("/").filter(Boolean).pop() ?? "workspace",
-      color: "var(--color-brand)", z: 0,
+      color: frameColorFor(id), z: 0,
       workspacePath: rp ?? undefined, workspaceRoot: rootRef.current ?? null,
     };
     setFrames((fs) => (fs.length ? fs : [frame]));

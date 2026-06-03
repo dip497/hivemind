@@ -6,6 +6,7 @@
  * values the auto-fit effect depends on.
  */
 import { useCallback, useEffect, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import { frameColorFor } from "./frame-color";
 import { computeFrameLayout, arrangeBoxes, FRAME_ROW_MAX, FRAME_GAP, type ArrangeMode, type ArrangeBox } from "./frame-layout";
 import { defaultSizeForKind, defaultTileSize, FRAME_PAD, FRAME_HEADER, FRAME_EMPTY_W, FRAME_EMPTY_H } from "./canvas-sizing";
 import type { FrameState, TileInstance } from "./canvas-persistence";
@@ -51,7 +52,7 @@ export function useFrameOps(ctx: FrameOpsCtx) {
       const rightEdge = fs.reduce((m, f) => Math.max(m, f.x + f.w), 0);
       const x = fs.length ? rightEdge + 48 : 120;
       const y = 120;
-      return [...fs, { id, x, y, w, h, title: `Group ${n}`, color: "var(--color-brand)", z: maxZ + 1 }];
+      return [...fs, { id, x, y, w, h, title: `Group ${n}`, color: frameColorFor(id), z: maxZ + 1 }];
     });
     // Pan to the new frame — rAF lets the node mount before we center on it.
     requestAnimationFrame(() => focusTile(id));
