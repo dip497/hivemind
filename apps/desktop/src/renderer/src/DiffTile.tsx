@@ -23,6 +23,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { GripVertical, Play } from "lucide-react";
 import {
   CodeView,
   UnresolvedFile,
@@ -453,7 +454,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
     >
       {/* tile chrome */}
       <div className="tile-drag-handle h-8 flex items-center gap-2 px-2.5 bg-[var(--color-bg3)] border-b border-[var(--color-line)] text-[11px] font-mono text-[var(--color-fg2)] cursor-grab active:cursor-grabbing">
-        <span aria-hidden className="text-[var(--color-fg3)] tracking-tighter">⋮⋮</span>
+        <GripVertical aria-hidden size={13} className="text-[var(--color-fg3)] -ml-1 shrink-0" />
         <span className="font-semibold text-[var(--color-fg)]">Diff</span>
         <span aria-hidden className="text-[var(--color-line2)]">·</span>
         <span className="text-[var(--color-fg2)]">{repoPath.split("/").slice(-1)[0]}</span>
@@ -692,7 +693,8 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
             className="ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded text-white bg-[var(--color-brand)] hover:opacity-90 text-[10.5px] font-medium"
             title="Send all review comments to claude (spawns one if none is running)"
           >
-            ▶ Send review to Claude
+            <Play size={9} fill="currentColor" strokeWidth={0} aria-hidden />
+            Send review to Claude
           </button>
           <button
             onClick={() => persistComments([])}

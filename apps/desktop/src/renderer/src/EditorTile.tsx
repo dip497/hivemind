@@ -12,6 +12,7 @@
  * user actually opens get pulled in.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { GripVertical } from "lucide-react";
 import { EditorState, type Extension, Compartment } from "@codemirror/state";
 import {
   EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter,
@@ -430,7 +431,7 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, embedded = fal
       {/* drag handle + tile chrome — only when standalone; embedded host owns chrome */}
       {!embedded && (
         <header className="tile-drag-handle h-8 flex items-center gap-2 px-2.5 bg-[var(--color-bg3)] border-b border-[var(--color-line)] text-[11px] font-mono text-[var(--color-fg2)] cursor-grab active:cursor-grabbing">
-          <span aria-hidden className="text-[var(--color-fg3)]">⋮⋮</span>
+          <GripVertical aria-hidden size={13} className="text-[var(--color-fg3)] -ml-1 shrink-0" />
           <span className="font-semibold text-[var(--color-fg)]">Editor</span>
           {activeMeta?.dirty && (
             <span className="text-[10px] text-[var(--color-warn)]" title="unsaved changes">●</span>

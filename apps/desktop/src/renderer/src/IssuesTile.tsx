@@ -9,9 +9,41 @@
  * card opens the full peek; "▶" dispatches the same spawn+send-to-claude flow as
  * IssuePeek. The heavy drag-drop board stays as the dedicated full-screen view.
  */
+import { GripVertical, Play, Inbox, FolderGit2 } from "lucide-react";
 import type { IssueState, IssueSummary } from "@hivemind/core/types";
 import { STATE_LABEL, STATE_ORDER, StateIcon } from "./components/StateMeta";
 import { useIssues, useUpdateState } from "./queries";
+
+/** Centered, teaching empty/placeholder state (icon · headline · hint · optional action). */
+function TileEmpty({
+  icon,
+  title,
+  hint,
+  action,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  hint: string;
+  action?: { label: string; onClick: () => void };
+}) {
+  return (
+    <div className="h-full grid place-items-center px-6 text-center">
+      <div className="flex flex-col items-center gap-2 max-w-[240px]">
+        <div className="text-[var(--color-fg3)]">{icon}</div>
+        <div className="text-[12.5px] font-medium text-[var(--color-fg)]">{title}</div>
+        <p className="text-[11.5px] text-[var(--color-fg2)] leading-relaxed">{hint}</p>
+        {action && (
+          <button
+            onClick={action.onClick}
+            className="mt-1 inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11.5px] font-medium text-white bg-[var(--color-brand)] hover:opacity-90 cursor-pointer"
+          >
+            {action.label}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 interface Props {
   root: string | null;
@@ -47,7 +79,7 @@ export function IssuesTile({ root, onClose }: Props) {
   return (
     <div className="flex h-full flex-col rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] overflow-hidden shadow-[0_8px_22px_rgba(0,0,0,0.45)]">
       <div className="tile-drag-handle h-8 flex items-center gap-2 px-2.5 bg-[var(--color-bg3)] border-b border-[var(--color-line)] text-[11px] font-mono text-[var(--color-fg2)] cursor-grab active:cursor-grabbing">
-        <span aria-hidden className="text-[var(--color-fg3)] tracking-tighter">⋮⋮</span>
+        <GripVertical aria-hidden size={13} className="text-[var(--color-fg3)] -ml-1 shrink-0" />
         <span className="font-semibold text-[var(--color-fg)]">Issues</span>
         <span className="ml-1 text-[var(--color-fg3)] tabular-nums">{issues.length}</span>
         <button
@@ -62,14 +94,22 @@ export function IssuesTile({ root, onClose }: Props) {
 
       <div className="flex-1 overflow-auto p-2">
         {!root ? (
-          <div className="p-3 text-[11px] text-[var(--color-fg3)]">no workspace — open a project with a .hivemind/ folder</div>
+          <TileEmpty
+            icon={<FolderGit2 size={26} strokeWidth={1.5} />}
+            title="No workspace"
+            hint="Open a project with a .hivemind/ folder to start tracking issues."
+          />
         ) : isLoading ? (
-          <div className="p-3 flex items-center gap-2 text-[11px] text-[var(--color-fg3)]">
-            <span className="hm-spinner" aria-hidden />
-            <span>Loading issues…</span>
+          <div className="h-full grid place-items-center text-[11.5px] text-[var(--color-fg2)]">
+            <span className="flex items-center gap-2"><span className="hm-spinner" aria-hidden />Loading issues…</span>
           </div>
         ) : issues.length === 0 ? (
-          <div className="p-3 text-[11px] text-[var(--color-fg3)]">no issues yet — ⌘N to create one</div>
+          <TileEmpty
+            icon={<Inbox size={26} strokeWidth={1.5} />}
+            title="No issues yet"
+            hint="Create your first issue to plan work and hand it to an agent."
+            action={{ label: "New issue", onClick: () => window.dispatchEvent(new CustomEvent("hivemind:new-issue")) }}
+          />
         ) : (
           <div className="flex gap-2 min-w-fit h-full">
             {columns.map((state) => {
@@ -122,11 +162,11 @@ function IssueCard({
       <div className="flex items-center gap-1.5">
         <span className="font-mono text-[11px] text-[var(--color-fg2)] tabular-nums">{issue.id}</span>
         <button
-          className="nodrag ml-auto opacity-90 group-hover:opacity-100 transition-opacity text-[11px] px-1.5 py-1 rounded-md text-white bg-[var(--color-brand)] hover:opacity-90 cursor-pointer"
+          className="nodrag ml-auto inline-flex items-center gap-1 opacity-90 group-hover:opacity-100 transition-opacity text-[11px] px-1.5 py-1 rounded-md text-white bg-[var(--color-brand)] hover:opacity-90 cursor-pointer"
           aria-label={`Spawn claude to work on ${issue.id}`}
           title="spawn claude + work on this"
           onClick={(e) => { e.stopPropagation(); onWork(); }}
-        >▶ work</button>
+        ><Play size={8} fill="currentColor" strokeWidth={0} aria-hidden />work</button>
       </div>
       <div className="mt-1.5 text-[11.5px] text-[var(--color-fg)] leading-snug line-clamp-3">{issue.title}</div>
       <select

@@ -10,6 +10,7 @@
  * `tabs` prop); clicking a file in the embedded tree opens/dedupes a tab.
  */
 import { useEffect, useRef, useState } from "react";
+import { GripVertical } from "lucide-react";
 import { FileTreeTile } from "./FileTreeTile";
 import { EditorTile } from "./EditorTile";
 
@@ -47,7 +48,7 @@ export function WorkbenchTile({ repoPath, tabs, onOpenFile, onCloseTab, onClose 
     <div className="flex h-full flex-col rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] overflow-hidden shadow-[0_8px_22px_rgba(0,0,0,0.45)]">
       {/* drag handle + tile chrome (the ONE header for the whole workbench) */}
       <header className="tile-drag-handle h-8 flex items-center gap-2 px-2.5 bg-[var(--color-bg3)] border-b border-[var(--color-line)] text-[11px] font-mono text-[var(--color-fg2)] cursor-grab active:cursor-grabbing">
-        <span aria-hidden className="text-[var(--color-fg3)]">⋮⋮</span>
+        <GripVertical aria-hidden size={13} className="text-[var(--color-fg3)] -ml-1 shrink-0" />
         <span className="font-semibold text-[var(--color-fg)]">Workbench</span>
         <span className="text-[var(--color-fg3)] truncate">· {repoName}</span>
         <button

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Play } from "lucide-react";
 import type { AcceptanceItem, Issue, IssueState, LinkType } from "@hivemind/core/types";
 import {
   useCommentOnIssue,
@@ -93,7 +94,8 @@ export function IssuePeek({ root, id, onClose }: Props) {
                   className="inline-flex items-center gap-1 h-8 px-2.5 rounded-md text-[11.5px] font-semibold text-white bg-[var(--color-brand)] hover:opacity-90 cursor-pointer"
                   title="Set up agents (if needed), spawn claude, and tell it to work on this issue"
                 >
-                  ▶ Work on this
+                  <Play size={11} fill="currentColor" strokeWidth={0} aria-hidden />
+                  Work on this
                 </button>
                 <span aria-hidden className="mx-0.5 h-5 w-px bg-[var(--color-line2)]" />
                 <button
