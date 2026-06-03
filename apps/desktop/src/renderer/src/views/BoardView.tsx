@@ -99,7 +99,7 @@ function Card({
           onOpen(i.id);
         }
       }}
-      className={`group rounded-md border p-2 cursor-pointer transition-all text-left ${
+      className={`group rounded-md border p-2 cursor-pointer transition text-left ${
         dragging ? "opacity-40 scale-[0.98] shadow-lg" : ""
       } ${
         selected

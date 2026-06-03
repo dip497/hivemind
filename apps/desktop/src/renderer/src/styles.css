@@ -132,6 +132,13 @@ body {
   letter-spacing: -0.005em;
   color: var(--color-fg);
   background: var(--color-bg);
+  text-wrap: pretty; /* avoid single-word orphans in wrapped body/labels */
+}
+
+/* headings (e.g. issue-peek title) balance across lines instead of leaving a
+   short last line — make-interfaces-feel-better §10. */
+h1, h2, h3 {
+  text-wrap: balance;
 }
 
 /* tracked small-caps section-header utility — replaces all-caps mono headers */
