@@ -97,7 +97,7 @@ export function StateChip({ state }: { state: IssueState }) {
       className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded text-[10.5px] font-medium"
       style={{
         color: STATE_COLOR[state],
-        background: `color-mix(in oklab, ${STATE_COLOR[state]} 14%, transparent)`,
+        background: `color-mix(in oklab, ${STATE_COLOR[state]} 18%, transparent)`,
       }}
     >
       <StateIcon state={state} size={11} />
@@ -110,7 +110,7 @@ export function LabelChip({ label }: { label: string }) {
   const hue = Array.from(label).reduce((a, c) => a + c.charCodeAt(0), 0) % 360;
   return (
     <span
-      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium"
+      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-medium"
       style={{
         color: `oklch(0.88 0.14 ${hue})`,
         background: `oklch(0.34 0.08 ${hue} / 0.6)`,

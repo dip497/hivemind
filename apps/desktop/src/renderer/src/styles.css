@@ -141,7 +141,7 @@ body {
   font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--color-fg3);
+  color: var(--color-fg2); /* AA: fg3 (#6b7280) fails 4.5:1; eyebrow labels carry real info */
 }
 
 /* ── floating-island chrome — ONE recipe shared by every canvas overlay

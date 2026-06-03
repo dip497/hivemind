@@ -51,11 +51,13 @@ export function IssuesTile({ root, onClose }: Props) {
         <span className="font-semibold text-[var(--color-fg)]">Issues</span>
         <span className="ml-1 text-[var(--color-fg3)] tabular-nums">{issues.length}</span>
         <button
-          className="nodrag ml-auto size-4 grid place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--color-line2)] hover:text-[var(--color-fg)]"
+          className="nodrag ml-auto size-5 grid place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--color-line2)] hover:text-[var(--color-fg)] cursor-pointer"
           aria-label="close tile"
           title="close"
           onClick={onClose}
-        >×</button>
+        >
+          <svg width="12" height="12" viewBox="0 0 14 14" aria-hidden><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
+        </button>
       </div>
 
       <div className="flex-1 overflow-auto p-2">
@@ -79,7 +81,7 @@ export function IssuesTile({ root, onClose }: Props) {
                     <span>{STATE_LABEL[state]}</span>
                     <span className="text-[var(--color-fg3)] tabular-nums">{items.length}</span>
                   </div>
-                  <div className="flex flex-col gap-1.5">
+                  <div className="flex flex-col gap-2">
                     {items.map((issue) => (
                       <IssueCard key={issue.id} issue={issue} root={root} columns={allColumns} onChangeState={(s) => root && update.mutate({ root, id: issue.id, state: s, note: `moved to ${s} via canvas` })} onWork={() => workOn(issue)} />
                     ))}
@@ -106,26 +108,33 @@ function IssueCard({
   onChangeState: (s: IssueState) => void;
   onWork: () => void;
 }) {
+  const open = () => window.dispatchEvent(new CustomEvent<string>("hivemind:open-issue", { detail: issue.id }));
   return (
     <div
-      className="nodrag group rounded-md border border-[var(--color-line2)] bg-[var(--color-bg3)] p-2 cursor-pointer hover:border-[var(--color-accent)] transition-colors"
-      onClick={() => window.dispatchEvent(new CustomEvent<string>("hivemind:open-issue", { detail: issue.id }))}
+      role="button"
+      tabIndex={0}
+      aria-label={`Open issue ${issue.id}`}
+      className="nodrag group rounded-md border border-[var(--color-line2)] bg-[var(--color-bg3)] p-2.5 cursor-pointer hover:border-[var(--color-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-brand)] transition-colors"
+      onClick={open}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } }}
       title={`open ${issue.id}`}
     >
       <div className="flex items-center gap-1.5">
-        <span className="font-mono text-[9.5px] text-[var(--color-fg3)] tabular-nums">{issue.id}</span>
+        <span className="font-mono text-[11px] text-[var(--color-fg2)] tabular-nums">{issue.id}</span>
         <button
-          className="ml-auto opacity-70 group-hover:opacity-100 transition-opacity text-[9.5px] px-1 py-0.5 rounded text-white bg-[var(--color-brand)] hover:opacity-90"
+          className="nodrag ml-auto opacity-90 group-hover:opacity-100 transition-opacity text-[11px] px-1.5 py-1 rounded-md text-white bg-[var(--color-brand)] hover:opacity-90 cursor-pointer"
+          aria-label={`Spawn claude to work on ${issue.id}`}
           title="spawn claude + work on this"
           onClick={(e) => { e.stopPropagation(); onWork(); }}
         >▶ work</button>
       </div>
-      <div className="mt-1 text-[11.5px] text-[var(--color-fg)] leading-snug line-clamp-3">{issue.title}</div>
+      <div className="mt-1.5 text-[11.5px] text-[var(--color-fg)] leading-snug line-clamp-3">{issue.title}</div>
       <select
         value={issue.state}
+        aria-label={`State of ${issue.id}`}
         onClick={(e) => e.stopPropagation()}
         onChange={(e) => onChangeState(e.target.value as IssueState)}
-        className="mt-1.5 w-full bg-[var(--color-bg)] border border-[var(--color-line2)] rounded text-[9.5px] font-mono text-[var(--color-fg2)] px-1 py-0.5 outline-none cursor-pointer"
+        className="nodrag mt-2 w-full bg-[var(--color-bg)] border border-[var(--color-line2)] rounded-md text-[11px] font-mono text-[var(--color-fg2)] px-1.5 py-1 outline-none cursor-pointer"
       >
         {columns.map((s) => (
           <option key={s} value={s}>{STATE_LABEL[s]}</option>

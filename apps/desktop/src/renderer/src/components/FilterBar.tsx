@@ -117,7 +117,7 @@ export function FilterBar({
         <button
           onClick={() => setField("showCancelled", !filters.showCancelled)}
           title={filters.showCancelled ? "Hide cancelled" : "Show cancelled"}
-          className={`text-[11px] px-1.5 py-0.5 rounded border transition-colors ${
+          className={`text-[11px] px-1.5 py-1 rounded-md border transition-colors cursor-pointer ${
             filters.showCancelled
               ? "bg-[var(--color-bg4)] border-[var(--color-line2)] text-[var(--color-fg)]"
               : "border-transparent text-[var(--color-fg3)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg3)]"
@@ -128,7 +128,7 @@ export function FilterBar({
         {(filters.states.size + filters.labels.size + filters.assignees.size > 0 || filters.q || filters.showCancelled) && (
           <button
             onClick={() => onChange(emptyFilters())}
-            className="text-[11px] text-[var(--color-fg3)] hover:text-[var(--color-fg)] px-1.5"
+            className="text-[11px] text-[var(--color-fg2)] hover:text-[var(--color-fg)] px-1.5 py-1 rounded-md cursor-pointer"
           >
             Clear
           </button>
@@ -141,9 +141,10 @@ export function FilterBar({
             <button
               key={c.kind + c.value + i}
               onClick={c.remove}
-              className="inline-flex items-center gap-1 pl-1.5 pr-1 py-0.5 rounded text-[10.5px] bg-[var(--color-bg4)] text-[var(--color-fg)] hover:bg-[var(--color-bg3)] group"
+              aria-label={`Remove ${c.kind} filter ${c.value}`}
+              className="inline-flex items-center gap-1 pl-1.5 pr-1 py-0.5 rounded-md text-[10.5px] bg-[var(--color-bg4)] text-[var(--color-fg)] hover:bg-[var(--color-bg3)] cursor-pointer group"
             >
-              <span className="text-[var(--color-fg3)]">{c.kind}:</span>
+              <span className="text-[var(--color-fg2)]">{c.kind}:</span>
               <span>{c.value}</span>
               <span className="text-[var(--color-fg3)] group-hover:text-[var(--color-err)]">×</span>
             </button>
@@ -168,7 +169,8 @@ function SearchInput({ value, onChange }: { value: string; onChange: (v: string)
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder="Search…"
-        className="pl-7 pr-2 py-1 w-52 text-[12px] bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded outline-none focus:border-[var(--color-brand)] text-[var(--color-fg)] placeholder:text-[var(--color-fg3)]"
+        aria-label="Search issues"
+        className="pl-7 pr-2 py-1 w-52 text-[12px] bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-md outline-none focus:border-[var(--color-brand)] focus:ring-1 focus:ring-[var(--color-brand)] text-[var(--color-fg)] placeholder:text-[var(--color-fg3)]"
       />
     </div>
   );
@@ -199,7 +201,7 @@ function Dropdown({ label, count, options }: { label: string; count: number; opt
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen((o) => !o)}
-        className={`inline-flex items-center gap-1.5 px-2 py-1 text-[11.5px] rounded border ${
+        className={`inline-flex items-center gap-1.5 px-2 py-1 text-[11.5px] rounded-md border cursor-pointer ${
           count > 0
             ? "bg-[var(--color-bg4)] border-[var(--color-line2)] text-[var(--color-fg)]"
             : "bg-[var(--color-bg3)] border-[var(--color-line2)] text-[var(--color-fg2)] hover:text-[var(--color-fg)]"
@@ -207,7 +209,7 @@ function Dropdown({ label, count, options }: { label: string; count: number; opt
       >
         {label}
         {count > 0 && (
-          <span className="font-mono tabular-nums text-[10px] text-[var(--color-brand)]">{count}</span>
+          <span className="font-mono tabular-nums text-[10px] text-[var(--color-accent)]">{count}</span>
         )}
         <svg width="9" height="9" viewBox="0 0 10 10" className="text-[var(--color-fg3)]">
           <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" />
@@ -222,7 +224,7 @@ function Dropdown({ label, count, options }: { label: string; count: number; opt
               <button
                 key={o.key}
                 onClick={o.toggle}
-                className={`w-full flex items-center gap-2 px-2 py-1 rounded text-[12px] text-left hover:bg-[var(--color-bg4)] ${
+                className={`w-full flex items-center gap-2 px-2 py-1 rounded-md text-[12px] text-left cursor-pointer hover:bg-[var(--color-bg4)] ${
                   o.selected ? "text-[var(--color-fg)]" : "text-[var(--color-fg2)]"
                 }`}
               >

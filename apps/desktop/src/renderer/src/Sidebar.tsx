@@ -48,7 +48,7 @@ export function Sidebar({
       <div className="relative border-b border-[var(--color-line)]">
         <button
           onClick={() => setSwitcherOpen((o) => !o)}
-          className="w-full px-4 pt-4 pb-3 text-left hover:bg-[var(--color-bg3)] transition-colors group"
+          className="w-full px-4 pt-4 pb-3 text-left hover:bg-[var(--color-bg3)] transition-colors cursor-pointer group"
           title="Switch workspace"
         >
           <div className="flex items-center gap-2">
@@ -59,11 +59,11 @@ export function Sidebar({
             <span className="text-[15px] font-semibold text-[var(--color-fg)] truncate tracking-tight flex-1">
               {projName}
             </span>
-            <span aria-hidden className="text-[10px] text-[var(--color-fg3)] group-hover:text-[var(--color-fg2)] transition-colors">
-              ▾
-            </span>
+            <svg aria-hidden width="10" height="10" viewBox="0 0 10 10" className="text-[var(--color-fg3)] group-hover:text-[var(--color-fg2)] transition-colors shrink-0">
+              <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" />
+            </svg>
           </div>
-          <div className="font-mono text-[10.5px] text-[var(--color-fg3)] mt-0.5 truncate pl-3.5" title={repoPath}>
+          <div className="font-mono text-[10.5px] text-[var(--color-fg2)] mt-0.5 truncate pl-3.5" title={repoPath}>
             {hasWorkspace ? repoPath.split("/").slice(-3).join("/") : "click to open a folder"}
           </div>
         </button>
@@ -74,18 +74,22 @@ export function Sidebar({
             <div className="absolute left-2 right-2 top-full z-40 mt-1 bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-md shadow-xl py-1">
               <button
                 onClick={() => { setSwitcherOpen(false); onOpenFolder(); }}
-                className="w-full text-left flex items-center gap-2 px-2.5 py-1.5 text-[12px] text-[var(--color-fg)] hover:bg-[var(--color-bg4)] transition-colors"
+                className="w-full text-left flex items-center gap-2 px-2.5 py-1.5 text-[12px] text-[var(--color-fg)] hover:bg-[var(--color-bg4)] transition-colors cursor-pointer"
               >
-                <span aria-hidden>📁</span>
+                <svg aria-hidden width="13" height="13" viewBox="0 0 14 14" className="text-[var(--color-fg3)] shrink-0">
+                  <path d="M1.5 3.5a1 1 0 0 1 1-1h3l1.2 1.2h4.8a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-10a1 1 0 0 1-1-1z" stroke="currentColor" strokeWidth="1.1" fill="none" strokeLinejoin="round" />
+                </svg>
                 <span className="flex-1">Open folder…</span>
-                <kbd className="font-mono text-[9.5px] text-[var(--color-fg3)]">⌃O</kbd>
+                <kbd className="font-mono text-[10.5px] text-[var(--color-fg2)]">⌃O</kbd>
               </button>
               {!hasWorkspace && (
                 <button
                   onClick={() => { setSwitcherOpen(false); onInitWorkspace(); }}
-                  className="w-full text-left flex items-center gap-2 px-2.5 py-1.5 text-[12px] text-[var(--color-brand)] hover:bg-[var(--color-bg4)] transition-colors"
+                  className="w-full text-left flex items-center gap-2 px-2.5 py-1.5 text-[12px] text-[var(--color-brand)] hover:bg-[var(--color-bg4)] transition-colors cursor-pointer"
                 >
-                  <span aria-hidden>✦</span>
+                  <svg aria-hidden width="13" height="13" viewBox="0 0 14 14" className="shrink-0">
+                    <path d="M7 1.5l1.4 3.6L12 6.5l-3.6 1.4L7 11.5 5.6 7.9 2 6.5l3.6-1.4z" fill="currentColor" />
+                  </svg>
                   <span className="flex-1">Initialize workspace here</span>
                 </button>
               )}
@@ -99,10 +103,10 @@ export function Sidebar({
                     <button
                       key={p}
                       onClick={() => { setSwitcherOpen(false); onOpenRecent(p); }}
-                      className="w-full text-left flex flex-col px-2.5 py-1 hover:bg-[var(--color-bg4)] transition-colors"
+                      className="w-full text-left flex flex-col px-2.5 py-1 hover:bg-[var(--color-bg4)] transition-colors cursor-pointer"
                     >
                       <span className="text-[12px] text-[var(--color-fg)] truncate">{p.split("/").slice(-1)[0]}</span>
-                      <span className="text-[10px] text-[var(--color-fg3)] truncate font-mono">{p}</span>
+                      <span className="text-[11px] text-[var(--color-fg2)] truncate font-mono">{p}</span>
                     </button>
                   ))}
                 </>
@@ -154,7 +158,7 @@ function NavSection({ title, children }: { title: string; children: React.ReactN
   return (
     <section className="mt-4 first:mt-0 px-2">
       <div className="u-eyebrow px-2 mb-1">{title}</div>
-      <div className="space-y-px">{children}</div>
+      <div className="space-y-0.5">{children}</div>
     </section>
   );
 }
@@ -175,7 +179,7 @@ function NavItem({
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-[12px] transition-colors ${
+      className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-[12px] transition-colors cursor-pointer ${
         active
           ? "bg-[var(--color-bg4)] text-[var(--color-fg)]"
           : "text-[var(--color-fg2)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)]"
@@ -202,12 +206,12 @@ function IssueQuick({
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-left transition-colors ${
+      className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-left transition-colors cursor-pointer ${
         selected ? "bg-[var(--color-bg4)]" : "hover:bg-[var(--color-bg3)]"
       }`}
     >
       <StateIcon state={i.state} size={11} />
-      <span className="font-mono text-[10px] text-[var(--color-fg3)] tabular-nums shrink-0">{i.id}</span>
+      <span className="font-mono text-[10.5px] text-[var(--color-fg2)] tabular-nums shrink-0">{i.id}</span>
       <span className="text-[12px] text-[var(--color-fg)] truncate flex-1">{i.title}</span>
     </button>
   );

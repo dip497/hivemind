@@ -80,23 +80,23 @@ export function NewIssueModal({ root, open, onOpenChange, onCreated }: Props) {
 
           <div className="grid gap-3 py-4">
             <label className="grid gap-1">
-              <span className="text-[11px] text-[var(--color-fg3)] uppercase tracking-wider">Title</span>
+              <span className="u-eyebrow">Title</span>
               <input
                 autoFocus
                 required
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="e.g. Fix flaky CDN cookie tests"
-                className="w-full bg-[var(--color-bg)] border border-[var(--color-line2)] rounded-md px-2.5 py-1.5 text-[13px] text-[var(--color-fg)] focus:outline-none focus:border-[var(--color-brand)]"
+                className="w-full bg-[var(--color-bg)] border border-[var(--color-line2)] rounded-md px-2.5 py-1.5 text-[13px] text-[var(--color-fg)] focus:outline-none focus:border-[var(--color-brand)] focus:ring-1 focus:ring-[var(--color-brand)]"
               />
             </label>
 
             <label className="grid gap-1">
-              <span className="text-[11px] text-[var(--color-fg3)] uppercase tracking-wider">State</span>
+              <span className="u-eyebrow">State</span>
               <select
                 value={state}
                 onChange={(e) => setState(e.target.value as IssueState)}
-                className="w-full bg-[var(--color-bg)] border border-[var(--color-line2)] rounded-md px-2 py-1.5 text-[12px] text-[var(--color-fg)] focus:outline-none focus:border-[var(--color-brand)]"
+                className="w-full bg-[var(--color-bg)] border border-[var(--color-line2)] rounded-md px-2.5 py-1.5 text-[13px] text-[var(--color-fg)] focus:outline-none focus:border-[var(--color-brand)] focus:ring-1 focus:ring-[var(--color-brand)]"
               >
                 {STATES.map((s) => (
                   <option key={s.value} value={s.value}>{s.label}</option>
@@ -105,13 +105,13 @@ export function NewIssueModal({ root, open, onOpenChange, onCreated }: Props) {
             </label>
 
             <label className="grid gap-1">
-              <span className="text-[11px] text-[var(--color-fg3)] uppercase tracking-wider">Description</span>
+              <span className="u-eyebrow">Description</span>
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Markdown. Acceptance criteria etc. can be added later."
                 rows={5}
-                className="w-full bg-[var(--color-bg)] border border-[var(--color-line2)] rounded-md px-2.5 py-1.5 text-[12px] text-[var(--color-fg)] focus:outline-none focus:border-[var(--color-brand)] font-mono resize-y"
+                className="w-full bg-[var(--color-bg)] border border-[var(--color-line2)] rounded-md px-2.5 py-1.5 text-[13px] text-[var(--color-fg)] focus:outline-none focus:border-[var(--color-brand)] focus:ring-1 focus:ring-[var(--color-brand)] font-mono resize-y"
               />
             </label>
           </div>
