@@ -263,6 +263,24 @@ export function useGitStatus(repoPath: string | null | undefined) {
   });
 }
 
+/** Current branch ONLY — a SEPARATE query from useGitStatus on purpose. The
+ *  branch changes only on checkout, so this carries a long staleTime and stays
+ *  OUT of the 200ms fs-changed invalidation storm that hammers git:status while
+ *  an agent writes files. Refreshed only when .git/HEAD changes (see
+ *  useFsChangedInvalidation). Safe to call per frame node — React-Query dedupes
+ *  by key, so N frames on one repo share one fetch and re-render only when the
+ *  branch actually changes, NOT on every file write. */
+export function useGitBranch(repoPath: string | null | undefined) {
+  return useQuery<string | null>({
+    queryKey: ["git:branch", repoPath],
+    queryFn: async () => (repoPath ? (await window.hive.gitStatus(repoPath)).branch : null),
+    enabled: !!repoPath,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
+}
+
 export function useGitListFiles(repoPath: string | null | undefined) {
   return useQuery<string[]>({
     queryKey: ["git:list-files", repoPath],
@@ -402,6 +420,7 @@ export function useFsChangedInvalidation(repoPath: string | null | undefined) {
     // agent output. Batch the work flags and flush once per ~200ms idle window.
     let gitPending = false;
     let hivePending = false;
+    let headPending = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const flush = () => {
       timer = undefined;
@@ -411,6 +430,12 @@ export function useFsChangedInvalidation(repoPath: string | null | undefined) {
         qc.invalidateQueries({ queryKey: ["git:list-files", repoPath] });
         qc.invalidateQueries({ queryKey: ["worktrees", repoPath] });
         gitPending = false;
+      }
+      if (headPending) {
+        // Branch only — kept off the every-file-write path; HEAD moves only on
+        // checkout/commit, so this refreshes the frame branch badge rarely.
+        qc.invalidateQueries({ queryKey: ["git:branch", repoPath] });
+        headPending = false;
       }
       if (hivePending) {
         qc.invalidateQueries({ queryKey: ["issues"] });
@@ -424,9 +449,13 @@ export function useFsChangedInvalidation(repoPath: string | null | undefined) {
       // the workspace root differs from the git root.
       const touchedGit = paths.some((p) => p.includes("/.git/"));
       const touchedHive = paths.some((p) => p.includes("/.hivemind/"));
+      // HEAD moves on checkout/commit (a branch change). Match `.git/HEAD` and a
+      // worktree's `.git` file pointer flips too — keep it narrow.
+      const touchedHead = paths.some((p) => p.endsWith("/.git/HEAD") || p.endsWith("/HEAD"));
       // .git change OR any working-tree change ⇒ git views are stale.
       if (touchedGit || !touchedHive) gitPending = true;
       if (touchedHive) hivePending = true;
+      if (touchedHead) headPending = true;
       if (timer) clearTimeout(timer);
       timer = setTimeout(flush, 200);
     });

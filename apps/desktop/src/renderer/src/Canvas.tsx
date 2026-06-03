@@ -950,7 +950,12 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     setFrames((fs) => fs.map((f) => (f.id === id ? { ...f, color } : f)));
   }, []);
   const deleteFrame = useCallback((id: string) => {
-    setFrames((fs) => fs.filter((f) => f.id !== id));
+    // Removing a repo frame also removes its worktree SUB-frames from the
+    // canvas — otherwise a child's parentFrameId dangles and computeFrameLayout
+    // silently promotes it to a top-level frame (it "jumps out"). The worktrees
+    // stay on DISK (re-attachable via the picker); the destructive removal is
+    // the explicit detach (×) on a worktree frame, not a canvas delete.
+    setFrames((fs) => fs.filter((f) => f.id !== id && f.parentFrameId !== id));
   }, []);
   // ── reactive frame auto-fit ───────────────────────────────────────────────
   // Frame geometry is DERIVED from its member tiles, not stored-and-grown.
@@ -1037,7 +1042,10 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
         for (const id of shiftIds) {
           const c = p[id];
           const s = tileShifts[id]!;
-          if (!c || (Math.abs(s.dx) < 1 && Math.abs(s.dy) < 1)) continue;
+          // Match the frame-geometry dead-band (2px). A 1px threshold here let a
+          // sub-2px separation residue shift positions → re-fire the effect →
+          // settle a tick later. Same band on both = no self-fire on residue.
+          if (!c || (Math.abs(s.dx) < 2 && Math.abs(s.dy) < 2)) continue;
           np[id] = { x: c.x + s.dx, y: c.y + s.dy };
           changed = true;
         }
@@ -1085,13 +1093,27 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     (parentId: string, wt: { branch: string; path: string; head: string }) => {
       const parent = framesRef.current.find((f) => f.id === parentId);
       if (!parent) return;
+      // Nesting is exactly 2 levels (repo → worktree). A worktree can't own
+      // worktrees, and the node-build ordering + auto-fit assume depth ≤ 2 — so
+      // never nest under a frame that is itself a worktree child.
+      if (parent.parentFrameId) return;
       const dup = framesRef.current.find(
         (f) => f.parentFrameId === parentId && f.worktreePath === wt.path,
       );
       if (dup) { setSelectedFrameId(dup.id); focusTile(dup.id); return; }
+      // Pack beside BOTH existing sibling worktree frames AND the parent's direct
+      // tiles, so a new worktree frame doesn't land on a tile (mirror of
+      // placeInFrame, which packs tiles around child frames).
       const siblings = framesRef.current
         .filter((f) => f.parentFrameId === parentId)
         .map((s) => ({ id: s.id, x: s.x, y: s.y, w: s.w, h: s.h }));
+      for (const t of tilesRef.current) {
+        if (frameOfRef.current[t.id] !== parentId) continue;
+        const p = positionsRef.current[t.id];
+        if (!p) continue;
+        const sz = sizesRef.current[t.id] ?? (defaultSizeForKind(t.kind));
+        siblings.push({ id: t.id, x: p.x, y: p.y, w: sz.width, h: sz.height });
+      }
       const slot = nextSlotInFrame(
         { x: parent.x, y: parent.y },
         siblings,
@@ -1130,11 +1152,18 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     [spawnWorktreeFrame],
   );
 
+  // Branches with an in-flight `worktreeCreate` — guards against a double-click
+  // (or attach-while-create) spawning two frames for the same branch, since the
+  // dedupe in spawnWorktreeFrame keys on worktreePath which doesn't exist yet.
+  const creatingWtRef = useRef<Set<string>>(new Set());
   const onCreateWorktree = useCallback(
     async (parentId: string, rawBranch: string) => {
       const branch = rawBranch.trim();
       const repo = frameRepo(parentId);
       if (!branch || !repo) return;
+      const key = `${parentId}::${branch}`;
+      if (creatingWtRef.current.has(key)) return;
+      creatingWtRef.current.add(key);
       try {
         const res = await window.hive.worktreeCreate(repo, { branch });
         // worktreeCreate returns {path, branch} only — fetch the head sha so the
@@ -1153,6 +1182,8 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
           label: `create ${branch} failed: ${msg.slice(0, 120)}`,
           status: "blocked",
         });
+      } finally {
+        creatingWtRef.current.delete(key);
       }
     },
     [frameRepo, spawnWorktreeFrame],
@@ -1184,6 +1215,15 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     }
     const memberTiles = Object.keys(frameOfRef.current).filter((tid) => frameOfRef.current[tid] === frameId);
     for (const tid of memberTiles) closeTile(tid);
+    if (memberTiles.length) {
+      // Drop their membership too — else frameOf accumulates dead keys (which
+      // also persist to localStorage).
+      setFrameOf((m) => {
+        const copy = { ...m };
+        for (const tid of memberTiles) delete copy[tid];
+        return copy;
+      });
+    }
     setFrames((fs) => fs.filter((f) => f.id !== frameId));
   }, [frameRepo, closeTile]);
 
@@ -1242,11 +1282,14 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // top-left RELATIVE position (relX = topLeftX − frame.x).
   const parentFrameOf = useCallback(
     (cx: number, cy: number): { parentId: string; fx: number; fy: number } | null => {
-      for (const f of sortedFrames) {
-        if (cx >= f.x && cx <= f.x + f.w && cy >= f.y && cy <= f.y + f.h) {
-          return { parentId: f.id, fx: f.x, fy: f.y };
-        }
-      }
+      const hit = (f: FrameState) => cx >= f.x && cx <= f.x + f.w && cy >= f.y && cy <= f.y + f.h;
+      // Prefer the INNERMOST frame: a worktree child sits geometrically inside
+      // its repo parent, so a tile dropped there must join the CHILD (its PTY
+      // runs on the worktree's branch/cwd) — not the parent. Child frames win
+      // over their ancestor regardless of z; among children/among parents,
+      // topmost-z wins (sortedFrames is z-desc).
+      for (const f of sortedFrames) if (f.parentFrameId && hit(f)) return { parentId: f.id, fx: f.x, fy: f.y };
+      for (const f of sortedFrames) if (!f.parentFrameId && hit(f)) return { parentId: f.id, fx: f.x, fy: f.y };
       return null;
     },
     [sortedFrames],
@@ -1283,7 +1326,10 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // ── Figma-style Layers panel data ─────────────────────────────────────────
   // Every open tile flattened to { id, kind, name, frameId } for the left rail.
   const layerFrames: LayerFrame[] = useMemo(
-    () => frames.map((f) => ({ id: f.id, title: f.title, color: f.color })),
+    () => frames.map((f) => ({
+      id: f.id, title: f.title, color: f.color,
+      parentFrameId: f.parentFrameId, branch: f.parentFrameId ? f.branch : undefined,
+    })),
     [frames],
   );
   const layerTiles: LayerTile[] = useMemo(() => {
@@ -1337,7 +1383,10 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
       return k ? defaultSizeForKind(k) : defaultTileSize(tid);
     };
 
-    // Existing members of THIS frame (explicit frameOf), to pack beside.
+    // Existing occupants of THIS frame to pack beside: its member tiles (explicit
+    // frameOf) PLUS its worktree CHILD frames — so a new tile never lands on top
+    // of a nested worktree frame (and vice-versa; spawnWorktreeFrame packs around
+    // these same tiles). One occupancy model = the parent divides space properly.
     const members: Array<{ id: string; x: number; y: number; w: number; h: number }> = [];
     for (const t of tilesRef.current) {
       if (t.id === id) continue;
@@ -1346,6 +1395,9 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
       if (!p) continue;
       const s = sizeOf(t.id);
       members.push({ id: t.id, x: p.x, y: p.y, w: s.width, h: s.height });
+    }
+    for (const cf of framesRef.current) {
+      if (cf.parentFrameId === frame.id) members.push({ id: cf.id, x: cf.x, y: cf.y, w: cf.w, h: cf.h });
     }
     const me = sizeOf(id);
     const slot = nextSlotInFrame(
@@ -2294,15 +2346,22 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
               if (!old) { moveFrame(node.id, node.position.x, node.position.y); return; }
               // A child (worktree) frame returns position RELATIVE to its
               // parent; convert to absolute before diffing.
+              const dragParent = node.parentId ? framesRef.current.find((f) => f.id === node.parentId) : undefined;
               let nx = node.position.x;
               let ny = node.position.y;
-              if (node.parentId) {
-                const parent = framesRef.current.find((f) => f.id === node.parentId);
-                if (parent) { nx = parent.x + node.position.x; ny = parent.y + node.position.y; }
-              }
+              if (dragParent) { nx = dragParent.x + node.position.x; ny = dragParent.y + node.position.y; }
               const dx = nx - old.x;
               const dy = ny - old.y;
-              if (dx !== 0 || dy !== 0) {
+              // Detach a worktree child dragged so its CENTER left the parent —
+              // it becomes a top-level frame (keeps its worktree). Otherwise
+              // auto-fit just re-nests it and the drag looks ignored. Re-attach
+              // is via the picker.
+              const detach = !!dragParent && (() => {
+                const ccx = nx + old.w / 2, ccy = ny + old.h / 2;
+                return ccx < dragParent.x || ccx > dragParent.x + dragParent.w
+                  || ccy < dragParent.y || ccy > dragParent.y + dragParent.h;
+              })();
+              if (dx !== 0 || dy !== 0 || detach) {
                 // Everything that moves with this frame: its descendant child
                 // (worktree) frames, plus every member tile of the frame AND its
                 // descendants. Shifting member tiles re-lands non-empty frames;
@@ -2327,7 +2386,11 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
                 lastActiveFrameRef.current = node.id;
                 setFrames((fs) =>
                   fs.map((f) => {
-                    if (f.id === node.id) return { ...f, x: nx, y: ny };
+                    if (f.id === node.id) {
+                      return detach
+                        ? { ...f, x: nx, y: ny, parentFrameId: undefined }
+                        : { ...f, x: nx, y: ny };
+                    }
                     if (descendants.includes(f.id)) return { ...f, x: f.x + dx, y: f.y + dy };
                     return f;
                   }),

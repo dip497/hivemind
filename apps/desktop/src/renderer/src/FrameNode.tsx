@@ -11,6 +11,7 @@ import { createPortal } from "react-dom";
 import { GitBranch, FolderGit2, Plus } from "lucide-react";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { WorktreePicker } from "./WorktreePicker";
+import { useGitBranch } from "./queries";
 import type { WorktreeEntry } from "../../shared/ipc";
 
 /** Dropdown anchored under a trigger button, rendered in a portal to
@@ -132,6 +133,12 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
   const isWorktreeChild = !!data.parentFrameId;
   const wsBound = !!data.workspacePath;
   const wsName = data.workspacePath?.split("/").filter(Boolean).pop();
+  // Current branch of this repo frame (base or workspace zone) — shown as a
+  // badge like Zed's title bar. Uses the dedicated long-staleTime git:branch
+  // query (NOT git:status), so it stays off the 200ms fs-invalidation storm:
+  // deduped by repoPath across frames, re-renders only on an actual checkout.
+  // Disabled for worktree children (they show their own branch · sha pill).
+  const repoBranch = useGitBranch(isWorktreeChild ? null : data.repoPath ?? null).data ?? null;
 
   // F2 rename: Canvas dispatches `hivemind:frame-rename` with the selected
   // frame id when the user presses F2. We enter edit mode if it's us.
@@ -211,6 +218,18 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
           >
             {data.title}
           </button>
+        )}
+        {/* Current branch of this repo zone (Zed-style). Worktree sub-frames
+            show their own branch · sha pill below instead. */}
+        {!isWorktreeChild && repoBranch && (
+          <span
+            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-mono text-[var(--color-fg2)] shrink-0"
+            style={{ background: "var(--color-bg3)" }}
+            title={`on branch ${repoBranch}`}
+          >
+            <GitBranch size={10} className="shrink-0 text-[var(--color-fg3)]" />
+            <span className="truncate max-w-[120px]">{repoBranch}</span>
+          </span>
         )}
         {/* ── worktree / workspace zone controls ──────────────────────────
             A WORKTREE sub-frame shows its branch · sha pill (detach to remove).

@@ -69,7 +69,11 @@ export function resolveFrameCollisions(
   const cur = new Map<string, LayoutRect>(order.map((r) => [r.id, { ...r }]));
   const anchorPresent = !!anchorId && cur.has(anchorId);
 
-  const maxIter = Math.max(8, order.length * order.length * 2);
+  // Bound the work: separation converges in a handful of passes in practice, so
+  // the n²-per-pass scan times an n²-iteration cap (O(n⁴)) is needless on a busy
+  // board. Keep the quadratic iteration room for tiny sets (cheap + helps tight
+  // cascades) but hard-cap it so large boards can't spike the auto-fit effect.
+  const maxIter = Math.min(Math.max(8, order.length * order.length * 2), 96);
   for (let iter = 0; iter < maxIter; iter++) {
     let moved = false;
     for (let i = 0; i < order.length; i++) {
@@ -130,10 +134,14 @@ export function nextSlotInFrame(
   if (members.length === 0) return { x: startX, y: startY };
 
   const maxRowWidth = opts.maxRowWidth ?? FRAME_ROW_MAX;
-  const leftX = Math.min(...members.map((m) => m.x));
-  const rightX = Math.max(...members.map((m) => m.x + m.w));
-  const topY = Math.min(...members.map((m) => m.y));
-  const botY = Math.max(...members.map((m) => m.y + m.h));
+  // Single pass — avoid four array allocations per call.
+  let leftX = Infinity, rightX = -Infinity, topY = Infinity, botY = -Infinity;
+  for (const m of members) {
+    if (m.x < leftX) leftX = m.x;
+    if (m.x + m.w > rightX) rightX = m.x + m.w;
+    if (m.y < topY) topY = m.y;
+    if (m.y + m.h > botY) botY = m.y + m.h;
+  }
 
   const candidateX = rightX + opts.gap;
   if (candidateX + tile.w - leftX <= maxRowWidth) {
@@ -183,10 +191,15 @@ interface Rect { x: number; y: number; w: number; h: number }
  *  members → a collapsed placeholder anchored at the frame's current origin. */
 function tileBox(f: FrameGeom, mem: MemberRect[] | undefined, k: FrameLayoutConst): Rect {
   if (!mem || mem.length === 0) return { x: f.x, y: f.y, w: k.emptyW, h: k.emptyH };
-  const minX = Math.min(...mem.map((m) => m.x));
-  const minY = Math.min(...mem.map((m) => m.y));
-  const maxR = Math.max(...mem.map((m) => m.r));
-  const maxB = Math.max(...mem.map((m) => m.b));
+  // Single pass — `Math.min(...mem.map())` four times allocates four arrays per
+  // frame per layout tick (hot path). One reduce, no intermediates.
+  let minX = Infinity, minY = Infinity, maxR = -Infinity, maxB = -Infinity;
+  for (const m of mem) {
+    if (m.x < minX) minX = m.x;
+    if (m.y < minY) minY = m.y;
+    if (m.r > maxR) maxR = m.r;
+    if (m.b > maxB) maxB = m.b;
+  }
   return {
     x: Math.round(minX - k.pad),
     y: Math.round(minY - k.header),
@@ -240,6 +253,13 @@ export function computeFrameLayout(
   const tBox = new Map<string, Rect>();
   for (const f of frames) tBox.set(f.id, tileBox(f, memberRects.get(f.id), k));
 
+  // The top-level pass must pin the anchor's PARENT (not the anchor itself) when
+  // the anchor is a worktree child — else spawning/dragging a child sets the
+  // anchor to the child id, which isn't in the top-level set, so the parent
+  // isn't pinned and the whole nest jumps when a sibling repo yields against it.
+  const anchorFrame = anchorId ? byId.get(anchorId) : undefined;
+  const topAnchor = anchorFrame ? (parentOf(anchorFrame) ?? anchorId) : anchorId;
+
   // 2) separate sibling child frames within each parent.
   const childDelta = new Map<string, { dx: number; dy: number }>();
   for (const [, kids] of childrenOf) {
@@ -286,9 +306,9 @@ export function computeFrameLayout(
     }
   }
 
-  // 4) separate the top-level frames.
+  // 4) separate the top-level frames (pinning the anchor's parent — see above).
   const rootRects: LayoutRect[] = topLevel.map((f) => ({ id: f.id, ...rootDesired.get(f.id)! }));
-  const rootDelta = resolveFrameCollisions(rootRects, anchorId, gap);
+  const rootDelta = resolveFrameCollisions(rootRects, topAnchor, gap);
 
   // 5) assemble final geometry + per-frame member-tile shift.
   const geometry = new Map<string, Rect>();
