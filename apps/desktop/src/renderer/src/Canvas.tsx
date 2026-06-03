@@ -26,7 +26,7 @@ import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { identifyAgent } from "./agent-state";
 import { queueWork } from "./claude-bus";
 import { TileErrorBoundary } from "./TileErrorBoundary";
-import { computeFrameLayout, nextSlotInFrame, FRAME_ROW_MAX, FRAME_GAP } from "./frame-layout";
+import { computeFrameLayout, nextSlotInFrame, arrangeBoxes, FRAME_ROW_MAX, FRAME_GAP, type ArrangeMode, type ArrangeBox } from "./frame-layout";
 import type { WorktreeEntry } from "../../shared/ipc";
 
 /** Auto-derive a short tile name from the command. Uses identifyAgent for
@@ -957,6 +957,54 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     // the explicit detach (×) on a worktree frame, not a canvas delete.
     setFrames((fs) => fs.filter((f) => f.id !== id && f.parentFrameId !== id));
   }, []);
+
+  // Opt-in "tidy": snap a frame's contents — its member tiles AND its worktree
+  // sub-frames — into Columns / Rows / Grid. Free drag stays the default; this
+  // only runs when the user picks a mode from the frame header. A child frame
+  // moves with its member tiles (its geometry derives from them, like a drag).
+  const arrangeFrame = useCallback((frameId: string, mode: ArrangeMode) => {
+    const frame = framesRef.current.find((f) => f.id === frameId);
+    if (!frame) return;
+    const boxes: ArrangeBox[] = [];
+    const directTiles: string[] = [];
+    for (const t of tilesRef.current) {
+      if (frameOfRef.current[t.id] !== frameId) continue;
+      const p = positionsRef.current[t.id];
+      if (!p) continue;
+      const s = sizesRef.current[t.id] ?? defaultSizeForKind(t.kind);
+      boxes.push({ id: t.id, x: p.x, y: p.y, w: s.width, h: s.height });
+      directTiles.push(t.id);
+    }
+    const childFrames = framesRef.current.filter((f) => f.parentFrameId === frameId);
+    for (const cf of childFrames) boxes.push({ id: cf.id, x: cf.x, y: cf.y, w: cf.w, h: cf.h });
+    if (boxes.length === 0) return;
+    const placed = arrangeBoxes(boxes, mode, {
+      originX: frame.x, originY: frame.y,
+      padX: FRAME_PAD, padTop: FRAME_HEADER + FRAME_PAD, gap: FRAME_GAP, maxRowWidth: FRAME_ROW_MAX,
+    });
+    lastActiveFrameRef.current = frameId;
+    const tileUpdates: Record<string, { x: number; y: number }> = {};
+    const frameUpdates: Record<string, { x: number; y: number }> = {};
+    for (const cf of childFrames) {
+      const np = placed.get(cf.id);
+      if (!np) continue;
+      const dx = np.x - cf.x, dy = np.y - cf.y;
+      frameUpdates[cf.id] = np;
+      for (const t of tilesRef.current) {
+        if (frameOfRef.current[t.id] !== cf.id) continue;
+        const p = positionsRef.current[t.id];
+        if (p) tileUpdates[t.id] = { x: p.x + dx, y: p.y + dy };
+      }
+    }
+    for (const tid of directTiles) {
+      const np = placed.get(tid);
+      if (np) tileUpdates[tid] = np;
+    }
+    if (Object.keys(tileUpdates).length) setPositions((prev) => ({ ...prev, ...tileUpdates }));
+    if (Object.keys(frameUpdates).length) {
+      setFrames((fs) => fs.map((f) => (frameUpdates[f.id] ? { ...f, ...frameUpdates[f.id] } : f)));
+    }
+  }, []);
   // ── reactive frame auto-fit ───────────────────────────────────────────────
   // Frame geometry is DERIVED from its member tiles, not stored-and-grown.
   // Whenever tile positions / sizes / visibility / extras change (all of which
@@ -1829,6 +1877,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
           onTitleChange: updateFrameTitle,
           onColorChange: updateFrameColor,
           onDelete: deleteFrame,
+          onArrange: arrangeFrame,
           onBringToFront: bringFrameToFront,
           onAttachWorktree,
           onCreateWorktree,
@@ -1941,6 +1990,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     updateFrameTitle,
     updateFrameColor,
     deleteFrame,
+    arrangeFrame,
     bringFrameToFront,
     onAttachWorktree,
     onCreateWorktree,

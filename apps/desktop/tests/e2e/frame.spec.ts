@@ -83,3 +83,16 @@ test("frame header-drag moves it", async () => {
   expect(Math.abs(dxObserved)).toBeGreaterThan(40);
   expect(Math.abs(dyObserved)).toBeGreaterThan(30);
 });
+
+test("frame arrange menu offers Columns / Rows / Grid", async () => {
+  const frame = page.locator(".react-flow__node-frame").first();
+  await frame.click({ position: { x: 30, y: 4 } });
+  const arrange = frame.locator('[aria-label="arrange"]');
+  await expect(arrange).toBeVisible();
+  await arrange.click();
+  // Menu portals to document.body.
+  await expect(page.getByText("Columns", { exact: true })).toBeVisible({ timeout: 2_000 });
+  await expect(page.getByText("Rows", { exact: true })).toBeVisible();
+  await expect(page.getByText("Grid", { exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+});

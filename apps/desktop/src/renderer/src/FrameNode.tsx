@@ -8,10 +8,11 @@
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { GitBranch, FolderGit2, Plus } from "lucide-react";
+import { GitBranch, FolderGit2, Plus, LayoutGrid } from "lucide-react";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { WorktreePicker } from "./WorktreePicker";
 import { useGitBranch } from "./queries";
+import type { ArrangeMode } from "./frame-layout";
 import type { WorktreeEntry } from "../../shared/ipc";
 
 /** Dropdown anchored under a trigger button, rendered in a portal to
@@ -69,6 +70,8 @@ export interface FrameNodeData {
   onTitleChange: (id: string, title: string) => void;
   onColorChange: (id: string, color: string) => void;
   onDelete: (id: string) => void;
+  /** Opt-in tidy: snap this frame's tiles + worktree sub-frames into a layout. */
+  onArrange: (id: string, mode: ArrangeMode) => void;
   onBringToFront: (id: string) => void;
   /** Attach an existing worktree → caller spawns a nested sub-frame. */
   onAttachWorktree: (frameId: string, entry: WorktreeEntry) => void;
@@ -105,9 +108,11 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
   const [showPicker, setShowPicker] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [showWt, setShowWt] = useState(false);
+  const [showArrange, setShowArrange] = useState(false);
   const addBtnRef = useRef<HTMLButtonElement>(null);
   const colorBtnRef = useRef<HTMLButtonElement>(null);
   const wtBtnRef = useRef<HTMLButtonElement>(null);
+  const arrangeBtnRef = useRef<HTMLButtonElement>(null);
   // Live status per child tile — chips show a colored dot for working/blocked.
   // Subscribe filters by data.tileIds so unrelated tile events are skipped.
   const [chipStatus, setChipStatus] = useState<Map<string, TileStatusKind>>(new Map());
@@ -373,6 +378,34 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
               onClick={() => {
                 window.dispatchEvent(new CustomEvent("hivemind:frame-open", { detail: { frameId: data.id, kind } }));
                 setShowAdd(false);
+              }}
+              className="text-left px-2 py-1 rounded text-[11px] text-[var(--color-fg)] hover:bg-[var(--color-bg4)]"
+            >
+              {label}
+            </button>
+          ))}
+        </AnchoredMenu>
+        <button
+          ref={arrangeBtnRef}
+          onClick={() => setShowArrange((x) => !x)}
+          className="size-4 grid place-items-center rounded text-[var(--color-fg2)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)]"
+          title="Arrange tiles + worktrees (Columns / Rows / Grid)"
+          aria-label="arrange"
+        >
+          <LayoutGrid size={11} />
+        </button>
+        <AnchoredMenu anchor={arrangeBtnRef.current} open={showArrange} onClose={() => setShowArrange(false)}>
+          <div className="px-2 py-1 text-[9px] uppercase tracking-[0.12em] text-[var(--color-fg3)] font-semibold">arrange</div>
+          {([
+            ["columns", "Columns"],
+            ["rows", "Rows"],
+            ["grid", "Grid"],
+          ] as const).map(([mode, label]) => (
+            <button
+              key={mode}
+              onClick={() => {
+                data.onArrange(data.id, mode);
+                setShowArrange(false);
               }}
               className="text-left px-2 py-1 rounded text-[11px] text-[var(--color-fg)] hover:bg-[var(--color-bg4)]"
             >

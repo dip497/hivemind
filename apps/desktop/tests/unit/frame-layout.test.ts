@@ -5,9 +5,11 @@ import {
   resolveFrameCollisions,
   nextSlotInFrame,
   computeFrameLayout,
+  arrangeBoxes,
   FRAME_GAP,
   type FrameGeom,
   type MemberRect,
+  type ArrangeBox,
 } from "../../src/renderer/src/frame-layout.ts";
 
 const rect = (id: string, x: number, y: number, w: number, h: number) => ({ id, x, y, w, h });
@@ -216,4 +218,47 @@ test("nested: anchoring on a worktree CHILD pins its parent in the top-level pas
   assert.deepEqual(tileShift.get("C1"), { dx: 0, dy: 0 }, "the anchored child stays put");
   const dP2 = tileShift.get("P2")!;
   assert.ok(dP2.dx !== 0 || dP2.dy !== 0, "the sibling repo P2 yields instead");
+});
+
+// ── arrangeBoxes (opt-in tidy) ───────────────────────────────────────────────
+const box = (id: string, x: number, y: number, w: number, h: number): ArrangeBox => ({ id, x, y, w, h });
+const ARR = { originX: 100, originY: 200, padX: 24, padTop: 48, gap: 24, maxRowWidth: 1000 };
+const noOverlap = (m: Map<string, { x: number; y: number }>, boxes: ArrangeBox[]) => {
+  const placed = boxes.map((b) => ({ ...b, ...m.get(b.id)! }));
+  for (let i = 0; i < placed.length; i++)
+    for (let j = i + 1; j < placed.length; j++)
+      if (overlap(placed[i]!, placed[j]!)) return false;
+  return true;
+};
+
+test("arrange columns: boxes side by side, top-aligned, in reading order", () => {
+  const boxes = [box("b", 500, 200, 200, 150), box("a", 100, 200, 200, 150)];
+  const m = arrangeBoxes(boxes, "columns", ARR);
+  // sorted by (y,x): a then b. startX=124, startY=248.
+  assert.deepEqual(m.get("a"), { x: 124, y: 248 });
+  assert.deepEqual(m.get("b"), { x: 124 + 200 + 24, y: 248 });
+  assert.ok(noOverlap(m, boxes));
+});
+
+test("arrange rows: boxes stacked, left-aligned", () => {
+  const boxes = [box("a", 100, 200, 200, 150), box("b", 100, 400, 300, 100)];
+  const m = arrangeBoxes(boxes, "rows", ARR);
+  assert.deepEqual(m.get("a"), { x: 124, y: 248 });
+  assert.deepEqual(m.get("b"), { x: 124, y: 248 + 150 + 24 });
+  assert.ok(noOverlap(m, boxes));
+});
+
+test("arrange grid: wraps past maxRowWidth, row advances by tallest", () => {
+  // maxRowWidth 1000 from startX: two 400-wide fit (424,848), third wraps.
+  const boxes = [
+    box("a", 0, 0, 400, 200),
+    box("b", 500, 0, 400, 120),
+    box("c", 1000, 0, 400, 100),
+  ];
+  const m = arrangeBoxes(boxes, "grid", ARR);
+  assert.deepEqual(m.get("a"), { x: 124, y: 248 });
+  assert.deepEqual(m.get("b"), { x: 124 + 400 + 24, y: 248 });
+  // c wraps to a new row below the tallest in row 1 (200).
+  assert.deepEqual(m.get("c"), { x: 124, y: 248 + 200 + 24 });
+  assert.ok(noOverlap(m, boxes));
 });

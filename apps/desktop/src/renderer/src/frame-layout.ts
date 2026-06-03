@@ -15,6 +15,11 @@
  *     left-to-right then WRAPS to a new row past a max row width, so a frame
  *     grows downward predictably instead of infinitely rightward.
  *
+ *  4. arrangeBoxes — opt-in "tidy" for a frame's contents (tiles + worktree
+ *     sub-frames). Free drag stays the default; this snaps the boxes into
+ *     Columns / Rows / Grid only when the user asks. Pure: returns new absolute
+ *     top-lefts; the caller applies them.
+ *
  *  3. computeFrameLayout — the whole-canvas auto-fit, nesting-aware. Derives
  *     every frame's geometry from its member tiles AND (for a repo frame that
  *     owns worktree sub-frames) the bounding box of its child frames, then
@@ -150,6 +155,58 @@ export function nextSlotInFrame(
   }
   // Wrap: new row below everything, back at the left edge.
   return { x: startX, y: botY + opts.gap };
+}
+
+// ── opt-in arrange (Columns / Rows / Grid) ──────────────────────────────────
+
+export type ArrangeMode = "columns" | "rows" | "grid";
+
+/** A box to arrange — a member tile or a worktree sub-frame, by absolute rect. */
+export interface ArrangeBox { id: string; x: number; y: number; w: number; h: number }
+
+/**
+ * Tidy a frame's contents into the chosen layout, returning each box's new
+ * absolute top-left. Boxes are taken in reading order (top→bottom, left→right)
+ * so the result is stable and matches what the user sees.
+ *  - columns: one horizontal band, boxes side by side, top-aligned.
+ *  - rows:    one vertical stack, boxes left-aligned.
+ *  - grid:    pack left→right, wrapping to a new row past maxRowWidth; each row
+ *             advances by its tallest box.
+ * Pure — no overlap because every box gets a fresh slot.
+ */
+export function arrangeBoxes(
+  boxes: ArrangeBox[],
+  mode: ArrangeMode,
+  opts: { originX: number; originY: number; padX: number; padTop: number; gap: number; maxRowWidth?: number },
+): Map<string, { x: number; y: number }> {
+  const out = new Map<string, { x: number; y: number }>();
+  const sorted = [...boxes].sort((a, b) => a.y - b.y || a.x - b.x);
+  const startX = opts.originX + opts.padX;
+  const startY = opts.originY + opts.padTop;
+
+  if (mode === "rows") {
+    let y = startY;
+    for (const b of sorted) {
+      out.set(b.id, { x: startX, y });
+      y += b.h + opts.gap;
+    }
+  } else if (mode === "columns") {
+    let x = startX;
+    for (const b of sorted) {
+      out.set(b.id, { x, y: startY });
+      x += b.w + opts.gap;
+    }
+  } else {
+    const maxW = opts.maxRowWidth ?? FRAME_ROW_MAX;
+    let x = startX, y = startY, rowH = 0;
+    for (const b of sorted) {
+      if (x > startX && x + b.w - startX > maxW) { x = startX; y += rowH + opts.gap; rowH = 0; }
+      out.set(b.id, { x, y });
+      x += b.w + opts.gap;
+      if (b.h > rowH) rowH = b.h;
+    }
+  }
+  return out;
 }
 
 // ── nesting-aware whole-canvas auto-fit ─────────────────────────────────────

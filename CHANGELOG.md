@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Added
 - **Worktree sub-frames now nest in the Layers panel** and each repo/workspace frame shows its **current branch** as a Zed-style badge. `apps/desktop/src/renderer/src/{LayersPanel,FrameNode}.tsx`.
+- **Opt-in "arrange" for a frame's contents.** Free drag stays the default (and new tiles still auto-pack to avoid overlap), but a frame's header now has an arrange control that snaps its tiles **and** its worktree sub-frames into **Columns / Rows / Grid** on demand — worktrees-as-columns is a clean way to line branches up side by side. `apps/desktop/src/renderer/src/{frame-layout,Canvas,FrameNode}.{ts,tsx}`.
 
 ### Fixed
 - **Worktree nesting hardening (architecture + performance review).** Deleting a repo frame no longer orphans its worktree children (they're removed from the canvas; the worktrees stay on disk, detach `×` is the destructive path). A tile dropped inside a worktree frame now reliably joins *that* worktree (its PTY runs on the right branch/cwd) — `parentFrameOf` prefers the innermost frame. Spawning/dragging a worktree no longer makes the nest jump (the separation pass pins the anchor's parent). A worktree frame dragged out of its parent now **detaches** instead of snapping back. Guards against >2-level nesting and double-create races. Tiles and worktree sub-frames share one occupancy model so the parent divides space without overlap. `apps/desktop/src/renderer/src/{Canvas,frame-layout}.{ts,tsx}`.
