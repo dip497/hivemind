@@ -36,6 +36,7 @@ import {
   type FrameState,
 } from "./canvas-persistence";
 import { useStateWithRef } from "./use-state-with-ref";
+import { inEditable, inTextField } from "./dom-focus";
 import type { WorktreeEntry } from "../../shared/ipc";
 
 /** Auto-derive a short tile name from the command. Uses identifyAgent for
@@ -1148,21 +1149,6 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
       if (which === "tree" || which === "shell" || which === "diff" || which === "issues") {
         spawnVis(which);
       }
-    };
-    const inEditable = (t: EventTarget | null): boolean => {
-      const el = t as HTMLElement | null;
-      return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable);
-    };
-    // A REAL text field (tile rename, palette search, issue forms) where every
-    // key — including "." and Escape — must type/act normally. Distinct from the
-    // terminal/editor, which are also "editable" but are canvas content you
-    // navigate FROM. xterm's hidden textarea carries `.xterm-helper-textarea`.
-    const inTextField = (t: EventTarget | null): boolean => {
-      const el = t as HTMLElement | null;
-      if (!el) return false;
-      if (el.tagName === "INPUT") return true;
-      if (el.tagName === "TEXTAREA") return !el.classList.contains("xterm-helper-textarea");
-      return false;
     };
     const onKey = (e: KeyboardEvent) => {
       // ── modifier shortcuts (kept for muscle memory) ──
