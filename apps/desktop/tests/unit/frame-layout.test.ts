@@ -6,6 +6,7 @@ import {
   nextSlotInFrame,
   computeFrameLayout,
   arrangeBoxes,
+  frameAtPoint,
   FRAME_GAP,
   type FrameGeom,
   type MemberRect,
@@ -261,4 +262,32 @@ test("arrange grid: wraps past maxRowWidth, row advances by tallest", () => {
   // c wraps to a new row below the tallest in row 1 (200).
   assert.deepEqual(m.get("c"), { x: 124, y: 248 + 200 + 24 });
   assert.ok(noOverlap(m, boxes));
+});
+
+// ── frameAtPoint (drop-membership; replaces frame-contains-tile logic) ───────
+const wf = (id: string, x: number, y: number, w: number, h: number, parentFrameId?: string) =>
+  ({ id, x, y, w, h, parentFrameId });
+
+test("frameAtPoint: a point inside a frame returns that frame + origin", () => {
+  const frames = [wf("a", 0, 0, 500, 400)];
+  assert.deepEqual(frameAtPoint(frames, 100, 100), { id: "a", x: 0, y: 0 });
+});
+
+test("frameAtPoint: a point outside every frame returns null", () => {
+  assert.equal(frameAtPoint([wf("a", 0, 0, 100, 100)], 500, 500), null);
+});
+
+test("frameAtPoint: INNERMOST (worktree child) wins over its parent at the same point", () => {
+  // child 'c' (worktree) sits inside parent 'p'. A drop in the overlap joins 'c'
+  // so the tile's PTY runs on the worktree branch — the reviewer's H3 fix.
+  const framesZDesc = [wf("c", 50, 50, 200, 200, "p"), wf("p", 0, 0, 800, 600)];
+  assert.equal(frameAtPoint(framesZDesc, 100, 100)!.id, "c");
+  // A point inside the parent but OUTSIDE the child joins the parent.
+  assert.equal(frameAtPoint(framesZDesc, 400, 400)!.id, "p");
+});
+
+test("frameAtPoint: among same-level frames, the first (topmost-z) hit wins", () => {
+  // Caller passes z-descending; two overlapping top-level frames → first wins.
+  const framesZDesc = [wf("top", 0, 0, 300, 300), wf("bottom", 0, 0, 300, 300)];
+  assert.equal(frameAtPoint(framesZDesc, 50, 50)!.id, "top");
 });

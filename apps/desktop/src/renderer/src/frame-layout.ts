@@ -385,3 +385,20 @@ export function computeFrameLayout(
   }
   return { geometry, tileShift };
 }
+
+/** Which frame contains the point (cx,cy)? Prefers the INNERMOST frame — a
+ *  worktree child sits geometrically inside its repo parent, so a tile dropped
+ *  there must join the CHILD (its PTY runs on the worktree's branch/cwd), not
+ *  the parent. Among children / among parents, the first hit wins, so pass the
+ *  frames z-DESCENDING for topmost-wins. Pure; used for drop-membership. */
+export function frameAtPoint(
+  framesZDesc: Array<{ id: string; x: number; y: number; w: number; h: number; parentFrameId?: string }>,
+  cx: number,
+  cy: number,
+): { id: string; x: number; y: number } | null {
+  const hit = (f: { x: number; y: number; w: number; h: number }) =>
+    cx >= f.x && cx <= f.x + f.w && cy >= f.y && cy <= f.y + f.h;
+  for (const f of framesZDesc) if (f.parentFrameId && hit(f)) return { id: f.id, x: f.x, y: f.y };
+  for (const f of framesZDesc) if (!f.parentFrameId && hit(f)) return { id: f.id, x: f.x, y: f.y };
+  return null;
+}

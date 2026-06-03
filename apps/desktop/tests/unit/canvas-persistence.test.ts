@@ -45,6 +45,9 @@ test("saveLayout → loadLayout round-trips frames + tiles + viewport", () => {
   assert.equal(l.tiles![0]!.kind, "shell");
   assert.deepEqual(l.frameOf, { a: "f1" });
   assert.deepEqual(l.viewport, { x: 5, y: 6, zoom: 1.5 });
+  // Tile sizes persist across reload (replaces the tile-size-persist e2e).
+  assert.deepEqual(l.sizes, { a: { width: 100, height: 80 } });
+  assert.deepEqual(l.positions, { a: { x: 1, y: 2 } });
 });
 
 test("migration: backfills missing frame z by index order", () => {

@@ -12,7 +12,7 @@ import {
 import { LayersPanel, type LayerTile, type LayerFrame } from "./LayersPanel";
 import type { TileStatusKind } from "./agent-status-bus";
 import { queueWork } from "./claude-bus";
-import { FRAME_ROW_MAX } from "./frame-layout";
+import { FRAME_ROW_MAX, frameAtPoint } from "./frame-layout";
 import { ToolIsland, ZoomIsland } from "./canvas-islands";
 import { Toasts, CanvasEmptyState } from "./canvas-overlays";
 import { nodeTypes } from "./canvas-nodes";
@@ -397,15 +397,9 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // top-left RELATIVE position (relX = topLeftX − frame.x).
   const parentFrameOf = useCallback(
     (cx: number, cy: number): { parentId: string; fx: number; fy: number } | null => {
-      const hit = (f: FrameState) => cx >= f.x && cx <= f.x + f.w && cy >= f.y && cy <= f.y + f.h;
-      // Prefer the INNERMOST frame: a worktree child sits geometrically inside
-      // its repo parent, so a tile dropped there must join the CHILD (its PTY
-      // runs on the worktree's branch/cwd) — not the parent. Child frames win
-      // over their ancestor regardless of z; among children/among parents,
-      // topmost-z wins (sortedFrames is z-desc).
-      for (const f of sortedFrames) if (f.parentFrameId && hit(f)) return { parentId: f.id, fx: f.x, fy: f.y };
-      for (const f of sortedFrames) if (!f.parentFrameId && hit(f)) return { parentId: f.id, fx: f.x, fy: f.y };
-      return null;
+      // Innermost-frame-wins drop membership (pure — see frameAtPoint).
+      const r = frameAtPoint(sortedFrames, cx, cy);
+      return r ? { parentId: r.id, fx: r.x, fy: r.y } : null;
     },
     [sortedFrames],
   );
