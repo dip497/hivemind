@@ -10,6 +10,8 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { simpleGit, type SimpleGit } from "simple-git";
 import { applyShellEnvToProcess } from "./shell-env.js";
+import { isRemote } from "../shared/remote-uri.js";
+import { runRemoteGit, readRemoteFile, writeRemoteFile } from "./remote/git.js";
 import type {
   DiffPayload,
   DiffScope,
@@ -49,6 +51,10 @@ const GIT_TIMEOUTS: Record<string, number> = {
 
 async function rawGit(repoPath: string, args: string[]): Promise<string> {
   const timeoutMs = GIT_TIMEOUTS[args[0] ?? ""] ?? GIT_DEFAULT_TIMEOUT_MS;
+  // Remote repo (ssh:// uri): run git over ssh exec instead of a local spawn.
+  // Every porcelain op built on rawGit (status, ls-files, diff, show, rev-parse,
+  // commit, push, branch, worktree…) becomes remote-capable for free.
+  if (isRemote(repoPath)) return runRemoteGit(repoPath, args, timeoutMs);
   try {
     return await spawnGit(repoPath, args, timeoutMs);
   } catch (e) {
@@ -220,23 +226,27 @@ export async function gitStatus(repoPath: string): Promise<GitStatusSnapshot> {
     }
   }
 
-  // Detect merge/rebase by checking .git filesystem markers.
-  const gitDir = path.join(repoPath, ".git");
-  try {
-    await fs.stat(path.join(gitDir, "MERGE_HEAD"));
-    snap.isMerging = true;
-  } catch {
-    /* not merging */
-  }
-  try {
-    await fs.stat(path.join(gitDir, "rebase-merge"));
-    snap.isRebasing = true;
-  } catch {
+  // Detect merge/rebase by checking .git filesystem markers. Local only — a
+  // remote repo's .git isn't on this host's FS (MVP: no merge/rebase banner
+  // for remote frames; the status itself is correct).
+  if (!isRemote(repoPath)) {
+    const gitDir = path.join(repoPath, ".git");
     try {
-      await fs.stat(path.join(gitDir, "rebase-apply"));
+      await fs.stat(path.join(gitDir, "MERGE_HEAD"));
+      snap.isMerging = true;
+    } catch {
+      /* not merging */
+    }
+    try {
+      await fs.stat(path.join(gitDir, "rebase-merge"));
       snap.isRebasing = true;
     } catch {
-      /* not rebasing */
+      try {
+        await fs.stat(path.join(gitDir, "rebase-apply"));
+        snap.isRebasing = true;
+      } catch {
+        /* not rebasing */
+      }
     }
   }
 
@@ -362,6 +372,7 @@ export async function gitFileContents(
 ): Promise<string> {
   if (rev === "WORKING") {
     try {
+      if (isRemote(repoPath)) return await readRemoteFile(repoPath, file);
       return await fs.readFile(path.join(repoPath, file), "utf8");
     } catch {
       return "";
@@ -379,10 +390,13 @@ export async function gitFileContents(
 
 export async function gitStage(repoPath: string, files: string[]): Promise<void> {
   if (files.length === 0) return;
+  // Remote has no simple-git; route through rawGit (which is remote-aware).
+  if (isRemote(repoPath)) { await rawGit(repoPath, ["add", "--", ...files]); return; }
   await repo(repoPath).add(files);
 }
 export async function gitUnstage(repoPath: string, files: string[]): Promise<void> {
   if (files.length === 0) return;
+  if (isRemote(repoPath)) { await rawGit(repoPath, ["reset", "HEAD", "--", ...files]); return; }
   await repo(repoPath).reset(["HEAD", "--", ...files]);
 }
 export async function gitDiscard(repoPath: string, files: string[]): Promise<void> {
@@ -404,7 +418,13 @@ export async function gitDiscard(repoPath: string, files: string[]): Promise<voi
   if (tracked.length > 0) {
     // Restore tracked files; let a real failure (e.g. index.lock) propagate
     // instead of swallowing it and then rm'ing the file.
-    await repo(repoPath).checkout(["--", ...tracked]);
+    if (isRemote(repoPath)) await rawGit(repoPath, ["checkout", "--", ...tracked]);
+    else await repo(repoPath).checkout(["--", ...tracked]);
+  }
+  if (untracked.length > 0 && isRemote(repoPath)) {
+    // Remote untracked removal via `git clean -f` (no local fs access).
+    await rawGit(repoPath, ["clean", "-f", "--", ...untracked]);
+    return;
   }
   for (const f of untracked) {
     await fs.rm(path.join(repoPath, f), { force: true, recursive: true }).catch(() => {
@@ -440,7 +460,9 @@ export async function gitConflictedFile(
   repoPath: string,
   file: string
 ): Promise<{ raw: string; conflicts: number }> {
-  const raw = await fs.readFile(path.join(repoPath, file), "utf8");
+  const raw = isRemote(repoPath)
+    ? await readRemoteFile(repoPath, file)
+    : await fs.readFile(path.join(repoPath, file), "utf8");
   const conflicts = raw.split("\n").filter((l) => CONFLICT_RE.test(l + "\n")).length;
   return { raw, conflicts };
 }
@@ -450,6 +472,7 @@ export async function gitWriteResolved(
   file: string,
   contents: string
 ): Promise<void> {
+  if (isRemote(repoPath)) { await writeRemoteFile(repoPath, file, contents); return; }
   await fs.writeFile(path.join(repoPath, file), contents, "utf8");
 }
 

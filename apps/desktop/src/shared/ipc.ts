@@ -88,6 +88,26 @@ export interface WorktreeCreateOpts {
   includeFiles?: string[];
 }
 
+// ── remote (SSH) frames ───────────────────────────────────────────────────
+/** Auth for a remote host. SSH agent is always tried first; these are the
+ *  explicit fallbacks. */
+export interface RemoteAuth {
+  /** Path to a private key file. */
+  privateKeyPath?: string;
+  /** Passphrase for an encrypted private key. */
+  passphrase?: string;
+  /** Username override (else parsed from the uri, else $USER). */
+  username?: string;
+}
+/** One remote directory entry (SFTP) for the folder picker / tree. */
+export interface RemoteDirEntry {
+  name: string;
+  isDir: boolean;
+  isSymlink: boolean;
+  size: number;
+  mtime: number;
+}
+
 // ── full IPC surface ──────────────────────────────────────────────────────
 
 export interface HiveIpc {
@@ -182,6 +202,13 @@ export interface HiveIpc {
   fileRead(repoPath: string, relPath: string): Promise<string>;
   /** Write UTF-8 contents to a repo-relative file. Rejects path traversal. */
   fileWrite(repoPath: string, relPath: string, contents: string): Promise<void>;
+
+  // ── remote (SSH) frames ───────────────────────────────────
+  /** Probe + register auth for an ssh://[user@]host[:port]/ target; returns the
+   *  remote home dir + the connection-pool host id. Throws on connect failure. */
+  sshConnect(uri: string, auth: RemoteAuth): Promise<{ home: string; hostId: string }>;
+  /** List a remote directory (for the folder picker). Empty dir → remote home. */
+  sshListDir(uri: string, dir: string): Promise<{ dir: string; entries: RemoteDirEntry[] }>;
 
   // ── worktree ──────────────────────────────────────────────
   worktreeList(repoPath: string): Promise<WorktreeEntry[]>;

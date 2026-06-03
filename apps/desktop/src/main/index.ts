@@ -27,6 +27,12 @@ import os from "node:os";
 import type { IssuePatch } from "@hivemind/core/types";
 import * as ptyHost from "./pty-host.js";
 import * as ptyDaemon from "./daemon-client.js";
+import { isRemote, parseRemote } from "../shared/remote-uri.js";
+import {
+  spawnRemotePty, writeRemotePty, resizeRemotePty, killRemotePty, hasRemotePty,
+} from "./remote/pty.js";
+import { readRemoteFile, writeRemoteFile } from "./remote/git.js";
+import { remoteConns, type HostAuth } from "./remote/conn.js";
 // tmux-style persistence is ON by default — terminal sessions live in a
 // detached daemon and survive the window closing. No user-facing flag.
 // `HIVEMIND_PTY_DAEMON=0` is an internal escape hatch (debugging / a hostile
@@ -554,25 +560,58 @@ function resolveInRepo(repoPath: string, relPath: string): string {
   }
   return abs;
 }
+// Remote (ssh://) traversal guard: paths are POSIX-relative to the remote repo;
+// reject absolutes + `..` segments so a renderer can't escape the repo root.
+function assertRemoteRel(relPath: string): string {
+  const norm = relPath.replace(/\\/g, "/");
+  if (norm.startsWith("/") || norm.split("/").includes("..")) {
+    throw new Error(`path escapes repo: ${relPath}`);
+  }
+  return relPath;
+}
 // Variant for git CLI args: validates the path stays inside repoPath but
 // returns the ORIGINAL relPath (git commands receive paths relative to the
 // repo, not absolute). Throws on escape so callers fail-loud at the IPC
 // boundary. Use for every file/files arg that flows from the renderer into
 // a git-adapter function (which then hands them to `git` or `fs`).
 function assertInRepo(repoPath: string, relPath: string): string {
+  if (isRemote(repoPath)) return assertRemoteRel(relPath);
   resolveInRepo(repoPath, relPath);
   return relPath;
 }
 function assertAllInRepo(repoPath: string, paths: readonly string[]): string[] {
+  if (isRemote(repoPath)) return paths.map(assertRemoteRel);
   for (const p of paths) resolveInRepo(repoPath, p);
   return paths.slice();
 }
 ipcMain.handle("fileRead", wrap((_e, repoPath: string, relPath: string) =>
-  fsp.readFile(resolveInRepo(repoPath, relPath), "utf8")
+  isRemote(repoPath)
+    ? readRemoteFile(repoPath, assertRemoteRel(relPath))
+    : fsp.readFile(resolveInRepo(repoPath, relPath), "utf8")
 ));
 ipcMain.handle("fileWrite", wrap((_e, repoPath: string, relPath: string, contents: string) =>
-  fsp.writeFile(resolveInRepo(repoPath, relPath), contents, "utf8")
+  isRemote(repoPath)
+    ? writeRemoteFile(repoPath, assertRemoteRel(relPath), contents)
+    : fsp.writeFile(resolveInRepo(repoPath, relPath), contents, "utf8")
 ));
+
+// ── remote (SSH) frames ─────────────────────────────────────────────────
+// Probe + auth-register a host, returning its home dir (the connectivity check
+// behind "attach remote"). `uri` is ssh://[user@]host[:port]/ — the path is
+// ignored here (the picker chooses it next).
+ipcMain.handle("sshConnect", wrap(async (_e, uri: string, auth: HostAuth) => {
+  const { home, hostId } = await remoteConns.probe(uri, auth ?? {});
+  return { home, hostId };
+}));
+// List a remote directory for the folder picker. `dir` empty → the host's home.
+ipcMain.handle("sshListDir", wrap(async (_e, uri: string, dir: string) => {
+  const target = parseRemote(uri);
+  const fs = await remoteConns.fs(target);
+  const start = dir && dir.trim() ? dir : await fs.home();
+  const real = await fs.realpath(start).catch(() => start);
+  const entries = await fs.readdir(real);
+  return { dir: real, entries };
+}));
 
 // worktree
 ipcMain.handle("worktreeList", wrap((_e, repoPath: string) => worktreeList(repoPath)));
@@ -604,6 +643,20 @@ ipcMain.handle("ptySpawn", wrap(async (e, opts: Parameters<typeof spawnPty>[0]) 
   // must too. And reject a non-directory cwd up front (otherwise it surfaces as
   // an opaque node-pty throw later).
   recordPtySpawn();
+  const sender = e.sender;
+  // Remote frame (ssh:// cwd): run the PTY over ssh, in-main. Skip the local
+  // cwd stat + shell-env patch (those are for the LOCAL host). The data/exit
+  // plumbing below is identical.
+  if (isRemote(opts.cwd)) {
+    const safeSendR = (channel: string, payload: unknown) => {
+      if (sender.isDestroyed()) return;
+      try { sender.send(channel, payload); } catch { /* sender gone */ }
+    };
+    return spawnRemotePty(opts, {
+      onData: (data) => safeSendR(`pty:data:${opts.tileId}`, data),
+      onExit: (code, signal) => safeSendR(`pty:exit:${opts.tileId}`, { code, signal }),
+    });
+  }
   if (opts.cwd) {
     const st = await fsp.stat(opts.cwd).catch(() => null);
     if (!st?.isDirectory()) throw new Error(`pty cwd is not a directory: ${opts.cwd}`);
@@ -612,7 +665,6 @@ ipcMain.handle("ptySpawn", wrap(async (e, opts: Parameters<typeof spawnPty>[0]) 
   // (or, in daemon mode, the daemon process that inherits this env) spawns —
   // otherwise `claude`/`gh`/nvm-node may not resolve. Idempotent + cached.
   await applyShellEnvToProcess();
-  const sender = e.sender;
   // Guard against `Object has been destroyed` — a PTY can outlive the
   // renderer (window closed mid-session) and emit data/exit after the
   // sender is gone. Silently drop those instead of crashing main.
@@ -629,14 +681,21 @@ ipcMain.handle("ptySpawn", wrap(async (e, opts: Parameters<typeof spawnPty>[0]) 
     onExit: (code, signal) => safeSend(`pty:exit:${opts.tileId}`, { code, signal }),
   });
 }));
-ipcMain.on("ptyWrite", (_e, tileId: string, data: string) => writePty(tileId, data));
-ipcMain.on("ptyResize", (_e, tileId: string, cols: number, rows: number) =>
-  resizePty(tileId, cols, rows)
+ipcMain.on("ptyWrite", (_e, tileId: string, data: string) =>
+  hasRemotePty(tileId) ? writeRemotePty(tileId, data) : writePty(tileId, data)
 );
-ipcMain.on("ptyKill", (_e, tileId: string) => killPty(tileId));
+ipcMain.on("ptyResize", (_e, tileId: string, cols: number, rows: number) =>
+  hasRemotePty(tileId) ? resizeRemotePty(tileId, cols, rows) : resizePty(tileId, cols, rows)
+);
+ipcMain.on("ptyKill", (_e, tileId: string) =>
+  hasRemotePty(tileId) ? killRemotePty(tileId) : killPty(tileId)
+);
 // Detach (window closed / tile unmounted): daemon keeps the session alive;
-// in-process path treats it as a kill.
-ipcMain.on("ptyDetach", (_e, tileId: string) => detachPty(tileId));
+// in-process path treats it as a kill. Remote PTYs can't survive an ssh drop,
+// so detach == kill there too.
+ipcMain.on("ptyDetach", (_e, tileId: string) =>
+  hasRemotePty(tileId) ? killRemotePty(tileId) : detachPty(tileId)
+);
 
 // ── lifecycle ─────────────────────────────────────────────────
 

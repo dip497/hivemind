@@ -64,6 +64,9 @@ const api: HiveIpc & {
   fileWrite: (repoPath, relPath, contents) =>
     ipcRenderer.invoke("fileWrite", repoPath, relPath, contents),
 
+  sshConnect: (uri, auth) => ipcRenderer.invoke("sshConnect", uri, auth),
+  sshListDir: (uri, dir) => ipcRenderer.invoke("sshListDir", uri, dir),
+
   worktreeList: (repoPath) => ipcRenderer.invoke("worktreeList", repoPath),
   worktreeCreate: (repoPath, opts: WorktreeCreateOpts) =>
     ipcRenderer.invoke("worktreeCreate", repoPath, opts),
