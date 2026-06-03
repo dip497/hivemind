@@ -37,6 +37,15 @@ import {
 } from "./canvas-persistence";
 import { useStateWithRef } from "./use-state-with-ref";
 import { inEditable, inTextField } from "./dom-focus";
+import {
+  defaultTileSize,
+  defaultSizeForKind,
+  FRAME_PAD,
+  FRAME_HEADER,
+  FRAME_EMPTY_W,
+  FRAME_EMPTY_H,
+} from "./canvas-sizing";
+import { useWorktrees } from "./useWorktrees";
 import type { WorktreeEntry } from "../../shared/ipc";
 
 /** Auto-derive a short tile name from the command. Uses identifyAgent for
@@ -92,45 +101,7 @@ const SINGLETON_KINDS: ReadonlySet<TileKind> = new Set(["editor", "diff", "issue
 
 
 
-/** Fallback tile dimensions for tiles never explicitly resized (so they have
- *  no entry in the `sizes` map). Mirrors the defaults in the nodes useMemo.
- *  Used by the frame auto-fit effect to estimate a child's box without a DOM
- *  measurement. */
-function defaultTileSize(id: string): { width: number; height: number } {
-  if (id === WORKBENCH_TILE_ID || id === "tile-diff-1") return { width: 1400, height: 900 };
-  if (id === "tile-issues-1") return { width: 680, height: 460 };
-  // terminals + claude extras
-  return { width: 1200, height: 820 };
-}
-
-/** Default size by KIND — the single source of truth for a fresh tile's box.
- *  Node-building, the frame auto-fit effect, and placeInFrame all derive from
- *  this so the frame grows to the tile's ACTUAL rendered size. (defaultTileSize
- *  above keyed off fixed ids, which broke once tiles became per-instance with
- *  timestamped ids — claude rendered 1480×1000 but the frame fit it to 1200×820
- *  and the tile spilled out.) */
-function defaultSizeForKind(kind: TileKind): { width: number; height: number } {
-  switch (kind) {
-    case "editor":
-    case "diff":
-      return { width: 1400, height: 900 };
-    case "issues":
-      return { width: 680, height: 460 };
-    case "claude":
-      return { width: 1480, height: 1000 };
-    case "shell":
-    default:
-      return { width: 1200, height: 820 };
-  }
-}
-
-// Frame auto-fit geometry. Frames are sized to the bbox of their member tiles
-// + these paddings; an empty frame collapses to the placeholder so a bound
-// workspace zone stays a visible, droppable target with its header chrome.
-const FRAME_PAD = 28;
-const FRAME_HEADER = 36;
-const FRAME_EMPTY_W = 460;
-const FRAME_EMPTY_H = 200;
+// tile sizing helpers + FRAME_* constants moved to canvas-sizing.ts
 
 export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // Bootstrapped from localStorage on first render (synchronous useState
@@ -607,198 +578,14 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     });
   }, []);
 
-  // ── worktree sub-frames ─────────────────────────────────────────────────────
-  // A repo frame (base or workspace zone) owns nested WORKTREE sub-frames.
-  // Attaching/creating a worktree spawns a child FrameState (parentFrameId =
-  // the repo frame) carrying {branch, worktreePath, head}; its tiles scope to
-  // the worktree (see mkTile). The picker UI lives in FrameNode/WorktreePicker.
-
-  // The repo a frame's worktrees live under: a workspace zone's bound repo,
-  // else the canvas base repo.
-  const frameRepo = useCallback((frameId: string): string | null => {
-    const f = framesRef.current.find((x) => x.id === frameId);
-    return f?.workspacePath ?? repoPathRef.current ?? null;
-  }, []);
-
-  // Spawn a worktree sub-frame nested in repo frame `parentId`, packed beside
-  // any existing sibling worktree frames (the auto-fit effect then grows the
-  // parent to wrap it). Re-selecting an already-attached worktree just focuses.
-  const spawnWorktreeFrame = useCallback(
-    (parentId: string, wt: { branch: string; path: string; head: string }) => {
-      const parent = framesRef.current.find((f) => f.id === parentId);
-      if (!parent) return;
-      // Nesting is exactly 2 levels (repo → worktree). A worktree can't own
-      // worktrees, and the node-build ordering + auto-fit assume depth ≤ 2 — so
-      // never nest under a frame that is itself a worktree child.
-      if (parent.parentFrameId) return;
-      const dup = framesRef.current.find(
-        (f) => f.parentFrameId === parentId && f.worktreePath === wt.path,
-      );
-      if (dup) { setSelectedFrameId(dup.id); focusTile(dup.id); return; }
-      // Pack beside BOTH existing sibling worktree frames AND the parent's direct
-      // tiles, so a new worktree frame doesn't land on a tile (mirror of
-      // placeInFrame, which packs tiles around child frames).
-      const siblings = framesRef.current
-        .filter((f) => f.parentFrameId === parentId)
-        .map((s) => ({ id: s.id, x: s.x, y: s.y, w: s.w, h: s.h }));
-      for (const t of tilesRef.current) {
-        if (frameOfRef.current[t.id] !== parentId) continue;
-        const p = positionsRef.current[t.id];
-        if (!p) continue;
-        const sz = sizesRef.current[t.id] ?? (defaultSizeForKind(t.kind));
-        siblings.push({ id: t.id, x: p.x, y: p.y, w: sz.width, h: sz.height });
-      }
-      const slot = nextSlotInFrame(
-        { x: parent.x, y: parent.y },
-        siblings,
-        { w: FRAME_EMPTY_W, h: FRAME_EMPTY_H },
-        { padX: FRAME_PAD, padTop: FRAME_HEADER + FRAME_PAD, gap: FRAME_GAP, maxRowWidth: FRAME_ROW_MAX },
-      );
-      const id = `frame-wt-${Date.now()}`;
-      const maxZ = framesRef.current.reduce((m, f) => (f.z > m ? f.z : m), 0);
-      const child: FrameState = {
-        id, x: slot.x, y: slot.y, w: FRAME_EMPTY_W, h: FRAME_EMPTY_H,
-        title: wt.branch, color: parent.color, z: maxZ + 1,
-        branch: wt.branch, worktreePath: wt.path, head: wt.head,
-        parentFrameId: parentId,
-      };
-      lastActiveFrameRef.current = id;
-      framesRef.current = [...framesRef.current, child];
-      setFrames((fs) => [...fs, child]);
-      setSelectedFrameId(id);
-      requestAnimationFrame(() => focusTile(id));
-    },
-    [focusTile],
-  );
-
-  const onAttachWorktree = useCallback(
-    (parentId: string, entry: WorktreeEntry) => {
-      if (!entry.branch) {
-        pushToastRef.current?.({
-          tileId: `frame-wt-${parentId}`,
-          label: "can't attach a detached worktree",
-          status: "blocked",
-        });
-        return;
-      }
-      spawnWorktreeFrame(parentId, { branch: entry.branch, path: entry.path, head: entry.head });
-    },
-    [spawnWorktreeFrame],
-  );
-
-  // Branches with an in-flight `worktreeCreate` — guards against a double-click
-  // (or attach-while-create) spawning two frames for the same branch, since the
-  // dedupe in spawnWorktreeFrame keys on worktreePath which doesn't exist yet.
-  const creatingWtRef = useRef<Set<string>>(new Set());
-  const onCreateWorktree = useCallback(
-    async (parentId: string, rawBranch: string) => {
-      const branch = rawBranch.trim();
-      const repo = frameRepo(parentId);
-      if (!branch || !repo) return;
-      const key = `${parentId}::${branch}`;
-      if (creatingWtRef.current.has(key)) return;
-      creatingWtRef.current.add(key);
-      try {
-        const res = await window.hive.worktreeCreate(repo, { branch });
-        // worktreeCreate returns {path, branch} only — fetch the head sha so the
-        // pill is complete (best-effort; the frame is fine without it).
-        let head = "";
-        try {
-          const ws = await window.hive.worktreeList(repo);
-          head = ws.find((w) => w.path === res.path)?.head ?? "";
-        } catch { /* head stays empty */ }
-        spawnWorktreeFrame(parentId, { branch: res.branch, path: res.path, head });
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        console.error("[hivemind] worktree create failed:", msg);
-        pushToastRef.current?.({
-          tileId: `frame-wt-${parentId}`,
-          label: `create ${branch} failed: ${msg.slice(0, 120)}`,
-          status: "blocked",
-        });
-      } finally {
-        creatingWtRef.current.delete(key);
-      }
-    },
-    [frameRepo, spawnWorktreeFrame],
-  );
-
-  // Detach a worktree sub-frame: remove its worktree on disk (destructive),
-  // close its tiles (their cwd is gone), then drop the child frame.
-  const unbindBranch = useCallback(async (frameId: string) => {
-    const frame = framesRef.current.find((f) => f.id === frameId);
-    if (!frame) return;
-    const repo = frame.parentFrameId ? frameRepo(frame.parentFrameId) : repoPathRef.current;
-    if (frame.worktreePath && repo) {
-      const ok = typeof window.confirm === "function"
-        ? window.confirm(`Detach worktree "${frame.branch}"?\n\n${frame.worktreePath}\n\nUncommitted changes there will be lost.`)
-        : true;
-      if (!ok) return;
-      try {
-        await window.hive.worktreeRemove(repo, frame.worktreePath);
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        console.error("[hivemind] worktree remove failed:", msg);
-        pushToastRef.current?.({
-          tileId: `frame-unbind-${frameId}`,
-          label: `detach failed: ${msg.slice(0, 120)}`,
-          status: "blocked",
-        });
-        return;
-      }
-    }
-    const memberTiles = Object.keys(frameOfRef.current).filter((tid) => frameOfRef.current[tid] === frameId);
-    for (const tid of memberTiles) closeTile(tid);
-    if (memberTiles.length) {
-      // Drop their membership too — else frameOf accumulates dead keys (which
-      // also persist to localStorage).
-      setFrameOf((m) => {
-        const copy = { ...m };
-        for (const tid of memberTiles) delete copy[tid];
-        return copy;
-      });
-    }
-    setFrames((fs) => fs.filter((f) => f.id !== frameId));
-  }, [frameRepo, closeTile]);
-
-  // ── workspace-zone binding ────────────────────────────────────────────────
-  // Bind a frame to an arbitrary repo folder so multiple projects coexist on
-  // one canvas. Tiles inside the frame then run with cwd/repoPath = that repo
-  // and root = its .hivemind (see mkTile). Reuses the folder picker + project
-  // resolver; installs the agentic stack so the zone's agents can work issues.
-  const bindWorkspace = useCallback(async (frameId: string) => {
-    try {
-      const dir = await window.hive.pickProjectFolder();
-      if (!dir) return;
-      const proj = await window.hive.resolveProject(dir);
-      const wsPath = proj.repoPath ?? dir;
-      const name = wsPath.split("/").filter(Boolean).pop() ?? "workspace";
-      setFrames((fs) =>
-        fs.map((f) =>
-          f.id === frameId
-            ? { ...f, workspacePath: wsPath, workspaceRoot: proj.root ?? null, title: name }
-            : f,
-        ),
-      );
-      // Best-effort: make the zone's repo work-on-this capable. Don't block/await.
-      void window.hive.installAgentic(wsPath).catch(() => {});
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      console.error("[hivemind] bind workspace failed:", msg);
-      pushToastRef.current?.({
-        tileId: `frame-ws-${frameId}`,
-        label: `bind workspace failed: ${msg.slice(0, 120)}`,
-        status: "blocked",
-      });
-    }
-  }, []);
-
-  const unbindWorkspace = useCallback((frameId: string) => {
-    // External repo — nothing on disk to remove; just clear the binding.
-    setFrames((fs) =>
-      fs.map((f) => (f.id === frameId ? { ...f, workspacePath: undefined, workspaceRoot: undefined } : f)),
-    );
-  }, []);
+  // Worktree + workspace-zone lifecycle (IPC, in-flight guard, detach confirm).
+  const {
+    onAttachWorktree, onCreateWorktree, unbindBranch, bindWorkspace, unbindWorkspace,
+  } = useWorktrees({
+    framesRef, tilesRef, positionsRef, sizesRef, frameOfRef, repoPathRef,
+    lastActiveFrameRef, pushToastRef, setFrames, setFrameOf, setSelectedFrameId,
+    focusTile, closeTile,
+  });
 
   /** Find the topmost frame containing the (x,y) point. Sorted by z desc so
    *  overlapping frames return the visually-topmost one. Used at tile-spawn
