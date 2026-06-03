@@ -35,6 +35,7 @@ import {
   type TileInstance,
   type FrameState,
 } from "./canvas-persistence";
+import { useStateWithRef } from "./use-state-with-ref";
 import type { WorktreeEntry } from "../../shared/ipc";
 
 /** Auto-derive a short tile name from the command. Uses identifyAgent for
@@ -142,9 +143,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // All open tiles, every kind, as instances. Replaces the old `vis` singletons
   // + `extras` list. Mirror to a ref so callbacks declared before later state
   // can read the latest list without re-creating on every change.
-  const [tiles, setTiles] = useState<TileInstance[]>(initial.tiles ?? []);
-  const tilesRef = useRef(tiles);
-  useEffect(() => { tilesRef.current = tiles; }, [tiles]);
+  const [tiles, setTiles, tilesRef] = useStateWithRef<TileInstance[]>(initial.tiles ?? []);
   // Files opened in each editor tile — tabs keyed by editor tile id (repo-
   // relative paths, deduped). Each editor instance has its own tab set.
   const [editorTabs, setEditorTabs] = useState<Record<string, string[]>>(initial.editorTabs ?? {});
@@ -156,7 +155,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // every render and the resize visually no-ops (we proved this via
   // playwright: onResize callback DID fire with 460→620 px, but
   // getBoundingClientRect still read 460 because style.width won the race).
-  const [sizes, setSizes] = useState<Record<string, { width: number; height: number }>>(initial.sizes);
+  const [sizes, setSizes, sizesRef] = useStateWithRef<Record<string, { width: number; height: number }>>(initial.sizes);
   // User-renamed tile labels (per tile id). Persisted with layout. Holds USER
   // renames ONLY — an absent entry means "use the auto/agent name".
   const [tileNames, setTileNames] = useState<Record<string, string>>(initial.tileNames ?? {});
@@ -179,8 +178,6 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   const setAgentTitle = useCallback((id: string, title: string) => {
     setAgentTitles((m) => (m[id] === title ? m : { ...m, [id]: title }));
   }, []);
-  const sizesRef = useRef(sizes);
-  useEffect(() => { sizesRef.current = sizes; }, [sizes]);
   const onNodeResizeCommit = useCallback((id: string, width: number, height: number, x?: number, y?: number) => {
     setSizes((s) => {
       const cur = s[id];
@@ -211,9 +208,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // Same pattern for positions — useMemo rebuilds nodes with hardcoded x/y
   // from the layout loop, so dragged-then-released tiles would snap back
   // without this override map. Populated by onNodeDragStop.
-  const [positions, setPositions] = useState<Record<string, { x: number; y: number }>>(initial.positions);
-  const positionsRef = useRef(positions);
-  useEffect(() => { positionsRef.current = positions; }, [positions]);
+  const [positions, setPositions, positionsRef] = useStateWithRef<Record<string, { x: number; y: number }>>(initial.positions);
   const commitPosition = useCallback((id: string, x: number, y: number) => {
     // Snap on COMMIT (not during drag) — snapping during motion teleports the
     // tile in grid steps every pointermove → feels notchy. Snap only on release.
@@ -230,9 +225,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // Manual tile selection (react-flow's click-select is dead in our config —
   // see the note at the original declaration site below). Declared here so
   // openFile can select the editor tile when a file opens.
-  const [selectedTileId, setSelectedTileId] = useState<string | null>(null);
-  const selectedTileIdRef = useRef<string | null>(null);
-  useEffect(() => { selectedTileIdRef.current = selectedTileId; }, [selectedTileId]);
+  const [selectedTileId, setSelectedTileId, selectedTileIdRef] = useStateWithRef<string | null>(null);
   // Keyboard gate: a tile only takes input while selected. `tile-locked`'s
   // pointer-events:none blocks the mouse but NOT the keyboard, so a focused
   // input (CodeMirror, an issue field, …) keeps eating keystrokes after its
@@ -296,16 +289,13 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // (selectedTileId state is declared higher up so openFile can use it.)
 
   // Frame nodes — Unreal-Blueprint-style colored comment boxes for grouping.
-  const [frames, setFrames] = useState<FrameState[]>(initial.frames);
-  // Mirror frames to a ref so async bind/unbind handlers read the latest list
-  // without re-creating the callback on every frame change.
-  const framesRef = useRef<FrameState[]>(frames);
+  // frames/frameOf each expose a synchronously-readable ref (updated in the
+  // setter — see useStateWithRef). Async bind/unbind + the memoized keyboard
+  // handler read the ref; render uses the state value.
+  const [frames, setFrames, framesRef] = useStateWithRef<FrameState[]>(initial.frames);
   // Explicit tile→frame membership (see PersistedLayout.frameOf). Authoritative
   // for auto-fit, parenting, and the chip strip — geometry never decides it.
-  const [frameOf, setFrameOf] = useState<Record<string, string>>(initial.frameOf ?? {});
-  const frameOfRef = useRef(frameOf);
-  useEffect(() => { frameOfRef.current = frameOf; }, [frameOf]);
-  useEffect(() => { framesRef.current = frames; }, [frames]);
+  const [frameOf, setFrameOf, frameOfRef] = useStateWithRef<Record<string, string>>(initial.frameOf ?? {});
   // The frame the user most recently touched (spawned into / dragged). The
   // collision-separation pass keeps THIS frame fixed and pushes neighbours, so
   // growing a frame never makes your focus jump.
@@ -319,13 +309,9 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   const pushToastRef = useRef<((t: { tileId: string; label: string; status: TileStatusKind }) => void) | null>(null);
   // Track the selected frame id so F2 / bring-to-front can target it without
   // needing to thread react-flow's selection state through every render.
-  const [selectedFrameId, setSelectedFrameId] = useState<string | null>(null);
-  // Mirror to a ref so the (memoized) keyboard handler can read the latest
-  // selection without forcing the listener effect to rebind on every change.
-  const selectedFrameIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    selectedFrameIdRef.current = selectedFrameId;
-  }, [selectedFrameId]);
+  // ref (updated in the setter) so F2 / bring-to-front / the keyboard handler
+  // read the latest selection without the listener effect rebinding.
+  const [selectedFrameId, setSelectedFrameId, selectedFrameIdRef] = useStateWithRef<string | null>(null);
 
   // Reload layout when the repo changes — each repo has its own canvas state.
   // Skip on first mount (initial values already came from useMemo above).
