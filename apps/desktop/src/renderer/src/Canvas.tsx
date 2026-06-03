@@ -26,7 +26,8 @@ import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { identifyAgent } from "./agent-state";
 import { queueWork } from "./claude-bus";
 import { TileErrorBoundary } from "./TileErrorBoundary";
-import { computeFrameLayout, nextSlotInFrame, FRAME_ROW_MAX } from "./frame-layout";
+import { computeFrameLayout, nextSlotInFrame, FRAME_ROW_MAX, FRAME_GAP } from "./frame-layout";
+import type { WorktreeEntry } from "../../shared/ipc";
 
 /** Auto-derive a short tile name from the command. Uses identifyAgent for
  *  known agents (claude, codex, gemini, …), falls back to the basename of
@@ -469,11 +470,17 @@ interface FrameState {
   branch?: string;
   /** Worktree dir for `branch`; tiles inside use it as their cwd. */
   worktreePath?: string;
+  /** Short HEAD sha of the bound worktree — shown in the worktree pill. */
+  head?: string;
   /** Workspace zone: an arbitrary repo folder. Tiles inside run in this repo
    *  (cwd/repoPath) — lets multiple projects live on one canvas. */
   workspacePath?: string;
   /** The `.hivemind` root for `workspacePath` (for Issues/diff/tree scope). */
   workspaceRoot?: string | null;
+  /** When set, this is a WORKTREE sub-frame nested inside the repo frame
+   *  `parentFrameId`. It carries {branch, worktreePath, head}; tiles inside
+   *  scope to the worktree. The parent stays the repo (workspace/base) zone. */
+  parentFrameId?: string;
 }
 /** Single workbench tile id — there is only ever one workbench (explorer +
  *  tabbed editor, attached) on the canvas. */
@@ -1058,56 +1065,127 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     });
   }, []);
 
-  // ── worktree binding ──────────────────────────────────────────────────────
-  // Bind a frame to a git branch: create (or reuse) a worktree under the repo,
-  // then stash {branch, worktreePath} on the FrameState. Tiles spawned inside
-  // the frame then run with cwd = worktreePath (see mkTile below). Errors are
-  // surfaced via a toast — never crash the canvas.
-  const bindBranch = useCallback(async (frameId: string, rawBranch: string) => {
-    const branch = rawBranch.trim();
-    if (!branch || !repoPath) return;
-    try {
-      const res = await window.hive.worktreeCreate(repoPath, { branch });
-      setFrames((fs) =>
-        fs.map((f) => (f.id === frameId ? { ...f, branch: res.branch, worktreePath: res.path } : f)),
-      );
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      console.error("[hivemind] worktree bind failed:", msg);
-      pushToastRef.current?.({
-        tileId: `frame-bind-${frameId}`,
-        label: `bind ${branch} failed: ${msg.slice(0, 120)}`,
-        status: "blocked",
-      });
-    }
-  }, [repoPath]);
+  // ── worktree sub-frames ─────────────────────────────────────────────────────
+  // A repo frame (base or workspace zone) owns nested WORKTREE sub-frames.
+  // Attaching/creating a worktree spawns a child FrameState (parentFrameId =
+  // the repo frame) carrying {branch, worktreePath, head}; its tiles scope to
+  // the worktree (see mkTile). The picker UI lives in FrameNode/WorktreePicker.
 
+  // The repo a frame's worktrees live under: a workspace zone's bound repo,
+  // else the canvas base repo.
+  const frameRepo = useCallback((frameId: string): string | null => {
+    const f = framesRef.current.find((x) => x.id === frameId);
+    return f?.workspacePath ?? repoPathRef.current ?? null;
+  }, []);
+
+  // Spawn a worktree sub-frame nested in repo frame `parentId`, packed beside
+  // any existing sibling worktree frames (the auto-fit effect then grows the
+  // parent to wrap it). Re-selecting an already-attached worktree just focuses.
+  const spawnWorktreeFrame = useCallback(
+    (parentId: string, wt: { branch: string; path: string; head: string }) => {
+      const parent = framesRef.current.find((f) => f.id === parentId);
+      if (!parent) return;
+      const dup = framesRef.current.find(
+        (f) => f.parentFrameId === parentId && f.worktreePath === wt.path,
+      );
+      if (dup) { setSelectedFrameId(dup.id); focusTile(dup.id); return; }
+      const siblings = framesRef.current
+        .filter((f) => f.parentFrameId === parentId)
+        .map((s) => ({ id: s.id, x: s.x, y: s.y, w: s.w, h: s.h }));
+      const slot = nextSlotInFrame(
+        { x: parent.x, y: parent.y },
+        siblings,
+        { w: FRAME_EMPTY_W, h: FRAME_EMPTY_H },
+        { padX: FRAME_PAD, padTop: FRAME_HEADER + FRAME_PAD, gap: FRAME_GAP, maxRowWidth: FRAME_ROW_MAX },
+      );
+      const id = `frame-wt-${Date.now()}`;
+      const maxZ = framesRef.current.reduce((m, f) => (f.z > m ? f.z : m), 0);
+      const child: FrameState = {
+        id, x: slot.x, y: slot.y, w: FRAME_EMPTY_W, h: FRAME_EMPTY_H,
+        title: wt.branch, color: parent.color, z: maxZ + 1,
+        branch: wt.branch, worktreePath: wt.path, head: wt.head,
+        parentFrameId: parentId,
+      };
+      lastActiveFrameRef.current = id;
+      framesRef.current = [...framesRef.current, child];
+      setFrames((fs) => [...fs, child]);
+      setSelectedFrameId(id);
+      requestAnimationFrame(() => focusTile(id));
+    },
+    [focusTile],
+  );
+
+  const onAttachWorktree = useCallback(
+    (parentId: string, entry: WorktreeEntry) => {
+      if (!entry.branch) {
+        pushToastRef.current?.({
+          tileId: `frame-wt-${parentId}`,
+          label: "can't attach a detached worktree",
+          status: "blocked",
+        });
+        return;
+      }
+      spawnWorktreeFrame(parentId, { branch: entry.branch, path: entry.path, head: entry.head });
+    },
+    [spawnWorktreeFrame],
+  );
+
+  const onCreateWorktree = useCallback(
+    async (parentId: string, rawBranch: string) => {
+      const branch = rawBranch.trim();
+      const repo = frameRepo(parentId);
+      if (!branch || !repo) return;
+      try {
+        const res = await window.hive.worktreeCreate(repo, { branch });
+        // worktreeCreate returns {path, branch} only — fetch the head sha so the
+        // pill is complete (best-effort; the frame is fine without it).
+        let head = "";
+        try {
+          const ws = await window.hive.worktreeList(repo);
+          head = ws.find((w) => w.path === res.path)?.head ?? "";
+        } catch { /* head stays empty */ }
+        spawnWorktreeFrame(parentId, { branch: res.branch, path: res.path, head });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error("[hivemind] worktree create failed:", msg);
+        pushToastRef.current?.({
+          tileId: `frame-wt-${parentId}`,
+          label: `create ${branch} failed: ${msg.slice(0, 120)}`,
+          status: "blocked",
+        });
+      }
+    },
+    [frameRepo, spawnWorktreeFrame],
+  );
+
+  // Detach a worktree sub-frame: remove its worktree on disk (destructive),
+  // close its tiles (their cwd is gone), then drop the child frame.
   const unbindBranch = useCallback(async (frameId: string) => {
     const frame = framesRef.current.find((f) => f.id === frameId);
-    if (!frame?.worktreePath || !repoPath) {
-      // Nothing on disk to remove — just clear the fields.
-      setFrames((fs) => fs.map((f) => (f.id === frameId ? { ...f, branch: undefined, worktreePath: undefined } : f)));
-      return;
+    if (!frame) return;
+    const repo = frame.parentFrameId ? frameRepo(frame.parentFrameId) : repoPathRef.current;
+    if (frame.worktreePath && repo) {
+      const ok = typeof window.confirm === "function"
+        ? window.confirm(`Detach worktree "${frame.branch}"?\n\n${frame.worktreePath}\n\nUncommitted changes there will be lost.`)
+        : true;
+      if (!ok) return;
+      try {
+        await window.hive.worktreeRemove(repo, frame.worktreePath);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error("[hivemind] worktree remove failed:", msg);
+        pushToastRef.current?.({
+          tileId: `frame-unbind-${frameId}`,
+          label: `detach failed: ${msg.slice(0, 120)}`,
+          status: "blocked",
+        });
+        return;
+      }
     }
-    // Removing a worktree is destructive (drops uncommitted work in it).
-    const ok = typeof window.confirm === "function"
-      ? window.confirm(`Remove worktree for branch "${frame.branch}"?\n\n${frame.worktreePath}\n\nUncommitted changes there will be lost.`)
-      : true;
-    if (!ok) return;
-    try {
-      await window.hive.worktreeRemove(repoPath, frame.worktreePath);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      console.error("[hivemind] worktree remove failed:", msg);
-      pushToastRef.current?.({
-        tileId: `frame-unbind-${frameId}`,
-        label: `unbind failed: ${msg.slice(0, 120)}`,
-        status: "blocked",
-      });
-      return;
-    }
-    setFrames((fs) => fs.map((f) => (f.id === frameId ? { ...f, branch: undefined, worktreePath: undefined } : f)));
-  }, [repoPath]);
+    const memberTiles = Object.keys(frameOfRef.current).filter((tid) => frameOfRef.current[tid] === frameId);
+    for (const tid of memberTiles) closeTile(tid);
+    setFrames((fs) => fs.filter((f) => f.id !== frameId));
+  }, [frameRepo, closeTile]);
 
   // ── workspace-zone binding ────────────────────────────────────────────────
   // Bind a frame to an arbitrary repo folder so multiple projects coexist on
@@ -1650,28 +1728,41 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
       return { width: Math.min(w, Math.max(640, vw - 80)), height: Math.min(h, Math.max(420, vh - 120)) };
     };
 
-    // Frames FIRST. React-flow requires parent nodes to appear before their
-    // children in the nodes array — otherwise the `parentId` lookup runs
-    // before the frame exists and you get the warning "Parent node X not
-    // found" + the parentId is silently dropped (data-parent-id stays null
-    // in the DOM, no real reparenting). Verified via playwright test.
-    for (const f of frames) {
-      // zIndex: frames live BELOW tiles (tiles get the default ~0). We use
-      // Frames sit BEHIND tiles but ABOVE the canvas (dotted Background). The
-      // old `-1000 + f.z` pushed them behind the Background too → invisible.
-      // Range 0..(f.z) keeps frame-to-frame ordering (bringFrameToFront bumps
-      // f.z) while staying under tiles, which get a baseline zIndex ≥ 10 below.
+    // Frames FIRST, and PARENTS before their worktree CHILD frames. React-flow
+    // requires a parent node to appear before any node referencing it via
+    // parentId — else "Parent node X not found" + the parentId is silently
+    // dropped. Top-level frames have no parent, so emitting them, then child
+    // (worktree) frames, then tiles satisfies the 2-level nest ordering.
+    const frameById = new Map(frames.map((f) => [f.id, f]));
+    const orderedFrames = [
+      ...frames.filter((f) => !f.parentFrameId || !frameById.has(f.parentFrameId)),
+      ...frames.filter((f) => f.parentFrameId && frameById.has(f.parentFrameId)),
+    ];
+    for (const f of orderedFrames) {
+      const parent = f.parentFrameId ? frameById.get(f.parentFrameId) : undefined;
+      // A worktree CHILD frame nests inside its parent: react-flow wants its
+      // position RELATIVE to the parent. zIndex tiers: parent repo frame (≤40)
+      // < worktree child frame (50–90) < tiles (≥100) < selected (1000) — so a
+      // child frame's chrome sits above the parent body but under every tile.
+      const position = parent ? { x: f.x - parent.x, y: f.y - parent.y } : { x: f.x, y: f.y };
+      const zIndex = parent ? 50 + Math.min(f.z, 40) : Math.min(f.z, 40);
       out.push({
         id: f.id,
         type: "frame",
-        position: { x: f.x, y: f.y },
-        style: { width: f.w, height: f.h, zIndex: Math.min(f.z, 90) },
+        position,
+        ...(parent ? { parentId: parent.id } : {}),
+        style: { width: f.w, height: f.h, zIndex },
         data: {
           id: f.id,
           title: f.title,
           color: f.color,
           branch: f.branch,
           worktreePath: f.worktreePath,
+          head: f.head,
+          parentFrameId: f.parentFrameId,
+          // Repo this frame's worktrees list/create under: a workspace zone's
+          // bound repo, else the canvas base repo. (Unused on child frames.)
+          repoPath: f.workspacePath ?? repoPath ?? undefined,
           workspacePath: f.workspacePath,
           workspaceRoot: f.workspaceRoot,
           canBind: !!repoPath,
@@ -1679,7 +1770,8 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
           onColorChange: updateFrameColor,
           onDelete: deleteFrame,
           onBringToFront: bringFrameToFront,
-          onBindBranch: bindBranch,
+          onAttachWorktree,
+          onCreateWorktree,
           onUnbindBranch: unbindBranch,
           onBindWorkspace: bindWorkspace,
           onUnbindWorkspace: unbindWorkspace,
@@ -1790,7 +1882,8 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     updateFrameColor,
     deleteFrame,
     bringFrameToFront,
-    bindBranch,
+    onAttachWorktree,
+    onCreateWorktree,
     unbindBranch,
     onNodeResizeCommit,
     frameTiles,
@@ -2191,31 +2284,55 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
             // mkTile's parentFrameOf can detect frame containment on
             // re-render. Convert via positionAbsolute when available.
             if (node.type === "frame") {
-              // Dragging a frame carries its tiles. react-flow moves parented
-              // children visually during the drag, but our positions map
-              // (absolute) is stale on drop — translate every EXPLICIT member
-              // (frameOf === this frame) by the frame's delta.
+              // Dragging a frame carries its body. Frame geometry is DERIVED
+              // from member tiles (+ child frames), so the move persists by
+              // translating those — react-flow's live drag is visual only and
+              // our absolute positions map is stale on drop.
               const old = framesRef.current.find((f) => f.id === node.id);
-              if (old) {
-                const dx = node.position.x - old.x;
-                const dy = node.position.y - old.y;
-                if (dx !== 0 || dy !== 0) {
-                  const moveIds = Object.keys(frameOfRef.current).filter(
-                    (tid) => frameOfRef.current[tid] === node.id,
-                  );
-                  if (moveIds.length > 0) {
-                    setPositions((prev) => {
-                      const next = { ...prev };
-                      for (const tid of moveIds) {
-                        const p = next[tid];
-                        if (p) next[tid] = { x: p.x + dx, y: p.y + dy };
-                      }
-                      return next;
-                    });
-                  }
-                }
+              if (!old) { moveFrame(node.id, node.position.x, node.position.y); return; }
+              // A child (worktree) frame returns position RELATIVE to its
+              // parent; convert to absolute before diffing.
+              let nx = node.position.x;
+              let ny = node.position.y;
+              if (node.parentId) {
+                const parent = framesRef.current.find((f) => f.id === node.parentId);
+                if (parent) { nx = parent.x + node.position.x; ny = parent.y + node.position.y; }
               }
-              moveFrame(node.id, node.position.x, node.position.y);
+              const dx = nx - old.x;
+              const dy = ny - old.y;
+              if (dx !== 0 || dy !== 0) {
+                // Everything that moves with this frame: its descendant child
+                // (worktree) frames, plus every member tile of the frame AND its
+                // descendants. Shifting member tiles re-lands non-empty frames;
+                // shifting frame x/y re-lands empty ones — do both, uniformly.
+                const descendants = framesRef.current
+                  .filter((f) => f.parentFrameId === node.id)
+                  .map((f) => f.id);
+                const movedFrames = new Set<string>([node.id, ...descendants]);
+                const moveIds = Object.keys(frameOfRef.current).filter((tid) =>
+                  movedFrames.has(frameOfRef.current[tid]!),
+                );
+                if (moveIds.length > 0) {
+                  setPositions((prev) => {
+                    const next = { ...prev };
+                    for (const tid of moveIds) {
+                      const p = next[tid];
+                      if (p) next[tid] = { x: p.x + dx, y: p.y + dy };
+                    }
+                    return next;
+                  });
+                }
+                lastActiveFrameRef.current = node.id;
+                setFrames((fs) =>
+                  fs.map((f) => {
+                    if (f.id === node.id) return { ...f, x: nx, y: ny };
+                    if (descendants.includes(f.id)) return { ...f, x: f.x + dx, y: f.y + dy };
+                    return f;
+                  }),
+                );
+                return;
+              }
+              moveFrame(node.id, nx, ny);
               return;
             }
             // xyflow v12.3.6 returns `positionAbsolute: undefined` for

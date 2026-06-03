@@ -10,6 +10,8 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { GitBranch, FolderGit2, Plus } from "lucide-react";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
+import { WorktreePicker } from "./WorktreePicker";
+import type { WorktreeEntry } from "../../shared/ipc";
 
 /** Dropdown anchored under a trigger button, rendered in a portal to
  *  document.body. Frame nodes have a low zIndex (≤90, BELOW tiles), and a
@@ -52,6 +54,12 @@ export interface FrameNodeData {
   branch?: string;
   /** Worktree dir for the bound branch — tiles inside run here. */
   worktreePath?: string;
+  /** Short HEAD sha of the bound worktree (worktree sub-frames). */
+  head?: string;
+  /** Set => this IS a worktree sub-frame nested in repo frame `parentFrameId`. */
+  parentFrameId?: string;
+  /** Repo this frame's worktrees are listed/created under (repo frames). */
+  repoPath?: string;
   /** Workspace zone: bound repo folder; tiles inside run in this repo. */
   workspacePath?: string;
   workspaceRoot?: string | null;
@@ -61,7 +69,11 @@ export interface FrameNodeData {
   onColorChange: (id: string, color: string) => void;
   onDelete: (id: string) => void;
   onBringToFront: (id: string) => void;
-  onBindBranch: (id: string, branch: string) => void;
+  /** Attach an existing worktree → caller spawns a nested sub-frame. */
+  onAttachWorktree: (frameId: string, entry: WorktreeEntry) => void;
+  /** Create a worktree on `branch`, then attach it as a sub-frame. */
+  onCreateWorktree: (frameId: string, branch: string) => void;
+  /** Detach this worktree sub-frame (remove its worktree, delete the frame). */
   onUnbindBranch: (id: string) => void;
   onBindWorkspace: (id: string) => void;
   onUnbindWorkspace: (id: string) => void;
@@ -91,10 +103,10 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
   const [draft, setDraft] = useState(data.title);
   const [showPicker, setShowPicker] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
-  const [binding, setBinding] = useState(false);
-  const [branchDraft, setBranchDraft] = useState("");
+  const [showWt, setShowWt] = useState(false);
   const addBtnRef = useRef<HTMLButtonElement>(null);
   const colorBtnRef = useRef<HTMLButtonElement>(null);
+  const wtBtnRef = useRef<HTMLButtonElement>(null);
   // Live status per child tile — chips show a colored dot for working/blocked.
   // Subscribe filters by data.tileIds so unrelated tile events are skipped.
   const [chipStatus, setChipStatus] = useState<Map<string, TileStatusKind>>(new Map());
@@ -114,7 +126,10 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
       });
     });
   }, [data.tileIds]);
-  const bound = !!data.worktreePath;
+  // This frame IS a worktree sub-frame (nested in a repo frame) → show the
+  // worktree pill, no attach/workspace controls. A repo (base/workspace) frame
+  // instead offers "attach worktree" (spawns sub-frames) + "workspace".
+  const isWorktreeChild = !!data.parentFrameId;
   const wsBound = !!data.workspacePath;
   const wsName = data.workspacePath?.split("/").filter(Boolean).pop();
 
@@ -197,11 +212,30 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
             {data.title}
           </button>
         )}
-        {/* ── workspace zone (bound repo folder) ──────────────────────────
-            A frame can be a WHOLE-REPO zone (workspace) OR a base-repo branch
-            zone. Workspace bind wins: when set, show the repo chip; otherwise
-            offer branch-bind + a "workspace" button. */}
-        {wsBound ? (
+        {/* ── worktree / workspace zone controls ──────────────────────────
+            A WORKTREE sub-frame shows its branch · sha pill (detach to remove).
+            A REPO frame (workspace or base zone) offers "worktree" — a Zed-style
+            picker that lists/creates worktrees and spawns each as a nested
+            sub-frame — plus the "workspace" bind. */}
+        {isWorktreeChild ? (
+          <span
+            className="flex items-center gap-1 max-w-[60%] rounded px-1.5 py-0.5 text-[10px] font-mono text-[var(--color-fg)]"
+            style={{ background: `color-mix(in oklab, ${data.color} 28%, transparent)` }}
+            title={`worktree ${data.branch}\n${data.worktreePath}`}
+          >
+            <GitBranch size={11} className="shrink-0" style={{ color: data.color }} />
+            <span className="truncate font-semibold">{data.branch}</span>
+            {data.head && <span className="shrink-0 text-[var(--color-fg3)]">{data.head.slice(0, 7)}</span>}
+            <button
+              onClick={() => data.onUnbindBranch(data.id)}
+              className="shrink-0 text-[var(--color-fg2)] hover:text-[var(--color-err)] leading-none"
+              title="Detach worktree (destructive)"
+              aria-label="detach worktree"
+            >
+              ×
+            </button>
+          </span>
+        ) : wsBound ? (
           <span
             className="flex items-center gap-1 max-w-[60%] rounded px-1.5 py-0.5 text-[10px] font-mono text-[var(--color-fg)]"
             style={{ background: "var(--color-bg3)" }}
@@ -218,57 +252,38 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
               ×
             </button>
           </span>
-        ) : bound ? (
-          <span
-            className="flex items-center gap-1 max-w-[52%] rounded px-1.5 py-0.5 text-[10px] font-mono text-[var(--color-fg)]"
-            style={{ background: "var(--color-bg3)" }}
-            title={`branch ${data.branch}\n${data.worktreePath}`}
-          >
-            <GitBranch size={11} className="shrink-0 text-[var(--color-fg2)]" />
-            <span className="truncate">{data.branch}</span>
-            <button
-              onClick={() => data.onUnbindBranch(data.id)}
-              className="shrink-0 text-[var(--color-fg2)] hover:text-[var(--color-err)] leading-none"
-              title="Unbind worktree (destructive)"
-              aria-label="unbind branch"
-            >
-              ×
-            </button>
-          </span>
-        ) : binding ? (
-          <input
-            autoFocus
-            value={branchDraft}
-            onChange={(e) => setBranchDraft(e.target.value)}
-            onBlur={() => setBinding(false)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                const b = branchDraft.trim();
-                if (b) data.onBindBranch(data.id, b);
-                setBranchDraft("");
-                setBinding(false);
-              }
-              if (e.key === "Escape") {
-                setBranchDraft("");
-                setBinding(false);
-              }
-            }}
-            placeholder="branch name…"
-            className="w-28 bg-[var(--color-bg)] border border-[var(--color-line2)] rounded px-1.5 py-0.5 text-[10px] font-mono text-[var(--color-fg)] outline-none"
-          />
-        ) : (
+        ) : null}
+        {!isWorktreeChild && (
           <button
-            onClick={() => { setBranchDraft(""); setBinding(true); }}
-            disabled={!data.canBind}
+            ref={wtBtnRef}
+            onClick={() => setShowWt((x) => !x)}
+            disabled={!data.canBind && !data.repoPath}
             className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-[var(--color-fg2)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)] disabled:opacity-30 disabled:cursor-not-allowed"
-            title={data.canBind ? "Bind this frame to a git branch + worktree" : "Bind needs a git repo"}
-            aria-label="bind branch"
+            title="Attach a git worktree — opens a nested sub-frame scoped to that branch"
+            aria-label="attach worktree"
           >
             <GitBranch size={11} />
-            bind branch
+            worktree
           </button>
         )}
-        {!wsBound && (
+        <AnchoredMenu anchor={wtBtnRef.current} open={showWt} onClose={() => setShowWt(false)}>
+          {data.repoPath ? (
+            <WorktreePicker
+              repoPath={data.repoPath}
+              onAttach={(entry) => {
+                data.onAttachWorktree(data.id, entry);
+                setShowWt(false);
+              }}
+              onCreate={(branch) => {
+                data.onCreateWorktree(data.id, branch);
+                setShowWt(false);
+              }}
+            />
+          ) : (
+            <div className="px-3 py-2 text-[11px] text-[var(--color-fg3)]">no git repo</div>
+          )}
+        </AnchoredMenu>
+        {!isWorktreeChild && !wsBound && (
           <button
             onClick={() => data.onBindWorkspace(data.id)}
             className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-[var(--color-fg2)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)]"
