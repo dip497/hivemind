@@ -4,7 +4,10 @@ import assert from "node:assert/strict";
 import {
   resolveFrameCollisions,
   nextSlotInFrame,
+  computeFrameLayout,
   FRAME_GAP,
+  type FrameGeom,
+  type MemberRect,
 } from "../../src/renderer/src/frame-layout.ts";
 
 const rect = (id: string, x: number, y: number, w: number, h: number) => ({ id, x, y, w, h });
@@ -96,4 +99,100 @@ test("tile wraps to a new row when the row would exceed maxRowWidth", () => {
   const slot = nextSlotInFrame(origin, m, { w: 1480, h: 1000 }, PACK);
   assert.equal(slot.x, 124, "wraps back to the left pad");
   assert.equal(slot.y, 248 + 1000 + 24, "drops below the tallest in the row");
+});
+
+// ── computeFrameLayout (nesting-aware auto-fit) ──────────────────────────────
+const K = { pad: 28, header: 36, emptyW: 460, emptyH: 200 };
+const mem = (x: number, y: number, w: number, h: number): MemberRect => ({ x, y, r: x + w, b: y + h });
+const contains = (
+  outer: { x: number; y: number; w: number; h: number },
+  inner: { x: number; y: number; w: number; h: number },
+) =>
+  outer.x <= inner.x &&
+  outer.y <= inner.y &&
+  outer.x + outer.w >= inner.x + inner.w &&
+  outer.y + outer.h >= inner.y + inner.h;
+
+test("flat: a lone frame fits its member-tile bbox (pad+header)", () => {
+  const frames: FrameGeom[] = [{ id: "a", x: 0, y: 0, w: 460, h: 200 }];
+  const members = new Map([["a", [mem(100, 100, 500, 400)]]]);
+  const { geometry, tileShift } = computeFrameLayout(frames, members, null, K);
+  assert.deepEqual(geometry.get("a"), { x: 72, y: 64, w: 556, h: 464 });
+  assert.deepEqual(tileShift.get("a"), { dx: 0, dy: 0 });
+});
+
+test("flat: an empty frame collapses to the placeholder at its origin", () => {
+  const frames: FrameGeom[] = [{ id: "a", x: 300, y: 200, w: 800, h: 600 }];
+  const { geometry } = computeFrameLayout(frames, new Map(), null, K);
+  assert.deepEqual(geometry.get("a"), { x: 300, y: 200, w: 460, h: 200 });
+});
+
+test("flat: two top-level frames with overlapping boxes separate", () => {
+  const frames: FrameGeom[] = [
+    { id: "a", x: 0, y: 0, w: 800, h: 400 },
+    { id: "b", x: 0, y: 0, w: 800, h: 400 },
+  ];
+  const members = new Map([
+    ["a", [mem(0, 0, 800, 400)]],
+    ["b", [mem(200, 0, 800, 400)]],
+  ]);
+  const { geometry } = computeFrameLayout(frames, members, "a", K);
+  assert.equal(overlap(geometry.get("a")!, geometry.get("b")!), false);
+});
+
+test("nested: a parent frame fully contains its single child frame", () => {
+  const frames: FrameGeom[] = [
+    { id: "P", x: 0, y: 0, w: 460, h: 200 },
+    { id: "C", x: 0, y: 0, w: 460, h: 200, parentFrameId: "P" },
+  ];
+  // P has no own tiles; C has tiles → C derives its box, P wraps it.
+  const members = new Map([["C", [mem(200, 200, 700, 500)]]]);
+  const { geometry } = computeFrameLayout(frames, members, null, K);
+  const P = geometry.get("P")!;
+  const C = geometry.get("C")!;
+  assert.ok(contains(P, C), `parent ${JSON.stringify(P)} must contain child ${JSON.stringify(C)}`);
+  // The parent reserves header room ABOVE the child for its own title bar.
+  assert.ok(P.y < C.y, "parent top sits above child top");
+});
+
+test("nested: sibling child frames separate; parent contains both", () => {
+  const frames: FrameGeom[] = [
+    { id: "P", x: 0, y: 0, w: 460, h: 200 },
+    { id: "C1", x: 0, y: 0, w: 460, h: 200, parentFrameId: "P" },
+    { id: "C2", x: 0, y: 0, w: 460, h: 200, parentFrameId: "P" },
+  ];
+  const members = new Map([
+    ["C1", [mem(100, 100, 600, 400)]],
+    ["C2", [mem(200, 100, 600, 400)]], // overlaps C1's box
+  ]);
+  const { geometry } = computeFrameLayout(frames, members, "C1", K);
+  const P = geometry.get("P")!;
+  const C1 = geometry.get("C1")!;
+  const C2 = geometry.get("C2")!;
+  assert.equal(overlap(C1, C2), false, "siblings must not overlap");
+  assert.ok(contains(P, C1) && contains(P, C2), "parent contains both children");
+});
+
+test("nested: a parent's separation delta cascades to its child (geometry + tileShift)", () => {
+  // Two repo frames, each with one child, positioned so the wrapped parent
+  // boxes overlap → top-level separation moves one parent; its child must move
+  // with it (same delta) in both geometry and tileShift.
+  const frames: FrameGeom[] = [
+    { id: "P1", x: 0, y: 0, w: 460, h: 200 },
+    { id: "C1", x: 0, y: 0, w: 460, h: 200, parentFrameId: "P1" },
+    { id: "P2", x: 0, y: 0, w: 460, h: 200 },
+    { id: "C2", x: 0, y: 0, w: 460, h: 200, parentFrameId: "P2" },
+  ];
+  const members = new Map([
+    ["C1", [mem(0, 0, 700, 500)]],
+    ["C2", [mem(300, 0, 700, 500)]], // P2's wrapped box overlaps P1's
+  ]);
+  const { geometry, tileShift } = computeFrameLayout(frames, members, "P1", K);
+  assert.equal(overlap(geometry.get("P1")!, geometry.get("P2")!), false, "parents separated");
+  // P1 is the anchor → P2 moves. C2 must carry P2's delta.
+  const dP2 = tileShift.get("P2")!;
+  const dC2 = tileShift.get("C2")!;
+  assert.deepEqual(dC2, dP2, "child shift equals parent shift (no children of its own)");
+  assert.ok(dP2.dx !== 0 || dP2.dy !== 0, "P2 actually moved");
+  assert.ok(contains(geometry.get("P2")!, geometry.get("C2")!), "P2 still contains C2 after move");
 });

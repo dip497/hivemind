@@ -26,7 +26,7 @@ import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { identifyAgent } from "./agent-state";
 import { queueWork } from "./claude-bus";
 import { TileErrorBoundary } from "./TileErrorBoundary";
-import { resolveFrameCollisions, nextSlotInFrame, FRAME_ROW_MAX } from "./frame-layout";
+import { computeFrameLayout, nextSlotInFrame, FRAME_ROW_MAX } from "./frame-layout";
 
 /** Auto-derive a short tile name from the command. Uses identifyAgent for
  *  known agents (claude, codex, gemini, …), falls back to the basename of
@@ -986,47 +986,22 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
       memberIds.set(fid, ids);
     }
 
-    // 1) DESIRED geometry: each frame fits its members' bbox (empty → collapse
-    //    to a placeholder at its current origin).
-    const cur = framesRef.current;
-    const desired = cur.map((f) => {
-      const mem = memberRects.get(f.id);
-      if (!mem || mem.length === 0) {
-        return { id: f.id, x: f.x, y: f.y, w: FRAME_EMPTY_W, h: FRAME_EMPTY_H };
-      }
-      const minX = Math.min(...mem.map((m) => m.x));
-      const minY = Math.min(...mem.map((m) => m.y));
-      const maxR = Math.max(...mem.map((m) => m.r));
-      const maxB = Math.max(...mem.map((m) => m.b));
-      return {
-        id: f.id,
-        x: Math.round(minX - FRAME_PAD),
-        y: Math.round(minY - FRAME_HEADER),
-        w: Math.round(maxR - minX + FRAME_PAD * 2),
-        h: Math.round(maxB - minY + FRAME_HEADER + FRAME_PAD),
-      };
-    });
-
-    // 2) SEPARATE: nudge frames so none overlap, keeping the last-touched frame
-    //    fixed. Apply each frame's delta to its MEMBER TILES (absolute coords)
-    //    so the next derive lands the frame at the separated spot — and to empty
-    //    frames' origins directly (they have no members to carry them).
-    const deltas = resolveFrameCollisions(desired, lastActiveFrameRef.current);
-    const tileShifts: Record<string, { dx: number; dy: number }> = {};
-    const finalById = new Map<string, { x: number; y: number; w: number; h: number }>();
-    for (const d of desired) {
-      const del = deltas[d.id] ?? { dx: 0, dy: 0 };
-      finalById.set(d.id, { x: d.x + del.dx, y: d.y + del.dy, w: d.w, h: d.h });
-      if ((del.dx !== 0 || del.dy !== 0) && (memberIds.get(d.id)?.length ?? 0) > 0) {
-        for (const tid of memberIds.get(d.id)!) tileShifts[tid] = del;
-      }
-    }
+    // Geometry is PURE: feed member rects to computeFrameLayout (nesting-aware)
+    // and commit what it returns. A repo frame that owns worktree sub-frames
+    // grows to wrap them; sibling frames separate but a child stays nested in
+    // its parent. See frame-layout.ts.
+    const { geometry, tileShift } = computeFrameLayout(
+      framesRef.current,
+      memberRects,
+      lastActiveFrameRef.current,
+      { pad: FRAME_PAD, header: FRAME_HEADER, emptyW: FRAME_EMPTY_W, emptyH: FRAME_EMPTY_H },
+    );
 
     // Commit frame geometry (2px dead-band → no churn / no self-fire loop).
     setFrames((prev) => {
       let changed = false;
       const next = prev.map((f) => {
-        const fin = finalById.get(f.id);
+        const fin = geometry.get(f.id);
         if (!fin) return f;
         if (
           Math.abs(fin.x - f.x) < 2 && Math.abs(fin.y - f.y) < 2 &&
@@ -1038,8 +1013,15 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
       return changed ? next : prev;
     });
 
-    // Commit member-tile shifts (drives the NEXT derive to the separated spot;
-    // converges because once separated the resolver returns zero deltas).
+    // Apply each frame's separation delta to ITS member tiles (absolute) so the
+    // next derive re-lands the frame at the separated spot; converges because
+    // once separated the resolver returns zero deltas. Child-frame shifts
+    // already fold in the parent's delta (see computeFrameLayout).
+    const tileShifts: Record<string, { dx: number; dy: number }> = {};
+    for (const [fid, d] of tileShift) {
+      if (d.dx === 0 && d.dy === 0) continue;
+      for (const tid of memberIds.get(fid) ?? []) tileShifts[tid] = d;
+    }
     const shiftIds = Object.keys(tileShifts);
     if (shiftIds.length) {
       setPositions((p) => {

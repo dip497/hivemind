@@ -14,6 +14,13 @@
  *  2. nextSlotInFrame — where a newly-spawned tile lands inside a frame. Packs
  *     left-to-right then WRAPS to a new row past a max row width, so a frame
  *     grows downward predictably instead of infinitely rightward.
+ *
+ *  3. computeFrameLayout — the whole-canvas auto-fit, nesting-aware. Derives
+ *     every frame's geometry from its member tiles AND (for a repo frame that
+ *     owns worktree sub-frames) the bounding box of its child frames, then
+ *     separates frames so siblings never overlap — but a child stays nested
+ *     inside its parent. Pure: the React effect feeds it member rects and
+ *     commits the geometry + member-tile shifts it returns.
  */
 
 export interface LayoutRect {
@@ -135,4 +142,169 @@ export function nextSlotInFrame(
   }
   // Wrap: new row below everything, back at the left edge.
   return { x: startX, y: botY + opts.gap };
+}
+
+// ── nesting-aware whole-canvas auto-fit ─────────────────────────────────────
+
+/** A frame's stored geometry (absolute x/y). `parentFrameId` set => this is a
+ *  worktree sub-frame nested inside that repo frame. */
+export interface FrameGeom {
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  parentFrameId?: string;
+}
+
+/** Absolute bounding box of one member tile (right/bottom precomputed). */
+export interface MemberRect { x: number; y: number; r: number; b: number }
+
+/** Padding/sizing knobs — passed in so Canvas owns the single source of truth
+ *  for FRAME_PAD/FRAME_HEADER/etc. and this stays pure. */
+export interface FrameLayoutConst {
+  /** Side + bottom padding from member tiles to the frame edge. */
+  pad: number;
+  /** Header bar height — room reserved above member tiles. */
+  header: number;
+  /** Collapsed placeholder size for an empty frame. */
+  emptyW: number;
+  emptyH: number;
+  /** Gap between separated sibling frames. Default FRAME_GAP. */
+  gap?: number;
+  /** Extra inset a parent repo frame keeps around its nested child frames
+   *  (on top of its own header room). Default = pad. */
+  nestPad?: number;
+}
+
+interface Rect { x: number; y: number; w: number; h: number }
+
+/** Bounding box of member tiles for one frame, padded to frame edges. Empty
+ *  members → a collapsed placeholder anchored at the frame's current origin. */
+function tileBox(f: FrameGeom, mem: MemberRect[] | undefined, k: FrameLayoutConst): Rect {
+  if (!mem || mem.length === 0) return { x: f.x, y: f.y, w: k.emptyW, h: k.emptyH };
+  const minX = Math.min(...mem.map((m) => m.x));
+  const minY = Math.min(...mem.map((m) => m.y));
+  const maxR = Math.max(...mem.map((m) => m.r));
+  const maxB = Math.max(...mem.map((m) => m.b));
+  return {
+    x: Math.round(minX - k.pad),
+    y: Math.round(minY - k.header),
+    w: Math.round(maxR - minX + k.pad * 2),
+    h: Math.round(maxB - minY + k.header + k.pad),
+  };
+}
+
+/**
+ * Whole-canvas frame geometry, nesting-aware.
+ *
+ * Two levels only (repo frame → worktree sub-frames). The algorithm:
+ *   1. Every frame's tile-derived box (`tileBox`).
+ *   2. Separate each parent's CHILD frames among themselves (a sibling group),
+ *      keeping the anchor fixed — children never overlap each other.
+ *   3. Each parent's box = union(its own tiles, its children's separated
+ *      boxes) inset by `nestPad` + header room, so children sit visually
+ *      inside the parent below its title bar.
+ *   4. Separate the TOP-LEVEL frames among themselves. A parent's delta
+ *      cascades to its children (geometry + tile shift) so the nest moves as
+ *      one body.
+ *
+ * Returns final per-frame geometry plus, per frame, the {dx,dy} the caller
+ * must apply to that frame's MEMBER TILES (absolute) so the next derive lands
+ * the frame at the separated spot. For a child frame this shift already folds
+ * in its parent's delta.
+ */
+export function computeFrameLayout(
+  frames: FrameGeom[],
+  memberRects: Map<string, MemberRect[]>,
+  anchorId: string | null | undefined,
+  k: FrameLayoutConst,
+): {
+  geometry: Map<string, Rect>;
+  tileShift: Map<string, { dx: number; dy: number }>;
+} {
+  const gap = k.gap ?? FRAME_GAP;
+  const nestPad = k.nestPad ?? k.pad;
+  const byId = new Map(frames.map((f) => [f.id, f]));
+  // A parentFrameId that points at a missing frame ⇒ treat as top-level.
+  const parentOf = (f: FrameGeom) =>
+    f.parentFrameId && byId.has(f.parentFrameId) ? f.parentFrameId : undefined;
+
+  const childrenOf = new Map<string, FrameGeom[]>();
+  for (const f of frames) {
+    const p = parentOf(f);
+    if (p) (childrenOf.get(p) ?? childrenOf.set(p, []).get(p)!).push(f);
+  }
+
+  // 1) tile-derived box for every frame.
+  const tBox = new Map<string, Rect>();
+  for (const f of frames) tBox.set(f.id, tileBox(f, memberRects.get(f.id), k));
+
+  // 2) separate sibling child frames within each parent.
+  const childDelta = new Map<string, { dx: number; dy: number }>();
+  for (const [, kids] of childrenOf) {
+    if (kids.length < 2) continue; // a lone child can't collide
+    const rects: LayoutRect[] = kids.map((c) => ({ id: c.id, ...tBox.get(c.id)! }));
+    const d = resolveFrameCollisions(rects, anchorId, gap);
+    for (const c of kids) childDelta.set(c.id, d[c.id] ?? { dx: 0, dy: 0 });
+  }
+  const childBox = (id: string): Rect => {
+    const b = tBox.get(id)!;
+    const d = childDelta.get(id) ?? { dx: 0, dy: 0 };
+    return { x: b.x + d.dx, y: b.y + d.dy, w: b.w, h: b.h };
+  };
+
+  // 3) parent (top-level) desired box wraps own tiles + child boxes.
+  const topLevel = frames.filter((f) => !parentOf(f));
+  const rootDesired = new Map<string, Rect>();
+  for (const f of topLevel) {
+    const kids = childrenOf.get(f.id);
+    const boxes: Rect[] = [];
+    const ownHasTiles = (memberRects.get(f.id)?.length ?? 0) > 0;
+    if (ownHasTiles) boxes.push(tBox.get(f.id)!);
+    if (kids) for (const c of kids) boxes.push(childBox(c.id));
+    if (boxes.length === 0) {
+      // No tiles, no children → collapsed placeholder at current origin.
+      rootDesired.set(f.id, { x: f.x, y: f.y, w: k.emptyW, h: k.emptyH });
+      continue;
+    }
+    const minX = Math.min(...boxes.map((b) => b.x));
+    const minY = Math.min(...boxes.map((b) => b.y));
+    const maxR = Math.max(...boxes.map((b) => b.x + b.w));
+    const maxB = Math.max(...boxes.map((b) => b.y + b.h));
+    if (kids?.length) {
+      // Inset around the nest + extra header room so the parent title bar
+      // clears the child frames sitting below it.
+      rootDesired.set(f.id, {
+        x: minX - nestPad,
+        y: minY - k.header,
+        w: maxR - minX + nestPad * 2,
+        h: maxB - minY + k.header + nestPad,
+      });
+    } else {
+      rootDesired.set(f.id, { x: minX, y: minY, w: maxR - minX, h: maxB - minY });
+    }
+  }
+
+  // 4) separate the top-level frames.
+  const rootRects: LayoutRect[] = topLevel.map((f) => ({ id: f.id, ...rootDesired.get(f.id)! }));
+  const rootDelta = resolveFrameCollisions(rootRects, anchorId, gap);
+
+  // 5) assemble final geometry + per-frame member-tile shift.
+  const geometry = new Map<string, Rect>();
+  const tileShift = new Map<string, { dx: number; dy: number }>();
+  for (const f of topLevel) {
+    const dp = rootDelta[f.id] ?? { dx: 0, dy: 0 };
+    const r = rootDesired.get(f.id)!;
+    geometry.set(f.id, { x: r.x + dp.dx, y: r.y + dp.dy, w: r.w, h: r.h });
+    tileShift.set(f.id, dp);
+    for (const c of childrenOf.get(f.id) ?? []) {
+      const dc = childDelta.get(c.id) ?? { dx: 0, dy: 0 };
+      const total = { dx: dp.dx + dc.dx, dy: dp.dy + dc.dy };
+      const cb = tBox.get(c.id)!;
+      geometry.set(c.id, { x: cb.x + total.dx, y: cb.y + total.dy, w: cb.w, h: cb.h });
+      tileShift.set(c.id, total);
+    }
+  }
+  return { geometry, tileShift };
 }
