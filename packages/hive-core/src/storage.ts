@@ -158,13 +158,29 @@ export async function writeConfig(root: string, cfg: Config): Promise<void> {
   await fs.rename(tmp, p);
 }
 
-/** Reserve and increment the next ID atomically (read-modify-write). */
+// Per-root async mutex serializing the next_id read-modify-write. Without it,
+// two concurrent allocations (CLI `new` + MCP `hive_create_issue`, or two MCP
+// calls) both read the same next_id and mint the SAME issue id, then one write
+// silently clobbers the other. The readConfig coalescer makes this WORSE — it
+// hands both racers the identical in-memory config object — so collisions are
+// reliable, not occasional. This chain guarantees each allocation's full
+// read→increment→write completes before the next begins.
+const allocChains = new Map<string, Promise<unknown>>();
+
+/** Reserve and increment the next ID atomically (serialized read-modify-write). */
 export async function allocateId(root: string): Promise<{ id: string; cfg: Config }> {
-  const cfg = await readConfig(root);
-  const id = `${cfg.prefix}-${cfg.next_id}`;
-  cfg.next_id += 1;
-  await writeConfig(root, cfg);
-  return { id, cfg };
+  const prev = allocChains.get(root) ?? Promise.resolve();
+  const run = prev.then(async () => {
+    const cfg = await readConfig(root);
+    const id = `${cfg.prefix}-${cfg.next_id}`;
+    cfg.next_id += 1;
+    await writeConfig(root, cfg);
+    return { id, cfg };
+  });
+  // Keep the chain alive even if THIS allocation rejects, so one failure doesn't
+  // wedge every later allocation for the root.
+  allocChains.set(root, run.then(() => undefined, () => undefined));
+  return run;
 }
 
 // ── issues: paths ──────────────────────────────────────────────────

@@ -20,6 +20,8 @@ import {
 import { writeAgentContext } from "./agent-context.js";
 import { prefixOf, resolveWorkspaceByPrefix } from "./registry.js";
 import type { Issue, IssueLink, LinkType } from "./types.js";
+import { stat } from "node:fs/promises";
+import path from "node:path";
 
 /** The reciprocal relationship recorded on the *other* end of a link. */
 export function reciprocalLinkType(t: LinkType): LinkType {
@@ -188,6 +190,19 @@ export async function transferIssue(
   const destRoot = ws.root;
   if (destRoot === srcRoot) {
     throw new HiveError("invalid_arg", `${id} is already in workspace '${destPrefix}'`);
+  }
+  // Defense-in-depth: the workspace registry (~/.config/hivemind/registry.json)
+  // is a shared, world-writable file. A poisoned entry could point destRoot at
+  // an arbitrary directory, and writeIssue below would mkdir+write there.
+  // Verify the destination is a REAL .hivemind root (config.yaml present)
+  // before trusting it — and do it WITHOUT readConfig, which would self-heal a
+  // missing config and thus create the structure at the poisoned path.
+  const destConfig = await stat(path.join(destRoot, "config.yaml")).catch(() => null);
+  if (!destConfig?.isFile()) {
+    throw new HiveError(
+      "unknown_workspace",
+      `destination workspace '${destPrefix}' is not a valid .hivemind root: ${destRoot}`,
+    );
   }
   const src = await readIssue(srcRoot, id);
 

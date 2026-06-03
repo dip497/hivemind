@@ -116,6 +116,18 @@ describe("allocateId", () => {
     expect(b.id).toBe("PAY-2");
     expect((await readConfig(root)).next_id).toBe(3);
   });
+
+  test("concurrent allocations get UNIQUE ids (no collision)", async () => {
+    const root = await mkRoot();
+    // Fire many in parallel — without the per-root serialization these would
+    // read the same next_id and mint duplicate ids, then clobber each other.
+    const N = 20;
+    const ids = (await Promise.all(Array.from({ length: N }, () => allocateId(root)))).map((r) => r.id);
+    expect(new Set(ids).size).toBe(N); // all unique
+    expect((await readConfig(root)).next_id).toBe(N + 1);
+    const nums = ids.map((id) => Number(id.split("-")[1])).sort((a, b) => a - b);
+    expect(nums).toEqual(Array.from({ length: N }, (_, i) => i + 1)); // exactly 1..N
+  });
 });
 
 describe("write+read round-trip", () => {
