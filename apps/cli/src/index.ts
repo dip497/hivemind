@@ -6,6 +6,7 @@
  * Doc split:      AGENTS.md (pointer) → CLAUDE.md (source of truth).
  */
 import { defineCommand, runMain } from "citty";
+import pkg from "../package.json" with { type: "json" };
 import { initCmd } from "./commands/init.js";
 import { newCmd } from "./commands/new.js";
 import { listCmd } from "./commands/list.js";
@@ -21,9 +22,6 @@ import { agentCmd } from "./commands/agent.js";
 import { upgradeCmd } from "./commands/upgrade.js";
 import { resolveCmd } from "./commands/mention.js";
 import { mcpStdioCmd } from "./commands/mcp.js";
-import { readIssue, requireRoot } from "@hivemind/core";
-import { err, ok, renderIssue } from "./format.js";
-import { stripAt } from "./parse.js";
 
 /**
  * Intercept `hive @ID` BEFORE citty sees argv — citty treats unknown
@@ -40,7 +38,7 @@ function preprocessArgv(): void {
 const main = defineCommand({
   meta: {
     name: "hive",
-    version: "0.0.1",
+    version: pkg.version,
     description:
       "Markdown-only issue/task tracker (filesystem-backed). See AGENTS.md / CLAUDE.md.",
   },
@@ -63,14 +61,6 @@ const main = defineCommand({
     "mcp-stdio": mcpStdioCmd,
   },
 });
-
-// Silence unused-import warning for the show alias in @-shortcut path.
-void readIssue;
-void requireRoot;
-void err;
-void ok;
-void renderIssue;
-void stripAt;
 
 preprocessArgv();
 await runMain(main);

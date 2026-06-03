@@ -8,6 +8,7 @@
  */
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import pkg from "../package.json" with { type: "json" };
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -311,7 +312,7 @@ const LinkIssueArgs = z.object({
 /** Build and return an MCP Server bound to hive-core. Caller transports it. */
 export function buildServer(): Server {
   const server = new Server(
-    { name: "hive", version: "0.0.1" },
+    { name: "hive", version: pkg.version },
     { capabilities: { tools: {} } },
   );
 
