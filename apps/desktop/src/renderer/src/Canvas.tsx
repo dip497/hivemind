@@ -10,7 +10,7 @@ import {
   type Edge,
 } from "@xyflow/react";
 import { LayersPanel, type LayerTile, type LayerFrame } from "./LayersPanel";
-import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
+import type { TileStatusKind } from "./agent-status-bus";
 import { queueWork } from "./claude-bus";
 import { FRAME_ROW_MAX } from "./frame-layout";
 import { ToolIsland, ZoomIsland } from "./canvas-islands";
@@ -41,6 +41,7 @@ import { useWorktrees } from "./useWorktrees";
 import { useSpawn } from "./useSpawn";
 import { useFrameOps } from "./useFrameOps";
 import { buildBaseNodes } from "./canvas-node-build";
+import { useAgentAwareness } from "./useAgentAwareness";
 import type { WorktreeEntry } from "../../shared/ipc";
 
 // snapViewportCrisp moved to canvas-camera.tsx
@@ -809,100 +810,11 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tiles, focusTile]);
 
-  // ── herdr-style agent awareness ───────────────────────────────────────────
-  // Tiles publish their detected state to agent-status-bus; we mirror it here to
-  // (a) color the live-session chips, (b) flag done-UNSEEN tiles (finished while
-  // you weren't looking), and (c) toast when an OFF-SCREEN agent needs you.
-  type TileMeta = { label: string; status: TileStatusKind; seen: boolean };
-  const [statuses, setStatuses] = useState<Map<string, TileMeta>>(() => new Map());
-  // Mirror of `statuses` so the bus listener can read the PREVIOUS status
-  // synchronously (to detect working→idle "done" transitions) without putting
-  // side effects inside a setState updater.
-  const statusesRef = useRef<Map<string, TileMeta>>(statuses);
-  // Which tiles the user currently has selected — drives toast suppression and
-  // marks done tiles as "seen". Ref so the bus listener reads the latest set
-  // without re-subscribing on every selection change.
-  const selectedTileIdsRef = useRef<Set<string>>(new Set());
-
-  interface Toast { id: string; tileId: string; label: string; status: TileStatusKind }
-  const [toasts, setToasts] = useState<Toast[]>([]);
-  const dismissToast = useCallback((id: string) => {
-    setToasts((ts) => ts.filter((t) => t.id !== id));
-  }, []);
-  const pushToast = useCallback((t: Omit<Toast, "id">) => {
-    const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    setToasts((ts) => {
-      // Collapse a prior toast for the same tile — only the latest state matters.
-      const kept = ts.filter((x) => x.tileId !== t.tileId);
-      return [...kept, { ...t, id }];
-    });
-    // Blocked (needs you) lingers; a "done" notice is lower-stakes — auto-clear.
-    const ttl = t.status === "blocked" || t.status === "permission" || t.status === "question" ? 12000 : 7000;
-    setTimeout(() => dismissToast(id), ttl);
-  }, [dismissToast]);
-
-  // Expose pushToast to the (earlier-declared) bind/unbind worktree handlers.
-  useEffect(() => { pushToastRef.current = pushToast; }, [pushToast]);
-
-  const commitStatuses = useCallback((m: Map<string, TileMeta>) => {
-    statusesRef.current = m;
-    setStatuses(m);
-  }, []);
-
-  // Mark tiles as seen (clears done-unseen + dismisses their toasts).
-  const markSeen = useCallback((ids: string[]) => {
-    if (ids.length === 0) return;
-    const prev = statusesRef.current;
-    let changed = false;
-    const next = new Map(prev);
-    for (const id of ids) {
-      const m = next.get(id);
-      if (m && !m.seen) { next.set(id, { ...m, seen: true }); changed = true; }
-    }
-    if (changed) commitStatuses(next);
-    // Return the SAME array reference when nothing matches — otherwise every
-    // selection-change emits a fresh [] and, because `nodes` is rebuilt each
-    // render, react-flow re-fires onSelectionChange → infinite loop (React #185).
-    setToasts((ts) => (ts.some((t) => ids.includes(t.tileId)) ? ts.filter((t) => !ids.includes(t.tileId)) : ts));
-  }, [commitStatuses]);
-
-  useEffect(() => {
-    const off = subscribeStatus((e) => {
-      const selected = selectedTileIdsRef.current.has(e.tileId);
-      const prev = statusesRef.current;
-      const old = prev.get(e.tileId);
-      const finished = e.status === "idle" && old?.status === "working"; // done now
-      const needsHuman =
-        e.status === "blocked" || e.status === "permission" || e.status === "question";
-      // "seen" = user is looking (tile selected) OR nothing noteworthy happened.
-      const seen = selected ? true : finished || needsHuman ? false : old?.seen ?? true;
-      const next = new Map(prev);
-      next.set(e.tileId, { label: e.label, status: e.status, seen });
-      commitStatuses(next);
-      // Toast only for background events — suppress when the tile is selected
-      // (you're already looking at it). herdr does the same tab-aware suppression.
-      if (!selected && (needsHuman || finished)) {
-        pushToast({ tileId: e.tileId, label: e.label, status: e.status });
-      }
-      // Native OS notification for the SAME transitions, but NOT gated on
-      // selection — if the whole window is unfocused you're away regardless of
-      // what's selected. Main suppresses it when the window IS focused (the
-      // in-app toast above covers that case). One state machine, two surfaces.
-      if (needsHuman || finished) {
-        const fid = frameOfRef.current[e.tileId];
-        const fr = fid ? framesRef.current.find((f) => f.id === fid) : undefined;
-        try {
-          window.hive.notifyAgent({
-            tileId: e.tileId,
-            label: e.label,
-            kind: needsHuman ? "needs" : "done",
-            frame: fr?.title,
-          });
-        } catch { /* preload missing in some test harnesses */ }
-      }
-    });
-    return off;
-  }, [commitStatuses, pushToast]);
+  // herdr-style agent awareness: status → in-app toast + OS notification, with
+  // done-unseen tracking + selection-based suppression. See useAgentAwareness.
+  const { toasts, dismissToast, markSeen, selectedTileIdsRef } = useAgentAwareness({
+    pushToastRef, frameOfRef, framesRef,
+  });
 
   return (
     <div className="relative h-full w-full flex flex-col">
