@@ -15,6 +15,7 @@ const api: HiveIpc & {
   onMenuNewIssue: (cb: () => void) => () => void;
   onMenuOpenFolder: (cb: () => void) => () => void;
   onMenuOpenRecent: (cb: () => void) => () => void;
+  onMenuToggleLayers: (cb: () => void) => () => void;
   getLaunchTarget: () => Promise<string | null>;
   onOpenProject: (cb: (path: string) => void) => () => void;
 } = {
@@ -121,6 +122,11 @@ const api: HiveIpc & {
     const listener = () => cb();
     ipcRenderer.on("menu:open-recent", listener);
     return () => ipcRenderer.removeListener("menu:open-recent", listener);
+  },
+  onMenuToggleLayers: (cb: () => void) => {
+    const listener = () => cb();
+    ipcRenderer.on("menu:toggle-layers", listener);
+    return () => ipcRenderer.removeListener("menu:toggle-layers", listener);
   },
 
   getLaunchTarget: () => ipcRenderer.invoke("getLaunchTarget"),

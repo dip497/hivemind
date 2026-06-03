@@ -188,11 +188,15 @@ export function App() {
     // Recents now live in the ⌘K palette — OS "Open Recent" just opens it.
     const offRecent = (w.hive as unknown as { onMenuOpenRecent?: (cb: () => void) => () => void })
       .onMenuOpenRecent?.(() => window.dispatchEvent(new CustomEvent("hivemind:toggle-palette")));
+    // ⌘/Ctrl+L toggles the Layers panel (LayersPanel listens for the event).
+    const offLayers = (w.hive as unknown as { onMenuToggleLayers?: (cb: () => void) => () => void })
+      .onMenuToggleLayers?.(() => window.dispatchEvent(new CustomEvent("hivemind:toggle-layers")));
     return () => {
       offPal?.();
       offNew?.();
       offOpen?.();
       offRecent?.();
+      offLayers?.();
     };
   }, []);
 

@@ -65,6 +65,14 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
     () => localStorage.getItem("hivemind:layers-hidden") !== "0",
   );
   useEffect(() => { localStorage.setItem("hivemind:layers-hidden", hidden ? "1" : "0"); }, [hidden]);
+  // ⌘/Ctrl+L toggles the panel open/closed (dispatched from App's menu bridge;
+  // works even over a focused terminal since main forwards the key). The header
+  // × and the collapsed pill remain for mouse.
+  useEffect(() => {
+    const onToggle = () => setHidden((h) => !h);
+    window.addEventListener("hivemind:toggle-layers", onToggle);
+    return () => window.removeEventListener("hivemind:toggle-layers", onToggle);
+  }, []);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
   // Live status per tile, from the shared bus (same source as frame chips).

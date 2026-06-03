@@ -214,9 +214,17 @@ async function createWindow(): Promise<void> {
       event.preventDefault();
       try { wc.send("menu:open-folder"); } catch { /* destroyed mid-call */ }
     } else if (k === "r") {
-      // VSCode parity: Ctrl+R opens the "recent projects" picker.
+      // Ctrl+R USED to open the recents picker — but recents live in the ⌘K
+      // palette now, so it just re-opened the SAME panel as ⌘K (confusing). We
+      // still swallow it (preventDefault) so muscle-memory Ctrl+R doesn't trigger
+      // Electron's hard window reload, which would tear down the canvas + re-
+      // attach every PTY. Recents are reachable via ⌘K and File ▸ Open Recent.
       event.preventDefault();
-      try { wc.send("menu:open-recent"); } catch { /* destroyed mid-call */ }
+    } else if (k === "l") {
+      // ⌘/Ctrl+L toggles the Layers panel (forwarded from main because xterm
+      // swallows ^L when a terminal is focused — same bridge as ⌘K/⌘N).
+      event.preventDefault();
+      try { wc.send("menu:toggle-layers"); } catch { /* destroyed mid-call */ }
     }
   });
 
