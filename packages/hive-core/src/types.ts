@@ -120,6 +120,22 @@ export interface IssueSummary
   path: string;
 }
 
+/** Partial update to an issue. The SINGLE source of truth for this shape — both
+ *  core's updateIssue and the desktop IPC contract import it from here (it lives
+ *  in types.ts, which is node-free, so the web bundle can use it without pulling
+ *  storage.ts's node:fs deps). */
+export type IssuePatch = Partial<{
+  title: string;
+  state: IssueSummary["state"];
+  parent: string | null;
+  labels: string[];
+  assignee: Issue["assignee"];
+  github: number | null;
+  description: string;
+  acceptanceCriteria: Issue["sections"]["acceptanceCriteria"];
+  extra: string;
+}>;
+
 export const ConfigZ = z.object({
   prefix: z.string().regex(/^[A-Z][A-Z0-9]{1,9}$/, "prefix must be UPPERCASE 2-10 chars"),
   next_id: z.number().int().positive(),

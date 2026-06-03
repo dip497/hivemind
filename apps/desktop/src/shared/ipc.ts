@@ -1,5 +1,9 @@
 /** Typed contract for IPC between main and renderer. */
-import type { Issue, IssueSummary, IssueState, AcceptanceItem, Assignee, LinkType } from "@hivemind/core/types";
+import type { Issue, IssueSummary, IssueState, AcceptanceItem, Assignee, LinkType, IssuePatch } from "@hivemind/core/types";
+
+// IssuePatch is owned by @hivemind/core/types (node-free) — re-export so renderer
+// modules keep importing it from the IPC contract, with no hand-maintained copy.
+export type { IssuePatch };
 
 /** A registered workspace (subset of the core registry entry — display shape
  *  for the renderer; avoids pulling node-only registry deps into the web tsconfig). */
@@ -9,22 +13,6 @@ export interface WorkspaceInfo {
   repo: string;
   title: string;
 }
-
-/**
- * Patch shape for `updateIssue`. Duplicated from `@hivemind/core/storage`
- * because importing from there pulls node-only deps into the web tsconfig.
- */
-export type IssuePatch = Partial<{
-  title: string;
-  state: IssueState;
-  parent: string | null | undefined;
-  labels: string[];
-  assignee: Assignee | null | undefined;
-  github: number | null | undefined;
-  description: string;
-  acceptanceCriteria: AcceptanceItem[];
-  extra: string;
-}>;
 
 // ── git types (mirror simple-git status v2 + pretty wrappers) ─────────────
 

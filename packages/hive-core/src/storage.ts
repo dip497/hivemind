@@ -24,6 +24,7 @@ import {
   type ActivityEntry,
   type Config,
   type Issue,
+  type IssuePatch,
   type IssueSections,
   type IssueSummary,
 } from "./types.js";
@@ -581,17 +582,9 @@ async function nextSubIssueId(root: string, parentId: string): Promise<string> {
   return `${parentId}.${highest + 1}`;
 }
 
-export type IssuePatch = Partial<{
-  title: string;
-  state: IssueSummary["state"];
-  parent: string | undefined;
-  labels: string[];
-  assignee: Issue["assignee"];
-  github: number | null;
-  description: string;
-  acceptanceCriteria: Issue["sections"]["acceptanceCriteria"];
-  extra: string;
-}>;
+// IssuePatch now lives in types.ts (node-free single source — see there). Kept
+// re-exported here so existing `@hivemind/core/storage` importers don't break.
+export type { IssuePatch };
 
 /**
  * Read-merge-write update. Patches frontmatter and/or sections, appends an

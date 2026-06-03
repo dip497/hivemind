@@ -4,7 +4,6 @@ import path from "node:path";
 import { promises as fsp, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
-  appendActivity,
   commentOnIssue,
   createIssue,
   deleteIssue as deleteIssueCore,
@@ -20,13 +19,12 @@ import {
   updateIssue,
   writeAgentContext,
   writeConfig,
-  writeIssue,
   templates,
   type IssueState,
   type LinkType,
 } from "@hivemind/core";
 import os from "node:os";
-import type { IssuePatch } from "@hivemind/core/storage";
+import type { IssuePatch } from "@hivemind/core/types";
 import * as ptyHost from "./pty-host.js";
 import * as ptyDaemon from "./daemon-client.js";
 // tmux-style persistence is ON by default — terminal sessions live in a
@@ -464,10 +462,10 @@ ipcMain.handle("readIssue", wrap(async (_e, root: string, id: string) => readIss
 ipcMain.handle(
   "updateIssueState",
   wrap(async (_e, root: string, id: string, state: IssueState, note?: string) => {
-    const issue = await readIssue(root, id);
-    appendActivity(issue, "ui", `state ${issue.state} → ${state}${note ? ` · ${note}` : ""}`);
-    issue.state = state;
-    await writeIssue(issue);
+    // Route through core (like createIssue/updateIssue/commentOnIssue) instead
+    // of hand-rolling the state change + a divergent activity string. The note,
+    // if any, is appended in the SAME write.
+    const issue = await updateIssue(root, id, { state }, "ui", note);
     await writeAgentContext(root);
     return issue;
   })
