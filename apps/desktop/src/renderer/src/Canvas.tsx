@@ -1506,6 +1506,17 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
       const el = t as HTMLElement | null;
       return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable);
     };
+    // A REAL text field (tile rename, palette search, issue forms) where every
+    // key — including "." and Escape — must type/act normally. Distinct from the
+    // terminal/editor, which are also "editable" but are canvas content you
+    // navigate FROM. xterm's hidden textarea carries `.xterm-helper-textarea`.
+    const inTextField = (t: EventTarget | null): boolean => {
+      const el = t as HTMLElement | null;
+      if (!el) return false;
+      if (el.tagName === "INPUT") return true;
+      if (el.tagName === "TEXTAREA") return !el.classList.contains("xterm-helper-textarea");
+      return false;
+    };
     const onKey = (e: KeyboardEvent) => {
       // ── modifier shortcuts (kept for muscle memory) ──
       if (e.metaKey || e.ctrlKey) {
@@ -1515,18 +1526,21 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
         else if ((e.key === "d" || e.key === "D") && repoPath) { e.preventDefault(); spawnVis("diff"); }
         return;
       }
-      // Focus mode hotkeys fire even when typing in a tile (xterm/CodeMirror
-      // are "editable" so the typing-guard below blocks them) — they navigate
-      // the canvas, not the focused content.
-      if (e.key === ".") {
-        const id = selectedTileIdRef.current ?? selectedFrameIdRef.current;
-        if (id) { e.preventDefault(); setFocusModeReq({ id, n: ++focusModeNonceRef.current }); }
-        return;
-      }
-      if (e.key === "Escape") {
-        e.preventDefault();
-        setFocusModeReq({ id: null, n: ++focusModeNonceRef.current });
-        return;
+      // Focus mode hotkeys fire even when typing in a TILE (xterm/CodeMirror are
+      // "editable" but you navigate the canvas from them) — but NOT in a real
+      // text field like the tile-rename input, palette, or a form, where "."
+      // and Escape must type/cancel normally.
+      if (!inTextField(e.target)) {
+        if (e.key === ".") {
+          const id = selectedTileIdRef.current ?? selectedFrameIdRef.current;
+          if (id) { e.preventDefault(); setFocusModeReq({ id, n: ++focusModeNonceRef.current }); }
+          return;
+        }
+        if (e.key === "Escape") {
+          e.preventDefault();
+          setFocusModeReq({ id: null, n: ++focusModeNonceRef.current });
+          return;
+        }
       }
       // ── single-key tool hotkeys (number row only) — when NOT typing ──
       // NOTE: bare LETTER aliases (a/t/b/d/f/c) were removed — in a dev tool you
