@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-06-03
+
 ### Added
 - **`hivemind upgrade` / `hive upgrade` — self-update to the latest release.** Re-runs the official installer (downloads the newest GitHub release if newer, no-op if already current; `--dev` rebuilds a source install). Works as a `hive` CLI subcommand and as `hivemind upgrade` on the desktop launcher. `apps/cli/src/commands/upgrade.ts`, `install.sh`.
 
@@ -180,7 +182,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/dip497/hivemind/releases/tag/v0.4.0
 [0.3.2]: https://github.com/dip497/hivemind/releases/tag/v0.3.2
 [0.3.1]: https://github.com/dip497/hivemind/releases/tag/v0.3.1
 [0.3.0]: https://github.com/dip497/hivemind/releases/tag/v0.3.0
