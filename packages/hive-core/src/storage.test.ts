@@ -6,6 +6,8 @@ import {
   HiveError,
   allocateId,
   appendActivity,
+  createIssue,
+  updateIssue,
   deleteIssueFile,
   findRoot,
   issuePath,
@@ -469,5 +471,45 @@ describe("serializeIssue round-trip is stable", () => {
     expect(back.assignee?.id).toBe("claude");
     expect(back.github).toBe(487);
     expect(back.sections.description).toBe("D body.");
+  });
+});
+
+describe("createIssue / updateIssue (CLI + UI write path)", () => {
+  test("createIssue records the given actor + an ISO timestamp", async () => {
+    const root = await mkRoot();
+    const issue = await createIssue(root, { title: "hello", who: "cli:alice" });
+    expect(issue.id).toBe("PAY-1");
+    const act = issue.sections.activity[0]!;
+    expect(act.who).toBe("cli:alice");
+    expect(act.message).toBe("created");
+    // ISO-Z, not the legacy "YYYY-MM-DD HH:MM" form.
+    expect(act.at).toMatch(/T.*Z$/);
+  });
+
+  test("createIssue defaults actor to 'ui' and carries github", async () => {
+    const root = await mkRoot();
+    const issue = await createIssue(root, { title: "x", github: 42 });
+    expect(issue.sections.activity[0]!.who).toBe("ui");
+    expect(issue.github).toBe(42);
+  });
+
+  test("updateIssue appends a note in the SAME write as the patch", async () => {
+    const root = await mkRoot();
+    const created = await createIssue(root, { title: "t" });
+    const updated = await updateIssue(root, created.id, { state: "in_progress" }, "cli:bob", "starting now");
+    const msgs = updated.sections.activity.map((a) => a.message);
+    expect(msgs).toContain("state: todo → in_progress");
+    expect(msgs).toContain("starting now");
+    // Re-read from disk: one write, both entries persisted.
+    const reread = await readIssue(root, created.id);
+    expect(reread.sections.activity.map((a) => a.message)).toContain("starting now");
+  });
+
+  test("updateIssue can unset github via null", async () => {
+    const root = await mkRoot();
+    const created = await createIssue(root, { title: "t", github: 7 });
+    const updated = await updateIssue(root, created.id, { github: null }, "ui");
+    expect(updated.github).toBe(null);
+    expect(updated.sections.activity.map((a) => a.message)).toContain("github: 7 → —");
   });
 });

@@ -9,20 +9,17 @@
 import { defineCommand } from "citty";
 import {
   HiveError,
-  appendActivity,
   childrenOf,
-  issuePath,
+  createIssue,
   listIssues,
   readIssue,
   requireRoot,
+  updateIssue,
   writeAgentContext,
-  writeIssue,
-  type Issue,
 } from "@hivemind/core";
 import { err, ok, renderIssue, renderIssueList } from "../format.js";
 import { detectWho } from "../who.js";
 import { stripAt } from "../parse.js";
-import { findNextChildId } from "../parent.js";
 
 function normaliseSubId(parent: string, ref: string): string {
   const r = stripAt(ref);
@@ -54,33 +51,16 @@ const addSub = defineCommand({
       } catch {
         return err(ctx, "bad_parent", `parent ${parent} does not exist`);
       }
-      const id = await findNextChildId(root, parent);
-      const now = new Date().toISOString();
-      const issue: Issue = {
-        id,
+      // Core owns sub-issue id allocation + the default body + activity format.
+      const issue = await createIssue(root, {
         title: String(args.title),
-        state: (args.state ? String(args.state) : "todo") as Issue["state"],
         parent,
-        labels: [],
-        assignee: args.assignee
-          ? { type: "agent", id: String(args.assignee).toLowerCase() }
-          : null,
-        github: null,
-        created: now,
-        updated: now,
-        path: issuePath(root, id),
-        sections: {
-          description: "",
-          acceptanceCriteria: [],
-          activity: [],
-          extra: "",
-        },
-        raw: "",
-      };
-      appendActivity(issue, detectWho(), `created (sub-issue of ${parent})`);
-      await writeIssue(issue);
+        state: (args.state ? String(args.state) : "todo") as Parameters<typeof createIssue>[1]["state"],
+        assignee: args.assignee ? { type: "agent", id: String(args.assignee).toLowerCase() } : null,
+        who: detectWho(),
+      });
       await writeAgentContext(root);
-      return ok(ctx, { id, parent, path: issue.path }, () => renderIssue(issue));
+      return ok(ctx, { id: issue.id, parent, path: issue.path }, () => renderIssue(issue));
     } catch (e) {
       const msg = e instanceof HiveError ? e.message : (e as Error).message;
       const code = e instanceof HiveError ? e.code : "task_add_failed";
@@ -107,11 +87,9 @@ const doneSub = defineCommand({
       const id = normaliseSubId(parent, String(args.sub));
       const issue = await readIssue(root, id);
       if (issue.state === "done") return err(ctx, "noop", `${id} already done`);
-      appendActivity(issue, detectWho(), `state ${issue.state} → done`);
-      issue.state = "done";
-      await writeIssue(issue);
+      const updated = await updateIssue(root, id, { state: "done" }, detectWho());
       await writeAgentContext(root);
-      return ok(ctx, issue, () => renderIssue(issue));
+      return ok(ctx, updated, () => renderIssue(updated));
     } catch (e) {
       const msg = e instanceof HiveError ? e.message : (e as Error).message;
       const code = e instanceof HiveError ? e.code : "task_done_failed";

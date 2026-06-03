@@ -512,6 +512,10 @@ export interface CreateIssueOpts {
   /** Structured acceptance criteria. Without this, agents cram the checklist
    *  into `description` as raw `- [ ]` lines and the dedicated panel is empty. */
   acceptanceCriteria?: AcceptanceItem[];
+  /** Linked GitHub issue/PR number. */
+  github?: number | null;
+  /** Actor recorded in the creation activity entry. Default "ui". */
+  who?: string;
 }
 
 /**
@@ -535,7 +539,7 @@ export async function createIssue(root: string, opts: CreateIssueOpts): Promise<
     parent: opts.parent ?? null,
     labels: opts.labels ?? [],
     assignee: opts.assignee ?? null,
-    github: null,
+    github: opts.github ?? null,
     created: now,
     updated: now,
     path: issuePath(root, finalId),
@@ -544,8 +548,8 @@ export async function createIssue(root: string, opts: CreateIssueOpts): Promise<
       acceptanceCriteria: opts.acceptanceCriteria ?? [],
       activity: [
         {
-          at: now.replace("T", " ").slice(0, 16),
-          who: "ui",
+          at: now,
+          who: opts.who ?? "ui",
           message: opts.parent ? `created as sub-issue of ${opts.parent}` : "created",
         },
       ],
@@ -583,7 +587,7 @@ export type IssuePatch = Partial<{
   parent: string | undefined;
   labels: string[];
   assignee: Issue["assignee"];
-  github: number | undefined;
+  github: number | null;
   description: string;
   acceptanceCriteria: Issue["sections"]["acceptanceCriteria"];
   extra: string;
@@ -598,6 +602,9 @@ export async function updateIssue(
   id: string,
   patch: IssuePatch,
   who: string = "ui",
+  /** Optional free-text note appended to Activity in the SAME write — avoids a
+   *  second read-modify-write (which could race with a concurrent op). */
+  note?: string,
 ): Promise<Issue> {
   const issue = await readIssue(root, id);
   const summary: string[] = [];
@@ -628,7 +635,10 @@ export async function updateIssue(
       issue.assignee = patch.assignee;
     }
   }
-  if (patch.github !== undefined) issue.github = patch.github;
+  if (patch.github !== undefined && patch.github !== issue.github) {
+    summary.push(`github: ${issue.github ?? "—"} → ${patch.github ?? "—"}`);
+    issue.github = patch.github;
+  }
   if (patch.description !== undefined) {
     issue.sections.description = patch.description;
   }
@@ -640,6 +650,8 @@ export async function updateIssue(
   }
 
   if (summary.length > 0) appendActivity(issue, who, summary.join(" · "));
+  const trimmedNote = note?.trim();
+  if (trimmedNote) appendActivity(issue, who, trimmedNote);
   issue.updated = new Date().toISOString();
   await writeIssue(issue);
   return issue;

@@ -1,18 +1,14 @@
 import { defineCommand } from "citty";
 import {
   HiveError,
-  allocateId,
-  appendActivity,
-  issuePath,
+  createIssue,
   readIssue,
   requireRoot,
   writeAgentContext,
-  writeIssue,
-  type Issue,
 } from "@hivemind/core";
 import { err, ok, renderIssue } from "../format.js";
 import { detectWho } from "../who.js";
-import { parseAssignee, parseState, stripAt } from "../parse.js";
+import { collectMulti, parseAssignee, parseState, stripAt } from "../parse.js";
 
 export const newCmd = defineCommand({
   meta: {
@@ -48,16 +44,6 @@ export const newCmd = defineCommand({
         }
       }
 
-      // Allocate ID. Sub-issues append .N to parent id (find next .N for this parent).
-      let id: string;
-      if (parent) {
-        const { findNextChildId } = await import("../parent.js");
-        id = await findNextChildId(root, parent);
-      } else {
-        const alloc = await allocateId(root);
-        id = alloc.id;
-      }
-
       const state = args.state ? parseState(String(args.state)) : "backlog";
       if (!state) {
         return err(ctx, "bad_state", `invalid state: ${args.state}`);
@@ -71,33 +57,22 @@ export const newCmd = defineCommand({
       if (args.github != null && (githubNum === null || !Number.isInteger(githubNum))) {
         return err(ctx, "bad_github", `--github must be a positive integer`);
       }
-      const labels = collectMulti(args.label);
-      const now = new Date().toISOString();
 
-      const issue: Issue = {
-        id,
+      // Route through core — it owns id allocation (incl. the next sub-issue id
+      // under `parent`), the default body, and the canonical activity format.
+      const issue = await createIssue(root, {
         title: String(args.title),
         state,
-        parent,
-        labels,
+        parent: parent ?? undefined,
+        labels: collectMulti(args.label),
         assignee,
         github: githubNum && githubNum > 0 ? githubNum : null,
-        created: now,
-        updated: now,
-        path: issuePath(root, id),
-        sections: {
-          description: args.description ? String(args.description) : "",
-          acceptanceCriteria: [],
-          activity: [],
-          extra: "",
-        },
-        raw: "",
-      };
-      appendActivity(issue, detectWho(), `created`);
-      await writeIssue(issue);
+        description: args.description ? String(args.description) : "",
+        who: detectWho(),
+      });
       await writeAgentContext(root);
 
-      return ok(ctx, { id, path: issue.path }, () => renderIssue(issue));
+      return ok(ctx, { id: issue.id, path: issue.path }, () => renderIssue(issue));
     } catch (e) {
       const msg = e instanceof HiveError ? e.message : (e as Error).message;
       const code = e instanceof HiveError ? e.code : "new_failed";
@@ -105,10 +80,3 @@ export const newCmd = defineCommand({
     }
   },
 });
-
-/** citty passes a repeated flag value as `string[]` when set multiple times. */
-function collectMulti(v: unknown): string[] {
-  if (v == null) return [];
-  if (Array.isArray(v)) return v.map(String);
-  return [String(v)];
-}

@@ -81,3 +81,11 @@ export function asInt(v: unknown): number | undefined {
   if (!Number.isFinite(n) || !Number.isInteger(n)) return undefined;
   return n;
 }
+
+/** citty passes a repeated flag value as `string[]` when set multiple times,
+ *  or a bare string when set once. Normalize to an array. */
+export function collectMulti(v: unknown): string[] {
+  if (v == null) return [];
+  if (Array.isArray(v)) return v.map(String);
+  return [String(v)];
+}

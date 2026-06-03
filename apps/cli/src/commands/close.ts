@@ -1,15 +1,17 @@
 import { defineCommand } from "citty";
 import {
   HiveError,
-  appendActivity,
   readIssue,
   requireRoot,
+  updateIssue,
   writeAgentContext,
-  writeIssue,
 } from "@hivemind/core";
 import { err, ok, renderIssue } from "../format.js";
 import { detectWho } from "../who.js";
 import { stripAt } from "../parse.js";
+
+/** Join non-empty note fragments into one activity note. */
+const joinNotes = (...parts: (string | undefined)[]) => parts.filter(Boolean).join(" — ") || undefined;
 
 export const closeCmd = defineCommand({
   meta: { name: "close", description: "Mark an issue done (or cancelled with --reason)" },
@@ -29,17 +31,10 @@ export const closeCmd = defineCommand({
       if (issue.state === next) {
         return err(ctx, "noop", `issue ${id} already ${next}`);
       }
-      const who = detectWho();
-      appendActivity(
-        issue,
-        who,
-        `state ${issue.state} → ${next}${args.reason ? ` (${args.reason})` : ""}`
-      );
-      if (args.note) appendActivity(issue, who, String(args.note));
-      issue.state = next;
-      await writeIssue(issue);
+      const note = joinNotes(args.reason ? String(args.reason) : undefined, args.note ? String(args.note) : undefined);
+      const updated = await updateIssue(root, id, { state: next }, detectWho(), note);
       await writeAgentContext(root);
-      return ok(ctx, issue, () => renderIssue(issue));
+      return ok(ctx, updated, () => renderIssue(updated));
     } catch (e) {
       const msg = e instanceof HiveError ? e.message : (e as Error).message;
       const code = e instanceof HiveError ? e.code : "close_failed";
@@ -69,13 +64,16 @@ export const reopenCmd = defineCommand({
       if (issue.state === target) {
         return err(ctx, "noop", `issue ${id} already ${target}`);
       }
-      const who = detectWho();
-      appendActivity(issue, who, `state ${issue.state} → ${target} (reopened)`);
-      if (args.note) appendActivity(issue, who, String(args.note));
-      issue.state = target as typeof issue.state;
-      await writeIssue(issue);
+      const note = joinNotes("reopened", args.note ? String(args.note) : undefined);
+      const updated = await updateIssue(
+        root,
+        id,
+        { state: target as typeof issue.state },
+        detectWho(),
+        note,
+      );
       await writeAgentContext(root);
-      return ok(ctx, issue, () => renderIssue(issue));
+      return ok(ctx, updated, () => renderIssue(updated));
     } catch (e) {
       const msg = e instanceof HiveError ? e.message : (e as Error).message;
       const code = e instanceof HiveError ? e.code : "reopen_failed";
