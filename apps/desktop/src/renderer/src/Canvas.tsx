@@ -1395,13 +1395,15 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     const sel = selectedFrameIdRef.current;
     const selF = sel ? framesRef.current.find((f) => f.id === sel) : undefined;
     if (selF) return selF;
-    // Prefer a workspace-bound frame over an empty base — without this, a
-    // user-bound zone (e.g. "manageark") that wasn't created first would lose
-    // spawns to a stale base frame, and tiles would land off-screen relative
-    // to the visible workspace.
-    const bound = framesRef.current.find((f) => f.workspacePath || f.worktreePath);
+    // Prefer a workspace-bound TOP-LEVEL frame over an empty base — without
+    // this, a user-bound zone (e.g. "manageark") that wasn't created first
+    // would lose spawns to a stale base frame, and tiles would land off-screen
+    // relative to the visible workspace. Never auto-route into a worktree
+    // sub-frame (parentFrameId set) — those are spawned-into only on explicit
+    // selection, else an unselected spawn would land in a random worktree.
+    const bound = framesRef.current.find((f) => !f.parentFrameId && f.workspacePath);
     if (bound) return bound;
-    const first = framesRef.current[0];
+    const first = framesRef.current.find((f) => !f.parentFrameId);
     if (first) return first;
     const id = `frame-${Date.now()}`;
     const rp = repoPathRef.current;
@@ -2459,25 +2461,32 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
                 <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-fg3)]">
                   Spawn claude in
                 </div>
-                {frames.map((f) => {
-                  const isSel = f.id === selectedFrameId;
-                  return (
-                    <button
-                      key={f.id}
-                      autoFocus={isSel}
-                      onClick={() => { spawnTile(spawnPick.kind, f.id, { mode: spawnPick.mode, work: spawnPick.work }); setSpawnPick(null); }}
-                      className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[12px] text-[var(--color-fg)] hover:bg-[var(--color-bg3)] transition-colors ${
-                        isSel ? "bg-[var(--color-bg3)] ring-1 ring-[var(--color-brand)]" : ""
-                      }`}
-                    >
-                      <span aria-hidden className="size-2 rounded-full" style={{ background: f.color }} />
-                      <span className="truncate">{f.title}</span>
-                      <span className="ml-auto text-[10px] text-[var(--color-fg3)]">
-                        {isSel ? "selected" : "workspace"}
-                      </span>
-                    </button>
-                  );
-                })}
+                {/* Order each repo frame followed by its worktree children, so
+                    the picker reads as a tree (children indented + tagged). */}
+                {frames
+                  .filter((f) => !f.parentFrameId)
+                  .flatMap((p) => [p, ...frames.filter((c) => c.parentFrameId === p.id)])
+                  .map((f) => {
+                    const isSel = f.id === selectedFrameId;
+                    const isWt = !!f.parentFrameId;
+                    return (
+                      <button
+                        key={f.id}
+                        autoFocus={isSel}
+                        onClick={() => { spawnTile(spawnPick.kind, f.id, { mode: spawnPick.mode, work: spawnPick.work }); setSpawnPick(null); }}
+                        className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[12px] text-[var(--color-fg)] hover:bg-[var(--color-bg3)] transition-colors ${
+                          isSel ? "bg-[var(--color-bg3)] ring-1 ring-[var(--color-brand)]" : ""
+                        }`}
+                        style={isWt ? { paddingLeft: 20 } : undefined}
+                      >
+                        <span aria-hidden className="size-2 rounded-full shrink-0" style={{ background: f.color }} />
+                        <span className="truncate">{f.title}</span>
+                        <span className="ml-auto text-[10px] text-[var(--color-fg3)]">
+                          {isSel ? "selected" : isWt ? "worktree" : "workspace"}
+                        </span>
+                      </button>
+                    );
+                  })}
                 <button
                   onClick={() => setSpawnPick(null)}
                   className="w-full text-left px-2 py-1 mt-0.5 rounded-md text-[11px] text-[var(--color-fg3)] hover:bg-[var(--color-bg3)] transition-colors"
