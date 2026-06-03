@@ -8,7 +8,7 @@
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { GitBranch, FolderGit2, Plus, LayoutGrid } from "lucide-react";
+import { GitBranch, FolderGit2, Plus, LayoutGrid, Server } from "lucide-react";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { WorktreePicker } from "./WorktreePicker";
 import { useGitBranch } from "./queries";
@@ -310,12 +310,23 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
         {!isWorktreeChild && !wsBound && (
           <button
             onClick={() => data.onBindWorkspace(data.id)}
-            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-[var(--color-fg2)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)]"
+            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-[var(--color-fg2)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)] cursor-pointer"
             title="Bind this frame to a repo folder — tiles inside run in that workspace"
             aria-label="bind workspace"
           >
             <FolderGit2 size={11} />
             workspace
+          </button>
+        )}
+        {!isWorktreeChild && !wsBound && (
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent("hivemind:attach-remote", { detail: { frameId: data.id } }))}
+            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-[var(--color-fg2)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)] cursor-pointer"
+            title="Attach an SSH host — tiles inside run on the remote (terminal, editor, diff)"
+            aria-label="attach remote"
+          >
+            <Server size={11} />
+            remote
           </button>
         )}
         {/* ── child terminal chips ──────────────────────────────────────

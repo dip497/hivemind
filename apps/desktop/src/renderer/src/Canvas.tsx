@@ -37,6 +37,7 @@ import {
 import { useStateWithRef } from "./use-state-with-ref";
 import { defaultTileSize, defaultSizeForKind } from "./canvas-sizing";
 import { useWorktrees } from "./useWorktrees";
+import { RemoteConnectModal } from "./components/RemoteConnectModal";
 import { useSpawn } from "./useSpawn";
 import { useFrameOps } from "./useFrameOps";
 import { buildBaseNodes } from "./canvas-node-build";
@@ -374,7 +375,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
 
   // Worktree + workspace-zone lifecycle (IPC, in-flight guard, detach confirm).
   const {
-    onAttachWorktree, onCreateWorktree, unbindBranch, bindWorkspace, unbindWorkspace,
+    onAttachWorktree, onCreateWorktree, unbindBranch, bindWorkspace, unbindWorkspace, bindRemote,
   } = useWorktrees({
     framesRef, tilesRef, positionsRef, sizesRef, frameOfRef, repoPathRef,
     lastActiveFrameRef, pushToastRef, setFrames, setFrameOf, setSelectedFrameId,
@@ -479,6 +480,18 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // Spawn-target picker: when 2+ workspaces (base + workspace-zone frames) live
   // on the canvas, ask WHERE a new claude should run instead of guessing.
   const [spawnPick, setSpawnPick] = useState<{ kind: TileKind; mode?: string; work?: string } | null>(null);
+  // Frame awaiting a remote (ssh://) bind — set when FrameNode fires
+  // `hivemind:attach-remote`; the modal connects, browses, and binds the picked
+  // ssh uri as that frame's workspacePath.
+  const [remoteAttach, setRemoteAttach] = useState<string | null>(null);
+  useEffect(() => {
+    const onAttach = (e: Event) => {
+      const fid = (e as CustomEvent<{ frameId: string }>).detail?.frameId;
+      if (fid) setRemoteAttach(fid);
+    };
+    window.addEventListener("hivemind:attach-remote", onAttach as EventListener);
+    return () => window.removeEventListener("hivemind:attach-remote", onAttach as EventListener);
+  }, []);
 
   // Position a new tile inside a frame. Tiles pack left-to-right then WRAP to a
   // new row past FRAME_ROW_MAX (so a frame grows DOWN, not infinitely right).
@@ -951,6 +964,11 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
             onInitWorkspace={onInitWorkspace}
           />
         )}
+        <RemoteConnectModal
+          open={remoteAttach !== null}
+          onClose={() => setRemoteAttach(null)}
+          onPick={(uri) => { if (remoteAttach) bindRemote(remoteAttach, uri); setRemoteAttach(null); }}
+        />
       </div>
     </div>
   );
