@@ -80,12 +80,22 @@ test("corner-handle drag resizes a terminal tile", async () => {
   //    (isVisible={selected}), so this click is required before the handle exists.
   await term.click({ position: { x: 20, y: 20 } });
 
-  // 4. Find the bottom-right handle and drag it +160, +110.
+  // Let selection settle: selecting re-renders the node AND may snap the
+  // viewport (ViewportSnap / SelectZoomReset). Measuring the handle mid-settle
+  // gave a stale bbox → the drag missed → flaky resize. Wait for the handle to
+  // be visible, then for its position to stop moving before we grab it.
   const handle = page.locator(
     `${termSel} .react-flow__resize-control.bottom.right.handle`
   );
   await expect(handle).toBeVisible();
-  const hb = await handle.boundingBox();
+  await page.waitForTimeout(300);
+  let hb = await handle.boundingBox();
+  for (let i = 0; i < 10; i++) {
+    await page.waitForTimeout(60);
+    const next = await handle.boundingBox();
+    if (hb && next && Math.abs(next.x - hb.x) < 0.5 && Math.abs(next.y - hb.y) < 0.5) { hb = next; break; }
+    hb = next;
+  }
   expect(hb).toBeTruthy();
   const sx = hb!.x + hb!.width / 2;
   const sy = hb!.y + hb!.height / 2;
