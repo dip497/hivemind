@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [0.3.2] — 2026-06-03
+
 ### Fixed
 - **Terminal text selection (and clicks) landed on the wrong row when zoomed.** xterm maps the mouse to a cell using its *unscaled* cell size, but react-flow CSS-scales the canvas at any zoom ≠ 100% — so selecting a line grabbed one 2–3 rows off (a known xterm limitation under CSS transform; it also threw off link clicks and mouse-reporting clicks). Selecting a terminal tile now snaps the canvas to exactly 100%, where the mouse→cell math is pixel-accurate, so selection, link clicks, and mouse clicks all hit the right row. (Editor/diff tiles are unaffected — they use DOM coordinates that scale correctly.) `apps/desktop/src/renderer/src/Canvas.tsx`.
 - **Clicking a URL in the terminal now opens it in the browser.** The terminal had no link handling at all — URLs were only openable via an agent's own mouse-reporting, which is unreliable. Added xterm's WebLinksAddon (plain `http(s)` URLs become clickable) plus a `linkHandler` for OSC 8 hyperlinks (which claude emits); a click routes through `window.open` → the existing `setWindowOpenHandler` → `shell.openExternal`, opening in the OS browser (http/https only, no popup). `apps/desktop/src/renderer/src/TerminalTile.tsx`, `package.json`.
@@ -172,7 +174,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/dip497/hivemind/releases/tag/v0.3.2
 [0.3.1]: https://github.com/dip497/hivemind/releases/tag/v0.3.1
 [0.3.0]: https://github.com/dip497/hivemind/releases/tag/v0.3.0
 [0.2.0]: https://github.com/dip497/hivemind/releases/tag/v0.2.0
