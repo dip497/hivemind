@@ -33,6 +33,15 @@ export interface ClaudeResumeDeps {
 
 const isClaude = (spec: SpawnSpec): boolean => (spec.cmd ?? "").split("/").pop() === "claude";
 
+/** POSIX single-quote a value for safe interpolation into a shell command. The
+ *  SessionStart hook string is run by the user's shell, and `id` derives from a
+ *  renderer-controlled tileId — an unescaped `'` would break out of the quoting
+ *  and inject arbitrary commands. Wrapping in single quotes and rewriting any
+ *  inner `'` as `'\''` makes ANY string safe (incl. app-owned paths). */
+export function shq(s: string): string {
+  return `'${s.replace(/'/g, "'\\''")}'`;
+}
+
 /** The merged hooks settings JSON for a tile. claude MERGES this with the
  *  project's own hooks (doesn't clobber e.g. claude-mem). One hook:
  *   - SessionStart → records the tile's live session id (resume tracking).
@@ -40,8 +49,8 @@ const isClaude = (spec: SpawnSpec): boolean => (spec.cmd ?? "").split("/").pop()
  *  (multi-agent, transition-deduped) — see agent-notify.ts — not a claude hook. */
 export function trackerSettings(deps: ClaudeResumeDeps, id: string): string {
   const sessionCmd =
-    `HIVEMIND_TILE='${id}' ELECTRON_RUN_AS_NODE=1 ` +
-    `'${deps.execPath}' '${deps.trackerPath}' '${deps.tileSessionsDir}'`;
+    `HIVEMIND_TILE=${shq(id)} ELECTRON_RUN_AS_NODE=1 ` +
+    `${shq(deps.execPath)} ${shq(deps.trackerPath)} ${shq(deps.tileSessionsDir)}`;
   const hooks: Record<string, unknown[]> = {
     SessionStart: [{ hooks: [{ type: "command", command: sessionCmd }] }],
   };

@@ -579,7 +579,29 @@ ipcMain.handle("worktreeRemove", wrap((_e, repoPath: string, wtPath: string, for
 ipcMain.handle("worktreePrune", wrap((_e, repoPath: string) => worktreePrune(repoPath)));
 
 // PTY
+// Sliding-window spawn rate-limit (see ptySpawn handler).
+const PTY_SPAWN_WINDOW_MS = 10_000;
+const PTY_SPAWN_MAX = 24;
+let ptySpawnTimes: number[] = [];
+function recordPtySpawn(): void {
+  const now = Date.now();
+  ptySpawnTimes = ptySpawnTimes.filter((t) => now - t < PTY_SPAWN_WINDOW_MS);
+  if (ptySpawnTimes.length >= PTY_SPAWN_MAX) {
+    throw new Error("pty spawn rate limit exceeded — too many terminals spawned at once");
+  }
+  ptySpawnTimes.push(now);
+}
 ipcMain.handle("ptySpawn", wrap(async (e, opts: Parameters<typeof spawnPty>[0]) => {
+  // Spawn rate-limit: a compromised renderer (XSS via rendered diff/issue
+  // content) could fork-bomb the host through ptySpawn. Cap spawns per sliding
+  // window — the dev-bridge already guards the identical call; the IPC path
+  // must too. And reject a non-directory cwd up front (otherwise it surfaces as
+  // an opaque node-pty throw later).
+  recordPtySpawn();
+  if (opts.cwd) {
+    const st = await fsp.stat(opts.cwd).catch(() => null);
+    if (!st?.isDirectory()) throw new Error(`pty cwd is not a directory: ${opts.cwd}`);
+  }
   // Ensure the user's PATH/tokens are patched into process.env BEFORE the PTY
   // (or, in daemon mode, the daemon process that inherits this env) spawns —
   // otherwise `claude`/`gh`/nvm-node may not resolve. Idempotent + cached.

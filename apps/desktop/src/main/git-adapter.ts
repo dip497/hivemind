@@ -488,6 +488,31 @@ export async function worktreeCreate(
   repoPath: string,
   opts: WorktreeCreateOpts
 ): Promise<{ path: string; branch: string }> {
+  // Validate renderer-supplied args — they reach `git` as positionals/values.
+  // A bad branch name can't shell-inject (spawn is execFile-style) but CAN be a
+  // git ARG injection, and an absolute/`..` path or a leading-dash sparse entry
+  // escapes the repo / is read as a flag. Reject all of those.
+  if (
+    !opts.branch ||
+    !/^[A-Za-z0-9._/-]+$/.test(opts.branch) ||
+    opts.branch.startsWith("-") ||
+    opts.branch.includes("..")
+  ) {
+    throw new Error(`invalid branch name: ${JSON.stringify(opts.branch)}`);
+  }
+  if (opts.path !== undefined && (path.isAbsolute(opts.path) || opts.path.split(/[/\\]/).includes(".."))) {
+    throw new Error("worktree path must be relative to the repo and contain no '..'");
+  }
+  const assertSafeList = (xs: string[] | undefined, label: string) => {
+    for (const x of xs ?? []) {
+      if (x.startsWith("-") || path.isAbsolute(x) || x.split(/[/\\]/).includes("..")) {
+        throw new Error(`invalid ${label} entry: ${JSON.stringify(x)}`);
+      }
+    }
+  };
+  assertSafeList(opts.sparse, "sparse");
+  assertSafeList(opts.includeFiles, "includeFiles");
+
   // Submodule guard — git worktree does NOT support submodules.
   try {
     const sm = await fs.readFile(path.join(repoPath, ".gitmodules"), "utf8");
