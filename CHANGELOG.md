@@ -7,6 +7,12 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Added
+- **Nested git-worktree sub-frames with a Zed-style picker.** A repo frame (the base workspace or a bound workspace zone) now owns nested **worktree** sub-frames. The frame header's new "worktree" control opens a picker modeled on Zed's — it lists the repo's existing worktrees (directory name · branch · short-sha · truncated path) and offers "Create new worktree based on `<branch>`". Attaching or creating one spawns a real nested child frame (react-flow `parentId`) bound to that branch; **every tile inside scopes to the worktree** — terminal/Claude `cwd`, the editor, and the diff all run against `worktreePath`, so each branch's work is isolated on one canvas. The child frame shows a `branch · sha` pill and detaches (removes the worktree + closes its tiles) via ×. Issues stay the project's shared `.hivemind` (a worktree has none of its own). Dragging a repo frame carries its worktree children and their tiles; the parent auto-fits to wrap them. `apps/desktop/src/renderer/src/{Canvas,FrameNode,WorktreePicker,frame-layout}.{ts,tsx}`.
+
+### Changed
+- **Whole-canvas frame auto-fit extracted to a pure, unit-tested `computeFrameLayout`.** The geometry math (derive each frame from its tiles, separate overlapping siblings, and now wrap nested worktree children) moved out of the `Canvas.tsx` god-component into `frame-layout.ts` — no behavior change for existing flat frames, fully covered by unit tests. `apps/desktop/src/renderer/src/frame-layout.ts`.
+
 ## [0.4.0] — 2026-06-03
 
 ### Added
