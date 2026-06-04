@@ -135,7 +135,7 @@ export function CommandPalette({ root, repoPath, recents = [], onPickFolder, onO
                   >
                     <Folder />
                     <span className="truncate">{p.split("/").slice(-1)[0]}</span>
-                    <span className="ml-2 truncate text-[10px] text-[var(--color-fg3)] font-mono">
+                    <span className="ml-auto truncate max-w-[55%] text-[10.5px] text-[var(--color-fg3)] font-mono">
                       {p}
                     </span>
                   </CommandItem>
@@ -204,7 +204,7 @@ export function CommandPalette({ root, repoPath, recents = [], onPickFolder, onO
                       onSelect={() => fire("hivemind:open-issue", i.id)}
                     >
                       <StateIcon state={i.state} size={14} />
-                      <span className="font-mono text-[10.5px] text-[var(--color-fg3)] mr-0.5">
+                      <span className="font-mono text-[10.5px] text-[var(--color-fg2)] tabular-nums mr-0.5">
                         {i.id}
                       </span>
                       <span className="truncate">{i.title}</span>

@@ -15,7 +15,7 @@ const Command = React.forwardRef<
   <CommandPrimitive
     ref={ref}
     className={cn(
-      "flex h-full w-full flex-col overflow-hidden rounded-md bg-popover text-popover-foreground",
+      "flex h-full w-full flex-col overflow-hidden rounded-md bg-transparent text-[var(--color-fg)]",
       className
     )}
     {...props}
@@ -40,12 +40,12 @@ const CommandInput = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive.Input>,
   React.ComponentPropsWithoutRef<typeof CommandPrimitive.Input>
 >(({ className, ...props }, ref) => (
-  <div className="flex items-center border-b px-3" cmdk-input-wrapper="">
-    <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+  <div className="flex items-center gap-2.5 border-b border-[var(--color-line)] px-3.5" cmdk-input-wrapper="">
+    <Search className="h-[15px] w-[15px] shrink-0 text-[var(--color-fg3)]" />
     <CommandPrimitive.Input
       ref={ref}
       className={cn(
-        "flex h-10 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50",
+        "flex h-12 w-full bg-transparent text-[13px] text-[var(--color-fg)] outline-none placeholder:text-[var(--color-fg3)] disabled:cursor-not-allowed disabled:opacity-50",
         className
       )}
       {...props}
@@ -74,7 +74,7 @@ const CommandEmpty = React.forwardRef<
 >((props, ref) => (
   <CommandPrimitive.Empty
     ref={ref}
-    className="py-6 text-center text-sm"
+    className="py-8 text-center text-[12px] text-[var(--color-fg3)]"
     {...props}
   />
 ))
@@ -103,7 +103,7 @@ const CommandSeparator = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <CommandPrimitive.Separator
     ref={ref}
-    className={cn("-mx-1 h-px bg-border", className)}
+    className={cn("-mx-1 h-px bg-[var(--color-line)]", className)}
     {...props}
   />
 ))
@@ -116,7 +116,14 @@ const CommandItem = React.forwardRef<
   <CommandPrimitive.Item
     ref={ref}
     className={cn(
-      "relative flex cursor-default gap-2 select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none data-[disabled=true]:pointer-events-none data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground data-[disabled=true]:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+      // App-themed, restrained selection: a soft bg + a brand left-bar + brand
+      // icon — NOT a loud full-width accent fill. Default rows are muted (fg2);
+      // the selected row lifts to fg. Icons are fg3 → brand when selected.
+      "relative flex cursor-pointer gap-2.5 select-none items-center rounded-md px-2.5 py-2 text-[13px] text-[var(--color-fg2)] outline-none transition-colors",
+      "data-[selected=true]:bg-[var(--color-bg4)] data-[selected=true]:text-[var(--color-fg)]",
+      "data-[selected=true]:shadow-[inset_2px_0_0_var(--color-brand)]",
+      "data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-40",
+      "[&_svg]:pointer-events-none [&_svg]:size-[15px] [&_svg]:shrink-0 [&_svg]:text-[var(--color-fg3)] data-[selected=true]:[&_svg]:text-[var(--color-brand)]",
       className
     )}
     {...props}
@@ -132,7 +139,7 @@ const CommandShortcut = ({
   return (
     <span
       className={cn(
-        "ml-auto text-xs tracking-widest text-muted-foreground",
+        "ml-auto inline-flex items-center gap-0.5 font-mono text-[10.5px] tracking-wide text-[var(--color-fg3)]",
         className
       )}
       {...props}
