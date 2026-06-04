@@ -7,6 +7,10 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Fixed
+- **Generic Electron icon in the GNOME dock** (source/dev runs) — the app now names itself `hivemind`, so the X11 `WM_CLASS` matches its desktop entry and the real icon shows instead of the gear. Packaged AppImages already had the icon.
+- **Upgrade-safe profile migration.** Naming the app moves its data dir to `~/.config/hivemind`; on first run with the new name the app now clones the most recent legacy profile (`Electron` for dev, `@hivemind/desktop` for packaged) into it, so **upgrading does not blank your canvas** (frames/tiles/layout). Idempotent. `apps/desktop/src/main/index.ts`.
+
 ## [1.0.1] — 2026-06-04
 
 ### Added
