@@ -39,6 +39,7 @@
       "synopsis": "Plane-style PM + canvas + claude agents",
       "description": "Local-first issue tracker, infinite canvas, and Claude Code integration in a single Electron desktop app.",
       "executableName": "hivemind",
+      "icon": "icons/icon.png",
       "artifactName": "hivemind-${version}-${arch}.AppImage"
     },
     "directories": {

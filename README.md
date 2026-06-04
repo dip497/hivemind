@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/icon.png" width="116" alt="hivemind" />
+
 # hivemind
 
 **A canvas-per-project mission control for AI coding agents.**

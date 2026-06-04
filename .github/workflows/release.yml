@@ -72,7 +72,10 @@ jobs:
         # electron-vite emits to apps/desktop/out — the deploy copy has only
         # source. The AppImage just needs `out/**/*` + package.json (per the
         # `build.files` config).
-        run: cp -r apps/desktop/out desktop-deploy/
+        run: |
+          cp -r apps/desktop/out desktop-deploy/
+          # electron-builder reads linux.icon (icons/icon.png) from the deploy dir.
+          cp -r apps/desktop/icons desktop-deploy/
 
       - name: Drop optional native dep cpu-features
         # ssh2 (remote SSH frames) lists `cpu-features` as an OPTIONAL dep — it

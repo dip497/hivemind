@@ -3,6 +3,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell, webContents 
 import path from "node:path";
 import { promises as fsp, statSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { spawn } from "node:child_process";
 import {
   commentOnIssue,
   createIssue,
@@ -169,6 +170,9 @@ async function createWindow(): Promise<void> {
     minWidth: 1100,
     minHeight: 700,
     backgroundColor: "#0d0e12",
+    // Window / taskbar icon (Linux). The AppImage's desktop icon comes from
+    // electron-builder's linux.icon; this sets the live window icon too.
+    icon: path.join(__dirname, "../renderer/icon.png"),
     titleBarStyle: "default",
     // Hide the native File/Edit/View/Window menu bar — it's redundant chrome
     // (no app-specific actions live there; everything is in the in-app top bar
@@ -920,8 +924,23 @@ if (process.env.HIVEMIND_BROWSER_CDP === "1" || readSettings().browserCdp === tr
 // backgroundThrottling: false (BrowserWindow webPreferences) is the correct
 // supported lever for keeping RAF alive on unfocused windows.
 
-const gotLock = app.requestSingleInstanceLock();
-if (!gotLock) {
+// `hivemind upgrade` should UPDATE, not open a window. New installs intercept
+// this in the install.sh launcher, but an OLD launcher (or a bare symlink to
+// the AppImage) passes the literal word "upgrade" straight to this binary,
+// where Electron would otherwise ignore the unknown arg and just open a window.
+// Handle it at the binary level so upgrade is correct regardless of launcher age:
+// run the official installer, stream its output, and exit — never create a window.
+function runUpgradeAndExit(): void {
+  const url = "https://raw.githubusercontent.com/dip497/hivemind/main/install.sh";
+  process.stdout.write("hivemind: upgrading via the official installer…\n");
+  const child = spawn("bash", ["-c", `curl -fsSL ${url} | bash`], { stdio: "inherit" });
+  child.on("error", () => app.exit(127));
+  child.on("close", (code) => app.exit(code ?? 0));
+}
+
+if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
+  runUpgradeAndExit();
+} else if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on("second-instance", (_e, argv, workingDirectory) => {

@@ -8,9 +8,11 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 ## [Unreleased]
 
 ### Added
+- **App icon.** hivemind now has a real icon — two stacked canvas frames holding a lit honeycomb (the canvas-of-frames + the hive), honey-amber on dark. Wired as the AppImage/desktop icon (`electron-builder` `linux.icon`), the live window/taskbar icon, and the renderer favicon; PNGs in `apps/desktop/icons/` + `assets/icon.png`. `apps/desktop/{icons/icon.png,package.json,src/main/index.ts,src/renderer/{index.html,public/*}}`, `.github/workflows/release.yml`.
 - **Browser in the tool island.** The top-center tool island now has a **Browser** button (hotkey `7`) alongside terminal / agent / explorer / diff / issues / frame — the Browser tile was previously only reachable via the hidden `7` key or a frame's **+** menu. `apps/desktop/src/renderer/src/{canvas-islands,Canvas}.tsx`.
 
 ### Fixed
+- **`hivemind upgrade` no longer opens the app** — it just upgrades. New installs intercept `upgrade` in the launcher, but an old launcher (or a bare AppImage symlink) passed the word straight to Electron, which ignored it and opened a window. The app binary now handles `upgrade` itself: runs the official installer, streams its output, and exits without creating a window. `apps/desktop/src/main/index.ts`.
 - **Diff tile no longer crashes on remote frames** with `CodeView.addItem: duplicate id …`. A malformed/duplicate git path (seen over SSH) produced two CodeView items with the same id, which threw and took down the whole tile. Items are now de-duped by id (first wins, dev-warns) so a duplicate degrades instead of crashing. `apps/desktop/src/renderer/src/DiffTile.tsx`.
 - **Diff tile listed untracked directories as empty `+0 -0` rows.** `git status` collapses an untracked directory into one `dir/` entry, which the diff rendered as an undiffable blank. Status now uses `--untracked-files=all` so each new file is a real new-file diff. `apps/desktop/src/main/git-adapter.ts`.
 
