@@ -8,7 +8,7 @@
 
 Drop `claude`, `codex`, `gemini`, or `opencode` into real workspaces where they can
 read issues, update status, mark acceptance criteria, and comment their own
-progress — through a Plane-style PM model that's just plain markdown on disk.
+progress — through a Kanban PM model that's just plain markdown on disk.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![Platform: Linux](https://img.shields.io/badge/platform-Linux%20x86__64-blue.svg)](#install)
@@ -64,7 +64,7 @@ land live in the board tile.
 
 <table>
   <tr>
-    <td width="50%"><img src="screenshots/board.png" alt="Plane-style issues board backed by markdown" /><br/><sub><b>Issues board</b> — Plane-style cards across Backlog → Todo → In&nbsp;progress → In&nbsp;review → Done. Each card is one markdown file you can <code>cat</code>.</sub></td>
+    <td width="50%"><img src="screenshots/board.png" alt="Kanban issues board backed by markdown" /><br/><sub><b>Issues board</b> — Kanban cards across Backlog → Todo → In&nbsp;progress → In&nbsp;review → Done. Each card is one markdown file you can <code>cat</code>.</sub></td>
     <td width="50%"><img src="screenshots/explorer.png" alt="File explorer and diff tiles side by side" /><br/><sub><b>Explorer + diff</b> — browse the tree, open files in the editor, and review changes in the Pierre-backed diff — all on the same canvas.</sub></td>
   </tr>
   <tr>
@@ -180,7 +180,7 @@ Agents use your existing CLI login.
 |---|---|
 | **Canvas-per-project** | One infinite [xyflow](https://reactflow.dev) canvas per repo. Frames bind to a workspace path, so multiple repos coexist on one screen, each with its own auto-assigned color. |
 | **Pluggable agents** | `claude` / `codex` / `gemini` / `opencode` each run in their own WebGL-accelerated xterm tile. Agents are an extensible registry — adding one is a single entry. Live status (idle / working / waiting / done) is detected from the command and shown on the frame header. |
-| **Plane-style PM you can `cat`** | Issues, acceptance criteria, cycles, and an activity log are markdown + YAML frontmatter under `.hivemind/`. No DB, no API. |
+| **PM you can `cat`** | Issues, acceptance criteria, cycles, and an activity log are markdown + YAML frontmatter under `.hivemind/`. No DB, no API. |
 | **MCP integration** | `.mcp.json` autowires a stdio MCP server so agents can `get_issue`, `set_state`, `add_comment`, `mark_acceptance`, … from inside their tile. |
 | **Live diff review** | A Pierre-backed diff tile: split / unified, a changed-files sidebar with per-file **reviewed** checks, multi-line comments, and **send-to-agent** for any comment or selection. |
 | **Git worktrees as sub-frames** | Attach a branch worktree → a nested sub-frame scoped to that branch. Line several branches up side by side and arrange them as columns. |
@@ -211,7 +211,7 @@ apps/
                  ├─ DiffTile     Pierre-backed diff + review
                  ├─ EditorTile   CodeMirror tabs
                  ├─ FileTreeTile project explorer
-                 ├─ IssuesTile   Plane-style board
+                 ├─ IssuesTile   Kanban issues board
                  ├─ BrowserTile  multi-tab <webview> + CDP agent bridge
                  ├─ FrameNode    workspace zones (repo / worktree / remote)
                  ├─ LayersPanel  Figma-style rail grouped by frame

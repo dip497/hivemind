@@ -36,7 +36,7 @@
         "AppImage"
       ],
       "category": "Development",
-      "synopsis": "Plane-style PM + canvas + claude agents",
+      "synopsis": "Kanban PM + infinite canvas + AI coding agents",
       "description": "Local-first issue tracker, infinite canvas, and Claude Code integration in a single Electron desktop app.",
       "executableName": "hivemind",
       "icon": "icons/icon.png",
