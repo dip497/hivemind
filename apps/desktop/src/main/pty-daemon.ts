@@ -14,6 +14,7 @@ import { SessionManager, type ManagedPty, type SpawnSpec, type SessionSnapshot }
 import { type ClientMsg, type ServerMsg, frame, makeLineDecoder } from "./pty-protocol.js";
 import { evictTrackedSession, trackerSource } from "./tile-session-store.js";
 import { makeClaudeResumeTransforms } from "./claude-resume.js";
+import { makeCodexResumeTransforms } from "./codex-resume.js";
 
 const socketPath = process.argv[2] || process.env.HIVEMIND_PTY_SOCK;
 if (!socketPath) {
@@ -56,6 +57,10 @@ const claudeResume = makeClaudeResumeTransforms({
   legacyMapFile: tileSessionsPath,
   execPath: process.execPath,
 });
+// Codex resume — resolves the session id from ~/.codex/sessions at restore time
+// (codex can't pre-assign an id). No-op for non-codex specs, so it composes with
+// the claude transforms below.
+const codexResume = makeCodexResumeTransforms();
 
 const snapshotPath = (id: string): string => {
   // URL-safe base64 of the id so any character (including ':') is path-safe.
@@ -174,9 +179,12 @@ const manager = new SessionManager(factory, {
   // (can't fix from the PTY layer): killed mid-tool-call (#18880), post-`cd`
   // mid-session (#22566), version-upgrade across resume (#53417).
   transformSpecOnSpawn: claudeResume.transformSpecOnSpawn,
-  transformSpecOnRestore: claudeResume.transformSpecOnRestore,
+  // claude transform first (no-op for codex), then codex (no-op for claude).
+  transformSpecOnRestore: (spec, id) =>
+    codexResume.transformSpecOnRestore(claudeResume.transformSpecOnRestore(spec, id), id),
   restoreRetryMs: claudeResume.restoreRetryMs,
-  restoreRetryTransform: claudeResume.restoreRetryTransform,
+  restoreRetryTransform: (spec) =>
+    claudeResume.restoreRetryTransform(spec) ?? codexResume.restoreRetryTransform(spec),
 });
 
 // Reboot-restore: hydrate any snapshots written by a previous daemon. They
