@@ -7,6 +7,13 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Fixed
+- **Diff tile no longer crashes on remote frames** with `CodeView.addItem: duplicate id …`. A malformed/duplicate git path (seen over SSH) produced two CodeView items with the same id, which threw and took down the whole tile. Items are now de-duped by id (first wins, dev-warns) so a duplicate degrades instead of crashing. `apps/desktop/src/renderer/src/DiffTile.tsx`.
+- **Diff tile listed untracked directories as empty `+0 -0` rows.** `git status` collapses an untracked directory into one `dir/` entry, which the diff rendered as an undiffable blank. Status now uses `--untracked-files=all` so each new file is a real new-file diff. `apps/desktop/src/main/git-adapter.ts`.
+
+### Changed
+- **Diff tile's changed-files sidebar now uses the `@pierre/trees` `<FileTree>`** — the same component the editor's file tree uses — instead of a bespoke tree. Deep paths (`java/com/flotomate/models/…`) get VS Code-style compact folders, file icons, virtualization, and `⌘P` quick-open; filenames stop truncating. Per-file +adds/−dels show as a row decoration; jump-to-file and toggle-reviewed live in the row context menu. `apps/desktop/src/renderer/src/DiffTile.tsx`.
+
 ## [1.0.0] — 2026-06-04
 
 ### Added

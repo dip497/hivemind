@@ -60,6 +60,12 @@ import {
   workerHighlighterOptions,
   workerPoolOptions,
 } from "./pierre-codeview";
+import { FileTree as PierreFileTree, useFileTree } from "@pierre/trees/react";
+import type {
+  ContextMenuItem,
+  ContextMenuOpenContext,
+  FileTreeRowDecoration,
+} from "@pierre/trees";
 import { DiffReviewPanel } from "./DiffReviewPanel";
 import { normalizeComments, newCid, type ReviewComment } from "./diff-comments";
 
@@ -199,7 +205,26 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
   const branchScope: DiffScope = useMemo(() => ({ kind: "branch", base: initialBase }), [initialBase]);
   const branch = useBranchItems(repoPath, branchScope, mode === "branch");
 
-  const baseItems = mode === "working" ? workingItems.items : branch.items;
+  const rawBaseItems = mode === "working" ? workingItems.items : branch.items;
+
+  // De-dupe by item id (`diff:<path>`). CodeView.addItem THROWS on a duplicate
+  // id ("CodeView.addItem: duplicate id …") and that crashes the whole tile —
+  // seen on remote (ssh) frames where a malformed git path can collide. A
+  // duplicate must degrade (drop the repeat), never take down the diff. Keep
+  // first occurrence; warn in dev so the upstream parse bug stays visible.
+  const baseItems = useMemo(() => {
+    const seen = new Set<string>();
+    const out: typeof rawBaseItems = [];
+    for (const it of rawBaseItems) {
+      if (seen.has(it.id)) {
+        if (import.meta.env.DEV) console.warn(`DiffTile: dropping duplicate diff id ${JSON.stringify(it.id)}`);
+        continue;
+      }
+      seen.add(it.id);
+      out.push(it);
+    }
+    return out;
+  }, [rawBaseItems]);
 
   // Decorate base items with collapse/viewed/annotations.
   //
@@ -640,12 +665,36 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
       <WorkerPoolContextProvider poolOptions={workerPoolOptions} highlighterOptions={workerHighlighterOptions}>
        <div className="flex-1 min-h-0 flex overflow-hidden">
         {filesOpen && fileRows.length > 0 && !activeFile && (
-          <aside className="nodrag w-[210px] shrink-0 flex flex-col border-r border-[var(--color-line)] bg-[var(--color-bg2)] overflow-hidden">
+          <aside
+            className="nodrag w-[230px] shrink-0 flex flex-col border-r border-[var(--color-line)] bg-[var(--color-bg2)] overflow-hidden"
+            style={{
+              // Theme @pierre/trees via its CSS vars (same mapping as FileTreeTile).
+              "--trees-bg": "var(--color-bg2)",
+              "--trees-bg-muted": "var(--color-bg3)",
+              "--trees-fg": "var(--color-fg)",
+              "--trees-fg-muted": "var(--color-fg3)",
+              "--trees-accent": "var(--color-brand)",
+              "--trees-border-color": "var(--color-line)",
+              "--trees-item-height": "22px",
+              "--trees-theme-sidebar-bg": "var(--color-bg2)",
+              "--trees-theme-sidebar-fg": "var(--color-fg)",
+              "--trees-theme-list-hover-bg": "var(--color-bg3)",
+              "--trees-theme-list-active-selection-bg": "var(--color-bg4)",
+              "--trees-theme-list-active-selection-fg": "var(--color-fg)",
+              "--trees-theme-input-bg": "var(--color-bg3)",
+              "--trees-theme-input-border": "var(--color-line2)",
+              "--trees-theme-input-fg": "var(--color-fg)",
+              "--trees-theme-focus-ring": "var(--color-brand)",
+              "--trees-theme-scrollbar-thumb": "var(--color-line2)",
+              "--trees-theme-row-decoration-fg": "var(--color-fg3)",
+              "--trees-theme-row-decoration-bg": "transparent",
+            } as React.CSSProperties}
+          >
             <div className="h-7 shrink-0 flex items-center gap-1.5 px-2.5 border-b border-[var(--color-line2)] text-[10px] uppercase tracking-wider font-semibold text-[var(--color-fg3)]">
               Files
               <span className="ml-auto font-mono tabular-nums text-[var(--color-fg3)]">{viewed.size}/{fileRows.length}</span>
             </div>
-            <div className="flex-1 overflow-y-auto py-1">
+            <div className="flex-1 min-h-0">
               <FileTree rows={fileRows} viewed={viewed} onJump={jumpToFile} onToggleViewed={toggleViewed} />
             </div>
           </aside>
@@ -843,93 +892,74 @@ interface ItemsResult {
 }
 
 // ── changed-files TREE ──────────────────────────────────────────────────
-// @pierre/diffs has no file-navigation component, so we build a real folder
-// tree from the flat changed-file list (nested dirs, collapsible).
+// @pierre/diffs ships no file-navigation component, but @pierre/trees DOES —
+// the same <FileTree> the editor's FileTreeTile uses. We reuse it here (fed the
+// changed-file paths) so the diff sidebar gets compact folders, file icons,
+// virtualization, and ⌘P search for free instead of a bespoke tree. `viewed` is
+// surfaced via the main pane (reviewed files collapse) + the sidebar header
+// count; the per-file toggle lives in the row context menu (Pierre owns row
+// rendering, so we can't inject a checkbox — its decoration slot is text-only).
 interface FileRow { id: string; file: string; adds: number; dels: number }
-interface TreeNode { name: string; path: string; children: Map<string, TreeNode>; row?: FileRow }
-
-function buildFileTree(rows: FileRow[]): TreeNode {
-  const root: TreeNode = { name: "", path: "", children: new Map() };
-  for (const r of rows) {
-    const parts = r.file.split("/");
-    let node = root;
-    parts.forEach((part, i) => {
-      let child = node.children.get(part);
-      if (!child) { child = { name: part, path: parts.slice(0, i + 1).join("/"), children: new Map() }; node.children.set(part, child); }
-      node = child;
-      if (i === parts.length - 1) node.row = r;
-    });
-  }
-  return root;
-}
 
 function FileTree({
-  rows, viewed, onJump, onToggleViewed,
+  rows, onJump, onToggleViewed,
 }: {
   rows: FileRow[];
   viewed: Set<string>;
   onJump: (id: string) => void;
   onToggleViewed: (file: string) => void;
 }) {
-  const tree = useMemo(() => buildFileTree(rows), [rows]);
-  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
-  const toggle = (p: string) => setCollapsed((s) => { const n = new Set(s); n.has(p) ? n.delete(p) : n.add(p); return n; });
+  const norm = (p: string) => p.replace(/\/+$/, "");
+  const paths = useMemo(() => rows.map((r) => norm(r.file)), [rows]);
+  // path → row, for jump-on-select + the +adds/−dels decoration.
+  const byPath = useMemo(() => {
+    const m = new Map<string, FileRow>();
+    for (const r of rows) m.set(norm(r.file), r);
+    return m;
+  }, [rows]);
+  // The model is built once; its callbacks must read the latest maps/handlers.
+  const byPathRef = useRef(byPath); byPathRef.current = byPath;
+  const onJumpRef = useRef(onJump); onJumpRef.current = onJump;
+  const onToggleRef = useRef(onToggleViewed); onToggleRef.current = onToggleViewed;
 
-  const renderNodes = (node: TreeNode, depth: number): React.ReactNode => {
-    const kids = [...node.children.values()].sort((a, b) => {
-      const aDir = a.row ? 1 : 0, bDir = b.row ? 1 : 0; // dirs (no row) first
-      return aDir !== bDir ? aDir - bDir : a.name.localeCompare(b.name);
-    });
-    return kids.map((k) => {
-      const pad = 8 + depth * 12;
-      if (k.row) {
-        const r = k.row;
-        const isViewed = viewed.has(r.file);
+  const { model } = useFileTree({
+    paths,
+    flattenEmptyDirectories: true,   // VS Code-style compact folders
+    initialExpansion: "open",        // only the changed files — show them all
+    search: true,
+    fileTreeSearchMode: "expand-matches",
+    itemHeight: 22,
+    onSelectionChange: (sel) => {
+      const p = sel[0];
+      const r = p ? byPathRef.current.get(p.replace(/\/+$/, "")) : undefined;
+      if (r) onJumpRef.current(r.id); // directory selections resolve to no row
+    },
+    renderRowDecoration: ({ item }): FileTreeRowDecoration | null => {
+      if (item.kind === "directory") return null;
+      const r = byPathRef.current.get(item.path.replace(/\/+$/, ""));
+      return r ? { text: `+${r.adds} −${r.dels}`, title: `+${r.adds} −${r.dels}` } : null;
+    },
+  });
+
+  useEffect(() => { model.resetPaths(paths); }, [model, paths]);
+
+  return (
+    <PierreFileTree
+      model={model}
+      className="h-full w-full nowheel"
+      renderContextMenu={(item: ContextMenuItem, ctx: ContextMenuOpenContext) => {
+        const r = byPathRef.current.get(item.path.replace(/\/+$/, ""));
+        if (!r) return <></>;
+        const btn = "w-full text-left px-2 py-1 rounded text-[var(--color-fg)] hover:bg-[var(--color-bg4)]";
         return (
-          <div
-            key={k.path}
-            onClick={() => onJump(r.id)}
-            title={r.file}
-            className="group flex items-center gap-1.5 pr-2 py-1 cursor-pointer hover:bg-[var(--color-bg3)]"
-            style={{ paddingLeft: pad }}
-          >
-            <button
-              onClick={(e) => { e.stopPropagation(); onToggleViewed(r.file); }}
-              title={isViewed ? "Mark not reviewed" : "Mark reviewed"}
-              aria-label={isViewed ? `Mark ${k.name} not reviewed` : `Mark ${k.name} reviewed`}
-              className="shrink-0 size-3.5 grid place-items-center rounded-sm border cursor-pointer"
-              style={{ background: isViewed ? "var(--color-ok)" : "transparent", borderColor: isViewed ? "var(--color-ok)" : "var(--color-line2)" }}
-            >
-              {isViewed && <svg width="9" height="9" viewBox="0 0 10 10" aria-hidden><path d="M2 5L4 7L8 3" stroke="var(--color-bg)" strokeWidth="1.7" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>}
-            </button>
-            <span className={`truncate flex-1 text-[11.5px] leading-tight ${isViewed ? "text-[var(--color-fg3)] line-through" : "text-[var(--color-fg)]"}`}>{k.name}</span>
-            <span className="shrink-0 font-mono text-[9px] tabular-nums">
-              <span className="text-[var(--color-ok)]">+{r.adds}</span>{" "}
-              <span className="text-[var(--color-err)]">−{r.dels}</span>
-            </span>
+          <div className="min-w-[180px] bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-md shadow-2xl p-1 text-[12px]">
+            <button className={btn} onClick={() => { onJumpRef.current(r.id); ctx.close(); }}>Jump to file</button>
+            <button className={btn} onClick={() => { onToggleRef.current(r.file); ctx.close(); }}>Toggle reviewed</button>
           </div>
         );
-      }
-      const isCol = collapsed.has(k.path);
-      return (
-        <div key={k.path}>
-          <div
-            onClick={() => toggle(k.path)}
-            className="flex items-center gap-1 py-1 pr-2 cursor-pointer hover:bg-[var(--color-bg3)] text-[var(--color-fg2)]"
-            style={{ paddingLeft: pad }}
-          >
-            <svg width="9" height="9" viewBox="0 0 10 10" className="shrink-0 text-[var(--color-fg3)]" style={{ transform: isCol ? "none" : "rotate(90deg)" }}>
-              <path d="M3.5 2L6.5 5L3.5 8" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            <svg width="12" height="12" viewBox="0 0 14 14" fill="none" className="shrink-0 text-[var(--color-fg3)]"><path d="M1.5 3.5a1 1 0 0 1 1-1h3l1.2 1.2h4.8a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-10a1 1 0 0 1-1-1z" stroke="currentColor" strokeWidth="1.1" /></svg>
-            <span className="truncate text-[11px] leading-tight">{k.name}</span>
-          </div>
-          {!isCol && renderNodes(k, depth + 1)}
-        </div>
-      );
-    });
-  };
-  return <>{renderNodes(tree, 0)}</>;
+      }}
+    />
+  );
 }
 
 function useWorkingItems(repoPath: string, files: GitFileEntry[], staged: boolean): ItemsResult {

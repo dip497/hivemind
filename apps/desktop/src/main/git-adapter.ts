@@ -158,7 +158,13 @@ export async function gitStatus(repoPath: string): Promise<GitStatusSnapshot> {
       "status",
       "--porcelain=v2",
       "--branch",
-      "--untracked-files=normal",
+      // `=all` lists every untracked FILE individually. `=normal` collapses an
+      // untracked directory into one `dir/` entry — which the DiffTile then
+      // renders as an empty, undiffable "+0 -0" row (a directory has no content
+      // to diff). `=all` makes each new file a real new-file diff, matching the
+      // per-file view in FileTreeTile/editor. Gitignored trees stay excluded via
+      // `--ignored=no`, so this doesn't pull in node_modules etc.
+      "--untracked-files=all",
       // Explicit: gitignored files MUST NOT appear in DiffTile / FileTreeTile.
       // `--ignored=no` is the default but stating it locks the behavior against
       // future flag drift. Note: a file that was tracked BEFORE being added to
