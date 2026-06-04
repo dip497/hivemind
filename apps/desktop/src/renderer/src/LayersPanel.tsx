@@ -12,7 +12,7 @@ import { Layers, ChevronRight, ChevronDown, Square, GitBranch, Server } from "lu
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { AgentIcon } from "./agents";
 
-export type LayerKind = "claude" | "terminal" | "editor" | "diff" | "issues";
+export type LayerKind = "claude" | "terminal" | "editor" | "diff" | "issues" | "browser";
 
 export interface LayerTile {
   id: string;
@@ -60,6 +60,7 @@ const KIND_GLYPH: Record<LayerKind, string> = {
   editor: "{}",
   diff: "±",
   issues: "◔",
+  browser: "🌐",
 };
 
 export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocusFrame }: Props) {
@@ -121,9 +122,9 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
         onClick={() => setHidden(false)}
         className="pointer-events-auto absolute left-3 top-16 z-20 size-8 grid place-items-center rounded-lg hm-island text-[var(--color-fg2)] hover:text-[var(--color-fg)]"
         title={
-          needsYou > 0 ? `Show layers — ${needsYou} agent(s) need you`
-          : working > 0 ? `Show layers — ${working} working`
-          : "Show layers"
+          needsYou > 0 ? `Show layers (⌘L) — ${needsYou} agent(s) need you`
+          : working > 0 ? `Show layers (⌘L) — ${working} working`
+          : "Show layers (⌘L)"
         }
         aria-label="show layers"
       >
@@ -246,10 +247,15 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
           )}
           <span className="text-[var(--color-fg3)]">{tiles.length}</span>
         </span>
+        <kbd
+          aria-hidden
+          title="Toggle the Layers panel"
+          className="grid place-items-center h-[15px] px-1 rounded bg-[var(--color-bg)] border border-[var(--color-line2)] text-[9px] font-mono text-[var(--color-fg3)] tracking-tight"
+        >⌘L</kbd>
         <button
           onClick={() => setHidden(true)}
           className="size-4 grid place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)]"
-          title="Hide layers"
+          title="Hide layers (⌘L)"
           aria-label="hide layers"
         >×</button>
       </header>
