@@ -87,11 +87,13 @@ export function WorkbenchTile({ repoPath, tabs, onOpenFile, onCloseTab, onClose 
                   a zone bound to a different repo (stale internal cache fixed). */}
               <FileTreeTile key={repoPath} repoPath={repoPath} onSelectFile={onOpenFile} embedded />
             </div>
-            {/* Resize handle. `nodrag`/`nowheel` so the canvas doesn't drag the
-                tile or pan while dragging the divider. Pointer-capture tracks
-                the drag past the thin hit area. */}
+            {/* Resize handle — a WIDE (8px) grab zone with a thin centered line
+                that highlights on hover, so the divider is actually easy to hit
+                (the old 1px hit area was nearly ungrabbable). `nodrag`/`nowheel`
+                keep the canvas from panning while dragging; pointer-capture
+                tracks the drag. */}
             <div
-              className="nodrag shrink-0 w-1 cursor-col-resize bg-transparent hover:bg-[var(--color-brand)] active:bg-[var(--color-brand)] -mx-px relative z-10"
+              className="nodrag group shrink-0 w-2 -mx-1 cursor-col-resize relative z-10 flex justify-center"
               role="separator"
               aria-orientation="vertical"
               title="Drag to resize explorer"
@@ -109,7 +111,9 @@ export function WorkbenchTile({ repoPath, tabs, onOpenFile, onCloseTab, onClose 
                 dragRef.current = null;
                 (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
               }}
-            />
+            >
+              <span className="w-px h-full bg-[var(--color-line)] group-hover:bg-[var(--color-brand)] group-active:bg-[var(--color-brand)] transition-colors" />
+            </div>
           </>
         )}
         <div className="flex-1 min-w-0">
