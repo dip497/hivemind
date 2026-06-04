@@ -264,6 +264,18 @@ export interface HiveIpc {
   /** Forward a notable agent-status transition to the main process, which fires
    *  a native OS notification IF the window is unfocused. Fire-and-forget. */
   notifyAgent(notice: AgentNotice): void;
+
+  // ── BrowserTile <webview> ↔ agent CDP bridge ──────────────
+  /** A BrowserTile reports its guest <webview>'s webContents id (plus its frame
+   *  and current URL) so the main process can attach the debugger AND write the
+   *  discovery file the `hive-browser` skill reads. Called on dom-ready + on nav. */
+  browserRegister(tileId: string, webContentsId: number, frameId: string | null, url: string): void;
+  /** Tile unmounted — drop the guest mapping. */
+  browserUnregister(tileId: string): void;
+  /** Send a raw Chrome DevTools Protocol command to the tile's guest page
+   *  (auto-attaches on first use). Navigate / click / read DOM / screenshot /
+   *  evaluate — the surface an agent uses to "use" the browser. */
+  browserCdp(tileId: string, method: string, params?: Record<string, unknown>): Promise<unknown>;
 }
 
 /** A notable agent-status transition worth a native OS notification. */

@@ -227,6 +227,8 @@ export function useSpawn(ctx: SpawnCtx) {
         const sh = defaultShell();
         cmd = sh.cmd; args = sh.args;
         label = `shell #${n}`;
+      } else if (kind === "browser") {
+        label = `Browser #${n}`;
       } else {
         label = kind === "editor" ? "Editor" : kind === "diff" ? "Diff" : "Issues";
       }
@@ -287,7 +289,7 @@ export function useSpawn(ctx: SpawnCtx) {
     }
     const k: TileKind =
       kind === "tree" ? "editor"
-      : kind === "claude" || kind === "shell" || kind === "diff" || kind === "issues" ? kind
+      : kind === "claude" || kind === "shell" || kind === "diff" || kind === "issues" || kind === "browser" ? kind
       : "shell";
     spawnTile(k, frameId);
   }, [spawnTile]);

@@ -17,6 +17,8 @@ export interface CanvasShortcutsCtx {
   /** Spawn the tool island's currently-selected agent (claude/codex/opencode). */
   spawnSelectedAgent: () => void;
   spawnVis: (which: "tree" | "shell" | "diff" | "issues") => void;
+  /** Spawn a Browser tile into the active/resolved frame. */
+  spawnBrowser: () => void;
   addFrame: () => void;
   frameOpen: (frameId: string, kind: string) => void;
   focusTile: (id: string) => void;
@@ -30,7 +32,7 @@ export interface CanvasShortcutsCtx {
 
 export function useCanvasShortcuts(ctx: CanvasShortcutsCtx) {
   const {
-    repoPath, spawnClaude, spawnSelectedAgent, spawnVis, addFrame, frameOpen, focusTile,
+    repoPath, spawnClaude, spawnSelectedAgent, spawnVis, spawnBrowser, addFrame, frameOpen, focusTile,
     setSelectedTileId, setFocusModeReq, selectedTileIdRef, selectedFrameIdRef,
     focusModeNonceRef, tilesRef,
   } = ctx;
@@ -82,6 +84,7 @@ export function useCanvasShortcuts(ctx: CanvasShortcutsCtx) {
         case "4": if (repoPath) { e.preventDefault(); spawnVis("diff"); } break;
         case "5": if (repoPath) { e.preventDefault(); spawnVis("issues"); } break;
         case "6": e.preventDefault(); addFrame(); break;
+        case "7": e.preventDefault(); spawnBrowser(); break;
         case "F2": {
           const sel = selectedFrameIdRef.current;
           if (!sel) return;

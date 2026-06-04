@@ -221,6 +221,15 @@ export function buildBaseNodes(ctx: NodeBuildCtx): Node[] {
         data: { root, onResize: onNodeResizeCommit, onClose: () => closeTile(t.id) },
         dragHandle: ".tile-drag-handle",
       };
+    } else if (t.kind === "browser") {
+      // No repo needed — a browser tile is repo-agnostic.
+      node = {
+        id: t.id,
+        type: "browser",
+        style: sized(t.id, w, h),
+        data: { tileId: t.id, frameId: frameOf[t.id] ?? null, url: t.url, onResize: onNodeResizeCommit, onClose: () => closeTile(t.id) },
+        dragHandle: ".tile-drag-handle",
+      };
     } else {
       // claude / shell — both render as a TerminalTile.
       const cmd = t.cmd ?? defaultShell().cmd;

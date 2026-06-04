@@ -26,6 +26,8 @@ export function defaultSizeForKind(kind: TileKind): { width: number; height: num
       return { width: 1400, height: 900 };
     case "issues":
       return { width: 680, height: 460 };
+    case "browser":
+      return { width: 1280, height: 860 };
     case "claude":
       return { width: 1480, height: 1000 };
     case "shell":

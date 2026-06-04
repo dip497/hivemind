@@ -15,6 +15,7 @@ const api: HiveIpc & {
   onMenuToggleLayers: (cb: () => void) => () => void;
   getLaunchTarget: () => Promise<string | null>;
   onOpenProject: (cb: (path: string) => void) => () => void;
+  onBrowserPopup: (cb: (p: { fromId: number; url: string }) => void) => () => void;
 } = {
   resolveProject: (rootHint) => ipcRenderer.invoke("resolveProject", rootHint),
   pickProjectFolder: () => ipcRenderer.invoke("pickProjectFolder"),
@@ -82,6 +83,17 @@ const api: HiveIpc & {
   persistentPty: process.env.HIVEMIND_PTY_DAEMON !== "0",
 
   notifyAgent: (notice) => ipcRenderer.send("notify:agent", notice),
+
+  browserRegister: (tileId, webContentsId, frameId, url) =>
+    ipcRenderer.send("browser:register", tileId, webContentsId, frameId, url),
+  browserUnregister: (tileId) => ipcRenderer.send("browser:unregister", tileId),
+  browserCdp: (tileId, method, params) =>
+    ipcRenderer.invoke("browserCdp", tileId, method, params),
+  onBrowserPopup: (cb) => {
+    const listener = (_e: unknown, p: { fromId: number; url: string }) => cb(p);
+    ipcRenderer.on("browser:popup", listener);
+    return () => ipcRenderer.removeListener("browser:popup", listener);
+  },
 
   onPtyData: (tileId, cb) => {
     const ch = `pty:data:${tileId}`;

@@ -1,5 +1,5 @@
 /** Electron main process — owns the BrowserWindow + IPC + PtyHost + git/worktree. */
-import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell, webContents } from "electron";
 import path from "node:path";
 import { promises as fsp, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -156,6 +156,10 @@ async function createWindow(): Promise<void> {
   // only hides it until Alt; this kills it outright). No app actions live there
   // — everything is in the in-canvas chrome + ⌘K palette.
   Menu.setApplicationMenu(null);
+  // Export the browser-targets discovery path so spawned PTY agents inherit it
+  // (set here — post-ready — because userData is only reliable now). Harmless
+  // when the CDP enabler is off; the file just lists tiles with no endpoint.
+  process.env.HIVEMIND_BROWSER_TARGETS = path.join(app.getPath("userData"), "browser-targets.json");
   const state = await loadWinState();
   mainWindow = new BrowserWindow({
     width: state.width,
@@ -180,6 +184,12 @@ async function createWindow(): Promise<void> {
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false,
+      // BrowserTile renders web content in a <webview> — the only embed
+      // primitive that lives IN the DOM (so it pans/zooms/clips with the
+      // react-flow canvas transform) AND carries its own webContents (so an
+      // agent can attach CDP via webContents.debugger and drive it). Each
+      // guest is its own out-of-process Chromium renderer.
+      webviewTag: true,
       // Keep compositor + RAF running when the window loses focus. Without this,
       // claude streaming into a backgrounded window stalls the xterm renderer
       // and the canvas tile freezes on refocus.
@@ -239,6 +249,28 @@ async function createWindow(): Promise<void> {
     return { action: "deny" };
   });
 
+  // Harden every BrowserTile <webview> guest as it attaches. The guest is a
+  // full Chromium renderer loading arbitrary web pages, so: (1) strip any
+  // preload/nodeIntegration a page tries to negotiate, and (2) route window.open
+  // / target=_blank to the OS browser instead of spawning rogue child windows on
+  // the canvas. The page still renders + is fully agent-drivable over CDP.
+  wc.on("will-attach-webview", (_e, webPreferences) => {
+    // Defense in depth: never let an embedded page run with node access or a
+    // preload, regardless of what attributes the <webview> element carries.
+    delete webPreferences.preload;
+    webPreferences.nodeIntegration = false;
+    webPreferences.contextIsolation = true;
+  });
+  wc.on("did-attach-webview", (_e, guest) => {
+    guest.setWindowOpenHandler(({ url }) => {
+      // A link/popup (target=_blank, window.open) inside a BrowserTile guest →
+      // hand it back to the host renderer so the owning tile opens it as a NEW
+      // TAB (canvas-native tabs), instead of spawning a rogue OS window.
+      if (!wc.isDestroyed()) wc.send("browser:popup", { fromId: guest.id, url });
+      return { action: "deny" };
+    });
+  });
+
   const devUrl = process.env["ELECTRON_RENDERER_URL"];
   if (devUrl) {
     mainWindow.loadURL(devUrl);
@@ -293,6 +325,67 @@ ipcMain.handle("resolveProject", wrap(async (e, rootHint?: string) => {
   if (root) await registerWorkspace(root).catch(() => {});
   return { root, cwd, repoPath };
 }));
+
+// ── BrowserTile CDP bridge ────────────────────────────────────
+// Each BrowserTile registers its <webview> guest's webContents id here, keyed
+// by tileId. An agent (or in-app automation / MCP tool) then drives the VISIBLE
+// tile by sending raw Chrome DevTools Protocol commands through `browserCdp` —
+// Page.navigate, Input.dispatchMouseEvent (click), DOM.getDocument,
+// Page.captureScreenshot, Runtime.evaluate, etc. This is the whole reason to
+// use <webview> over <iframe>: the guest owns a real webContents, so
+// webContents.debugger hands us full CDP for free, on the same pixels the user
+// sees. The guest auto-attaches on the first command and stays attached.
+interface BrowserGuest { webContentsId: number; frameId: string | null; url: string }
+const browserGuests = new Map<string, BrowserGuest>();
+
+// Discovery file the `hive-browser` skill reads so a spawned agent can find the
+// right tab to drive: which BrowserTile lives in which frame, its current URL
+// (used to match the CDP target via `agent-browser tab`), and the loopback CDP
+// port. Written on every register/unregister/navigate so it never goes stale.
+// Path is exported as $HIVEMIND_BROWSER_TARGETS into every PTY's environment.
+function browserTargetsPath(): string {
+  return path.join(app.getPath("userData"), "browser-targets.json");
+}
+async function writeBrowserTargets(): Promise<void> {
+  const tiles = [...browserGuests.entries()].map(([tileId, g]) => ({
+    tileId, frameId: g.frameId, url: g.url,
+  }));
+  const doc = {
+    cdpEnabled: process.env.HIVEMIND_BROWSER_CDP === "1",
+    cdpPort: process.env.HIVEMIND_BROWSER_CDP_PORT ?? null,
+    cdpEndpoint: process.env.HIVEMIND_BROWSER_CDP === "1"
+      ? `http://127.0.0.1:${process.env.HIVEMIND_BROWSER_CDP_PORT ?? "9333"}`
+      : null,
+    tiles,
+  };
+  await fsp.writeFile(browserTargetsPath(), JSON.stringify(doc, null, 2)).catch(() => {});
+}
+
+ipcMain.on("browser:register", (_e, tileId: string, webContentsId: number, frameId: string | null, url: string) => {
+  browserGuests.set(tileId, { webContentsId, frameId: frameId ?? null, url: url ?? "" });
+  void writeBrowserTargets();
+});
+ipcMain.on("browser:unregister", (_e, tileId: string) => {
+  browserGuests.delete(tileId);
+  void writeBrowserTargets();
+});
+
+function browserGuestFor(tileId: string): Electron.WebContents | null {
+  const g = browserGuests.get(tileId);
+  if (!g) return null;
+  const guest = webContents.fromId(g.webContentsId);
+  return guest && !guest.isDestroyed() ? guest : null;
+}
+
+ipcMain.handle(
+  "browserCdp",
+  wrap(async (_e, tileId: string, method: string, params?: Record<string, unknown>) => {
+    const guest = browserGuestFor(tileId);
+    if (!guest) throw new Error(`no browser tile registered for ${tileId}`);
+    if (!guest.debugger.isAttached()) guest.debugger.attach("1.3");
+    return await guest.debugger.sendCommand(method, params ?? {});
+  }),
+);
 
 // The repo passed on the CLI (`hivemind .`), or null for a bare launch (then
 // the renderer falls back to its persisted last-project).
@@ -422,6 +515,18 @@ async function installAgenticStack(dir: string, root: string): Promise<void> {
   } catch {
     await fsp.mkdir(path.dirname(skillPath), { recursive: true });
     await fsp.writeFile(skillPath, templates.HIVE_WORK_SKILL, "utf8");
+  }
+
+  // hive-browser skill — lets a spawned agent drive a Browser tile over CDP.
+  // Just a markdown file (zero runtime deps): the agent-browser CLI is fetched
+  // on demand via npx, and the CDP bridge stays opt-in. Write-if-absent so we
+  // never clobber a user's edits.
+  const browserSkillPath = path.join(dir, ".claude", "skills", "hive-browser", "SKILL.md");
+  try {
+    await fsp.stat(browserSkillPath);
+  } catch {
+    await fsp.mkdir(path.dirname(browserSkillPath), { recursive: true });
+    await fsp.writeFile(browserSkillPath, templates.hiveBrowserSkill(), "utf8");
   }
 }
 
@@ -744,6 +849,24 @@ app.commandLine.appendSwitch(
 // it so a workspace with several claude/shell tiles doesn't silently fall back
 // to the DOM renderer when the 16th WebGL context is requested. VS Code uses 32.
 app.commandLine.appendSwitch("max-active-webgl-contexts", "32");
+
+// ── Agent browser-use (CDP) enabler ───────────────────────────
+// Opt-in (HIVEMIND_BROWSER_CDP=1): expose a LOOPBACK Chrome DevTools Protocol
+// port so a spawned agent in a PTY tile can drive a BrowserTile with
+// `agent-browser --cdp <port>` (see the `hive-browser` skill). The port + the
+// discovery-file path are exported into the environment, which every PTY
+// inherits (pty-host spreads process.env) — so the agent sees
+// $HIVEMIND_BROWSER_CDP_PORT and $HIVEMIND_BROWSER_TARGETS with no extra wiring.
+// SECURITY: a remote-debugging port also exposes the app's OWN window, so this
+// is off by default and bound to 127.0.0.1 — only enable it for agents you trust.
+if (process.env.HIVEMIND_BROWSER_CDP === "1") {
+  const port = process.env.HIVEMIND_BROWSER_CDP_PORT || "9333";
+  app.commandLine.appendSwitch("remote-debugging-port", port);
+  app.commandLine.appendSwitch("remote-debugging-address", "127.0.0.1");
+  process.env.HIVEMIND_BROWSER_CDP_PORT = port;
+  // $HIVEMIND_BROWSER_TARGETS is set post-ready in createWindow (userData path
+  // is only reliable then) — before any PTY spawns, so agents still inherit it.
+}
 // NOTE: we intentionally do NOT set disable-gpu-vsync / ignore-gpu-blocklist /
 // disable-frame-rate-limit / enable-zero-copy / force_high_performance_gpu /
 // CanvasOopRasterization. Those are debug flags (vsync/framerate) or

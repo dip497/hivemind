@@ -26,6 +26,8 @@ export interface TileInstance {
   /** claude / shell only. */
   cmd?: string;
   args?: string[];
+  /** browser only — last/initial URL so the tile restores where it was. */
+  url?: string;
 }
 
 export interface FrameState {
