@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [1.0.0] — 2026-06-04
+
 ### Added
 - **Settings dialog + agent-browser toggle.** A gear button (top-right) opens Settings with an **"Enable agent browser control"** switch — the opt-in for the CDP bridge, instead of hand-setting `HIVEMIND_BROWSER_CDP=1`. The choice persists to `<userData>/settings.json` and (a debug port can only be opened at launch) offers **Relaunch to apply**; the dialog shows whether the bridge is live this session vs the saved choice, and warns about the loopback-port exposure. `apps/desktop/src/{main/index.ts,preload/index.ts,shared/ipc.ts,renderer/src/App.tsx}`.
 - **Agents can drive the Browser tile (`hive-browser` skill).** A spawned agent (in any PTY tile) can now navigate/click/fill/read/screenshot the **visible** Browser tile by extending [vercel-labs/agent-browser](https://github.com/vercel-labs/agent-browser) over CDP. Opt-in via `HIVEMIND_BROWSER_CDP=1`: Electron exposes a **loopback** `--remote-debugging-port` and writes a discovery file (`<userData>/browser-targets.json`, path in `$HIVEMIND_BROWSER_TARGETS`) listing each browser tile's frame + current URL so the agent connects with `agent-browser --cdp $HIVEMIND_BROWSER_CDP_PORT` and picks the right tab. Browser-tile registration now reports `frameId` + `url`. The skill ships into agentic projects via `installAgenticStack` (write-if-absent, like `hive-work`) and uses `npx -y agent-browser` so there's no global install. Skill at `.claude/skills/hive-browser/SKILL.md`. Security: the debug port also exposes the app window, so the CDP bridge is **off by default** and bound to 127.0.0.1 — enable per the skill's instructions. `apps/desktop/src/{main/index.ts,preload/index.ts,shared/ipc.ts,renderer/src/{BrowserTile,canvas-nodes,canvas-node-build}}` + `.claude/skills/hive-browser/`.
@@ -220,7 +222,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/dip497/hivemind/releases/tag/v1.0.0
 [0.5.0]: https://github.com/dip497/hivemind/releases/tag/v0.5.0
 [0.4.0]: https://github.com/dip497/hivemind/releases/tag/v0.4.0
 [0.3.2]: https://github.com/dip497/hivemind/releases/tag/v0.3.2
