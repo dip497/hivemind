@@ -31,7 +31,7 @@ export function ToolIsland({
     <div className="hm-island flex items-center gap-0.5 p-1.5">
       <ToolButton label="Terminal" hint="1" active={present.has("shell")} onClick={() => onToggle("shell")}
         icon={<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M4 6l2 2-2 2M8 10h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>} />
-      <ToolButton label="Claude" hint="2" accent active={present.has("claude")} onClick={onClaude}
+      <ToolButton label="Claude" hint="2" active={present.has("claude")} onClick={onClaude}
         icon={<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5.5" stroke="currentColor" strokeWidth="1.2"/><circle cx="8" cy="8" r="1.8" fill="currentColor"/></svg>} />
       <select
         value={claudeMode}
@@ -65,7 +65,6 @@ function ToolButton({
   hint,
   icon,
   active,
-  accent,
   disabled,
   onClick,
 }: {
@@ -73,7 +72,6 @@ function ToolButton({
   hint: string;
   icon: React.ReactNode;
   active?: boolean;
-  accent?: boolean;
   disabled?: boolean;
   onClick: () => void;
 }) {
@@ -84,15 +82,17 @@ function ToolButton({
       title={disabled ? `${label} — needs a repo` : `${label}  (${hint})`}
       className={`relative grid place-items-center size-9 rounded-lg transition-colors ${
         active
-          ? accent
-            ? "bg-[var(--color-brand)] text-white"
-            : "bg-[var(--color-bg4)] text-[var(--color-fg)] ring-1 ring-[var(--color-brand)]"
+          // "this tile is open on the canvas" — a NEUTRAL raised state (no blue
+          // brand ring/fill, which read as AI-slop): elevated surface + full-
+          // contrast icon + a soft neutral border, plus a small dot indicator.
+          ? "bg-[var(--color-bg4)] text-[var(--color-fg)] ring-1 ring-[var(--color-line2)]"
           : "text-[var(--color-fg2)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)]"
       } ${disabled ? "opacity-30 cursor-not-allowed" : ""}`}
     >
       {icon}
-      {/* Inherit text color (currentColor) so the hint stays legible on the
-          active/accent fill — a fixed gray vanished on claude's blue bg. */}
+      {active && (
+        <span aria-hidden className="absolute top-1 right-1 size-1.5 rounded-full bg-[var(--color-ok)]" />
+      )}
       <kbd className="absolute bottom-0.5 right-1 font-mono text-[8px] leading-none opacity-60">{hint}</kbd>
     </button>
   );
