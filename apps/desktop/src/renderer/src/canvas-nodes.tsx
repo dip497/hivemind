@@ -8,6 +8,7 @@
 import { memo, useEffect, useRef, lazy, Suspense } from "react";
 import { NodeResizer, useReactFlow, type NodeTypes } from "@xyflow/react";
 import { TerminalTile } from "./TerminalTile";
+import { BrowserTile } from "./BrowserTile";
 import { IssuesTile } from "./IssuesTile";
 import { FrameNode, type FrameNodeData } from "./FrameNode";
 import { TileErrorBoundary } from "./TileErrorBoundary";
@@ -56,7 +57,7 @@ const RESIZER_PROPS = {
   // and slides under neighbors.
   minWidth: 340,
   minHeight: 200,
-  color: "var(--color-brand)",
+  color: "var(--color-select)",
   // Resize is the heaviest motion (tile content reflows every frame). Flag the
   // body so styles.css can strip box-shadow/blur during the drag (xyflow #4711:
   // node CSS is recalculated every frame). Cleared by a global pointerup in Canvas.
@@ -288,6 +289,34 @@ const WorkbenchNode = memo(function WorkbenchNode({
   );
 });
 
+type BrowserNodeData = { tileId: string; frameId?: string | null; url?: string; onClose?: () => void };
+const BrowserNode = memo(function BrowserNode({
+  id,
+  data,
+  selected,
+}: {
+  id: string;
+  data: WithResize<BrowserNodeData>;
+  selected: boolean;
+}) {
+  const wheelRef = useTileWheelZoom(selected);
+  return (
+    <div className={`w-full h-full${selected ? " hm-node-selected" : " tile-locked"}`} ref={wheelRef}>
+      <NodeResizer
+        nodeId={id}
+        isVisible={selected}
+        {...RESIZER_PROPS}
+        minWidth={420}
+        minHeight={280}
+        onResizeEnd={(_e, p) => data.onResize(id, p.width, p.height, p.x, p.y)}
+      />
+      <TileErrorBoundary label="Browser" onClose={data.onClose}>
+        <BrowserTile tileId={data.tileId} frameId={data.frameId} url={data.url} selected={selected} onClose={data.onClose} />
+      </TileErrorBoundary>
+    </div>
+  );
+});
+
 type IssuesNodeData = { root: string | null; onClose: () => void };
 const IssuesNode = memo(function IssuesNode({
   id,
@@ -332,5 +361,6 @@ export const nodeTypes: NodeTypes = {
   diff: DiffNode as unknown as NodeTypes[string],
   workbench: WorkbenchNode as unknown as NodeTypes[string],
   issues: IssuesNode as unknown as NodeTypes[string],
+  browser: BrowserNode as unknown as NodeTypes[string],
   frame: FrameNodeWrapper as unknown as NodeTypes[string],
 };

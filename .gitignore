@@ -23,7 +23,12 @@ dist-electron/
 linux-unpacked/
 
 # Per-developer / local dev artifacts — never committed.
-.claude/
+# Ignore .claude/ contents (settings.local.json, agents, local skills) but SHIP
+# the hive-browser skill — it's part of the Browser-tile feature, not local cruft.
+.claude/*
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/hive-browser/
 .hyperresearch/
 research/
 screenshots/

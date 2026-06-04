@@ -89,6 +89,8 @@
   --color-fg3:    #6b7280;   /* tertiary / metadata */
 
   --color-brand:  #5b6cff;   /* indigo primary (Plane/Huly accent) */
+  --color-select: #e0a73a;   /* SELECTION highlight (warm gold) — separate from
+                                brand so a selected tile reads non-blue */
   --color-accent: #38bdf8;   /* sky link accent (Huly's blue PR links) */
   --color-ok:     #22c55e;
   --color-warn:   #f59e0b;   /* Huly's "pending" amber */
@@ -382,7 +384,7 @@ body.canvas-resizing .react-flow__node * {
    make selection obvious. Resize handles only render for the selected tile,
    which also cuts per-frame DOM cost on canvases with many tiles. */
 .react-flow__node .hm-node-selected {
-  outline: 2px solid var(--color-brand);
+  outline: 2px solid var(--color-select);
   outline-offset: 2px;
   border-radius: 12px;
 }

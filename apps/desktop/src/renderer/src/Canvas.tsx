@@ -510,7 +510,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // grown frame never overlaps a neighbour. We only pick the new tile's slot.
   // Tile spawning + in-frame placement (placeInFrame / ensureFrame / spawnTile
   // + spawnInto/spawnClaude/spawnVis/frameOpen). See useSpawn.
-  const { spawnTile, spawnClaude, spawnAgent, spawnVis, frameOpen } = useSpawn({
+  const { spawnTile, spawnClaude, spawnAgent, spawnVis, spawnInto, frameOpen } = useSpawn({
     repoPath, claudeMode,
     positionsRef, sizesRef, tilesRef, frameOfRef, framesRef, selectedFrameIdRef,
     selectedTileIdRef, repoPathRef, rootRef, lastActiveFrameRef, claudeSeqRef,
@@ -550,7 +550,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
 
   // Keyboard shortcuts + menu event listeners. See useCanvasShortcuts.
   useCanvasShortcuts({
-    repoPath, spawnClaude, spawnSelectedAgent, spawnVis, addFrame, frameOpen, focusTile,
+    repoPath, spawnClaude, spawnSelectedAgent, spawnVis, spawnBrowser: () => spawnInto("browser"), addFrame, frameOpen, focusTile,
     setSelectedTileId, setFocusModeReq, selectedTileIdRef, selectedFrameIdRef,
     focusModeNonceRef, tilesRef,
   });
@@ -960,7 +960,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
                         autoFocus={isSel}
                         onClick={() => { spawnTile(spawnPick.kind, f.id, { mode: spawnPick.mode, work: spawnPick.work, agent: spawnPick.agent }); setSpawnPick(null); }}
                         className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[12px] text-[var(--color-fg)] hover:bg-[var(--color-bg3)] transition-colors ${
-                          isSel ? "bg-[var(--color-bg3)] ring-1 ring-[var(--color-brand)]" : ""
+                          isSel ? "bg-[var(--color-bg3)] ring-1 ring-[var(--color-select)]" : ""
                         }`}
                         style={isWt ? { paddingLeft: 20 } : undefined}
                       >
