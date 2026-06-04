@@ -116,14 +116,14 @@ const CommandItem = React.forwardRef<
   <CommandPrimitive.Item
     ref={ref}
     className={cn(
-      // App-themed, restrained selection: a soft bg + a brand left-bar + brand
-      // icon — NOT a loud full-width accent fill. Default rows are muted (fg2);
-      // the selected row lifts to fg. Icons are fg3 → brand when selected.
+      // NEUTRAL selection — no colored fill, no indigo bar (that read as the
+      // "purple-on-dark" AI-slop tell). The selected row just lifts onto the
+      // raised neutral surface (bg4) with full-contrast text + icon. Default
+      // rows are muted (fg2/fg3); selection is carried by elevation + weight.
       "relative flex cursor-pointer gap-2.5 select-none items-center rounded-md px-2.5 py-2 text-[13px] text-[var(--color-fg2)] outline-none transition-colors",
       "data-[selected=true]:bg-[var(--color-bg4)] data-[selected=true]:text-[var(--color-fg)]",
-      "data-[selected=true]:shadow-[inset_2px_0_0_var(--color-brand)]",
       "data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-40",
-      "[&_svg]:pointer-events-none [&_svg]:size-[15px] [&_svg]:shrink-0 [&_svg]:text-[var(--color-fg3)] data-[selected=true]:[&_svg]:text-[var(--color-brand)]",
+      "[&_svg]:pointer-events-none [&_svg]:size-[15px] [&_svg]:shrink-0 [&_svg]:text-[var(--color-fg3)] data-[selected=true]:[&_svg]:text-[var(--color-fg)]",
       className
     )}
     {...props}
