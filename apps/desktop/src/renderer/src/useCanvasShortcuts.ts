@@ -14,6 +14,8 @@ type FocusModeReq = { id: string | null; n: number } | null;
 export interface CanvasShortcutsCtx {
   repoPath: string | null;
   spawnClaude: (mode?: string, work?: string) => void;
+  /** Spawn the tool island's currently-selected agent (claude/codex/opencode). */
+  spawnSelectedAgent: () => void;
   spawnVis: (which: "tree" | "shell" | "diff" | "issues") => void;
   addFrame: () => void;
   frameOpen: (frameId: string, kind: string) => void;
@@ -28,7 +30,7 @@ export interface CanvasShortcutsCtx {
 
 export function useCanvasShortcuts(ctx: CanvasShortcutsCtx) {
   const {
-    repoPath, spawnClaude, spawnVis, addFrame, frameOpen, focusTile,
+    repoPath, spawnClaude, spawnSelectedAgent, spawnVis, addFrame, frameOpen, focusTile,
     setSelectedTileId, setFocusModeReq, selectedTileIdRef, selectedFrameIdRef,
     focusModeNonceRef, tilesRef,
   } = ctx;
@@ -75,7 +77,7 @@ export function useCanvasShortcuts(ctx: CanvasShortcutsCtx) {
       if (inEditable(e.target)) return;
       switch (e.key) {
         case "1": e.preventDefault(); spawnVis("shell"); break;
-        case "2": e.preventDefault(); spawnClaude(); break;
+        case "2": e.preventDefault(); spawnSelectedAgent(); break;
         case "3": if (repoPath) { e.preventDefault(); spawnVis("tree"); } break;
         case "4": if (repoPath) { e.preventDefault(); spawnVis("diff"); } break;
         case "5": if (repoPath) { e.preventDefault(); spawnVis("issues"); } break;

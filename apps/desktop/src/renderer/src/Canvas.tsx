@@ -39,7 +39,7 @@ import { defaultTileSize, defaultSizeForKind } from "./canvas-sizing";
 import { useWorktrees } from "./useWorktrees";
 import { RemoteConnectModal } from "./components/RemoteConnectModal";
 import { isRemote } from "../../shared/remote-uri";
-import { AgentIcon, agentForCmd } from "./agents";
+import { AGENTS, AgentIcon, agentById, agentForCmd } from "./agents";
 import { useSpawn } from "./useSpawn";
 import { useFrameOps } from "./useFrameOps";
 import { buildBaseNodes } from "./canvas-node-build";
@@ -476,7 +476,8 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   const [agentSel, setAgentSel] = useState<string>(
     () => localStorage.getItem("hivemind:agent-sel") || "claude",
   );
-  useEffect(() => { localStorage.setItem("hivemind:agent-sel", agentSel); }, [agentSel]);
+  const agentSelRef = useRef(agentSel);
+  useEffect(() => { agentSelRef.current = agentSel; localStorage.setItem("hivemind:agent-sel", agentSel); }, [agentSel]);
 
   // Monotonic session counter — `xs.length + 1` produced DUPLICATE labels
   // (#3, #3) after kill+respawn. This only ever increases.
@@ -540,9 +541,16 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     return () => window.removeEventListener("hivemind:deliver-to-claude", onDeliver as EventListener);
   }, [spawnClaude]);
 
+  // Spawn the island's CURRENTLY-selected agent (key "2"), reading agentSel via
+  // a ref so the stable callback always uses the latest selection.
+  const spawnSelectedAgent = useCallback(() => {
+    const a = agentById(agentSelRef.current) ?? AGENTS[0]!;
+    spawnAgent(a);
+  }, [spawnAgent]);
+
   // Keyboard shortcuts + menu event listeners. See useCanvasShortcuts.
   useCanvasShortcuts({
-    repoPath, spawnClaude, spawnVis, addFrame, frameOpen, focusTile,
+    repoPath, spawnClaude, spawnSelectedAgent, spawnVis, addFrame, frameOpen, focusTile,
     setSelectedTileId, setFocusModeReq, selectedTileIdRef, selectedFrameIdRef,
     focusModeNonceRef, tilesRef,
   });
