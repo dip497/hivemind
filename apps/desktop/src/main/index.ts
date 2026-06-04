@@ -210,22 +210,14 @@ async function createWindow(): Promise<void> {
     if (input.shift || input.alt) return;
     if (wc.isDestroyed()) return;
     const k = input.key.toLowerCase();
-    if (k === "k") {
-      event.preventDefault();
-      try { wc.send("menu:open-palette"); } catch { /* destroyed mid-call */ }
-    } else if (k === "n") {
+    if (k === "n") {
       event.preventDefault();
       try { wc.send("menu:new-issue"); } catch { /* destroyed mid-call */ }
-    } else if (k === "o") {
-      // VSCode parity: Ctrl+O opens a folder picker.
-      event.preventDefault();
-      try { wc.send("menu:open-folder"); } catch { /* destroyed mid-call */ }
     } else if (k === "r") {
-      // Ctrl+R USED to open the recents picker — but recents live in the ⌘K
-      // palette now, so it just re-opened the SAME panel as ⌘K (confusing). We
-      // still swallow it (preventDefault) so muscle-memory Ctrl+R doesn't trigger
-      // Electron's hard window reload, which would tear down the canvas + re-
-      // attach every PTY. Recents are reachable via ⌘K and File ▸ Open Recent.
+      // Swallow Ctrl+R so muscle-memory reload doesn't tear down the canvas +
+      // re-attach every PTY. (⌘K and Ctrl+O are intentionally NOT intercepted
+      // — the command palette + open-folder shortcut were removed, so those
+      // keys now pass through to the focused terminal as normal readline keys.)
       event.preventDefault();
     } else if (k === "l") {
       // ⌘/Ctrl+L toggles the Layers panel (forwarded from main because xterm

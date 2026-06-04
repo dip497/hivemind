@@ -40,16 +40,12 @@ test.afterAll(async () => {
   await fs.rm(workspace, { recursive: true, force: true }).catch(() => {/*ignored*/});
 });
 
-test("no workspace: palette + empty-state offer Initialize, no New-issue button", async () => {
+test("no workspace: empty-state offers Initialize, no New-issue button", async () => {
   // Canvas-only: no header. The New-issue button is absent without a workspace.
   expect(await page.getByRole("button", { name: /New issue/ }).count()).toBe(0);
   // Empty-state surfaces the init action directly (frame = workspace; the old
-  // top-left switcher is gone).
+  // top-left switcher + ⌘K palette are gone).
   await expect(page.getByRole("button", { name: /Initialize workspace here/ })).toBeVisible();
-  // ⌘K palette also lists "Initialize workspace here…".
-  await page.keyboard.press("Control+k");
-  await expect(page.getByRole("option", { name: /Initialize workspace here/ })).toBeVisible({ timeout: 3_000 });
-  await page.keyboard.press("Escape");
 });
 
 test("Initialize workspace writes config + reveals New button", async () => {

@@ -9,7 +9,6 @@ import {
   useProject,
 } from "./queries";
 import { Canvas } from "./Canvas";
-import { CommandPalette } from "./components/CommandPalette";
 import { IssuePeek } from "./components/IssuePeek";
 import { NewIssueModal } from "./components/NewIssueModal";
 
@@ -166,36 +165,25 @@ export function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // Main-process accelerator bridge: xterm swallows Ctrl+K / Ctrl+N to send
-  // them as control codes to the PTY (^K = VT, ^N = SO), so window keydown
-  // never fires when a terminal has focus. Main intercepts via
-  // before-input-event and forwards over IPC — we re-emit as the same
-  // CustomEvents the keydown handlers + palette already react to.
+  // Main-process accelerator bridge: xterm swallows Ctrl+N to send it as a
+  // control code to the PTY (^N = SO), so window keydown never fires when a
+  // terminal has focus. Main intercepts ⌘N / ⌘L via before-input-event and
+  // forwards over IPC — we re-emit as the same CustomEvents the handlers use.
   useEffect(() => {
     const w = window as unknown as {
       hive?: {
-        onMenuPalette?: (cb: () => void) => () => void;
         onMenuNewIssue?: (cb: () => void) => () => void;
+        onMenuToggleLayers?: (cb: () => void) => () => void;
       };
     };
-    if (!w.hive?.onMenuPalette) return;
-    const offPal = w.hive.onMenuPalette!(() => {
-      window.dispatchEvent(new CustomEvent("hivemind:toggle-palette"));
-    });
-    const offNew = w.hive.onMenuNewIssue!(() => setNewOpen(true));
-    const offOpen = (w.hive as unknown as { onMenuOpenFolder?: (cb: () => void) => () => void })
-      .onMenuOpenFolder?.(() => void pickFolder());
-    // Recents now live in the ⌘K palette — OS "Open Recent" just opens it.
-    const offRecent = (w.hive as unknown as { onMenuOpenRecent?: (cb: () => void) => () => void })
-      .onMenuOpenRecent?.(() => window.dispatchEvent(new CustomEvent("hivemind:toggle-palette")));
+    if (!w.hive?.onMenuNewIssue) return;
+    const offNew = w.hive.onMenuNewIssue(() => setNewOpen(true));
     // ⌘/Ctrl+L toggles the Layers panel (LayersPanel listens for the event).
-    const offLayers = (w.hive as unknown as { onMenuToggleLayers?: (cb: () => void) => () => void })
-      .onMenuToggleLayers?.(() => window.dispatchEvent(new CustomEvent("hivemind:toggle-layers")));
+    const offLayers = w.hive.onMenuToggleLayers?.(() =>
+      window.dispatchEvent(new CustomEvent("hivemind:toggle-layers")),
+    );
     return () => {
-      offPal?.();
       offNew?.();
-      offOpen?.();
-      offRecent?.();
       offLayers?.();
     };
   }, []);
@@ -206,18 +194,9 @@ export function App() {
 
   return (
     <div className="h-screen w-screen overflow-hidden bg-[var(--color-bg)]">
-      <CommandPalette
-        root={root}
-        repoPath={repoPath}
-        recents={recents}
-        onPickFolder={pickFolder}
-        onOpenRecent={openRecent}
-        canInit={!root}
-        onInit={() => setInitOpen(true)}
-      />
       {/* Canvas-only workspace. The canvas is full-bleed; floating chrome sits
           on top — frame = workspace, so the per-Frame "+ workspace" bind is the
-          canonical add-a-workspace action; Open/Init/Recents now live in ⌘K. */}
+          canonical add-a-workspace action; Open/Init/Recents live in the sidebar. */}
       <div className="fixed inset-0 z-30 bg-[var(--color-bg)]">
         <Canvas
           cwd={cwd}

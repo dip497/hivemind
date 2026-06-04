@@ -16,10 +16,8 @@ declare global {
       getLaunchTarget: () => Promise<string | null>;
       /** A second `hivemind <path>` invocation asks the running window to switch. */
       onOpenProject: (cb: (path: string) => void) => () => void;
-      onMenuPalette: (cb: () => void) => () => void;
       onMenuNewIssue: (cb: () => void) => () => void;
-      onMenuOpenFolder: (cb: () => void) => () => void;
-      onMenuOpenRecent: (cb: () => void) => () => void;
+      onMenuToggleLayers?: (cb: () => void) => () => void;
     };
   }
 }

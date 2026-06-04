@@ -43,12 +43,6 @@ test.afterAll(async () => {
   await app?.close();
 });
 
-test("ctrl+k opens command palette", async () => {
-  await page.keyboard.press("Control+k");
-  await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 2_000 });
-  await page.keyboard.press("Escape");
-});
-
 test("ctrl+n opens new-issue modal", async () => {
   // Only works if a project root is resolved — otherwise modal renders but
   // is gated. Either way, the key shouldn't be swallowed.

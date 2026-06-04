@@ -11,10 +11,7 @@ const api: HiveIpc & {
     repoPath: string,
     cb: (info: { paths: string[] }) => void
   ) => () => void;
-  onMenuPalette: (cb: () => void) => () => void;
   onMenuNewIssue: (cb: () => void) => () => void;
-  onMenuOpenFolder: (cb: () => void) => () => void;
-  onMenuOpenRecent: (cb: () => void) => () => void;
   onMenuToggleLayers: (cb: () => void) => () => void;
   getLaunchTarget: () => Promise<string | null>;
   onOpenProject: (cb: (path: string) => void) => () => void;
@@ -105,29 +102,13 @@ const api: HiveIpc & {
     return () => ipcRenderer.removeListener(ch, listener);
   },
 
-  // Global accelerator bridge — main intercepts Ctrl+K / Ctrl+N before the
-  // DOM (xterm would otherwise eat them) and re-emits as IPC. Renderer
-  // re-dispatches as the same CustomEvent the regular keydown listeners use,
-  // so palette/new-issue logic is unchanged.
-  onMenuPalette: (cb: () => void) => {
-    const listener = () => cb();
-    ipcRenderer.on("menu:open-palette", listener);
-    return () => ipcRenderer.removeListener("menu:open-palette", listener);
-  },
+  // Global accelerator bridge — main intercepts Ctrl+N before the DOM (xterm
+  // would otherwise eat it) and re-emits as IPC. Renderer re-dispatches as the
+  // same CustomEvent the regular keydown listener uses.
   onMenuNewIssue: (cb: () => void) => {
     const listener = () => cb();
     ipcRenderer.on("menu:new-issue", listener);
     return () => ipcRenderer.removeListener("menu:new-issue", listener);
-  },
-  onMenuOpenFolder: (cb: () => void) => {
-    const listener = () => cb();
-    ipcRenderer.on("menu:open-folder", listener);
-    return () => ipcRenderer.removeListener("menu:open-folder", listener);
-  },
-  onMenuOpenRecent: (cb: () => void) => {
-    const listener = () => cb();
-    ipcRenderer.on("menu:open-recent", listener);
-    return () => ipcRenderer.removeListener("menu:open-recent", listener);
   },
   onMenuToggleLayers: (cb: () => void) => {
     const listener = () => cb();
