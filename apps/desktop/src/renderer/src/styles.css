@@ -324,6 +324,13 @@ a {
   will-change: transform;
 }
 
+/* @pierre/diffs renders the selectable code text in <code data-code> and ships
+   no CSS, so the I-beam was missing — you couldn't tell the diff was selectable.
+   Scope cursor:text to the code glyphs only (gutter/buttons keep their pointer). */
+.react-flow__node-diff [data-code] {
+  cursor: text;
+}
+
 /* Node DRAG. Promote ONLY the dragged tile to its own compositor layer so the
    browser TRANSLATES a cached bitmap instead of re-rasterizing per frame — but
    the content STAYS VISIBLE (blanking it via content-visibility made dragging a

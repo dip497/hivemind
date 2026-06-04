@@ -122,6 +122,10 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
   >(null);
 
   const codeViewRef = useRef<CodeViewHandle<ReviewComment>>(null);
+  // Last line-selection from CodeView (`onSelectedLinesChange`). The gutter "+"
+  // callback only receives a range — NOT the file — so we remember which file
+  // (item id `diff:<path>`) the selection is in to seed the comment composer.
+  const selectedRef = useRef<{ id: string; range: { start: number; end: number; side?: AnnotationSide; endSide?: AnnotationSide } } | null>(null);
 
   const { data: status, isLoading: statusLoading, error: statusError } = useGitStatus(repoPath);
   const stageMut = useStageFiles();
@@ -296,15 +300,18 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
       // rows, which is why the diff looked "incomplete" before.
       itemMetrics: { diffHeaderHeight: HEADER_H },
       layout: { gap: 10, paddingTop: 8, paddingBottom: 8 },
-      onGutterUtilityClick: (range, context) => {
-        // Comments work in BOTH working- and branch-diff modes. The gutter "+"
-        // carries the CURRENT line selection range, so dragging across several
-        // lines then clicking + comments on the whole range (not one line).
-        if (context.item.type !== "diff") return;
-        const side: AnnotationSide = range.side ?? range.endSide ?? "additions";
+      onGutterUtilityClick: (range) => {
+        // The library calls this with ONE arg (the line range) — NOT a context.
+        // The earlier code read `context.item` (undefined) and threw, so the
+        // composer never opened ("comments not working"). Resolve the file from
+        // the remembered line-selection (its id is `diff:<path>`).
+        const sel = selectedRef.current;
+        if (!sel) return;
+        const file = sel.id.replace(/^diff:/, "");
+        const side: AnnotationSide = range.side ?? range.endSide ?? sel.range.side ?? "additions";
         const startLine = Math.min(range.start, range.end);
         const endLine = Math.max(range.start, range.end);
-        setComposer({ file: context.item.fileDiff.name, startLine, endLine, side });
+        setComposer({ file, startLine, endLine, side });
       },
     }),
     [layout, overflow],
@@ -736,6 +743,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
                 options={options}
                 renderCustomHeader={renderCustomHeader}
                 renderAnnotation={renderAnnotation}
+                onSelectedLinesChange={(sel) => { selectedRef.current = sel; }}
               />
             </div>
           )}
