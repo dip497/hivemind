@@ -118,6 +118,13 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
     () => localStorage.getItem("hivemind:diff-files-open") !== "0",
   );
   useEffect(() => { localStorage.setItem("hivemind:diff-files-open", filesOpen ? "1" : "0"); }, [filesOpen]);
+  // Changed-files sidebar width — user-resizable (deep paths need room), persisted.
+  const [filesW, setFilesW] = useState<number>(() => {
+    const v = Number(localStorage.getItem("hivemind:diff-files-w"));
+    return Number.isFinite(v) && v > 0 ? clampFilesW(v) : 280;
+  });
+  useEffect(() => { localStorage.setItem("hivemind:diff-files-w", String(filesW)); }, [filesW]);
+  const filesDragRef = useRef<{ startX: number; startW: number } | null>(null);
   const [viewed, setViewed] = useState<Set<string>>(
     () => new Set(loadJson<string[]>(VIEWED_KEY_PREFIX + repoPath, [])),
   );
@@ -666,8 +673,9 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
        <div className="flex-1 min-h-0 flex overflow-hidden">
         {filesOpen && fileRows.length > 0 && !activeFile && (
           <aside
-            className="nodrag w-[230px] shrink-0 flex flex-col border-r border-[var(--color-line)] bg-[var(--color-bg2)] overflow-hidden"
+            className="nodrag shrink-0 flex flex-col border-r border-[var(--color-line)] bg-[var(--color-bg2)] overflow-hidden"
             style={{
+              width: filesW,
               // Theme @pierre/trees via its CSS vars (same mapping as FileTreeTile).
               "--trees-bg": "var(--color-bg2)",
               "--trees-bg-muted": "var(--color-bg3)",
@@ -698,6 +706,32 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
               <FileTree rows={fileRows} viewed={viewed} onJump={jumpToFile} onToggleViewed={toggleViewed} />
             </div>
           </aside>
+        )}
+        {filesOpen && fileRows.length > 0 && !activeFile && (
+          // Wide grab zone + thin centered line (mirrors the Workbench explorer
+          // divider) so deep paths can be widened instead of truncating.
+          <div
+            className="nodrag group shrink-0 w-2 -ml-1 cursor-col-resize relative z-10 flex justify-center"
+            role="separator"
+            aria-orientation="vertical"
+            title="Drag to resize the files panel"
+            onPointerDown={(e) => {
+              filesDragRef.current = { startX: e.clientX, startW: filesW };
+              (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+              e.preventDefault();
+            }}
+            onPointerMove={(e) => {
+              const d = filesDragRef.current;
+              if (!d) return;
+              setFilesW(clampFilesW(d.startW + (e.clientX - d.startX)));
+            }}
+            onPointerUp={(e) => {
+              filesDragRef.current = null;
+              (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+            }}
+          >
+            <span className="w-px h-full bg-[var(--color-line)] group-hover:bg-[var(--color-brand)] group-active:bg-[var(--color-brand)] transition-colors" />
+          </div>
         )}
         <div className="flex-1 min-h-0 flex flex-col overflow-hidden" data-pierre-tile>
           {statusLoading && <div className="p-3 text-[11px] text-[var(--color-fg3)]">loading git status…</div>}
@@ -899,6 +933,8 @@ interface ItemsResult {
 // surfaced via the main pane (reviewed files collapse) + the sidebar header
 // count; the per-file toggle lives in the row context menu (Pierre owns row
 // rendering, so we can't inject a checkbox — its decoration slot is text-only).
+const clampFilesW = (w: number) => Math.max(180, Math.min(560, Math.round(w)));
+
 interface FileRow { id: string; file: string; adds: number; dels: number }
 
 function FileTree({
@@ -928,6 +964,7 @@ function FileTree({
     initialExpansion: "open",        // only the changed files — show them all
     search: true,
     fileTreeSearchMode: "expand-matches",
+    density: "compact",              // tighter rows + indent for deep change-sets
     itemHeight: 22,
     onSelectionChange: (sel) => {
       const p = sel[0];
