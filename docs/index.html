@@ -162,15 +162,32 @@
 
   .gallery{display:grid; grid-template-columns:1fr 1fr; gap:16px}
   .gallery figure{margin:0}
-  .gallery img{width:100%; border-radius:12px; border:1px solid var(--line); display:block; transition:border-color .2s}
+  .gallery img{width:100%; height:auto; border-radius:12px; border:1px solid var(--line); display:block; transition:border-color .2s}
   .gallery img:hover{border-color:var(--honey)}
 
-  .install-wrap{max-width:760px; margin:0 auto}
-  pre.install{background:#07080a; border:1px solid var(--line2); border-radius:12px; padding:18px 20px;
-    overflow:auto; color:var(--teal); font-size:14px; margin:0; font-family:"JetBrains Mono",ui-monospace,Menlo,monospace;
-    display:flex; align-items:center; gap:12px}
-  pre.install .pr{color:var(--muted); user-select:none}
+  /* copyable command box (hero + install section) */
+  .copybox{display:flex; align-items:center; gap:12px; max-width:640px; margin:0 auto;
+    background:#07080a; border:1px solid var(--line2); border-radius:12px; padding:13px 14px 13px 18px;
+    font-family:"JetBrains Mono",ui-monospace,Menlo,monospace; font-size:13.5px; text-align:left}
+  .copybox .pr{color:var(--muted); user-select:none}
+  .copybox .cmd{color:var(--teal); flex:1; overflow-x:auto; white-space:nowrap; scrollbar-width:none}
+  .copybox .cmd::-webkit-scrollbar{display:none}
+  .copybtn{flex:none; cursor:pointer; background:var(--bg3); border:1px solid var(--line2); color:var(--muted);
+    border-radius:8px; padding:7px 9px; display:inline-flex; align-items:center; gap:6px; font:inherit; font-size:12px;
+    transition:color .2s, border-color .2s, background .2s}
+  .copybtn:hover{color:var(--fg); border-color:var(--honey)}
+  .copybtn.done{color:var(--teal); border-color:var(--teal)}
+  .copybtn svg{width:14px; height:14px; stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round}
+  .install-note{color:var(--muted); text-align:center; font-size:14px; margin:16px auto 0; max-width:640px}
   .center{text-align:center}
+
+  /* app-window chrome so the product screenshot reads as a screenshot, not a dark blob */
+  .window{max-width:1000px; margin:54px auto 0; border-radius:14px; overflow:hidden; border:1px solid var(--line2);
+    background:#171A21; box-shadow:0 50px 130px rgba(0,0,0,.6), 0 0 0 1px rgba(232,178,74,.06)}
+  .window .titlebar{height:38px; display:flex; align-items:center; gap:8px; padding:0 15px; background:#171A21; border-bottom:1px solid var(--line)}
+  .window .titlebar .dot{width:11px; height:11px; border-radius:50%}
+  .window .titlebar .t{margin-left:8px; color:var(--muted); font-family:"JetBrains Mono",monospace; font-size:12.5px}
+  .window img{display:block; width:100%; height:auto; background:#0e1014}
 
   .faq-list{max-width:780px; margin:0 auto}
   details{border:1px solid var(--line); border-radius:12px; margin-bottom:12px; background:var(--bg2); overflow:hidden}
@@ -236,13 +253,29 @@
       <svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.3.8-.6v-2c-3.2.7-3.9-1.4-3.9-1.4-.5-1.3-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.8 0-1.3.5-2.3 1.2-3.2-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0C17.3 4.7 18.3 5 18.3 5c.6 1.6.2 2.8.1 3.1.8.9 1.2 1.9 1.2 3.2 0 4.6-2.7 5.5-5.3 5.8.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6 4.6-1.5 7.9-5.8 7.9-10.9C23.5 5.7 18.3.5 12 .5z"/></svg>
       Star on GitHub
     </a>
-    <a class="cta ghost" href="#install">Install for Linux</a>
+    <a class="cta ghost" href="https://github.com/dip497/hivemind#quick-start">Quick start &amp; docs</a>
   </div>
+
+  <div class="copybox" style="margin-top:24px" id="install">
+    <span class="pr">$</span>
+    <span class="cmd" id="cmd">bash &lt;(curl -fsSL https://raw.githubusercontent.com/dip497/hivemind/main/install.sh)</span>
+    <button class="copybtn" id="copy" aria-label="Copy install command" type="button">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+      <span id="copytxt">Copy</span>
+    </button>
+  </div>
+  <p class="install-note">Linux x86_64 · no build toolchain · prebuilt from the latest <a href="https://github.com/dip497/hivemind/releases">GitHub Release</a></p>
 </header>
 
 <div class="wrap">
-  <div class="shot reveal">
-    <img src="https://raw.githubusercontent.com/dip497/hivemind/main/screenshots/canvas.png" alt="The full hivemind canvas — an issues board, a code editor, a live git diff, and two AI coding agent terminals, all on one infinite canvas" width="1632" height="960" loading="lazy" />
+  <div class="window reveal">
+    <div class="titlebar">
+      <span class="dot" style="background:#ff5f57"></span>
+      <span class="dot" style="background:#febc2e"></span>
+      <span class="dot" style="background:#28c840"></span>
+      <span class="t">hivemind — acme-pay</span>
+    </div>
+    <img src="https://raw.githubusercontent.com/dip497/hivemind/main/screenshots/canvas.png" alt="The full hivemind canvas — an issues board, a code editor, a live git diff, and two AI coding agent terminals, all on one infinite canvas" width="1440" height="900" loading="lazy" />
   </div>
   <p class="cap reveal">One infinite canvas per repo. Every tile is live — agent terminals, diffs that update as the agent edits, a file tree, an editor, an issues board, even a real browser.</p>
 </div>
@@ -288,19 +321,10 @@
   <h2 class="reveal">See it</h2>
   <p class="sub reveal">Real screens from the app — board, diff, explorer, and issue capture.</p>
   <div class="gallery">
-    <figure class="reveal"><img src="https://raw.githubusercontent.com/dip497/hivemind/main/screenshots/board.png" alt="Kanban issues board backed by markdown files in hivemind" loading="lazy" /></figure>
-    <figure class="reveal"><img src="https://raw.githubusercontent.com/dip497/hivemind/main/screenshots/diff.png" alt="Live git diff of an AI agent's fix in hivemind" loading="lazy" /></figure>
-    <figure class="reveal"><img src="https://raw.githubusercontent.com/dip497/hivemind/main/screenshots/explorer.png" alt="File explorer and diff side by side in hivemind" loading="lazy" /></figure>
-    <figure class="reveal"><img src="https://raw.githubusercontent.com/dip497/hivemind/main/screenshots/new-issue.png" alt="Creating an issue that lives as a markdown file in hivemind" loading="lazy" /></figure>
-  </div>
-</section>
-
-<section id="install" class="wrap">
-  <h2 class="reveal">Install</h2>
-  <p class="sub reveal">Linux x86_64. No build toolchain — the installer pulls prebuilt binaries from the latest GitHub Release.</p>
-  <div class="install-wrap reveal">
-    <pre class="install"><span class="pr">$</span><code>bash &lt;(curl -fsSL https://raw.githubusercontent.com/dip497/hivemind/main/install.sh)</code></pre>
-    <p class="center" style="margin-top:18px"><a href="https://github.com/dip497/hivemind#quick-start">Quick start &amp; docs →</a></p>
+    <figure class="reveal"><img src="https://raw.githubusercontent.com/dip497/hivemind/main/screenshots/board.png" alt="Kanban issues board backed by markdown files in hivemind" width="1440" height="900" loading="lazy" /></figure>
+    <figure class="reveal"><img src="https://raw.githubusercontent.com/dip497/hivemind/main/screenshots/diff.png" alt="Live git diff of an AI agent's fix in hivemind" width="1440" height="900" loading="lazy" /></figure>
+    <figure class="reveal"><img src="https://raw.githubusercontent.com/dip497/hivemind/main/screenshots/explorer.png" alt="File explorer and diff side by side in hivemind" width="1440" height="900" loading="lazy" /></figure>
+    <figure class="reveal"><img src="https://raw.githubusercontent.com/dip497/hivemind/main/screenshots/new-issue.png" alt="Creating an issue that lives as a markdown file in hivemind" width="1440" height="900" loading="lazy" /></figure>
   </div>
 </section>
 
@@ -333,6 +357,18 @@
       entries.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } });
     }, { threshold: 0.12 });
     document.querySelectorAll('.reveal').forEach(function(el){ io.observe(el); });
+  })();
+
+  // Copy install command
+  (function(){
+    var btn = document.getElementById('copy'), cmd = document.getElementById('cmd'), txt = document.getElementById('copytxt');
+    if(!btn || !cmd) return;
+    btn.addEventListener('click', function(){
+      navigator.clipboard.writeText(cmd.textContent.trim()).then(function(){
+        btn.classList.add('done'); txt.textContent = 'Copied';
+        setTimeout(function(){ btn.classList.remove('done'); txt.textContent = 'Copy'; }, 1600);
+      });
+    });
   })();
 </script>
 
