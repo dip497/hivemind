@@ -503,8 +503,13 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
     const term = termRef.current;
     if (!term) return;
     term.options.disableStdin = !selected;
-    if (selected) term.focus();
-    else term.blur();
+    if (selected) {
+      term.focus();
+      // Focusing a terminal (e.g. from the Layers panel) snaps to the LATEST
+      // output / live prompt — never leave it parked mid-scrollback. Editor /
+      // diff tiles keep their own (top-anchored) scroll position.
+      term.scrollToBottom();
+    } else term.blur();
   }, [selected]);
 
   return (
