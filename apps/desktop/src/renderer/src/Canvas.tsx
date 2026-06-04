@@ -429,11 +429,6 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // Agent title overlays the auto label; a user rename overlays both.
   const framesChipNames = useMemo(() => ({ ...agentTitles, ...tileNames }), [agentTitles, tileNames]);
 
-  // Which tile kinds currently have ≥1 instance — drives the ToolIsland active
-  // highlight (the buttons now SPAWN rather than toggle, so "active" just means
-  // "you have one of these open somewhere").
-  const presentKinds = useMemo(() => new Set<TileKind>(tiles.map((t) => t.kind)), [tiles]);
-
   // ── Figma-style Layers panel data ─────────────────────────────────────────
   // Every open tile flattened to { id, kind, name, frameId } for the left rail.
   const layerFrames: LayerFrame[] = useMemo(
@@ -851,7 +846,6 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
           {/* Excalidraw-style floating tool island — top-center. */}
           <Panel position="top-center" className="!m-0 !mt-3">
             <ToolIsland
-              present={presentKinds}
               repoPath={repoPath}
               onToggle={(k) => spawnVis(k)}
               onClaude={() => spawnClaude()}

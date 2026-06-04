@@ -10,6 +10,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Layers, ChevronRight, ChevronDown, Square, GitBranch, Server } from "lucide-react";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
+import { AgentIcon } from "./agents";
 
 export type LayerKind = "claude" | "terminal" | "editor" | "diff" | "issues";
 
@@ -156,7 +157,9 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
         }`}
         title={`${t.name} · ${st}`}
       >
-        <span aria-hidden className="w-3.5 shrink-0 text-center font-mono text-[10px] text-[var(--color-fg3)]">{KIND_GLYPH[t.kind]}</span>
+        <span aria-hidden className="w-3.5 shrink-0 grid place-items-center font-mono text-[10px] text-[var(--color-fg3)]">
+          {t.kind === "claude" ? <AgentIcon id="claude" size={12} /> : KIND_GLYPH[t.kind]}
+        </span>
         <span className="truncate flex-1">{t.name}</span>
         {st !== "idle" && (
           <span className="shrink-0 text-[9px] tabular-nums" style={{ color: STATUS_COLOR[st] }}>

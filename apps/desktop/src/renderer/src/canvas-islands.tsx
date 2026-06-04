@@ -7,11 +7,10 @@
  */
 import { useEffect, useState } from "react";
 import { useReactFlow, useStore } from "@xyflow/react";
-import type { TileKind } from "./tile-kinds";
+import { AgentIcon } from "./agents";
 
 /** Top-center tool island — spawn terminal/claude/editor/diff/issues/frame. */
 export function ToolIsland({
-  present,
   repoPath,
   onToggle,
   onClaude,
@@ -19,7 +18,6 @@ export function ToolIsland({
   claudeMode,
   onClaudeModeChange,
 }: {
-  present: ReadonlySet<TileKind>;
   repoPath: string | null;
   onToggle: (k: "tree" | "shell" | "diff" | "issues") => void;
   onClaude: () => void;
@@ -29,10 +27,10 @@ export function ToolIsland({
 }) {
   return (
     <div className="hm-island flex items-center gap-0.5 p-1.5">
-      <ToolButton label="Terminal" hint="1" active={present.has("shell")} onClick={() => onToggle("shell")}
+      <ToolButton label="Terminal" hint="1" onClick={() => onToggle("shell")}
         icon={<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M4 6l2 2-2 2M8 10h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>} />
-      <ToolButton label="Claude" hint="2" active={present.has("claude")} onClick={onClaude}
-        icon={<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5.5" stroke="currentColor" strokeWidth="1.2"/><circle cx="8" cy="8" r="1.8" fill="currentColor"/></svg>} />
+      <ToolButton label="Claude" hint="2" onClick={onClaude}
+        icon={<AgentIcon id="claude" size={15} />} />
       <select
         value={claudeMode}
         onChange={(e) => onClaudeModeChange(e.target.value)}
@@ -47,11 +45,11 @@ export function ToolIsland({
         <option value="bypassPermissions">bypass</option>
       </select>
       <div className="mx-0.5 h-5 w-px bg-[var(--color-line2)]" aria-hidden />
-      <ToolButton label="Explorer" hint="3" active={present.has("editor")} disabled={!repoPath} onClick={() => onToggle("tree")}
+      <ToolButton label="Explorer" hint="3" disabled={!repoPath} onClick={() => onToggle("tree")}
         icon={<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M2 4.5C2 3.7 2.7 3 3.5 3h3l1.5 1.5h4.5c.8 0 1.5.7 1.5 1.5v5.5c0 .8-.7 1.5-1.5 1.5h-9C2.7 13 2 12.3 2 11.5v-7Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>} />
-      <ToolButton label="Diff" hint="4" active={present.has("diff")} disabled={!repoPath} onClick={() => onToggle("diff")}
+      <ToolButton label="Diff" hint="4" disabled={!repoPath} onClick={() => onToggle("diff")}
         icon={<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M4 2v8m0 0a2 2 0 1 0 0 0Zm8-4v2m0 0a2 2 0 1 0 0 0Zm0 0v2a2 2 0 0 1-2 2H6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>} />
-      <ToolButton label="Issues" hint="5" active={present.has("issues")} disabled={!repoPath} onClick={() => onToggle("issues")}
+      <ToolButton label="Issues" hint="5" disabled={!repoPath} onClick={() => onToggle("issues")}
         icon={<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><rect x="2" y="2.5" width="5" height="11" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="9" y="2.5" width="5" height="7" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg>} />
       <div className="mx-0.5 h-5 w-px bg-[var(--color-line2)]" aria-hidden />
       <ToolButton label="Frame" hint="6" onClick={onFrame}
@@ -64,14 +62,12 @@ function ToolButton({
   label,
   hint,
   icon,
-  active,
   disabled,
   onClick,
 }: {
   label: string;
   hint: string;
   icon: React.ReactNode;
-  active?: boolean;
   disabled?: boolean;
   onClick: () => void;
 }) {
@@ -80,19 +76,16 @@ function ToolButton({
       onClick={onClick}
       disabled={disabled}
       title={disabled ? `${label} — needs a repo` : `${label}  (${hint})`}
-      className={`relative grid place-items-center size-9 rounded-lg transition-colors ${
-        active
-          // "this tile is open on the canvas" — a NEUTRAL raised state (no blue
-          // brand ring/fill, which read as AI-slop): elevated surface + full-
-          // contrast icon + a soft neutral border, plus a small dot indicator.
-          ? "bg-[var(--color-bg4)] text-[var(--color-fg)] ring-1 ring-[var(--color-line2)]"
+      className={`relative grid place-items-center size-9 rounded-lg transition-colors cursor-pointer ${
+        // These are spawn/toggle ACTIONS, not stateful toggles — showing them
+        // "selected" because a tile of that kind happens to be open was just
+        // confusing. All buttons read the same; only hover responds.
+        disabled
+          ? "text-[var(--color-fg2)] opacity-30 cursor-not-allowed"
           : "text-[var(--color-fg2)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)]"
-      } ${disabled ? "opacity-30 cursor-not-allowed" : ""}`}
+      }`}
     >
       {icon}
-      {active && (
-        <span aria-hidden className="absolute top-1 right-1 size-1.5 rounded-full bg-[var(--color-ok)]" />
-      )}
       <kbd className="absolute bottom-0.5 right-1 font-mono text-[8px] leading-none opacity-60">{hint}</kbd>
     </button>
   );
