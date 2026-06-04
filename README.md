@@ -1,74 +1,92 @@
+<div align="center">
+
 # hivemind
 
-> A canvas-per-project mission control for AI coding agents. Drop `claude`,
-> `codex`, `gemini`, or `opencode` into real workspaces where they can read
-> issues, update status, mark acceptance criteria, and comment their own
-> progress — through a Plane-style PM model that's just plain markdown on disk.
+**A canvas-per-project mission control for AI coding agents.**
+
+Drop `claude`, `codex`, `gemini`, or `opencode` into real workspaces where they can
+read issues, update status, mark acceptance criteria, and comment their own
+progress — through a Plane-style PM model that's just plain markdown on disk.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
-[![Platform: Linux](https://img.shields.io/badge/platform-Linux-blue.svg)](#install)
-[![Made with TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6.svg)](#)
-[![pnpm workspace](https://img.shields.io/badge/pnpm-workspace-F69220.svg)](https://pnpm.io)
+[![Platform: Linux](https://img.shields.io/badge/platform-Linux%20x86__64-blue.svg)](#install)
+[![Release](https://img.shields.io/github/v/release/dip497/hivemind?color=success)](https://github.com/dip497/hivemind/releases)
+[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6.svg)](#)
 
-Local-first. Markdown-backed. No SDK lock-in. No telemetry. No cloud.
+Local-first · Markdown-backed · No SDK lock-in · No telemetry · No cloud.
+
+<br/>
+
+<img src="screenshots/diff.png" alt="hivemind — an issues board and a live diff of an agent's fix, side by side on one canvas" width="880" />
+
+<sub>An issue board and the live diff of a fix, side by side on one infinite canvas. The agent edits; the diff updates as you watch.</sub>
+
+</div>
 
 ---
 
-## Demo
+## Contents
 
-> One infinite canvas per repo. Every tile is live — terminals running agents,
-> a diff that updates as they edit, a file tree, an issues board. Group them
-> into **frames** (workspaces), bind each frame to a local repo, a git worktree,
-> or a **remote SSH host**, and watch several agents work in parallel.
+[Why](#why) · [The whole canvas](#the-whole-canvas) · [Install](#install) · [Quick start](#quick-start) · [How agents talk to hivemind](#how-agents-talk-to-hivemind) · [Features](#features) · [Architecture](#architecture) · [Persistence](#persistence-model) · [Development](#development) · [Contributing](#contributing)
 
-<p align="center">
-  <img src="screenshots/08-final.png" alt="hivemind canvas — multiple agent tiles, diff, and issues board on one infinite canvas" width="900" />
-</p>
+---
+
+## Why
+
+Running a coding agent in a bare terminal throws away everything around the work.
+You lose track of *which* task it's on, you can't see its edits without `git diff`,
+the conversation dies when you close the window, and the moment you want a second
+agent on a second branch you're juggling tmux panes.
+
+hivemind makes the **project** the unit of work, not the terminal. One infinite
+canvas per repo. Every tile on it is live — a terminal running an agent, a diff
+that updates as the agent edits, a file tree, a code editor, an issues board, even
+a real web browser. Group tiles into **frames** (named workspaces), bind each frame
+to a local repo, a git **worktree**, or a **remote SSH host**, and watch several
+agents work in parallel — each scoped to its own directory, issues, and branch.
+
+The project-management layer underneath is deliberately boring: issues, acceptance
+criteria, cycles, and an activity log are **plain markdown files with YAML
+frontmatter** under `.hivemind/`. No database, no API, no account. An agent reads
+and writes them through a small MCP server, so it can pick up an issue, flip its
+state, tick acceptance criteria, and comment its progress — and you see all of it
+land live in the board tile.
+
+---
+
+## The whole canvas
+
+<div align="center">
+<img src="screenshots/canvas.png" alt="The full hivemind canvas — issues board, code editor, diff, and two agent terminals" width="880" />
+</div>
 
 <table>
   <tr>
-    <td width="50%"><img src="screenshots/07-all-working.png" alt="Several claude tiles working in parallel inside a frame" /><br/><sub><b>Agents in parallel</b> — each in its own PTY tile, status dots live on the frame header.</sub></td>
-    <td width="50%"><img src="screenshots/04-tree-claude.png" alt="File tree + editor + claude side by side" /><br/><sub><b>Editor + tree + agent</b> — open files, see edits land in the diff next door.</sub></td>
+    <td width="50%"><img src="screenshots/board.png" alt="Plane-style issues board backed by markdown" /><br/><sub><b>Issues board</b> — Plane-style cards across Backlog → Todo → In&nbsp;progress → In&nbsp;review → Done. Each card is one markdown file you can <code>cat</code>.</sub></td>
+    <td width="50%"><img src="screenshots/explorer.png" alt="File explorer and diff tiles side by side" /><br/><sub><b>Explorer + diff</b> — browse the tree, open files in the editor, and review changes in the Pierre-backed diff — all on the same canvas.</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src="screenshots/01-default-board.png" alt="Plane-style issues board" /><br/><sub><b>Issues board</b> — Plane-style cards backed by plain markdown on disk.</sub></td>
-    <td width="50%"><img src="screenshots/10-new-modal.png" alt="New issue modal" /><br/><sub><b>Create an issue</b> — then hand it to an agent with one click (<b>▶ Work on this</b>).</sub></td>
+    <td width="50%"><img src="screenshots/diff.png" alt="Live diff with a real bug fix" /><br/><sub><b>Live diff</b> — split or unified, changed-files sidebar, per-file <b>reviewed</b> checks, line comments you can send straight to an agent.</sub></td>
+    <td width="50%"><img src="screenshots/new-issue.png" alt="New issue modal" /><br/><sub><b>Create an issue</b> — it lives at <code>.hivemind/issues/&lt;id&gt;.md</code>, then hand it to an agent with <b>▶ Work</b>.</sub></td>
   </tr>
 </table>
 
 **60-second tour**
 
 1. `hivemind .` in any repo → an infinite canvas opens, scoped to that project.
-2. Press `⌘\` → a `claude` tile spawns in the frame, running in the repo's `cwd`.
-3. Click **▶ Work on this** on an issue → the agent spawns pre-loaded with the
-   issue and the full MCP tool surface; it works, you watch the diff update live.
-4. Click a frame's **worktree** button to spin a branch into a nested sub-frame,
-   or **remote** to bind the frame to a directory on an SSH host — the same
-   terminals, editor, and diff, now running on that machine.
-
----
-
-## Contents
-
-[What it is](#what-it-is) · [Install](#install) · [Quick start](#quick-start) · [Features](#features) · [Architecture](#architecture) · [Development](#development) · [Contributing](#contributing) · [License](#license)
-
----
-
-## What it is
-
-A desktop app — Electron + an infinite [xyflow](https://reactflow.dev) canvas — where every tile is a live terminal, a code diff, a file tree, or an issues board, and every tile belongs to a **frame** (a named workspace bound to a real repo on disk). Spawn a `claude` inside a frame: it runs in that repo's `cwd`, sees that repo's issues, and writes changes that show up live in the diff tile next door.
-
-The terminals survive everything:
-
-- **Window close / app quit** → PTY keeps running in a detached daemon, replay on reopen via headless [xterm.js](https://xtermjs.org) snapshot (Mosh-style coalesced state — alt-screen for vim/htop, SGR colors, cursor — not a fast-forward of raw bytes).
-- **Reboot** → claude sessions are bound to a hivemind-generated UUID at spawn (`--session-id <uuid>`). After reboot the daemon respawns claude with `--resume <uuid>` so the prior conversation continues, not a fresh one.
-- **Layout** → frames, tile positions, viewport pan/zoom, editor tabs all persist per-repo in `localStorage` and restore on next open.
+2. Press `2` (or a frame's **+**) → an agent tile spawns, running in the repo's `cwd`.
+3. Click **▶ Work** on an issue → the agent spawns pre-loaded with that issue and the
+   full MCP tool surface; it works, you watch the diff update live.
+4. Click a frame's **worktree** button to spin a branch into a nested sub-frame, or
+   **remote** to bind the frame to a directory on an SSH host — same terminals,
+   editor, and diff, now running on that machine.
 
 ---
 
 ## Install
 
-Linux x86_64 only for now. **No build toolchain needed** — the installer downloads prebuilt binaries from the latest [GitHub Release](https://github.com/dip497/hivemind/releases).
+Linux x86_64 only for now. **No build toolchain needed** — the installer downloads
+prebuilt binaries from the latest [GitHub Release](https://github.com/dip497/hivemind/releases).
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/dip497/hivemind/main/install.sh)
@@ -78,24 +96,24 @@ The script will:
 
 1. Resolve the latest release tag from GitHub.
 2. Download the `hive` CLI single-binary and the Electron AppImage into `~/.hivemind-app/`.
-3. Symlink them into `~/.local/bin/` (`hive`, `hivemind`).
-4. Verify `claude` is on PATH (warning only — desktop app runs without it).
+3. Symlink them into `~/.local/bin/` as `hive` and `hivemind`.
+4. Check that an agent CLI (`claude`, `codex`, …) is on `PATH` (warning only).
 
-Re-run anytime to upgrade — the installer is a no-op if you're already on the latest tag, otherwise downloads + relinks. Pin a specific version with `HIVEMIND_VERSION=v0.1.0 bash <(curl …)`.
+Re-run anytime to upgrade — it's a no-op if you're already on the latest tag. Pin a
+version with `HIVEMIND_VERSION=v1.0.0 bash <(curl …)`.
 
-### Build from source (hackers)
-
-If you want to hack on hivemind or run pre-release code:
+<details>
+<summary><b>Build from source</b></summary>
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/dip497/hivemind/main/install.sh) --dev
-# or:
 git clone https://github.com/dip497/hivemind.git
 cd hivemind
 ./install.sh --dev
 ```
 
-Requires `git`, `node` ≥ 22, `pnpm` ≥ 10, `bun` ≥ 1.1. Set `HIVEMIND_SKIP_APPIMAGE=1` to skip the slow electron-builder step (the CLI still installs).
+Requires `git`, `node` ≥ 22, `pnpm` ≥ 10, `bun` ≥ 1.1. Set `HIVEMIND_SKIP_APPIMAGE=1`
+to skip the slow electron-builder step (the CLI still installs).
+</details>
 
 ---
 
@@ -104,8 +122,8 @@ Requires `git`, `node` ≥ 22, `pnpm` ≥ 10, `bun` ≥ 1.1. Set `HIVEMIND_SKIP_
 ```bash
 # 1. Initialize hivemind inside a git repo
 cd ~/my-project
-hive init --prefix MYP
-hive init --agentic        # adds .mcp.json + .claude/skills/hive-work/SKILL.md + CLAUDE.md
+hive init --prefix MYP        # writes .hivemind/config.yaml
+hive init --agentic           # adds .mcp.json + .claude/skills/ + CLAUDE.md
 
 # 2. Create an issue
 hive new "Fix token expiry comparison"
@@ -117,11 +135,40 @@ hivemind .
 
 In the canvas:
 
-- Press `⌘\` to spawn a claude tile in the active workspace zone.
-- Click **▶ Work on this** on any issue → claude spawns pre-loaded with the issue and the full MCP tool surface.
-- Drag a file from the explorer tile into the diff tile to pin a review.
-- Press `7` to open a **Browser** tile — a real web view that pans/zooms with the canvas.
-- Double-click any tile name to rename it; the pencil icon opens edit mode.
+- Press `2` to spawn the selected agent; the tool island (top) switches agent and
+  the number keys `1`–`7` spawn terminal / agent / explorer / diff / issues / frame / browser.
+- Click **▶ Work** on any issue → the agent spawns pre-loaded with the issue and the
+  full MCP tool surface.
+- Press `⌘L` to toggle the **Layers** panel — every tile grouped by frame, with live
+  agent status.
+- Press `7` for a **Browser** tile — a real web view that pans and zooms with the canvas.
+- Double-click a tile's name to rename it.
+
+---
+
+## How agents talk to hivemind
+
+```text
+agent tile (claude / codex / …)
+      │  reads .mcp.json, spawns the server over stdio
+      ▼
+hive mcp-stdio  ──►  get_issue · set_state · add_comment · mark_acceptance · …
+      │  edits markdown
+      ▼
+.hivemind/issues/*.md  ──►  filesystem watcher  ──►  live board tile
+```
+
+1. `hive init --agentic` drops `.mcp.json`, `CLAUDE.md`, and the `hive-work` skill
+   into your repo.
+2. You start an agent (in a canvas tile or any terminal) inside that repo.
+3. The agent auto-loads `.mcp.json`, spawns `hive mcp-stdio`, and gets the hive tools:
+   `get_issue`, `set_state`, `add_comment`, `mark_acceptance`, and friends.
+4. The skill activates on any `MYP-123` mention and runs the agent through an
+   **execution contract**: load the issue → do the work → end the session by setting
+   the issue's disposition.
+
+State changes flow MCP → markdown → filesystem watcher → live UI. No SDK, no API key.
+Agents use your existing CLI login.
 
 ---
 
@@ -129,19 +176,19 @@ In the canvas:
 
 | | |
 |---|---|
-| **Canvas-per-project** | One infinite canvas per repo. Frames bind to a workspace path so multiple repos can coexist on one screen. Each frame auto-gets a distinct color. |
-| **First-class agents** | claude / codex / gemini / opencode each run in their own xterm tile with WebGL-accelerated rendering. |
-| **Browser tile** | A real Chromium web view (Electron `<webview>`) that lives in the DOM, so it pans / zooms / clips with the canvas — multi-tab, address bar, find-in-page, per-session logins. Press `7` or a frame's **+ → Browser**. |
-| **Agents can browse** | Opt-in (`HIVEMIND_BROWSER_CDP=1`): a spawned agent drives the *visible* Browser tile over CDP via the `hive-browser` skill (built on [agent-browser](https://github.com/vercel-labs/agent-browser)) — navigate, click, read, screenshot the same page you're watching. |
-| **Remote SSH frames** | Bind a frame to a directory on another machine over SSH — its terminals are real PTYs on the host, the editor reads/writes over SFTP, diff/status run `git` on the remote. One pooled `ssh2` connection per host; agent/key auth; TOFU host keys. |
+| **Canvas-per-project** | One infinite [xyflow](https://reactflow.dev) canvas per repo. Frames bind to a workspace path, so multiple repos coexist on one screen, each with its own auto-assigned color. |
+| **Pluggable agents** | `claude` / `codex` / `gemini` / `opencode` each run in their own WebGL-accelerated xterm tile. Agents are an extensible registry — adding one is a single entry. Live status (idle / working / waiting / done) is detected from the command and shown on the frame header. |
+| **Plane-style PM you can `cat`** | Issues, acceptance criteria, cycles, and an activity log are markdown + YAML frontmatter under `.hivemind/`. No DB, no API. |
+| **MCP integration** | `.mcp.json` autowires a stdio MCP server so agents can `get_issue`, `set_state`, `add_comment`, `mark_acceptance`, … from inside their tile. |
+| **Live diff review** | A Pierre-backed diff tile: split / unified, a changed-files sidebar with per-file **reviewed** checks, multi-line comments, and **send-to-agent** for any comment or selection. |
 | **Git worktrees as sub-frames** | Attach a branch worktree → a nested sub-frame scoped to that branch. Line several branches up side by side and arrange them as columns. |
-| **Layers + arrange** | A Figma-style layers rail lists every tile grouped by frame with live status; opt-in arrange snaps a frame's tiles + worktrees into Columns / Rows / Grid. |
-| **PM you can `cat`** | Issues, cycles, activity log are markdown files with YAML frontmatter under `.hivemind/`. No DB, no API. |
-| **MCP integration** | `.mcp.json` autowires a 9-tool stdio MCP server so claude can `get_issue`, `set_state`, `add_comment`, `mark_acceptance` etc. directly from inside its tile. |
-| **Persistent terminals** | Detached PTY daemon survives the window. Headless xterm + SerializeAddon for replay. Disk snapshots for reboot survival. |
-| **Reboot-resume for claude** | Every claude spawn is `--session-id`-bound at spawn time. After reboot, daemon respawns with `--resume <uuid>` — same conversation. |
-| **Persistent layout** | Frames, sizes, positions, viewport, editor tabs — all per-repo, restored on reopen. |
-| **Plane-style PM** | Project / issue / acceptance criteria / cycles / activity log — the bits that mattered. |
+| **Remote SSH frames** | Bind a frame to a directory on another machine over SSH — its terminals are real PTYs on the host, the editor reads/writes over SFTP, diff/status run `git` on the remote. One pooled `ssh2` connection per host; agent / key / password auth; TOFU host keys. |
+| **Browser tile** | A real Chromium web view (Electron `<webview>`) that lives in the DOM, so it pans / zooms / clips with the canvas — multi-tab, address bar, find-in-page, per-session logins. |
+| **Agents can browse** | Opt-in: a spawned agent drives the *visible* Browser tile over CDP via the `hive-browser` skill (built on [agent-browser](https://github.com/vercel-labs/agent-browser)) — navigate, click, read, screenshot the same page you're watching. |
+| **Layers + arrange** | A Figma-style layers rail lists every tile grouped by frame with live status; opt-in arrange snaps a frame's tiles and worktrees into Columns / Rows / Grid. |
+| **Persistent terminals** | A detached PTY daemon outlives the window. Headless xterm + SerializeAddon replays the *current screen* (alt-screen, SGR colors, cursor) on reopen — not a raw byte fast-forward. |
+| **Reboot-resume** | Every `claude` spawn is `--session-id`-bound at spawn time; after a reboot the daemon respawns with `--resume <uuid>`, continuing the same conversation. Codex resumes from its session dir. |
+| **Persistent layout** | Frames, sizes, positions, viewport pan/zoom, and editor tabs persist per-repo and restore on reopen. |
 
 ---
 
@@ -159,45 +206,40 @@ apps/
 └── desktop/     Electron + electron-vite + React renderer.
                  ├─ Canvas       xyflow infinite canvas
                  ├─ TerminalTile xterm.js + WebGL + agent-status bus
-                 ├─ BrowserTile  multi-tab <webview> + CDP agent bridge
-                 ├─ DiffTile     Pierre-backed diff view
-                 ├─ FileTreeTile project explorer
+                 ├─ DiffTile     Pierre-backed diff + review
                  ├─ EditorTile   CodeMirror tabs
-                 ├─ IssuesTile   Plane-style cards
-                 ├─ FrameNode    workspace zones (bind repo / worktree / remote)
-                 ├─ LayersPanel  Figma-style tile rail grouped by frame
+                 ├─ FileTreeTile project explorer
+                 ├─ IssuesTile   Plane-style board
+                 ├─ BrowserTile  multi-tab <webview> + CDP agent bridge
+                 ├─ FrameNode    workspace zones (repo / worktree / remote)
+                 ├─ LayersPanel  Figma-style rail grouped by frame
                  ├─ main/remote/ ssh2 transport — remote PTY + SFTP + git
                  └─ pty-daemon   detached node-pty + headless-xterm snapshots
 
 packages/
 ├── hive-core/   storage + parsing (gray-matter + zod schemas)
-├── hive-mcp/    stdio MCP server (9 tools wrapping hive-core)
+├── hive-mcp/    stdio MCP server wrapping hive-core
 └── tsconfig/    shared TS config
 
 templates/
 └── agentic/     per-workspace templates copied by `hive init --agentic`
 ```
 
-### How claude talks to hivemind
+---
 
-1. `hive init --agentic` drops `.mcp.json`, `CLAUDE.md`, and the `hive-work` skill into your repo.
-2. You start `claude` (in a canvas tile or any terminal) inside that repo.
-3. claude auto-loads `.mcp.json` → spawns `hive mcp-stdio` over stdio → gets `mcp__hive__get_issue`, `set_state`, `add_comment`, `mark_acceptance`, …
-4. The skill auto-activates on any `MYP-123` mention and runs claude through the **Execution Contract**: load issue → do work → end every session with `mcp__hive__set_state(disposition)`.
+## Persistence model
 
-State changes go through MCP → markdown files → filesystem watcher → live UI. No SDK, no API key. claude uses your existing `claude` CLI login (Pro / Max / API).
-
-### Persistence model
-
-| Event | PTY survives | Visible screen | Claude conversation |
+| Event | PTY survives | Visible screen | Agent conversation |
 |---|---|---|---|
 | Close window / quit Electron | ✅ daemon detached | ✅ live stream | ✅ same process |
 | `pkill electron` | ✅ | ✅ | ✅ |
-| Daemon killed | ❌ respawned with new PTY | ✅ replayed from disk | ✅ via `--resume <uuid>` |
+| Daemon killed | ❌ respawned | ✅ replayed from disk | ✅ via `--resume <uuid>` |
 | Reboot | ❌ | ✅ replayed from disk | ✅ via `--resume <uuid>` |
 | `×` on tile | ❌ explicit kill | ❌ snapshot evicted | ❌ done |
 
-Anchored against `anthropics/claude-code`'s actual semantics — see [`apps/desktop/src/main/pty-daemon.ts`](./apps/desktop/src/main/pty-daemon.ts) for the bind/restore wiring with citations.
+Anchored against `anthropics/claude-code`'s actual resume semantics — see
+[`apps/desktop/src/main/pty-daemon.ts`](./apps/desktop/src/main/pty-daemon.ts) for the
+bind/restore wiring.
 
 ---
 
@@ -205,38 +247,34 @@ Anchored against `anthropics/claude-code`'s actual semantics — see [`apps/desk
 
 ```bash
 git clone https://github.com/dip497/hivemind.git
-cd hivemind
-pnpm install
+cd hivemind && pnpm install
 
-# Renderer + dev-bridge (browser dev loop — fastest)
-pnpm --filter @hivemind/desktop run dev:bridge -- /path/to/test/repo
-# then open http://localhost:5180/
-
-# Or run the full Electron app (auto-reload on rebuild)
+# Full Electron app (auto-reload on rebuild)
 pnpm --filter @hivemind/desktop run dev
 
-# CLI in dev (no compile)
+# Renderer-only dev loop (fastest) — open http://localhost:5180/
+pnpm --filter @hivemind/desktop run dev:bridge -- /path/to/test/repo
+
+# CLI in dev
 pnpm --filter @hivemind/cli run dev <subcommand>
 
-# Tests
-pnpm --filter @hivemind/desktop run test:unit       # node:test, fast
-pnpm --filter @hivemind/desktop run test:e2e        # playwright + xvfb
-
-# Typecheck
+# Tests + typecheck
+pnpm --filter @hivemind/desktop run test:unit    # node:test, fast
+pnpm --filter @hivemind/desktop run test:e2e     # playwright + xvfb
 pnpm --filter @hivemind/desktop run typecheck
 ```
 
-**Hard rule:** the dev-bridge must run under `tsx` (node), NOT `bun`. Bun's
-loader silently drops `@lydell/node-pty` output on Linux. The dev-bridge
-self-guards against accidental bun startup.
+**Hard rule:** the dev-bridge must run under `tsx` (node), **not** `bun` — Bun's loader
+silently drops `@lydell/node-pty` output on Linux. The dev-bridge self-guards against
+accidental bun startup.
 
 ### Prior art
 
 | From | Pattern borrowed |
 |---|---|
-| [Plane](https://plane.so) | workspace > project > issue > acceptance criteria + cycles + activity log |
-| [tldraw](https://tldraw.com) / Figma | infinite canvas with frame-as-workspace, snap-to-grid, momentum pan |
-| [tmux](https://github.com/tmux/tmux) / [mosh](https://mosh.org) | tmux-style detach-keeps-alive; Mosh-style coalesced state replay (current screen, not raw byte tail) |
+| [Plane](https://plane.so) | workspace → project → issue → acceptance criteria + cycles + activity log |
+| [tldraw](https://tldraw.com) / Figma | infinite canvas with frame-as-workspace, momentum pan |
+| [tmux](https://github.com/tmux/tmux) / [mosh](https://mosh.org) | detach-keeps-alive; coalesced state replay (current screen, not raw byte tail) |
 | Unreal Blueprint | comment-box "Frame" nodes to group canvas tiles |
 | [Pierre](https://pierre.co) | first-class diff + tree components inside the canvas |
 
@@ -244,14 +282,17 @@ self-guards against accidental bun startup.
 
 ## Contributing
 
-PRs welcome. Areas that would benefit:
+PRs welcome. High-value areas:
 
-- **macOS / Windows support** — currently Linux-only because of `@lydell/node-pty` build + AppImage packaging. Should be straightforward.
-- **More agents** — adapters/skills for `codex`, `gemini`, `opencode` beyond the claude integration.
-- **Reboot resume for non-claude agents** — `pty-daemon.ts`'s `transformSpecOnSpawn` / `transformSpecOnRestore` accepts arbitrary transforms; wire up your agent's resume semantics there.
-- **Tests** — the `tests/unit` (node:test) and `tests/e2e` (Playwright) suites are the place to pin behavior. Drag/perf and persistence are well covered; agent-status detection less so.
+- **macOS / Windows support** — currently Linux-only because of `@lydell/node-pty`
+  build + AppImage packaging.
+- **More agents** — the registry (`apps/desktop/src/renderer/src/agents.tsx`) takes one
+  entry per agent; wire status detection + resume semantics.
+- **Reboot-resume for non-claude agents** — `pty-daemon.ts`'s
+  `transformSpecOnSpawn` / `transformSpecOnRestore` accept arbitrary transforms.
 
-Open an issue first if the change is non-trivial. Match the project's coding style: TypeScript strict, comments document **why** (especially load-bearing trade-offs), no emoji in code, lucide-react icons only.
+Open an issue first if the change is non-trivial. Style: TypeScript strict, comments
+explain **why**, no emoji in code, lucide-react icons only.
 
 ---
 
