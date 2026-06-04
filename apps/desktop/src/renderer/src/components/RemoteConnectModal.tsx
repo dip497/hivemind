@@ -6,7 +6,7 @@
  * it as the frame's workspacePath (every tile in the frame then runs remote).
  */
 import { useEffect, useRef, useState } from "react";
-import { Server, Folder, ChevronRight, Loader2, ArrowLeft, HardDriveDownload, X, Plug } from "lucide-react";
+import { Server, Folder, ChevronRight, Loader2, ArrowLeft, HardDriveDownload, X, Plus, Plug } from "lucide-react";
 import type { RemoteDirEntry, SavedHost } from "../../../shared/ipc";
 import { formatRemote, posixJoin } from "../../../shared/remote-uri";
 
@@ -30,6 +30,9 @@ export function RemoteConnectModal({ open, onClose, onPick }: Props) {
   const [entries, setEntries] = useState<RemoteDirEntry[]>([]);
   const [remember, setRemember] = useState(true);
   const [saved, setSaved] = useState<SavedHost[]>([]);
+  // Recents-first: when saved hosts exist, open to the list; the manual form is
+  // behind "New connection". With none saved, the form shows directly.
+  const [showForm, setShowForm] = useState(false);
   const firstInput = useRef<HTMLInputElement>(null);
 
   // Reset on open; focus the host field; load saved connections.
@@ -37,7 +40,7 @@ export function RemoteConnectModal({ open, onClose, onPick }: Props) {
     if (!open) return;
     setPhase("form"); setError(null); setBusy(false);
     setEntries([]); setCwd(""); setPassword(""); setRemember(true);
-    window.hive.sshSavedHosts().then(setSaved).catch(() => setSaved([]));
+    window.hive.sshSavedHosts().then((s) => { setSaved(s); setShowForm(s.length === 0); }).catch(() => { setSaved([]); setShowForm(true); });
     const t = setTimeout(() => firstInput.current?.focus(), 30);
     return () => clearTimeout(t);
   }, [open]);
@@ -122,10 +125,10 @@ export function RemoteConnectModal({ open, onClose, onPick }: Props) {
 
         {phase === "form" ? (
           <div className="p-4 grid gap-3">
-            {saved.length > 0 && (
+            {saved.length > 0 && !showForm ? (
               <div className="grid gap-1">
-                <span className="u-eyebrow">Saved</span>
-                <div className="grid gap-1">
+                <span className="u-eyebrow">Saved connections</span>
+                <div className="grid gap-1 max-h-[300px] overflow-y-auto -mx-1 px-1">
                   {saved.map((h) => (
                     <div key={h.hostId} className="group flex items-center gap-2 rounded-md border border-[var(--color-line2)] bg-[var(--color-bg3)] px-2 py-1.5">
                       <Server size={13} className="shrink-0 text-[var(--color-brand)]" />
@@ -143,9 +146,26 @@ export function RemoteConnectModal({ open, onClose, onPick }: Props) {
                     </div>
                   ))}
                 </div>
-                <div className="my-1 border-t border-[var(--color-line2)]" />
+                <button
+                  onClick={() => setShowForm(true)}
+                  className="mt-1 w-full flex items-center justify-center gap-1.5 px-2 py-2 rounded-md border border-dashed border-[var(--color-line2)] text-[12px] text-[var(--color-fg2)] hover:text-[var(--color-fg)] hover:border-[var(--color-fg3)] cursor-pointer"
+                >
+                  <Plus size={13} /> New connection
+                </button>
+                <div className="flex justify-end pt-1">
+                  <button onClick={onClose} className="px-3 py-1.5 text-[12px] text-[var(--color-fg2)] hover:text-[var(--color-fg)] rounded-md cursor-pointer">Cancel</button>
+                </div>
               </div>
-            )}
+            ) : (
+              <>
+                {saved.length > 0 && (
+                  <button
+                    onClick={() => setShowForm(false)}
+                    className="flex items-center gap-1.5 w-fit text-[11.5px] text-[var(--color-fg2)] hover:text-[var(--color-fg)] cursor-pointer"
+                  >
+                    <ArrowLeft size={13} /> Saved connections
+                  </button>
+                )}
             <div className="grid grid-cols-[1fr_88px] gap-2">
               <label className="grid gap-1">
                 <span className="u-eyebrow">Host</span>
@@ -215,6 +235,8 @@ export function RemoteConnectModal({ open, onClose, onPick }: Props) {
                 Connect
               </button>
             </div>
+              </>
+            )}
           </div>
         ) : (
           <div className="flex flex-col">
