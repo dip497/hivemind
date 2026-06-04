@@ -17,6 +17,7 @@ export function ToolIsland({
   onAgentChange,
   onSpawnAgent,
   onFrame,
+  onBrowser,
 }: {
   repoPath: string | null;
   onToggle: (k: "tree" | "shell" | "diff" | "issues") => void;
@@ -25,6 +26,7 @@ export function ToolIsland({
   onAgentChange: (id: string) => void;
   onSpawnAgent: (agent: { id: string; cmd: string; defaultArgs?: string[]; label: string }) => void;
   onFrame: () => void;
+  onBrowser: () => void;
 }) {
   const enabled = AGENTS.filter((a) => a.enabled);
   const sel = agentById(agentSel) ?? enabled[0]!;
@@ -78,6 +80,8 @@ export function ToolIsland({
       <div className="mx-0.5 h-5 w-px bg-[var(--color-line2)]" aria-hidden />
       <ToolButton label="Frame" hint="6" onClick={onFrame}
         icon={<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M5 2v12M11 2v12M2 5h12M2 11h12" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>} />
+      <ToolButton label="Browser" hint="7" onClick={onBrowser}
+        icon={<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.2"/><ellipse cx="8" cy="8" rx="2.6" ry="6" stroke="currentColor" strokeWidth="1.1"/><path d="M2 8h12" stroke="currentColor" strokeWidth="1.1"/></svg>} />
     </div>
   );
 }

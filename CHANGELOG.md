@@ -7,6 +7,9 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Added
+- **Browser in the tool island.** The top-center tool island now has a **Browser** button (hotkey `7`) alongside terminal / agent / explorer / diff / issues / frame — the Browser tile was previously only reachable via the hidden `7` key or a frame's **+** menu. `apps/desktop/src/renderer/src/{canvas-islands,Canvas}.tsx`.
+
 ### Fixed
 - **Diff tile no longer crashes on remote frames** with `CodeView.addItem: duplicate id …`. A malformed/duplicate git path (seen over SSH) produced two CodeView items with the same id, which threw and took down the whole tile. Items are now de-duped by id (first wins, dev-warns) so a duplicate degrades instead of crashing. `apps/desktop/src/renderer/src/DiffTile.tsx`.
 - **Diff tile listed untracked directories as empty `+0 -0` rows.** `git status` collapses an untracked directory into one `dir/` entry, which the diff rendered as an undiffable blank. Status now uses `--untracked-files=all` so each new file is a real new-file diff. `apps/desktop/src/main/git-adapter.ts`.

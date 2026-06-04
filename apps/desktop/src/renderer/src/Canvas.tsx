@@ -895,6 +895,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
               onAgentChange={setAgentSel}
               onSpawnAgent={(a) => spawnAgent(a)}
               onFrame={addFrame}
+              onBrowser={() => spawnInto("browser")}
             />
           </Panel>
 
