@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+<title>hivemind — Infinite canvas for Claude Code &amp; AI coding agents</title>
+<meta name="description" content="hivemind is an open-source infinite canvas for Claude Code and AI coding agents. Run claude, codex, gemini and opencode in parallel across git worktrees and remote SSH hosts, watch every diff live, and track work with a markdown Kanban board agents read and update over MCP. Local-first, no cloud, Linux." />
+<link rel="canonical" href="https://dip497.github.io/hivemind/" />
+<meta name="keywords" content="claude code canvas, gui for claude code, ai coding agents, run multiple claude agents in parallel, tmux for ai agents, infinite canvas, mcp server, git worktree, codex, gemini cli, opencode, agent orchestration, local-first" />
+
+<!-- Open Graph / Twitter -->
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://dip497.github.io/hivemind/" />
+<meta property="og:title" content="hivemind — Infinite canvas for Claude Code & AI coding agents" />
+<meta property="og:description" content="Run claude, codex, gemini and opencode in parallel on one infinite canvas — git worktrees, remote SSH, live diffs, and a markdown Kanban board agents update over MCP. Local-first, open source." />
+<meta property="og:image" content="https://raw.githubusercontent.com/dip497/hivemind/main/screenshots/canvas.png" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="hivemind — Infinite canvas for Claude Code & AI coding agents" />
+<meta name="twitter:description" content="Run claude, codex, gemini and opencode in parallel on one infinite canvas. Local-first, open source." />
+<meta name="twitter:image" content="https://raw.githubusercontent.com/dip497/hivemind/main/screenshots/canvas.png" />
+
+<link rel="icon" type="image/png" href="https://raw.githubusercontent.com/dip497/hivemind/main/assets/icon.png" />
+
+<!-- Structured data: helps Google rich results + answer engines (Perplexity/Exa) cite us -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "hivemind",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "Linux",
+  "description": "An infinite canvas for Claude Code and AI coding agents. Run claude, codex, gemini and opencode in parallel across git worktrees and remote SSH hosts, with live diffs and a markdown Kanban board agents update over MCP.",
+  "url": "https://dip497.github.io/hivemind/",
+  "downloadUrl": "https://github.com/dip497/hivemind/releases",
+  "license": "https://opensource.org/licenses/MIT",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Is there a canvas or GUI for Claude Code?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes. hivemind is an open-source infinite canvas for Claude Code and other AI coding agents. Each agent runs in a real terminal tile, and you arrange terminals, live diffs, a file tree, a code editor, an issues board and a web browser freely on one zoomable canvas, one per project." }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I run multiple AI coding agents in parallel?",
+      "acceptedAnswer": { "@type": "Answer", "text": "In hivemind you bind each frame on the canvas to a local repo, a git worktree, or a remote SSH host, then spawn an agent per frame. Several agents work side by side, each scoped to its own directory, branch and issues, and you watch every diff update live." }
+    },
+    {
+      "@type": "Question",
+      "name": "Is hivemind like tmux for AI agents?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Same idea (many agents, one screen) but with the structure agents need: a diff tile next to each terminal, an issues board they read and update over MCP, git worktrees as nested frames, and sessions that survive the window and resume after a reboot." }
+    },
+    {
+      "@type": "Question",
+      "name": "Which AI coding agents does hivemind support?",
+      "acceptedAnswer": { "@type": "Answer", "text": "claude (Claude Code), codex, gemini and opencode out of the box. The agent registry takes one entry per CLI, so any terminal-native coding agent can be added." }
+    },
+    {
+      "@type": "Question",
+      "name": "Is hivemind local-first and private?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes. Everything runs on your machine, the project data is plain markdown files on your disk, there is no telemetry and no cloud account, and agents use your existing CLI login." }
+    }
+  ]
+}
+</script>
+
+<style>
+  :root{
+    --bg:#0C0D11; --bg2:#14161D; --fg:#F3EFE6; --muted:#A6ACB8;
+    --honey:#E8B24A; --bright:#F6CF6B; --teal:#54C6AC; --line:#2A2E37;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:radial-gradient(120% 90% at 50% 0%, #14161D 0%, #0C0D11 60%);
+    color:var(--fg); font:16px/1.6 Inter,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--honey); text-decoration:none}
+  a:hover{text-decoration:underline}
+  code,pre{font-family:"JetBrains Mono","SF Mono",Menlo,Consolas,monospace}
+  .wrap{max-width:1040px; margin:0 auto; padding:0 24px}
+  header{padding:80px 0 40px; text-align:center}
+  header img.logo{width:96px; height:96px; border-radius:22px}
+  h1{font-size:clamp(34px,6vw,60px); font-weight:800; letter-spacing:-1.5px; margin:22px 0 10px; line-height:1.08}
+  h1 .accent{color:var(--honey)}
+  .tagline{font-size:clamp(17px,2.4vw,22px); color:var(--muted); max-width:760px; margin:0 auto 26px}
+  .badges{display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-bottom:26px}
+  .badges img{height:22px}
+  .cta{display:inline-flex; gap:10px; align-items:center; background:var(--honey); color:#1a1300;
+    font-weight:700; padding:13px 24px; border-radius:11px; font-size:16px}
+  .cta.ghost{background:transparent; color:var(--fg); border:1px solid var(--line)}
+  .cta-row{display:flex; gap:12px; justify-content:center; flex-wrap:wrap}
+  .shot{margin:48px 0; border-radius:16px; overflow:hidden; border:1px solid var(--line);
+    box-shadow:0 40px 120px rgba(0,0,0,.55)}
+  .shot img{display:block; width:100%}
+  .cap{color:var(--muted); font-size:14px; text-align:center; margin-top:-32px; margin-bottom:48px}
+  section{padding:36px 0; border-top:1px solid var(--line)}
+  h2{font-size:clamp(24px,4vw,34px); font-weight:800; letter-spacing:-.6px; margin:0 0 22px}
+  .grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:18px}
+  .card{background:var(--bg2); border:1px solid var(--line); border-radius:13px; padding:20px}
+  .card h3{margin:0 0 8px; font-size:18px; color:var(--bright)}
+  .card p{margin:0; color:var(--muted); font-size:15px}
+  .faq h3{font-size:18px; margin:24px 0 6px}
+  .faq p{color:var(--muted); margin:0 0 4px}
+  pre.install{background:#070809; border:1px solid var(--line); border-radius:12px; padding:18px 20px;
+    overflow:auto; color:var(--teal); font-size:14px; max-width:760px; margin:0 auto}
+  footer{padding:48px 0 80px; text-align:center; color:var(--muted); font-size:14px}
+  .gallery{display:grid; grid-template-columns:1fr 1fr; gap:16px}
+  .gallery img{width:100%; border-radius:12px; border:1px solid var(--line)}
+  @media(max-width:640px){ .gallery{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+
+<header class="wrap">
+  <img class="logo" src="https://raw.githubusercontent.com/dip497/hivemind/main/assets/icon.png" alt="hivemind logo — two stacked canvas frames holding a lit honeycomb" />
+  <h1>An infinite canvas for <span class="accent">Claude Code</span><br/>&amp; AI coding agents</h1>
+  <p class="tagline">Drop <code>claude</code>, <code>codex</code>, <code>gemini</code> or <code>opencode</code> into real workspaces and run them in parallel — across git worktrees and remote SSH hosts. Watch every diff live. Track work with a Kanban board that's just markdown on disk, which agents read and update over MCP.</p>
+  <div class="badges">
+    <img src="https://img.shields.io/github/v/release/dip497/hivemind?color=success" alt="latest release" />
+    <img src="https://img.shields.io/github/stars/dip497/hivemind?style=flat" alt="GitHub stars" />
+    <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT license" />
+    <img src="https://img.shields.io/badge/platform-Linux%20x86__64-blue.svg" alt="Linux x86_64" />
+  </div>
+  <div class="cta-row">
+    <a class="cta" href="https://github.com/dip497/hivemind">★ Star on GitHub</a>
+    <a class="cta ghost" href="#install">Install</a>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="shot">
+    <img src="https://raw.githubusercontent.com/dip497/hivemind/main/screenshots/canvas.png" alt="The full hivemind canvas — an issues board, a code editor, a live git diff, and two AI coding agent terminals, all on one infinite canvas" />
+  </div>
+  <p class="cap">One infinite canvas per repo. Every tile is live — agent terminals, diffs that update as the agent edits, a file tree, an editor, an issues board, even a real browser.</p>
+</div>
+
+<section class="wrap">
+  <h2>Why hivemind</h2>
+  <p style="color:var(--muted);max-width:820px">Running a coding agent in a bare terminal throws away everything around the work — which task it's on, what it changed, the session when you close the window. The moment you want a second agent on a second branch you're juggling tmux panes. hivemind makes the <strong>project</strong> the unit of work, not the terminal: one canvas per repo, several agents in parallel, each scoped to its own directory, branch and issues.</p>
+  <div class="grid" style="margin-top:24px">
+    <div class="card"><h3>Agents in real terminals</h3><p>Full PTY tiles for claude, codex, gemini, opencode — not chat boxes. Sessions survive the window and resume after a reboot.</p></div>
+    <div class="card"><h3>Parallel by worktree &amp; SSH</h3><p>Bind a frame to a local repo, a git worktree, or a remote SSH host. Run agents side by side without conflicts.</p></div>
+    <div class="card"><h3>Live diffs</h3><p>A diff tile next to each terminal updates as the agent edits — split or unified, line comments you can send straight back.</p></div>
+    <div class="card"><h3>Kanban PM you can <code>cat</code></h3><p>Issues, acceptance criteria, cycles and an activity log as plain markdown under <code>.hivemind/</code>. No DB, no API.</p></div>
+    <div class="card"><h3>Agents update it over MCP</h3><p>A small MCP server lets an agent pick up an issue, flip its state, tick acceptance criteria, and comment its progress.</p></div>
+    <div class="card"><h3>Local-first</h3><p>Everything on your machine. No telemetry, no cloud account, no SDK lock-in — agents use your existing CLI login.</p></div>
+  </div>
+</section>
+
+<section class="wrap">
+  <h2>See it</h2>
+  <div class="gallery">
+    <img src="https://raw.githubusercontent.com/dip497/hivemind/main/screenshots/board.png" alt="Kanban issues board backed by markdown files in hivemind" />
+    <img src="https://raw.githubusercontent.com/dip497/hivemind/main/screenshots/diff.png" alt="Live git diff of an AI agent's fix in hivemind" />
+    <img src="https://raw.githubusercontent.com/dip497/hivemind/main/screenshots/explorer.png" alt="File explorer and diff side by side in hivemind" />
+    <img src="https://raw.githubusercontent.com/dip497/hivemind/main/screenshots/new-issue.png" alt="Creating an issue that lives as a markdown file in hivemind" />
+  </div>
+</section>
+
+<section class="wrap" id="install">
+  <h2>Install</h2>
+  <p style="color:var(--muted);text-align:center;margin-bottom:18px">Linux x86_64. No build toolchain — the installer pulls prebuilt binaries from the latest GitHub Release.</p>
+  <pre class="install">bash &lt;(curl -fsSL https://raw.githubusercontent.com/dip497/hivemind/main/install.sh)</pre>
+  <p style="color:var(--muted);text-align:center;margin-top:18px"><a href="https://github.com/dip497/hivemind#quick-start">Quick start &amp; docs →</a></p>
+</section>
+
+<section class="wrap faq">
+  <h2>FAQ</h2>
+  <h3>Is there a canvas or GUI for Claude Code?</h3>
+  <p>Yes — hivemind is an infinite canvas for Claude Code and other AI coding agents. Each agent runs in a real terminal tile, alongside diffs, a file tree, an editor, an issues board and a browser, on one zoomable canvas per project.</p>
+  <h3>How do I run multiple AI coding agents in parallel?</h3>
+  <p>Bind each frame to a local repo, a git worktree, or a remote SSH host, then spawn an agent per frame. They work side by side — each scoped to its own directory, branch and issues — and you watch every diff update live.</p>
+  <h3>Is it like tmux for AI agents?</h3>
+  <p>Same idea, many agents on one screen, but with the structure agents need: a diff next to each terminal, a markdown issues board they update over MCP, worktrees as nested frames, and sessions that resume after a reboot.</p>
+  <h3>Which agents are supported?</h3>
+  <p><code>claude</code>, <code>codex</code>, <code>gemini</code> and <code>opencode</code> out of the box; any terminal-native coding agent can be added.</p>
+  <h3>Is it local-first and private?</h3>
+  <p>Yes. Everything runs locally, the data is files on your disk, there's no telemetry, and agents use your existing CLI login — no extra API keys.</p>
+</section>
+
+<footer class="wrap">
+  <a href="https://github.com/dip497/hivemind">github.com/dip497/hivemind</a> · MIT · Local-first · Open source<br/>
+  An open-source infinite canvas for Claude Code, Codex, Gemini &amp; OpenCode.
+</footer>
+
+</body>
+</html>
