@@ -5,45 +5,88 @@
  * adapters driven entirely by props / react-flow's camera API — they hold no
  * Canvas state, so they live here to keep Canvas.tsx focused on orchestration.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useReactFlow, useStore } from "@xyflow/react";
-import { AgentIcon } from "./agents";
+import { AGENTS, AgentIcon, agentById } from "./agents";
 
-/** Top-center tool island — spawn terminal/claude/editor/diff/issues/frame. */
+/** Top-center tool island — spawn terminal/agent/editor/diff/issues/frame. */
 export function ToolIsland({
   repoPath,
   onToggle,
-  onClaude,
+  agentSel,
+  onAgentChange,
+  onSpawnAgent,
   onFrame,
   claudeMode,
   onClaudeModeChange,
 }: {
   repoPath: string | null;
   onToggle: (k: "tree" | "shell" | "diff" | "issues") => void;
-  onClaude: () => void;
+  /** Currently-selected agent id (which the spawn button creates). */
+  agentSel: string;
+  onAgentChange: (id: string) => void;
+  onSpawnAgent: (agent: { id: string; cmd: string; defaultArgs?: string[]; label: string }) => void;
   onFrame: () => void;
   claudeMode: string;
   onClaudeModeChange: (m: string) => void;
 }) {
+  const enabled = AGENTS.filter((a) => a.enabled);
+  const sel = agentById(agentSel) ?? enabled[0]!;
+  const [agentMenu, setAgentMenu] = useState(false);
+  const agentBtnRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!agentMenu) return;
+    const onDoc = (e: MouseEvent) => { if (agentBtnRef.current && !agentBtnRef.current.contains(e.target as Node)) setAgentMenu(false); };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [agentMenu]);
+
   return (
     <div className="hm-island flex items-center gap-0.5 p-1.5">
       <ToolButton label="Terminal" hint="1" onClick={() => onToggle("shell")}
         icon={<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M4 6l2 2-2 2M8 10h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>} />
-      <ToolButton label="Claude" hint="2" onClick={onClaude}
-        icon={<AgentIcon id="claude" size={15} />} />
-      <select
-        value={claudeMode}
-        onChange={(e) => onClaudeModeChange(e.target.value)}
-        title="Claude permission mode for new sessions"
-        className="h-7 bg-[var(--color-bg)] border border-[var(--color-line2)] rounded-md text-[10px] font-mono text-[var(--color-fg2)] px-1 outline-none cursor-pointer hover:text-[var(--color-fg)]"
-      >
-        <option value="default">default</option>
-        <option value="plan">plan</option>
-        <option value="acceptEdits">acceptEdits</option>
-        <option value="auto">auto</option>
-        <option value="dontAsk">dontAsk</option>
-        <option value="bypassPermissions">bypass</option>
-      </select>
+      {/* Agent button — spawns the SELECTED agent; the ▾ opens a switcher. */}
+      <div ref={agentBtnRef} className="relative flex items-center">
+        <ToolButton label={sel.label} hint="2" onClick={() => onSpawnAgent(sel)} icon={<AgentIcon id={sel.id} size={15} />} />
+        <button
+          onClick={() => setAgentMenu((o) => !o)}
+          title="Switch agent"
+          aria-label="switch agent"
+          className="grid place-items-center h-9 w-4 -ml-1 text-[var(--color-fg3)] hover:text-[var(--color-fg)] cursor-pointer"
+        >
+          <svg width="8" height="8" viewBox="0 0 10 10"><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" /></svg>
+        </button>
+        {agentMenu && (
+          <div className="absolute top-full left-0 mt-1 z-30 min-w-[140px] hm-island rounded-lg p-1">
+            {enabled.map((a) => (
+              <button
+                key={a.id}
+                onClick={() => { onAgentChange(a.id); setAgentMenu(false); }}
+                className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[12px] text-left cursor-pointer hover:bg-[var(--color-bg4)] ${a.id === sel.id ? "text-[var(--color-fg)]" : "text-[var(--color-fg2)]"}`}
+              >
+                <a.icon size={14} />
+                <span className="flex-1">{a.label}</span>
+                {a.id === sel.id && <span className="text-[var(--color-fg3)] text-[10px]">✓</span>}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      {sel.id === "claude" && (
+        <select
+          value={claudeMode}
+          onChange={(e) => onClaudeModeChange(e.target.value)}
+          title="Claude permission mode for new sessions"
+          className="h-7 bg-[var(--color-bg)] border border-[var(--color-line2)] rounded-md text-[10px] font-mono text-[var(--color-fg2)] px-1 outline-none cursor-pointer hover:text-[var(--color-fg)]"
+        >
+          <option value="default">default</option>
+          <option value="plan">plan</option>
+          <option value="acceptEdits">acceptEdits</option>
+          <option value="auto">auto</option>
+          <option value="dontAsk">dontAsk</option>
+          <option value="bypassPermissions">bypass</option>
+        </select>
+      )}
       <div className="mx-0.5 h-5 w-px bg-[var(--color-line2)]" aria-hidden />
       <ToolButton label="Explorer" hint="3" disabled={!repoPath} onClick={() => onToggle("tree")}
         icon={<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M2 4.5C2 3.7 2.7 3 3.5 3h3l1.5 1.5h4.5c.8 0 1.5.7 1.5 1.5v5.5c0 .8-.7 1.5-1.5 1.5h-9C2.7 13 2 12.3 2 11.5v-7Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>} />

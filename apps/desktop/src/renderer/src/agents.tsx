@@ -34,7 +34,28 @@ function ClaudeIcon({ size = 16, className }: { size?: number; className?: strin
   );
 }
 
-/** A generic agent mark for tools without a bundled logo yet (codex/gemini/…). */
+/** Codex — geometric hexagon mark (placeholder until the official logo is
+ *  bundled; swap the `icon` in the registry entry to replace). */
+function CodexIcon({ size = 16, className }: { size?: number; className?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" className={className} aria-hidden>
+      <path d="M8 1.6 13.5 4.8v6.4L8 14.4 2.5 11.2V4.8z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+      <circle cx="8" cy="8" r="2" fill="currentColor" />
+    </svg>
+  );
+}
+
+/** opencode — bracketed cursor-block mark (placeholder; see CodexIcon). */
+function OpencodeIcon({ size = 16, className }: { size?: number; className?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" className={className} aria-hidden>
+      <path d="M5.5 3 2.5 8l3 5M10.5 3l3 5-3 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+      <rect x="6.8" y="6.8" width="2.4" height="2.4" rx="0.4" fill="currentColor" />
+    </svg>
+  );
+}
+
+/** A generic agent mark for tools without a bundled logo yet (gemini/…). */
 function GenericAgentIcon({ size = 16, className }: { size?: number; className?: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" fill="none" className={className} aria-hidden>
@@ -55,10 +76,10 @@ export const AGENTS: AgentDef[] = [
   { id: "claude", label: "Claude", cmd: "claude", icon: ClaudeIcon, enabled: true },
   // Codex: safe interactive default — works in the workspace, asks before risky
   // / out-of-sandbox actions (status detection handles the approval prompts).
-  { id: "codex", label: "Codex", cmd: "codex", defaultArgs: ["--sandbox", "workspace-write", "--ask-for-approval", "on-request"], icon: GenericAgentIcon, enabled: true },
+  { id: "codex", label: "Codex", cmd: "codex", defaultArgs: ["--sandbox", "workspace-write", "--ask-for-approval", "on-request"], icon: CodexIcon, enabled: true },
   // opencode: permission model is config-driven (opencode.json), so no default
   // flags. Note: its TUI has no CLI resume — reopen sessions via its in-app list.
-  { id: "opencode", label: "opencode", cmd: "opencode", icon: GenericAgentIcon, enabled: true },
+  { id: "opencode", label: "opencode", cmd: "opencode", icon: OpencodeIcon, enabled: true },
   { id: "gemini", label: "Gemini", cmd: "gemini", icon: GenericAgentIcon, enabled: false },
 ];
 

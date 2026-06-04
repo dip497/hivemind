@@ -18,7 +18,7 @@ import type { TileKind } from "./tile-kinds";
 const SINGLETON_KINDS: ReadonlySet<TileKind> = new Set(["editor", "diff", "issues"]);
 
 type FocusReq = { id: string; cx: number; cy: number; n: number } | null;
-type SpawnPick = { kind: TileKind; mode?: string; work?: string } | null;
+type SpawnPick = { kind: TileKind; mode?: string; work?: string; agent?: { id: string; cmd: string; args?: string[]; label: string } } | null;
 
 export interface SpawnCtx {
   repoPath: string | null;
@@ -243,7 +243,7 @@ export function useSpawn(ctx: SpawnCtx) {
   // selection IS the target: a selected frame — or the frame holding the
   // selected tile — spawns straight in, no picker. Only ask when nothing is
   // selected to disambiguate AND 2+ frames exist.
-  const spawnInto = useCallback((kind: TileKind, opts?: { mode?: string; work?: string }) => {
+  const spawnInto = useCallback((kind: TileKind, opts?: { mode?: string; work?: string; agent?: { id: string; cmd: string; args?: string[]; label: string } }) => {
     const selTile = selectedTileIdRef.current;
     const selFrame =
       selectedFrameIdRef.current ?? (selTile ? frameOfRef.current[selTile] ?? null : null);
@@ -252,11 +252,18 @@ export function useSpawn(ctx: SpawnCtx) {
       return;
     }
     if (framesRef.current.length >= 2) {
-      setSpawnPick({ kind, mode: opts?.mode, work: opts?.work });
+      setSpawnPick({ kind, mode: opts?.mode, work: opts?.work, agent: opts?.agent });
       return;
     }
     spawnTile(kind, ensureFrame().id, opts);
   }, [spawnTile, ensureFrame]);
+
+  // Spawn a registry agent from a global surface (the tool island). claude keeps
+  // its permission-mode path; other agents carry their registry cmd/flags.
+  const spawnAgent = useCallback((agent: { id: string; cmd: string; defaultArgs?: string[]; label: string }, mode?: string) => {
+    if (agent.id === "claude") { spawnInto("claude", { mode }); return; }
+    spawnInto("claude", { agent: { id: agent.id, cmd: agent.cmd, args: agent.defaultArgs, label: agent.label } });
+  }, [spawnInto]);
 
   // Back-compat thin wrappers for the many existing call sites.
   const spawnClaude = useCallback(
@@ -285,5 +292,5 @@ export function useSpawn(ctx: SpawnCtx) {
     spawnTile(k, frameId);
   }, [spawnTile]);
 
-  return { placeInFrame, ensureFrame, spawnTile, spawnInto, spawnClaude, spawnVis, frameOpen };
+  return { placeInFrame, ensureFrame, spawnTile, spawnInto, spawnClaude, spawnAgent, spawnVis, frameOpen };
 }

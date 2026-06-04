@@ -472,13 +472,18 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     () => localStorage.getItem("hivemind:claude-mode") || "default",
   );
   useEffect(() => { localStorage.setItem("hivemind:claude-mode", claudeMode); }, [claudeMode]);
+  // Which agent the tool island's spawn button creates (claude / codex / …).
+  const [agentSel, setAgentSel] = useState<string>(
+    () => localStorage.getItem("hivemind:agent-sel") || "claude",
+  );
+  useEffect(() => { localStorage.setItem("hivemind:agent-sel", agentSel); }, [agentSel]);
 
   // Monotonic session counter — `xs.length + 1` produced DUPLICATE labels
   // (#3, #3) after kill+respawn. This only ever increases.
   const claudeSeqRef = useRef(0);
   // Spawn-target picker: when 2+ workspaces (base + workspace-zone frames) live
   // on the canvas, ask WHERE a new claude should run instead of guessing.
-  const [spawnPick, setSpawnPick] = useState<{ kind: TileKind; mode?: string; work?: string } | null>(null);
+  const [spawnPick, setSpawnPick] = useState<{ kind: TileKind; mode?: string; work?: string; agent?: { id: string; cmd: string; args?: string[]; label: string } } | null>(null);
   // Text awaiting a claude target — set when something wants to deliver a prompt
   // ("Work on this", diff "send review") and 2+ claude tiles exist, so the user
   // picks WHICH claude (or a new one). 0 claude → spawn new directly; the picker
@@ -504,7 +509,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // grown frame never overlaps a neighbour. We only pick the new tile's slot.
   // Tile spawning + in-frame placement (placeInFrame / ensureFrame / spawnTile
   // + spawnInto/spawnClaude/spawnVis/frameOpen). See useSpawn.
-  const { spawnTile, spawnClaude, spawnVis, frameOpen } = useSpawn({
+  const { spawnTile, spawnClaude, spawnAgent, spawnVis, frameOpen } = useSpawn({
     repoPath, claudeMode,
     positionsRef, sizesRef, tilesRef, frameOfRef, framesRef, selectedFrameIdRef,
     selectedTileIdRef, repoPathRef, rootRef, lastActiveFrameRef, claudeSeqRef,
@@ -878,7 +883,9 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
             <ToolIsland
               repoPath={repoPath}
               onToggle={(k) => spawnVis(k)}
-              onClaude={() => spawnClaude()}
+              agentSel={agentSel}
+              onAgentChange={setAgentSel}
+              onSpawnAgent={(a) => spawnAgent(a, claudeMode)}
               onFrame={addFrame}
               claudeMode={claudeMode}
               onClaudeModeChange={setClaudeMode}
@@ -945,7 +952,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
                       <button
                         key={f.id}
                         autoFocus={isSel}
-                        onClick={() => { spawnTile(spawnPick.kind, f.id, { mode: spawnPick.mode, work: spawnPick.work }); setSpawnPick(null); }}
+                        onClick={() => { spawnTile(spawnPick.kind, f.id, { mode: spawnPick.mode, work: spawnPick.work, agent: spawnPick.agent }); setSpawnPick(null); }}
                         className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[12px] text-[var(--color-fg)] hover:bg-[var(--color-bg3)] transition-colors ${
                           isSel ? "bg-[var(--color-bg3)] ring-1 ring-[var(--color-brand)]" : ""
                         }`}
