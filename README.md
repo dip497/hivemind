@@ -14,6 +14,40 @@ Local-first. Markdown-backed. No SDK lock-in. No telemetry. No cloud.
 
 ---
 
+## Demo
+
+> One infinite canvas per repo. Every tile is live — terminals running agents,
+> a diff that updates as they edit, a file tree, an issues board. Group them
+> into **frames** (workspaces), bind each frame to a local repo, a git worktree,
+> or a **remote SSH host**, and watch several agents work in parallel.
+
+<p align="center">
+  <img src="screenshots/08-final.png" alt="hivemind canvas — multiple agent tiles, diff, and issues board on one infinite canvas" width="900" />
+</p>
+
+<table>
+  <tr>
+    <td width="50%"><img src="screenshots/07-all-working.png" alt="Several claude tiles working in parallel inside a frame" /><br/><sub><b>Agents in parallel</b> — each in its own PTY tile, status dots live on the frame header.</sub></td>
+    <td width="50%"><img src="screenshots/04-tree-claude.png" alt="File tree + editor + claude side by side" /><br/><sub><b>Editor + tree + agent</b> — open files, see edits land in the diff next door.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="screenshots/01-default-board.png" alt="Plane-style issues board" /><br/><sub><b>Issues board</b> — Plane-style cards backed by plain markdown on disk.</sub></td>
+    <td width="50%"><img src="screenshots/10-new-modal.png" alt="New issue modal" /><br/><sub><b>Create an issue</b> — then hand it to an agent with one click (<b>▶ Work on this</b>).</sub></td>
+  </tr>
+</table>
+
+**60-second tour**
+
+1. `hivemind .` in any repo → an infinite canvas opens, scoped to that project.
+2. Press `⌘\` → a `claude` tile spawns in the frame, running in the repo's `cwd`.
+3. Click **▶ Work on this** on an issue → the agent spawns pre-loaded with the
+   issue and the full MCP tool surface; it works, you watch the diff update live.
+4. Click a frame's **worktree** button to spin a branch into a nested sub-frame,
+   or **remote** to bind the frame to a directory on an SSH host — the same
+   terminals, editor, and diff, now running on that machine.
+
+---
+
 ## What it is
 
 A desktop app — Electron + an infinite [xyflow](https://reactflow.dev) canvas — where every tile is a live terminal, a code diff, a file tree, or an issues board, and every tile belongs to a **frame** (a named workspace bound to a real repo on disk). Spawn a `claude` inside a frame: it runs in that repo's `cwd`, sees that repo's issues, and writes changes that show up live in the diff tile next door.
@@ -88,8 +122,11 @@ In the canvas:
 
 | | |
 |---|---|
-| **Canvas-per-project** | One infinite canvas per repo. Frames bind to a workspace path so multiple repos can coexist on one screen. |
+| **Canvas-per-project** | One infinite canvas per repo. Frames bind to a workspace path so multiple repos can coexist on one screen. Each frame auto-gets a distinct color. |
 | **First-class agents** | claude / codex / gemini / opencode each run in their own xterm tile with WebGL-accelerated rendering. |
+| **Remote SSH frames** | Bind a frame to a directory on another machine over SSH — its terminals are real PTYs on the host, the editor reads/writes over SFTP, diff/status run `git` on the remote. One pooled `ssh2` connection per host; agent/key auth; TOFU host keys. |
+| **Git worktrees as sub-frames** | Attach a branch worktree → a nested sub-frame scoped to that branch. Line several branches up side by side and arrange them as columns. |
+| **Layers + arrange** | A Figma-style layers rail lists every tile grouped by frame with live status; opt-in arrange snaps a frame's tiles + worktrees into Columns / Rows / Grid. |
 | **PM you can `cat`** | Issues, cycles, activity log are markdown files with YAML frontmatter under `.hivemind/`. No DB, no API. |
 | **MCP integration** | `.mcp.json` autowires a 9-tool stdio MCP server so claude can `get_issue`, `set_state`, `add_comment`, `mark_acceptance` etc. directly from inside its tile. |
 | **Persistent terminals** | Detached PTY daemon survives the window. Headless xterm + SerializeAddon for replay. Disk snapshots for reboot survival. |
@@ -117,7 +154,9 @@ apps/
                  ├─ FileTreeTile project explorer
                  ├─ EditorTile   CodeMirror tabs
                  ├─ IssuesTile   Plane-style cards
-                 ├─ FrameNode    workspace zones (bind repo)
+                 ├─ FrameNode    workspace zones (bind repo / worktree / remote)
+                 ├─ LayersPanel  Figma-style tile rail grouped by frame
+                 ├─ main/remote/ ssh2 transport — remote PTY + SFTP + git
                  └─ pty-daemon   detached node-pty + headless-xterm snapshots
 
 packages/
