@@ -108,6 +108,11 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
     () => localStorage.getItem("hivemind:review-open") === "1",
   );
   useEffect(() => { localStorage.setItem("hivemind:review-open", reviewOpen ? "1" : "0"); }, [reviewOpen]);
+  // File-list sidebar (GitHub-style changed-files tree) open state — persisted.
+  const [filesOpen, setFilesOpen] = useState<boolean>(
+    () => localStorage.getItem("hivemind:diff-files-open") !== "0",
+  );
+  useEffect(() => { localStorage.setItem("hivemind:diff-files-open", filesOpen ? "1" : "0"); }, [filesOpen]);
   const [viewed, setViewed] = useState<Set<string>>(
     () => new Set(loadJson<string[]>(VIEWED_KEY_PREFIX + repoPath, [])),
   );
@@ -215,6 +220,22 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [baseItems, collapsed, viewed, comments, mode]);
+
+  // Changed-files list for the sidebar tree — path + add/del counts per file.
+  const fileRows = useMemo(
+    () =>
+      baseItems.map((it) => ({
+        id: it.id,
+        file: it.fileDiff.name,
+        adds: it.fileDiff.hunks.reduce((n, h) => n + h.additionLines, 0),
+        dels: it.fileDiff.hunks.reduce((n, h) => n + h.deletionLines, 0),
+      })),
+    [baseItems],
+  );
+  // Jump the CodeView to a file by its item id (`diff:<path>`).
+  const jumpToFile = useCallback((id: string) => {
+    codeViewRef.current?.scrollTo({ type: "item", id, align: "start" });
+  }, []);
 
   // ── in-diff search (codiff's hunk-walk algorithm) ──────────────────────
   // Walks each fileDiff's hunks → hunkContent blocks, mapping array indices
@@ -575,8 +596,19 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
           )}
           <button
             className={`nodrag inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] transition-colors ${
+              filesOpen
+                ? "border-[var(--color-line2)] bg-[var(--color-bg4)] text-[var(--color-fg)]"
+                : "border-[var(--color-line2)] text-[var(--color-fg3)] hover:text-[var(--color-fg2)]"
+            }`}
+            onClick={() => setFilesOpen((o) => !o)}
+            title="Toggle the changed-files list"
+          >
+            files
+          </button>
+          <button
+            className={`nodrag inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] transition-colors ${
               reviewOpen
-                ? "border-[var(--color-brand)] text-[var(--color-brand)]"
+                ? "border-[var(--color-line2)] bg-[var(--color-bg4)] text-[var(--color-fg)]"
                 : "border-[var(--color-line2)] text-[var(--color-fg3)] hover:text-[var(--color-fg2)]"
             }`}
             onClick={() => setReviewOpen((o) => !o)}
@@ -605,6 +637,48 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
           min-h-0) without clipping it. */}
       <WorkerPoolContextProvider poolOptions={workerPoolOptions} highlighterOptions={workerHighlighterOptions}>
        <div className="flex-1 min-h-0 flex overflow-hidden">
+        {filesOpen && fileRows.length > 0 && !activeFile && (
+          <aside className="nodrag w-[210px] shrink-0 flex flex-col border-r border-[var(--color-line)] bg-[var(--color-bg2)] overflow-hidden">
+            <div className="h-7 shrink-0 flex items-center gap-1.5 px-2.5 border-b border-[var(--color-line2)] text-[10px] uppercase tracking-wider font-semibold text-[var(--color-fg3)]">
+              Files
+              <span className="ml-auto font-mono tabular-nums text-[var(--color-fg3)]">{viewed.size}/{fileRows.length}</span>
+            </div>
+            <div className="flex-1 overflow-y-auto py-1">
+              {fileRows.map((r) => {
+                const isViewed = viewed.has(r.file);
+                const slash = r.file.lastIndexOf("/");
+                const name = slash === -1 ? r.file : r.file.slice(slash + 1);
+                const dir = slash === -1 ? "" : r.file.slice(0, slash);
+                return (
+                  <div
+                    key={r.id}
+                    onClick={() => jumpToFile(r.id)}
+                    title={r.file}
+                    className="group flex items-center gap-1.5 px-2 py-1 cursor-pointer hover:bg-[var(--color-bg3)]"
+                  >
+                    <button
+                      onClick={(e) => { e.stopPropagation(); toggleViewed(r.file); }}
+                      title={isViewed ? "Mark not reviewed" : "Mark reviewed"}
+                      aria-label={isViewed ? `Mark ${name} not reviewed` : `Mark ${name} reviewed`}
+                      className="shrink-0 size-3.5 grid place-items-center rounded-sm border cursor-pointer"
+                      style={{ background: isViewed ? "var(--color-ok)" : "transparent", borderColor: isViewed ? "var(--color-ok)" : "var(--color-line2)" }}
+                    >
+                      {isViewed && <svg width="9" height="9" viewBox="0 0 10 10" aria-hidden><path d="M2 5L4 7L8 3" stroke="var(--color-bg)" strokeWidth="1.7" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+                    </button>
+                    <div className="min-w-0 flex-1">
+                      <div className={`truncate text-[11.5px] leading-tight ${isViewed ? "text-[var(--color-fg3)] line-through" : "text-[var(--color-fg)]"}`}>{name}</div>
+                      {dir && <div className="truncate text-[9px] text-[var(--color-fg3)] font-mono leading-tight">{dir}</div>}
+                    </div>
+                    <span className="shrink-0 font-mono text-[9px] tabular-nums">
+                      <span className="text-[var(--color-ok)]">+{r.adds}</span>{" "}
+                      <span className="text-[var(--color-err)]">−{r.dels}</span>
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </aside>
+        )}
         <div className="flex-1 min-h-0 flex flex-col overflow-hidden" data-pierre-tile>
           {statusLoading && <div className="p-3 text-[11px] text-[var(--color-fg3)]">loading git status…</div>}
           {statusError && (
