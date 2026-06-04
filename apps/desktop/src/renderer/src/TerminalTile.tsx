@@ -444,6 +444,11 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
         fitRaf = 0;
         try {
           fit.fit();
+          // Anchor to the bottom after a resize so the LATEST output + prompt
+          // stay visible. xterm's reflow can otherwise leave the viewport
+          // scrolled up — shrinking a tile "cropped" the live prompt off the
+          // bottom and showed stale lines instead.
+          term.scrollToBottom();
         } catch {
           /* ignore */
         }

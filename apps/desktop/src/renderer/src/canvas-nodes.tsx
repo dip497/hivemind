@@ -124,25 +124,20 @@ function useTileWheelZoom(selected: boolean): React.RefObject<HTMLDivElement | n
     const onWheel = (e: WheelEvent) => {
       if (e.ctrlKey || e.metaKey) return; // zoom handled by onZoom (capture phase)
       if (selected) {
-        // Selected: this listener runs in the BUBBLE phase (capture:false
-        // below), so xterm/diff/editor has ALREADY received + handled the
-        // wheel (scrollback, or claude's mouse-reporting scroll). We only stop
-        // it bubbling further so react-flow doesn't ALSO pan. Do NOT
-        // stopPropagation in capture here — that would block the event from
-        // ever reaching the terminal and kill scrolling inside claude.
+        // SELECTED tile keeps the wheel for ITS OWN content (terminal
+        // scrollback, diff/editor scroll). This listener is in the BUBBLE phase
+        // (capture:false below), so the tile content already handled the wheel;
+        // we just stop it bubbling so react-flow doesn't ALSO pan.
         e.stopPropagation();
         return;
       }
-      // Unselected → pan the canvas, block the content's own scroll. This
-      // listener runs in the CAPTURE phase so it beats xterm's own wheel
-      // handler to the event.
+      // Unselected → two-finger/wheel pans the canvas (capture phase beats the
+      // tile's own wheel handler).
       e.preventDefault();
       e.stopPropagation();
       const { x, y, zoom } = getViewport();
       setViewport({ x: x - e.deltaX, y: y - e.deltaY, zoom });
     };
-    // Capture phase ONLY when unselected (intercept before the terminal so the
-    // canvas pans). When selected, bubble phase so the terminal scrolls first.
     el.addEventListener("wheel", onWheel, { passive: false, capture: !selected });
 
     // Middle/right-mouse drag pans the canvas EVEN over a tile. react-flow's
@@ -179,7 +174,7 @@ function useTileWheelZoom(selected: boolean): React.RefObject<HTMLDivElement | n
 
     return () => {
       el.removeEventListener("wheel", onZoom, { capture: true });
-      el.removeEventListener("wheel", onWheel, { capture: !selected });
+      el.removeEventListener("wheel", onWheel, { capture: true });
       el.removeEventListener("pointerdown", onDown, { capture: true });
       el.removeEventListener("pointermove", onMove);
       el.removeEventListener("pointerup", endPan);
