@@ -49,8 +49,9 @@ Interpret:
 
 - **`port=` is empty / `cdpEnabled:false` in the file** → the CDP bridge is
   OFF. It is opt-in for safety (a debug port also exposes the app window). Tell
-  the user to **relaunch hivemind with `HIVEMIND_BROWSER_CDP=1`** set in the
-  environment, then retry. Do not try to work around this.
+  the user to enable it: **Settings (gear, top-right) → "Enable agent browser
+  control" → Relaunch to apply** (or set `HIVEMIND_BROWSER_CDP=1` in the
+  environment before launch). Then retry. Do not try to work around this.
 - **`NO_DISCOVERY_FILE` or `tiles: []`** → no Browser tile is open. Ask the user
   to open one (canvas hotkey **`7`**, or a frame's **+ → Browser**), ideally in
   the **same frame** as your tile. Then re-read the file.

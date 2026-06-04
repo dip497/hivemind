@@ -276,6 +276,13 @@ export interface HiveIpc {
    *  (auto-attaches on first use). Navigate / click / read DOM / screenshot /
    *  evaluate — the surface an agent uses to "use" the browser. */
   browserCdp(tileId: string, method: string, params?: Record<string, unknown>): Promise<unknown>;
+  /** Agent-browser bridge settings for the in-app toggle. `active` = live this
+   *  session; `enabled` = persisted choice (applies on next launch). */
+  getBrowserSettings(): Promise<{ active: boolean; enabled: boolean; port: string }>;
+  /** Persist the agent-browser bridge on/off choice (applies after relaunch). */
+  setBrowserCdpEnabled(enabled: boolean): Promise<{ ok: true }>;
+  /** Restart the app so a settings change that needs a fresh launch takes hold. */
+  relaunchApp(): Promise<void>;
 }
 
 /** A notable agent-status transition worth a native OS notification. */

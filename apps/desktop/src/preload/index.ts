@@ -89,6 +89,9 @@ const api: HiveIpc & {
   browserUnregister: (tileId) => ipcRenderer.send("browser:unregister", tileId),
   browserCdp: (tileId, method, params) =>
     ipcRenderer.invoke("browserCdp", tileId, method, params),
+  getBrowserSettings: () => ipcRenderer.invoke("getBrowserSettings"),
+  setBrowserCdpEnabled: (enabled) => ipcRenderer.invoke("setBrowserCdpEnabled", enabled),
+  relaunchApp: () => ipcRenderer.invoke("relaunchApp"),
   onBrowserPopup: (cb) => {
     const listener = (_e: unknown, p: { fromId: number; url: string }) => cb(p);
     ipcRenderer.on("browser:popup", listener);

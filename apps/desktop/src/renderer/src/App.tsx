@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
+import { Plus, Settings } from "lucide-react";
 import path from "path-browserify";
 import {
   inElectron,
@@ -93,6 +93,7 @@ export function App() {
   const [newOpen, setNewOpen] = useState(false);
   const [initing, setIniting] = useState(false);
   const [initOpen, setInitOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const qc = useQueryClient();
 
   // Initialize a .hivemind/ workspace in the current folder (no terminal).
@@ -204,7 +205,7 @@ export function App() {
           root={root}
           onInitWorkspace={!root ? () => setInitOpen(true) : undefined}
         />
-        <div className="absolute top-0 right-0 z-40 flex items-start px-3 py-2.5 pointer-events-none">
+        <div className="absolute top-0 right-0 z-40 flex items-start gap-2 px-3 py-2.5 pointer-events-none">
           {root && (
             <button
               onClick={() => setNewOpen(true)}
@@ -216,6 +217,14 @@ export function App() {
               <kbd className="font-mono text-[9.5px] text-[var(--color-fg3)] ml-0.5">⌘N</kbd>
             </button>
           )}
+          <button
+            onClick={() => setSettingsOpen(true)}
+            className="pointer-events-auto inline-flex items-center justify-center size-8 rounded-lg hm-island text-[var(--color-fg2)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)] transition-colors"
+            title="Settings"
+            aria-label="settings"
+          >
+            <Settings aria-hidden className="size-4" />
+          </button>
         </div>
       </div>
 
@@ -234,6 +243,100 @@ export function App() {
         pending={initing}
         onConfirm={doInitWorkspace}
       />
+      <SettingsModal open={settingsOpen} onOpenChange={setSettingsOpen} />
+    </div>
+  );
+}
+
+/** App settings dialog. Currently houses the agent-browser CDP bridge toggle —
+ *  opt-in because a debug port also exposes the app window. The bridge can only
+ *  be (de)activated at launch, so the toggle persists the choice and offers a
+ *  relaunch to apply it. */
+function SettingsModal({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
+  const [active, setActive] = useState(false);   // live this session
+  const [enabled, setEnabled] = useState(false); // persisted choice
+  const [port, setPort] = useState("9333");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    void window.hive.getBrowserSettings().then((s) => {
+      setActive(s.active);
+      setEnabled(s.enabled);
+      setPort(s.port);
+    }).catch(() => {});
+  }, [open]);
+
+  if (!open) return null;
+  // The toggle is "dirty" when the persisted choice no longer matches what's
+  // actually running — that's exactly when a relaunch is needed.
+  const needsRelaunch = enabled !== active;
+
+  const onToggle = async () => {
+    const next = !enabled;
+    setBusy(true);
+    try { await window.hive.setBrowserCdpEnabled(next); setEnabled(next); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/50" onClick={() => onOpenChange(false)}>
+      <div
+        className="w-[480px] bg-[var(--color-bg2)] border border-[var(--color-line2)] rounded-lg shadow-2xl p-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="text-[15px] font-semibold text-[var(--color-fg)]">Settings</h2>
+
+        <div className="mt-4 flex items-start gap-3">
+          <button
+            role="switch"
+            aria-checked={enabled}
+            disabled={busy}
+            onClick={onToggle}
+            className={`mt-0.5 shrink-0 relative w-9 h-5 rounded-full transition-colors disabled:opacity-50 ${
+              enabled ? "bg-[var(--color-brand)]" : "bg-[var(--color-line2)]"
+            }`}
+            title="Enable agent browser control"
+          >
+            <span className={`absolute top-0.5 size-4 rounded-full bg-white transition-all ${enabled ? "left-[18px]" : "left-0.5"}`} />
+          </button>
+          <div className="min-w-0">
+            <div className="text-[13px] font-medium text-[var(--color-fg)]">Enable agent browser control</div>
+            <p className="mt-1 text-[11.5px] text-[var(--color-fg2)] leading-relaxed">
+              Lets a spawned agent drive a Browser tile (navigate, click, read, screenshot)
+              over the Chrome DevTools Protocol via the <code className="font-mono text-[10.5px] bg-[var(--color-bg3)] px-1 rounded">hive-browser</code> skill.
+            </p>
+            <p className="mt-1.5 text-[11px] text-[var(--color-warn)] leading-relaxed">
+              ⚠ Opens a loopback debug port (127.0.0.1:{port}) that also exposes this app's
+              window to local processes. Only enable it for agents you trust.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 flex items-center justify-between gap-2">
+          <span className="text-[11px] text-[var(--color-fg3)]">
+            {active ? <>Bridge is <b className="text-[var(--color-fg2)]">active</b> this session.</>
+                    : <>Bridge is <b className="text-[var(--color-fg2)]">off</b> this session.</>}
+          </span>
+          <div className="flex gap-2">
+            {needsRelaunch && (
+              <button
+                onClick={() => void window.hive.relaunchApp()}
+                className="px-3 py-1.5 text-[12px] font-medium text-white bg-[var(--color-brand)] rounded hover:opacity-90"
+                title="Restart hivemind to apply"
+              >
+                Relaunch to apply
+              </button>
+            )}
+            <button
+              onClick={() => onOpenChange(false)}
+              className="px-3 py-1.5 text-[12px] text-[var(--color-fg2)] hover:text-[var(--color-fg)] rounded"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

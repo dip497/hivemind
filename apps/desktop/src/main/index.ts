@@ -1,7 +1,7 @@
 /** Electron main process — owns the BrowserWindow + IPC + PtyHost + git/worktree. */
 import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell, webContents } from "electron";
 import path from "node:path";
-import { promises as fsp, statSync } from "node:fs";
+import { promises as fsp, statSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
   commentOnIssue,
@@ -398,6 +398,20 @@ ipcMain.handle(
     return await guest.debugger.sendCommand(method, params ?? {});
   }),
 );
+
+// Agent-browser settings for the in-app toggle. `active` = is the bridge live
+// THIS session (the switch was applied at launch); `enabled` = the persisted
+// choice. They differ between toggling and relaunching, which the UI surfaces.
+ipcMain.handle("getBrowserSettings", () => ({
+  active: process.env.HIVEMIND_BROWSER_CDP === "1",
+  enabled: readSettings().browserCdp === true,
+  port: process.env.HIVEMIND_BROWSER_CDP_PORT ?? "9333",
+}));
+ipcMain.handle("setBrowserCdpEnabled", wrap(async (_e, enabled: boolean) => {
+  writeSettings({ browserCdp: !!enabled });
+  return { ok: true as const };
+}));
+ipcMain.handle("relaunchApp", () => { app.relaunch(); app.exit(0); });
 
 // The repo passed on the CLI (`hivemind .`), or null for a bare launch (then
 // the renderer falls back to its persisted last-project).
@@ -871,10 +885,28 @@ app.commandLine.appendSwitch("max-active-webgl-contexts", "32");
 // $HIVEMIND_BROWSER_CDP_PORT and $HIVEMIND_BROWSER_TARGETS with no extra wiring.
 // SECURITY: a remote-debugging port also exposes the app's OWN window, so this
 // is off by default and bound to 127.0.0.1 — only enable it for agents you trust.
-if (process.env.HIVEMIND_BROWSER_CDP === "1") {
+// Persisted app settings live in <userData>/settings.json. Read SYNC here
+// because the remote-debugging switch must be set before app-ready (it can't be
+// toggled at runtime — that's why the UI toggle persists a choice + relaunches).
+function settingsFile(): string { return path.join(app.getPath("userData"), "settings.json"); }
+function readSettings(): { browserCdp?: boolean } {
+  try { return JSON.parse(readFileSync(settingsFile(), "utf8")) as { browserCdp?: boolean }; }
+  catch { return {}; }
+}
+function writeSettings(patch: Record<string, unknown>): void {
+  let cur: Record<string, unknown> = {};
+  try { cur = JSON.parse(readFileSync(settingsFile(), "utf8")) as Record<string, unknown>; } catch { /* fresh */ }
+  writeFileSync(settingsFile(), JSON.stringify({ ...cur, ...patch }, null, 2));
+}
+// Enable the agent-browser CDP bridge when the env var OR the persisted setting
+// asks for it. The env var stays an escape hatch; the Settings toggle is the
+// normal path. SECURITY: a debug port also exposes the app window, so this is
+// off by default and bound to 127.0.0.1.
+if (process.env.HIVEMIND_BROWSER_CDP === "1" || readSettings().browserCdp === true) {
   const port = process.env.HIVEMIND_BROWSER_CDP_PORT || "9333";
   app.commandLine.appendSwitch("remote-debugging-port", port);
   app.commandLine.appendSwitch("remote-debugging-address", "127.0.0.1");
+  process.env.HIVEMIND_BROWSER_CDP = "1";
   process.env.HIVEMIND_BROWSER_CDP_PORT = port;
   // $HIVEMIND_BROWSER_TARGETS is set post-ready in createWindow (userData path
   // is only reliable then) — before any PTY spawns, so agents still inherit it.
