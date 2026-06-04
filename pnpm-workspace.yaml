@@ -2,6 +2,13 @@ packages:
   - apps/*
   - packages/*
 
+# cpu-features is an OPTIONAL native dep of ssh2 (remote SSH frames) — it only
+# selects a faster cipher when present, and ssh2 falls back to pure JS without
+# it. Its node-gyp build breaks electron-builder's rebuild on CI and source
+# installs ("buildcheck.gypi not found"), so skip installing it entirely.
+ignoredOptionalDependencies:
+  - cpu-features
+
 catalog:
   typescript: 5.9.3
   '@types/node': 22.19.19

@@ -81,9 +81,13 @@ jobs:
         # it and dies on the runner ("buildcheck.gypi not found"). It resolves
         # cpu-features from BOTH the deploy dir and the hoisted workspace-root
         # pnpm store, so nuke every copy in the tree; ssh2 works without it.
+        # Remove the package dirs, the `cpu-features@<ver>` pnpm-store wrappers,
+        # AND the dangling symlinks pnpm leaves in each `.pnpm/node_modules`
+        # (a leftover symlink makes electron-builder ENOENT on stat). After
+        # this, cpu-features is simply an unresolved OPTIONAL dep — non-fatal.
         run: |
-          find "$GITHUB_WORKSPACE" -type d -name cpu-features -prune -exec rm -rf {} + 2>/dev/null || true
-          echo "remaining cpu-features dirs:"; find "$GITHUB_WORKSPACE" -type d -name cpu-features 2>/dev/null || true
+          find "$GITHUB_WORKSPACE" \( -name 'cpu-features' -o -name 'cpu-features@*' \) -prune -exec rm -rf {} + 2>/dev/null || true
+          echo "remaining cpu-features entries:"; find "$GITHUB_WORKSPACE" -name 'cpu-features*' 2>/dev/null || true
 
       - name: Package AppImage
         # Run electron-builder INSIDE the deployed copy so node_modules are
