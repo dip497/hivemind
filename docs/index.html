@@ -19,8 +19,14 @@
 <meta name="twitter:title" content="hivemind — Infinite canvas for Claude Code & AI coding agents" />
 <meta name="twitter:description" content="Run claude, codex, gemini and opencode in parallel on one infinite canvas. Local-first, open source." />
 <meta name="twitter:image" content="https://raw.githubusercontent.com/dip497/hivemind/main/screenshots/canvas.png" />
+<meta name="theme-color" content="#0C0D11" />
 
 <link rel="icon" type="image/png" href="https://raw.githubusercontent.com/dip497/hivemind/main/assets/icon.png" />
+
+<!-- Developer-tool typeface pairing: IBM Plex Sans (body) + JetBrains Mono (code) -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
 
 <!-- Structured data: helps Google rich results + answer engines (Perplexity/Exa) cite us -->
 <script type="application/ld+json">
@@ -73,52 +79,147 @@
 
 <style>
   :root{
-    --bg:#0C0D11; --bg2:#14161D; --fg:#F3EFE6; --muted:#A6ACB8;
-    --honey:#E8B24A; --bright:#F6CF6B; --teal:#54C6AC; --line:#2A2E37;
+    --bg:#0C0D11; --bg2:#14161D; --bg3:#191C24; --fg:#F3EFE6; --muted:#A6ACB8;
+    --honey:#E8B24A; --bright:#F6CF6B; --teal:#54C6AC; --line:#2A2E37; --line2:#3a3f4b;
+    --z-nav:50;
   }
   *{box-sizing:border-box}
   html{scroll-behavior:smooth}
   body{
-    margin:0; background:radial-gradient(120% 90% at 50% 0%, #14161D 0%, #0C0D11 60%);
-    color:var(--fg); font:16px/1.6 Inter,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-    -webkit-font-smoothing:antialiased;
+    margin:0; background:var(--bg); color:var(--fg);
+    font:16px/1.65 "IBM Plex Sans",-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased; overflow-x:hidden;
   }
-  a{color:var(--honey); text-decoration:none}
-  a:hover{text-decoration:underline}
-  code,pre{font-family:"JetBrains Mono","SF Mono",Menlo,Consolas,monospace}
+  /* layered backdrop: top honey glow + faint hex grid → depth, not flat */
+  body::before{
+    content:""; position:fixed; inset:0; z-index:-2; pointer-events:none;
+    background:
+      radial-gradient(60% 40% at 50% -5%, rgba(232,178,74,.14), rgba(232,178,74,0) 60%),
+      radial-gradient(90% 70% at 50% 0%, #14161D 0%, #0C0D11 55%);
+  }
+  body::after{
+    content:""; position:fixed; inset:0; z-index:-1; pointer-events:none; opacity:.5;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='100' viewBox='0 0 56 100'%3E%3Cg fill='none' stroke='%232A2E37' stroke-width='1'%3E%3Cpath d='M28 0l24 14v28L28 56 4 42V14z'/%3E%3Cpath d='M28 56l24 14v28M28 56L4 70v28'/%3E%3C/g%3E%3C/svg%3E");
+    mask-image:linear-gradient(180deg,#000 0%,transparent 40%);
+    -webkit-mask-image:linear-gradient(180deg,#000 0%,transparent 40%);
+  }
+  a{color:var(--honey); text-decoration:none; transition:color .2s}
+  a:hover{color:var(--bright)}
+  code{font-family:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace; font-size:.9em;
+    background:rgba(232,178,74,.1); color:var(--bright); padding:.08em .38em; border-radius:5px}
   .wrap{max-width:1040px; margin:0 auto; padding:0 24px}
-  header{padding:80px 0 40px; text-align:center}
-  header img.logo{width:96px; height:96px; border-radius:22px}
-  h1{font-size:clamp(34px,6vw,60px); font-weight:800; letter-spacing:-1.5px; margin:22px 0 10px; line-height:1.08}
+  :focus-visible{outline:2px solid var(--honey); outline-offset:3px; border-radius:6px}
+
+  /* top nav */
+  nav{position:sticky; top:0; z-index:var(--z-nav); backdrop-filter:saturate(140%) blur(10px);
+    background:rgba(12,13,17,.72); border-bottom:1px solid var(--line)}
+  nav .wrap{display:flex; align-items:center; gap:14px; height:58px}
+  nav img{width:28px; height:28px; border-radius:8px}
+  nav b{font-weight:700; letter-spacing:-.2px}
+  nav .sp{flex:1}
+  nav a.navlink{color:var(--muted); font-size:14.5px; font-weight:500}
+  nav a.navlink:hover{color:var(--fg)}
+  nav a.star{background:var(--honey); color:#1a1300; font-weight:700; padding:8px 15px;
+    border-radius:9px; font-size:14px; display:inline-flex; gap:7px; align-items:center}
+  nav a.star:hover{background:var(--bright); color:#1a1300}
+  @media(max-width:620px){ nav a.navlink{display:none} }
+
+  header{padding:78px 0 28px; text-align:center}
+  header img.logo{width:92px; height:92px; border-radius:22px;
+    box-shadow:0 24px 60px rgba(232,178,74,.18), 0 4px 14px rgba(0,0,0,.5)}
+  h1{font-size:clamp(34px,6.2vw,62px); font-weight:700; letter-spacing:-1.8px; margin:22px 0 12px; line-height:1.06}
   h1 .accent{color:var(--honey)}
-  .tagline{font-size:clamp(17px,2.4vw,22px); color:var(--muted); max-width:760px; margin:0 auto 26px}
+  .tagline{font-size:clamp(16.5px,2.3vw,21px); color:var(--muted); max-width:740px; margin:0 auto 28px; line-height:1.6}
   .badges{display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-bottom:26px}
   .badges img{height:22px}
-  .cta{display:inline-flex; gap:10px; align-items:center; background:var(--honey); color:#1a1300;
-    font-weight:700; padding:13px 24px; border-radius:11px; font-size:16px}
-  .cta.ghost{background:transparent; color:var(--fg); border:1px solid var(--line)}
   .cta-row{display:flex; gap:12px; justify-content:center; flex-wrap:wrap}
-  .shot{margin:48px 0; border-radius:16px; overflow:hidden; border:1px solid var(--line);
-    box-shadow:0 40px 120px rgba(0,0,0,.55)}
+  .cta{display:inline-flex; gap:9px; align-items:center; cursor:pointer; background:var(--honey); color:#1a1300;
+    font-weight:700; padding:13px 26px; border-radius:11px; font-size:16px; transition:background .2s, transform .15s, box-shadow .2s;
+    box-shadow:0 8px 24px rgba(232,178,74,.22)}
+  .cta:hover{background:var(--bright); color:#1a1300; transform:translateY(-2px); box-shadow:0 12px 30px rgba(232,178,74,.32)}
+  .cta.ghost{background:transparent; color:var(--fg); border:1px solid var(--line2); box-shadow:none}
+  .cta.ghost:hover{background:var(--bg2); color:var(--fg); border-color:var(--honey)}
+  .cta svg{width:18px; height:18px}
+
+  .shot{margin:54px auto 0; border-radius:16px; overflow:hidden; border:1px solid var(--line2);
+    box-shadow:0 50px 130px rgba(0,0,0,.6), 0 0 0 1px rgba(232,178,74,.06)}
   .shot img{display:block; width:100%}
-  .cap{color:var(--muted); font-size:14px; text-align:center; margin-top:-32px; margin-bottom:48px}
-  section{padding:36px 0; border-top:1px solid var(--line)}
-  h2{font-size:clamp(24px,4vw,34px); font-weight:800; letter-spacing:-.6px; margin:0 0 22px}
-  .grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:18px}
-  .card{background:var(--bg2); border:1px solid var(--line); border-radius:13px; padding:20px}
-  .card h3{margin:0 0 8px; font-size:18px; color:var(--bright)}
-  .card p{margin:0; color:var(--muted); font-size:15px}
-  .faq h3{font-size:18px; margin:24px 0 6px}
-  .faq p{color:var(--muted); margin:0 0 4px}
-  pre.install{background:#070809; border:1px solid var(--line); border-radius:12px; padding:18px 20px;
-    overflow:auto; color:var(--teal); font-size:14px; max-width:760px; margin:0 auto}
-  footer{padding:48px 0 80px; text-align:center; color:var(--muted); font-size:14px}
+  .cap{color:var(--muted); font-size:14px; text-align:center; max-width:760px; margin:18px auto 0; line-height:1.55}
+
+  section{padding:64px 0; border-top:1px solid var(--line)}
+  h2{font-size:clamp(25px,4vw,36px); font-weight:700; letter-spacing:-.8px; margin:0 0 8px; text-align:center}
+  .sub{color:var(--muted); text-align:center; max-width:680px; margin:0 auto 40px}
+
+  .grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(258px,1fr)); gap:18px}
+  .card{background:linear-gradient(180deg,var(--bg2),var(--bg)); border:1px solid var(--line);
+    border-radius:15px; padding:24px; transition:transform .2s, border-color .2s, box-shadow .2s}
+  .card:hover{transform:translateY(-3px); border-color:var(--line2); box-shadow:0 18px 40px rgba(0,0,0,.4)}
+  .card .ico{width:42px; height:42px; border-radius:11px; display:grid; place-items:center; margin-bottom:15px;
+    background:rgba(232,178,74,.12); border:1px solid rgba(232,178,74,.22)}
+  .card .ico svg{width:22px; height:22px; stroke:var(--honey); fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round}
+  .card h3{margin:0 0 7px; font-size:18px; font-weight:600; color:var(--fg)}
+  .card p{margin:0; color:var(--muted); font-size:14.5px; line-height:1.6}
+
   .gallery{display:grid; grid-template-columns:1fr 1fr; gap:16px}
-  .gallery img{width:100%; border-radius:12px; border:1px solid var(--line)}
-  @media(max-width:640px){ .gallery{grid-template-columns:1fr} }
+  .gallery figure{margin:0}
+  .gallery img{width:100%; border-radius:12px; border:1px solid var(--line); display:block; transition:border-color .2s}
+  .gallery img:hover{border-color:var(--honey)}
+
+  .install-wrap{max-width:760px; margin:0 auto}
+  pre.install{background:#07080a; border:1px solid var(--line2); border-radius:12px; padding:18px 20px;
+    overflow:auto; color:var(--teal); font-size:14px; margin:0; font-family:"JetBrains Mono",ui-monospace,Menlo,monospace;
+    display:flex; align-items:center; gap:12px}
+  pre.install .pr{color:var(--muted); user-select:none}
+  .center{text-align:center}
+
+  .faq-list{max-width:780px; margin:0 auto}
+  details{border:1px solid var(--line); border-radius:12px; margin-bottom:12px; background:var(--bg2); overflow:hidden}
+  details[open]{border-color:var(--line2)}
+  summary{cursor:pointer; padding:17px 20px; font-weight:600; font-size:16.5px; list-style:none;
+    display:flex; justify-content:space-between; align-items:center; gap:12px; transition:color .2s}
+  summary:hover{color:var(--honey)}
+  summary::-webkit-details-marker{display:none}
+  summary .chev{flex:none; transition:transform .2s; color:var(--muted)}
+  details[open] summary .chev{transform:rotate(45deg)}
+  details p{margin:0; padding:0 20px 18px; color:var(--muted); font-size:15px; line-height:1.65}
+
+  footer{padding:54px 0 84px; text-align:center; color:var(--muted); font-size:14px; border-top:1px solid var(--line)}
+  footer a{font-weight:600}
+  footer .small{margin-top:8px; font-size:13px; opacity:.8}
+
+  /* scroll reveal */
+  .reveal{opacity:0; transform:translateY(18px); transition:opacity .6s ease, transform .6s ease}
+  .reveal.in{opacity:1; transform:none}
+
+  @media(max-width:640px){
+    .gallery{grid-template-columns:1fr}
+    section{padding:48px 0}
+    header{padding:56px 0 20px}
+    .cta-row{flex-direction:column; align-items:stretch}
+  }
+  @media(prefers-reduced-motion:reduce){
+    *{scroll-behavior:auto !important}
+    .reveal{opacity:1 !important; transform:none !important; transition:none}
+    .card:hover,.cta:hover{transform:none}
+  }
 </style>
 </head>
 <body>
+
+<nav>
+  <div class="wrap">
+    <img src="https://raw.githubusercontent.com/dip497/hivemind/main/assets/icon.png" alt="hivemind logo" />
+    <b>hivemind</b>
+    <span class="sp"></span>
+    <a class="navlink" href="#features">Features</a>
+    <a class="navlink" href="#install">Install</a>
+    <a class="navlink" href="#faq">FAQ</a>
+    <a class="star" href="https://github.com/dip497/hivemind" aria-label="Star hivemind on GitHub">
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+      Star
+    </a>
+  </div>
+</nav>
 
 <header class="wrap">
   <img class="logo" src="https://raw.githubusercontent.com/dip497/hivemind/main/assets/icon.png" alt="hivemind logo — two stacked canvas frames holding a lit honeycomb" />
@@ -126,71 +227,114 @@
   <p class="tagline">Drop <code>claude</code>, <code>codex</code>, <code>gemini</code> or <code>opencode</code> into real workspaces and run them in parallel — across git worktrees and remote SSH hosts. Watch every diff live. Track work with a Kanban board that's just markdown on disk, which agents read and update over MCP.</p>
   <div class="badges">
     <img src="https://img.shields.io/github/v/release/dip497/hivemind?color=success" alt="latest release" />
-    <img src="https://img.shields.io/github/stars/dip497/hivemind?style=flat" alt="GitHub stars" />
+    <img src="https://img.shields.io/github/stars/dip497/hivemind?style=flat&color=E8B24A" alt="GitHub stars" />
     <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT license" />
     <img src="https://img.shields.io/badge/platform-Linux%20x86__64-blue.svg" alt="Linux x86_64" />
   </div>
   <div class="cta-row">
-    <a class="cta" href="https://github.com/dip497/hivemind">★ Star on GitHub</a>
-    <a class="cta ghost" href="#install">Install</a>
+    <a class="cta" href="https://github.com/dip497/hivemind">
+      <svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.3.8-.6v-2c-3.2.7-3.9-1.4-3.9-1.4-.5-1.3-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.8 0-1.3.5-2.3 1.2-3.2-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0C17.3 4.7 18.3 5 18.3 5c.6 1.6.2 2.8.1 3.1.8.9 1.2 1.9 1.2 3.2 0 4.6-2.7 5.5-5.3 5.8.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6 4.6-1.5 7.9-5.8 7.9-10.9C23.5 5.7 18.3.5 12 .5z"/></svg>
+      Star on GitHub
+    </a>
+    <a class="cta ghost" href="#install">Install for Linux</a>
   </div>
 </header>
 
 <div class="wrap">
-  <div class="shot">
-    <img src="https://raw.githubusercontent.com/dip497/hivemind/main/screenshots/canvas.png" alt="The full hivemind canvas — an issues board, a code editor, a live git diff, and two AI coding agent terminals, all on one infinite canvas" />
+  <div class="shot reveal">
+    <img src="https://raw.githubusercontent.com/dip497/hivemind/main/screenshots/canvas.png" alt="The full hivemind canvas — an issues board, a code editor, a live git diff, and two AI coding agent terminals, all on one infinite canvas" width="1632" height="960" loading="lazy" />
   </div>
-  <p class="cap">One infinite canvas per repo. Every tile is live — agent terminals, diffs that update as the agent edits, a file tree, an editor, an issues board, even a real browser.</p>
+  <p class="cap reveal">One infinite canvas per repo. Every tile is live — agent terminals, diffs that update as the agent edits, a file tree, an editor, an issues board, even a real browser.</p>
 </div>
 
-<section class="wrap">
-  <h2>Why hivemind</h2>
-  <p style="color:var(--muted);max-width:820px">Running a coding agent in a bare terminal throws away everything around the work — which task it's on, what it changed, the session when you close the window. The moment you want a second agent on a second branch you're juggling tmux panes. hivemind makes the <strong>project</strong> the unit of work, not the terminal: one canvas per repo, several agents in parallel, each scoped to its own directory, branch and issues.</p>
-  <div class="grid" style="margin-top:24px">
-    <div class="card"><h3>Agents in real terminals</h3><p>Full PTY tiles for claude, codex, gemini, opencode — not chat boxes. Sessions survive the window and resume after a reboot.</p></div>
-    <div class="card"><h3>Parallel by worktree &amp; SSH</h3><p>Bind a frame to a local repo, a git worktree, or a remote SSH host. Run agents side by side without conflicts.</p></div>
-    <div class="card"><h3>Live diffs</h3><p>A diff tile next to each terminal updates as the agent edits — split or unified, line comments you can send straight back.</p></div>
-    <div class="card"><h3>Kanban PM you can <code>cat</code></h3><p>Issues, acceptance criteria, cycles and an activity log as plain markdown under <code>.hivemind/</code>. No DB, no API.</p></div>
-    <div class="card"><h3>Agents update it over MCP</h3><p>A small MCP server lets an agent pick up an issue, flip its state, tick acceptance criteria, and comment its progress.</p></div>
-    <div class="card"><h3>Local-first</h3><p>Everything on your machine. No telemetry, no cloud account, no SDK lock-in — agents use your existing CLI login.</p></div>
+<section id="features" class="wrap">
+  <h2 class="reveal">Why hivemind</h2>
+  <p class="sub reveal">A bare terminal throws away everything around the work — which task, what changed, the session when you close the window. hivemind makes the <strong style="color:var(--fg)">project</strong> the unit of work: one canvas per repo, several agents in parallel, each scoped to its own directory, branch and issues.</p>
+  <div class="grid">
+    <div class="card reveal">
+      <div class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg></div>
+      <h3>Agents in real terminals</h3>
+      <p>Full PTY tiles for claude, codex, gemini, opencode — not chat boxes. Sessions survive the window and resume after a reboot.</p>
+    </div>
+    <div class="card reveal">
+      <div class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg></div>
+      <h3>Parallel by worktree &amp; SSH</h3>
+      <p>Bind a frame to a local repo, a git worktree, or a remote SSH host. Run agents side by side, each isolated — no conflicts.</p>
+    </div>
+    <div class="card reveal">
+      <div class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M11 18H8a2 2 0 0 1-2-2V9"/></svg></div>
+      <h3>Live diffs, side by side</h3>
+      <p>A diff tile next to each terminal updates as the agent edits — split or unified, with line comments you send straight back.</p>
+    </div>
+    <div class="card reveal">
+      <div class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M8 7v7"/><path d="M12 7v4"/><path d="M16 7v9"/></svg></div>
+      <h3>Kanban PM you can <code>cat</code></h3>
+      <p>Issues, acceptance criteria, cycles and an activity log as plain markdown under <code>.hivemind/</code>. No database, no API.</p>
+    </div>
+    <div class="card reveal">
+      <div class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect width="20" height="8" x="2" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/></svg></div>
+      <h3>Agents update it over MCP</h3>
+      <p>A small MCP server lets an agent pick up an issue, flip its state, tick acceptance criteria, and comment its own progress.</p>
+    </div>
+    <div class="card reveal">
+      <div class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="22" x2="2" y1="12" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" x2="6.01" y1="16" y2="16"/><line x1="10" x2="10.01" y1="16" y2="16"/></svg></div>
+      <h3>Local-first &amp; private</h3>
+      <p>Everything on your machine. No telemetry, no cloud account, no SDK lock-in — agents use your existing CLI login.</p>
+    </div>
   </div>
 </section>
 
 <section class="wrap">
-  <h2>See it</h2>
+  <h2 class="reveal">See it</h2>
+  <p class="sub reveal">Real screens from the app — board, diff, explorer, and issue capture.</p>
   <div class="gallery">
-    <img src="https://raw.githubusercontent.com/dip497/hivemind/main/screenshots/board.png" alt="Kanban issues board backed by markdown files in hivemind" />
-    <img src="https://raw.githubusercontent.com/dip497/hivemind/main/screenshots/diff.png" alt="Live git diff of an AI agent's fix in hivemind" />
-    <img src="https://raw.githubusercontent.com/dip497/hivemind/main/screenshots/explorer.png" alt="File explorer and diff side by side in hivemind" />
-    <img src="https://raw.githubusercontent.com/dip497/hivemind/main/screenshots/new-issue.png" alt="Creating an issue that lives as a markdown file in hivemind" />
+    <figure class="reveal"><img src="https://raw.githubusercontent.com/dip497/hivemind/main/screenshots/board.png" alt="Kanban issues board backed by markdown files in hivemind" loading="lazy" /></figure>
+    <figure class="reveal"><img src="https://raw.githubusercontent.com/dip497/hivemind/main/screenshots/diff.png" alt="Live git diff of an AI agent's fix in hivemind" loading="lazy" /></figure>
+    <figure class="reveal"><img src="https://raw.githubusercontent.com/dip497/hivemind/main/screenshots/explorer.png" alt="File explorer and diff side by side in hivemind" loading="lazy" /></figure>
+    <figure class="reveal"><img src="https://raw.githubusercontent.com/dip497/hivemind/main/screenshots/new-issue.png" alt="Creating an issue that lives as a markdown file in hivemind" loading="lazy" /></figure>
   </div>
 </section>
 
-<section class="wrap" id="install">
-  <h2>Install</h2>
-  <p style="color:var(--muted);text-align:center;margin-bottom:18px">Linux x86_64. No build toolchain — the installer pulls prebuilt binaries from the latest GitHub Release.</p>
-  <pre class="install">bash &lt;(curl -fsSL https://raw.githubusercontent.com/dip497/hivemind/main/install.sh)</pre>
-  <p style="color:var(--muted);text-align:center;margin-top:18px"><a href="https://github.com/dip497/hivemind#quick-start">Quick start &amp; docs →</a></p>
+<section id="install" class="wrap">
+  <h2 class="reveal">Install</h2>
+  <p class="sub reveal">Linux x86_64. No build toolchain — the installer pulls prebuilt binaries from the latest GitHub Release.</p>
+  <div class="install-wrap reveal">
+    <pre class="install"><span class="pr">$</span><code>bash &lt;(curl -fsSL https://raw.githubusercontent.com/dip497/hivemind/main/install.sh)</code></pre>
+    <p class="center" style="margin-top:18px"><a href="https://github.com/dip497/hivemind#quick-start">Quick start &amp; docs →</a></p>
+  </div>
 </section>
 
-<section class="wrap faq">
-  <h2>FAQ</h2>
-  <h3>Is there a canvas or GUI for Claude Code?</h3>
-  <p>Yes — hivemind is an infinite canvas for Claude Code and other AI coding agents. Each agent runs in a real terminal tile, alongside diffs, a file tree, an editor, an issues board and a browser, on one zoomable canvas per project.</p>
-  <h3>How do I run multiple AI coding agents in parallel?</h3>
-  <p>Bind each frame to a local repo, a git worktree, or a remote SSH host, then spawn an agent per frame. They work side by side — each scoped to its own directory, branch and issues — and you watch every diff update live.</p>
-  <h3>Is it like tmux for AI agents?</h3>
-  <p>Same idea, many agents on one screen, but with the structure agents need: a diff next to each terminal, a markdown issues board they update over MCP, worktrees as nested frames, and sessions that resume after a reboot.</p>
-  <h3>Which agents are supported?</h3>
-  <p><code>claude</code>, <code>codex</code>, <code>gemini</code> and <code>opencode</code> out of the box; any terminal-native coding agent can be added.</p>
-  <h3>Is it local-first and private?</h3>
-  <p>Yes. Everything runs locally, the data is files on your disk, there's no telemetry, and agents use your existing CLI login — no extra API keys.</p>
+<section id="faq" class="wrap">
+  <h2 class="reveal">FAQ</h2>
+  <div class="faq-list">
+    <details class="reveal"><summary>Is there a canvas or GUI for Claude Code?<span class="chev">+</span></summary><p>Yes — hivemind is an infinite canvas for Claude Code and other AI coding agents. Each agent runs in a real terminal tile, alongside diffs, a file tree, an editor, an issues board and a browser, on one zoomable canvas per project.</p></details>
+    <details class="reveal"><summary>How do I run multiple AI coding agents in parallel?<span class="chev">+</span></summary><p>Bind each frame to a local repo, a git worktree, or a remote SSH host, then spawn an agent per frame. They work side by side — each scoped to its own directory, branch and issues — and you watch every diff update live.</p></details>
+    <details class="reveal"><summary>Is it like tmux for AI agents?<span class="chev">+</span></summary><p>Same idea, many agents on one screen, but with the structure agents need: a diff next to each terminal, a markdown issues board they update over MCP, worktrees as nested frames, and sessions that resume after a reboot.</p></details>
+    <details class="reveal"><summary>Which agents are supported?<span class="chev">+</span></summary><p><code>claude</code>, <code>codex</code>, <code>gemini</code> and <code>opencode</code> out of the box; any terminal-native coding agent can be added via the registry.</p></details>
+    <details class="reveal"><summary>Is it local-first and private?<span class="chev">+</span></summary><p>Yes. Everything runs locally, the data is files on your disk, there's no telemetry, and agents use your existing CLI login — no extra API keys.</p></details>
+  </div>
 </section>
 
-<footer class="wrap">
-  <a href="https://github.com/dip497/hivemind">github.com/dip497/hivemind</a> · MIT · Local-first · Open source<br/>
-  An open-source infinite canvas for Claude Code, Codex, Gemini &amp; OpenCode.
+<footer>
+  <div class="wrap">
+    <a href="https://github.com/dip497/hivemind">github.com/dip497/hivemind</a> · MIT · Local-first · Open source
+    <div class="small">An open-source infinite canvas for Claude Code, Codex, Gemini &amp; OpenCode.</div>
+  </div>
 </footer>
+
+<script>
+  // Progressive scroll-reveal; no-op under prefers-reduced-motion (CSS forces visible).
+  (function(){
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      document.querySelectorAll('.reveal').forEach(function(el){ el.classList.add('in'); });
+      return;
+    }
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } });
+    }, { threshold: 0.12 });
+    document.querySelectorAll('.reveal').forEach(function(el){ io.observe(el); });
+  })();
+</script>
 
 </body>
 </html>
