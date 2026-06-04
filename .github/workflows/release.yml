@@ -74,6 +74,16 @@ jobs:
         # `build.files` config).
         run: cp -r apps/desktop/out desktop-deploy/
 
+      - name: Drop optional native dep cpu-features
+        # ssh2 (remote SSH frames) lists `cpu-features` as an OPTIONAL dep — it
+        # only picks a faster cipher when present, and falls back to pure JS
+        # otherwise. electron-builder's native rebuild still tries to node-gyp
+        # it and dies on the runner ("buildcheck.gypi not found"). Remove it
+        # from the deploy so the rebuild skips it; ssh2 works without it.
+        run: |
+          rm -rf desktop-deploy/node_modules/.pnpm/cpu-features@* || true
+          find desktop-deploy/node_modules -maxdepth 5 -name cpu-features -exec rm -rf {} + 2>/dev/null || true
+
       - name: Package AppImage
         # Run electron-builder INSIDE the deployed copy so node_modules are
         # all under the app dir (no more "package.json must be under …" error).
