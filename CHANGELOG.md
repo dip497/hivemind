@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [1.0.1] — 2026-06-04
+
 ### Added
 - **App icon.** hivemind now has a real icon — two stacked canvas frames holding a lit honeycomb (the canvas-of-frames + the hive), honey-amber on dark. Wired as the AppImage/desktop icon (`electron-builder` `linux.icon`), the live window/taskbar icon, and the renderer favicon; PNGs in `apps/desktop/icons/` + `assets/icon.png`. `apps/desktop/{icons/icon.png,package.json,src/main/index.ts,src/renderer/{index.html,public/*}}`, `.github/workflows/release.yml`.
 - **Browser in the tool island.** The top-center tool island now has a **Browser** button (hotkey `7`) alongside terminal / agent / explorer / diff / issues / frame — the Browser tile was previously only reachable via the hidden `7` key or a frame's **+** menu. `apps/desktop/src/renderer/src/{canvas-islands,Canvas}.tsx`.
@@ -234,7 +236,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/dip497/hivemind/releases/tag/v1.0.1
 [1.0.0]: https://github.com/dip497/hivemind/releases/tag/v1.0.0
 [0.5.0]: https://github.com/dip497/hivemind/releases/tag/v0.5.0
 [0.4.0]: https://github.com/dip497/hivemind/releases/tag/v0.4.0
