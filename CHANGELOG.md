@@ -7,6 +7,9 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Changed
+- **Discoverability / SEO.** Set 20 GitHub repo topics (were none) and a keyword-front-loaded repo description, and added an FAQ to the README that answers the literal search queries ("canvas/GUI for Claude Code", "run multiple AI coding agents in parallel", "tmux for AI agents", "local-first"). Improves ranking on GitHub search, Google, and agentic/answer engines. `README.md` + repo metadata.
+
 ## [1.0.2] — 2026-06-04
 
 ### Fixed

@@ -282,6 +282,45 @@ accidental bun startup.
 
 ---
 
+## FAQ
+
+**Is there a canvas / GUI for Claude Code?**
+Yes — hivemind is an infinite canvas for Claude Code and other AI coding agents.
+Each agent runs in a real terminal tile (full PTY, not a chat box), and you arrange
+terminals, diffs, a file tree, a code editor, an issues board, and a web browser
+freely on one zoomable canvas, one per project.
+
+**How do I run multiple AI coding agents in parallel?**
+Bind each frame on the canvas to a local repo, a git **worktree**, or a **remote SSH
+host**, then spawn an agent per frame. Several agents work side by side — each scoped
+to its own directory, branch, and issues — and you watch every diff update live.
+
+**Which agents are supported?**
+`claude` (Claude Code), `codex`, `gemini`, and `opencode` out of the box. The agent
+registry takes one entry per CLI, so any terminal-native coding agent can be added.
+
+**Is this like tmux for AI agents?**
+Same idea — many agents, one screen — but hivemind keeps the structure agents need:
+a diff tile next to each terminal, an issues board they read and update over MCP, git
+worktrees as nested frames, and sessions that survive the window and resume after a
+reboot. Think tmux's parallelism with a project-management layer on top.
+
+**How is the project tracker stored?**
+As plain markdown with YAML frontmatter under `.hivemind/` — issues, acceptance
+criteria, cycles, and an activity log. No database, no API, no cloud account. You can
+`cat`, `grep`, and `git`-version your backlog, and agents read and write it through a
+small MCP server.
+
+**Is it local-first and private?**
+Yes. Everything runs on your machine, the data is files on your disk, there's no
+telemetry, and agents use your existing CLI login — no extra API keys or SDK lock-in.
+
+**What platforms does it run on?**
+Linux x86_64 today, via a prebuilt AppImage. macOS and Windows are open contribution
+areas (blocked on `@lydell/node-pty` build + packaging).
+
+---
+
 ## Contributing
 
 PRs welcome. High-value areas:
