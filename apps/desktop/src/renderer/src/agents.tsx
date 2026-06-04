@@ -53,9 +53,13 @@ function GenericAgentIcon({ size = 16, className }: { size?: number; className?:
  */
 export const AGENTS: AgentDef[] = [
   { id: "claude", label: "Claude", cmd: "claude", icon: ClaudeIcon, enabled: true },
-  { id: "codex", label: "Codex", cmd: "codex", icon: GenericAgentIcon, enabled: false },
+  // Codex: safe interactive default — works in the workspace, asks before risky
+  // / out-of-sandbox actions (status detection handles the approval prompts).
+  { id: "codex", label: "Codex", cmd: "codex", defaultArgs: ["--sandbox", "workspace-write", "--ask-for-approval", "on-request"], icon: GenericAgentIcon, enabled: true },
+  // opencode: permission model is config-driven (opencode.json), so no default
+  // flags. Note: its TUI has no CLI resume — reopen sessions via its in-app list.
+  { id: "opencode", label: "opencode", cmd: "opencode", icon: GenericAgentIcon, enabled: true },
   { id: "gemini", label: "Gemini", cmd: "gemini", icon: GenericAgentIcon, enabled: false },
-  { id: "opencode", label: "opencode", cmd: "opencode", icon: GenericAgentIcon, enabled: false },
 ];
 
 const BY_ID = new Map(AGENTS.map((a) => [a.id, a]));

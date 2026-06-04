@@ -13,6 +13,7 @@ import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { WorktreePicker } from "./WorktreePicker";
 import { useGitBranch } from "./queries";
 import { isRemote, parseRemote, remoteBasename, remoteDisplay } from "../../shared/remote-uri";
+import { AGENTS } from "./agents";
 import type { ArrangeMode } from "./frame-layout";
 import type { WorktreeEntry } from "../../shared/ipc";
 
@@ -385,8 +386,21 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
         </button>
         <AnchoredMenu anchor={addBtnRef.current} open={showAdd} onClose={() => setShowAdd(false)}>
           <div className="px-2 py-1 text-[9px] uppercase tracking-[0.12em] text-[var(--color-fg3)] font-semibold">open in zone</div>
+          {/* Agents come from the registry — adding one there adds it here. */}
+          {AGENTS.filter((a) => a.enabled).map((a) => (
+            <button
+              key={a.id}
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent("hivemind:frame-open", { detail: { frameId: data.id, kind: a.id } }));
+                setShowAdd(false);
+              }}
+              className="flex items-center gap-2 text-left px-2 py-1 rounded text-[11px] text-[var(--color-fg)] hover:bg-[var(--color-bg4)] w-full"
+            >
+              <a.icon size={13} />
+              {a.label}
+            </button>
+          ))}
           {([
-            ["claude", "Claude"],
             ["shell", "Terminal"],
             ["tree", "Editor"],
             ["diff", "Diff"],
@@ -398,7 +412,7 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
                 window.dispatchEvent(new CustomEvent("hivemind:frame-open", { detail: { frameId: data.id, kind } }));
                 setShowAdd(false);
               }}
-              className="text-left px-2 py-1 rounded text-[11px] text-[var(--color-fg)] hover:bg-[var(--color-bg4)]"
+              className="text-left px-2 py-1 rounded text-[11px] text-[var(--color-fg)] hover:bg-[var(--color-bg4)] w-full"
             >
               {label}
             </button>

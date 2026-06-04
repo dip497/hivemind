@@ -39,7 +39,7 @@ import { defaultTileSize, defaultSizeForKind } from "./canvas-sizing";
 import { useWorktrees } from "./useWorktrees";
 import { RemoteConnectModal } from "./components/RemoteConnectModal";
 import { isRemote } from "../../shared/remote-uri";
-import { AgentIcon } from "./agents";
+import { AgentIcon, agentForCmd } from "./agents";
 import { useSpawn } from "./useSpawn";
 import { useFrameOps } from "./useFrameOps";
 import { buildBaseNodes } from "./canvas-node-build";
@@ -450,7 +450,8 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
       const effRepo = owner?.worktreePath ?? owner?.workspacePath ?? repoPath ?? null;
       if ((t.kind === "editor" || t.kind === "diff") && !effRepo) continue;
       const kind: LayerTile["kind"] = t.kind === "shell" ? "terminal" : t.kind;
-      out.push({ id: t.id, kind, name: tileNames[t.id] ?? agentTitles[t.id] ?? t.label, frameId: fo[t.id] ?? null });
+      const agent = t.kind === "claude" ? (agentForCmd(t.cmd)?.id ?? "claude") : undefined;
+      out.push({ id: t.id, kind, name: tileNames[t.id] ?? agentTitles[t.id] ?? t.label, frameId: fo[t.id] ?? null, agent });
     }
     return out;
   }, [tiles, repoPath, frameOf, frames, tileNames, agentTitles]);

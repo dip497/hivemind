@@ -20,6 +20,9 @@ export interface LayerTile {
   name: string;
   /** Frame id this tile belongs to, or null when loose on the canvas. */
   frameId: string | null;
+  /** For agent tiles (kind "claude"): the registry agent id (claude/codex/…)
+   *  so the right logo shows even though they share the agent-terminal kind. */
+  agent?: string;
 }
 
 export interface LayerFrame {
@@ -158,7 +161,7 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
         title={`${t.name} · ${st}`}
       >
         <span aria-hidden className="w-3.5 shrink-0 grid place-items-center font-mono text-[10px] text-[var(--color-fg3)]">
-          {t.kind === "claude" ? <AgentIcon id="claude" size={12} /> : KIND_GLYPH[t.kind]}
+          {t.kind === "claude" ? <AgentIcon id={t.agent ?? "claude"} size={12} /> : KIND_GLYPH[t.kind]}
         </span>
         <span className="truncate flex-1">{t.name}</span>
         {st !== "idle" && (

@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, type Dispatch, type MutableRefObject, t
 import { frameColorFor } from "./frame-color";
 import { nextSlotInFrame, FRAME_ROW_MAX } from "./frame-layout";
 import { defaultSizeForKind, defaultTileSize } from "./canvas-sizing";
+import { agentById } from "./agents";
 import { defaultShell, type FrameState, type TileInstance } from "./canvas-persistence";
 import { queueWork } from "./claude-bus";
 import type { TileKind } from "./tile-kinds";
@@ -193,7 +194,7 @@ export function useSpawn(ctx: SpawnCtx) {
   // one-per-frame — if the frame already has one, focus it instead of making a
   // duplicate. placeInFrame lays it out + auto-grows the frame + selects/foci.
   const spawnTile = useCallback(
-    (kind: TileKind, targetFrameId: string | null, opts?: { mode?: string; work?: string }): void => {
+    (kind: TileKind, targetFrameId: string | null, opts?: { mode?: string; work?: string; agent?: { id: string; cmd: string; args?: string[]; label: string } }): void => {
       const frame = (targetFrameId ? framesRef.current.find((f) => f.id === targetFrameId) : undefined) ?? ensureFrame();
       const fid = frame.id;
       if (SINGLETON_KINDS.has(kind)) {
@@ -205,7 +206,14 @@ export function useSpawn(ctx: SpawnCtx) {
       let cmd: string | undefined;
       let args: string[] | undefined;
       let label: string;
-      if (kind === "claude") {
+      if (kind === "claude" && opts?.agent) {
+        // A non-claude agent (codex / opencode / …) runs in the same agent-
+        // terminal kind; its binary + default flags come from the registry, and
+        // status detection keys off the cmd (identifyAgent), not the kind.
+        cmd = opts.agent.cmd;
+        args = opts.agent.args ?? [];
+        label = `${opts.agent.label} #${n}`;
+      } else if (kind === "claude") {
         const m = opts?.mode || claudeMode;
         // bypassPermissions is gated behind its own flag — `--permission-mode
         // bypassPermissions` is refused at startup; the canonical entry is
@@ -263,6 +271,13 @@ export function useSpawn(ctx: SpawnCtx) {
   // Open a tile INSIDE a specific frame (the frame's launcher toolbar) — always
   // targets that frame, no picker. Same one-per-frame rule via spawnTile.
   const frameOpen = useCallback((frameId: string, kind: string) => {
+    // A registry agent (codex / opencode / …) opens as an agent-terminal tile
+    // carrying its binary + default flags.
+    const agent = agentById(kind);
+    if (agent && agent.id !== "claude") {
+      spawnTile("claude", frameId, { agent: { id: agent.id, cmd: agent.cmd, args: agent.defaultArgs, label: agent.label } });
+      return;
+    }
     const k: TileKind =
       kind === "tree" ? "editor"
       : kind === "claude" || kind === "shell" || kind === "diff" || kind === "issues" ? kind
