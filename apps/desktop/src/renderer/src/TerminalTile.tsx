@@ -379,6 +379,16 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
           window.hive.ptyKill(ptyId);
           return;
         }
+        // Force the live PTY to match our CURRENT geometry. On a RE-ATTACH the
+        // daemon keeps the session's ORIGINAL cols/rows (the spawn spec is
+        // frozen), and our init fit() already set term.cols — so term.onResize
+        // won't fire and the daemon never learns the real size. Result: claude
+        // stays stuck at the old (often smaller) size and its TUI renders narrow
+        // / oversized inside the actual tile, and the replayed snapshot wraps at
+        // the stale width — "text looks bigger after restart". Pushing our dims
+        // explicitly every spawn reflows claude (SIGWINCH) to the true tile size.
+        try { fit.fit(); } catch { /* torn down */ }
+        window.hive.ptyResize(ptyId, term.cols, term.rows);
         term.writeln(`\x1b[2m[hivemind] spawned ${cmd} (pid ${pid})\x1b[0m`);
         setStatus("idle");
         if (agent && !agentPoll) {
