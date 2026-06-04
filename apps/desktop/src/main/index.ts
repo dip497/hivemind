@@ -1,7 +1,7 @@
 /** Electron main process — owns the BrowserWindow + IPC + PtyHost + git/worktree. */
 import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell, webContents } from "electron";
 import path from "node:path";
-import { promises as fsp, statSync, readFileSync, writeFileSync } from "node:fs";
+import { promises as fsp, statSync, readFileSync, writeFileSync, existsSync, cpSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import {
@@ -70,6 +70,44 @@ import type {
 } from "../shared/ipc.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Set the app name EARLY (before the window is created) so Electron tags the
+// X11 WM_CLASS as "hivemind" instead of the default "electron". Without this a
+// source/dev run shows the generic Electron icon in the GNOME dock because no
+// .desktop StartupWMClass matches "electron". (Packaged AppImage already gets
+// this from electron-builder's executableName, but setting it is harmless there.)
+app.setName("hivemind");
+
+// Renaming the app (above) moves the userData dir to ~/.config/hivemind. Without
+// this, EVERY existing user loses their canvas (frames/tiles/layout live in the
+// OLD profile's localStorage) the first time they upgrade to this version. So on
+// first run with the new name, if the new profile is empty, clone the most recent
+// legacy profile into it. Idempotent: once the new profile has localStorage, skip.
+// Legacy names seen in the wild: "Electron" (dev/source default) and
+// "@hivemind/desktop" / "@hivemind" (packaged, from the asar package.json name).
+function migrateLegacyProfile(): void {
+  try {
+    const userData = app.getPath("userData");
+    if (existsSync(path.join(userData, "Local Storage"))) return; // already populated
+    const appData = app.getPath("appData");
+    const candidates = ["Electron", "@hivemind/desktop", "@hivemind", "hivemind-desktop"];
+    let best: { dir: string; mtime: number } | null = null;
+    for (const name of candidates) {
+      const dir = path.join(appData, name);
+      const ls = path.join(dir, "Local Storage");
+      if (existsSync(ls)) {
+        const mtime = statSync(ls).mtimeMs;
+        if (!best || mtime > best.mtime) best = { dir, mtime };
+      }
+    }
+    if (!best) return;
+    cpSync(best.dir, userData, { recursive: true, force: false, errorOnExist: false });
+    console.log(`hivemind: migrated profile ${best.dir} → ${userData}`);
+  } catch (e) {
+    console.warn("hivemind: legacy profile migration skipped:", (e as Error).message);
+  }
+}
+migrateLegacyProfile();
 
 let mainWindow: BrowserWindow | null = null;
 
