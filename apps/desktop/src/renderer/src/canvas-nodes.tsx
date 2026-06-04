@@ -159,8 +159,14 @@ function useTileWheelZoom(selected: boolean): React.RefObject<HTMLDivElement | n
       try { el.releasePointerCapture(ev.pointerId); } catch { /* already released */ }
     };
     const onDown = (ev: PointerEvent) => {
-      if (selected) return;                 // selected tile handles its own input
-      if (ev.button !== 1 && ev.button !== 2) return; // middle / right only
+      // MIDDLE-button drag pans the canvas ANYWHERE — even over a selected tile.
+      // On Linux a 3-finger trackpad drag is commonly routed to the middle
+      // button, so this is the closest thing to "3-finger pans the panel" the
+      // web platform can see (it never exposes finger count). RIGHT-button pan
+      // stays unselected-only so a selected tile keeps its own right-click use.
+      const isMiddle = ev.button === 1;
+      const isRight = ev.button === 2;
+      if (!isMiddle && !(isRight && !selected)) return;
       ev.preventDefault();
       ev.stopPropagation();
       panning = true;
