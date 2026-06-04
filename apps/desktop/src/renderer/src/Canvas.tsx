@@ -885,10 +885,8 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
               onToggle={(k) => spawnVis(k)}
               agentSel={agentSel}
               onAgentChange={setAgentSel}
-              onSpawnAgent={(a) => spawnAgent(a, claudeMode)}
+              onSpawnAgent={(a) => spawnAgent(a)}
               onFrame={addFrame}
-              claudeMode={claudeMode}
-              onClaudeModeChange={setClaudeMode}
             />
           </Panel>
 

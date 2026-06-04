@@ -17,8 +17,6 @@ export function ToolIsland({
   onAgentChange,
   onSpawnAgent,
   onFrame,
-  claudeMode,
-  onClaudeModeChange,
 }: {
   repoPath: string | null;
   onToggle: (k: "tree" | "shell" | "diff" | "issues") => void;
@@ -27,8 +25,6 @@ export function ToolIsland({
   onAgentChange: (id: string) => void;
   onSpawnAgent: (agent: { id: string; cmd: string; defaultArgs?: string[]; label: string }) => void;
   onFrame: () => void;
-  claudeMode: string;
-  onClaudeModeChange: (m: string) => void;
 }) {
   const enabled = AGENTS.filter((a) => a.enabled);
   const sel = agentById(agentSel) ?? enabled[0]!;
@@ -72,21 +68,6 @@ export function ToolIsland({
           </div>
         )}
       </div>
-      {sel.id === "claude" && (
-        <select
-          value={claudeMode}
-          onChange={(e) => onClaudeModeChange(e.target.value)}
-          title="Claude permission mode for new sessions"
-          className="h-7 bg-[var(--color-bg)] border border-[var(--color-line2)] rounded-md text-[10px] font-mono text-[var(--color-fg2)] px-1 outline-none cursor-pointer hover:text-[var(--color-fg)]"
-        >
-          <option value="default">default</option>
-          <option value="plan">plan</option>
-          <option value="acceptEdits">acceptEdits</option>
-          <option value="auto">auto</option>
-          <option value="dontAsk">dontAsk</option>
-          <option value="bypassPermissions">bypass</option>
-        </select>
-      )}
       <div className="mx-0.5 h-5 w-px bg-[var(--color-line2)]" aria-hidden />
       <ToolButton label="Explorer" hint="3" disabled={!repoPath} onClick={() => onToggle("tree")}
         icon={<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M2 4.5C2 3.7 2.7 3 3.5 3h3l1.5 1.5h4.5c.8 0 1.5.7 1.5 1.5v5.5c0 .8-.7 1.5-1.5 1.5h-9C2.7 13 2 12.3 2 11.5v-7Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>} />

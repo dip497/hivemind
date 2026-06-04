@@ -34,8 +34,8 @@ function ClaudeIcon({ size = 16, className }: { size?: number; className?: strin
   );
 }
 
-/** Codex — geometric hexagon mark (placeholder until the official logo is
- *  bundled; swap the `icon` in the registry entry to replace). */
+/** Codex — clean geometric mark (the official OpenAI logo wasn't fetchable as a
+ *  complete path; swap the registry `icon` to drop in the real logo later). */
 function CodexIcon({ size = 16, className }: { size?: number; className?: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" fill="none" className={className} aria-hidden>
@@ -45,12 +45,12 @@ function CodexIcon({ size = 16, className }: { size?: number; className?: string
   );
 }
 
-/** opencode — bracketed cursor-block mark (placeholder; see CodexIcon). */
+/** opencode — its official logo's leading block glyph (downloaded), monochrome. */
 function OpencodeIcon({ size = 16, className }: { size?: number; className?: string }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" className={className} aria-hidden>
-      <path d="M5.5 3 2.5 8l3 5M10.5 3l3 5-3 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-      <rect x="6.8" y="6.8" width="2.4" height="2.4" rx="0.4" fill="currentColor" />
+    <svg width={size} height={size} viewBox="-3 6 30 30" fill="currentColor" className={className} aria-hidden>
+      <path d="M18 30H6V18H18V30Z" opacity="0.65" />
+      <path d="M18 12H6V30H18V12ZM24 36H0V6H24V36Z" />
     </svg>
   );
 }
