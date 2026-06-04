@@ -96,6 +96,8 @@ export interface RemoteAuth {
   privateKeyPath?: string;
   /** Passphrase for an encrypted private key. */
   passphrase?: string;
+  /** Password (for hosts without key auth). Held in memory only, never persisted. */
+  password?: string;
   /** Username override (else parsed from the uri, else $USER). */
   username?: string;
 }

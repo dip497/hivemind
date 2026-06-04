@@ -22,6 +22,7 @@ export function RemoteConnectModal({ open, onClose, onPick }: Props) {
   const [user, setUser] = useState("");
   const [port, setPort] = useState("22");
   const [keyPath, setKeyPath] = useState("");
+  const [password, setPassword] = useState("");
   const [phase, setPhase] = useState<"form" | "browse">("form");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,7 +34,7 @@ export function RemoteConnectModal({ open, onClose, onPick }: Props) {
   useEffect(() => {
     if (!open) return;
     setPhase("form"); setError(null); setBusy(false);
-    setEntries([]); setCwd("");
+    setEntries([]); setCwd(""); setPassword("");
     const t = setTimeout(() => firstInput.current?.focus(), 30);
     return () => clearTimeout(t);
   }, [open]);
@@ -57,6 +58,7 @@ export function RemoteConnectModal({ open, onClose, onPick }: Props) {
       const { home } = await window.hive.sshConnect(baseUri(), {
         username: user.trim() || undefined,
         privateKeyPath: keyPath.trim() || undefined,
+        password: password || undefined,
       });
       await list(home);
       setPhase("browse");
@@ -125,6 +127,18 @@ export function RemoteConnectModal({ open, onClose, onPick }: Props) {
                 onChange={(e) => setUser(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") connect(); }}
                 placeholder={`$USER (or from ~/.ssh)`}
+                className="bg-[var(--color-bg)] border border-[var(--color-line2)] rounded-md px-2.5 py-1.5 text-[13px] text-[var(--color-fg)] focus:outline-none focus:border-[var(--color-brand)] focus:ring-1 focus:ring-[var(--color-brand)]"
+              />
+            </label>
+            <label className="grid gap-1">
+              <span className="u-eyebrow">Password <span className="lowercase tracking-normal text-[var(--color-fg3)]">(or use a key below)</span></span>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") connect(); }}
+                placeholder="••••••••"
+                autoComplete="off"
                 className="bg-[var(--color-bg)] border border-[var(--color-line2)] rounded-md px-2.5 py-1.5 text-[13px] text-[var(--color-fg)] focus:outline-none focus:border-[var(--color-brand)] focus:ring-1 focus:ring-[var(--color-brand)]"
               />
             </label>

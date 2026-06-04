@@ -15,6 +15,8 @@ export interface HostAuth {
   /** Explicit private key path (+ optional passphrase). Agent is tried first. */
   privateKeyPath?: string;
   passphrase?: string;
+  /** Password auth (when the host has no key set up). Kept in memory only. */
+  password?: string;
   /** Override the username parsed from the URI (else uri user, else $USER). */
   username?: string;
 }
@@ -58,6 +60,13 @@ export class RemoteConnectionManager {
     client.on("close", () => this.pool.delete(target.hostId));
     client.on("error", () => this.pool.delete(target.hostId));
 
+    // Some servers do password auth via keyboard-interactive, not the `password`
+    // method — answer those prompts with the supplied password.
+    if (auth.password) {
+      client.on("keyboard-interactive", (_n, _i, _l, _prompts, finish) =>
+        finish([auth.password as string]),
+      );
+    }
     client.connect({
       host: target.host,
       port: target.port,
@@ -65,10 +74,13 @@ export class RemoteConnectionManager {
       readyTimeout: 20_000,
       keepaliveInterval: 15_000,
       keepaliveCountMax: 3,
-      agent: process.env.SSH_AUTH_SOCK,
+      // Only offer the agent when no password was given (else ssh2 tries agent
+      // keys first and may fail before reaching password on key-only setups).
+      ...(auth.password ? {} : { agent: process.env.SSH_AUTH_SOCK }),
       ...(auth.privateKeyPath
         ? { privateKey: readFileSync(auth.privateKeyPath), passphrase: auth.passphrase }
         : {}),
+      ...(auth.password ? { password: auth.password, tryKeyboard: true } : {}),
       hostHash: "sha256",
       // TOFU: accept+record on first use, reject on later mismatch.
       hostVerifier: (keyHashHex: string) => {
