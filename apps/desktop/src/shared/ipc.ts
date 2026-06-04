@@ -109,6 +109,16 @@ export interface RemoteDirEntry {
   size: number;
   mtime: number;
 }
+/** A saved remote connection (password lives encrypted in the OS keychain — the
+ *  renderer only learns whether one exists). */
+export interface SavedHost {
+  hostId: string;
+  host: string;
+  port: number;
+  user: string;
+  hasPassword: boolean;
+  hasKey: boolean;
+}
 
 // ── full IPC surface ──────────────────────────────────────────────────────
 
@@ -207,10 +217,17 @@ export interface HiveIpc {
 
   // ── remote (SSH) frames ───────────────────────────────────
   /** Probe + register auth for an ssh://[user@]host[:port]/ target; returns the
-   *  remote home dir + the connection-pool host id. Throws on connect failure. */
-  sshConnect(uri: string, auth: RemoteAuth): Promise<{ home: string; hostId: string }>;
+   *  remote home dir + the connection-pool host id. Throws on connect failure.
+   *  `remember` saves the host (password encrypted in the OS keychain). */
+  sshConnect(uri: string, auth: RemoteAuth, remember?: boolean): Promise<{ home: string; hostId: string }>;
   /** List a remote directory (for the folder picker). Empty dir → remote home. */
   sshListDir(uri: string, dir: string): Promise<{ dir: string; entries: RemoteDirEntry[] }>;
+  /** Saved connections (host/user/port + whether a password/key is stored). */
+  sshSavedHosts(): Promise<SavedHost[]>;
+  /** Connect using a saved host's stored credentials. Returns its home + parts. */
+  sshConnectSaved(hostId: string): Promise<{ home: string; host: string; port: number; user: string }>;
+  /** Delete a saved connection. */
+  sshForgetHost(hostId: string): Promise<void>;
 
   // ── worktree ──────────────────────────────────────────────
   worktreeList(repoPath: string): Promise<WorktreeEntry[]>;

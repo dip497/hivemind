@@ -38,6 +38,7 @@ import { useStateWithRef } from "./use-state-with-ref";
 import { defaultTileSize, defaultSizeForKind } from "./canvas-sizing";
 import { useWorktrees } from "./useWorktrees";
 import { RemoteConnectModal } from "./components/RemoteConnectModal";
+import { isRemote } from "../../shared/remote-uri";
 import { useSpawn } from "./useSpawn";
 import { useFrameOps } from "./useFrameOps";
 import { buildBaseNodes } from "./canvas-node-build";
@@ -439,6 +440,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     () => frames.map((f) => ({
       id: f.id, title: f.title, color: f.color,
       parentFrameId: f.parentFrameId, branch: f.parentFrameId ? f.branch : undefined,
+      remote: isRemote(f.workspacePath),
     })),
     [frames],
   );

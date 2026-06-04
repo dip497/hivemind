@@ -64,8 +64,11 @@ const api: HiveIpc & {
   fileWrite: (repoPath, relPath, contents) =>
     ipcRenderer.invoke("fileWrite", repoPath, relPath, contents),
 
-  sshConnect: (uri, auth) => ipcRenderer.invoke("sshConnect", uri, auth),
+  sshConnect: (uri, auth, remember) => ipcRenderer.invoke("sshConnect", uri, auth, remember),
   sshListDir: (uri, dir) => ipcRenderer.invoke("sshListDir", uri, dir),
+  sshSavedHosts: () => ipcRenderer.invoke("sshSavedHosts"),
+  sshConnectSaved: (hostId) => ipcRenderer.invoke("sshConnectSaved", hostId),
+  sshForgetHost: (hostId) => ipcRenderer.invoke("sshForgetHost", hostId),
 
   worktreeList: (repoPath) => ipcRenderer.invoke("worktreeList", repoPath),
   worktreeCreate: (repoPath, opts: WorktreeCreateOpts) =>

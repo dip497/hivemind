@@ -6,8 +6,8 @@
  * it as the frame's workspacePath (every tile in the frame then runs remote).
  */
 import { useEffect, useRef, useState } from "react";
-import { Server, Folder, ChevronRight, Loader2, ArrowLeft, HardDriveDownload } from "lucide-react";
-import type { RemoteDirEntry } from "../../../shared/ipc";
+import { Server, Folder, ChevronRight, Loader2, ArrowLeft, HardDriveDownload, X, Plug } from "lucide-react";
+import type { RemoteDirEntry, SavedHost } from "../../../shared/ipc";
 import { formatRemote, posixJoin } from "../../../shared/remote-uri";
 
 interface Props {
@@ -28,13 +28,16 @@ export function RemoteConnectModal({ open, onClose, onPick }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [cwd, setCwd] = useState("");
   const [entries, setEntries] = useState<RemoteDirEntry[]>([]);
+  const [remember, setRemember] = useState(true);
+  const [saved, setSaved] = useState<SavedHost[]>([]);
   const firstInput = useRef<HTMLInputElement>(null);
 
-  // Reset on open; focus the host field.
+  // Reset on open; focus the host field; load saved connections.
   useEffect(() => {
     if (!open) return;
     setPhase("form"); setError(null); setBusy(false);
-    setEntries([]); setCwd(""); setPassword("");
+    setEntries([]); setCwd(""); setPassword(""); setRemember(true);
+    window.hive.sshSavedHosts().then(setSaved).catch(() => setSaved([]));
     const t = setTimeout(() => firstInput.current?.focus(), 30);
     return () => clearTimeout(t);
   }, [open]);
@@ -59,7 +62,7 @@ export function RemoteConnectModal({ open, onClose, onPick }: Props) {
         username: user.trim() || undefined,
         privateKeyPath: keyPath.trim() || undefined,
         password: password || undefined,
-      });
+      }, remember);
       await list(home);
       setPhase("browse");
     } catch (e) {
@@ -67,6 +70,26 @@ export function RemoteConnectModal({ open, onClose, onPick }: Props) {
     } finally {
       setBusy(false);
     }
+  }
+
+  // Reconnect a saved host with its stored (keychain) credentials.
+  async function connectSaved(h: SavedHost) {
+    setBusy(true); setError(null);
+    try {
+      const r = await window.hive.sshConnectSaved(h.hostId);
+      setHost(r.host); setUser(r.user); setPort(String(r.port));
+      await list(r.home);
+      setPhase("browse");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function forget(hostId: string) {
+    await window.hive.sshForgetHost(hostId).catch(() => {});
+    setSaved((s) => s.filter((h) => h.hostId !== hostId));
   }
 
   async function list(dir: string) {
@@ -99,6 +122,30 @@ export function RemoteConnectModal({ open, onClose, onPick }: Props) {
 
         {phase === "form" ? (
           <div className="p-4 grid gap-3">
+            {saved.length > 0 && (
+              <div className="grid gap-1">
+                <span className="u-eyebrow">Saved</span>
+                <div className="grid gap-1">
+                  {saved.map((h) => (
+                    <div key={h.hostId} className="group flex items-center gap-2 rounded-md border border-[var(--color-line2)] bg-[var(--color-bg3)] px-2 py-1.5">
+                      <Server size={13} className="shrink-0 text-[var(--color-brand)]" />
+                      <button
+                        onClick={() => connectSaved(h)}
+                        disabled={busy}
+                        className="flex-1 text-left min-w-0 cursor-pointer disabled:opacity-50"
+                        title={`Connect ${h.hostId}`}
+                      >
+                        <span className="block text-[12px] text-[var(--color-fg)] truncate">{h.user ? `${h.user}@` : ""}{h.host}{h.port !== 22 ? `:${h.port}` : ""}</span>
+                        <span className="block text-[10px] text-[var(--color-fg3)]">{h.hasPassword ? "password saved" : h.hasKey ? "key" : "agent"}</span>
+                      </button>
+                      <Plug size={12} className="shrink-0 text-[var(--color-fg3)] group-hover:text-[var(--color-fg)]" />
+                      <button onClick={() => forget(h.hostId)} aria-label="forget host" title="Forget" className="shrink-0 text-[var(--color-fg3)] hover:text-[var(--color-err)] cursor-pointer"><X size={13} /></button>
+                    </div>
+                  ))}
+                </div>
+                <div className="my-1 border-t border-[var(--color-line2)]" />
+              </div>
+            )}
             <div className="grid grid-cols-[1fr_88px] gap-2">
               <label className="grid gap-1">
                 <span className="u-eyebrow">Host</span>
@@ -153,6 +200,10 @@ export function RemoteConnectModal({ open, onClose, onPick }: Props) {
               />
             </label>
             {error && <p className="text-[11.5px] text-[var(--color-err)] break-words">{error}</p>}
+            <label className="flex items-center gap-2 text-[11.5px] text-[var(--color-fg2)] cursor-pointer select-none">
+              <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="accent-[var(--color-brand)]" />
+              Remember this connection {password ? "(password in OS keychain)" : ""}
+            </label>
             <div className="flex justify-end gap-2 pt-1">
               <button onClick={onClose} className="px-3 py-1.5 text-[12px] text-[var(--color-fg2)] hover:text-[var(--color-fg)] rounded-md cursor-pointer">Cancel</button>
               <button

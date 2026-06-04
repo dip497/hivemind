@@ -8,7 +8,7 @@
  * its own status subscription; Canvas owns the data + focus actions.
  */
 import { useEffect, useState, type ReactNode } from "react";
-import { Layers, ChevronRight, ChevronDown, Square, GitBranch } from "lucide-react";
+import { Layers, ChevronRight, ChevronDown, Square, GitBranch, Server } from "lucide-react";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 
 export type LayerKind = "claude" | "terminal" | "editor" | "diff" | "issues";
@@ -29,6 +29,8 @@ export interface LayerFrame {
   parentFrameId?: string;
   /** Branch of a worktree sub-frame (shown as a muted tag). */
   branch?: string;
+  /** True => bound to a remote SSH host (shown with a Server glyph). */
+  remote?: boolean;
 }
 
 interface Props {
@@ -194,7 +196,9 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
             className="flex-1 flex items-center gap-1.5 min-w-0 text-left text-[11px] font-medium text-[var(--color-fg)]"
             title={isWt ? `Focus worktree ${frame.branch ?? frame.title}` : `Focus ${frame.title}`}
           >
-            {isWt ? (
+            {frame.remote ? (
+              <Server size={11} className="shrink-0" style={{ color: frame.color }} />
+            ) : isWt ? (
               <GitBranch size={11} className="shrink-0" style={{ color: frame.color }} />
             ) : (
               <Square size={9} fill={frame.color} stroke={frame.color} className="shrink-0" />

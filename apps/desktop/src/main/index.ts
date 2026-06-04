@@ -27,7 +27,8 @@ import os from "node:os";
 import type { IssuePatch } from "@hivemind/core/types";
 import * as ptyHost from "./pty-host.js";
 import * as ptyDaemon from "./daemon-client.js";
-import { isRemote, parseRemote } from "../shared/remote-uri.js";
+import { isRemote, parseRemote, formatRemote } from "../shared/remote-uri.js";
+import { listSavedHosts, saveHost, savedAuth, forgetSavedHost } from "./remote/saved-hosts.js";
 import {
   spawnRemotePty, writeRemotePty, resizeRemotePty, killRemotePty, hasRemotePty,
 } from "./remote/pty.js";
@@ -599,9 +600,26 @@ ipcMain.handle("fileWrite", wrap((_e, repoPath: string, relPath: string, content
 // Probe + auth-register a host, returning its home dir (the connectivity check
 // behind "attach remote"). `uri` is ssh://[user@]host[:port]/ — the path is
 // ignored here (the picker chooses it next).
-ipcMain.handle("sshConnect", wrap(async (_e, uri: string, auth: HostAuth) => {
+ipcMain.handle("sshConnect", wrap(async (_e, uri: string, auth: HostAuth, remember?: boolean) => {
   const { home, hostId } = await remoteConns.probe(uri, auth ?? {});
+  if (remember) {
+    const t = parseRemote(uri);
+    saveHost(t.host, t.port, t.user ?? auth?.username ?? "", auth ?? {});
+  }
   return { home, hostId };
+}));
+// Saved connections (host/user/port + keychain-encrypted password).
+ipcMain.handle("sshSavedHosts", wrap(async () => listSavedHosts()));
+ipcMain.handle("sshForgetHost", wrap(async (_e, hostId: string) => { forgetSavedHost(hostId); }));
+// Connect using a saved host's stored credentials; returns the bits the picker
+// needs to rebuild the uri + browse. The connection is then pooled by hostId,
+// so sshListDir reuses it with no further auth.
+ipcMain.handle("sshConnectSaved", wrap(async (_e, hostId: string) => {
+  const saved = savedAuth(hostId);
+  if (!saved) throw new Error("saved host not found");
+  const uri = formatRemote({ host: saved.host, port: saved.port, user: saved.user || null, path: "/" });
+  const { home } = await remoteConns.probe(uri, saved.auth);
+  return { home, host: saved.host, port: saved.port, user: saved.user };
 }));
 // List a remote directory for the folder picker. `dir` empty → the host's home.
 ipcMain.handle("sshListDir", wrap(async (_e, uri: string, dir: string) => {
