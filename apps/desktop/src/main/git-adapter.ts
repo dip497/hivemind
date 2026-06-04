@@ -140,19 +140,6 @@ const XY_TO_STATUS: Record<string, GitFileStatus> = {
 };
 
 export async function gitStatus(repoPath: string): Promise<GitStatusSnapshot> {
-  const raw = await rawGit(repoPath, [
-    "status",
-    "--porcelain=v2",
-    "--branch",
-    "--untracked-files=normal",
-    // Explicit: gitignored files MUST NOT appear in DiffTile / FileTreeTile.
-    // `--ignored=no` is the default but stating it locks the behavior against
-    // future flag drift. Note: a file that was tracked BEFORE being added to
-    // .gitignore still surfaces — git only skips gitignored UNtracked files.
-    // To hide such files use `git rm --cached <path> && commit`.
-    "--ignored=no",
-  ]);
-
   const snap: GitStatusSnapshot = {
     branch: null,
     upstream: null,
@@ -164,6 +151,27 @@ export async function gitStatus(repoPath: string): Promise<GitStatusSnapshot> {
     isRebasing: false,
     head: "",
   };
+
+  let raw: string;
+  try {
+    raw = await rawGit(repoPath, [
+      "status",
+      "--porcelain=v2",
+      "--branch",
+      "--untracked-files=normal",
+      // Explicit: gitignored files MUST NOT appear in DiffTile / FileTreeTile.
+      // `--ignored=no` is the default but stating it locks the behavior against
+      // future flag drift. Note: a file that was tracked BEFORE being added to
+      // .gitignore still surfaces — git only skips gitignored UNtracked files.
+      // To hide such files use `git rm --cached <path> && commit`.
+      "--ignored=no",
+    ]);
+  } catch (e) {
+    // Non-git folder → no status (the file tree still works via the ls-files
+    // fallback). Git decorations simply don't show. Other errors propagate.
+    if (/not a git repository/i.test((e as Error).message)) return snap;
+    throw e;
+  }
 
   for (const line of raw.split("\n")) {
     if (!line) continue;
@@ -276,15 +284,59 @@ function makeEntry(filePath: string, xy: string): GitFileEntry {
 
 // ── diff ───────────────────────────────────────────────────────────────
 
+// Dirs never worth walking in the non-git fallback (heavy / noise).
+const WALK_IGNORE = new Set([
+  ".git", "node_modules", ".next", "dist", "build", "out", ".turbo", ".cache",
+  "target", ".venv", "venv", "__pycache__", ".idea", ".gradle", "vendor",
+]);
+const WALK_MAX = 5000;
+
+/** Recursive directory listing for a NON-git folder — relative POSIX paths,
+ *  skipping heavy/ignored dirs and dotfolders, bounded so a huge tree can't
+ *  hang the UI. Local FS only. */
+async function walkDir(root: string): Promise<string[]> {
+  const out: string[] = [];
+  const walk = async (dir: string, rel: string): Promise<void> => {
+    if (out.length >= WALK_MAX) return;
+    let entries: import("node:fs").Dirent[];
+    try { entries = await fs.readdir(dir, { withFileTypes: true }); }
+    catch { return; }
+    for (const e of entries) {
+      if (out.length >= WALK_MAX) return;
+      const name = e.name;
+      const childRel = rel ? `${rel}/${name}` : name;
+      if (e.isDirectory()) {
+        if (WALK_IGNORE.has(name) || name.startsWith(".")) continue;
+        await walk(path.join(dir, name), childRel);
+      } else if (e.isFile()) {
+        out.push(childRel);
+      }
+    }
+  };
+  await walk(root, "");
+  return out.sort();
+}
+
 export async function gitListFiles(repoPath: string): Promise<string[]> {
   // tracked + untracked, respecting .gitignore. Deduped, sorted, NUL-safe.
-  const raw = await rawGit(repoPath, [
-    "ls-files",
-    "-z",
-    "--cached",
-    "--others",
-    "--exclude-standard",
-  ]);
+  let raw: string;
+  try {
+    raw = await rawGit(repoPath, [
+      "ls-files",
+      "-z",
+      "--cached",
+      "--others",
+      "--exclude-standard",
+    ]);
+  } catch (e) {
+    // Not a git repo (or git missing) → plain directory walk so the editor /
+    // file tree still works on any folder. Remote non-git falls through to the
+    // error (the fs walk is local-only). Git status/diff just stay empty.
+    if (!isRemote(repoPath) && /not a git repository/i.test((e as Error).message)) {
+      return walkDir(repoPath);
+    }
+    throw e;
+  }
   const seen = new Set<string>();
   for (const p of raw.split("\0")) {
     if (p) seen.add(p);
