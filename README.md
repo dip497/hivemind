@@ -48,6 +48,12 @@ Local-first. Markdown-backed. No SDK lock-in. No telemetry. No cloud.
 
 ---
 
+## Contents
+
+[What it is](#what-it-is) · [Install](#install) · [Quick start](#quick-start) · [Features](#features) · [Architecture](#architecture) · [Development](#development) · [Contributing](#contributing) · [License](#license)
+
+---
+
 ## What it is
 
 A desktop app — Electron + an infinite [xyflow](https://reactflow.dev) canvas — where every tile is a live terminal, a code diff, a file tree, or an issues board, and every tile belongs to a **frame** (a named workspace bound to a real repo on disk). Spawn a `claude` inside a frame: it runs in that repo's `cwd`, sees that repo's issues, and writes changes that show up live in the diff tile next door.

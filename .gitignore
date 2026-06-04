@@ -22,6 +22,8 @@ dist-electron/
 *.AppImage
 linux-unpacked/
 
+.rig/
+
 # Per-developer / local dev artifacts — never committed.
 # Ignore .claude/ contents (settings.local.json, agents, local skills) but SHIP
 # the hive-browser skill — it's part of the Browser-tile feature, not local cruft.
@@ -31,7 +33,8 @@ linux-unpacked/
 !.claude/skills/hive-browser/
 .hyperresearch/
 research/
-screenshots/
+# screenshots/ are the README demo images — they MUST be committed so GitHub
+# renders them (relative <img src> only works if the files are in the repo).
 .preview-screenshot.png
 REVIEW.md
 PROPOSAL.md
