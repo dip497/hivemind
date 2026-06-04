@@ -589,7 +589,13 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       {/* `nowheel` tells react-flow to ignore wheel events inside this element
           (default class react-flow checks for) — without it, scrolling the
           terminal pans the entire canvas. */}
-      <div ref={hostRef} className="flex-1 bg-black p-1.5" />
+      {/* min-h-0/min-w-0 let this flex child shrink BELOW its content size —
+          without them a flex item floors at content height, so shrinking the
+          tile didn't shrink the host, fit() never reflowed, and the parent's
+          overflow-hidden cropped the terminal. With them the host tracks the
+          tile and the ResizeObserver re-fits, so the terminal reflows (cols/
+          rows scale) on resize down AND up instead of being clipped. */}
+      <div ref={hostRef} className="flex-1 min-h-0 min-w-0 overflow-hidden bg-black p-1.5" />
     </div>
   );
 }
