@@ -78,11 +78,12 @@ jobs:
         # ssh2 (remote SSH frames) lists `cpu-features` as an OPTIONAL dep — it
         # only picks a faster cipher when present, and falls back to pure JS
         # otherwise. electron-builder's native rebuild still tries to node-gyp
-        # it and dies on the runner ("buildcheck.gypi not found"). Remove it
-        # from the deploy so the rebuild skips it; ssh2 works without it.
+        # it and dies on the runner ("buildcheck.gypi not found"). It resolves
+        # cpu-features from BOTH the deploy dir and the hoisted workspace-root
+        # pnpm store, so nuke every copy in the tree; ssh2 works without it.
         run: |
-          rm -rf desktop-deploy/node_modules/.pnpm/cpu-features@* || true
-          find desktop-deploy/node_modules -maxdepth 5 -name cpu-features -exec rm -rf {} + 2>/dev/null || true
+          find "$GITHUB_WORKSPACE" -type d -name cpu-features -prune -exec rm -rf {} + 2>/dev/null || true
+          echo "remaining cpu-features dirs:"; find "$GITHUB_WORKSPACE" -type d -name cpu-features 2>/dev/null || true
 
       - name: Package AppImage
         # Run electron-builder INSIDE the deployed copy so node_modules are
