@@ -29,7 +29,9 @@ interface TabMeta {
 function toUrl(input: string): string {
   const s = input.trim();
   if (!s) return "about:blank";
-  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) return s;
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) return s; // already has a scheme (http, file, …)
+  // localhost / host:port (dev servers) → http, no dot required.
+  if (/^localhost(:\d+)?(\/.*)?$/i.test(s) || /^[\w.-]+:\d{2,5}(\/.*)?$/.test(s)) return `http://${s}`;
   if (/^[^\s]+\.[^\s]+$/.test(s) && !s.includes(" ")) return `https://${s}`;
   return `https://www.google.com/search?q=${encodeURIComponent(s)}`;
 }
@@ -89,6 +91,10 @@ function TabView({
       ref={ref as React.RefObject<HTMLElement>}
       src={initialUrl}
       partition="persist:browser"
+      // allowpopups must be present at attach time for window.open / target=_blank
+      // to fire the guest's window-open handler (main routes it back as a new tab).
+      // Without it the guest silently swallows popups → "links don't open".
+      allowpopups={true}
       className="w-full h-full"
       style={{ display: active ? "inline-flex" : "none", width: "100%", height: "100%" }}
     />

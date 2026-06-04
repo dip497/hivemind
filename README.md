@@ -114,6 +114,7 @@ In the canvas:
 - Press `⌘\` to spawn a claude tile in the active workspace zone.
 - Click **▶ Work on this** on any issue → claude spawns pre-loaded with the issue and the full MCP tool surface.
 - Drag a file from the explorer tile into the diff tile to pin a review.
+- Press `7` to open a **Browser** tile — a real web view that pans/zooms with the canvas.
 - Double-click any tile name to rename it; the pencil icon opens edit mode.
 
 ---
@@ -124,6 +125,8 @@ In the canvas:
 |---|---|
 | **Canvas-per-project** | One infinite canvas per repo. Frames bind to a workspace path so multiple repos can coexist on one screen. Each frame auto-gets a distinct color. |
 | **First-class agents** | claude / codex / gemini / opencode each run in their own xterm tile with WebGL-accelerated rendering. |
+| **Browser tile** | A real Chromium web view (Electron `<webview>`) that lives in the DOM, so it pans / zooms / clips with the canvas — multi-tab, address bar, find-in-page, per-session logins. Press `7` or a frame's **+ → Browser**. |
+| **Agents can browse** | Opt-in (`HIVEMIND_BROWSER_CDP=1`): a spawned agent drives the *visible* Browser tile over CDP via the `hive-browser` skill (built on [agent-browser](https://github.com/vercel-labs/agent-browser)) — navigate, click, read, screenshot the same page you're watching. |
 | **Remote SSH frames** | Bind a frame to a directory on another machine over SSH — its terminals are real PTYs on the host, the editor reads/writes over SFTP, diff/status run `git` on the remote. One pooled `ssh2` connection per host; agent/key auth; TOFU host keys. |
 | **Git worktrees as sub-frames** | Attach a branch worktree → a nested sub-frame scoped to that branch. Line several branches up side by side and arrange them as columns. |
 | **Layers + arrange** | A Figma-style layers rail lists every tile grouped by frame with live status; opt-in arrange snaps a frame's tiles + worktrees into Columns / Rows / Grid. |
@@ -150,6 +153,7 @@ apps/
 └── desktop/     Electron + electron-vite + React renderer.
                  ├─ Canvas       xyflow infinite canvas
                  ├─ TerminalTile xterm.js + WebGL + agent-status bus
+                 ├─ BrowserTile  multi-tab <webview> + CDP agent bridge
                  ├─ DiffTile     Pierre-backed diff view
                  ├─ FileTreeTile project explorer
                  ├─ EditorTile   CodeMirror tabs

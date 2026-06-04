@@ -382,7 +382,19 @@ ipcMain.handle(
   wrap(async (_e, tileId: string, method: string, params?: Record<string, unknown>) => {
     const guest = browserGuestFor(tileId);
     if (!guest) throw new Error(`no browser tile registered for ${tileId}`);
-    if (!guest.debugger.isAttached()) guest.debugger.attach("1.3");
+    // webContents.debugger and an open DevTools window both claim the one
+    // debugger slot, so attach() throws if the tile's DevTools is open. Surface
+    // that as an actionable message instead of a raw CDP error.
+    if (!guest.debugger.isAttached()) {
+      try {
+        guest.debugger.attach("1.3");
+      } catch (err) {
+        if (guest.isDevToolsOpened()) {
+          throw new Error("cannot attach CDP — this tile's DevTools is open; close it (toolbar wrench) and retry");
+        }
+        throw err;
+      }
+    }
     return await guest.debugger.sendCommand(method, params ?? {});
   }),
 );
