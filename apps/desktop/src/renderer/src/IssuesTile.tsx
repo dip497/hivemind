@@ -73,7 +73,7 @@ export function IssuesTile({ root, onClose }: Props) {
     // Spawn claude with the work prompt ATTACHED — it delivers it to itself once
     // ready (survives the workspace picker; no startup race). See claude-bus.
     const work = `Work on ${issue.id}: load it via hive_get_issue, complete the acceptance criteria, and end with hive_set_state. Title: "${issue.title}".`;
-    window.dispatchEvent(new CustomEvent("hivemind:spawn-claude", { detail: { work } }));
+    window.dispatchEvent(new CustomEvent("hivemind:deliver-to-claude", { detail: { text: work } }));
   };
 
   return (

@@ -39,6 +39,7 @@ import { defaultTileSize, defaultSizeForKind } from "./canvas-sizing";
 import { useWorktrees } from "./useWorktrees";
 import { RemoteConnectModal } from "./components/RemoteConnectModal";
 import { isRemote } from "../../shared/remote-uri";
+import { AgentIcon } from "./agents";
 import { useSpawn } from "./useSpawn";
 import { useFrameOps } from "./useFrameOps";
 import { buildBaseNodes } from "./canvas-node-build";
@@ -477,6 +478,11 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // Spawn-target picker: when 2+ workspaces (base + workspace-zone frames) live
   // on the canvas, ask WHERE a new claude should run instead of guessing.
   const [spawnPick, setSpawnPick] = useState<{ kind: TileKind; mode?: string; work?: string } | null>(null);
+  // Text awaiting a claude target — set when something wants to deliver a prompt
+  // ("Work on this", diff "send review") and 2+ claude tiles exist, so the user
+  // picks WHICH claude (or a new one). 0 claude → spawn new directly; the picker
+  // also lists the single-claude case as "this / new".
+  const [claudePick, setClaudePick] = useState<{ text: string } | null>(null);
   // Frame awaiting a remote (ssh://) bind — set when FrameNode fires
   // `hivemind:attach-remote`; the modal connects, browses, and binds the picked
   // ssh uri as that frame's workspacePath.
@@ -505,7 +511,30 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     setSelectedFrameId, setTiles, setSpawnPick, focusTile,
   });
 
-  // Keyboard shortcuts + CommandPalette/menu event listeners. See useCanvasShortcuts.
+  // Deliver a prompt to claude with a TARGET PICKER. "Work on this" and the
+  // diff "send review" fire `hivemind:deliver-to-claude` with the text; we route
+  // by how many claude tiles exist: 0 → spawn a new claude carrying the prompt;
+  // 1+ → show a picker (the chosen tile, or "New claude"). Old direct paths
+  // (spawn-claude / send-to-claude) still work for internal callers.
+  const deliverToClaude = useCallback((text: string, target: "new" | string) => {
+    if (target === "new") { spawnClaude(undefined, text); return; }
+    window.dispatchEvent(new CustomEvent("hivemind:send-to-claude", { detail: { text, target } }));
+    setSelectedTileId(target);
+    focusTile(target);
+  }, [spawnClaude, focusTile]);
+  useEffect(() => {
+    const onDeliver = (e: Event) => {
+      const text = (e as CustomEvent<{ text: string }>).detail?.text;
+      if (!text) return;
+      const claudes = tilesRef.current.filter((t) => t.kind === "claude");
+      if (claudes.length === 0) { spawnClaude(undefined, text); return; }
+      setClaudePick({ text });
+    };
+    window.addEventListener("hivemind:deliver-to-claude", onDeliver as EventListener);
+    return () => window.removeEventListener("hivemind:deliver-to-claude", onDeliver as EventListener);
+  }, [spawnClaude]);
+
+  // Keyboard shortcuts + menu event listeners. See useCanvasShortcuts.
   useCanvasShortcuts({
     repoPath, spawnClaude, spawnVis, addFrame, frameOpen, focusTile,
     setSelectedTileId, setFocusModeReq, selectedTileIdRef, selectedFrameIdRef,
@@ -965,6 +994,39 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
           onClose={() => setRemoteAttach(null)}
           onPick={(uri) => { if (remoteAttach) bindRemote(remoteAttach, uri); setRemoteAttach(null); }}
         />
+        {claudePick && (
+          <div className="fixed inset-0 z-50 grid place-items-center" onClick={() => setClaudePick(null)}>
+            <div className="absolute inset-0 bg-black/40" />
+            <div className="relative w-[340px] max-w-[90vw] rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] shadow-2xl p-1.5" onClick={(e) => e.stopPropagation()}>
+              <div className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-fg3)]">
+                Send to claude
+              </div>
+              {tiles.filter((t) => t.kind === "claude").map((t) => {
+                const name = tileNames[t.id] ?? agentTitles[t.id] ?? t.label;
+                const frame = frames.find((f) => f.id === frameOf[t.id]);
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => { deliverToClaude(claudePick.text, t.id); setClaudePick(null); }}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[12px] text-left text-[var(--color-fg2)] hover:bg-[var(--color-bg4)] hover:text-[var(--color-fg)] cursor-pointer"
+                  >
+                    <AgentIcon id="claude" size={13} className="shrink-0 text-[var(--color-fg3)]" />
+                    <span className="truncate flex-1">{name}</span>
+                    {frame && <span className="shrink-0 text-[10px] text-[var(--color-fg3)]">{frame.title}</span>}
+                  </button>
+                );
+              })}
+              <div className="my-1 border-t border-[var(--color-line2)]" />
+              <button
+                onClick={() => { deliverToClaude(claudePick.text, "new"); setClaudePick(null); }}
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[12px] text-left text-[var(--color-fg)] hover:bg-[var(--color-bg4)] cursor-pointer"
+              >
+                <span className="shrink-0 grid place-items-center size-3.5 text-[var(--color-fg3)]">+</span>
+                <span className="flex-1">New claude</span>
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

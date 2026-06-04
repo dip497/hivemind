@@ -60,7 +60,6 @@ import {
   workerHighlighterOptions,
   workerPoolOptions,
 } from "./pierre-codeview";
-import { latestClaude } from "./claude-bus";
 import { DiffReviewPanel } from "./DiffReviewPanel";
 import { normalizeComments, newCid, type ReviewComment } from "./diff-comments";
 
@@ -438,15 +437,11 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
     cv.setSelectedLines({ id, range: { start: c.startLine, end: c.endLine, side: c.side } });
   }, []);
 
-  // Send arbitrary review text to claude — spawn a tile first if none is live
-  // (otherwise the bus event vanishes). Shared by batch + per-thread sends.
+  // Send review text to claude via the target picker (Canvas routes it: pick
+  // among existing claude tiles, or spawn a new one carrying the text — no more
+  // blind latest-or-spawn-with-a-2.5s-timeout).
   const sendToClaude = useCallback((msg: string) => {
-    if (!latestClaude()) {
-      window.dispatchEvent(new CustomEvent("hivemind:spawn-claude"));
-      setTimeout(() => window.dispatchEvent(new CustomEvent<string>("hivemind:send-to-claude", { detail: msg })), 2500);
-    } else {
-      window.dispatchEvent(new CustomEvent<string>("hivemind:send-to-claude", { detail: msg }));
-    }
+    window.dispatchEvent(new CustomEvent("hivemind:deliver-to-claude", { detail: { text: msg } }));
   }, []);
   const sendComment = useCallback((c: ReviewComment) => {
     const range = c.startLine === c.endLine ? `${c.startLine}` : `${c.startLine}-${c.endLine}`;

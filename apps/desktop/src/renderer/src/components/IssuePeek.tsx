@@ -85,8 +85,10 @@ export function IssuePeek({ root, id, onClose }: Props) {
                     //    unlike the old blind setTimeout(2500) send-to-"latest".
                     //    The hive-work skill auto-triggers on the issue key.
                     const work = `Work on ${issue.id}: load it via hive_get_issue, complete the acceptance criteria, and end with hive_set_state. Title: "${issue.title}".`;
+                    // Route through the claude target picker (this/new when 1+,
+                    // select/new when 2+, straight-spawn when none).
                     window.dispatchEvent(
-                      new CustomEvent("hivemind:spawn-claude", { detail: { work } }),
+                      new CustomEvent("hivemind:deliver-to-claude", { detail: { text: work } }),
                     );
                     // 3. Close the peek so the focused claude tile is visible.
                     onClose();
