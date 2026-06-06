@@ -14,16 +14,25 @@ let page: Page;
 let repo: string;
 const FILE = "hello.ts";
 const ORIGINAL = "export const greeting = 'hello world';\n";
+// Two extra files for the tab-switching test (distinct unique markers so the
+// assertion can tell which buffer is active). Kept separate from FILE so the
+// edit/save tests above don't perturb them.
+const FILE_A = "tabs-a.ts";
+const FILE_B = "tabs-b.ts";
+const MARK_A = "ALPHA_TAB_MARKER";
+const MARK_B = "BETA_TAB_MARKER";
 
 test.beforeAll(async () => {
   repo = await fs.mkdtemp(path.join(os.tmpdir(), "hm-editor-"));
   await fs.writeFile(path.join(repo, FILE), ORIGINAL, "utf8");
-  // The file tree is fed by `git ls-files`, so the file must be tracked.
+  await fs.writeFile(path.join(repo, FILE_A), `export const a = '${MARK_A}';\n`, "utf8");
+  await fs.writeFile(path.join(repo, FILE_B), `export const b = '${MARK_B}';\n`, "utf8");
+  // The file tree is fed by `git ls-files`, so the files must be tracked.
   const git = (...args: string[]) => execFileSync("git", args, { cwd: repo });
   git("init", "-q");
   git("config", "user.email", "e2e@test.dev");
   git("config", "user.name", "e2e");
-  git("add", FILE);
+  git("add", "-A");
   git("commit", "-q", "-m", "seed");
 
   app = await electron.launch({
@@ -92,4 +101,27 @@ test("Ctrl+F opens the CodeMirror search panel", async () => {
   await expect(editor.locator(".cm-panel.cm-search input[name='search']"))
     .toBeVisible({ timeout: 4_000 });
   await page.keyboard.press("Escape");
+});
+
+test("re-clicking an already-open file switches back to its tab", async () => {
+  // Regression: open A, open B (B becomes active), then click A again. The tab
+  // list dedupes, so re-clicking an open file produced no state change and the
+  // editor stayed on B. Selecting a file must always activate it.
+  const wb = page.locator(".react-flow__node-workbench");
+  const treeFile = (name: string) =>
+    wb.locator("button[role='treeitem']").filter({ hasText: name }).first();
+  const showsContent = (marker: string) =>
+    expect
+      .poll(async () => wb.locator(".cm-content").textContent(), { timeout: 6_000, intervals: [300] })
+      .toContain(marker);
+
+  // Open A → its content shows.
+  await treeFile(FILE_A).click();
+  await showsContent(MARK_A);
+  // Open B → B becomes the active tab.
+  await treeFile(FILE_B).click();
+  await showsContent(MARK_B);
+  // Re-click A → MUST switch back to A's buffer (the bug: it stayed on B).
+  await treeFile(FILE_A).click();
+  await showsContent(MARK_A);
 });

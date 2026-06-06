@@ -37,6 +37,7 @@ import { tags as t } from "@lezer/highlight";
 // standalone DiffTile stays for browsing branch/commit diffs (no editable
 // buffer there).
 import { unifiedMergeView } from "@codemirror/merge";
+import { resolveActive } from "./editor-active";
 
 interface Props {
   repoPath: string;
@@ -44,6 +45,10 @@ interface Props {
   tabs: string[];
   /** Remove a tab from Canvas state. */
   onCloseTab: (path: string) => void;
+  /** Activate-this-file request from the host (tree click). The `seq` makes
+   *  re-selecting an already-open file a fresh request, so clicking a file that's
+   *  already a tab switches back to it instead of being a no-op. */
+  activeReq?: { path: string; seq: number } | null;
   /** Close the whole tile. Omitted when embedded (the host owns chrome). */
   onClose?: () => void;
   /** When true, render only the tab bar + editor body — no outer tile chrome
@@ -184,7 +189,7 @@ interface TabState {
   dirty: boolean;
 }
 
-export function EditorTile({ repoPath, tabs, onCloseTab, onClose, embedded = false }: Props) {
+export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, embedded = false }: Props) {
   const [active, setActive] = useState<string | null>(tabs[0] ?? null);
   // Per-tab metadata. Live document content lives in CodeMirror's state; we
   // keep saved snapshot + dirty/loaded flags here keyed by repo-relative path.
@@ -205,31 +210,21 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, embedded = fal
   // lose unsaved edits. Keyed by repo-relative path. Updated on every doc change.
   const buffers = useRef<Map<string, string>>(new Map());
 
-  // Keep `active` valid as tabs open/close, AND focus any newly-opened tab.
-  //
-  // Previous version only re-targeted `active` when the current active was
-  // removed from `tabs`. That meant clicking a SECOND file in the tree
-  // appended a new tab but kept focus on the first — the user's complaint.
-  // We now diff `tabs` against the previous render: any path that's new gets
-  // focused, with the most-recently-added winning when several arrive at once.
+  // Resolve which tab is active across all the things that can change it: tabs
+  // opening/closing, a newly-opened file (focus it), the active tab being closed
+  // elsewhere (repair), and an explicit tree-click request — including a re-click
+  // of an ALREADY-OPEN file, which the deduped `tabs` list can't signal on its
+  // own (that was the bug: re-clicking an open file did nothing). The decision is
+  // a pure function (`resolveActive`) so it's unit-tested without a DOM.
   const prevTabsRef = useRef<string[]>(tabs);
+  const lastReqSeqRef = useRef<number>(activeReq?.seq ?? -1);
   useEffect(() => {
     const prev = prevTabsRef.current;
     prevTabsRef.current = tabs;
-    if (tabs.length === 0) {
-      setActive(null);
-      return;
-    }
-    const added = tabs.filter((p) => !prev.includes(p));
-    if (added.length > 0) {
-      setActive(added[added.length - 1]!);
-      return;
-    }
-    if (!active || !tabs.includes(active)) {
-      // Active tab was closed externally → fall back to the last remaining.
-      setActive(tabs[tabs.length - 1] ?? null);
-    }
-  }, [tabs, active]);
+    const next = resolveActive({ tabs, prevTabs: prev, active, req: activeReq ?? null, lastSeq: lastReqSeqRef.current });
+    lastReqSeqRef.current = next.seq;
+    if (next.active !== active) setActive(next.active);
+  }, [tabs, active, activeReq]);
 
   // Drop cached buffers + meta + diffMode for closed tabs (avoid unbounded growth).
   useEffect(() => {

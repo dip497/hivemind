@@ -34,6 +34,18 @@ const clampW = (w: number) => Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, w));
 
 export function WorkbenchTile({ repoPath, tabs, onOpenFile, onCloseTab, onClose }: Props) {
   const [collapsed, setCollapsed] = useState(false);
+  // Selecting a file in the tree must ALWAYS activate it in the editor — even
+  // when it's already an open tab (Canvas dedupes the tab list, so re-clicking an
+  // open file produced no state change and the editor stayed on the other tab).
+  // A monotonic request token carries "activate this path" independently of the
+  // deduped tab list; EditorTile honors it. seq makes re-clicking the SAME path
+  // a fresh request.
+  const reqSeq = useRef(0);
+  const [activeReq, setActiveReq] = useState<{ path: string; seq: number } | null>(null);
+  const selectFile = (path: string) => {
+    onOpenFile(path); // add as a tab (Canvas dedupes)
+    setActiveReq({ path, seq: ++reqSeq.current }); // and always focus it
+  };
   // Explorer width is user-resizable via the divider; persisted globally so it
   // survives reopen + applies to every workbench tile.
   const [sidebarW, setSidebarW] = useState<number>(() => {
@@ -85,7 +97,7 @@ export function WorkbenchTile({ repoPath, tabs, onOpenFile, onCloseTab, onClose 
             >
               {/* key on repoPath → remounts the tree when the tile gets moved into
                   a zone bound to a different repo (stale internal cache fixed). */}
-              <FileTreeTile key={repoPath} repoPath={repoPath} onSelectFile={onOpenFile} embedded />
+              <FileTreeTile key={repoPath} repoPath={repoPath} onSelectFile={selectFile} embedded />
             </div>
             {/* Resize handle — a WIDE (8px) grab zone with a thin centered line
                 that highlights on hover, so the divider is actually easy to hit
@@ -117,7 +129,7 @@ export function WorkbenchTile({ repoPath, tabs, onOpenFile, onCloseTab, onClose 
           </>
         )}
         <div className="flex-1 min-w-0">
-          <EditorTile repoPath={repoPath} tabs={tabs} onCloseTab={onCloseTab} embedded />
+          <EditorTile repoPath={repoPath} tabs={tabs} onCloseTab={onCloseTab} activeReq={activeReq} embedded />
         </div>
       </div>
     </div>
