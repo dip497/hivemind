@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-06-07
+
 ### Added
 
 - Render diagnostics are now written to `<userData>/render-diag.log` (a new `diagLog` IPC). Every terminal focus auto-appends the render state (zoom, dpr, font, will-change/transform, font-smoothing, whether `.canvas-moving` is active) at t0 / t200ms / settled — so a blurry-text report is readable off disk and over SSH, not just in the on-screen HUD. Self-capping at ~128KB.
@@ -296,7 +298,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v1.0.7...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/dip497/hivemind/releases/tag/v1.1.0
 [1.0.7]: https://github.com/dip497/hivemind/releases/tag/v1.0.7
 [1.0.6]: https://github.com/dip497/hivemind/releases/tag/v1.0.6
 [1.0.5]: https://github.com/dip497/hivemind/releases/tag/v1.0.5
