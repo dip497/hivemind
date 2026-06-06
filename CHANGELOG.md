@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [1.0.6] — 2026-06-07
+
 ### Added
 
 - Terminal tiles: adjustable font size. Ctrl/Cmd `+`/`-` resizes, Ctrl/Cmd `0` resets; the size is shared across every terminal and persisted. Larger glyphs render with more device pixels each, so text is crisper and more legible. Default bumped 12→13.
@@ -280,7 +282,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v1.0.5...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v1.0.6...HEAD
+[1.0.6]: https://github.com/dip497/hivemind/releases/tag/v1.0.6
 [1.0.5]: https://github.com/dip497/hivemind/releases/tag/v1.0.5
 [1.0.4]: https://github.com/dip497/hivemind/releases/tag/v1.0.4
 [1.0.3]: https://github.com/dip497/hivemind/releases/tag/v1.0.3
