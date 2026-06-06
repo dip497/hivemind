@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { useStore } from "@xyflow/react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
@@ -18,6 +19,25 @@ function openExternalLink(uri: string): void {
       window.open(uri, "_blank", "noopener,noreferrer");
     }
   } catch { /* not a parseable URL — ignore */ }
+}
+
+const BASE_FONT = 12;
+/**
+ * Level-of-detail supersampling for the WebGL terminal. xterm rasterizes glyphs
+ * at (cell px × window.devicePixelRatio) and has NO per-instance DPR override
+ * (confirmed: dpr is read straight from window) — so the only way to a denser
+ * bitmap is to give xterm a larger CSS area + proportional font and scale the
+ * host back down by the same factor. cols/rows stay invariant (font and box both
+ * scale by k) ⇒ NO PTY reflow; the WebGL backing just becomes k² denser, which
+ * survives the canvas zoom-transform crisply.
+ *
+ * Policy (LOD): only spend the extra GPU when zoomed in enough to actually READ
+ * a terminal; in overview the glyphs are too small to read, so stay at 1× and
+ * pay nothing. Capped at 2 (4× texture) to bound memory across many tiles.
+ * k===1 reproduces the original behavior exactly, so it's a safe floor.
+ */
+function superSampleFor(zoom: number): number {
+  return zoom >= 1.2 ? 2 : 1;
 }
 
 interface Props {
@@ -48,7 +68,18 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(name ?? "");
   const hostRef = useRef<HTMLDivElement | null>(null);
+  // Supersample wrapper: scaled by 1/k and sized k× so the xterm host renders at
+  // k× CSS pixels (denser WebGL backing) while occupying the same visual area.
+  const superRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<Terminal | null>(null);
+  const fitRef = useRef<FitAddon | null>(null);
+  const webglRef = useRef<WebglAddon | null>(null);
+  // Render quality follows the canvas zoom (re-renders only when the bucket
+  // flips, never per zoom frame). kRef lets the mount effect read the current
+  // level without taking k as a dep (which would respawn the PTY on every zoom).
+  const k = useStore((s) => superSampleFor(s.transform[2]));
+  const kRef = useRef(k);
+  kRef.current = k;
   // Unique PTY identity per MOUNT (not per prop). Fixes React.StrictMode
   // double-mount race: the first mount's awaited ptySpawn could resolve AFTER
   // its cleanup ran, killing the second mount's PTY (same tileId in the
@@ -167,7 +198,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
     if (!host) return;
     const term = new Terminal({
       fontFamily: '"JetBrains Mono", monospace',
-      fontSize: 12,
+      fontSize: BASE_FONT * kRef.current,
       lineHeight: 1.3,
       theme: {
         // Cool deep-navy to match the Huly/Plane theme (was warm orange/black).
@@ -226,6 +257,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
     // etc.) — single click opens in the OS browser.
     term.loadAddon(new WebLinksAddon((_e, uri) => openExternalLink(uri)));
     const fit = new FitAddon();
+    fitRef.current = fit;
     term.loadAddon(fit);
     term.open(host);
     // WebGL renderer with onContextLoss handler: GPU drivers can yank the
@@ -236,9 +268,11 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
     let webgl: WebglAddon | undefined;
     try {
       webgl = new WebglAddon();
+      webglRef.current = webgl;
       webgl.onContextLoss(() => {
         try { webgl?.dispose(); } catch { /* already disposed */ }
         webgl = undefined;
+        webglRef.current = null;
       });
       term.loadAddon(webgl);
     } catch {
@@ -479,6 +513,8 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       try { webgl?.dispose(); } catch { /* already gone */ }
       term.dispose();
       termRef.current = null;
+      fitRef.current = null;
+      webglRef.current = null;
     };
     // `args` is excluded from deps intentionally — Canvas/parent recreates the
     // array on every render so reference equality would always fail and cause
@@ -511,6 +547,25 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       term.scrollToBottom();
     } else term.blur();
   }, [selected]);
+
+  // Apply the LOD supersample level when it flips. Scaling BOTH the font and the
+  // host box by k keeps cols/rows identical (no PTY reflow); the host's pixel
+  // size changes, so we re-fit + clear the atlas so glyphs re-rasterize at the
+  // new density. k===1 restores the exact original geometry (no-op transform).
+  useEffect(() => {
+    const term = termRef.current;
+    const wrap = superRef.current;
+    if (!term || !wrap) return;
+    term.options.fontSize = BASE_FONT * k;
+    wrap.style.width = `${100 * k}%`;
+    wrap.style.height = `${100 * k}%`;
+    wrap.style.transform = k === 1 ? "" : `scale(${1 / k})`;
+    try {
+      fitRef.current?.fit();
+      webglRef.current?.clearTextureAtlas();
+      term.refresh(0, term.rows - 1);
+    } catch { /* terminal torn down mid-update */ }
+  }, [k]);
 
   return (
     <div className="flex h-full flex-col rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] overflow-hidden shadow-[0_8px_22px_rgba(0,0,0,0.45)]">
@@ -595,7 +650,16 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
           overflow-hidden cropped the terminal. With them the host tracks the
           tile and the ResizeObserver re-fits, so the terminal reflows (cols/
           rows scale) on resize down AND up instead of being clipped. */}
-      <div ref={hostRef} className="flex-1 min-h-0 min-w-0 overflow-hidden bg-black p-1.5" />
+      {/* Supersample wrapper: at k>1 this is sized k× and scaled 1/k, so the
+          xterm host (w-full of it) renders at k× CSS px — a denser WebGL bitmap
+          that stays crisp under the canvas zoom — while occupying the same area.
+          At k===1 it's a transparent 100%/no-transform passthrough (identical to
+          the pre-supersample layout). */}
+      <div className="flex-1 min-h-0 min-w-0 overflow-hidden bg-black p-1.5">
+        <div ref={superRef} style={{ width: "100%", height: "100%", transformOrigin: "top left" }}>
+          <div ref={hostRef} className="w-full h-full overflow-hidden" />
+        </div>
+      </div>
     </div>
   );
 }
