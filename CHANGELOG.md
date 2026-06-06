@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [1.0.5] — 2026-06-07
+
 ### Changed
 
 - Terminal tiles now render with xterm's DOM renderer instead of WebGL, for crisp, hinted text that matches the system terminal at DPR=1. WebGL rasterizes glyphs into a GPU atlas with no font hinting, so small mono text came out thin/soft; the DOM renderer uses native font rendering. Removes the supersampling CSS-scale hack entirely. (Trade-off: extreme full-screen redraws are slower, irrelevant for agent/shell output.)
@@ -274,7 +276,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v1.0.4...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v1.0.5...HEAD
+[1.0.5]: https://github.com/dip497/hivemind/releases/tag/v1.0.5
 [1.0.4]: https://github.com/dip497/hivemind/releases/tag/v1.0.4
 [1.0.3]: https://github.com/dip497/hivemind/releases/tag/v1.0.3
 [1.0.2]: https://github.com/dip497/hivemind/releases/tag/v1.0.2
