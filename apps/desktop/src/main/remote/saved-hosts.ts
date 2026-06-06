@@ -75,19 +75,42 @@ export function saveHost(host: string, port: number, user: string, auth: HostAut
   persist(rows);
 }
 
-/** Resolve the stored auth (decrypting the password) for a saved host. */
-export function savedAuth(hostId: string): { host: string; port: number; user: string; auth: HostAuth } | null {
+/**
+ * Resolve the stored auth (decrypting the password) for a saved host.
+ *
+ * `passwordDecryptFailed` is true when a password WAS stored but can't be
+ * decrypted now — typically because the OS keychain key changed (e.g. the app
+ * was renamed, so safeStorage's per-app key no longer matches the blob). The
+ * caller must surface this as "re-enter the password" rather than silently
+ * connecting credential-less and getting an opaque "all auth methods failed".
+ */
+export function savedAuth(
+  hostId: string,
+): { host: string; port: number; user: string; auth: HostAuth; passwordDecryptFailed: boolean } | null {
   const row = load().find((r) => r.hostId === hostId);
   if (!row) return null;
   let password: string | undefined;
-  if (row.encPassword && safeStorage.isEncryptionAvailable()) {
-    try { password = safeStorage.decryptString(Buffer.from(row.encPassword, "base64")); } catch { /* corrupt — ignore */ }
+  let passwordDecryptFailed = false;
+  if (row.encPassword) {
+    if (safeStorage.isEncryptionAvailable()) {
+      try {
+        password = safeStorage.decryptString(Buffer.from(row.encPassword, "base64"));
+      } catch {
+        // Blob was encrypted under a different keychain key (app rename, profile
+        // move, keyring reset). It's unrecoverable — flag for re-entry.
+        passwordDecryptFailed = true;
+      }
+    } else {
+      // A password is stored but the keychain is unavailable to decrypt it.
+      passwordDecryptFailed = true;
+    }
   }
   return {
     host: row.host,
     port: row.port,
     user: row.user,
     auth: { username: row.user || undefined, privateKeyPath: row.privateKeyPath, password },
+    passwordDecryptFailed,
   };
 }
 

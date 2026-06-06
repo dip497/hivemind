@@ -1,7 +1,7 @@
 /** Electron main process — owns the BrowserWindow + IPC + PtyHost + git/worktree. */
 import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell, webContents } from "electron";
 import path from "node:path";
-import { promises as fsp, statSync, readFileSync, writeFileSync, existsSync, cpSync } from "node:fs";
+import { promises as fsp, statSync, readFileSync, writeFileSync, existsSync, cpSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import {
@@ -101,8 +101,28 @@ function migrateLegacyProfile(): void {
       }
     }
     if (!best) return;
-    cpSync(best.dir, userData, { recursive: true, force: false, errorOnExist: false });
-    console.log(`hivemind: migrated profile ${best.dir} → ${userData}`);
+    // Copy ONLY the browser-storage state that holds the canvas (frames/tiles/
+    // layout live in localStorage). A blanket recursive copy of the whole
+    // profile throws `ERR_FS_CP_SOCKET` the moment cpSync hits the daemon's
+    // `pty-daemon.sock` (a UNIX socket the PtyHost leaves in userData) — which
+    // aborted the ENTIRE migration and silently blanked every upgrader's canvas.
+    // A socket-skipping filter is kept as defense in case any of these subtrees
+    // ever contains one.
+    const STORAGE = ["Local Storage", "Session Storage", "IndexedDB", "Local State", "Preferences"];
+    mkdirSync(userData, { recursive: true });
+    const copied: string[] = [];
+    for (const name of STORAGE) {
+      const src = path.join(best.dir, name);
+      if (!existsSync(src)) continue;
+      cpSync(src, path.join(userData, name), {
+        recursive: true,
+        force: false,
+        errorOnExist: false,
+        filter: (p) => { try { return !statSync(p).isSocket(); } catch { return true; } },
+      });
+      copied.push(name);
+    }
+    console.log(`hivemind: migrated profile ${best.dir} → ${userData} (${copied.join(", ") || "nothing"})`);
   } catch (e) {
     console.warn("hivemind: legacy profile migration skipped:", (e as Error).message);
   }
@@ -782,6 +802,16 @@ ipcMain.handle("sshForgetHost", wrap(async (_e, hostId: string) => { forgetSaved
 ipcMain.handle("sshConnectSaved", wrap(async (_e, hostId: string) => {
   const saved = savedAuth(hostId);
   if (!saved) throw new Error("saved host not found");
+  // A stored password we can't decrypt (keychain key changed — e.g. the app was
+  // renamed) would otherwise fall through to a credential-less connect and a
+  // cryptic "All configured authentication methods failed". Fail loud + clear so
+  // the UI can prompt re-entry. (Connecting anyway with an empty password is
+  // never what the user wants here.)
+  if (saved.passwordDecryptFailed) {
+    throw new Error(
+      "SAVED_PASSWORD_UNREADABLE: the saved password can't be decrypted (the app keychain changed) — re-enter it",
+    );
+  }
   const uri = formatRemote({ host: saved.host, port: saved.port, user: saved.user || null, path: "/" });
   const { home } = await remoteConns.probe(uri, saved.auth);
   return { home, host: saved.host, port: saved.port, user: saved.user };

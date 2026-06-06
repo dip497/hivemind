@@ -84,7 +84,19 @@ export function RemoteConnectModal({ open, onClose, onPick }: Props) {
       await list(r.home);
       setPhase("browse");
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      // Stored password can't be decrypted (keychain key changed). Drop into the
+      // form pre-filled with this host so the user only re-types the password —
+      // saving it re-encrypts under the current keychain key.
+      if (/SAVED_PASSWORD_UNREADABLE/.test(msg)) {
+        setHost(h.host); setUser(h.user); setPort(String(h.port));
+        setKeyPath(""); setPassword(""); setRemember(true);
+        setShowForm(true);
+        setError("Saved password can't be read (keychain changed since it was saved) — re-enter it.");
+        setTimeout(() => firstInput.current?.focus(), 30);
+      } else {
+        setError(msg);
+      }
     } finally {
       setBusy(false);
     }

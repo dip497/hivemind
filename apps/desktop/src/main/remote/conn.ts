@@ -60,6 +60,17 @@ export class RemoteConnectionManager {
     client.on("close", () => this.pool.delete(target.hostId));
     client.on("error", () => this.pool.delete(target.hostId));
 
+    // No usable credential at all → ssh2 would try the "none" method, get
+    // rejected, and surface the opaque "All configured authentication methods
+    // failed". Pre-empt with a message that says what to actually do.
+    const agentSock = auth.password ? undefined : process.env.SSH_AUTH_SOCK;
+    if (!auth.password && !auth.privateKeyPath && !agentSock) {
+      this.pool.delete(target.hostId);
+      throw new Error(
+        "no SSH credential available — provide a password or private key (or start an ssh-agent)",
+      );
+    }
+
     // Some servers do password auth via keyboard-interactive, not the `password`
     // method — answer those prompts with the supplied password.
     if (auth.password) {
