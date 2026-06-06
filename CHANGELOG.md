@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [1.0.7] — 2026-06-07
+
 ### Fixed
 
 - Terminal text no longer blurs when a tile is focused/selected. Selecting a tile zooms the canvas to 100%, which briefly applied `.canvas-moving` → `will-change: transform` to the `.xterm`, promoting the DOM-rendered text to a GPU layer that disables crisp rendering. Removed `will-change` from `.xterm` (it was only needed by the old WebGL canvas); paint isolation during motion still comes from the node's `contain`.
@@ -290,7 +292,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v1.0.6...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v1.0.7...HEAD
+[1.0.7]: https://github.com/dip497/hivemind/releases/tag/v1.0.7
 [1.0.6]: https://github.com/dip497/hivemind/releases/tag/v1.0.6
 [1.0.5]: https://github.com/dip497/hivemind/releases/tag/v1.0.5
 [1.0.4]: https://github.com/dip497/hivemind/releases/tag/v1.0.4
