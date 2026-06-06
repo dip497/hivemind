@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [1.0.4] — 2026-06-06
+
 ### Changed
 - **Terminal text is now crisp at the zoom you actually use.** The 1.0.3 crispness pass only supersampled when zoomed *in* (≥120%), so at the normal/overview zoom most people read terminals at, text stayed soft. Supersampling is now the floor — terminals render at 2× density always (3× when zoomed past ~220%), giving anti-aliased glyphs at overview, ~100%, and zoomed-out. The focused terminal stays 1× so mouse/drag-select mapping is exact. `apps/desktop/src/renderer/src/TerminalTile.tsx`.
 
@@ -264,7 +266,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v1.0.3...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v1.0.4...HEAD
+[1.0.4]: https://github.com/dip497/hivemind/releases/tag/v1.0.4
 [1.0.3]: https://github.com/dip497/hivemind/releases/tag/v1.0.3
 [1.0.2]: https://github.com/dip497/hivemind/releases/tag/v1.0.2
 [1.0.1]: https://github.com/dip497/hivemind/releases/tag/v1.0.1
