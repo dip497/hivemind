@@ -68,6 +68,12 @@ if [ "\${1:-}" = "upgrade" ]; then
   shift
   exec bash -c 'curl -fsSL https://raw.githubusercontent.com/dip497/hivemind/main/install.sh | bash -s -- "\$@"' _ "\$@"
 fi
+# Apply a staged upgrade: when the installer ran while the app was live it could
+# not replace these files in place, so it extracted the new version beside this
+# one. Swap it in now, before launch (this process is the fresh start).
+if [ -d "${appdir}.staged" ]; then
+  rm -rf "$appdir" && mv "${appdir}.staged" "$appdir" && echo "hivemind: applied staged upgrade" >&2
+fi
 #
 # APPDIR must be exported explicitly: the bundled AppRun auto-detects APPDIR by
 # walking up from itself looking for "\$1" as a file — but \$1 is "--no-sandbox"
@@ -78,6 +84,73 @@ export APPDIR="$appdir"
 exec "$apprun" --no-sandbox "\$@"
 EOF
   chmod +x "$BIN_DIR/hivemind"
+}
+
+# Install the GNOME/XDG desktop entry + hicolor icon so the app shows up in the
+# app grid AND the running window maps to the real icon in the dock. The icon is
+# already bundled inside the extracted AppImage (electron-builder ships it) — the
+# installer just never copied it out, so the dock fell back to a generic icon and
+# there was no launcher entry. StartupWMClass MUST equal app.setName("hivemind")
+# (the window's WM_CLASS) or GNOME can't associate the window with this entry.
+# Runs on every install/upgrade (idempotent).
+install_desktop_entry() {
+  local appdir="$1"  # the hivemind-extracted dir
+  local data_dir="${XDG_DATA_HOME:-$HOME/.local/share}"
+  local icon_dst="$data_dir/icons/hicolor/512x512/apps/hivemind.png"
+  local desk_dst="$data_dir/applications/hivemind.desktop"
+  # Prefer the proper hicolor source; fall back to the AppImage root icon.
+  local icon_src="$appdir/usr/share/icons/hicolor/512x512/apps/hivemind.png"
+  [ -f "$icon_src" ] || icon_src="$appdir/hivemind.png"
+  if [ -f "$icon_src" ]; then
+    mkdir -p "$(dirname "$icon_dst")" && cp -f "$icon_src" "$icon_dst"
+  fi
+  mkdir -p "$(dirname "$desk_dst")"
+  cat > "$desk_dst" <<EOF
+[Desktop Entry]
+Type=Application
+Name=hivemind
+Comment=Infinite canvas for Claude Code & AI coding agents
+Exec=$BIN_DIR/hivemind %U
+Icon=hivemind
+Terminal=false
+Categories=Development;IDE;
+StartupWMClass=hivemind
+EOF
+  chmod +x "$desk_dst" 2>/dev/null || true
+  # Refresh the caches so the icon/entry appear without a re-login (best-effort).
+  command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "$data_dir/applications" >/dev/null 2>&1 || true
+  command -v gtk-update-icon-cache >/dev/null 2>&1 && gtk-update-icon-cache -f -t "$data_dir/icons/hicolor" >/dev/null 2>&1 || true
+  ok "installed desktop entry + icon ($desk_dst)"
+}
+
+# Is a packaged hivemind instance live right now? Matches the bundled Electron /
+# AppRun running out of our extracted dir. Used to avoid replacing files under a
+# running app (e.g. `hivemind upgrade` run from a terminal tile inside the app).
+hivemind_running() {
+  if command -v pgrep >/dev/null 2>&1; then
+    pgrep -f "$APP_DIR/hivemind-extracted/" >/dev/null 2>&1
+  else
+    ps -e -o args= 2>/dev/null | grep -Fq "$APP_DIR/hivemind-extracted/"
+  fi
+}
+
+# Extract the downloaded AppImage into place. If the app is RUNNING, stage it
+# beside the live dir instead of deleting the live one out from under the process
+# — the launcher swaps the staged dir in on next start. Returns 0 = extracted in
+# place, 1 = staged for next launch.
+extract_appimage() {
+  local live="$APP_DIR/hivemind-extracted"
+  rm -rf "$APP_DIR/squashfs-root"
+  (cd "$APP_DIR" && ./hivemind.AppImage --appimage-extract >/dev/null) \
+    || die "AppImage extract failed. Check $APP_DIR/hivemind.AppImage"
+  if hivemind_running; then
+    rm -rf "${live}.staged"
+    mv "$APP_DIR/squashfs-root" "${live}.staged"
+    return 1
+  fi
+  rm -rf "$live"
+  mv "$APP_DIR/squashfs-root" "$live"
+  return 0
 }
 
 # ── platform gate ─────────────────────────────────────────────────────────
@@ -132,15 +205,13 @@ install_prebuilt() {
     # AppRun looks like the wrapper (or is tiny), re-extract from the AppImage.
     if [ -f "$APPRUN" ] && ! grep -q 'BIN=' "$APPRUN" 2>/dev/null && [ -f "$APP_DIR/hivemind.AppImage" ]; then
       warn "detected corrupted AppRun — re-extracting AppImage"
-      rm -rf "$APP_DIR/hivemind-extracted" "$APP_DIR/squashfs-root"
-      (cd "$APP_DIR" && ./hivemind.AppImage --appimage-extract >/dev/null) \
-        && mv "$APP_DIR/squashfs-root" "$APP_DIR/hivemind-extracted" \
-        && ok "re-extracted AppImage"
+      if extract_appimage; then ok "re-extracted AppImage"; else warn "app is running — re-extract staged; restart hivemind to apply"; fi
     fi
     # Always (re)write the launcher to the current format — idempotent, and
     # upgrades old symlink/no-APPDIR launchers to the working wrapper.
     if [ -x "$APPRUN" ]; then
       write_launcher "$APPRUN"
+      install_desktop_entry "$APP_DIR/hivemind-extracted"
       ok "launcher up to date (--no-sandbox wrapper)"
     fi
     ok "already on $TAG — nothing to do"
@@ -167,12 +238,19 @@ install_prebuilt() {
     # libfuse.so.2". Extract sidesteps the dependency — `AppRun` is a normal
     # ELF that re-execs the bundled Electron. ~5s one-time cost, zero sudo.
     say "extracting AppImage (no libfuse2 needed)"
-    rm -rf "$APP_DIR/hivemind-extracted"
-    (cd "$APP_DIR" && ./hivemind.AppImage --appimage-extract >/dev/null) \
-      || die "AppImage extract failed. Check $APP_DIR/hivemind.AppImage"
-    mv "$APP_DIR/squashfs-root" "$APP_DIR/hivemind-extracted"
-    write_launcher "$APP_DIR/hivemind-extracted/AppRun"
-    ok "installed launcher $BIN_DIR/hivemind → $APP_DIR/hivemind-extracted/AppRun"
+    if extract_appimage; then
+      write_launcher "$APP_DIR/hivemind-extracted/AppRun"
+      install_desktop_entry "$APP_DIR/hivemind-extracted"
+      ok "installed launcher $BIN_DIR/hivemind → $APP_DIR/hivemind-extracted/AppRun"
+    else
+      # App is live — upgrade staged beside the running one; the launcher swaps
+      # it in on next start. Rewrite the launcher (so the swap block is present)
+      # and install the NEW icon from the staged tree (safe; touches only
+      # ~/.local/share, not the running process).
+      write_launcher "$APP_DIR/hivemind-extracted/AppRun"
+      install_desktop_entry "$APP_DIR/hivemind-extracted.staged"
+      warn "hivemind is running — upgrade STAGED. Quit & reopen hivemind to apply it. Your canvas + sessions are safe; nothing is lost."
+    fi
   else
     warn "AppImage download failed (CLI still installed). Run \`hivemind\` via --dev or re-run later."
   fi
