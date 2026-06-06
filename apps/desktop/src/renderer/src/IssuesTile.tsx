@@ -138,6 +138,7 @@ export function IssuesTile({ root, onClose }: Props) {
 
 function IssueCard({
   issue,
+  root,
   columns,
   onChangeState,
   onWork,
@@ -148,7 +149,10 @@ function IssueCard({
   onChangeState: (s: IssueState) => void;
   onWork: () => void;
 }) {
-  const open = () => window.dispatchEvent(new CustomEvent<string>("hivemind:open-issue", { detail: issue.id }));
+  // Carry THIS tile's root — it's authoritative (the tile read the issue from
+  // it). Without it the peek re-guesses the root via the workspace registry,
+  // which misses for unregistered repos / shared prefixes → "issue not found".
+  const open = () => window.dispatchEvent(new CustomEvent("hivemind:open-issue", { detail: { id: issue.id, root } }));
   return (
     <div
       role="button"

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Play } from "lucide-react";
+import { Play, FileQuestion, X } from "lucide-react";
 import type { AcceptanceItem, Issue, IssueState, LinkType } from "@hivemind/core/types";
 import {
   useCommentOnIssue,
@@ -28,7 +28,7 @@ interface Props {
 }
 
 export function IssuePeek({ root, id, onClose }: Props) {
-  const { data: issue, isLoading } = useIssue(root, id ?? undefined);
+  const { data: issue, isLoading, isError, error } = useIssue(root, id ?? undefined);
   const update = useUpdateState();
   const patch = useUpdateIssue();
   const comment = useCommentOnIssue();
@@ -58,8 +58,31 @@ export function IssuePeek({ root, id, onClose }: Props) {
         ref={ref}
         className="absolute right-0 top-0 h-full w-[560px] max-w-[80vw] bg-[var(--color-bg2)] border-l border-[var(--color-line)] flex flex-col pointer-events-auto shadow-2xl animate-in slide-in-from-right duration-200"
       >
-        {isLoading || !issue ? (
+        {isLoading ? (
           <div className="grid place-items-center h-full text-[var(--color-fg3)] text-[12px]">loading…</div>
+        ) : !issue ? (
+          // Settled with no issue — not found (wrong root for this id, or it was
+          // deleted), or the read errored. Either way: show it, don't hang on
+          // "loading…" forever.
+          <div className="grid place-items-center h-full px-6">
+            <div className="flex flex-col items-center gap-3 text-center max-w-[320px]">
+              <FileQuestion size={28} className="text-[var(--color-fg3)]" />
+              <div className="text-[13px] font-medium text-[var(--color-fg)]">
+                {isError ? "Couldn't load this issue" : "Issue not found"}
+              </div>
+              <p className="text-[11.5px] text-[var(--color-fg3)] break-words">
+                {isError
+                  ? (error instanceof Error ? error.message : String(error))
+                  : `“${id}” isn't in this workspace — it may belong to a different frame or have been deleted.`}
+              </p>
+              <button
+                onClick={onClose}
+                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-[11.5px] text-[var(--color-fg2)] hover:text-[var(--color-fg)] border border-[var(--color-line2)] hover:bg-[var(--color-bg3)] cursor-pointer"
+              >
+                <X size={13} /> Close
+              </button>
+            </div>
+          </div>
         ) : (
           <>
             <header className="flex items-center gap-2 px-4 py-3 border-b border-[var(--color-line)]">

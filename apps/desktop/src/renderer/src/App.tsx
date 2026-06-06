@@ -129,11 +129,20 @@ export function App() {
   // ⌘K palette → open peek via CustomEvent (decouples palette from App state)
   useEffect(() => {
     const onOpen = (e: Event) => {
-      const id = (e as CustomEvent<string>).detail;
+      // Detail is either a bare id (⌘K palette, peek links) or {id, root} when
+      // the opener knows its root (Issues tile). An explicit root is
+      // authoritative — use it and skip the registry guess entirely.
+      const detail = (e as CustomEvent<string | { id: string; root?: string | null }>).detail;
+      const id = typeof detail === "string" ? detail : detail?.id;
       if (typeof id !== "string") return;
+      const explicitRoot = typeof detail === "object" && detail ? detail.root ?? null : null;
       setPeekId(id);
-      // Optimistically read from the base root; if the id belongs to another
-      // registered workspace, repoint at its root once resolved.
+      if (explicitRoot) {
+        setPeekRoot(explicitRoot);
+        return;
+      }
+      // No root supplied: optimistically read from the base root; if the id
+      // belongs to another registered workspace, repoint once resolved.
       setPeekRoot(root);
       void window.hive
         .resolveIssueRoot(id)
