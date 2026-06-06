@@ -7,6 +7,9 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Changed
+- **Terminal text is now crisp at the zoom you actually use.** The 1.0.3 crispness pass only supersampled when zoomed *in* (≥120%), so at the normal/overview zoom most people read terminals at, text stayed soft. Supersampling is now the floor — terminals render at 2× density always (3× when zoomed past ~220%), giving anti-aliased glyphs at overview, ~100%, and zoomed-out. The focused terminal stays 1× so mouse/drag-select mapping is exact. `apps/desktop/src/renderer/src/TerminalTile.tsx`.
+
 ### Fixed
 - **`hivemind upgrade` failed with "text file busy" while the app was running.** The installer wrote the `hive` CLI binary in place with `curl -o`, which the kernel refuses when the executable is in use (a running app's claude tiles hold the hive MCP binary open). It now downloads to a temp file and atomically `mv`s it into place (same for the AppImage), so upgrades work without quitting first. `install.sh`.
 

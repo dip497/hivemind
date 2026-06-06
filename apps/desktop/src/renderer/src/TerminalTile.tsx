@@ -31,13 +31,19 @@ const BASE_FONT = 12;
  * scale by k) ⇒ NO PTY reflow; the WebGL backing just becomes k² denser, which
  * survives the canvas zoom-transform crisply.
  *
- * Policy (LOD): only spend the extra GPU when zoomed in enough to actually READ
- * a terminal; in overview the glyphs are too small to read, so stay at 1× and
- * pay nothing. Capped at 2 (4× texture) to bound memory across many tiles.
- * k===1 reproduces the original behavior exactly, so it's a safe floor.
+ * Policy: 2× supersampling is the FLOOR (always on). At DPR=1 (the common
+ * laptop case) a plain 1× WebGL render of small mono glyphs looks soft, and the
+ * canvas zoom-transform only makes it worse; rendering at 2× and displaying it
+ * scaled is supersampled anti-aliasing — crisp at overview (dense source
+ * downscales cleanly), at ~100% (SSAA), and zoomed out. Bump to 3× only when
+ * zoomed in past ~2.2× so the bitmap still maps ≥1 device px per screen px.
+ * Capped at 3 to bound GPU texture memory.
+ *
+ * (An earlier 1×-in-overview policy left text soft at exactly the zoom most
+ * users read terminals at — the reported complaint.)
  */
 function superSampleFor(zoom: number): number {
-  return zoom >= 1.2 ? 2 : 1;
+  return zoom >= 2.2 ? 3 : 2;
 }
 
 interface Props {
@@ -77,7 +83,12 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
   // Render quality follows the canvas zoom (re-renders only when the bucket
   // flips, never per zoom frame). kRef lets the mount effect read the current
   // level without taking k as a dep (which would respawn the PTY on every zoom).
-  const k = useStore((s) => superSampleFor(s.transform[2]));
+  const zoomK = useStore((s) => superSampleFor(s.transform[2]));
+  // The SELECTED terminal is the one you type/click/drag-select in — keep it at
+  // 1× so xterm's mouse-cell mapping stays exact under the pointer (no extra CSS
+  // scale). SelectZoomReset already snaps zoom→1 on select, so it's crisp at 1:1
+  // anyway. Every other (viewed-only) terminal supersamples for crisp text.
+  const k = selected ? 1 : zoomK;
   const kRef = useRef(k);
   kRef.current = k;
   // Unique PTY identity per MOUNT (not per prop). Fixes React.StrictMode
