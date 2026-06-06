@@ -7,6 +7,9 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Fixed
+- **`hivemind upgrade` failed with "text file busy" while the app was running.** The installer wrote the `hive` CLI binary in place with `curl -o`, which the kernel refuses when the executable is in use (a running app's claude tiles hold the hive MCP binary open). It now downloads to a temp file and atomically `mv`s it into place (same for the AppImage), so upgrades work without quitting first. `install.sh`.
+
 ## [1.0.3] — 2026-06-06
 
 ### Changed

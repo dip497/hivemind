@@ -224,14 +224,22 @@ install_prebuilt() {
   APPIMG_URL="https://github.com/$REPO/releases/download/$TAG/hivemind-${VERSION_BARE}-x86_64.AppImage"
 
   say "downloading hive CLI"
-  curl -fL --progress-bar -o "$APP_DIR/hive" "$CLI_URL" \
+  # Download to a temp file then atomically mv into place. A direct `curl -o`
+  # over the live binary fails with "text file busy" when the CLI is in use
+  # (a running app's claude tiles invoke the hive MCP binary) — rename swaps the
+  # name while the old inode keeps serving the running process.
+  curl -fL --progress-bar -o "$APP_DIR/hive.new" "$CLI_URL" \
     || die "CLI download failed from $CLI_URL"
-  chmod +x "$APP_DIR/hive"
+  chmod +x "$APP_DIR/hive.new"
+  mv -f "$APP_DIR/hive.new" "$APP_DIR/hive"
   ln -sf "$APP_DIR/hive" "$BIN_DIR/hive"
   ok "linked $BIN_DIR/hive → $APP_DIR/hive"
 
   say "downloading desktop AppImage"
-  if curl -fL --progress-bar -o "$APP_DIR/hivemind.AppImage" "$APPIMG_URL"; then
+  # Same temp-then-mv: avoids a half-written AppImage on interrupt and a
+  # busy-file clobber if the file is ever held open.
+  if curl -fL --progress-bar -o "$APP_DIR/hivemind.AppImage.new" "$APPIMG_URL"; then
+    mv -f "$APP_DIR/hivemind.AppImage.new" "$APP_DIR/hivemind.AppImage"
     chmod +x "$APP_DIR/hivemind.AppImage"
     # Extract instead of FUSE-mount at runtime. Ubuntu 22.04+ ships without
     # libfuse2; running the AppImage directly errors with "dlopen():
