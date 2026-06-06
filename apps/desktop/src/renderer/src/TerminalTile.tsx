@@ -19,7 +19,28 @@ function openExternalLink(uri: string): void {
   } catch { /* not a parseable URL — ignore */ }
 }
 
-const BASE_FONT = 12;
+// Terminal font size is user-adjustable (Ctrl/Cmd +/-/0) and shared across every
+// terminal tile + persisted, so the whole canvas reads at one consistent size.
+// Bigger glyphs render with more device pixels each ⇒ visibly crisper + more
+// legible — the main quality lever once the renderer is fixed (opencode/opencove
+// expose the same control). 13 is a touch larger than the old 12 default.
+const TERM_FONT_KEY = "hm:termFontSize";
+const DEFAULT_FONT = 13;
+const MIN_FONT = 8;
+const MAX_FONT = 28;
+function loadTermFont(): number {
+  try {
+    const v = Number(localStorage.getItem(TERM_FONT_KEY));
+    if (Number.isFinite(v) && v >= MIN_FONT && v <= MAX_FONT) return v;
+  } catch { /* localStorage blocked */ }
+  return DEFAULT_FONT;
+}
+/** Persist + broadcast a new terminal font size to every live tile. */
+function setTermFont(px: number): void {
+  const clamped = Math.max(MIN_FONT, Math.min(MAX_FONT, Math.round(px)));
+  try { localStorage.setItem(TERM_FONT_KEY, String(clamped)); } catch { /* ignore */ }
+  window.dispatchEvent(new CustomEvent("hivemind:term-font", { detail: clamped }));
+}
 /**
  * Renderer choice: the built-in DOM renderer (NO WebGL/canvas addon loaded).
  *
@@ -191,7 +212,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
     if (!host) return;
     const term = new Terminal({
       fontFamily: '"JetBrains Mono", monospace',
-      fontSize: BASE_FONT,
+      fontSize: loadTermFont(),
       lineHeight: 1.3,
       theme: {
         // Cool deep-navy to match the Huly/Plane theme (was warm orange/black).
@@ -254,7 +275,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
     term.loadAddon(fit);
     term.open(host);
     // No WebGL/canvas addon → xterm uses its built-in DOM renderer (native font
-    // rendering = crisp, hinted text). See the BASE_FONT doc above for why.
+    // rendering = crisp, hinted text). See the renderer doc above for why.
     fit.fit();
     termRef.current = term;
 
@@ -346,6 +367,16 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
     term.attachCustomKeyEventHandler((e) => {
       if (e.type !== "keydown") return true;
       if (!(e.ctrlKey || e.metaKey)) return true;
+      // Font zoom: Ctrl/Cmd +/- adjusts the shared terminal font size, Ctrl/Cmd 0
+      // resets. Broadcasts to every tile (setTermFont) so the canvas stays one
+      // consistent size. Bigger font = crisper, more legible glyphs at zoom 1.
+      if (e.key === "=" || e.key === "+" || e.key === "-" || e.key === "0") {
+        e.preventDefault();
+        const cur = loadTermFont();
+        const next = e.key === "0" ? DEFAULT_FONT : e.key === "-" ? cur - 1 : cur + 1;
+        setTermFont(next);
+        return false;
+      }
       if (e.key.toLowerCase() === "c") {
         const sel = term.getSelection();
         if (sel) {
@@ -521,6 +552,25 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       term.scrollToBottom();
     } else term.blur();
   }, [selected]);
+
+  // Apply a shared font-size change (from any tile's Ctrl+/-) to THIS terminal,
+  // then re-fit so cols/rows track the new cell size. Listens on window so one
+  // keystroke resizes every open terminal uniformly + new tiles read the
+  // persisted value at mount.
+  useEffect(() => {
+    const onFont = (e: Event) => {
+      const term = termRef.current;
+      if (!term) return;
+      const px = (e as CustomEvent<number>).detail;
+      term.options.fontSize = px;
+      try {
+        fitRef.current?.fit();
+        term.refresh(0, term.rows - 1);
+      } catch { /* torn down */ }
+    };
+    window.addEventListener("hivemind:term-font", onFont as EventListener);
+    return () => window.removeEventListener("hivemind:term-font", onFont as EventListener);
+  }, []);
 
   return (
     <div className="flex h-full flex-col rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] overflow-hidden shadow-[0_8px_22px_rgba(0,0,0,0.45)]">

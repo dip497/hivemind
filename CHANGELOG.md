@@ -7,6 +7,10 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Added
+
+- Terminal tiles: adjustable font size. Ctrl/Cmd `+`/`-` resizes, Ctrl/Cmd `0` resets; the size is shared across every terminal and persisted. Larger glyphs render with more device pixels each, so text is crisper and more legible. Default bumped 12→13.
+
 ## [1.0.5] — 2026-06-07
 
 ### Changed
