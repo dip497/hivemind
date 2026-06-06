@@ -102,6 +102,9 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
   const [staged, setStaged] = useState(false);
   const [layout, setLayout] = useState<Layout>("split");
   const [overflow, setOverflow] = useState<Overflow>("scroll");
+  // false (default) ⇒ collapse unchanged runs, show only changed hunks + context;
+  // true ⇒ expand the whole file. Toggled from the header ("diff"/"full").
+  const [expandUnchanged, setExpandUnchanged] = useState(false);
   const [activeFile, setActiveFile] = useState<string | null>(null);
   const [search, setSearch] = useState("");
 
@@ -316,8 +319,13 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
       overflow,
       diffIndicators: "bars",
       stickyHeaders: true,
-      expandUnchanged: true,
-      collapsedContextThreshold: 12,
+      // false ⇒ collapse runs of unchanged lines into expandable regions, so the
+      // diff shows ONLY changed hunks + a few lines of context (GitHub-style).
+      // true ⇒ whole file with every unchanged line. Header toggle drives it.
+      // collapsedContextThreshold keeps N context lines per hunk;
+      // expansionLineCount is how many lines a click-to-expand reveals.
+      expandUnchanged,
+      collapsedContextThreshold: 3,
       expansionLineCount: 60,
       lineDiffType: "char",
       maxLineDiffLength: 2000,
@@ -345,7 +353,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
         setComposer({ file, startLine, endLine, side });
       },
     }),
-    [layout, overflow],
+    [layout, overflow, expandUnchanged],
   );
 
   // ── header slot ───────────────────────────────────────────────────────
@@ -581,6 +589,15 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
             title="toggle long-line wrap"
           >
             wrap
+          </button>
+          <button
+            className={`px-1.5 text-[10px] font-mono rounded transition-colors ${
+              expandUnchanged ? "text-[var(--color-accent)] bg-[var(--color-bg4)]" : "text-[var(--color-fg3)] hover:text-[var(--color-fg2)]"
+            }`}
+            onClick={() => setExpandUnchanged((v) => !v)}
+            title={expandUnchanged ? "showing full file — click for changes only" : "showing changes only — click for full file"}
+          >
+            {expandUnchanged ? "full" : "diff"}
           </button>
         </div>
 

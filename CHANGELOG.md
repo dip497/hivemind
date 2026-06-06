@@ -7,6 +7,14 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Changed
+
+- Terminal tiles now render with xterm's DOM renderer instead of WebGL, for crisp, hinted text that matches the system terminal at DPR=1. WebGL rasterizes glyphs into a GPU atlas with no font hinting, so small mono text came out thin/soft; the DOM renderer uses native font rendering. Removes the supersampling CSS-scale hack entirely. (Trade-off: extreme full-screen redraws are slower, irrelevant for agent/shell output.)
+
+### Added
+
+- Diff tile: `diff`/`full` header toggle. Default `diff` collapses unchanged lines and shows only changed hunks (+3 context); `full` expands the whole file. Previously the full file was always rendered.
+
 ## [1.0.4] — 2026-06-06
 
 ### Changed
