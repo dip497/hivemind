@@ -41,6 +41,28 @@ function setTermFont(px: number): void {
   try { localStorage.setItem(TERM_FONT_KEY, String(clamped)); } catch { /* ignore */ }
   window.dispatchEvent(new CustomEvent("hivemind:term-font", { detail: clamped }));
 }
+
+// ── render-quality diagnostics ───────────────────────────────────────────────
+// A toggleable HUD (Ctrl/Cmd+Shift+D, shared across tiles) that surfaces the
+// live values that govern terminal crispness, so a blurry-text report becomes a
+// concrete reading instead of a guess: canvas zoom (text is only pixel-perfect
+// at exactly 1.000), devicePixelRatio, the rendered font px + grid, and the
+// computed styles that quietly degrade text — `will-change`/`transform` on the
+// .xterm (GPU-layer promotion kills crisp text) and whether `.canvas-moving` is
+// stuck on. Read imperatively (no React subscription) so it costs nothing off.
+const TERM_DEBUG_KEY = "hm:termDebug";
+function loadTermDebug(): boolean {
+  try { return localStorage.getItem(TERM_DEBUG_KEY) === "1"; } catch { return false; }
+}
+function setTermDebug(on: boolean): void {
+  try { localStorage.setItem(TERM_DEBUG_KEY, on ? "1" : "0"); } catch { /* ignore */ }
+  window.dispatchEvent(new CustomEvent("hivemind:term-debug", { detail: on }));
+}
+function readCanvasZoom(): number {
+  const vp = document.querySelector(".react-flow__viewport") as HTMLElement | null;
+  if (!vp) return 1;
+  try { return new DOMMatrixReadOnly(getComputedStyle(vp).transform).a; } catch { return 1; }
+}
 /**
  * Renderer choice: the built-in DOM renderer (NO WebGL/canvas addon loaded).
  *
@@ -91,6 +113,9 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
   // Persists via onRename → Canvas tileNames → LAYOUT_KEY localStorage.
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(name ?? "");
+  // Render-quality HUD (Ctrl/Cmd+Shift+D). `diag` holds the live readings.
+  const [debug, setDebug] = useState<boolean>(loadTermDebug);
+  const [diag, setDiag] = useState<Record<string, string>>({});
   const hostRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -367,6 +392,12 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
     term.attachCustomKeyEventHandler((e) => {
       if (e.type !== "keydown") return true;
       if (!(e.ctrlKey || e.metaKey)) return true;
+      // Diagnostics HUD toggle (Ctrl/Cmd+Shift+D), broadcast to every tile.
+      if (e.shiftKey && e.key.toLowerCase() === "d") {
+        e.preventDefault();
+        setTermDebug(!loadTermDebug());
+        return false;
+      }
       // Font zoom: Ctrl/Cmd +/- adjusts the shared terminal font size, Ctrl/Cmd 0
       // resets. Broadcasts to every tile (setTermFont) so the canvas stays one
       // consistent size. Bigger font = crisper, more legible glyphs at zoom 1.
@@ -572,6 +603,43 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
     return () => window.removeEventListener("hivemind:term-font", onFont as EventListener);
   }, []);
 
+  // Sync the HUD toggle across tiles.
+  useEffect(() => {
+    const onDbg = (e: Event) => setDebug((e as CustomEvent<boolean>).detail);
+    window.addEventListener("hivemind:term-debug", onDbg as EventListener);
+    return () => window.removeEventListener("hivemind:term-debug", onDbg as EventListener);
+  }, []);
+
+  // Poll the live render state while the HUD is open. Reads computed styles
+  // imperatively (no React subscription) so it's free when off.
+  useEffect(() => {
+    if (!debug) return;
+    const read = () => {
+      const host = hostRef.current;
+      const term = termRef.current;
+      if (!host) return;
+      const xterm = host.querySelector(".xterm") as HTMLElement | null;
+      const rows = host.querySelector(".xterm-rows") as HTMLElement | null;
+      const csX = xterm ? getComputedStyle(xterm) : null;
+      const csR = rows ? getComputedStyle(rows) : null;
+      const zoom = readCanvasZoom();
+      setDiag({
+        zoom: zoom.toFixed(3) + (Math.abs(zoom - 1) < 0.001 ? " ✓1:1" : " ✗blur"),
+        dpr: String(window.devicePixelRatio || 1),
+        font: term ? `${term.options.fontSize}px` : "?",
+        grid: term ? `${term.cols}×${term.rows}` : "?",
+        "will-change": csX?.willChange || "?",
+        transform: csX && csX.transform !== "none" ? "LAYER ✗" : "none ✓",
+        smoothing: csR?.getPropertyValue("-webkit-font-smoothing").trim() || "?",
+        moving: document.querySelector(".canvas-moving") ? "STUCK ✗" : "no ✓",
+        selected: selected ? "yes" : "no",
+      });
+    };
+    read();
+    const id = setInterval(read, 250);
+    return () => clearInterval(id);
+  }, [debug, selected]);
+
   return (
     <div className="flex h-full flex-col rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] overflow-hidden shadow-[0_8px_22px_rgba(0,0,0,0.45)]">
       {/* Entire header is the drag handle. Previously only the ⋮⋮ icon (~5px
@@ -655,8 +723,18 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
           overflow-hidden cropped the terminal. With them the host tracks the
           tile and the ResizeObserver re-fits, so the terminal reflows (cols/
           rows scale) on resize down AND up instead of being clipped. */}
-      <div className="flex-1 min-h-0 min-w-0 overflow-hidden bg-black p-1.5">
+      <div className="relative flex-1 min-h-0 min-w-0 overflow-hidden bg-black p-1.5">
         <div ref={hostRef} className="w-full h-full overflow-hidden" />
+        {debug && (
+          <div className="nodrag pointer-events-none absolute top-1 right-1 z-50 rounded bg-black/85 px-2 py-1 font-mono text-[10px] leading-tight text-[#9fe6a0] ring-1 ring-white/15">
+            <div className="mb-0.5 font-semibold text-white/70">render diag · ⌃⇧D</div>
+            {Object.entries(diag).map(([k, v]) => (
+              <div key={k}>
+                <span className="text-white/45">{k}:</span> {v}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

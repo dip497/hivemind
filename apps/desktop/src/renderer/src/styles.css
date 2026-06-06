@@ -320,7 +320,13 @@ a {
   pointer-events: none;
   contain: layout paint style;
 }
-.canvas-moving .react-flow__node-terminal .xterm,
+/* NOTE: do NOT add `.xterm` here. The terminal now uses xterm's DOM renderer
+   (real text nodes); `will-change: transform` promotes it to a GPU layer, which
+   disables crisp/subpixel text rendering and leaves the terminal blurry — most
+   visibly right after a programmatic zoom-to-1 on select, when `.canvas-moving`
+   is briefly applied. The node's `contain: layout paint style` (rule above)
+   already isolates paint during motion, so the terminal needs no extra
+   promotion. will-change stays only on the raster-heavy Pierre diff tiles. */
 .canvas-moving .react-flow__node-diff [data-pierre-tile],
 .canvas-moving .react-flow__node-workbench [data-pierre-tile] {
   will-change: transform;

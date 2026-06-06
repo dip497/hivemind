@@ -7,6 +7,14 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Fixed
+
+- Terminal text no longer blurs when a tile is focused/selected. Selecting a tile zooms the canvas to 100%, which briefly applied `.canvas-moving` → `will-change: transform` to the `.xterm`, promoting the DOM-rendered text to a GPU layer that disables crisp rendering. Removed `will-change` from `.xterm` (it was only needed by the old WebGL canvas); paint isolation during motion still comes from the node's `contain`.
+
+### Added
+
+- Terminal render-quality HUD: Ctrl/Cmd+Shift+D toggles a live overlay (on every terminal) showing canvas zoom (and whether it's pixel-perfect 1:1), devicePixelRatio, font size, grid, and the computed styles that affect text sharpness (`will-change`/`transform`/font-smoothing, and whether `.canvas-moving` is stuck). Makes blurry-text reports diagnosable without devtools.
+
 ## [1.0.6] — 2026-06-07
 
 ### Added
