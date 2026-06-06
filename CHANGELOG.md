@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [1.0.3] — 2026-06-06
+
 ### Changed
 - **Terminal text stays crisp when you zoom in to read it (level-of-detail supersampling).** xterm rasterizes glyphs at a fixed resolution that the canvas zoom then CSS-scales, so anything but 100% looked soft — and xterm has no per-instance device-pixel-ratio override (confirmed against its rendering internals). Terminals now render at a denser backing (`k×`) when the canvas is zoomed in enough to actually read them, scaling the host + font together so columns/rows are unchanged (no PTY reflow); in overview they stay at `1×` (cheap), so GPU cost is bounded across many tiles. The density level is a single tunable function. `apps/desktop/src/renderer/src/TerminalTile.tsx`.
 
@@ -256,7 +258,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v1.0.2...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v1.0.3...HEAD
+[1.0.3]: https://github.com/dip497/hivemind/releases/tag/v1.0.3
 [1.0.2]: https://github.com/dip497/hivemind/releases/tag/v1.0.2
 [1.0.1]: https://github.com/dip497/hivemind/releases/tag/v1.0.1
 [1.0.0]: https://github.com/dip497/hivemind/releases/tag/v1.0.0
