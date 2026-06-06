@@ -215,6 +215,11 @@ export interface HiveIpc {
   /** Write UTF-8 contents to a repo-relative file. Rejects path traversal. */
   fileWrite(repoPath: string, relPath: string, contents: string): Promise<void>;
 
+  /** Append one diagnostics line to userData/render-diag.log (auto-rotated).
+   *  Used by the terminal render-quality probe so blurry-text reports can be
+   *  read off disk (incl. over SSH) instead of only on-screen. */
+  diagLog(line: string): Promise<void>;
+
   // ── remote (SSH) frames ───────────────────────────────────
   /** Probe + register auth for an ssh://[user@]host[:port]/ target; returns the
    *  remote home dir + the connection-pool host id. Throws on connect failure.

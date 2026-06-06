@@ -62,6 +62,8 @@ const api: HiveIpc & {
   fileWrite: (repoPath, relPath, contents) =>
     ipcRenderer.invoke("fileWrite", repoPath, relPath, contents),
 
+  diagLog: (line) => ipcRenderer.invoke("diagLog", line),
+
   sshConnect: (uri, auth, remember) => ipcRenderer.invoke("sshConnect", uri, auth, remember),
   sshListDir: (uri, dir) => ipcRenderer.invoke("sshListDir", uri, dir),
   sshSavedHosts: () => ipcRenderer.invoke("sshSavedHosts"),

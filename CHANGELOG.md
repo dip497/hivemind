@@ -7,6 +7,10 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Added
+
+- Render diagnostics are now written to `<userData>/render-diag.log` (a new `diagLog` IPC). Every terminal focus auto-appends the render state (zoom, dpr, font, will-change/transform, font-smoothing, whether `.canvas-moving` is active) at t0 / t200ms / settled — so a blurry-text report is readable off disk and over SSH, not just in the on-screen HUD. Self-capping at ~128KB.
+
 ## [1.0.7] — 2026-06-07
 
 ### Fixed

@@ -640,6 +640,35 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
     return () => clearInterval(id);
   }, [debug, selected]);
 
+  // Auto-log the render state across a FOCUS (even with the HUD off), so the
+  // "quality drops on focus" window is always captured to render-diag.log and
+  // readable off disk / over SSH. Sample during the zoom animation and after it
+  // settles — the will-change/zoom transients live in that window.
+  useEffect(() => {
+    if (!selected) return;
+    const host = hostRef.current;
+    if (!host) return;
+    const snap = (phase: string) => {
+      const xterm = host.querySelector(".xterm") as HTMLElement | null;
+      const rows = host.querySelector(".xterm-rows") as HTMLElement | null;
+      const csX = xterm ? getComputedStyle(xterm) : null;
+      const csR = rows ? getComputedStyle(rows) : null;
+      const term = termRef.current;
+      const zoom = readCanvasZoom();
+      const line =
+        `[focus:${phase}] tile=${effLabel} zoom=${zoom.toFixed(3)} dpr=${window.devicePixelRatio || 1} ` +
+        `font=${term?.options.fontSize ?? "?"} grid=${term ? `${term.cols}x${term.rows}` : "?"} ` +
+        `will-change=${csX?.willChange ?? "?"} transform=${csX && csX.transform !== "none" ? "LAYER" : "none"} ` +
+        `smoothing=${csR?.getPropertyValue("-webkit-font-smoothing").trim() || "?"} ` +
+        `moving=${document.querySelector(".canvas-moving") ? "yes" : "no"}`;
+      void window.hive.diagLog?.(line);
+    };
+    snap("t0");
+    const t1 = setTimeout(() => snap("t200"), 200);
+    const t2 = setTimeout(() => snap("settled"), 700);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [selected, effLabel]);
+
   return (
     <div className="flex h-full flex-col rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] overflow-hidden shadow-[0_8px_22px_rgba(0,0,0,0.45)]">
       {/* Entire header is the drag handle. Previously only the ⋮⋮ icon (~5px

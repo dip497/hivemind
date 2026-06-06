@@ -781,6 +781,24 @@ ipcMain.handle("fileWrite", wrap((_e, repoPath: string, relPath: string, content
     : fsp.writeFile(resolveInRepo(repoPath, relPath), contents, "utf8")
 ));
 
+// Diagnostics sink: append render-quality lines to userData/render-diag.log so a
+// blurry-text report becomes a readable trace (incl. over SSH). Best-effort and
+// self-capping — truncate to the last ~64KB when it grows past 128KB so it never
+// balloons. Never throws into the renderer.
+ipcMain.handle("diagLog", async (_e, line: string) => {
+  try {
+    const file = path.join(app.getPath("userData"), "render-diag.log");
+    try {
+      const st = statSync(file);
+      if (st.size > 128 * 1024) {
+        const tail = readFileSync(file, "utf8").slice(-64 * 1024);
+        writeFileSync(file, tail);
+      }
+    } catch { /* file not there yet */ }
+    await fsp.appendFile(file, `${new Date().toISOString()} ${line}\n`, "utf8");
+  } catch { /* diagnostics must never break the app */ }
+});
+
 // ── remote (SSH) frames ─────────────────────────────────────────────────
 // Probe + auth-register a host, returning its home dir (the connectivity check
 // behind "attach remote"). `uri` is ssh://[user@]host[:port]/ — the path is
