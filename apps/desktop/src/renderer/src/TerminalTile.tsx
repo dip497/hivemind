@@ -25,9 +25,12 @@ function openExternalLink(uri: string): void {
 // terminal tile + persisted, so the whole canvas reads at one consistent size.
 // Crispness is now DPR-driven (see terminal-dpr.ts), NOT size-driven, so 12 is
 // the default purely for content density — Ctrl/Cmd +/- bumps it for comfort.
-const TERM_FONT_KEY = "hm:termFontSize";
-const DEFAULT_FONT = 12;
-const MIN_FONT = 8;
+// Key is versioned (…-v2): bumping it retires any previously-persisted size so a
+// new default takes effect immediately instead of being shadowed by an old saved
+// value. Ctrl/Cmd +/- still overrides + re-persists under this key.
+const TERM_FONT_KEY = "hm:termFontSize-v2";
+const DEFAULT_FONT = 8;
+const MIN_FONT = 6;
 const MAX_FONT = 28;
 function loadTermFont(): number {
   try {
