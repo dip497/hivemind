@@ -33,7 +33,7 @@ export const PIERRE_CSS_VARS: CSSProperties = {
   // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
   ...({
     "--diffs-font-family": '"JetBrains Mono", monospace',
-    "--diffs-font-size": "11.5px",
+    "--diffs-font-size": "13px",
     "--diffs-line-height": "1.6",
     "--diffs-tab-size": "2",
     "--diffs-min-number-column-width": "3ch",

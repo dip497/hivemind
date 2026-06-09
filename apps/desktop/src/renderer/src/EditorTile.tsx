@@ -13,6 +13,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GripVertical } from "lucide-react";
+import { useTileFont, FontStepper, handleFontKey } from "./tile-font";
 import { EditorState, type Extension, Compartment } from "@codemirror/state";
 import {
   EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter,
@@ -65,7 +66,9 @@ const cmTheme = EditorView.theme(
       height: "100%",
       backgroundColor: "var(--color-bg2)",
       color: "var(--color-fg)",
-      fontSize: "12.5px",
+      // Inherit from the tile root, which carries the per-tile font size (so
+      // A−/A+ scales the editor). See useTileFont in EditorTile.
+      fontSize: "inherit",
     },
     ".cm-scroller": {
       fontFamily:
@@ -190,6 +193,9 @@ interface TabState {
 }
 
 export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, embedded = false }: Props) {
+  // Per-tile font size (A−/A+ + Ctrl/Cmd +/−/0). The CM theme uses fontSize:
+  // "inherit", so the size set on the root below flows into the editor.
+  const font = useTileFont(`editor:${repoPath}`, 13);
   const [active, setActive] = useState<string | null>(tabs[0] ?? null);
   // Per-tab metadata. Live document content lives in CodeMirror's state; we
   // keep saved snapshot + dirty/loaded flags here keyed by repo-relative path.
@@ -422,6 +428,8 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, emb
           ? "flex h-full flex-col bg-[var(--color-bg2)] overflow-hidden min-w-0"
           : "flex h-full flex-col rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] overflow-hidden shadow-[0_8px_22px_rgba(0,0,0,0.45)]"
       }
+      style={{ fontSize: `${font.size}px` }}
+      onKeyDownCapture={(e) => handleFontKey(e, font)}
     >
       {/* drag handle + tile chrome — only when standalone; embedded host owns chrome */}
       {!embedded && (
@@ -448,6 +456,7 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, emb
               </button>
             )}
             <span className="text-[9.5px] text-[var(--color-fg3)]">⌘S to save</span>
+            <FontStepper {...font} />
           </span>
           <button
             onClick={onClose}

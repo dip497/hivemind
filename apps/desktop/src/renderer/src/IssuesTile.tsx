@@ -10,6 +10,7 @@
  * IssuePeek. The heavy drag-drop board stays as the dedicated full-screen view.
  */
 import { GripVertical, Play, Inbox, FolderGit2 } from "lucide-react";
+import { useTileFont, FontStepper, handleFontKey } from "./tile-font";
 import type { IssueState, IssueSummary } from "@hivemind/core/types";
 import { STATE_LABEL, STATE_ORDER, StateIcon } from "./components/StateMeta";
 import { useIssues, useUpdateState } from "./queries";
@@ -51,6 +52,9 @@ interface Props {
 }
 
 export function IssuesTile({ root, onClose }: Props) {
+  // Per-tile font (A−/A+ + Ctrl/Cmd +/−/0). Issues is a fixed-px card UI, so we
+  // scale the whole board with CSS zoom (13 = 1.0) rather than a font-size.
+  const font = useTileFont(`issues:${root ?? "none"}`, 13);
   const { data: issues = [], isLoading } = useIssues(root);
   const update = useUpdateState();
   // Only show columns that have issues (empty columns wasted ~200px each and
@@ -77,13 +81,19 @@ export function IssuesTile({ root, onClose }: Props) {
   };
 
   return (
-    <div className="flex h-full flex-col rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] overflow-hidden shadow-[0_8px_22px_rgba(0,0,0,0.45)]">
+    <div
+      className="flex h-full flex-col rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] overflow-hidden shadow-[0_8px_22px_rgba(0,0,0,0.45)]"
+      onKeyDownCapture={(e) => handleFontKey(e, font)}
+    >
       <div className="tile-drag-handle h-8 flex items-center gap-2 px-2.5 bg-[var(--color-bg3)] border-b border-[var(--color-line)] text-[11px] font-mono text-[var(--color-fg2)] cursor-grab active:cursor-grabbing">
         <GripVertical aria-hidden size={13} className="text-[var(--color-fg3)] -ml-1 shrink-0" />
         <span className="font-semibold text-[var(--color-fg)]">Issues</span>
         <span className="ml-1 text-[var(--color-fg3)] tabular-nums">{issues.length}</span>
+        <span className="ml-auto">
+          <FontStepper {...font} />
+        </span>
         <button
-          className="nodrag ml-auto size-5 grid place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--color-line2)] hover:text-[var(--color-fg)] cursor-pointer"
+          className="nodrag size-5 grid place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--color-line2)] hover:text-[var(--color-fg)] cursor-pointer"
           aria-label="close tile"
           title="close"
           onClick={onClose}
@@ -92,7 +102,7 @@ export function IssuesTile({ root, onClose }: Props) {
         </button>
       </div>
 
-      <div className="flex-1 overflow-auto p-2">
+      <div className="flex-1 overflow-auto p-2" style={{ zoom: font.size / 13 }}>
         {!root ? (
           <TileEmpty
             icon={<FolderGit2 size={26} strokeWidth={1.5} />}

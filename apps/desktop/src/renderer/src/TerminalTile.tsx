@@ -5,6 +5,7 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { installCrispDpr, effectiveDpr } from "./terminal-dpr";
 import { registerWebglSlotClient, unregisterWebglSlotClient, reconcileWebglSlots } from "./webgl-slots";
+import { useTileFont, FontStepper, handleFontKey } from "./tile-font";
 import { identifyAgent, detectTileStatus, stabilizeClaudeStatus, normalizeAgentTitle, type TileStatus } from "./agent-state";
 import { registerClaude, unregisterClaude, shouldDeliver, claimWork, clearWork, type SendToClaudeDetail } from "./claude-bus";
 import { publishStatus, clearStatus, type TileStatusKind } from "./agent-status-bus";
@@ -22,30 +23,10 @@ function openExternalLink(uri: string): void {
   } catch { /* not a parseable URL — ignore */ }
 }
 
-// Terminal font size is user-adjustable (Ctrl/Cmd +/-/0) and shared across every
-// terminal tile + persisted, so the whole canvas reads at one consistent size.
-// Crispness is now DPR-driven (see terminal-dpr.ts), NOT size-driven, so 12 is
-// the default purely for content density — Ctrl/Cmd +/- bumps it for comfort.
-// Key is versioned (…-v2): bumping it retires any previously-persisted size so a
-// new default takes effect immediately instead of being shadowed by an old saved
-// value. Ctrl/Cmd +/- still overrides + re-persists under this key.
-const TERM_FONT_KEY = "hm:termFontSize-v3";
+// Default terminal font size. Each tile remembers its OWN size (useTileFont keyed
+// by tileId) — A−/A+ in the header + Ctrl/Cmd +/−/0 adjust it. Crispness is
+// DPR-driven (see terminal-dpr.ts), so 12 is the default purely for density.
 const DEFAULT_FONT = 12;
-const MIN_FONT = 6;
-const MAX_FONT = 28;
-function loadTermFont(): number {
-  try {
-    const v = Number(localStorage.getItem(TERM_FONT_KEY));
-    if (Number.isFinite(v) && v >= MIN_FONT && v <= MAX_FONT) return v;
-  } catch { /* localStorage blocked */ }
-  return DEFAULT_FONT;
-}
-/** Persist + broadcast a new terminal font size to every live tile. */
-function setTermFont(px: number): void {
-  const clamped = Math.max(MIN_FONT, Math.min(MAX_FONT, Math.round(px)));
-  try { localStorage.setItem(TERM_FONT_KEY, String(clamped)); } catch { /* ignore */ }
-  window.dispatchEvent(new CustomEvent("hivemind:term-font", { detail: clamped }));
-}
 
 // ── render-quality diagnostics ───────────────────────────────────────────────
 // A toggleable HUD (Ctrl/Cmd+Shift+D, shared across tiles) that surfaces the
@@ -122,6 +103,14 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
   // Live `selected` for the WebGL slot manager's priority() (read outside render).
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
+  // Per-tile font size (A−/A+ + Ctrl/Cmd +/−/0). fontSizeRef gives the mount
+  // effect the initial size; fontCtlRef lets the xterm key handler (a closure)
+  // call the current inc/dec/reset.
+  const font = useTileFont(tileId, DEFAULT_FONT);
+  const fontSizeRef = useRef(font.size);
+  fontSizeRef.current = font.size;
+  const fontCtlRef = useRef(font);
+  fontCtlRef.current = font;
   // Unique PTY identity per MOUNT (not per prop). Fixes React.StrictMode
   // double-mount race: the first mount's awaited ptySpawn could resolve AFTER
   // its cleanup ran, killing the second mount's PTY (same tileId in the
@@ -240,7 +229,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
     if (!host) return;
     const term = new Terminal({
       fontFamily: '"JetBrains Mono", monospace',
-      fontSize: loadTermFont(),
+      fontSize: fontSizeRef.current,
       lineHeight: 1.3,
       theme: {
         // Cool deep-navy to match the Huly/Plane theme (was warm orange/black).
@@ -462,14 +451,9 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
         setTermDebug(!loadTermDebug());
         return false;
       }
-      // Font zoom: Ctrl/Cmd +/- adjusts the shared terminal font size, Ctrl/Cmd 0
-      // resets. Broadcasts to every tile (setTermFont) so the canvas stays one
-      // consistent size. Bigger font = crisper, more legible glyphs at zoom 1.
-      if (e.key === "=" || e.key === "+" || e.key === "-" || e.key === "0") {
-        e.preventDefault();
-        const cur = loadTermFont();
-        const next = e.key === "0" ? DEFAULT_FONT : e.key === "-" ? cur - 1 : cur + 1;
-        setTermFont(next);
+      // Font zoom: Ctrl/Cmd +/−/0 adjusts THIS tile's font (per-tile). The apply
+      // effect below pushes the new size into xterm.
+      if (handleFontKey(e, fontCtlRef.current)) {
         return false;
       }
       if (e.key.toLowerCase() === "c") {
@@ -656,24 +640,17 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
     } else term.blur();
   }, [selected]);
 
-  // Apply a shared font-size change (from any tile's Ctrl+/-) to THIS terminal,
-  // then re-fit so cols/rows track the new cell size. Listens on window so one
-  // keystroke resizes every open terminal uniformly + new tiles read the
-  // persisted value at mount.
+  // Apply THIS tile's font size to xterm whenever it changes, then re-fit so
+  // cols/rows track the new cell size.
   useEffect(() => {
-    const onFont = (e: Event) => {
-      const term = termRef.current;
-      if (!term) return;
-      const px = (e as CustomEvent<number>).detail;
-      term.options.fontSize = px;
-      try {
-        fitRef.current?.fit();
-        term.refresh(0, term.rows - 1);
-      } catch { /* torn down */ }
-    };
-    window.addEventListener("hivemind:term-font", onFont as EventListener);
-    return () => window.removeEventListener("hivemind:term-font", onFont as EventListener);
-  }, []);
+    const term = termRef.current;
+    if (!term) return;
+    term.options.fontSize = font.size;
+    try {
+      fitRef.current?.fit();
+      term.refresh(0, term.rows - 1);
+    } catch { /* torn down */ }
+  }, [font.size]);
 
   // Sync the HUD toggle across tiles.
   useEffect(() => {
@@ -789,7 +766,10 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
         )}
         <span aria-hidden className="text-[var(--color-line2)]">·</span>
         <span className="text-[var(--color-fg2)]">{cmd.split("/").slice(-1)[0]}</span>
-        <span className="ml-auto inline-flex items-center gap-1.5 text-[10px]" title="agent status — working / idle / blocked / exited">
+        <span className="ml-auto">
+          <FontStepper {...font} />
+        </span>
+        <span className="inline-flex items-center gap-1.5 text-[10px]" title="agent status — working / idle / blocked / exited">
           <span
             ref={dotRef}
             aria-hidden

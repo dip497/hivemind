@@ -23,7 +23,8 @@ import {
   useRef,
   useState,
 } from "react";
-import { GripVertical, Play } from "lucide-react";
+import { GripVertical, Play, RefreshCw } from "lucide-react";
+import { useTileFont, FontStepper, handleFontKey } from "./tile-font";
 import {
   CodeView,
   UnresolvedFile,
@@ -98,6 +99,8 @@ function loadJson<T>(key: string, fallback: T): T {
 }
 
 export function DiffTile({ repoPath, initialMode = "working", initialBase = "origin/main", onClose }: Props) {
+  // Per-tile font size (A−/A+ + Ctrl/Cmd +/−/0) — overrides --diffs-font-size.
+  const font = useTileFont(`diff:${repoPath}`, 13);
   const [mode, setMode] = useState<Mode>(initialMode);
   const [staged, setStaged] = useState(false);
   const [layout, setLayout] = useState<Layout>("split");
@@ -194,10 +197,32 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
       .map((c) => ({ side: c.side, lineNumber: c.endLine, metadata: c }));
   }
 
-  // ── git:file cache invalidation on fs change (owned here, not in queries.ts) ──
+  // ── git invalidation on fs change (owned here, scoped to THIS tile's repo) ──
+  // App's central useFsChangedInvalidation only covers the top-level repoPath. A
+  // worktree/scoped DiffTile has a DIFFERENT repoPath, so its `git:status` list
+  // was never refreshed — edits didn't show until reopen. Watch + invalidate
+  // BOTH the changed-file LIST (git:status / git:diff / git:list-files) and the
+  // per-file CONTENTS (git:file) for this repoPath, debounced against the
+  // agent-write storm.
   const qc = useQueryClient();
+  const refresh = useCallback(() => {
+    qc.invalidateQueries({ queryKey: ["git:status", repoPath] });
+    qc.invalidateQueries({ queryKey: ["git:diff", repoPath] });
+    qc.invalidateQueries({ queryKey: ["git:list-files", repoPath] });
+    qc.invalidateQueries({
+      predicate: (q) => q.queryKey[0] === "git:file" && q.queryKey[1] === repoPath,
+    });
+  }, [qc, repoPath]);
   useEffect(() => {
-    const unsub = window.hive.onFsChanged(repoPath, ({ paths }) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let pending: string[] = [];
+    const flush = () => {
+      timer = undefined;
+      const paths = pending;
+      pending = [];
+      qc.invalidateQueries({ queryKey: ["git:status", repoPath] });
+      qc.invalidateQueries({ queryKey: ["git:diff", repoPath] });
+      qc.invalidateQueries({ queryKey: ["git:list-files", repoPath] });
       qc.invalidateQueries({
         predicate: (q) =>
           q.queryKey[0] === "git:file" &&
@@ -206,8 +231,16 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
             (p) => p === `${repoPath}/${q.queryKey[2]}` || p.endsWith(`/${q.queryKey[2]}`),
           ),
       });
+    };
+    const unsub = window.hive.onFsChanged(repoPath, ({ paths }) => {
+      pending.push(...paths);
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(flush, 150);
     });
-    return unsub;
+    return () => {
+      if (timer) clearTimeout(timer);
+      unsub();
+    };
   }, [qc, repoPath]);
 
   // ── build CodeView items per mode ───────────────────────────────────────
@@ -513,7 +546,8 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
   return (
     <div
       className="flex flex-col h-full bg-[var(--color-bg2)] border border-[var(--color-line)] rounded-xl overflow-hidden"
-      style={PIERRE_CSS_VARS}
+      style={{ ...PIERRE_CSS_VARS, "--diffs-font-size": `${font.size}px` } as React.CSSProperties}
+      onKeyDownCapture={(e) => handleFontKey(e, font)}
     >
       {/* tile chrome */}
       <div className="tile-drag-handle h-8 flex items-center gap-2 px-2.5 bg-[var(--color-bg3)] border-b border-[var(--color-line)] text-[11px] font-mono text-[var(--color-fg2)] cursor-grab active:cursor-grabbing">
@@ -600,6 +634,22 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
             {expandUnchanged ? "full" : "diff"}
           </button>
         </div>
+
+        {/* Manual refresh — re-reads the changed-file list + diffs now. The fs
+            watcher already auto-refreshes, but this is the explicit escape hatch
+            for any case it misses (e.g. an external git op). */}
+        <button
+          className="nodrag ml-1.5 size-6 grid place-items-center rounded text-[var(--color-fg3)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg4)] transition-colors"
+          onClick={refresh}
+          aria-label="refresh diff"
+          title="Refresh diff"
+        >
+          <RefreshCw size={12} aria-hidden />
+        </button>
+
+        <span className="ml-1.5">
+          <FontStepper {...font} />
+        </span>
 
         {/* in-diff search — line-level matches, scroll + highlight, ↑/↓ nav */}
         <div className="nodrag ml-1.5 inline-flex items-center gap-1 bg-[var(--color-bg)] border border-[var(--color-line2)] rounded px-1.5 py-0.5">
