@@ -833,13 +833,17 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
               // the viewport so that layer lands on whole pixels (sharp, not
               // blurry). See ViewportSnap.
               bumpSnap();
-              // xterm maps mouse→cell using the UNSCALED cell size, so at any
-              // zoom ≠ 1 text selection / link clicks land on the wrong row
-              // (off by the zoom factor — a known xterm limitation under CSS
-              // transform). Snap to exactly 100% when you click into a terminal
-              // to interact, so selection + clicks are pixel-accurate. Terminals
-              // only — editor/diff use DOM coords that already scale correctly.
-              if (node.type === "terminal") setSelZoomReq((n) => n + 1);
+              // Snap to exactly 100% when you focus a text-heavy tile, for two
+              // reasons: (1) terminals map mouse→cell using the UNSCALED cell
+              // size, so selection/link clicks are only pixel-accurate at zoom 1;
+              // (2) the diff (Pierre) and editor (CodeMirror) render DOM TEXT,
+              // which the browser can only rasterize crisply at 1:1 — at any
+              // other zoom it's a scaled bitmap (soft). The terminal escapes this
+              // via WebGL supersampling; DOM text can't, so reading it crisply
+              // means viewing at 100%. Snap so a focused diff/editor is sharp.
+              if (node.type === "terminal" || node.type === "diff" || node.type === "editor" || node.type === "workbench") {
+                setSelZoomReq((n) => n + 1);
+              }
             }
           }}
           onPaneClick={() => {
