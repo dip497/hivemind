@@ -28,8 +28,8 @@ function openExternalLink(uri: string): void {
 // Key is versioned (…-v2): bumping it retires any previously-persisted size so a
 // new default takes effect immediately instead of being shadowed by an old saved
 // value. Ctrl/Cmd +/- still overrides + re-persists under this key.
-const TERM_FONT_KEY = "hm:termFontSize-v2";
-const DEFAULT_FONT = 8;
+const TERM_FONT_KEY = "hm:termFontSize-v3";
+const DEFAULT_FONT = 12;
 const MIN_FONT = 6;
 const MAX_FONT = 28;
 function loadTermFont(): number {
