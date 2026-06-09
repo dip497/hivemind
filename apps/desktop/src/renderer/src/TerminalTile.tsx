@@ -23,11 +23,10 @@ function openExternalLink(uri: string): void {
 
 // Terminal font size is user-adjustable (Ctrl/Cmd +/-/0) and shared across every
 // terminal tile + persisted, so the whole canvas reads at one consistent size.
-// Bigger glyphs render with more device pixels each ⇒ visibly crisper + more
-// legible — the main quality lever once the renderer is fixed (opencode/opencove
-// expose the same control). 13 is a touch larger than the old 12 default.
+// Crispness is now DPR-driven (see terminal-dpr.ts), NOT size-driven, so 12 is
+// the default purely for content density — Ctrl/Cmd +/- bumps it for comfort.
 const TERM_FONT_KEY = "hm:termFontSize";
-const DEFAULT_FONT = 13;
+const DEFAULT_FONT = 12;
 const MIN_FONT = 8;
 const MAX_FONT = 28;
 function loadTermFont(): number {
