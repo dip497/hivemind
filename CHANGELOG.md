@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [1.2.1] — 2026-06-09
+
 ### Fixed
 
 - Terminal text selection landed on the wrong row (highlight appeared below the cursor). Focusing a terminal now snaps the canvas to exactly 100% zoom — xterm maps the mouse to a cell using the unscaled cell size, so selection is only pixel-accurate at 1:1. (A prior change fit-to-tiled terminals at zoom ≤ 1 on the now-removed assumption that a DPR supersample kept them crisp at any zoom.)
@@ -322,7 +324,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/dip497/hivemind/releases/tag/v1.2.1
 [1.2.0]: https://github.com/dip497/hivemind/releases/tag/v1.2.0
 [1.1.0]: https://github.com/dip497/hivemind/releases/tag/v1.1.0
 [1.0.7]: https://github.com/dip497/hivemind/releases/tag/v1.0.7
