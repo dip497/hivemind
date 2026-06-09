@@ -1,7 +1,9 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
+import { WebglAddon } from "@xterm/addon-webgl";
 import { WebLinksAddon } from "@xterm/addon-web-links";
+import { installCrispDpr, effectiveDpr } from "./terminal-dpr";
 import { identifyAgent, detectTileStatus, stabilizeClaudeStatus, normalizeAgentTitle, type TileStatus } from "./agent-state";
 import { registerClaude, unregisterClaude, shouldDeliver, claimWork, clearWork, type SendToClaudeDetail } from "./claude-bus";
 import { publishStatus, clearStatus, type TileStatusKind } from "./agent-status-bus";
@@ -64,26 +66,20 @@ function readCanvasZoom(): number {
   try { return new DOMMatrixReadOnly(getComputedStyle(vp).transform).a; } catch { return 1; }
 }
 /**
- * Renderer choice: the built-in DOM renderer (NO WebGL/canvas addon loaded).
+ * Renderer: WebGL + a per-instance device-pixel-ratio override (see
+ * ./terminal-dpr.ts) — the technique opencove uses, adapted for DPR=1 displays.
  *
- * The WebGL renderer rasterizes every glyph into a GPU texture atlas with
- * `antialias:false` and no font hinting — at DPR=1 (the common laptop case)
- * small mono glyphs come out thin/soft, and the react-flow zoom-transform
- * blurs the bitmap further. Two rounds of supersampling (rendering at k× and
- * CSS-downscaling) only approximated native sharpness and never matched it —
- * because WebGL fundamentally bypasses the OS font rasterizer.
+ * WebGL rasterizes glyphs into a GPU atlas at `cellPx × devicePixelRatio`. On
+ * HiDPI (DPR≥2) that's dense → crisp (why opencove looks sharp on retina). On a
+ * DPR=1 laptop the atlas is 1× → thin/soft, and the canvas zoom makes it worse.
+ * installCrispDpr() overrides xterm's internal dpr to a supersample FLOOR of 2,
+ * so the atlas is always rasterized ≥2× and downsampled to the display — crisp
+ * at zoom 1, no CSS hacks, no PTY reflow, mouse-mapping intact.
  *
- * The DOM renderer draws real text nodes, so the browser renders them with
- * native hinting + (sub)pixel antialiasing — exactly what the system terminal
- * (VTE/FreeType) does. That is the crispness users compared against. xterm
- * confirms it: since v5 the canvas renderer is "fallback only" and WebGL trades
- * sharpness for raw throughput, which agent tiles never need. (Verified against
- * xterm.js source + issue #4212 "abnormally thin text" — a WebGL-only artifact.)
- *
- * Cost: heavy full-screen redraws (cat a huge file, fast vim scroll) are slower
- * in the DOM renderer. Agent/shell output is line-oriented, so it's a non-issue
- * here, and crispness is worth it. If a perf-sensitive workload appears, add the
- * WebGL addon back behind a per-tile toggle rather than as the default.
+ * (Earlier attempts — a CSS-scale SSAA wrapper, then switching to the DOM
+ * renderer — both fell short: the wrapper caused reflow/mouse drift, and the DOM
+ * renderer doesn't supersample and still blurs under the canvas transform. The
+ * DPR override is the actual fix.)
  */
 
 interface Props {
@@ -119,6 +115,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
   const hostRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
+  const webglRef = useRef<WebglAddon | null>(null);
   // Unique PTY identity per MOUNT (not per prop). Fixes React.StrictMode
   // double-mount race: the first mount's awaited ptySpawn could resolve AFTER
   // its cleanup ran, killing the second mount's PTY (same tileId in the
@@ -299,8 +296,28 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
     fitRef.current = fit;
     term.loadAddon(fit);
     term.open(host);
-    // No WebGL/canvas addon → xterm uses its built-in DOM renderer (native font
-    // rendering = crisp, hinted text). See the renderer doc above for why.
+    // WebGL renderer + crisp-DPR override (see renderer doc above + terminal-dpr).
+    // onContextLoss: GPU drivers can yank the context (sleep/wake, driver reset);
+    // dispose the addon so xterm falls back to the DOM renderer instead of drawing
+    // into a dead context. installCrispDpr runs AFTER loadAddon so the render
+    // service exists — it raises the atlas density to the supersample floor.
+    let webgl: WebglAddon | undefined;
+    let disposeDpr: (() => void) | undefined;
+    try {
+      webgl = new WebglAddon();
+      webglRef.current = webgl;
+      webgl.onContextLoss(() => {
+        try { disposeDpr?.(); } catch { /* already gone */ }
+        disposeDpr = undefined;
+        try { webgl?.dispose(); } catch { /* already disposed */ }
+        webgl = undefined;
+        webglRef.current = null;
+      });
+      term.loadAddon(webgl);
+      disposeDpr = installCrispDpr(term);
+    } catch {
+      /* WebGL unavailable — DOM renderer (no supersample, but functional). */
+    }
     fit.fit();
     termRef.current = term;
 
@@ -320,12 +337,11 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
     let unsubExit: (() => void) | undefined;
     let unsubClaude: (() => void) | undefined;
 
-    // Re-measure once the web font is truly loaded. xterm measures the font at
-    // open(); "JetBrains Mono" loads async (web font), so the first layout can be
-    // built from FALLBACK metrics → misaligned glyphs that never self-correct.
-    // Force-load the exact faces, then re-fit + refresh so the DOM renderer
-    // re-lays-out at the correct metrics. Usually instant (font cached after the
-    // first tile).
+    // Rebuild the glyph atlas once the web font is truly loaded. xterm measures
+    // the font at open(); "JetBrains Mono" loads async (web font), so the first
+    // atlas is often built from FALLBACK metrics → permanently blurry glyphs that
+    // never self-correct. Force-load the exact faces, then re-fit + clear the
+    // WebGL texture atlas so glyphs re-rasterize at the right metrics + density.
     if (typeof document !== "undefined" && document.fonts?.ready) {
       const fams = ['400 12px "JetBrains Mono"', '700 12px "JetBrains Mono"'];
       Promise.all(fams.map((f) => document.fonts.load(f).catch(() => undefined)))
@@ -334,6 +350,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
           if (cancelled) return;
           try {
             fit.fit();
+            webgl?.clearTextureAtlas();
             term.refresh(0, term.rows - 1);
           } catch { /* terminal torn down mid-load */ }
         })
@@ -548,9 +565,12 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       } catch {
         /* ignore */
       }
+      try { disposeDpr?.(); } catch { /* restore dpr — already gone */ }
+      try { webgl?.dispose(); } catch { /* already disposed */ }
       term.dispose();
       termRef.current = null;
       fitRef.current = null;
+      webglRef.current = null;
     };
     // `args` is excluded from deps intentionally — Canvas/parent recreates the
     // array on every render so reference equality would always fail and cause
@@ -625,7 +645,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       const zoom = readCanvasZoom();
       setDiag({
         zoom: zoom.toFixed(3) + (Math.abs(zoom - 1) < 0.001 ? " ✓1:1" : " ✗blur"),
-        dpr: String(window.devicePixelRatio || 1),
+        dpr: `${window.devicePixelRatio || 1} → atlas@${effectiveDpr(window.devicePixelRatio || 1)}x`,
         font: term ? `${term.options.fontSize}px` : "?",
         grid: term ? `${term.cols}×${term.rows}` : "?",
         "will-change": csX?.willChange || "?",

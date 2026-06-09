@@ -7,6 +7,14 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Fixed
+
+- **High CPU / system crash with active terminals.** The DOM renderer adopted in 1.0.5 re-renders DOM nodes on every frame of terminal output, so live agent tiles (claude/codex streaming TUI repaints) pegged the CPU and could crash the machine. Reverted to the GPU-accelerated WebGL renderer, which is far cheaper for high-throughput output.
+
+### Changed
+
+- Terminal text crispness now comes from a per-instance device-pixel-ratio override (ported from opencove): xterm's WebGL atlas is rasterized at a supersample floor of 2× device pixels, so text is crisp on DPR=1 displays without CSS-scaling hacks or PTY reflow. No-op on HiDPI (already dense). The render-quality HUD (Ctrl/Cmd+Shift+D) now shows the effective atlas DPR.
+
 ## [1.1.0] — 2026-06-07
 
 ### Added
