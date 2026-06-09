@@ -4,6 +4,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { installCrispDpr, effectiveDpr } from "./terminal-dpr";
+import { registerWebglSlotClient, unregisterWebglSlotClient, reconcileWebglSlots } from "./webgl-slots";
 import { identifyAgent, detectTileStatus, stabilizeClaudeStatus, normalizeAgentTitle, type TileStatus } from "./agent-state";
 import { registerClaude, unregisterClaude, shouldDeliver, claimWork, clearWork, type SendToClaudeDetail } from "./claude-bus";
 import { publishStatus, clearStatus, type TileStatusKind } from "./agent-status-bus";
@@ -84,15 +85,6 @@ function readCanvasZoom(): number {
  * DPR override is the actual fix.)
  */
 
-// WebGL context budget. Browsers cap simultaneous WebGL contexts (~16 in
-// Chromium); past that, context creation fails and the terminal renders BLANK.
-// With many open terminals that limit is real, so cap the number of WebGL
-// terminals and let the overflow use xterm's DOM renderer (heavier per tile, but
-// correct — never blank). opencove uses the same budget approach. Kept a few
-// below the hard limit to leave headroom for other GL surfaces (browser tiles).
-const WEBGL_BUDGET = 12;
-let activeWebglCount = 0;
-
 interface Props {
   tileId: string;
   cwd: string;
@@ -127,6 +119,9 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const webglRef = useRef<WebglAddon | null>(null);
+  // Live `selected` for the WebGL slot manager's priority() (read outside render).
+  const selectedRef = useRef(selected);
+  selectedRef.current = selected;
   // Unique PTY identity per MOUNT (not per prop). Fixes React.StrictMode
   // double-mount race: the first mount's awaited ptySpawn could resolve AFTER
   // its cleanup ran, killing the second mount's PTY (same tileId in the
@@ -307,50 +302,72 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
     fitRef.current = fit;
     term.loadAddon(fit);
     term.open(host);
-    // WebGL renderer (budget-gated) + crisp-DPR override. Only take a WebGL
-    // context if we're under the budget — otherwise use the DOM renderer so an
-    // over-budget terminal renders correctly instead of BLANK (failed context).
-    // releaseWebglSlot is idempotent so the count is decremented exactly once
-    // whether release comes from context loss or unmount.
-    let webgl: WebglAddon | undefined;
-    let disposeDpr: (() => void) | undefined;
-    let heldWebglSlot = false;
-    const releaseWebglSlot = () => {
-      if (!heldWebglSlot) return;
-      heldWebglSlot = false;
-      activeWebglCount = Math.max(0, activeWebglCount - 1);
-    };
-    if (activeWebglCount < WEBGL_BUDGET) {
-      try {
-        webgl = new WebglAddon();
-        activeWebglCount++;
-        heldWebglSlot = true;
-        webglRef.current = webgl;
-        // GPU drivers can yank the context (sleep/wake, driver reset) or the
-        // browser can evict it under context pressure. Dispose the addon, free
-        // the slot, and REFRESH so xterm repaints via the DOM renderer instead
-        // of leaving the tile blank.
-        webgl.onContextLoss(() => {
-          try { disposeDpr?.(); } catch { /* already gone */ }
-          disposeDpr = undefined;
-          try { webgl?.dispose(); } catch { /* already disposed */ }
-          webgl = undefined;
-          webglRef.current = null;
-          releaseWebglSlot();
-          try { term.refresh(0, term.rows - 1); } catch { /* torn down */ }
-        });
-        term.loadAddon(webgl);
-        disposeDpr = installCrispDpr(term);
-      } catch {
-        // WebGL construction failed — free the slot (if taken) and fall back to
-        // the DOM renderer (no addon loaded). Never blank.
-        releaseWebglSlot();
-        webgl = undefined;
-        webglRef.current = null;
-      }
-    }
     fit.fit();
     termRef.current = term;
+
+    // ── WebGL renderer follows ATTENTION (see webgl-slots.ts) ────────────────
+    // Browsers cap WebGL contexts (~16) and we keep every terminal mounted, so we
+    // can't give them all WebGL. Start on the DOM renderer; the slot manager
+    // hot-swaps THIS tile to the crisp WebGL renderer when it's focused or
+    // visible (and back to DOM when it scrolls off-screen / loses focus). The PTY
+    // is never touched. acquire/release are idempotent.
+    // `cancelled` is declared HERE (not below with the spawn vars) because
+    // registerWebglSlotClient() synchronously calls acquireWebgl, which reads it.
+    let cancelled = false;
+    let webgl: WebglAddon | undefined;
+    let disposeDpr: (() => void) | undefined;
+    const acquireWebgl = () => {
+      if (webgl || cancelled) return;
+      try {
+        const w = new WebglAddon();
+        webgl = w;
+        webglRef.current = w;
+        // Context can be evicted (driver reset, GL pressure). Drop to DOM, repaint
+        // so the tile is never blank, and reconcile so the slot frees for another.
+        w.onContextLoss(() => {
+          try { disposeDpr?.(); } catch { /* gone */ }
+          disposeDpr = undefined;
+          try { w.dispose(); } catch { /* disposed */ }
+          if (webgl === w) { webgl = undefined; webglRef.current = null; }
+          try { term.refresh(0, term.rows - 1); } catch { /* torn down */ }
+          reconcileWebglSlots();
+        });
+        term.loadAddon(w);
+        disposeDpr = installCrispDpr(term); // supersample atlas → crisp at DPR=1
+        try { fitRef.current?.fit(); term.refresh(0, term.rows - 1); } catch { /* */ }
+      } catch {
+        try { webgl?.dispose(); } catch { /* */ }
+        webgl = undefined;
+        webglRef.current = null;
+        disposeDpr = undefined;
+      }
+    };
+    const releaseWebgl = () => {
+      if (!webgl) return;
+      try { disposeDpr?.(); } catch { /* gone */ }
+      disposeDpr = undefined;
+      try { webgl.dispose(); } catch { /* disposed */ }
+      webgl = undefined;
+      webglRef.current = null;
+      try { term.refresh(0, term.rows - 1); } catch { /* torn down */ } // repaint via DOM
+    };
+    // Viewport visibility → priority. Assume visible on mount (a fresh tile is
+    // usually in view); the observer corrects on the next frame.
+    let inViewport = true;
+    const io = new IntersectionObserver(
+      (entries) => {
+        const v = !!entries[entries.length - 1]?.isIntersecting;
+        if (v !== inViewport) { inViewport = v; reconcileWebglSlots(); }
+      },
+      { threshold: 0.01 },
+    );
+    io.observe(host);
+    registerWebglSlotClient({
+      id: ptyId,
+      priority: () => (selectedRef.current ? 2 : inViewport ? 1 : 0),
+      acquire: acquireWebgl,
+      release: releaseWebgl,
+    });
 
     // Agents set the terminal window title (OSC 0/2) to a live task summary —
     // claude's "session name". Surface it to Canvas as this tile's name. Skip
@@ -362,7 +379,6 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
         })
       : undefined;
 
-    let cancelled = false;
     let exited = false;
     let unsubData: (() => void) | undefined;
     let unsubExit: (() => void) | undefined;
@@ -588,6 +604,10 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       clearStatus(tileId);
       clearWork(tileId);
       ro.disconnect();
+      io.disconnect();
+      // Unregister from the slot manager — this releases our WebGL slot (disposes
+      // the addon + dpr override) and lets another tile claim it.
+      unregisterWebglSlotClient(ptyId);
       try {
         // Persistent + not an explicit close → detach (keep the session alive
         // in the daemon). Otherwise kill.
@@ -596,9 +616,6 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       } catch {
         /* ignore */
       }
-      try { disposeDpr?.(); } catch { /* restore dpr — already gone */ }
-      try { webgl?.dispose(); } catch { /* already disposed */ }
-      releaseWebglSlot();
       term.dispose();
       termRef.current = null;
       fitRef.current = null;
@@ -624,6 +641,9 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
   // you deselect the tile. disableStdin makes xterm ignore input entirely when
   // unselected; selecting re-enables + focuses so one click puts you in.
   useEffect(() => {
+    // Focus changed → re-rank WebGL slots so the focused tile is boosted to the
+    // crisp WebGL renderer (selectedRef is already current from render).
+    reconcileWebglSlots();
     const term = termRef.current;
     if (!term) return;
     term.options.disableStdin = !selected;
