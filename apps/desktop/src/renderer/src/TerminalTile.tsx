@@ -356,6 +356,12 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       priority: () => (selectedRef.current ? 2 : inViewport ? 1 : 0),
       acquire: acquireWebgl,
       release: releaseWebgl,
+      // Crisp boost: the FOCUSED tile on a low-DPI screen renders via DOM (native
+      // font hinting → sharp, like the system terminal). WebGL's GPU atlas is soft
+      // at devicePixelRatio=1; on HiDPI it's already crisp, so no boost there. Only
+      // the selected tile boosts, so the heavier DOM renderer is bounded to one
+      // terminal — the one you're actually reading.
+      wantsDom: () => selectedRef.current === true && (window.devicePixelRatio || 1) < 2,
     });
 
     // Agents set the terminal window title (OSC 0/2) to a live task summary —
@@ -625,8 +631,9 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
   // you deselect the tile. disableStdin makes xterm ignore input entirely when
   // unselected; selecting re-enables + focuses so one click puts you in.
   useEffect(() => {
-    // Focus changed → re-rank WebGL slots so the focused tile is boosted to the
-    // crisp WebGL renderer (selectedRef is already current from render).
+    // Focus changed → re-rank renderers. The focused tile boosts to the CRISP
+    // renderer: DOM (native hinting) on a low-DPI screen, WebGL on HiDPI. Others
+    // hold WebGL within budget. (selectedRef is already current from render.)
     reconcileWebglSlots();
     const term = termRef.current;
     if (!term) return;

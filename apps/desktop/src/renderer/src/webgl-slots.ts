@@ -32,6 +32,14 @@ export interface WebglSlotClient {
   acquire: () => void;
   /** Drop WebGL → fall back to the DOM renderer (idempotent). */
   release: () => void;
+  /**
+   * Live opt-IN to the crisp DOM renderer (native font hinting — sharper than
+   * WebGL on low-DPI displays). True only for the FOCUSED terminal on a non-HiDPI
+   * screen: it's the one tile you're reading, so the heavier DOM renderer is worth
+   * it AND bounded to one terminal (the DOM renderer is CPU-costly per output
+   * frame; many at once is what crashed). Such a client never holds a WebGL slot.
+   */
+  wantsDom?: () => boolean;
   /** Internal: whether this client currently holds a slot. */
   _hasSlot?: boolean;
 }
@@ -49,10 +57,21 @@ const clients = new Map<string, WebglSlotClient>();
  */
 function reconcile(): void {
   const all = [...clients.values()];
+
+  // Crisp-DOM boost first: tiles that explicitly want the DOM renderer (the
+  // focused tile on a low-DPI screen) are pinned to DOM — they never hold a
+  // WebGL slot and are excluded from the WebGL budget below. Bounded by how many
+  // tiles can be focused (one), so DOM's per-frame cost can't pile up.
+  const domForced = new Set<string>();
+  for (const c of all) {
+    if (c.wantsDom?.()) domForced.add(c.id);
+  }
+
   const keep = new Set<string>();
   let n = 0;
 
   const wanters = all
+    .filter((c) => !domForced.has(c.id))
     .map((c) => ({ c, p: c.priority() }))
     .filter((x) => x.p > 0)
     .sort((a, b) => b.p - a.p);
@@ -64,12 +83,13 @@ function reconcile(): void {
   if (n < BUDGET) {
     for (const c of all) {
       if (n >= BUDGET) break;
+      if (domForced.has(c.id)) continue;
       if (c._hasSlot && !keep.has(c.id)) { keep.add(c.id); n++; }
     }
   }
 
   for (const c of all) {
-    const want = keep.has(c.id);
+    const want = keep.has(c.id) && !domForced.has(c.id);
     if (want && !c._hasSlot) {
       c._hasSlot = true;
       try { c.acquire(); } catch { /* swap failed — leave on DOM */ c._hasSlot = false; }

@@ -9,11 +9,17 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Fixed
 
-- **High CPU / system crash with active terminals.** The DOM renderer adopted in 1.0.5 re-renders DOM nodes on every frame of terminal output, so live agent tiles (claude/codex streaming TUI repaints) pegged the CPU and could crash the machine. Reverted to the GPU-accelerated WebGL renderer, which is far cheaper for high-throughput output.
+- **High CPU / system crash with active terminals.** The DOM renderer adopted in 1.0.5 re-renders DOM nodes on every frame of output, so many live agent tiles (claude/codex streaming TUI repaints) pegged the CPU and could crash the machine. Terminals now default to the GPU-accelerated WebGL renderer (cheap for high throughput).
+- **Terminal text clipping / not wrapping.** An experimental device-pixel-ratio override (a supersample attempt) forced a synthetic DPR onto xterm, which desynced its CSS vs device cell metrics — the WebGL canvas rendered wider than its tile, so TUI lines clipped at the right edge instead of wrapping. Removed the override; xterm uses the display's real DPR, so cell geometry is correct and text wraps.
 
 ### Changed
 
-- Terminal text crispness now comes from a per-instance device-pixel-ratio override (ported from opencove): xterm's WebGL atlas is rasterized at a supersample floor of 2× device pixels, so text is crisp on DPR=1 displays without CSS-scaling hacks or PTY reflow. No-op on HiDPI (already dense). The render-quality HUD (Ctrl/Cmd+Shift+D) now shows the effective atlas DPR.
+- **Crisp where you look.** The focused terminal now boosts to the DOM renderer (native font hinting → sharp text, like the system terminal) on standard-DPI displays; every other tile stays on cheap WebGL. Because only the selected tile boosts, the heavier DOM renderer is bounded to one terminal — crisp where you're reading, no CPU blow-up. On HiDPI the boost is skipped (WebGL is already crisp). This is xterm's `gpuAcceleration: off` approach (VS Code), scoped to one tile on demand.
+
+### Added
+
+- Per-tile terminal font size: A−/A+ buttons in the tile header and Ctrl/Cmd `+`/`−`/`0`, remembered per tile.
+- Render-quality HUD (Ctrl/Cmd+Shift+D) showing the live values that govern terminal sharpness (canvas zoom, dpr, font, will-change/transform, `.canvas-moving`).
 
 ## [1.1.0] — 2026-06-07
 
