@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-06-09
+
 ### Fixed
 
 - **High CPU / system crash with active terminals.** The DOM renderer adopted in 1.0.5 re-renders DOM nodes on every frame of output, so many live agent tiles (claude/codex streaming TUI repaints) pegged the CPU and could crash the machine. Terminals now default to the GPU-accelerated WebGL renderer (cheap for high throughput).
@@ -312,7 +314,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/dip497/hivemind/releases/tag/v1.2.0
 [1.1.0]: https://github.com/dip497/hivemind/releases/tag/v1.1.0
 [1.0.7]: https://github.com/dip497/hivemind/releases/tag/v1.0.7
 [1.0.6]: https://github.com/dip497/hivemind/releases/tag/v1.0.6
