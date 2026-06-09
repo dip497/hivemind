@@ -826,6 +826,9 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
             if (node.type === "frame") {
               setSelectedTileId(null);
             } else {
+              // Re-frame only when selecting a DIFFERENT tile — re-clicking the
+              // already-selected tile (e.g. to type) must NOT yank the viewport.
+              const isNewSelection = !selectedTileIdsRef.current.has(node.id);
               setSelectedTileId(node.id);
               selectedTileIdsRef.current = new Set([node.id]);
               markSeen([node.id]);
@@ -833,16 +836,21 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
               // the viewport so that layer lands on whole pixels (sharp, not
               // blurry). See ViewportSnap.
               bumpSnap();
-              // Snap to exactly 100% when you focus a text-heavy tile, for two
-              // reasons: (1) terminals map mouse→cell using the UNSCALED cell
-              // size, so selection/link clicks are only pixel-accurate at zoom 1;
-              // (2) the diff (Pierre) and editor (CodeMirror) render DOM TEXT,
-              // which the browser can only rasterize crisply at 1:1 — at any
-              // other zoom it's a scaled bitmap (soft). The terminal escapes this
-              // via WebGL supersampling; DOM text can't, so reading it crisply
-              // means viewing at 100%. Snap so a focused diff/editor is sharp.
-              if (node.type === "terminal" || node.type === "diff" || node.type === "editor" || node.type === "workbench") {
-                setSelZoomReq((n) => n + 1);
+              if (isNewSelection) {
+                if (node.type === "terminal") {
+                  // Terminals render via WebGL with a DPR supersample, so they
+                  // stay crisp at ANY zoom — fit the whole tile in view instead
+                  // of yanking to 100% (which, from an overview, made the tile
+                  // "explode" to huge). fit-to-tile (maxZoom 1) frames the full
+                  // transcript without zooming past native size.
+                  focusTile(node.id);
+                } else if (node.type === "diff" || node.type === "editor" || node.type === "workbench") {
+                  // Diff (Pierre) + editor (CodeMirror) render DOM TEXT, which the
+                  // browser only rasterizes crisply at 1:1. Snap to exactly 100%
+                  // so a focused diff/editor is sharp (DOM can't supersample like
+                  // the WebGL terminal).
+                  setSelZoomReq((n) => n + 1);
+                }
               }
             }
           }}

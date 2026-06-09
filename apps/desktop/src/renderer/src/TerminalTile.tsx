@@ -81,6 +81,15 @@ function readCanvasZoom(): number {
  * DPR override is the actual fix.)
  */
 
+// WebGL context budget. Browsers cap simultaneous WebGL contexts (~16 in
+// Chromium); past that, context creation fails and the terminal renders BLANK.
+// With many open terminals that limit is real, so cap the number of WebGL
+// terminals and let the overflow use xterm's DOM renderer (heavier per tile, but
+// correct — never blank). opencove uses the same budget approach. Kept a few
+// below the hard limit to leave headroom for other GL surfaces (browser tiles).
+const WEBGL_BUDGET = 12;
+let activeWebglCount = 0;
+
 interface Props {
   tileId: string;
   cwd: string;
@@ -295,27 +304,47 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
     fitRef.current = fit;
     term.loadAddon(fit);
     term.open(host);
-    // WebGL renderer + crisp-DPR override (see renderer doc above + terminal-dpr).
-    // onContextLoss: GPU drivers can yank the context (sleep/wake, driver reset);
-    // dispose the addon so xterm falls back to the DOM renderer instead of drawing
-    // into a dead context. installCrispDpr runs AFTER loadAddon so the render
-    // service exists — it raises the atlas density to the supersample floor.
+    // WebGL renderer (budget-gated) + crisp-DPR override. Only take a WebGL
+    // context if we're under the budget — otherwise use the DOM renderer so an
+    // over-budget terminal renders correctly instead of BLANK (failed context).
+    // releaseWebglSlot is idempotent so the count is decremented exactly once
+    // whether release comes from context loss or unmount.
     let webgl: WebglAddon | undefined;
     let disposeDpr: (() => void) | undefined;
-    try {
-      webgl = new WebglAddon();
-      webglRef.current = webgl;
-      webgl.onContextLoss(() => {
-        try { disposeDpr?.(); } catch { /* already gone */ }
-        disposeDpr = undefined;
-        try { webgl?.dispose(); } catch { /* already disposed */ }
+    let heldWebglSlot = false;
+    const releaseWebglSlot = () => {
+      if (!heldWebglSlot) return;
+      heldWebglSlot = false;
+      activeWebglCount = Math.max(0, activeWebglCount - 1);
+    };
+    if (activeWebglCount < WEBGL_BUDGET) {
+      try {
+        webgl = new WebglAddon();
+        activeWebglCount++;
+        heldWebglSlot = true;
+        webglRef.current = webgl;
+        // GPU drivers can yank the context (sleep/wake, driver reset) or the
+        // browser can evict it under context pressure. Dispose the addon, free
+        // the slot, and REFRESH so xterm repaints via the DOM renderer instead
+        // of leaving the tile blank.
+        webgl.onContextLoss(() => {
+          try { disposeDpr?.(); } catch { /* already gone */ }
+          disposeDpr = undefined;
+          try { webgl?.dispose(); } catch { /* already disposed */ }
+          webgl = undefined;
+          webglRef.current = null;
+          releaseWebglSlot();
+          try { term.refresh(0, term.rows - 1); } catch { /* torn down */ }
+        });
+        term.loadAddon(webgl);
+        disposeDpr = installCrispDpr(term);
+      } catch {
+        // WebGL construction failed — free the slot (if taken) and fall back to
+        // the DOM renderer (no addon loaded). Never blank.
+        releaseWebglSlot();
         webgl = undefined;
         webglRef.current = null;
-      });
-      term.loadAddon(webgl);
-      disposeDpr = installCrispDpr(term);
-    } catch {
-      /* WebGL unavailable — DOM renderer (no supersample, but functional). */
+      }
     }
     fit.fit();
     termRef.current = term;
@@ -566,6 +595,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       }
       try { disposeDpr?.(); } catch { /* restore dpr — already gone */ }
       try { webgl?.dispose(); } catch { /* already disposed */ }
+      releaseWebglSlot();
       term.dispose();
       termRef.current = null;
       fitRef.current = null;
