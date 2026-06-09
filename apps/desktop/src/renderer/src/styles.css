@@ -89,7 +89,7 @@
   --color-fg3:    #6b7280;   /* tertiary / metadata */
 
   --color-brand:  #5b6cff;   /* indigo primary (Plane/Huly accent) */
-  --color-select: #e0a73a;   /* SELECTION highlight (warm gold) — separate from
+  --color-select: #9aa1ad;   /* SELECTION highlight (neutral grey) — separate from
                                 brand so a selected tile reads non-blue */
   --color-accent: #38bdf8;   /* sky link accent (Huly's blue PR links) */
   --color-ok:     #22c55e;

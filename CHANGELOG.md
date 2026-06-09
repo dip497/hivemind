@@ -7,6 +7,14 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Fixed
+
+- Terminal text selection landed on the wrong row (highlight appeared below the cursor). Focusing a terminal now snaps the canvas to exactly 100% zoom — xterm maps the mouse to a cell using the unscaled cell size, so selection is only pixel-accurate at 1:1. (A prior change fit-to-tiled terminals at zoom ≤ 1 on the now-removed assumption that a DPR supersample kept them crisp at any zoom.)
+
+### Changed
+
+- Selection highlight is now neutral grey instead of warm gold (`--color-select`): the selected-tile ring, layers-panel selected row, and node selection accents.
+
 ## [1.2.0] — 2026-06-09
 
 ### Fixed

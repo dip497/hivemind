@@ -837,18 +837,22 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
               // blurry). See ViewportSnap.
               bumpSnap();
               if (isNewSelection) {
-                if (node.type === "terminal") {
-                  // Terminals render via WebGL with a DPR supersample, so they
-                  // stay crisp at ANY zoom — fit the whole tile in view instead
-                  // of yanking to 100% (which, from an overview, made the tile
-                  // "explode" to huge). fit-to-tile (maxZoom 1) frames the full
-                  // transcript without zooming past native size.
-                  focusTile(node.id);
-                } else if (node.type === "diff" || node.type === "editor" || node.type === "workbench") {
-                  // Diff (Pierre) + editor (CodeMirror) render DOM TEXT, which the
-                  // browser only rasterizes crisply at 1:1. Snap to exactly 100%
-                  // so a focused diff/editor is sharp (DOM can't supersample like
-                  // the WebGL terminal).
+                // Terminals, diff (Pierre) and editor (CodeMirror) all need
+                // EXACTLY 100% zoom when focused. xterm maps the mouse to a cell
+                // using the UNSCALED cell size, so a drag-selection at any zoom ≠ 1
+                // lands on the wrong row — it highlights BELOW the cursor at
+                // zoom > 1. diff/editor render DOM text the browser only rasterizes
+                // crisply at 1:1, and the terminal's focus DOM-renderer boost is
+                // likewise only pixel-perfect at 1:1. So snap all of them to 100%.
+                // (An earlier change fit-to-tiled terminals at zoom ≤ 1 on the
+                // now-removed premise that a DPR supersample kept them crisp at any
+                // zoom — that broke text selection.)
+                if (
+                  node.type === "terminal" ||
+                  node.type === "diff" ||
+                  node.type === "editor" ||
+                  node.type === "workbench"
+                ) {
                   setSelZoomReq((n) => n + 1);
                 }
               }
