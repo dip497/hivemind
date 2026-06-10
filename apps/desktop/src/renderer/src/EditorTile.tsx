@@ -11,7 +11,7 @@
  * Languages lazy-load via @codemirror/language-data so only the extensions a
  * user actually opens get pulled in.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GripVertical } from "lucide-react";
 import { useTileFont, FontStepper, handleFontKey } from "./tile-font";
 import { EditorState, type Extension, Compartment } from "@codemirror/state";
@@ -39,6 +39,14 @@ import { tags as t } from "@lezer/highlight";
 // buffer there).
 import { unifiedMergeView } from "@codemirror/merge";
 import { resolveActive } from "./editor-active";
+// Lazy: marked + DOMPurify (and, on demand, mermaid) load only when the user
+// actually opens Preview — opening an editor tile pulls in zero markdown code.
+const MarkdownPreview = lazy(() =>
+  import("./markdown-preview").then((m) => ({ default: m.MarkdownPreview })),
+);
+
+/** Files that get a Preview (rendered markdown) toggle. */
+const isMarkdownPath = (p: string): boolean => /\.(md|markdown|mdown|mkd|mdx)$/i.test(p);
 
 interface Props {
   repoPath: string;
@@ -205,6 +213,12 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, emb
   // `unifiedMergeView` extension comparing the buffer against `HEAD:<path>`.
   // Same tab, same buffer — no DiffTile spawned. Keyed by repo-relative path.
   const [diffMode, setDiffMode] = useState<Record<string, boolean>>({});
+  // Per-tab markdown Preview mode (markdown files only). When on, the rendered
+  // doc replaces the CodeMirror surface. `previewSource` is the text snapshot
+  // shown — captured when preview turns on / the tab changes (you can't edit
+  // while previewing, so it needn't track keystrokes live).
+  const [previewMode, setPreviewMode] = useState<Record<string, boolean>>({});
+  const [previewSource, setPreviewSource] = useState("");
 
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -247,7 +261,18 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, emb
     };
     setMeta(prune);
     setDiffMode(prune);
+    setPreviewMode(prune);
   }, [tabs]);
+
+  // Snapshot the doc text for the preview when preview turns on (or the active
+  // tab changes while previewing). Read the live CodeMirror doc; fall back to the
+  // cached buffer if the view hasn't mounted the tab yet.
+  useEffect(() => {
+    if (active && previewMode[active]) {
+      const txt = viewRef.current?.state.doc.toString() ?? buffers.current.get(active) ?? "";
+      setPreviewSource(txt);
+    }
+  }, [active, previewMode]);
 
   const markDirty = useCallback((path: string, dirty: boolean) => {
     setMeta((m) => {
@@ -420,6 +445,8 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, emb
 
   const activeMeta = active ? meta[active] : undefined;
   const activeDiff = active ? !!diffMode[active] : false;
+  const activeMarkdown = active ? isMarkdownPath(active) : false;
+  const activePreview = active ? !!previewMode[active] : false;
 
   return (
     <div
@@ -490,6 +517,21 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, emb
                 }`}
               >
                 <span className="truncate font-mono">{name}</span>
+                {isActive && isMarkdownPath(path) && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPreviewMode((m) => ({ ...m, [path]: !m[path] }));
+                    }}
+                    className={`text-[9px] leading-none px-1 rounded ${
+                      previewMode[path]
+                        ? "bg-[var(--color-brand)] text-white"
+                        : "text-[var(--color-fg3)] hover:text-[var(--color-fg)]"
+                    }`}
+                    title={previewMode[path] ? "edit (show source)" : "preview rendered markdown"}
+                    aria-label="toggle markdown preview"
+                  >◉</button>
+                )}
                 {isActive && (
                   <button
                     onClick={(e) => {
@@ -545,8 +587,27 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, emb
         <div
           ref={hostRef}
           className="absolute inset-0 h-full w-full"
-          style={{ visibility: tabs.length > 0 && !activeMeta?.error ? "visible" : "hidden" }}
+          style={{
+            visibility:
+              tabs.length > 0 && !activeMeta?.error && !(activeMarkdown && activePreview)
+                ? "visible"
+                : "hidden",
+          }}
         />
+        {/* Markdown preview overlay — replaces the CodeMirror surface for a
+            markdown tab in Preview mode. The editor stays mounted (hidden) so
+            toggling back is instant and the doc/undo history is preserved. */}
+        {activeMarkdown && activePreview && !activeMeta?.error && (
+          <Suspense
+            fallback={
+              <div className="absolute inset-0 grid place-items-center text-[11px] text-[var(--color-fg3)]">
+                rendering…
+              </div>
+            }
+          >
+            <MarkdownPreview source={previewSource} />
+          </Suspense>
+        )}
       </div>
     </div>
   );

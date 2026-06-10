@@ -7,6 +7,10 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Added
+
+- Markdown preview in the editor. Open a `.md`/`.markdown`/`.mdx` file → a ◉ Preview toggle appears in the tab; click to render the doc (click again for source). Renders GFM markdown, raw inline HTML (sanitized with DOMPurify), and **Mermaid** diagrams. Themed prose; links open in the OS browser. Footprint-conscious: marked + DOMPurify load only when Preview is opened, and Mermaid's bundle loads only when a doc actually contains a `mermaid` block.
+
 ## [1.2.1] — 2026-06-09
 
 ### Fixed
