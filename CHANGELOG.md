@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-06-10
+
 ### Added
 
 - Markdown preview in the editor. Open a `.md`/`.markdown`/`.mdx` file → a ◉ Preview toggle appears in the tab; click to render the doc (click again for source). Renders GFM markdown, raw inline HTML (sanitized with DOMPurify), and **Mermaid** diagrams. Themed prose; links open in the OS browser. Footprint-conscious: marked + DOMPurify load only when Preview is opened, and Mermaid's bundle loads only when a doc actually contains a `mermaid` block.
@@ -328,7 +330,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v1.2.1...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/dip497/hivemind/releases/tag/v1.3.0
 [1.2.1]: https://github.com/dip497/hivemind/releases/tag/v1.2.1
 [1.2.0]: https://github.com/dip497/hivemind/releases/tag/v1.2.0
 [1.1.0]: https://github.com/dip497/hivemind/releases/tag/v1.1.0
