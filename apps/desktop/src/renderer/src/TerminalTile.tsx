@@ -232,28 +232,29 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       fontSize: fontSizeRef.current,
       lineHeight: 1.3,
       theme: {
-        // Cool deep-navy to match the Huly/Plane theme (was warm orange/black).
-        background: "#0d0e12",
-        foreground: "#e7e9ee",
-        cursor: "#5b6cff",
-        cursorAccent: "#0d0e12",
-        selectionBackground: "rgba(91,108,255,0.30)",
-        black: "#0d0e12",
-        brightBlack: "#6b7280",
-        red: "#f43f5e",
-        brightRed: "#fb7185",
-        green: "#22c55e",
-        brightGreen: "#4ade80",
-        yellow: "#f59e0b",
-        brightYellow: "#fbbf24",
-        blue: "#5b6cff",
-        brightBlue: "#818cf8",
-        magenta: "#a855f7",
-        brightMagenta: "#c084fc",
-        cyan: "#38bdf8",
-        brightCyan: "#7dd3fc",
-        white: "#e7e9ee",
-        brightWhite: "#ffffff",
+        // Ubuntu / GNOME Terminal defaults: the signature aubergine background +
+        // the Tango ANSI palette. Applies to every terminal tile (claude + shells).
+        background: "#300A24",
+        foreground: "#FFFFFF",
+        cursor: "#FFFFFF",
+        cursorAccent: "#300A24",
+        selectionBackground: "rgba(255,255,255,0.25)",
+        black: "#2E3436",
+        brightBlack: "#555753",
+        red: "#CC0000",
+        brightRed: "#EF2929",
+        green: "#4E9A06",
+        brightGreen: "#8AE234",
+        yellow: "#C4A000",
+        brightYellow: "#FCE94F",
+        blue: "#3465A4",
+        brightBlue: "#729FCF",
+        magenta: "#75507B",
+        brightMagenta: "#AD7FA8",
+        cyan: "#06989A",
+        brightCyan: "#34E2E2",
+        white: "#D3D7CF",
+        brightWhite: "#EEEEEC",
       },
       // No blink — a blinking cursor repaints EVERY terminal ~2×/s forever, so
       // the canvas never feels fully still/crisp (perpetual GPU compositing
@@ -826,7 +827,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
           overflow-hidden cropped the terminal. With them the host tracks the
           tile and the ResizeObserver re-fits, so the terminal reflows (cols/
           rows scale) on resize down AND up instead of being clipped. */}
-      <div className="relative flex-1 min-h-0 min-w-0 overflow-hidden bg-black p-1.5">
+      <div className="relative flex-1 min-h-0 min-w-0 overflow-hidden bg-[#300A24] p-1.5">
         <div ref={hostRef} className="w-full h-full overflow-hidden" />
         {debug && (
           <div className="nodrag pointer-events-none absolute top-1 right-1 z-50 rounded bg-black/85 px-2 py-1 font-mono text-[10px] leading-tight text-[#9fe6a0] ring-1 ring-white/15">

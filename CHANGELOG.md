@@ -7,6 +7,10 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Changed
+
+- Terminal tiles now use the Ubuntu / GNOME Terminal default colors — the `#300A24` aubergine background and the Tango ANSI palette — so claude and shell output match the system terminal. Applies to every terminal tile.
+
 ## [1.4.0] — 2026-06-11
 
 ### Added
