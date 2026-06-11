@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [1.4.1] — 2026-06-11
+
 ### Changed
 
 - Terminal tiles now use the Ubuntu / GNOME Terminal default colors — the `#300A24` aubergine background and the Tango ANSI palette — so claude and shell output match the system terminal. Applies to every terminal tile.
@@ -345,7 +347,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v1.4.1...HEAD
+[1.4.1]: https://github.com/dip497/hivemind/releases/tag/v1.4.1
 [1.4.0]: https://github.com/dip497/hivemind/releases/tag/v1.4.0
 [1.3.0]: https://github.com/dip497/hivemind/releases/tag/v1.3.0
 [1.2.1]: https://github.com/dip497/hivemind/releases/tag/v1.2.1
