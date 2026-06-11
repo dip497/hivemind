@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-06-11
+
 ### Added
 
 - Editor now watches the filesystem. When a file you have open changes on disk (an agent edits it, a git checkout, etc.) a **clean** tab auto-reloads the new content — no more close+reopen. A tab with **unsaved edits** is never clobbered: it shows a non-destructive banner with **Reload** / **Keep mine**. Debounced against agent write-bursts; your own saves don't trigger it.
@@ -339,7 +341,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/dip497/hivemind/releases/tag/v1.4.0
 [1.3.0]: https://github.com/dip497/hivemind/releases/tag/v1.3.0
 [1.2.1]: https://github.com/dip497/hivemind/releases/tag/v1.2.1
 [1.2.0]: https://github.com/dip497/hivemind/releases/tag/v1.2.0
