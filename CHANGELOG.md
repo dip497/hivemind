@@ -7,6 +7,15 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Added
+
+- Editor now watches the filesystem. When a file you have open changes on disk (an agent edits it, a git checkout, etc.) a **clean** tab auto-reloads the new content — no more close+reopen. A tab with **unsaved edits** is never clobbered: it shows a non-destructive banner with **Reload** / **Keep mine**. Debounced against agent write-bursts; your own saves don't trigger it.
+
+### Fixed
+
+- Terminal text clipped at the right edge (didn't wrap) after focusing a tile. The WebGL→DOM render swap on focus inherited WebGL's column count, but at DPR=1 WebGL rounds its cell width down and packs more columns than the wider DOM cells fit. `cols` is now anchored to the DOM cell size (re-fit on the DOM swap), so the focused terminal fits and wraps; background WebGL tiles just leave a few px of right margin.
+- Terminal/editor/diff selection landed on the wrong row when the tile was focused from the **Layers panel** or via **maximize** (`.`/fit-in-screen). Those paths used `fitView` (variable zoom ≤ 1, or up to 1.6× on maximize), but xterm selection + DOM-text crispness are only pixel-accurate at exactly 100%. Both paths now snap text tiles to exactly 100% (matching canvas-click); non-text tiles keep fit-to-screen.
+
 ## [1.3.0] — 2026-06-10
 
 ### Added

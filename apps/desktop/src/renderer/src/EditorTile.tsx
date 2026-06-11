@@ -198,6 +198,9 @@ interface TabState {
   loaded: boolean;
   error: string | null;
   dirty: boolean;
+  /** The file changed on disk while this tab had UNSAVED edits — set by the fs
+   *  watcher so the UI can offer Reload / Keep mine instead of clobbering. */
+  diskChanged?: boolean;
 }
 
 export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, embedded = false }: Props) {
@@ -313,6 +316,91 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, emb
   // snapshot without rebuilding the editor state on every meta change.
   const metaRef = useRef(meta);
   useEffect(() => { metaRef.current = meta; }, [meta]);
+  // Live tabs/active for the fs watcher (so it subscribes once per repo, not on
+  // every tab switch).
+  const tabsRef = useRef(tabs); tabsRef.current = tabs;
+  const activeRef = useRef(active); activeRef.current = active;
+
+  /** Adopt on-disk content into a tab. For the ACTIVE tab, replace the live doc
+   *  via a transaction (keeps the editor mounted + undoable); for a background
+   *  tab, just refresh its cached buffer so it shows fresh when switched to. We
+   *  update metaRef synchronously BEFORE dispatching so the dirty-listener sees
+   *  the new `saved` and doesn't mark the reload as a local edit. */
+  const adoptDiskContent = useCallback((path: string, disk: string) => {
+    buffers.current.set(path, disk);
+    const next: TabState = { saved: disk, loaded: true, error: null, dirty: false };
+    metaRef.current = { ...metaRef.current, [path]: next };
+    setMeta((m) => ({ ...m, [path]: next }));
+    if (path === activeRef.current && viewRef.current) {
+      const view = viewRef.current;
+      view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: disk } });
+    }
+  }, []);
+
+  // Reload the active tab from disk, discarding local edits (the "Reload" action
+  // on the changed-on-disk banner).
+  const reloadFromDisk = useCallback(async () => {
+    const path = activeRef.current;
+    if (!path) return;
+    try {
+      const disk = await window.hive.fileRead(repoPath, path);
+      adoptDiskContent(path, disk);
+    } catch { /* unreadable (deleted?) — leave the buffer as-is */ }
+  }, [repoPath, adoptDiskContent]);
+
+  // Dismiss the changed-on-disk banner, keeping the local edits.
+  const keepMine = useCallback(() => {
+    const path = activeRef.current;
+    if (!path) return;
+    setMeta((m) => (m[path] ? { ...m, [path]: { ...m[path]!, diskChanged: false } } : m));
+  }, []);
+
+  // ── filesystem watcher ──────────────────────────────────────────────────
+  // Mirror on-disk changes into open tabs (e.g. an agent edits the file, or a
+  // git checkout). CLEAN tabs adopt the new content automatically — no more
+  // close+reopen to see external edits. A tab with UNSAVED edits is never
+  // clobbered: it gets a `diskChanged` flag and a Reload / Keep-mine banner.
+  // Debounced against agent write-bursts; our own saves are no-ops (disk already
+  // equals the live buffer).
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const pending = new Set<string>();
+    const flush = async () => {
+      timer = undefined;
+      const abs = [...pending];
+      pending.clear();
+      for (const tab of tabsRef.current) {
+        if (!abs.some((p) => p === `${repoPath}/${tab}` || p.endsWith(`/${tab}`))) continue;
+        let disk: string;
+        try {
+          disk = await window.hive.fileRead(repoPath, tab);
+        } catch {
+          continue; // deleted / unreadable — leave as-is
+        }
+        const cur = metaRef.current[tab];
+        const saved = cur?.saved ?? "";
+        const live =
+          (tab === activeRef.current ? viewRef.current?.state.doc.toString() : buffers.current.get(tab)) ??
+          saved;
+        if (disk === live) continue; // already in sync (incl. our own save)
+        if (live !== saved) {
+          // unsaved local edits + a different disk version → conflict, don't clobber
+          setMeta((m) => (m[tab] ? { ...m, [tab]: { ...m[tab]!, diskChanged: true } } : m));
+        } else {
+          adoptDiskContent(tab, disk);
+        }
+      }
+    };
+    const unsub = window.hive.onFsChanged(repoPath, ({ paths }) => {
+      for (const p of paths) pending.add(p);
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => void flush(), 200);
+    });
+    return () => {
+      if (timer) clearTimeout(timer);
+      unsub();
+    };
+  }, [repoPath, adoptDiskContent]);
 
   // Mount the EditorView once. Tab switches swap state via view.setState.
   useEffect(() => {
@@ -572,6 +660,24 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, emb
         )}
       </div>
 
+      {/* Changed-on-disk banner: the file was edited externally while this tab
+          had unsaved changes. Non-destructive — the user picks Reload or Keep. */}
+      {activeMeta?.diskChanged && (
+        <div className="nodrag flex items-center gap-2 px-3 py-1.5 bg-[var(--color-bg4)] border-b border-[var(--color-warn)] text-[11px] text-[var(--color-fg)]">
+          <span className="text-[var(--color-warn)]">●</span>
+          <span>This file changed on disk and you have unsaved edits.</span>
+          <button
+            onClick={() => void reloadFromDisk()}
+            className="ml-auto px-2 py-0.5 rounded border border-[var(--color-line2)] hover:bg-[var(--color-bg2)]"
+            title="discard your edits and load the version on disk"
+          >Reload</button>
+          <button
+            onClick={keepMine}
+            className="px-2 py-0.5 rounded border border-[var(--color-line2)] hover:bg-[var(--color-bg2)]"
+            title="keep your edits (saving will overwrite the disk version)"
+          >Keep mine</button>
+        </div>
+      )}
       {/* editor body — nowheel so scrolling doesn't pan the canvas */}
       <div className="relative flex-1 min-h-0">
         {tabs.length === 0 ? (

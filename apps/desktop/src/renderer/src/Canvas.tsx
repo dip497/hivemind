@@ -458,6 +458,16 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   const focusTileFromPanel = useCallback((id: string) => {
     setSelectedTileId(id);
     focusTile(id);
+    // Text tiles must end at EXACTLY 100%: xterm maps the mouse to a cell using
+    // the UNSCALED cell size (selection is only pixel-accurate at 1:1), and DOM
+    // text is only crisp at 1:1. focusTile uses fitView (lands at zoom ≤ 1), so
+    // for terminals/editor/diff also snap to 100% — mirrors the canvas-click path
+    // (onNodeClick). issues/browser keep the fit-to-screen zoom.
+    const kind = tilesRef.current.find((t) => t.id === id)?.kind;
+    if (kind === "claude" || kind === "shell" || kind === "editor" || kind === "diff") {
+      setSelZoomReq((n) => n + 1);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusTile]);
   const focusFrameFromPanel = useCallback((id: string) => {
     setSelectedFrameId(id);

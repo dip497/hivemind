@@ -24,19 +24,31 @@ export function snapViewportCrisp(vp: { x: number; y: number; zoom: number }): {
 
 /** Focus mode: fitView to ONE node (req.id) or to ALL nodes (req.id === null). */
 export function FocusMode({ req }: { req: { id: string | null; n: number } | null }) {
-  const { fitView } = useReactFlow();
+  const { fitView, getNode, zoomTo } = useReactFlow();
   useEffect(() => {
     if (!req) return;
     if (req.id) {
-      // Near-fullscreen: tiny padding so the tile fills the window edge-to-edge
-      // (neighbors no longer peek in), and maxZoom up to 1.6 so a small tile
-      // enlarges to fill instead of sitting tiny + centered. Big tiles (claude)
-      // land at zoom<1 and show whole, which is the maximized feel.
-      void fitView({ nodes: [{ id: req.id }], padding: 0.03, duration: 400, maxZoom: 1.6 });
+      // Text tiles (terminal / editor / diff / workbench) must end at EXACTLY
+      // 100%: xterm selection maps the mouse with the unscaled cell size, and DOM
+      // text is only crisp at 1:1 — so maximizing a terminal to 1.6× (or to <1 for
+      // a big tile) would break selection and blur the text. Cap them at maxZoom 1
+      // and then pin to exactly 1. Non-text tiles (issues / browser) keep the
+      // enlarge-to-fill behavior (maxZoom 1.6).
+      const type = getNode(req.id)?.type;
+      const textTile =
+        type === "terminal" || type === "editor" || type === "diff" || type === "workbench";
+      void fitView({
+        nodes: [{ id: req.id }],
+        padding: 0.03,
+        duration: 400,
+        maxZoom: textTile ? 1 : 1.6,
+      }).then(() => {
+        if (textTile) void zoomTo(1, { duration: 120 });
+      });
     } else {
       void fitView({ padding: 0.2, duration: 400 });
     }
-  }, [req, fitView]);
+  }, [req, fitView, getNode, zoomTo]);
   return null;
 }
 

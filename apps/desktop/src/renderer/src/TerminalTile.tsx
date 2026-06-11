@@ -322,8 +322,14 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
           reconcileWebglSlots();
         });
         term.loadAddon(w);
-        disposeDpr = installCrispDpr(term); // supersample atlas → crisp at DPR=1
-        try { fitRef.current?.fit(); term.refresh(0, term.rows - 1); } catch { /* */ }
+        disposeDpr = installCrispDpr(term);
+        // Do NOT fit() here. cols is anchored to the DOM cell size (see
+        // releaseWebgl). At dpr=1 the WebGL renderer rounds the device cell width
+        // DOWN, so its cells are slightly NARROWER than the DOM renderer's —
+        // rendering the DOM-sized cols on WebGL just leaves a few px of right
+        // margin, never an overflow. Re-fitting here would bump cols to WebGL's
+        // larger count, and the next focus (→DOM) would overflow + reflow claude.
+        try { term.refresh(0, term.rows - 1); } catch { /* torn down */ }
       } catch {
         try { webgl?.dispose(); } catch { /* */ }
         webgl = undefined;
@@ -338,7 +344,16 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       try { webgl.dispose(); } catch { /* disposed */ }
       webgl = undefined;
       webglRef.current = null;
-      try { term.refresh(0, term.rows - 1); } catch { /* torn down */ } // repaint via DOM
+      // Re-fit on the DOM renderer. DOM cells are WIDER than WebGL's at dpr=1, so
+      // any cols WebGL fit to would overflow the DOM rows — text clips at the
+      // right edge instead of wrapping (the reported bug). Recompute cols for the
+      // DOM cell size so the (focused) terminal fits exactly; fit() → onResize →
+      // ptyResize reflows claude to the real visible width. The second fit on the
+      // next frame is a safety net: disposing the WebGL addon may not recompute
+      // the DOM render dimensions until the following paint, and a stale first fit
+      // would re-introduce the overflow. (A no-op when the first fit already won.)
+      try { fitRef.current?.fit(); term.refresh(0, term.rows - 1); } catch { /* torn down */ }
+      requestAnimationFrame(() => { try { fitRef.current?.fit(); } catch { /* torn down */ } });
     };
     // Viewport visibility → priority. Assume visible on mount (a fresh tile is
     // usually in view); the observer corrects on the next frame.
