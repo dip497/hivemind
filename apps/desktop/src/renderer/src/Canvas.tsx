@@ -256,6 +256,29 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // setter — see useStateWithRef). Async bind/unbind + the memoized keyboard
   // handler read the ref; render uses the state value.
   const [frames, setFrames, framesRef] = useStateWithRef<FrameState[]>(initial.frames);
+  // Re-resolve a frame's workspaceRoot when it's null but the folder now has a
+  // `.hivemind/`. A frame saves workspaceRoot at open time; if you opened the
+  // folder BEFORE running `hive init`, that's persisted as null and the Issues
+  // tile shows "No workspace" forever — even across restarts (the stale null is
+  // in the saved layout). Run once on load: for any local frame with a path but
+  // no root, resolve again and adopt a freshly-created tracker.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const todo = framesRef.current.filter(
+        (f) => f.workspacePath && !f.workspacePath.startsWith("ssh://") && !f.workspaceRoot,
+      );
+      for (const f of todo) {
+        try {
+          const proj = await window.hive.resolveProject(f.workspacePath!);
+          if (cancelled || !proj.root) continue;
+          setFrames((fs) => fs.map((x) => (x.id === f.id ? { ...x, workspaceRoot: proj.root } : x)));
+        } catch { /* unreadable path — leave as-is */ }
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Explicit tile→frame membership (see PersistedLayout.frameOf). Authoritative
   // for auto-fit, parenting, and the chip strip — geometry never decides it.
   const [frameOf, setFrameOf, frameOfRef] = useStateWithRef<Record<string, string>>(initial.frameOf ?? {});
@@ -457,15 +480,10 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   }, [tiles, repoPath, frameOf, frames, tileNames, agentTitles]);
   const focusTileFromPanel = useCallback((id: string) => {
     setSelectedTileId(id);
-    // Text tiles (terminal/editor/diff) must land at EXACTLY 100%: xterm maps the
-    // mouse to a cell using the UNSCALED cell size (selection is only pixel-accurate
-    // at 1:1), and DOM text is only crisp at 1:1. Pass exact so focusTile does it in
-    // ONE fitView animation (minZoom=maxZoom=1) — no second racing zoom-to-1 that
-    // mis-positioned the tile. issues/browser keep fit-to-screen.
-    const kind = tilesRef.current.find((t) => t.id === id)?.kind;
-    const exact = kind === "claude" || kind === "shell" || kind === "editor" || kind === "diff";
-    focusTile(id, { exact });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Fit the tile to the screen. Selection stays accurate at any zoom (the
+    // zoom-aware mouse patch in terminal-mouse-patch.ts), so terminals no longer
+    // need to be pinned to 100% here.
+    focusTile(id);
   }, [focusTile]);
   const focusFrameFromPanel = useCallback((id: string) => {
     setSelectedFrameId(id);

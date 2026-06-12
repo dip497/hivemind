@@ -4,6 +4,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { installCrispDpr, effectiveDpr } from "./terminal-dpr";
+import { patchTerminalMouseWithRetry } from "./terminal-mouse-patch";
 import { registerWebglSlotClient, unregisterWebglSlotClient, reconcileWebglSlots } from "./webgl-slots";
 import { useTileFont, FontStepper, handleFontKey } from "./tile-font";
 import { identifyAgent, detectTileStatus, stabilizeClaudeStatus, normalizeAgentTitle, type TileStatus } from "./agent-state";
@@ -294,6 +295,9 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
     term.open(host);
     fit.fit();
     termRef.current = term;
+    // Make selection zoom-aware so it works at ANY canvas zoom (not just 100%) —
+    // lets focus fit a terminal to the screen without breaking drag-select.
+    const cancelMousePatch = patchTerminalMouseWithRetry(term);
 
     // ── WebGL renderer follows ATTENTION (see webgl-slots.ts) ────────────────
     // Browsers cap WebGL contexts (~16) and we keep every terminal mounted, so we
@@ -622,6 +626,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       } catch {
         /* ignore */
       }
+      cancelMousePatch();
       term.dispose();
       termRef.current = null;
       fitRef.current = null;

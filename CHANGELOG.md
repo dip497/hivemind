@@ -7,6 +7,14 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Fixed
+
+- Issues tile stuck on "No workspace" after running `hive init` in an already-open folder. The frame saved `workspaceRoot: null` at open time (before `.hivemind/` existed) and that stale null persisted across restarts. The app now (a) re-resolves the project live when a `.hivemind/` appears in a folder that had none, and (b) on load, re-resolves any frame whose folder gained a `.hivemind/` after it was opened — so the tracker is picked up without re-attaching.
+
+### Changed
+
+- Terminal text selection is now zoom-aware (ported from opencove): clicks map to the right cell at ANY canvas zoom, not just 100%. Because of this, focusing a terminal/editor/diff from the Layers panel or via maximize once again FITS the tile to the screen (zoom to fill) instead of being pinned to 100% — selection still lands correctly at the fit zoom.
+
 ## [1.4.2] — 2026-06-12
 
 ### Fixed

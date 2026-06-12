@@ -424,9 +424,17 @@ export function useFsChangedInvalidation(
     let gitPending = false;
     let hivePending = false;
     let headPending = false;
+    let projectPending = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const flush = () => {
       timer = undefined;
+      if (projectPending) {
+        // A `.hivemind/` appeared in a folder that resolved to "No workspace"
+        // (e.g. you just ran `hive init`). Re-run the project resolution so the
+        // freshly-created tracker is picked up live — no app restart needed.
+        qc.invalidateQueries({ queryKey: ["project"] });
+        projectPending = false;
+      }
       if (gitPending) {
         qc.invalidateQueries({ queryKey: ["git:status", repoPath] });
         qc.invalidateQueries({ queryKey: ["git:diff", repoPath] });
@@ -468,6 +476,10 @@ export function useFsChangedInvalidation(
       if (touchedGit || !touchedHive) gitPending = true;
       if (touchedHive) hivePending = true;
       if (touchedHead) headPending = true;
+      // No workspace resolved yet + a `.hivemind/` just appeared ⇒ re-resolve the
+      // project. Gated on `!root` so once a workspace exists we don't re-resolve on
+      // every agent issue-write (that path only refreshes the issues board above).
+      if (touchedHive && !root) projectPending = true;
       if (timer) clearTimeout(timer);
       timer = setTimeout(flush, 200);
     });

@@ -22,34 +22,24 @@ export function snapViewportCrisp(vp: { x: number; y: number; zoom: number }): {
   return { zoom, x: Math.round(vp.x * dpr) / dpr, y: Math.round(vp.y * dpr) / dpr };
 }
 
-/** Focus mode: fitView to ONE node (req.id) or to ALL nodes (req.id === null). */
+/** Focus mode: fitView to ONE node (req.id) or to ALL nodes (req.id === null).
+ *  Maximize FITS the tile to the screen (zoom to fill, up to 1.6× for small
+ *  tiles). Selection stays accurate at any zoom thanks to the zoom-aware mouse
+ *  patch (terminal-mouse-patch.ts), so terminals no longer need to be pinned to
+ *  100% here. */
 export function FocusMode({ req }: { req: { id: string | null; n: number } | null }) {
-  const { fitView, getNode } = useReactFlow();
+  const { fitView } = useReactFlow();
   useEffect(() => {
     if (!req) return;
     if (req.id) {
-      // Text tiles (terminal / editor / diff / workbench) must end at EXACTLY
-      // 100%: xterm selection maps the mouse with the unscaled cell size, and DOM
-      // text is only crisp at 1:1 — so maximizing a terminal to 1.6× (or to <1 for
-      // a big tile) would break selection and blur the text. Cap them at maxZoom 1
-      // and then pin to exactly 1. Non-text tiles (issues / browser) keep the
-      // enlarge-to-fill behavior (maxZoom 1.6).
-      const type = getNode(req.id)?.type;
-      const textTile =
-        type === "terminal" || type === "editor" || type === "diff" || type === "workbench";
-      // Text tiles maximize to EXACTLY 100% (selection + crisp DOM) in a single
-      // animation (minZoom=maxZoom=1); non-text tiles keep enlarge-to-fill (1.6×).
-      void fitView({
-        nodes: [{ id: req.id }],
-        padding: 0.03,
-        duration: 400,
-        maxZoom: textTile ? 1 : 1.6,
-        ...(textTile ? { minZoom: 1 } : {}),
-      });
+      // Near-fullscreen: tiny padding so the tile fills the window edge-to-edge,
+      // maxZoom 1.6 so a small tile enlarges to fill. Big tiles land at zoom<1 and
+      // show whole — the maximized feel.
+      void fitView({ nodes: [{ id: req.id }], padding: 0.03, duration: 400, maxZoom: 1.6 });
     } else {
       void fitView({ padding: 0.2, duration: 400 });
     }
-  }, [req, fitView, getNode]);
+  }, [req, fitView]);
   return null;
 }
 
