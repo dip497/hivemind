@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [1.4.2] — 2026-06-12
+
 ### Fixed
 
 - Focusing a terminal/editor/diff tile from the Layers panel or via maximize now lands at exactly 100% in a single animation. The panel/maximize paths previously ran two-or-three racing viewport animations (setCenter + fitView + a separate zoom-to-100%), which left the tile mis-positioned and at the wrong zoom.
@@ -352,7 +354,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v1.4.1...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v1.4.2...HEAD
+[1.4.2]: https://github.com/dip497/hivemind/releases/tag/v1.4.2
 [1.4.1]: https://github.com/dip497/hivemind/releases/tag/v1.4.1
 [1.4.0]: https://github.com/dip497/hivemind/releases/tag/v1.4.0
 [1.3.0]: https://github.com/dip497/hivemind/releases/tag/v1.3.0
