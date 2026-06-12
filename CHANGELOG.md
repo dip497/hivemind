@@ -7,6 +7,11 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Fixed
+
+- Focusing a terminal/editor/diff tile from the Layers panel or via maximize now lands at exactly 100% in a single animation. The panel/maximize paths previously ran two-or-three racing viewport animations (setCenter + fitView + a separate zoom-to-100%), which left the tile mis-positioned and at the wrong zoom.
+- Terminal looked blurry after select → unselect → re-select (and sharpened only when you manually zoomed). Selecting snaps the canvas to 100%, but the DOM-rendered text kept its rasterization from the pre-snap zoom. The terminal now repaints after the zoom-snap settles, so it's crisp at 100% without a manual zoom.
+
 ## [1.4.1] — 2026-06-11
 
 ### Changed

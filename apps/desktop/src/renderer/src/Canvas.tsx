@@ -345,9 +345,9 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // works even when the node hasn't been DOM-measured yet OR is culled
   // off-screen — fitView on an unmeasured node centers on a 0×0 box and does
   // nothing, which is why freshly-spawned tiles weren't centering.
-  const [focusReq, setFocusReq] = useState<{ id: string; cx: number; cy: number; n: number } | null>(null);
+  const [focusReq, setFocusReq] = useState<{ id: string; cx: number; cy: number; n: number; exact?: boolean } | null>(null);
   const focusTile = useCallback(
-    (id: string) => {
+    (id: string, opts?: { exact?: boolean }) => {
       // Frame? center on its rect. Tile? center on pos + size.
       const frame = framesRef.current.find((f) => f.id === id);
       let cx: number, cy: number;
@@ -361,7 +361,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
         cx = p.x + s.width / 2;
         cy = p.y + s.height / 2;
       }
-      setFocusReq((prev) => ({ id, cx, cy, n: (prev?.n ?? 0) + 1 }));
+      setFocusReq((prev) => ({ id, cx, cy, n: (prev?.n ?? 0) + 1, exact: opts?.exact }));
     },
     [],
   );
@@ -457,16 +457,14 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   }, [tiles, repoPath, frameOf, frames, tileNames, agentTitles]);
   const focusTileFromPanel = useCallback((id: string) => {
     setSelectedTileId(id);
-    focusTile(id);
-    // Text tiles must end at EXACTLY 100%: xterm maps the mouse to a cell using
-    // the UNSCALED cell size (selection is only pixel-accurate at 1:1), and DOM
-    // text is only crisp at 1:1. focusTile uses fitView (lands at zoom ≤ 1), so
-    // for terminals/editor/diff also snap to 100% — mirrors the canvas-click path
-    // (onNodeClick). issues/browser keep the fit-to-screen zoom.
+    // Text tiles (terminal/editor/diff) must land at EXACTLY 100%: xterm maps the
+    // mouse to a cell using the UNSCALED cell size (selection is only pixel-accurate
+    // at 1:1), and DOM text is only crisp at 1:1. Pass exact so focusTile does it in
+    // ONE fitView animation (minZoom=maxZoom=1) — no second racing zoom-to-1 that
+    // mis-positioned the tile. issues/browser keep fit-to-screen.
     const kind = tilesRef.current.find((t) => t.id === id)?.kind;
-    if (kind === "claude" || kind === "shell" || kind === "editor" || kind === "diff") {
-      setSelZoomReq((n) => n + 1);
-    }
+    const exact = kind === "claude" || kind === "shell" || kind === "editor" || kind === "diff";
+    focusTile(id, { exact });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusTile]);
   const focusFrameFromPanel = useCallback((id: string) => {

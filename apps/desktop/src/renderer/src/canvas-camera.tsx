@@ -24,7 +24,7 @@ export function snapViewportCrisp(vp: { x: number; y: number; zoom: number }): {
 
 /** Focus mode: fitView to ONE node (req.id) or to ALL nodes (req.id === null). */
 export function FocusMode({ req }: { req: { id: string | null; n: number } | null }) {
-  const { fitView, getNode, zoomTo } = useReactFlow();
+  const { fitView, getNode } = useReactFlow();
   useEffect(() => {
     if (!req) return;
     if (req.id) {
@@ -37,28 +37,41 @@ export function FocusMode({ req }: { req: { id: string | null; n: number } | nul
       const type = getNode(req.id)?.type;
       const textTile =
         type === "terminal" || type === "editor" || type === "diff" || type === "workbench";
+      // Text tiles maximize to EXACTLY 100% (selection + crisp DOM) in a single
+      // animation (minZoom=maxZoom=1); non-text tiles keep enlarge-to-fill (1.6×).
       void fitView({
         nodes: [{ id: req.id }],
         padding: 0.03,
         duration: 400,
         maxZoom: textTile ? 1 : 1.6,
-      }).then(() => {
-        if (textTile) void zoomTo(1, { duration: 120 });
+        ...(textTile ? { minZoom: 1 } : {}),
       });
     } else {
       void fitView({ padding: 0.2, duration: 400 });
     }
-  }, [req, fitView, getNode, zoomTo]);
+  }, [req, fitView, getNode]);
   return null;
 }
 
 /** Pans the viewport to a requested tile once it has mounted + been measured.
  *  Polls a few rAF ticks because a freshly-spawned node isn't laid out on the
  *  same frame the request fires. Rendered inside <ReactFlow>. */
-export function FocusOnTile({ req }: { req: { id: string; cx: number; cy: number; n: number } | null }) {
+export function FocusOnTile({
+  req,
+}: {
+  req: { id: string; cx: number; cy: number; n: number; exact?: boolean } | null;
+}) {
   const { setCenter, getZoom, getNode, fitView } = useReactFlow();
   useEffect(() => {
     if (!req) return;
+    // `exact`: text tiles (terminal/editor/diff) need EXACTLY 100% — xterm
+    // selection + DOM-text crispness are only pixel-accurate at 1:1. Pan to the
+    // tile centre at zoom 1 in a SINGLE animation; do NOT chase it with a fitView
+    // (which lands at ≤ 1) — running both raced the viewport to the wrong place.
+    if (req.exact) {
+      void setCenter(req.cx, req.cy, { zoom: 1, duration: 400 });
+      return;
+    }
     // Two-stage focus, same end result as the "." focus-selected hotkey but
     // robust for a brand-new tile that isn't DOM-measured yet:
     //   1. setCenter on the resolved absolute coords NOW — needs no
@@ -171,19 +184,29 @@ export function ViewportSnap({
   return null;
 }
 
-/** Fly the viewport to a tile by id (used by chip + toast clicks). Must be
- *  called inside <ReactFlow> so useReactFlow resolves. */
-export function useTileFocus(): (id: string) => void {
+/** Fly the viewport to a tile by id (used by chip + toast clicks + the Layers
+ *  panel). Must be called inside <ReactFlow> so useReactFlow resolves.
+ *  `opts.exact` forces zoom to EXACTLY 100% (minZoom = maxZoom = 1) in a SINGLE
+ *  animation — used for terminal/editor/diff tiles, which are only pixel-accurate
+ *  (xterm selection, DOM-text crispness) at 1:1. Doing it in one fitView avoids a
+ *  second racing zoom-to-1 animation that left the tile mis-positioned. */
+export function useTileFocus(): (id: string, opts?: { exact?: boolean }) => void {
   const { fitView, getNode } = useReactFlow();
   return useCallback(
-    (id: string) => {
+    (id: string, opts?: { exact?: boolean }) => {
       // For PARENTED tiles, `n.position` is RELATIVE to the parent — setCenter
       // on relative coords pans to the wrong place. fitView resolves absolute
       // internally and handles both parented and free nodes. Same fix shape as
       // FocusOnTile / onNodeDragStop's positionAbsolute fallback.
       const n = getNode(id);
       if (!n) return;
-      void fitView({ nodes: [{ id }], padding: 0.3, duration: 400, maxZoom: 1 });
+      void fitView({
+        nodes: [{ id }],
+        padding: 0.3,
+        duration: 400,
+        maxZoom: 1,
+        ...(opts?.exact ? { minZoom: 1 } : {}),
+      });
     },
     [getNode, fitView],
   );

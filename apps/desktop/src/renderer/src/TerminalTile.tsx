@@ -660,6 +660,17 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       // output / live prompt — never leave it parked mid-scrollback. Editor /
       // diff tiles keep their own (top-anchored) scroll position.
       term.scrollToBottom();
+      // Re-rasterize AFTER the select zoom-snap settles. Selecting snaps the
+      // canvas to 100% (SelectZoomReset), but the DOM renderer's text sits in the
+      // canvas's composited layer and keeps its raster from the PRE-snap zoom
+      // (you were at 80–120%) — so it looks blurry until the next manual zoom
+      // invalidates it ("zooming in sharpens it"). A delayed full refresh repaints
+      // the rows → invalidates the stale raster → crisp at the final 100%. Two
+      // ticks (after the ~150ms zoom animation + buffer) catch the settle robustly.
+      const repaint = () => { try { termRef.current?.refresh(0, (termRef.current?.rows ?? 1) - 1); } catch { /* torn down */ } };
+      const t1 = setTimeout(repaint, 280);
+      const t2 = setTimeout(repaint, 560);
+      return () => { clearTimeout(t1); clearTimeout(t2); };
     } else term.blur();
   }, [selected]);
 
