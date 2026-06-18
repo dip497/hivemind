@@ -14,6 +14,7 @@ import { statusOf, setWaitStatus, type TileStatusKind } from "./agent-status-bus
 import { queueWork } from "./claude-bus";
 import { FRAME_ROW_MAX, frameAtPoint } from "./frame-layout";
 import { ToolIsland, ZoomIsland } from "./canvas-islands";
+import { Eye, EyeOff } from "lucide-react";
 import { Toasts, CanvasEmptyState } from "./canvas-overlays";
 import { nodeTypes } from "./canvas-nodes";
 import { pipeEdgeTypes } from "./canvas-pipe-edge";
@@ -786,6 +787,10 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // on every pan/zoom frame, a real cost with several live tiles. Off by default.
   const [minimapOn, setMinimapOn] = useState(false);
   const showMinimap = minimapOn && nodes.length > 0;
+  // Zen mode — hide ALL canvas chrome (tool island, zoom island, minimap, Layers
+  // panel) for a clean full-canvas view. The eye toggle stays so you can restore.
+  const [zen, setZen] = useState<boolean>(() => localStorage.getItem("hivemind:zen") === "1");
+  useEffect(() => { localStorage.setItem("hivemind:zen", zen ? "1" : "0"); }, [zen]);
   const isEmpty = nodes.length === 0;
 
   // Motion-aware compositing: while the viewport pans/zooms we add a class that
@@ -974,7 +979,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
           canvas (not an overlay), so the canvas sits BESIDE it and is never
           occluded. Collapses to a narrow icon rail; both keep the canvas clear. */}
       <div className="flex-1 min-h-0 flex flex-row">
-        {layerTiles.length > 0 && (
+        {!zen && layerTiles.length > 0 && (
           <LayersPanel
             frames={layerFrames}
             tiles={layerTiles}
@@ -1106,7 +1111,8 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
           <PanMomentum req={momentumReq} activeRef={inMomentumRef} onSettle={bumpSnap} />
           <ViewportSnap req={snapReq} activeRef={inMomentumRef} />
 
-          {/* Excalidraw-style floating tool island — top-center. */}
+          {/* Excalidraw-style floating tool island — top-center. Hidden in zen. */}
+          {!zen && (
           <Panel position="top-center" className="!m-0 !mt-3">
             <ToolIsland
               repoPath={repoPath}
@@ -1118,6 +1124,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
               onBrowser={() => spawnInto("browser")}
             />
           </Panel>
+          )}
 
           {/* Roster removed — the top-left WorkspaceSwitcher (App) is the
               single workspace UI. Click a frame on the canvas to set active. */}
@@ -1137,21 +1144,34 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
             </Panel>
           )}
 
-          {/* Zoom + nav island — bottom-left (Excalidraw footer). */}
+          {/* Zoom + nav island — bottom-left (Excalidraw footer). The EYE toggle
+              is always visible (it restores zen); the zoom island hides in zen. */}
           <Panel position="bottom-left" className="!m-0 !ml-3 !mb-3">
-            <ZoomIsland
-              tileCount={nodes.length}
-              minimapOn={minimapOn}
-              onToggleMinimap={() => setMinimapOn((v) => !v)}
-              onReset={() => { setSizes({}); setPositions({}); setFrames([]); setTiles([]); setEditorTabs({}); setFrameOf({}); }}
-              onFocus={() => {
-                const id = selectedTileIdRef.current ?? selectedFrameIdRef.current;
-                setFocusModeReq({ id, n: ++focusModeNonceRef.current });
-              }}
-            />
+            <div className="flex items-center gap-2 pointer-events-auto">
+              <button
+                onClick={() => setZen((z) => !z)}
+                className="hm-island size-8 grid place-items-center rounded-lg text-[var(--color-fg2)] hover:text-[var(--color-fg)]"
+                title={zen ? "Show UI" : "Hide UI (zen mode)"}
+                aria-label={zen ? "show UI" : "hide UI"}
+              >
+                {zen ? <EyeOff size={15} /> : <Eye size={15} />}
+              </button>
+              {!zen && (
+                <ZoomIsland
+                  tileCount={nodes.length}
+                  minimapOn={minimapOn}
+                  onToggleMinimap={() => setMinimapOn((v) => !v)}
+                  onReset={() => { setSizes({}); setPositions({}); setFrames([]); setTiles([]); setEditorTabs({}); setFrameOf({}); }}
+                  onFocus={() => {
+                    const id = selectedTileIdRef.current ?? selectedFrameIdRef.current;
+                    setFocusModeReq({ id, n: ++focusModeNonceRef.current });
+                  }}
+                />
+              )}
+            </div>
           </Panel>
 
-          {showMinimap && (
+          {showMinimap && !zen && (
             <MiniMap
               pannable
               zoomable
