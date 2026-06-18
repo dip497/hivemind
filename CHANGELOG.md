@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [1.6.0] — 2026-06-19
+
 ### Added
 
 - **Zen mode — one eye toggle hides all canvas chrome.** A persistent eye button (bottom-left) hides the top tool island, the bottom zoom/nav island, the minimap, and the Layers panel for a clean, full-canvas view (the eye stays so you can restore everything). State persists across reloads.
@@ -410,7 +412,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/dip497/hivemind/releases/tag/v1.6.0
 [1.5.0]: https://github.com/dip497/hivemind/releases/tag/v1.5.0
 [1.4.2]: https://github.com/dip497/hivemind/releases/tag/v1.4.2
 [1.4.1]: https://github.com/dip497/hivemind/releases/tag/v1.4.1
