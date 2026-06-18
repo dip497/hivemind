@@ -14,9 +14,28 @@ import { SessionManager, type ManagedPty, type SpawnSpec, type SessionSnapshot }
 import { type ClientMsg, type ServerMsg, frame, makeLineDecoder } from "./pty-protocol.js";
 import { evictTrackedSession, trackerSource } from "./tile-session-store.js";
 import { makeClaudeResumeTransforms } from "./claude-resume.js";
+import { planHookSource } from "./plan-review-hook-source.js";
+import { stopHookSource } from "./hcp/stop-hook-source.js";
+import { approvalHookSource } from "./hcp/approval-hook-source.js";
+import { readOrCreateToken, hcpSockPath } from "./hcp/token.js";
 import { makeCodexResumeTransforms } from "./codex-resume.js";
 
 const socketPath = process.argv[2] || process.env.HIVEMIND_PTY_SOCK;
+// Captured ONCE at startup: the mtime of the daemon script this process is
+// running. Reported on `ping` so the app can detect a rebuild (the on-disk
+// script is newer than what we loaded) and replace us with a fresh daemon.
+// CONTENT hash (FNV-1a) of our own bundle — NOT mtime. A rebuild that doesn't
+// change the daemon's code keeps the same stamp, so a renderer/main-only rebuild
+// won't make the app respawn us and tear down live claude sessions. Must match
+// daemon-client.ts's currentBuildStamp() byte-for-byte.
+const BUILD_STAMP = (() => {
+  try {
+    const b = fs.readFileSync(process.argv[1] ?? "");
+    let h = 0x811c9dc5;
+    for (let i = 0; i < b.length; i++) { h ^= b[i]!; h = Math.imul(h, 0x01000193); }
+    return h >>> 0;
+  } catch { return 0; }
+})();
 if (!socketPath) {
   console.error("[pty-daemon] no socket path given");
   process.exit(1);
@@ -49,6 +68,26 @@ const tileSessionsDir = path.join(userDataDir, "tile-sessions");
 const trackerPath = path.join(userDataDir, "tile-session-tracker.cjs");
 try { fs.writeFileSync(trackerPath, trackerSource()); } catch { /* best-effort */ }
 
+// Plan review: the daemon writes the PreToolUse(ExitPlanMode) hook script; the
+// SOCKET is owned by Electron main (it alone can drive the canvas). Both sides
+// derive the same socket path from userDataDir, so no extra arg-passing. main
+// binds the bridge in plan-bridge.ts.
+const planHookPath = path.join(userDataDir, "plan-review-hook.cjs");
+const planBridgeSock = path.join(userDataDir, "plan-bridge.sock");
+try { fs.writeFileSync(planHookPath, planHookSource()); } catch { /* best-effort */ }
+
+// HCP: the daemon writes the Stop hook (turn reporter) and shares the control-
+// plane socket + capability token with Electron main (both derive the socket
+// path from userDataDir; the token file is read/created by whichever starts
+// first). Injected into spawned claude tiles via claude-resume.
+const stopHookPath = path.join(userDataDir, "hcp-stop-hook.cjs");
+try { fs.writeFileSync(stopHookPath, stopHookSource()); } catch { /* best-effort */ }
+// Permission-broker hook (HCP Phase 6) — injected ONLY for supervised workers.
+const approvalHookPath = path.join(userDataDir, "hcp-approval-hook.cjs");
+try { fs.writeFileSync(approvalHookPath, approvalHookSource()); } catch { /* best-effort */ }
+const hcpSock = hcpSockPath(userDataDir);
+const hcpToken = readOrCreateToken(userDataDir);
+
 // claude resume/tracking transforms (electron-free, in claude-resume.ts so they
 // can be integration-tested with a fake claude). The daemon just supplies paths.
 const claudeResume = makeClaudeResumeTransforms({
@@ -56,6 +95,12 @@ const claudeResume = makeClaudeResumeTransforms({
   tileSessionsDir,
   legacyMapFile: tileSessionsPath,
   execPath: process.execPath,
+  planHookPath,
+  planBridgeSock,
+  stopHookPath,
+  approvalHookPath,
+  hcpSock,
+  hcpToken,
 });
 // Codex resume — resolves the session id from ~/.codex/sessions at restore time
 // (codex can't pre-assign an id). No-op for non-codex specs, so it composes with
@@ -276,7 +321,12 @@ const server = net.createServer((sock) => {
         send({ t: "sessions", reqId: msg.reqId, ids: manager.list() });
         break;
       case "ping":
-        send({ t: "pong", reqId: msg.reqId });
+        send({ t: "pong", reqId: msg.reqId, buildStamp: BUILD_STAMP });
+        break;
+      case "shutdown":
+        // The app detected a rebuild and is replacing us. Sessions persist via
+        // their on-disk snapshots; the fresh daemon replays + respawns them.
+        process.exit(0);
         break;
     }
   });

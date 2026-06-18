@@ -384,6 +384,25 @@ async function resolveBranchBase(repoPath: string, requested?: string): Promise<
   return null;
 }
 
+/** Resolve the base for an "unpushed" diff — the commits committed locally but
+ *  not yet on the remote. Resolution order, each AUTHORITATIVE:
+ *    1. an explicit caller-chosen base (only if it exists), else
+ *    2. the branch's own remote tracking ref `@{upstream}` — the exact "what
+ *       I'd push" boundary, else
+ *    3. `origin/HEAD` (default branch) — covers a branch that was NEVER pushed,
+ *       where every local commit is unpushed and there is no upstream to count
+ *       against (mirrors resolveBranchBase's authoritative fallback).
+ *  Returns null when none resolve; caller renders an empty diff, never crashes. */
+async function resolveUnpushedBase(repoPath: string, requested?: string): Promise<string | null> {
+  const r = requested?.trim();
+  if (r && (await refExists(repoPath, r))) return r;
+  try {
+    const up = (await rawGit(repoPath, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"])).trim();
+    if (up && (await refExists(repoPath, up))) return up; // e.g. "origin/feature-x"
+  } catch { /* no upstream configured for this branch */ }
+  return resolveBranchBase(repoPath); // branch never pushed ⇒ fall back to default branch
+}
+
 export async function gitDiff(
   repoPath: string,
   scope: DiffScope,
@@ -404,6 +423,15 @@ export async function gitDiff(
       return { patch: "", cacheKey: `${repoPath}:${head}:branch-none${file ? `:${file}` : ""}` };
     }
     args.push(`${branchBase}...HEAD`);
+  } else if (scope.kind === "unpushed") {
+    branchBase = await resolveUnpushedBase(repoPath, scope.base);
+    if (!branchBase) {
+      // No upstream and no default branch — nothing authoritative to diff
+      // against. Empty diff, same graceful path as branch mode.
+      const head = (await rawGit(repoPath, ["rev-parse", "HEAD"])).trim();
+      return { patch: "", cacheKey: `${repoPath}:${head}:unpushed-none${file ? `:${file}` : ""}` };
+    }
+    args.push(`${branchBase}...HEAD`);
   } else if (scope.kind === "commit") {
     args.push(`${scope.sha}^!`);
   }
@@ -418,7 +446,9 @@ export async function gitDiff(
       ? `working${scope.staged ? "-staged" : ""}`
       : scope.kind === "branch"
         ? `branch-${branchBase ?? scope.base ?? "origin/main"}`
-        : `commit-${scope.sha}`;
+        : scope.kind === "unpushed"
+          ? `unpushed-${branchBase ?? scope.base ?? "upstream"}`
+          : `commit-${scope.sha}`;
   const cacheKey = `${repoPath}:${head}:${scopeKey}${file ? `:${file}` : ""}`;
   return { patch, cacheKey };
 }

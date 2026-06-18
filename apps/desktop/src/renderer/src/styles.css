@@ -123,6 +123,11 @@ body,
   height: 100%;
   width: 100%;
   margin: 0;
+  /* Fixed-viewport canvas app — nothing at page level scrolls. Without this, a
+     tile's inner scroll (xterm/diff/editor) chains its overscroll up to the
+     document at the scroll boundary, shifting the whole panel ("scroll leak"). */
+  overflow: hidden;
+  overscroll-behavior: none;
   font-feature-settings: "ss01", "cv01";  /* IBM Plex stylistic set + JetBrains alts */
 }
 
@@ -250,6 +255,12 @@ a {
 /* xterm.js scrollbar inside terminal — narrower */
 .xterm-viewport::-webkit-scrollbar {
   width: 6px;
+}
+
+/* Keep terminal scroll from chaining into the canvas/page at its boundary —
+   the wheel scrolls the scrollback and stops there. */
+.xterm-viewport {
+  overscroll-behavior: contain;
 }
 
 /* i-animate: reduced-motion override (mandatory). Kills all transitions/animations

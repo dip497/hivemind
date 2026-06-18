@@ -36,6 +36,7 @@ import {
   type IssueState,
 } from "@hivemind/core";
 import type { IssuePatch } from "@hivemind/core/storage";
+import { hcpCall } from "./hcp-client.js";
 
 /** Resolve the repo root from $HIVE_ROOT (set by `hive mcp-stdio --root`)
  *  or by walking up from cwd. Throws if no .hivemind found. Also registers
@@ -262,6 +263,141 @@ const TOOLS: Tool[] = [
       required: ["id", "other_id"],
     },
   },
+  // ── canvas / agent control (HCP — needs the desktop app running) ──────────
+  {
+    name: "hive_spawn_agent",
+    description:
+      "Spawn a NEW coding agent as a tile on the hivemind canvas and hand it a prompt. Returns its tileId. Use this to delegate a subtask to a sibling agent. By DEFAULT the worker AUTO-REPORTS: when it finishes its turn, its reply is delivered straight back into YOUR session (you'll see a '[hive] from <tileId>:' message) — so you can fire-and-forget and keep working, no need to block on hive_read. A visible reporting edge is drawn from the worker to you. Pass `supervise` to have the worker escalate its tool-permission prompts to YOU (you'll get a '[hive] APPROVAL …' message and answer with hive_approve) instead of stopping for a human — so it can run unattended under your watch. Use hive_send for a follow-up turn, or hive_read only to synchronously block for the next reply. Requires the hivemind desktop app to be running.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        agent: { type: "string", description: "Agent to launch: 'claude' (default), 'codex', 'opencode', …" },
+        prompt: { type: "string", description: "Initial task delivered once the agent is ready." },
+        frame: { type: "string", description: "Frame to spawn into — a frame id, repo/worktree name, or title (e.g. 'manageark'). Omit to use the spawning agent's own frame. Discover with hive_list_frames." },
+        mode: { type: "string", description: "claude permission mode (e.g. 'plan', 'acceptEdits'); optional." },
+        report: { type: "boolean", description: "Auto-deliver the worker's replies back to you when it finishes a turn (default true). Set false for a fire-and-forget worker you'll poll with hive_read instead." },
+        supervise: { description: "Route the worker's tool-permission prompts to YOU (the spawner) to approve via hive_approve, instead of a human. true / 'parent' brokers the mutating tools (Bash/Edit/Write/WebFetch); 'all' brokers every tool; or pass a comma-string / array of tool names. Omit for normal (human) permissions. Fails safe to the human prompt if you don't answer.", type: ["boolean", "string", "array"], items: { type: "string" } },
+      },
+    },
+  },
+  {
+    name: "hive_send",
+    description:
+      "Send text to an agent tile (by tileId from hive_spawn_agent) — like typing into its terminal and pressing Enter. Use for follow-up turns in a conversation with a spawned agent. Requires the hivemind desktop app.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tileId: { type: "string" },
+        text: { type: "string" },
+        submit: { type: "boolean", description: "Press Enter after the text (default true)." },
+      },
+      required: ["tileId", "text"],
+    },
+  },
+  {
+    name: "hive_send_keys",
+    description:
+      "Send a sequence of KEYS to an agent tile's terminal UI — for driving an interactive TUI you can't answer with plain text, e.g. selecting an option in a worker's native AskUserQuestion picker. Pass `keys` as an array of tokens: arrows 'Up'/'Down'/'Left'/'Right', 'Enter', 'Esc', 'Tab', 'Space', 'Backspace', 'Home'/'End'/'PageUp'/'PageDown', or any literal text/digits (sent as-is). They're emitted with a small gap so the TUI registers each. Example: to pick the 2nd option in a picker, keys: [\"Down\", \"Enter\"]. Requires the hivemind desktop app.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tileId: { type: "string" },
+        keys: { type: "array", items: { type: "string" }, description: "Ordered key tokens, e.g. [\"Down\",\"Enter\"]." },
+      },
+      required: ["tileId", "keys"],
+    },
+  },
+  {
+    name: "hive_read",
+    description:
+      "OPTIONAL synchronous read: block until a spawned agent (by tileId) finishes its current turn, then return its reply (its final assistant message, read cleanly from the session transcript — never screen-scraped). Most of the time you DON'T need this — agents spawned with report:true (the default) auto-deliver their replies into your session when done. Use hive_read only when you must block for the answer inline. On timeout it returns finalStatus:'timeout' (the agent is still working) — it does NOT return raw terminal output. Requires the hivemind desktop app.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tileId: { type: "string" },
+        timeout_ms: { type: "number", description: "Max wait in ms (default 120000)." },
+      },
+      required: ["tileId"],
+    },
+  },
+  {
+    name: "hive_approve",
+    description:
+      "Answer an approval request from a supervised worker (spawned with `supervise`). When a worker wants to run a brokered tool you'll get a '[hive] APPROVAL — worker <id> wants to run <tool>: <summary>\\nReply: hive_approve(\"<reqId>\", …)' message; call this with that reqId. decision: 'allow'/'deny' for this one call, or 'always'/'never' to also remember the decision for that worker+tool (no more prompts for it). Requires the hivemind desktop app.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        reqId: { type: "string", description: "The approval request id from the '[hive] APPROVAL …' message." },
+        decision: { type: "string", enum: ["allow", "deny", "always", "never"], description: "allow/deny this call; always/never also remember it for this worker+tool." },
+        reason: { type: "string", description: "Optional note shown to the worker (especially useful on deny, so it can adapt)." },
+      },
+      required: ["reqId", "decision"],
+    },
+  },
+  {
+    name: "hive_list_frames",
+    description:
+      "List the canvas frames (workspaces) — each with its id, title, repo/worktree path, branch, and tile count. Use to discover which frame to spawn into (pass its id, repo name, or title as hive_spawn_agent's `frame`). Requires the hivemind desktop app.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "hive_list_tiles",
+    description:
+      "List the tiles on the hivemind canvas GROUPED BY FRAME — returns { frames: [{ frameId, title, repo, branch, tiles: [{ tileId, kind, label, status }] }], loose: [...] }. Each agent tile carries its live status (working/idle/blocked/…). Pass `frame` to filter to a single frame (by id, repo name, or title); omit to list every frame. Use to discover spawned agents and check whether they're busy. Requires the hivemind desktop app.",
+    inputSchema: { type: "object", properties: { frame: { type: "string", description: "Filter to one frame — a frame id, repo name, or title. Omit to list all frames." } } },
+  },
+  {
+    name: "hive_focus",
+    description: "Focus a tile on the canvas (select it and bring it into view) by tileId. Requires the hivemind desktop app.",
+    inputSchema: { type: "object", properties: { tileId: { type: "string" } }, required: ["tileId"] },
+  },
+  {
+    name: "hive_close_tile",
+    description: "Close a tile by tileId (e.g. shut down a worker agent you spawned). Requires the hivemind desktop app.",
+    inputSchema: { type: "object", properties: { tileId: { type: "string" } }, required: ["tileId"] },
+  },
+  {
+    name: "hive_open_review",
+    description:
+      "Open a plan in hivemind's visual review tile and BLOCK until the human approves or requests changes. Returns { decision: 'allow'|'deny', feedback? }. Use to get human sign-off on a plan you generated before acting on it. Requires the hivemind desktop app.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        plan: { type: "string", description: "The plan markdown to review." },
+        cwd: { type: "string", description: "Working directory for context (shown in the tile)." },
+      },
+      required: ["plan"],
+    },
+  },
+  {
+    name: "hive_report",
+    description:
+      "Report a result back to the agent that SPAWNED you (your parent). If you were launched by another agent via hive_spawn_agent, call this when you finish your delegated task — your message is delivered into the parent's session so it can collect your findings without polling. No-op error if you have no parent. Requires the hivemind desktop app.",
+    inputSchema: {
+      type: "object",
+      properties: { message: { type: "string", description: "Your result/findings to send to the parent agent." } },
+      required: ["message"],
+    },
+  },
+  {
+    name: "hive_connect",
+    description:
+      "Pipe one agent's output into another's input: whenever the source agent (src_tile_id) finishes a turn, its reply is automatically sent to the destination agent (dst_tile_id). Chains workers without you relaying messages by hand. Requires the hivemind desktop app.",
+    inputSchema: {
+      type: "object",
+      properties: { src_tile_id: { type: "string" }, dst_tile_id: { type: "string" } },
+      required: ["src_tile_id", "dst_tile_id"],
+    },
+  },
+  {
+    name: "hive_disconnect",
+    description: "Remove a pipe created by hive_connect. Omit dst_tile_id to remove all pipes from src_tile_id. Requires the hivemind desktop app.",
+    inputSchema: {
+      type: "object",
+      properties: { src_tile_id: { type: "string" }, dst_tile_id: { type: "string" } },
+      required: ["src_tile_id"],
+    },
+  },
 ];
 
 const GetIssueArgs = z.object({ id: z.string() });
@@ -308,6 +444,26 @@ const LinkIssueArgs = z.object({
   other_id: z.string(),
   type: LinkTypeZ.default("relates"),
 });
+const SpawnAgentArgs = z.object({
+  agent: z.string().optional(),
+  prompt: z.string().optional(),
+  frame: z.string().optional(),
+  mode: z.string().optional(),
+  report: z.boolean().optional(),
+  supervise: z.union([z.boolean(), z.string(), z.array(z.string())]).optional(),
+});
+const ApproveArgs = z.object({
+  reqId: z.string(),
+  decision: z.enum(["allow", "deny", "always", "never"]),
+  reason: z.string().optional(),
+});
+const SendArgs = z.object({ tileId: z.string(), text: z.string(), submit: z.boolean().optional() });
+const SendKeysArgs = z.object({ tileId: z.string(), keys: z.array(z.string()).min(1) });
+const ReadArgs = z.object({ tileId: z.string(), timeout_ms: z.number().optional() });
+const TileIdArgs = z.object({ tileId: z.string() });
+const OpenReviewArgs = z.object({ plan: z.string().min(1), cwd: z.string().optional() });
+const ConnectArgs = z.object({ src_tile_id: z.string(), dst_tile_id: z.string() });
+const DisconnectArgs = z.object({ src_tile_id: z.string(), dst_tile_id: z.string().optional() });
 
 /** Build and return an MCP Server bound to hive-core. Caller transports it. */
 export function buildServer(): Server {
@@ -318,9 +474,17 @@ export function buildServer(): Server {
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
 
+  // Canvas/agent tools drive the running app over HCP and need NO issue
+  // workspace — only the issue tools resolve a `.hivemind/` root. Resolving it
+  // for canvas tools would (wrongly) fail in a repo without `.hivemind/`.
+  const CANVAS_TOOLS = new Set([
+    "hive_spawn_agent", "hive_send", "hive_send_keys", "hive_read", "hive_approve", "hive_list_frames", "hive_list_tiles",
+    "hive_focus", "hive_close_tile", "hive_connect", "hive_disconnect", "hive_open_review",
+    "hive_report",
+  ]);
   server.setRequestHandler(CallToolRequestSchema, async (req) => {
     const { name, arguments: args } = req.params;
-    const root = await resolveRoot();
+    const root = CANVAS_TOOLS.has(name) ? "" : await resolveRoot();
     try {
       switch (name) {
         case "hive_get_issue": {
@@ -442,6 +606,62 @@ export function buildServer(): Server {
           const r = await rootForId(root, a.id);
           const res = await linkIssues(r, a.id, a.other_id, a.type, actorTag());
           return jsonResult({ ok: true, ...res });
+        }
+        case "hive_spawn_agent": {
+          const a = SpawnAgentArgs.parse(args);
+          // Default the new agent into THIS agent's frame (its own tile id is in
+          // the env hivemind injected). The renderer resolves the frame.
+          return jsonResult(await hcpCall("tile.spawn_agent", { ...a, callerTile: process.env.HIVEMIND_TILE }));
+        }
+        case "hive_send": {
+          const a = SendArgs.parse(args);
+          return jsonResult(await hcpCall("agent.send", a));
+        }
+        case "hive_send_keys": {
+          const a = SendKeysArgs.parse(args);
+          return jsonResult(await hcpCall("agent.send_keys", a));
+        }
+        case "hive_read": {
+          const a = ReadArgs.parse(args);
+          // Give the wire client a ceiling ABOVE the server-side read timeout, or
+          // long reads die at the client's default 130s before the read returns.
+          const readMs = a.timeout_ms ?? 120_000;
+          return jsonResult(await hcpCall("agent.read", { tileId: a.tileId, timeoutMs: readMs }, readMs + 15_000));
+        }
+        case "hive_approve": {
+          const a = ApproveArgs.parse(args);
+          return jsonResult(await hcpCall("agent.approve", a));
+        }
+        case "hive_list_frames":
+          return jsonResult(await hcpCall("tile.list_frames", {}));
+        case "hive_list_tiles": {
+          const a = z.object({ frame: z.string().optional() }).parse(args);
+          return jsonResult(await hcpCall("tile.list", { frame: a.frame }));
+        }
+        case "hive_focus": {
+          const a = TileIdArgs.parse(args);
+          return jsonResult(await hcpCall("tile.focus", { tileId: a.tileId }));
+        }
+        case "hive_close_tile": {
+          const a = TileIdArgs.parse(args);
+          return jsonResult(await hcpCall("tile.close", { tileId: a.tileId }));
+        }
+        case "hive_open_review": {
+          const a = OpenReviewArgs.parse(args);
+          // Human review can take minutes — give the round-trip a long ceiling.
+          return jsonResult(await hcpCall("review.open", { plan: a.plan, cwd: a.cwd }, 24 * 60 * 60 * 1000));
+        }
+        case "hive_report": {
+          const a = z.object({ message: z.string().min(1) }).parse(args);
+          return jsonResult(await hcpCall("agent.report", { callerTile: process.env.HIVEMIND_TILE, message: a.message }));
+        }
+        case "hive_connect": {
+          const a = ConnectArgs.parse(args);
+          return jsonResult(await hcpCall("tile.connect", { srcTileId: a.src_tile_id, dstTileId: a.dst_tile_id }));
+        }
+        case "hive_disconnect": {
+          const a = DisconnectArgs.parse(args);
+          return jsonResult(await hcpCall("tile.disconnect", { srcTileId: a.src_tile_id, dstTileId: a.dst_tile_id }));
         }
         default:
           throw new Error(`unknown tool: ${name}`);

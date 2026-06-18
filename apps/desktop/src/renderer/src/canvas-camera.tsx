@@ -6,7 +6,7 @@
  * Canvas.tsx focused on orchestration.
  */
 import { useCallback, useEffect } from "react";
-import { useReactFlow } from "@xyflow/react";
+import { useReactFlow, useStore } from "@xyflow/react";
 
 /** Snap a settled viewport so canvas-rendered text stays crisp: round the pan to
  *  whole DEVICE pixels (fractional CSS translate puts the xterm bitmap on
@@ -49,17 +49,35 @@ export function FocusMode({ req }: { req: { id: string | null; n: number } | nul
 export function FocusOnTile({
   req,
 }: {
-  req: { id: string; cx: number; cy: number; n: number; exact?: boolean } | null;
+  req: { id: string; cx: number; cy: number; w?: number; h?: number; n: number; exact?: boolean } | null;
 }) {
   const { setCenter, getZoom, getNode, fitView } = useReactFlow();
+  // Pane size (CSS px). At the exact-path's zoom 1, flow units == screen px, so
+  // we can frame the tile against the viewport directly.
+  const paneW = useStore((s) => s.width);
+  const paneH = useStore((s) => s.height);
   useEffect(() => {
     if (!req) return;
     // `exact`: text tiles (terminal/editor/diff) need EXACTLY 100% — xterm
     // selection + DOM-text crispness are only pixel-accurate at 1:1. Pan to the
-    // tile centre at zoom 1 in a SINGLE animation; do NOT chase it with a fitView
+    // tile at zoom 1 in a SINGLE animation; do NOT chase it with a fitView
     // (which lands at ≤ 1) — running both raced the viewport to the wrong place.
     if (req.exact) {
-      void setCenter(req.cx, req.cy, { zoom: 1, duration: 400 });
+      // Centering is right when the tile FITS, but a tile WIDER/TALLER than the
+      // viewport would center-clip its edges — and for a terminal the LEFT edge
+      // (prompt + line starts) is exactly what you need to read. When the tile
+      // overflows an axis, anchor that axis to the tile's left/top edge (+pad) so
+      // the content corner stays on screen instead of hanging off the left.
+      const PAD = 24;
+      const w = req.w ?? 0;
+      const h = req.h ?? 0;
+      let tx = req.cx;
+      let ty = req.cy;
+      // Guard paneW/paneH > 0: the store reports 0 until the pane is measured;
+      // clamping against 0 would shove the tile hard off-screen.
+      if (paneW > 0 && w > paneW - 2 * PAD) tx = req.cx - w / 2 + paneW / 2 - PAD; // left-anchor
+      if (paneH > 0 && h > paneH - 2 * PAD) ty = req.cy - h / 2 + paneH / 2 - PAD; // top-anchor
+      void setCenter(tx, ty, { zoom: 1, duration: 400 });
       return;
     }
     // Two-stage focus, same end result as the "." focus-selected hotkey but

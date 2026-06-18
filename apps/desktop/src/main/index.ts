@@ -42,7 +42,7 @@ import { remoteConns, type HostAuth } from "./remote/conn.js";
 // in-process PTYs (which die with the window).
 const PERSIST_PTY = process.env.HIVEMIND_PTY_DAEMON !== "0";
 const ptyMod = PERSIST_PTY ? ptyDaemon : ptyHost;
-const { spawnPty, writePty, resizePty, killPty, detachPty } = ptyMod;
+const { spawnPty, writePty, resizePty, killPty, detachPty, hasSession } = ptyMod;
 const killAllPtys = ptyMod.killAll;
 import { applyShellEnvToProcess } from "./shell-env.js";
 import {
@@ -64,6 +64,18 @@ import {
 } from "./git-adapter.js";
 import { unwatchAll, watchRepo } from "./fs-watcher.js";
 import { registerAgentNotifications } from "./agent-notify.js";
+import { startPlanBridge, type PlanRequest } from "./plan-bridge.js";
+import { randomUUID } from "node:crypto";
+import { startHcpServer } from "./hcp/hcp-server.js";
+import { makeDispatch } from "./hcp/methods.js";
+import { TurnTracker } from "./hcp/turn-tracker.js";
+import { OutputRecorder } from "./hcp/output-recorder.js";
+import { readOrCreateToken, hcpSockPath } from "./hcp/token.js";
+import { HcpError } from "./hcp/protocol.js";
+import { PipeManager } from "./hcp/pipes.js";
+import { readLastAssistantMessage } from "./hcp/transcript.js";
+import { toBareId, toPtyId } from "../shared/tile-id.js";
+import { SUBMIT_DELAY_MS } from "../shared/agent-io.js";
 import type {
   DiffScope,
   WorktreeCreateOpts,
@@ -781,6 +793,62 @@ ipcMain.handle("fileWrite", wrap((_e, repoPath: string, relPath: string, content
     : fsp.writeFile(resolveInRepo(repoPath, relPath), contents, "utf8")
 ));
 
+// Files the terminal will hand to the OS opener — a VIEWABLE allowlist, not a
+// denylist, so executables / installers / shortcuts (.exe .desktop .lnk .msi
+// .app .sh-binaries …) are never launched: anything not listed is refused.
+const OPENABLE_EXT = new Set([
+  ".html", ".htm", ".md", ".markdown", ".txt", ".text", ".log", ".rtf", ".pdf", ".csv", ".tsv",
+  ".json", ".jsonc", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf", ".env", ".xml", ".svg",
+  ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".py", ".rb", ".go", ".rs", ".java", ".kt", ".kts",
+  ".c", ".h", ".cc", ".cpp", ".hpp", ".hh", ".cs", ".php", ".swift", ".scala", ".sh", ".bash", ".zsh",
+  ".fish", ".sql", ".css", ".scss", ".sass", ".less", ".vue", ".svelte", ".astro", ".lua", ".pl", ".r",
+  ".dart", ".ex", ".exs", ".erl", ".clj", ".hs", ".ml", ".gradle", ".groovy", ".tf", ".proto", ".graphql",
+  ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".ico", ".avif", ".tiff", ".mp4", ".webm", ".mov", ".mp3", ".wav", ".ogg",
+]);
+
+// Open a file/dir clicked in the terminal with the OS default app (xdg-open via
+// shell.openPath). The file-link provider passes the raw matched token + the
+// tile's cwd. Hardened (automated security review): (1) CONFINE to the tile's
+// workspace via realpath — rejects absolute/`..`/symlink escapes; (2) ALLOWLIST
+// viewable extensions — never hands an executable/installer/shortcut to the OS
+// opener; (3) extensionless files (Makefile, LICENSE) only when NOT executable.
+ipcMain.handle("openPathInApp", wrap(async (_e, repoPath: string, target: string) => {
+  if (!target) return { ok: false, error: "no target" };
+  let t = target.trim();
+  if (t.startsWith("file://")) {
+    try { t = decodeURIComponent(new URL(t).pathname); } catch { return { ok: false, error: "bad file uri" }; }
+  }
+  t = t.replace(/:\d+(?::\d+)?$/, "").replace(/[)\].,;:'"]+$/, ""); // drop :line:col + trailing punctuation
+  if (t.startsWith("~/")) t = path.join(os.homedir(), t.slice(2));
+  // A local opener can't reach an ssh:// workspace or a non-file URI; and we need
+  // a real workspace to confine against.
+  if (isRemote(repoPath) || /^[a-z][a-z0-9+.-]*:\/\//i.test(t)) return { ok: false, error: "not a local path" };
+  if (!repoPath) return { ok: false, error: "no workspace to scope to" };
+  const resolved = path.resolve(repoPath, t);
+  const st = await fsp.stat(resolved).catch(() => null);
+  if (!st) return { ok: false, error: "not found" };
+  // (1) Confine to the workspace — realpath both sides so a symlink can't escape.
+  let realResolved: string, realRepo: string;
+  try {
+    realResolved = await fsp.realpath(resolved);
+    realRepo = await fsp.realpath(repoPath);
+  } catch { return { ok: false, error: "unresolvable" }; }
+  if (realResolved !== realRepo && !realResolved.startsWith(realRepo + path.sep)) {
+    return { ok: false, error: "outside workspace" };
+  }
+  // (2)/(3) Type gate (dirs open the file manager — no gate needed).
+  if (st.isFile()) {
+    const ext = path.extname(realResolved).toLowerCase();
+    if (ext) {
+      if (!OPENABLE_EXT.has(ext)) return { ok: false, error: `refused (${ext})` };
+    } else if (st.mode & 0o111) {
+      return { ok: false, error: "refused (executable)" };
+    }
+  }
+  const err = await shell.openPath(realResolved); // "" on success
+  return err ? { ok: false, error: err } : { ok: true };
+}));
+
 // Diagnostics sink: append render-quality lines to userData/render-diag.log so a
 // blurry-text report becomes a readable trace (incl. over SSH). Best-effort and
 // self-capping — truncate to the last ~64KB when it grows past 128KB so it never
@@ -867,6 +935,28 @@ function recordPtySpawn(): void {
   }
   ptySpawnTimes.push(now);
 }
+
+// HCP (control plane) shared state — the output recorder + turn tracker are fed
+// from the SAME pty data main relays to the renderer (tee'd in the onData
+// callbacks below), so an agent's output/turns are captured with no dependency
+// on its tile staying mounted. See startHcpControlPlane().
+const hcpRecorder = new OutputRecorder();
+const hcpTurns = new TurnTracker();
+const hcpPipes = new PipeManager();
+// bare tileId → supervision spec ("all" or a tool list). Set when an agent
+// spawns a worker with `supervise`; injected as HIVE_SUPERVISE into that
+// worker's spawn env at ptySpawn so the daemon installs the permission-broker
+// hook (HCP Phase 6 — agent-supervised approvals).
+const hcpSupervise = new Map<string, string>();
+// Set once the HCP server binds; fans live pty output to agent.stream subscribers.
+let hcpBroadcast: ((tileId: string, chunk: string) => void) | null = null;
+// Resolve writeToTile once (used by HCP agent.send AND pipe forwarding).
+const hcpWriteToTile = (tileId: string, data: string): boolean => {
+  if (hasRemotePty(tileId)) { writeRemotePty(tileId, data); return true; }
+  if (hasSession(tileId)) { writePty(tileId, data); return true; }
+  return false; // dead/unknown tile → agent.send surfaces TILE_NOT_FOUND
+};
+
 ipcMain.handle("ptySpawn", wrap(async (e, opts: Parameters<typeof spawnPty>[0]) => {
   // Spawn rate-limit: a compromised renderer (XSS via rendered diff/issue
   // content) could fork-bomb the host through ptySpawn. Cap spawns per sliding
@@ -874,6 +964,11 @@ ipcMain.handle("ptySpawn", wrap(async (e, opts: Parameters<typeof spawnPty>[0]) 
   // must too. And reject a non-directory cwd up front (otherwise it surfaces as
   // an opaque node-pty throw later).
   recordPtySpawn();
+  // Supervised worker? Inject HIVE_SUPERVISE into its spawn env so the daemon
+  // installs the PreToolUse permission-broker hook (HCP Phase 6). opts.tileId is
+  // the pty id; the policy is keyed by the bare id.
+  const supSpec = hcpSupervise.get(toBareId(opts.tileId));
+  if (supSpec) opts = { ...opts, env: { ...(opts.env ?? {}), HIVE_SUPERVISE: supSpec } };
   const sender = e.sender;
   // Remote frame (ssh:// cwd): run the PTY over ssh, in-main. Skip the local
   // cwd stat + shell-env patch (those are for the LOCAL host). The data/exit
@@ -884,7 +979,7 @@ ipcMain.handle("ptySpawn", wrap(async (e, opts: Parameters<typeof spawnPty>[0]) 
       try { sender.send(channel, payload); } catch { /* sender gone */ }
     };
     return spawnRemotePty(opts, {
-      onData: (data) => safeSendR(`pty:data:${opts.tileId}`, data),
+      onData: (data) => { hcpRecorder.record(opts.tileId, data); hcpBroadcast?.(toBareId(opts.tileId), data); safeSendR(`pty:data:${opts.tileId}`, data); },
       onExit: (code, signal) => safeSendR(`pty:exit:${opts.tileId}`, { code, signal }),
     });
   }
@@ -908,7 +1003,7 @@ ipcMain.handle("ptySpawn", wrap(async (e, opts: Parameters<typeof spawnPty>[0]) 
     }
   };
   return spawnPty(opts, {
-    onData: (data) => safeSend(`pty:data:${opts.tileId}`, data),
+    onData: (data) => { hcpRecorder.record(opts.tileId, data); hcpBroadcast?.(toBareId(opts.tileId), data); safeSend(`pty:data:${opts.tileId}`, data); },
     onExit: (code, signal) => safeSend(`pty:exit:${opts.tileId}`, { code, signal }),
   });
 }));
@@ -1039,16 +1134,150 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
       if (target) mainWindow.webContents.send("open-project", target);
     }
   });
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
+    // Dev rebuild safety: if a daemon from an older build is still running,
+    // replace it BEFORE the renderer attaches tiles, so new sessions carry the
+    // current code (HCP/plan hooks + env injection). No-op in prod / when current.
+    if (PERSIST_PTY) { try { await ptyDaemon.ensureFreshDaemon(); } catch { /* best-effort */ } }
     void createWindow();
     // Native OS notifications for agents that need you — driven by the renderer's
     // agent-status bus over IPC (multi-agent, transition-deduped). Reads
     // `mainWindow` lazily; gated on window-not-focused inside the bridge.
     registerAgentNotifications(() => mainWindow);
+    startPlanReviewBridge();
+    startHcpControlPlane();
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) void createWindow();
     });
   });
+}
+
+// ── plan review bridge ───────────────────────────────────────────────────────
+// The injected PreToolUse(ExitPlanMode) hook connects to this unix socket when
+// an agent hands off a plan. We hold the hook connection (via `reply`) until the
+// renderer resolves it through "plan-review:decide". Socket path mirrors the one
+// the daemon injects into the hook command (both derive from userData).
+const planReplies = new Map<string, PlanRequest["reply"]>();
+function startPlanReviewBridge(): void {
+  const sock = path.join(app.getPath("userData"), "plan-bridge.sock");
+  startPlanBridge(sock, (req) => {
+    const win = mainWindow;
+    if (!win || win.isDestroyed()) { req.reply("allow"); return; } // fail-open: no UI
+    planReplies.set(req.requestId, req.reply);
+    req.onAbort(() => {
+      planReplies.delete(req.requestId);
+      if (mainWindow && !mainWindow.isDestroyed())
+        mainWindow.webContents.send("plan-review:abort", req.requestId);
+    });
+    win.webContents.send("plan-review:open", {
+      requestId: req.requestId, tileId: req.tileId, plan: req.plan, cwd: req.cwd,
+    });
+  });
+}
+ipcMain.handle(
+  "plan-review:decide",
+  wrap(async (_e, requestId: string, decision: "allow" | "deny", feedback?: string) => {
+    const reply = planReplies.get(requestId);
+    if (reply) { reply(decision, feedback); planReplies.delete(requestId); }
+  }),
+);
+
+// ── HCP: the control plane ───────────────────────────────────────────────────
+// A 0600 unix socket where the hive MCP (and CLIs) drive the running app: spawn
+// agents on the canvas, send them input, read their replies. Renderer verbs
+// (tile.*) cross the request-id-correlated "hcp:command"/"hcp:result" channel
+// (twin of plan-review). Main verbs (agent.send/read) run here against the
+// recorder + turn tracker. The injected Stop hook reports finished turns.
+const pendingHcp = new Map<string, { resolve: (v: unknown) => void; reject: (e: unknown) => void; timer: NodeJS.Timeout }>();
+function hcpCallRenderer(method: string, params: unknown, timeoutMs: number): Promise<unknown> {
+  const win = mainWindow;
+  if (!win || win.isDestroyed()) return Promise.reject(new HcpError("APP_NO_RENDERER", "hivemind window not open"));
+  const id = randomUUID();
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      pendingHcp.delete(id);
+      reject(new HcpError("TIMEOUT", `renderer verb ${method} timed out`));
+    }, timeoutMs);
+    pendingHcp.set(id, { resolve, reject, timer });
+    win.webContents.send("hcp:command", { id, method, params });
+  });
+}
+ipcMain.handle(
+  "hcp:result",
+  wrap(async (_e, id: string, ok: boolean, result: unknown, errorMessage?: string) => {
+    const p = pendingHcp.get(id);
+    if (!p) return;
+    pendingHcp.delete(id);
+    clearTimeout(p.timer);
+    if (ok) p.resolve(result);
+    else p.reject(new HcpError("INTERNAL", errorMessage || "renderer verb failed"));
+  }),
+);
+// Anti-fork-bomb: at most 16 HCP agent spawns per rolling minute.
+let hcpSpawnTimes: number[] = [];
+function hcpSpawnAllowed(): boolean {
+  const now = Date.now();
+  hcpSpawnTimes = hcpSpawnTimes.filter((t) => now - t < 60_000);
+  if (hcpSpawnTimes.length >= 16) return false;
+  hcpSpawnTimes.push(now);
+  return true;
+}
+function startHcpControlPlane(): void {
+  const userData = app.getPath("userData");
+  const token = readOrCreateToken(userData);
+  const pushPipe = (src: string, dst: string | null, connected: boolean) => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("hcp:pipe", { src, dst, connected });
+  };
+  const dispatch = makeDispatch({
+    callRenderer: hcpCallRenderer,
+    writeToTile: hcpWriteToTile,
+    turns: hcpTurns,
+    recorder: hcpRecorder,
+    spawnAllowed: hcpSpawnAllowed,
+    connect: (src, dst) => { const ok = hcpPipes.connect(src, dst); if (ok) pushPipe(src, dst, true); return ok; },
+    disconnect: (src, dst) => { hcpPipes.disconnect(src, dst); pushPipe(src, dst ?? null, false); },
+    forgetPipes: (id) => { hcpPipes.forget(id); pushPipe(id, null, false); },
+    setSupervise: (id, spec) => { if (spec) hcpSupervise.set(id, spec); else hcpSupervise.delete(id); },
+    pushWait: (tileId, status) => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("hcp:wait", { tileId, status });
+    },
+  });
+  const server = startHcpServer(hcpSockPath(userData), {
+    token,
+    rendererUp: () => !!mainWindow && !mainWindow.isDestroyed(),
+    dispatch,
+    onEvent: (topic, data) => {
+      if (topic !== "turn") return;
+      const d = (data ?? {}) as { tileId?: string; transcriptPath?: string };
+      if (!d.tileId) return;
+      // Forged-event hardening: the `turn` event is token-less (only the 0600
+      // socket gates it), so constrain the transcript path to a real claude
+      // transcript (`~/.claude/**.jsonl`). A bogus path can't make agent.read
+      // return an arbitrary user-readable file's contents — it falls back to the
+      // recorder instead.
+      const tp = d.transcriptPath;
+      const safeTp = tp && tp.startsWith(path.join(os.homedir(), ".claude") + path.sep) && tp.endsWith(".jsonl") ? tp : null;
+      hcpTurns.recordTurn(d.tileId, safeTp);
+      // Pipe forwarding: feed this agent's reply into any piped destinations.
+      const dests = hcpPipes.dests(toBareId(d.tileId));
+      if (dests.length === 0 || !safeTp) return;
+      const reply = readLastAssistantMessage(safeTp);
+      if (!reply) return;
+      // Tag the forward with its source so the receiving agent knows which
+      // worker just reported (this is the agent-to-agent "mailbox" delivery —
+      // also what an auto-reporting spawned worker uses to reach its parent).
+      const banner = `\n[hive] from ${toBareId(d.tileId)}:\n${reply}\n`;
+      // Type the message, then Enter as a separate keystroke (claude's TUI drops a
+      // newline bundled with the text). dests are BARE ids; writeToTile keys on
+      // the pty namespace → convert (the forward no-op'd without this).
+      for (const dst of dests) {
+        const pid = toPtyId(dst);
+        hcpWriteToTile(pid, banner);
+        setTimeout(() => hcpWriteToTile(pid, "\r"), SUBMIT_DELAY_MS);
+      }
+    },
+  });
+  hcpBroadcast = server.broadcast;
 }
 
 // In daemon mode the normal quit hangs (~60s): this UI process owns no PTY

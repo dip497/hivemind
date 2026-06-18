@@ -1,21 +1,25 @@
 /**
- * IssuesTile — the issue tracker as a first-class CANVAS tile (board-lite).
+ * IssuesTile — the issue tracker as a first-class CANVAS tile.
  *
- * Research (council, see research/council-findings.md) found that embedding a
- * full drag-drop kanban inside a pannable/zoomable canvas is fragile — intra-
- * tile card DnD fights canvas drag-to-pan and zoom transforms break DnD coords
- * (confirmed by OpenCove's bug history). So this is a NO-DRAG board: issues are
- * grouped by state in columns; state changes via a per-card dropdown; clicking a
- * card opens the full peek; "▶" dispatches the same spawn+send-to-claude flow as
- * IssuePeek. The heavy drag-drop board stays as the dedicated full-screen view.
+ * Linear/Plane-grade shell: a FilterBar (search + state/label/assignee filters)
+ * with a toolbar (group-by, Board/List view switch, New), over a BoardView or
+ * ListView. The board supports drag-between-columns ONLY when the tile is focused
+ * (`selected`), so it never fights canvas drag-to-pan (the original reason DnD was
+ * left out). Cards open the full IssuePeek; "work" spawns claude + delivers the
+ * work prompt. Per-tile view + group-by persist in localStorage.
  */
-import { GripVertical, Play, Inbox, FolderGit2 } from "lucide-react";
+import { useMemo, useState } from "react";
+import { GripVertical, Inbox, FolderGit2 } from "lucide-react";
 import { useTileFont, FontStepper, handleFontKey } from "./tile-font";
-import type { IssueState, IssueSummary } from "@hivemind/core/types";
-import { STATE_LABEL, STATE_ORDER, StateIcon } from "./components/StateMeta";
-import { useIssues, useUpdateState } from "./queries";
+import type { IssueSummary } from "@hivemind/core/types";
+import { useIssues } from "./queries";
+import { FilterBar, emptyFilters, applyFilters, type Filters } from "./components/FilterBar";
+import { ViewSwitcher, type ViewKind } from "./components/ViewSwitcher";
+import { BoardView } from "./issues/BoardView";
+import { ListView } from "./issues/ListView";
+import { GROUP_BY_LABEL, GROUP_BY_ORDER, type GroupBy } from "./issues/grouping";
 
-/** Centered, teaching empty/placeholder state (icon · headline · hint · optional action). */
+/** Centered, teaching empty/placeholder state. */
 function TileEmpty({
   icon,
   title,
@@ -28,7 +32,7 @@ function TileEmpty({
   action?: { label: string; onClick: () => void };
 }) {
   return (
-    <div className="h-full grid place-items-center px-6 text-center">
+    <div className="flex-1 grid place-items-center px-6 text-center">
       <div className="flex flex-col items-center gap-2 max-w-[240px]">
         <div className="text-[var(--color-fg3)]">{icon}</div>
         <div className="text-[12.5px] font-medium text-[var(--color-fg)]">{title}</div>
@@ -46,36 +50,68 @@ function TileEmpty({
   );
 }
 
+function GroupByMenu({ value, onChange }: { value: GroupBy; onChange: (g: GroupBy) => void }) {
+  return (
+    <label className="nodrag inline-flex items-center gap-1 text-[11px] text-[var(--color-fg2)]">
+      <span className="text-[var(--color-fg3)]">Group</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value as GroupBy)}
+        aria-label="Group issues by"
+        className="bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-md text-[11.5px] text-[var(--color-fg)] px-1.5 py-1 outline-none cursor-pointer"
+      >
+        {GROUP_BY_ORDER.map((g) => (
+          <option key={g} value={g}>
+            {GROUP_BY_LABEL[g]}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 interface Props {
   root: string | null;
   onClose?: () => void;
+  /** Tile focus — gates board drag-and-drop so it doesn't fight canvas pan. */
+  selected?: boolean;
 }
 
-export function IssuesTile({ root, onClose }: Props) {
-  // Per-tile font (A−/A+ + Ctrl/Cmd +/−/0). Issues is a fixed-px card UI, so we
-  // scale the whole board with CSS zoom (13 = 1.0) rather than a font-size.
+const viewKey = (root: string) => `hm:issues:view:${root}`;
+const groupKey = (root: string) => `hm:issues:group:${root}`;
+const readLS = <T extends string>(k: string, fallback: T): T => {
+  try {
+    return (localStorage.getItem(k) as T) || fallback;
+  } catch {
+    return fallback;
+  }
+};
+
+export function IssuesTile({ root, onClose, selected = false }: Props) {
   const font = useTileFont(`issues:${root ?? "none"}`, 13);
   const { data: issues = [], isLoading } = useIssues(root);
-  const update = useUpdateState();
-  // Only show columns that have issues (empty columns wasted ~200px each and
-  // pushed the populated ones off-screen with no scroll affordance). If the
-  // board is totally empty we still show the default set so it reads as a board.
-  const allColumns = STATE_ORDER.filter((s) => s !== "cancelled");
-  const columns = (() => {
-    const nonEmpty = allColumns.filter((s) => issues.some((i) => i.state === s));
-    return nonEmpty.length > 0 ? nonEmpty : allColumns;
-  })();
+  const [filters, setFilters] = useState<Filters>(emptyFilters);
+  const [view, setView] = useState<ViewKind>(() => (root ? readLS<ViewKind>(viewKey(root), "board") : "board"));
+  const [groupBy, setGroupBy] = useState<GroupBy>(() => (root ? readLS<GroupBy>(groupKey(root), "state") : "state"));
+
+  const setViewP = (v: ViewKind) => {
+    setView(v);
+    if (root) try { localStorage.setItem(viewKey(root), v); } catch { /* ignore */ }
+  };
+  const setGroupP = (g: GroupBy) => {
+    setGroupBy(g);
+    if (root) try { localStorage.setItem(groupKey(root), g); } catch { /* ignore */ }
+  };
+
+  const filtered = useMemo(() => applyFilters(issues, filters), [issues, filters]);
 
   const workOn = async (issue: IssueSummary) => {
-    // Ensure the repo has the hive MCP + hive-work skill so claude can actually
-    // work the issue (idempotent — installs on first use). Status is owned by
-    // the AGENT via the skill (in_progress on pickup → in_review/done/blocked).
+    // Ensure the repo has the hive MCP + work skill (idempotent), then spawn claude
+    // with the work prompt attached (delivered once it's ready — see claude-bus).
     const repoDir = root ? root.replace(/\/\.hivemind\/?$/, "") : null;
     if (repoDir) {
       try { await window.hive.installAgentic(repoDir); } catch { /* best-effort */ }
     }
-    // Spawn claude with the work prompt ATTACHED — it delivers it to itself once
-    // ready (survives the workspace picker; no startup race). See claude-bus.
     const work = `Work on ${issue.id}: load it via hive_get_issue, complete the acceptance criteria, and end with hive_set_state. Title: "${issue.title}".`;
     window.dispatchEvent(new CustomEvent("hivemind:deliver-to-claude", { detail: { text: work } }));
   };
@@ -102,98 +138,72 @@ export function IssuesTile({ root, onClose }: Props) {
         </button>
       </div>
 
-      <div className="flex-1 overflow-auto p-2" style={{ zoom: font.size / 13 }}>
-        {!root ? (
-          <TileEmpty
-            icon={<FolderGit2 size={26} strokeWidth={1.5} />}
-            title="No workspace"
-            hint="Open a project with a .hivemind/ folder to start tracking issues."
+      {!root ? (
+        <TileEmpty
+          icon={<FolderGit2 size={26} strokeWidth={1.5} />}
+          title="No workspace"
+          hint="Open a project with a .hivemind/ folder to start tracking issues."
+        />
+      ) : isLoading ? (
+        <div className="flex-1 grid place-items-center text-[11.5px] text-[var(--color-fg2)]">
+          <span className="flex items-center gap-2"><span className="hm-spinner" aria-hidden />Loading issues…</span>
+        </div>
+      ) : (
+        <>
+          <FilterBar
+            issues={issues}
+            filters={filters}
+            onChange={setFilters}
+            rightSlot={
+              <>
+                <GroupByMenu value={groupBy} onChange={setGroupP} />
+                <ViewSwitcher value={view} onChange={setViewP} views={["board", "list"]} />
+                <button
+                  onClick={() => window.dispatchEvent(new CustomEvent("hivemind:new-issue"))}
+                  className="nodrag inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11.5px] font-medium text-white bg-[var(--color-brand)] hover:opacity-90 cursor-pointer"
+                >
+                  + New
+                </button>
+              </>
+            }
           />
-        ) : isLoading ? (
-          <div className="h-full grid place-items-center text-[11.5px] text-[var(--color-fg2)]">
-            <span className="flex items-center gap-2"><span className="hm-spinner" aria-hidden />Loading issues…</span>
-          </div>
-        ) : issues.length === 0 ? (
-          <TileEmpty
-            icon={<Inbox size={26} strokeWidth={1.5} />}
-            title="No issues yet"
-            hint="Create your first issue to plan work and hand it to an agent."
-            action={{ label: "New issue", onClick: () => window.dispatchEvent(new CustomEvent("hivemind:new-issue")) }}
-          />
-        ) : (
-          <div className="flex gap-2 min-w-fit h-full">
-            {columns.map((state) => {
-              const items = issues.filter((i) => i.state === state);
-              return (
-                <div key={state} className="flex flex-col w-[200px] shrink-0">
-                  <div className="flex items-center gap-1.5 px-1.5 py-1 text-[10.5px] font-mono text-[var(--color-fg2)]">
-                    <StateIcon state={state} size={12} />
-                    <span>{STATE_LABEL[state]}</span>
-                    <span className="text-[var(--color-fg3)] tabular-nums">{items.length}</span>
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    {items.map((issue) => (
-                      <IssueCard key={issue.id} issue={issue} root={root} columns={allColumns} onChangeState={(s) => root && update.mutate({ root, id: issue.id, state: s, note: `moved to ${s} via canvas` })} onWork={() => workOn(issue)} />
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function IssueCard({
-  issue,
-  root,
-  columns,
-  onChangeState,
-  onWork,
-}: {
-  issue: IssueSummary;
-  root: string;
-  columns: IssueState[];
-  onChangeState: (s: IssueState) => void;
-  onWork: () => void;
-}) {
-  // Carry THIS tile's root — it's authoritative (the tile read the issue from
-  // it). Without it the peek re-guesses the root via the workspace registry,
-  // which misses for unregistered repos / shared prefixes → "issue not found".
-  const open = () => window.dispatchEvent(new CustomEvent("hivemind:open-issue", { detail: { id: issue.id, root } }));
-  return (
-    <div
-      role="button"
-      tabIndex={0}
-      aria-label={`Open issue ${issue.id}`}
-      className="nodrag group rounded-md border border-[var(--color-line2)] bg-[var(--color-bg3)] p-2.5 cursor-pointer hover:border-[var(--color-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-brand)] transition-colors"
-      onClick={open}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } }}
-      title={`open ${issue.id}`}
-    >
-      <div className="flex items-center gap-1.5">
-        <span className="font-mono text-[11px] text-[var(--color-fg2)] tabular-nums">{issue.id}</span>
-        <button
-          className="nodrag ml-auto inline-flex items-center gap-1 opacity-90 group-hover:opacity-100 transition-opacity text-[11px] px-1.5 py-1 rounded-md text-white bg-[var(--color-brand)] hover:opacity-90 cursor-pointer"
-          aria-label={`Spawn claude to work on ${issue.id}`}
-          title="spawn claude + work on this"
-          onClick={(e) => { e.stopPropagation(); onWork(); }}
-        ><Play size={8} fill="currentColor" strokeWidth={0} aria-hidden />work</button>
-      </div>
-      <div className="mt-1.5 text-[11.5px] text-[var(--color-fg)] leading-snug line-clamp-3">{issue.title}</div>
-      <select
-        value={issue.state}
-        aria-label={`State of ${issue.id}`}
-        onClick={(e) => e.stopPropagation()}
-        onChange={(e) => onChangeState(e.target.value as IssueState)}
-        className="nodrag mt-2 w-full bg-[var(--color-bg)] border border-[var(--color-line2)] rounded-md text-[11px] font-mono text-[var(--color-fg2)] px-1.5 py-1 outline-none cursor-pointer"
-      >
-        {columns.map((s) => (
-          <option key={s} value={s}>{STATE_LABEL[s]}</option>
-        ))}
-      </select>
+          {issues.length === 0 ? (
+            <TileEmpty
+              icon={<Inbox size={26} strokeWidth={1.5} />}
+              title="No issues yet"
+              hint="Create your first issue to plan work and hand it to an agent."
+              action={{ label: "New issue", onClick: () => window.dispatchEvent(new CustomEvent("hivemind:new-issue")) }}
+            />
+          ) : filtered.length === 0 ? (
+            <TileEmpty
+              icon={<Inbox size={26} strokeWidth={1.5} />}
+              title="No matches"
+              hint="No issues match the current filters."
+            />
+          ) : (
+            <div className="flex-1 overflow-auto p-2" style={{ zoom: font.size / 13 }}>
+              {view === "board" ? (
+                <BoardView
+                  issues={filtered}
+                  root={root}
+                  groupBy={groupBy}
+                  showCancelled={filters.showCancelled}
+                  selected={selected}
+                  onWork={workOn}
+                />
+              ) : (
+                <ListView
+                  issues={filtered}
+                  root={root}
+                  groupBy={groupBy}
+                  showCancelled={filters.showCancelled}
+                  onWork={workOn}
+                />
+              )}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

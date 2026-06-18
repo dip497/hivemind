@@ -29,6 +29,27 @@ export interface ClaudeResumeDeps {
   legacyMapFile?: string;
   /** Node/electron-as-node binary that runs the tracker hook (process.execPath). */
   execPath: string;
+  /** Absolute path to the generated plan-review hook `.cjs` (daemon writes it).
+   *  When set together with `planBridgeSock`, a PreToolUse(ExitPlanMode) hook is
+   *  injected so plan handoffs open the in-canvas review. Omit to disable. */
+  planHookPath?: string;
+  /** The plan-bridge unix socket the hook connects to (owned by Electron main). */
+  planBridgeSock?: string;
+  /** Absolute path to the generated HCP Stop hook `.cjs` (daemon writes it). With
+   *  `hcpSock`, injects a Stop hook so finished turns are reported to the control
+   *  plane (deterministic agent.read). */
+  stopHookPath?: string;
+  /** The HCP control-plane unix socket (owned by Electron main). Injected into
+   *  the agent's env as HIVE_HCP_SOCK so its hive MCP can drive the canvas. */
+  hcpSock?: string;
+  /** The HCP capability token, injected as HCP_TOKEN so the agent's MCP is
+   *  authorized to call the control plane. */
+  hcpToken?: string;
+  /** Absolute path to the generated permission-broker hook `.cjs` (daemon writes
+   *  it). With `hcpSock`, a PreToolUse hook is injected ONLY for workers whose
+   *  spawn env carries `HIVE_SUPERVISE` — it brokers their tool-permission
+   *  decisions to the spawning agent (see hcp/approval-hook-source.ts). */
+  approvalHookPath?: string;
 }
 
 const isClaude = (spec: SpawnSpec): boolean => (spec.cmd ?? "").split("/").pop() === "claude";
@@ -43,18 +64,74 @@ export function shq(s: string): string {
 }
 
 /** The merged hooks settings JSON for a tile. claude MERGES this with the
- *  project's own hooks (doesn't clobber e.g. claude-mem). One hook:
+ *  project's own hooks (doesn't clobber e.g. claude-mem). Hooks:
  *   - SessionStart → records the tile's live session id (resume tracking).
+ *   - PreToolUse(ExitPlanMode) → opens the in-canvas plan review and blocks the
+ *     handoff until the user approves / requests changes (only when the
+ *     plan-bridge paths are supplied).
  *  OS notifications are driven separately off the renderer's agent-status bus
  *  (multi-agent, transition-deduped) — see agent-notify.ts — not a claude hook. */
-export function trackerSettings(deps: ClaudeResumeDeps, id: string): string {
+export function trackerSettings(deps: ClaudeResumeDeps, id: string, supervise?: string): string {
   const sessionCmd =
     `HIVEMIND_TILE=${shq(id)} ELECTRON_RUN_AS_NODE=1 ` +
     `${shq(deps.execPath)} ${shq(deps.trackerPath)} ${shq(deps.tileSessionsDir)}`;
   const hooks: Record<string, unknown[]> = {
     SessionStart: [{ hooks: [{ type: "command", command: sessionCmd }] }],
   };
+  const preToolUse: unknown[] = [];
+  if (deps.planHookPath && deps.planBridgeSock) {
+    const planCmd =
+      `HIVEMIND_TILE=${shq(id)} ELECTRON_RUN_AS_NODE=1 ` +
+      `${shq(deps.execPath)} ${shq(deps.planHookPath)} ${shq(deps.planBridgeSock)}`;
+    // `timeout` is SECONDS (Claude Code hook contract). 345600 = 96h, so a long
+    // review never trips the hook timeout — same value plannotator uses.
+    preToolUse.push(
+      { matcher: "ExitPlanMode", hooks: [{ type: "command", command: planCmd, timeout: 345600 }] },
+    );
+  }
+  // Permission broker — ONLY for supervised workers (the spawn env carries
+  // HIVE_SUPERVISE). Brokers their tool-permission decisions to the spawning
+  // agent. Matcher scopes which tools are brokered ("all" → every tool); the
+  // hook double-checks HIVE_SUPERVISE and fails safe to the normal prompt.
+  if (deps.approvalHookPath && deps.hcpSock && supervise) {
+    const apCmd =
+      `HIVEMIND_TILE=${shq(id)} HIVE_SUPERVISE=${shq(supervise)} ELECTRON_RUN_AS_NODE=1 ` +
+      `${shq(deps.execPath)} ${shq(deps.approvalHookPath)} ${shq(deps.hcpSock)}`;
+    const matcher = supervise === "all" ? "*" : supervise.split(",").map((s) => s.trim()).filter(Boolean).join("|");
+    // 600s ceiling: a supervisor has up to ~9min to answer (the hook's own
+    // timeout falls through to the normal prompt before this trips).
+    preToolUse.push({ matcher, hooks: [{ type: "command", command: apCmd, timeout: 600 }] });
+  }
+  if (preToolUse.length) hooks.PreToolUse = preToolUse;
+  if (deps.stopHookPath && deps.hcpSock) {
+    // Reports a finished turn to HCP (deterministic agent.read). Does not block
+    // the stop — the agent ends normally; a short hook timeout bounds a hung app.
+    const stopCmd =
+      `HIVEMIND_TILE=${shq(id)} ELECTRON_RUN_AS_NODE=1 ` +
+      `${shq(deps.execPath)} ${shq(deps.stopHookPath)} ${shq(deps.hcpSock)}`;
+    hooks.Stop = [{ hooks: [{ type: "command", command: stopCmd, timeout: 10 }] }];
+  }
   return JSON.stringify({ hooks });
+}
+
+/** The HCP env injected into a spawned claude so its hive MCP can drive the
+ *  control plane: the socket path + capability token + this agent's own tile id
+ *  (so spawns/sends from this agent default to ITS frame) + its spawn depth
+ *  (for the anti-fork-bomb gate). */
+function hcpEnv(deps: ClaudeResumeDeps, spec: SpawnSpec, id: string): Record<string, string> | undefined {
+  if (!deps.hcpSock || !deps.hcpToken) return spec.env;
+  return {
+    ...spec.env,
+    HIVE_HCP_SOCK: deps.hcpSock,
+    HCP_TOKEN: deps.hcpToken,
+    // The agent's OWN tile id — so its hive_spawn_agent/hive_send default to the
+    // frame it lives in (the hook command sets HIVEMIND_TILE only for the hook
+    // subprocess; the agent process itself needs it too).
+    HIVEMIND_TILE: id,
+    // Top-level (user-spawned) agents are depth 0. HCP-spawned children get an
+    // incremented value once spawn-env threading lands (Phase 2); default 0.
+    HIVE_AGENT_DEPTH: spec.env?.HIVE_AGENT_DEPTH ?? "0",
+  };
 }
 
 /** Prepend our merged `--settings` (tracker hook) to a claude spec. Idempotent;
@@ -62,8 +139,11 @@ export function trackerSettings(deps: ClaudeResumeDeps, id: string): string {
 export function withTracker(deps: ClaudeResumeDeps, spec: SpawnSpec, id: string): SpawnSpec {
   if (!isClaude(spec)) return spec;
   const args = spec.args ?? [];
-  if (args.includes("--settings")) return spec;
-  return { ...spec, args: ["--settings", trackerSettings(deps, id), ...args] };
+  // Supervision policy rides the spawn env (set by main's ptySpawn for an agent
+  // spawned with `supervise`); gates the permission-broker hook injection.
+  const supervise = spec.env?.HIVE_SUPERVISE;
+  if (args.includes("--settings")) return { ...spec, env: hcpEnv(deps, spec, id) };
+  return { ...spec, args: ["--settings", trackerSettings(deps, id, supervise), ...args], env: hcpEnv(deps, spec, id) };
 }
 
 /** The live session id the tile is currently in (per-tile file, legacy map

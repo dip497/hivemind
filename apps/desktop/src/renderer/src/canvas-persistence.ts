@@ -28,6 +28,12 @@ export interface TileInstance {
   args?: string[];
   /** browser only — last/initial URL so the tile restores where it was. */
   url?: string;
+  /** planReview only — the live plan handoff this tile is reviewing. Ephemeral:
+   *  tied to a blocked agent hook, so planReview tiles are NEVER persisted (a
+   *  reloaded requestId is dead — the hook already failed open). `requestId`
+   *  routes the decision to the plan-bridge hook; `hcpCmdId` routes it to a
+   *  blocked HCP `review.open` caller instead (one or the other is set). */
+  review?: { requestId?: string; plan: string; cwd: string; hcpCmdId?: string; agentTileId?: string };
 }
 
 export interface FrameState {
@@ -203,8 +209,13 @@ export function loadLayout(repoPath: string | null): PersistedLayout {
  *  the beforeunload flush both call this, so the blob shape lives in one place. */
 export function saveLayout(repoPath: string | null, snap: LayoutSnapshot): void {
   if (typeof window === "undefined" || !repoPath) return;
+  // planReview tiles are ephemeral (tied to a live, blocked agent hook) — drop
+  // them so a reload doesn't resurrect a dead review with a stale requestId.
+  const persisted: LayoutSnapshot = snap.tiles
+    ? { ...snap, tiles: snap.tiles.filter((t) => t.kind !== "planReview") }
+    : snap;
   try {
-    window.localStorage.setItem(LAYOUT_KEY(repoPath), JSON.stringify(snap));
+    window.localStorage.setItem(LAYOUT_KEY(repoPath), JSON.stringify(persisted));
   } catch {
     // QuotaExceeded / private-mode etc — swallow; layout is best-effort.
   }

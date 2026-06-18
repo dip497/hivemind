@@ -25,10 +25,32 @@ import {
   type SpawnSpec,
   type SessionSnapshot,
 } from "../../src/main/pty-session-manager.ts";
-import { makeClaudeResumeTransforms, type ClaudeResumeTransforms } from "../../src/main/claude-resume.ts";
+import { makeClaudeResumeTransforms, trackerSettings, type ClaudeResumeTransforms } from "../../src/main/claude-resume.ts";
 import { trackerSource, readTrackedSession } from "../../src/main/tile-session-store.ts";
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+test("trackerSettings: injects the permission-broker hook ONLY when supervised", () => {
+  const deps = {
+    trackerPath: "/x/tracker.cjs", tileSessionsDir: "/x/sess", execPath: "/x/node",
+    approvalHookPath: "/x/approval.cjs", hcpSock: "/x/hcp.sock",
+  };
+  // No supervise → no approval hook (PreToolUse absent without a plan hook either).
+  const plain = JSON.parse(trackerSettings(deps, "t1"));
+  assert.equal(plain.hooks.PreToolUse, undefined);
+  // Supervised with a tool list → a PreToolUse entry matching those tools, whose
+  // command runs the approval hook against the HCP socket with HIVE_SUPERVISE set.
+  const sup = JSON.parse(trackerSettings(deps, "t1", "Bash,Write"));
+  const entry = sup.hooks.PreToolUse.find((e: { matcher: string }) => e.matcher === "Bash|Write");
+  assert.ok(entry, "approval hook entry present with the brokered-tools matcher");
+  const cmd = entry.hooks[0].command as string;
+  assert.match(cmd, /HIVE_SUPERVISE=/);
+  assert.match(cmd, /approval\.cjs/);
+  assert.match(cmd, /hcp\.sock/);
+  // "all" → matcher "*".
+  const all = JSON.parse(trackerSettings(deps, "t1", "all"));
+  assert.ok(all.hooks.PreToolUse.some((e: { matcher: string }) => e.matcher === "*"));
+});
 const client = () => ({ onData: () => {}, onExit: () => {} });
 const liveSpec = (cwd: string): SpawnSpec => ({ cwd, cmd: "claude", args: [], cols: 80, rows: 24 });
 const argVal = (p: FakeClaude | undefined, flag: string): string | undefined => {

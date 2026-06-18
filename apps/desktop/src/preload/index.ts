@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { HiveIpc, DiffScope, WorktreeCreateOpts } from "../shared/ipc.js";
+import type { HiveIpc, DiffScope, WorktreeCreateOpts, PlanReviewOpen, HcpCommand, HcpPipeEvent, HcpWaitEvent } from "../shared/ipc.js";
 
 const api: HiveIpc & {
   onPtyData: (tileId: string, cb: (data: string) => void) => () => void;
@@ -16,6 +16,11 @@ const api: HiveIpc & {
   getLaunchTarget: () => Promise<string | null>;
   onOpenProject: (cb: (path: string) => void) => () => void;
   onBrowserPopup: (cb: (p: { fromId: number; url: string }) => void) => () => void;
+  onPlanReviewOpen: (cb: (p: PlanReviewOpen) => void) => () => void;
+  onPlanReviewAbort: (cb: (requestId: string) => void) => () => void;
+  onHcpCommand: (cb: (cmd: HcpCommand) => void) => () => void;
+  onHcpPipe: (cb: (e: HcpPipeEvent) => void) => () => void;
+  onHcpWait: (cb: (e: HcpWaitEvent) => void) => () => void;
 } = {
   resolveProject: (rootHint) => ipcRenderer.invoke("resolveProject", rootHint),
   pickProjectFolder: () => ipcRenderer.invoke("pickProjectFolder"),
@@ -61,6 +66,7 @@ const api: HiveIpc & {
   fileRead: (repoPath, relPath) => ipcRenderer.invoke("fileRead", repoPath, relPath),
   fileWrite: (repoPath, relPath, contents) =>
     ipcRenderer.invoke("fileWrite", repoPath, relPath, contents),
+  openPathInApp: (cwd, target) => ipcRenderer.invoke("openPathInApp", cwd, target),
 
   diagLog: (line) => ipcRenderer.invoke("diagLog", line),
 
@@ -138,6 +144,39 @@ const api: HiveIpc & {
     const listener = (_e: unknown, p: string) => cb(p);
     ipcRenderer.on("open-project", listener);
     return () => ipcRenderer.removeListener("open-project", listener);
+  },
+
+  // Plan review: an agent handed off a plan → open the in-canvas review.
+  planReviewDecide: (requestId, decision, feedback) =>
+    ipcRenderer.invoke("plan-review:decide", requestId, decision, feedback),
+  onPlanReviewOpen: (cb: (p: PlanReviewOpen) => void) => {
+    const listener = (_e: unknown, p: PlanReviewOpen) => cb(p);
+    ipcRenderer.on("plan-review:open", listener);
+    return () => ipcRenderer.removeListener("plan-review:open", listener);
+  },
+  onPlanReviewAbort: (cb: (requestId: string) => void) => {
+    const listener = (_e: unknown, id: string) => cb(id);
+    ipcRenderer.on("plan-review:abort", listener);
+    return () => ipcRenderer.removeListener("plan-review:abort", listener);
+  },
+
+  // HCP control plane: main pushes a canvas verb → renderer executes → replies.
+  hcpResult: (id, ok, result, errorMessage) =>
+    ipcRenderer.invoke("hcp:result", id, ok, result, errorMessage),
+  onHcpCommand: (cb: (cmd: HcpCommand) => void) => {
+    const listener = (_e: unknown, cmd: HcpCommand) => cb(cmd);
+    ipcRenderer.on("hcp:command", listener);
+    return () => ipcRenderer.removeListener("hcp:command", listener);
+  },
+  onHcpPipe: (cb: (e: HcpPipeEvent) => void) => {
+    const listener = (_e: unknown, ev: HcpPipeEvent) => cb(ev);
+    ipcRenderer.on("hcp:pipe", listener);
+    return () => ipcRenderer.removeListener("hcp:pipe", listener);
+  },
+  onHcpWait: (cb: (e: HcpWaitEvent) => void) => {
+    const listener = (_e: unknown, ev: HcpWaitEvent) => cb(ev);
+    ipcRenderer.on("hcp:wait", listener);
+    return () => ipcRenderer.removeListener("hcp:wait", listener);
   },
 };
 

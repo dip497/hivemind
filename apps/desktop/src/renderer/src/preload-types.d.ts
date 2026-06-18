@@ -1,8 +1,18 @@
-import type { HiveIpc } from "../../shared/ipc";
+import type { HiveIpc, PlanReviewOpen, HcpCommand, HcpPipeEvent, HcpWaitEvent } from "../../shared/ipc";
 
 declare global {
   interface Window {
     hive: HiveIpc & {
+      /** An agent handed off a plan (PreToolUse/ExitPlanMode) → open the review. */
+      onPlanReviewOpen: (cb: (p: PlanReviewOpen) => void) => () => void;
+      /** The agent/hook went away before a decision → close the review tile. */
+      onPlanReviewAbort: (cb: (requestId: string) => void) => () => void;
+      /** Main asks the renderer to run a control-plane canvas verb (HCP). */
+      onHcpCommand: (cb: (cmd: HcpCommand) => void) => () => void;
+      /** An agent pipe was created/removed → draw/erase the data-flow edge. */
+      onHcpPipe: (cb: (e: HcpPipeEvent) => void) => () => void;
+      /** A tile entered/left a control-plane "wait" state (e.g. awaiting approval). */
+      onHcpWait: (cb: (e: HcpWaitEvent) => void) => () => void;
       onPtyData: (tileId: string, cb: (data: string) => void) => () => void;
       onPtyExit: (
         tileId: string,

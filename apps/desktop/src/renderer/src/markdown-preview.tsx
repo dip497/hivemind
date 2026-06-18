@@ -72,7 +72,15 @@ async function renderMermaid(container: HTMLElement, alive: () => boolean): Prom
   }
 }
 
-export function MarkdownPreview({ source }: { source: string }) {
+export function MarkdownPreview({
+  source,
+  className = "md-preview nowheel absolute inset-0 h-full w-full overflow-auto px-6 py-4",
+}: {
+  source: string;
+  /** Override the container classes. Default = the editor's full-tile overlay;
+   *  callers embedding it inline (e.g. the issue peek) pass a flow `md-preview`. */
+  className?: string;
+}) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -88,10 +96,5 @@ export function MarkdownPreview({ source }: { source: string }) {
     };
   }, [source]);
 
-  return (
-    <div
-      ref={ref}
-      className="md-preview nowheel absolute inset-0 h-full w-full overflow-auto px-6 py-4"
-    />
-  );
+  return <div ref={ref} className={className} />;
 }

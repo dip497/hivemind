@@ -230,6 +230,25 @@ export function buildBaseNodes(ctx: NodeBuildCtx): Node[] {
         data: { tileId: t.id, frameId: frameOf[t.id] ?? null, url: t.url, onResize: onNodeResizeCommit, onClose: () => closeTile(t.id) },
         dragHandle: ".tile-drag-handle",
       };
+    } else if (t.kind === "planReview") {
+      // Ephemeral plan-handoff review (data carried on the tile's `review`).
+      // A malformed/absent review can't happen via the open path, but guard so
+      // a stale persisted tile never crashes the build.
+      const r = t.review ?? { plan: "", cwd: "" };
+      node = {
+        id: t.id,
+        type: "planReview",
+        style: sized(t.id, w, h),
+        data: {
+          requestId: r.requestId,
+          hcpCmdId: r.hcpCmdId,
+          plan: r.plan,
+          cwd: r.cwd,
+          onResize: onNodeResizeCommit,
+          onClose: () => closeTile(t.id),
+        },
+        dragHandle: ".tile-drag-handle",
+      };
     } else {
       // claude / shell — both render as a TerminalTile.
       const cmd = t.cmd ?? defaultShell().cmd;

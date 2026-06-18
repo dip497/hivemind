@@ -10,18 +10,18 @@ import {
   type Edge,
 } from "@xyflow/react";
 import { LayersPanel, type LayerTile, type LayerFrame } from "./LayersPanel";
-import type { TileStatusKind } from "./agent-status-bus";
+import { statusOf, setWaitStatus, type TileStatusKind } from "./agent-status-bus";
 import { queueWork } from "./claude-bus";
 import { FRAME_ROW_MAX, frameAtPoint } from "./frame-layout";
 import { ToolIsland, ZoomIsland } from "./canvas-islands";
 import { Toasts, CanvasEmptyState } from "./canvas-overlays";
 import { nodeTypes } from "./canvas-nodes";
+import { pipeEdgeTypes } from "./canvas-pipe-edge";
 import {
   snapViewportCrisp,
   FocusMode,
   FocusOnTile,
   PanMomentum,
-  SelectZoomReset,
   ViewportSnap,
   useTileFocus,
 } from "./canvas-camera";
@@ -107,6 +107,8 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // + `extras` list. Mirror to a ref so callbacks declared before later state
   // can read the latest list without re-creating on every change.
   const [tiles, setTiles, tilesRef] = useStateWithRef<TileInstance[]>(initial.tiles ?? []);
+  // Live agent pipes (HCP hive_connect) → animated data-flow edges. Ephemeral.
+  const [pipes, setPipes] = useState<{ src: string; dst: string }[]>([]);
   // Files opened in each editor tile — tabs keyed by editor tile id (repo-
   // relative paths, deduped). Each editor instance has its own tab set.
   const [editorTabs, setEditorTabs] = useState<Record<string, string[]>>(initial.editorTabs ?? {});
@@ -368,23 +370,29 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // works even when the node hasn't been DOM-measured yet OR is culled
   // off-screen — fitView on an unmeasured node centers on a 0×0 box and does
   // nothing, which is why freshly-spawned tiles weren't centering.
-  const [focusReq, setFocusReq] = useState<{ id: string; cx: number; cy: number; n: number; exact?: boolean } | null>(null);
+  const [focusReq, setFocusReq] = useState<{ id: string; cx: number; cy: number; w: number; h: number; n: number; exact?: boolean } | null>(null);
   const focusTile = useCallback(
     (id: string, opts?: { exact?: boolean }) => {
-      // Frame? center on its rect. Tile? center on pos + size.
+      // Frame? center on its rect. Tile? center on pos + size. w/h let the exact
+      // (100%) focus anchor a tile that's bigger than the viewport to its content
+      // corner instead of center-clipping it.
       const frame = framesRef.current.find((f) => f.id === id);
-      let cx: number, cy: number;
+      let cx: number, cy: number, w: number, h: number;
       if (frame) {
         cx = frame.x + frame.w / 2;
         cy = frame.y + frame.h / 2;
+        w = frame.w;
+        h = frame.h;
       } else {
         const p = positionsRef.current[id];
         if (!p) return;
         const s = sizesRef.current[id] ?? defaultTileSize(id);
         cx = p.x + s.width / 2;
         cy = p.y + s.height / 2;
+        w = s.width;
+        h = s.height;
       }
-      setFocusReq((prev) => ({ id, cx, cy, n: (prev?.n ?? 0) + 1, exact: opts?.exact }));
+      setFocusReq((prev) => ({ id, cx, cy, w, h, n: (prev?.n ?? 0) + 1, exact: opts?.exact }));
     },
     [],
   );
@@ -472,6 +480,9 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
       const owner = fo[t.id] ? frames.find((f) => f.id === fo[t.id]) : undefined;
       const effRepo = owner?.worktreePath ?? owner?.workspacePath ?? repoPath ?? null;
       if ((t.kind === "editor" || t.kind === "diff") && !effRepo) continue;
+      // planReview tiles are a live blocked agent waiting on your review — they
+      // DO belong in the Layers panel so you can navigate to them and see the
+      // "review" status (LayersPanel renders kind === "planReview" specially).
       const kind: LayerTile["kind"] = t.kind === "shell" ? "terminal" : t.kind;
       const agent = t.kind === "claude" ? (agentForCmd(t.cmd)?.id ?? "claude") : undefined;
       out.push({ id: t.id, kind, name: tileNames[t.id] ?? agentTitles[t.id] ?? t.label, frameId: fo[t.id] ?? null, agent });
@@ -480,10 +491,13 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   }, [tiles, repoPath, frameOf, frames, tileNames, agentTitles]);
   const focusTileFromPanel = useCallback((id: string) => {
     setSelectedTileId(id);
-    // Fit the tile to the screen. Selection stays accurate at any zoom (the
-    // zoom-aware mouse patch in terminal-mouse-patch.ts), so terminals no longer
-    // need to be pinned to 100% here.
-    focusTile(id);
+    // Clicking a tile in the Layers panel must focus it EXACTLY like clicking it
+    // on the canvas (onNodeClick) — not the older fit-to-screen zoom-out. Text
+    // tiles (terminal/shell/diff/editor) snap to 100% with the content-corner
+    // clamp; the rest get the framed focus. Mirrors the onNodeClick decision.
+    const kind = tilesRef.current.find((x) => x.id === id)?.kind;
+    const exact = kind === "claude" || kind === "shell" || kind === "diff" || kind === "editor";
+    focusTile(id, { exact });
   }, [focusTile]);
   const focusFrameFromPanel = useCallback((id: string) => {
     setSelectedFrameId(id);
@@ -536,13 +550,153 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // grown frame never overlaps a neighbour. We only pick the new tile's slot.
   // Tile spawning + in-frame placement (placeInFrame / ensureFrame / spawnTile
   // + spawnInto/spawnClaude/spawnVis/frameOpen). See useSpawn.
-  const { spawnTile, spawnClaude, spawnAgent, spawnVis, spawnInto, frameOpen } = useSpawn({
+  const { spawnTile, spawnClaude, spawnAgent, spawnVis, spawnInto, frameOpen, openPlanReview, hcpSpawnAgent } = useSpawn({
     repoPath, claudeMode,
     positionsRef, sizesRef, tilesRef, frameOfRef, framesRef, selectedFrameIdRef,
     selectedTileIdRef, repoPathRef, rootRef, lastActiveFrameRef, claudeSeqRef,
     setFrameOf, setPositions, setSelectedTileId, setFocusReq, setFrames,
     setSelectedFrameId, setTiles, setSpawnPick, focusTile,
   });
+
+  // Plan review: an agent hit ExitPlanMode → main's plan-bridge pushed the plan.
+  // Open a PlanReviewTile beside the agent (the tile decides and unblocks the
+  // hook via planReviewDecide). On abort (hook/agent gone) close the open tile.
+  useEffect(() => {
+    const offOpen = window.hive.onPlanReviewOpen((p) => {
+      openPlanReview({ requestId: p.requestId, plan: p.plan, cwd: p.cwd, agentTileId: p.tileId });
+    });
+    const offAbort = window.hive.onPlanReviewAbort((requestId) => {
+      const tile = tilesRef.current.find((t) => t.kind === "planReview" && t.review?.requestId === requestId);
+      if (tile) closeTile(tile.id);
+    });
+    return () => { offOpen(); offAbort(); };
+  }, [openPlanReview, closeTile]);
+
+  // HCP control plane: main forwards a canvas verb (e.g. tile.spawn_agent from an
+  // agent's hive MCP). Execute it via useSpawn and reply with the result/error.
+  useEffect(() => {
+    const off = window.hive.onHcpCommand(async (cmd) => {
+      try {
+        const p = (cmd.params ?? {}) as Record<string, unknown>;
+        switch (cmd.method) {
+          case "tile.spawn_agent": {
+            const tileId = hcpSpawnAgent(p as { agent?: string; prompt?: string; frame?: string; mode?: string; callerTile?: string });
+            await window.hive.hcpResult(cmd.id, true, { tileId });
+            break;
+          }
+          case "tile.list": {
+            // Resolve an optional frame filter (id → title → path basename →
+            // title substring), same precedence as spawn's frame targeting.
+            const resolveFrameId = (q: string): string | undefined => {
+              const fs = framesRef.current;
+              const lq = q.toLowerCase();
+              const base = (pp?: string) => pp?.split("/").filter(Boolean).pop()?.toLowerCase();
+              return (
+                fs.find((f) => f.id === q) ??
+                fs.find((f) => f.title.toLowerCase() === lq) ??
+                fs.find((f) => base(f.worktreePath) === lq || base(f.workspacePath) === lq) ??
+                fs.find((f) => f.title.toLowerCase().includes(lq))
+              )?.id;
+            };
+            const filterId = p.frame ? resolveFrameId(String(p.frame)) : undefined;
+            const mapTile = (t: typeof tilesRef.current[number]) => ({
+              tileId: t.id, kind: t.kind, label: t.label, status: statusOf(t.id),
+            });
+            const groupOf = (f: FrameState) => ({
+              frameId: f.id,
+              title: f.title,
+              repo: f.worktreePath ?? f.workspacePath ?? null,
+              branch: f.branch ?? null,
+              tiles: tilesRef.current.filter((t) => frameOfRef.current[t.id] === f.id).map(mapTile),
+            });
+            if (filterId) {
+              const f = framesRef.current.find((fr) => fr.id === filterId)!;
+              await window.hive.hcpResult(cmd.id, true, { frames: [groupOf(f)], loose: [] });
+              break;
+            }
+            // Drop empty frames; loose = tiles whose frame is unknown/missing.
+            const frameIds = new Set(framesRef.current.map((f) => f.id));
+            const frames = framesRef.current.map(groupOf).filter((g) => g.tiles.length > 0);
+            const loose = tilesRef.current
+              .filter((t) => { const fid = frameOfRef.current[t.id]; return !fid || !frameIds.has(fid); })
+              .map(mapTile);
+            await window.hive.hcpResult(cmd.id, true, { frames, loose });
+            break;
+          }
+          case "tile.list_frames": {
+            const frames = framesRef.current.map((f) => ({
+              id: f.id,
+              title: f.title,
+              repo: f.worktreePath ?? f.workspacePath ?? null,
+              branch: f.branch ?? null,
+              tiles: tilesRef.current.filter((t) => frameOfRef.current[t.id] === f.id).length,
+            }));
+            await window.hive.hcpResult(cmd.id, true, { frames });
+            break;
+          }
+          case "tile.focus": {
+            const id = String(p.tileId ?? "");
+            setSelectedTileId(id);
+            focusTile(id);
+            await window.hive.hcpResult(cmd.id, true, { ok: true });
+            break;
+          }
+          case "tile.close": {
+            closeTile(String(p.tileId ?? ""));
+            await window.hive.hcpResult(cmd.id, true, { ok: true });
+            break;
+          }
+          case "review.open": {
+            // Open the review tile carrying THIS command's id; the tile replies
+            // (hcpResult) on the user's decision — so do NOT reply here.
+            openPlanReview({ plan: String(p.plan ?? ""), cwd: String(p.cwd ?? ""), hcpCmdId: cmd.id });
+            break;
+          }
+          default:
+            await window.hive.hcpResult(cmd.id, false, undefined, `unknown renderer verb: ${cmd.method}`);
+        }
+      } catch (e) {
+        await window.hive.hcpResult(cmd.id, false, undefined, (e as Error)?.message ?? "renderer error");
+      }
+    });
+    return off;
+  }, [hcpSpawnAgent, focusTile, closeTile]);
+
+  // HCP pipes → animated data-flow edges. Add on connect; on disconnect remove
+  // the one edge (dst set) or all of src's edges (dst null).
+  useEffect(() => {
+    return window.hive.onHcpPipe((ev) => {
+      setPipes((cur) => {
+        if (ev.connected && ev.dst) {
+          if (cur.some((p) => p.src === ev.src && p.dst === ev.dst)) return cur;
+          return [...cur, { src: ev.src, dst: ev.dst }];
+        }
+        return cur.filter((p) => p.src !== ev.src || (ev.dst != null && p.dst !== ev.dst));
+      });
+    });
+  }, []);
+
+  // HCP "wait" states (control-plane derived: a supervised worker blocked on its
+  // parent's approval) → override the scrape on the status bus so the tile reads
+  // "waiting: approval" instead of a misleading "idle".
+  useEffect(() => {
+    return window.hive.onHcpWait((ev) => {
+      // ev.tileId is already the bare tile id (the status bus key).
+      setWaitStatus(ev.tileId, (ev.status as TileStatusKind | null) ?? null);
+    });
+  }, []);
+
+  // Plan-review wait: while a planReview tile is open for an agent, that agent is
+  // blocked on its ExitPlanMode handoff → mark it "waiting: review" (cleared when
+  // the plan tile closes). Diff against the previous set to set/clear precisely.
+  const planAgentsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const now = new Set<string>();
+    for (const t of tiles) if (t.kind === "planReview" && t.review?.agentTileId) now.add(t.review.agentTileId);
+    for (const a of now) if (!planAgentsRef.current.has(a)) setWaitStatus(a, "plan_review");
+    for (const a of planAgentsRef.current) if (!now.has(a)) setWaitStatus(a, null);
+    planAgentsRef.current = now;
+  }, [tiles]);
 
   // Deliver a prompt to claude with a TARGET PICKER. "Work on this" and the
   // diff "send review" fire `hivemind:deliver-to-claude` with the text; we route
@@ -617,7 +771,16 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
       return { ...n, selected: true, style: { ...(n.style ?? {}), zIndex: 1000 } };
     });
   }, [baseNodes, selectedTileId]);
-  const edges = EMPTY_EDGES;
+  // Agent pipes (hive_connect) → animated "data flow" edges. Main pushes
+  // connect/disconnect over "hcp:pipe"; we draw an edge per pipe whose endpoints
+  // both still exist as tiles (a closed tile's edge silently drops).
+  const edges = useMemo<Edge[]>(() => {
+    if (pipes.length === 0) return EMPTY_EDGES;
+    const ids = new Set(tiles.map((t) => t.id));
+    return pipes
+      .filter((p) => ids.has(p.src) && ids.has(p.dst))
+      .map((p) => ({ id: `flow-${p.src}-${p.dst}`, source: p.src, target: p.dst, type: "dataflow", zIndex: 2000 }));
+  }, [pipes, tiles]);
 
   // MiniMap is opt-in — its `pannable zoomable` re-renders every node mini-rect
   // on every pan/zoom frame, a real cost with several live tiles. Off by default.
@@ -645,9 +808,6 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // promoted to its own layer and a fractional transform would blur it.
   const [snapReq, setSnapReq] = useState(0);
   const bumpSnap = useCallback(() => setSnapReq((n) => n + 1), []);
-  // Bumped to reset zoom to exactly 100% when a terminal is selected (xterm
-  // selection/clicks are only pixel-accurate at zoom 1). Applied by SelectZoomReset.
-  const [selZoomReq, setSelZoomReq] = useState(0);
   const onMove = useCallback((_: unknown, vp: { x: number; y: number; zoom: number }) => {
     currentViewportRef.current = vp;
     if (inMomentumRef.current) return; // ignore self-generated moves
@@ -810,13 +970,27 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   });
   return (
     <div className="relative h-full w-full flex flex-col">
-      {/* Suppress the native context menu inside the canvas so RIGHT-mouse drag
-          pans (panOnDrag=[1,2]) instead of popping a menu that aborts the drag. */}
-      <div ref={flowWrapRef} className="relative flex-1 min-h-0" onContextMenu={(e) => e.preventDefault()}>
+      {/* t3code-style DOCKED layout: the Layers panel is a flex SIBLING of the
+          canvas (not an overlay), so the canvas sits BESIDE it and is never
+          occluded. Collapses to a narrow icon rail; both keep the canvas clear. */}
+      <div className="flex-1 min-h-0 flex flex-row">
+        {layerTiles.length > 0 && (
+          <LayersPanel
+            frames={layerFrames}
+            tiles={layerTiles}
+            selectedTileId={selectedTileId}
+            onFocusTile={focusTileFromPanel}
+            onFocusFrame={focusFrameFromPanel}
+          />
+        )}
+        {/* Suppress the native context menu inside the canvas so RIGHT-mouse drag
+            pans (panOnDrag=[1,2]) instead of popping a menu that aborts the drag. */}
+        <div ref={flowWrapRef} className="relative flex-1 min-h-0" onContextMenu={(e) => e.preventDefault()}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
           nodeTypes={nodeTypes}
+          edgeTypes={pipeEdgeTypes}
           defaultViewport={initial.viewport ?? DEFAULT_VIEWPORT}
           minZoom={0.25}
           maxZoom={2.5}
@@ -879,7 +1053,12 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
                   node.type === "editor" ||
                   node.type === "workbench"
                 ) {
-                  setSelZoomReq((n) => n + 1);
+                  // Snap to 100% AND frame the tile in one move. The old path only
+                  // zoomed to 1 around the VIEWPORT centre — if the tile wasn't
+                  // already centred it grew off-screen (the left columns/prompt
+                  // clipped). exact focus recentres on the tile (anchoring the
+                  // content corner when it's bigger than the viewport).
+                  focusTile(node.id, { exact: true });
                 }
               }
             }
@@ -926,7 +1105,6 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
           <FocusMode req={focusModeReq} />
           <PanMomentum req={momentumReq} activeRef={inMomentumRef} onSettle={bumpSnap} />
           <ViewportSnap req={snapReq} activeRef={inMomentumRef} />
-          <SelectZoomReset req={selZoomReq} />
 
           {/* Excalidraw-style floating tool island — top-center. */}
           <Panel position="top-center" className="!m-0 !mt-3">
@@ -1025,17 +1203,6 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
             </Panel>
           )}
         </ReactFlow>
-        {/* Figma-style layers rail — overlay (outside ReactFlow), only when
-            there's something to list. */}
-        {layerTiles.length > 0 && (
-          <LayersPanel
-            frames={layerFrames}
-            tiles={layerTiles}
-            selectedTileId={selectedTileId}
-            onFocusTile={focusTileFromPanel}
-            onFocusFrame={focusFrameFromPanel}
-          />
-        )}
         {isEmpty && (
           <CanvasEmptyState
             repoPath={repoPath}
@@ -1084,6 +1251,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
             </div>
           </div>
         )}
+      </div>
       </div>
     </div>
   );

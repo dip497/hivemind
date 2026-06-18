@@ -73,6 +73,10 @@ function doSpawn(opts: SpawnOpts): pty.IPty {
   });
 }
 
+/** Whether a live in-process pty exists for this id (HCP dead-tile detection). */
+export function hasSession(tileId: string): boolean {
+  return ptys.has(tileId);
+}
 export function writePty(tileId: string, data: string): void {
   const p = ptys.get(tileId);
   if (p) p.write(data);

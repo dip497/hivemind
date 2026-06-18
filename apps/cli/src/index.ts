@@ -22,6 +22,7 @@ import { agentCmd } from "./commands/agent.js";
 import { upgradeCmd } from "./commands/upgrade.js";
 import { resolveCmd } from "./commands/mention.js";
 import { mcpStdioCmd } from "./commands/mcp.js";
+import { ctlCmd } from "./commands/ctl.js";
 
 /**
  * Intercept `hive @ID` BEFORE citty sees argv — citty treats unknown
@@ -59,6 +60,7 @@ const main = defineCommand({
     upgrade: upgradeCmd,
     resolve: resolveCmd,
     "mcp-stdio": mcpStdioCmd,
+    ctl: ctlCmd,
   },
 });
 

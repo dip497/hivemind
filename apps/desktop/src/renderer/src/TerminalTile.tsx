@@ -3,6 +3,7 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { WebLinksAddon } from "@xterm/addon-web-links";
+import { registerFileLinks } from "./terminal-file-links";
 import { installCrispDpr, effectiveDpr } from "./terminal-dpr";
 import { patchTerminalMouseWithRetry } from "./terminal-mouse-patch";
 import { registerWebglSlotClient, unregisterWebglSlotClient, reconcileWebglSlots } from "./webgl-slots";
@@ -10,6 +11,7 @@ import { useTileFont, FontStepper, handleFontKey } from "./tile-font";
 import { identifyAgent, detectTileStatus, stabilizeClaudeStatus, normalizeAgentTitle, type TileStatus } from "./agent-state";
 import { registerClaude, unregisterClaude, shouldDeliver, claimWork, clearWork, type SendToClaudeDetail } from "./claude-bus";
 import { publishStatus, clearStatus, type TileStatusKind } from "./agent-status-bus";
+import { SUBMIT_DELAY_MS } from "../../shared/agent-io";
 import { Pencil, GripVertical } from "lucide-react";
 
 /** Open a terminal link in the OS browser. window.open is intercepted by main's
@@ -104,6 +106,10 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
   // Live `selected` for the WebGL slot manager's priority() (read outside render).
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
+  // Live cwd so the terminal file-link provider resolves relative paths against
+  // the tile's CURRENT cwd even after a frame rebind.
+  const cwdRef = useRef(cwd);
+  cwdRef.current = cwd;
   // Per-tile font size (A−/A+ + Ctrl/Cmd +/−/0). fontSizeRef gives the mount
   // effect the initial size; fontCtlRef lets the xterm key handler (a closure)
   // call the current inc/dec/reset.
@@ -289,6 +295,9 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
     // Make plain http(s) URLs in terminal output clickable (claude, build logs,
     // etc.) — single click opens in the OS browser.
     term.loadAddon(new WebLinksAddon((_e, uri) => openExternalLink(uri)));
+    // Make file PATHS clickable too (open in the OS default app) — WebLinksAddon
+    // only handles http(s) URLs. Disposed with the terminal on unmount.
+    registerFileLinks(term, () => cwdRef.current);
     const fit = new FitAddon();
     fitRef.current = fit;
     term.loadAddon(fit);
@@ -502,7 +511,13 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       const onSend = (e: Event) => {
         const detail = (e as CustomEvent<string | SendToClaudeDetail>).detail;
         const { deliver, text } = shouldDeliver(tileId, detail);
-        if (deliver && text) window.hive.ptyWrite(ptyId, text + "\n");
+        // Type the text, THEN press Enter as a SEPARATE keystroke a tick later.
+        // A single "text\n" write reaches claude's TUI before it has staged the
+        // paste, so the newline is dropped and the prompt sits unsubmitted.
+        if (deliver && text) {
+          window.hive.ptyWrite(ptyId, text);
+          setTimeout(() => window.hive.ptyWrite(ptyId, "\r"), SUBMIT_DELAY_MS);
+        }
       };
       window.addEventListener("hivemind:send-to-claude", onSend as EventListener);
       unsubClaude = () => {
@@ -566,7 +581,12 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
               // readiness instead of racing claude+MCP startup.
               if (isClaude && next === "idle") {
                 const work = claimWork(tileId);
-                if (work) window.hive.ptyWrite(ptyId, work + "\n");
+                // Type the prompt, then Enter as a separate keystroke (see the
+                // hivemind:send-to-claude handler above for why one write fails).
+                if (work) {
+                  window.hive.ptyWrite(ptyId, work);
+                  setTimeout(() => window.hive.ptyWrite(ptyId, "\r"), SUBMIT_DELAY_MS);
+                }
               }
             } catch { /* buffer not ready */ }
           }, 1200);

@@ -1,10 +1,9 @@
 /**
- * NewIssueModal — minimal create-issue form.
- *
- * Just title + state + description for v0. Labels/assignee/parent are out
- * of scope here; edit them in IssuePeek after create.
+ * NewIssueModal — create an issue with the full metadata the backend supports:
+ * title, state, description, labels, assignee, parent. Acceptance criteria are
+ * still added in the peek after create (kept out to keep this form quick).
  */
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -13,8 +12,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./ui/dialog";
-import { useCreateIssue } from "../queries";
-import type { IssueState } from "@hivemind/core/types";
+import { useCreateIssue, useIssues } from "../queries";
+import type { Assignee, IssueState } from "@hivemind/core/types";
+import { AssigneePicker, LabelPicker, ParentPicker } from "../issues/pickers";
 
 interface Props {
   root: string | null;
@@ -32,17 +32,46 @@ const STATES: { value: IssueState; label: string }[] = [
   { value: "done", label: "Done" },
 ];
 
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="grid gap-1">
+      <span className="u-eyebrow">{label}</span>
+      {children}
+    </div>
+  );
+}
+function PickerBox({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="bg-[var(--color-bg)] border border-[var(--color-line2)] rounded-md px-2.5 py-1.5 min-h-[34px] flex items-center">
+      {children}
+    </div>
+  );
+}
+
 export function NewIssueModal({ root, open, onOpenChange, onCreated }: Props) {
   const create = useCreateIssue();
+  const { data: allIssues = [] } = useIssues(root);
+  const allLabels = useMemo(() => Array.from(new Set(allIssues.flatMap((i) => i.labels))).sort(), [allIssues]);
+  const allAssignees = useMemo(
+    () => Array.from(new Set(allIssues.map((i) => i.assignee?.id).filter((x): x is string => !!x))).sort(),
+    [allIssues],
+  );
+
   const [title, setTitle] = useState("");
   const [state, setState] = useState<IssueState>("todo");
   const [description, setDescription] = useState("");
+  const [labels, setLabels] = useState<string[]>([]);
+  const [assignee, setAssignee] = useState<Assignee | null>(null);
+  const [parent, setParent] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
       setTitle("");
       setState("todo");
       setDescription("");
+      setLabels([]);
+      setAssignee(null);
+      setParent(null);
     }
   }, [open]);
 
@@ -56,6 +85,9 @@ export function NewIssueModal({ root, open, onOpenChange, onCreated }: Props) {
           title: title.trim(),
           state,
           description: description.trim() || undefined,
+          labels: labels.length ? labels : undefined,
+          assignee: assignee ?? undefined,
+          parent: parent ?? undefined,
         },
       },
       {
@@ -66,6 +98,9 @@ export function NewIssueModal({ root, open, onOpenChange, onCreated }: Props) {
       },
     );
   }
+
+  const inputCls =
+    "w-full bg-[var(--color-bg)] border border-[var(--color-line2)] rounded-md px-2.5 py-1.5 text-[13px] text-[var(--color-fg)] focus:outline-none focus:border-[var(--color-brand)] focus:ring-1 focus:ring-[var(--color-brand)]";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -79,41 +114,54 @@ export function NewIssueModal({ root, open, onOpenChange, onCreated }: Props) {
           </DialogHeader>
 
           <div className="grid gap-3 py-4">
-            <label className="grid gap-1">
-              <span className="u-eyebrow">Title</span>
+            <Field label="Title">
               <input
                 autoFocus
                 required
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="e.g. Fix flaky CDN cookie tests"
-                className="w-full bg-[var(--color-bg)] border border-[var(--color-line2)] rounded-md px-2.5 py-1.5 text-[13px] text-[var(--color-fg)] focus:outline-none focus:border-[var(--color-brand)] focus:ring-1 focus:ring-[var(--color-brand)]"
+                className={inputCls}
               />
-            </label>
+            </Field>
 
-            <label className="grid gap-1">
-              <span className="u-eyebrow">State</span>
-              <select
-                value={state}
-                onChange={(e) => setState(e.target.value as IssueState)}
-                className="w-full bg-[var(--color-bg)] border border-[var(--color-line2)] rounded-md px-2.5 py-1.5 text-[13px] text-[var(--color-fg)] focus:outline-none focus:border-[var(--color-brand)] focus:ring-1 focus:ring-[var(--color-brand)]"
-              >
-                {STATES.map((s) => (
-                  <option key={s.value} value={s.value}>{s.label}</option>
-                ))}
-              </select>
-            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="State">
+                <select value={state} onChange={(e) => setState(e.target.value as IssueState)} className={inputCls}>
+                  {STATES.map((s) => (
+                    <option key={s.value} value={s.value}>{s.label}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Assignee">
+                <PickerBox>
+                  <AssigneePicker value={assignee} allAssignees={allAssignees} onChange={setAssignee} />
+                </PickerBox>
+              </Field>
+            </div>
 
-            <label className="grid gap-1">
-              <span className="u-eyebrow">Description</span>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Labels">
+                <PickerBox>
+                  <LabelPicker value={labels} allLabels={allLabels} onChange={setLabels} />
+                </PickerBox>
+              </Field>
+              <Field label="Parent">
+                <PickerBox>
+                  <ParentPicker value={parent} candidates={allIssues} onChange={setParent} />
+                </PickerBox>
+              </Field>
+            </div>
+
+            <Field label="Description">
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Markdown. Acceptance criteria etc. can be added later."
+                placeholder="Markdown. Acceptance criteria can be added after create."
                 rows={5}
-                className="w-full bg-[var(--color-bg)] border border-[var(--color-line2)] rounded-md px-2.5 py-1.5 text-[13px] text-[var(--color-fg)] focus:outline-none focus:border-[var(--color-brand)] focus:ring-1 focus:ring-[var(--color-brand)] font-mono resize-y"
+                className={`${inputCls} font-mono resize-y`}
               />
-            </label>
+            </Field>
           </div>
 
           <DialogFooter>

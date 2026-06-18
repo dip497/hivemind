@@ -17,7 +17,7 @@ import type { TileKind } from "./tile-kinds";
 /** Kinds that are one-per-frame (spawn → focus existing). claude/shell are not. */
 const SINGLETON_KINDS: ReadonlySet<TileKind> = new Set(["editor", "diff", "issues"]);
 
-type FocusReq = { id: string; cx: number; cy: number; n: number } | null;
+type FocusReq = { id: string; cx: number; cy: number; w: number; h: number; n: number; exact?: boolean } | null;
 type SpawnPick = { kind: TileKind; mode?: string; work?: string; agent?: { id: string; cmd: string; args?: string[]; label: string } } | null;
 
 export interface SpawnCtx {
@@ -103,7 +103,7 @@ export function useSpawn(ctx: SpawnCtx) {
     // the animation twice). Center on the KNOWN coords directly (don't wait
     // for the positions ref to settle).
     setSelectedTileId(id);
-    setFocusReq((prev) => ({ id, cx: placeX + me.width / 2, cy: placeY + me.height / 2, n: (prev?.n ?? 0) + 1 }));
+    setFocusReq((prev) => ({ id, cx: placeX + me.width / 2, cy: placeY + me.height / 2, w: me.width, h: me.height, n: (prev?.n ?? 0) + 1 }));
   }, [repoPath]);
 
   // frame = workspace: EVERY tile lives in a frame, never loose on the canvas.
@@ -294,5 +294,96 @@ export function useSpawn(ctx: SpawnCtx) {
     spawnTile(k, frameId);
   }, [spawnTile]);
 
-  return { placeInFrame, ensureFrame, spawnTile, spawnInto, spawnClaude, spawnAgent, spawnVis, frameOpen };
+  // Open a plan-review tile for an agent's plan handoff. Places it in the SAME
+  // frame as the agent tile that produced the plan (so the review sits beside
+  // its terminal), falling back to the active frame. Returns the new tile id so
+  // the caller can close it on abort. Not a SINGLETON_KIND — several agents can
+  // be mid-review at once.
+  const openPlanReview = useCallback(
+    (payload: { requestId?: string; hcpCmdId?: string; plan: string; cwd: string; agentTileId?: string }): string => {
+      // agentTileId arrives as the agent's HIVEMIND_TILE, which is the PTY id
+      // (`hm:<tileId>`). frameOf is keyed by the bare tile id, so strip the
+      // `hm:` scope prefix before the lookup — otherwise it always misses and
+      // the review tile lands in the active/first frame (the wrong project).
+      const callerTile = payload.agentTileId?.startsWith("hm:")
+        ? payload.agentTileId.slice(3)
+        : payload.agentTileId;
+      const agentFrameId = callerTile ? frameOfRef.current[callerTile] : undefined;
+      const frame =
+        (agentFrameId ? framesRef.current.find((f) => f.id === agentFrameId) : undefined) ?? ensureFrame();
+      const newId = `tile-planReview-${Date.now()}`;
+      placeInFrame(newId, frame);
+      setTiles((cur) => [
+        ...cur,
+        {
+          id: newId,
+          kind: "planReview",
+          label: "Plan review",
+          review: { requestId: payload.requestId, hcpCmdId: payload.hcpCmdId, plan: payload.plan, cwd: payload.cwd, agentTileId: callerTile },
+        },
+      ]);
+      return newId;
+    },
+    [ensureFrame, placeInFrame],
+  );
+
+  // HCP control-plane spawn: create an agent tile and return its id so the
+  // caller (main, via the renderer command channel) can drive it. Mirrors the
+  // claude/registry-agent branch of spawnTile, plus prompt delivery via the
+  // claude-bus work queue. `agent` is a registry id ("claude", "codex", …).
+  const hcpSpawnAgent = useCallback(
+    (opts: { agent?: string; prompt?: string; frame?: string; mode?: string; callerTile?: string }): string => {
+      // Frame preference: explicit > the CALLER agent's frame (so a worker lands
+      // beside the agent that spawned it) > the active/first frame.
+      // The caller passes its HIVEMIND_TILE, which is the PTY id (`hm:<tileId>`
+      // for a persistent pty); frameOf is keyed by the bare tile id, so strip the
+      // `hm:` scope prefix before the lookup.
+      const callerTile = opts.callerTile?.startsWith("hm:") ? opts.callerTile.slice(3) : opts.callerTile;
+      const callerFrameId = callerTile ? frameOfRef.current[callerTile] : undefined;
+      // Resolve opts.frame (a frame id, repo/worktree name, or title) most-
+      // specific → loosest: exact id → case-insensitive title → worktree/
+      // workspace path basename → case-insensitive title substring. Falls
+      // through to the caller's frame, then ensureFrame().
+      const resolveFrame = (q: string): FrameState | undefined => {
+        const fs = framesRef.current;
+        const byId = fs.find((f) => f.id === q);
+        if (byId) return byId;
+        const lq = q.toLowerCase();
+        const byTitle = fs.find((f) => f.title.toLowerCase() === lq);
+        if (byTitle) return byTitle;
+        const base = (p?: string) => p?.split("/").filter(Boolean).pop()?.toLowerCase();
+        const byPath = fs.find((f) => base(f.worktreePath) === lq || base(f.workspacePath) === lq);
+        if (byPath) return byPath;
+        return fs.find((f) => f.title.toLowerCase().includes(lq));
+      };
+      const resolved = opts.frame ? resolveFrame(opts.frame) : undefined;
+      const callerFrame = callerFrameId ? framesRef.current.find((f) => f.id === callerFrameId) : undefined;
+      const frame = resolved ?? callerFrame ?? ensureFrame();
+      const n = ++claudeSeqRef.current;
+      const newId = `tile-claude-${Date.now()}`;
+      const reg = opts.agent && opts.agent !== "claude" ? agentById(opts.agent) : null;
+      let cmd: string;
+      let args: string[];
+      let label: string;
+      if (reg) {
+        cmd = reg.cmd;
+        args = reg.defaultArgs ?? [];
+        label = `${reg.label} #${n}`;
+      } else {
+        const m = opts.mode || claudeMode;
+        args = m === "bypassPermissions"
+          ? ["--dangerously-skip-permissions"]
+          : m && m !== "default" ? ["--permission-mode", m] : [];
+        cmd = "claude";
+        label = `claude #${n}${m && m !== "default" ? ` · ${m}` : ""}`;
+      }
+      placeInFrame(newId, frame);
+      setTiles((cur) => [...cur, { id: newId, kind: "claude", label, cmd, args }]);
+      if (opts.prompt) queueWork(newId, opts.prompt);
+      return newId;
+    },
+    [claudeMode, ensureFrame, placeInFrame],
+  );
+
+  return { placeInFrame, ensureFrame, spawnTile, spawnInto, spawnClaude, spawnAgent, spawnVis, frameOpen, openPlanReview, hcpSpawnAgent };
 }

@@ -55,6 +55,11 @@ export interface GitStatusSnapshot {
 export type DiffScope =
   | { kind: "working"; staged?: boolean }
   | { kind: "branch"; base?: string }
+  // Committed-but-not-pushed: the net diff of local commits ahead of the
+  // branch's remote tracking ref (`@{upstream}...HEAD`). Optional `base`
+  // overrides the auto-resolved upstream so this same scope serves future
+  // "ahead of <any ref>" reviews without a new variant.
+  | { kind: "unpushed"; base?: string }
   | { kind: "commit"; sha: string };
 
 export interface DiffPayload {
@@ -214,6 +219,9 @@ export interface HiveIpc {
   fileRead(repoPath: string, relPath: string): Promise<string>;
   /** Write UTF-8 contents to a repo-relative file. Rejects path traversal. */
   fileWrite(repoPath: string, relPath: string, contents: string): Promise<void>;
+  /** Open a path clicked in the terminal with the OS default app (xdg-open).
+   *  Resolves relatives against `cwd`; must exist; refuses `.desktop` + remote. */
+  openPathInApp(cwd: string, target: string): Promise<{ ok: boolean; error?: string }>;
 
   /** Append one diagnostics line to userData/render-diag.log (auto-rotated).
    *  Used by the terminal render-quality probe so blurry-text reports can be
@@ -288,6 +296,56 @@ export interface HiveIpc {
   setBrowserCdpEnabled(enabled: boolean): Promise<{ ok: true }>;
   /** Restart the app so a settings change that needs a fresh launch takes hold. */
   relaunchApp(): Promise<void>;
+
+  /** Resolve a blocked plan-review hook. allow → the agent proceeds with the
+   *  plan; deny + feedback → the agent stays in plan mode and revises. */
+  planReviewDecide(
+    requestId: string,
+    decision: "allow" | "deny",
+    feedback?: string,
+  ): Promise<void>;
+
+  /** Reply to a main→renderer HCP command (a control-plane verb that needs the
+   *  canvas, e.g. tile.spawn_agent). `id` correlates with the pushed command. */
+  hcpResult(id: string, ok: boolean, result?: unknown, errorMessage?: string): Promise<void>;
+}
+
+/** A control-plane verb main asks the renderer to execute (request-id correlated
+ *  with `hcpResult`). */
+export interface HcpCommand {
+  id: string;
+  method: string;
+  params: unknown;
+}
+
+/** Pushed main→renderer when an agent pipe is created/removed, so the canvas can
+ *  draw/erase the animated "data flow" edge. `dst` is null when ALL of src's
+ *  pipes were removed. */
+export interface HcpPipeEvent {
+  src: string;
+  dst: string | null;
+  connected: boolean;
+}
+
+/** Pushed main→renderer when a tile enters/leaves a control-plane "wait" state
+ *  (e.g. a supervised worker blocked on its parent's approval). `status` is a
+ *  TileStatusKind string, or null to clear. The renderer forwards it to the
+ *  agent-status bus as an override. */
+export interface HcpWaitEvent {
+  tileId: string;
+  status: string | null;
+}
+
+/** Pushed main→renderer when an agent hands off a plan (PreToolUse/ExitPlanMode).
+ *  The renderer opens a PlanReviewTile and later calls `planReviewDecide`. */
+export interface PlanReviewOpen {
+  requestId: string;
+  /** The agent tile that produced the plan (so the review opens beside it). */
+  tileId: string;
+  /** The plan markdown (Claude Code's `tool_input.plan`). */
+  plan: string;
+  /** The agent's cwd at handoff. */
+  cwd: string;
 }
 
 /** A notable agent-status transition worth a native OS notification. */

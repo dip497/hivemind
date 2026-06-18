@@ -37,13 +37,17 @@ const VIEWS: { key: ViewKind; label: string; icon: React.ReactNode }[] = [
 export function ViewSwitcher({
   value,
   onChange,
+  views,
 }: {
   value: ViewKind;
   onChange: (v: ViewKind) => void;
+  /** Restrict to a subset (e.g. ["board","list"]); defaults to all. */
+  views?: ViewKind[];
 }) {
+  const shown = views ? VIEWS.filter((v) => views.includes(v.key)) : VIEWS;
   return (
-    <div className="inline-flex items-center gap-0.5 p-0.5 bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-md">
-      {VIEWS.map((v) => {
+    <div className="nodrag inline-flex items-center gap-0.5 p-0.5 bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-md">
+      {shown.map((v) => {
         const active = v.key === value;
         return (
           <button

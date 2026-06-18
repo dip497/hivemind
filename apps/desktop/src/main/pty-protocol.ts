@@ -19,7 +19,9 @@ export type ClientMsg =
   | { t: "detach"; id: string }
   | { t: "kill"; id: string }
   | { t: "list"; reqId: string }
-  | { t: "ping"; reqId: string };
+  | { t: "ping"; reqId: string }
+  /** Ask the daemon to exit (used to replace a stale daemon after a rebuild). */
+  | { t: "shutdown" };
 
 /** daemon → client */
 export type ServerMsg =
@@ -27,7 +29,7 @@ export type ServerMsg =
   | { t: "data"; id: string; data: string }
   | { t: "exit"; id: string; code: number; signal: number | null }
   | { t: "sessions"; reqId: string; ids: string[] }
-  | { t: "pong"; reqId: string }
+  | { t: "pong"; reqId: string; buildStamp?: number }
   | { t: "error"; reqId?: string; message: string };
 
 export const SOCKET_NAME = "pty-daemon.sock";

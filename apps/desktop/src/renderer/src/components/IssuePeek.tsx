@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Play, FileQuestion, X } from "lucide-react";
 import type { AcceptanceItem, Issue, IssueState, LinkType } from "@hivemind/core/types";
 import {
   useCommentOnIssue,
   useDeleteIssue,
   useIssue,
+  useIssues,
   useLinkIssue,
   useMoveIssue,
   useUnlinkIssue,
@@ -12,14 +13,15 @@ import {
   useUpdateState,
   useWorkspaces,
 } from "../queries";
-import {
-  STATE_COLOR,
-  STATE_LABEL,
-  STATE_ORDER,
-  StateIcon,
-  LabelChip,
-  Avatar,
-} from "./StateMeta";
+import { STATE_COLOR, STATE_LABEL, STATE_ORDER, StateIcon } from "./StateMeta";
+import { AssigneePicker, LabelPicker, ParentPicker } from "../issues/pickers";
+import { SubIssueTree } from "../issues/SubIssueTree";
+
+// Lazy: marked + DOMPurify (+ mermaid on demand) load only when a description
+// actually renders. Reuses the editor's renderer.
+const MarkdownPreview = lazy(() =>
+  import("../markdown-preview").then((m) => ({ default: m.MarkdownPreview })),
+);
 
 interface Props {
   root: string | null;
@@ -35,6 +37,16 @@ export function IssuePeek({ root, id, onClose }: Props) {
   const del = useDeleteIssue();
   const ref = useRef<HTMLDivElement>(null);
 
+  // Workspace-wide issue list powers the editable pickers + sub-issue tree.
+  const { data: allIssues = [] } = useIssues(root);
+  const allLabels = useMemo(() => Array.from(new Set(allIssues.flatMap((i) => i.labels))).sort(), [allIssues]);
+  const allAssignees = useMemo(
+    () => Array.from(new Set(allIssues.map((i) => i.assignee?.id).filter((x): x is string => !!x))).sort(),
+    [allIssues],
+  );
+  const subIssues = useMemo(() => (id ? allIssues.filter((i) => i.parent === id) : []), [allIssues, id]);
+  const parentCandidates = useMemo(() => allIssues.filter((i) => i.id !== id), [allIssues, id]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // Don't close on Esc while typing into an input — let the field swallow it.
@@ -49,14 +61,14 @@ export function IssuePeek({ root, id, onClose }: Props) {
   if (!id) return null;
 
   return (
-    <div className="fixed inset-0 z-40 pointer-events-none">
+    <div className="fixed inset-0 z-40 pointer-events-none flex items-center justify-center p-6">
       <div
         onClick={onClose}
-        className="absolute inset-0 bg-black/40 pointer-events-auto animate-in fade-in duration-150"
+        className="absolute inset-0 bg-black/50 pointer-events-auto animate-in fade-in duration-150"
       />
-      <aside
+      <div
         ref={ref}
-        className="absolute right-0 top-0 h-full w-[560px] max-w-[80vw] bg-[var(--color-bg2)] border-l border-[var(--color-line)] flex flex-col pointer-events-auto shadow-2xl animate-in slide-in-from-right duration-200"
+        className="relative w-[900px] max-w-[92vw] h-[80vh] max-h-[820px] bg-[var(--color-bg2)] border border-[var(--color-line)] rounded-xl flex flex-col pointer-events-auto shadow-2xl overflow-hidden animate-in zoom-in-95 fade-in duration-200"
       >
         {isLoading ? (
           <div className="grid place-items-center h-full text-[var(--color-fg3)] text-[12px]">loading…</div>
@@ -149,8 +161,8 @@ export function IssuePeek({ root, id, onClose }: Props) {
                 </button>
               </div>
             </header>
-            <div className="flex-1 overflow-y-auto grid grid-cols-[1fr_220px]">
-              <div className="px-5 py-4 border-r border-[var(--color-line)] min-w-0">
+            <div className="flex-1 min-h-0 grid grid-cols-[1fr_280px]">
+              <div className="px-7 py-6 border-r border-[var(--color-line)] min-w-0 overflow-y-auto">
                 <EditableTitle
                   value={issue.title}
                   onSave={(v) => root && patch.mutate({ root, id: issue.id, patch: { title: v } })}
@@ -176,6 +188,11 @@ export function IssuePeek({ root, id, onClose }: Props) {
                     }
                   />
                 </Section>
+                {root && (
+                  <Section title="Sub-issues">
+                    <SubIssueTree root={root} parentId={issue.id} items={subIssues} />
+                  </Section>
+                )}
                 <Section title="Relations">
                   <RelationsSection root={root} issue={issue} onClose={onClose} />
                 </Section>
@@ -201,7 +218,7 @@ export function IssuePeek({ root, id, onClose }: Props) {
                   />
                 </Section>
               </div>
-              <aside className="px-4 py-4 space-y-3">
+              <aside className="px-5 py-6 space-y-4 overflow-y-auto bg-[var(--color-bg2)]">
                 <PropRow label="State">
                   <StateSelect
                     value={issue.state}
@@ -209,30 +226,25 @@ export function IssuePeek({ root, id, onClose }: Props) {
                   />
                 </PropRow>
                 <PropRow label="Assignee">
-                  {issue.assignee ? (
-                    <div className="flex items-center gap-1.5">
-                      <Avatar id={issue.assignee.id} size={18} />
-                      <span className="text-[12px] text-[var(--color-fg)] truncate">{issue.assignee.id}</span>
-                    </div>
-                  ) : (
-                    <span className="text-[11.5px] text-[var(--color-fg2)]">Unassigned</span>
-                  )}
+                  <AssigneePicker
+                    value={issue.assignee}
+                    allAssignees={allAssignees}
+                    onChange={(a) => root && patch.mutate({ root, id: issue.id, patch: { assignee: a } })}
+                  />
                 </PropRow>
                 <PropRow label="Parent">
-                  {issue.parent ? (
-                    <span className="font-mono text-[11px] text-[var(--color-fg)]">{issue.parent}</span>
-                  ) : (
-                    <span className="text-[11.5px] text-[var(--color-fg2)]">—</span>
-                  )}
+                  <ParentPicker
+                    value={issue.parent}
+                    candidates={parentCandidates}
+                    onChange={(p) => root && patch.mutate({ root, id: issue.id, patch: { parent: p } })}
+                  />
                 </PropRow>
                 <PropRow label="Labels">
-                  {issue.labels.length > 0 ? (
-                    <div className="flex flex-wrap gap-1">
-                      {issue.labels.map((l) => <LabelChip key={l} label={l} />)}
-                    </div>
-                  ) : (
-                    <span className="text-[11.5px] text-[var(--color-fg2)]">—</span>
-                  )}
+                  <LabelPicker
+                    value={issue.labels}
+                    allLabels={allLabels}
+                    onChange={(l) => root && patch.mutate({ root, id: issue.id, patch: { labels: l } })}
+                  />
                 </PropRow>
                 <PropRow label="Created">
                   <span className="text-[11.5px] text-[var(--color-fg2)]">{relTime(issue.created)}</span>
@@ -249,7 +261,7 @@ export function IssuePeek({ root, id, onClose }: Props) {
             </div>
           </>
         )}
-      </aside>
+      </div>
     </div>
   );
 }
@@ -313,40 +325,6 @@ function StateSelect({ value, onChange }: { value: IssueState; onChange: (s: Iss
   );
 }
 
-function Markdownish({ text }: { text: string }) {
-  // minimal markdown — paragraphs, bullets, code. No external dep.
-  const lines = text.trim().split("\n");
-  const blocks: React.ReactNode[] = [];
-  let para: string[] = [];
-  let ul: string[] = [];
-  const flush = () => {
-    if (para.length) {
-      blocks.push(<p key={blocks.length} className="text-[13px] text-[var(--color-fg)] leading-relaxed mb-2">{para.join(" ")}</p>);
-      para = [];
-    }
-    if (ul.length) {
-      blocks.push(
-        <ul key={blocks.length} className="list-disc pl-5 mb-2 space-y-1 text-[13px] text-[var(--color-fg)]">
-          {ul.map((b, i) => <li key={i}>{b}</li>)}
-        </ul>
-      );
-      ul = [];
-    }
-  };
-  for (const ln of lines) {
-    if (/^\s*[-*]\s/.test(ln)) {
-      if (para.length) flush();
-      ul.push(ln.replace(/^\s*[-*]\s/, ""));
-    } else if (!ln.trim()) {
-      flush();
-    } else {
-      if (ul.length) flush();
-      para.push(ln.trim());
-    }
-  }
-  flush();
-  return <div>{blocks}</div>;
-}
 
 // ── editable widgets ──────────────────────────────────────────────────
 
@@ -396,7 +374,9 @@ function EditableDescription({ value, onSave }: { value: string; onSave: (v: str
     return (
       <div className="group relative">
         {value.trim() ? (
-          <Markdownish text={value} />
+          <Suspense fallback={<p className="text-[11.5px] text-[var(--color-fg3)]">rendering…</p>}>
+            <MarkdownPreview source={value} className="md-preview" />
+          </Suspense>
         ) : (
           <p className="text-[12px] text-[var(--color-fg2)] italic">No description.</p>
         )}

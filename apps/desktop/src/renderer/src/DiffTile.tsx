@@ -72,22 +72,18 @@ import { normalizeComments, newCid, type ReviewComment } from "./diff-comments";
 
 interface Props {
   repoPath: string;
-  initialMode?: "working" | "branch";
+  initialMode?: Mode;
   initialBase?: string;
   onClose?: () => void;
 }
 
-type Mode = "working" | "branch";
+type Mode = "working" | "branch" | "unpushed";
 type Layout = "split" | "unified";
 type Overflow = "scroll" | "wrap";
 
 const COMMENTS_KEY_PREFIX = "hivemind:comments:";
 const VIEWED_KEY_PREFIX = "hivemind:viewed:";
 
-/** Per-file header height (px). Shared between the rendered <DiffHeader> and
- *  CodeView's `itemMetrics.diffHeaderHeight` so virtualization + sticky math
- *  match the actual DOM. */
-const HEADER_H = 34;
 
 function loadJson<T>(key: string, fallback: T): T {
   try {
@@ -101,6 +97,12 @@ function loadJson<T>(key: string, fallback: T): T {
 export function DiffTile({ repoPath, initialMode = "working", initialBase = "origin/main", onClose }: Props) {
   // Per-tile font size (A−/A+ + Ctrl/Cmd +/−/0) — overrides --diffs-font-size.
   const font = useTileFont(`diff:${repoPath}`, 13);
+  // Chrome (per-file headers + changed-files tree) scales WITH the code font so
+  // the whole diff grows together — A+/A− was only sizing the code glyphs, which
+  // left the headers/tree looking tiny next to large code. Kept ~15% smaller
+  // than the code (mirrors the stock 11px-chrome / 13px-code ratio).
+  const chromePx = Math.max(9, Math.round(font.size * 0.85));
+  const headerH = Math.round(chromePx * 3.1);
   const [mode, setMode] = useState<Mode>(initialMode);
   const [staged, setStaged] = useState(false);
   const [layout, setLayout] = useState<Layout>("split");
@@ -247,8 +249,12 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
   const workingItems = useWorkingItems(repoPath, mode === "working" ? status?.files ?? [] : [], staged);
   const branchScope: DiffScope = useMemo(() => ({ kind: "branch", base: initialBase }), [initialBase]);
   const branch = useBranchItems(repoPath, branchScope, mode === "branch");
+  // Committed-but-not-pushed: net diff of local commits ahead of @{upstream}.
+  const unpushedScope: DiffScope = useMemo(() => ({ kind: "unpushed" }), []);
+  const unpushed = useBranchItems(repoPath, unpushedScope, mode === "unpushed");
 
-  const rawBaseItems = mode === "working" ? workingItems.items : branch.items;
+  const revItems = mode === "unpushed" ? unpushed : branch;
+  const rawBaseItems = mode === "working" ? workingItems.items : revItems.items;
 
   // De-dupe by item id (`diff:<path>`). CodeView.addItem THROWS on a duplicate
   // id ("CodeView.addItem: duplicate id …") and that crashes the whole tile —
@@ -370,7 +376,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
       // px for the header slot and uses it for sticky-header positioning
       // (CodeView.js getStickyHeaderOffset). Mismatch ⇒ clipped / overlapping
       // rows, which is why the diff looked "incomplete" before.
-      itemMetrics: { diffHeaderHeight: HEADER_H },
+      itemMetrics: { diffHeaderHeight: headerH },
       layout: { gap: 10, paddingTop: 8, paddingBottom: 8 },
       onGutterUtilityClick: (range) => {
         // The library calls this with ONE arg (the line range) — NOT a context.
@@ -386,7 +392,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
         setComposer({ file, startLine, endLine, side });
       },
     }),
-    [layout, overflow, expandUnchanged],
+    [layout, overflow, expandUnchanged, headerH],
   );
 
   // ── header slot ───────────────────────────────────────────────────────
@@ -402,6 +408,8 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
       const isViewed = viewed.has(file);
       return (
         <DiffHeader
+          h={headerH}
+          fontPx={chromePx}
           file={file}
           adds={adds}
           dels={dels}
@@ -423,7 +431,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
         />
       );
     },
-    [status, collapsed, viewed, mode, repoPath, toggleCollapsed, toggleViewed, stageMut, unstageMut, discardMut],
+    [status, collapsed, viewed, mode, repoPath, toggleCollapsed, toggleViewed, stageMut, unstageMut, discardMut, headerH, chromePx],
   );
 
   const renderAnnotation = useCallback(
@@ -540,8 +548,34 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
     sendToClaude(`Code review — ${open.length} unresolved comment${open.length > 1 ? "s" : ""} to address:\n${lines}`);
   }, [comments, sendToClaude]);
 
-  const loading = mode === "working" ? workingItems.isLoading : branch.isLoading;
-  const modeError = mode === "branch" ? branch.error : workingItems.error;
+  const loading = mode === "working" ? workingItems.isLoading : revItems.isLoading;
+  const modeError = mode === "working" ? workingItems.error : revItems.error;
+
+  // Data-driven mode tabs — add a future diff source (a commit, a range, a
+  // "since tag") by appending one entry here + (if it needs new git) one
+  // DiffScope variant. The render below just maps this list.
+  const ahead = status?.ahead ?? 0;
+  const modeTabs: {
+    id: Mode;
+    label: string;
+    title: string;
+    badge?: number;
+    disabled?: boolean;
+  }[] = [
+    { id: "working", label: "working", title: "uncommitted working-tree changes" },
+    { id: "branch", label: "branch", title: `compare branch to ${initialBase}` },
+    {
+      id: "unpushed",
+      label: "unpushed",
+      title: status?.upstream
+        ? `commits ahead of ${status.upstream} (committed, not pushed)`
+        : "local commits not yet pushed",
+      badge: ahead > 0 ? ahead : undefined,
+      // Only disable when we KNOW there's nothing ahead (upstream tracked, ahead 0).
+      // No upstream ⇒ leave enabled (every local commit counts as unpushed).
+      disabled: !!status?.upstream && ahead === 0,
+    },
+  ];
 
   return (
     <div
@@ -557,27 +591,26 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
         <span className="text-[var(--color-fg2)]">{repoPath.split("/").slice(-1)[0]}</span>
 
         <div className="nodrag ml-2.5 inline-flex rounded-md overflow-hidden bg-[var(--color-bg)] border border-[var(--color-line2)]">
-          <button
-            className={`px-2.5 py-0.5 text-[10.5px] font-mono transition-colors ${
-              mode === "working"
-                ? "bg-[var(--color-bg4)] text-[var(--color-accent)] font-semibold"
-                : "text-[var(--color-fg3)] hover:text-[var(--color-fg2)]"
-            }`}
-            onClick={() => setMode("working")}
-          >
-            working
-          </button>
-          <button
-            className={`px-2.5 py-0.5 text-[10.5px] font-mono transition-colors ${
-              mode === "branch"
-                ? "bg-[var(--color-bg4)] text-[var(--color-accent)] font-semibold"
-                : "text-[var(--color-fg3)] hover:text-[var(--color-fg2)]"
-            }`}
-            onClick={() => setMode("branch")}
-            title={`compare branch to ${initialBase}`}
-          >
-            branch
-          </button>
+          {modeTabs.map((t) => (
+            <button
+              key={t.id}
+              className={`px-2.5 py-0.5 text-[10.5px] font-mono transition-colors inline-flex items-center gap-1 ${
+                mode === t.id
+                  ? "bg-[var(--color-bg4)] text-[var(--color-accent)] font-semibold"
+                  : "text-[var(--color-fg3)] hover:text-[var(--color-fg2)]"
+              } ${t.disabled ? "opacity-40 cursor-not-allowed" : ""}`}
+              onClick={() => { if (!t.disabled) setMode(t.id); }}
+              disabled={t.disabled}
+              title={t.title}
+            >
+              {t.label}
+              {t.badge != null && (
+                <span className="px-1 rounded-full bg-[var(--color-brand)] text-white text-[8.5px] leading-none py-0.5 tabular-nums">
+                  {t.badge}
+                </span>
+              )}
+            </button>
+          ))}
         </div>
 
         {mode === "working" && (
@@ -744,13 +777,16 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
             style={{
               width: filesW,
               // Theme @pierre/trees via its CSS vars (same mapping as FileTreeTile).
+              // Tie the tree's type + row height to the code font so the file
+              // list scales with A+/A− instead of staying tiny next to big code.
+              "--trees-font-size": `${chromePx}px`,
+              "--trees-item-height": `${Math.round(chromePx * 2)}px`,
               "--trees-bg": "var(--color-bg2)",
               "--trees-bg-muted": "var(--color-bg3)",
               "--trees-fg": "var(--color-fg)",
               "--trees-fg-muted": "var(--color-fg3)",
               "--trees-accent": "var(--color-brand)",
               "--trees-border-color": "var(--color-line)",
-              "--trees-item-height": "22px",
               "--trees-theme-sidebar-bg": "var(--color-bg2)",
               "--trees-theme-sidebar-fg": "var(--color-fg)",
               "--trees-theme-list-hover-bg": "var(--color-bg3)",
@@ -844,7 +880,11 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
 
           {!activeFile && !modeError && !loading && items.length === 0 && (
             <div className="p-4 text-[11px] text-[var(--color-fg3)] text-center font-mono">
-              {mode === "working" ? "✓ working tree clean" : "✓ no commits on this branch beyond base"}
+              {mode === "working"
+                ? "✓ working tree clean"
+                : mode === "unpushed"
+                  ? "✓ everything committed is pushed"
+                  : "✓ no commits on this branch beyond base"}
             </div>
           )}
 
@@ -1210,6 +1250,8 @@ function collectMatches(items: CodeViewDiffItem<ReviewComment>[], query: string)
 // ── per-file header ───────────────────────────────────────────────────────
 
 function DiffHeader(props: {
+  h: number;
+  fontPx: number;
   file: string;
   adds: number;
   dels: number;
@@ -1225,10 +1267,10 @@ function DiffHeader(props: {
 }) {
   return (
     <div
-      className={`flex items-center gap-2 px-2.5 w-full text-[11px] font-mono bg-[var(--color-bg3)] border-b border-[var(--color-line)] ${
+      className={`flex items-center gap-2 px-2.5 w-full font-mono bg-[var(--color-bg3)] border-b border-[var(--color-line)] ${
         props.viewed ? "opacity-55" : ""
       }`}
-      style={{ height: HEADER_H }}
+      style={{ height: props.h, fontSize: props.fontPx }}
     >
       <button
         title={props.collapsed ? "expand" : "collapse"}
@@ -1236,7 +1278,7 @@ function DiffHeader(props: {
           e.stopPropagation();
           props.onToggleCollapsed();
         }}
-        className="text-[var(--color-fg3)] hover:text-[var(--color-fg)] w-3 text-[9px]"
+        className="text-[var(--color-fg3)] hover:text-[var(--color-fg)] w-3 text-[0.82em]"
       >
         {props.collapsed ? "▸" : "▾"}
       </button>
@@ -1255,7 +1297,7 @@ function DiffHeader(props: {
             border: props.staged ? "1px solid var(--color-ok)" : "1px solid var(--color-line2)",
             background: props.staged ? "var(--color-ok)" : "transparent",
             color: props.staged ? "var(--color-bg)" : "transparent",
-            fontSize: 9,
+            fontSize: "0.82em",
             lineHeight: "12px",
           }}
         >
@@ -1274,7 +1316,7 @@ function DiffHeader(props: {
             e.stopPropagation();
             props.onToggleViewed();
           }}
-          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] transition-colors ${
+          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[0.92em] transition-colors ${
             props.viewed
               ? "border-[var(--color-ok)] text-[var(--color-ok)]"
               : "border-[var(--color-line2)] text-[var(--color-fg3)] hover:text-[var(--color-fg2)]"
@@ -1288,7 +1330,7 @@ function DiffHeader(props: {
             e.stopPropagation();
             props.onOpen();
           }}
-          className="px-1.5 py-0.5 rounded border border-[var(--color-line2)] text-[var(--color-fg2)] text-[10px]"
+          className="px-1.5 py-0.5 rounded border border-[var(--color-line2)] text-[var(--color-fg2)] text-[0.92em]"
         >
           ↗ open
         </button>
@@ -1299,7 +1341,7 @@ function DiffHeader(props: {
               e.stopPropagation();
               props.onDiscard();
             }}
-            className="px-1.5 py-0.5 rounded border border-[var(--color-line2)] text-[var(--color-err)] text-[10px]"
+            className="px-1.5 py-0.5 rounded border border-[var(--color-line2)] text-[var(--color-err)] text-[0.92em]"
           >
             ⌫
           </button>

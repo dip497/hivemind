@@ -172,6 +172,36 @@ hive mcp-stdio  ──►  get_issue · set_state · add_comment · mark_accepta
 State changes flow MCP → markdown → filesystem watcher → live UI. No SDK, no API key.
 Agents use your existing CLI login.
 
+### The control plane — agents that drive the canvas
+
+The issue tools above are file-only. A second tier, the **Hivemind Control Plane
+(HCP)**, lets an agent *inside a tile* (or any CLI/script) drive the **running
+app** — spawn sibling agents, talk to them, wire them together, and request human
+review. Transport is a `0600` unix socket owned by the app (no network); a
+per-install capability token + the agent's own tile id are injected into every
+spawned agent, so these tools "just work" from inside a tile and return a clear
+*"app not running"* when it isn't.
+
+| Tool | What it does |
+|---|---|
+| `hive_spawn_agent` | Launch an agent tile (`claude`/`codex`/…) and hand it a task → returns its `tileId`. `frame:` picks which workspace it lands in (by id / repo name / title); by default the worker **auto-reports** — its reply is delivered back into your session when it finishes (no polling), with a visible reporting edge drawn on the canvas. |
+| `hive_send` / `hive_send_keys` | Send text, or **key tokens** (`Down`/`Enter`/`Esc`/…), to a tile's terminal — e.g. answer a worker's native `AskUserQuestion` picker. |
+| `hive_read` | Optional synchronous read: block until an agent finishes a turn, return its reply (parsed cleanly from the session transcript, never screen-scraped). |
+| `hive_approve` | Answer a **supervised** worker's tool-permission request (`allow`/`deny`/`always`/`never`) — see below. |
+| `hive_list_tiles` / `hive_list_frames` | List tiles **grouped by frame** (with live status), or list the frames themselves. Filter by `frame`. |
+| `hive_focus` / `hive_close_tile` | Bring a tile into view, or shut a worker down. |
+| `hive_connect` / `hive_disconnect` | Pipe one agent's finished-turn replies into another's input — chain workers (animated data-flow edge). |
+| `hive_open_review` / `hive_report` | Open a plan in the review tile and block for human approve/deny; or push a result back to the agent that spawned you. |
+
+**Supervised approvals.** Spawn with `supervise` and the worker stops escalating
+its tool-permission prompts to a human — they're brokered to **the agent that
+spawned it** instead (an injected `PreToolUse` hook blocks on the socket until you
+answer with `hive_approve`). `always`/`never` remember the decision per
+worker+tool; it **fails safe** to the normal human prompt on timeout or no
+supervisor. So you can fire a worker and let it run *under your watch*, approving
+only the calls that need judgement. The same surface is on the CLI: `hive ctl
+spawn|send|keys|read|approve|list|frames|focus|close|connect`.
+
 ---
 
 ## Features
@@ -187,6 +217,7 @@ Agents use your existing CLI login.
 | **Remote SSH frames** | Bind a frame to a directory on another machine over SSH — its terminals are real PTYs on the host, the editor reads/writes over SFTP, diff/status run `git` on the remote. One pooled `ssh2` connection per host; agent / key / password auth; TOFU host keys. |
 | **Browser tile** | A real Chromium web view (Electron `<webview>`) that lives in the DOM, so it pans / zooms / clips with the canvas — multi-tab, address bar, find-in-page, per-session logins. |
 | **Agents can browse** | Opt-in: a spawned agent drives the *visible* Browser tile over CDP via the `hive-browser` skill (built on [agent-browser](https://github.com/vercel-labs/agent-browser)) — navigate, click, read, screenshot the same page you're watching. |
+| **Multi-agent control plane** | An agent in one tile can **spawn, drive, and supervise** other agents on the canvas over a local `0600` socket (HCP): pick the target frame, converse, pipe agents together, auto-report results, and broker a worker's permission prompts back to its parent (`supervise` + `hive_approve`). Same surface from the shell via `hive ctl`. Complements Claude Code's native subagents by making the agent mesh **visible, spatial, and cross-tool**. |
 | **Layers + arrange** | A Figma-style layers rail lists every tile grouped by frame with live status; opt-in arrange snaps a frame's tiles and worktrees into Columns / Rows / Grid. |
 | **Persistent terminals** | A detached PTY daemon outlives the window. Headless xterm + SerializeAddon replays the *current screen* (alt-screen, SGR colors, cursor) on reopen — not a raw byte fast-forward. |
 | **Reboot-resume** | Every `claude` spawn is `--session-id`-bound at spawn time; after a reboot the daemon respawns with `--resume <uuid>`, continuing the same conversation. Codex resumes from its session dir. |
