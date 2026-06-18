@@ -7,6 +7,15 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Added
+
+- **`hive init --agentic` now documents the multi-agent control plane.** The installed `CLAUDE.md` gains a "Multi-agent control plane" section covering `hive_spawn_agent` (with `frame`/`supervise`), `hive_send`/`hive_send_keys`, `hive_read`, `hive_approve`, `hive_list_frames`/`hive_list_tiles`, `hive_focus`/`hive_close_tile`/`hive_connect`/`hive_report` — so a spawned agent actually knows it can delegate, supervise, and coordinate other agents. Re-run `hive init --agentic` in a repo to refresh its `CLAUDE.md`.
+
+### Fixed
+
+- **Layers panel: frame headers show a labelled `working` / `needs you` pill, not a bare dot.** The per-frame aggregate (highest-priority state among its agents) now reads as a small pill matching the tile rows, so you can tell at a glance — collapsed or not — whether a frame has an agent working or waiting on you.
+- **Layers panel: claude's leading title glyph no longer leaks into the agent name.** Claude Code prepends a `✳` status star to its window title while working; we showed the title verbatim, so it appeared as a stray `·` after the icon. The displayed name is now just the task (our own status pill conveys working/idle).
+
 ## [1.6.0] — 2026-06-19
 
 ### Added

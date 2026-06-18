@@ -274,16 +274,17 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
               <Square size={10} fill={frame.color} stroke={frame.color} className="shrink-0" />
             )}
             <span className="truncate">{frame.title}</span>
-            <span className="ml-auto flex items-center gap-1.5">
+            <span className="ml-auto flex items-center gap-1.5 min-w-0">
               {agg && agg !== "idle" && agg !== "exited" && (
                 <span
-                  aria-hidden
-                  className={`size-1.5 rounded-full ${NEEDS_YOU(agg) || agg === "working" ? "animate-pulse" : ""}`}
-                  style={{ background: STATUS_COLOR[agg] }}
+                  className={`shrink-0 text-[9px] font-medium leading-none px-1.5 py-[3px] rounded-full ${NEEDS_YOU(agg) || agg === "working" ? "animate-pulse" : ""}`}
+                  style={{ color: STATUS_COLOR[agg], background: `color-mix(in srgb, ${STATUS_COLOR[agg]} 16%, transparent)` }}
                   title={STATUS_LABEL[agg]}
-                />
+                >
+                  {STATUS_LABEL[agg]}
+                </span>
               )}
-              <span className="font-mono text-[11px] text-[var(--color-fg3)]">{items.length + kids.length}</span>
+              <span className="font-mono text-[11px] text-[var(--color-fg3)] shrink-0">{items.length + kids.length}</span>
             </span>
           </button>
         </div>

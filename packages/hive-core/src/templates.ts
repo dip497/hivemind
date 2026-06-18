@@ -146,6 +146,32 @@ Do not exit a session silently.
 If an issue is too big, break it down via
 \`mcp__hive__create_issue({ title, parent: $KEY })\`. Children inherit the
 parent's id (e.g. \`PAY-42.1\`).
+
+### Multi-agent control plane (when running inside hivemind)
+
+If you are an agent in a hivemind tile, you can also DRIVE THE CANVAS — spawn and
+coordinate other agents. (These no-op with "app not running" if hivemind isn't
+up, so they're safe to try.)
+
+- \`mcp__hive__hive_spawn_agent({ prompt, agent?, frame?, supervise? })\` —
+  delegate a subtask to a sibling agent. It AUTO-REPORTS its result back into your
+  session when done (no polling). \`frame\` picks the workspace (id / repo name /
+  title — discover via \`hive_list_frames\`); \`supervise\` routes the worker's
+  tool-permission prompts to YOU (answer with \`hive_approve\`).
+- \`mcp__hive__hive_send({ tileId, text })\` / \`hive_send_keys({ tileId, keys })\`
+  — send a follow-up, or key tokens (e.g. \`["Down","Enter"]\`) to drive a
+  worker's interactive picker (e.g. its AskUserQuestion).
+- \`mcp__hive__hive_read({ tileId })\` — optionally block for a worker's reply.
+- \`mcp__hive__hive_approve({ reqId, decision })\` — answer a supervised worker:
+  \`allow\` | \`deny\` | \`always\` | \`never\`.
+- \`mcp__hive__hive_list_frames()\` / \`hive_list_tiles({ frame? })\` — discover
+  frames and the agents in them (grouped, with live status).
+- \`mcp__hive__hive_focus\` / \`hive_close_tile\` / \`hive_connect\` /
+  \`hive_report\` — focus a tile, close a worker, pipe one agent into another, or
+  report a result up to your parent.
+
+Delegate generously: fire a worker and keep working — its reply lands in your
+inbox when it's done.
 `;
 
 export function agenticClaudeAppend(): string {

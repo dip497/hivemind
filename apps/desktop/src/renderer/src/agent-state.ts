@@ -400,6 +400,11 @@ export function normalizeAgentTitle(raw: string): string {
     .filter((ch) => ch >= " " && ch !== "\x7f") // then strip C0/C1 controls + DEL
     .join("")
     .trim()
+    // Strip a leading status glyph + separator claude prepends to the window title
+    // while working (e.g. "✳ Fix the bug" / "· Fix the bug") — our own status pill
+    // conveys working/idle, so the displayed name should be just the task. Only
+    // decorative glyphs (stars/bullets/dots) + space; brackets/parens are kept.
+    .replace(/^[\s·•∙‣⁃*✶✱✲✳✴✻✽✦✧★☆●○◦◌◆◇]+/u, "")
     .slice(0, 80)
     .trim();
 }
