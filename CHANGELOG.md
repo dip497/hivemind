@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [1.7.0] — 2026-06-22
+
 ### Fixed
 
 - **A tile can no longer be stuck on "working" when it isn't.** Every "working" claim — whether from a hook turn (`liveTurn`) or the screen-scrape — is now gated on *recent pty output*: a genuinely-working agent streams output (animated spinner / elapsed-seconds timer / tokens, ~every second), while a finished, Esc-interrupted, killed, or restart-replayed tile is **quiet**. So a "working" with no output for ~8s is treated as stale and reads **idle**. This is the universal self-heal that the prior scrape-vs-hook reconciliation couldn't cover: it doesn't depend on the scrape detecting an idle prompt (which can itself freeze on a replayed buffer) or on the `Stop` hook firing (which an Esc-interrupt skips). Background subagents (event-driven, legitimately quiet) and needs-you prompts are exempt. The bus learns liveness from a new `noteOutput` (called on every pty data event) and re-evaluates each poll tick via `revalidate`. A staleness-decay is flagged **synthetic** — the awareness layer updates the status but does NOT treat it as a completion (no toast, no OS notification, no done-unseen pulse, no canvas re-render), so correcting many stuck tiles at once can't flood the screen with "finished" toasts or jank the app. Window is 15s (long enough that a working agent's normal output cadence — even batched under load — never false-decays).
@@ -466,7 +468,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v1.6.1...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/dip497/hivemind/releases/tag/v1.7.0
 [1.6.1]: https://github.com/dip497/hivemind/releases/tag/v1.6.1
 [1.6.0]: https://github.com/dip497/hivemind/releases/tag/v1.6.0
 [1.5.0]: https://github.com/dip497/hivemind/releases/tag/v1.5.0
