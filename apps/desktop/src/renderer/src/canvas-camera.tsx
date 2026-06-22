@@ -27,19 +27,33 @@ export function snapViewportCrisp(vp: { x: number; y: number; zoom: number }): {
  *  tiles). Selection stays accurate at any zoom thanks to the zoom-aware mouse
  *  patch (terminal-mouse-patch.ts), so terminals no longer need to be pinned to
  *  100% here. */
+// Text/terminal tiles are only crisp + mouse-pixel-accurate at EXACTLY 100% on a
+// DPR=1 display (no DPR supersampling — see terminal-dpr.ts; xterm cell math is
+// 1:1). Zooming them to fill (≠ 100%) → blurry text + the fit "feels off", and it
+// varies with the per-tile font and the starting scale (the reported bug). So
+// focus pins these to 100% (matching useTileFocus/FocusOnTile's `exact`); only
+// non-text tiles (issues/browser/planReview) zoom-to-fill.
+const PIXEL_EXACT_NODE_TYPES = new Set(["terminal", "diff", "workbench"]);
+
 export function FocusMode({ req }: { req: { id: string | null; n: number } | null }) {
-  const { fitView } = useReactFlow();
+  const { fitView, getNode } = useReactFlow();
   useEffect(() => {
     if (!req) return;
     if (req.id) {
-      // Near-fullscreen: tiny padding so the tile fills the window edge-to-edge,
-      // maxZoom 1.6 so a small tile enlarges to fill. Big tiles land at zoom<1 and
-      // show whole — the maximized feel.
-      void fitView({ nodes: [{ id: req.id }], padding: 0.03, duration: 400, maxZoom: 1.6 });
+      const exact = PIXEL_EXACT_NODE_TYPES.has(getNode(req.id)?.type ?? "");
+      // exact → lock zoom to 1.0 (minZoom = maxZoom = 1): pan to the tile at 100%,
+      // never enlarge/shrink it. (Want bigger crisp text? Use the per-tile A−/A+
+      // font, not zoom.) Non-text → near-fullscreen maximize (up to 1.6×).
+      void fitView({
+        nodes: [{ id: req.id }],
+        padding: 0.03,
+        duration: 400,
+        ...(exact ? { minZoom: 1, maxZoom: 1 } : { maxZoom: 1.6 }),
+      });
     } else {
       void fitView({ padding: 0.2, duration: 400 });
     }
-  }, [req, fitView]);
+  }, [req, fitView, getNode]);
   return null;
 }
 
