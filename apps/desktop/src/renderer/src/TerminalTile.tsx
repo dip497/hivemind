@@ -333,25 +333,31 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
     fit.fit();
     termRef.current = term;
     // ── FOCUS GUARANTEE ──────────────────────────────────────────────────────
-    // A re-render of the react-flow node (e.g. claude rewriting its window title
-    // every turn while it "thinks", or any canvas re-render) can detach/reattach
-    // xterm's input textarea, yanking the cursor out from under someone typing —
-    // the "focus removed again and again" report. We can't catch every re-render
-    // source, so GUARANTEE it at the seam: when xterm's input blurs WHILE this
-    // tile is selected AND focus landed on nothing (document.body — the signature
-    // of a re-render steal, not a deliberate click onto another element), take it
-    // straight back next frame. Guarded by selectedRef + the body check so it
-    // never fights a real click onto another tile/input.
-    const onInputBlur = () => {
+    // While claude STREAMS, its title/status churn re-renders the react-flow node,
+    // and react-flow re-focuses the SELECTED node's wrapper <div> (nodes are
+    // focusable for a11y) — yanking focus off xterm's input mid-type. Keystrokes
+    // then go to the node wrapper / react-flow, not the terminal → "can't type
+    // while it's working". A `=== document.body` check misses this (focus is on a
+    // node wrapper, not body). So: when xterm's input blurs WHILE this tile is
+    // selected and focus landed on the CANVAS CHROME — body, the react-flow pane,
+    // or ANY node wrapper (a re-render/selection steal) and NOT a real editable
+    // field — take focus straight back next frame. Never fights a deliberate move
+    // into another tile's terminal, a rename box, or the command palette (all
+    // editable elements), so it can't trap focus.
+    const reclaimFocusIfStolen = () => {
       if (!selectedRef.current) return;
       requestAnimationFrame(() => {
         if (!selectedRef.current) return;
-        const ae = document.activeElement;
-        if (!ae || ae === document.body) {
-          try { termRef.current?.focus(); } catch { /* torn down */ }
-        }
+        const ae = document.activeElement as HTMLElement | null;
+        const editable = !!ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.isContentEditable);
+        if (editable) return; // user moved into a real input — leave it
+        const onCanvasChrome = !ae || ae === document.body
+          || ae.classList?.contains("react-flow__pane")
+          || !!ae.closest?.(".react-flow__node");
+        if (onCanvasChrome) { try { termRef.current?.focus(); } catch { /* torn down */ } }
       });
     };
+    const onInputBlur = reclaimFocusIfStolen;
     const inputEl = term.textarea;
     inputEl?.addEventListener("blur", onInputBlur);
     // Make selection zoom-aware so it works at ANY canvas zoom (not just 100%) —
