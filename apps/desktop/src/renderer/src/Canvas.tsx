@@ -209,9 +209,6 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // pattern as focusReq so re-firing the same id still triggers.
   const [focusModeReq, setFocusModeReq] = useState<{ id: string | null; n: number } | null>(null);
   const focusModeNonceRef = useRef(0);
-  // Remembers the tile currently maximized by focus mode + its pre-maximize size,
-  // so Esc / maximizing another tile can restore it (see FocusMode).
-  const maximizedRef = useRef<{ id: string; w: number; h: number } | null>(null);
 
   // Open a file as a tab in the workbench's embedded editor (mounting the
   // workbench if it isn't open yet). The EditorTile picks the newly-appended
@@ -1187,13 +1184,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
         >
           <Background variant={BackgroundVariant.Dots} gap={22} size={1.5} color="rgba(155,161,173,0.10)" />
           <FocusOnTile req={focusReq} />
-          <FocusMode
-            req={focusModeReq}
-            setSize={(id, w, h) => onNodeResizeCommit(id, w, h)}
-            getSize={(id) => sizesRef.current[id]}
-            posRef={positionsRef}
-            maxRef={maximizedRef}
-          />
+          <FocusMode req={focusModeReq} />
           <PanMomentum req={momentumReq} activeRef={inMomentumRef} onSettle={bumpSnap} />
           <ViewportSnap req={snapReq} activeRef={inMomentumRef} />
 

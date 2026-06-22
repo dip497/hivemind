@@ -27,73 +27,29 @@ export function snapViewportCrisp(vp: { x: number; y: number; zoom: number }): {
  *  tiles). Selection stays accurate at any zoom thanks to the zoom-aware mouse
  *  patch (terminal-mouse-patch.ts), so terminals no longer need to be pinned to
  *  100% here. */
-/** Focus mode = CRISP maximize. A terminal is only sharp at 100% (no DPR
- *  supersample on a DPR=1 panel), so we don't zoom — we GROW the tile's box to
- *  ~fill the window (xterm re-fits to more rows/cols at the SAME font → no quality
- *  drop) and frame it at exactly 100%. Esc (or maximizing another tile) restores
- *  the saved size. Needs Canvas's size setter + absolute-position ref + a
- *  cross-call ref to remember the maximized tile's original size.
- *
- *  `setSize`/`getSize` operate in WORLD units (== screen px at zoom 1). */
-export function FocusMode({
-  req,
-  setSize,
-  getSize,
-  maxRef,
-}: {
-  req: { id: string | null; n: number } | null;
-  setSize?: (id: string, w: number, h: number) => void;
-  getSize?: (id: string) => { width: number; height: number } | undefined;
-  /** Accepted for back-compat with the call site; unused (fitView resolves coords). */
-  posRef?: React.MutableRefObject<Record<string, { x: number; y: number }>>;
-  maxRef?: React.MutableRefObject<{ id: string; w: number; h: number } | null>;
-}) {
+// Text/terminal tiles are crisp + mouse-accurate only at exactly 100% on a DPR=1
+// panel (no supersample — see terminal-dpr.ts). So `.` focus PINS them to 100%
+// (centered; sharp). Non-text tiles (issues/browser/planReview) zoom-to-fill.
+// (A full-screen-CRISP maximize would have to grow the tile's rows/cols rather
+// than zoom — that fought the frame layout and is deferred.)
+const PIXEL_EXACT_NODE_TYPES = new Set(["terminal", "diff", "workbench"]);
+
+export function FocusMode({ req }: { req: { id: string | null; n: number } | null }) {
   const { fitView, getNode } = useReactFlow();
-  const paneW = useStore((s) => s.width);
-  const paneH = useStore((s) => s.height);
   useEffect(() => {
     if (!req) return;
-    const PAD = 16;
-    // Frame ONE tile at exactly 100% (no CSS scaling → crisp). fitView resolves
-    // absolute/framed coords itself, so it never lands off-canvas (a manual
-    // setViewport did, on parented tiles → the "out of canvas / blank" bug).
-    const frameExact = () => void fitView({ nodes: [{ id: req.id! }], padding: 0.01, duration: 400, minZoom: 1, maxZoom: 1 });
-    const restorePrev = () => {
-      const m = maxRef?.current;
-      if (m && setSize) { setSize(m.id, m.w, m.h); if (maxRef) maxRef.current = null; }
-    };
-    // Esc / fit-all → restore any maximized tile, then frame everything.
-    if (!req.id) { restorePrev(); void fitView({ padding: 0.2, duration: 400 }); return; }
-    // Re-press on the already-maximized tile → toggle back to its normal size.
-    if (maxRef?.current?.id === req.id) {
-      restorePrev();
-      void fitView({ nodes: [{ id: req.id }], padding: 0.15, duration: 400, maxZoom: 1 });
-      return;
+    if (req.id) {
+      const exact = PIXEL_EXACT_NODE_TYPES.has(getNode(req.id)?.type ?? "");
+      void fitView({
+        nodes: [{ id: req.id }],
+        padding: 0.05,
+        duration: 400,
+        ...(exact ? { minZoom: 1, maxZoom: 1 } : { maxZoom: 1.6 }),
+      });
+    } else {
+      void fitView({ padding: 0.2, duration: 400 });
     }
-    // Fallback (no Canvas wiring / unmeasured pane): just zoom-fit at ≤100%.
-    if (!setSize || !getSize || !maxRef || paneW <= 0 || paneH <= 0 || !getSize(req.id)) {
-      void fitView({ nodes: [{ id: req.id }], padding: 0.02, duration: 400, maxZoom: 1 });
-      return;
-    }
-    restorePrev(); // restore a DIFFERENT previously-maximized tile first
-    const cur = getSize(req.id);
-    if (cur) maxRef.current = { id: req.id, w: cur.width, h: cur.height };
-    // Grow the box to ~fill the window; xterm re-fits to more rows/cols at the
-    // SAME font (no quality drop). Then frame it at EXACTLY 100% once react-flow
-    // has re-measured the grown node (poll a few frames, like FocusOnTile).
-    const targetW = Math.round(paneW - 2 * PAD);
-    setSize(req.id, targetW, Math.round(paneH - 2 * PAD));
-    let raf = 0;
-    let tries = 0;
-    const tick = () => {
-      const n = getNode(req.id!);
-      if ((n?.measured?.width ?? 0) >= targetW - 8) { frameExact(); return; }
-      if (tries++ < 60) raf = requestAnimationFrame(tick);
-      else frameExact();
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [req, fitView, getNode, paneW, paneH, setSize, getSize, maxRef]);
+  }, [req, fitView, getNode]);
   return null;
 }
 
