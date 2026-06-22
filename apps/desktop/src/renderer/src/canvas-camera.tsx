@@ -39,21 +39,25 @@ export function FocusMode({
   req,
   setSize,
   getSize,
-  posRef,
   maxRef,
 }: {
   req: { id: string | null; n: number } | null;
   setSize?: (id: string, w: number, h: number) => void;
   getSize?: (id: string) => { width: number; height: number } | undefined;
+  /** Accepted for back-compat with the call site; unused (fitView resolves coords). */
   posRef?: React.MutableRefObject<Record<string, { x: number; y: number }>>;
   maxRef?: React.MutableRefObject<{ id: string; w: number; h: number } | null>;
 }) {
-  const { fitView, setViewport } = useReactFlow();
+  const { fitView, getNode } = useReactFlow();
   const paneW = useStore((s) => s.width);
   const paneH = useStore((s) => s.height);
   useEffect(() => {
     if (!req) return;
     const PAD = 16;
+    // Frame ONE tile at exactly 100% (no CSS scaling → crisp). fitView resolves
+    // absolute/framed coords itself, so it never lands off-canvas (a manual
+    // setViewport did, on parented tiles → the "out of canvas / blank" bug).
+    const frameExact = () => void fitView({ nodes: [{ id: req.id! }], padding: 0.01, duration: 400, minZoom: 1, maxZoom: 1 });
     const restorePrev = () => {
       const m = maxRef?.current;
       if (m && setSize) { setSize(m.id, m.w, m.h); if (maxRef) maxRef.current = null; }
@@ -67,21 +71,29 @@ export function FocusMode({
       return;
     }
     // Fallback (no Canvas wiring / unmeasured pane): just zoom-fit at ≤100%.
-    if (!setSize || !getSize || !posRef || !maxRef || paneW <= 0 || paneH <= 0 || !posRef.current[req.id]) {
+    if (!setSize || !getSize || !maxRef || paneW <= 0 || paneH <= 0 || !getSize(req.id)) {
       void fitView({ nodes: [{ id: req.id }], padding: 0.02, duration: 400, maxZoom: 1 });
       return;
     }
     restorePrev(); // restore a DIFFERENT previously-maximized tile first
     const cur = getSize(req.id);
     if (cur) maxRef.current = { id: req.id, w: cur.width, h: cur.height };
-    const pos = posRef.current[req.id];
-    if (!pos) return;
-    // Grow the box to ~fill the window; xterm re-fits to more cols/rows.
-    setSize(req.id, Math.round(paneW - 2 * PAD), Math.round(paneH - 2 * PAD));
-    // zoom 1 → world units == screen px: place the tile's ABSOLUTE top-left at PAD
-    // so the now-window-sized tile fills edge-to-edge, perfectly crisp.
-    void setViewport({ x: PAD - pos.x, y: PAD - pos.y, zoom: 1 }, { duration: 400 });
-  }, [req, fitView, setViewport, paneW, paneH, setSize, getSize, posRef, maxRef]);
+    // Grow the box to ~fill the window; xterm re-fits to more rows/cols at the
+    // SAME font (no quality drop). Then frame it at EXACTLY 100% once react-flow
+    // has re-measured the grown node (poll a few frames, like FocusOnTile).
+    const targetW = Math.round(paneW - 2 * PAD);
+    setSize(req.id, targetW, Math.round(paneH - 2 * PAD));
+    let raf = 0;
+    let tries = 0;
+    const tick = () => {
+      const n = getNode(req.id!);
+      if ((n?.measured?.width ?? 0) >= targetW - 8) { frameExact(); return; }
+      if (tries++ < 60) raf = requestAnimationFrame(tick);
+      else frameExact();
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [req, fitView, getNode, paneW, paneH, setSize, getSize, maxRef]);
   return null;
 }
 
