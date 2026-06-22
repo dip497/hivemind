@@ -8,6 +8,7 @@
  */
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
+import { isBackgroundTile } from "./worker-tiles";
 import type { FrameState } from "./canvas-persistence";
 
 type TileMeta = { label: string; status: TileStatusKind; seen: boolean };
@@ -27,6 +28,9 @@ export function useAgentAwareness(ctx: AgentAwarenessCtx) {
   // Mirror so the bus listener reads the PREVIOUS status synchronously (to
   // detect working→idle "done") without side effects inside a setState updater.
   const statusesRef = useRef<Map<string, TileMeta>>(new Map());
+  // Signature of the ATTENTION set (unseen tiles + their status) at the last
+  // Canvas re-render. We only re-render when THIS changes — see commitStatuses.
+  const renderSigRef = useRef("");
   // Which tiles the user currently has selected — drives toast suppression +
   // marks done tiles seen. The render writes this on selection.
   const selectedTileIdsRef = useRef<Set<string>>(new Set());
@@ -52,6 +56,20 @@ export function useAgentAwareness(ctx: AgentAwarenessCtx) {
 
   const commitStatuses = useCallback((m: Map<string, TileMeta>) => {
     statusesRef.current = m;
+    // CRITICAL: re-render the Canvas ONLY when the attention set actually changes
+    // (which tiles are done-unseen / need-you). An agent that's steadily WORKING
+    // re-publishes its status (and churns its title/label) ~every second; without
+    // this gate, every such tick called setStatuses → Canvas re-render → react-flow
+    // re-render → the mouse cursor flickered (z-fighting) and input janked while
+    // you typed into a working tile. statusesRef stays current for done-detection
+    // regardless; only the highlight-relevant transitions trigger a render.
+    const sig = [...m.entries()]
+      .filter(([, v]) => !v.seen)
+      .map(([k, v]) => `${k}:${v.status}`)
+      .sort()
+      .join("|");
+    if (sig === renderSigRef.current) return;
+    renderSigRef.current = sig;
     setStatuses(m);
   }, []);
 
@@ -77,9 +95,16 @@ export function useAgentAwareness(ctx: AgentAwarenessCtx) {
       const selected = selectedTileIdsRef.current.has(e.tileId);
       const prev = statusesRef.current;
       const old = prev.get(e.tileId);
-      const finished = e.status === "idle" && old?.status === "working"; // done now
+      const rawFinished = e.status === "idle" && old?.status === "working"; // done now
       const needsHuman =
         e.status === "blocked" || e.status === "permission" || e.status === "question";
+      // Skip the "finished" path for:
+      //  - SYNTHETIC idles: a stuck "working" decayed because output stopped (a
+      //    state correction, not a completion) — toasting/notifying for each would
+      //    flood the screen (the "filling laggy" report); the status still updates.
+      //  - background workflow workers (report:false), gathered in bulk.
+      // needs-you is kept either way: an unattended blocked worker still needs help.
+      const finished = rawFinished && !e.synthetic && !isBackgroundTile(e.tileId);
       // "seen" = user is looking (tile selected) OR nothing noteworthy happened.
       const seen = selected ? true : finished || needsHuman ? false : old?.seen ?? true;
       const next = new Map(prev);

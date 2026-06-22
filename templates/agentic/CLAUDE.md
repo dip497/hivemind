@@ -59,6 +59,23 @@ When the user asks you to work on `$ISSUE_KEY`:
   `mcp__hive__hive_create_issue({ title, parent: $ISSUE_KEY })`. Children inherit
   the parent's id (e.g. `PAY-42.1`).
 
+## Multi-agent workflows (when running inside hivemind)
+
+If you're an agent in a hivemind tile, you can orchestrate a FLEET of sibling
+agents as visible canvas tiles. The `hive-workflow` skill (at
+`.claude/skills/hive-workflow/SKILL.md`) has the full playbook; the short version:
+
+- `mcp__hive__hive_spawn_agent({ prompt, frame?, supervise? })` — delegate one
+  subtask; it auto-reports its result back into your session when done.
+- `mcp__hive__hive_workflow({ shape, … })` — run a whole fleet in one blocking
+  call. `shape: "fanout"` (one worker per `items[i]`, `{item}` templated, parallel),
+  `"mapreduce"` (fanout + a reducer over `{results}`), or `"pipeline"` (sequential
+  `stages`, each may use `{input}`). Returns every worker's reply aggregated.
+
+Use a workflow when an issue decomposes into independent units (review N files,
+summarize N modules, try N approaches). For dynamic control flow drive
+`hive_spawn_agent`/`hive_read`/`hive_connect` directly — see the skill.
+
 ## Code Conventions for This Repo
 
 (Add project-specific rules below — language, formatter, test runner, etc.

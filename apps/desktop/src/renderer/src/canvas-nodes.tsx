@@ -23,6 +23,11 @@ type TerminalNodeData = {
   cmd: string;
   args?: string[];
   label?: string;
+  name?: string;
+  onRename?: (id: string, name: string) => void;
+  onAgentTitle?: (id: string, title: string) => void;
+  onOpenInBrowser?: (url: string) => void;
+  onOpenInEditor?: (path: string) => void;
   onClose?: () => void;
 };
 
@@ -37,6 +42,7 @@ type WorkbenchNodeData = {
   repoPath: string;
   tabs: string[];
   onOpenFile: (path: string) => void;
+  onOpenInBrowser?: (url: string) => void;
   onCloseTab: (path: string) => void;
   onClose: () => void;
 };
@@ -307,6 +313,7 @@ const WorkbenchNode = memo(function WorkbenchNode({
             repoPath={data.repoPath}
             tabs={data.tabs}
             onOpenFile={data.onOpenFile}
+            onOpenInBrowser={data.onOpenInBrowser}
             onCloseTab={data.onCloseTab}
             onClose={data.onClose}
           />
@@ -316,7 +323,13 @@ const WorkbenchNode = memo(function WorkbenchNode({
   );
 });
 
-type BrowserNodeData = { tileId: string; frameId?: string | null; url?: string; onClose?: () => void };
+type BrowserNodeData = {
+  tileId: string;
+  frameId?: string | null;
+  url?: string;
+  openReq?: { url: string; seq: number } | null;
+  onClose?: () => void;
+};
 const BrowserNode = memo(function BrowserNode({
   id,
   data,
@@ -338,7 +351,14 @@ const BrowserNode = memo(function BrowserNode({
         onResizeEnd={(_e, p) => data.onResize(id, p.width, p.height, p.x, p.y)}
       />
       <TileErrorBoundary label="Browser" onClose={data.onClose}>
-        <BrowserTile tileId={data.tileId} frameId={data.frameId} url={data.url} selected={selected} onClose={data.onClose} />
+        <BrowserTile
+          tileId={data.tileId}
+          frameId={data.frameId}
+          url={data.url}
+          openReq={data.openReq}
+          selected={selected}
+          onClose={data.onClose}
+        />
       </TileErrorBoundary>
     </div>
   );

@@ -38,7 +38,27 @@ export function detectClaudeState(screen: string): ClaudeState {
   //      (Spinner glyphs Claude cycles: ✻ ✶ ✳ ✢ ✽ ⋆ ● * · — match any, then a
   //      word, then the ellipsis. Box-drawing prefixes like "│ " are tolerated.)
   if (/esc to interrupt/i.test(last)) return "working";
-  if (/[✻✶✳✢✽⋆●*·]\s+\w[\w' -]*…/u.test(last)) return "working";
+  // Live token-stream counter — "↑ 1.2k tokens" / "↓ 18.3k tokens" — is rendered
+  // ONLY while a turn is generating. The most version-proof working signal: it
+  // survives spinner-glyph churn AND the high-effort "thinking some more" status
+  // variant that drops the "esc to interrupt" hint (the reported miss).
+  if (/[↑↓·(]\s*[\d.,]+\s*k?\s*tokens/i.test(last)) return "working";
+  // Spinner status line: a cycling glyph + the task title + "…". claude cycles
+  // MANY glyphs (added ✚ ✺ ✹ ◐… here) and the title between the glyph and the
+  // ellipsis is arbitrary prose ("If your site is down, would you know it first?…")
+  // — commas/"?"/etc. — so allow ANY run up to the "…", not just a gerund word.
+  // Box-drawing prefixes like "│ " are tolerated.
+  if (/[✻✶✳✢✽⋆✺✹✸✷✵✴✲✱●○◐◓◑◒◍◌*·✚✦✧]\s+\S[^\n]*…/u.test(last)) return "working";
+  // Elapsed-time status line ("(6m 41s · …", "(12s · …") paired with any active
+  // marker — a belt-and-suspenders catch for spinner/wording we haven't seen.
+  if (/\(\d+m\s*\d+s\b|\(\d+s\s*·/.test(last) && /tokens|interrupt|thinking|effort/i.test(last))
+    return "working";
+  // Background agents still running: claude returns the main loop to the ❯ prompt
+  // and prints "✻ Waiting for N background agent(s) to finish" — no interrupt hint,
+  // no spinner ellipsis, so the working signals above miss it and the visible
+  // prompt below reads as idle. Scan the WHOLE screen (not just `last`): the
+  // background-agent picker overlay can push the wait line past the 20-line tail.
+  if (/waiting for \d+ background agents?\b/i.test(screen)) return "working";
 
   // Idle: the prompt line (❯ or > + space/nbsp, not followed by a digit) AND no
   // active-work signal above. `>` covers newer prompt rendering.

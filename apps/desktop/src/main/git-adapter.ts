@@ -15,6 +15,7 @@ import { runRemoteGit, readRemoteFile, writeRemoteFile } from "./remote/git.js";
 import type {
   DiffPayload,
   DiffScope,
+  GitBranchList,
   GitFileEntry,
   GitFileStatus,
   GitStatusSnapshot,
@@ -355,6 +356,42 @@ export async function gitListFiles(repoPath: string): Promise<string[]> {
   return all.filter((p) => !ignored.has(p)).sort();
 }
 
+/** Local + remote branches for the diff tile's base/head pickers. Remote-tracking
+ *  `origin/HEAD` is filtered (it's a symbolic alias, not a reviewable branch).
+ *  Returns empty lists for a non-git / unborn-HEAD repo rather than throwing. */
+export async function gitListBranches(repoPath: string): Promise<GitBranchList> {
+  const empty: GitBranchList = { current: null, local: [], remote: [] };
+  let raw: string;
+  try {
+    // One pass over both ref namespaces; %(HEAD) marks the checked-out branch
+    // with "*". NUL-safe so branch names with odd chars survive.
+    raw = await rawGit(repoPath, [
+      "for-each-ref",
+      "--format=%(HEAD)%00%(refname)%00%(refname:short)",
+      "refs/heads",
+      "refs/remotes",
+    ]);
+  } catch {
+    return empty; // not a git repo, or no refs yet
+  }
+  const local: string[] = [];
+  const remote: string[] = [];
+  let current: string | null = null;
+  for (const line of raw.split("\n")) {
+    if (!line) continue;
+    // Namespace from the FULL refname — short names can't be trusted, a local
+    // branch like `feature/x` has a slash just like a remote `origin/x`.
+    const [headMark, full, name] = line.split("\0");
+    if (!name || full?.endsWith("/HEAD")) continue; // skip origin/HEAD alias
+    if (full?.startsWith("refs/remotes/")) remote.push(name);
+    else if (full?.startsWith("refs/heads/")) {
+      local.push(name);
+      if (headMark === "*") current = name;
+    }
+  }
+  return { current, local: local.sort(), remote: remote.sort() };
+}
+
 /** True if `ref` resolves to a commit in this repo. Non-throwing. */
 async function refExists(repoPath: string, ref: string): Promise<boolean> {
   try {
@@ -422,7 +459,9 @@ export async function gitDiff(
       const head = (await rawGit(repoPath, ["rev-parse", "HEAD"])).trim();
       return { patch: "", cacheKey: `${repoPath}:${head}:branch-none${file ? `:${file}` : ""}` };
     }
-    args.push(`${branchBase}...HEAD`);
+    // `head` defaults to HEAD (review a branch against the checkout); an explicit
+    // head reviews two arbitrary branches. 3-dot = merge-base diff (PR semantics).
+    args.push(`${branchBase}...${scope.head ?? "HEAD"}`);
   } else if (scope.kind === "unpushed") {
     branchBase = await resolveUnpushedBase(repoPath, scope.base);
     if (!branchBase) {
@@ -435,6 +474,14 @@ export async function gitDiff(
   } else if (scope.kind === "commit") {
     args.push(`${scope.sha}^!`);
   }
+  // Full file context for the patch-based modes (branch / unpushed / commit) so
+  // the diff renderer's collapsed "N unmodified lines" bands can EXPAND on click —
+  // with the default 3-line context there's no hidden content to reveal. `-U`
+  // emits context for the CHANGED files only (unchanged files aren't in the diff),
+  // so total size ≈ the changed files' content; the renderer re-collapses runs to
+  // `collapsedContextThreshold` and the bands become expandable. Working mode
+  // renders from full file blobs (useWorkingItems) and never hits this path.
+  if (scope.kind !== "working") args.push("-U999999");
   if (file) args.push("--", file);
 
   const patch = await rawGit(repoPath, args);
@@ -445,7 +492,7 @@ export async function gitDiff(
     scope.kind === "working"
       ? `working${scope.staged ? "-staged" : ""}`
       : scope.kind === "branch"
-        ? `branch-${branchBase ?? scope.base ?? "origin/main"}`
+        ? `branch-${branchBase ?? scope.base ?? "origin/main"}..${scope.head ?? "HEAD"}`
         : scope.kind === "unpushed"
           ? `unpushed-${branchBase ?? scope.base ?? "upstream"}`
           : `commit-${scope.sha}`;

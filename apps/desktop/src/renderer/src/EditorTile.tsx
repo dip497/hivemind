@@ -12,7 +12,7 @@
  * user actually opens get pulled in.
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { GripVertical } from "lucide-react";
+import { ExternalLink, GripVertical } from "lucide-react";
 import { useTileFont, FontStepper, handleFontKey } from "./tile-font";
 import { EditorState, type Extension, Compartment } from "@codemirror/state";
 import {
@@ -39,6 +39,7 @@ import { tags as t } from "@lezer/highlight";
 // buffer there).
 import { unifiedMergeView } from "@codemirror/merge";
 import { resolveActive } from "./editor-active";
+import { htmlFileUrl, isHtmlPath } from "./browser-open";
 // Lazy: marked + DOMPurify (and, on demand, mermaid) load only when the user
 // actually opens Preview — opening an editor tile pulls in zero markdown code.
 const MarkdownPreview = lazy(() =>
@@ -58,6 +59,8 @@ interface Props {
    *  re-selecting an already-open file a fresh request, so clicking a file that's
    *  already a tab switches back to it instead of being a no-op. */
   activeReq?: { path: string; seq: number } | null;
+  /** Open a URL in the frame's browser tile. */
+  onOpenInBrowser?: (url: string) => void;
   /** Close the whole tile. Omitted when embedded (the host owns chrome). */
   onClose?: () => void;
   /** When true, render only the tab bar + editor body — no outer tile chrome
@@ -203,7 +206,7 @@ interface TabState {
   diskChanged?: boolean;
 }
 
-export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, embedded = false }: Props) {
+export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, onOpenInBrowser, embedded = false }: Props) {
   // Per-tile font size (A−/A+ + Ctrl/Cmd +/−/0). The CM theme uses fontSize:
   // "inherit", so the size set on the root below flows into the editor.
   const font = useTileFont(`editor:${repoPath}`, 13);
@@ -534,6 +537,8 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, emb
   const activeMeta = active ? meta[active] : undefined;
   const activeDiff = active ? !!diffMode[active] : false;
   const activeMarkdown = active ? isMarkdownPath(active) : false;
+  const activeHtml = active ? isHtmlPath(active) : false;
+  const activeHtmlUrl = active ? htmlFileUrl(repoPath, active) : null;
   const activePreview = active ? !!previewMode[active] : false;
 
   return (
@@ -557,6 +562,17 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, emb
           {saving && <span className="text-[10px] text-[var(--color-fg3)]">saving…</span>}
           <span className="ml-auto flex items-center gap-2">
             {active && (
+              <>
+              {activeHtml && activeHtmlUrl && onOpenInBrowser && (
+                <button
+                  onClick={() => onOpenInBrowser(activeHtmlUrl)}
+                  className="nodrag size-5 grid place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--color-line2)] hover:text-[var(--color-fg)]"
+                  title="Open HTML in browser tile"
+                  aria-label="open HTML in browser"
+                >
+                  <ExternalLink size={12} />
+                </button>
+              )}
               <button
                 onClick={() => setDiffMode((m) => ({ ...m, [active]: !m[active] }))}
                 className={`nodrag text-[9.5px] px-1.5 py-0.5 rounded border ${
@@ -569,6 +585,7 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, emb
               >
                 ⇄ {activeDiff ? "diff" : "edit"}
               </button>
+              </>
             )}
             <span className="text-[9.5px] text-[var(--color-fg3)]">⌘S to save</span>
             <FontStepper {...font} />
@@ -619,6 +636,20 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, emb
                     title={previewMode[path] ? "edit (show source)" : "preview rendered markdown"}
                     aria-label="toggle markdown preview"
                   >◉</button>
+                )}
+                {isActive && isHtmlPath(path) && htmlFileUrl(repoPath, path) && onOpenInBrowser && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const url = htmlFileUrl(repoPath, path);
+                      if (url) onOpenInBrowser(url);
+                    }}
+                    className="text-[var(--color-fg3)] hover:text-[var(--color-fg)]"
+                    title="open HTML in browser tile"
+                    aria-label="open HTML in browser"
+                  >
+                    <ExternalLink size={10} />
+                  </button>
                 )}
                 {isActive && (
                   <button

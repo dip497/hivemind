@@ -12,6 +12,8 @@ interface Props {
   /** Tile selection — the wrapper's `tile-locked` class gates pointer-events
    *  when false so the wheel pans the canvas (matches TerminalTile). */
   selected?: boolean;
+  /** One-shot request from the canvas to open a URL in this browser tile. */
+  openReq?: { url: string; seq: number } | null;
   onClose?: () => void;
 }
 
@@ -101,7 +103,7 @@ function TabView({
   );
 }
 
-export function BrowserTile({ tileId, frameId, url, selected, onClose }: Props) {
+export function BrowserTile({ tileId, frameId, url, selected, openReq, onClose }: Props) {
   const seq = useRef(1);
   const initialUrls = useRef<Record<string, string>>({ t0: url ?? DEFAULT_URL });
   const [tabs, setTabs] = useState<TabMeta[]>(() => [
@@ -167,6 +169,12 @@ export function BrowserTile({ tileId, frameId, url, selected, onClose }: Props) 
   }, []);
   const newTabRef = useRef(newTab);
   newTabRef.current = newTab;
+  const lastOpenReqSeq = useRef(openReq?.seq ?? -1);
+  useEffect(() => {
+    if (!openReq || openReq.seq === lastOpenReqSeq.current) return;
+    lastOpenReqSeq.current = openReq.seq;
+    newTab(openReq.url);
+  }, [openReq, newTab]);
 
   const closeTab = useCallback((id: string) => {
     setTabs((ts) => {

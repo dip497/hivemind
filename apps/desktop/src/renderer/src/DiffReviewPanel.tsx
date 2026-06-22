@@ -56,7 +56,7 @@ export function DiffReviewPanel({ comments, onJump, onReply, onResolve, onDelete
       <div className="flex-1 overflow-y-auto p-2 space-y-3 text-[12px]">
         {comments.length === 0 && (
           <div className="text-[11px] text-[var(--color-fg3)] px-1 py-2">
-            No comments yet. Select line(s) in the diff and click the gutter “+”.
+            No comments yet. Click a line number in the diff (or select a range) to comment — on any line, changed or not.
           </div>
         )}
         {[...byFile.entries()].map(([file, list]) => (

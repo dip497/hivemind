@@ -71,3 +71,47 @@ test("working wins over the queued-input prompt during work", () => {
 test("idle in bypass mode (boxed prompt, no spinner) is still idle", () => {
   assert.equal(detectClaudeState("done.\n❯ \n⏵⏵ bypass permissions on"), "idle");
 });
+
+// Reported bug: a background agent is running but the main loop sits at the ❯
+// prompt with "✻ Waiting for N background agent to finish" — no interrupt hint,
+// no spinner ellipsis — so the tile falsely showed idle.
+// Reported miss: claude in high-effort "thinking" mode shows a spinner line with
+// a NEW glyph (✚), a punctuated task title, a live token counter, and NO "esc to
+// interrupt" — above the still-visible ❯ prompt → it read as idle.
+test("working: token-stream counter (high-effort thinking, no interrupt hint)", () => {
+  const screen = [
+    "✚ If your site is down, would you know it first?… (6m 41s · ↓ 18.3k tokens · thinking some more with high effort)",
+    "╭───────────────────────────╮",
+    "│ ❯ ",
+    "╰───────────────────────────╯",
+    "▶▶ auto mode on (shift+tab to cycle)",
+  ].join("\n");
+  assert.equal(detectClaudeState(screen), "working");
+});
+
+test("working: token counter alone (↑ upload) over a prompt", () => {
+  assert.equal(detectClaudeState("✶ Working… (↑ 1.2k tokens)\n❯ "), "working");
+  assert.equal(detectClaudeState("Booping (· 4321 tokens ·)\n❯ "), "working");
+});
+
+test("working: new spinner glyph ✚ + punctuated title + ellipsis", () => {
+  assert.equal(detectClaudeState("✚ Is it down, or is it me?…\n❯ "), "working");
+});
+
+test("working: background agent running, main loop back at prompt", () => {
+  assert.equal(detectClaudeState("✻ Waiting for 1 background agent to finish\n❯ "), "working");
+  assert.equal(detectClaudeState("Waiting for 3 background agents to finish\n> "), "working");
+});
+
+test("working: background-agent wait line above a long picker overlay", () => {
+  const screen = [
+    "✻ Waiting for 1 background agent to finish",
+    "─────────────",
+    "> ",
+    "Model: Opus 4.8 | v2.1.181",
+    "↑/↓ to select · Enter to view",
+    "> ● main",
+    "○ general-purpose  Resolve improvement/skills merge  6m",
+  ].join("\n");
+  assert.equal(detectClaudeState(screen), "working");
+});

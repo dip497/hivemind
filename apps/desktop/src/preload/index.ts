@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { HiveIpc, DiffScope, WorktreeCreateOpts, PlanReviewOpen, HcpCommand, HcpPipeEvent, HcpWaitEvent } from "../shared/ipc.js";
+import type { HiveIpc, DiffScope, WorktreeCreateOpts, PlanReviewOpen, HcpCommand, HcpPipeEvent, HcpWaitEvent, HcpSubagentEvent, HcpNotifyEvent, HcpTurnStateEvent } from "../shared/ipc.js";
 
 const api: HiveIpc & {
   onPtyData: (tileId: string, cb: (data: string) => void) => () => void;
@@ -21,6 +21,9 @@ const api: HiveIpc & {
   onHcpCommand: (cb: (cmd: HcpCommand) => void) => () => void;
   onHcpPipe: (cb: (e: HcpPipeEvent) => void) => () => void;
   onHcpWait: (cb: (e: HcpWaitEvent) => void) => () => void;
+  onHcpSubagent: (cb: (e: HcpSubagentEvent) => void) => () => void;
+  onHcpNotify: (cb: (e: HcpNotifyEvent) => void) => () => void;
+  onHcpTurnState: (cb: (e: HcpTurnStateEvent) => void) => () => void;
 } = {
   resolveProject: (rootHint) => ipcRenderer.invoke("resolveProject", rootHint),
   pickProjectFolder: () => ipcRenderer.invoke("pickProjectFolder"),
@@ -47,6 +50,7 @@ const api: HiveIpc & {
 
   gitStatus: (repoPath) => ipcRenderer.invoke("gitStatus", repoPath),
   gitListFiles: (repoPath) => ipcRenderer.invoke("gitListFiles", repoPath),
+  gitListBranches: (repoPath) => ipcRenderer.invoke("gitListBranches", repoPath),
   gitDiff: (repoPath, scope: DiffScope, file?: string) =>
     ipcRenderer.invoke("gitDiff", repoPath, scope, file),
   gitFileContents: (repoPath, file, rev) =>
@@ -177,6 +181,21 @@ const api: HiveIpc & {
     const listener = (_e: unknown, ev: HcpWaitEvent) => cb(ev);
     ipcRenderer.on("hcp:wait", listener);
     return () => ipcRenderer.removeListener("hcp:wait", listener);
+  },
+  onHcpSubagent: (cb: (e: HcpSubagentEvent) => void) => {
+    const listener = (_e: unknown, ev: HcpSubagentEvent) => cb(ev);
+    ipcRenderer.on("hcp:subagent", listener);
+    return () => ipcRenderer.removeListener("hcp:subagent", listener);
+  },
+  onHcpNotify: (cb: (e: HcpNotifyEvent) => void) => {
+    const listener = (_e: unknown, ev: HcpNotifyEvent) => cb(ev);
+    ipcRenderer.on("hcp:notify", listener);
+    return () => ipcRenderer.removeListener("hcp:notify", listener);
+  },
+  onHcpTurnState: (cb: (e: HcpTurnStateEvent) => void) => {
+    const listener = (_e: unknown, ev: HcpTurnStateEvent) => cb(ev);
+    ipcRenderer.on("hcp:turnstate", listener);
+    return () => ipcRenderer.removeListener("hcp:turnstate", listener);
   },
 };
 

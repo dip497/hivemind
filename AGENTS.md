@@ -73,3 +73,12 @@ GitHub Actions builds + publishes. **Do not run it unless explicitly asked.**
   plain node.
 - A persistent PTY daemon survives the window; remote PTYs run in-main (they
   can't survive an ssh drop). See `apps/desktop/AGENTS.md`.
+
+
+<claude-mem-context>
+# Memory Context
+
+# [hivemind] recent context, 2026-06-19 2:43pm GMT+5:30
+
+No previous sessions found.
+</claude-mem-context>

@@ -53,6 +53,20 @@ function OpencodeIcon({ size = 16, className }: { size?: number; className?: str
   );
 }
 
+/** Droid (Factory) — a geometric rendering of Factory's looped-petal star mark
+ *  (four overlapping loops on 8-fold symmetry), stroked with currentColor so it
+ *  themes. Factory ships no simple-icons logo; this is a clean approximation. */
+function DroidIcon({ size = 16, className }: { size?: number; className?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" className={className} aria-hidden>
+      <ellipse cx="12" cy="12" rx="10" ry="2.6" />
+      <ellipse cx="12" cy="12" rx="10" ry="2.6" transform="rotate(45 12 12)" />
+      <ellipse cx="12" cy="12" rx="10" ry="2.6" transform="rotate(90 12 12)" />
+      <ellipse cx="12" cy="12" rx="10" ry="2.6" transform="rotate(135 12 12)" />
+    </svg>
+  );
+}
+
 /** A generic agent mark for tools without a bundled logo yet (gemini/…). */
 function GenericAgentIcon({ size = 16, className }: { size?: number; className?: string }) {
   return (
@@ -78,6 +92,11 @@ export const AGENTS: AgentDef[] = [
   // opencode: permission model is config-driven (opencode.json), so no default
   // flags. Note: its TUI has no CLI resume — reopen sessions via its in-app list.
   { id: "opencode", label: "opencode", cmd: "opencode", icon: OpencodeIcon, enabled: true },
+  // droid (Factory): its interactive TUI gates approvals in-app (Ctrl+L cycles
+  // autonomy; `--auto` is exec-only), so no permission flags on the CLI —
+  // detectDroid reads the in-TUI prompts. Session resume across a daemon restart
+  // is handled by the droid provider (`droid --resume <id>`); status is scrape-only.
+  { id: "droid", label: "Droid", cmd: "droid", icon: DroidIcon, enabled: true },
   { id: "gemini", label: "Gemini", cmd: "gemini", icon: GenericAgentIcon, enabled: false },
 ];
 

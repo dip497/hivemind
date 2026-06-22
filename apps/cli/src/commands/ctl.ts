@@ -130,6 +130,45 @@ const disconnect = defineCommand({
   async run({ args }) { await run("tile.disconnect", { srcTileId: args.src, dstTileId: args.dst }); },
 });
 
+const workflow = defineCommand({
+  meta: { name: "workflow", description: "Run a multi-agent workflow (fanout | pipeline | mapreduce) of visible worker tiles" },
+  args: {
+    shape: { type: "string", default: "fanout", description: "fanout | pipeline | mapreduce" },
+    items: { type: "string", description: "fanout/mapreduce: '||'-separated items, one worker each (filled into {item})" },
+    prompt: { type: "string", description: "fanout/mapreduce: per-worker task; use {item} placeholder" },
+    stages: { type: "string", description: "pipeline: '||'-separated stage prompts; each may use {input}" },
+    input: { type: "string", description: "pipeline: seed value for the first stage's {input}" },
+    "reduce-prompt": { type: "string", description: "mapreduce: reducer prompt; use {results}" },
+    agent: { type: "string", default: "claude", description: "runtime per worker (claude, codex, …)" },
+    frame: { type: "string", description: "frame to spawn workers into (id, repo name, or title)" },
+    supervise: { type: "string", description: "broker workers' tool perms to this CLI: 'all' or a comma-list of tools" },
+    "max-concurrent": { type: "string", description: "max workers live at once (default 6, cap 12)" },
+    timeout: { type: "string", description: "per-worker turn ceiling in ms (default 600000)" },
+    close: { type: "boolean", description: "close worker tiles after collecting their replies" },
+  },
+  async run({ args }) {
+    const split = (s?: string) => (s ? String(s).split("||").map((x) => x.trim()).filter(Boolean) : undefined);
+    const perTurn = args.timeout ? Number(args.timeout) : 600_000;
+    const params = {
+      shape: args.shape,
+      items: split(args.items),
+      prompt: args.prompt,
+      stages: split(args.stages),
+      input: args.input,
+      reduce_prompt: args["reduce-prompt"],
+      agent: args.agent,
+      frame: args.frame,
+      supervise: args.supervise,
+      max_concurrent: args["max-concurrent"] ? Number(args["max-concurrent"]) : undefined,
+      timeout_ms: args.timeout ? perTurn : undefined,
+      close_when_done: args.close || undefined,
+    };
+    const units = (params.items?.length ?? 0) + (params.stages?.length ?? 0) + 2;
+    const ceiling = Math.min(24 * 60 * 60 * 1000, perTurn * units + 30_000);
+    await run("workflow.run", params, ceiling);
+  },
+});
+
 const approve = defineCommand({
   meta: { name: "approve", description: "Answer a supervised worker's approval request" },
   args: {
@@ -171,5 +210,5 @@ const stream = defineCommand({
 
 export const ctlCmd = defineCommand({
   meta: { name: "ctl", description: "Drive the running hivemind app (spawn/send/read/stream/connect agents)" },
-  subCommands: { list, frames, spawn, send, keys, read, approve, stream, focus, close, connect, disconnect },
+  subCommands: { list, frames, spawn, send, keys, read, workflow, approve, stream, focus, close, connect, disconnect },
 });

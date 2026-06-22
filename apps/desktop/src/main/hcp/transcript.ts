@@ -20,6 +20,7 @@ type Block = { type?: string; text?: string };
 type Entry = {
   type?: string;
   role?: string;
+  content?: Block[] | string; // droid emits flat {role,content}; claude nests under message
   message?: { role?: string; content?: Block[] | string };
 };
 
@@ -51,7 +52,7 @@ function scanLast(raw: string): string | null {
       continue;
     }
     if (!isAssistant(e)) continue;
-    const text = textOf(e.message?.content).trim();
+    const text = textOf(e.message?.content ?? e.content).trim();
     if (text) return text;
   }
   return null;

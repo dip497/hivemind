@@ -124,8 +124,10 @@ to skip the slow electron-builder step (the CLI still installs).
 ```bash
 # 1. Initialize hivemind inside a git repo
 cd ~/my-project
-hive init --prefix MYP        # writes .hivemind/config.yaml
-hive init --agentic           # adds .mcp.json + .claude/skills/ + CLAUDE.md
+hive init --prefix MYP        # writes .hivemind/config.yaml + the agentic stack
+                              # (.mcp.json + .claude/skills/ + CLAUDE.md) by default
+# hive init --prefix MYP --no-agentic   # tracker only, skip the agentic stack
+# hive add mcp / hive add skill         # add a single piece later
 
 # 2. Create an issue
 hive new "Fix token expiry comparison"

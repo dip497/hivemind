@@ -23,7 +23,8 @@ import {
   useRef,
   useState,
 } from "react";
-import { GripVertical, Play, RefreshCw } from "lucide-react";
+import { GripVertical, Play, RefreshCw, Search, SlidersHorizontal } from "lucide-react";
+import { ReviewPopover, CommentBox, ActionToolbar } from "./review-ui";
 import { useTileFont, FontStepper, handleFontKey } from "./tile-font";
 import {
   CodeView,
@@ -46,7 +47,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import type { DiffScope, GitFileEntry, GitStatusSnapshot } from "../../shared/ipc";
+import type { DiffScope, GitBranchList, GitFileEntry, GitStatusSnapshot } from "../../shared/ipc";
 import {
   useDiscardFiles,
   useGitCommit,
@@ -94,6 +95,23 @@ function loadJson<T>(key: string, fallback: T): T {
   }
 }
 
+/** Which file does a hovered line belong to? Pierre stacks file diffs and gives
+ *  the gutter "+" only a line range — not the file. We resolve it by finding the
+ *  nearest `data-diff-file` header (on our DiffHeader) that PRECEDES the line in
+ *  document order (the hovered line's sticky header is always rendered above it).
+ *  Robust to Pierre's gutter API + to view/setting toggles clearing the selection. */
+function fileForLineEl(lineEl: HTMLElement | null, container: HTMLElement | null): string | null {
+  if (!lineEl || !container) return null;
+  let file: string | null = null;
+  for (const h of Array.from(container.querySelectorAll<HTMLElement>("[data-diff-file]"))) {
+    // header precedes line ⇒ line FOLLOWS header in document order.
+    if (h.compareDocumentPosition(lineEl) & Node.DOCUMENT_POSITION_FOLLOWING) {
+      file = h.getAttribute("data-diff-file");
+    } else break;
+  }
+  return file;
+}
+
 export function DiffTile({ repoPath, initialMode = "working", initialBase = "origin/main", onClose }: Props) {
   // Per-tile font size (A−/A+ + Ctrl/Cmd +/−/0) — overrides --diffs-font-size.
   const font = useTileFont(`diff:${repoPath}`, 13);
@@ -104,6 +122,11 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
   const chromePx = Math.max(9, Math.round(font.size * 0.85));
   const headerH = Math.round(chromePx * 3.1);
   const [mode, setMode] = useState<Mode>(initialMode);
+  // Branch-compare refs (branch mode). `undefined` ⇒ auto: base resolves to
+  // origin/HEAD, head defaults to the working checkout (HEAD). Set either to
+  // review any two arbitrary branches — no remote PR needed.
+  const [branchBase, setBranchBase] = useState<string | undefined>(undefined);
+  const [branchHead, setBranchHead] = useState<string | undefined>(undefined);
   const [staged, setStaged] = useState(false);
   const [layout, setLayout] = useState<Layout>("split");
   const [overflow, setOverflow] = useState<Overflow>("scroll");
@@ -112,6 +135,32 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
   const [expandUnchanged, setExpandUnchanged] = useState(false);
   const [activeFile, setActiveFile] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  // Secondary chrome — collapsed by default to de-clutter the header. The
+  // "view⋯" popover holds layout/wrap/full/font/refresh; the 🔍 button reveals
+  // the in-diff search input on demand.
+  const [viewMenuOpen, setViewMenuOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  // Close the view⋯ popover on outside-click or Escape. Document-level listeners
+  // (not a fixed overlay): the tile lives inside a react-flow `.tile-drag-handle`,
+  // whose drag/pan system swallows a non-`nodrag` overlay and can pointer-capture
+  // `pointerdown`. `mousedown` (capture) is delivered before react-flow reacts and
+  // is not retargeted by setPointerCapture; Escape is the keyboard escape hatch.
+  const viewMenuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!viewMenuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (!viewMenuRef.current?.contains(e.target as Node)) setViewMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setViewMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDown, true);
+    document.addEventListener("keydown", onKey, true);
+    return () => {
+      document.removeEventListener("mousedown", onDown, true);
+      document.removeEventListener("keydown", onKey, true);
+    };
+  }, [viewMenuOpen]);
 
   const [comments, setComments] = useState<ReviewComment[]>(() =>
     normalizeComments(loadJson<unknown>(COMMENTS_KEY_PREFIX + repoPath, [])),
@@ -138,13 +187,22 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
   );
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [composer, setComposer] = useState<
-    { file: string; startLine: number; endLine: number; side: AnnotationSide } | null
+    { file: string; startLine: number; endLine: number; side: AnnotationSide; anchor: { x: number; y: number }; stage: "choose" | "comment" } | null
   >(null);
+  const [composerDraft, setComposerDraft] = useState("");
+  // Clear the draft whenever the composer closes, so a fresh "+" starts empty.
+  useEffect(() => { if (!composer) setComposerDraft(""); }, [composer]);
 
   const codeViewRef = useRef<CodeViewHandle<ReviewComment>>(null);
-  // Last line-selection from CodeView (`onSelectedLinesChange`). The gutter "+"
-  // callback only receives a range — NOT the file — so we remember which file
-  // (item id `diff:<path>`) the selection is in to seed the comment composer.
+  // The CodeView wrapper — for popover anchor coords + scoping the file lookup.
+  const cvHostRef = useRef<HTMLDivElement>(null);
+  // The line element the pointer is currently over (from onLineEnter). The gutter
+  // "+" callback gets only a line RANGE — not the file — so we resolve the file
+  // from the hovered line's position via the nearest preceding `data-diff-file`
+  // header (robust to view/setting changes that clear the selection).
+  const hoveredLineRef = useRef<HTMLElement | null>(null);
+  // Last line-selection from CodeView (`onSelectedLinesChange`) — fallback file
+  // source (its id is `diff:<path>`) when there's no hovered line.
   const selectedRef = useRef<{ id: string; range: { start: number; end: number; side?: AnnotationSide; endSide?: AnnotationSide } } | null>(null);
 
   const { data: status, isLoading: statusLoading, error: statusError } = useGitStatus(repoPath);
@@ -211,6 +269,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
     qc.invalidateQueries({ queryKey: ["git:status", repoPath] });
     qc.invalidateQueries({ queryKey: ["git:diff", repoPath] });
     qc.invalidateQueries({ queryKey: ["git:list-files", repoPath] });
+    qc.invalidateQueries({ queryKey: ["git:branches", repoPath] });
     qc.invalidateQueries({
       predicate: (q) => q.queryKey[0] === "git:file" && q.queryKey[1] === repoPath,
     });
@@ -225,6 +284,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
       qc.invalidateQueries({ queryKey: ["git:status", repoPath] });
       qc.invalidateQueries({ queryKey: ["git:diff", repoPath] });
       qc.invalidateQueries({ queryKey: ["git:list-files", repoPath] });
+      qc.invalidateQueries({ queryKey: ["git:branches", repoPath] });
       qc.invalidateQueries({
         predicate: (q) =>
           q.queryKey[0] === "git:file" &&
@@ -247,8 +307,17 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
 
   // ── build CodeView items per mode ───────────────────────────────────────
   const workingItems = useWorkingItems(repoPath, mode === "working" ? status?.files ?? [] : [], staged);
-  const branchScope: DiffScope = useMemo(() => ({ kind: "branch", base: initialBase }), [initialBase]);
+  const branchScope: DiffScope = useMemo(
+    () => ({ kind: "branch", base: branchBase ?? initialBase, head: branchHead }),
+    [branchBase, branchHead, initialBase],
+  );
   const branch = useBranchItems(repoPath, branchScope, mode === "branch");
+  // Branch inventory for the base/head pickers — only fetched in branch mode.
+  const branchesQ = useQuery<GitBranchList>({
+    queryKey: ["git:branches", repoPath],
+    queryFn: () => window.hive.gitListBranches(repoPath),
+    enabled: mode === "branch",
+  });
   // Committed-but-not-pushed: net diff of local commits ahead of @{upstream}.
   const unpushedScope: DiffScope = useMemo(() => ({ kind: "unpushed" }), []);
   const unpushed = useBranchItems(repoPath, unpushedScope, mode === "unpushed");
@@ -314,6 +383,25 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
     codeViewRef.current?.scrollTo({ type: "item", id, align: "start" });
   }, []);
 
+  // Open the comment composer popover anchored just under a line. Shared by the
+  // gutter "+" and the line-number click. Stable (refs + setters only).
+  const openComposerAt = useCallback(
+    (file: string, startLine: number, endLine: number, side: AnnotationSide, lineEl: HTMLElement | null) => {
+      const hostRect = cvHostRef.current?.getBoundingClientRect();
+      const lineRect = lineEl?.getBoundingClientRect();
+      let anchor = { x: 44, y: 44 };
+      if (hostRect && lineRect) {
+        const yBelow = lineRect.bottom - hostRect.top;
+        // Flip the popover ABOVE the line when it would render off the tile's
+        // bottom edge (clicking a low line otherwise pushed the composer off-screen).
+        const flip = yBelow > hostRect.height - 150;
+        anchor = { x: lineRect.left - hostRect.left + 44, y: flip ? Math.max(4, lineRect.top - hostRect.top - 140) : yBelow };
+      }
+      setComposer({ file, startLine, endLine, side, anchor, stage: "choose" });
+    },
+    [],
+  );
+
   // ── in-diff search (codiff's hunk-walk algorithm) ──────────────────────
   // Walks each fileDiff's hunks → hunkContent blocks, mapping array indices
   // back to real line numbers + side, so we can scrollTo + highlight each hit.
@@ -370,7 +458,17 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
       maxLineDiffLength: 2000,
       hunkSeparators: "line-info-basic",
       enableLineSelection: true,
-      enableGutterUtility: mode === "working",
+      // Comments work in EVERY diff mode (working / branch / unpushed) — a review
+      // comment is just file+line+side. (Was gated to `mode === "working"`, which
+      // is why the "+" vanished when you switched the mode tab.)
+      enableGutterUtility: true,
+      // Track the hovered line so the gutter "+" can resolve its file (the click
+      // callback gets only a range). Robust to view/setting toggles clearing the
+      // selection — the old code resolved the file from a stale selection.
+      onLineEnter: (p: { lineElement?: HTMLElement }) => { hoveredLineRef.current = p.lineElement ?? null; },
+      // Highlight the hovered line + number so it reads as interactive (click the
+      // number to comment) — without this the gutter looked inert.
+      lineHoverHighlight: "both",
       tokenizeMaxLength: 100_000,
       // MUST match DiffHeader's rendered height — CodeView reserves this many
       // px for the header slot and uses it for sticky-header positioning
@@ -379,20 +477,29 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
       itemMetrics: { diffHeaderHeight: headerH },
       layout: { gap: 10, paddingTop: 8, paddingBottom: 8 },
       onGutterUtilityClick: (range) => {
-        // The library calls this with ONE arg (the line range) — NOT a context.
-        // The earlier code read `context.item` (undefined) and threw, so the
-        // composer never opened ("comments not working"). Resolve the file from
-        // the remembered line-selection (its id is `diff:<path>`).
+        // The library hands us only the line RANGE, not the file. Resolve the file
+        // from the HOVERED line (nearest preceding `data-diff-file` header), with
+        // the last selection as a fallback. This no longer silently no-ops after a
+        // view/setting change cleared the selection ("comments not working").
         const sel = selectedRef.current;
-        if (!sel) return;
-        const file = sel.id.replace(/^diff:/, "");
-        const side: AnnotationSide = range.side ?? range.endSide ?? sel.range.side ?? "additions";
-        const startLine = Math.min(range.start, range.end);
-        const endLine = Math.max(range.start, range.end);
-        setComposer({ file, startLine, endLine, side });
+        const lineEl = hoveredLineRef.current;
+        const file =
+          fileForLineEl(lineEl, cvHostRef.current) ?? sel?.id.replace(/^diff:/, "") ?? null;
+        if (!file) return;
+        const side: AnnotationSide = range.side ?? range.endSide ?? sel?.range.side ?? "additions";
+        openComposerAt(file, Math.min(range.start, range.end), Math.max(range.start, range.end), side, lineEl);
+      },
+      // Click a line NUMBER → comment on THAT line — works on ANY line, including
+      // unmodified/context lines (the hover "+" only invited modified lines). More
+      // discoverable than hunting the gutter "+", and the GitHub model.
+      onLineNumberClick: (p: { lineNumber?: number; annotationSide?: AnnotationSide; lineElement?: HTMLElement }) => {
+        const lineEl = p.lineElement ?? hoveredLineRef.current;
+        const file = fileForLineEl(lineEl, cvHostRef.current);
+        if (!file || p.lineNumber == null) return;
+        openComposerAt(file, p.lineNumber, p.lineNumber, p.annotationSide ?? "additions", lineEl);
       },
     }),
-    [layout, overflow, expandUnchanged, headerH],
+    [layout, overflow, expandUnchanged, headerH, openComposerAt],
   );
 
   // ── header slot ───────────────────────────────────────────────────────
@@ -491,6 +598,9 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
     ];
     persistComments(next);
     setComposer(null);
+    // Reveal the review panel on the FIRST comment so it isn't invisible (you'd
+    // otherwise have to know to toggle "Review" to see what you left).
+    if (comments.length === 0) setReviewOpen(true);
   }
 
   // ── review-comment mutations (used by the review panel) ──────────────────
@@ -563,7 +673,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
     disabled?: boolean;
   }[] = [
     { id: "working", label: "working", title: "uncommitted working-tree changes" },
-    { id: "branch", label: "branch", title: `compare branch to ${initialBase}` },
+    { id: "branch", label: "branch", title: `compare ${branchBase ?? initialBase} … ${branchHead ?? "HEAD"}` },
     {
       id: "unpushed",
       label: "unpushed",
@@ -598,7 +708,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
                 mode === t.id
                   ? "bg-[var(--color-bg4)] text-[var(--color-accent)] font-semibold"
                   : "text-[var(--color-fg3)] hover:text-[var(--color-fg2)]"
-              } ${t.disabled ? "opacity-40 cursor-not-allowed" : ""}`}
+              } ${t.disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}
               onClick={() => { if (!t.disabled) setMode(t.id); }}
               disabled={t.disabled}
               title={t.title}
@@ -612,6 +722,28 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
             </button>
           ))}
         </div>
+
+        {/* branch-compare pickers — base…head. Review any two branches with no
+            remote PR. Empty = auto (base→origin/HEAD, head→working checkout). */}
+        {mode === "branch" && (
+          <div className="nodrag ml-1.5 inline-flex items-center gap-1">
+            <BranchPicker
+              label="base"
+              value={branchBase}
+              onChange={setBranchBase}
+              branches={branchesQ.data}
+              autoLabel={`auto (${initialBase})`}
+            />
+            <span aria-hidden className="text-[var(--color-fg3)]">…</span>
+            <BranchPicker
+              label="head"
+              value={branchHead}
+              onChange={setBranchHead}
+              branches={branchesQ.data}
+              autoLabel="HEAD (checkout)"
+            />
+          </div>
+        )}
 
         {mode === "working" && (
           <button
@@ -628,98 +760,140 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
           </button>
         )}
 
-        <div className="nodrag ml-1.5 inline-flex items-center gap-1 px-1 py-0.5 rounded bg-[var(--color-bg)] border border-[var(--color-line2)]">
+        {/* in-diff search — collapsed to an icon; click reveals the input.
+            Line-level matches, scroll + highlight, ↑/↓ nav. */}
+        {searchOpen || search.trim() ? (
+          <div className="nodrag ml-1.5 inline-flex items-center gap-1 bg-[var(--color-bg)] border border-[var(--color-line2)] rounded px-1.5 py-0.5">
+            <Search size={11} aria-hidden className="text-[var(--color-fg3)] shrink-0" />
+            <input
+              autoFocus
+              className="w-28 bg-transparent text-[10px] font-mono text-[var(--color-fg)] outline-none placeholder:text-[var(--color-fg3)]"
+              placeholder="search diff…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  gotoMatch(matchIdx + (e.shiftKey ? -1 : 1));
+                }
+                if (e.key === "Escape") { setSearch(""); setSearchOpen(false); }
+              }}
+            />
+            {search.trim() && (
+              <span className="text-[9.5px] font-mono tabular-nums text-[var(--color-fg3)] min-w-[34px] text-center">
+                {matches.length ? `${matchIdx + 1}/${matches.length}` : "0/0"}
+              </span>
+            )}
+            <button
+              className="text-[var(--color-fg3)] hover:text-[var(--color-fg)] disabled:opacity-30 text-[10px] leading-none"
+              disabled={matches.length === 0}
+              onClick={() => gotoMatch(matchIdx - 1)}
+              title="previous match (shift+enter)"
+            >
+              ↑
+            </button>
+            <button
+              className="text-[var(--color-fg3)] hover:text-[var(--color-fg)] disabled:opacity-30 text-[10px] leading-none"
+              disabled={matches.length === 0}
+              onClick={() => gotoMatch(matchIdx + 1)}
+              title="next match (enter)"
+            >
+              ↓
+            </button>
+            <button
+              className="cursor-pointer text-[var(--color-fg3)] hover:text-[var(--color-fg)] text-[11px] leading-none ml-0.5"
+              onClick={() => { setSearch(""); setSearchOpen(false); }}
+              title="close search"
+            >
+              ×
+            </button>
+          </div>
+        ) : (
           <button
-            className={`px-1.5 text-[10px] font-mono rounded transition-colors ${
-              layout === "split" ? "text-[var(--color-accent)] bg-[var(--color-bg4)]" : "text-[var(--color-fg3)] hover:text-[var(--color-fg2)]"
-            }`}
-            onClick={() => setLayout("split")}
-            title="split layout"
+            className="nodrag cursor-pointer ml-1.5 size-6 grid place-items-center rounded text-[var(--color-fg3)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg4)] transition-colors"
+            onClick={() => setSearchOpen(true)}
+            aria-label="search diff"
+            title="Search diff"
           >
-            split
+            <Search size={12} aria-hidden />
           </button>
-          <button
-            className={`px-1.5 text-[10px] font-mono rounded transition-colors ${
-              layout === "unified" ? "text-[var(--color-accent)] bg-[var(--color-bg4)]" : "text-[var(--color-fg3)] hover:text-[var(--color-fg2)]"
-            }`}
-            onClick={() => setLayout("unified")}
-            title="unified layout"
-          >
-            unified
-          </button>
-          <span aria-hidden className="text-[var(--color-line2)]">|</span>
-          <button
-            className={`px-1.5 text-[10px] font-mono rounded transition-colors ${
-              overflow === "wrap" ? "text-[var(--color-accent)] bg-[var(--color-bg4)]" : "text-[var(--color-fg3)] hover:text-[var(--color-fg2)]"
-            }`}
-            onClick={() => setOverflow((o) => (o === "scroll" ? "wrap" : "scroll"))}
-            title="toggle long-line wrap"
-          >
-            wrap
-          </button>
-          <button
-            className={`px-1.5 text-[10px] font-mono rounded transition-colors ${
-              expandUnchanged ? "text-[var(--color-accent)] bg-[var(--color-bg4)]" : "text-[var(--color-fg3)] hover:text-[var(--color-fg2)]"
-            }`}
-            onClick={() => setExpandUnchanged((v) => !v)}
-            title={expandUnchanged ? "showing full file — click for changes only" : "showing changes only — click for full file"}
-          >
-            {expandUnchanged ? "full" : "diff"}
-          </button>
-        </div>
+        )}
 
-        {/* Manual refresh — re-reads the changed-file list + diffs now. The fs
-            watcher already auto-refreshes, but this is the explicit escape hatch
-            for any case it misses (e.g. an external git op). */}
-        <button
-          className="nodrag ml-1.5 size-6 grid place-items-center rounded text-[var(--color-fg3)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg4)] transition-colors"
-          onClick={refresh}
-          aria-label="refresh diff"
-          title="Refresh diff"
-        >
-          <RefreshCw size={12} aria-hidden />
-        </button>
-
-        <span className="ml-1.5">
-          <FontStepper {...font} />
-        </span>
-
-        {/* in-diff search — line-level matches, scroll + highlight, ↑/↓ nav */}
-        <div className="nodrag ml-1.5 inline-flex items-center gap-1 bg-[var(--color-bg)] border border-[var(--color-line2)] rounded px-1.5 py-0.5">
-          <input
-            className="w-28 bg-transparent text-[10px] font-mono text-[var(--color-fg)] outline-none placeholder:text-[var(--color-fg3)]"
-            placeholder="search diff…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                gotoMatch(matchIdx + (e.shiftKey ? -1 : 1));
-              }
-              if (e.key === "Escape") setSearch("");
-            }}
-          />
-          {search.trim() && (
-            <span className="text-[9.5px] font-mono tabular-nums text-[var(--color-fg3)] min-w-[34px] text-center">
-              {matches.length ? `${matchIdx + 1}/${matches.length}` : "0/0"}
-            </span>
+        {/* view⋯ — secondary view options (layout / wrap / full / font /
+            refresh) collapsed into one popover so the header stays uncluttered. */}
+        <div className="relative" ref={viewMenuRef}>
+          <button
+            className={`nodrag cursor-pointer ml-1.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] font-mono transition-colors ${
+              viewMenuOpen
+                ? "border-[var(--color-line2)] bg-[var(--color-bg4)] text-[var(--color-fg)]"
+                : "border-[var(--color-line2)] text-[var(--color-fg3)] hover:text-[var(--color-fg2)]"
+            }`}
+            onClick={() => setViewMenuOpen((o) => !o)}
+            title="View options"
+          >
+            <SlidersHorizontal size={11} aria-hidden />
+            view
+          </button>
+          {viewMenuOpen && (
+            <div className="nodrag absolute z-50 right-0 top-full mt-1 w-44 flex flex-col gap-2 bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-lg shadow-xl p-2 text-[10px] font-mono">
+              {/* header — label + explicit close (outside-click & Esc also close) */}
+              <div className="flex items-center justify-between -mb-0.5">
+                <span className="uppercase tracking-wider text-[9px] font-semibold text-[var(--color-fg3)]">View</span>
+                <button
+                  className="cursor-pointer size-4 grid place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--color-line2)] hover:text-[var(--color-fg)] transition-colors"
+                  onClick={() => setViewMenuOpen(false)}
+                  aria-label="close view options"
+                  title="close"
+                >
+                  ×
+                </button>
+              </div>
+              {/* layout */}
+              <div className="inline-flex rounded overflow-hidden border border-[var(--color-line2)]">
+                <button
+                  className={`flex-1 cursor-pointer px-2 py-1 transition-colors ${layout === "split" ? "bg-[var(--color-bg4)] text-[var(--color-accent)]" : "text-[var(--color-fg3)] hover:text-[var(--color-fg2)]"}`}
+                  onClick={() => setLayout("split")}
+                >
+                  split
+                </button>
+                <button
+                  className={`flex-1 cursor-pointer px-2 py-1 transition-colors ${layout === "unified" ? "bg-[var(--color-bg4)] text-[var(--color-accent)]" : "text-[var(--color-fg3)] hover:text-[var(--color-fg2)]"}`}
+                  onClick={() => setLayout("unified")}
+                >
+                  unified
+                </button>
+              </div>
+              {/* toggles */}
+              <div className="flex items-center gap-1.5">
+                <button
+                  className={`flex-1 cursor-pointer px-2 py-1 rounded border transition-colors ${overflow === "wrap" ? "border-[var(--color-accent)] text-[var(--color-accent)] bg-[var(--color-bg4)]" : "border-[var(--color-line2)] text-[var(--color-fg3)] hover:text-[var(--color-fg2)]"}`}
+                  onClick={() => setOverflow((o) => (o === "scroll" ? "wrap" : "scroll"))}
+                  title="toggle long-line wrap"
+                >
+                  wrap
+                </button>
+                <button
+                  className={`flex-1 cursor-pointer px-2 py-1 rounded border transition-colors ${expandUnchanged ? "border-[var(--color-accent)] text-[var(--color-accent)] bg-[var(--color-bg4)]" : "border-[var(--color-line2)] text-[var(--color-fg3)] hover:text-[var(--color-fg2)]"}`}
+                  onClick={() => setExpandUnchanged((v) => !v)}
+                  title={expandUnchanged ? "showing full file — click for changes only" : "showing changes only — click for full file"}
+                >
+                  {expandUnchanged ? "full" : "diff"}
+                </button>
+              </div>
+              {/* font + refresh */}
+              <div className="flex items-center justify-between gap-1.5 pt-1 border-t border-[var(--color-line2)]">
+                <FontStepper {...font} />
+                <button
+                  className="size-6 cursor-pointer grid place-items-center rounded text-[var(--color-fg3)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg4)] transition-colors"
+                  onClick={refresh}
+                  aria-label="refresh diff"
+                  title="Refresh diff (re-read files + diffs)"
+                >
+                  <RefreshCw size={12} aria-hidden />
+                </button>
+              </div>
+            </div>
           )}
-          <button
-            className="text-[var(--color-fg3)] hover:text-[var(--color-fg)] disabled:opacity-30 text-[10px] leading-none"
-            disabled={matches.length === 0}
-            onClick={() => gotoMatch(matchIdx - 1)}
-            title="previous match (shift+enter)"
-          >
-            ↑
-          </button>
-          <button
-            className="text-[var(--color-fg3)] hover:text-[var(--color-fg)] disabled:opacity-30 text-[10px] leading-none"
-            disabled={matches.length === 0}
-            onClick={() => gotoMatch(matchIdx + 1)}
-            title="next match (enter)"
-          >
-            ↓
-          </button>
         </div>
 
         <div className="ml-auto flex items-center gap-2.5 text-[var(--color-fg3)]">
@@ -889,7 +1063,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
           )}
 
           {!activeFile && !modeError && !loading && items.length > 0 && (
-            <div className="flex-1 min-h-0">
+            <div ref={cvHostRef} className="relative flex-1 min-h-0">
               <CodeView<ReviewComment>
                 ref={codeViewRef}
                 className="h-full w-full overflow-y-auto"
@@ -899,6 +1073,26 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
                 renderAnnotation={renderAnnotation}
                 onSelectedLinesChange={(sel) => { selectedRef.current = sel; }}
               />
+              {/* Comment composer — a popover anchored just under the clicked line
+                  (same UX as plan-review). Stage 1 = Comment + quick-labels; stage
+                  2 = the multi-line comment box. Shared review-ui components. */}
+              {composer && (
+                <ReviewPopover anchor={composer.anchor} onClose={() => setComposer(null)}>
+                  {composer.stage === "choose" ? (
+                    <ActionToolbar
+                      onComment={() => setComposer({ ...composer, stage: "comment" })}
+                      onQuickLabel={(label, tip) => submitComposer(tip ? `**${label}** — ${tip}` : label)}
+                    />
+                  ) : (
+                    <CommentBox
+                      value={composerDraft}
+                      onChange={setComposerDraft}
+                      onCancel={() => setComposer({ ...composer, stage: "choose" })}
+                      onSubmit={() => submitComposer(composerDraft)}
+                    />
+                  )}
+                </ReviewPopover>
+              )}
             </div>
           )}
         </div>
@@ -926,10 +1120,10 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
           </span>
           <button
             onClick={sendReview}
-            className="ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded text-white bg-[var(--color-brand)] hover:opacity-90 text-[10.5px] font-medium"
+            className="ml-auto inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-white bg-[var(--color-brand)] hover:opacity-90 text-[11.5px] font-medium"
             title="Send all review comments to claude (spawns one if none is running)"
           >
-            <Play size={9} fill="currentColor" strokeWidth={0} aria-hidden />
+            <Play size={12} fill="currentColor" strokeWidth={0} aria-hidden />
             Send review to Claude
           </button>
           <button
@@ -944,10 +1138,6 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
 
       {mode === "working" && !activeFile && status && ((status.files?.length ?? 0) > 0 || status.ahead > 0) && (
         <CommitBar repoPath={repoPath} status={status} />
-      )}
-
-      {composer && (
-        <Composer composer={composer} onSubmit={submitComposer} onCancel={() => setComposer(null)} />
       )}
     </div>
   );
@@ -1178,6 +1368,115 @@ function useWorkingItems(repoPath: string, files: GitFileEntry[], staged: boolea
 
 // ── items: branch (`git diff base...HEAD`, partial patch) ─────────────────
 
+/** A base/head ref dropdown for branch-compare. Native <select> so the menu is
+ *  immune to the tile drag-handle and z-stacking. Empty value ⇒ auto (caller's
+ *  default). Local + remote branches in separate optgroups. */
+/** Searchable branch combobox — a trigger button + a filterable popover list.
+ *  A plain <select> is unusable on repos with hundreds of branches; this filters
+ *  local + remote refs as you type. Closes on pick / outside-click / Escape. */
+function BranchPicker({
+  label,
+  value,
+  onChange,
+  branches,
+  autoLabel,
+}: {
+  label: string;
+  value: string | undefined;
+  onChange: (v: string | undefined) => void;
+  branches: GitBranchList | undefined;
+  autoLabel: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", onDown, true);
+    document.addEventListener("keydown", onKey, true);
+    return () => {
+      document.removeEventListener("mousedown", onDown, true);
+      document.removeEventListener("keydown", onKey, true);
+    };
+  }, [open]);
+
+  const q = query.trim().toLowerCase();
+  const local = (branches?.local ?? []).filter((b) => b.toLowerCase().includes(q));
+  const remote = (branches?.remote ?? []).filter((b) => b.toLowerCase().includes(q));
+
+  const pick = (v: string | undefined) => { onChange(v); setOpen(false); setQuery(""); };
+
+  return (
+    <div className="nodrag relative inline-flex items-center gap-1 text-[10px] font-mono" ref={ref}>
+      <span className="text-[var(--color-fg3)]">{label}</span>
+      <button
+        className="nodrag cursor-pointer max-w-[150px] inline-flex items-center gap-1 bg-[var(--color-bg)] border border-[var(--color-line2)] rounded px-1.5 py-0.5 text-[var(--color-fg)] outline-none hover:border-[var(--color-fg3)] transition-colors"
+        onClick={() => setOpen((o) => !o)}
+        title={value ?? autoLabel}
+      >
+        <span className="truncate">{value ?? autoLabel}</span>
+        <span aria-hidden className="text-[var(--color-fg3)] shrink-0">▾</span>
+      </button>
+      {open && (
+        <div className="nodrag absolute z-50 left-0 top-full mt-1 w-60 flex flex-col bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-lg shadow-xl overflow-hidden">
+          <div className="flex items-center gap-1 px-2 py-1.5 border-b border-[var(--color-line2)]">
+            <Search size={11} aria-hidden className="text-[var(--color-fg3)] shrink-0" />
+            <input
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="filter branches…"
+              className="w-full bg-transparent text-[10px] font-mono text-[var(--color-fg)] outline-none placeholder:text-[var(--color-fg3)]"
+            />
+          </div>
+          <div className="max-h-64 overflow-y-auto py-1">
+            <button
+              className={`w-full cursor-pointer text-left px-2 py-1 transition-colors ${value == null ? "text-[var(--color-accent)] bg-[var(--color-bg4)]" : "text-[var(--color-fg2)] hover:bg-[var(--color-bg4)]"}`}
+              onClick={() => pick(undefined)}
+            >
+              {autoLabel}
+            </button>
+            {local.length > 0 && (
+              <div className="px-2 pt-1.5 pb-0.5 text-[8.5px] uppercase tracking-wider text-[var(--color-fg3)]">local</div>
+            )}
+            {local.map((b) => (
+              <button
+                key={`l:${b}`}
+                className={`w-full cursor-pointer text-left truncate px-2 py-1 transition-colors ${value === b ? "text-[var(--color-accent)] bg-[var(--color-bg4)]" : "text-[var(--color-fg)] hover:bg-[var(--color-bg4)]"}`}
+                onClick={() => pick(b)}
+                title={b}
+              >
+                {b}
+              </button>
+            ))}
+            {remote.length > 0 && (
+              <div className="px-2 pt-1.5 pb-0.5 text-[8.5px] uppercase tracking-wider text-[var(--color-fg3)]">remote</div>
+            )}
+            {remote.map((b) => (
+              <button
+                key={`r:${b}`}
+                className={`w-full cursor-pointer text-left truncate px-2 py-1 transition-colors ${value === b ? "text-[var(--color-accent)] bg-[var(--color-bg4)]" : "text-[var(--color-fg)] hover:bg-[var(--color-bg4)]"}`}
+                onClick={() => pick(b)}
+                title={b}
+              >
+                {b}
+              </button>
+            ))}
+            {local.length === 0 && remote.length === 0 && (
+              <div className="px-2 py-2 text-[var(--color-fg3)]">{branches ? "no match" : "loading…"}</div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function useBranchItems(repoPath: string, scope: DiffScope, enabled: boolean): ItemsResult {
   const q = useGitDiff(enabled ? repoPath : null, scope);
   const items = useMemo(() => {
@@ -1267,6 +1566,10 @@ function DiffHeader(props: {
 }) {
   return (
     <div
+      // The comment gutter resolves which file a clicked line belongs to by
+      // finding the nearest preceding header in document order — this attribute is
+      // that anchor (robust to Pierre's gutter API not carrying the file id).
+      data-diff-file={props.file}
       className={`flex items-center gap-2 px-2.5 w-full font-mono bg-[var(--color-bg3)] border-b border-[var(--color-line)] ${
         props.viewed ? "opacity-55" : ""
       }`}
@@ -1431,39 +1734,3 @@ function ConflictView(props: { repoPath: string; file: string }) {
   );
 }
 
-// ── inline comment composer ───────────────────────────────────────────────
-
-function Composer({
-  composer,
-  onSubmit,
-  onCancel,
-}: {
-  composer: { file: string; startLine: number; endLine: number; side: AnnotationSide };
-  onSubmit: (body: string) => void;
-  onCancel: () => void;
-}) {
-  const [body, setBody] = useState("");
-  const range = composer.startLine === composer.endLine
-    ? `${composer.startLine}`
-    : `${composer.startLine}-${composer.endLine}`;
-  return (
-    <div className="border-t border-[var(--color-line)] bg-[var(--color-bg3)] p-2 flex items-center gap-2">
-      <span className="text-[10px] font-mono text-[var(--color-fg3)] shrink-0">
-        {composer.file}:{range} ({composer.side})
-      </span>
-      <input
-        autoFocus
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") onSubmit(body);
-          if (e.key === "Escape") onCancel();
-        }}
-        placeholder="comment ↵ send · esc cancel"
-        className="flex-1 bg-[var(--color-bg)] border border-[var(--color-line2)] rounded px-2 py-1 text-[11px] text-[var(--color-fg)] outline-none focus:border-[var(--color-accent)]"
-      />
-      <button className="text-[10px] font-mono text-[var(--color-accent)]" onClick={() => onSubmit(body)}>send</button>
-      <button className="text-[10px] font-mono text-[var(--color-fg3)]" onClick={onCancel}>cancel</button>
-    </div>
-  );
-}

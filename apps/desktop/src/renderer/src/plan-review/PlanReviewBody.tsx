@@ -10,9 +10,10 @@
  *                            or a free-text box when there are no marks yet.
  */
 import { lazy, Suspense, useMemo, useRef, useState } from "react";
-import { Check, MessageSquare, Trash2, Tag, X, MessagesSquare } from "lucide-react";
+import { Check, MessageSquare, X, MessagesSquare } from "lucide-react";
 import { parsePlanToBlocks, exportAnnotations } from "./blocks";
-import { QUICK_LABELS, type Annotation, type PlanBlock } from "./types";
+import { type Annotation, type PlanBlock } from "./types";
+import { ReviewPopover, CommentBox, ActionToolbar } from "../review-ui";
 
 const MarkdownPreview = lazy(() =>
   import("../markdown-preview").then((m) => ({ default: m.MarkdownPreview })),
@@ -104,26 +105,13 @@ export function PlanReviewBody({
         ))}
 
         {pending && (
-          <Popover anchor={pending.anchor} onClose={() => setPending(null)}>
+          <ReviewPopover anchor={pending.anchor} onClose={() => setPending(null)}>
             {pending.stage === "choose" ? (
-              <div className="flex flex-col gap-1">
-                <div className="flex items-center gap-1">
-                  <ToolBtn icon={<MessageSquare size={13} />} label="Comment"
-                    onClick={() => setPending({ ...pending, stage: "comment" })} />
-                  <ToolBtn icon={<Trash2 size={13} />} label="Delete" danger
-                    onClick={() => commit("deletion")} />
-                </div>
-                <div className="flex flex-wrap gap-1 max-w-[220px] pt-0.5">
-                  {QUICK_LABELS.map((q) => (
-                    <button key={q.label}
-                      onClick={() => commit("comment", { quickLabel: q.label, comment: q.tip })}
-                      title={q.tip}
-                      className="nodrag inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10.5px] text-[var(--color-fg2)] bg-[var(--color-bg)] border border-[var(--color-line2)] hover:border-[var(--color-fg3)] hover:text-[var(--color-fg)] cursor-pointer">
-                      <Tag size={9} />{q.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <ActionToolbar
+                onComment={() => setPending({ ...pending, stage: "comment" })}
+                onDelete={() => commit("deletion")}
+                onQuickLabel={(label, tip) => commit("comment", { quickLabel: label, comment: tip })}
+              />
             ) : (
               <CommentBox
                 value={draft}
@@ -132,7 +120,7 @@ export function PlanReviewBody({
                 onSubmit={() => draft.trim() && commit("comment", { comment: draft.trim() })}
               />
             )}
-          </Popover>
+          </ReviewPopover>
         )}
       </div>
 
@@ -267,48 +255,3 @@ function AnnotationCard({ a, onRemove }: { a: Annotation; onRemove: () => void }
   );
 }
 
-function ToolBtn({ icon, label, danger, onClick }: { icon: React.ReactNode; label: string; danger?: boolean; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`nodrag inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium cursor-pointer transition-colors ${
-        danger ? "text-[var(--color-danger,#e5484d)] hover:bg-[var(--color-danger,#e5484d)]/12" : "text-[var(--color-fg)] hover:bg-[var(--color-bg)]"
-      }`}
-    >
-      {icon}{label}
-    </button>
-  );
-}
-
-function CommentBox({ value, onChange, onCancel, onSubmit }: { value: string; onChange: (v: string) => void; onCancel: () => void; onSubmit: () => void }) {
-  return (
-    <div className="flex flex-col gap-1.5 w-[240px]">
-      <textarea
-        autoFocus value={value} onChange={(e) => onChange(e.target.value)}
-        onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) onSubmit(); if (e.key === "Escape") onCancel(); }}
-        rows={3} placeholder="Comment… (⌘/Ctrl+Enter)"
-        className="nodrag w-full resize-y bg-[var(--color-bg)] border border-[var(--color-line2)] rounded px-2 py-1.5 text-[11.5px] text-[var(--color-fg)] outline-none focus:border-[var(--color-brand)] placeholder:text-[var(--color-fg3)]"
-      />
-      <div className="flex items-center gap-1">
-        <button onClick={onCancel} className="nodrag px-2 py-1 text-[11px] text-[var(--color-fg2)] hover:text-[var(--color-fg)] cursor-pointer">Back</button>
-        <button onClick={onSubmit} disabled={!value.trim()} className="nodrag ml-auto px-2.5 py-1 text-[11px] font-medium text-white bg-[var(--color-brand)] rounded hover:opacity-90 disabled:opacity-40 cursor-pointer">Add</button>
-      </div>
-    </div>
-  );
-}
-
-/** A small popover anchored within the scroll container (absolute coords). */
-function Popover({ anchor, onClose, children }: { anchor: { x: number; y: number }; onClose: () => void; children: React.ReactNode }) {
-  return (
-    <>
-      <div className="fixed inset-0 z-40" onMouseDown={onClose} />
-      <div
-        className="absolute z-50 bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-lg shadow-xl p-1.5"
-        style={{ left: Math.max(4, anchor.x - 60), top: anchor.y + 6 }}
-        onMouseDown={(e) => e.stopPropagation()}
-      >
-        {children}
-      </div>
-    </>
-  );
-}

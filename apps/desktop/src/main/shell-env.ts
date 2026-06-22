@@ -172,3 +172,22 @@ function mergeIntoProcessEnv(env: Record<string, string>): void {
   // of system + shell + rescue, so it strictly dominates current PATH).
   if (env.PATH) process.env.PATH = env.PATH;
 }
+
+/**
+ * Strip Electron-internal runtime vars from the env handed to a USER-FACING
+ * terminal shell (a tile PTY). The persistence daemon runs as electron-as-node
+ * (spawned with ELECTRON_RUN_AS_NODE=1 — daemon-client.ts), and its PTY factory
+ * inherits `process.env`, so without this every terminal tile carries
+ * ELECTRON_RUN_AS_NODE=1. Then ANY Electron app launched from a hivemind terminal
+ * — hivemind itself, VS Code, Slack — runs in node-mode and crashes importing its
+ * GUI: `TypeError: Cannot read properties of undefined (reading 'exports')` at
+ * cjsPreparseModuleExports. (That is exactly why "open a terminal in hivemind,
+ * run hivemind" died.) A user shell must look like a normal login shell, not
+ * electron-as-node. Mutates + returns the env for chaining.
+ */
+const ELECTRON_INTERNAL_ENV = ["ELECTRON_RUN_AS_NODE", "ELECTRON_NO_ATTACH_CONSOLE"] as const;
+
+export function sanitizeShellEnv(env: Record<string, string>): Record<string, string> {
+  for (const k of ELECTRON_INTERNAL_ENV) delete env[k];
+  return env;
+}

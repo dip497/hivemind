@@ -65,6 +65,17 @@ export function claimWork(tileId: string): string | undefined {
   return Date.now() - w.at > WORK_TTL_MS ? undefined : w.text;
 }
 
+/** Peek the queued prompt WITHOUT consuming it (undefined if none or stale).
+ *  The deliverer types it but only clears it (clearWork) once the agent actually
+ *  starts working — so a keystroke dropped during a TUI's boot/splash (droid does
+ *  this) can be re-delivered, instead of being lost by a one-shot claim. */
+export function peekWork(tileId: string): string | undefined {
+  const w = pendingWork.get(tileId);
+  if (!w) return undefined;
+  if (Date.now() - w.at > WORK_TTL_MS) { pendingWork.delete(tileId); return undefined; }
+  return w.text;
+}
+
 /** Drop a tile's pending work (call on unmount, so a closed-before-ready tile
  *  doesn't leak). */
 export function clearWork(tileId: string): void {

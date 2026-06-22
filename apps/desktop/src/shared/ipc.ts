@@ -54,7 +54,11 @@ export interface GitStatusSnapshot {
 
 export type DiffScope =
   | { kind: "working"; staged?: boolean }
-  | { kind: "branch"; base?: string }
+  // base...head merge-base (3-dot) diff — what `head` adds since it diverged
+  // from `base`, the same semantics GitHub/Azure PRs show. `head` defaults to
+  // HEAD (review another branch against the checkout); set it to review any two
+  // arbitrary branches without a remote PR.
+  | { kind: "branch"; base?: string; head?: string }
   // Committed-but-not-pushed: the net diff of local commits ahead of the
   // branch's remote tracking ref (`@{upstream}...HEAD`). Optional `base`
   // overrides the auto-resolved upstream so this same scope serves future
@@ -67,6 +71,16 @@ export interface DiffPayload {
   patch: string;
   /** SHA-style cache key so Pierre's worker can cache the AST. */
   cacheKey: string;
+}
+
+/** Branch inventory for the diff tile's base/head pickers. */
+export interface GitBranchList {
+  /** Current local branch, or null when detached. */
+  current: string | null;
+  /** Local branch names (`refs/heads`). */
+  local: string[];
+  /** Remote-tracking refs, e.g. `origin/main` (`origin/HEAD` filtered out). */
+  remote: string[];
 }
 
 // ── worktree types ───────────────────────────────────────────────────────
@@ -197,6 +211,8 @@ export interface HiveIpc {
   gitStatus(repoPath: string): Promise<GitStatusSnapshot>;
   /** Tracked + untracked paths (respecting .gitignore). Used by the file-tree tile. */
   gitListFiles(repoPath: string): Promise<string[]>;
+  /** Local + remote branches for the diff tile's base/head pickers. */
+  gitListBranches(repoPath: string): Promise<GitBranchList>;
   gitDiff(repoPath: string, scope: DiffScope, file?: string): Promise<DiffPayload>;
   gitFileContents(
     repoPath: string,
@@ -334,6 +350,38 @@ export interface HcpPipeEvent {
 export interface HcpWaitEvent {
   tileId: string;
   status: string | null;
+}
+
+/** Pushed main→renderer when a tile gains/loses in-flight Task subagents (from
+ *  the injected SubagentStart/SubagentStop hooks). `busy` true keeps the tile
+ *  reading "working" while subagents run — including BACKGROUND agents, where the
+ *  main loop returns to the idle prompt and the screen-scrape would read "idle".
+ *  Deterministic and correctly attributed (the hook fires in the parent session).
+ *  `tileId` is the bare tile id (the status-bus key). */
+export interface HcpSubagentEvent {
+  tileId: string;
+  busy: boolean;
+}
+
+/** Pushed main→renderer when claude's `Notification` hook reports a "needs you"
+ *  state (permission / interactive question). Deterministic + version-proof
+ *  (claude's own signal, not a scraped UI string). SOFT: the renderer lifts an
+ *  idle tile to this status and auto-clears it when the scrape shows work
+ *  resumed, so it can't get stuck. `tileId` is the bare tile id. */
+export interface HcpNotifyEvent {
+  tileId: string;
+  status: "permission" | "question";
+}
+
+/** Pushed main→renderer with claude's HOOK-DRIVEN turn state: `working` on
+ *  UserPromptSubmit (turn start), `idle` on Stop (turn end). This is the
+ *  deterministic, version-proof replacement for the working/idle screen-scrape —
+ *  it can't be fooled by spinner-glyph/wording changes, focus/scroll, or stale
+ *  buffer replay on restart (no hook has fired → the tile stays idle). The scrape
+ *  remains the fallback for non-claude agents. `tileId` is the bare tile id. */
+export interface HcpTurnStateEvent {
+  tileId: string;
+  state: "working" | "idle";
 }
 
 /** Pushed main→renderer when an agent hands off a plan (PreToolUse/ExitPlanMode).

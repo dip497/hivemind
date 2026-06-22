@@ -3,7 +3,7 @@
  * Electron utilityProcess per the VS Code 3-process pattern).
  */
 import * as pty from "@lydell/node-pty";
-import { applyShellEnvToProcess } from "./shell-env.js";
+import { applyShellEnvToProcess, sanitizeShellEnv } from "./shell-env.js";
 
 interface SpawnOpts {
   tileId: string;
@@ -57,10 +57,10 @@ function doSpawn(opts: SpawnOpts): pty.IPty {
   // LC_ALL (UTF-8 locale for unicode glyphs in claude/gh/nvim) are NOT set by
   // node-pty. Fill them only if the parent env didn't already carry a value
   // — never clobber a user-configured locale.
-  const env: Record<string, string> = {
+  const env: Record<string, string> = sanitizeShellEnv({
     ...(process.env as Record<string, string>),
     ...(opts.env ?? {}),
-  };
+  });
   if (!env.COLORTERM) env.COLORTERM = "truecolor";
   if (!env.LANG) env.LANG = "C.UTF-8";
   if (!env.TERM_PROGRAM) env.TERM_PROGRAM = "hivemind";

@@ -271,7 +271,7 @@ const TOOLS: Tool[] = [
     inputSchema: {
       type: "object",
       properties: {
-        agent: { type: "string", description: "Agent to launch: 'claude' (default), 'codex', 'opencode', …" },
+        agent: { type: "string", description: "Agent to launch: 'claude' (default), 'codex', 'opencode', 'droid', …" },
         prompt: { type: "string", description: "Initial task delivered once the agent is ready." },
         frame: { type: "string", description: "Frame to spawn into — a frame id, repo/worktree name, or title (e.g. 'manageark'). Omit to use the spawning agent's own frame. Discover with hive_list_frames." },
         mode: { type: "string", description: "claude permission mode (e.g. 'plan', 'acceptEdits'); optional." },
@@ -398,6 +398,29 @@ const TOOLS: Tool[] = [
       required: ["src_tile_id"],
     },
   },
+  {
+    name: "hive_workflow",
+    description:
+      "Run a MULTI-AGENT WORKFLOW: spawn a fleet of worker agents as VISIBLE tiles on the canvas, drive them, and BLOCK until they're done — then return their replies aggregated, in one call. This is hivemind's native answer to fanning work out (no hand-rolling spawn→read→gather across many tool calls). Workers are real tiles you and the user watch; each is a child of you (the orchestrator), depth-capped and rate-limited. Pick a `shape`:\n• 'fanout' — one worker per `items[i]`, all run in parallel (bounded by `max_concurrent`); `prompt` is a template with a `{item}` placeholder filled per worker. Returns each worker's reply. Use for: review N files, summarize N docs, try N approaches.\n• 'mapreduce' — a fanout, then ONE reducer agent fed all worker outputs via `reduce_prompt` (use `{results}` for the joined outputs). Returns the workers + the reducer's synthesis.\n• 'pipeline' — a sequential chain: `stages` is an array of prompts, each may use `{input}` to reference the PRIOR stage's reply. Returns each step + the final output.\nFor dynamic control flow a fixed shape can't express (loop-until-done, judge panels, conditional fan-out), drive `hive_spawn_agent`/`hive_read`/`hive_connect` yourself instead (see the hive-workflow skill). Requires the hivemind desktop app.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        shape: { type: "string", enum: ["fanout", "pipeline", "mapreduce"], description: "fanout (parallel, one per item) | pipeline (sequential chain) | mapreduce (fanout + reducer)." },
+        items: { type: "array", items: { type: "string" }, description: "fanout/mapreduce: one worker spawned per element. Substituted into `prompt`'s {item}." },
+        prompt: { type: "string", description: "fanout/mapreduce: the per-worker task. Use {item} as the placeholder for each element of `items`." },
+        stages: { type: "array", items: { type: "string" }, description: "pipeline: one prompt per stage, run in order. Each may use {input} to reference the prior stage's reply." },
+        input: { type: "string", description: "pipeline: optional seed value substituted into the FIRST stage's {input}." },
+        reduce_prompt: { type: "string", description: "mapreduce: the reducer agent's prompt. Use {results} for all worker outputs joined together." },
+        agent: { type: "string", description: "Runtime for every worker: 'claude' (default), 'codex', 'droid', … " },
+        frame: { type: "string", description: "Frame to spawn workers into. Omit to use your own frame. Discover with hive_list_frames." },
+        supervise: { description: "Broker the workers' tool-permission prompts to YOU (answer with hive_approve) instead of a human — for unattended fan-out. true brokers the mutating tools; 'all' brokers every tool; or a comma-string / array of tool names.", type: ["boolean", "string", "array"], items: { type: "string" } },
+        max_concurrent: { type: "integer", minimum: 1, description: "Max workers live at once for fanout/mapreduce (default 6, capped at 12)." },
+        timeout_ms: { type: "number", description: "Per-worker turn ceiling in ms (default 600000)." },
+        close_when_done: { type: "boolean", description: "Close each worker tile after collecting its reply (default false — leave them on the canvas to inspect)." },
+      },
+      required: ["shape"],
+    },
+  },
 ];
 
 const GetIssueArgs = z.object({ id: z.string() });
@@ -464,6 +487,20 @@ const TileIdArgs = z.object({ tileId: z.string() });
 const OpenReviewArgs = z.object({ plan: z.string().min(1), cwd: z.string().optional() });
 const ConnectArgs = z.object({ src_tile_id: z.string(), dst_tile_id: z.string() });
 const DisconnectArgs = z.object({ src_tile_id: z.string(), dst_tile_id: z.string().optional() });
+const WorkflowArgs = z.object({
+  shape: z.enum(["fanout", "pipeline", "mapreduce"]),
+  items: z.array(z.string()).optional(),
+  prompt: z.string().optional(),
+  stages: z.array(z.string()).optional(),
+  input: z.string().optional(),
+  reduce_prompt: z.string().optional(),
+  agent: z.string().optional(),
+  frame: z.string().optional(),
+  supervise: z.union([z.boolean(), z.string(), z.array(z.string())]).optional(),
+  max_concurrent: z.number().int().positive().optional(),
+  timeout_ms: z.number().positive().optional(),
+  close_when_done: z.boolean().optional(),
+});
 
 /** Build and return an MCP Server bound to hive-core. Caller transports it. */
 export function buildServer(): Server {
@@ -480,7 +517,7 @@ export function buildServer(): Server {
   const CANVAS_TOOLS = new Set([
     "hive_spawn_agent", "hive_send", "hive_send_keys", "hive_read", "hive_approve", "hive_list_frames", "hive_list_tiles",
     "hive_focus", "hive_close_tile", "hive_connect", "hive_disconnect", "hive_open_review",
-    "hive_report",
+    "hive_report", "hive_workflow",
   ]);
   server.setRequestHandler(CallToolRequestSchema, async (req) => {
     const { name, arguments: args } = req.params;
@@ -662,6 +699,18 @@ export function buildServer(): Server {
         case "hive_disconnect": {
           const a = DisconnectArgs.parse(args);
           return jsonResult(await hcpCall("tile.disconnect", { srcTileId: a.src_tile_id, dstTileId: a.dst_tile_id }));
+        }
+        case "hive_workflow": {
+          const a = WorkflowArgs.parse(args);
+          // A workflow runs many worker turns; the orchestrator's tool call must
+          // block for the whole fleet. Give the wire client a ceiling ABOVE the
+          // worst-case server-side run (workers are concurrent, so summing the
+          // per-worker timeout over every item/stage is a safe over-estimate),
+          // capped so a runaway can't hang the connection forever.
+          const perTurn = a.timeout_ms ?? 600_000;
+          const units = (a.items?.length ?? 0) + (a.stages?.length ?? 0) + 2;
+          const ceiling = Math.min(24 * 60 * 60 * 1000, perTurn * units + 30_000);
+          return jsonResult(await hcpCall("workflow.run", { ...a, callerTile: process.env.HIVEMIND_TILE }, ceiling));
         }
         default:
           throw new Error(`unknown tool: ${name}`);

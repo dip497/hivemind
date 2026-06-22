@@ -52,6 +52,7 @@ import {
   gitDiscard,
   gitFileContents,
   gitListFiles,
+  gitListBranches,
   gitPush,
   gitStage,
   gitStatus,
@@ -69,6 +70,9 @@ import { randomUUID } from "node:crypto";
 import { startHcpServer } from "./hcp/hcp-server.js";
 import { makeDispatch } from "./hcp/methods.js";
 import { TurnTracker } from "./hcp/turn-tracker.js";
+import { SubagentTracker } from "./hcp/subagent-tracker.js";
+import { SubagentReaper } from "./hcp/subagent-reaper.js";
+import { notifyStatusFor } from "./hcp/notification-map.js";
 import { OutputRecorder } from "./hcp/output-recorder.js";
 import { readOrCreateToken, hcpSockPath } from "./hcp/token.js";
 import { HcpError } from "./hcp/protocol.js";
@@ -714,6 +718,7 @@ ipcMain.handle("deleteIssue", wrap(async (_e, root: string, id: string) => {
 // git
 ipcMain.handle("gitStatus", wrap((_e, repoPath: string) => gitStatus(repoPath)));
 ipcMain.handle("gitListFiles", wrap((_e, repoPath: string) => gitListFiles(repoPath)));
+ipcMain.handle("gitListBranches", wrap((_e, repoPath: string) => gitListBranches(repoPath)));
 // Each `file`/`files` IPC arg is verified to stay inside `repoPath` before
 // reaching git-adapter — git-adapter joins them onto repoPath for `fs.rm`,
 // `fs.writeFile`, and `git show :path`, so an unguarded `../etc/passwd` arg
@@ -853,7 +858,7 @@ ipcMain.handle("openPathInApp", wrap(async (_e, repoPath: string, target: string
 // blurry-text report becomes a readable trace (incl. over SSH). Best-effort and
 // self-capping — truncate to the last ~64KB when it grows past 128KB so it never
 // balloons. Never throws into the renderer.
-ipcMain.handle("diagLog", async (_e, line: string) => {
+async function writeDiagLog(line: string): Promise<void> {
   try {
     const file = path.join(app.getPath("userData"), "render-diag.log");
     try {
@@ -865,12 +870,24 @@ ipcMain.handle("diagLog", async (_e, line: string) => {
     } catch { /* file not there yet */ }
     await fsp.appendFile(file, `${new Date().toISOString()} ${line}\n`, "utf8");
   } catch { /* diagnostics must never break the app */ }
-});
+}
+ipcMain.handle("diagLog", async (_e, line: string) => { await writeDiagLog(line); });
 
 // ── remote (SSH) frames ─────────────────────────────────────────────────
 // Probe + auth-register a host, returning its home dir (the connectivity check
 // behind "attach remote"). `uri` is ssh://[user@]host[:port]/ — the path is
 // ignored here (the picker chooses it next).
+// Keychain fallback for the connection pool: when a remote tile is restored
+// after an app restart, the in-memory auth map is empty, so the pool resolves
+// the saved (safeStorage-encrypted) credential here instead of failing with
+// "All configured authentication methods failed". A password we can't decrypt
+// (keychain key changed) resolves to null → the clear "no credential" error,
+// prompting re-entry rather than a silent credential-less connect.
+remoteConns.setAuthResolver((hostId) => {
+  const saved = savedAuth(hostId);
+  if (!saved || saved.passwordDecryptFailed) return null;
+  return saved.auth;
+});
 ipcMain.handle("sshConnect", wrap(async (_e, uri: string, auth: HostAuth, remember?: boolean) => {
   const { home, hostId } = await remoteConns.probe(uri, auth ?? {});
   if (remember) {
@@ -942,6 +959,36 @@ function recordPtySpawn(): void {
 // on its tile staying mounted. See startHcpControlPlane().
 const hcpRecorder = new OutputRecorder();
 const hcpTurns = new TurnTracker();
+const hcpSubagents = new SubagentTracker();
+/** Push a tile's subagent-busy edge to the renderer status bus (bare tile id).
+ *  Keeps the tile reading "working" while it has in-flight Task subagents. */
+function pushSubagent(tileId: string, busy: boolean): void {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("hcp:subagent", { tileId, busy });
+}
+// Watchdog: a lost SubagentStop (subagent errored / turn interrupted / session
+// compacted / process died) would otherwise pin a tile "working" forever. The
+// reaper force-drains a tile's in-flight set after a quiet grace window — it's
+// (re)armed on every subagent edge and on turn-end while busy, so a genuinely
+// active background population (which keeps emitting edges) is never reaped.
+const SUBAGENT_REAP_MS = 120_000;
+const hcpSubagentReaper = new SubagentReaper(SUBAGENT_REAP_MS, (tileId) => {
+  if (hcpSubagents.forget(tileId)) {
+    pushSubagent(tileId, false);
+    void writeDiagLog(`[subagent-reap] tile=${tileId} drained ${SUBAGENT_REAP_MS}ms after last edge (lost SubagentStop)`);
+  }
+});
+/** Push a deterministic "needs you" status (from claude's Notification hook) to
+ *  the renderer status bus (bare tile id). Soft + auto-cleared by the scrape when
+ *  work resumes — see agent-status-bus.setNotify. */
+function pushNotify(tileId: string, status: "permission" | "question"): void {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("hcp:notify", { tileId, status });
+}
+/** Push claude's hook-driven turn state (UserPromptSubmit → working, Stop → idle)
+ *  to the renderer status bus (bare tile id). This is the deterministic
+ *  replacement for the working/idle screen-scrape. */
+function pushTurnState(tileId: string, state: "working" | "idle"): void {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("hcp:turnstate", { tileId, state });
+}
 const hcpPipes = new PipeManager();
 // bare tileId → supervision spec ("all" or a tool list). Set when an agent
 // spawns a worker with `supervise`; injected as HIVE_SUPERVISE into that
@@ -980,7 +1027,7 @@ ipcMain.handle("ptySpawn", wrap(async (e, opts: Parameters<typeof spawnPty>[0]) 
     };
     return spawnRemotePty(opts, {
       onData: (data) => { hcpRecorder.record(opts.tileId, data); hcpBroadcast?.(toBareId(opts.tileId), data); safeSendR(`pty:data:${opts.tileId}`, data); },
-      onExit: (code, signal) => safeSendR(`pty:exit:${opts.tileId}`, { code, signal }),
+      onExit: (code, signal) => { hcpSubagentReaper.cancel(toBareId(opts.tileId)); if (hcpSubagents.forget(toBareId(opts.tileId))) pushSubagent(toBareId(opts.tileId), false); safeSendR(`pty:exit:${opts.tileId}`, { code, signal }); },
     });
   }
   if (opts.cwd) {
@@ -1247,17 +1294,75 @@ function startHcpControlPlane(): void {
     rendererUp: () => !!mainWindow && !mainWindow.isDestroyed(),
     dispatch,
     onEvent: (topic, data) => {
+      if (topic === "subagent") {
+        // SubagentStart/Stop hook: a tile gained/lost an in-flight Task subagent.
+        // Track the per-tile set and push only real busy edges to the renderer so
+        // the tile reads "working" even when its main loop is back at the prompt
+        // (the background-agent case the screen-scrape misses). tileId is bare.
+        const s = (data ?? {}) as { tileId?: string; phase?: string; agentId?: string };
+        if (!s.tileId) return;
+        // The hook reports the PTY id; key the tracker + renderer push + reaper by
+        // BARE (matches the renderer status bus and the onExit `forget`).
+        const tileId = toBareId(s.tileId);
+        const changed =
+          s.phase === "start" ? hcpSubagents.start(tileId, s.agentId ?? "")
+          : s.phase === "stop" ? hcpSubagents.stop(tileId, s.agentId ?? "")
+          : false;
+        if (changed) pushSubagent(tileId, hcpSubagents.busy(tileId));
+        // (Re)arm the lost-edge watchdog while busy; cancel it once the set
+        // drains naturally. Every edge pushes the reap deadline out, so an
+        // active subagent population is never reaped — only a quiet stuck set.
+        if (hcpSubagents.busy(tileId)) hcpSubagentReaper.arm(tileId);
+        else hcpSubagentReaper.cancel(tileId);
+        return;
+      }
+      if (topic === "status") {
+        // UserPromptSubmit hook: a turn STARTED → working (deterministic). The hook
+        // reports the PTY id (`hm:<bare>` = HIVEMIND_TILE); the renderer status bus
+        // keys by the BARE tile id, so normalize before pushing.
+        const s = (data ?? {}) as { tileId?: string; state?: string };
+        if (s.tileId && (s.state === "working" || s.state === "idle")) pushTurnState(toBareId(s.tileId), s.state);
+        return;
+      }
+      if (topic === "notification") {
+        // claude's Notification hook: map the type to a "needs you" status and
+        // push it. Stateless here — the renderer auto-clears it when the scrape
+        // shows work resumed. Normalize the pty id → bare for the renderer bus.
+        const n = (data ?? {}) as { tileId?: string; notificationType?: string };
+        if (!n.tileId) return;
+        const status = notifyStatusFor(n.notificationType ?? "");
+        if (status) pushNotify(toBareId(n.tileId), status);
+        return;
+      }
       if (topic !== "turn") return;
       const d = (data ?? {}) as { tileId?: string; transcriptPath?: string };
       if (!d.tileId) return;
       // Forged-event hardening: the `turn` event is token-less (only the 0600
-      // socket gates it), so constrain the transcript path to a real claude
-      // transcript (`~/.claude/**.jsonl`). A bogus path can't make agent.read
-      // return an arbitrary user-readable file's contents — it falls back to the
-      // recorder instead.
-      const tp = d.transcriptPath;
-      const safeTp = tp && tp.startsWith(path.join(os.homedir(), ".claude") + path.sep) && tp.endsWith(".jsonl") ? tp : null;
+      // socket gates it), so constrain the transcript path to a real agent
+      // transcript — claude's `~/.claude/**`, droid's `~/.factory/**`, or droid's
+      // ephemeral FACTORY_HOME_OVERRIDE overlay (`<userData>/droid-home/**`). A
+      // bogus path can't make agent.read return an arbitrary user-readable file's
+      // contents — it falls back to the recorder instead.
+      let tp = d.transcriptPath;
+      if (tp && tp.startsWith("~/")) tp = path.join(os.homedir(), tp.slice(2)); // hooks may report a literal ~
+      const okRoots = [
+        path.join(os.homedir(), ".claude") + path.sep,
+        path.join(os.homedir(), ".factory") + path.sep,
+        path.join(app.getPath("userData"), "droid-home") + path.sep,
+      ];
+      const safeTp = tp && tp.endsWith(".jsonl") && okRoots.some((r) => tp!.startsWith(r)) ? tp : null;
       hcpTurns.recordTurn(d.tileId, safeTp);
+      // Turn END → idle (hook-driven status). The hook reports the PTY id; the
+      // renderer status bus keys by BARE — normalize (recordTurn above stays on
+      // the pty id, the turn-tracker's key). If a background subagent is still
+      // running, the subagent-busy override re-lifts the tile to "working" — see
+      // the status-bus precedence — so this is safe to push unconditionally.
+      pushTurnState(toBareId(d.tileId), "idle");
+      // Arm the watchdog: if the set is still non-empty at turn-end and no further
+      // subagent edge arrives within the grace window, those are lost SubagentStops
+      // (interrupt / error / compaction) — reap them so the tile doesn't read
+      // "working" forever. A real background subagent will keep emitting edges.
+      if (hcpSubagents.busy(d.tileId)) hcpSubagentReaper.arm(d.tileId);
       // Pipe forwarding: feed this agent's reply into any piped destinations.
       const dests = hcpPipes.dests(toBareId(d.tileId));
       if (dests.length === 0 || !safeTp) return;

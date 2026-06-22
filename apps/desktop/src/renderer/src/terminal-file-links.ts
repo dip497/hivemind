@@ -9,13 +9,19 @@
  * resolves relatives against the tile's cwd, and refuses `.desktop` + remote.)
  */
 import type { Terminal, ILinkProvider, ILink, IBufferRange, IDisposable } from "@xterm/xterm";
+import { openTargetForTerminalLink } from "./browser-open";
 
 // A path-like token that contains at least one "/", optional file:// scheme,
 // optional trailing :line[:col].
 const PATH_RE = /(?:file:\/\/)?[\w.+@~/-]*\/[\w.+@~/-]+(?::\d+(?::\d+)?)?/g;
 
 /** Register the file-path link provider; returns the disposable. */
-export function registerFileLinks(term: Terminal, getCwd: () => string): IDisposable {
+export function registerFileLinks(
+  term: Terminal,
+  getCwd: () => string,
+  openInBrowser?: (url: string) => void,
+  openInEditor?: (path: string) => void,
+): IDisposable {
   const provider: ILinkProvider = {
     provideLinks(y, callback) {
       const line = term.buffer.active.getLine(y - 1);
@@ -35,7 +41,12 @@ export function registerFileLinks(term: Terminal, getCwd: () => string): IDispos
         links.push({
           text: raw,
           range,
-          activate: () => { void window.hive.openPathInApp(getCwd(), raw); },
+          activate: () => {
+            const target = openTargetForTerminalLink(getCwd(), raw);
+            if (target.kind === "browser" && openInBrowser) { openInBrowser(target.url); return; }
+            if (target.kind === "editor" && openInEditor) { openInEditor(target.path); return; }
+            void window.hive.openPathInApp(getCwd(), target.kind === "app" ? target.target : raw);
+          },
         });
       }
       callback(links.length ? links : undefined);

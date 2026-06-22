@@ -51,6 +51,47 @@ test("trackerSettings: injects the permission-broker hook ONLY when supervised",
   const all = JSON.parse(trackerSettings(deps, "t1", "all"));
   assert.ok(all.hooks.PreToolUse.some((e: { matcher: string }) => e.matcher === "*"));
 });
+
+test("trackerSettings: injects SubagentStart/Stop hooks when the subagent hook path is set", () => {
+  // Without the subagent hook path → no SubagentStart/Stop (e.g. older daemon).
+  const bare = JSON.parse(trackerSettings(
+    { trackerPath: "/x/tracker.cjs", tileSessionsDir: "/x/sess", execPath: "/x/node", hcpSock: "/x/hcp.sock" },
+    "t1",
+  ));
+  assert.equal(bare.hooks.SubagentStart, undefined);
+  assert.equal(bare.hooks.SubagentStop, undefined);
+  // With the path + socket → both events run the subagent hook against the socket,
+  // carrying this tile's HIVEMIND_TILE so main attributes the subagent correctly.
+  const deps = {
+    trackerPath: "/x/tracker.cjs", tileSessionsDir: "/x/sess", execPath: "/x/node",
+    subagentHookPath: "/x/subagent.cjs", hcpSock: "/x/hcp.sock",
+  };
+  const s = JSON.parse(trackerSettings(deps, "t-abc"));
+  const cmd = s.hooks.SubagentStart[0].hooks[0].command as string;
+  assert.equal(s.hooks.SubagentStop[0].hooks[0].command, cmd); // one command, both events
+  assert.match(cmd, /HIVEMIND_TILE='t-abc'/);
+  assert.match(cmd, /subagent\.cjs/);
+  assert.match(cmd, /hcp\.sock/);
+});
+
+test("trackerSettings: injects the UserPromptSubmit hook (turn-start → working)", () => {
+  const bare = JSON.parse(trackerSettings(
+    { trackerPath: "/x/tracker.cjs", tileSessionsDir: "/x/sess", execPath: "/x/node", hcpSock: "/x/hcp.sock" },
+    "t1",
+  ));
+  assert.equal(bare.hooks.UserPromptSubmit, undefined); // no path → not injected
+  const s = JSON.parse(trackerSettings(
+    {
+      trackerPath: "/x/tracker.cjs", tileSessionsDir: "/x/sess", execPath: "/x/node",
+      userpromptHookPath: "/x/userprompt.cjs", hcpSock: "/x/hcp.sock",
+    },
+    "t-up",
+  ));
+  const cmd = s.hooks.UserPromptSubmit[0].hooks[0].command as string;
+  assert.match(cmd, /HIVEMIND_TILE='t-up'/);
+  assert.match(cmd, /userprompt\.cjs/);
+  assert.match(cmd, /hcp\.sock/);
+});
 const client = () => ({ onData: () => {}, onExit: () => {} });
 const liveSpec = (cwd: string): SpawnSpec => ({ cwd, cmd: "claude", args: [], cols: 80, rows: 24 });
 const argVal = (p: FakeClaude | undefined, flag: string): string | undefined => {

@@ -9,18 +9,23 @@ import { patchTerminalMouseWithRetry } from "./terminal-mouse-patch";
 import { registerWebglSlotClient, unregisterWebglSlotClient, reconcileWebglSlots } from "./webgl-slots";
 import { useTileFont, FontStepper, handleFontKey } from "./tile-font";
 import { identifyAgent, detectTileStatus, stabilizeClaudeStatus, normalizeAgentTitle, type TileStatus } from "./agent-state";
-import { registerClaude, unregisterClaude, shouldDeliver, claimWork, clearWork, type SendToClaudeDetail } from "./claude-bus";
-import { publishStatus, clearStatus, type TileStatusKind } from "./agent-status-bus";
+import { registerClaude, unregisterClaude, shouldDeliver, peekWork, claimWork, clearWork, type SendToClaudeDetail } from "./claude-bus";
+import { publishStatus, clearStatus, noteOutput, revalidate, type TileStatusKind } from "./agent-status-bus";
 import { SUBMIT_DELAY_MS } from "../../shared/agent-io";
 import { Pencil, GripVertical } from "lucide-react";
+import { webUrlForInternalBrowser } from "./browser-open";
 
 /** Open a terminal link in the OS browser. window.open is intercepted by main's
  *  setWindowOpenHandler → shell.openExternal (and the in-app navigation denied),
  *  so no popup window appears. Only http(s) — never file:/ javascript: etc. */
-function openExternalLink(uri: string): void {
+function openExternalLink(uri: string, openInBrowser?: (url: string) => void): void {
   try {
     const u = new URL(uri);
     if (u.protocol === "http:" || u.protocol === "https:") {
+      if (openInBrowser) {
+        openInBrowser(uri);
+        return;
+      }
       window.open(uri, "_blank", "noopener,noreferrer");
     }
   } catch { /* not a parseable URL — ignore */ }
@@ -83,6 +88,10 @@ interface Props {
   /** Report this agent's live OSC window title (claude's task summary) so Canvas
    *  can show it as the session name. */
   onAgentTitle?: (id: string, title: string) => void;
+  /** Open URL targets in the frame's browser tile instead of the OS browser. */
+  onOpenInBrowser?: (url: string) => void;
+  /** Open text file paths in the frame's editor tile instead of the OS app. */
+  onOpenInEditor?: (path: string) => void;
   /** Clip-to-pile: open Canvas-level popover to add this tile to a pile. */
   onClose?: () => void;
   /** Tile selection — when false, xterm stdin is disabled + blurred so an
@@ -91,7 +100,7 @@ interface Props {
   selected?: boolean;
 }
 
-export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, onAgentTitle, onClose, selected }: Props) {
+export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, onAgentTitle, onOpenInBrowser, onOpenInEditor, onClose, selected }: Props) {
   // Editable header name: starts in display mode; double-click opens input.
   // Persists via onRename → Canvas tileNames → LAYOUT_KEY localStorage.
   const [editing, setEditing] = useState(false);
@@ -106,6 +115,10 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
   // Live `selected` for the WebGL slot manager's priority() (read outside render).
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
+  const openInBrowserRef = useRef(onOpenInBrowser);
+  openInBrowserRef.current = onOpenInBrowser;
+  const openInEditorRef = useRef(onOpenInEditor);
+  openInEditorRef.current = onOpenInEditor;
   // Live cwd so the terminal file-link provider resolves relative paths against
   // the tile's CURRENT cwd even after a frame rebind.
   const cwdRef = useRef(cwd);
@@ -161,6 +174,13 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
   // send-to-claude bus wiring claude-only.
   const agent = identifyAgent(cmd);
   const isClaude = agent === "claude";
+  // NOTE: we deliberately DON'T seed claude's hook-driven turn state on mount.
+  // liveTurn is authoritative ONLY once a real UserPromptSubmit/Stop hook fires.
+  // An earlier version seeded "idle" here to suppress the stale-replayed-buffer
+  // "working" on restart — but that idle seed HARD-overrode the scrape, so a
+  // claude process WITHOUT the hooks (any session already running before the
+  // hooks were injected) got stuck reading idle while actually working. Now
+  // hook-less sessions fall back to the scrape; only a real hook overrides it.
   // The label shown on canvas chips / toasts / notifications. `name` already
   // resolves user-rename ?? agent OSC title ?? auto label (Canvas), so the
   // session title claude writes flows through here. Kept in a ref so the
@@ -277,11 +297,10 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       minimumContrastRatio: 4.5,          // auto-adjust low-contrast cells to WCAG AA
                                           // (color only — doesn't affect sharpness)
       letterSpacing: 0,
-      // OSC 8 hyperlinks (claude emits these) → open in the OS browser. Plain
-      // http(s) URLs are handled by WebLinksAddon below; both route through
-      // window.open, which main's setWindowOpenHandler sends to shell.openExternal.
+      // OSC 8 hyperlinks (claude emits these) → prefer the in-app browser tile.
+      // If no canvas callback exists, fall back to the OS browser.
       linkHandler: {
-        activate: (_e, uri) => openExternalLink(uri),
+        activate: (_e, uri) => openExternalLink(uri, openInBrowserRef.current),
       },
       // Rescale glyphs that overflow their cell (powerline, wide Unicode,
       // ligature-ish forms) instead of letting them clip/smear — sharper edges.
@@ -293,17 +312,48 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       // The WebGL renderer (loaded below) reuses the atlas across frames.
     });
     // Make plain http(s) URLs in terminal output clickable (claude, build logs,
-    // etc.) — single click opens in the OS browser.
-    term.loadAddon(new WebLinksAddon((_e, uri) => openExternalLink(uri)));
+    // etc.) — single click opens in the in-app browser when available.
+    term.loadAddon(new WebLinksAddon((_e, uri) => {
+      const web = webUrlForInternalBrowser(uri);
+      if (web && openInBrowserRef.current) openInBrowserRef.current(web);
+      else openExternalLink(uri);
+    }));
     // Make file PATHS clickable too (open in the OS default app) — WebLinksAddon
     // only handles http(s) URLs. Disposed with the terminal on unmount.
-    registerFileLinks(term, () => cwdRef.current);
+    registerFileLinks(
+      term,
+      () => cwdRef.current,
+      (url) => openInBrowserRef.current?.(url),
+      (path) => openInEditorRef.current?.(path),
+    );
     const fit = new FitAddon();
     fitRef.current = fit;
     term.loadAddon(fit);
     term.open(host);
     fit.fit();
     termRef.current = term;
+    // ── FOCUS GUARANTEE ──────────────────────────────────────────────────────
+    // A re-render of the react-flow node (e.g. claude rewriting its window title
+    // every turn while it "thinks", or any canvas re-render) can detach/reattach
+    // xterm's input textarea, yanking the cursor out from under someone typing —
+    // the "focus removed again and again" report. We can't catch every re-render
+    // source, so GUARANTEE it at the seam: when xterm's input blurs WHILE this
+    // tile is selected AND focus landed on nothing (document.body — the signature
+    // of a re-render steal, not a deliberate click onto another element), take it
+    // straight back next frame. Guarded by selectedRef + the body check so it
+    // never fights a real click onto another tile/input.
+    const onInputBlur = () => {
+      if (!selectedRef.current) return;
+      requestAnimationFrame(() => {
+        if (!selectedRef.current) return;
+        const ae = document.activeElement;
+        if (!ae || ae === document.body) {
+          try { termRef.current?.focus(); } catch { /* torn down */ }
+        }
+      });
+    };
+    const inputEl = term.textarea;
+    inputEl?.addEventListener("blur", onInputBlur);
     // Make selection zoom-aware so it works at ANY canvas zoom (not just 100%) —
     // lets focus fit a terminal to the screen without breaking drag-select.
     const cancelMousePatch = patchTerminalMouseWithRetry(term);
@@ -319,6 +369,24 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
     let cancelled = false;
     let webgl: WebglAddon | undefined;
     let disposeDpr: (() => void) | undefined;
+    // WebGL context-loss back-off (opencove pattern). The packaged app's GPU
+    // sandbox evicts WebGL contexts far more aggressively than the dev server —
+    // and re-acquiring immediately just loses it again, thrashing the canvas
+    // (recreated each cycle) → the cursor flickers and keyboard focus drops while
+    // an agent streams output. After a loss we fall to the DOM renderer and stay
+    // there for a cooldown (wantsDom() honors this), breaking the loop. The DOM
+    // renderer handles output fine — just slightly softer until the cooldown ends.
+    let webglCooldownUntil = 0;
+    const WEBGL_COOLDOWN_MS = 30_000;
+    // Restore keyboard focus after an operation that recreates the renderer canvas
+    // (acquire/release/context-loss) — a focused selected terminal must not silently
+    // lose input. Deferred a frame so it runs after the DOM swap settles.
+    const restoreFocusIfSelected = () => {
+      if (!selectedRef.current) return;
+      requestAnimationFrame(() => {
+        try { if (selectedRef.current) termRef.current?.focus(); } catch { /* torn down */ }
+      });
+    };
     const acquireWebgl = () => {
       if (webgl || cancelled) return;
       try {
@@ -328,11 +396,20 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
         // Context can be evicted (driver reset, GL pressure). Drop to DOM, repaint
         // so the tile is never blank, and reconcile so the slot frees for another.
         w.onContextLoss(() => {
+          // Back off WebGL for a cooldown so we don't immediately re-acquire and
+          // lose it again (the prod GPU thrash). wantsDom() now forces this tile to
+          // the DOM renderer until the cooldown expires.
+          webglCooldownUntil = Date.now() + WEBGL_COOLDOWN_MS;
+          // Confirms the prod-only "pointer flicker / focus loss while working"
+          // hypothesis: if render-diag.log fills with these, GPU context churn is
+          // the cause and the cooldown is doing its job.
+          void window.hive.diagLog?.(`[webgl-context-loss] tile=${effLabel} cooldown=${WEBGL_COOLDOWN_MS}ms`);
           try { disposeDpr?.(); } catch { /* gone */ }
           disposeDpr = undefined;
           try { w.dispose(); } catch { /* disposed */ }
           if (webgl === w) { webgl = undefined; webglRef.current = null; }
           try { term.refresh(0, term.rows - 1); } catch { /* torn down */ }
+          restoreFocusIfSelected();
           reconcileWebglSlots();
         });
         term.loadAddon(w);
@@ -344,6 +421,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
         // margin, never an overflow. Re-fitting here would bump cols to WebGL's
         // larger count, and the next focus (→DOM) would overflow + reflow claude.
         try { term.refresh(0, term.rows - 1); } catch { /* torn down */ }
+        restoreFocusIfSelected();
       } catch {
         try { webgl?.dispose(); } catch { /* */ }
         webgl = undefined;
@@ -368,6 +446,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       // would re-introduce the overflow. (A no-op when the first fit already won.)
       try { fitRef.current?.fit(); term.refresh(0, term.rows - 1); } catch { /* torn down */ }
       requestAnimationFrame(() => { try { fitRef.current?.fit(); } catch { /* torn down */ } });
+      restoreFocusIfSelected();
     };
     // Viewport visibility → priority. Assume visible on mount (a fresh tile is
     // usually in view); the observer corrects on the next frame.
@@ -390,16 +469,41 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       // at devicePixelRatio=1; on HiDPI it's already crisp, so no boost there. Only
       // the selected tile boosts, so the heavier DOM renderer is bounded to one
       // terminal — the one you're actually reading.
-      wantsDom: () => selectedRef.current === true && (window.devicePixelRatio || 1) < 2,
+      //
+      // EXCEPT agent tiles: a full-screen agent TUI (codex especially) repaints the
+      // whole screen many times per second, and xterm's DOM renderer mutates a DOM
+      // node per cell per frame → at that frame rate it's layout/paint storms that
+      // make the WHOLE window blink + lag. Agents stay on the GPU (WebGL) renderer,
+      // which eats high-frame-rate redraws for free. The DOM boost is for reading
+      // static shell output, not driving a live TUI.
+      // During a WebGL context-loss cooldown, force DOM regardless of agent/DPI —
+      // re-acquiring WebGL would just lose the context again and thrash the canvas.
+      wantsDom: () =>
+        Date.now() < webglCooldownUntil ||
+        (!agent && selectedRef.current === true && (window.devicePixelRatio || 1) < 2),
     });
 
     // Agents set the terminal window title (OSC 0/2) to a live task summary —
     // claude's "session name". Surface it to Canvas as this tile's name. Skip
     // plain shells, whose titles are noisy "user@host:cwd" chrome.
+    //
+    // THROTTLED: claude rewrites its window title repeatedly while working. The
+    // canvas node-data memo keys on agentTitles, so an un-throttled stream churns
+    // the whole canvas while you're typing into a working tile → input jank /
+    // focus loss + lag. Collapse to one trailing update per window; the name is
+    // cosmetic so a fraction-of-a-second delay is invisible.
+    let titleTimer: ReturnType<typeof setTimeout> | undefined;
+    let pendingTitle: string | null = null;
     const offTitle = agent
       ? term.onTitleChange((t) => {
           const title = normalizeAgentTitle(t);
-          if (title) onAgentTitle?.(tileId, title);
+          if (!title) return;
+          pendingTitle = title;
+          if (titleTimer) return;
+          titleTimer = setTimeout(() => {
+            titleTimer = undefined;
+            if (pendingTitle) onAgentTitle?.(tileId, pendingTitle);
+          }, 600);
         })
       : undefined;
 
@@ -442,8 +546,13 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       term.write(d);
       // Agent tiles get authoritative state from the screen poll (mark dirty so
       // the next poll tick actually scans); plain shells use the cheap heuristic.
-      if (agent) agentDirty = true;
-      else markActivity();
+      if (agent) {
+        agentDirty = true;
+        // Ground-truth liveness: a working agent streams output. noteOutput keeps
+        // a "working" status honored; its absence lets the status bus decay a
+        // stuck "working" (missed Stop hook / frozen replayed buffer) to idle.
+        noteOutput(tileId);
+      } else markActivity();
     });
     unsubExit = window.hive.onPtyExit(ptyId, ({ code, signal }) => {
       term.writeln(
@@ -558,7 +667,35 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
           // last time work was seen, across poll ticks.
           let lastReported: TileStatus = "idle";
           const lastWorkingAt = { t: null as number | null };
+          // Queued-prompt ("Work on this" / workflow) delivery: deliver EXACTLY
+          // ONCE, when the agent's screen has SETTLED (boot/splash output stopped
+          // = it's at a ready input prompt), then consume it. Delivering on the
+          // first scrape-"idle" raced droid's ~6s boot (its splash scrapes as idle
+          // the WHOLE time, before the input is interactive); re-delivering on each
+          // idle poll caused DUPLICATE submissions (droid buffers them all). The
+          // "settled" signal = N consecutive QUIET ticks (no new pty output) —
+          // robust for any agent (claude/codex/droid/…), not tied to scrape status.
+          let workQuietTicks = 0;
+          const WORK_SETTLE_TICKS = 2; // ~2.4s of quiet after boot → ready prompt
           agentPoll = setInterval(() => {
+            // One-shot delivery — runs BEFORE the agentDirty early-return so it can
+            // fire while the agent is quiet (the exact "ready" moment). claimWork
+            // consumes, so the prompt can never be submitted twice.
+            if (agent && peekWork(tileId)) {
+              if (agentDirty) workQuietTicks = 0; else workQuietTicks++;
+              if (workQuietTicks >= WORK_SETTLE_TICKS) {
+                const work = claimWork(tileId);
+                if (work) {
+                  window.hive.ptyWrite(ptyId, work);
+                  setTimeout(() => window.hive.ptyWrite(ptyId, "\r"), SUBMIT_DELAY_MS);
+                  void window.hive.diagLog?.(`[work-deliver] tile=${tileId} agent=${agent} settled`);
+                }
+              }
+            }
+            // Re-evaluate the bus status every tick (even with no new output) so
+            // the time-based staleness gate can decay a stuck "working" (missed
+            // Stop hook / frozen replayed buffer) to idle on its own.
+            if (agent) revalidate(tileId);
             // Keep scanning even while the window is hidden/minimized — that is
             // exactly when an OS notification matters. Cost is bounded by
             // agentDirty: a quiet, hidden tile never materializes its viewport.
@@ -575,19 +712,6 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
               const next = stabilizeClaudeStatus(lastReported, raw, Date.now(), lastWorkingAt);
               lastReported = next;
               setStatus(next);
-              // First time claude reaches a ready input prompt, deliver any
-              // queued "Work on this" prompt to ITSELF (claimWork is one-shot).
-              // This replaces the old blind 2500ms send and waits for real
-              // readiness instead of racing claude+MCP startup.
-              if (isClaude && next === "idle") {
-                const work = claimWork(tileId);
-                // Type the prompt, then Enter as a separate keystroke (see the
-                // hivemind:send-to-claude handler above for why one write fails).
-                if (work) {
-                  window.hive.ptyWrite(ptyId, work);
-                  setTimeout(() => window.hive.ptyWrite(ptyId, "\r"), SUBMIT_DELAY_MS);
-                }
-              }
             } catch { /* buffer not ready */ }
           }, 1200);
         }
@@ -631,6 +755,9 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       unsubExit?.();
       unsubClaude?.();
       offTitle?.dispose();
+      inputEl?.removeEventListener("blur", onInputBlur);
+      if (titleTimer) clearTimeout(titleTimer);
+      clearWork(tileId);
       clearStatus(tileId);
       clearWork(tileId);
       ro.disconnect();

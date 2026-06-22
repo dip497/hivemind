@@ -20,6 +20,8 @@ interface Props {
   tabs: string[];
   /** Open a file as a tab (Canvas dedupes). */
   onOpenFile: (path: string) => void;
+  /** Open a URL in the frame's browser tile. */
+  onOpenInBrowser?: (url: string) => void;
   /** Close a single editor tab. */
   onCloseTab: (path: string) => void;
   /** Close the whole workbench tile. */
@@ -32,7 +34,7 @@ const SIDEBAR_MAX = 640;
 const SIDEBAR_KEY = "hivemind:workbench-sidebar";
 const clampW = (w: number) => Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, w));
 
-export function WorkbenchTile({ repoPath, tabs, onOpenFile, onCloseTab, onClose }: Props) {
+export function WorkbenchTile({ repoPath, tabs, onOpenFile, onOpenInBrowser, onCloseTab, onClose }: Props) {
   const [collapsed, setCollapsed] = useState(false);
   // Selecting a file in the tree must ALWAYS activate it in the editor — even
   // when it's already an open tab (Canvas dedupes the tab list, so re-clicking an
@@ -129,7 +131,14 @@ export function WorkbenchTile({ repoPath, tabs, onOpenFile, onCloseTab, onClose 
           </>
         )}
         <div className="flex-1 min-w-0">
-          <EditorTile repoPath={repoPath} tabs={tabs} onCloseTab={onCloseTab} activeReq={activeReq} embedded />
+          <EditorTile
+            repoPath={repoPath}
+            tabs={tabs}
+            onCloseTab={onCloseTab}
+            activeReq={activeReq}
+            onOpenInBrowser={onOpenInBrowser}
+            embedded
+          />
         </div>
       </div>
     </div>

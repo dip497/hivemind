@@ -1,4 +1,4 @@
-import type { HiveIpc, PlanReviewOpen, HcpCommand, HcpPipeEvent, HcpWaitEvent } from "../../shared/ipc";
+import type { HiveIpc, PlanReviewOpen, HcpCommand, HcpPipeEvent, HcpWaitEvent, HcpSubagentEvent, HcpNotifyEvent, HcpTurnStateEvent } from "../../shared/ipc";
 
 declare global {
   interface Window {
@@ -13,6 +13,12 @@ declare global {
       onHcpPipe: (cb: (e: HcpPipeEvent) => void) => () => void;
       /** A tile entered/left a control-plane "wait" state (e.g. awaiting approval). */
       onHcpWait: (cb: (e: HcpWaitEvent) => void) => () => void;
+      /** A tile gained/lost in-flight Task subagents → keep it reading "working". */
+      onHcpSubagent: (cb: (e: HcpSubagentEvent) => void) => () => void;
+      /** claude's Notification hook fired → a deterministic "needs you" status. */
+      onHcpNotify: (cb: (e: HcpNotifyEvent) => void) => () => void;
+      /** claude's hook-driven turn state (UserPromptSubmit → working, Stop → idle). */
+      onHcpTurnState: (cb: (e: HcpTurnStateEvent) => void) => () => void;
       onPtyData: (tileId: string, cb: (data: string) => void) => () => void;
       onPtyExit: (
         tileId: string,

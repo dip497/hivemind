@@ -29,6 +29,17 @@ const DEFAULT_BROKER_TOOLS = "Bash,Edit,Write,MultiEdit,NotebookEdit,WebFetch";
  *  own (human) permission prompt. < the hook's command timeout. */
 const APPROVAL_TIMEOUT_MS = 9 * 60 * 1000;
 
+/** Workflow (multi-agent orchestration) defaults. A `workflow.run` fans work out
+ *  to visible worker tiles and awaits their turns. `TIMEOUT` bounds one worker's
+ *  turn; `CONCURRENCY` bounds how many workers are live at once (on top of the
+ *  per-minute spawn rate gate and the depth cap). */
+const WORKFLOW_DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
+const WORKFLOW_DEFAULT_CONCURRENCY = 6;
+const WORKFLOW_MAX_CONCURRENCY = 12;
+/** Backoff between spawn retries when the rate gate trips mid-fan-out. */
+const WORKFLOW_SPAWN_RETRY_MS = 1500;
+const WORKFLOW_SPAWN_RETRIES = 6;
+
 /** Symbolic key → terminal bytes, for driving a worker's TUI (e.g. answering a
  *  native AskUserQuestion picker). A raw ESC byte can't be expressed through a
  *  plain-text param from a tool call, so agent.send_keys maps tokens here; any
@@ -120,50 +131,83 @@ export function makeDispatch(deps: MethodDeps): (method: string, params: unknown
     sendMark.set(pid, deps.recorder.mark(pid));
   };
 
+  // Spawn one child tile and wire up its bookkeeping (depth, parent, auto-report,
+  // supervision, read epoch). Shared by `tile.spawn_agent` and `workflow.run` so
+  // both enforce the same depth/rate gates. Throws HcpError on depth/rate/spawn
+  // failure. `report` defaults to on (draws the auto-report edge to the parent);
+  // workflow workers pass report:false and gather via waitForTurn instead.
+  const doSpawn = async (opts: {
+    agent?: unknown; prompt?: unknown; frame?: unknown; mode?: unknown;
+    callerTile?: unknown; report?: unknown; supervise?: unknown;
+  }): Promise<string> => {
+    const callerDepth = opts.callerTile ? (depthOf.get(bareOf(String(opts.callerTile))) ?? 0) : 0;
+    const childDepth = callerDepth + 1;
+    if (childDepth > MAX_SPAWN_DEPTH) {
+      throw new HcpError("DEPTH_EXCEEDED", `agent spawn depth ${childDepth} exceeds max ${MAX_SPAWN_DEPTH}`);
+    }
+    if (!deps.spawnAllowed()) throw new HcpError("RATE_LIMITED", "spawn rate limit exceeded");
+    const agent = String(opts.agent ?? "claude");
+    const res = (await deps.callRenderer(
+      "tile.spawn_agent",
+      // `background` = a silent worker (report:false → gathered in bulk, e.g. a
+      // workflow worker). The renderer uses it to NOT steal focus / center the
+      // viewport on spawn and to suppress the per-worker "finished" notification.
+      { agent, prompt: opts.prompt, frame: opts.frame, mode: opts.mode, callerTile: opts.callerTile, background: opts.report === false },
+      RENDERER_TIMEOUT,
+    )) as { tileId?: string };
+    if (!res?.tileId) throw new HcpError("INTERNAL", "spawn returned no tileId");
+    depthOf.set(res.tileId, childDepth);
+    if (opts.callerTile) {
+      const parentBare = bareOf(String(opts.callerTile));
+      parentOf.set(res.tileId, parentBare);
+      if (opts.report !== false && parentBare !== res.tileId) deps.connect(res.tileId, parentBare);
+      const sup = normalizeSupervise(opts.supervise);
+      if (sup) deps.setSupervise(res.tileId, sup);
+    }
+    armRead(res.tileId);
+    return res.tileId;
+  };
+
+  // Close a tile and drop ALL its per-tile state (pid-keyed: turns/recorder/
+  // epochs; bare-keyed: pipes/parent/depth/supervision/approvals). Shared by the
+  // `tile.close` verb and workflow's `close_when_done`.
+  const closeTile = async (tileId: string): Promise<unknown> => {
+    const r = await deps.callRenderer("tile.close", { tileId }, RENDERER_TIMEOUT);
+    const pid = ptyId(tileId);
+    const bare = bareOf(tileId);
+    deps.turns.forget(pid);
+    deps.recorder.forget(pid);
+    deps.forgetPipes(bare);
+    sendSeq.delete(pid);
+    sendMark.delete(pid);
+    parentOf.delete(bare);
+    depthOf.delete(bare);
+    deps.setSupervise(bare, null);
+    for (const [reqId, pend] of pendingApprovals) {
+      if (pend.cacheKey.startsWith(`${bare}:`)) {
+        clearTimeout(pend.timer);
+        pend.resolve({ decision: "deny", reason: "worker closed" });
+        pendingApprovals.delete(reqId);
+      }
+    }
+    for (const key of approveCache.keys()) if (key.startsWith(`${bare}:`)) approveCache.delete(key);
+    deps.pushWait(bare, null);
+    return r;
+  };
+
   return async (method, rawParams) => {
     const p = (rawParams ?? {}) as Record<string, unknown>;
     switch (method) {
       case "tile.spawn_agent": {
-        // Anti-fork-bomb: bound recursion depth (agent→agent→agent…) in addition
-        // to the per-minute rate cap. The caller's depth is what it spawned AT
-        // (0 for a user-spawned agent with no record); its child is one deeper.
-        const callerDepth = p.callerTile ? (depthOf.get(bareOf(String(p.callerTile))) ?? 0) : 0;
-        const childDepth = callerDepth + 1;
-        if (childDepth > MAX_SPAWN_DEPTH) {
-          throw new HcpError("DEPTH_EXCEEDED", `agent spawn depth ${childDepth} exceeds max ${MAX_SPAWN_DEPTH}`);
-        }
-        if (!deps.spawnAllowed()) throw new HcpError("RATE_LIMITED", "spawn rate limit exceeded");
-        const agent = String(p.agent ?? "claude");
-        const res = (await deps.callRenderer(
-          "tile.spawn_agent",
-          { agent, prompt: p.prompt, frame: p.frame, mode: p.mode, callerTile: p.callerTile },
-          RENDERER_TIMEOUT,
-        )) as { tileId?: string };
-        if (!res?.tileId) throw new HcpError("INTERNAL", "spawn returned no tileId");
-        depthOf.set(res.tileId, childDepth);
-        if (p.callerTile) {
-          const parentBare = bareOf(String(p.callerTile));
-          // Remember who spawned this child (for hive_report).
-          parentOf.set(res.tileId, parentBare);
-          // AUTO-REPORT (default on): pipe the worker's finished-turn replies
-          // back to the parent, so the parent learns the result the moment the
-          // worker is done — no blocking read, no screen-scrape (the forward
-          // reads the clean transcript). Draws a visible reporting edge. The
-          // caller can opt out with report:false. self-pipe is impossible here
-          // (parent ≠ freshly-minted child id), and connect() refuses cycles.
-          if (p.report !== false && parentBare !== res.tileId) {
-            deps.connect(res.tileId, parentBare);
-          }
-          // SUPERVISE (opt-in): broker the worker's tool-permission decisions to
-          // this parent. Recorded in main → injected as HIVE_SUPERVISE into the
-          // worker's spawn env → daemon installs the PreToolUse broker hook.
-          const sup = normalizeSupervise(p.supervise);
-          if (sup) deps.setSupervise(res.tileId, sup);
-        }
-        // Arm the read epoch so a follow-up agent.read waits for THIS agent's
-        // first turn (the prompt was delivered at spawn via queueWork).
-        armRead(res.tileId);
-        return { tileId: res.tileId };
+        // Anti-fork-bomb depth + rate gates, parent/auto-report/supervision
+        // wiring, and the read-epoch arm all live in doSpawn (shared with
+        // workflow.run). AUTO-REPORT is on unless report:false; the read epoch is
+        // armed so a follow-up agent.read waits for THIS agent's first turn.
+        const tileId = await doSpawn({
+          agent: p.agent, prompt: p.prompt, frame: p.frame, mode: p.mode,
+          callerTile: p.callerTile, report: p.report, supervise: p.supervise,
+        });
+        return { tileId };
       }
 
       case "agent.send": {
@@ -293,6 +337,102 @@ export function makeDispatch(deps: MethodDeps): (method: string, params: unknown
         return { text: null, finalStatus: "timeout", truncated: false, note: "agent still working — no completed turn within timeout" };
       }
 
+      case "workflow.run": {
+        // Multi-agent orchestration. Fan a list of items out to visible worker
+        // tiles (or chain them as a pipeline), await each worker's turn
+        // deterministically via the turn-tracker (NOT screen-scrape), and return
+        // the aggregated transcript replies. Workers are spawned report:false —
+        // the workflow gathers them itself, so their replies don't also spam the
+        // orchestrator's terminal. The orchestrator's MCP tool call blocks until
+        // this returns (long client-side ceiling, like agent.read/review.open).
+        const shape = String(p.shape ?? "fanout");
+        const caller = p.callerTile != null ? String(p.callerTile) : undefined;
+        const agent = p.agent != null ? String(p.agent) : "claude";
+        const frame = p.frame != null ? String(p.frame) : undefined;
+        const supervise = p.supervise;
+        const perTurnMs = typeof p.timeout_ms === "number" ? p.timeout_ms : WORKFLOW_DEFAULT_TIMEOUT_MS;
+        const maxConc = Math.max(1, Math.min(Number(p.max_concurrent ?? WORKFLOW_DEFAULT_CONCURRENCY), WORKFLOW_MAX_CONCURRENCY));
+        const closeWhenDone = p.close_when_done === true;
+
+        const delay = (ms: number) => new Promise<void>((r) => { const t = setTimeout(r, ms); t.unref?.(); });
+        const fill = (tmpl: string, item: string) => tmpl.replace(/\{item\}/g, item);
+
+        // Spawn one worker (retrying through transient rate-limits), await its
+        // turn, read the clean transcript reply. Returns a per-worker result.
+        type WR = { item: string; tileId: string | null; status: "turn" | "timeout" | "error"; text: string | null };
+        const runWorker = async (label: string, prompt: string): Promise<WR> => {
+          let tileId: string;
+          try {
+            tileId = await spawnRetry({ agent, prompt, frame, callerTile: caller, report: false, supervise });
+          } catch (e) {
+            return { item: label, tileId: null, status: "error", text: (e as Error).message };
+          }
+          const pid = ptyId(tileId);
+          const afterSeq = sendSeq.get(pid) ?? deps.turns.currentSeq(pid);
+          const rec = await deps.turns.waitForTurn(pid, afterSeq, perTurnMs);
+          const text = rec?.transcriptPath ? readLastAssistantMessage(rec.transcriptPath) : null;
+          const status: WR["status"] = rec?.transcriptPath ? "turn" : "timeout";
+          if (closeWhenDone && status === "turn") { try { await closeTile(tileId); } catch { /* best-effort */ } }
+          return { item: label, tileId, status, text };
+        };
+        async function spawnRetry(opts: Parameters<typeof doSpawn>[0]): Promise<string> {
+          for (let i = 0; ; i++) {
+            try { return await doSpawn(opts); }
+            catch (e) {
+              if (e instanceof HcpError && e.code === "RATE_LIMITED" && i < WORKFLOW_SPAWN_RETRIES) { await delay(WORKFLOW_SPAWN_RETRY_MS); continue; }
+              throw e;
+            }
+          }
+        }
+        // Fixed-size worker pool: at most `n` runWorker calls live at once.
+        const pool = async <T, R>(xs: T[], n: number, fn: (x: T, i: number) => Promise<R>): Promise<R[]> => {
+          const out = new Array<R>(xs.length);
+          let next = 0;
+          const slot = async () => {
+            for (;;) {
+              const i = next++;
+              if (i >= xs.length) return;
+              out[i] = await fn(xs[i]!, i);
+            }
+          };
+          await Promise.all(Array.from({ length: Math.min(n, xs.length) }, slot));
+          return out;
+        };
+
+        if (shape === "fanout" || shape === "mapreduce") {
+          const items = Array.isArray(p.items) ? p.items.map(String) : [];
+          if (!items.length) throw new HcpError("BAD_REQUEST", "items required (a non-empty array) for fanout/mapreduce");
+          const prompt = String(p.prompt ?? "");
+          if (!prompt) throw new HcpError("BAD_REQUEST", "prompt required for fanout/mapreduce");
+          const results = await pool(items, maxConc, (it) => runWorker(it, fill(prompt, it)));
+          if (shape === "fanout") return { shape, items: results };
+          // mapreduce: feed every worker's output into one reducer tile.
+          const reduceTmpl = String(p.reduce_prompt ?? "");
+          if (!reduceTmpl) throw new HcpError("BAD_REQUEST", "reduce_prompt required for mapreduce");
+          const joined = results.map((r) => `## ${r.item}\n${r.text ?? "(no output)"}`).join("\n\n");
+          const reducer = await runWorker("(reduce)", reduceTmpl.replace(/\{results\}/g, joined));
+          return { shape, items: results, reduced: reducer.text, reducerStatus: reducer.status };
+        }
+
+        if (shape === "pipeline") {
+          // Sequential chain: each stage's prompt may reference {input} (the prior
+          // stage's reply). Stops the chain on a timeout/error stage.
+          const stages = Array.isArray(p.stages) ? p.stages.map(String) : [];
+          if (!stages.length) throw new HcpError("BAD_REQUEST", "stages required (a non-empty array) for pipeline");
+          const steps: WR[] = [];
+          let prev: string | null = p.input != null ? String(p.input) : null;
+          for (let s = 0; s < stages.length; s++) {
+            const r = await runWorker(`stage ${s + 1}`, stages[s]!.replace(/\{input\}/g, prev ?? ""));
+            steps.push(r);
+            if (r.status !== "turn") break; // dead chain — surface the partial run
+            prev = r.text;
+          }
+          return { shape, steps, output: prev };
+        }
+
+        throw new HcpError("BAD_REQUEST", `unknown workflow shape '${shape}' (expected fanout | pipeline | mapreduce)`);
+      }
+
       // ── canvas verbs (renderer) ──────────────────────────────────────────
       case "tile.list":
         return await deps.callRenderer("tile.list", { frame: p.frame }, RENDERER_TIMEOUT);
@@ -304,33 +444,9 @@ export function makeDispatch(deps: MethodDeps): (method: string, params: unknown
       }
       case "tile.close": {
         if (!p.tileId) throw new HcpError("BAD_REQUEST", "tileId required");
-        const tileId = String(p.tileId);
-        const r = await deps.callRenderer("tile.close", { tileId }, RENDERER_TIMEOUT);
-        // Drop ALL per-tile state so nothing leaks for the session + the pipe
-        // graph never forwards into a closed tile (pid-keyed: turns/recorder/
-        // epochs; bare-keyed: pipes/parent/depth).
-        const pid = ptyId(tileId);
-        const bare = bareOf(tileId);
-        deps.turns.forget(pid);
-        deps.recorder.forget(pid);
-        deps.forgetPipes(bare);
-        sendSeq.delete(pid);
-        sendMark.delete(pid);
-        parentOf.delete(bare);
-        depthOf.delete(bare);
-        deps.setSupervise(bare, null);
-        // Resolve + drop any approvals in flight for this worker (it's gone) and
-        // forget its remembered decisions.
-        for (const [reqId, pend] of pendingApprovals) {
-          if (pend.cacheKey.startsWith(`${bare}:`)) {
-            clearTimeout(pend.timer);
-            pend.resolve({ decision: "deny", reason: "worker closed" });
-            pendingApprovals.delete(reqId);
-          }
-        }
-        for (const key of approveCache.keys()) if (key.startsWith(`${bare}:`)) approveCache.delete(key);
-        deps.pushWait(bare, null);
-        return r;
+        // closeTile drops ALL per-tile state (pipes/turns/recorder/epochs/parent/
+        // depth/supervision) + resolves any in-flight approvals for the worker.
+        return await closeTile(String(p.tileId));
       }
 
       case "review.open": {

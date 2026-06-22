@@ -10,7 +10,7 @@ import {
   type Edge,
 } from "@xyflow/react";
 import { LayersPanel, type LayerTile, type LayerFrame } from "./LayersPanel";
-import { statusOf, setWaitStatus, type TileStatusKind } from "./agent-status-bus";
+import { statusOf, setWaitStatus, setSubagentBusy, setNotify, setTurnState, type TileStatusKind } from "./agent-status-bus";
 import { queueWork } from "./claude-bus";
 import { FRAME_ROW_MAX, frameAtPoint } from "./frame-layout";
 import { ToolIsland, ZoomIsland } from "./canvas-islands";
@@ -45,6 +45,7 @@ import { useSpawn } from "./useSpawn";
 import { useFrameOps } from "./useFrameOps";
 import { buildBaseNodes } from "./canvas-node-build";
 import { useAgentAwareness } from "./useAgentAwareness";
+import { unmarkBackgroundTile } from "./worker-tiles";
 import { useCanvasShortcuts } from "./useCanvasShortcuts";
 import { useNodeDragStop } from "./useNodeDragStop";
 import type { WorktreeEntry } from "../../shared/ipc";
@@ -233,7 +234,13 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // and its tabs. (closeTile below handles the generic case; editor needs the
   // tab cleanup too.)
   const closeTile = useCallback((id: string) => {
+    unmarkBackgroundTile(id);
     setTiles((ts) => ts.filter((t) => t.id !== id));
+    setBrowserOpenReqs((m) => {
+      if (!(id in m)) return m;
+      const { [id]: _drop, ...rest } = m;
+      return rest;
+    });
     setEditorTabs((m) => {
       if (!(id in m)) return m;
       const { [id]: _drop, ...rest } = m;
@@ -525,7 +532,9 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   const claudeSeqRef = useRef(0);
   // Spawn-target picker: when 2+ workspaces (base + workspace-zone frames) live
   // on the canvas, ask WHERE a new claude should run instead of guessing.
-  const [spawnPick, setSpawnPick] = useState<{ kind: TileKind; mode?: string; work?: string; agent?: { id: string; cmd: string; args?: string[]; label: string } } | null>(null);
+  const [spawnPick, setSpawnPick] = useState<{ kind: TileKind; mode?: string; work?: string; url?: string; agent?: { id: string; cmd: string; args?: string[]; label: string } } | null>(null);
+  const browserReqSeq = useRef(0);
+  const [browserOpenReqs, setBrowserOpenReqs] = useState<Record<string, { url: string; seq: number }>>({});
   // Text awaiting a claude target — set when something wants to deliver a prompt
   // ("Work on this", diff "send review") and 2+ claude tiles exist, so the user
   // picks WHICH claude (or a new one). 0 claude → spawn new directly; the picker
@@ -558,6 +567,40 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     setFrameOf, setPositions, setSelectedTileId, setFocusReq, setFrames,
     setSelectedFrameId, setTiles, setSpawnPick, focusTile,
   });
+  const openFileFromTerminal = useCallback((sourceTileId: string, path: string) => {
+    const sourceFrameId = frameOfRef.current[sourceTileId] ?? selectedFrameIdRef.current;
+    const existing = tilesRef.current.find((t) => (
+      (t.kind === "editor" || t.kind === "workbench") &&
+      (!sourceFrameId || frameOfRef.current[t.id] === sourceFrameId)
+    ));
+    if (existing) {
+      openFileInTile(existing.id, path);
+      setTimeout(() => { setSelectedTileId(existing.id); focusTile(existing.id); }, 0);
+      return;
+    }
+    spawnTile("editor", sourceFrameId ?? null, {});
+  }, [openFileInTile, focusTile, spawnTile]);
+
+  const openUrlInBrowser = useCallback((sourceTileId: string, url: string) => {
+    const sourceFrameId = frameOfRef.current[sourceTileId] ?? selectedFrameIdRef.current;
+    const existing = tilesRef.current.find((t) => (
+      t.kind === "browser" && (!sourceFrameId || frameOfRef.current[t.id] === sourceFrameId)
+    ));
+    if (existing) {
+      const browserFrameId = frameOfRef.current[existing.id] ?? null;
+      const seq = ++browserReqSeq.current;
+      setBrowserOpenReqs((m) => ({ ...m, [existing.id]: { url, seq } }));
+      // Defer selection past the click-bubble: onNodeClick fires on the terminal
+      // node after our handler and would re-select it, clobbering our selection.
+      setTimeout(() => {
+        if (browserFrameId) setSelectedFrameId(browserFrameId);
+        setSelectedTileId(existing.id);
+        focusTile(existing.id);
+      }, 0);
+      return;
+    }
+    spawnTile("browser", sourceFrameId ?? null, { url });
+  }, [focusTile, spawnTile]);
 
   // Plan review: an agent hit ExitPlanMode → main's plan-bridge pushed the plan.
   // Open a PlanReviewTile beside the agent (the tile decides and unblocks the
@@ -581,7 +624,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
         const p = (cmd.params ?? {}) as Record<string, unknown>;
         switch (cmd.method) {
           case "tile.spawn_agent": {
-            const tileId = hcpSpawnAgent(p as { agent?: string; prompt?: string; frame?: string; mode?: string; callerTile?: string });
+            const tileId = hcpSpawnAgent(p as { agent?: string; prompt?: string; frame?: string; mode?: string; callerTile?: string; background?: boolean });
             await window.hive.hcpResult(cmd.id, true, { tileId });
             break;
           }
@@ -687,6 +730,34 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     });
   }, []);
 
+  // HCP subagent lifecycle (deterministic SubagentStart/Stop hooks) → keep a tile
+  // reading "working" while it has in-flight Task subagents, including BACKGROUND
+  // agents where the main loop is back at the idle prompt and the scrape misses it.
+  useEffect(() => {
+    return window.hive.onHcpSubagent((ev) => {
+      // ev.tileId is already the bare tile id (the status bus key).
+      setSubagentBusy(ev.tileId, ev.busy);
+    });
+  }, []);
+
+  // HCP "needs you" (claude's deterministic Notification hook) → a soft status
+  // override the scrape auto-clears when work resumes. Hardens permission/question
+  // detection against UI-string drift; tileId is already bare.
+  useEffect(() => {
+    return window.hive.onHcpNotify((ev) => {
+      setNotify(ev.tileId, ev.status as TileStatusKind);
+    });
+  }, []);
+
+  // HCP turn state — claude's hook-driven working/idle (UserPromptSubmit → working,
+  // Stop → idle). Authoritative over the screen-scrape for working/idle; immune to
+  // TUI/scroll/focus/buffer-replay churn. ev.tileId is already bare.
+  useEffect(() => {
+    return window.hive.onHcpTurnState((ev) => {
+      setTurnState(ev.tileId, ev.state);
+    });
+  }, []);
+
   // Plan-review wait: while a planReview tile is open for an agent, that agent is
   // blocked on its ExitPlanMode handoff → mark it "waiting: review" (cleared when
   // the plan tile closes). Diff against the previous set to set/clear precisely.
@@ -745,14 +816,14 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // Rebuilds on any layout/frame/size/position change; the selection-derived
   // `nodes` memo below clones only the selected node so a click doesn't churn.
   const baseNodes: Node[] = useMemo(() => buildBaseNodes({
-    repoPath, root, cwd, tiles, frames, frameOf, sizes, positions, editorTabs,
+    repoPath, root, cwd, tiles, frames, frameOf, sizes, positions, editorTabs, browserOpenReqs,
     tileNames, agentTitles, frameTiles, framesChipNames,
     updateFrameTitle, updateFrameColor, deleteFrame, arrangeFrame, bringFrameToFront,
     onAttachWorktree, onCreateWorktree, unbindBranch, bindWorkspace, unbindWorkspace,
-    openFileInTile, closeTabInTile, closeTile, onNodeResizeCommit, renameTile, setAgentTitle,
+    openFileInTile, openUrlInBrowser, openFileFromTerminal, closeTabInTile, closeTile, onNodeResizeCommit, renameTile, setAgentTitle,
   }), [
-    repoPath, root, cwd, tiles, editorTabs, frames, frameOf, sizes, positions,
-    openFileInTile, closeTabInTile, closeTile, updateFrameTitle, updateFrameColor,
+    repoPath, root, cwd, tiles, editorTabs, browserOpenReqs, frames, frameOf, sizes, positions,
+    openFileInTile, openUrlInBrowser, openFileFromTerminal, closeTabInTile, closeTile, updateFrameTitle, updateFrameColor,
     deleteFrame, arrangeFrame, bringFrameToFront, onAttachWorktree, onCreateWorktree,
     unbindBranch, onNodeResizeCommit, frameTiles, tileNames, bindWorkspace,
     unbindWorkspace, renameTile, framesChipNames, agentTitles, setAgentTitle,
@@ -1199,7 +1270,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
                       <button
                         key={f.id}
                         autoFocus={isSel}
-                        onClick={() => { spawnTile(spawnPick.kind, f.id, { mode: spawnPick.mode, work: spawnPick.work, agent: spawnPick.agent }); setSpawnPick(null); }}
+                        onClick={() => { spawnTile(spawnPick.kind, f.id, { mode: spawnPick.mode, work: spawnPick.work, url: spawnPick.url, agent: spawnPick.agent }); setSpawnPick(null); }}
                         className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[12px] text-[var(--color-fg)] hover:bg-[var(--color-bg3)] transition-colors ${
                           isSel ? "bg-[var(--color-bg3)] ring-1 ring-[var(--color-select)]" : ""
                         }`}

@@ -6,7 +6,7 @@
  * Escape fit-all, F2 rename — with the same text-field guards.
  */
 import { useEffect, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
-import { inEditable, inTextField } from "./dom-focus";
+import { inEditable } from "./dom-focus";
 import type { TileInstance } from "./canvas-persistence";
 
 type FocusModeReq = { id: string | null; n: number } | null;
@@ -58,10 +58,14 @@ export function useCanvasShortcuts(ctx: CanvasShortcutsCtx) {
         else if ((e.key === "d" || e.key === "D") && repoPath) { e.preventDefault(); spawnVis("diff"); }
         return;
       }
-      // Focus-mode hotkeys fire even when typing in a TILE (xterm/CodeMirror are
-      // "editable" but you navigate the canvas from them) — but NOT in a real
-      // text field (tile-rename input, palette, form) where "." and Escape type.
-      if (!inTextField(e.target)) {
+      // Focus-mode hotkeys (".", Escape) fire ONLY when no editable element is
+      // focused. Previously they used !inTextField, which excluded xterm's helper
+      // textarea — so "." and Escape typed into a terminal were stolen by the
+      // canvas (Escape → fit-all zoom, "." → zoom-to-tile) instead of reaching the
+      // agent. Escape especially is load-bearing inside claude/droid's TUI. Now
+      // any focused terminal/editor gets them; use ". "/Escape on the canvas by
+      // clicking the background first (no tile selected).
+      if (!inEditable(e.target)) {
         if (e.key === ".") {
           const id = selectedTileIdRef.current ?? selectedFrameIdRef.current;
           if (id) { e.preventDefault(); setFocusModeReq({ id, n: ++focusModeNonceRef.current }); }

@@ -30,6 +30,7 @@ export interface NodeBuildCtx {
   sizes: Record<string, { width: number; height: number }>;
   positions: Record<string, { x: number; y: number }>;
   editorTabs: Record<string, string[]>;
+  browserOpenReqs: Record<string, { url: string; seq: number }>;
   tileNames: Record<string, string>;
   agentTitles: Record<string, string>;
   frameTiles: Map<string, string[]>;
@@ -45,6 +46,8 @@ export interface NodeBuildCtx {
   bindWorkspace: (id: string) => void;
   unbindWorkspace: (id: string) => void;
   openFileInTile: (tileId: string, file: string) => void;
+  openUrlInBrowser: (sourceTileId: string, url: string) => void;
+  openFileFromTerminal: (sourceTileId: string, path: string) => void;
   closeTabInTile: (tileId: string, file: string) => void;
   closeTile: (id: string) => void;
   onNodeResizeCommit: (id: string, w: number, h: number, x?: number, y?: number) => void;
@@ -54,11 +57,11 @@ export interface NodeBuildCtx {
 
 export function buildBaseNodes(ctx: NodeBuildCtx): Node[] {
   const {
-    repoPath, root, cwd, tiles, frames, frameOf, sizes, positions, editorTabs,
+    repoPath, root, cwd, tiles, frames, frameOf, sizes, positions, editorTabs, browserOpenReqs,
     tileNames, agentTitles, frameTiles, framesChipNames,
     updateFrameTitle, updateFrameColor, deleteFrame, arrangeFrame, bringFrameToFront,
     onAttachWorktree, onCreateWorktree, unbindBranch, bindWorkspace, unbindWorkspace,
-    openFileInTile, closeTabInTile, closeTile, onNodeResizeCommit, renameTile, setAgentTitle,
+    openFileInTile, openUrlInBrowser, openFileFromTerminal, closeTabInTile, closeTile, onNodeResizeCommit, renameTile, setAgentTitle,
   } = ctx;
 
   const out: Node[] = [];
@@ -193,6 +196,7 @@ export function buildBaseNodes(ctx: NodeBuildCtx): Node[] {
           repoPath: effRepo,
           tabs: editorTabs[t.id] ?? [],
           onOpenFile: (file: string) => openFileInTile(t.id, file),
+          onOpenInBrowser: (url: string) => openUrlInBrowser(t.id, url),
           onCloseTab: (file: string) => closeTabInTile(t.id, file),
           onClose: () => closeTile(t.id),
           onResize: onNodeResizeCommit,
@@ -227,7 +231,14 @@ export function buildBaseNodes(ctx: NodeBuildCtx): Node[] {
         id: t.id,
         type: "browser",
         style: sized(t.id, w, h),
-        data: { tileId: t.id, frameId: frameOf[t.id] ?? null, url: t.url, onResize: onNodeResizeCommit, onClose: () => closeTile(t.id) },
+        data: {
+          tileId: t.id,
+          frameId: frameOf[t.id] ?? null,
+          url: t.url,
+          openReq: browserOpenReqs[t.id] ?? null,
+          onResize: onNodeResizeCommit,
+          onClose: () => closeTile(t.id),
+        },
         dragHandle: ".tile-drag-handle",
       };
     } else if (t.kind === "planReview") {
@@ -266,6 +277,8 @@ export function buildBaseNodes(ctx: NodeBuildCtx): Node[] {
           name: tileNames[t.id] ?? agentTitles[t.id] ?? autoNameFromCmd(cmd),
           onRename: renameTile,
           onAgentTitle: setAgentTitle,
+          onOpenInBrowser: (url: string) => openUrlInBrowser(t.id, url),
+          onOpenInEditor: (path: string) => openFileFromTerminal(t.id, path),
           onResize: onNodeResizeCommit,
           onClose: () => closeTile(t.id),
         },

@@ -39,6 +39,21 @@ export interface ClaudeResumeDeps {
    *  `hcpSock`, injects a Stop hook so finished turns are reported to the control
    *  plane (deterministic agent.read). */
   stopHookPath?: string;
+  /** Absolute path to the generated HCP subagent hook `.cjs` (daemon writes it).
+   *  With `hcpSock`, injects SubagentStart/SubagentStop hooks so a tile reads
+   *  "working" while it has in-flight (incl. background) Task subagents — the
+   *  case the screen-scrape misses once the main loop returns to the prompt. */
+  subagentHookPath?: string;
+  /** Absolute path to the generated HCP notification hook `.cjs` (daemon writes
+   *  it). With `hcpSock`, injects a Notification hook so claude's own "needs your
+   *  permission" / "waiting for your input" signal drives the tile status
+   *  deterministically (hardens the screen-scrape; version-proof). */
+  notificationHookPath?: string;
+  /** Absolute path to the generated HCP UserPromptSubmit hook `.cjs`. With
+   *  `hcpSock`, injects a UserPromptSubmit hook so a turn START marks the tile
+   *  `working` deterministically (paired with the Stop hook's turn END → idle).
+   *  This is the hook-driven replacement for the working/idle screen-scrape. */
+  userpromptHookPath?: string;
   /** The HCP control-plane unix socket (owned by Electron main). Injected into
    *  the agent's env as HIVE_HCP_SOCK so its hive MCP can drive the canvas. */
   hcpSock?: string;
@@ -110,6 +125,36 @@ export function trackerSettings(deps: ClaudeResumeDeps, id: string, supervise?: 
       `HIVEMIND_TILE=${shq(id)} ELECTRON_RUN_AS_NODE=1 ` +
       `${shq(deps.execPath)} ${shq(deps.stopHookPath)} ${shq(deps.hcpSock)}`;
     hooks.Stop = [{ hooks: [{ type: "command", command: stopCmd, timeout: 10 }] }];
+  }
+  if (deps.subagentHookPath && deps.hcpSock) {
+    // Reports subagent start/stop edges so the tile shows "working" while Task
+    // subagents (including BACKGROUND ones) are in flight. Fire-and-forget like
+    // Stop — does not block dispatch; a short timeout bounds a hung app. One
+    // command for both events; the hook derives the phase from the payload.
+    const subCmd =
+      `HIVEMIND_TILE=${shq(id)} ELECTRON_RUN_AS_NODE=1 ` +
+      `${shq(deps.execPath)} ${shq(deps.subagentHookPath)} ${shq(deps.hcpSock)}`;
+    const subHook = [{ hooks: [{ type: "command", command: subCmd, timeout: 10 }] }];
+    hooks.SubagentStart = subHook;
+    hooks.SubagentStop = subHook;
+  }
+  if (deps.notificationHookPath && deps.hcpSock) {
+    // Reports claude's own Notification events (permission_request / idle_prompt /
+    // elicitation) so a "needs you" status is deterministic, not scraped. Fire-
+    // and-forget; the renderer auto-clears it when work resumes.
+    const notifCmd =
+      `HIVEMIND_TILE=${shq(id)} ELECTRON_RUN_AS_NODE=1 ` +
+      `${shq(deps.execPath)} ${shq(deps.notificationHookPath)} ${shq(deps.hcpSock)}`;
+    hooks.Notification = [{ hooks: [{ type: "command", command: notifCmd, timeout: 10 }] }];
+  }
+  if (deps.userpromptHookPath && deps.hcpSock) {
+    // Turn START → working (deterministic). Paired with the Stop hook (turn END →
+    // idle) this replaces the working/idle screen-scrape, which mis-read claude's
+    // spinner/wording changes, focus/scroll, and stale buffer replay on restart.
+    const upCmd =
+      `HIVEMIND_TILE=${shq(id)} ELECTRON_RUN_AS_NODE=1 ` +
+      `${shq(deps.execPath)} ${shq(deps.userpromptHookPath)} ${shq(deps.hcpSock)}`;
+    hooks.UserPromptSubmit = [{ hooks: [{ type: "command", command: upCmd, timeout: 10 }] }];
   }
   return JSON.stringify({ hooks });
 }

@@ -33,9 +33,27 @@ export class RemoteConnectionManager {
   readonly limiter = new ConcurrencyLimiter(4);
   /** Auth config supplied per host id (set by sshConnect before first use). */
   private auth = new Map<string, HostAuth>();
+  /** Fallback that resolves auth for a host NOT in the in-memory map — wired to
+   *  the keychain-backed saved-hosts store (index.ts). This is what makes a
+   *  remote tile reconnect after an app restart: the in-memory `auth` map is
+   *  empty on a fresh process, so without this every restored pty/fs/git connect
+   *  would hit "All configured authentication methods failed". Injected (not
+   *  imported) so this module stays electron-free + unit-testable. */
+  private resolveAuth?: (hostId: string) => HostAuth | null;
 
   setAuth(hostId: string, auth: HostAuth): void {
     this.auth.set(hostId, auth);
+  }
+
+  setAuthResolver(fn: (hostId: string) => HostAuth | null): void {
+    this.resolveAuth = fn;
+  }
+
+  /** The auth to use for a host: in-memory (set by an interactive sshConnect)
+   *  first, else the injected keychain resolver (restore-after-restart), else
+   *  empty. Pure — the connect path in get() uses this. */
+  resolveAuthFor(hostId: string): HostAuth {
+    return this.auth.get(hostId) ?? this.resolveAuth?.(hostId) ?? {};
   }
 
   /** Connect (or reuse) the Client for a remote target's host. */
@@ -45,7 +63,9 @@ export class RemoteConnectionManager {
       await existing.ready;
       return existing.client;
     }
-    const auth = this.auth.get(target.hostId) ?? {};
+    // In-memory auth (set by an interactive sshConnect) first; else the keychain
+    // fallback (the restore-after-restart path, where the in-memory map is empty).
+    const auth = this.resolveAuthFor(target.hostId);
     const username =
       auth.username ?? target.user ?? process.env.USER ?? process.env.USERNAME ?? "root";
 

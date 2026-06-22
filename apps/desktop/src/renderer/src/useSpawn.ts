@@ -12,13 +12,15 @@ import { defaultSizeForKind, defaultTileSize } from "./canvas-sizing";
 import { agentById } from "./agents";
 import { defaultShell, type FrameState, type TileInstance } from "./canvas-persistence";
 import { queueWork } from "./claude-bus";
+import { markBackgroundTile } from "./worker-tiles";
 import type { TileKind } from "./tile-kinds";
 
 /** Kinds that are one-per-frame (spawn → focus existing). claude/shell are not. */
 const SINGLETON_KINDS: ReadonlySet<TileKind> = new Set(["editor", "diff", "issues"]);
 
 type FocusReq = { id: string; cx: number; cy: number; w: number; h: number; n: number; exact?: boolean } | null;
-type SpawnPick = { kind: TileKind; mode?: string; work?: string; agent?: { id: string; cmd: string; args?: string[]; label: string } } | null;
+type SpawnOpts = { mode?: string; work?: string; url?: string; agent?: { id: string; cmd: string; args?: string[]; label: string } };
+type SpawnPick = ({ kind: TileKind } & SpawnOpts) | null;
 
 export interface SpawnCtx {
   repoPath: string | null;
@@ -54,7 +56,7 @@ export function useSpawn(ctx: SpawnCtx) {
     setSelectedFrameId, setTiles, setSpawnPick, focusTile,
   } = ctx;
 
-  const placeInFrame = useCallback((id: string, frame: FrameState) => {
+  const placeInFrame = useCallback((id: string, frame: FrameState, opts?: { background?: boolean }) => {
     const padX = 24;
     const padTop = 48;
     const gap = 24;
@@ -101,9 +103,13 @@ export function useSpawn(ctx: SpawnCtx) {
     // SINGLE focus+select authority for placed tiles. Every spawn path routes
     // through placeInFrame, so callers must NOT also focus/select (that fired
     // the animation twice). Center on the KNOWN coords directly (don't wait
-    // for the positions ref to settle).
-    setSelectedTileId(id);
-    setFocusReq((prev) => ({ id, cx: placeX + me.width / 2, cy: placeY + me.height / 2, w: me.width, h: me.height, n: (prev?.n ?? 0) + 1 }));
+    // for the positions ref to settle). EXCEPT background workers (workflow /
+    // report:false): they're placed but must NOT grab selection (→ keyboard
+    // focus) or pan the viewport — you stay where you are while they run.
+    if (!opts?.background) {
+      setSelectedTileId(id);
+      setFocusReq((prev) => ({ id, cx: placeX + me.width / 2, cy: placeY + me.height / 2, w: me.width, h: me.height, n: (prev?.n ?? 0) + 1 }));
+    }
   }, [repoPath]);
 
   // frame = workspace: EVERY tile lives in a frame, never loose on the canvas.
@@ -194,7 +200,7 @@ export function useSpawn(ctx: SpawnCtx) {
   // one-per-frame — if the frame already has one, focus it instead of making a
   // duplicate. placeInFrame lays it out + auto-grows the frame + selects/foci.
   const spawnTile = useCallback(
-    (kind: TileKind, targetFrameId: string | null, opts?: { mode?: string; work?: string; agent?: { id: string; cmd: string; args?: string[]; label: string } }): void => {
+    (kind: TileKind, targetFrameId: string | null, opts?: SpawnOpts): void => {
       const frame = (targetFrameId ? framesRef.current.find((f) => f.id === targetFrameId) : undefined) ?? ensureFrame();
       const fid = frame.id;
       if (SINGLETON_KINDS.has(kind)) {
@@ -233,7 +239,7 @@ export function useSpawn(ctx: SpawnCtx) {
         label = kind === "editor" ? "Editor" : kind === "diff" ? "Diff" : "Issues";
       }
       placeInFrame(newId, frame);
-      setTiles((cur) => [...cur, { id: newId, kind, label, cmd, args }]);
+      setTiles((cur) => [...cur, { id: newId, kind, label, cmd, args, ...(kind === "browser" && opts?.url ? { url: opts.url } : {}) }]);
       // "Work on this": hand the fresh claude tile its prompt. It delivers it to
       // itself the first time it's ready (see claude-bus queueWork/claimWork).
       if (kind === "claude" && opts?.work) queueWork(newId, opts.work);
@@ -245,7 +251,7 @@ export function useSpawn(ctx: SpawnCtx) {
   // selection IS the target: a selected frame — or the frame holding the
   // selected tile — spawns straight in, no picker. Only ask when nothing is
   // selected to disambiguate AND 2+ frames exist.
-  const spawnInto = useCallback((kind: TileKind, opts?: { mode?: string; work?: string; agent?: { id: string; cmd: string; args?: string[]; label: string } }) => {
+  const spawnInto = useCallback((kind: TileKind, opts?: SpawnOpts) => {
     const selTile = selectedTileIdRef.current;
     const selFrame =
       selectedFrameIdRef.current ?? (selTile ? frameOfRef.current[selTile] ?? null : null);
@@ -332,7 +338,7 @@ export function useSpawn(ctx: SpawnCtx) {
   // claude/registry-agent branch of spawnTile, plus prompt delivery via the
   // claude-bus work queue. `agent` is a registry id ("claude", "codex", …).
   const hcpSpawnAgent = useCallback(
-    (opts: { agent?: string; prompt?: string; frame?: string; mode?: string; callerTile?: string }): string => {
+    (opts: { agent?: string; prompt?: string; frame?: string; mode?: string; callerTile?: string; background?: boolean }): string => {
       // Frame preference: explicit > the CALLER agent's frame (so a worker lands
       // beside the agent that spawned it) > the active/first frame.
       // The caller passes its HIVEMIND_TILE, which is the PTY id (`hm:<tileId>`
@@ -377,7 +383,11 @@ export function useSpawn(ctx: SpawnCtx) {
         cmd = "claude";
         label = `claude #${n}${m && m !== "default" ? ` · ${m}` : ""}`;
       }
-      placeInFrame(newId, frame);
+      // Background (workflow / report:false) workers: place WITHOUT stealing
+      // focus or centering the viewport, and mark them so useAgentAwareness skips
+      // their "finished" notification — they're gathered in bulk, not driven.
+      if (opts.background) markBackgroundTile(newId);
+      placeInFrame(newId, frame, { background: opts.background });
       setTiles((cur) => [...cur, { id: newId, kind: "claude", label, cmd, args }]);
       if (opts.prompt) queueWork(newId, opts.prompt);
       return newId;

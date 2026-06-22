@@ -8,6 +8,7 @@
 import { defineCommand, runMain } from "citty";
 import pkg from "../package.json" with { type: "json" };
 import { initCmd } from "./commands/init.js";
+import { addCmd } from "./commands/add.js";
 import { newCmd } from "./commands/new.js";
 import { listCmd } from "./commands/list.js";
 import { showCmd } from "./commands/show.js";
@@ -45,6 +46,7 @@ const main = defineCommand({
   },
   subCommands: {
     init: initCmd,
+    add: addCmd,
     new: newCmd,
     list: listCmd,
     show: showCmd,
