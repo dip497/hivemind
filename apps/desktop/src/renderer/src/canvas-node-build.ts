@@ -274,7 +274,13 @@ export function buildBaseNodes(ctx: NodeBuildCtx): Node[] {
           cmd,
           args,
           label: t.label,
-          name: tileNames[t.id] ?? agentTitles[t.id] ?? autoNameFromCmd(cmd),
+          // NOTE: the live agent OSC title is deliberately NOT used here. It
+          // updates ~every 600ms while an agent streams; feeding it into node data
+          // rebuilt the whole react-flow node array each tick → cursor-flicker
+          // (react-flow z-fight) + focus stolen off the input mid-type. The live
+          // title still shows in the Layers panel (its own memo) and the terminal
+          // status line; tiles show the rename / auto name.
+          name: tileNames[t.id] ?? autoNameFromCmd(cmd),
           onRename: renameTile,
           onAgentTitle: setAgentTitle,
           onOpenInBrowser: (url: string) => openUrlInBrowser(t.id, url),

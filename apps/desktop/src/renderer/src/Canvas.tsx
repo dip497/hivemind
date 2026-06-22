@@ -467,7 +467,11 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // Display-name map for FrameNode chip strip: tile id → user/auto name.
   // Memoized to keep node memoization stable.
   // Agent title overlays the auto label; a user rename overlays both.
-  const framesChipNames = useMemo(() => ({ ...agentTitles, ...tileNames }), [agentTitles, tileNames]);
+  // Canvas frame-chip names: rename / static only — NOT the live agent OSC title.
+  // The title churns ~every 600ms while an agent streams; including it here made
+  // baseNodes rebuild each tick → cursor-flicker + focus loss. (Live titles still
+  // show in the Layers panel, which derives its own list from agentTitles.)
+  const framesChipNames = useMemo(() => ({ ...tileNames }), [tileNames]);
 
   // ── Figma-style Layers panel data ─────────────────────────────────────────
   // Every open tile flattened to { id, kind, name, frameId } for the left rail.
@@ -826,7 +830,9 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     openFileInTile, openUrlInBrowser, openFileFromTerminal, closeTabInTile, closeTile, updateFrameTitle, updateFrameColor,
     deleteFrame, arrangeFrame, bringFrameToFront, onAttachWorktree, onCreateWorktree,
     unbindBranch, onNodeResizeCommit, frameTiles, tileNames, bindWorkspace,
-    unbindWorkspace, renameTile, framesChipNames, agentTitles, setAgentTitle,
+    // agentTitles intentionally NOT a dep: a live title change must not rebuild
+    // the react-flow node array (cursor-flicker + focus loss while streaming).
+    unbindWorkspace, renameTile, framesChipNames, setAgentTitle,
   ]);
   // Derive selection-aware nodes from baseNodes. Shallow-clones ONLY the
   // currently-selected and previously-selected tile so other nodes keep their
