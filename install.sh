@@ -17,6 +17,11 @@
 #   - prebuilt mode → fetches the latest release if newer than installed
 #   - dev mode      → `git pull --ff-only` + rebuild
 #
+# Installed users manage the app via the `hivemind` launcher:
+#   hivemind upgrade            # re-run this installer (latest release)
+#   hivemind uninstall          # remove app + launcher + desktop entry
+#   hivemind uninstall --purge  # also delete ~/.config/hivemind (settings/sessions)
+#
 # Env knobs (rarely needed):
 #   HIVEMIND_BIN_DIR  symlink dir (default: ~/.local/bin)
 #   HIVEMIND_APP_DIR  where the AppImage / version metadata live
@@ -62,11 +67,34 @@ write_launcher() {
 # for the extracted AppImage — see install.sh write_launcher() for the why.
 #
 # \`hivemind upgrade\` re-runs the official installer (fetches the latest release,
-# no-op if already current; pass --dev for a source install). Anything else
-# launches the app.
+# no-op if already current; pass --dev for a source install).
+# \`hivemind uninstall\` removes the app, launcher and desktop entry (keeps your
+# settings/sessions; pass --purge to delete ~/.config/hivemind too). Anything
+# else launches the app.
 if [ "\${1:-}" = "upgrade" ]; then
   shift
   exec bash -c 'curl -fsSL https://raw.githubusercontent.com/dip497/hivemind/main/install.sh | bash -s -- "\$@"' _ "\$@"
+fi
+if [ "\${1:-}" = "uninstall" ]; then
+  shift
+  purge=0; for a in "\$@"; do [ "\$a" = "--purge" ] && purge=1; done
+  echo "hivemind: uninstalling…" >&2
+  # Stop the running app + its background pty daemon. Match on the app dir so we
+  # never kill THIS launcher process (it lives at a different path, in BIN_DIR).
+  pkill -f "$appdir" 2>/dev/null || true
+  data_dir="\${XDG_DATA_HOME:-\$HOME/.local/share}"
+  rm -rf "$appdir" "${appdir}.staged"
+  rm -f "\$data_dir/applications/hivemind.desktop" "\$data_dir/icons/hicolor/512x512/apps/hivemind.png"
+  update-desktop-database "\$data_dir/applications" 2>/dev/null || true
+  if [ "\$purge" = 1 ]; then
+    rm -rf "\${XDG_CONFIG_HOME:-\$HOME/.config}/hivemind"
+    echo "hivemind: removed user data (\${XDG_CONFIG_HOME:-\$HOME/.config}/hivemind)" >&2
+  else
+    echo "hivemind: kept user data — pass 'hivemind uninstall --purge' to remove it too" >&2
+  fi
+  rm -f "$BIN_DIR/hivemind"   # the launcher itself, LAST (safe: already in memory)
+  echo "hivemind: uninstalled." >&2
+  exit 0
 fi
 # Apply a staged upgrade: when the installer ran while the app was live it could
 # not replace these files in place, so it extracted the new version beside this

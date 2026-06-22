@@ -14,7 +14,7 @@ import { Layers, ChevronRight, ChevronDown, Square, GitBranch, Server, PanelLeft
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { AgentIcon } from "./agents";
 
-export type LayerKind = "claude" | "terminal" | "editor" | "diff" | "issues" | "browser" | "planReview";
+export type LayerKind = "claude" | "terminal" | "editor" | "diff" | "issues" | "browser" | "planReview" | "workbench";
 
 export interface LayerTile {
   id: string;
@@ -87,6 +87,7 @@ const KIND_GLYPH: Record<LayerKind, string> = {
   issues: "◔",
   browser: "🌐",
   planReview: "▤",
+  workbench: "▥",
 };
 
 export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocusFrame }: Props) {

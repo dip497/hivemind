@@ -34,14 +34,16 @@ test("webUrlForInternalBrowser keeps http urls for the internal browser", () => 
   assert.equal(webUrlForInternalBrowser("ftp://example.com/file"), null);
 });
 
-test("openTargetForTerminalLink routes html paths to browser and other files to app opener", () => {
+test("openTargetForTerminalLink routes html→browser, source→in-app editor, http→browser", () => {
   assert.deepEqual(
     openTargetForTerminalLink("/home/me/site", "./index.html:12"),
     { kind: "browser", url: "file:///home/me/site/index.html" },
   );
+  // Source files now open in the in-app editor tile (resolved to an absolute path)
+  // rather than the OS app opener.
   assert.deepEqual(
     openTargetForTerminalLink("/home/me/site", "./src/main.ts:12:4"),
-    { kind: "app", target: "./src/main.ts:12:4" },
+    { kind: "editor", path: "/home/me/site/src/main.ts" },
   );
   assert.deepEqual(
     openTargetForTerminalLink("/home/me/site", "https://example.com"),

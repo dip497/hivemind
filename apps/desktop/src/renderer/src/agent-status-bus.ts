@@ -81,31 +81,24 @@ function effective(tileId: string): StatusEvent | undefined {
   //    reaper) and legitimately QUIET — so NOT subject to the output-staleness
   //    gate below.
   if (subagentBusy.has(tileId)) return here("working");
-  // STALENESS: any "working" claim (hook turn OR scrape) must be backed by recent
-  // pty output (see WORKING_STALE_MS). A working agent streams output; a finished/
-  // interrupted/killed/restart-replayed tile is quiet. So a "working" gone quiet
-  // for the window is stale → idle. This corrects BOTH a missed Stop hook (Esc /
-  // crash pins liveTurn "working") AND a frozen "working" scrape the poll can't
-  // re-evaluate (no new output) — neither of which the scrape's own idle could fix.
-  // Gate only once the tile has produced output at least once (so a working
-  // status is coupled to a real stream); a tile that never emitted is governed
-  // by the hook/scrape as before. In production publishStatus("working") is
-  // always preceded by the pty-data event that called noteOutput, so a fresh
-  // "working" is never stale — only one gone quiet for the window is.
+  // 5. Hook-driven turn state (claude/droid): UserPromptSubmit → working, Stop →
+  //    idle. AUTHORITATIVE and NOT staleness-gated: the hook KNOWS the turn is
+  //    live, so "working" holds even when claude is output-SILENT — extended
+  //    "max effort" thinking can be quiet for minutes with a frozen elapsed timer.
+  //    (Gating this on output was the "genuinely-working tile shows idle" bug.)
+  //    A crash is caught by `exited` above; an Esc-interrupt leaves a stale
+  //    "working" only until the next UserPromptSubmit re-affirms / Stop clears it.
+  const lt = liveTurn.get(tileId);
+  if (lt === "working") return here("working");
+  if (lt === "idle") return here("idle"); // dominates a spinner false-"working"
+  // 6. Scrape base — the ONLY signal for hook-less agents (codex/opencode, or a
+  //    claude session from before hook injection). The scrape can FREEZE on a
+  //    replayed/stale buffer the poll can't re-evaluate (no new output), so gate a
+  //    quiet scraped "working" as stale → idle. Restricted to the no-hook path so
+  //    it can never override an authoritative live turn. Gated only once the tile
+  //    has emitted at least once (a working status coupled to a real stream).
   const lastOut = lastOutputAt.get(tileId);
   const stale = lastOut !== undefined && Date.now() - lastOut > WORKING_STALE_MS;
-  // 5. Hook-driven turn state (claude/droid): UserPromptSubmit → working, Stop →
-  //    idle. Authoritative over the scrape — immune to spinner/wording changes,
-  //    focus/scroll, stale buffer replay. Unset for hook-less agents → scrape.
-  const lt = liveTurn.get(tileId);
-  if (lt === "working") {
-    if (b?.status === "idle") return b;          // real scrape idle → real finish
-    if (stale) return here("idle", true);         // output stopped → SYNTHETIC idle
-    return here("working");
-  }
-  if (lt === "idle") return here("idle"); // dominates a spinner false-"working"
-  // 6. Scrape base — the fallback (hook-less working/idle; claude before seeding).
-  //    A scraped "working" that's gone quiet is a frozen/stale screen → SYNTHETIC idle.
   if (b?.status === "working" && stale) return here("idle", true);
   return b;
 }

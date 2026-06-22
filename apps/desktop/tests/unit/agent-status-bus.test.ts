@@ -187,14 +187,17 @@ test("liveTurn is claude-only: non-claude tiles fall through to the scrape", () 
   clearStatus("lt5");
 });
 
-test("a stale liveTurn 'working' is self-healed by a scraped idle (missed Stop hook)", () => {
+test("a live hook 'working' turn is NOT overridden by a scraped idle (silent thinking)", () => {
   clearStatus("lt6");
   setTurnState("lt6", "working"); // turn started (UserPromptSubmit)
   assert.equal(statusOf("lt6"), "working");
-  // Turn interrupted (Esc) / agent killed / app restart → Stop hook never fired,
-  // so liveTurn sticks at "working". The scrape eventually reads the idle prompt.
+  // The scrape can misread a SILENT "max effort" thinking screen (frozen timer,
+  // no output) as idle — but the hook knows the turn is live, so working stands.
+  // Letting the scrape's idle win here was the "genuinely-working shows idle" bug.
   publishStatus({ tileId: "lt6", label: "claude", status: "idle" });
-  assert.equal(statusOf("lt6"), "idle"); // scraped idle corrects the stale working
+  assert.equal(statusOf("lt6"), "working");
+  setTurnState("lt6", "idle"); // a REAL end fires Stop → idle
+  assert.equal(statusOf("lt6"), "idle");
   clearStatus("lt6");
 });
 
@@ -206,15 +209,16 @@ test("a stale liveTurn 'working' is NOT cleared by a scraped working (real turn)
   clearStatus("lt7");
 });
 
-test("subagent-busy still masks a scraped idle even when liveTurn is working", () => {
+test("subagent-busy + a live turn both keep working; only Stop returns idle", () => {
   clearStatus("lt8");
   setTurnState("lt8", "working");
   setSubagentBusy("lt8", true); // background Task agent running
-  // Main prompt scrapes idle, but a bg subagent is live → must stay working.
-  publishStatus({ tileId: "lt8", label: "claude", status: "idle" });
+  publishStatus({ tileId: "lt8", label: "claude", status: "idle" }); // scrape misread
   assert.equal(statusOf("lt8"), "working");
   setSubagentBusy("lt8", false);
-  assert.equal(statusOf("lt8"), "idle"); // bg done + scraped idle → idle
+  assert.equal(statusOf("lt8"), "working"); // turn still live (no Stop) → working
+  setTurnState("lt8", "idle"); // Stop fired → idle
+  assert.equal(statusOf("lt8"), "idle");
   clearStatus("lt8");
 });
 
@@ -231,14 +235,14 @@ test("setSubagentBusy fires a transition event only on a real edge", () => {
   clearStatus("s5");
 });
 
-test("staleness gate: a 'working' gone quiet decays to idle; fresh output keeps it working", () => {
-  // Fresh output → liveTurn "working" is honored.
-  noteOutput("st1");
+test("a hook-driven 'working' turn is AUTHORITATIVE — never staleness-decayed (silent thinking)", () => {
+  // liveTurn "working" = the turn is genuinely live (UserPromptSubmit, no Stop).
+  // Even output-silent for >WORKING_STALE_MS (extended "max effort" thinking with
+  // a frozen timer) it must STILL read working — the staleness gate must not touch it.
   setTurnState("st1", "working");
+  noteOutput("st1", Date.now() - 60000); // 60s of output silence
   assert.equal(statusOf("st1"), "working");
-  // Same tile, but last output was 16s ago (> WORKING_STALE_MS) → stale → idle,
-  // even though the Stop hook never fired (liveTurn still "working").
-  noteOutput("st1", Date.now() - 16000);
+  setTurnState("st1", "idle"); // Stop fired → idle
   assert.equal(statusOf("st1"), "idle");
   clearStatus("st1");
 });
