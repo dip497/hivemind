@@ -27,22 +27,61 @@ export function snapViewportCrisp(vp: { x: number; y: number; zoom: number }): {
  *  tiles). Selection stays accurate at any zoom thanks to the zoom-aware mouse
  *  patch (terminal-mouse-patch.ts), so terminals no longer need to be pinned to
  *  100% here. */
-export function FocusMode({ req }: { req: { id: string | null; n: number } | null }) {
-  const { fitView } = useReactFlow();
+/** Focus mode = CRISP maximize. A terminal is only sharp at 100% (no DPR
+ *  supersample on a DPR=1 panel), so we don't zoom — we GROW the tile's box to
+ *  ~fill the window (xterm re-fits to more rows/cols at the SAME font → no quality
+ *  drop) and frame it at exactly 100%. Esc (or maximizing another tile) restores
+ *  the saved size. Needs Canvas's size setter + absolute-position ref + a
+ *  cross-call ref to remember the maximized tile's original size.
+ *
+ *  `setSize`/`getSize` operate in WORLD units (== screen px at zoom 1). */
+export function FocusMode({
+  req,
+  setSize,
+  getSize,
+  posRef,
+  maxRef,
+}: {
+  req: { id: string | null; n: number } | null;
+  setSize?: (id: string, w: number, h: number) => void;
+  getSize?: (id: string) => { width: number; height: number } | undefined;
+  posRef?: React.MutableRefObject<Record<string, { x: number; y: number }>>;
+  maxRef?: React.MutableRefObject<{ id: string; w: number; h: number } | null>;
+}) {
+  const { fitView, setViewport } = useReactFlow();
+  const paneW = useStore((s) => s.width);
+  const paneH = useStore((s) => s.height);
   useEffect(() => {
     if (!req) return;
-    if (req.id) {
-      // MAXIMIZE: fill the window edge-to-edge. Tiny padding (1.5%) so almost no
-      // margin is left, and a generous maxZoom (2.2×) so even a small tile blows
-      // up to fill. Big tiles land at zoom-to-fit and show whole. Selection stays
-      // accurate at any zoom via the terminal mouse patch; terminal text is
-      // CSS-scaled (slightly soft) above 100% on a DPR=1 panel — use the per-tile
-      // A−/A+ font for crisper glyphs.
-      void fitView({ nodes: [{ id: req.id }], padding: 0.015, duration: 400, maxZoom: 2.2 });
-    } else {
-      void fitView({ padding: 0.2, duration: 400 });
+    const PAD = 16;
+    const restorePrev = () => {
+      const m = maxRef?.current;
+      if (m && setSize) { setSize(m.id, m.w, m.h); if (maxRef) maxRef.current = null; }
+    };
+    // Esc / fit-all → restore any maximized tile, then frame everything.
+    if (!req.id) { restorePrev(); void fitView({ padding: 0.2, duration: 400 }); return; }
+    // Re-press on the already-maximized tile → toggle back to its normal size.
+    if (maxRef?.current?.id === req.id) {
+      restorePrev();
+      void fitView({ nodes: [{ id: req.id }], padding: 0.15, duration: 400, maxZoom: 1 });
+      return;
     }
-  }, [req, fitView]);
+    // Fallback (no Canvas wiring / unmeasured pane): just zoom-fit at ≤100%.
+    if (!setSize || !getSize || !posRef || !maxRef || paneW <= 0 || paneH <= 0 || !posRef.current[req.id]) {
+      void fitView({ nodes: [{ id: req.id }], padding: 0.02, duration: 400, maxZoom: 1 });
+      return;
+    }
+    restorePrev(); // restore a DIFFERENT previously-maximized tile first
+    const cur = getSize(req.id);
+    if (cur) maxRef.current = { id: req.id, w: cur.width, h: cur.height };
+    const pos = posRef.current[req.id];
+    if (!pos) return;
+    // Grow the box to ~fill the window; xterm re-fits to more cols/rows.
+    setSize(req.id, Math.round(paneW - 2 * PAD), Math.round(paneH - 2 * PAD));
+    // zoom 1 → world units == screen px: place the tile's ABSOLUTE top-left at PAD
+    // so the now-window-sized tile fills edge-to-edge, perfectly crisp.
+    void setViewport({ x: PAD - pos.x, y: PAD - pos.y, zoom: 1 }, { duration: 400 });
+  }, [req, fitView, setViewport, paneW, paneH, setSize, getSize, posRef, maxRef]);
   return null;
 }
 
