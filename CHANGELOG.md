@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [1.7.1] — 2026-06-23
+
 ## [1.7.0] — 2026-06-22
 
 ### Fixed
@@ -468,7 +470,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v1.7.1...HEAD
+[1.7.1]: https://github.com/dip497/hivemind/releases/tag/v1.7.1
 [1.7.0]: https://github.com/dip497/hivemind/releases/tag/v1.7.0
 [1.6.1]: https://github.com/dip497/hivemind/releases/tag/v1.6.1
 [1.6.0]: https://github.com/dip497/hivemind/releases/tag/v1.6.0
