@@ -522,6 +522,48 @@ ipcMain.handle("setBrowserCdpEnabled", wrap(async (_e, enabled: boolean) => {
 }));
 ipcMain.handle("relaunchApp", () => { app.relaunch(); app.exit(0); });
 
+// ── app version + self-update ─────────────────────────────────────────────
+ipcMain.handle("getAppVersion", () => app.getVersion());
+
+// Strict "is `latest` newer than `current`" over dotted numeric versions.
+// Tolerant of differing segment counts and non-numeric junk (→ 0).
+function isNewerVersion(latest: string, current: string): boolean {
+  const a = latest.split(".").map((n) => parseInt(n, 10) || 0);
+  const b = current.split(".").map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const x = a[i] ?? 0;
+    const y = b[i] ?? 0;
+    if (x !== y) return x > y;
+  }
+  return false;
+}
+
+// Fetch the latest GitHub release in MAIN (the renderer's CSP blocks the
+// api.github.com request). Any failure — offline, DNS, rate-limit, non-200 —
+// resolves to a no-update result so the UI shows nothing rather than an error.
+ipcMain.handle("checkForUpdate", async () => {
+  const current = app.getVersion();
+  try {
+    const res = await net.fetch(
+      "https://api.github.com/repos/dip497/hivemind/releases/latest",
+      { headers: { Accept: "application/vnd.github+json", "User-Agent": "hivemind-desktop" } },
+    );
+    if (!res.ok) return { current, latest: null, updateAvailable: false };
+    const json = (await res.json()) as { tag_name?: string };
+    const latest = (json.tag_name ?? "").replace(/^v/, "").trim();
+    if (!latest) return { current, latest: null, updateAvailable: false };
+    return { current, latest, updateAvailable: isNewerVersion(latest, current) };
+  } catch {
+    return { current, latest: null, updateAvailable: false };
+  }
+});
+
+// Upgrade-in-place: reuse the exact installer path `hivemind upgrade` uses
+// (curl install.sh | bash), then quit. Quitting (rather than app.relaunch())
+// is the safe choice — the running binary is being replaced under us, so the
+// freshly-installed one is picked up on the user's next launch.
+ipcMain.handle("runUpgrade", () => { runUpgradeAndExit(); });
+
 // The repo passed on the CLI (`hivemind .`), or null for a bare launch (then
 // the renderer falls back to its persisted last-project).
 ipcMain.handle("getLaunchTarget", () => cliLaunchTarget);

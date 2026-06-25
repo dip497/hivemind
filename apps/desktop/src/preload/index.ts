@@ -111,6 +111,9 @@ const api: HiveIpc & {
   getBrowserSettings: () => ipcRenderer.invoke("getBrowserSettings"),
   setBrowserCdpEnabled: (enabled) => ipcRenderer.invoke("setBrowserCdpEnabled", enabled),
   relaunchApp: () => ipcRenderer.invoke("relaunchApp"),
+  getAppVersion: () => ipcRenderer.invoke("getAppVersion"),
+  checkForUpdate: () => ipcRenderer.invoke("checkForUpdate"),
+  runUpgrade: () => ipcRenderer.invoke("runUpgrade"),
   onBrowserPopup: (cb) => {
     const listener = (_e: unknown, p: { fromId: number; url: string }) => cb(p);
     ipcRenderer.on("browser:popup", listener);
