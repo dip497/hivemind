@@ -301,7 +301,7 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
 
   return (
     <aside
-      className="relative h-full shrink-0 flex flex-col bg-[var(--color-bg2)] border-r border-[var(--color-line)] overflow-hidden"
+      className="hm-layers relative h-full shrink-0 flex flex-col bg-[var(--color-bg2)] border-r border-[var(--color-line)] overflow-hidden"
       style={{ width }}
       aria-label="Layers"
     >

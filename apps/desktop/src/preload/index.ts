@@ -1,7 +1,9 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { HiveIpc, DiffScope, WorktreeCreateOpts, PlanReviewOpen, HcpCommand, HcpPipeEvent, HcpWaitEvent, HcpSubagentEvent, HcpNotifyEvent, HcpTurnStateEvent } from "../shared/ipc.js";
 
 const api: HiveIpc & {
+  /** Resolve a picked File's real filesystem path (for the persistent video wallpaper). */
+  getPathForFile: (file: File) => string;
   onPtyData: (tileId: string, cb: (data: string) => void) => () => void;
   onPtyExit: (
     tileId: string,
@@ -197,6 +199,10 @@ const api: HiveIpc & {
     ipcRenderer.on("hcp:turnstate", listener);
     return () => ipcRenderer.removeListener("hcp:turnstate", listener);
   },
+  // webUtils.getPathForFile is the supported way to get a dropped/picked File's
+  // absolute path under contextIsolation (File.path was removed). Used to build
+  // the persistent hm-media:// video-wallpaper URL.
+  getPathForFile: (file: File) => webUtils.getPathForFile(file),
 };
 
 // A native agent notification was clicked → focus that tile on the canvas.

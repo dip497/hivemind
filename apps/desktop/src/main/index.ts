@@ -1,8 +1,8 @@
 /** Electron main process — owns the BrowserWindow + IPC + PtyHost + git/worktree. */
-import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell, webContents } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, session, shell, webContents } from "electron";
 import path from "node:path";
 import { promises as fsp, statSync, readFileSync, writeFileSync, existsSync, cpSync, mkdirSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawn } from "node:child_process";
 import {
   commentOnIssue,
@@ -294,9 +294,17 @@ async function createWindow(): Promise<void> {
   // the existing handlers listen for.
   wc.on("before-input-event", (event, input) => {
     if (input.type !== "keyDown") return;
+    if (wc.isDestroyed()) return;
+    // F11 → native fullscreen. Hides the OS titlebar (and the desktop top bar on
+    // GNOME) so the canvas + wallpaper go edge-to-edge. Pair with the eye/zen
+    // toggle to also hide the in-app chrome for a pure-wallpaper view.
+    if (input.key === "F11" && !input.control && !input.meta && !input.shift && !input.alt) {
+      event.preventDefault();
+      try { mainWindow?.setFullScreen(!mainWindow.isFullScreen()); } catch { /* window gone */ }
+      return;
+    }
     if (!(input.control || input.meta)) return;
     if (input.shift || input.alt) return;
-    if (wc.isDestroyed()) return;
     const k = input.key.toLowerCase();
     if (k === "n") {
       event.preventDefault();
@@ -1181,7 +1189,27 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
       if (target) mainWindow.webContents.send("open-project", target);
     }
   });
+  // Persistent local-video wallpaper: serve a user-picked clip by its real path
+  // via a custom scheme. A blob: URL can't survive a reload (in-memory), and a
+  // raw file:// is blocked by webSecurity + CSP — so the theme stores a stable
+  // `hm-media://v/<encoded-abs-path>` URL and main streams the file here. Must be
+  // registered as privileged BEFORE app `ready`.
+  protocol.registerSchemesAsPrivileged([
+    { scheme: "hm-media", privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
+  ]);
   app.whenReady().then(async () => {
+    // Stream hm-media://v/<encoded-path> from disk (range-forwarded so the video
+    // can seek/loop). Same-uid local trust: the renderer is CSP-locked to 'self'
+    // scripts, and we only serve an existing regular file.
+    protocol.handle("hm-media", (request) => {
+      try {
+        const p = decodeURIComponent(new URL(request.url).pathname.replace(/^\/+/, ""));
+        if (!p || !existsSync(p) || !statSync(p).isFile()) return new Response("not found", { status: 404 });
+        return net.fetch(pathToFileURL(p).toString(), { headers: request.headers });
+      } catch {
+        return new Response("bad request", { status: 400 });
+      }
+    });
     // Dev rebuild safety: if a daemon from an older build is still running,
     // replace it BEFORE the renderer attaches tiles, so new sessions carry the
     // current code (HCP/plan hooks + env injection). No-op in prod / when current.

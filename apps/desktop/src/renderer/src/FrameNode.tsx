@@ -178,7 +178,10 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
         // A grouping ZONE, not a tile: faint fill + a DASHED, lower-saturation
         // border so it reads as a region behind the tiles (a solid 2px high-sat
         // border made it look like a giant empty tile). Selected = solid accent.
-        background: `color-mix(in oklab, ${data.color} 7%, transparent)`,
+        // Fill strength is a CSS var so glass mode can dial the frame tint down
+        // (styles.css sets --frame-fill lower under .glass-on) — the frame reads
+        // as a faint zone over the wallpaper instead of a colored block.
+        background: `color-mix(in oklab, ${data.color} var(--frame-fill, 7%), transparent)`,
         border: selected
           ? `2px solid ${data.color}`
           : `1.5px dashed color-mix(in oklab, ${data.color} 45%, transparent)`,

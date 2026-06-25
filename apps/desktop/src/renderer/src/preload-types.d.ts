@@ -34,6 +34,8 @@ declare global {
       onOpenProject: (cb: (path: string) => void) => () => void;
       onMenuNewIssue: (cb: () => void) => () => void;
       onMenuToggleLayers?: (cb: () => void) => () => void;
+      /** Resolve a picked File's absolute path (persistent video wallpaper). */
+      getPathForFile?: (file: File) => string;
       /** A BrowserTile guest requested a popup/new window (target=_blank,
        *  window.open) — the owning tile opens it as a new tab. */
       onBrowserPopup: (cb: (p: { fromId: number; url: string }) => void) => () => void;

@@ -486,3 +486,285 @@ body.canvas-resizing .react-flow__node * {
   border-radius: 6px;
   font-size: 12px;
 }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   Glassmorphism + live wallpaper — OPT-IN, driven by theme-store.applyTheme().
+   Everything below is gated on `html.glass-on`; with the class absent the app is
+   the classic opaque dark theme (zero cost). The Customizer toggles the class +
+   the --glass-* vars. Frost auto-disables during pan/drag/resize via the
+   existing motion-strip rule above (the node wrappers ARE .react-flow__node).
+   ════════════════════════════════════════════════════════════════════════════ */
+:root {
+  --glass-blur: 16px;     /* backdrop blur radius (theme-store overrides) */
+  --glass-opacity: 60%;   /* SOLID fraction of a frosted panel (color-mix amount) */
+  /* Single source of truth for the panel SURFACE colors. The opaque @theme
+     tokens (--color-bg2/3/4) mirror these; glass mode derives translucent
+     variants from the SAME values so there's no duplicated magic hex. Change a
+     surface color here and both the opaque + glass themes track it. */
+  --surface-2: #121419;   /* sidebar / titlebar / panel */
+  --surface-3: #16181f;   /* cards / tile chrome / popovers */
+  --surface-4: #20242e;   /* hover / active */
+  --frame-fill: 7%;       /* frame-zone tint strength (FrameNode reads this) */
+}
+
+/* The master switch. Recolor the panel TOKENS to translucent variants of the
+   SAME surface sources so every existing bg-[var(--color-bg2/3/4)] surface
+   frosts with no component edits (Tailwind v4 resolves the var at use-site),
+   and clear the canvas pane so the wallpaper behind it shows through. */
+html.glass-on {
+  --color-bg2: color-mix(in srgb, var(--surface-2) var(--glass-opacity), transparent);
+  --color-bg3: color-mix(in srgb, var(--surface-3) var(--glass-opacity), transparent);
+  --color-bg4: color-mix(in srgb, var(--surface-4) var(--glass-opacity), transparent);
+  /* Frames: a fainter zone tint so the wallpaper reads through them cleanly. */
+  --frame-fill: 3%;
+}
+html.glass-on .react-flow {
+  background-color: transparent !important;
+}
+/* Kill the dotted grid under glass — it reads as noise over a live wallpaper. */
+html.glass-on .react-flow__background {
+  display: none !important;
+}
+/* App shell behind the fixed wallpaper goes transparent so the wallpaper shows
+   through every translucent surface (Layers panel, titlebar, gaps) — not just
+   the canvas pane. */
+html.glass-on body {
+  background: transparent;
+}
+/* Frost the docked Layers panel (it sits BESIDE the canvas; its bg token is
+   already translucent under glass, this adds the blur so the wallpaper behind
+   reads as frosted glass). */
+html.glass-on .hm-layers {
+  backdrop-filter: blur(var(--glass-blur)) saturate(135%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(135%);
+}
+/* Selection on glass: the neutral-grey outline washes out over a live
+   wallpaper, so a selected tile gets the brand accent + a softly PULSING glow
+   ring (breathes ~2.4s) so the active tile is obvious. Stripped during motion
+   by the box-shadow motion rule above, so it costs nothing while panning. */
+html.glass-on .react-flow__node .hm-node-selected {
+  outline-color: var(--color-brand);
+  animation: hm-sel-pulse 2.4s ease-in-out infinite;
+}
+@keyframes hm-sel-pulse {
+  0%, 100% { box-shadow: 0 0 0 1px var(--color-brand), 0 0 18px -8px var(--color-brand); }
+  50%      { box-shadow: 0 0 0 1px var(--color-brand), 0 0 30px -4px var(--color-brand); }
+}
+@media (prefers-reduced-motion: reduce) {
+  html.glass-on .react-flow__node .hm-node-selected { animation: none; }
+}
+/* Frost the floating islands (blur was removed for perf in the opaque theme; it
+   returns only under glass, and there are only a handful of islands). */
+html.glass-on .hm-island {
+  background: color-mix(in srgb, var(--color-bg2) var(--glass-opacity), transparent);
+  backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+}
+/* Frost the tiles. backdrop-filter sits on the node WRAPPER (full tile box);
+   the translucent tile bg above lets the blurred wallpaper/neighbors show
+   through. border-radius clips the blur to a rounded card (resize handles are
+   absolutely positioned, so they're unaffected by the radius). Heavy interior
+   content (xterm/diff) stays opaque — the frost reads on the chrome + rim,
+   matching Clonk's low default transparency. */
+html.glass-on .react-flow__node-terminal,
+html.glass-on .react-flow__node-diff,
+html.glass-on .react-flow__node-editor,
+html.glass-on .react-flow__node-workbench,
+html.glass-on .react-flow__node-issues,
+html.glass-on .react-flow__node-browser {
+  backdrop-filter: blur(var(--glass-blur)) saturate(135%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(135%);
+  border-radius: 14px;
+}
+
+/* ── Live wallpaper: one fixed full-bleed layer behind the react-flow pane.
+   Two drifting radial blooms (screen-blended over a deep base) + a vignette.
+   Scene palette comes from [data-scene]; the blooms pause on window blur. */
+.hm-wallpaper {
+  /* Fixed + behind ALL app content (z-index:-1 paints above the root background
+     but below every UI surface), so it shows through the canvas pane AND the
+     panels beside it (Layers, titlebar) — not just inside the canvas. */
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  background: var(--wp-base);
+  /* default scene (aurora) — three accent colors per scene drive the blooms */
+  --wp-base: #090c16;
+  --wp-1: #4f46e5;
+  --wp-2: #14b8a6;
+  --wp-3: #7c3aed;
+}
+.hm-wallpaper[data-scene="aurora"] { --wp-base: #090c16; --wp-1: #4f46e5; --wp-2: #14b8a6; --wp-3: #7c3aed; }
+.hm-wallpaper[data-scene="ember"]  { --wp-base: #130a07; --wp-1: #f97316; --wp-2: #db2777; --wp-3: #fbbf24; }
+.hm-wallpaper[data-scene="ice"]    { --wp-base: #05111a; --wp-1: #0ea5e9; --wp-2: #22d3ee; --wp-3: #6366f1; }
+.hm-wallpaper[data-scene="mesh"]   { --wp-base: #0a0914; --wp-1: #8b5cf6; --wp-2: #ec4899; --wp-3: #3b82f6; }
+.hm-wallpaper[data-scene="sunset"] { --wp-base: #160a0c; --wp-1: #f97316; --wp-2: #ef4444; --wp-3: #fbbf24; }
+.hm-wallpaper[data-scene="forest"] { --wp-base: #07140d; --wp-1: #10b981; --wp-2: #34d399; --wp-3: #84cc16; }
+.hm-wallpaper[data-scene="nebula"] { --wp-base: #0a0816; --wp-1: #a855f7; --wp-2: #6366f1; --wp-3: #ec4899; }
+.hm-wallpaper[data-scene="mono"]   { --wp-base: #0b0d12; --wp-1: #475569; --wp-2: #64748b; --wp-3: #334155; }
+
+.hm-wp-bloom {
+  position: absolute;
+  width: 75vw;
+  height: 75vw;
+  border-radius: 50%;
+  filter: blur(60px);
+  opacity: 0.55;
+  mix-blend-mode: screen;
+  will-change: transform;
+}
+.hm-wp-a {
+  background: radial-gradient(circle, var(--wp-1), transparent 62%);
+  top: -22%;
+  left: -12%;
+  animation: hm-wp-drift-a 34s ease-in-out infinite alternate;
+}
+.hm-wp-b {
+  background: radial-gradient(circle, var(--wp-2), transparent 62%);
+  bottom: -28%;
+  right: -16%;
+  animation: hm-wp-drift-b 42s ease-in-out infinite alternate;
+}
+.hm-wp-c {
+  background: radial-gradient(circle, var(--wp-3), transparent 64%);
+  top: 28%;
+  left: 38%;
+  width: 55vw;
+  height: 55vw;
+  opacity: 0.4;
+  animation: hm-wp-drift-c 50s ease-in-out infinite alternate;
+}
+/* Fine grain — fractal-noise data URI at low opacity kills gradient banding and
+   reads as a premium frosted texture. Static (no animation cost). */
+.hm-wp-grain {
+  position: absolute;
+  inset: 0;
+  opacity: 0.04;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+/* Top-down sheen — the "lit from above" glass tell (Apple liquid-glass cue). */
+.hm-wp-sheen {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 30%);
+}
+.hm-wp-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 40%, rgba(0, 0, 0, 0.6));
+}
+/* Video wallpaper — full-bleed, cover-fit. object-fit:cover preserves full
+   resolution (no quality loss beyond scaling); brightness is user-controlled
+   (--wp-brightness, default 0.85) so frosted panels stay legible while keeping
+   the clip's vibrancy. high-quality scaling hint avoids any softening. */
+.hm-wp-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  image-rendering: auto;
+  filter: brightness(var(--wp-brightness, 0.85)) saturate(1.05);
+}
+/* Photo wallpaper — same cover-fit + brightness control as video. When motion is
+   on, a slow Ken-Burns pan/zoom gives a static photo gentle life (transform-only,
+   compositor-cheap). The .hm-wallpaper clips the overscan. */
+.hm-wp-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: brightness(var(--wp-brightness, 0.85)) saturate(1.05);
+  transform-origin: center;
+  animation: hm-kenburns 44s ease-in-out infinite alternate;
+}
+@keyframes hm-kenburns {
+  from { transform: scale(1.04) translate(0, 0); }
+  to   { transform: scale(1.14) translate(-2.5%, -2%); }
+}
+.hm-wallpaper.paused .hm-wp-image { animation-play-state: paused; }
+
+/* Motion toggle OFF (html.wp-static) → freeze every wallpaper animation. */
+html.wp-static .hm-wp-bloom,
+html.wp-static .hm-wp-image {
+  animation: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hm-wp-image { animation: none !important; }
+}
+
+/* NOTE: deliberately NO animated `filter`/`hue-rotate` on the wallpaper root —
+   animating filter forces a continuous full-screen GPU re-composite (Chromium
+   anti-pattern). The "alive" motion comes purely from the blooms' transform
+   drift (translate/scale), which the compositor handles for free. */
+@keyframes hm-wp-drift-a {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to   { transform: translate3d(12vw, 8vh, 0) scale(1.18); }
+}
+@keyframes hm-wp-drift-b {
+  from { transform: translate3d(0, 0, 0) scale(1.1); }
+  to   { transform: translate3d(-10vw, -6vh, 0) scale(0.92); }
+}
+@keyframes hm-wp-drift-c {
+  from { transform: translate3d(0, 0, 0) scale(0.9); }
+  to   { transform: translate3d(-8vw, 10vh, 0) scale(1.2); }
+}
+.hm-wallpaper.paused .hm-wp-bloom { animation-play-state: paused; }
+@media (prefers-reduced-motion: reduce) {
+  .hm-wp-bloom { animation: none !important; }
+}
+
+/* ── Liquid-glass light edge — a soft top-inner highlight + low drop shadow so
+   frosted panels read as lit glass slabs, not flat translucent rectangles. The
+   highlight is inset (top) so it survives the motion-strip (which only clears
+   backdrop-filter + the OUTER box-shadow). Applied to tiles + islands. */
+html.glass-on .hm-island,
+html.glass-on .react-flow__node-terminal,
+html.glass-on .react-flow__node-diff,
+html.glass-on .react-flow__node-editor,
+html.glass-on .react-flow__node-workbench,
+html.glass-on .react-flow__node-issues,
+html.glass-on .react-flow__node-browser {
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.12),
+    0 10px 36px rgba(0, 0, 0, 0.5);
+}
+
+/* Customizer drawer slide-in. */
+@keyframes hm-drawer-in {
+  from { transform: translateX(12px); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+.hm-drawer-in { animation: hm-drawer-in 180ms cubic-bezier(0.32, 0.72, 0, 1); }
+
+/* Customizer range sliders — native input themed to the brand accent. */
+.hm-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--color-bg4);
+  accent-color: var(--color-brand);
+}
+.hm-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--color-brand);
+  border: 2px solid var(--color-bg2);
+  cursor: pointer;
+}
+.hm-range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--color-bg2);
+  border-radius: 50%;
+  background: var(--color-brand);
+  cursor: pointer;
+}

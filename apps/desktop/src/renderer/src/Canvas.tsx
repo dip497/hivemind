@@ -14,6 +14,9 @@ import { statusOf, setWaitStatus, setSubagentBusy, setNotify, setTurnState, type
 import { queueWork } from "./claude-bus";
 import { FRAME_ROW_MAX, frameAtPoint } from "./frame-layout";
 import { ToolIsland, ZoomIsland } from "./canvas-islands";
+import { Wallpaper } from "./Wallpaper";
+import { ThemeCustomizer } from "./ThemeCustomizer";
+import { applyTheme } from "./theme-store";
 import { Eye, EyeOff } from "lucide-react";
 import { Toasts, CanvasEmptyState } from "./canvas-overlays";
 import { nodeTypes } from "./canvas-nodes";
@@ -868,6 +871,10 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   // panel) for a clean full-canvas view. The eye toggle stays so you can restore.
   const [zen, setZen] = useState<boolean>(() => localStorage.getItem("hivemind:zen") === "1");
   useEffect(() => { localStorage.setItem("hivemind:zen", zen ? "1" : "0"); }, [zen]);
+  // Appearance customizer (glass / wallpaper / accent). Theme is a global app
+  // pref persisted by theme-store; push it into the DOM once on mount.
+  const [customizerOpen, setCustomizerOpen] = useState(false);
+  useEffect(() => { applyTheme(); }, []);
   const isEmpty = nodes.length === 0;
 
   // Motion-aware compositing: while the viewport pans/zooms we add a class that
@@ -1052,6 +1059,9 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   });
   return (
     <div className="relative h-full w-full flex flex-col">
+      {/* Live wallpaper — fixed full-window layer behind ALL app content (z-index
+          -1), so it shows through the canvas pane AND the panels beside it. */}
+      <Wallpaper />
       {/* t3code-style DOCKED layout: the Layers panel is a flex SIBLING of the
           canvas (not an overlay), so the canvas sits BESIDE it and is never
           occluded. Collapses to a narrow icon rail; both keep the canvas clear. */}
@@ -1199,6 +1209,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
               onSpawnAgent={(a) => spawnAgent(a)}
               onFrame={addFrame}
               onBrowser={() => spawnInto("browser")}
+              onTheme={() => setCustomizerOpen((o) => !o)}
             />
           </Panel>
           )}
@@ -1315,6 +1326,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
           onClose={() => setRemoteAttach(null)}
           onPick={(uri) => { if (remoteAttach) bindRemote(remoteAttach, uri); setRemoteAttach(null); }}
         />
+        <ThemeCustomizer open={customizerOpen} onClose={() => setCustomizerOpen(false)} />
         {claudePick && (
           <div className="fixed inset-0 z-50 grid place-items-center" onClick={() => setClaudePick(null)}>
             <div className="absolute inset-0 bg-black/40" />
