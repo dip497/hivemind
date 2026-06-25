@@ -547,8 +547,8 @@ html.glass-on .react-flow__node .hm-node-selected {
   animation: hm-sel-pulse 2.4s ease-in-out infinite;
 }
 @keyframes hm-sel-pulse {
-  0%, 100% { box-shadow: 0 0 0 1px var(--color-brand), 0 0 18px -8px var(--color-brand); }
-  50%      { box-shadow: 0 0 0 1px var(--color-brand), 0 0 30px -4px var(--color-brand); }
+  0%, 100% { box-shadow: 0 0 0 1px var(--color-brand), 0 0 8px -9px var(--color-brand); }
+  50%      { box-shadow: 0 0 0 1px var(--color-brand), 0 0 14px -7px var(--color-brand); }
 }
 @media (prefers-reduced-motion: reduce) {
   html.glass-on .react-flow__node .hm-node-selected { animation: none; }

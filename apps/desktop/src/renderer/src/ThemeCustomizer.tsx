@@ -59,15 +59,18 @@ export function ThemeCustomizer({ open, onClose }: { open: boolean; onClose: () 
     fileRef.current.accept = kind === "video" ? "video/mp4,video/webm,video/*" : "image/*";
     fileRef.current.click();
   }
-  function onMediaFile(e: React.ChangeEvent<HTMLInputElement>) {
+  async function onMediaFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     e.target.value = ""; // allow re-picking the same file later
     if (!f) return;
-    // Prefer a PERSISTENT hm-media:// URL built from the file's real path — main
-    // streams it back every launch (survives reload/restart). Fall back to an
-    // in-memory blob: URL only if the path can't be resolved (non-Electron).
+    // Copy the picked file into main's sandboxed wallpaper dir and use the
+    // returned hm-media:// URL — PERSISTENT (survives reload/restart) and safe
+    // (main only ever serves files confined to that dir). Fall back to an
+    // in-memory blob: URL only if import fails (non-Electron / unreadable).
     const p = window.hive?.getPathForFile?.(f);
-    const src = p ? `hm-media://v/${encodeURIComponent(p)}` : URL.createObjectURL(f);
+    let src: string | null = null;
+    if (p) src = (await window.hive?.importWallpaper?.(p)) ?? null;
+    if (!src) src = URL.createObjectURL(f);
     if (pendingKind.current === "video") setTheme({ wallpaper: "video", videoSrc: src });
     else setTheme({ wallpaper: "image", imageSrc: src });
   }

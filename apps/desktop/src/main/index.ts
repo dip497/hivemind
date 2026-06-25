@@ -3,6 +3,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, session, shel
 import path from "node:path";
 import { promises as fsp, statSync, readFileSync, writeFileSync, existsSync, cpSync, mkdirSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import {
   commentOnIssue,
@@ -1198,16 +1199,44 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     { scheme: "hm-media", privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
   ]);
   app.whenReady().then(async () => {
-    // Stream hm-media://v/<encoded-path> from disk (range-forwarded so the video
-    // can seek/loop). Same-uid local trust: the renderer is CSP-locked to 'self'
-    // scripts, and we only serve an existing regular file.
+    // Wallpaper media is CONFINED to a sandboxed dir under userData. The
+    // hm-media:// handler serves ONLY files inside it — never an arbitrary path
+    // from the URL. Without this confinement the scheme is an arbitrary-file-read
+    // primitive (e.g. hm-media://v/<encoded /etc/passwd>), reachable from the
+    // untrusted web content a BrowserTile <webview> can load. Range-forwarded so
+    // the video can seek/loop.
+    const wallpaperDir = path.join(app.getPath("userData"), "wallpapers");
     protocol.handle("hm-media", (request) => {
       try {
-        const p = decodeURIComponent(new URL(request.url).pathname.replace(/^\/+/, ""));
-        if (!p || !existsSync(p) || !statSync(p).isFile()) return new Response("not found", { status: 404 });
-        return net.fetch(pathToFileURL(p).toString(), { headers: request.headers });
+        const abs = path.resolve(decodeURIComponent(new URL(request.url).pathname.replace(/^\/+/, "")));
+        if (abs !== wallpaperDir && !abs.startsWith(wallpaperDir + path.sep)) {
+          return new Response("forbidden", { status: 403 });
+        }
+        if (!existsSync(abs) || !statSync(abs).isFile()) return new Response("not found", { status: 404 });
+        return net.fetch(pathToFileURL(abs).toString(), { headers: request.headers });
       } catch {
         return new Response("bad request", { status: 400 });
+      }
+    });
+    // Import a user-picked image/video INTO the sandboxed dir and return its
+    // hm-media:// URL. Copying (a) confines what the protocol can ever read to
+    // files the user explicitly chose, and (b) makes the wallpaper survive the
+    // original being moved/deleted. The dest name is a hash of the source path
+    // (+ext) so re-picking the same file is idempotent.
+    ipcMain.handle("wallpaper:import", (_e, srcPath: unknown) => {
+      try {
+        const src = path.resolve(String(srcPath));
+        if (!existsSync(src) || !statSync(src).isFile()) return null;
+        mkdirSync(wallpaperDir, { recursive: true });
+        // Keep the original basename (sanitized) so the customizer shows a
+        // recognizable name; prefix a short hash of the source path for
+        // uniqueness + idempotent re-pick.
+        const base = path.basename(src).replace(/[^.\w-]/g, "_").slice(-60);
+        const dest = path.join(wallpaperDir, `${createHash("sha1").update(src).digest("hex").slice(0, 8)}-${base}`);
+        cpSync(src, dest);
+        return `hm-media://v/${encodeURIComponent(dest)}`;
+      } catch {
+        return null;
       }
     });
     // Dev rebuild safety: if a daemon from an older build is still running,

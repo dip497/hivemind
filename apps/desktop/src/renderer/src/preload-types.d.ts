@@ -36,6 +36,8 @@ declare global {
       onMenuToggleLayers?: (cb: () => void) => () => void;
       /** Resolve a picked File's absolute path (persistent video wallpaper). */
       getPathForFile?: (file: File) => string;
+      /** Copy a picked media file into the sandboxed wallpaper dir → its hm-media:// URL. */
+      importWallpaper?: (srcPath: string) => Promise<string | null>;
       /** A BrowserTile guest requested a popup/new window (target=_blank,
        *  window.open) — the owning tile opens it as a new tab. */
       onBrowserPopup: (cb: (p: { fromId: number; url: string }) => void) => () => void;

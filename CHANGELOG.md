@@ -7,7 +7,13 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
-## [1.8.0] — 2026-06-25
+### Security
+
+- **`hm-media://` wallpaper protocol can no longer read arbitrary files.** The handler shipped in 1.8.0 served any path embedded in the URL (`hm-media://v/<encoded-abs-path>`), an arbitrary-file-read primitive reachable from the untrusted web content a BrowserTile `<webview>` can load. Picked media is now **copied into a sandboxed `userData/wallpapers/` dir**, and the protocol serves **only files confined to that dir** (path-resolved + prefix-checked; anything outside → `403`). Side benefit: the wallpaper now survives the original file being moved or deleted.
+
+### Changed
+
+- Softened the on-glass selection glow (gentler pulse).
 
 ### Added
 

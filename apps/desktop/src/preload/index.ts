@@ -4,6 +4,8 @@ import type { HiveIpc, DiffScope, WorktreeCreateOpts, PlanReviewOpen, HcpCommand
 const api: HiveIpc & {
   /** Resolve a picked File's real filesystem path (for the persistent video wallpaper). */
   getPathForFile: (file: File) => string;
+  /** Copy a picked media file into the sandboxed wallpaper dir → its hm-media:// URL. */
+  importWallpaper: (srcPath: string) => Promise<string | null>;
   onPtyData: (tileId: string, cb: (data: string) => void) => () => void;
   onPtyExit: (
     tileId: string,
@@ -203,6 +205,7 @@ const api: HiveIpc & {
   // absolute path under contextIsolation (File.path was removed). Used to build
   // the persistent hm-media:// video-wallpaper URL.
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
+  importWallpaper: (srcPath: string) => ipcRenderer.invoke("wallpaper:import", srcPath) as Promise<string | null>,
 };
 
 // A native agent notification was clicked → focus that tile on the canvas.
