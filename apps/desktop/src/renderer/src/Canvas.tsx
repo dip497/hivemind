@@ -175,6 +175,25 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
     // the new size/position above triggers it. No manual frame-grow here.
   }, []);
 
+  // Proportional tile scale from a terminal header's hover slider. The slider
+  // grows the FONT (its own per-tile store) and emits the drag delta as a ratio;
+  // here we grow the NODE box by the same ratio so the whole terminal scales in
+  // proportion — crisp, since nothing zooms (bigger box + bigger font px only
+  // change the cols/rows, not the canvas transform). Clamped to the terminal
+  // NodeResizer's min and a sane max.
+  useEffect(() => {
+    const onScale = (e: Event) => {
+      const d = (e as CustomEvent<{ tileId: string; ratio: number }>).detail;
+      if (!d?.tileId || !Number.isFinite(d.ratio) || d.ratio <= 0) return;
+      const cur = sizesRef.current[d.tileId] ?? defaultTileSize(d.tileId);
+      const width = Math.max(340, Math.min(4200, Math.round(cur.width * d.ratio)));
+      const height = Math.max(200, Math.min(2800, Math.round(cur.height * d.ratio)));
+      onNodeResizeCommit(d.tileId, width, height);
+    };
+    window.addEventListener("hivemind:scale-tile", onScale as EventListener);
+    return () => window.removeEventListener("hivemind:scale-tile", onScale as EventListener);
+  }, [onNodeResizeCommit]);
+
   // Same pattern for positions — useMemo rebuilds nodes with hardcoded x/y
   // from the layout loop, so dragged-then-released tiles would snap back
   // without this override map. Populated by onNodeDragStop.

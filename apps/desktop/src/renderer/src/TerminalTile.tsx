@@ -1073,7 +1073,14 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
         <span aria-hidden className="text-[var(--color-line2)]">·</span>
         <span className="text-[var(--color-fg2)]">{cmd.split("/").slice(-1)[0]}</span>
         <span className="ml-auto flex items-center gap-1.5">
-          <FontScaleControl {...font} />
+          <FontScaleControl
+            {...font}
+            onScale={(ratio) =>
+              window.dispatchEvent(
+                new CustomEvent("hivemind:scale-tile", { detail: { tileId, ratio } }),
+              )
+            }
+          />
           {/* Crisp fit-to-screen: re-parents the live terminal into a fullscreen
               overlay and GROWS the grid (no zoom). nodrag so it doesn't drag. */}
           <button
