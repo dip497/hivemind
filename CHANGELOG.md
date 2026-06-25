@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [1.8.3] — 2026-06-25
+
 ### Fixed
 
 - **Glass mode no longer spikes the renderer (~227% → ~9% CPU).** Frost tile content was forcing every terminal onto the slow DOM renderer (on the wrong assumption that WebGL ignores transparency — it doesn't), so streaming agents repainted as DOM nodes. Terminals now stay on WebGL with a transparent background; verified live, idle renderer CPU dropped from ~227% to ~9%.
@@ -512,7 +514,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v1.8.2...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v1.8.3...HEAD
+[1.8.3]: https://github.com/dip497/hivemind/releases/tag/v1.8.3
 [1.8.2]: https://github.com/dip497/hivemind/releases/tag/v1.8.2
 [1.8.1]: https://github.com/dip497/hivemind/releases/tag/v1.8.1
 [1.8.0]: https://github.com/dip497/hivemind/releases/tag/v1.8.0
