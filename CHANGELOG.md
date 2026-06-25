@@ -7,6 +7,10 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Fixed
+
+- **Terminal text is now crisp instead of blurry.** Two causes: (1) `allowTransparency` was set unconditionally for the glass feature, and it disables subpixel-antialiased text — so it's now only enabled when Frost-tile-content is actually on; opaque terminals keep subpixel AA. (2) Agent (claude) terminals were pinned to xterm's WebGL renderer, which is grayscale-only (softer); they now use the **DOM renderer whenever idle or selected** (subpixel, sharp like a native terminal) and drop to WebGL **only while actively streaming** — so a multi-agent fan-out still can't spike the renderer, and renderer swaps happen only on unselected tiles (no visible flicker). Net: idle terminals are as sharp as a native GNOME terminal. (For maximum sharpness keep Frost-tile-content off — transparent text physically cannot use subpixel antialiasing.)
+
 ## [1.8.3] — 2026-06-25
 
 ### Fixed

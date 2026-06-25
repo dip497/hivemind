@@ -305,9 +305,11 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       fontFamily: '"JetBrains Mono", monospace',
       fontSize: fontSizeRef.current,
       lineHeight: 1.3,
-      // Always on so the bg can be swapped to transparent live (Frost tile
-      // content); a no-op cost while the bg stays opaque.
-      allowTransparency: true,
+      // ONLY when Frost-tile-content is on at mount. allowTransparency disables
+      // subpixel-antialiased text (text goes grayscale → softer/blurrier vs a
+      // native terminal), so opaque terminals must keep it OFF to stay crisp.
+      // (Toggling content-glass later needs a reload to apply to open terminals.)
+      allowTransparency: getTheme().glass && getTheme().contentGlass,
       theme: { ...TERM_THEME, background: termBgFor(getTheme()) },
       // No blink — a blinking cursor repaints EVERY terminal ~2×/s forever, so
       // the canvas never feels fully still/crisp (perpetual GPU compositing
@@ -410,6 +412,13 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
     // renderer handles output fine — just slightly softer until the cooldown ends.
     let webglCooldownUntil = 0;
     const WEBGL_COOLDOWN_MS = 30_000;
+    // Crisp-when-idle: background terminals use the sharp DOM renderer too, EXCEPT
+    // while actively streaming (then WebGL, so a multi-agent fan-out doesn't spike
+    // the renderer). lastStreamTs tracks recent output; renderer swaps happen only
+    // on UNSELECTED tiles (invisible — the selected tile is always DOM).
+    let lastStreamTs = 0;
+    const STREAM_QUIET_MS = 1500;
+    let streamQuietTimer: ReturnType<typeof setTimeout> | undefined;
     // Restore keyboard focus after an operation that recreates the renderer canvas
     // (acquire/release/context-loss) — a focused selected terminal must not silently
     // lose input. Deferred a frame so it runs after the DOM swap settles.
@@ -512,11 +521,13 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       // re-acquiring WebGL would just lose the context again and thrash the canvas.
       wantsDom: () =>
         Date.now() < webglCooldownUntil ||
-        // NOTE: content-glass does NOT force DOM. The WebGL addon honors
-        // allowTransparency (transparent theme bg renders fine on WebGL), so a
-        // frosted terminal stays on the fast GPU renderer — forcing DOM made
-        // streaming agents repaint as DOM nodes (renderer CPU spike).
-        (!agent && selectedRef.current === true && (window.devicePixelRatio || 1) < 2),
+        // DOM renderer = subpixel-antialiased (sharp, like a native terminal);
+        // WebGL = grayscale (softer/blurrier). Use DOM at dpr<2 whenever the tile
+        // is SELECTED *or* IDLE (no recent output). Only an UNSELECTED tile that's
+        // actively STREAMING stays on WebGL, so a multi-agent fan-out can't
+        // re-spike the renderer. Swaps happen only on unselected tiles → invisible.
+        ((window.devicePixelRatio || 1) < 2 &&
+          (selectedRef.current === true || Date.now() - lastStreamTs > STREAM_QUIET_MS)),
     });
 
     // Agents set the terminal window title (OSC 0/2) to a live task summary —
@@ -580,6 +591,16 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
     // here. Subscribing first means we never drop the opening banner.
     unsubData = window.hive.onPtyData(ptyId, (d) => {
       term.write(d);
+      // Crisp-when-idle renderer choice: note the stream, and reconcile only on
+      // TRANSITIONS (quiet→streaming now, streaming→quiet later) and only for an
+      // UNSELECTED tile (the selected tile is always DOM, so it never swaps).
+      const wasQuiet = Date.now() - lastStreamTs > STREAM_QUIET_MS;
+      lastStreamTs = Date.now();
+      if (wasQuiet && !selectedRef.current) reconcileWebglSlots();
+      clearTimeout(streamQuietTimer);
+      streamQuietTimer = setTimeout(() => {
+        if (!selectedRef.current) reconcileWebglSlots();
+      }, STREAM_QUIET_MS + 120);
       // Agent tiles get authoritative state from the screen poll (mark dirty so
       // the next poll tick actually scans); plain shells use the cheap heuristic.
       if (agent) {
@@ -787,6 +808,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       if (fitRaf) cancelAnimationFrame(fitRaf);
       if (idleTimer.current) clearTimeout(idleTimer.current);
       if (agentPoll) clearInterval(agentPoll);
+      if (streamQuietTimer) clearTimeout(streamQuietTimer);
       unsubData?.();
       unsubExit?.();
       unsubClaude?.();
