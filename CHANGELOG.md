@@ -7,6 +7,10 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Added
+
+- **"Update available" notification + Settings/About panel.** On launch and every few hours the main process checks the latest GitHub release (`api.github.com/repos/dip497/hivemind/releases/latest`) and compares it to the running version. When a newer release exists, an "Update available" pill appears beside the Theme button (and a dot on the new gear button); clicking it runs the official `install.sh` upgrade flow and quits so the new binary takes over on next launch. A failed check (offline / rate-limited) shows nothing. The new **Settings & About** drawer (gear button, frosted `.hm-island` like the theme drawer) shows the app name, version, GitHub repo link, MIT license, and update status with a one-click "Update & restart" / "Check now". The update check runs in main (renderer CSP blocks the github.com fetch); the last result is cached in `localStorage` so the badge survives a reload.
+
 ## [1.8.4] — 2026-06-26
 
 ### Fixed

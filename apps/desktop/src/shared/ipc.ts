@@ -139,9 +139,34 @@ export interface SavedHost {
   hasKey: boolean;
 }
 
+// ── app version + self-update ─────────────────────────────────────────────
+
+/** Result of the GitHub "latest release" check. On offline / rate-limit the
+ *  main process returns `latest: null` + `updateAvailable: false` so the
+ *  renderer shows NOTHING (never a scary error). */
+export interface UpdateStatus {
+  /** This app's running version (apps/desktop/package.json "version"). */
+  current: string;
+  /** Latest release tag (leading "v" stripped), or null when the check failed. */
+  latest: string | null;
+  /** True iff `latest` is strictly newer than `current`. */
+  updateAvailable: boolean;
+}
+
 // ── full IPC surface ──────────────────────────────────────────────────────
 
 export interface HiveIpc {
+  // ── app version + self-update ─────────────────────────────
+  /** This app's version string (from apps/desktop/package.json). */
+  getAppVersion(): Promise<string>;
+  /** Check the latest GitHub release and compare to the running version. Done
+   *  in MAIN (renderer CSP blocks the github.com fetch). Never rejects — a
+   *  failed check resolves with `latest: null`. */
+  checkForUpdate(): Promise<UpdateStatus>;
+  /** Run the official installer (the same `install.sh` flow `hivemind upgrade`
+   *  uses) then quit so the freshly-installed binary takes over on next launch. */
+  runUpgrade(): Promise<void>;
+
   // ── project resolution ────────────────────────────────────
   resolveProject(rootHint?: string): Promise<{
     root: string | null;

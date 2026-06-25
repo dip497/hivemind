@@ -19,6 +19,9 @@ export function ToolIsland({
   onFrame,
   onBrowser,
   onTheme,
+  onAbout,
+  updateAvailable,
+  onUpgrade,
 }: {
   repoPath: string | null;
   onToggle: (k: "tree" | "shell" | "diff" | "issues") => void;
@@ -29,6 +32,12 @@ export function ToolIsland({
   onFrame: () => void;
   onBrowser: () => void;
   onTheme: () => void;
+  /** Open the Settings / About drawer. */
+  onAbout: () => void;
+  /** A newer GitHub release exists → show the "Update available" pill. */
+  updateAvailable: boolean;
+  /** Run the upgrade + restart (from the pill). */
+  onUpgrade: () => void;
 }) {
   const enabled = AGENTS.filter((a) => a.enabled);
   const sel = agentById(agentSel) ?? enabled[0]!;
@@ -87,6 +96,27 @@ export function ToolIsland({
       <div className="mx-0.5 h-5 w-px bg-[var(--color-line2)]" aria-hidden />
       <ToolButton label="Theme" hint="8" onClick={onTheme}
         icon={<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M8 1.5a6.5 6.5 0 0 0 0 13c.83 0 1.5-.67 1.5-1.5 0-.4-.16-.76-.41-1.03-.24-.26-.39-.6-.39-.97 0-.83.67-1.5 1.5-1.5H11a3.5 3.5 0 0 0 3.5-3.5C14.5 4.3 11.6 1.5 8 1.5Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/><circle cx="5" cy="6.5" r="0.9" fill="currentColor"/><circle cx="8" cy="5" r="0.9" fill="currentColor"/><circle cx="11" cy="6.5" r="0.9" fill="currentColor"/></svg>} />
+      {/* Settings / About — gear. The dot overlays it when an update is ready,
+          so the affordance is visible even with the panel closed. */}
+      <div className="relative flex items-center">
+        <ToolButton label="Settings" hint="9" onClick={onAbout}
+          icon={<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2.1" stroke="currentColor" strokeWidth="1.2"/><path d="M8 1.5v1.8M8 12.7v1.8M14.5 8h-1.8M3.3 8H1.5M12.6 3.4l-1.3 1.3M4.7 11.3l-1.3 1.3M12.6 12.6l-1.3-1.3M4.7 4.7L3.4 3.4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>} />
+        {updateAvailable && (
+          <span className="absolute top-1 right-1 size-2 rounded-full bg-[var(--color-warn)] ring-2 ring-[var(--color-bg2)] pointer-events-none" aria-hidden />
+        )}
+      </div>
+      {/* "Update available — restart to update" pill. Only when newer release
+          exists; clicking runs the installer + quits. */}
+      {updateAvailable && (
+        <button
+          onClick={onUpgrade}
+          title="Update available — click to update and restart"
+          className="ml-1 flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-[11px] font-medium text-[var(--color-warn)] bg-[color-mix(in_srgb,var(--color-warn)_16%,transparent)] hover:bg-[color-mix(in_srgb,var(--color-warn)_26%,transparent)] cursor-pointer whitespace-nowrap"
+        >
+          <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M7 9.5V2.5M4 5l3-3 3 3M2.5 11.5h9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          Update available
+        </button>
+      )}
     </div>
   );
 }
