@@ -97,7 +97,13 @@ export function FontStepper({ size, inc, dec, reset }: TileFont) {
  * Mounts inside a `group`-classed header so the `group-hover:` width transition
  * fires. `nodrag` everywhere so dragging the slider never starts a tile drag.
  */
-export function FontScaleControl({ size, inc, dec, reset, set, best }: TileFont) {
+export function FontScaleControl({
+  size, inc, dec, reset, set, best, onScale,
+}: TileFont & {
+  /** Drag delta as a ratio (new/old) so the host can scale the whole tile node
+   *  in proportion with the font — passed by TerminalTile, omitted elsewhere. */
+  onScale?: (ratio: number) => void;
+}) {
   return (
     <span className="nodrag inline-flex items-center gap-1">
       <input
@@ -106,10 +112,16 @@ export function FontScaleControl({ size, inc, dec, reset, set, best }: TileFont)
         max={MAX}
         step={1}
         value={size}
-        onChange={(e) => set(Number(e.target.value))}
+        onChange={(e) => {
+          const next = Number(e.target.value);
+          // Scale the tile box in proportion to the font step (crisp — font px
+          // stays integer, the bigger box just fits more cols/rows at 100% zoom).
+          if (onScale && size > 0 && next !== size) onScale(next / size);
+          set(next);
+        }}
         onDoubleClick={best}
-        aria-label="terminal font scale"
-        title="Drag to scale (crisp) · double-click = best for screen"
+        aria-label="terminal scale"
+        title="Drag to scale the whole terminal (crisp) · double-click = best for screen"
         className="hm-font-slider nodrag h-1 w-0 opacity-0 group-hover:w-20 group-hover:opacity-100 transition-[width,opacity] duration-150 cursor-ew-resize accent-[var(--color-accent)]"
       />
       <span className="nodrag inline-flex items-center rounded bg-[var(--color-bg)] border border-[var(--color-line2)] overflow-hidden">
