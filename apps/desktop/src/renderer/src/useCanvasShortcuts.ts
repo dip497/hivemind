@@ -104,6 +104,13 @@ export function useCanvasShortcuts(ctx: CanvasShortcutsCtx) {
       const d = (e as CustomEvent<{ frameId: string; kind: string }>).detail;
       if (d?.frameId && d?.kind) frameOpen(d.frameId, d.kind);
     };
+    // Ctrl/Cmd+. (forwarded from main → App) focuses the selected tile. Same
+    // action as the plain "." binding above, but that key is eaten by xterm when
+    // a terminal has focus, so the modifier combo arrives here as a CustomEvent.
+    const onFocusSelected = () => {
+      const id = selectedTileIdRef.current ?? selectedFrameIdRef.current;
+      if (id) setFocusModeReq({ id, n: ++focusModeNonceRef.current });
+    };
     // A native agent notification was clicked → select + fly to that tile.
     const onFocusTile = (e: Event) => {
       const id = (e as CustomEvent<string>).detail;
@@ -116,6 +123,7 @@ export function useCanvasShortcuts(ctx: CanvasShortcutsCtx) {
     window.addEventListener("hivemind:add-frame", onAddFrame);
     window.addEventListener("hivemind:frame-open", onFrameOpen as EventListener);
     window.addEventListener("hivemind:focus-tile", onFocusTile as EventListener);
+    window.addEventListener("hivemind:focus-selected", onFocusSelected);
     window.addEventListener("keydown", onKey);
     return () => {
       window.removeEventListener("hivemind:spawn-claude", onSpawn);
@@ -123,6 +131,7 @@ export function useCanvasShortcuts(ctx: CanvasShortcutsCtx) {
       window.removeEventListener("hivemind:add-frame", onAddFrame);
       window.removeEventListener("hivemind:frame-open", onFrameOpen as EventListener);
       window.removeEventListener("hivemind:focus-tile", onFocusTile as EventListener);
+      window.removeEventListener("hivemind:focus-selected", onFocusSelected);
       window.removeEventListener("keydown", onKey);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -305,8 +305,30 @@ async function createWindow(): Promise<void> {
       return;
     }
     if (!(input.control || input.meta)) return;
-    if (input.shift || input.alt) return;
+    if (input.alt) return;
     const k = input.key.toLowerCase();
+    // Tile scaling shortcuts forwarded to the renderer (xterm eats the keys when a
+    // terminal is focused, so they must be intercepted here, like ⌘N/⌘L).
+    // Ctrl/Cmd+Shift+F = toggle the crisp fit-to-screen overlay on the selected
+    // tile; Ctrl/Cmd+Shift+0 = reset that tile's scale to the screen's best.
+    if (input.shift) {
+      if (k === "f") {
+        event.preventDefault();
+        try { wc.send("menu:fit-overlay"); } catch { /* destroyed mid-call */ }
+      } else if (k === "0" || k === ")") {
+        event.preventDefault();
+        try { wc.send("menu:reset-scale"); } catch { /* destroyed mid-call */ }
+      }
+      return;
+    }
+    // Ctrl/Cmd+. focuses the selected tile. The plain `.` binding fails when a
+    // terminal is focused (xterm consumes it), so the modifier combo is forwarded
+    // from here instead. NEVER bind plain `.` (it's load-bearing terminal input).
+    if (k === ".") {
+      event.preventDefault();
+      try { wc.send("menu:focus-tile"); } catch { /* destroyed mid-call */ }
+      return;
+    }
     if (k === "n") {
       event.preventDefault();
       try { wc.send("menu:new-issue"); } catch { /* destroyed mid-call */ }

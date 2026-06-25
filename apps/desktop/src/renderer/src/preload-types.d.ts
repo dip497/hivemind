@@ -34,6 +34,12 @@ declare global {
       onOpenProject: (cb: (path: string) => void) => () => void;
       onMenuNewIssue: (cb: () => void) => () => void;
       onMenuToggleLayers?: (cb: () => void) => () => void;
+      /** Ctrl/Cmd+Shift+F → toggle the selected terminal's fit-to-screen overlay. */
+      onMenuFitOverlay?: (cb: () => void) => () => void;
+      /** Ctrl/Cmd+Shift+0 → reset the selected terminal's scale to the screen best. */
+      onMenuResetScale?: (cb: () => void) => () => void;
+      /** Ctrl/Cmd+. → focus the selected tile (plain `.` is eaten by xterm). */
+      onMenuFocusTile?: (cb: () => void) => () => void;
       /** Resolve a picked File's absolute path (persistent video wallpaper). */
       getPathForFile?: (file: File) => string;
       /** Copy a picked media file into the sandboxed wallpaper dir → its hm-media:// URL. */
