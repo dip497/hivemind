@@ -40,6 +40,34 @@ test("composeResume injects claude's signal hooks on a fresh claude spawn", () =
   assert.ok(settings.hooks.SessionStart, "SessionStart tracker injected");
 });
 
+// ── PLAN MODE ────────────────────────────────────────────────────────────────
+// The PreToolUse(ExitPlanMode) hook IS plan mode: when claude finishes planning
+// and calls ExitPlanMode, this hook routes the plan to the in-canvas review tile
+// and blocks the agent on the decision. It's injected only when BOTH
+// planHookPath AND planBridgeSock are threaded (claude.ts → claude-resume.ts).
+// If a refactor drops either thread, plan mode silently stops working with no
+// failing test — these two lock the wiring.
+test("composeResume injects the ExitPlanMode plan-review hook when planHookPath + planBridgeSock are set", () => {
+  const r = composeResume({ ...ctx, planHookPath: "/x/plan-hook.cjs", planBridgeSock: "/x/plan-bridge.sock" });
+  const out = r.transformSpecOnSpawn(spec("claude"), "t1");
+  const settings = JSON.parse(out.args[out.args.indexOf("--settings") + 1]!);
+  const pre = settings.hooks.PreToolUse as Array<{ matcher: string; hooks: Array<{ command: string }> }>;
+  assert.ok(Array.isArray(pre), "PreToolUse hooks present");
+  const planHook = pre.find((h) => h.matcher === "ExitPlanMode");
+  assert.ok(planHook, "ExitPlanMode PreToolUse hook injected — this is the plan-review handoff");
+  const cmd = planHook!.hooks[0]!.command;
+  assert.match(cmd, /plan-hook\.cjs/, "hook runs the plan-review hook script");
+  assert.match(cmd, /plan-bridge\.sock/, "hook targets the plan-bridge socket");
+});
+
+test("composeResume does NOT inject the plan hook when planHookPath/planBridgeSock are absent", () => {
+  const r = composeResume(ctx); // no plan deps
+  const out = r.transformSpecOnSpawn(spec("claude"), "t1");
+  const settings = JSON.parse(out.args[out.args.indexOf("--settings") + 1]!);
+  const planHook = ((settings.hooks.PreToolUse ?? []) as Array<{ matcher: string }>).find((h) => h.matcher === "ExitPlanMode");
+  assert.equal(planHook, undefined, "no plan hook when its deps are not provided");
+});
+
 test("composeResume leaves a non-agent spec untouched (every provider no-ops)", () => {
   const r = composeResume(ctx);
   const out = r.transformSpecOnSpawn(spec("bash"), "t2");
