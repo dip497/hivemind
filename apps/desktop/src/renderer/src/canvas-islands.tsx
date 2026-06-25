@@ -76,9 +76,9 @@ export function ToolIsland({
       <ToolButton label="Explorer" hint="3" disabled={!repoPath} onClick={() => onToggle("tree")}
         icon={<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M2 4.5C2 3.7 2.7 3 3.5 3h3l1.5 1.5h4.5c.8 0 1.5.7 1.5 1.5v5.5c0 .8-.7 1.5-1.5 1.5h-9C2.7 13 2 12.3 2 11.5v-7Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>} />
       <ToolButton label="Diff" hint="4" disabled={!repoPath} onClick={() => onToggle("diff")}
-        icon={<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M4 2v8m0 0a2 2 0 1 0 0 0Zm8-4v2m0 0a2 2 0 1 0 0 0Zm0 0v2a2 2 0 0 1-2 2H6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>} />
+        icon={<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><rect x="3" y="2" width="10" height="12" rx="1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M8 4.3v3.2M6.4 5.9h3.2M6.4 10.6h3.2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>} />
       <ToolButton label="Issues" hint="5" disabled={!repoPath} onClick={() => onToggle("issues")}
-        icon={<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><rect x="2" y="2.5" width="5" height="11" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="9" y="2.5" width="5" height="7" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg>} />
+        icon={<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M2.5 4.3l1.1 1.1 1.8-1.9M2.5 9.3l1.1 1.1 1.8-1.9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/><path d="M7.5 4.6h6M7.5 9.6h6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>} />
       <div className="mx-0.5 h-5 w-px bg-[var(--color-line2)]" aria-hidden />
       <ToolButton label="Frame" hint="6" onClick={onFrame}
         icon={<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M5 2v12M11 2v12M2 5h12M2 11h12" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>} />

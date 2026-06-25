@@ -543,15 +543,10 @@ html.glass-on .hm-layers {
    ring (breathes ~2.4s) so the active tile is obvious. Stripped during motion
    by the box-shadow motion rule above, so it costs nothing while panning. */
 html.glass-on .react-flow__node .hm-node-selected {
-  outline-color: var(--color-brand);
-  animation: hm-sel-pulse 2.4s ease-in-out infinite;
-}
-@keyframes hm-sel-pulse {
-  0%, 100% { box-shadow: 0 0 0 1px var(--color-brand), 0 0 8px -9px var(--color-brand); }
-  50%      { box-shadow: 0 0 0 1px var(--color-brand), 0 0 14px -7px var(--color-brand); }
-}
-@media (prefers-reduced-motion: reduce) {
-  html.glass-on .react-flow__node .hm-node-selected { animation: none; }
+  /* Subtle thin accent ring — no pulse, no glow (the pulsing halo was too loud). */
+  outline: 1.5px solid var(--color-brand);
+  outline-offset: 2px;
+  box-shadow: none;
 }
 /* Frost the floating islands (blur was removed for perf in the opaque theme; it
    returns only under glass, and there are only a handful of islands). */
@@ -575,6 +570,75 @@ html.glass-on .react-flow__node-browser {
   backdrop-filter: blur(var(--glass-blur)) saturate(135%);
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(135%);
   border-radius: 14px;
+}
+
+/* Frost tile CONTENT (opt-in, html.content-glass). The tile chrome bg is already
+   translucent under glass; clearing the heavy inner content backgrounds (editor,
+   diff) lets the wallpaper bleed through the whole tile. Terminal transparency is
+   handled in xterm itself (JS — allowTransparency + a translucent theme bg). */
+/* Inner content is FULLY transparent — the single content tint lives on the tile
+   ROOT (.hm-glass-surface / xterm), so every tile reads uniformly and nested
+   embeds (workbench) don't double-tint. */
+html.content-glass .cm-editor,
+html.content-glass .cm-editor .cm-scroller,
+html.content-glass .cm-gutters {
+  background-color: transparent !important;
+}
+/* Diff (Pierre): Pierre paints its OWN opaque row/buffer/gutter backgrounds via
+   --diffs-bg-* vars, which hid the tile tint. Clear them through Pierre's
+   intended -override hooks so the wallpaper shows, then tint the whole pane at
+   content-opacity. The add/del/modified line colors keep their own overrides. */
+html.content-glass [data-pierre-tile] {
+  background-color: transparent !important;
+  --diffs-bg-override: transparent;
+  --diffs-bg-buffer-override: transparent;
+  --diffs-bg-context-override: transparent;
+  --diffs-bg-context-gutter-override: transparent;
+  --diffs-bg-separator-override: transparent;
+}
+/* Terminal: the xterm theme bg (rgba, contentOpacity) is the ONLY content tint —
+   strip the opaque #300A24 host wrapper AND the tile-surface bg behind it so the
+   wallpaper bleeds through. The header keeps its own bg-bg3, so it stays legible. */
+html.content-glass .hm-term-root,
+html.content-glass .hm-term-host {
+  background-color: transparent !important;
+}
+/* Frost the tile HEADER (drag handle) too, so the title bar matches the glass
+   body instead of staying an opaque strip. Tinted at the same content-opacity;
+   the hairline divider softens to a translucent white so it reads on wallpaper. */
+html.content-glass .tile-drag-handle {
+  /* Match the body tint exactly and drop the divider so the title bar blends in
+     rather than reading as a brighter highlighted strip. */
+  background-color: color-mix(in srgb, var(--surface-3) var(--content-opacity, 25%), transparent) !important;
+  border-bottom-color: transparent !important;
+}
+/* Editor / diff / workbench: clear the opaque tile-surface root (like the
+   terminal's) so the wallpaper shows through the content — the .cm-editor /
+   pierre content above carries the single content-opacity tint. The header keeps
+   its own frosted bg via .tile-drag-handle. */
+html.content-glass .hm-glass-surface {
+  background-color: color-mix(in srgb, var(--surface-3) var(--content-opacity, 25%), transparent) !important;
+}
+/* Embedded-in-workbench tile bodies carry NO tint — the workbench root is the
+   single tint layer, so they're transparent to avoid a double-tint. */
+html.content-glass .hm-glass-embed {
+  background-color: transparent !important;
+}
+/* Themed text selection over glass — the accent (translucent) instead of the
+   faint default, for editor (CodeMirror drawn + native) and diff (native). */
+html.content-glass .cm-editor .cm-selectionBackground,
+html.content-glass .cm-editor.cm-focused .cm-selectionBackground {
+  background-color: color-mix(in srgb, var(--color-brand) 22%, transparent) !important;
+}
+html.content-glass .cm-editor ::selection,
+html.content-glass [data-pierre-tile] ::selection {
+  background-color: color-mix(in srgb, var(--color-brand) 22%, transparent);
+}
+/* Markdown preview (editor Preview mode + plan-review) code blocks: their opaque
+   --color-bg fill becomes a content-opacity tint so the wallpaper shows. */
+html.content-glass .md-preview pre,
+html.content-glass .md-preview code {
+  background: transparent !important;
 }
 
 /* ── Live wallpaper: one fixed full-bleed layer behind the react-flow pane.

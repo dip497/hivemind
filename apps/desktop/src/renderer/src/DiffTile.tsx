@@ -689,7 +689,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
 
   return (
     <div
-      className="flex flex-col h-full bg-[var(--color-bg2)] border border-[var(--color-line)] rounded-xl overflow-hidden"
+      className="hm-glass-surface flex flex-col h-full bg-[var(--color-bg2)] border border-[var(--color-line)] rounded-xl overflow-hidden"
       style={{ ...PIERRE_CSS_VARS, "--diffs-font-size": `${font.size}px` } as React.CSSProperties}
       onKeyDownCapture={(e) => handleFontKey(e, font)}
     >

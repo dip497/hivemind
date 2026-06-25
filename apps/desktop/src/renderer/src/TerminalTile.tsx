@@ -14,6 +14,7 @@ import { publishStatus, clearStatus, noteOutput, revalidate, type TileStatusKind
 import { SUBMIT_DELAY_MS } from "../../shared/agent-io";
 import { Pencil, GripVertical } from "lucide-react";
 import { webUrlForInternalBrowser } from "./browser-open";
+import { useTheme, getTheme, ACCENTS } from "./theme-store";
 
 /** Open a terminal link in the OS browser. window.open is intercepted by main's
  *  setWindowOpenHandler → shell.openExternal (and the in-app navigation denied),
@@ -33,8 +34,54 @@ function openExternalLink(uri: string, openInBrowser?: (url: string) => void): v
 
 // Default terminal font size. Each tile remembers its OWN size (useTileFont keyed
 // by tileId) — A−/A+ in the header + Ctrl/Cmd +/−/0 adjust it. Crispness is
-// DPR-driven (see terminal-dpr.ts), so 12 is the default purely for density.
-const DEFAULT_FONT = 12;
+// DPR-driven (see terminal-dpr.ts); 15 is the default for comfortable reading.
+const DEFAULT_FONT = 15;
+
+// Ubuntu / GNOME Terminal palette — the signature aubergine background + Tango
+// ANSI colors. Extracted so the "Frost tile content" theme option can swap just
+// the background to transparent live (xterm honors `theme` updates at runtime;
+// `allowTransparency` must be set at construction, so it's always on — it costs
+// nothing while the bg stays opaque).
+const TERM_THEME = {
+  background: "#300A24",
+  foreground: "#FFFFFF",
+  cursor: "#FFFFFF",
+  cursorAccent: "#300A24",
+  selectionBackground: "rgba(255,255,255,0.25)",
+  black: "#2E3436",
+  brightBlack: "#555753",
+  red: "#CC0000",
+  brightRed: "#EF2929",
+  green: "#4E9A06",
+  brightGreen: "#8AE234",
+  yellow: "#C4A000",
+  brightYellow: "#FCE94F",
+  blue: "#3465A4",
+  brightBlue: "#729FCF",
+  magenta: "#75507B",
+  brightMagenta: "#AD7FA8",
+  cyan: "#06989A",
+  brightCyan: "#34E2E2",
+  white: "#D3D7CF",
+  brightWhite: "#EEEEEC",
+} as const;
+/** The terminal background for the current theme: a translucent NEUTRAL-dark
+ *  tint (wallpaper bleeds through) when content-glass is on — alpha from
+ *  contentOpacity — else the opaque aubergine. A neutral tint (#0d0e12) reads as
+ *  frosted glass over any wallpaper color, where the aubergine would cast maroon. */
+const termBgFor = (t: { glass: boolean; contentGlass: boolean; contentOpacity: number }): string =>
+  t.glass && t.contentGlass ? `rgba(13,14,18,${t.contentOpacity})` : TERM_THEME.background;
+/** #rrggbb / #rgb → rgba() string with the given alpha. */
+const hexToRgba = (hex: string, a: number): string => {
+  const h = hex.replace("#", "");
+  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+  const n = parseInt(full, 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+};
+/** Terminal text-selection color: the brand accent (translucent) when content-
+ *  glass is on — the faint white default washes out over a bright wallpaper. */
+const termSelFor = (t: { glass: boolean; contentGlass: boolean; accent: keyof typeof ACCENTS }): string =>
+  t.glass && t.contentGlass ? hexToRgba(ACCENTS[t.accent].brand, 0.22) : TERM_THEME.selectionBackground;
 
 // ── render-quality diagnostics ───────────────────────────────────────────────
 // A toggleable HUD (Ctrl/Cmd+Shift+D, shared across tiles) that surfaces the
@@ -131,6 +178,22 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
   fontSizeRef.current = font.size;
   const fontCtlRef = useRef(font);
   fontCtlRef.current = font;
+  // Frost-tile-content: live-swap the terminal background (transparent ↔ opaque)
+  // when the theme toggles, WITHOUT recreating the terminal. xterm applies
+  // `theme` updates at runtime; the effect is gated on the COMPUTED bg, so
+  // opacity-slider drags (which don't change it) never trigger a refresh.
+  const themeNow = useTheme();
+  const termBg = termBgFor(themeNow);
+  const termSel = termSelFor(themeNow);
+  useEffect(() => {
+    const term = termRef.current;
+    if (!term) return;
+    term.options.theme = { ...TERM_THEME, background: termBg, selectionBackground: termSel };
+    // A transparent bg only renders under the DOM renderer (WebGL ignores
+    // allowTransparency). reconcile so wantsDom() re-evaluates and swaps this
+    // tile to DOM while content-glass is on (and back to WebGL when off).
+    reconcileWebglSlots();
+  }, [termBg, termSel]);
   // Unique PTY identity per MOUNT (not per prop). Fixes React.StrictMode
   // double-mount race: the first mount's awaited ptySpawn could resolve AFTER
   // its cleanup ran, killing the second mount's PTY (same tileId in the
@@ -258,31 +321,10 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       fontFamily: '"JetBrains Mono", monospace',
       fontSize: fontSizeRef.current,
       lineHeight: 1.3,
-      theme: {
-        // Ubuntu / GNOME Terminal defaults: the signature aubergine background +
-        // the Tango ANSI palette. Applies to every terminal tile (claude + shells).
-        background: "#300A24",
-        foreground: "#FFFFFF",
-        cursor: "#FFFFFF",
-        cursorAccent: "#300A24",
-        selectionBackground: "rgba(255,255,255,0.25)",
-        black: "#2E3436",
-        brightBlack: "#555753",
-        red: "#CC0000",
-        brightRed: "#EF2929",
-        green: "#4E9A06",
-        brightGreen: "#8AE234",
-        yellow: "#C4A000",
-        brightYellow: "#FCE94F",
-        blue: "#3465A4",
-        brightBlue: "#729FCF",
-        magenta: "#75507B",
-        brightMagenta: "#AD7FA8",
-        cyan: "#06989A",
-        brightCyan: "#34E2E2",
-        white: "#D3D7CF",
-        brightWhite: "#EEEEEC",
-      },
+      // Always on so the bg can be swapped to transparent live (Frost tile
+      // content); a no-op cost while the bg stays opaque.
+      allowTransparency: true,
+      theme: { ...TERM_THEME, background: termBgFor(getTheme()) },
       // No blink — a blinking cursor repaints EVERY terminal ~2×/s forever, so
       // the canvas never feels fully still/crisp (perpetual GPU compositing
       // across all tiles). Cursor stays solid + visible; zero idle repaint.
@@ -486,6 +528,9 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       // re-acquiring WebGL would just lose the context again and thrash the canvas.
       wantsDom: () =>
         Date.now() < webglCooldownUntil ||
+        // Frost-tile-content needs a transparent terminal bg, which only the DOM
+        // renderer supports (WebGL ignores allowTransparency). Force DOM while it's on.
+        (getTheme().glass && getTheme().contentGlass) ||
         (!agent && selectedRef.current === true && (window.devicePixelRatio || 1) < 2),
     });
 
@@ -911,7 +956,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
   }, [selected, effLabel]);
 
   return (
-    <div className="flex h-full flex-col rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] overflow-hidden shadow-[0_8px_22px_rgba(0,0,0,0.45)]">
+    <div className="hm-term-root flex h-full flex-col rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] overflow-hidden shadow-[0_8px_22px_rgba(0,0,0,0.45)]">
       {/* Entire header is the drag handle. Previously only the ⋮⋮ icon (~5px
           wide) carried `.tile-drag-handle` — invisible target, users
           clicked the wide header bar expecting drag and nothing happened
@@ -996,7 +1041,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
           overflow-hidden cropped the terminal. With them the host tracks the
           tile and the ResizeObserver re-fits, so the terminal reflows (cols/
           rows scale) on resize down AND up instead of being clipped. */}
-      <div className="relative flex-1 min-h-0 min-w-0 overflow-hidden bg-[#300A24] p-1.5">
+      <div className="hm-term-host relative flex-1 min-h-0 min-w-0 overflow-hidden bg-[#300A24] p-1.5">
         <div ref={hostRef} className="w-full h-full overflow-hidden" />
         {debug && (
           <div className="nodrag pointer-events-none absolute top-1 right-1 z-50 rounded bg-black/85 px-2 py-1 font-mono text-[10px] leading-tight text-[#9fe6a0] ring-1 ring-white/15">

@@ -37,6 +37,13 @@ export interface ThemeState {
   /** Wallpaper motion: gradient blooms drift + photos get a slow Ken-Burns pan.
    *  Off = a still wallpaper (lighter, calmer). Video always plays regardless. */
   animate: boolean;
+  /** Frost the tile CONTENT too (terminal/editor/diff), not just the chrome — the
+   *  wallpaper bleeds through the whole tile. Opt-in; legibility drops over busy
+   *  wallpapers, and the terminal relies on xterm transparency (WebGL-dependent). */
+  contentGlass: boolean;
+  /** Content tint alpha when contentGlass is on, 0.0–0.9. 0 = fully see-through,
+   *  higher = a darker tint behind the text for legibility. */
+  contentOpacity: number;
 }
 
 export const DEFAULT_THEME: ThemeState = {
@@ -49,6 +56,8 @@ export const DEFAULT_THEME: ThemeState = {
   accent: "indigo",
   videoBrightness: 0.85,
   animate: true,
+  contentGlass: false,
+  contentOpacity: 0.25,
 };
 
 /** Accent → brand/accent hex. Mirrors Clonk's Volt / Ember / Ice / Pulse set;
@@ -99,6 +108,8 @@ function load(): ThemeState {
       imageSrc: typeof p.imageSrc === "string" && !p.imageSrc.startsWith("blob:") ? p.imageSrc : undefined,
       videoBrightness: clamp(Number(p.videoBrightness) || DEFAULT_THEME.videoBrightness!, 0.4, 1.1),
       animate: typeof p.animate === "boolean" ? p.animate : DEFAULT_THEME.animate,
+      contentGlass: typeof p.contentGlass === "boolean" ? p.contentGlass : DEFAULT_THEME.contentGlass,
+      contentOpacity: clamp(typeof p.contentOpacity === "number" && !Number.isNaN(p.contentOpacity) ? p.contentOpacity : DEFAULT_THEME.contentOpacity, 0, 0.9),
     };
   } catch {
     return { ...DEFAULT_THEME };
@@ -117,10 +128,12 @@ export function applyTheme(t: ThemeState = state): void {
   const root = document.documentElement;
   root.classList.toggle("glass-on", t.glass);
   root.classList.toggle("wp-static", !t.animate);
+  root.classList.toggle("content-glass", t.glass && t.contentGlass);
   root.style.setProperty("--glass-blur", `${t.blur}px`);
   // color-mix wants a percentage; opacity is the SOLID fraction of the panel.
   root.style.setProperty("--glass-opacity", `${Math.round(t.opacity * 100)}%`);
   root.style.setProperty("--wp-brightness", String(t.videoBrightness ?? 0.85));
+  root.style.setProperty("--content-opacity", `${Math.round(t.contentOpacity * 100)}%`);
   root.dataset.wallpaper = t.wallpaper;
   const a = ACCENTS[t.accent];
   // Recolor brand + link accent (and the shadcn primary/ring aliases) live.

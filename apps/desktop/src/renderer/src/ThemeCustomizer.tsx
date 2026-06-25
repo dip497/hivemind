@@ -117,6 +117,19 @@ export function ThemeCustomizer({ open, onClose }: { open: boolean; onClose: () 
           suffix="px"
           onChange={(v) => setTheme({ blur: v })}
         />
+        <Row label="Frost tile content" hint="Wallpaper bleeds through terminals + editors">
+          <Switch on={t.contentGlass} onChange={(v) => setTheme({ contentGlass: v })} />
+        </Row>
+        {t.contentGlass && (
+          <Slider
+            label="Content tint"
+            value={Math.round(t.contentOpacity * 100)}
+            min={0}
+            max={90}
+            suffix="%"
+            onChange={(v) => setTheme({ contentOpacity: v / 100 })}
+          />
+        )}
       </div>
 
       {/* Accent palette */}

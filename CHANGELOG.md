@@ -7,6 +7,19 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Added
+
+- **Frost tile content — wallpaper bleeds through the tiles themselves, not just the chrome.** A new **Frost tile content** toggle (+ **Content tint** slider) in the Appearance drawer makes the terminal, editor, diff, workbench, issues, plan-review and file-tree CONTENT translucent so the live wallpaper shows through the whole tile. One uniform tint per tile (no double-tint on nested workbench embeds), frosted title bars, and an **accent-colored text selection** (soft 22%) across terminal/editor/diff. The terminal uses xterm's `allowTransparency` on the DOM renderer (WebGL ignores it); Browser is the only tile that can't go transparent (it hosts a real web page). Opt-in, off by default.
+- **Photo wallpaper** — pick any image as the background (persisted across restarts via the same sandboxed `hm-media://` path as video).
+- **4 more gradient scenes** (Sunset, Forest, Nebula, Mono) and **4 more accent palettes** (Rose, Emerald, Amber, Violet).
+- **Animate toggle** (drifting gradient scenes + a slow Ken-Burns pan on photos; video always plays) and a **Brightness** slider for photo/video wallpapers.
+
+### Changed
+
+- Terminal default font size 12 → 15 (more readable); default claude tile shrunk 2220×1500 → 1100×740 (smaller box, more free canvas) — applies to newly spawned terminals.
+- Clearer **Diff** (file + / −) and **Issues** (checklist) tool-island icons.
+- Subtler selected-tile ring on glass — a thin static accent outline instead of the pulsing glow halo.
+
 ## [1.8.1] — 2026-06-25
 
 ### Security

@@ -32,9 +32,9 @@ export function defaultSizeForKind(kind: TileKind): { width: number; height: num
     case "browser":
       return { width: 1280, height: 860 };
     case "claude":
-      // +50% over the old 1480×1000 — claude tiles hold long agent transcripts,
-      // so a larger default means less immediate resizing.
-      return { width: 2220, height: 1500 };
+      // Compact default — the larger 15px terminal font makes a smaller tile
+      // read comfortably, and a tighter box leaves more canvas free.
+      return { width: 1100, height: 740 };
     case "shell":
     default:
       return { width: 1200, height: 820 };

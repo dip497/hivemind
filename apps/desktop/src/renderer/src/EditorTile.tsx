@@ -545,8 +545,8 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, onO
     <div
       className={
         embedded
-          ? "flex h-full flex-col bg-[var(--color-bg2)] overflow-hidden min-w-0"
-          : "flex h-full flex-col rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] overflow-hidden shadow-[0_8px_22px_rgba(0,0,0,0.45)]"
+          ? "hm-glass-embed flex h-full flex-col bg-[var(--color-bg2)] overflow-hidden min-w-0"
+          : "hm-glass-surface flex h-full flex-col rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] overflow-hidden shadow-[0_8px_22px_rgba(0,0,0,0.45)]"
       }
       style={{ fontSize: `${font.size}px` }}
       onKeyDownCapture={(e) => handleFontKey(e, font)}
