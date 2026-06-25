@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [1.8.0] — 2026-06-25
+
 ### Added
 
 - **Glassmorphism theme + live wallpaper + Appearance customizer (opt-in).** A new **Theme** button on the tool island opens an Appearance drawer: a **Glass mode** toggle (frosted, translucent tiles + islands + Layers panel via `backdrop-filter`), **panel-opacity** + **blur** sliders, an **accent palette** (Indigo / Volt / Ember / Ice / Pulse — recolors brand + links app-wide), and a **live wallpaper** picker — code-generated drifting-gradient scenes (Aurora / Ember / Ice / Mesh, no art assets) **plus a looping Video wallpaper** (pick any `.mp4`/`.webm`; `loop`+`muted`+`autoplay`, hardware-decoded) that **persists across restarts** — the clip is served by its real path through a privileged `hm-media://` protocol in main (a blob URL can't survive a reload; `file://` is blocked by webSecurity+CSP), with `getPathForFile` exposed via preload. **F11 toggles native fullscreen** (hides the OS titlebar for an edge-to-edge canvas). The wallpaper is one fixed full-window layer behind ALL app content (not per-tile), pauses its animation/decoder on window blur, and honors `prefers-reduced-motion`; the dotted canvas grid hides under glass and selection gets a pulsing accent glow. Glass derives the translucent panel tokens from single-source `--surface-*` vars (and a `--frame-fill` token dials frame zones fainter), so every surface frosts with no per-tile edits. Performance: the existing pan/drag/resize motion-strip already disables `backdrop-filter` during motion; blur is capped at 24px and no `filter`/`hue-rotate` is animated (the "alive" motion is compositor-only transform drift) — both per Chromium GPU guidance. Theme is a global app preference (`localStorage` `hivemind:theme`); the app stays the classic opaque dark theme until you turn Glass on. New: `theme-store.ts`, `Wallpaper.tsx`, `ThemeCustomizer.tsx`.
@@ -474,7 +476,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v1.7.1...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v1.8.0...HEAD
+[1.8.0]: https://github.com/dip497/hivemind/releases/tag/v1.8.0
 [1.7.1]: https://github.com/dip497/hivemind/releases/tag/v1.7.1
 [1.7.0]: https://github.com/dip497/hivemind/releases/tag/v1.7.0
 [1.6.1]: https://github.com/dip497/hivemind/releases/tag/v1.6.1
