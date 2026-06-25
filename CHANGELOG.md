@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [1.8.1] — 2026-06-25
+
 ### Security
 
 - **`hm-media://` wallpaper protocol can no longer read arbitrary files.** The handler shipped in 1.8.0 served any path embedded in the URL (`hm-media://v/<encoded-abs-path>`), an arbitrary-file-read primitive reachable from the untrusted web content a BrowserTile `<webview>` can load. Picked media is now **copied into a sandboxed `userData/wallpapers/` dir**, and the protocol serves **only files confined to that dir** (path-resolved + prefix-checked; anything outside → `403`). Side benefit: the wallpaper now survives the original file being moved or deleted.
@@ -482,7 +484,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v1.8.0...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v1.8.1...HEAD
+[1.8.1]: https://github.com/dip497/hivemind/releases/tag/v1.8.1
 [1.8.0]: https://github.com/dip497/hivemind/releases/tag/v1.8.0
 [1.7.1]: https://github.com/dip497/hivemind/releases/tag/v1.7.1
 [1.7.0]: https://github.com/dip497/hivemind/releases/tag/v1.7.0
