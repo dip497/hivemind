@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Plus, Settings } from "lucide-react";
+import { ExternalLink, Plus, Settings } from "lucide-react";
 import path from "path-browserify";
+import type { UpdateStatus } from "../../shared/ipc";
 import {
   inElectron,
   useFsChangedInvalidation,
@@ -32,6 +33,40 @@ function pushRecent(path: string): string[] {
   const next = [path, ...cur].slice(0, RECENT_MAX);
   window.localStorage.setItem(RECENT_KEY, JSON.stringify(next));
   return next;
+}
+
+/** GitHub-release update check, owned at the App level so the top-right Settings
+ *  dialog (full status) and the canvas "Update available" pill share ONE check.
+ *  The fetch runs in main (renderer CSP blocks api.github.com); the last result
+ *  is cached in localStorage so the affordance survives a reload, then re-checked
+ *  on mount + every few hours. A failed check (offline/rate-limit) → no update. */
+function useUpdateCheck() {
+  const [version, setVersion] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [status, setStatus] = useState<UpdateStatus | null>(() => {
+    try {
+      const raw = localStorage.getItem("hivemind:update");
+      return raw ? (JSON.parse(raw) as UpdateStatus) : null;
+    } catch { return null; }
+  });
+  const check = useCallback(async () => {
+    if (!window.hive?.checkForUpdate) return;
+    setChecking(true);
+    try {
+      const s = await window.hive.checkForUpdate();
+      setStatus(s);
+      try { localStorage.setItem("hivemind:update", JSON.stringify(s)); } catch { /* quota */ }
+    } catch { /* main never rejects; ignore */ }
+    finally { setChecking(false); }
+  }, []);
+  useEffect(() => {
+    void window.hive?.getAppVersion?.().then(setVersion).catch(() => {});
+    void check();
+    const id = window.setInterval(() => { void check(); }, 4 * 60 * 60 * 1000);
+    return () => window.clearInterval(id);
+  }, [check]);
+  const upgrade = useCallback(() => { void window.hive?.runUpgrade?.(); }, []);
+  return { version, status, checking, check, upgrade };
 }
 
 export function App() {
@@ -94,6 +129,7 @@ export function App() {
   const [initing, setIniting] = useState(false);
   const [initOpen, setInitOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const update = useUpdateCheck();
   const qc = useQueryClient();
 
   // Initialize a .hivemind/ workspace in the current folder (no terminal).
@@ -230,6 +266,8 @@ export function App() {
           repoPath={repoPath}
           root={root}
           onInitWorkspace={!root ? () => setInitOpen(true) : undefined}
+          updateAvailable={update.status?.updateAvailable === true}
+          onUpgrade={update.upgrade}
         />
         <div className="absolute top-0 right-0 z-40 flex items-start gap-2 px-3 py-2.5 pointer-events-none">
           {root && (
@@ -245,11 +283,14 @@ export function App() {
           )}
           <button
             onClick={() => setSettingsOpen(true)}
-            className="pointer-events-auto inline-flex items-center justify-center size-8 rounded-lg hm-island text-[var(--color-fg2)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)] transition-colors"
-            title="Settings"
+            className="pointer-events-auto relative inline-flex items-center justify-center size-8 rounded-lg hm-island text-[var(--color-fg2)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)] transition-colors"
+            title={update.status?.updateAvailable ? "Settings — update available" : "Settings"}
             aria-label="settings"
           >
             <Settings aria-hidden className="size-4" />
+            {update.status?.updateAvailable && (
+              <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-[var(--color-warn)] ring-2 ring-[var(--color-bg2)]" aria-hidden />
+            )}
           </button>
         </div>
       </div>
@@ -269,16 +310,47 @@ export function App() {
         pending={initing}
         onConfirm={doInitWorkspace}
       />
-      <SettingsModal open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <SettingsModal
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        version={update.version}
+        update={update.status}
+        checking={update.checking}
+        onCheck={() => { void update.check(); }}
+        onUpgrade={update.upgrade}
+      />
     </div>
   );
 }
 
-/** App settings dialog. Currently houses the agent-browser CDP bridge toggle —
- *  opt-in because a debug port also exposes the app window. The bridge can only
- *  be (de)activated at launch, so the toggle persists the choice and offers a
- *  relaunch to apply it. */
-function SettingsModal({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
+const REPO_URL = "https://github.com/dip497/hivemind";
+
+/** App settings dialog. Houses the About section (version, repo, license,
+ *  update status) + the agent-browser CDP bridge toggle — opt-in because a
+ *  debug port also exposes the app window. The bridge can only be (de)activated
+ *  at launch, so the toggle persists the choice and offers a relaunch to apply. */
+function SettingsModal({
+  open,
+  onOpenChange,
+  version,
+  update,
+  checking,
+  onCheck,
+  onUpgrade,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  /** Running app version (null until main answers). */
+  version: string | null;
+  /** Latest update check result, or null if it hasn't run / failed silently. */
+  update: UpdateStatus | null;
+  /** A check is in flight. */
+  checking: boolean;
+  /** Re-run the update check now. */
+  onCheck: () => void;
+  /** Run the installer + quit so the new binary takes over. */
+  onUpgrade: () => void;
+}) {
   const [active, setActive] = useState(false);   // live this session
   const [enabled, setEnabled] = useState(false); // persisted choice
   const [port, setPort] = useState("9333");
@@ -312,6 +384,59 @@ function SettingsModal({ open, onOpenChange }: { open: boolean; onOpenChange: (o
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="text-[15px] font-semibold text-[var(--color-fg)]">Settings</h2>
+
+        {/* About + update status */}
+        <div className="mt-4 rounded-lg border border-[var(--color-line2)] bg-[var(--color-bg3)] p-3">
+          <div className="flex items-baseline justify-between gap-2">
+            <div className="flex items-baseline gap-2">
+              <span className="text-[14px] font-semibold text-[var(--color-fg)]">hivemind</span>
+              <span className="text-[11px] font-mono text-[var(--color-fg3)]">{version ? `v${version}` : "version…"}</span>
+            </div>
+            <a
+              href={REPO_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-[11px] text-[var(--color-fg2)] hover:text-[var(--color-fg)]"
+            >
+              GitHub <ExternalLink className="size-3 text-[var(--color-fg3)]" />
+            </a>
+          </div>
+          <div className="mt-2 flex items-center justify-between gap-2">
+            {update?.updateAvailable ? (
+              <>
+                <span className="inline-flex items-center gap-1.5 text-[12px] text-[var(--color-fg)]">
+                  <span className="size-2 rounded-full bg-[var(--color-warn)]" aria-hidden />
+                  Update available{update.latest ? ` — v${update.latest}` : ""}
+                </span>
+                <button
+                  onClick={onUpgrade}
+                  className="px-2.5 py-1.5 text-[11px] font-medium text-white bg-[var(--color-brand)] rounded hover:opacity-90"
+                  title="Download the latest release and restart"
+                >
+                  Update &amp; restart
+                </button>
+              </>
+            ) : (
+              <>
+                <span className="inline-flex items-center gap-1.5 text-[12px] text-[var(--color-fg2)]">
+                  <span className="size-2 rounded-full" style={{ background: checking ? "var(--color-fg3)" : "var(--color-ok)" }} aria-hidden />
+                  {checking ? "Checking…" : "Up to date"}
+                </span>
+                <button
+                  onClick={onCheck}
+                  disabled={checking}
+                  className="px-2 py-1 text-[11px] border border-[var(--color-line2)] text-[var(--color-fg2)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg4)] rounded disabled:opacity-40"
+                >
+                  Check now
+                </button>
+              </>
+            )}
+          </div>
+          <div className="mt-2 flex items-center justify-between text-[11px]">
+            <span className="text-[var(--color-fg3)]">License</span>
+            <span className="font-mono text-[var(--color-fg2)]">MIT</span>
+          </div>
+        </div>
 
         <div className="mt-4 flex items-start gap-3">
           <button

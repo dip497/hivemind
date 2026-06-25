@@ -16,9 +16,7 @@ import { FRAME_ROW_MAX, frameAtPoint } from "./frame-layout";
 import { ToolIsland, ZoomIsland } from "./canvas-islands";
 import { Wallpaper } from "./Wallpaper";
 import { ThemeCustomizer } from "./ThemeCustomizer";
-import { AboutPanel } from "./AboutPanel";
 import { applyTheme } from "./theme-store";
-import type { UpdateStatus } from "../../shared/ipc";
 import { Eye, EyeOff } from "lucide-react";
 import { Toasts, CanvasEmptyState } from "./canvas-overlays";
 import { nodeTypes } from "./canvas-nodes";
@@ -85,6 +83,11 @@ interface Props {
    *  CanvasEmptyState can offer "Initialize workspace here…" (the old top-left
    *  switcher's job). Undefined when a workspace is already resolved. */
   onInitWorkspace?: () => void;
+  /** A newer GitHub release exists → show the "Update available" pill by Theme.
+   *  Owned by App (so the Settings dialog + this pill share one check). */
+  updateAvailable?: boolean;
+  /** Run the installer + quit (from the pill). */
+  onUpgrade?: () => void;
 }
 
 
@@ -101,7 +104,7 @@ const SINGLETON_KINDS: ReadonlySet<TileKind> = new Set(["editor", "diff", "issue
 
 // tile sizing helpers + FRAME_* constants moved to canvas-sizing.ts
 
-export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
+export function Canvas({ cwd, repoPath, root = null, onInitWorkspace, updateAvailable = false, onUpgrade }: Props) {
   // Bootstrapped from localStorage on first render (synchronous useState
   // initializer so we never flash an empty canvas before hydrating). Reloaded
   // when repoPath changes — see the effect below.
@@ -897,38 +900,6 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
   const [customizerOpen, setCustomizerOpen] = useState(false);
   useEffect(() => { applyTheme(); }, []);
 
-  // Settings / About drawer + GitHub-release update check. The version + last
-  // result are surfaced by main; we cache the result in localStorage so the
-  // "Update available" affordance survives a reload without re-fetching, and
-  // re-check on mount + every few hours. A failed check (offline/rate-limit)
-  // resolves to no-update and shows nothing.
-  const [aboutOpen, setAboutOpen] = useState(false);
-  const [appVersion, setAppVersion] = useState<string | null>(null);
-  const [updateChecking, setUpdateChecking] = useState(false);
-  const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(() => {
-    try {
-      const raw = localStorage.getItem("hivemind:update");
-      return raw ? (JSON.parse(raw) as UpdateStatus) : null;
-    } catch { return null; }
-  });
-  const runUpdateCheck = useCallback(async () => {
-    if (!window.hive?.checkForUpdate) return;
-    setUpdateChecking(true);
-    try {
-      const s = await window.hive.checkForUpdate();
-      setUpdateStatus(s);
-      try { localStorage.setItem("hivemind:update", JSON.stringify(s)); } catch { /* quota */ }
-    } catch { /* main never rejects; ignore */ }
-    finally { setUpdateChecking(false); }
-  }, []);
-  useEffect(() => {
-    void window.hive?.getAppVersion?.().then(setAppVersion).catch(() => {});
-    void runUpdateCheck();
-    const id = window.setInterval(() => { void runUpdateCheck(); }, 4 * 60 * 60 * 1000);
-    return () => window.clearInterval(id);
-  }, [runUpdateCheck]);
-  const onUpgrade = useCallback(() => { void window.hive?.runUpgrade?.(); }, []);
-
   const isEmpty = nodes.length === 0;
 
   // Motion-aware compositing: while the viewport pans/zooms we add a class that
@@ -1264,9 +1235,8 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
               onFrame={addFrame}
               onBrowser={() => spawnInto("browser")}
               onTheme={() => setCustomizerOpen((o) => !o)}
-              onAbout={() => setAboutOpen((o) => !o)}
-              updateAvailable={updateStatus?.updateAvailable === true}
-              onUpgrade={onUpgrade}
+              updateAvailable={updateAvailable}
+              onUpgrade={() => onUpgrade?.()}
             />
           </Panel>
           )}
@@ -1384,15 +1354,6 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace }: Props) {
           onPick={(uri) => { if (remoteAttach) bindRemote(remoteAttach, uri); setRemoteAttach(null); }}
         />
         <ThemeCustomizer open={customizerOpen} onClose={() => setCustomizerOpen(false)} />
-        <AboutPanel
-          open={aboutOpen}
-          onClose={() => setAboutOpen(false)}
-          version={appVersion}
-          update={updateStatus}
-          checking={updateChecking}
-          onCheck={() => { void runUpdateCheck(); }}
-          onUpgrade={onUpgrade}
-        />
         {claudePick && (
           <div className="fixed inset-0 z-50 grid place-items-center" onClick={() => setClaudePick(null)}>
             <div className="absolute inset-0 bg-black/40" />

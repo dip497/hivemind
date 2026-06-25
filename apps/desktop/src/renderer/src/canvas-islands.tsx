@@ -19,7 +19,6 @@ export function ToolIsland({
   onFrame,
   onBrowser,
   onTheme,
-  onAbout,
   updateAvailable,
   onUpgrade,
 }: {
@@ -32,9 +31,8 @@ export function ToolIsland({
   onFrame: () => void;
   onBrowser: () => void;
   onTheme: () => void;
-  /** Open the Settings / About drawer. */
-  onAbout: () => void;
-  /** A newer GitHub release exists → show the "Update available" pill. */
+  /** A newer GitHub release exists → show the "Update available" pill next to
+   *  Theme. The full update UI lives in the top-right Settings dialog. */
   updateAvailable: boolean;
   /** Run the upgrade + restart (from the pill). */
   onUpgrade: () => void;
@@ -96,17 +94,9 @@ export function ToolIsland({
       <div className="mx-0.5 h-5 w-px bg-[var(--color-line2)]" aria-hidden />
       <ToolButton label="Theme" hint="8" onClick={onTheme}
         icon={<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M8 1.5a6.5 6.5 0 0 0 0 13c.83 0 1.5-.67 1.5-1.5 0-.4-.16-.76-.41-1.03-.24-.26-.39-.6-.39-.97 0-.83.67-1.5 1.5-1.5H11a3.5 3.5 0 0 0 3.5-3.5C14.5 4.3 11.6 1.5 8 1.5Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/><circle cx="5" cy="6.5" r="0.9" fill="currentColor"/><circle cx="8" cy="5" r="0.9" fill="currentColor"/><circle cx="11" cy="6.5" r="0.9" fill="currentColor"/></svg>} />
-      {/* Settings / About — gear. The dot overlays it when an update is ready,
-          so the affordance is visible even with the panel closed. */}
-      <div className="relative flex items-center">
-        <ToolButton label="Settings" hint="9" onClick={onAbout}
-          icon={<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2.1" stroke="currentColor" strokeWidth="1.2"/><path d="M8 1.5v1.8M8 12.7v1.8M14.5 8h-1.8M3.3 8H1.5M12.6 3.4l-1.3 1.3M4.7 11.3l-1.3 1.3M12.6 12.6l-1.3-1.3M4.7 4.7L3.4 3.4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>} />
-        {updateAvailable && (
-          <span className="absolute top-1 right-1 size-2 rounded-full bg-[var(--color-warn)] ring-2 ring-[var(--color-bg2)] pointer-events-none" aria-hidden />
-        )}
-      </div>
-      {/* "Update available — restart to update" pill. Only when newer release
-          exists; clicking runs the installer + quits. */}
+      {/* "Update available — restart to update" pill. Only when a newer release
+          exists; clicking runs the installer + quits. (Full update status +
+          version + repo/license live in the top-right Settings dialog.) */}
       {updateAvailable && (
         <button
           onClick={onUpgrade}
