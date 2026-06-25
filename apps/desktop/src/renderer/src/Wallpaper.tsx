@@ -17,6 +17,10 @@ import { useTheme } from "./theme-store";
 export function Wallpaper(): React.ReactElement | null {
   const { glass, wallpaper, videoSrc, imageSrc } = useTheme();
   const [paused, setPaused] = useState(false);
+  // A clip that can't decode (e.g. HEVC/H.265, which Chromium doesn't bundle)
+  // fires <video> onError → we fall back to a gradient instead of a black void.
+  const [videoFailed, setVideoFailed] = useState(false);
+  useEffect(() => { setVideoFailed(false); }, [videoSrc]);
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
@@ -54,28 +58,34 @@ export function Wallpaper(): React.ReactElement | null {
     );
   }
 
-  // Video scene: a looping muted clip, dimmed + tinted so frosted panels stay
-  // readable over it (matches Clonk's low default transparency).
+  // Video scene: a looping muted clip. Falls back to the aurora gradient if the
+  // clip can't decode (HEVC/H.265 etc.) so it's never a black void.
   if (wallpaper === "video") {
+    if (videoSrc && !videoFailed) {
+      return (
+        <div className={`hm-wallpaper${paused ? " paused" : ""}`} data-scene="video" aria-hidden="true">
+          <video
+            ref={videoRef}
+            className="hm-wp-video"
+            src={videoSrc}
+            autoPlay
+            loop
+            muted
+            playsInline
+            onError={() => setVideoFailed(true)}
+          />
+          <div className="hm-wp-vignette" />
+        </div>
+      );
+    }
     if (!videoSrc) return null; // no clip picked yet → nothing to show
-    return (
-      <div className={`hm-wallpaper${paused ? " paused" : ""}`} data-scene="video" aria-hidden="true">
-        <video
-          ref={videoRef}
-          className="hm-wp-video"
-          src={videoSrc}
-          autoPlay
-          loop
-          muted
-          playsInline
-        />
-        <div className="hm-wp-vignette" />
-      </div>
-    );
+    // videoSrc set but failed to decode → fall through to the gradient below.
   }
 
+  // Gradient scenes (and the video-decode fallback → aurora).
+  const scene = wallpaper === "video" ? "aurora" : wallpaper;
   return (
-    <div className={`hm-wallpaper${paused ? " paused" : ""}`} data-scene={wallpaper} aria-hidden="true">
+    <div className={`hm-wallpaper${paused ? " paused" : ""}`} data-scene={scene} aria-hidden="true">
       {/* Three drifting gradient blooms (screen-blended) → depth + slow color
           motion. A fine grain breaks up the gradient banding, a top sheen adds
           the "lit from above" glass feel, and a vignette focuses the center.

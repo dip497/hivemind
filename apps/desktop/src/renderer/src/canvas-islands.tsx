@@ -76,7 +76,7 @@ export function ToolIsland({
       <ToolButton label="Explorer" hint="3" disabled={!repoPath} onClick={() => onToggle("tree")}
         icon={<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M2 4.5C2 3.7 2.7 3 3.5 3h3l1.5 1.5h4.5c.8 0 1.5.7 1.5 1.5v5.5c0 .8-.7 1.5-1.5 1.5h-9C2.7 13 2 12.3 2 11.5v-7Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>} />
       <ToolButton label="Diff" hint="4" disabled={!repoPath} onClick={() => onToggle("diff")}
-        icon={<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><rect x="3" y="2" width="10" height="12" rx="1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M8 4.3v3.2M6.4 5.9h3.2M6.4 10.6h3.2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>} />
+        icon={<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="4.5" cy="4" r="1.7"/><circle cx="11.5" cy="12" r="1.7"/><path d="M4.5 5.7v2.8a2 2 0 0 0 2 2H9"/><path d="M11.5 10.3V7.5a2 2 0 0 0-2-2H7"/></svg>} />
       <ToolButton label="Issues" hint="5" disabled={!repoPath} onClick={() => onToggle("issues")}
         icon={<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M2.5 4.3l1.1 1.1 1.8-1.9M2.5 9.3l1.1 1.1 1.8-1.9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/><path d="M7.5 4.6h6M7.5 9.6h6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>} />
       <div className="mx-0.5 h-5 w-px bg-[var(--color-line2)]" aria-hidden />

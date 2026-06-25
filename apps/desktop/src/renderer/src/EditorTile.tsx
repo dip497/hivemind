@@ -95,7 +95,7 @@ const cmTheme = EditorView.theme(
     "&.cm-focused": { outline: "none" },
     ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--color-brand)" },
     "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection":
-      { backgroundColor: "rgba(91,108,255,0.30)" },
+      { backgroundColor: "rgba(255,255,255,0.20)" },
     ".cm-gutters": {
       backgroundColor: "var(--color-bg2)",
       color: "var(--color-fg3)",

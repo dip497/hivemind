@@ -1110,8 +1110,16 @@ process.on("unhandledRejection", (reason) => {
 // Source: https://github.com/microsoft/vscode/blob/main/src/main.ts
 app.commandLine.appendSwitch(
   "enable-features",
-  "EarlyEstablishGpuChannel,EstablishGpuChannelAsync",
+  // EarlyEstablishGpuChannel/EstablishGpuChannelAsync: faster first paint (VS Code).
+  // PlatformHEVCDecoderSupport + VaapiVideoDecoder(LinuxGL): enable HEVC/H.265
+  // wallpaper playback via the GPU's hardware decoder (Chromium ships no software
+  // HEVC decoder). Works on VAAPI-capable GPUs (Intel/AMD); a clip that still can't
+  // decode falls back to the gradient wallpaper. H.264 always worked regardless.
+  "EarlyEstablishGpuChannel,EstablishGpuChannelAsync,PlatformHEVCDecoderSupport,VaapiVideoDecoder,VaapiVideoDecodeLinuxGL",
 );
+// VAAPI hardware video decode is often gated behind the GPU blocklist on Linux;
+// allow it so the iGPU's HEVC decoder is actually used.
+app.commandLine.appendSwitch("ignore-gpu-blocklist");
 // Many xterm WebGL terminals can coexist. Default cap is 16 in Chromium; raise
 // it so a workspace with several claude/shell tiles doesn't silently fall back
 // to the DOM renderer when the 16th WebGL context is requested. VS Code uses 32.

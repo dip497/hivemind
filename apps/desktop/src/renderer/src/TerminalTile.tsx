@@ -14,7 +14,7 @@ import { publishStatus, clearStatus, noteOutput, revalidate, type TileStatusKind
 import { SUBMIT_DELAY_MS } from "../../shared/agent-io";
 import { Pencil, GripVertical } from "lucide-react";
 import { webUrlForInternalBrowser } from "./browser-open";
-import { useTheme, getTheme, ACCENTS } from "./theme-store";
+import { useTheme, getTheme } from "./theme-store";
 
 /** Open a terminal link in the OS browser. window.open is intercepted by main's
  *  setWindowOpenHandler → shell.openExternal (and the in-app navigation denied),
@@ -65,23 +65,12 @@ const TERM_THEME = {
   white: "#D3D7CF",
   brightWhite: "#EEEEEC",
 } as const;
-/** The terminal background for the current theme: a translucent NEUTRAL-dark
- *  tint (wallpaper bleeds through) when content-glass is on — alpha from
- *  contentOpacity — else the opaque aubergine. A neutral tint (#0d0e12) reads as
- *  frosted glass over any wallpaper color, where the aubergine would cast maroon. */
-const termBgFor = (t: { glass: boolean; contentGlass: boolean; contentOpacity: number }): string =>
-  t.glass && t.contentGlass ? `rgba(13,14,18,${t.contentOpacity})` : TERM_THEME.background;
-/** #rrggbb / #rgb → rgba() string with the given alpha. */
-const hexToRgba = (hex: string, a: number): string => {
-  const h = hex.replace("#", "");
-  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
-  const n = parseInt(full, 16);
-  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
-};
-/** Terminal text-selection color: the brand accent (translucent) when content-
- *  glass is on — the faint white default washes out over a bright wallpaper. */
-const termSelFor = (t: { glass: boolean; contentGlass: boolean; accent: keyof typeof ACCENTS }): string =>
-  t.glass && t.contentGlass ? hexToRgba(ACCENTS[t.accent].brand, 0.22) : TERM_THEME.selectionBackground;
+/** The terminal background: FULLY transparent when content-glass is on, so the
+ *  single tint lives on the tile ROOT (.hm-term-root, like every other tile) and
+ *  the whole body — including the host's padding band — reads as one uniform tint
+ *  (no "gap" frame). Else the opaque aubergine. */
+const termBgFor = (t: { glass: boolean; contentGlass: boolean }): string =>
+  t.glass && t.contentGlass ? "rgba(0,0,0,0)" : TERM_THEME.background;
 
 // ── render-quality diagnostics ───────────────────────────────────────────────
 // A toggleable HUD (Ctrl/Cmd+Shift+D, shared across tiles) that surfaces the
@@ -182,18 +171,13 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
   // when the theme toggles, WITHOUT recreating the terminal. xterm applies
   // `theme` updates at runtime; the effect is gated on the COMPUTED bg, so
   // opacity-slider drags (which don't change it) never trigger a refresh.
-  const themeNow = useTheme();
-  const termBg = termBgFor(themeNow);
-  const termSel = termSelFor(themeNow);
+  const termBg = termBgFor(useTheme());
   useEffect(() => {
     const term = termRef.current;
     if (!term) return;
-    term.options.theme = { ...TERM_THEME, background: termBg, selectionBackground: termSel };
-    // A transparent bg only renders under the DOM renderer (WebGL ignores
-    // allowTransparency). reconcile so wantsDom() re-evaluates and swaps this
-    // tile to DOM while content-glass is on (and back to WebGL when off).
-    reconcileWebglSlots();
-  }, [termBg, termSel]);
+    // Selection stays the neutral white default (TERM_THEME.selectionBackground).
+    term.options.theme = { ...TERM_THEME, background: termBg };
+  }, [termBg]);
   // Unique PTY identity per MOUNT (not per prop). Fixes React.StrictMode
   // double-mount race: the first mount's awaited ptySpawn could resolve AFTER
   // its cleanup ran, killing the second mount's PTY (same tileId in the
@@ -528,9 +512,10 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       // re-acquiring WebGL would just lose the context again and thrash the canvas.
       wantsDom: () =>
         Date.now() < webglCooldownUntil ||
-        // Frost-tile-content needs a transparent terminal bg, which only the DOM
-        // renderer supports (WebGL ignores allowTransparency). Force DOM while it's on.
-        (getTheme().glass && getTheme().contentGlass) ||
+        // NOTE: content-glass does NOT force DOM. The WebGL addon honors
+        // allowTransparency (transparent theme bg renders fine on WebGL), so a
+        // frosted terminal stays on the fast GPU renderer — forcing DOM made
+        // streaming agents repaint as DOM nodes (renderer CPU spike).
         (!agent && selectedRef.current === true && (window.devicePixelRatio || 1) < 2),
     });
 

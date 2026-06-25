@@ -395,15 +395,38 @@ body.canvas-resizing .react-flow__node * {
   transition: none !important;
 }
 
-/* Selected-tile highlight. `outline` (not box-shadow) so it's cheap and isn't
-   stripped by the motion rules above; offset clears the tile's own border.
-   The NodeResizer handles also appear (isVisible={selected}) — together they
-   make selection obvious. Resize handles only render for the selected tile,
-   which also cuts per-frame DOM cost on canvases with many tiles. */
+/* Selected-tile indicator. NOT a full outline (too loud) — just a small accent
+   "clip" centered above the top edge, so selection reads clean. Visible when
+   idle; the motion `contain` rules clip it during pan/drag, which is fine. */
 .react-flow__node .hm-node-selected {
-  outline: 2px solid var(--color-select);
-  outline-offset: 2px;
-  border-radius: 12px;
+  position: relative;
+}
+.react-flow__node .hm-node-selected::after {
+  content: "";
+  position: absolute;
+  top: -7px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 26px;
+  height: 3px;
+  border-radius: 3px;
+  background: var(--color-brand);
+  box-shadow: 0 0 8px -1px color-mix(in srgb, var(--color-brand) 70%, transparent);
+  pointer-events: none;
+  z-index: 5;
+}
+
+/* Resize handles: invisible until you reach for a corner/edge (hover the control)
+   so a selected tile stays clean — the handle only shows when you go to grab it.
+   Stays visible while actively resizing. (Handles still only render when the tile
+   is selected, via isVisible={selected}.) */
+.react-flow__node .react-flow__resize-control {
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+.react-flow__node .react-flow__resize-control:hover,
+body.canvas-resizing .react-flow__node .react-flow__resize-control {
+  opacity: 1;
 }
 
 /* A tile is INERT until selected (Figma-style): its content ignores pointer
@@ -538,16 +561,8 @@ html.glass-on .hm-layers {
   backdrop-filter: blur(var(--glass-blur)) saturate(135%);
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(135%);
 }
-/* Selection on glass: the neutral-grey outline washes out over a live
-   wallpaper, so a selected tile gets the brand accent + a softly PULSING glow
-   ring (breathes ~2.4s) so the active tile is obvious. Stripped during motion
-   by the box-shadow motion rule above, so it costs nothing while panning. */
-html.glass-on .react-flow__node .hm-node-selected {
-  /* Subtle thin accent ring — no pulse, no glow (the pulsing halo was too loud). */
-  outline: 1.5px solid var(--color-brand);
-  outline-offset: 2px;
-  box-shadow: none;
-}
+/* (The glass-mode selection outline was removed — the top-clip indicator above
+   works in both opaque + glass themes.) */
 /* Frost the floating islands (blur was removed for perf in the opaque theme; it
    returns only under glass, and there are only a handful of islands). */
 html.glass-on .hm-island {
@@ -570,6 +585,21 @@ html.glass-on .react-flow__node-browser {
   backdrop-filter: blur(var(--glass-blur)) saturate(135%);
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(135%);
   border-radius: 14px;
+}
+/* PERF: a VIDEO wallpaper changes every frame, so backdrop-filter re-blurs every
+   frosted surface ~60×/s — a big renderer/GPU cost. Drop the blur for video only
+   (the translucent tint stays); gradient/photo wallpapers change slowly, so they
+   keep their blur. Over moving video the blur is barely missed. */
+html.glass-on[data-wallpaper="video"] .hm-island,
+html.glass-on[data-wallpaper="video"] .hm-layers,
+html.glass-on[data-wallpaper="video"] .react-flow__node-terminal,
+html.glass-on[data-wallpaper="video"] .react-flow__node-diff,
+html.glass-on[data-wallpaper="video"] .react-flow__node-editor,
+html.glass-on[data-wallpaper="video"] .react-flow__node-workbench,
+html.glass-on[data-wallpaper="video"] .react-flow__node-issues,
+html.glass-on[data-wallpaper="video"] .react-flow__node-browser {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
 /* Frost tile CONTENT (opt-in, html.content-glass). The tile chrome bg is already
@@ -599,7 +629,12 @@ html.content-glass [data-pierre-tile] {
 /* Terminal: the xterm theme bg (rgba, contentOpacity) is the ONLY content tint —
    strip the opaque #300A24 host wrapper AND the tile-surface bg behind it so the
    wallpaper bleeds through. The header keeps its own bg-bg3, so it stays legible. */
-html.content-glass .hm-term-root,
+/* Terminal: the tile ROOT carries the single content tint (uniform across the
+   whole body incl. the host's padding band — no "gap" frame); the host wrapper
+   stays transparent and xterm is fully transparent (its bg is rgba 0). */
+html.content-glass .hm-term-root {
+  background-color: color-mix(in srgb, var(--surface-3) var(--content-opacity, 25%), transparent) !important;
+}
 html.content-glass .hm-term-host {
   background-color: transparent !important;
 }
@@ -628,11 +663,11 @@ html.content-glass .hm-glass-embed {
    faint default, for editor (CodeMirror drawn + native) and diff (native). */
 html.content-glass .cm-editor .cm-selectionBackground,
 html.content-glass .cm-editor.cm-focused .cm-selectionBackground {
-  background-color: color-mix(in srgb, var(--color-brand) 22%, transparent) !important;
+  background-color: rgba(255, 255, 255, 0.20) !important;
 }
 html.content-glass .cm-editor ::selection,
 html.content-glass [data-pierre-tile] ::selection {
-  background-color: color-mix(in srgb, var(--color-brand) 22%, transparent);
+  background-color: rgba(255, 255, 255, 0.20);
 }
 /* Markdown preview (editor Preview mode + plan-review) code blocks: their opaque
    --color-bg fill becomes a content-opacity tint so the wallpaper shows. */

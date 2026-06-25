@@ -7,6 +7,19 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Fixed
+
+- **Glass mode no longer spikes the renderer (~227% → ~9% CPU).** Frost tile content was forcing every terminal onto the slow DOM renderer (on the wrong assumption that WebGL ignores transparency — it doesn't), so streaming agents repainted as DOM nodes. Terminals now stay on WebGL with a transparent background; verified live, idle renderer CPU dropped from ~227% to ~9%.
+- **Frosted terminal "gap" removed.** The terminal's tint now lives on the tile root (like every other tile) with a fully-transparent xterm, so the whole body — including the inner padding band — reads as one uniform tint instead of a shaded frame around the content.
+- **HEVC/H.265 video wallpapers no longer show a black screen.** A clip that can't decode now falls back to the gradient wallpaper, and HEVC hardware decode is enabled via VAAPI (`PlatformHEVCDecoderSupport` + `VaapiVideoDecoder`) where the GPU supports it. (H.264 `.mp4`/`.webm` always worked.)
+
+### Changed
+
+- Text selection is now a neutral translucent white across terminal/editor/diff (was the brand accent).
+- Cleaner selection + resize affordances: a selected tile shows a small accent clip above its top edge instead of a full outline, and resize handles stay hidden until you hover a corner/edge.
+- Clearer git-compare **Diff** tool-island icon.
+- Frosted panels drop their blur over **video** wallpapers (the tint stays) to avoid a per-frame re-blur cost; gradient/photo wallpapers keep their blur.
+
 ## [1.8.2] — 2026-06-25
 
 ### Added
