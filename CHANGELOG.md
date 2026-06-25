@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [1.8.2] — 2026-06-25
+
 ### Added
 
 - **Frost tile content — wallpaper bleeds through the tiles themselves, not just the chrome.** A new **Frost tile content** toggle (+ **Content tint** slider) in the Appearance drawer makes the terminal, editor, diff, workbench, issues, plan-review and file-tree CONTENT translucent so the live wallpaper shows through the whole tile. One uniform tint per tile (no double-tint on nested workbench embeds), frosted title bars, and an **accent-colored text selection** (soft 22%) across terminal/editor/diff. The terminal uses xterm's `allowTransparency` on the DOM renderer (WebGL ignores it); Browser is the only tile that can't go transparent (it hosts a real web page). Opt-in, off by default.
@@ -497,7 +499,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v1.8.1...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v1.8.2...HEAD
+[1.8.2]: https://github.com/dip497/hivemind/releases/tag/v1.8.2
 [1.8.1]: https://github.com/dip497/hivemind/releases/tag/v1.8.1
 [1.8.0]: https://github.com/dip497/hivemind/releases/tag/v1.8.0
 [1.7.1]: https://github.com/dip497/hivemind/releases/tag/v1.7.1
