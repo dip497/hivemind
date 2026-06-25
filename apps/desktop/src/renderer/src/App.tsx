@@ -184,6 +184,9 @@ export function App() {
       hive?: {
         onMenuNewIssue?: (cb: () => void) => () => void;
         onMenuToggleLayers?: (cb: () => void) => () => void;
+        onMenuFitOverlay?: (cb: () => void) => () => void;
+        onMenuResetScale?: (cb: () => void) => () => void;
+        onMenuFocusTile?: (cb: () => void) => () => void;
       };
     };
     if (!w.hive?.onMenuNewIssue) return;
@@ -192,9 +195,23 @@ export function App() {
     const offLayers = w.hive.onMenuToggleLayers?.(() =>
       window.dispatchEvent(new CustomEvent("hivemind:toggle-layers")),
     );
+    // Tile scaling: re-dispatch the forwarded accelerators as CustomEvents that
+    // TerminalTile (fit/reset, selected-only) and useCanvasShortcuts (focus) hear.
+    const offFit = w.hive.onMenuFitOverlay?.(() =>
+      window.dispatchEvent(new CustomEvent("hivemind:fit-overlay")),
+    );
+    const offResetScale = w.hive.onMenuResetScale?.(() =>
+      window.dispatchEvent(new CustomEvent("hivemind:reset-scale")),
+    );
+    const offFocusSel = w.hive.onMenuFocusTile?.(() =>
+      window.dispatchEvent(new CustomEvent("hivemind:focus-selected")),
+    );
     return () => {
       offNew?.();
       offLayers?.();
+      offFit?.();
+      offResetScale?.();
+      offFocusSel?.();
     };
   }, []);
 

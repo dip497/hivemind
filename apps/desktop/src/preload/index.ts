@@ -17,6 +17,9 @@ const api: HiveIpc & {
   ) => () => void;
   onMenuNewIssue: (cb: () => void) => () => void;
   onMenuToggleLayers: (cb: () => void) => () => void;
+  onMenuFitOverlay: (cb: () => void) => () => void;
+  onMenuResetScale: (cb: () => void) => () => void;
+  onMenuFocusTile: (cb: () => void) => () => void;
   getLaunchTarget: () => Promise<string | null>;
   onOpenProject: (cb: (path: string) => void) => () => void;
   onBrowserPopup: (cb: (p: { fromId: number; url: string }) => void) => () => void;
@@ -145,6 +148,23 @@ const api: HiveIpc & {
     const listener = () => cb();
     ipcRenderer.on("menu:toggle-layers", listener);
     return () => ipcRenderer.removeListener("menu:toggle-layers", listener);
+  },
+  // Tile-scaling accelerators (xterm eats the keys when focused, so main forwards
+  // the intent over IPC and the renderer re-dispatches as the matching CustomEvent).
+  onMenuFitOverlay: (cb: () => void) => {
+    const listener = () => cb();
+    ipcRenderer.on("menu:fit-overlay", listener);
+    return () => ipcRenderer.removeListener("menu:fit-overlay", listener);
+  },
+  onMenuResetScale: (cb: () => void) => {
+    const listener = () => cb();
+    ipcRenderer.on("menu:reset-scale", listener);
+    return () => ipcRenderer.removeListener("menu:reset-scale", listener);
+  },
+  onMenuFocusTile: (cb: () => void) => {
+    const listener = () => cb();
+    ipcRenderer.on("menu:focus-tile", listener);
+    return () => ipcRenderer.removeListener("menu:focus-tile", listener);
   },
 
   getLaunchTarget: () => ipcRenderer.invoke("getLaunchTarget"),

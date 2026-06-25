@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
@@ -7,7 +8,7 @@ import { registerFileLinks } from "./terminal-file-links";
 import { installCrispDpr, effectiveDpr } from "./terminal-dpr";
 import { patchTerminalMouseWithRetry } from "./terminal-mouse-patch";
 import { registerWebglSlotClient, unregisterWebglSlotClient, reconcileWebglSlots } from "./webgl-slots";
-import { useTileFont, FontStepper, handleFontKey } from "./tile-font";
+import { useTileFont, FontScaleControl, handleFontKey } from "./tile-font";
 import { identifyAgent, detectTileStatus, stabilizeClaudeStatus, normalizeAgentTitle, type TileStatus } from "./agent-state";
 import { registerClaude, unregisterClaude, shouldDeliver, peekWork, claimWork, clearWork, type SendToClaudeDetail } from "./claude-bus";
 import { publishStatus, clearStatus, noteOutput, revalidate, type TileStatusKind } from "./agent-status-bus";
@@ -144,6 +145,12 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
   // Render-quality HUD (Ctrl/Cmd+Shift+D). `diag` holds the live readings.
   const [debug, setDebug] = useState<boolean>(loadTermDebug);
   const [diag, setDiag] = useState<Record<string, string>>({});
+  // Crisp fit-to-screen overlay. When on, the LIVE .xterm DOM node is re-parented
+  // into a fullscreen portal at document.body (see the reparent effect) — the
+  // canvas layout + every other node stay untouched, and the bigger viewport
+  // grows the grid (more cols/rows) at 100% zoom instead of scaling/zooming.
+  const [overlay, setOverlay] = useState(false);
+  const overlayHostRef = useRef<HTMLDivElement | null>(null);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -896,6 +903,61 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
     } catch { /* torn down */ }
   }, [font.size]);
 
+  // ── CRISP FIT-TO-SCREEN OVERLAY ───────────────────────────────────────────
+  // Re-parent the LIVE .xterm node into a fullscreen portal (document.body) and
+  // back, WITHOUT recreating the terminal: the xterm buffer + PTY are independent
+  // of the DOM parent, so moving term.element preserves both — no term.open(), no
+  // respawn. After each move, fit() recomputes cols/rows → fires term.onResize →
+  // the app forwards it to the PTY (SIGWINCH), so the grid GROWS into the bigger
+  // viewport at 100% zoom (crisp) instead of scaling. position:fixed INSIDE a
+  // react-flow node does not escape react-flow's CSS transform (why earlier
+  // in-place attempts broke); the portal at document.body sidesteps it entirely.
+  useEffect(() => {
+    const term = termRef.current;
+    const el = term?.element;
+    if (!term || !el) return;
+    if (overlay) {
+      const dest = overlayHostRef.current;
+      if (dest && el.parentElement !== dest) dest.appendChild(el);
+    } else {
+      const host = hostRef.current;
+      if (host && el.parentElement !== host) host.appendChild(el);
+    }
+    const raf = requestAnimationFrame(() => {
+      try {
+        fitRef.current?.fit();
+        term.refresh(0, term.rows - 1);
+        if (selectedRef.current) term.focus();
+      } catch { /* torn down */ }
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [overlay]);
+
+  // Esc exits the overlay — bound ONLY while it's open, so a TUI's Esc is never
+  // intercepted normally. Capture phase wins before xterm sees the key.
+  useEffect(() => {
+    if (!overlay) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setOverlay(false); }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [overlay]);
+
+  // Global scale shortcuts (main → App → CustomEvent), targeting the SELECTED
+  // tile only — mirrors the per-tile font keys. Ctrl/Cmd+Shift+F toggles the fit
+  // overlay; Ctrl/Cmd+Shift+0 grows the font to the screen's best (auto-reset).
+  useEffect(() => {
+    const onFit = () => { if (selectedRef.current) setOverlay((v) => !v); };
+    const onReset = () => { if (selectedRef.current) fontCtlRef.current.best(); };
+    window.addEventListener("hivemind:fit-overlay", onFit);
+    window.addEventListener("hivemind:reset-scale", onReset);
+    return () => {
+      window.removeEventListener("hivemind:fit-overlay", onFit);
+      window.removeEventListener("hivemind:reset-scale", onReset);
+    };
+  }, []);
+
   // Sync the HUD toggle across tiles.
   useEffect(() => {
     const onDbg = (e: Event) => setDebug((e as CustomEvent<boolean>).detail);
@@ -968,7 +1030,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
           wide) carried `.tile-drag-handle` — invisible target, users
           clicked the wide header bar expecting drag and nothing happened
           (verified via playwright element-from-point probe). */}
-      <div className="tile-drag-handle h-8 flex items-center gap-2 px-2.5 bg-[var(--color-bg3)] border-b border-[var(--color-line)] text-[11px] font-mono text-[var(--color-fg2)] cursor-grab active:cursor-grabbing">
+      <div className="group tile-drag-handle h-8 flex items-center gap-2 px-2.5 bg-[var(--color-bg3)] border-b border-[var(--color-line)] text-[11px] font-mono text-[var(--color-fg2)] cursor-grab active:cursor-grabbing">
         <GripVertical aria-hidden size={13} className="text-[var(--color-fg3)] -ml-1 shrink-0" />
         {editing ? (
           <input
@@ -1010,8 +1072,18 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
         )}
         <span aria-hidden className="text-[var(--color-line2)]">·</span>
         <span className="text-[var(--color-fg2)]">{cmd.split("/").slice(-1)[0]}</span>
-        <span className="ml-auto">
-          <FontStepper {...font} />
+        <span className="ml-auto flex items-center gap-1.5">
+          <FontScaleControl {...font} />
+          {/* Crisp fit-to-screen: re-parents the live terminal into a fullscreen
+              overlay and GROWS the grid (no zoom). nodrag so it doesn't drag. */}
+          <button
+            onClick={() => setOverlay((v) => !v)}
+            className="nodrag size-4 grid place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--color-line2)] hover:text-[var(--color-fg)] transition-colors cursor-pointer text-[11px] leading-none"
+            aria-label="fit terminal to screen"
+            title="Fit to screen (Ctrl/Cmd ⇧F) · Esc to exit"
+          >
+            ⤢
+          </button>
         </span>
         <span className="inline-flex items-center gap-1.5 text-[10px]" title="agent status — working / idle / blocked / exited">
           <span
@@ -1061,6 +1133,31 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
           </div>
         )}
       </div>
+      {/* Fullscreen fit overlay. Portaled to document.body so it escapes
+          react-flow's CSS transform; the live .xterm node is moved INTO
+          overlayHostRef by the reparent effect (PTY + buffer preserved). The
+          canvas + every other node stay mounted and untouched underneath. */}
+      {overlay && createPortal(
+        <div className="hm-term-overlay fixed inset-0 z-[9999] flex flex-col bg-[#300A24]">
+          <div className="group h-8 flex items-center gap-2 px-3 text-[11px] font-mono text-white/80 bg-black/30 shrink-0">
+            <span className="font-semibold text-white/95">{name?.trim() || "Terminal"}</span>
+            <span aria-hidden className="text-white/35">·</span>
+            <span className="text-white/55">fit to screen — grid grows at 100% zoom (crisp)</span>
+            <span className="ml-auto flex items-center gap-2">
+              <FontScaleControl {...font} />
+              <button
+                onClick={() => setOverlay(false)}
+                className="nodrag rounded border border-white/20 px-1.5 h-5 grid place-items-center text-[10px] text-white/80 hover:bg-white/10 hover:text-white transition-colors"
+                title="Exit fit overlay (Esc)"
+              >
+                Esc ✕
+              </button>
+            </span>
+          </div>
+          <div ref={overlayHostRef} className="flex-1 min-h-0 min-w-0 overflow-hidden p-2" />
+        </div>,
+        document.body,
+      )}
     </div>
   );
 }

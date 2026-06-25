@@ -7,6 +7,10 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Added
+
+- **Terminal scaling — hover slider + crisp fit-to-screen + scale shortcuts.** Each terminal header now reveals a **scale slider on hover** that drives the per-tile font size (crisp — scaling grows the grid, never zooms). New **⤢ fit-to-screen** affordance re-parents the live `.xterm` node into a fullscreen overlay (via a `document.body` portal, so it escapes react-flow's transform) and **grows the grid at 100% zoom** instead of zooming — PTY + scrollback are preserved (no respawn), and the canvas + other tiles stay untouched; **Esc** exits. The numeric chip is now a one-click **"best size for this screen"** reset (computed from screen dimensions + DPR). New modifier shortcuts work even when a terminal is focused (forwarded from main before xterm eats them): **Ctrl/Cmd+.** focuses the selected tile (the plain `.` binding failed inside a focused terminal), **Ctrl/Cmd+Shift+F** toggles the fit overlay, **Ctrl/Cmd+Shift+0** resets the scale.
+
 ## [1.8.4] — 2026-06-26
 
 ### Fixed
