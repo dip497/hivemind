@@ -5,10 +5,10 @@
   "type": "module",
   "main": "./out/main/index.js",
   "scripts": {
-    "dev": "electron-vite dev",
+    "dev": "ELECTRON_DISABLE_SANDBOX=1 electron-vite dev",
     "dev:bridge": "tsx src/dev-bridge/server.ts",
     "build": "electron-vite build",
-    "start": "electron-vite preview",
+    "start": "ELECTRON_DISABLE_SANDBOX=1 electron-vite preview",
     "dist": "electron-vite build && electron-builder --linux AppImage",
     "typecheck": "tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.node.json",
     "test:unit": "tsx --test tests/unit/*.test.ts",

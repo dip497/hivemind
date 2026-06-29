@@ -1,7 +1,7 @@
 /** Electron main process — owns the BrowserWindow + IPC + PtyHost + git/worktree. */
 import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, session, shell, webContents } from "electron";
 import path from "node:path";
-import { promises as fsp, statSync, readFileSync, writeFileSync, existsSync, cpSync, mkdirSync } from "node:fs";
+import { promises as fsp, statSync, readFileSync, writeFileSync, existsSync, cpSync, mkdirSync, readdirSync, unlinkSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
@@ -94,6 +94,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // .desktop StartupWMClass matches "electron". (Packaged AppImage already gets
 // this from electron-builder's executableName, but setting it is harmless there.)
 app.setName("hivemind");
+// Dev runs on a SEPARATE profile (~/.config/hivemind-dev) so `pnpm start`/`pnpm
+// dev` never touch the installed AppImage's canvas, and both can run at once.
+if (!app.isPackaged) app.setName("hivemind-dev");
 
 // Renaming the app (above) moves the userData dir to ~/.config/hivemind. Without
 // this, EVERY existing user loses their canvas (frames/tiles/layout live in the
@@ -1295,6 +1298,15 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     // files the user explicitly chose, and (b) makes the wallpaper survive the
     // original being moved/deleted. The dest name is a hash of the source path
     // (+ext) so re-picking the same file is idempotent.
+    // Classify a wallpaper file by extension so import can prune OLD files of the
+    // same kind — only one video + one image can ever be active, so keeping every
+    // file the user ever picked just leaked hundreds of MB into userData.
+    const VIDEO_EXT = new Set([".mp4", ".webm", ".mov", ".mkv", ".m4v", ".ogv"]);
+    const IMAGE_EXT = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif", ".bmp"]);
+    const mediaKind = (f: string): "video" | "image" | null => {
+      const e = path.extname(f).toLowerCase();
+      return VIDEO_EXT.has(e) ? "video" : IMAGE_EXT.has(e) ? "image" : null;
+    };
     ipcMain.handle("wallpaper:import", (_e, srcPath: unknown) => {
       try {
         const src = path.resolve(String(srcPath));
@@ -1306,6 +1318,19 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
         const base = path.basename(src).replace(/[^.\w-]/g, "_").slice(-60);
         const dest = path.join(wallpaperDir, `${createHash("sha1").update(src).digest("hex").slice(0, 8)}-${base}`);
         cpSync(src, dest);
+        // Prune previously-imported files of the SAME kind (the just-replaced
+        // wallpaper + any older orphans) — only the newest video/image is ever
+        // referenced, so this caps the dir at one video + one image instead of
+        // accumulating every pick forever.
+        const kind = mediaKind(dest);
+        if (kind) {
+          for (const f of readdirSync(wallpaperDir)) {
+            const abs = path.join(wallpaperDir, f);
+            if (abs !== dest && mediaKind(abs) === kind) {
+              try { unlinkSync(abs); } catch { /* best-effort */ }
+            }
+          }
+        }
         return `hm-media://v/${encodeURIComponent(dest)}`;
       } catch {
         return null;

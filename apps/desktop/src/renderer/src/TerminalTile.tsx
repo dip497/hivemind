@@ -1,5 +1,4 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
@@ -16,6 +15,7 @@ import { SUBMIT_DELAY_MS } from "../../shared/agent-io";
 import { Pencil, GripVertical } from "lucide-react";
 import { webUrlForInternalBrowser } from "./browser-open";
 import { useTheme, getTheme } from "./theme-store";
+import { FullscreenShell, useReparentFullscreen } from "./tile-fullscreen";
 
 /** Open a terminal link in the OS browser. window.open is intercepted by main's
  *  setWindowOpenHandler → shell.openExternal (and the in-app navigation denied),
@@ -904,45 +904,24 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
   }, [font.size]);
 
   // ── CRISP FIT-TO-SCREEN OVERLAY ───────────────────────────────────────────
-  // Re-parent the LIVE .xterm node into a fullscreen portal (document.body) and
-  // back, WITHOUT recreating the terminal: the xterm buffer + PTY are independent
-  // of the DOM parent, so moving term.element preserves both — no term.open(), no
-  // respawn. After each move, fit() recomputes cols/rows → fires term.onResize →
-  // the app forwards it to the PTY (SIGWINCH), so the grid GROWS into the bigger
-  // viewport at 100% zoom (crisp) instead of scaling. position:fixed INSIDE a
-  // react-flow node does not escape react-flow's CSS transform (why earlier
-  // in-place attempts broke); the portal at document.body sidesteps it entirely.
-  useEffect(() => {
-    const term = termRef.current;
-    const el = term?.element;
-    if (!term || !el) return;
-    if (overlay) {
-      const dest = overlayHostRef.current;
-      if (dest && el.parentElement !== dest) dest.appendChild(el);
-    } else {
-      const host = hostRef.current;
-      if (host && el.parentElement !== host) host.appendChild(el);
-    }
-    const raf = requestAnimationFrame(() => {
-      try {
-        fitRef.current?.fit();
-        term.refresh(0, term.rows - 1);
-        if (selectedRef.current) term.focus();
-      } catch { /* torn down */ }
-    });
-    return () => cancelAnimationFrame(raf);
-  }, [overlay]);
-
-  // Esc exits the overlay — bound ONLY while it's open, so a TUI's Esc is never
-  // intercepted normally. Capture phase wins before xterm sees the key.
-  useEffect(() => {
-    if (!overlay) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setOverlay(false); }
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, [overlay]);
+  // Move the LIVE .xterm node into the fullscreen glass panel and back, WITHOUT
+  // recreating the terminal: the xterm buffer + PTY are independent of the DOM
+  // parent, so the shared hook just re-parents term.element (we hold the ref).
+  // After each move, fit() recomputes cols/rows → term.onResize → PTY SIGWINCH, so
+  // the grid GROWS into the bigger viewport at 100% zoom (crisp), no scaling.
+  useReparentFullscreen({
+    open: overlay,
+    node: () => termRef.current?.element,
+    homeRef: hostRef,
+    hostRef: overlayHostRef,
+    afterMove: () => {
+      const term = termRef.current;
+      if (!term) return;
+      fitRef.current?.fit();
+      term.refresh(0, term.rows - 1);
+      if (selectedRef.current) term.focus();
+    },
+  });
 
   // Global scale shortcuts (main → App → CustomEvent), targeting the SELECTED
   // tile only — mirrors the per-tile font keys. Ctrl/Cmd+Shift+F toggles the fit
@@ -1072,7 +1051,28 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
         )}
         <span aria-hidden className="text-[var(--color-line2)]">·</span>
         <span className="text-[var(--color-fg2)]">{cmd.split("/").slice(-1)[0]}</span>
-        <span className="ml-auto flex items-center gap-1.5">
+        {/* Font / scale / fullscreen controls — revealed only on header hover
+            (group-hover). Two SEPARATE controls: font size (A−/A+, density only)
+            and whole-tile scale (−/+, grows the node box + font in proportion). */}
+        <span className="ml-auto flex items-center gap-1.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-150">
+          {/* Font size only (A−/A+) */}
+          <span className="nodrag inline-flex items-center rounded bg-[var(--color-bg)] border border-[var(--color-line2)] overflow-hidden" title="Font size (Ctrl/Cmd ±)">
+            <button
+              onClick={font.dec}
+              className="px-1 text-[10px] leading-none text-[var(--color-fg3)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg4)] transition-colors h-4 grid place-items-center"
+              aria-label="decrease font size"
+            >
+              A−
+            </button>
+            <button
+              onClick={font.inc}
+              className="px-1 text-[11px] leading-none text-[var(--color-fg3)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg4)] transition-colors h-4 grid place-items-center border-l border-[var(--color-line2)]"
+              aria-label="increase font size"
+            >
+              A+
+            </button>
+          </span>
+          {/* Whole-tile scale (− size +) */}
           <FontScaleControl
             {...font}
             onScale={(ratio) =>
@@ -1081,13 +1081,13 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
               )
             }
           />
-          {/* Crisp fit-to-screen: re-parents the live terminal into a fullscreen
-              overlay and GROWS the grid (no zoom). nodrag so it doesn't drag. */}
+          {/* Fullscreen: re-parents the live terminal into a wallpaper overlay and
+              GROWS the grid (no zoom). nodrag so it doesn't drag. */}
           <button
             onClick={() => setOverlay((v) => !v)}
             className="nodrag size-4 grid place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--color-line2)] hover:text-[var(--color-fg)] transition-colors cursor-pointer text-[11px] leading-none"
-            aria-label="fit terminal to screen"
-            title="Fit to screen (Ctrl/Cmd ⇧F) · Esc to exit"
+            aria-label="fullscreen terminal"
+            title="Fullscreen (Ctrl/Cmd ⇧F) · Esc to exit"
           >
             ⤢
           </button>
@@ -1140,30 +1140,16 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
           </div>
         )}
       </div>
-      {/* Fullscreen fit overlay. Portaled to document.body so it escapes
-          react-flow's CSS transform; the live .xterm node is moved INTO
-          overlayHostRef by the reparent effect (PTY + buffer preserved). The
-          canvas + every other node stay mounted and untouched underneath. */}
-      {overlay && createPortal(
-        <div className="hm-term-overlay fixed inset-0 z-[9999] flex flex-col bg-[#300A24]">
-          <div className="group h-8 flex items-center gap-2 px-3 text-[11px] font-mono text-white/80 bg-black/30 shrink-0">
-            <span className="font-semibold text-white/95">{name?.trim() || "Terminal"}</span>
-            <span aria-hidden className="text-white/35">·</span>
-            <span className="text-white/55">fit to screen — grid grows at 100% zoom (crisp)</span>
-            <span className="ml-auto flex items-center gap-2">
-              <FontScaleControl {...font} />
-              <button
-                onClick={() => setOverlay(false)}
-                className="nodrag rounded border border-white/20 px-1.5 h-5 grid place-items-center text-[10px] text-white/80 hover:bg-white/10 hover:text-white transition-colors"
-                title="Exit fit overlay (Esc)"
-              >
-                Esc ✕
-              </button>
-            </span>
-          </div>
-          <div ref={overlayHostRef} className="flex-1 min-h-0 min-w-0 overflow-hidden p-2" />
-        </div>,
-        document.body,
+      {/* Fullscreen: the live .xterm node is reparented into the shared shell's
+          glass panel (overlayHostRef) by useReparentFullscreen — PTY + buffer
+          preserved — floating over a clean copy of the live wallpaper. */}
+      {overlay && (
+        <FullscreenShell
+          title={name?.trim() || "Terminal"}
+          font={font}
+          hostRef={overlayHostRef}
+          onClose={() => setOverlay(false)}
+        />
       )}
     </div>
   );

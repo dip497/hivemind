@@ -11,8 +11,56 @@
 import type { ReactNode } from "react";
 import { MessageSquare, Trash2, Tag } from "lucide-react";
 import { QUICK_LABELS } from "./plan-review/types";
+import type { ReviewComment } from "./diff-comments";
 
 export { QUICK_LABELS };
+
+/** Anchor a comment popover just under a clicked line, flipping above it when it
+ *  would fall off the host's bottom edge. Shared by DiffTile + the Workbench diff
+ *  so the composer positions identically in both. */
+export function composerAnchor(
+  hostEl: HTMLElement | null,
+  lineEl: HTMLElement | null,
+): { x: number; y: number } {
+  const hostRect = hostEl?.getBoundingClientRect();
+  const lineRect = lineEl?.getBoundingClientRect();
+  if (!hostRect || !lineRect) return { x: 44, y: 44 };
+  const yBelow = lineRect.bottom - hostRect.top;
+  const flip = yBelow > hostRect.height - 150;
+  return {
+    x: lineRect.left - hostRect.left + 44,
+    y: flip ? Math.max(4, lineRect.top - hostRect.top - 140) : yBelow,
+  };
+}
+
+/** Inline diff annotation card (the rendered review comment shown under a line).
+ *  Shared so DiffTile and the Workbench diff render comments identically. */
+export function ReviewAnnotation({ comment: c }: { comment: ReviewComment | undefined }) {
+  if (!c) return null;
+  return (
+    <div
+      style={{
+        background: "rgba(245,159,0,0.08)",
+        borderLeft: "3px solid var(--color-warn)",
+        padding: "5px 12px 5px 56px",
+        fontFamily: "var(--font-sans)",
+        fontSize: 11,
+        color: "var(--color-warn)",
+      }}
+    >
+      <span style={{ color: "var(--color-fg)", fontWeight: 600 }}>{c.author}</span>
+      {c.startLine !== c.endLine && (
+        <span style={{ marginLeft: 6, color: "var(--color-fg3)", fontSize: 10 }}>L{c.startLine}–{c.endLine}</span>
+      )}
+      {c.resolved && <span style={{ marginLeft: 6, color: "var(--color-ok)", fontSize: 10 }}>✓ resolved</span>}
+      <span style={{ marginLeft: 8, color: c.resolved ? "var(--color-fg3)" : undefined }}>{c.body}</span>
+      {!!c.replies?.length && (
+        <span style={{ marginLeft: 6, color: "var(--color-fg3)", fontSize: 10 }}>💬 {c.replies.length}</span>
+      )}
+      <span style={{ color: "var(--color-fg3)", float: "right", fontSize: 10 }}>{c.at}</span>
+    </div>
+  );
+}
 
 /** A small popover anchored within a scroll/positioned container (absolute
  *  coords relative to that container). Click-outside closes it. */

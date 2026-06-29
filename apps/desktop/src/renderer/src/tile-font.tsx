@@ -88,68 +88,50 @@ export function FontStepper({ size, inc, dec, reset }: TileFont) {
 }
 
 /**
- * Hover-revealed scale slider for the terminal header. The slider is collapsed
- * (width 0) by default and expands on header hover — so it stays out of the way
- * yet gives a continuous, crisp scale control (font px → cols/rows) without
- * leaving 100% canvas zoom. The numeric chip = current px AND a one-click "best
- * for this screen" reset; A−/A+ remain for keyboard-free fine steps.
- *
- * Mounts inside a `group`-classed header so the `group-hover:` width transition
- * fires. `nodrag` everywhere so dragging the slider never starts a tile drag.
+ * Terminal scale control — A−/A+ buttons that scale the WHOLE terminal in
+ * proportion (font px AND the tile node box grow together via `onScale`), so it
+ * stays crisp: nothing zooms, the bigger box just fits more cols/rows at 100%
+ * canvas zoom. The numeric chip clicks to the screen's best size, double-clicks
+ * to the kind default. `nodrag` everywhere so clicks never start a tile drag.
  */
 export function FontScaleControl({
-  size, inc, dec, reset, set, best, onScale,
+  size, reset, set, best, onScale,
 }: TileFont & {
-  /** Drag delta as a ratio (new/old) so the host can scale the whole tile node
+  /** Step delta as a ratio (new/old) so the host can scale the whole tile node
    *  in proportion with the font — passed by TerminalTile, omitted elsewhere. */
   onScale?: (ratio: number) => void;
 }) {
+  const step = (dir: 1 | -1) => {
+    const next = Math.max(MIN, Math.min(MAX, size + dir));
+    if (onScale && size > 0 && next !== size) onScale(next / size);
+    set(next);
+  };
   return (
-    <span className="nodrag inline-flex items-center gap-1">
-      <input
-        type="range"
-        min={MIN}
-        max={MAX}
-        step={1}
-        value={size}
-        onChange={(e) => {
-          const next = Number(e.target.value);
-          // Scale the tile box in proportion to the font step (crisp — font px
-          // stays integer, the bigger box just fits more cols/rows at 100% zoom).
-          if (onScale && size > 0 && next !== size) onScale(next / size);
-          set(next);
-        }}
-        onDoubleClick={best}
-        aria-label="terminal scale"
-        title="Drag to scale the whole terminal (crisp) · double-click = best for screen"
-        className="hm-font-slider nodrag h-1 w-0 opacity-0 group-hover:w-20 group-hover:opacity-100 transition-[width,opacity] duration-150 cursor-ew-resize accent-[var(--color-accent)]"
-      />
-      <span className="nodrag inline-flex items-center rounded bg-[var(--color-bg)] border border-[var(--color-line2)] overflow-hidden">
-        <button
-          onClick={dec}
-          className="px-1 text-[10px] leading-none text-[var(--color-fg3)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg4)] transition-colors h-4 grid place-items-center"
-          title="Smaller font (Ctrl/Cmd −)"
-          aria-label="decrease font size"
-        >
-          A−
-        </button>
-        <button
-          onClick={best}
-          onDoubleClick={reset}
-          className="px-1 text-[9px] leading-none tabular-nums text-[var(--color-fg3)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg4)] transition-colors h-4 grid place-items-center border-x border-[var(--color-line2)]"
-          title="Best size for this screen (Ctrl/Cmd ⇧0) · double-click = default"
-        >
-          {size}
-        </button>
-        <button
-          onClick={inc}
-          className="px-1 text-[11px] leading-none text-[var(--color-fg3)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg4)] transition-colors h-4 grid place-items-center"
-          title="Larger font (Ctrl/Cmd +)"
-          aria-label="increase font size"
-        >
-          A+
-        </button>
-      </span>
+    <span className="nodrag inline-flex items-center rounded bg-[var(--color-bg)] border border-[var(--color-line2)] overflow-hidden">
+      <button
+        onClick={() => step(-1)}
+        className="px-1 text-[11px] leading-none text-[var(--color-fg3)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg4)] transition-colors h-4 grid place-items-center"
+        title="Scale the whole terminal down"
+        aria-label="scale terminal down"
+      >
+        −
+      </button>
+      <button
+        onClick={best}
+        onDoubleClick={reset}
+        className="px-1 text-[9px] leading-none tabular-nums text-[var(--color-fg3)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg4)] transition-colors h-4 grid place-items-center border-x border-[var(--color-line2)]"
+        title="Best size for this screen · double-click = default"
+      >
+        {size}
+      </button>
+      <button
+        onClick={() => step(1)}
+        className="px-1 text-[11px] leading-none text-[var(--color-fg3)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg4)] transition-colors h-4 grid place-items-center"
+        title="Scale the whole terminal up"
+        aria-label="scale terminal up"
+      >
+        +
+      </button>
     </span>
   );
 }

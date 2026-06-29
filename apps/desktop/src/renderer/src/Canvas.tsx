@@ -1355,11 +1355,23 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace, updateAvai
         />
         <ThemeCustomizer open={customizerOpen} onClose={() => setCustomizerOpen(false)} />
         {claudePick && (
-          <div className="fixed inset-0 z-50 grid place-items-center" onClick={() => setClaudePick(null)}>
+          // z above the tile fullscreen overlay (z-[9999]) so the picker shows ON
+          // TOP of a fullscreened diff/editor instead of behind it.
+          <div className="fixed inset-0 z-[10000] grid place-items-center" onClick={() => setClaudePick(null)}>
             <div className="absolute inset-0 bg-black/40" />
             <div className="relative w-[340px] max-w-[90vw] rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] shadow-2xl p-1.5" onClick={(e) => e.stopPropagation()}>
-              <div className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-fg3)]">
-                Send to claude
+              <div className="flex items-center px-2 py-1.5">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-fg3)]">
+                  Send to claude
+                </span>
+                <button
+                  onClick={() => setClaudePick(null)}
+                  className="ml-auto size-4 grid place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--color-bg4)] hover:text-[var(--color-fg)] transition-colors text-[12px] leading-none"
+                  aria-label="cancel"
+                  title="cancel (Esc)"
+                >
+                  ×
+                </button>
               </div>
               {tiles.filter((t) => t.kind === "claude").map((t) => {
                 const name = tileNames[t.id] ?? agentTitles[t.id] ?? t.label;
@@ -1383,6 +1395,12 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace, updateAvai
               >
                 <span className="shrink-0 grid place-items-center size-3.5 text-[var(--color-fg3)]">+</span>
                 <span className="flex-1">New claude</span>
+              </button>
+              <button
+                onClick={() => setClaudePick(null)}
+                className="w-full text-left px-2 py-1 mt-0.5 rounded-md text-[11px] text-[var(--color-fg3)] hover:bg-[var(--color-bg3)] transition-colors"
+              >
+                cancel
               </button>
             </div>
           </div>

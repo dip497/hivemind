@@ -695,6 +695,18 @@ html.content-glass .md-preview code {
   --wp-2: #14b8a6;
   --wp-3: #7c3aed;
 }
+/* Embedded variant: fill the positioned parent (e.g. the fit-to-screen overlay)
+   instead of the fixed full-window layer, so a fullscreen terminal floats over a
+   clean copy of the wallpaper rather than the canvas + other tiles. */
+.hm-wallpaper.embedded { position: absolute; z-index: 0; }
+/* Fit-to-screen glass panel — the SAME content tint + blur recipe as the canvas
+   glass tiles (--surface-3 at --content-opacity, --glass-blur), so fullscreen
+   matches the tile the user came from instead of an ad-hoc dark scrim. */
+.hm-term-fs-panel {
+  background-color: color-mix(in srgb, var(--surface-3) var(--content-opacity, 25%), transparent);
+  backdrop-filter: blur(var(--glass-blur, 16px)) saturate(135%);
+  -webkit-backdrop-filter: blur(var(--glass-blur, 16px)) saturate(135%);
+}
 .hm-wallpaper[data-scene="aurora"] { --wp-base: #090c16; --wp-1: #4f46e5; --wp-2: #14b8a6; --wp-3: #7c3aed; }
 .hm-wallpaper[data-scene="ember"]  { --wp-base: #130a07; --wp-1: #f97316; --wp-2: #db2777; --wp-3: #fbbf24; }
 .hm-wallpaper[data-scene="ice"]    { --wp-base: #05111a; --wp-1: #0ea5e9; --wp-2: #22d3ee; --wp-3: #6366f1; }

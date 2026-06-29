@@ -147,12 +147,20 @@ export function makeDispatch(deps: MethodDeps): (method: string, params: unknown
     }
     if (!deps.spawnAllowed()) throw new HcpError("RATE_LIMITED", "spawn rate limit exceeded");
     const agent = String(opts.agent ?? "claude");
+    const sup = normalizeSupervise(opts.supervise);
+    // Default an AGENT-SPAWNED worker to AUTO (bypassPermissions): a delegated
+    // worker has no human at its tile, so inheriting the UI's "default" mode would
+    // hang it on the first permission prompt. Two cases keep the human/broker in
+    // the loop and must NOT auto-skip: an explicit `mode` from the caller wins, and
+    // a `supervise`d worker routes its prompts to the parent (its PreToolUse broker
+    // only fires if permissions aren't skipped).
+    const mode = opts.mode != null ? opts.mode : sup ? undefined : "bypassPermissions";
     const res = (await deps.callRenderer(
       "tile.spawn_agent",
       // `background` = a silent worker (report:false → gathered in bulk, e.g. a
       // workflow worker). The renderer uses it to NOT steal focus / center the
       // viewport on spawn and to suppress the per-worker "finished" notification.
-      { agent, prompt: opts.prompt, frame: opts.frame, mode: opts.mode, callerTile: opts.callerTile, background: opts.report === false },
+      { agent, prompt: opts.prompt, frame: opts.frame, mode, callerTile: opts.callerTile, background: opts.report === false },
       RENDERER_TIMEOUT,
     )) as { tileId?: string };
     if (!res?.tileId) throw new HcpError("INTERNAL", "spawn returned no tileId");
@@ -161,7 +169,6 @@ export function makeDispatch(deps: MethodDeps): (method: string, params: unknown
       const parentBare = bareOf(String(opts.callerTile));
       parentOf.set(res.tileId, parentBare);
       if (opts.report !== false && parentBare !== res.tileId) deps.connect(res.tileId, parentBare);
-      const sup = normalizeSupervise(opts.supervise);
       if (sup) deps.setSupervise(res.tileId, sup);
     }
     armRead(res.tileId);

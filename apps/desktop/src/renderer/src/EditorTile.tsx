@@ -14,6 +14,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ExternalLink, GripVertical } from "lucide-react";
 import { useTileFont, FontStepper, handleFontKey } from "./tile-font";
+import { FullscreenShell, useReparentFullscreen } from "./tile-fullscreen";
 import { EditorState, type Extension, Compartment } from "@codemirror/state";
 import {
   EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter,
@@ -58,7 +59,7 @@ interface Props {
   /** Activate-this-file request from the host (tree click). The `seq` makes
    *  re-selecting an already-open file a fresh request, so clicking a file that's
    *  already a tab switches back to it instead of being a no-op. */
-  activeReq?: { path: string; seq: number } | null;
+  activeReq?: { path: string; seq: number; diff?: boolean } | null;
   /** Open a URL in the frame's browser tile. */
   onOpenInBrowser?: (url: string) => void;
   /** Close the whole tile. Omitted when embedded (the host owns chrome). */
@@ -228,6 +229,17 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, onO
 
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
+  // Fullscreen: move the live CodeMirror .cm-editor node into the shared shell's
+  // glass panel and back (state + undo history preserved — we only reparent it).
+  const [overlay, setOverlay] = useState(false);
+  const overlayHostRef = useRef<HTMLDivElement | null>(null);
+  useReparentFullscreen({
+    open: overlay,
+    node: () => viewRef.current?.dom,
+    homeRef: hostRef,
+    hostRef: overlayHostRef,
+    afterMove: () => viewRef.current?.requestMeasure(),
+  });
   const langCompartment = useRef(new Compartment());
   // unifiedMergeView is reconfigured per tab — also a Compartment so we can
   // toggle without rebuilding state.
@@ -251,6 +263,12 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, onO
     lastReqSeqRef.current = next.seq;
     if (next.active !== active) setActive(next.active);
   }, [tabs, active, activeReq]);
+
+  // A Changes-panel open requests diff mode for that file (editable inline merge
+  // vs HEAD). Independent of activation so re-opening the same file re-arms it.
+  useEffect(() => {
+    if (activeReq?.diff) setDiffMode((m) => (m[activeReq.path] ? m : { ...m, [activeReq.path]: true }));
+  }, [activeReq]);
 
   // Drop cached buffers + meta + diffMode for closed tabs (avoid unbounded growth).
   useEffect(() => {
@@ -689,6 +707,17 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, onO
             );
           })
         )}
+        {/* Fullscreen — in the tab bar so it shows even when the editor is
+            embedded in the Workbench (which strips the standalone header).
+            Sticky so it stays put when the tabs overflow-scroll. */}
+        <button
+          onClick={() => setOverlay((v) => !v)}
+          className="nodrag ml-auto sticky right-0 shrink-0 px-2 grid place-items-center bg-[var(--color-bg2)] border-l border-[var(--color-line)] text-[var(--color-fg3)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg3)] transition-colors text-[12px] leading-none"
+          aria-label="fullscreen editor"
+          title="Fullscreen · Esc to exit"
+        >
+          ⤢
+        </button>
       </div>
 
       {/* Changed-on-disk banner: the file was edited externally while this tab
@@ -746,6 +775,14 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, onO
           </Suspense>
         )}
       </div>
+      {overlay && (
+        <FullscreenShell
+          title={active ? (active.split("/").pop() ?? "Editor") : "Editor"}
+          font={font}
+          hostRef={overlayHostRef}
+          onClose={() => setOverlay(false)}
+        />
+      )}
     </div>
   );
 }

@@ -24,8 +24,10 @@ import {
   useState,
 } from "react";
 import { GripVertical, Play, RefreshCw, Search, SlidersHorizontal } from "lucide-react";
-import { ReviewPopover, CommentBox, ActionToolbar } from "./review-ui";
+import { ReviewPopover, CommentBox, ActionToolbar, ReviewAnnotation, composerAnchor } from "./review-ui";
 import { useTileFont, FontStepper, handleFontKey } from "./tile-font";
+import { FullscreenShell } from "./tile-fullscreen";
+import { DiffSurface } from "./code/DiffSurface";
 import {
   CodeView,
   UnresolvedFile,
@@ -47,16 +49,15 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import type { DiffScope, GitBranchList, GitFileEntry, GitStatusSnapshot } from "../../shared/ipc";
+import type { DiffScope, GitBranchList, GitFileEntry } from "../../shared/ipc";
 import {
   useDiscardFiles,
-  useGitCommit,
   useGitDiff,
-  useGitPush,
   useGitStatus,
   useStageFiles,
   useUnstageFiles,
 } from "./queries";
+import { CommitBar } from "./code/CommitBar";
 import {
   PIERRE_CSS_VARS,
   workerHighlighterOptions,
@@ -69,7 +70,8 @@ import type {
   FileTreeRowDecoration,
 } from "@pierre/trees";
 import { DiffReviewPanel } from "./DiffReviewPanel";
-import { normalizeComments, newCid, type ReviewComment } from "./diff-comments";
+import { newCid, formatCommentMessage, formatReviewMessage, type ReviewComment } from "./diff-comments";
+import { loadComments, saveComments, deliverToClaude } from "./code/review-store";
 
 interface Props {
   repoPath: string;
@@ -82,7 +84,6 @@ type Mode = "working" | "branch" | "unpushed";
 type Layout = "split" | "unified";
 type Overflow = "scroll" | "wrap";
 
-const COMMENTS_KEY_PREFIX = "hivemind:comments:";
 const VIEWED_KEY_PREFIX = "hivemind:viewed:";
 
 
@@ -115,6 +116,11 @@ function fileForLineEl(lineEl: HTMLElement | null, container: HTMLElement | null
 export function DiffTile({ repoPath, initialMode = "working", initialBase = "origin/main", onClose }: Props) {
   // Per-tile font size (A−/A+ + Ctrl/Cmd +/−/0) — overrides --diffs-font-size.
   const font = useTileFont(`diff:${repoPath}`, 13);
+  // Fullscreen: the Pierre CodeView is React-rendered (not an imperative node), so
+  // we REMOUNT the body inside the shared shell's glass panel while open (it stays
+  // under WorkerPoolContextProvider, so context flows through the portal).
+  const [overlay, setOverlay] = useState(false);
+  const overlayHostRef = useRef<HTMLDivElement | null>(null);
   // Chrome (per-file headers + changed-files tree) scales WITH the code font so
   // the whole diff grows together — A+/A− was only sizing the code glyphs, which
   // left the headers/tree looking tiny next to large code. Kept ~15% smaller
@@ -162,9 +168,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
     };
   }, [viewMenuOpen]);
 
-  const [comments, setComments] = useState<ReviewComment[]>(() =>
-    normalizeComments(loadJson<unknown>(COMMENTS_KEY_PREFIX + repoPath, [])),
-  );
+  const [comments, setComments] = useState<ReviewComment[]>(() => loadComments(repoPath));
   // Review panel (Figma/GitHub-style) open state — persisted.
   const [reviewOpen, setReviewOpen] = useState<boolean>(
     () => localStorage.getItem("hivemind:review-open") === "1",
@@ -217,7 +221,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
   const persistComments = useCallback(
     (next: ReviewComment[]) => {
       setComments(next);
-      localStorage.setItem(COMMENTS_KEY_PREFIX + repoPath, JSON.stringify(next));
+      saveComments(repoPath, next);
     },
     [repoPath],
   );
@@ -387,17 +391,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
   // gutter "+" and the line-number click. Stable (refs + setters only).
   const openComposerAt = useCallback(
     (file: string, startLine: number, endLine: number, side: AnnotationSide, lineEl: HTMLElement | null) => {
-      const hostRect = cvHostRef.current?.getBoundingClientRect();
-      const lineRect = lineEl?.getBoundingClientRect();
-      let anchor = { x: 44, y: 44 };
-      if (hostRect && lineRect) {
-        const yBelow = lineRect.bottom - hostRect.top;
-        // Flip the popover ABOVE the line when it would render off the tile's
-        // bottom edge (clicking a low line otherwise pushed the composer off-screen).
-        const flip = yBelow > hostRect.height - 150;
-        anchor = { x: lineRect.left - hostRect.left + 44, y: flip ? Math.max(4, lineRect.top - hostRect.top - 140) : yBelow };
-      }
-      setComposer({ file, startLine, endLine, side, anchor, stage: "choose" });
+      setComposer({ file, startLine, endLine, side, anchor: composerAnchor(cvHostRef.current, lineEl), stage: "choose" });
     },
     [],
   );
@@ -542,37 +536,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
   );
 
   const renderAnnotation = useCallback(
-    (annotation: DiffLineAnnotation<ReviewComment>) => {
-      const c = annotation.metadata;
-      if (!c) return null;
-      return (
-        <div
-          style={{
-            background: "rgba(245,159,0,0.08)",
-            borderLeft: "3px solid var(--color-warn)",
-            padding: "5px 12px 5px 56px",
-            fontFamily: "var(--font-sans)",
-            fontSize: 11,
-            color: "var(--color-warn)",
-          }}
-        >
-          <span style={{ color: "var(--color-fg)", fontWeight: 600 }}>{c.author}</span>
-          {c.startLine !== c.endLine && (
-            <span style={{ marginLeft: 6, color: "var(--color-fg3)", fontSize: 10 }}>
-              L{c.startLine}–{c.endLine}
-            </span>
-          )}
-          {c.resolved && (
-            <span style={{ marginLeft: 6, color: "var(--color-ok)", fontSize: 10 }}>✓ resolved</span>
-          )}
-          <span style={{ marginLeft: 8, color: c.resolved ? "var(--color-fg3)" : undefined }}>{c.body}</span>
-          {!!c.replies?.length && (
-            <span style={{ marginLeft: 6, color: "var(--color-fg3)", fontSize: 10 }}>💬 {c.replies.length}</span>
-          )}
-          <span style={{ color: "var(--color-fg3)", float: "right", fontSize: 10 }}>{c.at}</span>
-        </div>
-      );
-    },
+    (annotation: DiffLineAnnotation<ReviewComment>) => <ReviewAnnotation comment={annotation.metadata} />,
     [],
   );
 
@@ -628,35 +592,15 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
     cv.setSelectedLines({ id, range: { start: c.startLine, end: c.endLine, side: c.side } });
   }, []);
 
-  // Send review text to claude via the target picker (Canvas routes it: pick
-  // among existing claude tiles, or spawn a new one carrying the text — no more
-  // blind latest-or-spawn-with-a-2.5s-timeout).
-  const sendToClaude = useCallback((msg: string) => {
-    window.dispatchEvent(new CustomEvent("hivemind:deliver-to-claude", { detail: { text: msg } }));
-  }, []);
+  // Send review comments to claude via the target picker (Canvas routes the
+  // event). Formatting is shared with the Workbench diff (diff-comments).
   const sendComment = useCallback((c: ReviewComment) => {
-    const range = c.startLine === c.endLine ? `${c.startLine}` : `${c.startLine}-${c.endLine}`;
-    const thread = [c.body, ...(c.replies ?? []).map((r) => `  ↳ ${r.author}: ${r.body}`)].join("\n");
-    sendToClaude(`Address this review comment — ${c.file}:${range}:\n${thread}`);
-  }, [sendToClaude]);
-
-  // Send the whole review to claude as ONE message. If no claude tile is alive
-  // (latestClaude() === undefined → the send would vanish), spawn one first,
-  // then send after it boots. This is the answer to "how do my diff comments
-  // reach claude?": leave comments, click Send review.
+    deliverToClaude(formatCommentMessage(c));
+  }, []);
   const sendReview = useCallback(() => {
-    const open = comments.filter((c) => !c.resolved);
-    if (open.length === 0) return;
-    const lines = open
-      .map((c) => {
-        const side = c.side === "deletions" ? "old/left" : "new/right";
-        const range = c.startLine === c.endLine ? `${c.startLine}` : `${c.startLine}-${c.endLine}`;
-        const thread = (c.replies ?? []).map((r) => ` ↳ ${r.author}: ${r.body}`).join("\n");
-        return `- ${c.file}:${range} (${side}): ${c.body}${thread ? "\n" + thread : ""}`;
-      })
-      .join("\n");
-    sendToClaude(`Code review — ${open.length} unresolved comment${open.length > 1 ? "s" : ""} to address:\n${lines}`);
-  }, [comments, sendToClaude]);
+    const msg = formatReviewMessage(comments);
+    if (msg) deliverToClaude(msg);
+  }, [comments]);
 
   const loading = mode === "working" ? workingItems.isLoading : revItems.isLoading;
   const modeError = mode === "working" ? workingItems.error : revItems.error;
@@ -930,6 +874,14 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
             )}
           </button>
           <button
+            className="nodrag size-4 grid place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--color-line2)] hover:text-[var(--color-fg)] transition-colors cursor-pointer text-[11px] leading-none"
+            onClick={() => setOverlay((v) => !v)}
+            aria-label="fullscreen diff"
+            title="Fullscreen · Esc to exit"
+          >
+            ⤢
+          </button>
+          <button
             className="nodrag size-4 grid place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--color-line2)] hover:text-[var(--color-fg)] transition-colors cursor-pointer"
             aria-label="close tile"
             title="close"
@@ -944,6 +896,9 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
           flex-col so conflicts (flex-none) stack above the CodeView (flex-1
           min-h-0) without clipping it. */}
       <WorkerPoolContextProvider poolOptions={workerPoolOptions} highlighterOptions={workerHighlighterOptions}>
+       {(() => {
+        const diffBody = (
+         <>
        <div className="flex-1 min-h-0 flex overflow-hidden">
         {filesOpen && fileRows.length > 0 && !activeFile && (
           <aside
@@ -1109,110 +1064,57 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
           />
         )}
        </div>
+
+        {/* Review batch + commit bars live INSIDE diffBody (the fragment) so they
+            travel into the fullscreen panel too, instead of being stranded behind
+            the overlay — you can review + "Send to Claude" + commit while full. */}
+        {!activeFile && comments.length > 0 && (
+          <div className="flex items-center gap-2 px-3 py-1.5 border-t border-[var(--color-line)] bg-[var(--color-bg3)] text-[11px]">
+            <span className="text-[var(--color-warn)] font-medium">
+              {comments.length} review comment{comments.length > 1 ? "s" : ""}
+            </span>
+            <button
+              onClick={sendReview}
+              className="ml-auto inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-white bg-[var(--color-brand)] hover:opacity-90 text-[11.5px] font-medium"
+              title="Send all review comments to claude (spawns one if none is running)"
+            >
+              <Play size={12} fill="currentColor" strokeWidth={0} aria-hidden />
+              Send review to Claude
+            </button>
+            <button
+              onClick={() => persistComments([])}
+              className="text-[var(--color-fg3)] hover:text-[var(--color-err)] text-[10px]"
+              title="discard all review comments"
+            >
+              clear
+            </button>
+          </div>
+        )}
+
+        {mode === "working" && !activeFile && status && ((status.files?.length ?? 0) > 0 || status.ahead > 0) && (
+          <CommitBar repoPath={repoPath} status={status} />
+        )}
+         </>
+        );
+        // Fullscreen: remount the body inside the shared shell (still under this
+        // WorkerPoolContextProvider, so CodeView's context flows through the portal).
+        return overlay ? (
+          <FullscreenShell
+            title={activeFile ? (activeFile.split("/").pop() ?? "Diff") : `Diff · ${repoPath.split("/").slice(-1)[0]}`}
+            font={font}
+            hostRef={overlayHostRef}
+            onClose={() => setOverlay(false)}
+          >
+            <div className="h-full w-full flex flex-col overflow-hidden">{diffBody}</div>
+          </FullscreenShell>
+        ) : diffBody;
+       })()}
       </WorkerPoolContextProvider>
-
-      {/* Review batch — leave comments via the gutter "+", then send them all
-          to claude as one message. Spawns a claude tile if none is alive. */}
-      {!activeFile && comments.length > 0 && (
-        <div className="flex items-center gap-2 px-3 py-1.5 border-t border-[var(--color-line)] bg-[var(--color-bg3)] text-[11px]">
-          <span className="text-[var(--color-warn)] font-medium">
-            {comments.length} review comment{comments.length > 1 ? "s" : ""}
-          </span>
-          <button
-            onClick={sendReview}
-            className="ml-auto inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-white bg-[var(--color-brand)] hover:opacity-90 text-[11.5px] font-medium"
-            title="Send all review comments to claude (spawns one if none is running)"
-          >
-            <Play size={12} fill="currentColor" strokeWidth={0} aria-hidden />
-            Send review to Claude
-          </button>
-          <button
-            onClick={() => persistComments([])}
-            className="text-[var(--color-fg3)] hover:text-[var(--color-err)] text-[10px]"
-            title="discard all review comments"
-          >
-            clear
-          </button>
-        </div>
-      )}
-
-      {mode === "working" && !activeFile && status && ((status.files?.length ?? 0) > 0 || status.ahead > 0) && (
-        <CommitBar repoPath={repoPath} status={status} />
-      )}
     </div>
   );
 }
 
-// ── commit + push bar (working mode) ──────────────────────────────────────
-// Adopts Nyx's ZoneToolbar model: stage-all · editable message · Commit · Push.
-// AI-generated messages are intentionally deferred (no AI backend yet) — the
-// research flagged silent auto-messages as a known annoyance, so manual first.
-function CommitBar({ repoPath, status }: { repoPath: string; status: GitStatusSnapshot }) {
-  const [message, setMessage] = useState("");
-  const commitMut = useGitCommit();
-  const pushMut = useGitPush();
-  const stageMut = useStageFiles();
-
-  const staged = status.files.filter((f) => f.staged);
-  const unstaged = status.files.filter((f) => !f.staged && f.status !== "ignored");
-  const canCommit = staged.length > 0 && message.trim().length > 0 && !commitMut.isPending;
-
-  const doCommit = () => {
-    if (!canCommit) return;
-    commitMut.mutate({ repoPath, message: message.trim() }, { onSuccess: () => setMessage("") });
-  };
-
-  return (
-    <div className="border-t border-[var(--color-line)] bg-[var(--color-bg3)] px-2.5 py-1.5 flex items-center gap-2 text-[11px] font-mono">
-      {status.files.length > 0 && (
-        <span className="text-[var(--color-fg3)] tabular-nums shrink-0" title={`${staged.length} staged · ${unstaged.length} unstaged`}>
-          <span className="text-[var(--color-ok)]">{staged.length}</span>/{status.files.length}
-        </span>
-      )}
-      {unstaged.length > 0 && (
-        <button
-          className="shrink-0 px-1.5 py-0.5 rounded border border-[var(--color-line2)] text-[var(--color-fg3)] hover:text-[var(--color-fg)] text-[10px]"
-          title="stage all changes"
-          onClick={() => stageMut.mutate({ repoPath, files: unstaged.map((f) => f.path) })}
-        >
-          stage all
-        </button>
-      )}
-      {status.files.length === 0 ? (
-        <span className="flex-1 text-[var(--color-fg3)]">
-          {status.ahead > 0 ? `✓ clean · ${status.ahead} commit${status.ahead > 1 ? "s" : ""} to push` : "✓ working tree clean"}
-        </span>
-      ) : (
-        <input
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) doCommit(); }}
-          placeholder={staged.length ? "commit message · ⌘↵" : "stage files to commit"}
-          disabled={staged.length === 0}
-          className="flex-1 bg-[var(--color-bg)] border border-[var(--color-line2)] rounded px-2 py-0.5 text-[var(--color-fg)] outline-none focus:border-[var(--color-accent)] disabled:opacity-50"
-        />
-      )}
-      {status.files.length > 0 && (
-        <button
-          className="shrink-0 px-2 py-0.5 rounded text-[10px] font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          style={{ background: canCommit ? "var(--color-accent)" : "var(--color-bg4)", color: canCommit ? "var(--color-bg)" : "var(--color-fg3)" }}
-          disabled={!canCommit}
-          onClick={doCommit}
-        >
-          {commitMut.isPending ? "…" : "commit"}
-        </button>
-      )}
-      <button
-        className="shrink-0 px-2 py-0.5 rounded border border-[var(--color-line2)] text-[var(--color-fg2)] hover:text-[var(--color-fg)] text-[10px] disabled:opacity-40 inline-flex items-center gap-1"
-        title={`push${status.ahead ? ` (${status.ahead} ahead)` : ""}`}
-        disabled={pushMut.isPending}
-        onClick={() => pushMut.mutate({ repoPath, setUpstream: !status.upstream })}
-      >
-        push{status.ahead ? ` ↑${status.ahead}` : ""}
-      </button>
-    </div>
-  );
-}
+// CommitBar moved to code/CommitBar.tsx (shared with the Code Workbench).
 
 // ── items: working tree (HEAD ↔ WORKING|INDEX, full-content diff) ─────────
 
@@ -1656,57 +1558,10 @@ function DiffHeader(props: {
 
 // ── single-file CodeView popup (header "↗ open") ──────────────────────────
 
-function FileView(props: { repoPath: string; file: string; onClose: () => void }) {
-  const q = useQuery<string>({
-    queryKey: ["git:file", props.repoPath, props.file, "WORKING"],
-    queryFn: () => window.hive.gitFileContents(props.repoPath, props.file, "WORKING"),
-  });
-  const data = q.data;
-  const oversized = data != null && new Blob([data]).size > 10 * 1024 * 1024;
-  const binary = data != null && data.slice(0, 8192).indexOf("\0") !== -1;
-  const item: CodeViewItem | null =
-    data != null && !oversized && !binary
-      ? {
-          id: `file:${props.file}`,
-          type: "file",
-          file: {
-            name: props.file,
-            contents: data,
-            cacheKey: `${props.repoPath}:WORKING:${props.file}:${q.dataUpdatedAt}`,
-          },
-        }
-      : null;
-  return (
-    <div className="h-full flex flex-col border-b border-[var(--color-line)]">
-      <div className="flex items-center gap-2 px-3 py-1.5 bg-[var(--color-bg3)] text-[11px] font-mono shrink-0">
-        <span className="text-[var(--color-fg)] truncate" title={props.file}>{props.file}</span>
-        <span className="text-[var(--color-fg3)]">· working copy</span>
-        <button className="ml-auto text-[10px] text-[var(--color-fg3)]" onClick={props.onClose}>close</button>
-      </div>
-      <div className="flex-1 overflow-auto">
-        {q.isLoading && <div className="p-3 text-[11px] text-[var(--color-fg3)]">loading {props.file}…</div>}
-        {q.error && (
-          <div className="p-3 text-[11px] text-[var(--color-err)] font-mono">{(q.error as Error).message}</div>
-        )}
-        {data != null && oversized && (
-          <div className="p-3 text-[11px] text-[var(--color-warn)] font-mono">
-            file too large to preview ({(new Blob([data]).size / (1024 * 1024)).toFixed(1)} MB)
-          </div>
-        )}
-        {data != null && !oversized && binary && (
-          <div className="p-3 text-[11px] text-[var(--color-warn)] font-mono">binary file — not shown</div>
-        )}
-        {item && (
-          <CodeView
-            className="h-full w-full overflow-y-auto"
-            items={[item]}
-            options={{ theme: { dark: "pierre-dark", light: "pierre-light" }, themeType: "dark", overflow: "scroll" }}
-          />
-        )}
-      </div>
-    </div>
-  );
-}
+// Single-file diff surface now lives in code/DiffSurface.tsx (shared with the
+// Code Workbench). DiffTile aliases it so the existing <FileView .../> call site
+// (and its onClose) stays unchanged.
+const FileView = DiffSurface;
 
 // ── conflict view (UnresolvedFile — outside CodeView) ─────────────────────
 

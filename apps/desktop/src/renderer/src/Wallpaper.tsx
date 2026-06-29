@@ -14,8 +14,15 @@
 import { useEffect, useRef, useState } from "react";
 import { useTheme } from "./theme-store";
 
-export function Wallpaper(): React.ReactElement | null {
+/**
+ * `embedded` renders the SAME scene as an absolute fill (position:absolute,
+ * z-index:0) of its positioned parent instead of the default fixed full-window
+ * layer — used by the terminal fit-to-screen overlay so the fullscreen terminal
+ * sits over a clean copy of the live wallpaper (not the canvas + other tiles).
+ */
+export function Wallpaper({ embedded = false }: { embedded?: boolean } = {}): React.ReactElement | null {
   const { glass, wallpaper, videoSrc, imageSrc } = useTheme();
+  const cls = embedded ? " embedded" : "";
   const [paused, setPaused] = useState(false);
   // A clip that can't decode (e.g. HEVC/H.265, which Chromium doesn't bundle)
   // fires <video> onError → we fall back to a gradient instead of a black void.
@@ -23,17 +30,25 @@ export function Wallpaper(): React.ReactElement | null {
   useEffect(() => { setVideoFailed(false); }, [videoSrc]);
   const videoRef = useRef<HTMLVideoElement>(null);
 
+  // Pause the wallpaper (video decoder + bloom animations) when the window is
+  // hidden/blurred OR the user has been idle for a while — a live wallpaper
+  // composites every frame, so this reclaims continuous GPU + video-decode CPU
+  // whenever you're not actively interacting. Resumes within ~1s of any input.
+  // `bump` only writes a number (no React, no per-event timer churn); a 1Hz tick
+  // computes the paused state, and setPaused no-ops when unchanged.
   useEffect(() => {
-    const idle = () => setPaused(true);
-    const live = () => setPaused(false);
-    const vis = () => setPaused(document.hidden);
-    window.addEventListener("blur", idle);
-    window.addEventListener("focus", live);
-    document.addEventListener("visibilitychange", vis);
+    let last = Date.now();
+    const IDLE_MS = 30_000;
+    const bump = () => { last = Date.now(); };
+    const evs = ["mousemove", "keydown", "wheel", "pointerdown", "touchstart"] as const;
+    for (const e of evs) window.addEventListener(e, bump, { passive: true });
+    const tick = setInterval(() => {
+      const idle = Date.now() - last > IDLE_MS;
+      setPaused(document.hidden || !document.hasFocus() || idle);
+    }, 1000);
     return () => {
-      window.removeEventListener("blur", idle);
-      window.removeEventListener("focus", live);
-      document.removeEventListener("visibilitychange", vis);
+      clearInterval(tick);
+      for (const e of evs) window.removeEventListener(e, bump);
     };
   }, []);
 
@@ -51,7 +66,7 @@ export function Wallpaper(): React.ReactElement | null {
   if (wallpaper === "image") {
     if (!imageSrc) return null; // no photo picked yet
     return (
-      <div className="hm-wallpaper" data-scene="image" aria-hidden="true">
+      <div className={`hm-wallpaper${cls}`} data-scene="image" aria-hidden="true">
         <img className="hm-wp-image" src={imageSrc} alt="" />
         <div className="hm-wp-vignette" />
       </div>
@@ -63,7 +78,7 @@ export function Wallpaper(): React.ReactElement | null {
   if (wallpaper === "video") {
     if (videoSrc && !videoFailed) {
       return (
-        <div className={`hm-wallpaper${paused ? " paused" : ""}`} data-scene="video" aria-hidden="true">
+        <div className={`hm-wallpaper${cls}${paused ? " paused" : ""}`} data-scene="video" aria-hidden="true">
           <video
             ref={videoRef}
             className="hm-wp-video"
@@ -85,7 +100,7 @@ export function Wallpaper(): React.ReactElement | null {
   // Gradient scenes (and the video-decode fallback → aurora).
   const scene = wallpaper === "video" ? "aurora" : wallpaper;
   return (
-    <div className={`hm-wallpaper${paused ? " paused" : ""}`} data-scene={scene} aria-hidden="true">
+    <div className={`hm-wallpaper${cls}${paused ? " paused" : ""}`} data-scene={scene} aria-hidden="true">
       {/* Three drifting gradient blooms (screen-blended) → depth + slow color
           motion. A fine grain breaks up the gradient banding, a top sheen adds
           the "lit from above" glass feel, and a vignette focuses the center.
