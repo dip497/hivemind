@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [1.9.0] — 2026-06-29
+
 ### Added
 
 - **Workbench is now an IDE — Explorer / Changes activity bar + in-tile diff review + commit.** The Workbench tile gained a VSCode-style left **activity rail**: **Explorer** (the full working tree — open any file to edit, with Pierre `⌘P` search + context menu + git-status decorations) and **Changes** (git-changed files with M/A/D badges). Clicking a changed file opens a **Pierre diff** rendered straight from the `git diff` patch (`@pierre/diffs` `PatchDiff`) with **split/unified** + **expand-unchanged** toggles, **inline review comments** (gutter "+" / line-number → composer → annotation) and **Send to Claude**, overlaid on the editor (which stays mounted, so unsaved edits survive); an **Edit** button hands the file to an editable tab. A **commit/push bar** (stage-all · message · commit · push) shows at the bottom in Changes mode. New shared `code/` module (`DiffSurface`, `PatchDiffSurface`, `ChangesPanel`, `CommitBar`, `useReviewComments`, `review-store`) — the standalone Diff tile now reuses the same commit bar, diff surface, annotation renderer, composer anchor, persistence, and send-formatting (no duplicated review code across the two surfaces).
@@ -537,7 +539,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v1.8.4...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v1.9.0...HEAD
+[1.9.0]: https://github.com/dip497/hivemind/releases/tag/v1.9.0
 [1.8.4]: https://github.com/dip497/hivemind/releases/tag/v1.8.4
 [1.8.3]: https://github.com/dip497/hivemind/releases/tag/v1.8.3
 [1.8.2]: https://github.com/dip497/hivemind/releases/tag/v1.8.2
