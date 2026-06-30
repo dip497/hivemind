@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [1.10.0] — 2026-06-30
+
 ### Added
 
 - **Pi (pi.dev) coding agent.** `pi` (Earendil's `@earendil-works/pi-coding-agent`) is now a first-class, enabled agent alongside Claude / Codex / opencode / Droid: pick it from the tool-island / frame launcher and it spawns a `pi` TUI tile (official Pi logo, theme-colored). Pi is a minimal harness with no hook system, so — like codex — it has no deterministic spawn-time signals: tile status comes from the screen-scrape detector (`detectPi`), and session resume across a daemon restart resolves the newest `~/.pi/agent/sessions` entry whose header `cwd` matches the tile cwd → `pi --session <id>`. Also wired through the CLI (`hive agent detect` finds `pi`, `--assignee pi` resolves as an agent) and the MCP `hive_spawn_agent` / `hive_workflow` runtimes list. Adds `main/pi-resume.ts`, `main/providers/pi.ts`; registers `piProvider` in the provider registry; adds `pi` to the renderer agent registry (`agents.tsx`).
@@ -553,7 +555,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v1.9.0...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v1.10.0...HEAD
+[1.10.0]: https://github.com/dip497/hivemind/releases/tag/v1.10.0
 [1.9.0]: https://github.com/dip497/hivemind/releases/tag/v1.9.0
 [1.8.4]: https://github.com/dip497/hivemind/releases/tag/v1.8.4
 [1.8.3]: https://github.com/dip497/hivemind/releases/tag/v1.8.3
