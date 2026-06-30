@@ -33,11 +33,19 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           <Toaster
             theme="dark"
             position="bottom-right"
+            // Same glass family as the agent .hm-toast cards (frosted surface +
+            // token colors + inner-top highlight) so action confirmations and
+            // agent events read as one notification plane. Both are bottom-right
+            // and temporally rare, so they share the corner cleanly.
             toastOptions={{
+              className: "hm-sonner",
               style: {
-                background: "var(--color-bg3)",
+                background: "color-mix(in srgb, var(--color-bg3) 95%, transparent)",
                 color: "var(--color-fg)",
                 border: "1px solid var(--color-line2)",
+                borderRadius: "12px",
+                boxShadow: "inset 0 1px 0 0 rgba(255,255,255,0.08), 0 10px 36px rgba(0,0,0,0.5)",
+                backdropFilter: "blur(10px) saturate(135%)",
                 fontFamily: "var(--font-sans)",
                 fontSize: "12px",
               },

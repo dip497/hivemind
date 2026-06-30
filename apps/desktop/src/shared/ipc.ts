@@ -1,5 +1,7 @@
 /** Typed contract for IPC between main and renderer. */
 import type { Issue, IssueSummary, IssueState, AcceptanceItem, Assignee, LinkType, IssuePatch } from "@hivemind/core/types";
+import type { NotificationSettings } from "./notification-settings.js";
+export type { NotificationSettings };
 
 // IssuePatch is owned by @hivemind/core/types (node-free) — re-export so renderer
 // modules keep importing it from the IPC contract, with no hand-maintained copy.
@@ -318,6 +320,10 @@ export interface HiveIpc {
   /** Forward a notable agent-status transition to the main process, which fires
    *  a native OS notification IF the window is unfocused. Fire-and-forget. */
   notifyAgent(notice: AgentNotice): void;
+  /** Read the persisted notification preferences (normalized onto defaults). */
+  getNotificationSettings(): Promise<NotificationSettings>;
+  /** Persist + apply notification preferences live (no relaunch needed). */
+  setNotificationSettings(s: NotificationSettings): Promise<{ ok: true }>;
 
   // ── BrowserTile <webview> ↔ agent CDP bridge ──────────────
   /** A BrowserTile reports its guest <webview>'s webContents id (plus its frame
@@ -426,13 +432,33 @@ export interface AgentNotice {
   tileId: string;
   /** Human label for the popup, e.g. "claude #2 · plan". */
   label: string;
-  /** "needs" = blocked/permission/question; "done" = finished (working→idle). */
-  kind: "needs" | "done";
+  /** "needs" = blocked/permission/question (action required); "done" = finished
+   *  cleanly (working→idle); "error" = the agent process died while working
+   *  (working→exited, non-zero exit / signal). Surfaces crashes, OOM-kills and
+   *  failed builds that would otherwise be silent if the user isn't looking. */
+  kind: "needs" | "done" | "error";
   /** The frame (workspace) the tile lives in — shown as context so you know
    *  WHICH project's agent wants you. */
   frame?: string;
   /** Tile's repo cwd, if known — basename shown when no frame name. */
   repo?: string;
+  /** Process exit code (error kind only) — shown in the body so the user can
+   *  tell a 137 OOM-kill from a 1 error-exit at a glance. */
+  exitCode?: number;
+  /** Free-form one-line detail for the body (error kind). Currently the exit
+   *  signal/name when available; kept generic for future failure kinds. */
+  detail?: string;
+}
+
+/** Pushed main→renderer when a background subsystem hits a NON-fATAL error the
+ *  user would otherwise never see (e.g. the PTY daemon couldn't be refreshed,
+ *  so agent hooks may be stale). The renderer surfaces these as a non-blocking
+ *  toast so nothing fails silently. Fatal errors still go through dialogs. */
+export interface AppErrorEvent {
+  /** One-line, human message (shown as the toast title). */
+  message: string;
+  /** Which subsystem surfaced it — shown as muted context (e.g. "pty-daemon"). */
+  source: string;
 }
 
 export type IpcChannel =

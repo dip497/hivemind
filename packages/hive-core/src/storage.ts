@@ -15,6 +15,7 @@
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import matter from "gray-matter";
 import YAML from "yaml";
 import {
@@ -34,8 +35,15 @@ const DIR = ".hivemind";
 /** Find the nearest `.hivemind/` directory walking up from `cwd`. */
 export async function findRoot(cwd: string = process.cwd()): Promise<string | null> {
   let dir = path.resolve(cwd);
+  const home = os.homedir();
   // eslint-disable-next-line no-constant-condition
   while (true) {
+    // Stop AT home — never treat `~/.hivemind` (or anything at/above home) as a
+    // project root. Otherwise a stray `hive init` at $HOME hijacks workspace
+    // resolution for EVERY subfolder (the "only home gets selected" bug). A real
+    // project directly under home still matches before we reach this guard.
+    // Mirrors the desktop's findGitRoot home guard.
+    if (dir === home || dir === path.dirname(home) || dir === "/") return null;
     const candidate = path.join(dir, DIR);
     try {
       const st = await fs.stat(candidate);

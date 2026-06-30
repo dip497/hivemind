@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
-import type { HiveIpc, DiffScope, WorktreeCreateOpts, PlanReviewOpen, HcpCommand, HcpPipeEvent, HcpWaitEvent, HcpSubagentEvent, HcpNotifyEvent, HcpTurnStateEvent } from "../shared/ipc.js";
+import type { HiveIpc, DiffScope, WorktreeCreateOpts, PlanReviewOpen, HcpCommand, HcpPipeEvent, HcpWaitEvent, HcpSubagentEvent, HcpNotifyEvent, HcpTurnStateEvent, AppErrorEvent } from "../shared/ipc.js";
 
 const api: HiveIpc & {
   /** Resolve a picked File's real filesystem path (for the persistent video wallpaper). */
@@ -31,6 +31,7 @@ const api: HiveIpc & {
   onHcpSubagent: (cb: (e: HcpSubagentEvent) => void) => () => void;
   onHcpNotify: (cb: (e: HcpNotifyEvent) => void) => () => void;
   onHcpTurnState: (cb: (e: HcpTurnStateEvent) => void) => () => void;
+  onAppError: (cb: (e: AppErrorEvent) => void) => () => void;
 } = {
   resolveProject: (rootHint) => ipcRenderer.invoke("resolveProject", rootHint),
   pickProjectFolder: () => ipcRenderer.invoke("pickProjectFolder"),
@@ -102,6 +103,9 @@ const api: HiveIpc & {
   persistentPty: process.env.HIVEMIND_PTY_DAEMON !== "0",
 
   notifyAgent: (notice) => ipcRenderer.send("notify:agent", notice),
+
+  getNotificationSettings: () => ipcRenderer.invoke("getNotificationSettings"),
+  setNotificationSettings: (s) => ipcRenderer.invoke("setNotificationSettings", s),
 
   browserRegister: (tileId, webContentsId, frameId, url) =>
     ipcRenderer.send("browser:register", tileId, webContentsId, frameId, url),
@@ -223,6 +227,11 @@ const api: HiveIpc & {
     const listener = (_e: unknown, ev: HcpTurnStateEvent) => cb(ev);
     ipcRenderer.on("hcp:turnstate", listener);
     return () => ipcRenderer.removeListener("hcp:turnstate", listener);
+  },
+  onAppError: (cb: (e: AppErrorEvent) => void) => {
+    const listener = (_e: unknown, ev: AppErrorEvent) => cb(ev);
+    ipcRenderer.on("app:error", listener);
+    return () => ipcRenderer.removeListener("app:error", listener);
   },
   // webUtils.getPathForFile is the supported way to get a dropped/picked File's
   // absolute path under contextIsolation (File.path was removed). Used to build

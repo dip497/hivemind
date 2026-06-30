@@ -1,51 +1,10 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useState } from "react";
 import type { Assignee, IssueSummary } from "@hivemind/core/types";
 import { Avatar, LabelChip } from "../components/StateMeta";
+import { Popover } from "../components/ui/popover";
 
 const INPUT =
-  "w-full px-2 py-1 text-[12px] bg-[var(--color-bg)] border border-[var(--color-line2)] rounded outline-none focus:border-[var(--color-brand)] text-[var(--color-fg)] placeholder:text-[var(--color-fg3)]";
-
-/** Anchored popover — trigger + content; closes on outside click / Esc. */
-function Popover({
-  trigger,
-  children,
-  width = 200,
-}: {
-  trigger: ReactNode;
-  children: (close: () => void) => ReactNode;
-  width?: number;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
-    document.addEventListener("mousedown", onDoc);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDoc);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-  return (
-    <div ref={ref} className="relative">
-      <button type="button" onClick={() => setOpen((o) => !o)} className="nodrag w-full text-left">
-        {trigger}
-      </button>
-      {open && (
-        <div
-          className="absolute z-40 mt-1 right-0 bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-md shadow-xl p-1"
-          style={{ width }}
-        >
-          {children(() => setOpen(false))}
-        </div>
-      )}
-    </div>
-  );
-}
+  "w-full px-2 py-1 text-[12px] bg-[var(--color-bg)] border border-[var(--color-line2)] rounded-md outline-none focus:border-[var(--color-brand)] text-[var(--color-fg)] placeholder:text-[var(--color-fg3)]";
 
 const Check = () => (
   <svg width="9" height="9" viewBox="0 0 10 10">

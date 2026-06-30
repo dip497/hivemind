@@ -3,84 +3,99 @@
  * call-to-action. Pure presentational; driven by props (Canvas owns the toast
  * queue + the spawn actions). Extracted to keep Canvas.tsx focused.
  */
-import { Sparkles } from "lucide-react";
+import { useEffect, useState, type CSSProperties } from "react";
+import { AlertCircle, CheckCircle2, AlertTriangle, Sparkles, X } from "lucide-react";
 import { useTileFocus } from "./canvas-camera";
-import type { TileStatusKind } from "./agent-status-bus";
+import { toastKindOf, toastTtlMs, type Toast, type NoticeKind } from "./useAgentAwareness";
 
 // ── Agent awareness (ported concept from herdr) ─────────────────────────────
-type ChipMeta = { label: string; status: TileStatusKind; seen: boolean };
 
-/** Map a tile's status (+ done-unseen flag) to dot color / pulse / short label.
- *  herdr's 4-state model: working (amber) · needs-you (red) · done-unseen
- *  (blue) · idle-seen (green). exited = gray. */
-function statusViz(m?: ChipMeta): { color: string; pulse: boolean; text: string } {
-  if (!m) return { color: "var(--color-fg3)", pulse: false, text: "…" };
-  switch (m.status) {
-    case "working":
-      // Working is steady amber, NOT pulsing — reserve motion for the
-      // actionable "needs you" state only (pulsing everything is the slop tell).
-      return { color: "var(--color-warn)", pulse: false, text: "working" };
-    case "blocked":
-    case "permission":
-    case "question":
-      return { color: "var(--color-err)", pulse: true, text: "needs you" };
-    case "exited":
-      return { color: "var(--color-fg3)", pulse: false, text: "exited" };
-    case "idle":
-    default:
-      // "done" (finished while unseen) is informational, not actionable — it
-      // gets a distinct sky accent + a ring (see SessionChips) but does NOT
-      // pulse. Only "needs you" (actionable) pulses.
-      return m.seen
-        ? { color: "var(--color-ok)", pulse: false, text: "idle" }
-        : { color: "var(--color-accent)", pulse: false, text: "done" };
-  }
+/** Icon + verb per notice class. ONE accent (the app brand, set in CSS) is used
+ *  across every kind — the kind is encoded by the icon SHAPE + the verb text
+ *  (and a pulse on needs-you), never by a competing second color. Needs-you
+ *  pulses (actionable); done/error are steady — only needs-you earns motion
+ *  (pulsing everything is the slop tell). */
+const NOTICE: Record<NoticeKind, { Icon: typeof AlertCircle; verb: string; pulse: boolean }> = {
+  needs: { Icon: AlertCircle, verb: "needs your input", pulse: true },
+  done: { Icon: CheckCircle2, verb: "finished — click to view", pulse: false },
+  error: { Icon: AlertTriangle, verb: "failed — click to view", pulse: false },
+};
+
+/** "just now" / "Ns ago" — coarse, auto-updates on a 1s tick (Toasts only mounts
+ *  while there's ≥1 toast, so the ticker costs nothing when the stack is empty). */
+function relTime(at: number, now: number): string {
+  const s = Math.max(0, Math.round((now - at) / 1000));
+  if (s < 2) return "just now";
+  if (s < 60) return `${s}s ago`;
+  return `${Math.floor(s / 60)}m ago`;
 }
 
-/** Background-event toast stack. Blocked = red (needs you); done = blue. Click
- *  to fly to the tile + dismiss. */
+/** Background-event toast stack — borderless glass cards. Click to fly to the
+ *  tile + mark seen; hover the [×] to dismiss. One accent (the app brand) tints
+ *  the icon, verb, and the TTL line; see `.hm-toast` in styles.css. */
 export function Toasts({
   toasts,
   onDismiss,
   onView,
 }: {
-  toasts: { id: string; tileId: string; label: string; status: TileStatusKind }[];
+  toasts: Toast[];
   onDismiss: (id: string) => void;
   onView: (id: string) => void;
 }) {
   const focus = useTileFocus();
+  // Live relative timestamps. One interval for the whole stack (cheap: 1-3 cards).
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const i = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(i);
+  }, []);
+
   return (
-    <div className="flex flex-col items-end gap-1.5 max-h-[60vh] overflow-y-auto">
+    <div className="flex flex-col items-end gap-2 max-h-[60vh] overflow-y-auto pr-0.5">
       {toasts.map((t) => {
-        const v = statusViz({ label: t.label, status: t.status, seen: false });
-        const needsYou =
-          t.status === "blocked" || t.status === "permission" || t.status === "question";
+        const k = toastKindOf(t);
+        const { Icon, verb, pulse } = NOTICE[k];
+        const ttl = toastTtlMs(t);
+        const go = () => { focus(t.tileId); onView(t.tileId); };
         return (
           <div
             key={t.id}
             role="button"
             tabIndex={0}
-            onClick={() => { focus(t.tileId); onView(t.tileId); }}
-            onKeyDown={(ev) => { if (ev.key === "Enter") { focus(t.tileId); onView(t.tileId); } }}
-            className="hm-island group flex items-center gap-2 pl-2.5 pr-1.5 py-1.5 cursor-pointer min-w-[180px]"
-            style={{ borderColor: v.color }}
+            aria-label={`${t.label} ${verb}${t.frame ? ` in ${t.frame}` : ""}`}
+            onClick={go}
+            onKeyDown={(ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); go(); } }}
+            className="hm-toast hm-toast-in hm-soft group cursor-pointer"
+            style={{ "--ttl": `${ttl}ms` } as CSSProperties}
           >
-            <span
-              aria-hidden
-              className={`size-2 rounded-full ${v.pulse ? "animate-pulse" : ""}`}
-              style={{ background: v.color }}
-            />
-            <div className="flex flex-col leading-tight">
-              <span className="font-mono text-[11px] text-[var(--color-fg)]">{t.label}</span>
-              <span className="text-[10px]" style={{ color: v.color }}>
-                {needsYou ? "needs your input" : "finished — click to view"}
+            <div className="flex items-start gap-2.5 px-3 py-2.5">
+              <span
+                aria-hidden
+                className={`hm-toast-icon mt-0.5 shrink-0 ${pulse ? "animate-pulse" : ""}`}
+              >
+                <Icon size={15} strokeWidth={2.25} />
               </span>
+              <div className="flex flex-col min-w-0 flex-1 leading-tight">
+                <span className="font-mono text-[11.5px] text-[var(--color-fg)] truncate">{t.label}</span>
+                <span className="hm-toast-verb text-[10.5px] mt-0.5">{verb}</span>
+                {t.detail && (
+                  <span className="font-mono text-[10px] mt-1 text-[var(--color-fg2)] truncate">{t.detail}</span>
+                )}
+                <span className="text-[9.5px] mt-1 text-[var(--color-fg3)]">
+                  {t.frame ? <>{t.frame} · </> : null}{relTime(t.at, now)}
+                </span>
+              </div>
+              <button
+                onClick={(ev) => { ev.stopPropagation(); onDismiss(t.id); }}
+                className="shrink-0 -mr-1 -mt-1 size-5 grid place-items-center rounded text-[var(--color-fg3)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg4)] opacity-0 group-hover:opacity-100 hm-soft"
+                aria-label="Dismiss notification"
+                title="dismiss"
+              >
+                <X size={12} />
+              </button>
             </div>
-            <button
-              onClick={(ev) => { ev.stopPropagation(); onDismiss(t.id); }}
-              className="ml-auto text-[var(--color-fg3)] hover:text-[var(--color-fg)] opacity-0 group-hover:opacity-100 transition-opacity"
-              title="dismiss"
-            >×</button>
+            {/* Auto-dismiss progress line — shrinks with the JS timer (same TTL). */}
+            <span aria-hidden className="hm-toast-bar" />
           </div>
         );
       })}

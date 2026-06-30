@@ -1,6 +1,7 @@
-import { useMemo, useState, useRef, useEffect } from "react";
+import { useMemo, useState } from "react";
 import type { IssueState, IssueSummary } from "@hivemind/core/types";
 import { STATE_LABEL, STATE_ORDER, StateIcon, LabelChip, Avatar } from "./StateMeta";
+import { Popover } from "./ui/popover";
 
 export interface Filters {
   q: string;
@@ -142,7 +143,7 @@ export function FilterBar({
               key={c.kind + c.value + i}
               onClick={c.remove}
               aria-label={`Remove ${c.kind} filter ${c.value}`}
-              className="inline-flex items-center gap-1 pl-1.5 pr-1 py-0.5 rounded-md text-[10.5px] bg-[var(--color-bg4)] text-[var(--color-fg)] hover:bg-[var(--color-bg3)] cursor-pointer group"
+              className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-md text-[10.5px] bg-[var(--color-bg4)] border border-[var(--color-line2)] text-[var(--color-fg)] hover:border-[var(--color-fg3)] cursor-pointer group hm-soft"
             >
               <span className="text-[var(--color-fg2)]">{c.kind}:</span>
               <span>{c.value}</span>
@@ -159,7 +160,7 @@ function SearchInput({ value, onChange }: { value: string; onChange: (v: string)
   return (
     <div className="relative">
       <svg
-        className="absolute left-2 top-1/2 -translate-y-1/2 text-[var(--color-fg3)]"
+        className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--color-fg3)]"
         width="12" height="12" viewBox="0 0 14 14" fill="none"
       >
         <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.2" />
@@ -170,8 +171,17 @@ function SearchInput({ value, onChange }: { value: string; onChange: (v: string)
         onChange={(e) => onChange(e.target.value)}
         placeholder="Search…"
         aria-label="Search issues"
-        className="pl-7 pr-2 py-1 w-52 text-[12px] bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-md outline-none focus:border-[var(--color-brand)] focus:ring-1 focus:ring-[var(--color-brand)] text-[var(--color-fg)] placeholder:text-[var(--color-fg3)]"
+        className="pl-7 pr-7 py-1 w-52 text-[12px] bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-md outline-none focus:border-[var(--color-brand)] focus:ring-2 focus:ring-[var(--color-brand)]/30 text-[var(--color-fg)] placeholder:text-[var(--color-fg3)] hm-soft"
       />
+      {value && (
+        <button
+          onClick={() => onChange("")}
+          aria-label="Clear search"
+          className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[var(--color-fg3)] hover:text-[var(--color-fg)] cursor-pointer hm-soft"
+        >
+          <svg width="12" height="12" viewBox="0 0 14 14"><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
+        </button>
+      )}
     </div>
   );
 }
@@ -186,37 +196,29 @@ interface Option {
 }
 
 function Dropdown({ label, count, options }: { label: string; count: number; options: Option[] }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
-  }, [open]);
-
   return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className={`inline-flex items-center gap-1.5 px-2 py-1 text-[11.5px] rounded-md border cursor-pointer ${
-          count > 0
-            ? "bg-[var(--color-bg4)] border-[var(--color-line2)] text-[var(--color-fg)]"
-            : "bg-[var(--color-bg3)] border-[var(--color-line2)] text-[var(--color-fg2)] hover:text-[var(--color-fg)]"
-        }`}
-      >
-        {label}
-        {count > 0 && (
-          <span className="font-mono tabular-nums text-[10px] text-[var(--color-accent)]">{count}</span>
-        )}
-        <svg width="9" height="9" viewBox="0 0 10 10" className="text-[var(--color-fg3)]">
-          <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" />
-        </svg>
-      </button>
-      {open && (
-        <div className="absolute z-30 mt-1 min-w-[180px] max-h-[280px] overflow-y-auto bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-md shadow-xl p-1">
+    <Popover
+      width={200}
+      trigger={
+        <span
+          className={`inline-flex items-center gap-1.5 px-2 py-1 text-[11.5px] rounded-md border cursor-pointer hm-soft ${
+            count > 0
+              ? "bg-[var(--color-bg4)] border-[var(--color-line2)] text-[var(--color-fg)]"
+              : "bg-[var(--color-bg3)] border-[var(--color-line2)] text-[var(--color-fg2)] hover:text-[var(--color-fg)]"
+          }`}
+        >
+          {label}
+          {count > 0 && (
+            <span className="font-mono tabular-nums text-[10px] text-[var(--color-accent)]">{count}</span>
+          )}
+          <svg width="9" height="9" viewBox="0 0 10 10" className="text-[var(--color-fg3)]">
+            <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" />
+          </svg>
+        </span>
+      }
+    >
+      {() => (
+        <div className="flex flex-col gap-0.5 max-h-[280px] overflow-y-auto">
           {options.length === 0 ? (
             <div className="px-2 py-1.5 text-[11px] text-[var(--color-fg3)]">No options</div>
           ) : (
@@ -224,7 +226,7 @@ function Dropdown({ label, count, options }: { label: string; count: number; opt
               <button
                 key={o.key}
                 onClick={o.toggle}
-                className={`w-full flex items-center gap-2 px-2 py-1 rounded-md text-[12px] text-left cursor-pointer hover:bg-[var(--color-bg4)] ${
+                className={`w-full flex items-center gap-2 px-2 py-1 rounded-md text-[12px] text-left cursor-pointer hover:bg-[var(--color-bg4)] hm-soft ${
                   o.selected ? "text-[var(--color-fg)]" : "text-[var(--color-fg2)]"
                 }`}
               >
@@ -243,6 +245,6 @@ function Dropdown({ label, count, options }: { label: string; count: number; opt
           )}
         </div>
       )}
-    </div>
+    </Popover>
   );
 }

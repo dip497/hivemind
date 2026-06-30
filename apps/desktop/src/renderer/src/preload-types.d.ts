@@ -1,4 +1,4 @@
-import type { HiveIpc, PlanReviewOpen, HcpCommand, HcpPipeEvent, HcpWaitEvent, HcpSubagentEvent, HcpNotifyEvent, HcpTurnStateEvent } from "../../shared/ipc";
+import type { HiveIpc, PlanReviewOpen, HcpCommand, HcpPipeEvent, HcpWaitEvent, HcpSubagentEvent, HcpNotifyEvent, HcpTurnStateEvent, AppErrorEvent } from "../../shared/ipc";
 
 declare global {
   interface Window {
@@ -19,6 +19,8 @@ declare global {
       onHcpNotify: (cb: (e: HcpNotifyEvent) => void) => () => void;
       /** claude's hook-driven turn state (UserPromptSubmit → working, Stop → idle). */
       onHcpTurnState: (cb: (e: HcpTurnStateEvent) => void) => () => void;
+      /** A background subsystem hit a non-fatal error → surface as a toast. */
+      onAppError: (cb: (e: AppErrorEvent) => void) => () => void;
       onPtyData: (tileId: string, cb: (data: string) => void) => () => void;
       onPtyExit: (
         tileId: string,

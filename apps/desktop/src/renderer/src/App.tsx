@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, Plus, Settings } from "lucide-react";
+import { toast } from "sonner";
+import { Bell, ExternalLink, Plus, Settings } from "lucide-react";
 import path from "path-browserify";
 import type { UpdateStatus } from "../../shared/ipc";
 import {
@@ -12,6 +13,8 @@ import {
 import { Canvas } from "./Canvas";
 import { IssuePeek } from "./components/IssuePeek";
 import { NewIssueModal } from "./components/NewIssueModal";
+import { getNotificationSettings, setNotificationSettingsCache, subscribeNotificationSettings, saveNotificationSettings } from "./notification-settings";
+import type { NotificationSettings } from "../../shared/ipc";
 
 // Last 8 opened folders, most recent first. Persisted via localStorage —
 // mirrors VSCode's "Open Recent" (Ctrl+R) behavior at workspace granularity.
@@ -211,6 +214,41 @@ export function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // Load the persisted notification preferences into the renderer cache once on
+  // mount, so useAgentAwareness's in-app-toast gate reads the real values
+  // (defaults until this resolves). The SettingsModal refreshes the cache on
+  // every write, so no relaunch is needed for a toggle to take effect.
+  useEffect(() => {
+    void window.hive.getNotificationSettings().then(setNotificationSettingsCache).catch(() => {});
+  }, []);
+
+  // Surface non-fatal background-subsystem errors (pushed by main over app:error)
+  // as a sonner toast instead of letting them die in a console.error. These are
+  // the "something is degraded but the app still runs" cases — e.g. a stale PTY
+  // daemon that breaks agent hook injection. Distinct from agent-status toasts.
+  useEffect(() => {
+    if (!window.hive.onAppError) return;
+    return window.hive.onAppError((e) => {
+      toast.error(e.message, { description: e.source, duration: 9000 });
+    });
+  }, []);
+
+  // A new app version landed → ping once (not every 4h re-check). Only when the
+  // master notification preference is on; the Settings gear dot always shows it
+  // regardless. Uses the sonner action surface (an inline Update button) since
+  // an update is an actionable confirmation, not an agent-status event.
+  const announcedUpdateRef = useRef(false);
+  useEffect(() => {
+    if (!update.status?.updateAvailable || announcedUpdateRef.current) return;
+    announcedUpdateRef.current = true;
+    if (!getNotificationSettings().enabled) return;
+    toast.success(`Update available${update.status.latest ? ` — v${update.status.latest}` : ""}`, {
+      description: "Restart to install the new version.",
+      action: { label: "Update & restart", onClick: update.upgrade },
+      duration: 12000,
+    });
+  }, [update.status, update.upgrade]);
+
   // Main-process accelerator bridge: xterm swallows Ctrl+N to send it as a
   // control code to the PTY (^N = SO), so window keydown never fires when a
   // terminal has focus. Main intercepts ⌘N / ⌘L via before-input-event and
@@ -325,6 +363,132 @@ export function App() {
 
 const REPO_URL = "https://github.com/dip497/hivemind";
 
+/** Small accessible switch — matches the existing agent-browser toggle's
+ *  track/knob styling so every preference in Settings reads as one family. */
+function Switch({
+  checked,
+  onChange,
+  label,
+  disabled,
+}: {
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  label: string;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={`relative w-9 h-5 rounded-full transition-colors shrink-0 disabled:opacity-40 ${
+        checked ? "bg-[var(--color-brand)]" : "bg-[var(--color-line2)]"
+      }`}
+    >
+      <span className={`absolute top-0.5 size-4 rounded-full bg-white transition-all ${checked ? "left-[18px]" : "left-0.5"}`} />
+    </button>
+  );
+}
+
+/** Notifications preference card — master switch, per-kind mute, surface choice
+ *  (in-app toast vs. native OS popup), and a Do-Not-Disturb window. Reads the
+ *  renderer cache live; writes through `save` (persist + refresh) so a toggle
+ *  takes effect immediately on both surfaces with no relaunch. */
+function NotificationPrefs() {
+  const [s, setS] = useState<NotificationSettings>(() => getNotificationSettings());
+  useEffect(() => subscribeNotificationSettings(setS), []);
+
+  const update = (patch: Partial<NotificationSettings>): void => {
+    const next = { ...s, ...patch };
+    setS(next); // optimistic — the cache subscriber will re-sync on confirm
+    void saveNotificationSettings(next);
+  };
+  const dim = !s.enabled;
+
+  const kinds: { key: "needs" | "done" | "error"; label: string; hint: string }[] = [
+    { key: "needs", label: "Needs you", hint: "Permission prompts, questions, blocked" },
+    { key: "done", label: "Finished", hint: "An agent completed its task" },
+    { key: "error", label: "Failed", hint: "Agent crashed or exited non-zero" },
+  ];
+
+  return (
+    <div className="mt-4 rounded-lg border border-[var(--color-line2)] bg-[var(--color-bg3)] p-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Bell size={14} className="text-[var(--color-fg2)]" />
+          <span className="text-[13px] font-medium text-[var(--color-fg)]">Notifications</span>
+        </div>
+        <Switch checked={s.enabled} onChange={(v) => update({ enabled: v })} label="Enable notifications" />
+      </div>
+
+      {/* Per-kind mute — which agent transitions reach you. */}
+      <div className={`mt-3 space-y-1.5 ${dim ? "opacity-40 pointer-events-none" : ""}`}>
+        <div className="u-eyebrow">Notify me about</div>
+        {kinds.map((k) => (
+          <div key={k.key} className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-[12px] text-[var(--color-fg)]">{k.label}</div>
+              <div className="text-[10.5px] text-[var(--color-fg3)] leading-snug">{k.hint}</div>
+            </div>
+            <Switch
+              checked={s.kinds[k.key]}
+              onChange={(v) => update({ kinds: { ...s.kinds, [k.key]: v } })}
+              label={`Notify on ${k.label}`}
+            />
+          </div>
+        ))}
+      </div>
+
+      {/* Surface choice — in-app toast vs. native OS popup, independent. */}
+      <div className={`mt-3 space-y-1.5 ${dim ? "opacity-40 pointer-events-none" : ""}`}>
+        <div className="u-eyebrow">Where</div>
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-[12px] text-[var(--color-fg)]">In-app toasts</div>
+          <Switch checked={s.inApp} onChange={(v) => update({ inApp: v })} label="In-app toasts" />
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-[12px] text-[var(--color-fg)]">Native OS popups</div>
+          <Switch checked={s.osPopups} onChange={(v) => update({ osPopups: v })} label="Native OS popups" />
+        </div>
+      </div>
+
+      {/* Do-Not-Disturb — mutes finished/failed (NOT needs-you) during a window. */}
+      <div className={`mt-3 ${dim ? "opacity-40 pointer-events-none" : ""}`}>
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-[12px] text-[var(--color-fg)]">Do Not Disturb</div>
+            <div className="text-[10.5px] text-[var(--color-fg3)] leading-snug">Mutes finished/failed; needs-you still fires</div>
+          </div>
+          <Switch checked={s.dnd.enabled} onChange={(v) => update({ dnd: { ...s.dnd, enabled: v } })} label="Do Not Disturb" />
+        </div>
+        {s.dnd.enabled && (
+          <div className="mt-2 flex items-center gap-2">
+            <input
+              type="time"
+              value={s.dnd.start}
+              onChange={(e) => update({ dnd: { ...s.dnd, start: e.target.value } })}
+              className="font-mono text-[11px] bg-[var(--color-bg2)] border border-[var(--color-line2)] rounded px-2 py-1 text-[var(--color-fg)] focus-visible:outline-none"
+              aria-label="DND start"
+            />
+            <span className="text-[11px] text-[var(--color-fg3)]">to</span>
+            <input
+              type="time"
+              value={s.dnd.end}
+              onChange={(e) => update({ dnd: { ...s.dnd, end: e.target.value } })}
+              className="font-mono text-[11px] bg-[var(--color-bg2)] border border-[var(--color-line2)] rounded px-2 py-1 text-[var(--color-fg)] focus-visible:outline-none"
+              aria-label="DND end"
+            />
+            <span className="text-[10px] text-[var(--color-fg3)] ml-auto">local time</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /** App settings dialog. Houses the About section (version, repo, license,
  *  update status) + the agent-browser CDP bridge toggle — opt-in because a
  *  debug port also exposes the app window. The bridge can only be (de)activated
@@ -437,6 +601,8 @@ function SettingsModal({
             <span className="font-mono text-[var(--color-fg2)]">MIT</span>
           </div>
         </div>
+
+        <NotificationPrefs />
 
         <div className="mt-4 flex items-start gap-3">
           <button

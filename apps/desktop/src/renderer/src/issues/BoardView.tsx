@@ -55,7 +55,7 @@ export function BoardView({
   };
 
   return (
-    <div className="flex gap-2 min-w-fit h-full">
+    <div className="flex gap-3 min-w-fit h-full">
       {groups.map((g) => {
         const droppable = selected && canDrop(g);
         return (
@@ -64,15 +64,19 @@ export function BoardView({
             onDragOver={droppable ? (e) => { e.preventDefault(); setOverKey(g.key); } : undefined}
             onDragLeave={droppable ? () => setOverKey((k) => (k === g.key ? null : k)) : undefined}
             onDrop={droppable ? (e) => { e.preventDefault(); dropOn(g); } : undefined}
-            className={`flex flex-col w-[220px] shrink-0 rounded-lg transition-colors ${
-              overKey === g.key ? "bg-[var(--color-bg4)] ring-1 ring-[var(--color-brand)]" : ""
+            className={`flex flex-col w-[220px] shrink-0 rounded-lg hm-soft ${
+              overKey === g.key
+                ? "bg-[var(--color-bg4)] ring-1 ring-[var(--color-brand)]"
+                : "bg-[color-mix(in_srgb,var(--color-bg3)_50%,transparent)]"
             }`}
           >
-            <div className="flex items-center gap-1.5 px-1.5 py-1 text-[10.5px] font-mono text-[var(--color-fg2)]">
+            <div className="flex items-center gap-1.5 px-2.5 py-2 text-[11px] font-semibold text-[var(--color-fg2)]">
               {g.header}
-              <span className="ml-auto text-[var(--color-fg3)] tabular-nums">{g.items.length}</span>
+              <span className="ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-mono tabular-nums bg-[var(--color-bg4)] text-[var(--color-fg3)]">
+                {g.items.length}
+              </span>
             </div>
-            <div className="flex flex-col gap-2 px-0.5 pb-2 overflow-y-auto">
+            <div className="flex flex-col gap-2 px-1.5 pb-2 overflow-y-auto">
               {g.items.map((issue) => (
                 <IssueCard
                   key={issue.id}
@@ -91,7 +95,9 @@ export function BoardView({
                 />
               ))}
               {g.items.length === 0 && (
-                <div className="text-[10.5px] text-[var(--color-fg3)] px-1.5 py-2">—</div>
+                <div className="text-[10.5px] text-[var(--color-fg3)] px-2 py-3 rounded-md border border-dashed border-[var(--color-line2)] text-center">
+                  {droppable ? "Drop here" : "No issues"}
+                </div>
               )}
             </div>
           </div>

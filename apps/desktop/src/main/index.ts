@@ -66,6 +66,9 @@ import {
 } from "./git-adapter.js";
 import { unwatchAll, watchRepo } from "./fs-watcher.js";
 import { registerAgentNotifications } from "./agent-notify.js";
+import { getNotificationSettings, setNotificationSettings } from "./notification-settings-store.js";
+import { normalizeNotificationSettings } from "../shared/notification-settings.js";
+import type { AppErrorEvent } from "../shared/ipc.js";
 import { startPlanBridge, type PlanRequest } from "./plan-bridge.js";
 import { randomUUID } from "node:crypto";
 import { startHcpServer } from "./hcp/hcp-server.js";
@@ -521,6 +524,16 @@ ipcMain.handle("getBrowserSettings", () => ({
 }));
 ipcMain.handle("setBrowserCdpEnabled", wrap(async (_e, enabled: boolean) => {
   writeSettings({ browserCdp: !!enabled });
+  return { ok: true as const };
+}));
+
+// ── notification preferences ──────────────────────────────────────────────
+// The persisted blob lives in settings.json; this module owns the read + the
+// in-memory cache the per-notice OS-popup gate reads. The renderer caches its
+// own snapshot on load + on every change here (pushed back via the setter).
+ipcMain.handle("getNotificationSettings", () => getNotificationSettings());
+ipcMain.handle("setNotificationSettings", wrap(async (_e, s: unknown) => {
+  setNotificationSettings(normalizeNotificationSettings(s));
   return { ok: true as const };
 }));
 ipcMain.handle("relaunchApp", () => { app.relaunch(); app.exit(0); });
@@ -1059,6 +1072,15 @@ const hcpSubagentReaper = new SubagentReaper(SUBAGENT_REAP_MS, (tileId) => {
 function pushNotify(tileId: string, status: "permission" | "question"): void {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("hcp:notify", { tileId, status });
 }
+/** Push a NON-FATAL background-subsystem error to the renderer as a toast, so
+ *  nothing fails silently (e.g. a stale PTY daemon that breaks hook injection).
+ *  Fatal errors still use dialogs. Idempotent + cheap; safe to call pre-window. */
+function pushAppError(message: string, source: string): void {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    try { mainWindow.webContents.send("app:error", { message, source } satisfies AppErrorEvent); }
+    catch { /* mid-teardown */ }
+  }
+}
 /** Push claude's hook-driven turn state (UserPromptSubmit → working, Stop → idle)
  *  to the renderer status bus (bare tile id). This is the deterministic
  *  replacement for the working/idle screen-scrape. */
@@ -1339,7 +1361,15 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     // Dev rebuild safety: if a daemon from an older build is still running,
     // replace it BEFORE the renderer attaches tiles, so new sessions carry the
     // current code (HCP/plan hooks + env injection). No-op in prod / when current.
-    if (PERSIST_PTY) { try { await ptyDaemon.ensureFreshDaemon(); } catch { /* best-effort */ } }
+    if (PERSIST_PTY) {
+      try { await ptyDaemon.ensureFreshDaemon(); }
+      catch (e) {
+        // Best-effort, but a stale daemon means injected hooks may be wrong →
+        // notifications themselves could silently break. Surface it once as a
+        // non-blocking toast instead of swallowing entirely.
+        pushAppError(`Couldn't refresh the PTY daemon: ${(e as Error).message ?? "unknown error"}`, "pty-daemon");
+      }
+    }
     void createWindow();
     // Native OS notifications for agents that need you — driven by the renderer's
     // agent-status bus over IPC (multi-agent, transition-deduped). Reads

@@ -34,7 +34,7 @@ const STATES: { value: IssueState; label: string }[] = [
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="grid gap-1">
+    <div className="grid gap-1.5">
       <span className="u-eyebrow">{label}</span>
       {children}
     </div>
@@ -42,7 +42,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 function PickerBox({ children }: { children: React.ReactNode }) {
   return (
-    <div className="bg-[var(--color-bg)] border border-[var(--color-line2)] rounded-md px-2.5 py-1.5 min-h-[34px] flex items-center">
+    <div className="bg-[var(--color-bg)] border border-[var(--color-line2)] rounded-lg px-2.5 py-1.5 min-h-[38px] flex items-center hm-soft focus-within:border-[var(--color-brand)]">
       {children}
     </div>
   );
@@ -100,20 +100,20 @@ export function NewIssueModal({ root, open, onOpenChange, onCreated }: Props) {
   }
 
   const inputCls =
-    "w-full bg-[var(--color-bg)] border border-[var(--color-line2)] rounded-md px-2.5 py-1.5 text-[13px] text-[var(--color-fg)] focus:outline-none focus:border-[var(--color-brand)] focus:ring-1 focus:ring-[var(--color-brand)]";
+    "w-full bg-[var(--color-bg)] border border-[var(--color-line2)] rounded-lg px-3 py-2 text-[13px] text-[var(--color-fg)] placeholder:text-[var(--color-fg3)] focus:outline-none focus:border-[var(--color-brand)] focus:ring-2 focus:ring-[var(--color-brand)]/30 hm-soft";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[480px]">
         <form onSubmit={submit}>
           <DialogHeader>
-            <DialogTitle>New issue</DialogTitle>
-            <DialogDescription className="text-[var(--color-fg3)]">
+            <DialogTitle className="text-[16px] font-semibold text-[var(--color-fg)]">New issue</DialogTitle>
+            <DialogDescription className="text-[var(--color-fg3)] text-[12px]">
               Lives at <code className="font-mono text-[10.5px]">.hivemind/issues/&lt;id&gt;.md</code>
             </DialogDescription>
           </DialogHeader>
 
-          <div className="grid gap-3 py-4">
+          <div className="grid gap-3.5 py-4">
             <Field label="Title">
               <input
                 autoFocus
@@ -164,18 +164,18 @@ export function NewIssueModal({ root, open, onOpenChange, onCreated }: Props) {
             </Field>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="gap-2">
             <button
               type="button"
               onClick={() => onOpenChange(false)}
-              className="px-3 py-1.5 text-[12px] text-[var(--color-fg2)] hover:text-[var(--color-fg)] rounded transition-colors"
+              className="px-3.5 py-2 text-[12px] font-medium text-[var(--color-fg2)] hover:text-[var(--color-fg)] rounded-lg hover:bg-[var(--color-bg3)] hm-soft"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={!title.trim() || create.isPending}
-              className="px-3 py-1.5 text-[12px] font-medium text-white bg-[var(--color-brand)] rounded hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
+              className="px-3.5 py-2 text-[12px] font-semibold text-white bg-[var(--color-brand)] rounded-lg hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed hm-soft"
             >
               {create.isPending ? "Creating…" : "Create issue"}
             </button>

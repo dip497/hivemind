@@ -40,7 +40,7 @@ function TileEmpty({
         {action && (
           <button
             onClick={action.onClick}
-            className="mt-1 inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11.5px] font-medium text-white bg-[var(--color-brand)] hover:opacity-90 cursor-pointer"
+            className="mt-1 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11.5px] font-medium text-white bg-[var(--color-brand)] hover:opacity-90 cursor-pointer hm-soft"
           >
             {action.label}
           </button>
@@ -58,7 +58,7 @@ function GroupByMenu({ value, onChange }: { value: GroupBy; onChange: (g: GroupB
         value={value}
         onChange={(e) => onChange(e.target.value as GroupBy)}
         aria-label="Group issues by"
-        className="bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-md text-[11.5px] text-[var(--color-fg)] px-1.5 py-1 outline-none cursor-pointer"
+        className="bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-md text-[11.5px] text-[var(--color-fg)] px-2 py-1 outline-none cursor-pointer hm-soft focus:border-[var(--color-brand)]"
       >
         {GROUP_BY_ORDER.map((g) => (
           <option key={g} value={g}>
@@ -160,7 +160,7 @@ export function IssuesTile({ root, onClose, selected = false }: Props) {
                 <ViewSwitcher value={view} onChange={setViewP} views={["board", "list"]} />
                 <button
                   onClick={() => window.dispatchEvent(new CustomEvent("hivemind:new-issue"))}
-                  className="nodrag inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11.5px] font-medium text-white bg-[var(--color-brand)] hover:opacity-90 cursor-pointer"
+                  className="nodrag inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11.5px] font-semibold text-white bg-[var(--color-brand)] hover:opacity-90 cursor-pointer hm-soft"
                 >
                   + New
                 </button>

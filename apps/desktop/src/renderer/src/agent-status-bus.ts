@@ -38,6 +38,13 @@ export interface StatusEvent {
    *  notification, no done-unseen highlight. A real finish (Stop hook / scrape
    *  idle) is unmarked and still notifies. */
   synthetic?: boolean;
+  /** Process exit code, attached only to an `exited` status published from a
+   *  PTY exit. Lets the awareness layer distinguish a crash (non-zero → "error"
+   *  toast) from a clean close (0 → quiet/"done") and show the code in the body. */
+  exitCode?: number;
+  /** One-line exit detail (e.g. "signal SIGTERM"), attached to an `exited`
+   *  status. Forwarded to the error toast/notification body when present. */
+  detail?: string;
 }
 
 type Listener = (e: StatusEvent) => void;

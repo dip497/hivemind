@@ -26,6 +26,45 @@ test("done → normal urgency, 'finished' title", () => {
   assert.equal(r.body, "Task finished");
 });
 
+test("error → critical urgency, 'failed' title + exit code in body", () => {
+  const r = composeNotice({ tileId: "t1", label: "claude #3", kind: "error", exitCode: 137 }, false);
+  assert.ok(r);
+  assert.equal(r.urgency, "critical");
+  assert.equal(r.title, "claude #3 failed");
+  assert.equal(r.body, "exit code 137"); // no frame/repo → bare how (the code) shows
+});
+
+test("error with no code and no context falls back to a generic line", () => {
+  const r = composeNotice({ tileId: "t1", label: "claude", kind: "error" }, false);
+  assert.ok(r);
+  assert.equal(r.body, "Agent exited unexpectedly");
+});
+
+test("error with frame shows 'Crashed · …' and the context", () => {
+  const r = composeNotice(
+    { tileId: "t1", label: "claude", kind: "error", exitCode: 1, frame: "billing-api" },
+    false,
+  );
+  assert.ok(r);
+  assert.equal(r.urgency, "critical");
+  assert.equal(r.title, "claude failed");
+  assert.equal(r.body, "Crashed · exit code 1 · billing-api");
+});
+
+test("error prefers explicit detail (signal) over the bare exit code", () => {
+  const r = composeNotice(
+    { tileId: "t1", label: "claude", kind: "error", exitCode: 143, detail: "killed by signal 15", frame: "api" },
+    false,
+  );
+  assert.ok(r);
+  assert.equal(r.body, "Crashed · killed by signal 15 · api");
+});
+
+test("error is suppressed when the window is focused (toast covers it)", () => {
+  const r = composeNotice({ tileId: "t1", label: "claude", kind: "error", exitCode: 1 }, true);
+  assert.equal(r, null);
+});
+
 test("repo basename is appended as context when provided", () => {
   const r = composeNotice(
     { tileId: "t1", label: "claude", kind: "needs", repo: "/home/me/dev/motadata-itsm-server" },

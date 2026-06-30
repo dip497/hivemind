@@ -2,6 +2,11 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Play, FileQuestion, X } from "lucide-react";
 import type { AcceptanceItem, Issue, IssueState, LinkType } from "@hivemind/core/types";
 import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+} from "./ui/dialog";
+import {
   useCommentOnIssue,
   useDeleteIssue,
   useIssue,
@@ -35,7 +40,6 @@ export function IssuePeek({ root, id, onClose }: Props) {
   const patch = useUpdateIssue();
   const comment = useCommentOnIssue();
   const del = useDeleteIssue();
-  const ref = useRef<HTMLDivElement>(null);
 
   // Workspace-wide issue list powers the editable pickers + sub-issue tree.
   const { data: allIssues = [] } = useIssues(root);
@@ -47,36 +51,22 @@ export function IssuePeek({ root, id, onClose }: Props) {
   const subIssues = useMemo(() => (id ? allIssues.filter((i) => i.parent === id) : []), [allIssues, id]);
   const parentCandidates = useMemo(() => allIssues.filter((i) => i.id !== id), [allIssues, id]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      // Don't close on Esc while typing into an input — let the field swallow it.
-      const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
   if (!id) return null;
 
   return (
-    <div className="fixed inset-0 z-40 pointer-events-none flex items-center justify-center p-6">
-      <div
-        onClick={onClose}
-        className="absolute inset-0 bg-black/50 pointer-events-auto animate-in fade-in duration-150"
-      />
-      <div
-        ref={ref}
-        className="relative w-[900px] max-w-[92vw] h-[80vh] max-h-[820px] bg-[var(--color-bg2)] border border-[var(--color-line)] rounded-xl flex flex-col pointer-events-auto shadow-2xl overflow-hidden animate-in zoom-in-95 fade-in duration-200"
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent
+        className="sm:max-w-[900px] p-0 gap-0 overflow-hidden"
+        // The peek is a dense two-column layout, not a form — override the
+        // default DialogContent centering paddings so the header/columns fill.
       >
+        {/* Radix requires a Title for a11y; the visible title is the editable
+            h1 below, so this VisuallyHidden-style title carries the id. */}
+        <DialogTitle className="sr-only">{issue ? `${issue.id}: ${issue.title}` : "Issue"}</DialogTitle>
         {isLoading ? (
-          <div className="grid place-items-center h-full text-[var(--color-fg3)] text-[12px]">loading…</div>
+          <div className="grid place-items-center h-[80vh] max-h-[820px] text-[var(--color-fg3)] text-[12px]">loading…</div>
         ) : !issue ? (
-          // Settled with no issue — not found (wrong root for this id, or it was
-          // deleted), or the read errored. Either way: show it, don't hang on
-          // "loading…" forever.
-          <div className="grid place-items-center h-full px-6">
+          <div className="grid place-items-center h-[80vh] max-h-[820px] px-6">
             <div className="flex flex-col items-center gap-3 text-center max-w-[320px]">
               <FileQuestion size={28} className="text-[var(--color-fg3)]" />
               <div className="text-[13px] font-medium text-[var(--color-fg)]">
@@ -85,7 +75,7 @@ export function IssuePeek({ root, id, onClose }: Props) {
               <p className="text-[11.5px] text-[var(--color-fg3)] break-words">
                 {isError
                   ? (error instanceof Error ? error.message : String(error))
-                  : `“${id}” isn't in this workspace — it may belong to a different frame or have been deleted.`}
+                  : `"${id}" isn't in this workspace — it may belong to a different frame or have been deleted.`}
               </p>
               <button
                 onClick={onClose}
@@ -96,8 +86,8 @@ export function IssuePeek({ root, id, onClose }: Props) {
             </div>
           </div>
         ) : (
-          <>
-            <header className="flex items-center gap-2 px-4 py-3 border-b border-[var(--color-line)]">
+          <div className="h-[80vh] max-h-[820px] flex flex-col">
+            <header className="flex items-center gap-2 pl-4 pr-12 py-3 border-b border-[var(--color-line)]">
               <span className="font-mono text-[11px] text-[var(--color-fg3)] tabular-nums">{issue.id}</span>
               {issue.github != null && (
                 <span className="font-mono text-[11px] text-[var(--color-info)]">#{issue.github}</span>
@@ -105,30 +95,17 @@ export function IssuePeek({ root, id, onClose }: Props) {
               <div className="ml-auto flex items-center gap-1">
                 <button
                   onClick={async () => {
-                    // 1. Ensure the repo has the hive MCP + hive-work skill so a
-                    //    spawned claude can actually work the issue (idempotent).
-                    //    Without this, claude has no hive_* tools and silently
-                    //    does nothing — the gap users hit.
                     const repoDir = root ? root.replace(/\/\.hivemind\/?$/, "") : null;
                     if (repoDir) {
                       try { await window.hive.installAgentic(repoDir); } catch { /* best-effort */ }
                     }
-                    // 2. Spawn claude with the work prompt ATTACHED. The tile
-                    //    delivers it to itself the first time it's ready (see
-                    //    claude-bus queueWork/claimWork) — this survives the
-                    //    workspace picker and never races claude+MCP startup,
-                    //    unlike the old blind setTimeout(2500) send-to-"latest".
-                    //    The hive-work skill auto-triggers on the issue key.
                     const work = `Work on ${issue.id}: load it via hive_get_issue, complete the acceptance criteria, and end with hive_set_state. Title: "${issue.title}".`;
-                    // Route through the claude target picker (this/new when 1+,
-                    // select/new when 2+, straight-spawn when none).
                     window.dispatchEvent(
                       new CustomEvent("hivemind:deliver-to-claude", { detail: { text: work } }),
                     );
-                    // 3. Close the peek so the focused claude tile is visible.
                     onClose();
                   }}
-                  className="inline-flex items-center gap-1 h-8 px-2.5 rounded-md text-[11.5px] font-semibold text-white bg-[var(--color-brand)] hover:opacity-90 cursor-pointer"
+                  className="inline-flex items-center gap-1 h-8 px-2.5 rounded-md text-[11.5px] font-semibold text-white bg-[var(--color-brand)] hover:opacity-90 cursor-pointer hm-soft"
                   title="Set up agents (if needed), spawn claude, and tell it to work on this issue"
                 >
                   <Play size={11} fill="currentColor" strokeWidth={0} aria-hidden />
@@ -144,20 +121,12 @@ export function IssuePeek({ root, id, onClose }: Props) {
                       { onSuccess: onClose },
                     );
                   }}
-                  className="size-7 grid place-items-center rounded-md text-[var(--color-fg3)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-err)] cursor-pointer"
+                  className="size-7 grid place-items-center rounded-md text-[var(--color-fg3)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-err)] cursor-pointer hm-soft"
                   title="Delete issue"
                   aria-label="Delete issue"
                   disabled={del.isPending}
                 >
                   <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden><path d="M3 4h8M5 4V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1M4 4l1 8a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1l1-8" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                </button>
-                <button
-                  onClick={onClose}
-                  className="size-7 grid place-items-center rounded-md text-[var(--color-fg3)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)] cursor-pointer"
-                  title="Close (Esc)"
-                  aria-label="Close (Esc)"
-                >
-                  <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
                 </button>
               </div>
             </header>
@@ -259,10 +228,10 @@ export function IssuePeek({ root, id, onClose }: Props) {
                 )}
               </aside>
             </div>
-          </>
+          </div>
         )}
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -307,12 +276,12 @@ function StateSelect({ value, onChange }: { value: IssueState; onChange: (s: Iss
         <svg width="9" height="9" viewBox="0 0 10 10" className="ml-auto text-[var(--color-fg3)]"><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" /></svg>
       </button>
       {open && (
-        <div className="absolute z-30 mt-1 w-full bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-md shadow-xl p-1">
+        <div className="hm-popover absolute z-30 mt-1 w-full">
           {STATE_ORDER.map((s) => (
             <button
               key={s}
               onClick={() => { onChange(s); setOpen(false); }}
-              className="w-full flex items-center gap-1.5 px-1.5 py-1 rounded-md text-[11.5px] text-left cursor-pointer hover:bg-[var(--color-bg4)]"
+              className="w-full flex items-center gap-1.5 px-1.5 py-1 rounded-md text-[11.5px] text-left cursor-pointer hover:bg-[var(--color-bg4)] hm-soft"
               style={{ color: STATE_COLOR[s] }}
             >
               <StateIcon state={s} size={12} />

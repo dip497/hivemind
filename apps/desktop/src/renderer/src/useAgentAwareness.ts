@@ -9,10 +9,54 @@
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { isBackgroundTile } from "./worker-tiles";
+import { getNotificationSettings } from "./notification-settings";
+import { shouldNotify } from "../../shared/notification-settings.js";
 import type { FrameState } from "./canvas-persistence";
 
 type TileMeta = { label: string; status: TileStatusKind; seen: boolean };
-export interface Toast { id: string; tileId: string; label: string; status: TileStatusKind }
+
+/** The verb-class of a toast / OS popup — drives accent color, icon and copy.
+ *  Derived from a status transition: needs-you (blocked/permission/question),
+ *  finished (working→idle, or clean exit code 0), or error (working→exited,
+ *  non-zero). Kept separate from TileStatusKind so a single "error" kind can
+ *  overlay an `exited` status with red styling + the exit code in the body. */
+export type NoticeKind = "needs" | "done" | "error";
+
+export interface Toast {
+  id: string;
+  tileId: string;
+  label: string;
+  status: TileStatusKind;
+  /** Notice class (drives accent/icon/copy). Optional for back-compat with the
+   *  worktree handlers, which pass only {tileId,label,status} and get `needs`
+   *  derived from a blocked status. */
+  kind?: NoticeKind;
+  /** One-line failure detail shown under the label (error kind), e.g.
+   *  "exit code 137" / "killed by signal 9". */
+  detail?: string;
+  /** The frame (workspace) name — shown as muted context so you know WHICH
+   *  project's agent poked you, mirroring the native popup's body. */
+  frame?: string;
+  /** Creation ts — the rich toast renders a relative "just now" / "12s" stamp. */
+  at: number;
+}
+
+/** The notice class for a toast, deriving it from the status when the caller
+ *  didn't set `kind` explicitly (the worktree handlers pass only a status). */
+export function toastKindOf(t: { kind?: NoticeKind; status: TileStatusKind }): NoticeKind {
+  if (t.kind) return t.kind;
+  if (t.status === "blocked" || t.status === "permission" || t.status === "question") return "needs";
+  if (t.status === "exited") return "error";
+  return "done";
+}
+
+/** Auto-dismiss delay. Needs-you / crashed demand attention and linger; a clean
+ *  finish is lower-stakes and clears faster. Single source of truth — the toast
+ *  UI reads the same value to draw its shrinking progress line in sync. */
+export function toastTtlMs(t: { kind?: NoticeKind; status: TileStatusKind }): number {
+  const k = toastKindOf(t);
+  return k === "needs" || k === "error" ? 12000 : 7000;
+}
 
 export interface AgentAwarenessCtx {
   /** Populated with pushToast so earlier-declared worktree handlers can toast. */
@@ -39,15 +83,15 @@ export function useAgentAwareness(ctx: AgentAwarenessCtx) {
   const dismissToast = useCallback((id: string) => {
     setToasts((ts) => ts.filter((t) => t.id !== id));
   }, []);
-  const pushToast = useCallback((t: Omit<Toast, "id">) => {
+  const pushToast = useCallback((t: Omit<Toast, "id" | "at"> & { at?: number }) => {
     const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const at = t.at ?? Date.now();
     setToasts((ts) => {
       // Collapse a prior toast for the same tile — only the latest state matters.
       const kept = ts.filter((x) => x.tileId !== t.tileId);
-      return [...kept, { ...t, id }];
+      return [...kept, { ...t, id, at }];
     });
-    // Blocked (needs you) lingers; a "done" notice is lower-stakes — auto-clear.
-    const ttl = t.status === "blocked" || t.status === "permission" || t.status === "question" ? 12000 : 7000;
+    const ttl = toastTtlMs(t);
     setTimeout(() => dismissToast(id), ttl);
   }, [dismissToast]);
 
@@ -98,34 +142,60 @@ export function useAgentAwareness(ctx: AgentAwarenessCtx) {
       const rawFinished = e.status === "idle" && old?.status === "working"; // done now
       const needsHuman =
         e.status === "blocked" || e.status === "permission" || e.status === "question";
+      // A WORKING agent whose process just DIED. This is the failure mode that
+      // was previously silent (a non-zero exit only painted grey inline text):
+      // a crash, an OOM-kill, a failed build that took the shell down. Only a
+      // tile that was actually working can "crash" — a plain shell's exit has no
+      // prior working status (it never publishes one) so this stays quiet for it.
+      // Background workers are gathered in bulk and excluded like `finished`.
+      const exitedFromWorking = e.status === "exited" && old?.status === "working" && !isBackgroundTile(e.tileId);
+      // exitCode 0 = the agent closed cleanly (e.g. /exit) → reads as "done",
+      // not alarm-red. Unknown/missing code or non-zero → error.
+      const cleanExit = exitedFromWorking && e.exitCode === 0;
+      const crashed = exitedFromWorking && e.exitCode !== 0;
       // Skip the "finished" path for:
       //  - SYNTHETIC idles: a stuck "working" decayed because output stopped (a
       //    state correction, not a completion) — toasting/notifying for each would
       //    flood the screen (the "filling laggy" report); the status still updates.
       //  - background workflow workers (report:false), gathered in bulk.
       // needs-you is kept either way: an unattended blocked worker still needs help.
-      const finished = rawFinished && !e.synthetic && !isBackgroundTile(e.tileId);
+      const finished = (rawFinished && !e.synthetic) || cleanExit;
       // "seen" = user is looking (tile selected) OR nothing noteworthy happened.
-      const seen = selected ? true : finished || needsHuman ? false : old?.seen ?? true;
+      const seen = selected ? true : finished || needsHuman || crashed ? false : old?.seen ?? true;
       const next = new Map(prev);
       next.set(e.tileId, { label: e.label, status: e.status, seen });
       commitStatuses(next);
+      // Resolve the notice class + the frame context once, for both surfaces.
+      const kind: NoticeKind = crashed ? "error" : needsHuman ? "needs" : "done";
+      const fid = frameOfRef.current[e.tileId];
+      const fr = fid ? framesRef.current.find((f) => f.id === fid) : undefined;
       // Toast only for background events — suppress when the tile is selected.
-      if (!selected && (needsHuman || finished)) {
-        pushToast({ tileId: e.tileId, label: e.label, status: e.status });
+      // Gated by user prefs (master / per-kind / DND) for the in-app surface.
+      if (!selected && (needsHuman || finished || crashed) && shouldNotify(getNotificationSettings(), kind, "inApp")) {
+        pushToast({
+          tileId: e.tileId,
+          label: e.label,
+          status: e.status,
+          kind,
+          ...(crashed ? { detail: e.detail ?? (e.exitCode !== undefined ? `exit code ${e.exitCode}` : undefined) } : {}),
+          ...(fr?.title ? { frame: fr.title } : {}),
+        });
       }
       // Native OS notification for the SAME transitions, NOT gated on selection
       // (if the whole window is unfocused you're away). Main suppresses it when
-      // the window IS focused. One state machine, two surfaces.
-      if (needsHuman || finished) {
-        const fid = frameOfRef.current[e.tileId];
-        const fr = fid ? framesRef.current.find((f) => f.id === fid) : undefined;
+      // the window IS focused AND applies the same prefs for the osPopups
+      // surface. One state machine, two surfaces. We still forward every event
+      // so the OS-surface pref is honored even when the in-app one is off.
+      if (needsHuman || finished || crashed) {
         try {
           window.hive.notifyAgent({
             tileId: e.tileId,
             label: e.label,
-            kind: needsHuman ? "needs" : "done",
-            frame: fr?.title,
+            kind,
+            ...(fr?.title ? { frame: fr.title } : {}),
+            ...(crashed
+              ? { ...(e.exitCode !== undefined ? { exitCode: e.exitCode } : {}), ...(e.detail ? { detail: e.detail } : {}) }
+              : {}),
           });
         } catch { /* preload missing in some test harnesses */ }
       }

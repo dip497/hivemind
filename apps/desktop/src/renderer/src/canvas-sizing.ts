@@ -27,8 +27,9 @@ export function defaultSizeForKind(kind: TileKind): { width: number; height: num
     case "issues":
       return { width: 680, height: 460 };
     case "planReview":
-      // Roomy enough to read a full plan without scrolling the whole thing.
-      return { width: 820, height: 720 };
+      // Large by default — a plan + the annotation panel need width to read the
+      // full markdown (tables, code blocks) without constant scrolling.
+      return { width: 1280, height: 920 };
     case "browser":
       return { width: 1280, height: 860 };
     case "claude":

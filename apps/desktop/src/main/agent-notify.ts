@@ -19,6 +19,8 @@
  */
 import { Notification, app, ipcMain, type BrowserWindow } from "electron";
 import type { AgentNotice } from "../shared/ipc.js";
+import { shouldNotify } from "../shared/notification-settings.js";
+import { getNotificationSettings } from "./notification-settings-store.js";
 import { composeNotice } from "./agent-notify-core.js";
 
 export { composeNotice } from "./agent-notify-core.js";
@@ -28,13 +30,20 @@ export { composeNotice } from "./agent-notify-core.js";
 export function registerAgentNotifications(getWin: () => BrowserWindow | null): () => void {
   const onNotice = (_e: unknown, raw: unknown): void => {
     const rec = raw as AgentNotice | null;
+    if (!rec || (rec.kind !== "needs" && rec.kind !== "done" && rec.kind !== "error")) return;
+    // User preferences gate the OS popup surface (master, per-kind, DND). The
+    // focus gate (below) is separate: prefs say WHETHER this kind/surface is
+    // allowed at all; focus says whether you're already looking. Both must pass.
+    if (!shouldNotify(getNotificationSettings(), rec.kind, "osPopups")) return;
     const win = getWin();
     const focused = !!(win && !win.isDestroyed() && win.isFocused());
-    const composed = rec && composeNotice(rec, focused);
+    const composed = composeNotice(rec, focused);
     if (!composed) return;
     if (!Notification.isSupported()) return;
 
-    const needs = rec!.kind === "needs";
+    // needs-you + crashed are critical (wake the dock/taskbar); a clean finish
+    // is informational. The copy (needs/failed/finished) is decided in composeNotice.
+    const critical = rec.kind === "needs" || rec.kind === "error";
     const n = new Notification({ ...composed });
     n.on("click", () => {
       const w = getWin();
@@ -47,7 +56,7 @@ export function registerAgentNotifications(getWin: () => BrowserWindow | null): 
     n.show();
     // Persistent attention until the user looks (cleared on window 'focus').
     try { win?.flashFrame(true); } catch { /* unsupported DE */ }
-    try { app.dock?.bounce?.(needs ? "critical" : "informational"); } catch { /* macOS only */ }
+    try { app.dock?.bounce?.(critical ? "critical" : "informational"); } catch { /* macOS only */ }
   };
 
   ipcMain.on("notify:agent", onNotice);

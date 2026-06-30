@@ -15,31 +15,31 @@
    into the grays) so the whole surface reads calm + dense like Huly's tracker
    and Plane's revamped sidebar, rather than the previous warm-orange theme. */
 :root {
-  --background: #0d0e12;
-  --foreground: #e7e9ee;
-  --card: #16181f;
-  --card-foreground: #e7e9ee;
-  --popover: #16181f;
-  --popover-foreground: #e7e9ee;
-  --primary: #5b6cff;
+  --background: oklch(0.169 0.003 230.81);
+  --foreground: oklch(0.924 0.0017 230.69);
+  --card: oklch(0.216 0.0025 230.82);
+  --card-foreground: oklch(0.924 0.0017 230.69);
+  --popover: oklch(0.216 0.0025 230.82);
+  --popover-foreground: oklch(0.924 0.0017 230.69);
+  --primary: oklch(0.55 0.18 265);
   --primary-foreground: #ffffff;
-  --secondary: #20242e;
-  --secondary-foreground: #e7e9ee;
-  --muted: #16181f;
-  --muted-foreground: #9aa1ad;
-  --accent: #20242e;
-  --accent-foreground: #e7e9ee;
-  --destructive: #f43f5e;
+  --secondary: oklch(0.259 0.0033 230.84);
+  --secondary-foreground: oklch(0.924 0.0017 230.69);
+  --muted: oklch(0.216 0.0025 230.82);
+  --muted-foreground: oklch(0.846 0.0035 230.72);
+  --accent: oklch(0.259 0.0033 230.84);
+  --accent-foreground: oklch(0.924 0.0017 230.69);
+  --destructive: oklch(0.58 0.24 28);
   --destructive-foreground: #ffffff;
-  --border: #23262f;
-  --input: #23262f;
-  --ring: #5b6cff;
+  --border: oklch(0.342 0.0049 230.86);
+  --input: oklch(0.342 0.0049 230.86);
+  --ring: oklch(0.55 0.18 265);
   --radius: 0.5rem;
-  --chart-1: #5b6cff;
-  --chart-2: #38bdf8;
-  --chart-3: #22c55e;
-  --chart-4: #f59e0b;
-  --chart-5: #f43f5e;
+  --chart-1: oklch(0.55 0.18 265);
+  --chart-2: oklch(0.70 0.13 230);
+  --chart-3: oklch(0.70 0.19 152);
+  --chart-4: oklch(0.77 0.17 65);
+  --chart-5: oklch(0.58 0.24 28);
 }
 
 @theme inline {
@@ -74,41 +74,66 @@
 }
 
 @theme {
-  /* hivemind palette — Huly deep-navy ramp + Plane cool slate neutrals.
-     Each step nudges lightness with a constant cool (blue) hue so surfaces
-     stack cleanly: bg < bg2 (sidebar) < bg3 (cards) < bg4 (hover). */
-  --color-bg:     #0d0e12;   /* canvas / app backdrop (deep navy) */
-  --color-bg2:    #121419;   /* sidebar / titlebar */
-  --color-bg3:    #16181f;   /* tile chrome / cards / popovers */
-  --color-bg4:    #20242e;   /* hover / focus / active pill */
-  --color-line:   #1c1f27;   /* hairline dividers */
-  --color-line2:  #23262f;   /* control borders */
+  /* ── hivemind palette — aligned to Plane's oklch dark theme + Linear's
+     lavender-blue accent. Plane uses a cool blue-grey neutral ramp (hue ~230)
+     with a 4-layer surface ladder and a vivid blue-purple brand; Linear uses
+     lavender-blue #5e6ad2 as primary on near-black surfaces. We merge both:
+     Plane's neutral/surface/border structure + Linear's brand hue.
 
-  --color-fg:     #e7e9ee;   /* primary text (cool white) */
-  --color-fg2:    #9aa1ad;   /* secondary text */
-  --color-fg3:    #6b7280;   /* tertiary / metadata */
+     All values in oklch so color-mix() and alpha blends are perceptually
+     correct (Plane's entire system is oklch for this reason).              */
 
-  --color-brand:  #5b6cff;   /* indigo primary (Plane/Huly accent) */
-  --color-select: #9aa1ad;   /* SELECTION highlight (neutral grey) — separate from
-                                brand so a selected tile reads non-blue */
-  --color-accent: #38bdf8;   /* sky link accent (Huly's blue PR links) */
-  --color-ok:     #22c55e;
-  --color-warn:   #f59e0b;   /* Huly's "pending" amber */
-  --color-err:    #f43f5e;
-  --color-info:   #38bdf8;
+  /* Surface ladder — Plane dark neutrals (hue 230, low chroma = cool grey).
+     bg < bg2 < bg3 < bg4 reads as a clean depth stack. Linear uses the same
+     4-step idea (canvas → surface-1..4). */
+  --color-bg:     oklch(0.169 0.003 230.81);  /* canvas — Plane neutral-black */
+  --color-bg2:    oklch(0.193 0.002 230.81);  /* sidebar / titlebar — neutral-100 */
+  --color-bg3:    oklch(0.216 0.0025 230.82); /* cards / popovers — neutral-200 */
+  --color-bg4:    oklch(0.259 0.0033 230.84); /* hover / focus — neutral-400 */
 
-  /* Plane 5-group state palette (backlog/unstarted/started/completed/cancelled).
-     hivemind splits "started" into in_progress (amber) + in_review (violet)
-     for AI-agent workflows. Tuned to Plane's actual state hues. */
-  --color-state-backlog:   #8b909a;
-  --color-state-todo:      #5b6cff;
-  --color-state-progress:  #f59e0b;
-  --color-state-review:    #a855f7;
-  --color-state-done:      #22c55e;
-  --color-state-cancelled: #6b7280;
+  /* Borders — Plane's subtle/strong border pair. Linear's hairline #23252a
+     sits between these two. */
+  --color-line:   oklch(0.259 0.0033 230.84); /* hairline = same as bg4 (Plane subtle) */
+  --color-line2:  oklch(0.342 0.0049 230.86); /* control borders — Plane neutral-600 */
+
+  /* Text — Plane neutral ramp top end. Linear: ink #f7f8f8, muted #d0d6e0,
+     subtle #8a8f98, tertiary #62666d. We map to the same perceptual steps. */
+  --color-fg:     oklch(0.924 0.0017 230.69);  /* primary — Plane neutral-1200 / Linear ink */
+  --color-fg2:    oklch(0.846 0.0035 230.72);  /* secondary — neutral-1100 / Linear muted */
+  --color-fg3:    oklch(0.684 0.0074 230.81);  /* tertiary — neutral-900 / Linear subtle */
+
+  /* Brand — Linear's lavender-blue #5e6ad2 (the canonical task-mgmt accent).
+     Plane's brand-default is a similar blue-purple at oklch(0.63 0.13 238). */
+  --color-brand:  oklch(0.55 0.18 265);        /* Linear lavender-blue primary */
+  --color-brand-hover: oklch(0.62 0.17 263);   /* hover — Linear's #828ffa vibe */
+  --color-select: oklch(0.846 0.0035 230.72);  /* selection = neutral grey (non-blue) */
+  --color-accent: oklch(0.70 0.13 230);        /* link accent — Plane brand-700 */
+
+  /* Semantic — Plane green/amber/red ramps (dark-mode endpoints). */
+  --color-ok:     oklch(0.70 0.19 152);   /* green-700 */
+  --color-warn:   oklch(0.77 0.17 65);    /* amber-600 */
+  --color-err:    oklch(0.58 0.24 28);    /* red-500 */
+  --color-info:   oklch(0.70 0.13 230);   /* = accent */
+
+  /* State palette — Plane's 5-group workflow states (backlog/unstarted/
+     started/completed/cancelled), with hivemind's in_progress/in_review split.
+     Tuned to Plane's priority/state hues. */
+  --color-state-backlog:   oklch(0.64 0.013 231.77);  /* Plane priority-none (slate) */
+  --color-state-todo:      oklch(0.55 0.18 265);       /* = brand lavender-blue */
+  --color-state-progress:  oklch(0.77 0.17 65);        /* amber-600 */
+  --color-state-review:    oklch(0.60 0.20 303);       /* purple (Plane extended-purple-500 hue) */
+  --color-state-done:      oklch(0.70 0.19 152);       /* green-700 */
+  --color-state-cancelled: oklch(0.52 0.01 230);       /* neutral grey */
 
   --font-sans: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
   --font-mono: "JetBrains Mono", "SFMono-Regular", ui-monospace, Menlo, Monaco, Consolas, monospace;
+
+  /* Elevation tokens — Plane uses layered translucent shadows; Linear uses a
+     4-level elevation ladder. Each step = outer drop + inner top highlight. */
+  --hm-shadow-1: 0 1px 2px oklch(0.05 0 0 / 0.30), 0 1px 3px oklch(0.05 0 0 / 0.22);
+  --hm-shadow-2: 0 4px 12px oklch(0.05 0 0 / 0.38), 0 1px 3px oklch(0.05 0 0 / 0.26);
+  --hm-shadow-3: 0 12px 32px oklch(0.05 0 0 / 0.48), 0 4px 12px oklch(0.05 0 0 / 0.32);
+  --hm-highlight: inset 0 1px 0 0 oklch(1 0 0 / 0.07);
 }
 
 @layer base {
@@ -167,6 +192,130 @@ h1, h2, h3 {
   border: 1px solid var(--color-line2);
   border-radius: 12px;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+}
+
+/* ── Glass toasts (bottom-right stack) — borderless frosted cards. No hairline
+   border: the inset top sheen + the soft drop define the edge. ONE accent (the
+   app brand, --color-brand) tints the icon, the verb line, and the auto-dismiss
+   progress line; the kind is encoded by the icon shape + verb text (+ a pulse on
+   needs-you), never by a second color. Opaque in the default theme; frosts
+   against the live wallpaper under glass mode. NOT under .react-flow__node, so
+   the canvas motion-strip rule (which clears backdrop-filter during pan/drag)
+   doesn't touch it. */
+.hm-toast {
+  position: relative;
+  overflow: hidden;
+  min-width: 252px;
+  max-width: 324px;
+  border: none;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--color-bg3) 78%, transparent);
+  /* liquid-glass: inset top highlight (lit from above) + a deep drop so the
+     borderless card still reads as a floating slab against the canvas. */
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.10), 0 12px 40px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+}
+/* Under glass, lean into the live wallpaper frost (matches .hm-island's glass
+   rule). The translucent bg lets the blurred wallpaper bleed through. */
+html.glass-on .hm-toast {
+  background: color-mix(in srgb, var(--color-bg2) var(--glass-opacity), transparent);
+  backdrop-filter: blur(var(--glass-blur)) saturate(145%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(145%);
+}
+/* The single accent — applied to exactly three spots (icon, verb, TTL line). */
+.hm-toast-icon { color: var(--color-brand); }
+.hm-toast-verb { color: var(--color-brand); }
+/* Auto-dismiss progress line — shrinks 100%→0 over --ttl (set inline to match
+   the JS dismiss timer exactly, both via toastTtlMs). */
+.hm-toast-bar {
+  position: absolute;
+  left: 0; bottom: 0;
+  height: 2px;
+  width: 100%;
+  background: color-mix(in srgb, var(--color-brand) 70%, transparent);
+  animation: hm-toast-shrink var(--ttl, 7s) linear forwards;
+}
+@keyframes hm-toast-shrink { from { width: 100%; } to { width: 0%; } }
+/* Enter — slide in from the right, ease-out-quint. No scale pop (motion conveys
+   arrival; the flourish was decorative). */
+.hm-toast-in { animation: hm-toast-in 220ms cubic-bezier(0.32, 0.72, 0, 1); }
+@keyframes hm-toast-in {
+  from { opacity: 0; transform: translateX(16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hm-toast-in { animation: none; }
+  .hm-toast-bar { animation: none; }
+}
+
+/* ── Shared surface utilities — one depth language for the issue UI (and any
+   other surface that wants it). Each level: bg + hairline border + layered
+   shadow + a 1px inner top highlight so the surface reads "lifted, soft".
+     .hm-surface-1  → card / board column / list row container
+     .hm-surface-2  → anchored popover / dropdown
+     .hm-surface-3  → modal / dialog panel
+   Use .hm-card for interactive cards (adds hover-lift + soft transition). */
+.hm-surface-1 {
+  background: var(--color-bg3);
+  border: 1px solid var(--color-line2);
+  border-radius: 8px;
+  box-shadow: var(--hm-shadow-1), var(--hm-highlight);
+}
+.hm-surface-2 {
+  background: var(--color-bg3);
+  border: 1px solid var(--color-line2);
+  border-radius: 10px;
+  box-shadow: var(--hm-shadow-2), var(--hm-highlight);
+}
+.hm-surface-3 {
+  background: var(--color-bg2);
+  border: 1px solid var(--color-line2);
+  border-radius: 14px;
+  box-shadow: var(--hm-shadow-3), var(--hm-highlight);
+}
+
+/* Anchored popover shell — shared by FilterBar dropdowns, peek StateSelect,
+   and all pickers. Same padding + radius + shadow so every dropdown matches. */
+.hm-popover {
+  background: var(--color-bg3);
+  border: 1px solid var(--color-line2);
+  border-radius: 10px;
+  box-shadow: var(--hm-shadow-2), var(--hm-highlight);
+  padding: 4px;
+}
+
+/* Modal overlay + panel — used by IssuePeek AND NewIssueModal so the two
+   popups that sit next to each other in the same flow finally match. */
+.hm-modal-overlay {
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+
+/* Interactive soft card — gentle hover lift + border brighten + smooth ease.
+   The hover lift is tiny (-1px) so a board of cards stays calm, not jumpy. */
+.hm-card {
+  background: var(--color-bg3);
+  border: 1px solid var(--color-line2);
+  border-radius: 8px;
+  box-shadow: var(--hm-shadow-1);
+  transition: transform 150ms cubic-bezier(.32,.72,0,1),
+              border-color 150ms ease,
+              box-shadow 150ms ease;
+}
+.hm-card:hover {
+  transform: translateY(-1px);
+  border-color: var(--color-fg3);
+  box-shadow: var(--hm-shadow-2), var(--hm-highlight);
+}
+.hm-card:active {
+  transform: translateY(0);
+}
+
+/* Shared soft transition for any element that changes color/transform. */
+.hm-soft {
+  transition: all 150ms cubic-bezier(.32,.72,0,1);
 }
 
 /* lightweight loading spinner for tile loading states (muted, no glow) */
@@ -524,9 +673,9 @@ body.canvas-resizing .react-flow__node .react-flow__resize-control {
      tokens (--color-bg2/3/4) mirror these; glass mode derives translucent
      variants from the SAME values so there's no duplicated magic hex. Change a
      surface color here and both the opaque + glass themes track it. */
-  --surface-2: #121419;   /* sidebar / titlebar / panel */
-  --surface-3: #16181f;   /* cards / tile chrome / popovers */
-  --surface-4: #20242e;   /* hover / active */
+  --surface-2: oklch(0.193 0.002 230.81);   /* sidebar / titlebar / panel */
+  --surface-3: oklch(0.216 0.0025 230.82);  /* cards / tile chrome / popovers */
+  --surface-4: oklch(0.259 0.0033 230.84);  /* hover / active */
   --frame-fill: 7%;       /* frame-zone tint strength (FrameNode reads this) */
 }
 
@@ -748,7 +897,7 @@ html.content-glass .md-preview code {
   animation: hm-wp-drift-c 50s ease-in-out infinite alternate;
 }
 /* Fine grain — fractal-noise data URI at low opacity kills gradient banding and
-   reads as a premium frosted texture. Static (no animation cost). */
+   reads as a frosted texture. Static (no animation cost). */
 .hm-wp-grain {
   position: absolute;
   inset: 0;

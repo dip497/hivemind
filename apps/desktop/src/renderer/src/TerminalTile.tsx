@@ -269,7 +269,10 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       question: ["#5b6cff", "input?", true],
       blocked: ["#f43f5e", "blocked", true],
     };
-    const setStatus = (s: "working" | "idle" | "exited" | "permission" | "question" | "blocked") => {
+    const setStatus = (
+      s: "working" | "idle" | "exited" | "permission" | "question" | "blocked",
+      extra?: { exitCode?: number; detail?: string },
+    ) => {
       const dot = dotRef.current;
       const label = labelRef.current;
       if (!dot || !label) return;
@@ -283,8 +286,10 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       lastStatusRef.current = s;
       // Broadcast to the Canvas (chips / toasts / done-unseen). Only agent tiles
       // and exits are interesting — a plain shell's working/idle churn is noise.
+      // exitCode/detail ride along on an `exited` so the awareness layer can
+      // tell a crash (non-zero → error toast) from a clean close and show the code.
       if (agent || s === "exited") {
-        publishStatus({ tileId, label: chipLabelRef.current, status: s });
+        publishStatus({ tileId, label: chipLabelRef.current, status: s, ...extra });
       }
     };
     const markActivity = () => {
@@ -625,7 +630,12 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       exited = true;
       if (idleTimer.current) clearTimeout(idleTimer.current);
       if (agentPoll) { clearInterval(agentPoll); agentPoll = undefined; }
-      setStatus("exited");
+      // Thread the exit code + a one-line detail so the awareness layer can
+      // raise an "error" toast for a crash (non-zero) vs. stay quiet on a clean
+      // close, and show the code in the body. (signal here is the numeric value
+      // sent by node-pty; name it generically — a non-null signal implies kill.)
+      const detail = signal !== undefined && signal !== null ? `killed by signal ${signal}` : undefined;
+      setStatus("exited", { exitCode: code, detail });
     });
     term.onData((d) => {
       if (exited) {
