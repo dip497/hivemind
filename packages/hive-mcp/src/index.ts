@@ -271,7 +271,7 @@ const TOOLS: Tool[] = [
     inputSchema: {
       type: "object",
       properties: {
-        agent: { type: "string", description: "Agent to launch: 'claude' (default), 'codex', 'opencode', 'droid', …" },
+        agent: { type: "string", description: "Agent to launch: 'claude' (default), 'codex', 'opencode', 'droid', 'pi', …" },
         prompt: { type: "string", description: "Initial task delivered once the agent is ready." },
         frame: { type: "string", description: "Frame to spawn into — a frame id, repo/worktree name, or title (e.g. 'manageark'). Omit to use the spawning agent's own frame. Discover with hive_list_frames." },
         mode: { type: "string", description: "claude permission mode. Omit (default) → the worker runs AUTONOMOUSLY ('bypassPermissions' / --dangerously-skip-permissions), since a delegated worker has no human at its tile to answer prompts. Pass 'plan', 'acceptEdits', or 'default' to keep a human in the loop, or use `supervise` to route its prompts to YOU instead." },
@@ -411,7 +411,7 @@ const TOOLS: Tool[] = [
         stages: { type: "array", items: { type: "string" }, description: "pipeline: one prompt per stage, run in order. Each may use {input} to reference the prior stage's reply." },
         input: { type: "string", description: "pipeline: optional seed value substituted into the FIRST stage's {input}." },
         reduce_prompt: { type: "string", description: "mapreduce: the reducer agent's prompt. Use {results} for all worker outputs joined together." },
-        agent: { type: "string", description: "Runtime for every worker: 'claude' (default), 'codex', 'droid', … Non-claude runtimes must be installed on the host or the worker fails to spawn (status:'error')." },
+        agent: { type: "string", description: "Runtime for every worker: 'claude' (default), 'codex', 'droid', 'pi', … Non-claude runtimes must be installed on the host or the worker fails to spawn (status:'error')." },
         frame: { type: "string", description: "Frame to spawn workers into. Omit to use your own frame. Discover with hive_list_frames." },
         supervise: { description: "Broker the workers' tool-permission prompts to YOU (answer with hive_approve) instead of a human — for unattended fan-out. true brokers the mutating tools; 'all' brokers every tool; or a comma-string / array of tool names.", type: ["boolean", "string", "array"], items: { type: "string" } },
         max_concurrent: { type: "integer", minimum: 1, description: "Max workers live at once for fanout/mapreduce (default 6, capped at 12)." },

@@ -67,6 +67,18 @@ function DroidIcon({ size = 16, className }: { size?: number; className?: string
   );
 }
 
+/** Pi (pi.dev — Earendil) — its official stepped-glyph logo (from pi-logo-on-dark.svg),
+ *  recolored to `currentColor` so it themes with the tile chrome like the other
+ *  brand marks. fillRule=evenodd keeps the inner hole in the staircase path. */
+function PiIcon({ size = 16, className }: { size?: number; className?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 800 800" fill="currentColor" fillRule="evenodd" className={className} aria-hidden>
+      <path d="M165.29 165.29 H517.36 V400 H400 V517.36 H282.65 V634.72 H165.29 Z M282.65 282.65 V400 H400 V282.65 Z" />
+      <path d="M517.36 400 H634.72 V634.72 H517.36 Z" />
+    </svg>
+  );
+}
+
 /** A generic agent mark for tools without a bundled logo yet (gemini/…). */
 function GenericAgentIcon({ size = 16, className }: { size?: number; className?: string }) {
   return (
@@ -97,6 +109,12 @@ export const AGENTS: AgentDef[] = [
   // detectDroid reads the in-TUI prompts. Session resume across a daemon restart
   // is handled by the droid provider (`droid --resume <id>`); status is scrape-only.
   { id: "droid", label: "Droid", cmd: "droid", icon: DroidIcon, enabled: true },
+  // pi (pi.dev — Earendil): a minimal terminal coding harness. It ships NO hook
+  // system (no Stop/UserPromptSubmit/Notification), so no default flags and
+  // status is screen-scrape only (detectPi). Session resume across a daemon
+  // restart is handled by the pi provider (`pi --session <id>`, resolved from
+  // ~/.pi/agent/sessions for the tile cwd). It reads AGENTS.md natively.
+  { id: "pi", label: "Pi", cmd: "pi", icon: PiIcon, enabled: true },
   { id: "gemini", label: "Gemini", cmd: "gemini", icon: GenericAgentIcon, enabled: false },
 ];
 

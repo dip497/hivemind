@@ -13,8 +13,9 @@ import type { AgentProvider, ProviderResumeTransforms, ProviderSpawnContext } fr
 import { claudeProvider } from "./claude.js";
 import { codexProvider } from "./codex.js";
 import { droidProvider } from "./droid.js";
+import { piProvider } from "./pi.js";
 
-export const PROVIDERS: AgentProvider[] = [claudeProvider, codexProvider, droidProvider];
+export const PROVIDERS: AgentProvider[] = [claudeProvider, codexProvider, droidProvider, piProvider];
 
 export function providerFor(cmd: string): AgentProvider | undefined {
   return PROVIDERS.find((p) => p.matches(cmd));

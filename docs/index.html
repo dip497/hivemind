@@ -66,7 +66,7 @@
     {
       "@type": "Question",
       "name": "Which AI coding agents does hivemind support?",
-      "acceptedAnswer": { "@type": "Answer", "text": "claude (Claude Code), codex, gemini and opencode out of the box. The agent registry takes one entry per CLI, so any terminal-native coding agent can be added." }
+      "acceptedAnswer": { "@type": "Answer", "text": "claude (Claude Code), codex, gemini, opencode and pi out of the box. The agent registry takes one entry per CLI, so any terminal-native coding agent can be added." }
     },
     {
       "@type": "Question",
@@ -241,7 +241,7 @@
 <header class="wrap">
   <img class="logo" src="https://raw.githubusercontent.com/dip497/hivemind/main/assets/icon.png" alt="hivemind logo — two stacked canvas frames holding a lit honeycomb" />
   <h1>An infinite canvas for <span class="accent">Claude Code</span><br/>&amp; AI coding agents</h1>
-  <p class="tagline">Drop <code>claude</code>, <code>codex</code>, <code>gemini</code> or <code>opencode</code> into real workspaces and run them in parallel — across git worktrees and remote SSH hosts. Watch every diff live. Track work with a Kanban board that's just markdown on disk, which agents read and update over MCP.</p>
+  <p class="tagline">Drop <code>claude</code>, <code>codex</code>, <code>gemini</code>, <code>opencode</code> or <code>pi</code> into real workspaces and run them in parallel — across git worktrees and remote SSH hosts. Watch every diff live. Track work with a Kanban board that's just markdown on disk, which agents read and update over MCP.</p>
   <div class="badges">
     <img src="https://img.shields.io/github/v/release/dip497/hivemind?color=success" alt="latest release" />
     <img src="https://img.shields.io/github/stars/dip497/hivemind?style=flat&color=E8B24A" alt="GitHub stars" />
@@ -287,7 +287,7 @@
     <div class="card reveal">
       <div class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg></div>
       <h3>Agents in real terminals</h3>
-      <p>Full PTY tiles for claude, codex, gemini, opencode — not chat boxes. Sessions survive the window and resume after a reboot.</p>
+      <p>Full PTY tiles for claude, codex, gemini, opencode, pi — not chat boxes. Sessions survive the window and resume after a reboot.</p>
     </div>
     <div class="card reveal">
       <div class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg></div>
@@ -334,7 +334,7 @@
     <details class="reveal"><summary>Is there a canvas or GUI for Claude Code?<span class="chev">+</span></summary><p>Yes — hivemind is an infinite canvas for Claude Code and other AI coding agents. Each agent runs in a real terminal tile, alongside diffs, a file tree, an editor, an issues board and a browser, on one zoomable canvas per project.</p></details>
     <details class="reveal"><summary>How do I run multiple AI coding agents in parallel?<span class="chev">+</span></summary><p>Bind each frame to a local repo, a git worktree, or a remote SSH host, then spawn an agent per frame. They work side by side — each scoped to its own directory, branch and issues — and you watch every diff update live.</p></details>
     <details class="reveal"><summary>Is it like tmux for AI agents?<span class="chev">+</span></summary><p>Same idea, many agents on one screen, but with the structure agents need: a diff next to each terminal, a markdown issues board they update over MCP, worktrees as nested frames, and sessions that resume after a reboot.</p></details>
-    <details class="reveal"><summary>Which agents are supported?<span class="chev">+</span></summary><p><code>claude</code>, <code>codex</code>, <code>gemini</code> and <code>opencode</code> out of the box; any terminal-native coding agent can be added via the registry.</p></details>
+    <details class="reveal"><summary>Which agents are supported?<span class="chev">+</span></summary><p><code>claude</code>, <code>codex</code>, <code>gemini</code>, <code>opencode</code> and <code>pi</code> out of the box; any terminal-native coding agent can be added via the registry.</p></details>
     <details class="reveal"><summary>Is it local-first and private?<span class="chev">+</span></summary><p>Yes. Everything runs locally, the data is files on your disk, there's no telemetry, and agents use your existing CLI login — no extra API keys.</p></details>
   </div>
 </section>

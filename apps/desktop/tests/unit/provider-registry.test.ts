@@ -23,6 +23,8 @@ test("providerFor matches by command basename", () => {
   assert.equal(providerFor("/opt/codex")?.id, "codex");
   assert.equal(providerFor("droid")?.id, "droid");
   assert.equal(providerFor("/usr/local/bin/droid")?.id, "droid");
+  assert.equal(providerFor("pi")?.id, "pi");
+  assert.equal(providerFor("/opt/pi")?.id, "pi");
   assert.equal(providerFor("bash"), undefined);
   assert.equal(providerFor(""), undefined);
 });
@@ -79,5 +81,5 @@ test("composeResume restoreRetryMs is the max across providers (≥ claude's 5s)
 });
 
 test("registry order is claude before codex (preserves restore chaining)", () => {
-  assert.deepEqual(PROVIDERS.map((p) => p.id), ["claude", "codex", "droid"]);
+  assert.deepEqual(PROVIDERS.map((p) => p.id), ["claude", "codex", "droid", "pi"]);
 });

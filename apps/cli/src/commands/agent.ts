@@ -22,6 +22,7 @@ const KNOWN_AGENTS = [
   "hermes",
   "amp",
   "cursor",
+  "pi",
 ];
 
 const contextCmd = defineCommand({

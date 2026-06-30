@@ -24,6 +24,7 @@ const KNOWN_AGENTS = new Set([
   "hermes",
   "amp",
   "cursor",
+  "pi",
 ]);
 
 /**
