@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Bell, ExternalLink, Plus, Settings } from "lucide-react";
+import { Bell, ExternalLink, Loader2, Plus, Settings } from "lucide-react";
 import path from "path-browserify";
 import type { UpdateStatus } from "../../shared/ipc";
 import {
@@ -68,8 +68,35 @@ function useUpdateCheck() {
     const id = window.setInterval(() => { void check(); }, 4 * 60 * 60 * 1000);
     return () => window.clearInterval(id);
   }, [check]);
-  const upgrade = useCallback(() => { void window.hive?.runUpgrade?.(); }, []);
-  return { version, status, checking, check, upgrade };
+  // Upgrade flow with real feedback: a live progress toast (installer output),
+  // then either a "restarting…" success that relaunches through the launcher
+  // (applying the staged build → the NEW version actually loads), or an error
+  // toast that keeps the app open. Guarded against double-clicks (the pill, the
+  // Settings button, and the toast action all call this).
+  const [upgrading, setUpgrading] = useState(false);
+  const upgradingRef = useRef(false);
+  const upgrade = useCallback(() => {
+    if (upgradingRef.current || !window.hive?.runUpgrade) return;
+    upgradingRef.current = true;
+    setUpgrading(true);
+    const id = toast.loading("Downloading update… (this can take ~30s)");
+    const off = window.hive.onUpdateProgress?.((line) => { toast.loading(line, { id }); });
+    const done = () => { off?.(); upgradingRef.current = false; setUpgrading(false); };
+    window.hive
+      .runUpgrade()
+      .then((r) => {
+        if (r.ok) {
+          off?.();
+          toast.success("Update installed — restarting…", { id, duration: 4000 });
+          window.setTimeout(() => { void window.hive.relaunchApp(); }, 1200);
+        } else {
+          toast.error(`Update failed (exit ${r.code ?? "?"}). Run \`hivemind upgrade\` in a terminal.`, { id, duration: 8000 });
+          done();
+        }
+      })
+      .catch(() => { toast.error("Update failed to start.", { id }); done(); });
+  }, []);
+  return { version, status, checking, check, upgrade, upgrading };
 }
 
 export function App() {
@@ -306,6 +333,7 @@ export function App() {
           onInitWorkspace={!root ? () => setInitOpen(true) : undefined}
           updateAvailable={update.status?.updateAvailable === true}
           onUpgrade={update.upgrade}
+          upgrading={update.upgrading}
         />
         <div className="absolute top-0 right-0 z-40 flex items-start gap-2 px-3 py-2.5 pointer-events-none">
           {root && (
@@ -356,6 +384,7 @@ export function App() {
         checking={update.checking}
         onCheck={() => { void update.check(); }}
         onUpgrade={update.upgrade}
+        upgrading={update.upgrading}
       />
     </div>
   );
@@ -501,6 +530,7 @@ function SettingsModal({
   checking,
   onCheck,
   onUpgrade,
+  upgrading,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -512,8 +542,10 @@ function SettingsModal({
   checking: boolean;
   /** Re-run the update check now. */
   onCheck: () => void;
-  /** Run the installer + quit so the new binary takes over. */
+  /** Run the installer, stream progress, then restart into the new version. */
   onUpgrade: () => void;
+  /** An upgrade is in flight — disable the button + show a spinner. */
+  upgrading: boolean;
 }) {
   const [active, setActive] = useState(false);   // live this session
   const [enabled, setEnabled] = useState(false); // persisted choice
@@ -574,10 +606,19 @@ function SettingsModal({
                 </span>
                 <button
                   onClick={onUpgrade}
-                  className="px-2.5 py-1.5 text-[11px] font-medium text-white bg-[var(--color-brand)] rounded hover:opacity-90"
-                  title="Download the latest release and restart"
+                  disabled={upgrading}
+                  aria-busy={upgrading}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-medium text-white bg-[var(--color-brand)] rounded hover:opacity-90 disabled:opacity-70 disabled:cursor-default"
+                  title={upgrading ? "Downloading and installing the update…" : "Download the latest release and restart"}
                 >
-                  Update &amp; restart
+                  {upgrading ? (
+                    <>
+                      <Loader2 className="size-3 animate-spin" aria-hidden />
+                      Updating…
+                    </>
+                  ) : (
+                    "Update & restart"
+                  )}
                 </button>
               </>
             ) : (

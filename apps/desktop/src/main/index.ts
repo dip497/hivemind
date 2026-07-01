@@ -536,7 +536,27 @@ ipcMain.handle("setNotificationSettings", wrap(async (_e, s: unknown) => {
   setNotificationSettings(normalizeNotificationSettings(s));
   return { ok: true as const };
 }));
-ipcMain.handle("relaunchApp", () => { app.relaunch(); app.exit(0); });
+// The install.sh launcher (`~/.local/bin/hivemind`). Relaunching THROUGH it is
+// what makes "restart after update" land on the new version: the running
+// AppImage can't overwrite itself, so install.sh stages the new build to
+// `.staged` and the launcher swaps it in on its next start. A plain
+// app.relaunch() re-execs the current (old) AppRun and silently skips that swap.
+function resolveLauncherPath(): string | null {
+  const candidates = [
+    path.join(os.homedir(), ".local", "bin", "hivemind"),
+    ...(process.env.PATH ?? "").split(":").filter(Boolean).map((d) => path.join(d, "hivemind")),
+  ];
+  for (const p of candidates) {
+    try { if (statSync(p).isFile()) return p; } catch { /* not here */ }
+  }
+  return null;
+}
+ipcMain.handle("relaunchApp", () => {
+  const launcher = resolveLauncherPath();
+  if (launcher) app.relaunch({ execPath: launcher, args: [] });
+  else app.relaunch();
+  app.exit(0);
+});
 
 // ── app version + self-update ─────────────────────────────────────────────
 ipcMain.handle("getAppVersion", () => app.getVersion());
@@ -574,11 +594,27 @@ ipcMain.handle("checkForUpdate", async () => {
   }
 });
 
-// Upgrade-in-place: reuse the exact installer path `hivemind upgrade` uses
-// (curl install.sh | bash), then quit. Quitting (rather than app.relaunch())
-// is the safe choice — the running binary is being replaced under us, so the
-// freshly-installed one is picked up on the user's next launch.
-ipcMain.handle("runUpgrade", () => { runUpgradeAndExit(); });
+// Upgrade-in-place for the IN-APP button: run the same installer `hivemind
+// upgrade` uses, STREAM its output to the renderer (last line of each chunk →
+// `update:progress`) so the user sees it working, and resolve with the exit
+// status. Does NOT quit — the renderer shows success/failure, then calls
+// `relaunchApp()` (which goes through the launcher, applying the staged build).
+// The bare-CLI `upgrade` arg path still uses runUpgradeAndExit (it runs in a
+// real terminal, so inherited stdio + exit is correct there).
+ipcMain.handle("runUpgrade", () => new Promise<{ ok: boolean; code: number | null }>((resolve) => {
+  const url = "https://raw.githubusercontent.com/dip497/hivemind/main/install.sh";
+  const child = spawn("bash", ["-c", `curl -fsSL ${url} | bash`], { stdio: ["ignore", "pipe", "pipe"] });
+  const relay = (d: Buffer) => {
+    const line = d.toString().split("\n").map((s) => s.trim()).filter(Boolean).pop();
+    if (line && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("update:progress", line);
+    }
+  };
+  child.stdout?.on("data", relay);
+  child.stderr?.on("data", relay);
+  child.on("error", () => resolve({ ok: false, code: 127 }));
+  child.on("close", (code) => resolve({ ok: code === 0, code: code ?? null }));
+}));
 
 // The repo passed on the CLI (`hivemind .`), or null for a bare launch (then
 // the renderer falls back to its persisted last-project).

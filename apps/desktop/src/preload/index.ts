@@ -118,6 +118,11 @@ const api: HiveIpc & {
   getAppVersion: () => ipcRenderer.invoke("getAppVersion"),
   checkForUpdate: () => ipcRenderer.invoke("checkForUpdate"),
   runUpgrade: () => ipcRenderer.invoke("runUpgrade"),
+  onUpdateProgress: (cb) => {
+    const listener = (_e: unknown, line: string) => cb(line);
+    ipcRenderer.on("update:progress", listener);
+    return () => ipcRenderer.removeListener("update:progress", listener);
+  },
   onBrowserPopup: (cb) => {
     const listener = (_e: unknown, p: { fromId: number; url: string }) => cb(p);
     ipcRenderer.on("browser:popup", listener);

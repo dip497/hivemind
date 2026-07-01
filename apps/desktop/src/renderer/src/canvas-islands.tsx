@@ -21,6 +21,7 @@ export function ToolIsland({
   onTheme,
   updateAvailable,
   onUpgrade,
+  upgrading,
 }: {
   repoPath: string | null;
   onToggle: (k: "tree" | "shell" | "diff" | "issues") => void;
@@ -36,6 +37,9 @@ export function ToolIsland({
   updateAvailable: boolean;
   /** Run the upgrade + restart (from the pill). */
   onUpgrade: () => void;
+  /** An upgrade is in flight — the pill shows a spinner + "Updating…" and is
+   *  click-inert so it can't be fired twice. */
+  upgrading: boolean;
 }) {
   const enabled = AGENTS.filter((a) => a.enabled);
   const sel = agentById(agentSel) ?? enabled[0]!;
@@ -100,11 +104,22 @@ export function ToolIsland({
       {updateAvailable && (
         <button
           onClick={onUpgrade}
-          title="Update available — click to update and restart"
-          className="ml-1 flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-[11px] font-medium text-[var(--color-warn)] bg-[color-mix(in_srgb,var(--color-warn)_16%,transparent)] hover:bg-[color-mix(in_srgb,var(--color-warn)_26%,transparent)] cursor-pointer whitespace-nowrap"
+          disabled={upgrading}
+          aria-busy={upgrading}
+          title={upgrading ? "Downloading and installing the update…" : "Update available — click to update and restart"}
+          className="ml-1 flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-[11px] font-medium text-[var(--color-warn)] bg-[color-mix(in_srgb,var(--color-warn)_16%,transparent)] hover:bg-[color-mix(in_srgb,var(--color-warn)_26%,transparent)] disabled:cursor-default whitespace-nowrap cursor-pointer"
         >
-          <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M7 9.5V2.5M4 5l3-3 3 3M2.5 11.5h9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          Update available
+          {upgrading ? (
+            <>
+              <svg className="animate-spin" width="12" height="12" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="3" strokeOpacity="0.25"/><path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/></svg>
+              Updating…
+            </>
+          ) : (
+            <>
+              <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M7 9.5V2.5M4 5l3-3 3 3M2.5 11.5h9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              Update available
+            </>
+          )}
         </button>
       )}
     </div>

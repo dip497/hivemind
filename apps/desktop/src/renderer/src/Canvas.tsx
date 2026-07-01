@@ -86,8 +86,10 @@ interface Props {
   /** A newer GitHub release exists → show the "Update available" pill by Theme.
    *  Owned by App (so the Settings dialog + this pill share one check). */
   updateAvailable?: boolean;
-  /** Run the installer + quit (from the pill). */
+  /** Run the installer + restart (from the pill). */
   onUpgrade?: () => void;
+  /** An upgrade is in flight — the pill shows a spinner + is click-inert. */
+  upgrading?: boolean;
 }
 
 
@@ -104,7 +106,7 @@ const SINGLETON_KINDS: ReadonlySet<TileKind> = new Set(["editor", "diff", "issue
 
 // tile sizing helpers + FRAME_* constants moved to canvas-sizing.ts
 
-export function Canvas({ cwd, repoPath, root = null, onInitWorkspace, updateAvailable = false, onUpgrade }: Props) {
+export function Canvas({ cwd, repoPath, root = null, onInitWorkspace, updateAvailable = false, onUpgrade, upgrading = false }: Props) {
   // Persistence key for the canvas layout. Prefer repoPath (a git/.hivemind
   // project); fall back to the absolute cwd so a plain folder — including
   // `$HOME` — still persists + resumes. Without this, launching onto any
@@ -1246,6 +1248,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace, updateAvai
               onTheme={() => setCustomizerOpen((o) => !o)}
               updateAvailable={updateAvailable}
               onUpgrade={() => onUpgrade?.()}
+              upgrading={upgrading}
             />
           </Panel>
           )}

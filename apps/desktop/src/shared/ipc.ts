@@ -166,8 +166,14 @@ export interface HiveIpc {
    *  failed check resolves with `latest: null`. */
   checkForUpdate(): Promise<UpdateStatus>;
   /** Run the official installer (the same `install.sh` flow `hivemind upgrade`
-   *  uses) then quit so the freshly-installed binary takes over on next launch. */
-  runUpgrade(): Promise<void>;
+   *  uses) and resolve with its exit status. Does NOT quit — the renderer shows
+   *  the result and then calls `relaunchApp()` to restart into the new version.
+   *  `ok` is true iff the installer exited 0. */
+  runUpgrade(): Promise<{ ok: boolean; code: number | null }>;
+  /** Live installer output during `runUpgrade` — the last non-empty line of each
+   *  stdout/stderr chunk, so the UI can show real progress instead of a frozen
+   *  button. Returns an unsubscribe fn. */
+  onUpdateProgress(cb: (line: string) => void): () => void;
 
   // ── project resolution ────────────────────────────────────
   resolveProject(rootHint?: string): Promise<{

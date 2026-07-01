@@ -7,6 +7,10 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Fixed
+
+- **In-app update actually works now — live progress, a real restart, and clear success/failure.** “Update & restart” was half-wired: it ran the installer with `stdio:"inherit"` (invisible for a GUI launch), gave zero feedback for the ~30s download, then called `app.exit()` — it **quit instead of restarting**, and `relaunchApp` used a plain `app.relaunch()` that re-execs the current AppRun and never applies the staged build, so the update silently didn’t take and the “Update available” pill came back. Now: `runUpgrade` streams the installer’s output to a live toast, resolves with the real exit status, and does **not** quit; on success the UI shows “Update installed — restarting…” and relaunches **through the `~/.local/bin/hivemind` launcher**, which swaps in the staged build so the NEW version actually loads; on failure the app stays open with an error toast pointing at `hivemind upgrade`. Both the Settings “Update & restart” button and the canvas “Update available” pill now show a spinner + “Updating…” and go disabled while it runs (double-click-guarded). (`index.ts` `runUpgrade`/`relaunchApp`, `App.tsx` `useUpdateCheck`, preload `onUpdateProgress`, `canvas-islands.tsx`.)
+
 ## [1.10.2] — 2026-07-01
 
 ### Fixed
