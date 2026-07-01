@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [1.10.1] — 2026-07-01
+
 ### Fixed
 
 - **Diff viewer colors fixed — additions/deletions are vivid again, not washed out.** The `@pierre/diffs` CodeView's `*-color-override` CSS vars were being given translucent values (`rgba(...,0.14)`). Those vars feed the library's `--diffs-*-base`, a SOLID color the library uses directly for the header `+N`/`−N` counts, the classic `+`/`−` gutter markers, the `bars` indicator, and the inline word-diff span (the library layers its OWN alpha on top), and from which it DERIVES the row backgrounds via `color-mix`. So the 14%-opaque values made the counts/markers/word-highlights nearly invisible and the line tints washed out. Now bound to the solid oklch semantic tokens (`--color-ok` / `--color-err` / `--color-brand`) so the diff also stays in sync when the accent is recolored. Also dropped the dead `--diffs-selection-color-override` (documented but unconsumed by any library CSS rule) and re-tinted line selection to the brand accent (`pierre-codeview.ts`).
@@ -562,7 +564,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v1.10.0...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v1.10.1...HEAD
+[1.10.1]: https://github.com/dip497/hivemind/releases/tag/v1.10.1
 [1.10.0]: https://github.com/dip497/hivemind/releases/tag/v1.10.0
 [1.9.0]: https://github.com/dip497/hivemind/releases/tag/v1.9.0
 [1.8.4]: https://github.com/dip497/hivemind/releases/tag/v1.8.4
