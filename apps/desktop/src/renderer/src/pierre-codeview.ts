@@ -38,16 +38,30 @@ export const PIERRE_CSS_VARS: CSSProperties = {
     "--diffs-tab-size": "2",
     "--diffs-min-number-column-width": "3ch",
     "--diffs-header-font-family": '"Geist", sans-serif',
-    // Diff add/del/modified + selection derive from the theme palette so the
-    // diff viewer reads as the same app as everything else. Was hot-orange
-    // selection (rgb(255,122,26)) — clashed with the cool-navy identity.
-    // ok #22c55e, err #f43f5e, brand #5b6cff.
-    "--diffs-deletion-color-override": "rgba(244,63,94,0.14)",
-    "--diffs-addition-color-override": "rgba(34,197,94,0.15)",
-    "--diffs-modified-color-override": "rgba(91,108,255,0.14)",
-    "--diffs-selection-color-override": "rgb(255,255,255)",
-    "--diffs-bg-selection-override": "rgba(255,255,255,0.20)",
-    "--diffs-bg-selection-number-override": "rgba(255,255,255,0.32)",
+
+    // ── Diff change colors ───────────────────────────────────────────────
+    // These `*-color-override` vars feed Pierre's `--diffs-*-base`, which is a
+    // SOLID color used directly for: the header +N / −N counts, the classic
+    // +/- gutter markers, the `bars` indicator, and the inline word-diff span
+    // (Pierre adds its own alpha on top via `rgb(from <base> r g b / .2)`).
+    // Pierre then DERIVES the translucent row backgrounds from this same base
+    // with `color-mix(in lab, var(--diffs-bg) 80%, <base>)`. So the override
+    // MUST be solid — the old rgba(...,0.14) values made the counts, markers
+    // and word highlights nearly invisible and washed out the row tint.
+    // Bound to the oklch semantic tokens so the diff stays in sync when the
+    // accent is recolored, and reads as the same product as the rest of the app.
+    "--diffs-addition-color-override": "var(--color-ok)",    /* green-700  — added lines   */
+    "--diffs-deletion-color-override": "var(--color-err)",   /* red-500    — removed lines */
+    "--diffs-modified-color-override": "var(--color-brand)", /* lavender   — modified / change icon */
+
+    // Selection highlight for enableLineSelection. `--diffs-selection-base`
+    // is hardwired to the modified base, so a selected line already tints
+    // brand; we only strengthen the number-column gutter a touch. (The lib's
+    // `--diffs-selection-color-override` hook is documented but unconsumed —
+    // no CSS rule reads it — so it's intentionally omitted.)
+    "--diffs-bg-selection-override": "color-mix(in srgb, var(--color-brand) 22%, transparent)",
+    "--diffs-bg-selection-number-override": "color-mix(in srgb, var(--color-brand) 34%, transparent)",
+
     "--diffs-gap-inline": "8px",
     "--diffs-gap-block": "8px",
   } as Record<string, string>),
