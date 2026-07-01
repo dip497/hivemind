@@ -7,6 +7,10 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Fixed
+
+- **`hivemind upgrade` no longer dies on `mv: cannot stat '…hivemind.AppImage.new'`.** `install.sh` downloaded to a FIXED temp name (`hive.new` / `hivemind.AppImage.new`) and then `mv`’d it unconditionally. Two upgrades running at once — a terminal `hivemind upgrade` racing the app’s in-app updater, or a double-run — shared that temp name, so one run’s `mv` stole the other’s file and the loser aborted with `mv: cannot stat`. A truncated/failed download (disk full, interrupt, rate-limit) hit the same `mv` with a cryptic error too. Now each run downloads to a **PID-unique** temp (`hive.$$.new` / `hivemind.AppImage.$$.new`), **verifies it’s non-empty before `mv`**, and cleans up + reports a clear reason on failure. Fetched from `main`, so it applies to the next `hivemind upgrade` without a release (`install.sh`).
+
 ## [1.10.3] — 2026-07-01
 
 ### Fixed

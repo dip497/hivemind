@@ -252,22 +252,33 @@ install_prebuilt() {
   APPIMG_URL="https://github.com/$REPO/releases/download/$TAG/hivemind-${VERSION_BARE}-x86_64.AppImage"
 
   say "downloading hive CLI"
-  # Download to a temp file then atomically mv into place. A direct `curl -o`
-  # over the live binary fails with "text file busy" when the CLI is in use
-  # (a running app's claude tiles invoke the hive MCP binary) — rename swaps the
-  # name while the old inode keeps serving the running process.
-  curl -fL --progress-bar -o "$APP_DIR/hive.new" "$CLI_URL" \
-    || die "CLI download failed from $CLI_URL"
-  chmod +x "$APP_DIR/hive.new"
-  mv -f "$APP_DIR/hive.new" "$APP_DIR/hive"
+  # Download to a PER-PROCESS temp file ($$ = this run's PID) then atomically mv
+  # into place. Two reasons for temp-then-mv: (1) a direct `curl -o` over the
+  # live binary fails with "text file busy" when the CLI is in use; (2) a FIXED
+  # temp name (`hive.new`) is shared across concurrent upgrades — e.g. a terminal
+  # `hivemind upgrade` racing the app's own in-app updater — so one run's mv
+  # steals the other's temp file and the loser dies with a cryptic
+  # `mv: cannot stat '…​.new'`. A PID-unique name makes each run independent. We
+  # also verify the file is non-empty before mv, turning a truncated/failed
+  # download (disk full, interrupt, rate-limit) into a clear error.
+  CLI_TMP="$APP_DIR/hive.$$.new"
+  curl -fL --progress-bar -o "$CLI_TMP" "$CLI_URL" \
+    || { rm -f "$CLI_TMP"; die "CLI download failed from $CLI_URL"; }
+  [ -s "$CLI_TMP" ] \
+    || { rm -f "$CLI_TMP"; die "CLI download produced an empty file (disk full or interrupted?)"; }
+  chmod +x "$CLI_TMP"
+  mv -f "$CLI_TMP" "$APP_DIR/hive"
   ln -sf "$APP_DIR/hive" "$BIN_DIR/hive"
   ok "linked $BIN_DIR/hive → $APP_DIR/hive"
 
   say "downloading desktop AppImage"
-  # Same temp-then-mv: avoids a half-written AppImage on interrupt and a
-  # busy-file clobber if the file is ever held open.
-  if curl -fL --progress-bar -o "$APP_DIR/hivemind.AppImage.new" "$APPIMG_URL"; then
-    mv -f "$APP_DIR/hivemind.AppImage.new" "$APP_DIR/hivemind.AppImage"
+  # Same PID-unique temp-then-mv (see above): avoids a half-written AppImage on
+  # interrupt, a busy-file clobber, AND the concurrent-upgrade race on a shared
+  # `.new` name. Guard the mv on the download succeeding AND the file existing +
+  # being non-empty, so we never `mv` a file that isn't there.
+  APPIMG_TMP="$APP_DIR/hivemind.AppImage.$$.new"
+  if curl -fL --progress-bar -o "$APPIMG_TMP" "$APPIMG_URL" && [ -s "$APPIMG_TMP" ]; then
+    mv -f "$APPIMG_TMP" "$APP_DIR/hivemind.AppImage"
     chmod +x "$APP_DIR/hivemind.AppImage"
     # Extract instead of FUSE-mount at runtime. Ubuntu 22.04+ ships without
     # libfuse2; running the AppImage directly errors with "dlopen():
@@ -288,7 +299,8 @@ install_prebuilt() {
       warn "hivemind is running — upgrade STAGED. Quit & reopen hivemind to apply it. Your canvas + sessions are safe; nothing is lost."
     fi
   else
-    warn "AppImage download failed (CLI still installed). Run \`hivemind\` via --dev or re-run later."
+    rm -f "$APPIMG_TMP"
+    warn "AppImage download failed or was empty (disk full / interrupted / rate-limited). The CLI is still installed — re-run \`hivemind upgrade\` later."
   fi
 
   echo "$TAG" > "$INSTALLED_FILE"
