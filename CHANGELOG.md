@@ -7,6 +7,13 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Fixed
+
+- **Diff viewer colors fixed — additions/deletions are vivid again, not washed out.** The `@pierre/diffs` CodeView's `*-color-override` CSS vars were being given translucent values (`rgba(...,0.14)`). Those vars feed the library's `--diffs-*-base`, a SOLID color the library uses directly for the header `+N`/`−N` counts, the classic `+`/`−` gutter markers, the `bars` indicator, and the inline word-diff span (the library layers its OWN alpha on top), and from which it DERIVES the row backgrounds via `color-mix`. So the 14%-opaque values made the counts/markers/word-highlights nearly invisible and the line tints washed out. Now bound to the solid oklch semantic tokens (`--color-ok` / `--color-err` / `--color-brand`) so the diff also stays in sync when the accent is recolored. Also dropped the dead `--diffs-selection-color-override` (documented but unconsumed by any library CSS rule) and re-tinted line selection to the brand accent (`pierre-codeview.ts`).
+
+- **Canvas + agent sessions now persist and resume no matter where you launch — including `$HOME`.** The canvas layout (which tiles/agents exist, their positions, and the per-tile session ids needed to `--resume`) was persisted in `localStorage` keyed by `repoPath`. Launching onto any folder that is **not** a git repo and **not** a `.hivemind` workspace — most commonly the default `$HOME` — resolved `repoPath` to `null`, so `saveLayout`/`loadLayout` no-op'd: the canvas was **never written**, every restart was a blank "Start with an agent" canvas, and agents never resumed even though the detached PTY daemon still held the live sessions. The canvas now persists under `repoPath ?? cwd` — keyed on the absolute folder path (never a shared `__global__` sentinel, so distinct folders never leak into each other), while a genuinely transient empty cwd (welcome/e2e bootstrap) still stays unpersisted (`Canvas.tsx`).
+- **`$HOME` is now a valid workspace instead of a trap.** `findRoot` refused to resolve `~/.hivemind` at all (to stop a stray `hive init` at `$HOME` from hijacking every subfolder — the "only home gets selected" bug). That over-corrected: it also made a workspace initialised **at** `$HOME` dead-on-arrival. `findRoot` now resolves `$HOME`'s own `.hivemind` **when `$HOME` is the starting dir**, while still never letting a subfolder climb up into it (a `first`-iteration flag draws the line) — so home works as its own workspace with zero hijack risk. `home` is now an injectable arg for deterministic tests (`packages/hive-core/src/storage.ts`, `storage.test.ts` — +4 boundary tests, 49 pass).
+
 ## [1.10.0] — 2026-06-30
 
 ### Added

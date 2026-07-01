@@ -105,10 +105,19 @@ const SINGLETON_KINDS: ReadonlySet<TileKind> = new Set(["editor", "diff", "issue
 // tile sizing helpers + FRAME_* constants moved to canvas-sizing.ts
 
 export function Canvas({ cwd, repoPath, root = null, onInitWorkspace, updateAvailable = false, onUpgrade }: Props) {
+  // Persistence key for the canvas layout. Prefer repoPath (a git/.hivemind
+  // project); fall back to the absolute cwd so a plain folder — including
+  // `$HOME` — still persists + resumes. Without this, launching onto any
+  // non-git, non-init'd directory gave repoPath=null → saveLayout/loadLayout
+  // no-op'd → every restart was a blank canvas + agents never resumed. Keyed on
+  // the absolute path (never a shared `__global__` sentinel), so distinct
+  // folders never leak into each other. An empty cwd (welcome/e2e bootstrap)
+  // stays transient (null) and is intentionally NOT persisted.
+  const persistKey = repoPath ?? (cwd || null);
   // Bootstrapped from localStorage on first render (synchronous useState
   // initializer so we never flash an empty canvas before hydrating). Reloaded
-  // when repoPath changes — see the effect below.
-  const initial = useMemo(() => loadLayout(repoPath), [repoPath]);
+  // when the persistence key changes — see the effect below.
+  const initial = useMemo(() => loadLayout(persistKey), [persistKey]);
 
   // Lazy-mount: nothing on screen until the user clicks a toggle — OR restored
   // from a prior session so a restart resumes where you left off. Avoids
@@ -341,12 +350,12 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace, updateAvai
   const lastRepoRef = useRef<string | null | undefined>(undefined);
   useEffect(() => {
     if (lastRepoRef.current === undefined) {
-      lastRepoRef.current = repoPath;
+      lastRepoRef.current = persistKey;
       return;
     }
-    if (lastRepoRef.current === repoPath) return;
-    lastRepoRef.current = repoPath;
-    const next = loadLayout(repoPath);
+    if (lastRepoRef.current === persistKey) return;
+    lastRepoRef.current = persistKey;
+    const next = loadLayout(persistKey);
     setSizes(next.sizes);
     setPositions(next.positions);
     setFrames(next.frames);
@@ -355,7 +364,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace, updateAvai
     setEditorTabs(next.editorTabs ?? {});
     setFrameOf(next.frameOf ?? {});
     if (next.viewport) setViewport(next.viewport);
-  }, [repoPath]);
+  }, [persistKey]);
 
   // Latest viewport mutated on every pan tick (cheap — ref, no re-render);
   // committed to state at onMoveEnd so the layout-persist effect picks it up
@@ -375,29 +384,29 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace, updateAvai
   // + on dep change so we don't keep stale references after repo switch.
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => {
-    if (typeof window === "undefined" || !repoPath) return;
+    if (typeof window === "undefined" || !persistKey) return;
     if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
     persistTimerRef.current = setTimeout(() => {
-      saveLayout(repoPath, { sizes, positions, frames, tileNames, tiles, editorTabs, viewport, frameOf });
+      saveLayout(persistKey, { sizes, positions, frames, tileNames, tiles, editorTabs, viewport, frameOf });
     }, 250);
     return () => {
       if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
     };
-  }, [repoPath, sizes, positions, frames, tileNames, tiles, editorTabs, viewport, frameOf]);
+  }, [persistKey, sizes, positions, frames, tileNames, tiles, editorTabs, viewport, frameOf]);
   // Flush on tab close / app quit so the debounced write doesn't lose the
   // last ~250ms of edits. `beforeunload` fires sync before localStorage is
   // torn down; we set the latest snapshot then.
   useEffect(() => {
-    if (typeof window === "undefined" || !repoPath) return;
+    if (typeof window === "undefined" || !persistKey) return;
     const flush = () => {
       if (!persistTimerRef.current) return;
       clearTimeout(persistTimerRef.current);
       persistTimerRef.current = undefined;
-      saveLayout(repoPath, { sizes, positions, frames, tileNames, tiles, editorTabs, viewport, frameOf });
+      saveLayout(persistKey, { sizes, positions, frames, tileNames, tiles, editorTabs, viewport, frameOf });
     };
     window.addEventListener("beforeunload", flush);
     return () => window.removeEventListener("beforeunload", flush);
-  }, [repoPath, sizes, positions, frames, tileNames, tiles, editorTabs, viewport, frameOf]);
+  }, [persistKey, sizes, positions, frames, tileNames, tiles, editorTabs, viewport, frameOf]);
 
   // Viewport-focus request: we resolve the target's CENTER from our own state
   // (positions/sizes/frames) and hand absolute coords to <FocusOnTile>, which

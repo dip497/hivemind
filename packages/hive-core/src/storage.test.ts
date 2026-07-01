@@ -62,6 +62,52 @@ describe("findRoot", () => {
     await fs.mkdir(deep, { recursive: true });
     expect(await findRoot(deep)).toBe(root);
   });
+
+  // $HOME handling: home is a valid workspace when it IS the starting dir, but a
+  // subfolder must never climb up and resolve to ~/.hivemind (the "only home
+  // gets selected" hijack). `home` is injected explicitly (2nd arg) so the
+  // boundary is deterministic regardless of the runtime's os.homedir().
+  describe("$HOME boundary", () => {
+    let fakeHome: string;
+    beforeEach(async () => {
+      fakeHome = await fs.mkdtemp(path.join(os.tmpdir(), "fakehome-"));
+    });
+
+    async function mkHomeRoot(): Promise<string> {
+      const root = path.join(fakeHome, ".hivemind");
+      await fs.mkdir(path.join(root, "issues"), { recursive: true });
+      await writeConfig(root, { prefix: "HOME", next_id: 1, agents: {} });
+      return root;
+    }
+
+    test("resolves .hivemind AT $HOME when $HOME is the starting dir", async () => {
+      const root = await mkHomeRoot();
+      expect(await findRoot(fakeHome, fakeHome)).toBe(root);
+    });
+
+    test("a subfolder does NOT climb up into ~/.hivemind", async () => {
+      await mkHomeRoot();
+      const sub = path.join(fakeHome, "some-project", "src");
+      await fs.mkdir(sub, { recursive: true });
+      expect(await findRoot(sub, fakeHome)).toBe(null);
+    });
+
+    test("a subfolder still resolves its OWN .hivemind under $HOME", async () => {
+      const proj = path.join(fakeHome, "some-project");
+      const root = path.join(proj, ".hivemind");
+      await fs.mkdir(path.join(root, "issues"), { recursive: true });
+      await writeConfig(root, { prefix: "PROJ", next_id: 1, agents: {} });
+      const deep = path.join(proj, "src", "lib");
+      await fs.mkdir(deep, { recursive: true });
+      expect(await findRoot(deep, fakeHome)).toBe(root);
+    });
+
+    test("$HOME's parent (e.g. /home) never resolves a workspace", async () => {
+      // aboveHome guard: even a .hivemind sitting at $HOME's parent is ignored.
+      const above = path.dirname(fakeHome);
+      expect(await findRoot(above, fakeHome)).toBe(null);
+    });
+  });
 });
 
 describe("readConfig self-heal", () => {

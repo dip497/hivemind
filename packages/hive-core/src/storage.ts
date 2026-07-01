@@ -32,18 +32,30 @@ import {
 
 const DIR = ".hivemind";
 
-/** Find the nearest `.hivemind/` directory walking up from `cwd`. */
-export async function findRoot(cwd: string = process.cwd()): Promise<string | null> {
+/** Find the nearest `.hivemind/` directory walking up from `cwd`.
+ *
+ * $HOME is a valid workspace when it IS the starting dir — so you can `hive
+ * init` at home and it resolves for home itself. But a subfolder must NEVER
+ * climb up and resolve to `~/.hivemind`: a stray `hive init` at $HOME would
+ * otherwise hijack EVERY subfolder (the "only home gets selected" bug). The
+ * `first` flag draws that line: inspect $HOME's own `.hivemind` only on the
+ * initial iteration, and stop the moment we ASCEND into $HOME. `$HOME`'s parent
+ * (e.g. `/home`) and the filesystem root never hold a usable workspace at all.
+ */
+export async function findRoot(
+  cwd: string = process.cwd(),
+  homeDir: string = os.homedir(),
+): Promise<string | null> {
   let dir = path.resolve(cwd);
-  const home = os.homedir();
+  const home = path.resolve(homeDir);
+  const aboveHome = path.dirname(home);
+  let first = true;
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    // Stop AT home — never treat `~/.hivemind` (or anything at/above home) as a
-    // project root. Otherwise a stray `hive init` at $HOME hijacks workspace
-    // resolution for EVERY subfolder (the "only home gets selected" bug). A real
-    // project directly under home still matches before we reach this guard.
-    // Mirrors the desktop's findGitRoot home guard.
-    if (dir === home || dir === path.dirname(home) || dir === "/") return null;
+    if (dir === aboveHome || dir === "/") return null;
+    // Reached $HOME by climbing from a subfolder → stop (no hijack). $HOME as
+    // the explicit starting dir (first === true) still gets inspected below.
+    if (dir === home && !first) return null;
     const candidate = path.join(dir, DIR);
     try {
       const st = await fs.stat(candidate);
@@ -54,6 +66,7 @@ export async function findRoot(cwd: string = process.cwd()): Promise<string | nu
     const parent = path.dirname(dir);
     if (parent === dir) return null;
     dir = parent;
+    first = false;
   }
 }
 
