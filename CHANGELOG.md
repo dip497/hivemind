@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [1.10.3] — 2026-07-01
+
 ### Fixed
 
 - **In-app update actually works now — live progress, a real restart, and clear success/failure.** “Update & restart” was half-wired: it ran the installer with `stdio:"inherit"` (invisible for a GUI launch), gave zero feedback for the ~30s download, then called `app.exit()` — it **quit instead of restarting**, and `relaunchApp` used a plain `app.relaunch()` that re-execs the current AppRun and never applies the staged build, so the update silently didn’t take and the “Update available” pill came back. Now: `runUpgrade` streams the installer’s output to a live toast, resolves with the real exit status, and does **not** quit; on success the UI shows “Update installed — restarting…” and relaunches **through the `~/.local/bin/hivemind` launcher**, which swaps in the staged build so the NEW version actually loads; on failure the app stays open with an error toast pointing at `hivemind upgrade`. Both the Settings “Update & restart” button and the canvas “Update available” pill now show a spinner + “Updating…” and go disabled while it runs (double-click-guarded). (`index.ts` `runUpgrade`/`relaunchApp`, `App.tsx` `useUpdateCheck`, preload `onUpdateProgress`, `canvas-islands.tsx`.)
@@ -572,7 +574,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v1.10.2...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v1.10.3...HEAD
+[1.10.3]: https://github.com/dip497/hivemind/releases/tag/v1.10.3
 [1.10.2]: https://github.com/dip497/hivemind/releases/tag/v1.10.2
 [1.10.1]: https://github.com/dip497/hivemind/releases/tag/v1.10.1
 [1.10.0]: https://github.com/dip497/hivemind/releases/tag/v1.10.0
