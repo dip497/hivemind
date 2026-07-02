@@ -554,12 +554,15 @@ function SettingsModal({
 
   useEffect(() => {
     if (!open) return;
+    // Every time Settings opens, re-check for updates so the panel reflects the
+    // latest release — not a cached result from the last mount / 4h interval.
+    onCheck();
     void window.hive.getBrowserSettings().then((s) => {
       setActive(s.active);
       setEnabled(s.enabled);
       setPort(s.port);
     }).catch(() => {});
-  }, [open]);
+  }, [open, onCheck]);
 
   if (!open) return null;
   // The toggle is "dirty" when the persisted choice no longer matches what's

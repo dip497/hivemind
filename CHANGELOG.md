@@ -7,6 +7,10 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Changed
+
+- **Opening Settings now re-checks for updates.** The update panel used to show a cached result from app mount or the 4-hour interval, so a freshly published release wouldn't appear until you hit "Check now". Settings now fires a fresh check every time it opens.
+
 ## [1.10.4] — 2026-07-02
 
 ### Fixed
