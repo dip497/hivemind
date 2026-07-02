@@ -7,6 +7,10 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Changed
+
+- **Smaller AppImage download.** Enabled electron-builder `compression: "maximum"` (xz squashfs) and pruned bundled Electron locales to `en-US` only (`electronLanguages`), plus `strip` the CLI binary in the release workflow. No code or runtime change — just a smaller download.
+
 ## [1.10.5] — 2026-07-02
 
 ### Changed

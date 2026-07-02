@@ -55,6 +55,9 @@ jobs:
       - name: Build CLI single-binary
         run: pnpm --filter @hivemind/cli run build
 
+      - name: Strip CLI binary (drops ~1MB of symbols; bun still runs)
+        run: strip apps/cli/dist/hive || true
+
       - name: Build renderer + main
         run: pnpm --filter @hivemind/desktop run build
 

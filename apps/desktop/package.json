@@ -24,6 +24,10 @@
     "appId": "com.hivemind.desktop",
     "productName": "hivemind",
     "asar": true,
+    "compression": "maximum",
+    "electronLanguages": [
+      "en-US"
+    ],
     "files": [
       "out/**/*",
       "package.json"
