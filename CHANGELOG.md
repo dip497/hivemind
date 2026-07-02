@@ -7,6 +7,10 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Fixed
+
+- **Update checker no longer sticks on "Checking…" or falsely nags about an update.** Three compounding bugs: (1) the GitHub fetch had no timeout, so a stalled request pinned the UI on "Checking…" forever; (2) a failed check (offline / timeout / 403 rate-limit) was indistinguishable from "up to date" and could clobber a real result; (3) checking on every Settings open with no dedupe/throttle hammered the unauthenticated GitHub API (60 req/hr/IP) into rate-limit. Now: the fetch times out at 8s, results carry an explicit `ok` flag so only a *completed* check updates state/cache (a blip keeps the last known-good result), and checks are de-duped + throttled to once per 60s (the "Check now" button still forces an immediate check).
+
 ## [1.10.6] — 2026-07-02
 
 ### Changed

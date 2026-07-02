@@ -153,6 +153,10 @@ export interface UpdateStatus {
   latest: string | null;
   /** True iff `latest` is strictly newer than `current`. */
   updateAvailable: boolean;
+  /** True iff the check actually completed (reached GitHub, got a valid tag).
+   *  False on offline / timeout / rate-limit — the renderer must NOT treat a
+   *  false-ok result as "up to date" or persist it over a known-good state. */
+  ok: boolean;
 }
 
 // ── full IPC surface ──────────────────────────────────────────────────────

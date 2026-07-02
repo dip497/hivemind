@@ -579,18 +579,29 @@ function isNewerVersion(latest: string, current: string): boolean {
 // resolves to a no-update result so the UI shows nothing rather than an error.
 ipcMain.handle("checkForUpdate", async () => {
   const current = app.getVersion();
+  // `ok` distinguishes a COMPLETED check (whose result the renderer can trust
+  // and cache) from a FAILED one (offline / timeout / 403 rate-limit). Without
+  // it a network blip returns updateAvailable:false — indistinguishable from a
+  // genuine "up to date" — and clobbers a real "update available" banner.
   try {
     const res = await net.fetch(
       "https://api.github.com/repos/dip497/hivemind/releases/latest",
-      { headers: { Accept: "application/vnd.github+json", "User-Agent": "hivemind-desktop" } },
+      {
+        headers: { Accept: "application/vnd.github+json", "User-Agent": "hivemind-desktop" },
+        // Never let the fetch hang forever: a stalled socket would otherwise
+        // pin the renderer on "Checking…" with no way out.
+        signal: AbortSignal.timeout(8000),
+      },
     );
-    if (!res.ok) return { current, latest: null, updateAvailable: false };
+    // A non-2xx (notably 403 rate-limit) is NOT "up to date" — it's a failed
+    // check. Report ok:false so the renderer keeps its last known-good state.
+    if (!res.ok) return { current, latest: null, updateAvailable: false, ok: false };
     const json = (await res.json()) as { tag_name?: string };
     const latest = (json.tag_name ?? "").replace(/^v/, "").trim();
-    if (!latest) return { current, latest: null, updateAvailable: false };
-    return { current, latest, updateAvailable: isNewerVersion(latest, current) };
+    if (!latest) return { current, latest: null, updateAvailable: false, ok: false };
+    return { current, latest, updateAvailable: isNewerVersion(latest, current), ok: true };
   } catch {
-    return { current, latest: null, updateAvailable: false };
+    return { current, latest: null, updateAvailable: false, ok: false };
   }
 });
 

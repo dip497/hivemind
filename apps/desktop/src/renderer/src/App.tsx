@@ -52,20 +52,35 @@ function useUpdateCheck() {
       return raw ? (JSON.parse(raw) as UpdateStatus) : null;
     } catch { return null; }
   });
-  const check = useCallback(async () => {
+  // Dedupe concurrent checks (opening Settings + mount + interval can overlap)
+  // and throttle: unauthenticated GitHub API is 60 req/hr/IP, so hammering it
+  // on every Settings open earns a 403 that used to masquerade as "up to date".
+  const checkingRef = useRef(false);
+  const lastOkCheckRef = useRef(0);
+  const MIN_CHECK_INTERVAL = 60_000;
+  const check = useCallback(async (opts?: { force?: boolean }) => {
     if (!window.hive?.checkForUpdate) return;
+    if (checkingRef.current) return; // already in flight
+    if (!opts?.force && Date.now() - lastOkCheckRef.current < MIN_CHECK_INTERVAL) return;
+    checkingRef.current = true;
     setChecking(true);
     try {
       const s = await window.hive.checkForUpdate();
-      setStatus(s);
-      try { localStorage.setItem("hivemind:update", JSON.stringify(s)); } catch { /* quota */ }
+      // Only a COMPLETED check updates state/cache. A failed one (offline,
+      // timeout, rate-limit) must NOT overwrite a known-good result or flip the
+      // banner — we keep the last trustworthy status and just stop "Checking…".
+      if (s.ok) {
+        lastOkCheckRef.current = Date.now();
+        setStatus(s);
+        try { localStorage.setItem("hivemind:update", JSON.stringify(s)); } catch { /* quota */ }
+      }
     } catch { /* main never rejects; ignore */ }
-    finally { setChecking(false); }
+    finally { checkingRef.current = false; setChecking(false); }
   }, []);
   useEffect(() => {
     void window.hive?.getAppVersion?.().then(setVersion).catch(() => {});
-    void check();
-    const id = window.setInterval(() => { void check(); }, 4 * 60 * 60 * 1000);
+    void check({ force: true });
+    const id = window.setInterval(() => { void check({ force: true }); }, 4 * 60 * 60 * 1000);
     return () => window.clearInterval(id);
   }, [check]);
   // Upgrade flow with real feedback: a live progress toast (installer output),
@@ -540,8 +555,8 @@ function SettingsModal({
   update: UpdateStatus | null;
   /** A check is in flight. */
   checking: boolean;
-  /** Re-run the update check now. */
-  onCheck: () => void;
+  /** Re-run the update check. Pass `{force:true}` to bypass the throttle. */
+  onCheck: (opts?: { force?: boolean }) => void;
   /** Run the installer, stream progress, then restart into the new version. */
   onUpgrade: () => void;
   /** An upgrade is in flight — disable the button + show a spinner. */
@@ -631,11 +646,11 @@ function SettingsModal({
                   {checking ? "Checking…" : "Up to date"}
                 </span>
                 <button
-                  onClick={onCheck}
+                  onClick={() => onCheck({ force: true })}
                   disabled={checking}
                   className="px-2 py-1 text-[11px] border border-[var(--color-line2)] text-[var(--color-fg2)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg4)] rounded disabled:opacity-40"
                 >
-                  Check now
+                  {checking ? "Checking…" : "Check now"}
                 </button>
               </>
             )}
