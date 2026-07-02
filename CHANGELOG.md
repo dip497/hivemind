@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [1.10.7] — 2026-07-02
+
 ### Fixed
 
 - **Update checker no longer sticks on "Checking…" or falsely nags about an update.** Three compounding bugs: (1) the GitHub fetch had no timeout, so a stalled request pinned the UI on "Checking…" forever; (2) a failed check (offline / timeout / 403 rate-limit) was indistinguishable from "up to date" and could clobber a real result; (3) checking on every Settings open with no dedupe/throttle hammered the unauthenticated GitHub API (60 req/hr/IP) into rate-limit. Now: the fetch times out at 8s, results carry an explicit `ok` flag so only a *completed* check updates state/cache (a blip keeps the last known-good result), and checks are de-duped + throttled to once per 60s (the "Check now" button still forces an immediate check).
@@ -596,7 +598,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v1.10.6...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v1.10.7...HEAD
+[1.10.7]: https://github.com/dip497/hivemind/releases/tag/v1.10.7
 [1.10.6]: https://github.com/dip497/hivemind/releases/tag/v1.10.6
 [1.10.5]: https://github.com/dip497/hivemind/releases/tag/v1.10.5
 [1.10.4]: https://github.com/dip497/hivemind/releases/tag/v1.10.4
