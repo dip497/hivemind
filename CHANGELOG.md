@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [1.10.6] — 2026-07-02
+
 ### Changed
 
 - **Smaller AppImage download.** Enabled electron-builder `compression: "maximum"` (xz squashfs) and pruned bundled Electron locales to `en-US` only (`electronLanguages`), plus `strip` the CLI binary in the release workflow. No code or runtime change — just a smaller download.
@@ -590,7 +592,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v1.10.5...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v1.10.6...HEAD
+[1.10.6]: https://github.com/dip497/hivemind/releases/tag/v1.10.6
 [1.10.5]: https://github.com/dip497/hivemind/releases/tag/v1.10.5
 [1.10.4]: https://github.com/dip497/hivemind/releases/tag/v1.10.4
 [1.10.3]: https://github.com/dip497/hivemind/releases/tag/v1.10.3
