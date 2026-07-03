@@ -17,6 +17,7 @@ import { sanitizeShellEnv } from "./shell-env.js";
 import { composeResume } from "./providers/registry.js";
 import { planHookSource } from "./plan-review-hook-source.js";
 import { stopHookSource } from "./hcp/stop-hook-source.js";
+import { piExtSource } from "./hcp/pi-ext-source.js";
 import { approvalHookSource } from "./hcp/approval-hook-source.js";
 import { subagentHookSource } from "./hcp/subagent-hook-source.js";
 import { notificationHookSource } from "./hcp/notification-hook-source.js";
@@ -101,6 +102,12 @@ try { fs.writeFileSync(notificationHookPath, notificationHookSource()); } catch 
 // UserPromptSubmit hook — turn START → working (hook-driven status; pairs with Stop).
 const userpromptHookPath = path.join(userDataDir, "hcp-userprompt-hook.cjs");
 try { fs.writeFileSync(userpromptHookPath, userpromptHookSource()); } catch { /* best-effort */ }
+// pi lifecycle-bridge extension — pi has no hook system but loads an ESM
+// extension via `pi -e`; this bridges pi's agent_start/message_end/agent_end to
+// HCP so a pi tile reports turn/status/reply like claude's Stop hook. Injected
+// into spawned pi tiles via pi-resume (env + `-e` arg). Best-effort write.
+const piExtPath = path.join(userDataDir, "hive-pi-ext.mjs");
+try { fs.writeFileSync(piExtPath, piExtSource()); } catch { /* best-effort */ }
 const hcpSock = hcpSockPath(userDataDir);
 const hcpToken = readOrCreateToken(userDataDir);
 
@@ -138,6 +145,7 @@ const resume = composeResume({
   userpromptHookPath,
   hcpSock,
   hcpToken,
+  piExtPath,
   droidHome,
 });
 

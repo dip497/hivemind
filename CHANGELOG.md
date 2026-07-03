@@ -9,11 +9,15 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Fixed
 
+- **A spawned agent's initial prompt now auto-submits — no more pressing Enter yourself.** The prompt was typed and an Enter sent 90ms later, but a freshly-booted claude TUI can drop that first Enter (it lands before the just-rendered input's paste-debounce settles), leaving the prompt typed-but-unsubmitted. Added a one-shot backstop Enter at 1.5s that fires ONLY if the agent is still idle (never submitted) — so a prompt that already went through never gets a stray second Enter.
 - **Pinned tiles hold their screen position more reliably while panning.** A pinned tile's fixed position is now baked into the node build from the live viewport, so it no longer flashes to its old canvas spot (and briefly rides the pan) whenever the node array rebuilds — e.g. an agent status change or another tile spawning. Also skip the window-clamp until react-flow has measured the pane, so a pinned tile is never slammed into the corner on first paint. (Known remaining limit: a pinned tile still scales with zoom — constant *position*, not constant *size*.)
 
 ### Added
 
 - **Spawned agents now show a wire back to the agent that spawned them.** When an agent spawns a sub-agent (`hive_spawn_agent`) or a workflow spawns workers, a persistent dashed "parentage" line is drawn from parent → child on the canvas — for **every** spawn, including background workflow workers (previously a link was only drawn when `report` was on, so workflow workers appeared with nothing connecting them). It's visually distinct from the animated data-flow pipe (`hive_connect`): quiet, dashed, no traveling dot. The child still spawns into the **same frame** as its parent by default.
+- **pi agents are now first-class** — spawned pi tiles report turn-completion, status, and their reply through hive (hive_read / auto-report / workflow now work with `agent: pi`), via an injected pi lifecycle-bridge extension (agent_start/message_end/agent_end → HCP), mirroring claude's Stop hook. Previously pi ran raw with screen-scrape-only status.
+- **Claude model selection** — pick Opus or Sonnet per spawn (`hive_spawn_agent`/`hive_workflow` `model` param) or set a workspace default in Settings; threads to `claude --model`. claude-only.
+- **`hive-workflow` skill installed on init** — `hivemind init --agentic` / workspace init now writes (and refreshes) the multi-agent orchestration skill, so agents know how to use `hive_workflow`.
 
 ## [1.11.0] — 2026-07-03
 

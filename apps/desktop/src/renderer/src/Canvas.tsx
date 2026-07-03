@@ -571,6 +571,13 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace, updateAvai
     () => localStorage.getItem("hivemind:claude-mode") || "default",
   );
   useEffect(() => { localStorage.setItem("hivemind:claude-mode", claudeMode); }, [claudeMode]);
+  // Claude model the next Claude spawn launches with (claude-only `--model`
+  // alias). "default" → omit the flag (workspace default). Persisted alongside
+  // the permission mode so it survives restarts.
+  const [claudeModel, setClaudeModel] = useState<string>(
+    () => localStorage.getItem("hivemind:claude-model") || "default",
+  );
+  useEffect(() => { localStorage.setItem("hivemind:claude-model", claudeModel); }, [claudeModel]);
   // Which agent the tool island's spawn button creates (claude / codex / …).
   const [agentSel, setAgentSel] = useState<string>(
     () => localStorage.getItem("hivemind:agent-sel") || "claude",
@@ -612,7 +619,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace, updateAvai
   // Tile spawning + in-frame placement (placeInFrame / ensureFrame / spawnTile
   // + spawnInto/spawnClaude/spawnVis/frameOpen). See useSpawn.
   const { spawnTile, spawnClaude, spawnAgent, spawnVis, spawnInto, frameOpen, openPlanReview, hcpSpawnAgent } = useSpawn({
-    repoPath, claudeMode,
+    repoPath, claudeMode, claudeModel,
     positionsRef, sizesRef, tilesRef, frameOfRef, framesRef, selectedFrameIdRef,
     selectedTileIdRef, repoPathRef, rootRef, lastActiveFrameRef, claudeSeqRef,
     setFrameOf, setPositions, setSelectedTileId, setFocusReq, setFrames,
@@ -675,7 +682,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace, updateAvai
         const p = (cmd.params ?? {}) as Record<string, unknown>;
         switch (cmd.method) {
           case "tile.spawn_agent": {
-            const tileId = hcpSpawnAgent(p as { agent?: string; prompt?: string; frame?: string; mode?: string; callerTile?: string; background?: boolean });
+            const tileId = hcpSpawnAgent(p as { agent?: string; prompt?: string; frame?: string; mode?: string; model?: string; callerTile?: string; background?: boolean });
             await window.hive.hcpResult(cmd.id, true, { tileId });
             break;
           }
@@ -1335,6 +1342,8 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace, updateAvai
               agentSel={agentSel}
               onAgentChange={setAgentSel}
               onSpawnAgent={(a) => spawnAgent(a)}
+              claudeModel={claudeModel}
+              onModelChange={setClaudeModel}
               onFrame={addFrame}
               onBrowser={() => spawnInto("browser")}
               onTheme={() => setCustomizerOpen((o) => !o)}

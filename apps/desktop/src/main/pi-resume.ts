@@ -9,10 +9,16 @@
  *
  * So instead of binding at spawn, we resolve at RESTORE: find the newest pi
  * session whose header `cwd` matches the tile's cwd and respawn
- * `pi --session <id>`. No spawn-time changes, no hook, no post-spawn capture.
- * Status falls through to the renderer screen-scrape detector (agent-state.ts
- * `detectPi`). Ambiguous only if two pi tiles share one cwd (both resume the
- * newest) — acceptable, same tradeoff codex makes.
+ * `pi --session <id>`. Ambiguous only if two pi tiles share one cwd (both
+ * resume the newest) — acceptable, same tradeoff codex makes.
+ *
+ * DETERMINISTIC SIGNALS: pi has no claude-style hook system, but it DOES load an
+ * ESM extension via `pi -e <path>`. hivemind writes a lifecycle-bridge extension
+ * (hcp/pi-ext-source.ts) and injects it — plus the HCP socket/token/tile-id env —
+ * into every pi spawn AND restore (mirroring droid-resume's droidEnv). That
+ * extension bridges pi's agent_start/message_end/agent_end to the HCP `status`/
+ * `turn` topics, so a pi tile reports turn-completion + status + its inline reply
+ * deterministically (the screen-scrape detector remains the fallback).
  */
 import { homedir } from "node:os";
 import { join, basename } from "node:path";
@@ -79,24 +85,73 @@ export function newestPiSessionForCwd(
   return undefined;
 }
 
+export interface PiResumeDeps {
+  /** Override the ~/.pi/agent/sessions scan root (tests). */
+  sessionsRoot?: string;
+  /** HCP control-plane socket + capability token (injected into the pi env so
+   *  its bridge extension can reach the control plane, attributed to this tile). */
+  hcpSock?: string;
+  hcpToken?: string;
+  /** On-disk path of the generated pi HCP-bridge extension; appended as `-e
+   *  <path>` to the pi spawn. Set → pi reports turn/status/reply deterministically. */
+  piExtPath?: string;
+}
+
 export interface PiResumeTransforms {
+  transformSpecOnSpawn: (spec: SpawnSpec, id: string) => SpawnSpec;
   transformSpecOnRestore: (spec: SpawnSpec, id: string) => SpawnSpec;
   restoreRetryTransform: (spec: SpawnSpec) => SpawnSpec | null;
 }
 
+/** Env injected into a spawned pi: the HCP socket/token/tile-id so its bridge
+ *  extension reaches the control plane, attributed to this tile (mirrors
+ *  droid-resume's droidEnv). Returns spec.env unchanged if HCP isn't wired. */
+function piEnv(deps: PiResumeDeps, spec: SpawnSpec, id: string): Record<string, string> | undefined {
+  if (!(deps.hcpSock && deps.hcpToken)) return spec.env;
+  const env: Record<string, string> = { ...spec.env };
+  env.HIVE_HCP_SOCK = deps.hcpSock;
+  env.HCP_TOKEN = deps.hcpToken;
+  env.HIVEMIND_TILE = id; // the bridge extension + the agent's hive MCP attribute to this tile
+  env.HIVE_AGENT_DEPTH = spec.env?.HIVE_AGENT_DEPTH ?? "0";
+  return env;
+}
+
+/** Append `-e <piExtPath>` to a pi spawn (once — guard against a double-add if a
+ *  restored spec already carries it). No-op if no extension path is configured. */
+function withPiExt(deps: PiResumeDeps, args: string[]): string[] {
+  if (!deps.piExtPath) return args;
+  const i = args.indexOf("-e");
+  if (i >= 0 && args[i + 1] === deps.piExtPath) return args; // already injected
+  return [...args, "-e", deps.piExtPath];
+}
+
+/** Apply the deterministic-signal injection (HCP env + `-e` bridge extension) a
+ *  pi spawn needs. Shared by transformSpecOnSpawn AND transformSpecOnRestore so a
+ *  restored pi session gets the same wiring (mirrors droid applying droidEnv in
+ *  both). No-op for specs pi doesn't own, or if nothing is configured. */
+function injectPi(deps: PiResumeDeps, spec: SpawnSpec, id: string): SpawnSpec {
+  if (!isPi(spec)) return spec;
+  if (!(deps.hcpSock && deps.hcpToken) && !deps.piExtPath) return spec;
+  return { ...spec, env: piEnv(deps, spec, id), args: withPiExt(deps, spec.args ?? []) };
+}
+
 export function makePiResumeTransforms(
-  sessionsRoot?: string,
+  deps: PiResumeDeps = {},
 ): PiResumeTransforms {
   return {
-    transformSpecOnRestore: (spec) => {
+    // Fresh spawn: inject the HCP env + the `-e` bridge extension so pi reports
+    // turn/status/reply for THIS tile (no session-resume arg — that's restore).
+    transformSpecOnSpawn: (spec, id) => injectPi(deps, spec, id),
+    transformSpecOnRestore: (spec, id) => {
       if (!isPi(spec)) return spec;
-      const args = spec.args ?? [];
-      if (args.includes("--session")) return spec; // already resuming a specific session
-      const id = newestPiSessionForCwd(spec.cwd, sessionsRoot);
-      if (!id) return spec; // no matching session on disk → fresh start
+      const withInjection = injectPi(deps, spec, id);
+      const args = withInjection.args ?? [];
+      if (args.includes("--session")) return withInjection; // already resuming a specific session
+      const sessId = newestPiSessionForCwd(withInjection.cwd, deps.sessionsRoot);
+      if (!sessId) return withInjection; // no matching session on disk → fresh start
       // `pi --session <id>` resumes by UUID (or path); appends after any
       // existing top-level flags, mirroring codex's `resume <id>` append.
-      return { ...spec, args: [...args, "--session", id] };
+      return { ...withInjection, args: [...args, "--session", sessId] };
     },
     // If `pi --session <id>` dies fast (session file vanished), strip the
     // --session flag AND its value so a stale id doesn't kill the tile.

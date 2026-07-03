@@ -25,6 +25,7 @@ type SpawnPick = ({ kind: TileKind } & SpawnOpts) | null;
 export interface SpawnCtx {
   repoPath: string | null;
   claudeMode: string;
+  claudeModel: string;
   positionsRef: MutableRefObject<Record<string, { x: number; y: number }>>;
   sizesRef: MutableRefObject<Record<string, { width: number; height: number }>>;
   tilesRef: MutableRefObject<TileInstance[]>;
@@ -49,7 +50,7 @@ export interface SpawnCtx {
 
 export function useSpawn(ctx: SpawnCtx) {
   const {
-    repoPath, claudeMode,
+    repoPath, claudeMode, claudeModel,
     positionsRef, sizesRef, tilesRef, frameOfRef, framesRef, selectedFrameIdRef,
     selectedTileIdRef, repoPathRef, rootRef, lastActiveFrameRef, claudeSeqRef,
     setFrameOf, setPositions, setSelectedTileId, setFocusReq, setFrames,
@@ -227,6 +228,9 @@ export function useSpawn(ctx: SpawnCtx) {
         args = m === "bypassPermissions"
           ? ["--dangerously-skip-permissions"]
           : m && m !== "default" ? ["--permission-mode", m] : [];
+        // claude-only model alias (opus/sonnet). Never emitted for registry
+        // agents (codex/pi/droid) — a stray `--model` would break their CLI.
+        if (claudeModel && claudeModel !== "default") args.push("--model", claudeModel);
         cmd = "claude";
         label = `claude #${n}${m && m !== "default" ? ` · ${m}` : ""}`;
       } else if (kind === "shell") {
@@ -244,7 +248,7 @@ export function useSpawn(ctx: SpawnCtx) {
       // itself the first time it's ready (see claude-bus queueWork/claimWork).
       if (kind === "claude" && opts?.work) queueWork(newId, opts.work);
     },
-    [claudeMode, placeInFrame, ensureFrame, focusTile],
+    [claudeMode, claudeModel, placeInFrame, ensureFrame, focusTile],
   );
 
   // Spawn from a global surface (ToolIsland / palette / hotkey). A current
@@ -338,7 +342,7 @@ export function useSpawn(ctx: SpawnCtx) {
   // claude/registry-agent branch of spawnTile, plus prompt delivery via the
   // claude-bus work queue. `agent` is a registry id ("claude", "codex", …).
   const hcpSpawnAgent = useCallback(
-    (opts: { agent?: string; prompt?: string; frame?: string; mode?: string; callerTile?: string; background?: boolean }): string => {
+    (opts: { agent?: string; prompt?: string; frame?: string; mode?: string; model?: string; callerTile?: string; background?: boolean }): string => {
       // Frame preference: explicit > the CALLER agent's frame (so a worker lands
       // beside the agent that spawned it) > the active/first frame.
       // The caller passes its HIVEMIND_TILE, which is the PTY id (`hm:<tileId>`
@@ -380,6 +384,10 @@ export function useSpawn(ctx: SpawnCtx) {
         args = m === "bypassPermissions"
           ? ["--dangerously-skip-permissions"]
           : m && m !== "default" ? ["--permission-mode", m] : [];
+        // claude-only model alias (opus/sonnet). Per-spawn override wins over the
+        // workspace default; never emitted for registry agents above.
+        const model = opts.model || claudeModel;
+        if (model && model !== "default") args.push("--model", model);
         cmd = "claude";
         label = `claude #${n}${m && m !== "default" ? ` · ${m}` : ""}`;
       }
@@ -392,7 +400,7 @@ export function useSpawn(ctx: SpawnCtx) {
       if (opts.prompt) queueWork(newId, opts.prompt);
       return newId;
     },
-    [claudeMode, ensureFrame, placeInFrame],
+    [claudeMode, claudeModel, ensureFrame, placeInFrame],
   );
 
   return { placeInFrame, ensureFrame, spawnTile, spawnInto, spawnClaude, spawnAgent, spawnVis, frameOpen, openPlanReview, hcpSpawnAgent };

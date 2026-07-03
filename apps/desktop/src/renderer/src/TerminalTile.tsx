@@ -11,7 +11,7 @@ import { useTileFont, FontScaleControl, handleFontKey } from "./tile-font";
 import { identifyAgent, detectTileStatus, stabilizeClaudeStatus, normalizeAgentTitle, type TileStatus } from "./agent-state";
 import { registerClaude, unregisterClaude, shouldDeliver, peekWork, claimWork, clearWork, type SendToClaudeDetail } from "./claude-bus";
 import { publishStatus, clearStatus, noteOutput, revalidate, type TileStatusKind } from "./agent-status-bus";
-import { SUBMIT_DELAY_MS } from "../../shared/agent-io";
+import { SUBMIT_DELAY_MS, SPAWN_SUBMIT_RETRY_MS } from "../../shared/agent-io";
 import { Pencil, GripVertical } from "lucide-react";
 import { webUrlForInternalBrowser } from "./browser-open";
 import { useTheme, getTheme } from "./theme-store";
@@ -762,6 +762,14 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
                 if (work) {
                   window.hive.ptyWrite(ptyId, work);
                   setTimeout(() => window.hive.ptyWrite(ptyId, "\r"), SUBMIT_DELAY_MS);
+                  // Backstop: a fresh claude TUI can drop that first Enter, leaving
+                  // the prompt typed-but-unsubmitted (the "I had to press Enter"
+                  // bug). Re-send Enter ONCE, but only if the agent is STILL idle —
+                  // i.e. it never submitted. If the first Enter landed, the agent is
+                  // "working" by now and this no-ops (no stray empty submit).
+                  setTimeout(() => {
+                    if (lastReported === "idle") window.hive.ptyWrite(ptyId, "\r");
+                  }, SPAWN_SUBMIT_RETRY_MS);
                   void window.hive.diagLog?.(`[work-deliver] tile=${tileId} agent=${agent} settled`);
                 }
               }

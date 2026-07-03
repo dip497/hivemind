@@ -8,6 +8,10 @@ export interface TurnRecord {
   seq: number;
   /** Transcript path from the most recent Stop (used to read the reply). */
   transcriptPath: string | null;
+  /** Inline reply text carried by the turn event itself (pi has no transcript —
+   *  its bridge extension sends the reply here). null for claude/droid, which
+   *  carry a transcriptPath instead. */
+  text?: string | null;
 }
 
 type Waiter = { afterSeq: number; resolve: (r: TurnRecord) => void; timer: NodeJS.Timeout };
@@ -18,7 +22,7 @@ export class TurnTracker {
 
   private get(tileId: string): TurnRecord {
     let r = this.state.get(tileId);
-    if (!r) { r = { seq: 0, transcriptPath: null }; this.state.set(tileId, r); }
+    if (!r) { r = { seq: 0, transcriptPath: null, text: null }; this.state.set(tileId, r); }
     return r;
   }
 
@@ -29,10 +33,11 @@ export class TurnTracker {
 
   /** A Stop hook reported a finished turn. Bumps seq, stores the transcript, and
    *  wakes any waiter whose epoch is now satisfied. */
-  recordTurn(tileId: string, transcriptPath: string | null): void {
+  recordTurn(tileId: string, transcriptPath: string | null, text?: string | null): void {
     const r = this.get(tileId);
     r.seq += 1;
     r.transcriptPath = transcriptPath;
+    r.text = text ?? null; // pi carries the inline reply here; claude/droid → null
     const ws = this.waiters.get(tileId);
     if (!ws || ws.length === 0) return;
     const remaining: Waiter[] = [];
@@ -67,7 +72,7 @@ export class TurnTracker {
   forget(tileId: string): void {
     this.state.delete(tileId);
     const ws = this.waiters.get(tileId);
-    if (ws) for (const w of ws) { clearTimeout(w.timer); w.resolve({ seq: -1, transcriptPath: null }); }
+    if (ws) for (const w of ws) { clearTimeout(w.timer); w.resolve({ seq: -1, transcriptPath: null, text: null }); }
     this.waiters.delete(tileId);
   }
 }

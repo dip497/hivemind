@@ -768,6 +768,17 @@ async function installAgenticStack(dir: string, root: string): Promise<void> {
     await fsp.mkdir(path.dirname(browserSkillPath), { recursive: true });
     await fsp.writeFile(browserSkillPath, templates.hiveBrowserSkill(), "utf8");
   }
+
+  // hive-workflow skill — teaches an agent to fan work out via hive_workflow.
+  // This one is hivemind-managed: unlike the write-if-absent skills above, it is
+  // REGENERATED on every init so it tracks the app version across upgrades.
+  try {
+    const workflowSkillPath = path.join(dir, ".claude", "skills", "hive-workflow", "SKILL.md");
+    await fsp.mkdir(path.dirname(workflowSkillPath), { recursive: true });
+    await fsp.writeFile(workflowSkillPath, templates.hiveWorkflowSkill(), "utf8");
+  } catch {
+    /* best-effort — a skill write failure must not block init */
+  }
 }
 
 // Ensure the agentic stack exists for an already-initialized workspace (called
@@ -1570,7 +1581,7 @@ function startHcpControlPlane(): void {
         return;
       }
       if (topic !== "turn") return;
-      const d = (data ?? {}) as { tileId?: string; transcriptPath?: string };
+      const d = (data ?? {}) as { tileId?: string; transcriptPath?: string; text?: string };
       if (!d.tileId) return;
       // Forged-event hardening: the `turn` event is token-less (only the 0600
       // socket gates it), so constrain the transcript path to a real agent
@@ -1586,7 +1597,9 @@ function startHcpControlPlane(): void {
         path.join(app.getPath("userData"), "droid-home") + path.sep,
       ];
       const safeTp = tp && tp.endsWith(".jsonl") && okRoots.some((r) => tp!.startsWith(r)) ? tp : null;
-      hcpTurns.recordTurn(d.tileId, safeTp);
+      // pi carries its reply inline on the turn event (no transcript path); pass
+      // it through so agent.read returns it directly. claude/droid send no text.
+      hcpTurns.recordTurn(d.tileId, safeTp, typeof d.text === "string" ? d.text : null);
       // Turn END → idle (hook-driven status). The hook reports the PTY id; the
       // renderer status bus keys by BARE — normalize (recordTurn above stays on
       // the pty id, the turn-tracker's key). If a background subagent is still

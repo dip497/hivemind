@@ -49,7 +49,7 @@ test("newestPiSessionForCwd ignores non-session header lines", () => {
 test("transformSpecOnRestore appends `--session <id>` for pi with a matching session", () => {
   const root = mkdtempSync(join(tmpdir(), "pi-sess-"));
   sessionFile(root, "--w--/x.jsonl", "sid-1", "/w", 1_000_000);
-  const { transformSpecOnRestore } = makePiResumeTransforms(root);
+  const { transformSpecOnRestore } = makePiResumeTransforms({ sessionsRoot: root });
   const out = transformSpecOnRestore(
     { cwd: "/w", cmd: "pi", args: ["--model", "sonnet"] },
     "tile-1",
@@ -60,7 +60,7 @@ test("transformSpecOnRestore appends `--session <id>` for pi with a matching ses
 
 test("transformSpecOnRestore is a no-op for non-pi and for unknown cwd", () => {
   const root = mkdtempSync(join(tmpdir(), "pi-sess-"));
-  const { transformSpecOnRestore } = makePiResumeTransforms(root);
+  const { transformSpecOnRestore } = makePiResumeTransforms({ sessionsRoot: root });
   const claude = { cwd: "/w", cmd: "claude", args: ["--resume", "u"] };
   assert.deepEqual(transformSpecOnRestore(claude, "t"), claude);
   const piNoSession = { cwd: "/w", cmd: "pi", args: ["--thinking", "high"] };
@@ -70,13 +70,13 @@ test("transformSpecOnRestore is a no-op for non-pi and for unknown cwd", () => {
 test("transformSpecOnRestore does not double-append when already resuming", () => {
   const root = mkdtempSync(join(tmpdir(), "pi-sess-"));
   sessionFile(root, "--w--/x.jsonl", "sid-1", "/w", 1_000_000);
-  const { transformSpecOnRestore } = makePiResumeTransforms(root);
+  const { transformSpecOnRestore } = makePiResumeTransforms({ sessionsRoot: root });
   const already = transformSpecOnRestore({ cwd: "/w", cmd: "pi", args: ["--session", "old"] }, "t");
   assert.deepEqual(already.args, ["--session", "old"]);
 });
 
 test("restoreRetryTransform strips --session AND its value so a stale id respawns fresh", () => {
-  const { restoreRetryTransform } = makePiResumeTransforms("/nonexistent");
+  const { restoreRetryTransform } = makePiResumeTransforms({ sessionsRoot: "/nonexistent" });
   const out = restoreRetryTransform({ cwd: "/w", cmd: "pi", args: ["--model", "sonnet", "--session", "sid"] });
   assert.deepEqual(out?.args, ["--model", "sonnet"]);
   // non-pi is not this provider's concern

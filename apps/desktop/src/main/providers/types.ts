@@ -53,6 +53,10 @@ export interface ProviderSpawnContext {
   userpromptHookPath?: string;
   hcpSock?: string;
   hcpToken?: string;
+  /** On-disk path of the generated pi HCP-bridge extension (`hive-pi-ext.mjs`),
+   *  passed to `pi -e <path>` so a spawned pi tile reports turn/status/reply to
+   *  the control plane. Unset → pi runs raw (screen-scrape status only). */
+  piExtPath?: string;
   /** The ephemeral FACTORY_HOME_OVERRIDE home for droid hook injection (the
    *  daemon seeds it + writes droid's hooks.json there). Unset → droid runs with
    *  its normal home and no injected hooks (screen-scrape status only). */

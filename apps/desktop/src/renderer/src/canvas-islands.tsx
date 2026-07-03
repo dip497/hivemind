@@ -16,6 +16,8 @@ export function ToolIsland({
   agentSel,
   onAgentChange,
   onSpawnAgent,
+  claudeModel,
+  onModelChange,
   onFrame,
   onBrowser,
   onTheme,
@@ -29,6 +31,10 @@ export function ToolIsland({
   agentSel: string;
   onAgentChange: (id: string) => void;
   onSpawnAgent: (agent: { id: string; cmd: string; defaultArgs?: string[]; label: string }) => void;
+  /** Default Claude model the next spawn launches with ("default" | "opus" |
+   *  "sonnet"). claude-only — ignored for other runtimes. */
+  claudeModel: string;
+  onModelChange: (model: string) => void;
   onFrame: () => void;
   onBrowser: () => void;
   onTheme: () => void;
@@ -51,6 +57,23 @@ export function ToolIsland({
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
   }, [agentMenu]);
+
+  // Claude model picker (default | opus | sonnet). Only meaningful when the
+  // selected agent is claude — a `--model` alias is claude-only.
+  const MODELS = [
+    { id: "default", label: "Default" },
+    { id: "opus", label: "Opus" },
+    { id: "sonnet", label: "Sonnet" },
+  ] as const;
+  const selModel = MODELS.find((m) => m.id === claudeModel) ?? MODELS[0];
+  const [modelMenu, setModelMenu] = useState(false);
+  const modelBtnRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!modelMenu) return;
+    const onDoc = (e: MouseEvent) => { if (modelBtnRef.current && !modelBtnRef.current.contains(e.target as Node)) setModelMenu(false); };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [modelMenu]);
 
   return (
     <div className="hm-island flex items-center gap-0.5 p-1.5">
@@ -78,6 +101,33 @@ export function ToolIsland({
                 <a.icon size={14} />
                 <span className="flex-1">{a.label}</span>
                 {a.id === sel.id && <span className="text-[var(--color-fg3)] text-[10px]">✓</span>}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      {/* Claude model picker — sets the DEFAULT model the next claude spawn
+          launches with (claude-only `--model`). Mirrors the agent switcher. */}
+      <div ref={modelBtnRef} className="relative flex items-center">
+        <button
+          onClick={() => setModelMenu((o) => !o)}
+          title="Claude model for new spawns (claude-only)"
+          aria-label="claude model"
+          className="flex items-center gap-1 h-9 px-2 rounded-lg text-[11px] text-[var(--color-fg2)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)] transition-colors cursor-pointer"
+        >
+          <span>{selModel.label}</span>
+          <svg width="8" height="8" viewBox="0 0 10 10"><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" /></svg>
+        </button>
+        {modelMenu && (
+          <div className="absolute top-full left-0 mt-1 z-30 min-w-[120px] hm-island rounded-lg p-1">
+            {MODELS.map((m) => (
+              <button
+                key={m.id}
+                onClick={() => { onModelChange(m.id); setModelMenu(false); }}
+                className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[12px] text-left cursor-pointer hover:bg-[var(--color-bg4)] ${m.id === selModel.id ? "text-[var(--color-fg)]" : "text-[var(--color-fg2)]"}`}
+              >
+                <span className="flex-1">{m.label}</span>
+                {m.id === selModel.id && <span className="text-[var(--color-fg3)] text-[10px]">✓</span>}
               </button>
             ))}
           </div>

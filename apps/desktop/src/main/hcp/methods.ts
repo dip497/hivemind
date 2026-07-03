@@ -141,7 +141,7 @@ export function makeDispatch(deps: MethodDeps): (method: string, params: unknown
   // failure. `report` defaults to on (draws the auto-report edge to the parent);
   // workflow workers pass report:false and gather via waitForTurn instead.
   const doSpawn = async (opts: {
-    agent?: unknown; prompt?: unknown; frame?: unknown; mode?: unknown;
+    agent?: unknown; prompt?: unknown; frame?: unknown; mode?: unknown; model?: unknown;
     callerTile?: unknown; report?: unknown; supervise?: unknown;
   }): Promise<string> => {
     const callerDepth = opts.callerTile ? (depthOf.get(bareOf(String(opts.callerTile))) ?? 0) : 0;
@@ -164,7 +164,7 @@ export function makeDispatch(deps: MethodDeps): (method: string, params: unknown
       // `background` = a silent worker (report:false → gathered in bulk, e.g. a
       // workflow worker). The renderer uses it to NOT steal focus / center the
       // viewport on spawn and to suppress the per-worker "finished" notification.
-      { agent, prompt: opts.prompt, frame: opts.frame, mode, callerTile: opts.callerTile, background: opts.report === false },
+      { agent, prompt: opts.prompt, frame: opts.frame, mode, model: opts.model, callerTile: opts.callerTile, background: opts.report === false },
       RENDERER_TIMEOUT,
     )) as { tileId?: string };
     if (!res?.tileId) throw new HcpError("INTERNAL", "spawn returned no tileId");
@@ -224,7 +224,7 @@ export function makeDispatch(deps: MethodDeps): (method: string, params: unknown
         // workflow.run). AUTO-REPORT is on unless report:false; the read epoch is
         // armed so a follow-up agent.read waits for THIS agent's first turn.
         const tileId = await doSpawn({
-          agent: p.agent, prompt: p.prompt, frame: p.frame, mode: p.mode,
+          agent: p.agent, prompt: p.prompt, frame: p.frame, mode: p.mode, model: p.model,
           callerTile: p.callerTile, report: p.report, supervise: p.supervise,
         });
         return { tileId };
@@ -344,9 +344,22 @@ export function makeDispatch(deps: MethodDeps): (method: string, params: unknown
         const pid = ptyId(tileId);
         const afterSeq = sendSeq.get(pid) ?? deps.turns.currentSeq(pid);
         const rec = await deps.turns.waitForTurn(pid, afterSeq, timeoutMs);
+        if (rec && typeof rec.text === "string" && rec.text.length > 0) {
+          // pi inline-reply path: pi has no transcript file — its lifecycle-bridge
+          // extension carries the finished reply on the turn event itself.
+          return { text: rec.text, finalStatus: "turn", truncated: false };
+        }
         if (rec?.transcriptPath) {
           // Clean reply from the session transcript JSONL (NOT screen-scrape).
-          const text = readLastAssistantMessage(rec.transcriptPath);
+          // The Stop hook can fire a beat before the assistant's final message is
+          // flushed to the transcript file, so a first read returns null on a
+          // genuinely-completed turn (the observed `text:null` + finalStatus:turn).
+          // Retry a few times over ~0.5s to let the flush land before giving up.
+          let text = readLastAssistantMessage(rec.transcriptPath);
+          for (let i = 0; text == null && i < 4; i++) {
+            await new Promise<void>((r) => { const t = setTimeout(r, 130); t.unref?.(); });
+            text = readLastAssistantMessage(rec.transcriptPath);
+          }
           if (text != null) return { text, finalStatus: "turn", truncated: false };
           return { text: null, finalStatus: "turn", truncated: false, note: "turn completed but its transcript was unreadable" };
         }
@@ -369,6 +382,8 @@ export function makeDispatch(deps: MethodDeps): (method: string, params: unknown
         const caller = p.callerTile != null ? String(p.callerTile) : undefined;
         const agent = p.agent != null ? String(p.agent) : "claude";
         const frame = p.frame != null ? String(p.frame) : undefined;
+        // claude-only model alias applied to every worker in the fleet.
+        const model = p.model != null ? String(p.model) : undefined;
         const supervise = p.supervise;
         const perTurnMs = typeof p.timeout_ms === "number" ? p.timeout_ms : WORKFLOW_DEFAULT_TIMEOUT_MS;
         const maxConc = Math.max(1, Math.min(Number(p.max_concurrent ?? WORKFLOW_DEFAULT_CONCURRENCY), WORKFLOW_MAX_CONCURRENCY));
@@ -383,7 +398,7 @@ export function makeDispatch(deps: MethodDeps): (method: string, params: unknown
         const runWorker = async (label: string, prompt: string): Promise<WR> => {
           let tileId: string;
           try {
-            tileId = await spawnRetry({ agent, prompt, frame, callerTile: caller, report: false, supervise });
+            tileId = await spawnRetry({ agent, prompt, frame, model, callerTile: caller, report: false, supervise });
           } catch (e) {
             return { item: label, tileId: null, status: "error", text: (e as Error).message };
           }
