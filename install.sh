@@ -203,9 +203,31 @@ APP_DIR="${HIVEMIND_APP_DIR:-$HOME/.hivemind-app}"
 REPO="${HIVEMIND_REPO:-dip497/hivemind}"
 mkdir -p "$BIN_DIR" "$APP_DIR"
 
+# Remove temp download files on ANY exit — including a killed run (SIGINT/SIGTERM,
+# closed terminal, dropped network). The inline `rm -f` on curl failure only fires
+# when curl returns non-zero IN-PROCESS; a kill skips it and orphans a partial
+# `*.new` (up to ~115MB). On a near-full disk those orphans snowball into ENOSPC
+# and wedge every future upgrade. CLI_TMP/APPIMG_TMP are assigned later in
+# install_prebuilt; declared here so the trap can always see them.
+CLI_TMP=""; APPIMG_TMP=""
+cleanup_tmp() { rm -f "$CLI_TMP" "$APPIMG_TMP" 2>/dev/null || true; }
+trap cleanup_tmp EXIT INT TERM
+# Sweep orphans a PREVIOUS killed run may have left (the bug above, pre-fix).
+rm -f "$APP_DIR"/hive.*.new "$APP_DIR"/hivemind.AppImage.*.new 2>/dev/null || true
+
 # ── PREBUILT path ─────────────────────────────────────────────────────────
 install_prebuilt() {
   command -v curl >/dev/null 2>&1 || die "curl missing — install: sudo apt install curl"
+
+  # Disk preflight. Mid-upgrade the new AppImage (~120MB) and its extracted
+  # squashfs-root (~120MB) coexist with the current extracted dir, so we need a
+  # few hundred MB of headroom. Fail EARLY with a clear message instead of a
+  # cryptic truncated-download / "extract failed" deep in the process.
+  local free_kb need_kb=460000
+  free_kb=$(df -Pk "$APP_DIR" 2>/dev/null | awk 'NR==2 {print $4}')
+  if [ -n "$free_kb" ] && [ "$free_kb" -lt "$need_kb" ]; then
+    die "low disk in $(df -Ph "$APP_DIR" 2>/dev/null | awk 'NR==2{print $6}'): ~$((free_kb/1000))MB free, need ~$((need_kb/1000))MB. Free space, then re-run \`hivemind upgrade\`."
+  fi
 
   # Resolve target version (latest by default).
   if [ -n "${HIVEMIND_VERSION:-}" ]; then

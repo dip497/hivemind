@@ -565,6 +565,17 @@ body.canvas-resizing .react-flow__node * {
   z-index: 5;
 }
 
+/* Pinned tile — a soft brand-tinted outline so a sticky (viewport-fixed) tile
+   reads as "held" even when it isn't selected. Uses an inset ring so it never
+   shifts layout. */
+.react-flow__node .hm-node-pinned {
+  position: relative;
+  border-radius: 0.75rem;
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--color-brand) 55%, transparent),
+    0 10px 30px -6px rgba(0, 0, 0, 0.5);
+}
+
 /* Resize handles: invisible until you reach for a corner/edge (hover the control)
    so a selected tile stays clean — the handle only shows when you go to grab it.
    Stays visible while actively resizing. (Handles still only render when the tile

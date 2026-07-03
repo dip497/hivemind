@@ -7,6 +7,15 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Fixed
+
+- **The `hive` CLI was broken in v1.10.6/v1.10.7 — it ran as raw Bun instead of hivemind.** The release workflow `strip`ped the `bun build --compile` binary to save ~1MB, but `strip` corrupts the JS-bundle trailer bun appends to the executable, so the binary silently degraded to the Bun runtime: `hive --version` printed Bun's version, `hive init` ran *Bun's* project init, and **every** subcommand (`new`, `list`, `task`, `ctl`) plus `hive mcp-stdio` (the MCP server agents call) failed. Removed the strip step. Re-run `hivemind upgrade` after this release to get a working `hive`. **This requires a new release** (the CLI asset must be rebuilt without strip).
+- **`install.sh` / `hivemind upgrade` no longer wedges on a near-full disk.** An interrupted or killed upgrade (dropped network, closed terminal, SIGTERM) used to orphan a partial `hivemind.AppImage.$$.new` (up to ~115MB) because the temp-file `rm` only ran on curl's own in-process failure. On a near-full disk those orphans snowballed into ENOSPC and blocked every future upgrade. Now: a `trap … EXIT INT TERM` removes temp files on any exit, a startup sweep clears orphans left by prior killed runs, and a disk-space preflight fails early with a clear "low disk, need ~460MB" message instead of a cryptic truncated-download / extract error.
+
+### Added
+
+- **Pin a tile to keep it in view.** Hover any tile and click the pin badge (top-left) to make it a sticky HUD: it floats above other tiles and stays fixed on screen while you pan/zoom the canvas — pin a browser playing a video, then roam your code and it stays put. Click again to unpin (returns to its canvas spot). Pinned state persists across restarts. Pinning re-parents the tile without remounting it, so a pinned browser tile keeps playing (no reload). A pinned tile is clamped to the window so it can never scroll off-screen (a tile larger than the window keeps its header + pin control on screen). Note: v1 holds position through **pan**; a pinned tile still scales with zoom.
+
 ## [1.10.7] — 2026-07-02
 
 ### Fixed

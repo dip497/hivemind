@@ -11,12 +11,13 @@ const noop = () => {};
 function ctx(over: Partial<NodeBuildCtx>): NodeBuildCtx {
   return {
     repoPath: "/base/repo", root: "/base/repo/.hivemind", cwd: "/base/repo",
-    tiles: [], frames: [], frameOf: {}, sizes: {}, positions: {}, editorTabs: {},
+    tiles: [], frames: [], frameOf: {}, pinnedIds: new Set(), sizes: {}, positions: {}, editorTabs: {},
     tileNames: {}, agentTitles: {}, frameTiles: new Map(), framesChipNames: {},
     updateFrameTitle: noop, updateFrameColor: noop, deleteFrame: noop, arrangeFrame: noop,
     bringFrameToFront: noop, onAttachWorktree: noop, onCreateWorktree: noop, unbindBranch: noop,
     bindWorkspace: noop, unbindWorkspace: noop, openFileInTile: noop, closeTabInTile: noop,
     closeTile: noop, onNodeResizeCommit: noop, renameTile: noop, setAgentTitle: noop,
+    onTogglePin: noop,
     ...over,
   };
 }

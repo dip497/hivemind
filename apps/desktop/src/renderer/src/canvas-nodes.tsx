@@ -5,8 +5,10 @@
  * pure presentational adapters around the tile components; extracted so Canvas.tsx
  * orchestrates state rather than also declaring the view shells.
  */
-import { memo, useEffect, useRef, lazy, Suspense } from "react";
-import { NodeResizer, useReactFlow, type NodeTypes } from "@xyflow/react";
+import { memo, useEffect, useLayoutEffect, useRef, lazy, Suspense, type MutableRefObject } from "react";
+import { NodeResizer, useReactFlow, useStore, useViewport, type Node, type NodeTypes } from "@xyflow/react";
+import { Pin } from "lucide-react";
+import { paneToFlow, clampAnchor } from "./pin-anchor";
 import { TerminalTile } from "./TerminalTile";
 import { BrowserTile } from "./BrowserTile";
 import { IssuesTile } from "./IssuesTile";
@@ -94,7 +96,97 @@ const RESIZER_PROPS = {
 // source of truth for node size (style.width/height in the node spec).
 // Without this, XYResizer updates react-flow's internal store, but our
 // useMemo rebuilds nodes with the old style and the change disappears.
-type WithResize<T> = T & { onResize: (id: string, w: number, h: number, x?: number, y?: number) => void };
+type WithResize<T> = T & {
+  onResize: (id: string, w: number, h: number, x?: number, y?: number) => void;
+  /** Pin state + toggle, injected onto every tile's data by mkTile. */
+  pinned?: boolean;
+  onTogglePin?: (id: string, anchor: { sx: number; sy: number }) => void;
+};
+
+/** Corner badge that pins/unpins a tile. On click it measures the tile's DOM
+ *  rect relative to the react-flow pane (= PANE pixels) and hands that anchor
+ *  up, so PinnedViewportSync can hold the tile at that screen pixel while the
+ *  canvas pans. Hidden until node-hover unless already pinned. */
+function PinToggle({ id, pinned, onToggle }: {
+  id: string;
+  pinned?: boolean;
+  onToggle?: (id: string, anchor: { sx: number; sy: number }) => void;
+}) {
+  if (!onToggle) return null;
+  const handle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const nodeEl = (e.currentTarget as HTMLElement).closest(".react-flow__node") as HTMLElement | null;
+    const paneEl = nodeEl?.closest(".react-flow") as HTMLElement | null;
+    if (!nodeEl || !paneEl) { onToggle(id, { sx: 0, sy: 0 }); return; }
+    const nr = nodeEl.getBoundingClientRect();
+    const pr = paneEl.getBoundingClientRect();
+    onToggle(id, { sx: nr.left - pr.left, sy: nr.top - pr.top });
+  };
+  return (
+    <button
+      onClick={handle}
+      className={`nodrag absolute -top-3 -left-3 z-20 size-6 grid place-items-center rounded-full border shadow-md cursor-pointer transition-opacity ${
+        pinned
+          ? "opacity-100 bg-[var(--color-brand)] border-[var(--color-brand)] text-white"
+          : "opacity-0 group-hover/tile:opacity-100 focus-visible:opacity-100 bg-[var(--color-bg3)] border-[var(--color-line)] text-[var(--color-fg3)] hover:text-[var(--color-fg)]"
+      }`}
+      title={pinned ? "Unpin — return to canvas" : "Pin — keep in view while panning"}
+      aria-label={pinned ? "Unpin tile" : "Pin tile"}
+      aria-pressed={!!pinned}
+    >
+      <Pin size={12} className={pinned ? "fill-current" : ""} />
+    </button>
+  );
+}
+
+/** Lives INSIDE <ReactFlow> (needs its viewport context). On every viewport
+ *  change it counter-translates each pinned node so its stored PANE-pixel anchor
+ *  stays put on screen — smooth during a live pan, not just on release. Writes
+ *  through react-flow's store imperatively (setNodes); our `nodes` prop is only
+ *  re-synced on identity change, so these positions stick. Skips the node being
+ *  dragged, and re-applies whenever the base node array rebuilds (`epoch`). */
+export function PinnedViewportSync({ pins, draggingIdRef, epoch }: {
+  pins: { id: string; sx: number; sy: number }[];
+  draggingIdRef: MutableRefObject<string | null>;
+  epoch: unknown;
+}) {
+  const vp = useViewport();
+  const { setNodes } = useReactFlow();
+  // Pane (canvas viewport) size in screen px — clamps a pinned tile inside it so
+  // it can never scroll off the window. Comes from react-flow's own store, so it
+  // updates on window/panel resize.
+  const paneW = useStore((s) => s.width);
+  const paneH = useStore((s) => s.height);
+  useLayoutEffect(() => {
+    if (pins.length === 0) return;
+    setNodes((nds) => {
+      let changed = false;
+      const next = nds.map((n) => {
+        if (n.id === draggingIdRef.current) return n;
+        const pin = pins.find((p) => p.id === n.id);
+        if (!pin) return n;
+        // Tile size in SCREEN px (flow size × zoom). Prefer react-flow's measured
+        // dims; fall back to the style width/height baked into the node.
+        const measured = (n as Node & { measured?: { width?: number; height?: number } }).measured;
+        const flowW = measured?.width ?? Number(n.style?.width) ?? 0;
+        const flowH = measured?.height ?? Number(n.style?.height) ?? 0;
+        const clamped = clampAnchor(
+          pin,
+          { w: flowW * vp.zoom, h: flowH * vp.zoom },
+          { w: paneW, h: paneH },
+        );
+        const { x, y } = paneToFlow(clamped, vp);
+        const parented = (n as Node & { parentId?: string }).parentId != null;
+        if (!parented && n.position.x === x && n.position.y === y) return n;
+        changed = true;
+        const { parentId: _p, ...rest } = n as Node & { parentId?: string };
+        return { ...rest, position: { x, y } };
+      });
+      return changed ? next : nds;
+    });
+  }, [vp.x, vp.y, vp.zoom, pins, epoch, setNodes, draggingIdRef, paneW, paneH]);
+  return null;
+}
 
 // Does this tile OWN the wheel — i.e. does it contain scrollable content the
 // wheel should drive instead of panning the canvas? This is deliberately
@@ -244,7 +336,8 @@ const TerminalNode = memo(function TerminalNode({
 }) {
   const wheelRef = useTileWheelZoom(selected);
   return (
-    <div className={`w-full h-full nowheel${selected ? " hm-node-selected" : " tile-locked"}`} ref={wheelRef}>
+    <div className={`group/tile w-full h-full nowheel${selected ? " hm-node-selected" : " tile-locked"}${data.pinned ? " hm-node-pinned" : ""}`} ref={wheelRef}>
+      <PinToggle id={id} pinned={data.pinned} onToggle={data.onTogglePin} />
       <NodeResizer
         nodeId={id}
         isVisible={selected}
@@ -269,7 +362,8 @@ const DiffNode = memo(function DiffNode({
 }) {
   const wheelRef = useTileWheelZoom(selected);
   return (
-    <div className={`w-full h-full nowheel${selected ? " hm-node-selected" : " tile-locked"}`} ref={wheelRef}>
+    <div className={`group/tile w-full h-full nowheel${selected ? " hm-node-selected" : " tile-locked"}${data.pinned ? " hm-node-pinned" : ""}`} ref={wheelRef}>
+      <PinToggle id={id} pinned={data.pinned} onToggle={data.onTogglePin} />
       <NodeResizer
         nodeId={id}
         isVisible={selected}
@@ -298,7 +392,8 @@ const WorkbenchNode = memo(function WorkbenchNode({
 }) {
   const wheelRef = useTileWheelZoom(selected);
   return (
-    <div className={`w-full h-full nowheel${selected ? " hm-node-selected" : " tile-locked"}`} ref={wheelRef}>
+    <div className={`group/tile w-full h-full nowheel${selected ? " hm-node-selected" : " tile-locked"}${data.pinned ? " hm-node-pinned" : ""}`} ref={wheelRef}>
+      <PinToggle id={id} pinned={data.pinned} onToggle={data.onTogglePin} />
       <NodeResizer
         nodeId={id}
         isVisible={selected}
@@ -341,7 +436,8 @@ const BrowserNode = memo(function BrowserNode({
 }) {
   const wheelRef = useTileWheelZoom(selected);
   return (
-    <div className={`w-full h-full nowheel${selected ? " hm-node-selected" : " tile-locked"}`} ref={wheelRef}>
+    <div className={`group/tile w-full h-full nowheel${selected ? " hm-node-selected" : " tile-locked"}${data.pinned ? " hm-node-pinned" : ""}`} ref={wheelRef}>
+      <PinToggle id={id} pinned={data.pinned} onToggle={data.onTogglePin} />
       <NodeResizer
         nodeId={id}
         isVisible={selected}
@@ -376,7 +472,8 @@ const IssuesNode = memo(function IssuesNode({
 }) {
   const wheelRef = useTileWheelZoom(selected);
   return (
-    <div className={`w-full h-full nowheel${selected ? " hm-node-selected" : " tile-locked"}`} ref={wheelRef}>
+    <div className={`group/tile w-full h-full nowheel${selected ? " hm-node-selected" : " tile-locked"}${data.pinned ? " hm-node-pinned" : ""}`} ref={wheelRef}>
+      <PinToggle id={id} pinned={data.pinned} onToggle={data.onTogglePin} />
       <NodeResizer
         nodeId={id}
         isVisible={selected}
@@ -410,7 +507,8 @@ const PlanReviewNode = memo(function PlanReviewNode({
 }) {
   const wheelRef = useTileWheelZoom(selected);
   return (
-    <div className={`w-full h-full nowheel${selected ? " hm-node-selected" : " tile-locked"}`} ref={wheelRef}>
+    <div className={`group/tile w-full h-full nowheel${selected ? " hm-node-selected" : " tile-locked"}${data.pinned ? " hm-node-pinned" : ""}`} ref={wheelRef}>
+      <PinToggle id={id} pinned={data.pinned} onToggle={data.onTogglePin} />
       <NodeResizer
         nodeId={id}
         isVisible={selected}

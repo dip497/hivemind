@@ -54,9 +54,11 @@ jobs:
 
       - name: Build CLI single-binary
         run: pnpm --filter @hivemind/cli run build
-
-      - name: Strip CLI binary (drops ~1MB of symbols; bun still runs)
-        run: strip apps/cli/dist/hive || true
+      # DO NOT `strip` the CLI binary. `bun build --compile` appends the JS bundle
+      # to the executable with a trailer; `strip` corrupts that trailer and the
+      # binary silently degrades to raw Bun (hive --version → bun's version, hive
+      # init → "Start an empty Bun project"). It broke EVERY hive subcommand +
+      # the hive MCP server in v1.10.6/1.10.7 for ~1MB of savings. Never re-add it.
 
       - name: Build renderer + main
         run: pnpm --filter @hivemind/desktop run build

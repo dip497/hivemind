@@ -19,7 +19,8 @@ import { ThemeCustomizer } from "./ThemeCustomizer";
 import { applyTheme } from "./theme-store";
 import { Eye, EyeOff } from "lucide-react";
 import { Toasts, CanvasEmptyState } from "./canvas-overlays";
-import { nodeTypes } from "./canvas-nodes";
+import { nodeTypes, PinnedViewportSync } from "./canvas-nodes";
+import { flowToPane } from "./pin-anchor";
 import { pipeEdgeTypes } from "./canvas-pipe-edge";
 import {
   snapViewportCrisp,
@@ -377,6 +378,10 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace, updateAvai
     initial.viewport ?? DEFAULT_VIEWPORT,
   );
   const [viewport, setViewport] = useState(initial.viewport ?? DEFAULT_VIEWPORT);
+  // Id of the node currently being dragged — PinnedViewportSync skips it so the
+  // live drag isn't fought by the counter-translate. Set on drag start, cleared
+  // on drag stop.
+  const draggingIdRef = useRef<string | null>(null);
 
   // Persist on any layout change. **Trailing-debounced 250ms** so a drag
   // (which fires setPositions on every drop) doesn't trigger a synchronous
@@ -849,6 +854,29 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace, updateAvai
     focusModeNonceRef, tilesRef,
   });
 
+  // Pin state derived from tiles. `pinnedIds` gates the node-memo z-tier +
+  // parent-detach; `pins` (id + PANE-pixel anchor) feeds PinnedViewportSync.
+  const pinnedIds = useMemo(
+    () => new Set(tiles.filter((t) => t.pinned).map((t) => t.id)),
+    [tiles],
+  );
+  const pins = useMemo(
+    () => tiles.filter((t) => t.pinned && t.pinAnchor)
+      .map((t) => ({ id: t.id, sx: t.pinAnchor!.sx, sy: t.pinAnchor!.sy })),
+    [tiles],
+  );
+  // Toggle a tile's pin. Pinning stores the anchor (tile top-left in PANE pixels,
+  // captured from its DOM rect by PinToggle); unpinning drops it — the tile then
+  // rebuilds at its stored canvas position (its pre-pin / last-dropped spot).
+  const togglePin = useCallback((id: string, anchor: { sx: number; sy: number }) => {
+    setTiles((ts) => ts.map((t) => {
+      if (t.id !== id) return t;
+      return t.pinned
+        ? { ...t, pinned: false, pinAnchor: undefined }
+        : { ...t, pinned: true, pinAnchor: anchor };
+    }));
+  }, [setTiles]);
+
   // baseNodes: built WITHOUT selectedTileId. Heavy: rebuilds whenever any
   // layout / extras / frames / pile / size / position state changes. The
   // selection-derived `nodes` below shallow-clones only the selected and
@@ -858,35 +886,47 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace, updateAvai
   // Rebuilds on any layout/frame/size/position change; the selection-derived
   // `nodes` memo below clones only the selected node so a click doesn't churn.
   const baseNodes: Node[] = useMemo(() => buildBaseNodes({
-    repoPath, root, cwd, tiles, frames, frameOf, sizes, positions, editorTabs, browserOpenReqs,
+    repoPath, root, cwd, tiles, frames, frameOf, pinnedIds, sizes, positions, editorTabs, browserOpenReqs,
     tileNames, agentTitles, frameTiles, framesChipNames,
     updateFrameTitle, updateFrameColor, deleteFrame, arrangeFrame, bringFrameToFront,
     onAttachWorktree, onCreateWorktree, unbindBranch, bindWorkspace, unbindWorkspace,
     openFileInTile, openUrlInBrowser, openFileFromTerminal, closeTabInTile, closeTile, onNodeResizeCommit, renameTile, setAgentTitle,
+    onTogglePin: togglePin,
   }), [
-    repoPath, root, cwd, tiles, editorTabs, browserOpenReqs, frames, frameOf, sizes, positions,
+    repoPath, root, cwd, tiles, editorTabs, browserOpenReqs, frames, frameOf, pinnedIds, sizes, positions,
     openFileInTile, openUrlInBrowser, openFileFromTerminal, closeTabInTile, closeTile, updateFrameTitle, updateFrameColor,
     deleteFrame, arrangeFrame, bringFrameToFront, onAttachWorktree, onCreateWorktree,
     unbindBranch, onNodeResizeCommit, frameTiles, tileNames, bindWorkspace,
     // agentTitles intentionally NOT a dep: a live title change must not rebuild
     // the react-flow node array (cursor-flicker + focus loss while streaming).
-    unbindWorkspace, renameTile, framesChipNames, setAgentTitle,
+    unbindWorkspace, renameTile, framesChipNames, setAgentTitle, togglePin,
   ]);
   // Derive selection-aware nodes from baseNodes. Shallow-clones ONLY the
   // currently-selected and previously-selected tile so other nodes keep their
   // object identity → React.memo skips them. Frames keep their own z stacking.
   const nodes: Node[] = useMemo(() => {
-    // No selection (the common case): baseNodes already carries every node's
-    // zIndex (tiles 100 via mkTile, frames their own), so return it VERBATIM —
-    // same array + node refs, zero allocation, no memo break.
-    if (!selectedTileId) return baseNodes;
-    // Selection: clone ONLY the selected node (zIndex 1000 + selected flag for
-    // the ring + resize handles); every other node keeps its identity.
+    // No selection AND no pins (the common case): baseNodes already carries every
+    // node's zIndex (tiles 100 via mkTile, frames their own), so return it
+    // VERBATIM — same array + node refs, zero allocation, no memo break.
+    if (!selectedTileId && pinnedIds.size === 0) return baseNodes;
+    // Clone ONLY the selected + pinned nodes; every other node keeps its identity
+    // so React.memo skips it. A pinned node detaches from its parent frame (so its
+    // absolute position — set live by PinnedViewportSync — isn't offset by the
+    // parent) and floats at z 500 (above tiles, below a selected tile at 1000).
     return baseNodes.map((n) => {
-      if (n.type === "frame" || n.id !== selectedTileId) return n;
-      return { ...n, selected: true, style: { ...(n.style ?? {}), zIndex: 1000 } };
+      if (n.type === "frame") return n;
+      const isPinned = pinnedIds.has(n.id);
+      const isSel = n.id === selectedTileId;
+      if (!isPinned && !isSel) return n;
+      let out = n;
+      if (isPinned) {
+        const { parentId: _p, ...rest } = out as Node & { parentId?: string };
+        out = { ...rest, style: { ...(out.style ?? {}), zIndex: 500 } };
+      }
+      if (isSel) out = { ...out, selected: true, style: { ...(out.style ?? {}), zIndex: 1000 } };
+      return out;
     });
-  }, [baseNodes, selectedTileId]);
+  }, [baseNodes, selectedTileId, pinnedIds]);
   // Agent pipes (hive_connect) → animated "data flow" edges. Main pushes
   // connect/disconnect over "hcp:pipe"; we draw an edge per pipe whose endpoints
   // both still exist as tiles (a closed tile's edge silently drops).
@@ -989,7 +1029,8 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace, updateAvai
   // fires for it — that's why drag still felt laggy. Use a SEPARATE class with
   // compositing hints only (NOT pointer-events:none, which would drop the drag
   // gesture mid-move).
-  const onNodeDragStart = useCallback(() => {
+  const onNodeDragStart = useCallback((_e: unknown, node: Node) => {
+    draggingIdRef.current = node.id;
     flowWrapRef.current?.classList.add("canvas-dragging");
   }, []);
   // Remove SYNCHRONOUSLY on drop — must run BEFORE commitPosition's setPositions
@@ -1093,6 +1134,25 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace, updateAvai
     framesRef, frameOfRef, sizesRef, tilesRef, lastActiveFrameRef,
     setPositions, setFrames, setFrameOf, parentFrameOf, moveFrame, commitPosition, clearDragging,
   });
+  // Wrap drag-stop: clear the drag guard, and if a PINNED tile was moved, re-derive
+  // its PANE-pixel anchor from the drop's absolute position + the live viewport so
+  // it stays fixed at its NEW spot. (`node.position` is absolute here — pinned tiles
+  // carry no parentId.)
+  const onNodeDragStopWithPin = useCallback((e: unknown, node: Node) => {
+    handleNodeDragStop(e, node);
+    draggingIdRef.current = null;
+    const t = tilesRef.current.find((x) => x.id === node.id);
+    if (!t?.pinned) return;
+    const abs = (node as { positionAbsolute?: { x: number; y: number } }).positionAbsolute ?? node.position;
+    const anchor = flowToPane(abs, currentViewportRef.current);
+    setTiles((ts) => ts.map((x) => (x.id === node.id ? { ...x, pinAnchor: anchor } : x)));
+  }, [handleNodeDragStop, tilesRef, setTiles]);
+  // Signal for PinnedViewportSync to re-apply whenever the `nodes` PROP identity
+  // changes — react-flow re-syncs the prop over its store on any new array
+  // (baseNodes rebuild, selection clone, pin toggle), which would snap a pinned
+  // node back to its stored canvas position until the next viewport tick. Keying
+  // on `nodes` (not just baseNodes) covers the select-while-pinned case too.
+  const pinEpoch = useMemo(() => ({}), [nodes]);
   return (
     <div className="relative h-full w-full flex flex-col">
       {/* Live wallpaper — fixed full-window layer behind ALL app content (z-index
@@ -1210,7 +1270,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace, updateAvai
             selectedTileIdsRef.current = new Set(tileIds);
             markSeen(tileIds);
           }}
-          onNodeDragStop={handleNodeDragStop}
+          onNodeDragStop={onNodeDragStopWithPin}
           // NEVER cull off-viewport tiles. Our tiles wrap LIVE PTY sessions
           // (claude/shell): react-flow unmounts a culled node, which tears the
           // tile's PTY down — detach+reattach (banner + full xterm/WebGL rebuild
@@ -1232,6 +1292,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace, updateAvai
           <FocusOnTile req={focusReq} />
           <FocusMode req={focusModeReq} />
           <PanMomentum req={momentumReq} activeRef={inMomentumRef} onSettle={bumpSnap} />
+          <PinnedViewportSync pins={pins} draggingIdRef={draggingIdRef} epoch={pinEpoch} />
           <ViewportSnap req={snapReq} activeRef={inMomentumRef} />
 
           {/* Excalidraw-style floating tool island — top-center. Hidden in zen. */}

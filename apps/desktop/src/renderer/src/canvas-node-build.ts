@@ -27,6 +27,8 @@ export interface NodeBuildCtx {
   tiles: TileInstance[];
   frames: FrameState[];
   frameOf: Record<string, string>;
+  /** Tile ids currently pinned (float above + viewport-fixed). */
+  pinnedIds: Set<string>;
   sizes: Record<string, { width: number; height: number }>;
   positions: Record<string, { x: number; y: number }>;
   editorTabs: Record<string, string[]>;
@@ -53,15 +55,19 @@ export interface NodeBuildCtx {
   onNodeResizeCommit: (id: string, w: number, h: number, x?: number, y?: number) => void;
   renameTile: (id: string, name: string) => void;
   setAgentTitle: (id: string, title: string) => void;
+  /** Toggle a tile's pinned state. `anchor` is the tile's top-left in PANE
+   *  pixels, captured from its DOM rect at click time (ignored when unpinning). */
+  onTogglePin: (id: string, anchor: { sx: number; sy: number }) => void;
 }
 
 export function buildBaseNodes(ctx: NodeBuildCtx): Node[] {
   const {
-    repoPath, root, cwd, tiles, frames, frameOf, sizes, positions, editorTabs, browserOpenReqs,
+    repoPath, root, cwd, tiles, frames, frameOf, pinnedIds, sizes, positions, editorTabs, browserOpenReqs,
     tileNames, agentTitles, frameTiles, framesChipNames,
     updateFrameTitle, updateFrameColor, deleteFrame, arrangeFrame, bringFrameToFront,
     onAttachWorktree, onCreateWorktree, unbindBranch, bindWorkspace, unbindWorkspace,
     openFileInTile, openUrlInBrowser, openFileFromTerminal, closeTabInTile, closeTile, onNodeResizeCommit, renameTile, setAgentTitle,
+    onTogglePin,
   } = ctx;
 
   const out: Node[] = [];
@@ -79,6 +85,10 @@ export function buildBaseNodes(ctx: NodeBuildCtx): Node[] {
     // Bake the baseline tile zIndex (100, above frames) HERE so the selection
     // `nodes` memo's no-selection path can return baseNodes VERBATIM.
     const style = { ...(base.style as Record<string, unknown>), zIndex: 100 };
+    // Pin controls live on EVERY tile's data (rendered by the node wrapper as a
+    // corner badge). `onTogglePin` is stable (Canvas useCallback); the wrapper
+    // supplies the id, so no per-build closure churns React.memo.
+    const pinData = { pinned: pinnedIds.has(base.id), onTogglePin };
     const parentFrame = frameOf[base.id] ? frames.find((f) => f.id === frameOf[base.id]) : undefined;
     if (parentFrame) {
       const owner = parentFrame;
@@ -105,12 +115,12 @@ export function buildBaseNodes(ctx: NodeBuildCtx): Node[] {
       return {
         ...base,
         style,
-        data,
+        data: { ...(data as Record<string, unknown>), ...pinData },
         position: { x: px - parentFrame.x, y: py - parentFrame.y },
         parentId: parentFrame.id,
       };
     }
-    return { ...base, style, position: { x: px, y: py } };
+    return { ...base, style, data: { ...(base.data as Record<string, unknown>), ...pinData }, position: { x: px, y: py } };
   };
 
   // Clamp the default to the visible viewport so a wide tile spawns grabbable.
