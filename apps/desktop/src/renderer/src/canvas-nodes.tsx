@@ -5,7 +5,7 @@
  * pure presentational adapters around the tile components; extracted so Canvas.tsx
  * orchestrates state rather than also declaring the view shells.
  */
-import { memo, useEffect, useLayoutEffect, useRef, lazy, Suspense, type MutableRefObject } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, lazy, Suspense, type MutableRefObject } from "react";
 import { NodeResizer, useReactFlow, useStore, useViewport, type Node, type NodeTypes } from "@xyflow/react";
 import { Pin } from "lucide-react";
 import { paneToFlow, clampAnchor } from "./pin-anchor";
@@ -145,10 +145,15 @@ function PinToggle({ id, pinned, onToggle }: {
  *  through react-flow's store imperatively (setNodes); our `nodes` prop is only
  *  re-synced on identity change, so these positions stick. Skips the node being
  *  dragged, and re-applies whenever the base node array rebuilds (`epoch`). */
-export function PinnedViewportSync({ pins, draggingIdRef, epoch }: {
+export function PinnedViewportSync({ pins, draggingIdRef, epoch, repositionRef }: {
   pins: { id: string; sx: number; sy: number }[];
   draggingIdRef: MutableRefObject<string | null>;
   epoch: unknown;
+  /** Canvas populates this with a per-frame reposition fn and calls it from
+   *  `onMove` (react-flow's pan callback) — the guaranteed per-frame signal, so
+   *  a pinned tile holds its screen spot during a live pan even if the store
+   *  viewport subscription below lags the transform. */
+  repositionRef: MutableRefObject<((vp: { x: number; y: number; zoom: number }) => void) | null>;
 }) {
   const vp = useViewport();
   const { setNodes } = useReactFlow();
@@ -157,7 +162,10 @@ export function PinnedViewportSync({ pins, draggingIdRef, epoch }: {
   // updates on window/panel resize.
   const paneW = useStore((s) => s.width);
   const paneH = useStore((s) => s.height);
-  useLayoutEffect(() => {
+  // Counter-translate every pinned node so its stored PANE-pixel anchor holds the
+  // same screen spot under viewport `v`. Pure w.r.t. `v` so both the store-driven
+  // effect AND the onMove-driven per-frame call use identical math.
+  const reposition = useCallback((v: { x: number; y: number; zoom: number }) => {
     if (pins.length === 0) return;
     setNodes((nds) => {
       let changed = false;
@@ -165,17 +173,13 @@ export function PinnedViewportSync({ pins, draggingIdRef, epoch }: {
         if (n.id === draggingIdRef.current) return n;
         const pin = pins.find((p) => p.id === n.id);
         if (!pin) return n;
-        // Tile size in SCREEN px (flow size × zoom). Prefer react-flow's measured
-        // dims; fall back to the style width/height baked into the node.
         const measured = (n as Node & { measured?: { width?: number; height?: number } }).measured;
         const flowW = measured?.width ?? Number(n.style?.width) ?? 0;
         const flowH = measured?.height ?? Number(n.style?.height) ?? 0;
-        // Clamp to the pane ONLY once react-flow has measured it (width/height > 0).
-        // Clamping against a 0×0 pane would slam every pinned tile into the corner.
         const anchor = paneW > 0 && paneH > 0
-          ? clampAnchor(pin, { w: flowW * vp.zoom, h: flowH * vp.zoom }, { w: paneW, h: paneH })
+          ? clampAnchor(pin, { w: flowW * v.zoom, h: flowH * v.zoom }, { w: paneW, h: paneH })
           : pin;
-        const { x, y } = paneToFlow(anchor, vp);
+        const { x, y } = paneToFlow(anchor, v);
         const parented = (n as Node & { parentId?: string }).parentId != null;
         if (!parented && n.position.x === x && n.position.y === y) return n;
         changed = true;
@@ -184,7 +188,12 @@ export function PinnedViewportSync({ pins, draggingIdRef, epoch }: {
       });
       return changed ? next : nds;
     });
-  }, [vp.x, vp.y, vp.zoom, pins, epoch, setNodes, draggingIdRef, paneW, paneH]);
+  }, [pins, setNodes, draggingIdRef, paneW, paneH]);
+  // Register for onMove-driven per-frame repositioning during a live pan.
+  useEffect(() => { repositionRef.current = reposition; return () => { repositionRef.current = null; }; }, [reposition, repositionRef]);
+  // Store-driven: covers zoom, momentum-fling, resize, initial mount, and any
+  // rebuild (`epoch`) — cases onMove doesn't fire for.
+  useLayoutEffect(() => { reposition(vp); }, [vp.x, vp.y, vp.zoom, epoch, reposition]);
   return null;
 }
 

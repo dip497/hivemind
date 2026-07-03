@@ -386,6 +386,9 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace, updateAvai
   // live drag isn't fought by the counter-translate. Set on drag start, cleared
   // on drag stop.
   const draggingIdRef = useRef<string | null>(null);
+  // PinnedViewportSync registers a per-frame reposition fn here; onMove calls it
+  // every pan frame so pinned tiles hold their screen spot (not just at settle).
+  const pinRepositionRef = useRef<((vp: { x: number; y: number; zoom: number }) => void) | null>(null);
 
   // Persist on any layout change. **Trailing-debounced 250ms** so a drag
   // (which fires setPositions on every drop) doesn't trigger a synchronous
@@ -574,10 +577,12 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace, updateAvai
   // Claude model the next Claude spawn launches with (claude-only `--model`
   // alias). "default" → omit the flag (workspace default). Persisted alongside
   // the permission mode so it survives restarts.
-  const [claudeModel, setClaudeModel] = useState<string>(
+  // Default model for new claude spawns. Read from localStorage (a Settings
+  // picker can set it later); the per-spawn `model` param overrides it. No tool-
+  // island picker — it lived there briefly but was moved out for a cleaner bar.
+  const [claudeModel] = useState<string>(
     () => localStorage.getItem("hivemind:claude-model") || "default",
   );
-  useEffect(() => { localStorage.setItem("hivemind:claude-model", claudeModel); }, [claudeModel]);
   // Which agent the tool island's spawn button creates (claude / codex / …).
   const [agentSel, setAgentSel] = useState<string>(
     () => localStorage.getItem("hivemind:agent-sel") || "claude",
@@ -1013,6 +1018,9 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace, updateAvai
   const bumpSnap = useCallback(() => setSnapReq((n) => n + 1), []);
   const onMove = useCallback((_: unknown, vp: { x: number; y: number; zoom: number }) => {
     currentViewportRef.current = vp;
+    // Hold pinned tiles fixed on screen every pan frame (react-flow fires onMove
+    // per frame during a drag; the store subscription alone can lag the transform).
+    pinRepositionRef.current?.(vp);
     if (inMomentumRef.current) return; // ignore self-generated moves
     const s = panSamplesRef.current;
     s.push({ t: performance.now(), x: vp.x, y: vp.y });
@@ -1330,7 +1338,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace, updateAvai
           <FocusOnTile req={focusReq} />
           <FocusMode req={focusModeReq} />
           <PanMomentum req={momentumReq} activeRef={inMomentumRef} onSettle={bumpSnap} />
-          <PinnedViewportSync pins={pins} draggingIdRef={draggingIdRef} epoch={pinEpoch} />
+          <PinnedViewportSync pins={pins} draggingIdRef={draggingIdRef} epoch={pinEpoch} repositionRef={pinRepositionRef} />
           <ViewportSnap req={snapReq} activeRef={inMomentumRef} />
 
           {/* Excalidraw-style floating tool island — top-center. Hidden in zen. */}
@@ -1342,8 +1350,6 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace, updateAvai
               agentSel={agentSel}
               onAgentChange={setAgentSel}
               onSpawnAgent={(a) => spawnAgent(a)}
-              claudeModel={claudeModel}
-              onModelChange={setClaudeModel}
               onFrame={addFrame}
               onBrowser={() => spawnInto("browser")}
               onTheme={() => setCustomizerOpen((o) => !o)}

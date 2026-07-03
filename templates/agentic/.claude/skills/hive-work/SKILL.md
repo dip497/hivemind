@@ -5,6 +5,11 @@ description: Use whenever the user references a hivemind issue key (e.g. PAY-42,
 
 # Working a hivemind issue (Execution Contract)
 
+**Always use the `mcp__hive__*` tools — never shell out to the `hive` CLI via
+Bash.** The MCP tools keep the activity log, `updated` timestamp, and the board's
+live view in sync; the CLI is for humans. Every tool below works cross-repo: an id
+whose prefix belongs to another *registered* workspace resolves automatically.
+
 When you start work on issue `$KEY`:
 
 1. **Load context** — call `mcp__hive__hive_get_issue({ id: $KEY })`. Read the title, description, and `acceptanceCriteria` array.
@@ -47,7 +52,30 @@ When a human leaves a review comment on your diff (it arrives as a prompt like
 
 ## Sub-tasks
 
-If the issue is too large, break it down via `mcp__hive__hive_create_issue({ title, parent: $KEY })`. New sub-issues inherit the parent's id (e.g. PAY-42.1).
+If the issue is too large, break it down via `mcp__hive__hive_create_issue({ title, parent: $KEY })`. New sub-issues inherit the parent's id (e.g. PAY-42.1). Put acceptance criteria in the `acceptance_criteria` string-array argument (NOT inside `description`) so they land in the tickable checklist. `hive_create_issue` also takes `labels` and an initial `state`.
+
+## Cross-repo & linking
+
+In a multi-repo setup, hive can reach issues in OTHER registered workspaces:
+
+- `mcp__hive__hive_list_workspaces()` — list every registered workspace with its prefix, title, and repo path. Use it to discover where you can move or link.
+- `mcp__hive__hive_list_issues({ workspace: "OPS", state?, label?, assignee? })` — pass a `workspace` prefix to list ANOTHER repo's issues; omit for the current one.
+- `mcp__hive__hive_link_issue({ id, other_id, type })` — link two issues across (or within) repos. `type` ∈ `relates` (default) | `blocks` | `blocked-by` | `duplicates` | `parent-of` | `child-of`; the reciprocal is recorded automatically. For the single-repo parent hierarchy use `hive_update_issue({ parent })` instead.
+- `mcp__hive__hive_move_issue({ id, to_workspace, mode })` — transfer an issue to another workspace by prefix. `mode: "move"` (default) deletes the source and stamps the new issue `moved-from`; `mode: "copy"` keeps the source and links both with `relates`. Refuses issues that have sub-issues.
+
+## Full issue toolset
+
+| Tool | Purpose |
+|---|---|
+| `hive_get_issue({ id })` | Load one issue (title, description, `acceptanceCriteria`, activity, labels, assignee, links). |
+| `hive_list_issues({ state?, label?, assignee?, workspace? })` | Lightweight summaries, optionally filtered. |
+| `hive_create_issue({ title, description?, parent?, labels?, acceptance_criteria?, state? })` | New issue / sub-task. |
+| `hive_update_issue({ id, title?, description?, labels?, assignee?, parent? })` | Patch fields (NOT state). |
+| `hive_set_state({ id, state, note? })` | Change state + log it. |
+| `hive_add_comment({ id, message })` | Append a markdown comment to the activity log. |
+| `hive_mark_acceptance({ id, index, done })` | Tick/untick a 0-based criterion. |
+| `hive_link_issue` · `hive_move_issue` · `hive_list_workspaces` | Cross-repo links, transfers, discovery. |
+| `hive_delete_issue({ id })` | Destructive — only on explicit user ask. |
 
 ## Conventions
 
