@@ -717,14 +717,14 @@ html.glass-on body {
 /* Frost the docked Layers panel (it sits BESIDE the canvas; its bg token is
    already translucent under glass, this adds the blur so the wallpaper behind
    reads as frosted glass). */
+/* The docked Layers panel stays an OPAQUE surface even under glass — the
+   wallpaper must NOT bleed through it (translucency read as noise). `--color-bg2`
+   is redefined translucent under glass, so use the opaque source `--surface-2`
+   and drop the blur (nothing to frost on a solid slab). */
 html.glass-on .hm-layers {
-  /* Translucent surface (higher specificity than the Tailwind bg token) so the
-     wallpaper actually reads through the blur — otherwise the opaque bg swallowed
-     the frost. A hairline top-lit inner edge gives it the "pane of glass" look. */
-  background: color-mix(in srgb, var(--color-bg2) var(--glass-opacity), transparent);
-  backdrop-filter: blur(var(--glass-blur)) saturate(135%);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(135%);
-  box-shadow: inset -1px 0 0 color-mix(in srgb, #fff 6%, transparent);
+  background: var(--surface-2);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 /* (The glass-mode selection outline was removed — the top-clip indicator above
    works in both opaque + glass themes.) */
