@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [1.11.0] — 2026-07-03
+
 ### Fixed
 
 - **The `hive` CLI was broken in v1.10.6/v1.10.7 — it ran as raw Bun instead of hivemind.** The release workflow `strip`ped the `bun build --compile` binary to save ~1MB, but `strip` corrupts the JS-bundle trailer bun appends to the executable, so the binary silently degraded to the Bun runtime: `hive --version` printed Bun's version, `hive init` ran *Bun's* project init, and **every** subcommand (`new`, `list`, `task`, `ctl`) plus `hive mcp-stdio` (the MCP server agents call) failed. Removed the strip step. Re-run `hivemind upgrade` after this release to get a working `hive`. **This requires a new release** (the CLI asset must be rebuilt without strip).
@@ -607,7 +609,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v1.10.7...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v1.11.0...HEAD
+[1.11.0]: https://github.com/dip497/hivemind/releases/tag/v1.11.0
 [1.10.7]: https://github.com/dip497/hivemind/releases/tag/v1.10.7
 [1.10.6]: https://github.com/dip497/hivemind/releases/tag/v1.10.6
 [1.10.5]: https://github.com/dip497/hivemind/releases/tag/v1.10.5
