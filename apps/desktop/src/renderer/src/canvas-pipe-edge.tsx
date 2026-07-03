@@ -47,5 +47,26 @@ export function DataFlowEdge({ id, source, target, markerEnd, style }: EdgeProps
   );
 }
 
+/** The persistent "spawned-by" wire: a static DASHED floating edge from a parent
+ *  agent to a child it spawned (sub-agent or workflow worker). Deliberately quiet
+ *  — muted, no traveling dot — so it reads as a structural parentage link, not the
+ *  animated data pipe. Drawn for EVERY spawn, independent of the report pipe. */
+export function SpawnEdge({ id, source, target, markerEnd, style }: EdgeProps) {
+  const s = useInternalNode(source);
+  const t = useInternalNode(target);
+  if (!s || !t) return null;
+  const sp = nodeIntersection(s, t);
+  const tp = nodeIntersection(t, s);
+  const [edgePath] = getBezierPath({ sourceX: sp.x, sourceY: sp.y, targetX: tp.x, targetY: tp.y });
+  return (
+    <BaseEdge
+      id={id}
+      path={edgePath}
+      markerEnd={markerEnd}
+      style={{ stroke: "var(--color-fg3)", strokeWidth: 1.5, strokeOpacity: 0.5, strokeDasharray: "5 5", ...style }}
+    />
+  );
+}
+
 /** Stable edgeTypes map for <ReactFlow edgeTypes={…}>. */
-export const pipeEdgeTypes = { dataflow: DataFlowEdge };
+export const pipeEdgeTypes = { dataflow: DataFlowEdge, spawn: SpawnEdge };

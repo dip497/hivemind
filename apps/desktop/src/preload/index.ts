@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
-import type { HiveIpc, DiffScope, WorktreeCreateOpts, PlanReviewOpen, HcpCommand, HcpPipeEvent, HcpWaitEvent, HcpSubagentEvent, HcpNotifyEvent, HcpTurnStateEvent, AppErrorEvent } from "../shared/ipc.js";
+import type { HiveIpc, DiffScope, WorktreeCreateOpts, PlanReviewOpen, HcpCommand, HcpPipeEvent, HcpSpawnEvent, HcpWaitEvent, HcpSubagentEvent, HcpNotifyEvent, HcpTurnStateEvent, AppErrorEvent } from "../shared/ipc.js";
 
 const api: HiveIpc & {
   /** Resolve a picked File's real filesystem path (for the persistent video wallpaper). */
@@ -27,6 +27,7 @@ const api: HiveIpc & {
   onPlanReviewAbort: (cb: (requestId: string) => void) => () => void;
   onHcpCommand: (cb: (cmd: HcpCommand) => void) => () => void;
   onHcpPipe: (cb: (e: HcpPipeEvent) => void) => () => void;
+  onHcpSpawn: (cb: (e: HcpSpawnEvent) => void) => () => void;
   onHcpWait: (cb: (e: HcpWaitEvent) => void) => () => void;
   onHcpSubagent: (cb: (e: HcpSubagentEvent) => void) => () => void;
   onHcpNotify: (cb: (e: HcpNotifyEvent) => void) => () => void;
@@ -207,6 +208,11 @@ const api: HiveIpc & {
     const listener = (_e: unknown, cmd: HcpCommand) => cb(cmd);
     ipcRenderer.on("hcp:command", listener);
     return () => ipcRenderer.removeListener("hcp:command", listener);
+  },
+  onHcpSpawn: (cb: (e: HcpSpawnEvent) => void) => {
+    const listener = (_: unknown, e: HcpSpawnEvent) => cb(e);
+    ipcRenderer.on("hcp:spawn", listener);
+    return () => ipcRenderer.removeListener("hcp:spawn", listener);
   },
   onHcpPipe: (cb: (e: HcpPipeEvent) => void) => {
     const listener = (_e: unknown, ev: HcpPipeEvent) => cb(ev);

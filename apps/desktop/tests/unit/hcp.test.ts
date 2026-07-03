@@ -96,6 +96,7 @@ function fakeDeps(over: Partial<Parameters<typeof makeDispatch>[0]> = {}) {
     connect: () => true,
     disconnect: () => {},
     forgetPipes: () => {},
+    spawnEdge: () => {},
     setSupervise: () => {},
     pushWait: () => {},
     ...over,

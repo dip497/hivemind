@@ -7,6 +7,14 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Fixed
+
+- **Pinned tiles hold their screen position more reliably while panning.** A pinned tile's fixed position is now baked into the node build from the live viewport, so it no longer flashes to its old canvas spot (and briefly rides the pan) whenever the node array rebuilds — e.g. an agent status change or another tile spawning. Also skip the window-clamp until react-flow has measured the pane, so a pinned tile is never slammed into the corner on first paint. (Known remaining limit: a pinned tile still scales with zoom — constant *position*, not constant *size*.)
+
+### Added
+
+- **Spawned agents now show a wire back to the agent that spawned them.** When an agent spawns a sub-agent (`hive_spawn_agent`) or a workflow spawns workers, a persistent dashed "parentage" line is drawn from parent → child on the canvas — for **every** spawn, including background workflow workers (previously a link was only drawn when `report` was on, so workflow workers appeared with nothing connecting them). It's visually distinct from the animated data-flow pipe (`hive_connect`): quiet, dashed, no traveling dot. The child still spawns into the **same frame** as its parent by default.
+
 ## [1.11.0] — 2026-07-03
 
 ### Fixed

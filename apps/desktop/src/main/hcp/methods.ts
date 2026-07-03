@@ -89,6 +89,10 @@ export interface MethodDeps {
   disconnect: (srcTileId: string, dstTileId?: string) => void;
   /** Drop a tile from the pipe graph entirely (both directions) on close. */
   forgetPipes: (tileId: string) => void;
+  /** Draw/erase the persistent spawn-parentage "wire" (parent → child). ALWAYS
+   *  drawn on spawn, independent of the report/data pipe. Call with parent=null,
+   *  connected=false to drop every spawn link touching `child` (on close). */
+  spawnEdge: (child: string, parent: string | null, connected: boolean) => void;
   /** Record (or clear, with null) a worker's supervision policy. Main injects it
    *  as HIVE_SUPERVISE into the worker's spawn env so the daemon installs the
    *  permission-broker hook. */
@@ -168,7 +172,14 @@ export function makeDispatch(deps: MethodDeps): (method: string, params: unknown
     if (opts.callerTile) {
       const parentBare = bareOf(String(opts.callerTile));
       parentOf.set(res.tileId, parentBare);
-      if (opts.report !== false && parentBare !== res.tileId) deps.connect(res.tileId, parentBare);
+      if (parentBare !== res.tileId) {
+        // The parentage WIRE is drawn ALWAYS — for sub-agents AND background
+        // workflow workers (report:false) — so every spawned tile visibly links
+        // to the agent that spawned it. The report/data pipe (animated) is still
+        // separate and only for report:true.
+        deps.spawnEdge(res.tileId, parentBare, true);
+        if (opts.report !== false) deps.connect(res.tileId, parentBare);
+      }
       if (sup) deps.setSupervise(res.tileId, sup);
     }
     armRead(res.tileId);
@@ -185,9 +196,11 @@ export function makeDispatch(deps: MethodDeps): (method: string, params: unknown
     deps.turns.forget(pid);
     deps.recorder.forget(pid);
     deps.forgetPipes(bare);
+    deps.spawnEdge(bare, null, false); // drop spawn wires where this tile is parent OR child
     sendSeq.delete(pid);
     sendMark.delete(pid);
     parentOf.delete(bare);
+    for (const [child, parent] of parentOf) if (parent === bare) parentOf.delete(child);
     depthOf.delete(bare);
     deps.setSupervise(bare, null);
     for (const [reqId, pend] of pendingApprovals) {

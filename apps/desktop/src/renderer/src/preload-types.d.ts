@@ -1,4 +1,4 @@
-import type { HiveIpc, PlanReviewOpen, HcpCommand, HcpPipeEvent, HcpWaitEvent, HcpSubagentEvent, HcpNotifyEvent, HcpTurnStateEvent, AppErrorEvent } from "../../shared/ipc";
+import type { HiveIpc, PlanReviewOpen, HcpCommand, HcpPipeEvent, HcpSpawnEvent, HcpWaitEvent, HcpSubagentEvent, HcpNotifyEvent, HcpTurnStateEvent, AppErrorEvent } from "../../shared/ipc";
 
 declare global {
   interface Window {
@@ -11,6 +11,8 @@ declare global {
       onHcpCommand: (cb: (cmd: HcpCommand) => void) => () => void;
       /** An agent pipe was created/removed → draw/erase the data-flow edge. */
       onHcpPipe: (cb: (e: HcpPipeEvent) => void) => () => void;
+      /** An agent spawned another → draw/erase the dashed parentage wire. */
+      onHcpSpawn: (cb: (e: HcpSpawnEvent) => void) => () => void;
       /** A tile entered/left a control-plane "wait" state (e.g. awaiting approval). */
       onHcpWait: (cb: (e: HcpWaitEvent) => void) => () => void;
       /** A tile gained/lost in-flight Task subagents → keep it reading "working". */

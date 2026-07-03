@@ -20,7 +20,7 @@ import { applyTheme } from "./theme-store";
 import { Eye, EyeOff } from "lucide-react";
 import { Toasts, CanvasEmptyState } from "./canvas-overlays";
 import { nodeTypes, PinnedViewportSync } from "./canvas-nodes";
-import { flowToPane } from "./pin-anchor";
+import { flowToPane, paneToFlow } from "./pin-anchor";
 import { pipeEdgeTypes } from "./canvas-pipe-edge";
 import {
   snapViewportCrisp,
@@ -131,6 +131,10 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace, updateAvai
   const [tiles, setTiles, tilesRef] = useStateWithRef<TileInstance[]>(initial.tiles ?? []);
   // Live agent pipes (HCP hive_connect) → animated data-flow edges. Ephemeral.
   const [pipes, setPipes] = useState<{ src: string; dst: string }[]>([]);
+  // Spawn-parentage wires (parent → child) — a spawned sub-agent / workflow worker
+  // shows a persistent dashed line to the agent that spawned it. Drawn ALWAYS,
+  // independent of the report pipe. Ephemeral (spawn tree is main-side state).
+  const [spawnLinks, setSpawnLinks] = useState<{ parent: string; child: string }[]>([]);
   // Files opened in each editor tile — tabs keyed by editor tile id (repo-
   // relative paths, deduped). Each editor instance has its own tab set.
   const [editorTabs, setEditorTabs] = useState<Record<string, string[]>>(initial.editorTabs ?? {});
@@ -767,6 +771,20 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace, updateAvai
     });
   }, []);
 
+  // HCP spawn wires → dashed parentage edges. Add on spawn; on close (parent null,
+  // connected false) drop every link where the closed tile is parent OR child.
+  useEffect(() => {
+    return window.hive.onHcpSpawn((ev) => {
+      setSpawnLinks((cur) => {
+        if (ev.connected && ev.parent) {
+          if (cur.some((l) => l.parent === ev.parent && l.child === ev.child)) return cur;
+          return [...cur, { parent: ev.parent, child: ev.child }];
+        }
+        return cur.filter((l) => l.child !== ev.child && l.parent !== ev.child);
+      });
+    });
+  }, []);
+
   // HCP "wait" states (control-plane derived: a supervised worker blocked on its
   // parent's approval) → override the scrape on the status bus so the tile reads
   // "waiting: approval" instead of a misleading "idle".
@@ -865,6 +883,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace, updateAvai
       .map((t) => ({ id: t.id, sx: t.pinAnchor!.sx, sy: t.pinAnchor!.sy })),
     [tiles],
   );
+  const pinById = useMemo(() => new Map(pins.map((p) => [p.id, p])), [pins]);
   // Toggle a tile's pin. Pinning stores the anchor (tile top-left in PANE pixels,
   // captured from its DOM rect by PinToggle); unpinning drops it — the tile then
   // rebuilds at its stored canvas position (its pre-pin / last-dropped spot).
@@ -921,22 +940,34 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace, updateAvai
       let out = n;
       if (isPinned) {
         const { parentId: _p, ...rest } = out as Node & { parentId?: string };
-        out = { ...rest, style: { ...(out.style ?? {}), zIndex: 500 } };
+        // Bake the counter-translated position from the LIVE viewport ref so a
+        // rebuild lands the pinned tile at its fixed screen spot immediately —
+        // no one-frame flash to its stale canvas position (which read as "moving
+        // with the canvas"). PinnedViewportSync then keeps it fixed per pan frame.
+        const anchor = pinById.get(n.id);
+        const position = anchor ? paneToFlow(anchor, currentViewportRef.current) : out.position;
+        out = { ...rest, position, style: { ...(out.style ?? {}), zIndex: 500 } };
       }
       if (isSel) out = { ...out, selected: true, style: { ...(out.style ?? {}), zIndex: 1000 } };
       return out;
     });
-  }, [baseNodes, selectedTileId, pinnedIds]);
+  }, [baseNodes, selectedTileId, pinnedIds, pinById]);
   // Agent pipes (hive_connect) → animated "data flow" edges. Main pushes
   // connect/disconnect over "hcp:pipe"; we draw an edge per pipe whose endpoints
   // both still exist as tiles (a closed tile's edge silently drops).
   const edges = useMemo<Edge[]>(() => {
-    if (pipes.length === 0) return EMPTY_EDGES;
+    if (pipes.length === 0 && spawnLinks.length === 0) return EMPTY_EDGES;
     const ids = new Set(tiles.map((t) => t.id));
-    return pipes
+    // Spawn wires (dashed parentage, parent → child) sit UNDER the animated data
+    // pipes. A pipe between the same pair visually wins (higher zIndex).
+    const spawnEdges: Edge[] = spawnLinks
+      .filter((l) => ids.has(l.parent) && ids.has(l.child))
+      .map((l) => ({ id: `spawn-${l.parent}-${l.child}`, source: l.parent, target: l.child, type: "spawn", zIndex: 1900 }));
+    const pipeEdges: Edge[] = pipes
       .filter((p) => ids.has(p.src) && ids.has(p.dst))
       .map((p) => ({ id: `flow-${p.src}-${p.dst}`, source: p.src, target: p.dst, type: "dataflow", zIndex: 2000 }));
-  }, [pipes, tiles]);
+    return [...spawnEdges, ...pipeEdges];
+  }, [pipes, spawnLinks, tiles]);
 
   // MiniMap is opt-in — its `pannable zoomable` re-renders every node mini-rect
   // on every pan/zoom frame, a real cost with several live tiles. Off by default.

@@ -384,6 +384,16 @@ export interface HcpPipeEvent {
   connected: boolean;
 }
 
+/** Pushed main→renderer when an agent SPAWNS another agent (tile.spawn_agent /
+ *  workflow), so the canvas can draw a persistent parentage "wire" from parent to
+ *  child — ALWAYS, independent of the report/data pipe (`hcp:pipe`). `parent` is
+ *  null with connected:false to drop every spawn link touching `child` (on close). */
+export interface HcpSpawnEvent {
+  child: string;
+  parent: string | null;
+  connected: boolean;
+}
+
 /** Pushed main→renderer when a tile enters/leaves a control-plane "wait" state
  *  (e.g. a supervised worker blocked on its parent's approval). `status` is a
  *  TileStatusKind string, or null to clear. The renderer forwards it to the

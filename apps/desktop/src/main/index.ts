@@ -1506,6 +1506,9 @@ function startHcpControlPlane(): void {
   const pushPipe = (src: string, dst: string | null, connected: boolean) => {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("hcp:pipe", { src, dst, connected });
   };
+  const pushSpawn = (child: string, parent: string | null, connected: boolean) => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("hcp:spawn", { child, parent, connected });
+  };
   const dispatch = makeDispatch({
     callRenderer: hcpCallRenderer,
     writeToTile: hcpWriteToTile,
@@ -1515,6 +1518,7 @@ function startHcpControlPlane(): void {
     connect: (src, dst) => { const ok = hcpPipes.connect(src, dst); if (ok) pushPipe(src, dst, true); return ok; },
     disconnect: (src, dst) => { hcpPipes.disconnect(src, dst); pushPipe(src, dst ?? null, false); },
     forgetPipes: (id) => { hcpPipes.forget(id); pushPipe(id, null, false); },
+    spawnEdge: (child, parent, connected) => pushSpawn(child, parent, connected),
     setSupervise: (id, spec) => { if (spec) hcpSupervise.set(id, spec); else hcpSupervise.delete(id); },
     pushWait: (tileId, status) => {
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("hcp:wait", { tileId, status });

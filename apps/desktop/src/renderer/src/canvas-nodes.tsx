@@ -170,12 +170,12 @@ export function PinnedViewportSync({ pins, draggingIdRef, epoch }: {
         const measured = (n as Node & { measured?: { width?: number; height?: number } }).measured;
         const flowW = measured?.width ?? Number(n.style?.width) ?? 0;
         const flowH = measured?.height ?? Number(n.style?.height) ?? 0;
-        const clamped = clampAnchor(
-          pin,
-          { w: flowW * vp.zoom, h: flowH * vp.zoom },
-          { w: paneW, h: paneH },
-        );
-        const { x, y } = paneToFlow(clamped, vp);
+        // Clamp to the pane ONLY once react-flow has measured it (width/height > 0).
+        // Clamping against a 0×0 pane would slam every pinned tile into the corner.
+        const anchor = paneW > 0 && paneH > 0
+          ? clampAnchor(pin, { w: flowW * vp.zoom, h: flowH * vp.zoom }, { w: paneW, h: paneH })
+          : pin;
+        const { x, y } = paneToFlow(anchor, vp);
         const parented = (n as Node & { parentId?: string }).parentId != null;
         if (!parented && n.position.x === x && n.position.y === y) return n;
         changed = true;
