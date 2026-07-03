@@ -62,11 +62,9 @@ export interface ThemeState {
   /** Content tint alpha when contentGlass is on, 0.0–0.9. 0 = fully see-through,
    *  higher = a darker tint behind the text for legibility. */
   contentOpacity: number;
-  /** Bring-your-own BACKGROUND media — a fixed full-window layer behind the
-   *  canvas (over the animated wallpaper). Off (url null) by default. */
-  backgroundMedia: MediaLayer;
   /** Bring-your-own OVERLAY media — a fixed full-window layer OVER the tiles,
-   *  always pointer-events:none. Off (url null) by default. */
+   *  always pointer-events:none. Off (url null) by default. The BACKGROUND is
+   *  handled by the existing wallpaper (videoSrc/imageSrc), not here. */
   overlayMedia: MediaLayer;
 }
 
@@ -82,7 +80,6 @@ export const DEFAULT_THEME: ThemeState = {
   animate: true,
   contentGlass: false,
   contentOpacity: 0.25,
-  backgroundMedia: { url: null, kind: "image", opacity: 1, fit: "cover" },
   overlayMedia: { url: null, kind: "image", opacity: 0.9, fit: "cover" },
 };
 
@@ -136,7 +133,6 @@ function load(): ThemeState {
       animate: typeof p.animate === "boolean" ? p.animate : DEFAULT_THEME.animate,
       contentGlass: typeof p.contentGlass === "boolean" ? p.contentGlass : DEFAULT_THEME.contentGlass,
       contentOpacity: clamp(typeof p.contentOpacity === "number" && !Number.isNaN(p.contentOpacity) ? p.contentOpacity : DEFAULT_THEME.contentOpacity, 0, 0.9),
-      backgroundMedia: loadMedia(p.backgroundMedia, DEFAULT_THEME.backgroundMedia),
       overlayMedia: loadMedia(p.overlayMedia, DEFAULT_THEME.overlayMedia),
     };
   } catch {
@@ -201,20 +197,12 @@ export function setTheme(patch: Partial<ThemeState>): void {
   for (const l of listeners) l();
 }
 
-/** Merge a partial into the BACKGROUND media layer (persisted like the theme). */
-export function setBackgroundMedia(patch: Partial<MediaLayer>): void {
-  setTheme({ backgroundMedia: { ...state.backgroundMedia, ...patch } });
-}
-
 /** Merge a partial into the OVERLAY media layer (persisted like the theme). */
 export function setOverlayMedia(patch: Partial<MediaLayer>): void {
   setTheme({ overlayMedia: { ...state.overlayMedia, ...patch } });
 }
 
-/** Turn a media layer off (clear its url + name); opacity/fit are retained. */
-export function clearBackgroundMedia(): void {
-  setBackgroundMedia({ url: null, name: undefined });
-}
+/** Turn the overlay off (clear its url + name); opacity/fit are retained. */
 export function clearOverlayMedia(): void {
   setOverlayMedia({ url: null, name: undefined });
 }

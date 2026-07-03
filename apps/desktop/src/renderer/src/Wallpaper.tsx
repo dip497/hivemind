@@ -13,7 +13,6 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { useTheme } from "./theme-store";
-import { MediaLayerView } from "./CanvasOverlay";
 
 /**
  * `embedded` renders the SAME scene as an absolute fill (position:absolute,
@@ -22,7 +21,7 @@ import { MediaLayerView } from "./CanvasOverlay";
  * sits over a clean copy of the live wallpaper (not the canvas + other tiles).
  */
 export function Wallpaper({ embedded = false }: { embedded?: boolean } = {}): React.ReactElement | null {
-  const { glass, wallpaper, videoSrc, imageSrc, backgroundMedia } = useTheme();
+  const { glass, wallpaper, videoSrc, imageSrc } = useTheme();
   const cls = embedded ? " embedded" : "";
   const [paused, setPaused] = useState(false);
   // A clip that can't decode (e.g. HEVC/H.265, which Chromium doesn't bundle)
@@ -125,11 +124,5 @@ export function Wallpaper({ embedded = false }: { embedded?: boolean } = {}): Re
   // the wallpaper (behind the canvas), painted OVER the animated scene (later in
   // the DOM at the same z-index). Only for the default (non-embedded) layer; the
   // terminal fit-overlay wants a clean scene copy. Renders nothing when unset.
-  if (embedded) return sceneEl;
-  return (
-    <>
-      {sceneEl}
-      <MediaLayerView layer={backgroundMedia} z={-1} scene="background" />
-    </>
-  );
+  return sceneEl;
 }

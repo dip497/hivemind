@@ -10,9 +10,7 @@ import { X, Film, Image as ImageIcon } from "lucide-react";
 import {
   useTheme,
   setTheme,
-  setBackgroundMedia,
   setOverlayMedia,
-  clearBackgroundMedia,
   clearOverlayMedia,
   ACCENTS,
   WALLPAPERS,
@@ -242,22 +240,12 @@ export function ThemeCustomizer({ open, onClose }: { open: boolean; onClose: () 
         </p>
       </div>
 
-      {/* Custom media — bring-your-own background + transparent overlay. */}
+      {/* Overlay — a transparent character/video that plays OVER the tiles. The
+          background is handled by the Wallpaper section above (Photo/Video). */}
       <div className="flex flex-col gap-3">
-        <span className="u-eyebrow">Custom media</span>
+        <span className="u-eyebrow">Overlay</span>
         <MediaBlock
-          title="Background"
-          layer={t.backgroundMedia}
-          onChoose={async () => {
-            const r = await window.hive?.pickMedia?.("background");
-            if (r) setBackgroundMedia({ url: r.url, kind: r.kind, name: r.name });
-          }}
-          onClear={clearBackgroundMedia}
-          onOpacity={(v) => setBackgroundMedia({ opacity: v })}
-          onFit={(f) => setBackgroundMedia({ fit: f })}
-        />
-        <MediaBlock
-          title="Overlay"
+          title="On top of tiles"
           layer={t.overlayMedia}
           onChoose={async () => {
             const r = await window.hive?.pickMedia?.("overlay");
@@ -266,7 +254,7 @@ export function ThemeCustomizer({ open, onClose }: { open: boolean; onClose: () 
           onClear={clearOverlayMedia}
           onOpacity={(v) => setOverlayMedia({ opacity: v })}
           onFit={(f) => setOverlayMedia({ fit: f })}
-          hint="For transparency use a .webm (alpha), .gif, or .png."
+          hint="A transparent character/video that plays over your tiles. Use a .webm (alpha), .gif, or .png."
         />
       </div>
     </div>
