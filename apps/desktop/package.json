@@ -102,6 +102,7 @@
     "zustand": "catalog:"
   },
   "devDependencies": {
+    "@earendil-works/pi-coding-agent": "~0.80.3",
     "@electron/rebuild": "catalog:",
     "@hivemind/tsconfig": "workspace:*",
     "@playwright/test": "^1.60.0",
@@ -117,6 +118,7 @@
     "electron-vite": "catalog:",
     "tailwindcss": "catalog:",
     "tsx": "^4.22.1",
+    "typebox": "1.1.38",
     "typescript": "catalog:",
     "vite": "catalog:"
   }
