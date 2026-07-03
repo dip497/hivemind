@@ -222,7 +222,9 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
         data-active={sel}
         style={{ paddingLeft: 12 + depth * 14 }}
         className={`group flex h-8 items-center gap-2.5 pr-2.5 mx-2 text-left rounded-lg transition-colors ${
-          sel ? "bg-[var(--color-bg4)] text-[var(--color-fg)]" : "text-[var(--color-fg2)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)]"
+          sel
+            ? "bg-[color-mix(in_srgb,var(--color-brand)_15%,transparent)] text-[var(--color-fg)] shadow-[inset_2px_0_0_var(--color-brand)]"
+            : "text-[var(--color-fg2)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)]"
         }`}
         title={`${t.name} · ${st}`}
       >
