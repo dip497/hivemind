@@ -4,11 +4,23 @@
  * NodeResizer props, and the `nodeTypes` map handed to <ReactFlow>. These are
  * pure presentational adapters around the tile components; extracted so Canvas.tsx
  * orchestrates state rather than also declaring the view shells.
+ *
+ * Pinned tiles: a pinned tile stays a react-flow node for BOOKKEEPING, but its
+ * content is rendered via `createPortal` into a fixed, non-transformed screen-space
+ * layer (`PinnedLayerContext`). Because that layer isn't inside react-flow's
+ * transformed viewport, the panel is inherently screen-fixed + constant-size —
+ * completely unaffected by canvas pan/zoom. The React instance is preserved by the
+ * portal move; only a `<webview>` browser tile reloads once (an inherent Chromium
+ * reparent limit). See TileShell + FloatingPinnedPanel below.
  */
-import { memo, useCallback, useEffect, useLayoutEffect, useRef, lazy, Suspense, type MutableRefObject } from "react";
-import { NodeResizer, useReactFlow, useStore, useViewport, type Node, type NodeTypes } from "@xyflow/react";
-import { Pin } from "lucide-react";
-import { paneToFlow, clampAnchor } from "./pin-anchor";
+import {
+  memo, useCallback, useContext, useEffect, useRef, useState, lazy, Suspense,
+  createContext, type ReactNode,
+} from "react";
+import { createPortal } from "react-dom";
+import { NodeResizer, useReactFlow, type NodeTypes } from "@xyflow/react";
+import { Pin, X } from "lucide-react";
+import { clampAnchor } from "./pin-anchor";
 import { TerminalTile } from "./TerminalTile";
 import { BrowserTile } from "./BrowserTile";
 import { IssuesTile } from "./IssuesTile";
@@ -18,6 +30,15 @@ import { TileErrorBoundary } from "./TileErrorBoundary";
 
 const DiffTile = lazy(() => import("./DiffTile").then((m) => ({ default: m.DiffTile })));
 const WorkbenchTile = lazy(() => import("./WorkbenchTile").then((m) => ({ default: m.WorkbenchTile })));
+
+/** Screen-space rect captured from a tile's DOM at pin time (SCREEN pixels). */
+export type PinRect = { sx: number; sy: number; w: number; h: number };
+
+/** The DOM node every pinned tile portals its floating panel into. Canvas mounts a
+ *  single fixed full-window `<div id="hm-pinned-layer">` and provides it here; the
+ *  node wrappers `useContext` it. A React context (vs getElementById) keeps the
+ *  reference stable across re-renders and re-renders portals when it first mounts. */
+export const PinnedLayerContext = createContext<HTMLElement | null>(null);
 
 type TerminalNodeData = {
   tileId: string;
@@ -96,31 +117,38 @@ const RESIZER_PROPS = {
 // source of truth for node size (style.width/height in the node spec).
 // Without this, XYResizer updates react-flow's internal store, but our
 // useMemo rebuilds nodes with the old style and the change disappears.
-type WithResize<T> = T & {
-  onResize: (id: string, w: number, h: number, x?: number, y?: number) => void;
-  /** Pin state + toggle, injected onto every tile's data by mkTile. */
+/** Pin state + callbacks injected onto every tile's data by mkTile. */
+export type ShellPin = {
   pinned?: boolean;
-  onTogglePin?: (id: string, anchor: { sx: number; sy: number }) => void;
+  pinAnchor?: { sx: number; sy: number };
+  pinSize?: { w: number; h: number };
+  /** Pin/unpin. On pin, `rect` is the tile's current SCREEN rect (top-left +
+   *  size, from its DOM getBoundingClientRect); ignored on unpin. */
+  onTogglePin?: (id: string, rect: PinRect) => void;
+  /** Drag/resize of the floating panel → persist the new anchor and/or size. */
+  onPinChange?: (id: string, patch: { anchor?: { sx: number; sy: number }; size?: { w: number; h: number } }) => void;
 };
 
-/** Corner badge that pins/unpins a tile. On click it measures the tile's DOM
- *  rect relative to the react-flow pane (= PANE pixels) and hands that anchor
- *  up, so PinnedViewportSync can hold the tile at that screen pixel while the
- *  canvas pans. Hidden until node-hover unless already pinned. */
+type WithResize<T> = T & {
+  onResize: (id: string, w: number, h: number, x?: number, y?: number) => void;
+} & ShellPin;
+
+/** Corner badge that pins/unpins a tile. On PIN it measures the tile's DOM rect in
+ *  SCREEN pixels (getBoundingClientRect is already viewport-relative) and hands
+ *  that rect up, so the floating panel opens exactly where — and the size — the
+ *  tile currently is. Hidden until node-hover unless already pinned. */
 function PinToggle({ id, pinned, onToggle }: {
   id: string;
   pinned?: boolean;
-  onToggle?: (id: string, anchor: { sx: number; sy: number }) => void;
+  onToggle?: (id: string, rect: PinRect) => void;
 }) {
   if (!onToggle) return null;
   const handle = (e: React.MouseEvent) => {
     e.stopPropagation();
     const nodeEl = (e.currentTarget as HTMLElement).closest(".react-flow__node") as HTMLElement | null;
-    const paneEl = nodeEl?.closest(".react-flow") as HTMLElement | null;
-    if (!nodeEl || !paneEl) { onToggle(id, { sx: 0, sy: 0 }); return; }
-    const nr = nodeEl.getBoundingClientRect();
-    const pr = paneEl.getBoundingClientRect();
-    onToggle(id, { sx: nr.left - pr.left, sy: nr.top - pr.top });
+    if (!nodeEl) { onToggle(id, { sx: 80, sy: 80, w: 640, h: 420 }); return; }
+    const r = nodeEl.getBoundingClientRect();
+    onToggle(id, { sx: r.left, sy: r.top, w: r.width, h: r.height });
   };
   return (
     <button
@@ -130,7 +158,7 @@ function PinToggle({ id, pinned, onToggle }: {
           ? "opacity-100 bg-[var(--color-brand)] border-[var(--color-brand)] text-white"
           : "opacity-0 group-hover/tile:opacity-100 focus-visible:opacity-100 bg-[var(--color-bg3)] border-[var(--color-line)] text-[var(--color-fg3)] hover:text-[var(--color-fg)]"
       }`}
-      title={pinned ? "Unpin — return to canvas" : "Pin — keep in view while panning"}
+      title={pinned ? "Unpin — return to canvas" : "Pin — float fixed on screen"}
       aria-label={pinned ? "Unpin tile" : "Pin tile"}
       aria-pressed={!!pinned}
     >
@@ -139,62 +167,192 @@ function PinToggle({ id, pinned, onToggle }: {
   );
 }
 
-/** Lives INSIDE <ReactFlow> (needs its viewport context). On every viewport
- *  change it counter-translates each pinned node so its stored PANE-pixel anchor
- *  stays put on screen — smooth during a live pan, not just on release. Writes
- *  through react-flow's store imperatively (setNodes); our `nodes` prop is only
- *  re-synced on identity change, so these positions stick. Skips the node being
- *  dragged, and re-applies whenever the base node array rebuilds (`epoch`). */
-export function PinnedViewportSync({ pins, draggingIdRef, epoch, repositionRef }: {
-  pins: { id: string; sx: number; sy: number }[];
-  draggingIdRef: MutableRefObject<string | null>;
-  epoch: unknown;
-  /** Canvas populates this with a per-frame reposition fn and calls it from
-   *  `onMove` (react-flow's pan callback) — the guaranteed per-frame signal, so
-   *  a pinned tile holds its screen spot during a live pan even if the store
-   *  viewport subscription below lags the transform. */
-  repositionRef: MutableRefObject<((vp: { x: number; y: number; zoom: number }) => void) | null>;
+// Minimum floating-panel size — matches the in-canvas resizer floor so a pinned
+// tile can't be shrunk below a usable size.
+const PIN_MIN_W = 280;
+const PIN_MIN_H = 180;
+
+/** The screen-fixed floating panel a pinned tile renders into (portaled by
+ *  TileShell into the fixed pinned layer). Absolutely positioned in SCREEN pixels;
+ *  constant size; a header with a drag handle + unpin + close; and a bottom-right
+ *  corner handle to resize. Drag/resize keep the panel clamped inside the window
+ *  and commit the new anchor/size via `onChange` so they persist.
+ *
+ *  NOTE: portaling reparents the tile's DOM into this fixed layer. Canvas/terminal
+ *  content survives the move (terminals also reattach to their persistent daemon
+ *  PTY), but a `<webview>` browser tile reloads its page ONCE on reparent — an
+ *  inherent Chromium limitation, accepted. */
+function FloatingPinnedPanel({ id, anchor, size, onUnpin, onChange, onClose, children }: {
+  id: string;
+  anchor?: { sx: number; sy: number };
+  size?: { w: number; h: number };
+  onUnpin?: (id: string, rect: PinRect) => void;
+  onChange?: (id: string, patch: { anchor?: { sx: number; sy: number }; size?: { w: number; h: number } }) => void;
+  onClose?: () => void;
+  children: ReactNode;
 }) {
-  const vp = useViewport();
-  const { setNodes } = useReactFlow();
-  // Pane (canvas viewport) size in screen px — clamps a pinned tile inside it so
-  // it can never scroll off the window. Comes from react-flow's own store, so it
-  // updates on window/panel resize.
-  const paneW = useStore((s) => s.width);
-  const paneH = useStore((s) => s.height);
-  // Counter-translate every pinned node so its stored PANE-pixel anchor holds the
-  // same screen spot under viewport `v`. Pure w.r.t. `v` so both the store-driven
-  // effect AND the onMove-driven per-frame call use identical math.
-  const reposition = useCallback((v: { x: number; y: number; zoom: number }) => {
-    if (pins.length === 0) return;
-    setNodes((nds) => {
-      let changed = false;
-      const next = nds.map((n) => {
-        if (n.id === draggingIdRef.current) return n;
-        const pin = pins.find((p) => p.id === n.id);
-        if (!pin) return n;
-        const measured = (n as Node & { measured?: { width?: number; height?: number } }).measured;
-        const flowW = measured?.width ?? Number(n.style?.width) ?? 0;
-        const flowH = measured?.height ?? Number(n.style?.height) ?? 0;
-        const anchor = paneW > 0 && paneH > 0
-          ? clampAnchor(pin, { w: flowW * v.zoom, h: flowH * v.zoom }, { w: paneW, h: paneH })
-          : pin;
-        const { x, y } = paneToFlow(anchor, v);
-        const parented = (n as Node & { parentId?: string }).parentId != null;
-        if (!parented && n.position.x === x && n.position.y === y) return n;
-        changed = true;
-        const { parentId: _p, ...rest } = n as Node & { parentId?: string };
-        return { ...rest, position: { x, y } };
-      });
-      return changed ? next : nds;
-    });
-  }, [pins, setNodes, draggingIdRef, paneW, paneH]);
-  // Register for onMove-driven per-frame repositioning during a live pan.
-  useEffect(() => { repositionRef.current = reposition; return () => { repositionRef.current = null; }; }, [reposition, repositionRef]);
-  // Store-driven: covers zoom, momentum-fling, resize, initial mount, and any
-  // rebuild (`epoch`) — cases onMove doesn't fire for.
-  useLayoutEffect(() => { reposition(vp); }, [vp.x, vp.y, vp.zoom, epoch, reposition]);
-  return null;
+  const [pos, setPos] = useState(() => anchor ?? { sx: 80, sy: 80 });
+  const [dim, setDim] = useState(() => size ?? { w: 640, h: 420 });
+  // Re-sync from persisted values when they change externally (e.g. a re-pin
+  // captures a fresh rect). Live drag/resize below owns them in between.
+  const draggingRef = useRef(false);
+  useEffect(() => { if (anchor && !draggingRef.current) setPos(anchor); }, [anchor?.sx, anchor?.sy]);
+  useEffect(() => { if (size && !draggingRef.current) setDim(size); }, [size?.w, size?.h]);
+
+  const win = () => ({ w: window.innerWidth, h: window.innerHeight });
+
+  // Header drag → reposition, clamped inside the window; commit on release.
+  const onHeaderDown = useCallback((e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    draggingRef.current = true;
+    const startX = e.clientX, startY = e.clientY;
+    const base = pos;
+    let cur = pos;
+    const move = (ev: PointerEvent) => {
+      const next = clampAnchor(
+        { sx: base.sx + (ev.clientX - startX), sy: base.sy + (ev.clientY - startY) },
+        dim, win(),
+      );
+      cur = next;
+      setPos(next);
+    };
+    const up = () => {
+      draggingRef.current = false;
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      onChange?.(id, { anchor: cur });
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }, [pos, dim, id, onChange]);
+
+  // Bottom-right corner drag → resize; commit on release. Also re-clamps the
+  // anchor so a grown panel can't push its header off-screen.
+  const onCornerDown = useCallback((e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    draggingRef.current = true;
+    const startX = e.clientX, startY = e.clientY;
+    const base = dim;
+    let cur = dim;
+    const move = (ev: PointerEvent) => {
+      cur = {
+        w: Math.max(PIN_MIN_W, base.w + (ev.clientX - startX)),
+        h: Math.max(PIN_MIN_H, base.h + (ev.clientY - startY)),
+      };
+      setDim(cur);
+    };
+    const up = () => {
+      draggingRef.current = false;
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      const clamped = clampAnchor(pos, cur, win());
+      setPos(clamped);
+      onChange?.(id, { size: cur, anchor: clamped });
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }, [dim, pos, id, onChange]);
+
+  return (
+    <div
+      className="hm-pinned-panel fixed flex flex-col rounded-xl overflow-hidden"
+      style={{ left: pos.sx, top: pos.sy, width: dim.w, height: dim.h, pointerEvents: "auto", zIndex: 55 }}
+    >
+      {/* Header: drag handle + unpin + close. `nodrag` is irrelevant here (we're
+          outside react-flow), but the class keeps parity with tile chrome. */}
+      <div
+        onPointerDown={onHeaderDown}
+        className="hm-pinned-header shrink-0 flex items-center gap-1 h-7 px-1.5 cursor-grab active:cursor-grabbing select-none"
+      >
+        <Pin size={11} className="fill-current text-[var(--color-brand)] shrink-0" />
+        <span className="flex-1" />
+        <button
+          onClick={(e) => { e.stopPropagation(); onUnpin?.(id, { sx: pos.sx, sy: pos.sy, w: dim.w, h: dim.h }); }}
+          onPointerDown={(e) => e.stopPropagation()}
+          className="size-5 grid place-items-center rounded text-[var(--color-fg3)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg4)] cursor-pointer"
+          title="Unpin — return to canvas"
+          aria-label="Unpin tile"
+        >
+          <Pin size={12} />
+        </button>
+        {onClose && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onClose(); }}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="size-5 grid place-items-center rounded text-[var(--color-fg3)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg4)] cursor-pointer"
+            title="Close tile"
+            aria-label="Close tile"
+          >
+            <X size={12} />
+          </button>
+        )}
+      </div>
+      {/* Tile content — the SAME React tree, portaled here. */}
+      <div className="relative flex-1 min-h-0">{children}</div>
+      {/* Bottom-right resize handle. */}
+      <div
+        onPointerDown={onCornerDown}
+        className="absolute bottom-0 right-0 size-4 cursor-nwse-resize"
+        style={{ touchAction: "none" }}
+        aria-label="Resize pinned tile"
+      />
+    </div>
+  );
+}
+
+/** Shared shell for every tile node. Unpinned: renders the tile inline with the
+ *  pin badge + NodeResizer. Pinned: portals the SAME content into the fixed
+ *  pinned layer as a screen-fixed floating panel, and renders nothing in-canvas
+ *  (the node still exists in react-flow for id/bookkeeping). */
+function TileShell({
+  id, selected, pin, onClose, onResize, minWidth, minHeight, wheelRef, children,
+}: {
+  id: string;
+  selected: boolean;
+  pin: ShellPin;
+  onClose?: () => void;
+  onResize: (id: string, w: number, h: number, x?: number, y?: number) => void;
+  minWidth?: number;
+  minHeight?: number;
+  wheelRef: React.RefObject<HTMLDivElement | null>;
+  children: ReactNode;
+}) {
+  const pinnedLayer = useContext(PinnedLayerContext);
+  if (pin.pinned && pinnedLayer) {
+    // In-canvas footprint renders nothing (the portal moves the content out); the
+    // node keeps its react-flow identity but has no visible body.
+    return createPortal(
+      <FloatingPinnedPanel
+        id={id}
+        anchor={pin.pinAnchor}
+        size={pin.pinSize}
+        onUnpin={pin.onTogglePin}
+        onChange={pin.onPinChange}
+        onClose={onClose}
+      >
+        {children}
+      </FloatingPinnedPanel>,
+      pinnedLayer,
+    );
+  }
+  return (
+    <div className={`group/tile w-full h-full nowheel${selected ? " hm-node-selected" : " tile-locked"}`} ref={wheelRef}>
+      <PinToggle id={id} pinned={pin.pinned} onToggle={pin.onTogglePin} />
+      <NodeResizer
+        nodeId={id}
+        isVisible={selected}
+        {...RESIZER_PROPS}
+        minWidth={minWidth ?? RESIZER_PROPS.minWidth}
+        minHeight={minHeight ?? RESIZER_PROPS.minHeight}
+        onResizeEnd={(_e, p) => onResize(id, p.width, p.height, p.x, p.y)}
+      />
+      {children}
+    </div>
+  );
 }
 
 // Does this tile OWN the wheel — i.e. does it contain scrollable content the
@@ -345,18 +503,11 @@ const TerminalNode = memo(function TerminalNode({
 }) {
   const wheelRef = useTileWheelZoom(selected);
   return (
-    <div className={`group/tile w-full h-full nowheel${selected ? " hm-node-selected" : " tile-locked"}${data.pinned ? " hm-node-pinned" : ""}`} ref={wheelRef}>
-      <PinToggle id={id} pinned={data.pinned} onToggle={data.onTogglePin} />
-      <NodeResizer
-        nodeId={id}
-        isVisible={selected}
-        {...RESIZER_PROPS}
-        onResizeEnd={(_e, p) => data.onResize(id, p.width, p.height, p.x, p.y)}
-      />
+    <TileShell id={id} selected={selected} pin={data} onClose={data.onClose} onResize={data.onResize} wheelRef={wheelRef}>
       <TileErrorBoundary label={data.label ?? "terminal"} onClose={data.onClose}>
         <TerminalTile {...data} selected={selected} />
       </TileErrorBoundary>
-    </div>
+    </TileShell>
   );
 });
 
@@ -371,22 +522,13 @@ const DiffNode = memo(function DiffNode({
 }) {
   const wheelRef = useTileWheelZoom(selected);
   return (
-    <div className={`group/tile w-full h-full nowheel${selected ? " hm-node-selected" : " tile-locked"}${data.pinned ? " hm-node-pinned" : ""}`} ref={wheelRef}>
-      <PinToggle id={id} pinned={data.pinned} onToggle={data.onTogglePin} />
-      <NodeResizer
-        nodeId={id}
-        isVisible={selected}
-        {...RESIZER_PROPS}
-        minWidth={400}
-        minHeight={240}
-        onResizeEnd={(_e, p) => data.onResize(id, p.width, p.height, p.x, p.y)}
-      />
+    <TileShell id={id} selected={selected} pin={data} onClose={data.onClose} onResize={data.onResize} minWidth={400} minHeight={240} wheelRef={wheelRef}>
       <TileErrorBoundary label="Diff" onClose={data.onClose}>
         <Suspense fallback={<TileLoading label="Loading diff…" />}>
           <DiffTile {...data} />
         </Suspense>
       </TileErrorBoundary>
-    </div>
+    </TileShell>
   );
 });
 
@@ -401,16 +543,7 @@ const WorkbenchNode = memo(function WorkbenchNode({
 }) {
   const wheelRef = useTileWheelZoom(selected);
   return (
-    <div className={`group/tile w-full h-full nowheel${selected ? " hm-node-selected" : " tile-locked"}${data.pinned ? " hm-node-pinned" : ""}`} ref={wheelRef}>
-      <PinToggle id={id} pinned={data.pinned} onToggle={data.onTogglePin} />
-      <NodeResizer
-        nodeId={id}
-        isVisible={selected}
-        {...RESIZER_PROPS}
-        minWidth={520}
-        minHeight={360}
-        onResizeEnd={(_e, p) => data.onResize(id, p.width, p.height, p.x, p.y)}
-      />
+    <TileShell id={id} selected={selected} pin={data} onClose={data.onClose} onResize={data.onResize} minWidth={520} minHeight={360} wheelRef={wheelRef}>
       <TileErrorBoundary label="Editor" onClose={data.onClose}>
         <Suspense fallback={<TileLoading label="Loading editor…" />}>
           <WorkbenchTile
@@ -423,7 +556,7 @@ const WorkbenchNode = memo(function WorkbenchNode({
           />
         </Suspense>
       </TileErrorBoundary>
-    </div>
+    </TileShell>
   );
 });
 
@@ -445,16 +578,7 @@ const BrowserNode = memo(function BrowserNode({
 }) {
   const wheelRef = useTileWheelZoom(selected);
   return (
-    <div className={`group/tile w-full h-full nowheel${selected ? " hm-node-selected" : " tile-locked"}${data.pinned ? " hm-node-pinned" : ""}`} ref={wheelRef}>
-      <PinToggle id={id} pinned={data.pinned} onToggle={data.onTogglePin} />
-      <NodeResizer
-        nodeId={id}
-        isVisible={selected}
-        {...RESIZER_PROPS}
-        minWidth={420}
-        minHeight={280}
-        onResizeEnd={(_e, p) => data.onResize(id, p.width, p.height, p.x, p.y)}
-      />
+    <TileShell id={id} selected={selected} pin={data} onClose={data.onClose} onResize={data.onResize} minWidth={420} minHeight={280} wheelRef={wheelRef}>
       <TileErrorBoundary label="Browser" onClose={data.onClose}>
         <BrowserTile
           tileId={data.tileId}
@@ -465,7 +589,7 @@ const BrowserNode = memo(function BrowserNode({
           onClose={data.onClose}
         />
       </TileErrorBoundary>
-    </div>
+    </TileShell>
   );
 });
 
@@ -481,19 +605,11 @@ const IssuesNode = memo(function IssuesNode({
 }) {
   const wheelRef = useTileWheelZoom(selected);
   return (
-    <div className={`group/tile w-full h-full nowheel${selected ? " hm-node-selected" : " tile-locked"}${data.pinned ? " hm-node-pinned" : ""}`} ref={wheelRef}>
-      <PinToggle id={id} pinned={data.pinned} onToggle={data.onTogglePin} />
-      <NodeResizer
-        nodeId={id}
-        isVisible={selected}
-        {...RESIZER_PROPS}
-        minWidth={280}
-        onResizeEnd={(_e, p) => data.onResize(id, p.width, p.height, p.x, p.y)}
-      />
+    <TileShell id={id} selected={selected} pin={data} onClose={data.onClose} onResize={data.onResize} minWidth={280} wheelRef={wheelRef}>
       <TileErrorBoundary label="Issues" onClose={data.onClose}>
         <IssuesTile root={data.root} onClose={data.onClose} selected={selected} />
       </TileErrorBoundary>
-    </div>
+    </TileShell>
   );
 });
 
@@ -516,20 +632,11 @@ const PlanReviewNode = memo(function PlanReviewNode({
 }) {
   const wheelRef = useTileWheelZoom(selected);
   return (
-    <div className={`group/tile w-full h-full nowheel${selected ? " hm-node-selected" : " tile-locked"}${data.pinned ? " hm-node-pinned" : ""}`} ref={wheelRef}>
-      <PinToggle id={id} pinned={data.pinned} onToggle={data.onTogglePin} />
-      <NodeResizer
-        nodeId={id}
-        isVisible={selected}
-        {...RESIZER_PROPS}
-        minWidth={420}
-        minHeight={300}
-        onResizeEnd={(_e, p) => data.onResize(id, p.width, p.height, p.x, p.y)}
-      />
+    <TileShell id={id} selected={selected} pin={data} onClose={data.onClose} onResize={data.onResize} minWidth={420} minHeight={300} wheelRef={wheelRef}>
       <TileErrorBoundary label="Plan review" onClose={data.onClose}>
         <PlanReviewTile {...data} />
       </TileErrorBoundary>
-    </div>
+    </TileShell>
   );
 });
 

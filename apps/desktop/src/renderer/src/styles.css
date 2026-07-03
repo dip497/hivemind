@@ -565,15 +565,28 @@ body.canvas-resizing .react-flow__node * {
   z-index: 5;
 }
 
-/* Pinned tile — a soft brand-tinted outline so a sticky (viewport-fixed) tile
-   reads as "held" even when it isn't selected. Uses an inset ring so it never
-   shifts layout. */
-.react-flow__node .hm-node-pinned {
-  position: relative;
-  border-radius: 0.75rem;
+/* Pinned tile — the screen-fixed floating panel a pinned tile portals into (see
+   canvas-nodes.tsx FloatingPinnedPanel). A soft brand-tinted ring + drop shadow
+   so it reads as "held" and lifted above the canvas. Constant position + size,
+   unaffected by canvas pan/zoom (it lives outside react-flow's transform). */
+.hm-pinned-panel {
+  background: var(--color-bg2);
   box-shadow:
     0 0 0 2px color-mix(in srgb, var(--color-brand) 55%, transparent),
-    0 10px 30px -6px rgba(0, 0, 0, 0.5);
+    0 14px 40px -8px rgba(0, 0, 0, 0.55);
+}
+.hm-pinned-panel .hm-pinned-header {
+  background: color-mix(in srgb, var(--color-brand) 12%, var(--color-bg3));
+  border-bottom: 1px solid var(--color-line);
+}
+/* Bottom-right resize grip — a faint corner wedge, brighter on hover. */
+.hm-pinned-panel > [aria-label="Resize pinned tile"] {
+  background:
+    linear-gradient(135deg, transparent 50%, color-mix(in srgb, var(--color-fg3) 45%, transparent) 50%);
+}
+.hm-pinned-panel > [aria-label="Resize pinned tile"]:hover {
+  background:
+    linear-gradient(135deg, transparent 50%, var(--color-fg2) 50%);
 }
 
 /* Resize handles: invisible until you reach for a corner/edge (hover the control)

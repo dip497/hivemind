@@ -28,13 +28,16 @@ export interface TileInstance {
   args?: string[];
   /** browser only — last/initial URL so the tile restores where it was. */
   url?: string;
-  /** Pinned = the tile floats above others AND stays fixed on screen while the
-   *  canvas pans/zooms (a sticky HUD). `pinAnchor` is the tile's top-left in
-   *  PANE pixels (relative to the react-flow container, viewport-independent);
-   *  the live PinnedViewportSync counter-translates the node to hold that pixel.
-   *  Both persist so a pinned tile comes back pinned in place. */
+  /** Pinned = the tile becomes a TRUE screen-fixed floating panel: its content is
+   *  portaled out of react-flow's transformed viewport into a fixed full-window
+   *  layer, so it holds a constant screen position + size, unaffected by canvas
+   *  pan/zoom. `pinAnchor` is the panel's top-left in SCREEN pixels (viewport
+   *  coordinates); `pinSize` is its rendered size in SCREEN pixels (captured from
+   *  the tile's DOM rect at pin time). All three persist so a pinned tile comes
+   *  back pinned in place at the same size. */
   pinned?: boolean;
   pinAnchor?: { sx: number; sy: number };
+  pinSize?: { w: number; h: number };
   /** planReview only — the live plan handoff this tile is reviewing. Ephemeral:
    *  tied to a blocked agent hook, so planReview tiles are NEVER persisted (a
    *  reloaded requestId is dead — the hook already failed open). `requestId`

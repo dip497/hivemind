@@ -55,9 +55,11 @@ export interface NodeBuildCtx {
   onNodeResizeCommit: (id: string, w: number, h: number, x?: number, y?: number) => void;
   renameTile: (id: string, name: string) => void;
   setAgentTitle: (id: string, title: string) => void;
-  /** Toggle a tile's pinned state. `anchor` is the tile's top-left in PANE
-   *  pixels, captured from its DOM rect at click time (ignored when unpinning). */
-  onTogglePin: (id: string, anchor: { sx: number; sy: number }) => void;
+  /** Toggle a tile's pinned state. `rect` is the tile's SCREEN rect (top-left +
+   *  size) captured from its DOM at click time (ignored when unpinning). */
+  onTogglePin: (id: string, rect: { sx: number; sy: number; w: number; h: number }) => void;
+  /** Persist a pinned panel's new anchor and/or size after a drag/resize. */
+  onPinChange: (id: string, patch: { anchor?: { sx: number; sy: number }; size?: { w: number; h: number } }) => void;
 }
 
 export function buildBaseNodes(ctx: NodeBuildCtx): Node[] {
@@ -67,7 +69,7 @@ export function buildBaseNodes(ctx: NodeBuildCtx): Node[] {
     updateFrameTitle, updateFrameColor, deleteFrame, arrangeFrame, bringFrameToFront,
     onAttachWorktree, onCreateWorktree, unbindBranch, bindWorkspace, unbindWorkspace,
     openFileInTile, openUrlInBrowser, openFileFromTerminal, closeTabInTile, closeTile, onNodeResizeCommit, renameTile, setAgentTitle,
-    onTogglePin,
+    onTogglePin, onPinChange,
   } = ctx;
 
   const out: Node[] = [];
@@ -86,9 +88,18 @@ export function buildBaseNodes(ctx: NodeBuildCtx): Node[] {
     // `nodes` memo's no-selection path can return baseNodes VERBATIM.
     const style = { ...(base.style as Record<string, unknown>), zIndex: 100 };
     // Pin controls live on EVERY tile's data (rendered by the node wrapper as a
-    // corner badge). `onTogglePin` is stable (Canvas useCallback); the wrapper
-    // supplies the id, so no per-build closure churns React.memo.
-    const pinData = { pinned: pinnedIds.has(base.id), onTogglePin };
+    // corner badge; the floating panel when pinned). `onTogglePin`/`onPinChange`
+    // are stable (Canvas useCallback); the wrapper supplies the id, so no
+    // per-build closure churns React.memo. Anchor/size come from the persisted
+    // TileInstance so a pinned panel restores at its saved screen spot + size.
+    const pinTile = tiles.find((x) => x.id === base.id);
+    const pinData = {
+      pinned: pinnedIds.has(base.id),
+      pinAnchor: pinTile?.pinAnchor,
+      pinSize: pinTile?.pinSize,
+      onTogglePin,
+      onPinChange,
+    };
     const parentFrame = frameOf[base.id] ? frames.find((f) => f.id === frameOf[base.id]) : undefined;
     if (parentFrame) {
       const owner = parentFrame;

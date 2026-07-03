@@ -1,42 +1,30 @@
 /**
- * pin-anchor — the pure coordinate math for pinned (viewport-fixed) tiles.
+ * pin-anchor — the pure geometry for pinned (screen-fixed) tiles.
  *
- * A pinned tile's anchor is stored in PANE pixels: the tile's top-left relative
- * to the react-flow container, which is INDEPENDENT of the viewport pan/zoom.
- * To hold that screen pixel as the canvas moves, the tile's flow (canvas)
- * position is recomputed each frame from the anchor + current viewport.
- *
- * react-flow renders a node at pane pixel = viewport.{x,y} + flowPos * zoom, so
- * `paneToFlow` is the exact inverse of `flowToPane` — a round-trip is identity.
+ * A pinned tile is a TRUE screen-fixed floating panel: its content is portaled
+ * out of react-flow's transformed viewport into a fixed full-window layer, so it
+ * holds a constant screen position + size regardless of canvas pan/zoom. Its
+ * anchor is therefore stored in plain SCREEN pixels (viewport coordinates — the
+ * panel's top-left), NOT pane/flow pixels. No counter-translate math is needed;
+ * the only geometry left is clamping the panel inside the window.
  */
-export interface Viewport { x: number; y: number; zoom: number }
-export interface PaneAnchor { sx: number; sy: number }
-
-/** Flow (canvas) position → pane-pixel anchor under a viewport. */
-export function flowToPane(pos: { x: number; y: number }, vp: Viewport): PaneAnchor {
-  return { sx: vp.x + pos.x * vp.zoom, sy: vp.y + pos.y * vp.zoom };
-}
-
-/** Pane-pixel anchor → flow position under a viewport. Inverse of flowToPane. */
-export function paneToFlow(a: PaneAnchor, vp: Viewport): { x: number; y: number } {
-  return { x: (a.sx - vp.x) / vp.zoom, y: (a.sy - vp.y) / vp.zoom };
-}
+export interface ScreenAnchor { sx: number; sy: number }
 
 /**
- * Keep a pinned tile fully inside the pane. `tile` + `pane` are SCREEN pixels
- * (tile size already scaled by zoom). `margin` reserves an edge gutter (also
- * leaves room for the pin badge that overhangs the top-left corner). When the
- * tile is larger than the pane on an axis, the top-left wins (clamps to margin)
- * so the header + pin control stay reachable instead of scrolling off.
+ * Keep a pinned panel fully inside the window. `tile` + `window` are SCREEN
+ * pixels. `margin` reserves an edge gutter (also leaves room for the header
+ * controls that overhang the top-left corner). When the panel is larger than the
+ * window on an axis, the top-left wins (clamps to margin) so the header + unpin
+ * control stay reachable instead of scrolling off.
  */
 export function clampAnchor(
-  a: PaneAnchor,
+  a: ScreenAnchor,
   tile: { w: number; h: number },
-  pane: { w: number; h: number },
+  window: { w: number; h: number },
   margin = 14,
-): PaneAnchor {
-  const maxX = Math.max(margin, pane.w - tile.w - margin);
-  const maxY = Math.max(margin, pane.h - tile.h - margin);
+): ScreenAnchor {
+  const maxX = Math.max(margin, window.w - tile.w - margin);
+  const maxY = Math.max(margin, window.h - tile.h - margin);
   return {
     sx: Math.min(Math.max(a.sx, margin), maxX),
     sy: Math.min(Math.max(a.sy, margin), maxY),
