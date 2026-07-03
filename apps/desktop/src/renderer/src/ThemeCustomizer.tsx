@@ -10,10 +10,16 @@ import { X, Film, Image as ImageIcon } from "lucide-react";
 import {
   useTheme,
   setTheme,
+  setBackgroundMedia,
+  setOverlayMedia,
+  clearBackgroundMedia,
+  clearOverlayMedia,
   ACCENTS,
   WALLPAPERS,
   type AccentId,
   type WallpaperId,
+  type MediaLayer,
+  type MediaFit,
 } from "./theme-store";
 
 /** Mini scene previews for the wallpaper grid — mirror the styles.css palettes. */
@@ -235,6 +241,113 @@ export function ThemeCustomizer({ open, onClose }: { open: boolean; onClose: () 
           Wallpaper shows behind the canvas when Glass mode is on. It pauses when the window loses focus.
         </p>
       </div>
+
+      {/* Custom media — bring-your-own background + transparent overlay. */}
+      <div className="flex flex-col gap-3">
+        <span className="u-eyebrow">Custom media</span>
+        <MediaBlock
+          title="Background"
+          layer={t.backgroundMedia}
+          onChoose={async () => {
+            const r = await window.hive?.pickMedia?.("background");
+            if (r) setBackgroundMedia({ url: r.url, kind: r.kind, name: r.name });
+          }}
+          onClear={clearBackgroundMedia}
+          onOpacity={(v) => setBackgroundMedia({ opacity: v })}
+          onFit={(f) => setBackgroundMedia({ fit: f })}
+        />
+        <MediaBlock
+          title="Overlay"
+          layer={t.overlayMedia}
+          onChoose={async () => {
+            const r = await window.hive?.pickMedia?.("overlay");
+            if (r) setOverlayMedia({ url: r.url, kind: r.kind, name: r.name });
+          }}
+          onClear={clearOverlayMedia}
+          onOpacity={(v) => setOverlayMedia({ opacity: v })}
+          onFit={(f) => setOverlayMedia({ fit: f })}
+          hint="For transparency use a .webm (alpha), .gif, or .png."
+        />
+      </div>
+    </div>
+  );
+}
+
+/** One custom-media sub-block (Background or Overlay): choose/clear + opacity +
+ *  fit. Mirrors the wallpaper picker's control styling. */
+function MediaBlock({
+  title,
+  layer,
+  onChoose,
+  onClear,
+  onOpacity,
+  onFit,
+  hint,
+}: {
+  title: string;
+  layer: MediaLayer;
+  onChoose: () => void;
+  onClear: () => void;
+  onOpacity: (v: number) => void;
+  onFit: (f: MediaFit) => void;
+  hint?: string;
+}) {
+  const FITS: { id: MediaFit; label: string }[] = [
+    { id: "cover", label: "Cover" },
+    { id: "contain", label: "Contain" },
+    { id: "tile", label: "Tile" },
+  ];
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-[var(--color-line2)] bg-[var(--color-bg3)] p-2.5">
+      <div className="flex items-center justify-between">
+        <span className="text-[12px] font-medium text-[var(--color-fg)]">{title}</span>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={onChoose}
+            className="text-[11px] px-2 py-1 rounded border border-[var(--color-line2)] text-[var(--color-fg2)] hover:bg-[var(--color-bg4)] hover:text-[var(--color-fg)] cursor-pointer"
+          >
+            Choose file…
+          </button>
+          <button
+            onClick={onClear}
+            disabled={!layer.url}
+            className="text-[11px] px-2 py-1 rounded border border-[var(--color-line2)] text-[var(--color-fg3)] hover:bg-[var(--color-bg4)] hover:text-[var(--color-fg)] cursor-pointer disabled:opacity-40 disabled:cursor-default"
+          >
+            Clear
+          </button>
+        </div>
+      </div>
+      <div className="text-[11px] text-[var(--color-fg2)] truncate" title={layer.name ?? undefined}>
+        {layer.name ?? "None"}
+      </div>
+      <Slider
+        label="Opacity"
+        value={Math.round(layer.opacity * 100)}
+        min={0}
+        max={100}
+        suffix="%"
+        onChange={(v) => onOpacity(v / 100)}
+      />
+      <div className="flex items-center gap-1">
+        {FITS.map((f) => {
+          const sel = layer.fit === f.id;
+          return (
+            <button
+              key={f.id}
+              onClick={() => onFit(f.id)}
+              aria-pressed={sel}
+              className={`flex-1 text-[11px] px-2 py-1 rounded border cursor-pointer transition-colors ${
+                sel
+                  ? "border-[var(--color-brand)] text-[var(--color-fg)] bg-[var(--color-bg4)]"
+                  : "border-[var(--color-line2)] text-[var(--color-fg3)] hover:text-[var(--color-fg2)]"
+              }`}
+            >
+              {f.label}
+            </button>
+          );
+        })}
+      </div>
+      {hint && <p className="text-[10px] leading-snug text-[var(--color-fg3)]">{hint}</p>}
     </div>
   );
 }

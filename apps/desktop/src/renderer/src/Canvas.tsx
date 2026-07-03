@@ -15,6 +15,7 @@ import { queueWork } from "./claude-bus";
 import { FRAME_ROW_MAX, frameAtPoint } from "./frame-layout";
 import { ToolIsland, ZoomIsland } from "./canvas-islands";
 import { Wallpaper } from "./Wallpaper";
+import { CanvasOverlay } from "./CanvasOverlay";
 import { ThemeCustomizer } from "./ThemeCustomizer";
 import { applyTheme } from "./theme-store";
 import { Eye, EyeOff } from "lucide-react";
@@ -1204,6 +1205,10 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace, updateAvai
       {/* Live wallpaper — fixed full-window layer behind ALL app content (z-index
           -1), so it shows through the canvas pane AND the panels beside it. */}
       <Wallpaper />
+      {/* Custom OVERLAY media — user's transparent foreground plane OVER the
+          tiles. Fixed full-window + pointer-events:none, so it never blocks
+          canvas interaction. Renders nothing until the user picks a file. */}
+      <CanvasOverlay />
       {/* t3code-style DOCKED layout: the Layers panel is a flex SIBLING of the
           canvas (not an overlay), so the canvas sits BESIDE it and is never
           occluded. Collapses to a narrow icon rail; both keep the canvas clear. */}

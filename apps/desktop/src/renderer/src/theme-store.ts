@@ -16,6 +16,24 @@ export type WallpaperId =
 export type AccentId =
   | "indigo" | "volt" | "ember" | "ice" | "pulse" | "rose" | "emerald" | "amber" | "violet";
 
+/** How custom media fills its layer. `tile` repeats the media (CSS background-repeat). */
+export type MediaFit = "cover" | "contain" | "tile";
+
+/** One user-supplied media layer — a background (behind the canvas) or a
+ *  transparent overlay (over the tiles). `url` null = off (renders nothing). */
+export interface MediaLayer {
+  /** hivemedia:// URL of the picked file, or null when unset (nothing renders). */
+  url: string | null;
+  /** Whether `url` points at a video or an image (drives <video> vs <img>). */
+  kind: "video" | "image";
+  /** Display name of the original file (shown in the customizer). */
+  name?: string;
+  /** Layer opacity, 0–1. */
+  opacity: number;
+  /** Fill mode. */
+  fit: MediaFit;
+}
+
 export interface ThemeState {
   /** Master frosted-glass toggle. When off, the app is the classic opaque dark theme. */
   glass: boolean;
@@ -44,6 +62,12 @@ export interface ThemeState {
   /** Content tint alpha when contentGlass is on, 0.0–0.9. 0 = fully see-through,
    *  higher = a darker tint behind the text for legibility. */
   contentOpacity: number;
+  /** Bring-your-own BACKGROUND media — a fixed full-window layer behind the
+   *  canvas (over the animated wallpaper). Off (url null) by default. */
+  backgroundMedia: MediaLayer;
+  /** Bring-your-own OVERLAY media — a fixed full-window layer OVER the tiles,
+   *  always pointer-events:none. Off (url null) by default. */
+  overlayMedia: MediaLayer;
 }
 
 export const DEFAULT_THEME: ThemeState = {
@@ -58,6 +82,8 @@ export const DEFAULT_THEME: ThemeState = {
   animate: true,
   contentGlass: false,
   contentOpacity: 0.25,
+  backgroundMedia: { url: null, kind: "image", opacity: 1, fit: "cover" },
+  overlayMedia: { url: null, kind: "image", opacity: 0.9, fit: "cover" },
 };
 
 /** Accent → brand/accent hex. Mirrors Clonk's Volt / Ember / Ice / Pulse set;
@@ -110,6 +136,8 @@ function load(): ThemeState {
       animate: typeof p.animate === "boolean" ? p.animate : DEFAULT_THEME.animate,
       contentGlass: typeof p.contentGlass === "boolean" ? p.contentGlass : DEFAULT_THEME.contentGlass,
       contentOpacity: clamp(typeof p.contentOpacity === "number" && !Number.isNaN(p.contentOpacity) ? p.contentOpacity : DEFAULT_THEME.contentOpacity, 0, 0.9),
+      backgroundMedia: loadMedia(p.backgroundMedia, DEFAULT_THEME.backgroundMedia),
+      overlayMedia: loadMedia(p.overlayMedia, DEFAULT_THEME.overlayMedia),
     };
   } catch {
     return { ...DEFAULT_THEME };
@@ -117,6 +145,20 @@ function load(): ThemeState {
 }
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
+
+/** Hydrate a persisted MediaLayer onto its defaults. Drops dead blob: URLs
+ *  (in-memory, invalid after reload); only hivemedia:// URLs are persistent. */
+function loadMedia(p: Partial<MediaLayer> | undefined, def: MediaLayer): MediaLayer {
+  const fit: MediaFit = p?.fit === "contain" || p?.fit === "tile" || p?.fit === "cover" ? p.fit : def.fit;
+  const url = typeof p?.url === "string" && p.url.startsWith("hivemedia://") ? p.url : null;
+  return {
+    url,
+    kind: p?.kind === "video" ? "video" : "image",
+    name: typeof p?.name === "string" ? p.name : undefined,
+    opacity: clamp(typeof p?.opacity === "number" && !Number.isNaN(p.opacity) ? p.opacity : def.opacity, 0, 1),
+    fit,
+  };
+}
 
 let state: ThemeState = load();
 const listeners = new Set<() => void>();
@@ -157,6 +199,24 @@ export function setTheme(patch: Partial<ThemeState>): void {
     window.localStorage.setItem(KEY, JSON.stringify(state));
   } catch { /* private mode / quota — theme is best-effort */ }
   for (const l of listeners) l();
+}
+
+/** Merge a partial into the BACKGROUND media layer (persisted like the theme). */
+export function setBackgroundMedia(patch: Partial<MediaLayer>): void {
+  setTheme({ backgroundMedia: { ...state.backgroundMedia, ...patch } });
+}
+
+/** Merge a partial into the OVERLAY media layer (persisted like the theme). */
+export function setOverlayMedia(patch: Partial<MediaLayer>): void {
+  setTheme({ overlayMedia: { ...state.overlayMedia, ...patch } });
+}
+
+/** Turn a media layer off (clear its url + name); opacity/fit are retained. */
+export function clearBackgroundMedia(): void {
+  setBackgroundMedia({ url: null, name: undefined });
+}
+export function clearOverlayMedia(): void {
+  setOverlayMedia({ url: null, name: undefined });
 }
 
 function subscribe(cb: () => void): () => void {

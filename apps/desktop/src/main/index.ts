@@ -1352,6 +1352,11 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
   // registered as privileged BEFORE app `ready`.
   protocol.registerSchemesAsPrivileged([
     { scheme: "hm-media", privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
+    // Custom-media layers (user-supplied background + transparent overlay). Same
+    // sandbox model as hm-media, but keyed by BARE FILENAME (hivemedia://<file>)
+    // and confined to userData/media. `stream: true` is REQUIRED so <video>
+    // range-requests (seek/loop) work.
+    { scheme: "hivemedia", privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
   ]);
   app.whenReady().then(async () => {
     // Wallpaper media is CONFINED to a sandboxed dir under userData. The
@@ -1412,6 +1417,63 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
           }
         }
         return `hm-media://v/${encodeURIComponent(dest)}`;
+      } catch {
+        return null;
+      }
+    });
+
+    // ── Custom-media layers (bring-your-own background + overlay) ─────────────
+    // Files the user picks are COPIED into userData/media and served by bare
+    // filename via hivemedia://<file>. Copying confines what the protocol can
+    // ever read to files the user explicitly chose (never an arbitrary path from
+    // the URL), and survives the original being moved/deleted.
+    const mediaDir = path.join(app.getPath("userData"), "media");
+    protocol.handle("hivemedia", (request) => {
+      try {
+        // hivemedia://<filename> — pathname is `/<filename>` (host is empty for
+        // a bare-name URL). Resolve against mediaDir, then verify it never
+        // escaped the dir (path-traversal guard).
+        const name = decodeURIComponent(new URL(request.url).pathname.replace(/^\/+/, ""));
+        const abs = path.resolve(mediaDir, name);
+        if (abs !== mediaDir && !abs.startsWith(mediaDir + path.sep)) {
+          return new Response("forbidden", { status: 403 });
+        }
+        if (!existsSync(abs) || !statSync(abs).isFile()) return new Response("not found", { status: 404 });
+        return net.fetch(pathToFileURL(abs).toString(), { headers: request.headers });
+      } catch {
+        return new Response("bad request", { status: 400 });
+      }
+    });
+    // Pick a media file for a given layer, copy it into userData/media under a
+    // safe unique name, and return its hivemedia:// URL + classification. Returns
+    // null if the user cancels.
+    const MEDIA_VIDEO_EXT = new Set(["webm", "mp4", "mov"]);
+    ipcMain.handle("media:pick", async (_e, layerRaw: unknown) => {
+      const layer = layerRaw === "overlay" ? "overlay" : "background";
+      if (!mainWindow || mainWindow.isDestroyed()) return null;
+      const result = await dialog.showOpenDialog(mainWindow, {
+        properties: ["openFile"],
+        filters: [{ name: "Media", extensions: ["webm", "gif", "apng", "png", "jpg", "jpeg", "webp", "mp4", "mov"] }],
+      });
+      if (result.canceled || result.filePaths.length === 0) return null;
+      const src = result.filePaths[0]!;
+      try {
+        if (!existsSync(src) || !statSync(src).isFile()) return null;
+        mkdirSync(mediaDir, { recursive: true });
+        // Sanitize the extension to a short alnum token; default to bin if odd.
+        const rawExt = path.extname(src).replace(/^\./, "").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 5) || "bin";
+        const filename = `${layer}-${Date.now()}.${rawExt}`;
+        const dest = path.join(mediaDir, filename);
+        cpSync(src, dest);
+        // Prune older files for THIS layer — only the newest is ever referenced,
+        // so this caps the dir instead of leaking every pick forever.
+        for (const f of readdirSync(mediaDir)) {
+          if (f !== filename && f.startsWith(`${layer}-`)) {
+            try { unlinkSync(path.join(mediaDir, f)); } catch { /* best-effort */ }
+          }
+        }
+        const kind = MEDIA_VIDEO_EXT.has(rawExt) ? "video" : "image";
+        return { url: `hivemedia://${filename}`, kind, name: path.basename(src) };
       } catch {
         return null;
       }

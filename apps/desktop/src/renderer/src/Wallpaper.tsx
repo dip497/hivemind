@@ -13,6 +13,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { useTheme } from "./theme-store";
+import { MediaLayerView } from "./CanvasOverlay";
 
 /**
  * `embedded` renders the SAME scene as an absolute fill (position:absolute,
@@ -21,7 +22,7 @@ import { useTheme } from "./theme-store";
  * sits over a clean copy of the live wallpaper (not the canvas + other tiles).
  */
 export function Wallpaper({ embedded = false }: { embedded?: boolean } = {}): React.ReactElement | null {
-  const { glass, wallpaper, videoSrc, imageSrc } = useTheme();
+  const { glass, wallpaper, videoSrc, imageSrc, backgroundMedia } = useTheme();
   const cls = embedded ? " embedded" : "";
   const [paused, setPaused] = useState(false);
   // A clip that can't decode (e.g. HEVC/H.265, which Chromium doesn't bundle)
@@ -60,57 +61,75 @@ export function Wallpaper({ embedded = false }: { embedded?: boolean } = {}): Re
     else void v.play().catch(() => {});
   }, [paused, videoSrc, wallpaper]);
 
-  if (!glass || wallpaper === "none") return null;
+  // The built-in animated/photo/video wallpaper scene (or null when glass is off,
+  // no scene is chosen, or the picked media isn't ready). Computed as an element
+  // so the user's OWN background media can render OVER it below without the early
+  // returns swallowing it.
+  const sceneEl: React.ReactElement | null = (() => {
+    if (!glass || wallpaper === "none") return null;
 
-  // Photo scene: a static image, cover-fit + brightness-controlled like the video.
-  if (wallpaper === "image") {
-    if (!imageSrc) return null; // no photo picked yet
-    return (
-      <div className={`hm-wallpaper${cls}`} data-scene="image" aria-hidden="true">
-        <img className="hm-wp-image" src={imageSrc} alt="" />
-        <div className="hm-wp-vignette" />
-      </div>
-    );
-  }
-
-  // Video scene: a looping muted clip. Falls back to the aurora gradient if the
-  // clip can't decode (HEVC/H.265 etc.) so it's never a black void.
-  if (wallpaper === "video") {
-    if (videoSrc && !videoFailed) {
+    // Photo scene: a static image, cover-fit + brightness-controlled like the video.
+    if (wallpaper === "image") {
+      if (!imageSrc) return null; // no photo picked yet
       return (
-        <div className={`hm-wallpaper${cls}${paused ? " paused" : ""}`} data-scene="video" aria-hidden="true">
-          <video
-            ref={videoRef}
-            className="hm-wp-video"
-            src={videoSrc}
-            autoPlay
-            loop
-            muted
-            playsInline
-            onError={() => setVideoFailed(true)}
-          />
+        <div className={`hm-wallpaper${cls}`} data-scene="image" aria-hidden="true">
+          <img className="hm-wp-image" src={imageSrc} alt="" />
           <div className="hm-wp-vignette" />
         </div>
       );
     }
-    if (!videoSrc) return null; // no clip picked yet → nothing to show
-    // videoSrc set but failed to decode → fall through to the gradient below.
-  }
 
-  // Gradient scenes (and the video-decode fallback → aurora).
-  const scene = wallpaper === "video" ? "aurora" : wallpaper;
+    // Video scene: a looping muted clip. Falls back to the aurora gradient if the
+    // clip can't decode (HEVC/H.265 etc.) so it's never a black void.
+    if (wallpaper === "video") {
+      if (videoSrc && !videoFailed) {
+        return (
+          <div className={`hm-wallpaper${cls}${paused ? " paused" : ""}`} data-scene="video" aria-hidden="true">
+            <video
+              ref={videoRef}
+              className="hm-wp-video"
+              src={videoSrc}
+              autoPlay
+              loop
+              muted
+              playsInline
+              onError={() => setVideoFailed(true)}
+            />
+            <div className="hm-wp-vignette" />
+          </div>
+        );
+      }
+      if (!videoSrc) return null; // no clip picked yet → nothing to show
+      // videoSrc set but failed to decode → fall through to the gradient below.
+    }
+
+    // Gradient scenes (and the video-decode fallback → aurora).
+    const scene = wallpaper === "video" ? "aurora" : wallpaper;
+    return (
+      <div className={`hm-wallpaper${cls}${paused ? " paused" : ""}`} data-scene={scene} aria-hidden="true">
+        {/* Three drifting gradient blooms (screen-blended) → depth + slow color
+            motion. A fine grain breaks up the gradient banding, a top sheen adds
+            the "lit from above" glass feel, and a vignette focuses the center.
+            Colors per scene come from CSS vars set by [data-scene] in styles.css. */}
+        <div className="hm-wp-bloom hm-wp-a" />
+        <div className="hm-wp-bloom hm-wp-b" />
+        <div className="hm-wp-bloom hm-wp-c" />
+        <div className="hm-wp-grain" />
+        <div className="hm-wp-sheen" />
+        <div className="hm-wp-vignette" />
+      </div>
+    );
+  })();
+
+  // User's OWN background media — a fixed full-window plane in the SAME z-band as
+  // the wallpaper (behind the canvas), painted OVER the animated scene (later in
+  // the DOM at the same z-index). Only for the default (non-embedded) layer; the
+  // terminal fit-overlay wants a clean scene copy. Renders nothing when unset.
+  if (embedded) return sceneEl;
   return (
-    <div className={`hm-wallpaper${cls}${paused ? " paused" : ""}`} data-scene={scene} aria-hidden="true">
-      {/* Three drifting gradient blooms (screen-blended) → depth + slow color
-          motion. A fine grain breaks up the gradient banding, a top sheen adds
-          the "lit from above" glass feel, and a vignette focuses the center.
-          Colors per scene come from CSS vars set by [data-scene] in styles.css. */}
-      <div className="hm-wp-bloom hm-wp-a" />
-      <div className="hm-wp-bloom hm-wp-b" />
-      <div className="hm-wp-bloom hm-wp-c" />
-      <div className="hm-wp-grain" />
-      <div className="hm-wp-sheen" />
-      <div className="hm-wp-vignette" />
-    </div>
+    <>
+      {sceneEl}
+      <MediaLayerView layer={backgroundMedia} z={-1} scene="background" />
+    </>
   );
 }

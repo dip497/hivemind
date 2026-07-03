@@ -48,6 +48,9 @@ declare global {
       getPathForFile?: (file: File) => string;
       /** Copy a picked media file into the sandboxed wallpaper dir → its hm-media:// URL. */
       importWallpaper?: (srcPath: string) => Promise<string | null>;
+      /** Pick a custom media file for a canvas layer (background/overlay) → copied
+       *  into userData/media and served via the sandboxed hivemedia:// protocol. */
+      pickMedia?: (layer: "background" | "overlay") => Promise<{ url: string; kind: "video" | "image"; name: string } | null>;
       /** A BrowserTile guest requested a popup/new window (target=_blank,
        *  window.open) — the owning tile opens it as a new tab. */
       onBrowserPopup: (cb: (p: { fromId: number; url: string }) => void) => () => void;
