@@ -71,6 +71,7 @@ import type {
 } from "@pierre/trees";
 import { DiffReviewPanel } from "./DiffReviewPanel";
 import { newCid, formatCommentMessage, formatReviewMessage, type ReviewComment } from "./diff-comments";
+import { HeaderPinButton, type PinRect } from "./canvas-nodes";
 import { loadComments, saveComments, deliverToClaude } from "./code/review-store";
 
 interface Props {
@@ -78,6 +79,9 @@ interface Props {
   initialMode?: Mode;
   initialBase?: string;
   onClose?: () => void;
+  /** Pin state + toggle (injected via node data) — docked in the header. */
+  pinned?: boolean;
+  onTogglePin?: (id: string, rect: PinRect) => void;
 }
 
 type Mode = "working" | "branch" | "unpushed";
@@ -113,7 +117,7 @@ function fileForLineEl(lineEl: HTMLElement | null, container: HTMLElement | null
   return file;
 }
 
-export function DiffTile({ repoPath, initialMode = "working", initialBase = "origin/main", onClose }: Props) {
+export function DiffTile({ repoPath, initialMode = "working", initialBase = "origin/main", onClose, pinned, onTogglePin }: Props) {
   // Per-tile font size (A−/A+ + Ctrl/Cmd +/−/0) — overrides --diffs-font-size.
   const font = useTileFont(`diff:${repoPath}`, 13);
   // Fullscreen: the Pierre CodeView is React-rendered (not an imperative node), so
@@ -881,6 +885,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
           >
             ⤢
           </button>
+          <HeaderPinButton pinned={pinned} onToggle={onTogglePin} />
           <button
             className="nodrag size-4 grid place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--color-line2)] hover:text-[var(--color-fg)] transition-colors cursor-pointer"
             aria-label="close tile"

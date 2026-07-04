@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { WebviewTag } from "electron";
 import { ArrowLeft, ArrowRight, RotateCw, X as XIcon, Plus, Search, Wrench, Bot, GripVertical } from "lucide-react";
+import { HeaderPinButton, type PinRect } from "./canvas-nodes";
 
 interface Props {
   tileId: string;
@@ -15,6 +16,10 @@ interface Props {
   /** One-shot request from the canvas to open a URL in this browser tile. */
   openReq?: { url: string; seq: number } | null;
   onClose?: () => void;
+  /** Pin state + toggle (injected via node data). The pin button is docked in
+   *  this tile's toolbar next to close — no floating chip. */
+  pinned?: boolean;
+  onTogglePin?: (id: string, rect: PinRect) => void;
 }
 
 interface TabMeta {
@@ -103,7 +108,7 @@ function TabView({
   );
 }
 
-export function BrowserTile({ tileId, frameId, url, selected, openReq, onClose }: Props) {
+export function BrowserTile({ tileId, frameId, url, selected, openReq, onClose, pinned, onTogglePin }: Props) {
   const seq = useRef(1);
   const initialUrls = useRef<Record<string, string>>({ t0: url ?? DEFAULT_URL });
   const [tabs, setTabs] = useState<TabMeta[]>(() => [
@@ -339,6 +344,21 @@ export function BrowserTile({ tileId, frameId, url, selected, openReq, onClose }
         <button className="nodrag size-5 grid place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--color-line2)] hover:text-[var(--color-fg)]" onClick={toggleDevtools} aria-label="devtools" title="Toggle DevTools"><Wrench size={12} /></button>
         {/* Visible CDP proof — runs the same bridge an agent uses against the visible tab. */}
         <button className="nodrag size-5 grid place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--color-line2)] hover:text-[var(--color-fg)]" onClick={cdpSelfTest} aria-label="cdp test" title="CDP self-test (drive this tab like an agent)"><Bot size={12} /></button>
+        <span aria-hidden className="w-px h-4 bg-[var(--color-line2)] mx-0.5" />
+        {/* Pin toggle — docked in the toolbar (not a floating chip). Filled = pinned. */}
+        <HeaderPinButton tileId={tileId} pinned={pinned} onToggle={onTogglePin} />
+        {/* Tile close — the browser has no per-tile × elsewhere, so pinning it
+            still leaves a way to close it from its own chrome. */}
+        {onClose && (
+          <button
+            className="nodrag size-5 grid place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--color-line2)] hover:text-[var(--color-fg)]"
+            onClick={onClose}
+            aria-label="close tile"
+            title="Close tile"
+          >
+            <XIcon size={13} />
+          </button>
+        )}
       </div>
 
       {findOpen && (

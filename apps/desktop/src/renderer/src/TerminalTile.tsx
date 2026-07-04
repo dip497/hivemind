@@ -16,6 +16,7 @@ import { Pencil, GripVertical } from "lucide-react";
 import { webUrlForInternalBrowser } from "./browser-open";
 import { useTheme, getTheme } from "./theme-store";
 import { FullscreenShell, useReparentFullscreen } from "./tile-fullscreen";
+import { HeaderPinButton, type PinRect } from "./canvas-nodes";
 
 /** Open a terminal link in the OS browser. window.open is intercepted by main's
  *  setWindowOpenHandler → shell.openExternal (and the in-app navigation denied),
@@ -135,9 +136,13 @@ interface Props {
    *  unselected tile can't receive keystrokes (pointer-events:none only blocks
    *  the mouse, not the keyboard). Click the tile to select → typing works. */
   selected?: boolean;
+  /** Pin state + toggle (injected via node data). The pin button is docked in
+   *  this tile's header next to close — no floating chip. */
+  pinned?: boolean;
+  onTogglePin?: (id: string, rect: PinRect) => void;
 }
 
-export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, onAgentTitle, onOpenInBrowser, onOpenInEditor, onClose, selected }: Props) {
+export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, onAgentTitle, onOpenInBrowser, onOpenInEditor, onClose, selected, pinned, onTogglePin }: Props) {
   // Editable header name: starts in display mode; double-click opens input.
   // Persists via onRename → Canvas tileNames → LAYOUT_KEY localStorage.
   const [editing, setEditing] = useState(false);
@@ -1121,6 +1126,8 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
             starting
           </span>
         </span>
+        {/* Pin toggle — docked in the header next to close (not a floating chip). */}
+        <HeaderPinButton tileId={tileId} pinned={pinned} onToggle={onTogglePin} />
         {/* nodrag — react-flow ignores drag from elements with this class so
             clicking the × button doesn't start a tile drag. */}
         <button

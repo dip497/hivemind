@@ -12,7 +12,29 @@
  * Videos are always muted + loop + playsInline (autoplay requires muted).
  */
 import { useEffect, useRef } from "react";
-import { useTheme, type MediaLayer } from "./theme-store";
+import { useTheme, type MediaLayer, type MediaAnchor } from "./theme-store";
+
+const clampSize = (n: number) => Math.min(1, Math.max(0.15, n));
+
+/** Turn a 3×3 anchor + size fraction into a fixed-position box. `size` is the
+ *  fraction of the window each axis occupies; the leftover space (1 − size) is
+ *  distributed per the anchor: 0 toward the named edge, all of it toward the
+ *  opposite edge, half each for a centered axis. Values are vw/vh so the box
+ *  tracks window resizes. */
+function anchorBox(anchor: MediaAnchor, size: number): React.CSSProperties {
+  const gap = 1 - size;
+  const parts = anchor.split("-");
+  const v = parts.length === 2 ? parts[0] : "center"; // top | center | bottom
+  const h = parts.length === 2 ? parts[1] : "center"; // left | center | right
+  const top = v === "top" ? 0 : v === "bottom" ? gap : gap / 2;
+  const left = h === "left" ? 0 : h === "right" ? gap : gap / 2;
+  return {
+    top: `${top * 100}vh`,
+    left: `${left * 100}vw`,
+    width: `${size * 100}vw`,
+    height: `${size * 100}vh`,
+  };
+}
 
 /** True when the user asked the OS to reduce motion. */
 function usePrefersReducedMotion(): boolean {
@@ -54,12 +76,19 @@ export function MediaLayerView({
 
   if (!layer.url) return null;
 
+  // Placement: `size` (fraction of the window) + `anchor` (3×3 cell) turn the
+  // full-window plane into a smaller box parked in a corner/edge/center. At
+  // size ≥ 1 it fills the window and the anchor is irrelevant.
+  const size = clampSize(layer.size ?? 1);
+  const box: React.CSSProperties = size >= 0.999
+    ? { inset: 0, width: "100%", height: "100%" }
+    : anchorBox(layer.anchor ?? "center", size);
   const base: React.CSSProperties = {
     position: "fixed",
-    inset: 0,
     zIndex: z,
     opacity: layer.opacity,
     pointerEvents: "none",
+    ...box,
   };
   const objectFit: "cover" | "contain" = layer.fit === "contain" ? "contain" : "cover";
 
@@ -70,7 +99,7 @@ export function MediaLayerView({
         data-scene={scene}
         src={layer.url}
         // tiling isn't meaningful for <video> — fall back to cover.
-        style={{ ...base, width: "100%", height: "100%", objectFit }}
+        style={{ ...base, objectFit }}
         autoPlay={!reduceMotion}
         loop
         muted
@@ -101,7 +130,7 @@ export function MediaLayerView({
       src={layer.url}
       alt=""
       aria-hidden="true"
-      style={{ ...base, width: "100%", height: "100%", objectFit }}
+      style={{ ...base, objectFit }}
     />
   );
 }
@@ -114,5 +143,13 @@ export function MediaLayerView({
  */
 export function CanvasOverlay(): React.ReactElement | null {
   const { overlayMedia } = useTheme();
-  return <MediaLayerView layer={overlayMedia} z={45} scene="overlay" />;
+  if (overlayMedia.length === 0) return null;
+  // Paint in array order — later layers stack on top (z climbs from 45).
+  return (
+    <>
+      {overlayMedia.map((layer, i) => (
+        <MediaLayerView key={layer.id} layer={layer} z={45 + i} scene={`overlay-${i}`} />
+      ))}
+    </>
+  );
 }

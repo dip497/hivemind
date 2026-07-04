@@ -99,6 +99,10 @@ export function buildBaseNodes(ctx: NodeBuildCtx): Node[] {
       pinSize: pinTile?.pinSize,
       onTogglePin,
       onPinChange,
+      // Every tile with its own header docks the pin button there (next to close),
+      // so the shell/panel must not also draw the floating chip. planReview is
+      // ephemeral (never pinned); frames aren't tiles — both excluded.
+      headerPin: pinTile ? pinTile.kind !== "planReview" : false,
     };
     const parentFrame = frameOf[base.id] ? frames.find((f) => f.id === frameOf[base.id]) : undefined;
     if (parentFrame) {

@@ -127,42 +127,104 @@ export type ShellPin = {
   onTogglePin?: (id: string, rect: PinRect) => void;
   /** Drag/resize of the floating panel → persist the new anchor and/or size. */
   onPinChange?: (id: string, patch: { anchor?: { sx: number; sy: number }; size?: { w: number; h: number } }) => void;
+  /** When true, this tile renders its OWN pin button inside its header (via
+   *  `HeaderPinButton`), so the shell must NOT also draw the floating corner
+   *  chip — the control is docked in the tile chrome instead of hovering above
+   *  it. Set per tile kind in canvas-node-build. */
+  headerPin?: boolean;
 };
 
 type WithResize<T> = T & {
   onResize: (id: string, w: number, h: number, x?: number, y?: number) => void;
 } & ShellPin;
 
-/** Corner badge that pins/unpins a tile. On PIN it measures the tile's DOM rect in
- *  SCREEN pixels (getBoundingClientRect is already viewport-relative) and hands
- *  that rect up, so the floating panel opens exactly where — and the size — the
- *  tile currently is. Hidden until node-hover unless already pinned. */
-function PinToggle({ id, pinned, onToggle }: {
+// Shared chip-button styling for the pin/unpin/close controls — ONE look, used
+// by both the inline pin chip and the floating panel's chip so the affordance is
+// identical whether a tile is on the canvas or pinned. 26px hit target, frosted
+// pill, brand on hover.
+const PIN_CHIP_BTN =
+  "size-[26px] grid place-items-center rounded-md border border-[var(--color-line)] " +
+  "bg-[color-mix(in_srgb,var(--color-bg2)_92%,transparent)] backdrop-blur shadow-md " +
+  "text-[var(--color-fg2)] hover:text-[var(--color-brand)] hover:border-[var(--color-brand)] " +
+  "cursor-pointer transition-colors";
+
+/** Capture a tile's on-screen rect (top-left + size) for pinning. Clamps the
+ *  size to a usable floor/ceiling so pinning a zoomed-out tile doesn't open a
+ *  postage-stamp panel (and a zoomed-in one can't exceed the window). */
+function captureRect(el: HTMLElement | null): PinRect {
+  const r = el?.getBoundingClientRect();
+  if (!r) return { sx: 80, sy: 80, w: 640, h: 420 };
+  return {
+    sx: r.left,
+    sy: r.top,
+    w: Math.min(Math.max(r.width, PIN_MIN_W), window.innerWidth),
+    h: Math.min(Math.max(r.height, PIN_MIN_H), window.innerHeight),
+  };
+}
+
+/** The pin control on an UNPINNED tile: a hover-revealed chip floating just above
+ *  the tile's top-right corner — the SAME corner + style the pinned panel uses for
+ *  unpin/close, so pin↔unpin is one consistent affordance in one place. Floats
+ *  ABOVE the tile (outside its body) so it never overlaps the tile's own header
+ *  controls. On click it measures the tile's screen rect so the floating panel
+ *  opens exactly where the tile sits. */
+function PinToggle({ id, onToggle }: {
   id: string;
-  pinned?: boolean;
   onToggle?: (id: string, rect: PinRect) => void;
 }) {
   if (!onToggle) return null;
   const handle = (e: React.MouseEvent) => {
     e.stopPropagation();
     const nodeEl = (e.currentTarget as HTMLElement).closest(".react-flow__node") as HTMLElement | null;
-    if (!nodeEl) { onToggle(id, { sx: 80, sy: 80, w: 640, h: 420 }); return; }
-    const r = nodeEl.getBoundingClientRect();
-    onToggle(id, { sx: r.left, sy: r.top, w: r.width, h: r.height });
+    onToggle(id, captureRect(nodeEl));
   };
   return (
+    <div className="nodrag absolute -top-3.5 right-1 z-30 opacity-0 group-hover/tile:opacity-100 focus-within:opacity-100 transition-opacity">
+      <button
+        onClick={handle}
+        onPointerDown={(e) => e.stopPropagation()}
+        className={PIN_CHIP_BTN}
+        title="Pin — float fixed on screen"
+        aria-label="Pin tile"
+      >
+        <Pin size={13} />
+      </button>
+    </div>
+  );
+}
+
+/** Pin toggle that lives INSIDE a tile's own header, next to its close button —
+ *  the "proper" docked affordance (vs the floating corner chip). Styled to match
+ *  header icon buttons; reflects pinned state (filled = pinned). On click it
+ *  measures the tile's screen rect (for pinning) and toggles. Used by tiles that
+ *  set `headerPin` (terminals + agents). */
+export function HeaderPinButton({ tileId, pinned, onToggle }: {
+  /** Optional — falls back to the react-flow node's `data-id` so tiles that
+   *  don't thread a tileId prop still work. */
+  tileId?: string;
+  pinned?: boolean;
+  onToggle?: (id: string, rect: PinRect) => void;
+}) {
+  if (!onToggle) return null;
+  return (
     <button
-      onClick={handle}
-      className={`nodrag absolute -top-3 -left-3 z-20 size-6 grid place-items-center rounded-full border shadow-md cursor-pointer transition-opacity ${
+      onClick={(e) => {
+        e.stopPropagation();
+        const nodeEl = (e.currentTarget as HTMLElement).closest(".react-flow__node") as HTMLElement | null;
+        const id = tileId ?? nodeEl?.getAttribute("data-id") ?? undefined;
+        if (!id) return;
+        onToggle(id, captureRect(nodeEl));
+      }}
+      className={`nodrag size-4 grid place-items-center rounded transition-colors cursor-pointer ${
         pinned
-          ? "opacity-100 bg-[var(--color-brand)] border-[var(--color-brand)] text-white"
-          : "opacity-0 group-hover/tile:opacity-100 focus-visible:opacity-100 bg-[var(--color-bg3)] border-[var(--color-line)] text-[var(--color-fg3)] hover:text-[var(--color-fg)]"
+          ? "text-[var(--color-brand)]"
+          : "text-[var(--color-fg3)] hover:bg-[var(--color-line2)] hover:text-[var(--color-fg)]"
       }`}
       title={pinned ? "Unpin — return to canvas" : "Pin — float fixed on screen"}
       aria-label={pinned ? "Unpin tile" : "Pin tile"}
       aria-pressed={!!pinned}
     >
-      <Pin size={12} className={pinned ? "fill-current" : ""} />
+      <Pin size={11} className={pinned ? "fill-current" : ""} />
     </button>
   );
 }
@@ -182,13 +244,16 @@ const PIN_MIN_H = 180;
  *  content survives the move (terminals also reattach to their persistent daemon
  *  PTY), but a `<webview>` browser tile reloads its page ONCE on reparent — an
  *  inherent Chromium limitation, accepted. */
-function FloatingPinnedPanel({ id, anchor, size, onUnpin, onChange, onClose, children }: {
+function FloatingPinnedPanel({ id, anchor, size, onUnpin, onChange, onClose, headerPin, children }: {
   id: string;
   anchor?: { sx: number; sy: number };
   size?: { w: number; h: number };
   onUnpin?: (id: string, rect: PinRect) => void;
   onChange?: (id: string, patch: { anchor?: { sx: number; sy: number }; size?: { w: number; h: number } }) => void;
   onClose?: () => void;
+  /** When the pinned tile has its OWN header pin+close (terminals/agents), the
+   *  panel skips its floating chip — unpin/close come from the tile's chrome. */
+  headerPin?: boolean;
   children: ReactNode;
 }) {
   const [pos, setPos] = useState(() => anchor ?? { sx: 80, sy: 80 });
@@ -204,6 +269,13 @@ function FloatingPinnedPanel({ id, anchor, size, onUnpin, onChange, onClose, chi
   // Header drag → reposition, clamped inside the window; commit on release.
   const onHeaderDown = useCallback((e: React.PointerEvent) => {
     if (e.button !== 0) return;
+    // Drag ONLY from the tile's own header bar (`.tile-drag-handle`), never from
+    // its interactive controls (`.nodrag`), the pin-control chip, the content, or
+    // the resize grip. This reuses the tile's real header as the drag zone so a
+    // pinned tile doesn't grow a second, redundant header (the "double header"
+    // that looked like the panel overlapping the tile chrome).
+    const t = e.target as HTMLElement;
+    if (!t.closest(".tile-drag-handle") || t.closest(".nodrag") || t.closest("[data-pin-ctl]")) return;
     e.preventDefault();
     e.stopPropagation();
     draggingRef.current = true;
@@ -259,47 +331,54 @@ function FloatingPinnedPanel({ id, anchor, size, onUnpin, onChange, onClose, chi
 
   return (
     <div
-      className="hm-pinned-panel fixed flex flex-col rounded-xl overflow-hidden"
+      onPointerDown={onHeaderDown}
+      className="group/pin fixed"
       style={{ left: pos.sx, top: pos.sy, width: dim.w, height: dim.h, pointerEvents: "auto", zIndex: 55 }}
     >
-      {/* Header: drag handle + unpin + close. `nodrag` is irrelevant here (we're
-          outside react-flow), but the class keeps parity with tile chrome. */}
+      {/* Clipped shell — the rounded body + ring + bg. Holds the portaled tile
+          content (its OWN header is the drag zone, via onHeaderDown →
+          `.tile-drag-handle`) and the resize grip. */}
+      <div className="hm-pinned-panel absolute inset-0 flex flex-col rounded-xl overflow-hidden">
+        <div className="relative flex-1 min-h-0">{children}</div>
+        <div
+          onPointerDown={onCornerDown}
+          className="nodrag absolute bottom-0 right-0 size-4 cursor-nwse-resize"
+          style={{ touchAction: "none" }}
+          aria-label="Resize pinned tile"
+        />
+      </div>
+      {/* Pin controls — a hover-revealed chip floating ABOVE the top-right corner,
+          OUTSIDE the clipped shell: identical position + style to the unpinned
+          tile's pin chip, so pin↔unpin is one consistent affordance, and it never
+          overlaps the tile's own header controls. Skipped for tiles that carry
+          their own header pin+close (terminals/agents) — no double controls. */}
+      {!headerPin && (
       <div
-        onPointerDown={onHeaderDown}
-        className="hm-pinned-header shrink-0 flex items-center gap-1 h-7 px-1.5 cursor-grab active:cursor-grabbing select-none"
+        data-pin-ctl
+        className="absolute -top-3.5 right-1 z-30 flex items-center gap-1 opacity-0 group-hover/pin:opacity-100 focus-within:opacity-100 transition-opacity"
       >
-        <Pin size={11} className="fill-current text-[var(--color-brand)] shrink-0" />
-        <span className="flex-1" />
         <button
           onClick={(e) => { e.stopPropagation(); onUnpin?.(id, { sx: pos.sx, sy: pos.sy, w: dim.w, h: dim.h }); }}
           onPointerDown={(e) => e.stopPropagation()}
-          className="size-5 grid place-items-center rounded text-[var(--color-fg3)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg4)] cursor-pointer"
+          className={`${PIN_CHIP_BTN} text-[var(--color-brand)] border-[var(--color-brand)]`}
           title="Unpin — return to canvas"
           aria-label="Unpin tile"
         >
-          <Pin size={12} />
+          <Pin size={13} className="fill-current" />
         </button>
         {onClose && (
           <button
             onClick={(e) => { e.stopPropagation(); onClose(); }}
             onPointerDown={(e) => e.stopPropagation()}
-            className="size-5 grid place-items-center rounded text-[var(--color-fg3)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg4)] cursor-pointer"
+            className={`${PIN_CHIP_BTN} hover:text-[var(--color-danger,#ef4444)] hover:border-[var(--color-danger,#ef4444)]`}
             title="Close tile"
             aria-label="Close tile"
           >
-            <X size={12} />
+            <X size={13} />
           </button>
         )}
       </div>
-      {/* Tile content — the SAME React tree, portaled here. */}
-      <div className="relative flex-1 min-h-0">{children}</div>
-      {/* Bottom-right resize handle. */}
-      <div
-        onPointerDown={onCornerDown}
-        className="absolute bottom-0 right-0 size-4 cursor-nwse-resize"
-        style={{ touchAction: "none" }}
-        aria-label="Resize pinned tile"
-      />
+      )}
     </div>
   );
 }
@@ -333,6 +412,7 @@ function TileShell({
         onUnpin={pin.onTogglePin}
         onChange={pin.onPinChange}
         onClose={onClose}
+        headerPin={pin.headerPin}
       >
         {children}
       </FloatingPinnedPanel>,
@@ -341,7 +421,9 @@ function TileShell({
   }
   return (
     <div className={`group/tile w-full h-full nowheel${selected ? " hm-node-selected" : " tile-locked"}`} ref={wheelRef}>
-      <PinToggle id={id} pinned={pin.pinned} onToggle={pin.onTogglePin} />
+      {/* Tiles with their own header pin (terminals/agents) skip the floating
+          chip — the docked header button is the affordance. */}
+      {!pin.headerPin && <PinToggle id={id} onToggle={pin.onTogglePin} />}
       <NodeResizer
         nodeId={id}
         isVisible={selected}
@@ -553,6 +635,8 @@ const WorkbenchNode = memo(function WorkbenchNode({
             onOpenInBrowser={data.onOpenInBrowser}
             onCloseTab={data.onCloseTab}
             onClose={data.onClose}
+            pinned={data.pinned}
+            onTogglePin={data.onTogglePin}
           />
         </Suspense>
       </TileErrorBoundary>
@@ -587,6 +671,8 @@ const BrowserNode = memo(function BrowserNode({
           openReq={data.openReq}
           selected={selected}
           onClose={data.onClose}
+          pinned={data.pinned}
+          onTogglePin={data.onTogglePin}
         />
       </TileErrorBoundary>
     </TileShell>
@@ -607,7 +693,7 @@ const IssuesNode = memo(function IssuesNode({
   return (
     <TileShell id={id} selected={selected} pin={data} onClose={data.onClose} onResize={data.onResize} minWidth={280} wheelRef={wheelRef}>
       <TileErrorBoundary label="Issues" onClose={data.onClose}>
-        <IssuesTile root={data.root} onClose={data.onClose} selected={selected} />
+        <IssuesTile root={data.root} onClose={data.onClose} selected={selected} pinned={data.pinned} onTogglePin={data.onTogglePin} />
       </TileErrorBoundary>
     </TileShell>
   );

@@ -15,6 +15,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { GripVertical, Files, GitCompare } from "lucide-react";
+import { HeaderPinButton, type PinRect } from "./canvas-nodes";
 import { FileTreeTile } from "./FileTreeTile";
 import { EditorTile } from "./EditorTile";
 import { ChangesPanel } from "./code/ChangesPanel";
@@ -34,6 +35,9 @@ interface Props {
   onCloseTab: (path: string) => void;
   /** Close the whole workbench tile. */
   onClose: () => void;
+  /** Pin state + toggle (injected via node data) — docked in the header. */
+  pinned?: boolean;
+  onTogglePin?: (id: string, rect: PinRect) => void;
 }
 
 type Panel = "explorer" | "changes";
@@ -45,7 +49,7 @@ const SIDEBAR_KEY = "hivemind:workbench-sidebar";
 const PANEL_KEY = "hivemind:workbench-panel";
 const clampW = (w: number) => Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, w));
 
-export function WorkbenchTile({ repoPath, tabs, onOpenFile, onOpenInBrowser, onCloseTab, onClose }: Props) {
+export function WorkbenchTile({ repoPath, tabs, onOpenFile, onOpenInBrowser, onCloseTab, onClose, pinned, onTogglePin }: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const [panel, setPanel] = useState<Panel>(
     () => (localStorage.getItem(PANEL_KEY) as Panel) || "explorer",
@@ -115,12 +119,15 @@ export function WorkbenchTile({ repoPath, tabs, onOpenFile, onOpenInBrowser, onC
         <GripVertical aria-hidden size={13} className="text-[var(--color-fg3)] -ml-1 shrink-0" />
         <span className="font-semibold text-[var(--color-fg)]">Workbench</span>
         <span className="text-[var(--color-fg3)] truncate">· {repoName}</span>
-        <button
-          onClick={onClose}
-          className="nodrag ml-auto size-4 grid place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--color-line2)] hover:text-[var(--color-fg)]"
-          aria-label="close tile"
-          title="close"
-        >×</button>
+        <span className="ml-auto flex items-center gap-1.5">
+          <HeaderPinButton pinned={pinned} onToggle={onTogglePin} />
+          <button
+            onClick={onClose}
+            className="nodrag size-4 grid place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--color-line2)] hover:text-[var(--color-fg)]"
+            aria-label="close tile"
+            title="close"
+          >×</button>
+        </span>
       </header>
 
       {/* body: activity rail + side panel + draggable divider + editor */}

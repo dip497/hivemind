@@ -1430,10 +1430,14 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     const mediaDir = path.join(app.getPath("userData"), "media");
     protocol.handle("hivemedia", (request) => {
       try {
-        // hivemedia://<filename> — pathname is `/<filename>` (host is empty for
-        // a bare-name URL). Resolve against mediaDir, then verify it never
-        // escaped the dir (path-traversal guard).
-        const name = decodeURIComponent(new URL(request.url).pathname.replace(/^\/+/, ""));
+        // hivemedia://media/<filename> — the filename rides in the PATH (host is
+        // the fixed marker "media"). Older URLs put the bare filename in the host
+        // (hivemedia://<filename>, pathname empty); tolerate that too so a
+        // persisted overlay from before this fix still resolves. Resolve against
+        // mediaDir, then verify it never escaped the dir (path-traversal guard).
+        const u = new URL(request.url);
+        const rawName = u.pathname.replace(/^\/+/, "") || u.host;
+        const name = decodeURIComponent(rawName);
         const abs = path.resolve(mediaDir, name);
         if (abs !== mediaDir && !abs.startsWith(mediaDir + path.sep)) {
           return new Response("forbidden", { status: 403 });
@@ -1448,8 +1452,17 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     // safe unique name, and return its hivemedia:// URL + classification. Returns
     // null if the user cancels.
     const MEDIA_VIDEO_EXT = new Set(["webm", "mp4", "mov"]);
-    ipcMain.handle("media:pick", async (_e, layerRaw: unknown) => {
-      const layer = layerRaw === "overlay" ? "overlay" : "background";
+    ipcMain.handle("media:pick", async (_e, slotRaw: unknown) => {
+      // Slot key → a per-slot filename PREFIX. "background" and legacy "overlay"
+      // are single slots; "overlay:<id>" is one of many stacked overlays, each
+      // its OWN slot so a new/replaced overlay only prunes ITS file, never a
+      // sibling's. The id is sanitized (it names a file + a prune glob).
+      const slot = typeof slotRaw === "string" ? slotRaw : "overlay";
+      const prefix = slot === "background"
+        ? "background"
+        : slot.startsWith("overlay:")
+          ? `overlay-${slot.slice("overlay:".length).replace(/[^a-z0-9-]/gi, "").slice(0, 40) || "x"}`
+          : "overlay";
       if (!mainWindow || mainWindow.isDestroyed()) return null;
       const result = await dialog.showOpenDialog(mainWindow, {
         properties: ["openFile"],
@@ -1462,18 +1475,22 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
         mkdirSync(mediaDir, { recursive: true });
         // Sanitize the extension to a short alnum token; default to bin if odd.
         const rawExt = path.extname(src).replace(/^\./, "").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 5) || "bin";
-        const filename = `${layer}-${Date.now()}.${rawExt}`;
+        const filename = `${prefix}-${Date.now()}.${rawExt}`;
         const dest = path.join(mediaDir, filename);
         cpSync(src, dest);
-        // Prune older files for THIS layer — only the newest is ever referenced,
-        // so this caps the dir instead of leaking every pick forever.
+        // Prune older files for THIS slot only — only the newest is ever
+        // referenced per slot, so this caps the dir without touching sibling
+        // overlays (each has a distinct `overlay-<id>-` prefix).
         for (const f of readdirSync(mediaDir)) {
-          if (f !== filename && f.startsWith(`${layer}-`)) {
+          if (f !== filename && f.startsWith(`${prefix}-`)) {
             try { unlinkSync(path.join(mediaDir, f)); } catch { /* best-effort */ }
           }
         }
         const kind = MEDIA_VIDEO_EXT.has(rawExt) ? "video" : "image";
-        return { url: `hivemedia://${filename}`, kind, name: path.basename(src) };
+        // Filename rides in the PATH under a fixed "media" host — a bare
+        // `hivemedia://<filename>` would parse <filename> as the HOST (empty
+        // path), which the handler can't resolve. See the handler above.
+        return { url: `hivemedia://media/${filename}`, kind, name: path.basename(src) };
       } catch {
         return null;
       }

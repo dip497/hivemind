@@ -8,7 +8,7 @@ const api: HiveIpc & {
   importWallpaper: (srcPath: string) => Promise<string | null>;
   /** Pick a custom media file for a canvas layer → copied into userData/media,
    *  served via the sandboxed hivemedia:// protocol. Null if the user cancels. */
-  pickMedia: (layer: "background" | "overlay") => Promise<{ url: string; kind: "video" | "image"; name: string } | null>;
+  pickMedia: (slot: string) => Promise<{ url: string; kind: "video" | "image"; name: string } | null>;
   onPtyData: (tileId: string, cb: (data: string) => void) => () => void;
   onPtyExit: (
     tileId: string,
@@ -252,8 +252,8 @@ const api: HiveIpc & {
   // the persistent hm-media:// video-wallpaper URL.
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
   importWallpaper: (srcPath: string) => ipcRenderer.invoke("wallpaper:import", srcPath) as Promise<string | null>,
-  pickMedia: (layer: "background" | "overlay") =>
-    ipcRenderer.invoke("media:pick", layer) as Promise<{ url: string; kind: "video" | "image"; name: string } | null>,
+  pickMedia: (slot: string) =>
+    ipcRenderer.invoke("media:pick", slot) as Promise<{ url: string; kind: "video" | "image"; name: string } | null>,
 };
 
 // A native agent notification was clicked → focus that tile on the canvas.

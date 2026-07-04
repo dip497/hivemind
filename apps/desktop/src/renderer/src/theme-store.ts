@@ -19,9 +19,26 @@ export type AccentId =
 /** How custom media fills its layer. `tile` repeats the media (CSS background-repeat). */
 export type MediaFit = "cover" | "contain" | "tile";
 
+/** Where a sub-full overlay sits — one of a 3×3 grid of anchor cells. Ignored
+ *  when `size` is 1 (the layer fills the whole window). */
+export type MediaAnchor =
+  | "top-left" | "top-center" | "top-right"
+  | "center-left" | "center" | "center-right"
+  | "bottom-left" | "bottom-center" | "bottom-right";
+
+/** Row-major 3×3 anchor cells — also the render order for the grid picker. */
+export const ANCHORS: MediaAnchor[] = [
+  "top-left", "top-center", "top-right",
+  "center-left", "center", "center-right",
+  "bottom-left", "bottom-center", "bottom-right",
+];
+
 /** One user-supplied media layer — a background (behind the canvas) or a
  *  transparent overlay (over the tiles). `url` null = off (renders nothing). */
 export interface MediaLayer {
+  /** Stable id — distinguishes stacked overlays and keys each one's copied file
+   *  (filename `overlay-<id>-<ts>.<ext>`) so replacing one never deletes another. */
+  id: string;
   /** hivemedia:// URL of the picked file, or null when unset (nothing renders). */
   url: string | null;
   /** Whether `url` points at a video or an image (drives <video> vs <img>). */
@@ -32,6 +49,11 @@ export interface MediaLayer {
   opacity: number;
   /** Fill mode. */
   fit: MediaFit;
+  /** Fraction of the window the layer occupies, 0.15–1. 1 = full-window (the
+   *  `anchor` is then irrelevant); < 1 = a smaller box parked at `anchor`. */
+  size: number;
+  /** Which cell of the 3×3 grid a sub-full layer sits in. */
+  anchor: MediaAnchor;
 }
 
 export interface ThemeState {
@@ -62,10 +84,11 @@ export interface ThemeState {
   /** Content tint alpha when contentGlass is on, 0.0–0.9. 0 = fully see-through,
    *  higher = a darker tint behind the text for legibility. */
   contentOpacity: number;
-  /** Bring-your-own OVERLAY media — a fixed full-window layer OVER the tiles,
-   *  always pointer-events:none. Off (url null) by default. The BACKGROUND is
-   *  handled by the existing wallpaper (videoSrc/imageSrc), not here. */
-  overlayMedia: MediaLayer;
+  /** Bring-your-own OVERLAY media — a STACK of fixed layers OVER the tiles, each
+   *  always pointer-events:none, painted in array order (later = on top). Empty
+   *  by default. The BACKGROUND is handled by the existing wallpaper
+   *  (videoSrc/imageSrc), not here. */
+  overlayMedia: MediaLayer[];
 }
 
 export const DEFAULT_THEME: ThemeState = {
@@ -80,7 +103,7 @@ export const DEFAULT_THEME: ThemeState = {
   animate: true,
   contentGlass: false,
   contentOpacity: 0.25,
-  overlayMedia: { url: null, kind: "image", opacity: 0.9, fit: "cover" },
+  overlayMedia: [],
 };
 
 /** Accent → brand/accent hex. Mirrors Clonk's Volt / Ember / Ice / Pulse set;
@@ -133,7 +156,7 @@ function load(): ThemeState {
       animate: typeof p.animate === "boolean" ? p.animate : DEFAULT_THEME.animate,
       contentGlass: typeof p.contentGlass === "boolean" ? p.contentGlass : DEFAULT_THEME.contentGlass,
       contentOpacity: clamp(typeof p.contentOpacity === "number" && !Number.isNaN(p.contentOpacity) ? p.contentOpacity : DEFAULT_THEME.contentOpacity, 0, 0.9),
-      overlayMedia: loadMedia(p.overlayMedia, DEFAULT_THEME.overlayMedia),
+      overlayMedia: loadOverlays(p.overlayMedia),
     };
   } catch {
     return { ...DEFAULT_THEME };
@@ -142,18 +165,44 @@ function load(): ThemeState {
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 
-/** Hydrate a persisted MediaLayer onto its defaults. Drops dead blob: URLs
+/** A fresh, empty overlay layer (a new stacked slot's defaults). */
+export function newOverlay(): MediaLayer {
+  return { id: genId(), url: null, kind: "image", opacity: 0.9, fit: "cover", size: 1, anchor: "center" };
+}
+
+/** Best-effort unique id for an overlay layer / its copied file. */
+function genId(): string {
+  try {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+  } catch { /* fall through */ }
+  return `ov-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/** Hydrate a persisted MediaLayer onto a default template. Drops dead blob: URLs
  *  (in-memory, invalid after reload); only hivemedia:// URLs are persistent. */
 function loadMedia(p: Partial<MediaLayer> | undefined, def: MediaLayer): MediaLayer {
   const fit: MediaFit = p?.fit === "contain" || p?.fit === "tile" || p?.fit === "cover" ? p.fit : def.fit;
   const url = typeof p?.url === "string" && p.url.startsWith("hivemedia://") ? p.url : null;
+  const anchor: MediaAnchor = ANCHORS.includes(p?.anchor as MediaAnchor) ? (p!.anchor as MediaAnchor) : def.anchor;
   return {
+    id: typeof p?.id === "string" && p.id ? p.id : genId(),
     url,
     kind: p?.kind === "video" ? "video" : "image",
     name: typeof p?.name === "string" ? p.name : undefined,
     opacity: clamp(typeof p?.opacity === "number" && !Number.isNaN(p.opacity) ? p.opacity : def.opacity, 0, 1),
     fit,
+    size: clamp(typeof p?.size === "number" && !Number.isNaN(p.size) ? p.size : def.size, 0.15, 1),
+    anchor,
   };
+}
+
+/** Hydrate the overlay STACK. Accepts the current array shape AND the legacy
+ *  single-object shape (pre-multi-overlay), wrapping the latter in an array.
+ *  Url-less layers are dropped — a slot only exists once it has a picked file. */
+function loadOverlays(raw: unknown): MediaLayer[] {
+  const tmpl = newOverlay();
+  const items = Array.isArray(raw) ? raw : raw && typeof raw === "object" ? [raw] : [];
+  return items.map((x) => loadMedia(x as Partial<MediaLayer>, tmpl)).filter((m) => m.url);
 }
 
 let state: ThemeState = load();
@@ -197,14 +246,22 @@ export function setTheme(patch: Partial<ThemeState>): void {
   for (const l of listeners) l();
 }
 
-/** Merge a partial into the OVERLAY media layer (persisted like the theme). */
-export function setOverlayMedia(patch: Partial<MediaLayer>): void {
-  setTheme({ overlayMedia: { ...state.overlayMedia, ...patch } });
+/** Append a freshly-picked media file as a new overlay layer (top of the stack).
+ *  `id` MUST be the slot id that was passed to `pickMedia` so the layer and its
+ *  copied file agree — see main's per-slot file pruning. */
+export function addOverlay(media: { id: string; url: string; kind: "video" | "image"; name?: string }): void {
+  const layer: MediaLayer = { ...newOverlay(), id: media.id, url: media.url, kind: media.kind, name: media.name };
+  setTheme({ overlayMedia: [...state.overlayMedia, layer] });
 }
 
-/** Turn the overlay off (clear its url + name); opacity/fit are retained. */
-export function clearOverlayMedia(): void {
-  setOverlayMedia({ url: null, name: undefined });
+/** Merge a partial into ONE overlay layer (by id); persisted like the theme. */
+export function updateOverlay(id: string, patch: Partial<MediaLayer>): void {
+  setTheme({ overlayMedia: state.overlayMedia.map((l) => (l.id === id ? { ...l, ...patch, id: l.id } : l)) });
+}
+
+/** Remove one overlay layer from the stack. */
+export function removeOverlay(id: string): void {
+  setTheme({ overlayMedia: state.overlayMedia.filter((l) => l.id !== id) });
 }
 
 function subscribe(cb: () => void): () => void {

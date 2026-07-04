@@ -10,15 +10,26 @@ import { X, Film, Image as ImageIcon } from "lucide-react";
 import {
   useTheme,
   setTheme,
-  setOverlayMedia,
-  clearOverlayMedia,
+  addOverlay,
+  updateOverlay,
+  removeOverlay,
   ACCENTS,
   WALLPAPERS,
+  ANCHORS,
   type AccentId,
   type WallpaperId,
   type MediaLayer,
   type MediaFit,
+  type MediaAnchor,
 } from "./theme-store";
+
+/** Fresh slot id for a new overlay (also names its copied file). */
+function genOverlayId(): string {
+  try {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+  } catch { /* fall through */ }
+  return `ov-${Math.random().toString(36).slice(2, 10)}`;
+}
 
 /** Mini scene previews for the wallpaper grid — mirror the styles.css palettes. */
 const WP_PREVIEW: Record<WallpaperId, string> = {
@@ -240,22 +251,46 @@ export function ThemeCustomizer({ open, onClose }: { open: boolean; onClose: () 
         </p>
       </div>
 
-      {/* Overlay — a transparent character/video that plays OVER the tiles. The
-          background is handled by the Wallpaper section above (Photo/Video). */}
+      {/* Overlays — a STACK of transparent characters/videos over the tiles, each
+          with its own size + grid placement. Background lives in Wallpaper above. */}
       <div className="flex flex-col gap-3">
-        <span className="u-eyebrow">Overlay</span>
-        <MediaBlock
-          title="On top of tiles"
-          layer={t.overlayMedia}
-          onChoose={async () => {
-            const r = await window.hive?.pickMedia?.("overlay");
-            if (r) setOverlayMedia({ url: r.url, kind: r.kind, name: r.name });
-          }}
-          onClear={clearOverlayMedia}
-          onOpacity={(v) => setOverlayMedia({ opacity: v })}
-          onFit={(f) => setOverlayMedia({ fit: f })}
-          hint="A transparent character/video that plays over your tiles. Use a .webm (alpha), .gif, or .png."
-        />
+        <div className="flex items-center justify-between">
+          <span className="u-eyebrow">Overlays</span>
+          <button
+            onClick={async () => {
+              // Generate the slot id FIRST so the copied file (overlay-<id>-…)
+              // and the new layer agree — see main's per-slot pruning.
+              const id = genOverlayId();
+              const r = await window.hive?.pickMedia?.(`overlay:${id}`);
+              if (r) addOverlay({ id, url: r.url, kind: r.kind, name: r.name });
+            }}
+            className="text-[11px] px-2 py-1 rounded border border-[var(--color-line2)] text-[var(--color-fg2)] hover:bg-[var(--color-bg4)] hover:text-[var(--color-fg)] cursor-pointer"
+          >
+            + Add overlay
+          </button>
+        </div>
+        {t.overlayMedia.length === 0 && (
+          <p className="text-[11px] text-[var(--color-fg3)]">
+            None. Add a transparent character/video (a <code>.webm</code> with alpha, <code>.gif</code>, or <code>.png</code>) that plays over your tiles. Stack several — each gets its own size + position.
+          </p>
+        )}
+        {t.overlayMedia.map((layer, i) => (
+          <MediaBlock
+            key={layer.id}
+            title={`Overlay ${i + 1}`}
+            layer={layer}
+            onChoose={async () => {
+              const r = await window.hive?.pickMedia?.(`overlay:${layer.id}`);
+              if (r) updateOverlay(layer.id, { url: r.url, kind: r.kind, name: r.name });
+            }}
+            onClear={() => removeOverlay(layer.id)}
+            clearLabel="Remove"
+            onOpacity={(v) => updateOverlay(layer.id, { opacity: v })}
+            onFit={(f) => updateOverlay(layer.id, { fit: f })}
+            onSize={(v) => updateOverlay(layer.id, { size: v })}
+            onAnchor={(a) => updateOverlay(layer.id, { anchor: a })}
+          />
+        ))}
       </div>
     </div>
   );
@@ -268,16 +303,24 @@ function MediaBlock({
   layer,
   onChoose,
   onClear,
+  clearLabel,
   onOpacity,
   onFit,
+  onSize,
+  onAnchor,
   hint,
 }: {
   title: string;
   layer: MediaLayer;
   onChoose: () => void;
   onClear: () => void;
+  /** Label for the clear/remove button (default "Clear"). */
+  clearLabel?: string;
   onOpacity: (v: number) => void;
   onFit: (f: MediaFit) => void;
+  /** Optional placement controls (overlay only) — size fraction + 3×3 anchor. */
+  onSize?: (v: number) => void;
+  onAnchor?: (a: MediaAnchor) => void;
   hint?: string;
 }) {
   const FITS: { id: MediaFit; label: string }[] = [
@@ -298,10 +341,10 @@ function MediaBlock({
           </button>
           <button
             onClick={onClear}
-            disabled={!layer.url}
+            disabled={!layer.url && !clearLabel}
             className="text-[11px] px-2 py-1 rounded border border-[var(--color-line2)] text-[var(--color-fg3)] hover:bg-[var(--color-bg4)] hover:text-[var(--color-fg)] cursor-pointer disabled:opacity-40 disabled:cursor-default"
           >
-            Clear
+            {clearLabel ?? "Clear"}
           </button>
         </div>
       </div>
@@ -335,6 +378,44 @@ function MediaBlock({
           );
         })}
       </div>
+      {onSize && onAnchor && (() => {
+        const size = layer.size ?? 1;
+        const full = size >= 0.999;
+        return (
+          <div className="flex flex-col gap-2 pt-1 border-t border-[var(--color-line2)]">
+            <Slider
+              label="Size"
+              value={full ? 100 : Math.round(size * 100)}
+              min={15}
+              max={100}
+              suffix={full ? "% (full)" : "%"}
+              onChange={(v) => onSize(v / 100)}
+            />
+            {/* 3×3 placement grid — where a sub-full overlay parks. Greyed when
+                the overlay fills the window (anchor has no effect at full). */}
+            <div className={`grid grid-cols-3 gap-1 ${full ? "opacity-40 pointer-events-none" : ""}`} role="group" aria-label="Overlay position">
+              {ANCHORS.map((a) => {
+                const sel = !full && (layer.anchor ?? "center") === a;
+                return (
+                  <button
+                    key={a}
+                    onClick={() => onAnchor(a)}
+                    aria-pressed={sel}
+                    title={a.replace("-", " ")}
+                    className={`h-6 rounded border grid place-items-center cursor-pointer transition-colors ${
+                      sel
+                        ? "border-[var(--color-brand)] bg-[var(--color-bg4)]"
+                        : "border-[var(--color-line2)] hover:bg-[var(--color-bg4)]"
+                    }`}
+                  >
+                    <span className={`size-1.5 rounded-full ${sel ? "bg-[var(--color-brand)]" : "bg-[var(--color-fg3)]"}`} />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
       {hint && <p className="text-[10px] leading-snug text-[var(--color-fg3)]">{hint}</p>}
     </div>
   );

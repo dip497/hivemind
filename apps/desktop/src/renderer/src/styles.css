@@ -341,6 +341,15 @@ html.glass-on .hm-toast {
   border-radius: 3px;
 }
 
+/* Layers rows carry their own selection affordance (tinted bg + inset accent
+   bar), so the loud global focus ring reads as an unwanted blue outline the
+   moment you click a row. Drop the offset outline here; keyboard focus stays
+   visible via a subtle surface change. */
+.hm-layers button:focus-visible {
+  outline: none;
+  background: color-mix(in srgb, var(--color-brand) 22%, transparent);
+}
+
 /* React Flow canvas backdrop. The dotted grid is drawn by the <Background>
    component (it pans/zooms with the viewport — correct for an infinite canvas).
    We previously ALSO painted a radial-gradient dot layer here, which is FIXED
@@ -574,10 +583,6 @@ body.canvas-resizing .react-flow__node * {
   box-shadow:
     0 0 0 2px color-mix(in srgb, var(--color-brand) 55%, transparent),
     0 14px 40px -8px rgba(0, 0, 0, 0.55);
-}
-.hm-pinned-panel .hm-pinned-header {
-  background: color-mix(in srgb, var(--color-brand) 12%, var(--color-bg3));
-  border-bottom: 1px solid var(--color-line);
 }
 /* Bottom-right resize grip — a faint corner wedge, brighter on hover. */
 .hm-pinned-panel > [aria-label="Resize pinned tile"] {

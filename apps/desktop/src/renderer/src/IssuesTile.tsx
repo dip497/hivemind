@@ -10,6 +10,7 @@
  */
 import { useMemo, useState } from "react";
 import { GripVertical, Inbox, FolderGit2 } from "lucide-react";
+import { HeaderPinButton, type PinRect } from "./canvas-nodes";
 import { useTileFont, FontStepper, handleFontKey } from "./tile-font";
 import type { IssueSummary } from "@hivemind/core/types";
 import { useIssues } from "./queries";
@@ -75,6 +76,9 @@ interface Props {
   onClose?: () => void;
   /** Tile focus — gates board drag-and-drop so it doesn't fight canvas pan. */
   selected?: boolean;
+  /** Pin state + toggle (injected via node data) — docked in the header. */
+  pinned?: boolean;
+  onTogglePin?: (id: string, rect: PinRect) => void;
 }
 
 const viewKey = (root: string) => `hm:issues:view:${root}`;
@@ -87,7 +91,7 @@ const readLS = <T extends string>(k: string, fallback: T): T => {
   }
 };
 
-export function IssuesTile({ root, onClose, selected = false }: Props) {
+export function IssuesTile({ root, onClose, selected = false, pinned, onTogglePin }: Props) {
   const font = useTileFont(`issues:${root ?? "none"}`, 13);
   const { data: issues = [], isLoading } = useIssues(root);
   const [filters, setFilters] = useState<Filters>(emptyFilters);
@@ -128,6 +132,7 @@ export function IssuesTile({ root, onClose, selected = false }: Props) {
         <span className="ml-auto">
           <FontStepper {...font} />
         </span>
+        <HeaderPinButton pinned={pinned} onToggle={onTogglePin} />
         <button
           className="nodrag size-5 grid place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--color-line2)] hover:text-[var(--color-fg)] cursor-pointer"
           aria-label="close tile"
