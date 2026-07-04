@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [1.12.0] — 2026-07-04
+
 ### Fixed
 
 - **A spawned agent's initial prompt now auto-submits — no more pressing Enter yourself.** The prompt was typed and an Enter sent 90ms later, but a freshly-booted claude TUI can drop that first Enter (it lands before the just-rendered input's paste-debounce settles), leaving the prompt typed-but-unsubmitted. Added a one-shot backstop Enter at 1.5s that fires ONLY if the agent is still idle (never submitted) — so a prompt that already went through never gets a stray second Enter.
@@ -625,7 +627,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v1.11.0...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v1.12.0...HEAD
+[1.12.0]: https://github.com/dip497/hivemind/releases/tag/v1.12.0
 [1.11.0]: https://github.com/dip497/hivemind/releases/tag/v1.11.0
 [1.10.7]: https://github.com/dip497/hivemind/releases/tag/v1.10.7
 [1.10.6]: https://github.com/dip497/hivemind/releases/tag/v1.10.6
