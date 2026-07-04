@@ -219,6 +219,13 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
       <button
         key={t.id}
         onClick={() => onFocusTile(t.id)}
+        // Selecting a row is a pointer action, not a focus action — the row's
+        // own selected styling is the cue. Prevent the click from focusing the
+        // button so the global :focus-visible outline (a blue ring) never fires
+        // on click. Keyboard Tab focus is unaffected (mousedown-only), so a11y
+        // is preserved. This is CSS-independent (works even if the stylesheet's
+        // focus override doesn't apply).
+        onMouseDown={(e) => e.preventDefault()}
         data-active={sel}
         style={{
           paddingLeft: 12 + depth * 14,

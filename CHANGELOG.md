@@ -7,6 +7,10 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Fixed
+
+- **Selecting a Layers row no longer draws a blue focus-ring outline around it.** Clicking a row let the global `:focus-visible` outline fire; the row now prevents focus on click (`onMouseDown` preventDefault — keyboard Tab focus is unaffected), the `.hm-layers` focus override was hardened to `outline: none !important` for both `:focus` and `:focus-visible`, and the selected surface is an inline opaque neutral. Three independent guards so no stray blue block or ring survives, regardless of theme/glass state.
+
 ## [1.12.1] — 2026-07-04
 
 ### Fixed
