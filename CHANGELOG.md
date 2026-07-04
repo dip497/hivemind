@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [1.12.2] — 2026-07-04
+
 ### Fixed
 
 - **Selecting a Layers row no longer draws a blue focus-ring outline around it.** Clicking a row let the global `:focus-visible` outline fire; the row now prevents focus on click (`onMouseDown` preventDefault — keyboard Tab focus is unaffected), the `.hm-layers` focus override was hardened to `outline: none !important` for both `:focus` and `:focus-visible`, and the selected surface is an inline opaque neutral. Three independent guards so no stray blue block or ring survives, regardless of theme/glass state.
@@ -637,7 +639,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v1.12.1...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v1.12.2...HEAD
+[1.12.2]: https://github.com/dip497/hivemind/releases/tag/v1.12.2
 [1.12.1]: https://github.com/dip497/hivemind/releases/tag/v1.12.1
 [1.12.0]: https://github.com/dip497/hivemind/releases/tag/v1.12.0
 [1.11.0]: https://github.com/dip497/hivemind/releases/tag/v1.11.0
