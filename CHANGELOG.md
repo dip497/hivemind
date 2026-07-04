@@ -7,6 +7,10 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Fixed
+
+- **The selected row in the Layers panel no longer shows a stray dark-blue block.** Under glass mode the selected-row background used `--color-bg4`, which glass redefines *translucent*, so the blue wallpaper bled through the row. The selected surface is now set inline to the opaque `--surface-4` neutral (glass never remaps it, and it doesn't depend on Tailwind arbitrary-class generation), with the brand accent bar as the selection cue. Also removed the brand-tinted focus fill so clicking a row never paints a blue block.
+
 ## [1.12.0] — 2026-07-04
 
 ### Fixed

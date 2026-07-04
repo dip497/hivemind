@@ -220,10 +220,19 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
         key={t.id}
         onClick={() => onFocusTile(t.id)}
         data-active={sel}
-        style={{ paddingLeft: 12 + depth * 14 }}
+        style={{
+          paddingLeft: 12 + depth * 14,
+          // Selected background is set INLINE (not a Tailwind class) so it can't
+          // depend on arbitrary-class generation and can't be remapped translucent
+          // by glass mode — `--surface-4` is the opaque neutral "active" surface,
+          // so no wallpaper bleeds through. The brand accent bar is the cue.
+          ...(sel
+            ? { background: "var(--surface-4)", boxShadow: "inset 2px 0 0 var(--color-brand)" }
+            : {}),
+        }}
         className={`group flex h-8 items-center gap-2.5 pr-2.5 mx-2 text-left rounded-lg transition-colors ${
           sel
-            ? "bg-[var(--surface-4)] text-[var(--color-fg)] shadow-[inset_2px_0_0_var(--color-brand)]"
+            ? "text-[var(--color-fg)]"
             : "text-[var(--color-fg2)] hover:bg-[var(--surface-3)] hover:text-[var(--color-fg)]"
         }`}
         title={`${t.name} · ${st}`}
