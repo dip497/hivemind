@@ -10,7 +10,7 @@
  * its own status subscription; Canvas owns the data + focus actions.
  */
 import { useEffect, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
-import { Layers, ChevronRight, ChevronDown, Square, GitBranch, Server, PanelLeftClose } from "lucide-react";
+import { Layers, ChevronRight, ChevronDown, GitBranch, Server, PanelLeftClose } from "lucide-react";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { AgentIcon } from "./agents";
 
@@ -89,6 +89,36 @@ const KIND_GLYPH: Record<LayerKind, string> = {
   planReview: "▤",
   workbench: "▥",
 };
+
+/** Workspace identity chip — an app-icon style rounded tile keyed to the frame
+ *  color. A repo frame is a SOLID color tile (its color IS the identity); a
+ *  worktree / remote frame is a tinted chip carrying its branch / server glyph,
+ *  so the three frame kinds read as one consistent family instead of three
+ *  differently-sized bare icons. Replaces the old 10px sharp `<Square>`. */
+function WorkspaceIcon({ color, remote, worktree }: { color: string; remote?: boolean; worktree: boolean }) {
+  const glyph = remote || worktree;
+  return (
+    <span
+      aria-hidden
+      className="shrink-0 grid place-items-center rounded-[5px]"
+      style={
+        glyph
+          ? {
+              width: 18, height: 18, color,
+              background: `color-mix(in srgb, ${color} 16%, transparent)`,
+              boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${color} 45%, transparent)`,
+            }
+          : {
+              width: 15, height: 15, background: color,
+              // faint top-inner sheen so the flat color reads as a raised tile.
+              boxShadow: "inset 0 1px 0 color-mix(in srgb, #fff 22%, transparent)",
+            }
+      }
+    >
+      {remote ? <Server size={11} /> : worktree ? <GitBranch size={11} /> : null}
+    </span>
+  );
+}
 
 export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocusFrame }: Props) {
   // Persisted: panel hidden + which frame groups are collapsed. Now that the
@@ -229,7 +259,12 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
           // SELECTED, not "focused" — `outline-none` (an already-compiled utility
           // the whole app uses) suppresses the global focus ring.
           ...(sel
-            ? { background: "var(--surface-4)" }
+            ? {
+                background: "var(--surface-4)",
+                // Neutral (NOT brand) hairline ring so the active row reads as a
+                // distinct card at a glance — the earlier blue accent bar is gone.
+                boxShadow: "inset 0 0 0 1px color-mix(in srgb, var(--color-fg) 12%, transparent)",
+              }
             : {}),
         }}
         className={`group flex h-8 items-center gap-2.5 pr-2.5 mx-2 text-left rounded-lg outline-none focus-visible:outline-none transition-colors ${
@@ -280,13 +315,7 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
             className="flex-1 flex items-center gap-2 min-w-0 text-left text-[14px] font-medium text-[var(--color-fg)]"
             title={isWt ? `Focus worktree ${frame.branch ?? frame.title}` : `Focus ${frame.title}`}
           >
-            {frame.remote ? (
-              <Server size={13} className="shrink-0" style={{ color: frame.color }} />
-            ) : isWt ? (
-              <GitBranch size={13} className="shrink-0" style={{ color: frame.color }} />
-            ) : (
-              <Square size={10} fill={frame.color} stroke={frame.color} className="shrink-0" />
-            )}
+            <WorkspaceIcon color={frame.color} remote={frame.remote} worktree={isWt} />
             <span className="truncate">{frame.title}</span>
             <span className="ml-auto flex items-center gap-1.5 min-w-0">
               {agg && agg !== "idle" && agg !== "exited" && (
@@ -302,11 +331,19 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
             </span>
           </button>
         </div>
-        {!isCollapsed && (
-          <>
+        {!isCollapsed && (items.length > 0 || kids.length > 0) && (
+          // Nesting guide rail — a faint vertical line the child rows hang from,
+          // aligned under this group's workspace chip, so the worktree/tile
+          // hierarchy reads at a glance instead of relying on indent alone.
+          <div className="relative">
+            <span
+              aria-hidden
+              className="absolute top-0 bottom-1 w-px bg-[var(--color-line)]"
+              style={{ left: depth * 14 + 18 }}
+            />
             {items.map((t) => renderTile(t, depth + 1))}
             {kids.map((k) => renderFrameGroup(k, depth + 1))}
-          </>
+          </div>
         )}
       </div>
     );
@@ -358,7 +395,7 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
           <div className="mt-1.5">
             <div className="flex items-center gap-2 h-8 pr-2 mx-2 pl-[26px]">
               <span className="flex-1 flex items-center gap-2 min-w-0 text-[14px] font-medium text-[var(--color-fg2)]">
-                <span aria-hidden className="size-2 shrink-0 rounded-[2px] border border-[var(--color-line2)]" />
+                <span aria-hidden className="shrink-0 grid place-items-center rounded-[5px] border border-dashed border-[var(--color-line2)]" style={{ width: 15, height: 15 }} />
                 <span className="truncate">Canvas</span>
                 <span className="ml-auto font-mono text-[11px] text-[var(--color-fg3)]">{looseTiles.length}</span>
               </span>
