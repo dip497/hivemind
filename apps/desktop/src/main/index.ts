@@ -1359,6 +1359,36 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     { scheme: "hivemedia", privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
   ]);
   app.whenReady().then(async () => {
+    // Browser-tile extensions (prototype): load every UNPACKED extension in
+    // <userData>/browser-extensions/<name>/ into the SAME session the <webview>
+    // tiles use (partition "persist:browser"). Drop an unpacked extension dir
+    // (one containing manifest.json) there and restart. NOTE: Electron implements
+    // only a SUBSET of the chrome.* APIs — devtools + simple content-script / MV2
+    // extensions work well; heavy MV3 (service-worker + declarativeNetRequest)
+    // support is partial. Installed Chrome extensions can't be imported directly;
+    // point this at extension SOURCE folders. Best-effort — a bad extension logs
+    // and is skipped, never blocks startup.
+    try {
+      const extRoot = path.join(app.getPath("userData"), "browser-extensions");
+      mkdirSync(extRoot, { recursive: true });
+      const ses = session.fromPartition("persist:browser");
+      let loaded = 0;
+      for (const name of readdirSync(extRoot)) {
+        const dir = path.join(extRoot, name);
+        try {
+          if (!statSync(dir).isDirectory() || !existsSync(path.join(dir, "manifest.json"))) continue;
+          const ext = await ses.loadExtension(dir, { allowFileAccess: true });
+          console.log(`[browser] loaded extension: ${ext.name} v${ext.version}`);
+          loaded++;
+        } catch (err) {
+          console.warn(`[browser] skipped extension "${name}": ${(err as Error).message}`);
+        }
+      }
+      if (loaded === 0) console.log(`[browser] no extensions — drop unpacked dirs in ${extRoot}`);
+    } catch (err) {
+      console.warn(`[browser] extension load failed: ${(err as Error).message}`);
+    }
+
     // Wallpaper media is CONFINED to a sandboxed dir under userData. The
     // hm-media:// handler serves ONLY files inside it — never an arbitrary path
     // from the URL. Without this confinement the scheme is an arbitrary-file-read
