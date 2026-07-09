@@ -7,6 +7,10 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Fixed
+
+- **Tile names no longer fall back to "claude #N · auto" after a session reattach.** An agent tile's resolved name (claude's live OSC window-title task summary, e.g. "Fix AI Chatbot Service Request subject") was held in an ephemeral map that was wiped on every renderer mount and never persisted. A full app restart re-ran claude with `--resume`, which re-emitted the title, so names came back; but merely reattaching to a still-live daemon session replayed a serialized screen that omits the title OSC, so the name fell through to the generic spawn label. The last-known agent titles now persist in the canvas layout and seed on mount, so a reattach shows the real name immediately (a live OSC update still overrides it; a user rename still wins).
+
 ## [1.12.3] — 2026-07-09
 
 ### Fixed
