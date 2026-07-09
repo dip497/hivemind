@@ -341,15 +341,6 @@ html.glass-on .hm-toast {
   border-radius: 3px;
 }
 
-/* Layers rows carry their own selection affordance (neutral surface + inset
-   accent bar), so the loud global focus ring — and any brand-tinted focus fill —
-   reads as an unwanted blue block the moment you click a row. Drop both; the
-   selected/hover backgrounds already signal focus. */
-.hm-layers button:focus,
-.hm-layers button:focus-visible {
-  outline: none !important;
-  box-shadow: none;
-}
 
 /* React Flow canvas backdrop. The dotted grid is drawn by the <Background>
    component (it pans/zooms with the viewport — correct for an infinite canvas).

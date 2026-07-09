@@ -219,25 +219,20 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
       <button
         key={t.id}
         onClick={() => onFocusTile(t.id)}
-        // Selecting a row is a pointer action, not a focus action — the row's
-        // own selected styling is the cue. Prevent the click from focusing the
-        // button so the global :focus-visible outline (a blue ring) never fires
-        // on click. Keyboard Tab focus is unaffected (mousedown-only), so a11y
-        // is preserved. This is CSS-independent (works even if the stylesheet's
-        // focus override doesn't apply).
-        onMouseDown={(e) => e.preventDefault()}
         data-active={sel}
         style={{
           paddingLeft: 12 + depth * 14,
-          // Selected background is set INLINE (not a Tailwind class) so it can't
-          // depend on arbitrary-class generation and can't be remapped translucent
-          // by glass mode — `--surface-4` is the opaque neutral "active" surface,
-          // so no wallpaper bleeds through. The brand accent bar is the cue.
+          // Selected surface set INLINE (staleness-proof, glass never remaps it):
+          // `--surface-4` is the opaque neutral "active" surface — the SOLE
+          // selection cue. No brand accent bar: the inset lavender-blue boxShadow
+          // read as an unwanted blue block on the row's left edge. A row is
+          // SELECTED, not "focused" — `outline-none` (an already-compiled utility
+          // the whole app uses) suppresses the global focus ring.
           ...(sel
-            ? { background: "var(--surface-4)", boxShadow: "inset 2px 0 0 var(--color-brand)" }
+            ? { background: "var(--surface-4)" }
             : {}),
         }}
-        className={`group flex h-8 items-center gap-2.5 pr-2.5 mx-2 text-left rounded-lg transition-colors ${
+        className={`group flex h-8 items-center gap-2.5 pr-2.5 mx-2 text-left rounded-lg outline-none focus-visible:outline-none transition-colors ${
           sel
             ? "text-[var(--color-fg)]"
             : "text-[var(--color-fg2)] hover:bg-[var(--surface-3)] hover:text-[var(--color-fg)]"
