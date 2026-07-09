@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [1.12.3] — 2026-07-09
+
 ### Fixed
 
 - **Selecting a Layers row no longer shows a blue bar on its left edge.** The selected row carried an inset lavender-blue accent bar (`box-shadow` in `--color-brand`) on top of its neutral surface; it read as an unwanted blue block. The active row now uses the opaque neutral `--surface-4` fill plus a neutral hairline ring (no color) as its cue, and the click-to-focus ring suppression moved onto the button's own `outline-none focus-visible:outline-none` classes.
@@ -648,7 +650,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v1.12.2...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v1.12.3...HEAD
+[1.12.3]: https://github.com/dip497/hivemind/releases/tag/v1.12.3
 [1.12.2]: https://github.com/dip497/hivemind/releases/tag/v1.12.2
 [1.12.1]: https://github.com/dip497/hivemind/releases/tag/v1.12.1
 [1.12.0]: https://github.com/dip497/hivemind/releases/tag/v1.12.0
