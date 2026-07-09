@@ -85,12 +85,6 @@ export interface PersistedLayout {
   frames: FrameState[];
   /** User-renamed tile labels (per tile id). */
   tileNames?: Record<string, string>;
-  /** Last-known agent session titles (claude's OSC window-title task summary),
-   *  per tile id. Persisted so REATTACHING to a live daemon session (which
-   *  replays a serialized screen WITHOUT re-emitting the title OSC) still shows
-   *  the resolved name instead of falling back to "claude #N". A live OSC update
-   *  overwrites it; a user rename (tileNames) still takes precedence. */
-  agentTitles?: Record<string, string>;
   // Open tiles — so a restart resumes exactly where you left off (the PTY is
   // gone, but the tile + a fresh shell/claude respawn in place).
   tiles?: TileInstance[];
@@ -113,7 +107,7 @@ export interface PersistedLayout {
 
 /** The fields a save snapshot must supply (everything round-tripped). */
 export type LayoutSnapshot = Required<
-  Pick<PersistedLayout, "sizes" | "positions" | "frames" | "tileNames" | "agentTitles" | "tiles" | "editorTabs" | "frameOf">
+  Pick<PersistedLayout, "sizes" | "positions" | "frames" | "tileNames" | "tiles" | "editorTabs" | "frameOf">
 > & { viewport: PersistedLayout["viewport"] };
 
 export const LAYOUT_KEY = (repoPath: string | null) =>
@@ -209,7 +203,6 @@ export function loadLayout(repoPath: string | null): PersistedLayout {
       frames,
       frameOf,
       tileNames: p.tileNames ?? {},
-      agentTitles: p.agentTitles ?? {},
       tiles,
       editorTabs,
       viewport: p.viewport && typeof p.viewport.x === "number" && typeof p.viewport.y === "number"

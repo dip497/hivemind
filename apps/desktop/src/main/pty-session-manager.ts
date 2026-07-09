@@ -164,6 +164,10 @@ export interface SessionSnapshot {
   spec: SpawnSpec;
   /** Output of SerializeAddon.serialize() — a VT-escape string. */
   replay: string;
+  /** Last OSC window title (SerializeAddon omits it) so a reboot-restored
+   *  session re-emits the agent's name ahead of its replay, same as a live
+   *  reattach — the daemon is the single source of truth for the title. */
+  title?: string;
   /** Wall-clock at write time. Old snapshots can be evicted by the daemon. */
   savedAt: number;
 }
@@ -287,6 +291,9 @@ export class SessionManager {
       frozen: !!frozenSnap,
       frozenSpec: frozenSnap ? frozenSnap.spec : undefined,
       spawnedAt: Date.now(),
+      // Seed the title from the snapshot so a reboot-restored session re-emits
+      // the agent name on its first attach (before the fresh claude re-sets it).
+      lastTitle: frozenSnap?.title,
       // Watch output for a resume failure only when this is a restored session
       // spawned with --resume and a retry transform exists.
       retryWatch:
@@ -537,6 +544,7 @@ export class SessionManager {
             id: s.id,
             spec: s.spec,
             replay: s.serializer.serialize({ scrollback: this.scrollback }),
+            title: s.lastTitle,
             savedAt: Date.now(),
           });
         } catch {

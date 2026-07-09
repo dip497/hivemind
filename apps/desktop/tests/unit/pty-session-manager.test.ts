@@ -319,3 +319,24 @@ test("reattach replay re-emits the OSC window title (SerializeAddon drops it)", 
   assert.equal(r.isNew, false);
   assert.match(r.replay, /\x1b\]0;Fix the auth bug\x07/, "replay must re-emit the captured title");
 });
+
+test("snapshot carries the OSC title; reboot-restored attach re-emits it", async () => {
+  let snap: { title?: string; replay: string } | undefined;
+  const made1: FakePty[] = [];
+  const mgr1 = new SessionManager(
+    (spec) => { const p = new FakePty(spec); made1.push(p); return p; },
+    { onSnapshot: (_id, s) => { snap = { title: s.title, replay: s.replay }; }, snapshotDebounceMs: 1 },
+  );
+  const spec: SpawnSpec = { cwd: "/r", cmd: "claude", args: [], cols: 80, rows: 24 };
+  await mgr1.createOrAttach("repo:t1", spec, { onData: () => {}, onExit: () => {} });
+  made1[0]!.emit("\x1b]0;Refactor the parser\x07\r\n");
+  mgr1.detach("repo:t1");
+  await new Promise((r) => setTimeout(r, 5));
+  assert.equal(snap!.title, "Refactor the parser", "snapshot must persist the title");
+
+  // Reboot: fresh manager, restore snapshot, attach → replay must re-emit title.
+  const mgr2 = new SessionManager((s) => new FakePty(s), {});
+  mgr2.restoreSnapshot({ id: "repo:t1", spec, replay: snap!.replay, title: snap!.title, savedAt: Date.now() });
+  const r = await mgr2.createOrAttach("repo:t1", spec, { onData: () => {}, onExit: () => {} });
+  assert.match(r.replay, /\x1b\]0;Refactor the parser\x07/, "restored replay must re-emit the title");
+});

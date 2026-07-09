@@ -164,12 +164,12 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace, updateAvai
     });
   }, []);
   // Live agent session titles from the terminal OSC window-title (claude writes
-  // a task summary there). Seeded from the persisted layout and re-persisted so
-  // that REATTACHING to a still-live daemon session (which replays a serialized
-  // screen WITHOUT re-emitting the title OSC) shows the resolved name instead of
-  // "claude #N"; a fresh live OSC update overwrites it, and a user rename
-  // (tileNames) takes precedence. Cleared when a tile closes.
-  const [agentTitles, setAgentTitles] = useState<Record<string, string>>(initial.agentTitles ?? {});
+  // a task summary there). NOT persisted here — the DAEMON owns the title as
+  // session state (persisted in its snapshot) and re-emits it ahead of the
+  // replay on every attach, so onTitleChange repopulates this on reattach AND
+  // reboot-restore. A user rename (tileNames) still takes precedence. Cleared
+  // when a tile closes.
+  const [agentTitles, setAgentTitles] = useState<Record<string, string>>({});
   const setAgentTitle = useCallback((id: string, title: string) => {
     setAgentTitles((m) => (m[id] === title ? m : { ...m, [id]: title }));
   }, []);
@@ -405,12 +405,12 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace, updateAvai
     if (typeof window === "undefined" || !persistKey) return;
     if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
     persistTimerRef.current = setTimeout(() => {
-      saveLayout(persistKey, { sizes, positions, frames, tileNames, agentTitles, tiles, editorTabs, viewport, frameOf });
+      saveLayout(persistKey, { sizes, positions, frames, tileNames, tiles, editorTabs, viewport, frameOf });
     }, 250);
     return () => {
       if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
     };
-  }, [persistKey, sizes, positions, frames, tileNames, agentTitles, tiles, editorTabs, viewport, frameOf]);
+  }, [persistKey, sizes, positions, frames, tileNames, tiles, editorTabs, viewport, frameOf]);
   // Flush on tab close / app quit so the debounced write doesn't lose the
   // last ~250ms of edits. `beforeunload` fires sync before localStorage is
   // torn down; we set the latest snapshot then.
@@ -420,11 +420,11 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace, updateAvai
       if (!persistTimerRef.current) return;
       clearTimeout(persistTimerRef.current);
       persistTimerRef.current = undefined;
-      saveLayout(persistKey, { sizes, positions, frames, tileNames, agentTitles, tiles, editorTabs, viewport, frameOf });
+      saveLayout(persistKey, { sizes, positions, frames, tileNames, tiles, editorTabs, viewport, frameOf });
     };
     window.addEventListener("beforeunload", flush);
     return () => window.removeEventListener("beforeunload", flush);
-  }, [persistKey, sizes, positions, frames, tileNames, agentTitles, tiles, editorTabs, viewport, frameOf]);
+  }, [persistKey, sizes, positions, frames, tileNames, tiles, editorTabs, viewport, frameOf]);
 
   // Viewport-focus request: we resolve the target's CENTER from our own state
   // (positions/sizes/frames) and hand absolute coords to <FocusOnTile>, which
