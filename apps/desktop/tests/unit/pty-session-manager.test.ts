@@ -305,3 +305,17 @@ test("two independent sessions track state separately", async () => {
   assert.doesNotMatch(r1.replay, /two/);
   assert.doesNotMatch(r2.replay, /one/);
 });
+
+test("reattach replay re-emits the OSC window title (SerializeAddon drops it)", async () => {
+  const { mgr, created, spec } = makeManager();
+  await mgr.createOrAttach("repo:t1", spec, { onData: () => {}, onExit: () => {} });
+  // Claude sets its task summary as the OSC 0 window title.
+  created[0]!.emit("\x1b]0;Fix the auth bug\x07working…\r\n");
+  mgr.detach("repo:t1");
+
+  // Reattach: SerializeAddon does NOT serialize the title, so the manager must
+  // re-emit it ahead of the replay — else the tile name falls back to "claude #N".
+  const r = await mgr.createOrAttach("repo:t1", spec, { onData: () => {}, onExit: () => {} });
+  assert.equal(r.isNew, false);
+  assert.match(r.replay, /\x1b\]0;Fix the auth bug\x07/, "replay must re-emit the captured title");
+});

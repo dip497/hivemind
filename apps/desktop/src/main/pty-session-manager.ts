@@ -101,6 +101,11 @@ interface Session {
    *  retry fires the instant the error prints — not when the PTY finally exits
    *  (a slow SessionEnd hook can delay exit well past restoreRetryMs). */
   retryWatch?: string;
+  /** Latest OSC 0/2 window title the process set (claude's live "session name"),
+   *  captured from the headless term. SerializeAddon does NOT serialize the title,
+   *  so a reattach's replay would otherwise lose it — we re-emit it (see
+   *  `withTitle`) so the client's xterm re-fires onTitleChange on reattach. */
+  lastTitle?: string;
 }
 
 // claude's resume-failure message (stable across recent versions). Matched
@@ -210,6 +215,15 @@ export class SessionManager {
    *  once the write queue drains. We await a no-op write callback before
    *  serializing so the replay carries the latest bytes (not a stale snapshot
    *  that misses output emitted in the same tick). */
+  /** Re-emit the session's last OSC window title ahead of the replay so the
+   *  client's xterm re-fires onTitleChange on reattach (SerializeAddon drops the
+   *  title). Control chars stripped so an embedded BEL/ESC can't truncate it. */
+  private withTitle(s: Session, replay: string): string {
+    if (!s.lastTitle) return replay;
+    const t = s.lastTitle.replace(/[\x00-\x1f\x7f]/g, " ").trim();
+    return t ? `\x1b]0;${t}\x07${replay}` : replay;
+  }
+
   async createOrAttach(id: string, spec: SpawnSpec, client: SessionClient): Promise<AttachResult> {
     const existing = this.sessions.get(id);
     if (existing && !existing.exited) {
@@ -222,7 +236,7 @@ export class SessionManager {
       }
       this.cancelIdle();
       const replay = await this.serializeDrained(existing);
-      return { pid: existing.pty.pid, isNew: false, replay };
+      return { pid: existing.pty.pid, isNew: false, replay: this.withTitle(existing, replay) };
     }
 
     // Reboot-restore path: snapshot on disk but no live PTY → spawn a fresh
@@ -281,6 +295,10 @@ export class SessionManager {
           : undefined,
     };
     this.sessions.set(id, session);
+    // Capture the OSC 0/2 window title the headless term parses. SerializeAddon
+    // omits it from the replay, so without this a reattach shows the generic
+    // spawn label instead of claude's live task summary.
+    try { session.term.onTitleChange((t) => { session.lastTitle = t; }); } catch { /* headless build w/o title API */ }
     p.onData((d) => {
       // Stale-pty guard: after a retry respawn, the old pty may still flush a
       // trailing chunk — it must not write to the now-retried session.
@@ -329,7 +347,7 @@ export class SessionManager {
     // `isNew` = a fresh PTY was just spawned (vs attached to a live one). Both
     // brand-new sessions AND reboot-restored ones produce a new PTY — the only
     // !isNew path is the early-return up top for a still-live existing session.
-    return { pid: p.pid, isNew: true, replay };
+    return { pid: p.pid, isNew: true, replay: this.withTitle(session, replay) };
   }
   /** Fire the one-shot restore retry for a session whose `--resume` failed.
    *  Returns true if a retry was launched (caller should NOT proceed to the
