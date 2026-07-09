@@ -10,7 +10,7 @@
  * its own status subscription; Canvas owns the data + focus actions.
  */
 import { useEffect, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
-import { Layers, ChevronRight, ChevronDown, GitBranch, Server, PanelLeftClose } from "lucide-react";
+import { Layers, ChevronRight, ChevronDown, GitBranch, Server, Folder, FolderOpen, PanelLeftClose } from "lucide-react";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { AgentIcon } from "./agents";
 
@@ -90,34 +90,17 @@ const KIND_GLYPH: Record<LayerKind, string> = {
   workbench: "▥",
 };
 
-/** Workspace identity chip — an app-icon style rounded tile keyed to the frame
- *  color. A repo frame is a SOLID color tile (its color IS the identity); a
- *  worktree / remote frame is a tinted chip carrying its branch / server glyph,
- *  so the three frame kinds read as one consistent family instead of three
- *  differently-sized bare icons. Replaces the old 10px sharp `<Square>`. */
-function WorkspaceIcon({ color, remote, worktree }: { color: string; remote?: boolean; worktree: boolean }) {
-  const glyph = remote || worktree;
-  return (
-    <span
-      aria-hidden
-      className="shrink-0 grid place-items-center rounded-[5px]"
-      style={
-        glyph
-          ? {
-              width: 18, height: 18, color,
-              background: `color-mix(in srgb, ${color} 16%, transparent)`,
-              boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${color} 45%, transparent)`,
-            }
-          : {
-              width: 15, height: 15, background: color,
-              // faint top-inner sheen so the flat color reads as a raised tile.
-              boxShadow: "inset 0 1px 0 color-mix(in srgb, #fff 22%, transparent)",
-            }
-      }
-    >
-      {remote ? <Server size={11} /> : worktree ? <GitBranch size={11} /> : null}
-    </span>
-  );
+/** Workspace identity glyph, keyed to the frame color — no boxed chip (the solid
+ *  square read as an ugly block). A repo frame is a FOLDER that opens/closes with
+ *  the group (semantic: a workspace IS a folder); a worktree is a branch glyph, a
+ *  remote is a server glyph. All three are the same size + tinted the frame color,
+ *  so the kinds read as one family. */
+function WorkspaceIcon({ color, remote, worktree, collapsed }: { color: string; remote?: boolean; worktree: boolean; collapsed: boolean }) {
+  if (remote) return <Server size={15} className="shrink-0" style={{ color }} />;
+  if (worktree) return <GitBranch size={15} className="shrink-0" style={{ color }} />;
+  const Icon = collapsed ? Folder : FolderOpen;
+  // Solid-filled folder so the workspace color stays the strong identity cue.
+  return <Icon size={15} className="shrink-0" fill={color} style={{ color }} />;
 }
 
 export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocusFrame }: Props) {
@@ -315,7 +298,7 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
             className="flex-1 flex items-center gap-2 min-w-0 text-left text-[14px] font-medium text-[var(--color-fg)]"
             title={isWt ? `Focus worktree ${frame.branch ?? frame.title}` : `Focus ${frame.title}`}
           >
-            <WorkspaceIcon color={frame.color} remote={frame.remote} worktree={isWt} />
+            <WorkspaceIcon color={frame.color} remote={frame.remote} worktree={isWt} collapsed={isCollapsed} />
             <span className="truncate">{frame.title}</span>
             <span className="ml-auto flex items-center gap-1.5 min-w-0">
               {agg && agg !== "idle" && agg !== "exited" && (
@@ -395,7 +378,7 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
           <div className="mt-1.5">
             <div className="flex items-center gap-2 h-8 pr-2 mx-2 pl-[26px]">
               <span className="flex-1 flex items-center gap-2 min-w-0 text-[14px] font-medium text-[var(--color-fg2)]">
-                <span aria-hidden className="shrink-0 grid place-items-center rounded-[5px] border border-dashed border-[var(--color-line2)]" style={{ width: 15, height: 15 }} />
+                <FolderOpen size={15} aria-hidden className="shrink-0 text-[var(--color-fg3)]" />
                 <span className="truncate">Canvas</span>
                 <span className="ml-auto font-mono text-[11px] text-[var(--color-fg3)]">{looseTiles.length}</span>
               </span>
