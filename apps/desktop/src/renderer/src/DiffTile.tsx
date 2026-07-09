@@ -50,6 +50,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import type { DiffScope, GitBranchList, GitFileEntry } from "../../shared/ipc";
+import { OVERSIZE_SENTINEL } from "../../shared/ipc";
 import {
   useDiscardFiles,
   useGitDiff,
@@ -90,6 +91,16 @@ type Overflow = "scroll" | "wrap";
 
 const VIEWED_KEY_PREFIX = "hivemind:viewed:";
 
+
+/** main returns `${OVERSIZE_SENTINEL}${bytes}` for a file too big to diff. */
+function oversizeBytes(s: string | undefined): number | null {
+  if (!s || !s.startsWith(OVERSIZE_SENTINEL)) return null;
+  const n = Number(s.slice(OVERSIZE_SENTINEL.length));
+  return Number.isFinite(n) ? n : 0;
+}
+function oversizePlaceholder(bytes: number): string {
+  return `⚠ file too large to diff (${(bytes / 1_000_000).toFixed(1)} MB) — open it directly to view\n`;
+}
 
 function loadJson<T>(key: string, fallback: T): T {
   try {
@@ -1248,14 +1259,23 @@ function useWorkingItems(repoPath: string, files: GitFileEntry[], staged: boolea
       if (oldR?.isLoading || newR?.isLoading) return;
       const oldUpdated = oldR?.dataUpdatedAt ?? 0;
       const newUpdated = newR?.dataUpdatedAt ?? 0;
+      // A file the main process refused to load (over DIFF_MAX_FILE_BYTES) comes
+      // back as `${OVERSIZE_SENTINEL}${bytes}`. Diff a one-line placeholder on
+      // BOTH sides instead of the real content so parse/highlight stay trivial —
+      // the raw blob never entered the renderer, and the LCS can't blow up.
+      // Empty old + placeholder new so the file still SHOWS (as a one-line note)
+      // rather than vanishing (identical sides = no diff = dropped from the list).
+      const oversize = oversizeBytes(oldR?.data) ?? oversizeBytes(newR?.data);
+      const oldContents = oversize != null ? "" : (oldR?.data ?? "");
+      const newContents = oversize != null ? oversizePlaceholder(oversize) : (newR?.data ?? "");
       const oldFile: FileContents = {
         name: f.path,
-        contents: oldR?.data ?? "",
+        contents: oldContents,
         cacheKey: `${repoPath}:HEAD:${f.path}:${oldUpdated}`,
       };
       const newFile: FileContents = {
         name: f.path,
-        contents: newR?.data ?? "",
+        contents: newContents,
         cacheKey: `${repoPath}:${newRev}:${f.path}:${newUpdated}`,
       };
       const fileDiff = parseDiffFromFile(oldFile, newFile);

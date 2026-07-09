@@ -12,6 +12,7 @@ import { simpleGit, type SimpleGit } from "simple-git";
 import { applyShellEnvToProcess } from "./shell-env.js";
 import { isRemote } from "../shared/remote-uri.js";
 import { runRemoteGit, readRemoteFile, writeRemoteFile } from "./remote/git.js";
+import { DIFF_MAX_FILE_BYTES, OVERSIZE_SENTINEL } from "../shared/ipc.js";
 import type {
   DiffPayload,
   DiffScope,
@@ -508,13 +509,20 @@ export async function gitFileContents(
   if (rev === "WORKING") {
     try {
       if (isRemote(repoPath)) return await readRemoteFile(repoPath, file);
-      return await fs.readFile(path.join(repoPath, file), "utf8");
+      const abs = path.join(repoPath, file);
+      const { size } = await fs.stat(abs);
+      if (size > DIFF_MAX_FILE_BYTES) return `${OVERSIZE_SENTINEL}${size}`;
+      return await fs.readFile(abs, "utf8");
     } catch {
       return "";
     }
   }
   const spec = rev === "HEAD" ? "HEAD" : ":0";
   try {
+    // `cat-file -s` reports the blob size without materializing it — cheap guard
+    // so a 400 MB tracked blob never crosses the IPC bridge as a string.
+    const size = Number((await rawGit(repoPath, ["cat-file", "-s", `${spec}:${file}`])).trim());
+    if (Number.isFinite(size) && size > DIFF_MAX_FILE_BYTES) return `${OVERSIZE_SENTINEL}${size}`;
     return await rawGit(repoPath, ["show", `${spec}:${file}`]);
   } catch {
     return "";

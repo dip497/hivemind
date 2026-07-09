@@ -7,6 +7,15 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Fixed
+
+- **Selecting a Layers row no longer shows a blue bar on its left edge.** The selected row carried an inset lavender-blue accent bar (`box-shadow` in `--color-brand`) on top of its neutral surface; it read as an unwanted blue block. The active row now uses the opaque neutral `--surface-4` fill plus a neutral hairline ring (no color) as its cue, and the click-to-focus ring suppression moved onto the button's own `outline-none focus-visible:outline-none` classes.
+
+### Changed
+
+- **Layers panel visual polish.** Workspace icons are now app-style rounded chips keyed to the frame color (repo = solid tile, worktree/remote = tinted chip with its branch/server glyph) so the three frame kinds read as one family instead of three differently-sized bare icons; nested worktrees and tiles now hang from a faint vertical guide rail so the hierarchy is legible at a glance; and the loose "Canvas" group icon matches the same chip family.
+- **Opening a working diff no longer spikes renderer memory into the GBs on repos with a huge/generated/binary file.** A single large tracked or untracked blob (e.g. a 400 MB `index.scip` code-graph index, a lockfile, a bundle) was loaded in full as JS strings — twice, HEAD + working — and then line-diffed, exploding memory. `gitFileContents` now probes size first (`fs.stat` for working, `git cat-file -s` for HEAD/index) and refuses anything over 1.5 MB, so the blob never crosses the IPC bridge; the diff renders a "file too large to diff" placeholder instead.
+
 ## [1.12.2] — 2026-07-04
 
 ### Fixed

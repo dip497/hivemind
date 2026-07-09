@@ -16,6 +16,14 @@ export interface WorkspaceInfo {
   title: string;
 }
 
+/** Files above this many bytes are not loaded into the diff viewer — a single
+ *  huge/generated/binary blob (a scip index, a lockfile, a bundle) would load
+ *  its full contents twice as JS strings and then run an O(n) line-diff, spiking
+ *  renderer memory into the GBs. `gitFileContents` returns `${OVERSIZE_SENTINEL}${bytes}`
+ *  instead; the diff renders a "too large" placeholder. */
+export const DIFF_MAX_FILE_BYTES = 1_500_000;
+export const OVERSIZE_SENTINEL = "\0HM_OVERSIZE:";
+
 // ── git types (mirror simple-git status v2 + pretty wrappers) ─────────────
 
 export type GitFileStatus =
