@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [1.12.6] — 2026-07-12
+
 ### Added
 
 - Theme customizer: a **Cinematic** preset for video/photo wallpapers — dims the clip and thickens the panel tint so tile text stays readable over busy media.
@@ -687,7 +689,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v1.12.5...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v1.12.6...HEAD
+[1.12.6]: https://github.com/dip497/hivemind/releases/tag/v1.12.6
 [1.12.5]: https://github.com/dip497/hivemind/releases/tag/v1.12.5
 [1.12.4]: https://github.com/dip497/hivemind/releases/tag/v1.12.4
 [1.12.3]: https://github.com/dip497/hivemind/releases/tag/v1.12.3
