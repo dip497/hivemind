@@ -226,6 +226,8 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
   const dotRef = useRef<HTMLSpanElement | null>(null);
   const labelRef = useRef<HTMLSpanElement | null>(null);
   const idleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  /** Wrapper around the status dot+label — hidden entirely while idle. */
+  const statusWrapRef = useRef<HTMLSpanElement>(null);
 
   // Which agent (if any) is running. herdr-ported detection covers 15 CLI
   // agents (claude, codex, gemini, cursor, droid, amp, opencode, grok, …);
@@ -282,6 +284,12 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       const label = labelRef.current;
       if (!dot || !label) return;
       const [color, text, pulse] = STATUS[s]!;
+      // `idle` is the ABSENCE of a state, not a state — and it rendered as a green
+      // dot, which reads as "success" when it means "nothing is happening". Hide the
+      // whole chip so a quiet tile has a quiet header, and every chip that remains
+      // (working / approve? / blocked / exited) is worth looking at. Matches
+      // LayersPanel, which already skips idle rows.
+      if (statusWrapRef.current) statusWrapRef.current.style.display = s === "idle" ? "none" : "inline-flex";
       dot.style.background = color;
       // No glow (box-shadow) — the pulsing-glow-on-dark dot is a textbook
       // AI-slop tell. A solid dot + pulse on actionable states reads cleaner.
@@ -716,6 +724,14 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
 
     async function doSpawn() {
       try {
+        // Deliver a queued ▶ Work prompt as claude's positional ARGV — claude
+        // auto-submits it, so there's no race against the booting TUI that used to
+        // swallow the typed prompt's Enter (▶ Work silently doing nothing on a cold
+        // start). claimWork consumes once, so a re-attach/respawn never re-delivers,
+        // and the daemon strips it on frozen-restore — the task runs exactly once.
+        // Non-claude agents still take the typed-delivery path in the poll below
+        // (peekWork stays set for them because only claude claims here).
+        const initialPrompt = isClaude ? claimWork(ptyId) : undefined;
         const { pid } = await window.hive.ptySpawn({
           tileId: ptyId,
           cwd,
@@ -723,6 +739,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
           args: args ?? [],
           cols: term.cols,
           rows: term.rows,
+          ...(initialPrompt ? { initialPrompt } : {}),
         });
         if (cancelled) {
           window.hive.ptyKill(ptyId);
@@ -1064,7 +1081,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
                 single-click enters edit mode without arming xyflow's drag. */}
             <button
               onClick={() => { setDraft(name ?? "Terminal"); setEditing(true); }}
-              className="nodrag size-4 grid place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--color-line2)] hover:text-[var(--color-fg)] transition-colors cursor-pointer"
+              className="nodrag size-4 grid place-items-center rounded text-[var(--color-fg3)] opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:bg-[var(--color-line2)] hover:text-[var(--color-fg)] transition-[opacity,color,background-color] duration-150 cursor-pointer"
               aria-label="rename tile"
               title="Rename tile"
             >
@@ -1072,8 +1089,20 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
             </button>
           </>
         )}
-        <span aria-hidden className="text-[var(--color-line2)]">·</span>
-        <span className="text-[var(--color-fg2)]">{cmd.split("/").slice(-1)[0]}</span>
+        {/* The command is dropped when the tile name already contains it — the
+            default agent tile is literally "claude #1 · claude". It stays for a
+            renamed tile, or a shell whose command isn't obvious from the name. */}
+        {(() => {
+          const bin = cmd.split("/").slice(-1)[0] ?? "";
+          const shown = (name?.trim() || "Terminal").toLowerCase();
+          if (!bin || shown.startsWith(bin.toLowerCase())) return null;
+          return (
+            <>
+              <span aria-hidden className="text-[var(--color-line2)]">·</span>
+              <span className="text-[var(--color-fg2)]">{bin}</span>
+            </>
+          );
+        })()}
         {/* Font / scale / fullscreen controls — revealed only on header hover
             (group-hover). Two SEPARATE controls: font size (A−/A+, density only)
             and whole-tile scale (−/+, grows the node box + font in proportion). */}
@@ -1115,7 +1144,11 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
             ⤢
           </button>
         </span>
-        <span className="inline-flex items-center gap-1.5 text-[10px]" title="agent status — working / idle / blocked / exited">
+        <span
+          ref={statusWrapRef}
+          className="inline-flex items-center gap-1.5 text-[10px]"
+          title="agent status — working / blocked / exited (idle is not shown)"
+        >
           <span
             ref={dotRef}
             aria-hidden

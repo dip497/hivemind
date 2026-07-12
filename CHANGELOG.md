@@ -7,6 +7,31 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Added
+
+- Theme customizer: a **Cinematic** preset for video/photo wallpapers — dims the clip and thickens the panel tint so tile text stays readable over busy media.
+- Glass mode now honors the OS **reduce-transparency** and **increase-contrast** settings: surfaces solidify, blur and the video wallpaper switch off.
+
+### Changed
+
+- Layers panel is now a heavy translucent material (92%) with a lit trailing edge instead of an opaque slab against a hard seam; repo rows read as parents (semibold + tighter tracking), and empty frames no longer show a `0` count.
+- Typography: size-specific letter-spacing scale (display/heading/body/caption) rather than one global value; leading tightens as headings grow.
+
+- Layers panel: workspace identity hues are muted on the folder icons so agent **status** is the loudest colour in the panel. Canvas frame headers keep full chroma.
+- Frame header: the bound-workspace pill no longer repeats the frame title (the common case); it keeps the icon, the unbind button, and — for remotes — the host label.
+
+- Tile header: `idle` is no longer rendered (a quiet tile gets a quiet header), the command is dropped when the tile name already contains it, and the rename pencil reveals on hover like every other control.
+- Layers panel: tile names lead the row so the column left-aligns; only states that need a human (`approve?` / `input?` / `blocked`) pulse — a `working` agent is the normal case, not an alert.
+- Toasts now exit along the path they entered (they previously slid in and vanished), and reduced-motion gets a cross-fade instead of no feedback at all.
+
+### Fixed
+
+- **▶ Work silently did nothing on a cold start.** A queued task was typed into the freshly-booting agent TUI, whose first render swallowed the Enter — the prompt sat unsubmitted and the agent never began. The prompt is now handed to claude as its positional argv (which auto-submits), delivered exactly once and stripped on session-restore so it never re-runs. Non-claude agents keep the typed-delivery path.
+- **The app opened in a small floating window instead of maximized on first run.** `maximize()` was issued against an unmapped window (silently dropped by mutter); it now snaps to the display work area after the window is shown.
+- **Pinned tiles were stranded off-screen by a window resize.** A pin is anchored in screen pixels and `clampAnchor` only ran on pin/drag, so shrinking the window (unmaximise, monitor unplug) left the panel outside the viewport — permanently, since the anchor is persisted. Canvas now re-clamps every pin on `resize`.
+- Layers panel rows shrink-wrapped their text (a `<button>` with `flex` but no `w-full` resolves to fit-content), so the selected-row background hugged the label and long tile names overran the panel instead of truncating.
+- `.hm-soft` animated `all`, sweeping non-compositable layout properties onto the main thread; it now enumerates only transform/opacity/color/border/shadow.
+
 ## [1.12.5] — 2026-07-09
 
 ## [1.12.4] — 2026-07-09

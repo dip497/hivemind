@@ -278,7 +278,15 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
             {isRemoteWs
               ? <Server size={11} className="shrink-0 text-[var(--color-brand)]" />
               : <FolderGit2 size={11} className="shrink-0 text-[var(--color-fg2)]" />}
-            <span className="truncate">{isRemoteWs ? remoteHostLabel : wsName}</span>
+            {/* The pill's label is dropped when it just repeats the frame title —
+                which is the DEFAULT, since a new frame is titled after its repo.
+                The same word twice in one header is noise, and the icon already
+                says "a workspace is bound" (the path is on the tooltip). A remote
+                keeps its host label: that's information the title never carries,
+                and a renamed frame keeps it too. */}
+            {(isRemoteWs || wsName?.toLowerCase() !== data.title.trim().toLowerCase()) && (
+              <span className="truncate">{isRemoteWs ? remoteHostLabel : wsName}</span>
+            )}
             <button
               onClick={() => data.onUnbindWorkspace(data.id)}
               className="shrink-0 text-[var(--color-fg2)] hover:text-[var(--color-err)] leading-none cursor-pointer"
@@ -341,43 +349,34 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
             remote
           </button>
         )}
-        {/* ── child terminal chips ──────────────────────────────────────
-            Each tile inside the frame gets a pill showing its display name
-            (auto-named from cmd or user-renamed via TerminalTile header) and
-            a status dot. Updates live via subscribeStatus. Overflow >3 →
-            "+N" indicator so the header doesn't overflow on busy frames. */}
-        {!!data.tileIds?.length && (
-          <div className="flex items-center gap-1 mr-1">
-            {data.tileIds.slice(0, 3).map((tid) => {
-              const name = data.tileNames?.[tid] ?? "terminal";
-              const st = chipStatus.get(tid) ?? "idle";
-              const dot =
-                st === "working"
-                  ? "var(--color-brand)"
-                  : st === "blocked" || st === "permission" || st === "question"
-                    ? "var(--color-warn)"
-                    : st === "exited"
-                      ? "var(--color-err)"
-                      : "var(--color-fg3)";
-              return (
-                <span
-                  key={tid}
-                  className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-mono text-[var(--color-fg2)] max-w-[80px]"
-                  style={{ background: "var(--color-bg3)" }}
-                  title={`${name} · ${st}`}
-                >
-                  <span className="truncate">{name}</span>
-                  <span aria-hidden className="size-1.5 rounded-full shrink-0" style={{ background: dot }} />
-                </span>
-              );
-            })}
-            {data.tileIds.length > 3 && (
-              <span className="text-[10px] text-[var(--color-fg3)]" title={`${data.tileIds.length} tiles in this frame`}>
-                +{data.tileIds.length - 3}
-              </span>
-            )}
-          </div>
-        )}
+        {/* ── frame attention dot ───────────────────────────────────────
+            This used to be a strip of up to three name pills plus a "+N".
+            The names were dead weight: every tile already prints its own name
+            and status in its own header, a metre away on the same canvas, and
+            the strip could only ever show the first three of them — so it was
+            simultaneously redundant AND incomplete.
+
+            What it did carry, and what survives here, is the one fact the frame
+            header can't otherwise tell you: does something INSIDE this frame
+            want me? Collapsed to a single dot, shown only when the answer is
+            yes (an agent is blocked / asking / needs approval, or a tile died).
+            Steady work needs no dot — a frame full of busy agents is the normal
+            case, not an alert. */}
+        {(() => {
+          const states = (data.tileIds ?? []).map((tid) => chipStatus.get(tid) ?? "idle");
+          const needsYou = states.some((s) => s === "blocked" || s === "permission" || s === "question");
+          const died = states.some((s) => s === "exited");
+          if (!needsYou && !died) return null;
+          const color = needsYou ? "var(--color-warn)" : "var(--color-err)";
+          return (
+            <span
+              aria-label={needsYou ? "a tile in this frame needs you" : "a tile in this frame exited"}
+              title={needsYou ? "A tile in this frame needs you" : "A tile in this frame exited"}
+              className={`mr-1 size-1.5 rounded-full shrink-0 ${needsYou ? "animate-pulse" : ""}`}
+              style={{ background: color }}
+            />
+          );
+        })()}
         <button
           ref={addBtnRef}
           onClick={() => setShowAdd((x) => !x)}

@@ -50,6 +50,20 @@ export function Toasts({
     return () => clearInterval(i);
   }, []);
 
+  // Exit animations need the node to still be mounted while they play, so a
+  // dismissal marks the card `leaving` first and drops it from the parent's
+  // state once the animation ends — rather than yanking it from the DOM and
+  // letting it vanish mid-air. `onAnimationEnd` (not a setTimeout) keeps the
+  // unmount tied to the actual animation, including when reduced-motion swaps
+  // in the shorter cross-fade.
+  const [leaving, setLeaving] = useState<Set<string>>(new Set());
+  const beginDismiss = (id: string) =>
+    setLeaving((s) => (s.has(id) ? s : new Set(s).add(id)));
+  const finishDismiss = (id: string) => {
+    setLeaving((s) => { const n = new Set(s); n.delete(id); return n; });
+    onDismiss(id);
+  };
+
   return (
     <div className="flex flex-col items-end gap-2 max-h-[60vh] overflow-y-auto pr-0.5">
       {toasts.map((t) => {
@@ -65,8 +79,13 @@ export function Toasts({
             aria-label={`${t.label} ${verb}${t.frame ? ` in ${t.frame}` : ""}`}
             onClick={go}
             onKeyDown={(ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); go(); } }}
-            className="hm-toast hm-toast-in hm-soft group cursor-pointer"
+            className={`hm-toast ${leaving.has(t.id) ? "hm-toast-out" : "hm-toast-in"} hm-soft group cursor-pointer`}
             style={{ "--ttl": `${ttl}ms` } as CSSProperties}
+            onAnimationEnd={(ev) => {
+              // Only the card's OWN exit animation retires it — the countdown
+              // bar and the icon's pulse also bubble animationend up to here.
+              if (ev.target === ev.currentTarget && leaving.has(t.id)) finishDismiss(t.id);
+            }}
           >
             <div className="flex items-start gap-2.5 px-3 py-2.5">
               <span
@@ -86,7 +105,7 @@ export function Toasts({
                 </span>
               </div>
               <button
-                onClick={(ev) => { ev.stopPropagation(); onDismiss(t.id); }}
+                onClick={(ev) => { ev.stopPropagation(); beginDismiss(t.id); }}
                 className="shrink-0 -mr-1 -mt-1 size-5 grid place-items-center rounded text-[var(--color-fg3)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg4)] opacity-0 group-hover:opacity-100 hm-soft"
                 aria-label="Dismiss notification"
                 title="dismiss"

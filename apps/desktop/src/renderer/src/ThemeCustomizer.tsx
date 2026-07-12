@@ -16,6 +16,7 @@ import {
   ACCENTS,
   WALLPAPERS,
   ANCHORS,
+  CINEMATIC,
   type AccentId,
   type WallpaperId,
   type MediaLayer,
@@ -215,14 +216,23 @@ export function ThemeCustomizer({ open, onClose }: { open: boolean; onClose: () 
         </Row>
         {(t.wallpaper === "video" || t.wallpaper === "image") && (
           <div className="flex flex-col gap-2">
-            <button
-              onClick={() => pickMedia(t.wallpaper === "video" ? "video" : "image")}
-              className="self-start text-[11px] px-2 py-1 rounded border border-[var(--color-line2)] text-[var(--color-fg2)] hover:bg-[var(--color-bg4)] hover:text-[var(--color-fg)] cursor-pointer"
-            >
-              {activeMedia
-                ? t.wallpaper === "video" ? "Change video…" : "Change photo…"
-                : t.wallpaper === "video" ? "Choose video file…" : "Choose photo…"}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => pickMedia(t.wallpaper === "video" ? "video" : "image")}
+                className="text-[11px] px-2 py-1 rounded border border-[var(--color-line2)] text-[var(--color-fg2)] hover:bg-[var(--color-bg4)] hover:text-[var(--color-fg)] cursor-pointer"
+              >
+                {activeMedia
+                  ? t.wallpaper === "video" ? "Change video…" : "Change photo…"
+                  : t.wallpaper === "video" ? "Choose video file…" : "Choose photo…"}
+              </button>
+              <button
+                onClick={() => setTheme(CINEMATIC)}
+                title="Dim the clip and thicken the panel tint so text stays readable over busy media"
+                className="text-[11px] px-2 py-1 rounded border border-[var(--color-line2)] text-[var(--color-fg2)] hover:bg-[var(--color-bg4)] hover:text-[var(--color-fg)] cursor-pointer"
+              >
+                Cinematic
+              </button>
+            </div>
             {activeMedia && (
               <div className="rounded-md border border-[var(--color-line2)] bg-[var(--color-bg3)] px-2 py-1.5 min-w-0">
                 <div className="text-[11px] text-[var(--color-fg)] truncate" title={activeMedia.name}>{activeMedia.name}</div>

@@ -4,6 +4,7 @@
  */
 import * as pty from "@lydell/node-pty";
 import { applyShellEnvToProcess, sanitizeShellEnv } from "./shell-env.js";
+import { applyInitialPrompt } from "../shared/agent-io.js";
 
 interface SpawnOpts {
   tileId: string;
@@ -13,6 +14,8 @@ interface SpawnOpts {
   cols: number;
   rows: number;
   env?: Record<string, string>;
+  /** Initial task delivered as claude's positional argv (HIVE_INITIAL_PROMPT); consumed by the ptySpawn handler into env. */
+  initialPrompt?: string;
 }
 
 interface Callbacks {
@@ -64,12 +67,15 @@ function doSpawn(opts: SpawnOpts): pty.IPty {
   if (!env.COLORTERM) env.COLORTERM = "truecolor";
   if (!env.LANG) env.LANG = "C.UTF-8";
   if (!env.TERM_PROGRAM) env.TERM_PROGRAM = "hivemind";
-  return pty.spawn(opts.cmd, opts.args ?? [], {
+  // Mirror the daemon: a ▶ Work prompt (HIVE_INITIAL_PROMPT) becomes claude's
+  // positional argv (auto-submits) rather than being typed into the booting TUI.
+  const { args: execArgs, env: execEnv } = applyInitialPrompt(opts.args ?? [], env);
+  return pty.spawn(opts.cmd, execArgs, {
     cwd: opts.cwd,
     cols: opts.cols,
     rows: opts.rows,
     name: "xterm-256color",
-    env,
+    env: execEnv,
   });
 }
 

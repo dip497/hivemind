@@ -921,6 +921,35 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace, updateAvai
       : t)));
   }, [setTiles]);
 
+  // A pinned panel lives in SCREEN pixels, so it is the one thing on the canvas
+  // that a window resize can strand: shrink the window (or unmaximise, or unplug
+  // a monitor) and a pin anchored near the old right/bottom edge is simply gone —
+  // permanently, because the anchor is persisted. clampAnchor already runs when a
+  // tile is pinned and when it's dragged; nothing was re-running it when the
+  // WINDOW changed instead of the panel. Re-clamp every pin on resize, and write
+  // back only when something actually moved so we don't churn state (and the
+  // persisted layout) on every resize frame.
+  useEffect(() => {
+    const reclamp = () => {
+      const win = { w: window.innerWidth, h: window.innerHeight };
+      setTiles((ts) => {
+        let moved = false;
+        const next = ts.map((t) => {
+          if (!t.pinned || !t.pinAnchor) return t;
+          const size = t.pinSize ?? { w: 380, h: 260 };
+          const c = clampAnchor(t.pinAnchor, size, win);
+          if (c.sx === t.pinAnchor.sx && c.sy === t.pinAnchor.sy) return t;
+          moved = true;
+          return { ...t, pinAnchor: c };
+        });
+        return moved ? next : ts;
+      });
+    };
+    reclamp(); // also rescues pins already stranded by a resize while closed
+    window.addEventListener("resize", reclamp);
+    return () => window.removeEventListener("resize", reclamp);
+  }, [setTiles]);
+
   // baseNodes: built WITHOUT selectedTileId. Heavy: rebuilds whenever any
   // layout / extras / frames / pile / size / position state changes. The
   // selection-derived `nodes` below shallow-clones only the selected and

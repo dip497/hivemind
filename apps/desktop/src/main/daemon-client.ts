@@ -22,6 +22,8 @@ interface SpawnOpts {
   cols: number;
   rows: number;
   env?: Record<string, string>;
+  /** Initial task delivered as claude's positional argv (HIVE_INITIAL_PROMPT); consumed by the ptySpawn handler into env. */
+  initialPrompt?: string;
 }
 interface Callbacks {
   onData: (data: string) => void;

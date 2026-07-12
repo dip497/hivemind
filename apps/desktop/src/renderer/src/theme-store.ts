@@ -106,6 +106,20 @@ export const DEFAULT_THEME: ThemeState = {
   overlayMedia: [],
 };
 
+/** Legible-over-video defaults. A bright clip (anime, film) blows out the frosted
+ *  panels at the stock 0.72 tint / 0.85 brightness: the text loses contrast and the
+ *  glass reads as haze. This dims the plate and thickens the tint just enough that
+ *  the wallpaper still reads as motion behind solid, readable panels.
+ *  ponytail: one preset, not a preset system. Add more when a second one is asked for. */
+export const CINEMATIC: Partial<ThemeState> = {
+  glass: true,
+  blur: 20,
+  opacity: 0.78,
+  videoBrightness: 0.55,
+  contentGlass: false,
+  animate: true,
+};
+
 /** Accent → brand/accent hex. Mirrors Clonk's Volt / Ember / Ice / Pulse set;
  *  `indigo` is hivemind's existing default (applying it is a visual no-op). */
 export const ACCENTS: Record<AccentId, { label: string; brand: string; accent: string; swatch: string }> = {

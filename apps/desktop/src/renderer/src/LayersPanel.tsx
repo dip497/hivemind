@@ -10,7 +10,7 @@
  * its own status subscription; Canvas owns the data + focus actions.
  */
 import { useEffect, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
-import { Layers, ChevronRight, ChevronDown, GitBranch, Server, Folder, FolderOpen, PanelLeftClose } from "lucide-react";
+import { Layers, ChevronRight, ChevronDown, GitBranch, Server, Folder, FolderOpen, PanelLeftClose, Globe } from "lucide-react";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { AgentIcon } from "./agents";
 
@@ -85,7 +85,10 @@ const KIND_GLYPH: Record<LayerKind, string> = {
   editor: "{}",
   diff: "±",
   issues: "◔",
-  browser: "🌐",
+  // NOT the 🌐 emoji: the OS renders emoji in its own colour, so the browser row
+  // was the one blue glyph in a column of monochrome ones — colour implying a
+  // meaning that doesn't exist. A lucide icon inherits currentColor like the rest.
+  browser: "",
   planReview: "▤",
   workbench: "▥",
 };
@@ -95,12 +98,39 @@ const KIND_GLYPH: Record<LayerKind, string> = {
  *  the group (semantic: a workspace IS a folder); a worktree is a branch glyph, a
  *  remote is a server glyph. All three are the same size + tinted the frame color,
  *  so the kinds read as one family. */
+/**
+ * Identity color, turned DOWN. A frame's hue says "which repo"; the status pill
+ * says "this agent needs you". Rendered at full chroma they shout at the same
+ * volume, and a row of saturated folders reads as decoration the eye must sort
+ * through before it finds the one thing that's actually urgent.
+ *
+ * So the panel mutes the hue toward the tertiary text color: the repo stays
+ * distinguishable at a glance, but status is unambiguously the loudest thing on
+ * screen. The CANVAS frame headers keep full chroma — that's where the hue earns
+ * its keep, separating workspaces across a wide board.
+ *
+ * `color-mix` (not a chroma tweak in frame-color.ts) because `color` may be an
+ * oklch() string, a user-picked hex from the header swatch, OR the legacy
+ * `var(--color-brand)` — mixing handles all three without parsing any of them.
+ */
+const muted = (color: string) => `color-mix(in oklab, ${color} 62%, var(--color-fg3))`;
+
 function WorkspaceIcon({ color, remote, worktree, collapsed }: { color: string; remote?: boolean; worktree: boolean; collapsed: boolean }) {
-  if (remote) return <Server size={15} className="shrink-0" style={{ color }} />;
-  if (worktree) return <GitBranch size={15} className="shrink-0" style={{ color }} />;
+  const c = muted(color);
+  if (remote) return <Server size={15} className="shrink-0" style={{ color: c }} />;
+  if (worktree) return <GitBranch size={15} className="shrink-0" style={{ color: c }} />;
   const Icon = collapsed ? Folder : FolderOpen;
-  // Solid-filled folder so the workspace color stays the strong identity cue.
-  return <Icon size={15} className="shrink-0" fill={color} style={{ color }} />;
+  // Outline + a wash of fill, rather than a solid slug of color: the shape still
+  // reads as a folder and the hue still identifies it, at a fraction of the ink.
+  // `fill` goes through `style`, not the SVG attribute — an attribute parses as
+  // an SVG <paint>, which doesn't accept color-mix()/var().
+  return (
+    <Icon
+      size={15}
+      className="shrink-0"
+      style={{ color: c, fill: `color-mix(in oklab, ${color} 22%, transparent)` }}
+    />
+  );
 }
 
 export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocusFrame }: Props) {
@@ -250,7 +280,12 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
               }
             : {}),
         }}
-        className={`group flex h-8 items-center gap-2.5 pr-2.5 mx-2 text-left rounded-lg outline-none focus-visible:outline-none transition-colors ${
+        // `w-full min-w-0` is load-bearing, not cosmetic: a <button> defaults to
+        // width:auto, which on a flex container resolves to FIT-CONTENT. Without
+        // it the row shrink-wraps its text — so the selected background hugged the
+        // label instead of spanning the row, and the `truncate` on the name below
+        // never engaged (the row grew past the panel instead of clipping).
+        className={`group flex w-[calc(100%-1rem)] min-w-0 h-8 items-center gap-2.5 pr-2.5 mx-2 text-left rounded-lg outline-none focus-visible:outline-none transition-colors ${
           sel
             ? "text-[var(--color-fg)]"
             : "text-[var(--color-fg2)] hover:bg-[var(--surface-3)] hover:text-[var(--color-fg)]"
@@ -258,18 +293,38 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
         title={`${t.name} · ${st}`}
       >
         <span aria-hidden className="w-4 shrink-0 grid place-items-center font-mono text-[11px] text-[var(--color-fg3)]">
-          {t.kind === "claude" ? <AgentIcon id={t.agent ?? "claude"} size={14} /> : KIND_GLYPH[t.kind]}
+          {t.kind === "claude"
+            ? <AgentIcon id={t.agent ?? "claude"} size={14} />
+            : t.kind === "browser"
+              ? <Globe size={12} aria-hidden />
+              : KIND_GLYPH[t.kind]}
         </span>
-        {st !== "idle" && (
+        {/* Name first, so every row's text starts at the same x. The badge used to
+            lead, which pushed each name right by however wide its status happened
+            to be — the column read as ragged even though nothing was misaligned. */}
+        <span className="truncate flex-1 min-w-0">{t.name}</span>
+        {/* A word is for something you must ACT on. `working` is an agent doing its
+            job — the ordinary case — so it gets a dot, not a label: present enough
+            to see at a glance, quiet enough that `approve?` / `blocked` are the only
+            words in the column and therefore impossible to miss. Only those pulse.
+            (TerminalTile already said as much: "pulsing every active state is the
+            slop tell.") `exited` keeps its word — a dead tile is worth reading. */}
+        {st === "working" ? (
           <span
-            className={`shrink-0 text-[10px] font-medium leading-none px-1.5 py-[3px] rounded-full ${st === "working" || NEEDS_YOU(st) ? "animate-pulse" : ""}`}
+            aria-label="working"
+            title="working"
+            className="shrink-0 ml-auto size-1.5 rounded-full"
+            style={{ background: STATUS_COLOR[st] }}
+          />
+        ) : st !== "idle" ? (
+          <span
+            className={`shrink-0 ml-auto text-[10px] font-medium leading-none px-1.5 py-[3px] rounded-full ${NEEDS_YOU(st) ? "animate-pulse" : ""}`}
             style={{ color: STATUS_COLOR[st], background: `color-mix(in srgb, ${STATUS_COLOR[st]} 16%, transparent)` }}
             title={st}
           >
             {isPlan ? "review" : STATUS_LABEL[st]}
           </span>
-        )}
-        <span className="truncate flex-1 min-w-0">{t.name}</span>
+        ) : null}
       </button>
     );
   };
@@ -295,22 +350,43 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
           </button>
           <button
             onClick={() => onFocusFrame(frame.id)}
-            className="flex-1 flex items-center gap-2 min-w-0 text-left text-[14px] font-medium text-[var(--color-fg)]"
+            className="flex-1 flex items-center gap-2 min-w-0 text-left text-[14px] font-semibold tracking-[-0.014em] text-[var(--color-fg)]"
             title={isWt ? `Focus worktree ${frame.branch ?? frame.title}` : `Focus ${frame.title}`}
           >
             <WorkspaceIcon color={frame.color} remote={frame.remote} worktree={isWt} collapsed={isCollapsed} />
             <span className="truncate">{frame.title}</span>
             <span className="ml-auto flex items-center gap-1.5 min-w-0">
-              {agg && agg !== "idle" && agg !== "exited" && (
-                <span
-                  className={`shrink-0 text-[9px] font-medium leading-none px-1.5 py-[3px] rounded-full ${NEEDS_YOU(agg) || agg === "working" ? "animate-pulse" : ""}`}
-                  style={{ color: STATUS_COLOR[agg], background: `color-mix(in srgb, ${STATUS_COLOR[agg]} 16%, transparent)` }}
-                  title={STATUS_LABEL[agg]}
-                >
-                  {STATUS_LABEL[agg]}
+              {/* The frame's aggregate is a SUMMARY of its children. While the group
+                  is expanded the children are right there saying it themselves, so
+                  repeating it on the parent is the same fact twice — the row read
+                  `hmdemo working` directly above `Claude Code working`. Summarise
+                  only what's hidden: when collapsed, or when a child needs a human
+                  (that one is worth shouting even with the row open). */}
+              {agg && agg !== "idle" && agg !== "exited" && (isCollapsed || NEEDS_YOU(agg)) && (
+                NEEDS_YOU(agg) ? (
+                  <span
+                    className="shrink-0 text-[9px] font-medium leading-none px-1.5 py-[3px] rounded-full animate-pulse"
+                    style={{ color: STATUS_COLOR[agg], background: `color-mix(in srgb, ${STATUS_COLOR[agg]} 16%, transparent)` }}
+                    title={STATUS_LABEL[agg]}
+                  >
+                    {STATUS_LABEL[agg]}
+                  </span>
+                ) : (
+                  <span
+                    aria-label={STATUS_LABEL[agg]}
+                    title={STATUS_LABEL[agg]}
+                    className="shrink-0 size-1.5 rounded-full"
+                    style={{ background: STATUS_COLOR[agg] }}
+                  />
+                )
+              )}
+              {/* A frame with nothing in it shouldn't advertise a `0` — an empty
+                  count is noise the eye still has to read and discard. */}
+              {items.length + kids.length > 0 && (
+                <span className="font-mono text-[11px] tabular-nums text-[var(--color-fg3)] shrink-0">
+                  {items.length + kids.length}
                 </span>
               )}
-              <span className="font-mono text-[11px] text-[var(--color-fg3)] shrink-0">{items.length + kids.length}</span>
             </span>
           </button>
         </div>

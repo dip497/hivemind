@@ -321,6 +321,10 @@ export interface HiveIpc {
     cols: number;
     rows: number;
     env?: Record<string, string>;
+    /** A claude spawn's INITIAL task (▶ Work / spawn-with-work). Delivered as
+     *  claude's positional argv (which auto-submits), NOT typed into the booting
+     *  TUI — see applyInitialPrompt / HIVE_INITIAL_PROMPT. */
+    initialPrompt?: string;
   }): Promise<{ pid: number }>;
   /** Install the agentic stack (hive MCP + hive-work skill + CLAUDE.md) into a
    *  repo so a spawned claude can actually work issues. Idempotent. */

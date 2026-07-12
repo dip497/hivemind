@@ -12,6 +12,7 @@ import path from "node:path";
 import * as pty from "@lydell/node-pty";
 import { SessionManager, type ManagedPty, type SpawnSpec, type SessionSnapshot } from "./pty-session-manager.js";
 import { type ClientMsg, type ServerMsg, frame, makeLineDecoder } from "./pty-protocol.js";
+import { applyInitialPrompt } from "../shared/agent-io.js";
 import { evictTrackedSession, trackerSource } from "./tile-session-store.js";
 import { sanitizeShellEnv } from "./shell-env.js";
 import { composeResume } from "./providers/registry.js";
@@ -226,12 +227,16 @@ const factory = (spec: SpawnSpec): ManagedPty => {
   if (!env.COLORTERM) env.COLORTERM = "truecolor";
   if (!env.LANG) env.LANG = "C.UTF-8";
   if (!env.TERM_PROGRAM) env.TERM_PROGRAM = "hivemind";
-  const p = pty.spawn(spec.cmd, spec.args ?? [], {
+  // A ▶ Work prompt (HIVE_INITIAL_PROMPT) becomes claude's trailing positional
+  // arg — claude auto-submits it, so no typing race against the booting TUI. The
+  // env key is dropped from the child so claude never sees a stray var.
+  const { args: execArgs, env: execEnv } = applyInitialPrompt(spec.args ?? [], env);
+  const p = pty.spawn(spec.cmd, execArgs, {
     cwd: spec.cwd,
     cols: spec.cols,
     rows: spec.rows,
     name: "xterm-256color",
-    env,
+    env: execEnv,
   });
   return {
     get pid() {

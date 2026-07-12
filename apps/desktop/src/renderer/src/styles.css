@@ -40,6 +40,29 @@
   --chart-3: oklch(0.70 0.19 152);
   --chart-4: oklch(0.77 0.17 65);
   --chart-5: oklch(0.58 0.24 28);
+
+  /* ── Motion + tracking. Deliberately in :root, NOT in @theme: Tailwind v4
+     treats `--ease-*` as a theme namespace, so defining `--ease-out` there
+     would silently redefine the `ease-out` utility class app-wide. The `--hm-`
+     prefix keeps these ours.
+
+     ONE decelerating curve, named once — it was previously inlined in three
+     different spellings of the same bezier. Durations stay short because
+     latency is what kills the feeling of directness: nothing a pointer touches
+     should wait longer than --hm-dur-2 to acknowledge it. */
+  --hm-ease-out: cubic-bezier(0.32, 0.72, 0, 1);  /* decelerate; the house curve */
+  --hm-ease-in: cubic-bezier(1, 0, 0.68, 0.28);   /* its mirror, for exits (symmetric paths) */
+  --hm-dur-1: 100ms;   /* press feedback — must feel instant */
+  --hm-dur-2: 150ms;   /* hover / color / small transforms */
+  --hm-dur-3: 220ms;   /* panels, toasts, drawers */
+
+  /* Tracking is size-specific: letters read too far apart as they grow, and too
+     tight as they shrink. A single global letter-spacing is wrong somewhere, so
+     each size band gets its own value. */
+  --hm-track-display: -0.022em;  /* ≥24px   */
+  --hm-track-heading: -0.014em;  /* 16–23px */
+  --hm-track-body: -0.005em;     /* 12–15px — the body default */
+  --hm-track-caption: 0.01em;    /* ≤11px — small text wants a touch of air */
 }
 
 @theme inline {
@@ -161,17 +184,25 @@ body {
   -webkit-font-smoothing: antialiased;
   font-size: 13px;
   line-height: 1.5;
-  letter-spacing: -0.005em;
+  letter-spacing: var(--hm-track-body);
+  font-optical-sizing: auto;
   color: var(--color-fg);
   background: var(--color-bg);
   text-wrap: pretty; /* avoid single-word orphans in wrapped body/labels */
 }
 
 /* headings (e.g. issue-peek title) balance across lines instead of leaving a
-   short last line — make-interfaces-feel-better §10. */
+   short last line — make-interfaces-feel-better §10.
+   Leading tracks size INVERSELY (tight when large, loose when small) and
+   tracking tightens as the type grows: hierarchy is weight + size + leading as
+   a set, not size alone. */
 h1, h2, h3 {
   text-wrap: balance;
 }
+h1 { letter-spacing: var(--hm-track-display); line-height: 1.12; }
+h2 { letter-spacing: var(--hm-track-heading); line-height: 1.2; }
+h3 { letter-spacing: var(--hm-track-heading); line-height: 1.3; }
+small, .u-caption { letter-spacing: var(--hm-track-caption); }
 
 /* tracked small-caps section-header utility — replaces all-caps mono headers */
 .u-eyebrow {
@@ -239,14 +270,35 @@ html.glass-on .hm-toast {
 @keyframes hm-toast-shrink { from { width: 100%; } to { width: 0%; } }
 /* Enter — slide in from the right, ease-out-quint. No scale pop (motion conveys
    arrival; the flourish was decorative). */
-.hm-toast-in { animation: hm-toast-in 220ms cubic-bezier(0.32, 0.72, 0, 1); }
+.hm-toast-in { animation: hm-toast-in var(--hm-dur-3) var(--hm-ease-out); }
 @keyframes hm-toast-in {
-  from { opacity: 0; transform: translateX(16px); }
-  to   { opacity: 1; transform: translateX(0); }
+  /* A glass surface should MATERIALIZE, not just slide: blur + scale resolve
+     together so it reads as a pane of glass arriving, not a rectangle flying in. */
+  from { opacity: 0; transform: translateX(16px) scale(0.97); filter: blur(2px); }
+  to   { opacity: 1; transform: translateX(0) scale(1); filter: blur(0); }
+}
+/* Exit retraces the entry, on the mirrored curve. A toast that slides in from the
+   right and then simply blinks out of existence breaks the spatial contract: if
+   something disappears one way, we expect it to have come from there. Faster than
+   the entrance — leaving should never cost the user attention. */
+.hm-toast-out {
+  animation: hm-toast-out 160ms var(--hm-ease-in) forwards;
+  pointer-events: none;
+}
+@keyframes hm-toast-out {
+  from { opacity: 1; transform: translateX(0) scale(1); }
+  to   { opacity: 0; transform: translateX(16px) scale(0.97); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .hm-toast-in { animation: none; }
-  .hm-toast-bar { animation: none; }
+  /* Reduced motion is a gentler equivalent, NOT the absence of feedback: keep an
+     opacity cross-fade (non-vestibular) and drop the slide/scale/blur. */
+  .hm-toast-in  { animation: hm-toast-fade-in 160ms linear; }
+  .hm-toast-out { animation: hm-toast-fade-out 120ms linear forwards; }
+  @keyframes hm-toast-fade-in  { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes hm-toast-fade-out { from { opacity: 1; } to { opacity: 0; } }
+  /* The countdown bar KEEPS animating. It isn't decorative motion — it's the only
+     signal that the toast self-dismisses, and freezing it at 100% width says the
+     opposite. A 2px linear width shrink is not vestibular. */
 }
 
 /* ── Shared surface utilities — one depth language for the issue UI (and any
@@ -300,22 +352,35 @@ html.glass-on .hm-toast {
   border: 1px solid var(--color-line2);
   border-radius: 8px;
   box-shadow: var(--hm-shadow-1);
-  transition: transform 150ms cubic-bezier(.32,.72,0,1),
-              border-color 150ms ease,
-              box-shadow 150ms ease;
+  transition: transform var(--hm-dur-2) var(--hm-ease-out),
+              border-color var(--hm-dur-2) var(--hm-ease-out),
+              box-shadow var(--hm-dur-2) var(--hm-ease-out);
 }
 .hm-card:hover {
   transform: translateY(-1px);
   border-color: var(--color-fg3);
   box-shadow: var(--hm-shadow-2), var(--hm-highlight);
 }
+/* Press feedback lands on pointer-down (CSS :active fires on mousedown, not on
+   release) and is faster than the hover it interrupts — a press must never feel
+   like it's waiting for the mouse-up to be acknowledged. */
 .hm-card:active {
-  transform: translateY(0);
+  transform: scale(0.985);
+  transition-duration: var(--hm-dur-1);
 }
 
-/* Shared soft transition for any element that changes color/transform. */
+/* Shared soft transition for any element that changes color/transform.
+   Enumerated, never `all`: `all` sweeps in layout properties (width, top, …)
+   that can't be composited, so an unrelated style change silently animates on
+   the main thread. Only transform/opacity are compositor-friendly; the colors
+   here are cheap paints. */
 .hm-soft {
-  transition: all 150ms cubic-bezier(.32,.72,0,1);
+  transition: transform var(--hm-dur-2) var(--hm-ease-out),
+              opacity var(--hm-dur-2) var(--hm-ease-out),
+              color var(--hm-dur-2) var(--hm-ease-out),
+              background-color var(--hm-dur-2) var(--hm-ease-out),
+              border-color var(--hm-dur-2) var(--hm-ease-out),
+              box-shadow var(--hm-dur-2) var(--hm-ease-out);
 }
 
 /* lightweight loading spinner for tile loading states (muted, no glow) */
@@ -429,10 +494,10 @@ a {
    Stripped during pan/drag/resize below (motion already controls its own
    timing — adding transition there would lag the cursor). */
 .react-flow__node {
-  /* Linear-app drop easing: cubic-bezier(.32,.72,0,1) — ease-out-quint, fast
+  /* Linear-app drop easing: var(--hm-ease-out) — ease-out-quint, fast
      start that matches release velocity, slow settle. Material's symmetric
      (.4,0,.2,1) felt sluggish. 280ms keeps it snappy. */
-  transition: transform 280ms cubic-bezier(.32, .72, 0, 1);
+  transition: transform 280ms var(--hm-ease-out);
 }
 
 /* Frames must be event-transparent at the .react-flow__node wrapper level.
@@ -727,14 +792,23 @@ html.glass-on body {
 /* Frost the docked Layers panel (it sits BESIDE the canvas; its bg token is
    already translucent under glass, this adds the blur so the wallpaper behind
    reads as frosted glass). */
-/* The docked Layers panel stays an OPAQUE surface even under glass — the
-   wallpaper must NOT bleed through it (translucency read as noise). `--color-bg2`
-   is redefined translucent under glass, so use the opaque source `--surface-2`
-   and drop the blur (nothing to frost on a solid slab). */
+/* The docked Layers panel is a STRUCTURAL region, so it takes the HEAVIEST
+   material in the app — but heavy is not the same as opaque. Fully solid, it
+   read as a slab pasted over the wallpaper, ending in a hard seam. At 92% it
+   still hides the wallpaper's DETAIL (which is what "translucency read as noise"
+   was really about) while remaining part of the same scene: a faint wash of the
+   backdrop's color survives, and the trailing edge catches light instead of
+   guillotining the image.
+   Blur stays off — over a video wallpaper backdrop-filter re-blurs every frame
+   (see the perf rule below), and behind a 92% surface there's nothing to frost. */
 html.glass-on .hm-layers {
-  background: var(--surface-2);
+  background: color-mix(in srgb, var(--surface-2) 92%, transparent);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
+  /* The lit edge of a real material, in place of a 1px hard divider — so the
+     component's own `border-r` is retired here rather than drawn on top of it. */
+  border-right-color: transparent;
+  box-shadow: inset -1px 0 0 oklch(1 0 0 / 0.06), 8px 0 24px oklch(0.05 0 0 / 0.28);
 }
 /* (The glass-mode selection outline was removed — the top-clip indicator above
    works in both opaque + glass themes.) */
@@ -1025,7 +1099,7 @@ html.glass-on .react-flow__node-browser {
   from { transform: translateX(12px); opacity: 0; }
   to   { transform: translateX(0);    opacity: 1; }
 }
-.hm-drawer-in { animation: hm-drawer-in 180ms cubic-bezier(0.32, 0.72, 0, 1); }
+.hm-drawer-in { animation: hm-drawer-in 180ms var(--hm-ease-out); }
 
 /* Customizer range sliders — native input themed to the brand accent. */
 .hm-range {
@@ -1054,3 +1128,56 @@ html.glass-on .react-flow__node-browser {
   background: var(--color-brand);
   cursor: pointer;
 }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   Accessibility: the two system settings glass mode must honor.
+
+   Glass ships ON by default, so translucency is not opt-in for the user — which
+   means a user who told their OS to reduce transparency (or raise contrast) must
+   still get a readable app without hunting for our theme customizer. These
+   blocks sit at the END of the file so they win over the .glass-on rules above
+   without !important on every declaration.
+
+   Reduced motion is already handled per-component earlier in this file; the only
+   thing it owes us here is stilling the wallpaper, which composites every frame.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+@media (prefers-reduced-transparency: reduce) {
+  html.glass-on {
+    /* 100% of the surface source = the opaque token, so every
+       bg-[var(--color-bg2/3/4)] surface solidifies with no component edits. */
+    --glass-opacity: 100%;
+    --frame-fill: 7%;
+  }
+  /* Blur costs GPU and buys nothing behind an opaque panel. */
+  html.glass-on .hm-island,
+  html.glass-on .react-flow__node,
+  html.glass-on .hm-layers {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+  html.glass-on body { background: var(--color-bg); }
+  /* The layers panel is the one surface with a hand-tuned alpha, so the
+     --glass-opacity override above can't reach it. Solidify it explicitly. */
+  html.glass-on .hm-layers { background: var(--surface-2); }
+  /* A full-viewport moving video behind opaque chrome is pure cost. */
+  .hm-wallpaper { display: none !important; }
+}
+
+@media (prefers-contrast: more) {
+  html.glass-on {
+    --glass-opacity: 100%;
+  }
+  html.glass-on .hm-island,
+  html.glass-on .react-flow__node {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border: 1px solid var(--color-fg2);   /* a defined edge, not an implied one */
+  }
+  .hm-wallpaper { display: none !important; }
+}
+
+/* Vibrancy: text over a translucent surface needs more weight and a touch of
+   tracking than the same text over a solid one, because the backdrop moves and
+   its local contrast is unpredictable. Only applies while glass is actually on. */
+html.glass-on .u-eyebrow { color: var(--color-fg); }

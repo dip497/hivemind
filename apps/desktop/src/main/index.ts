@@ -1,5 +1,5 @@
 /** Electron main process — owns the BrowserWindow + IPC + PtyHost + git/worktree. */
-import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, session, shell, webContents } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, screen, session, shell, webContents } from "electron";
 import path from "node:path";
 import { promises as fsp, statSync, readFileSync, writeFileSync, existsSync, cpSync, mkdirSync, readdirSync, unlinkSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -83,7 +83,7 @@ import { HcpError } from "./hcp/protocol.js";
 import { PipeManager } from "./hcp/pipes.js";
 import { readLastAssistantMessage } from "./hcp/transcript.js";
 import { toBareId, toPtyId } from "../shared/tile-id.js";
-import { SUBMIT_DELAY_MS } from "../shared/agent-io.js";
+import { SUBMIT_DELAY_MS, INITIAL_PROMPT_ENV } from "../shared/agent-io.js";
 import type {
   DiffScope,
   WorktreeCreateOpts,
@@ -186,7 +186,12 @@ interface WinState {
   y?: number;
   maximized?: boolean;
 }
-const WIN_STATE_DEFAULTS: WinState = { width: 1440, height: 920 };
+// First run opens MAXIMIZED. An infinite canvas is the whole point of the app, and
+// 1440×920 floating on a large display shows a keyhole of it. The width/height are
+// still the un-maximised size, so the first ⌘/double-click restore lands somewhere
+// sane — and once the user resizes, `save()` persists whatever they chose (including
+// `maximized: false`), so this default never fights them again.
+const WIN_STATE_DEFAULTS: WinState = { width: 1440, height: 920, maximized: true };
 function winStatePath(): string {
   return path.join(app.getPath("userData"), "window-state.json");
 }
@@ -286,9 +291,32 @@ async function createWindow(): Promise<void> {
   // mainWindow.webContents throws "Object has been destroyed".
   const wc = mainWindow.webContents;
 
-  if (state.maximized) mainWindow.maximize();
   attachWinStateSaver(mainWindow);
+  // Maximize AFTER the window is mapped, not before. The window is created with
+  // `show: false`, and a maximize request against an unmapped window is silently
+  // dropped by several Linux WMs (mutter among them) — the app then opened at the
+  // 1440×920 fallback no matter what the saved state said.
   mainWindow.on("ready-to-show", () => mainWindow?.show());
+  // Maximize once the window is actually MAPPED. The window is created with
+  // `show: false`, and a maximize request against an unmapped X11 window is
+  // silently dropped by mutter — issuing it in `ready-to-show`, before or after
+  // show(), left the app at the 1440×920 fallback regardless of saved state
+  // (window-state.json would then persist `maximized: false`, making it sticky).
+  // `once("show")` + a macrotask lets the WM map the frame first.
+  mainWindow.once("show", () => {
+    if (!state.maximized) return;
+    // A bare maximize() here is a no-op under mutter: the request races the WM
+    // mapping the frame and is dropped (verified — `isMaximized()` stays false and
+    // the window keeps its 1440x920 fallback, which then persists as
+    // `maximized: false`). Snap to the display's work area first so the geometry is
+    // right regardless, then ask the WM to own it as a real maximized window.
+    setTimeout(() => {
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      const { workArea } = screen.getDisplayMatching(mainWindow.getBounds());
+      mainWindow.setBounds(workArea);
+      mainWindow.maximize();
+    }, 120);
+  });
   // Stop the taskbar/dock attention (set by a native agent notification) the
   // moment the user looks at the window.
   mainWindow.on("focus", () => { try { mainWindow?.flashFrame(false); } catch { /* unsupported */ } });
@@ -1172,6 +1200,12 @@ ipcMain.handle("ptySpawn", wrap(async (e, opts: Parameters<typeof spawnPty>[0]) 
   // the pty id; the policy is keyed by the bare id.
   const supSpec = hcpSupervise.get(toBareId(opts.tileId));
   if (supSpec) opts = { ...opts, env: { ...(opts.env ?? {}), HIVE_SUPERVISE: supSpec } };
+  // An initial ▶ Work prompt rides the spawn env (crosses the wire + persists),
+  // to be appended as claude's positional argv at exec (applyInitialPrompt) —
+  // this is the auto-submitting path that replaced typing into the booting TUI.
+  if (opts.initialPrompt) {
+    opts = { ...opts, env: { ...(opts.env ?? {}), [INITIAL_PROMPT_ENV]: opts.initialPrompt } };
+  }
   const sender = e.sender;
   // Remote frame (ssh:// cwd): run the PTY over ssh, in-main. Skip the local
   // cwd stat + shell-env patch (those are for the LOCAL host). The data/exit
