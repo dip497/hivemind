@@ -1756,8 +1756,15 @@ function startHcpControlPlane(): void {
       if (hcpSubagents.busy(d.tileId)) hcpSubagentReaper.arm(d.tileId);
       // Pipe forwarding: feed this agent's reply into any piped destinations.
       const dests = hcpPipes.dests(toBareId(d.tileId));
-      if (dests.length === 0 || !safeTp) return;
-      const reply = readLastAssistantMessage(safeTp);
+      if (dests.length === 0) return;
+      // claude/droid carry the reply in a transcript; pi carries it inline on the
+      // turn event. Gating on the transcript alone silently dropped every pi
+      // worker's auto-report to its parent.
+      const reply = safeTp
+        ? readLastAssistantMessage(safeTp)
+        : typeof d.text === "string"
+          ? d.text.trim()
+          : "";
       if (!reply) return;
       // Tag the forward with its source so the receiving agent knows which
       // worker just reported (this is the agent-to-agent "mailbox" delivery —

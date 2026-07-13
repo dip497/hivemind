@@ -7,6 +7,14 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Fixed
+
+- **A pi worker's reply never reached the agent that spawned it.** The auto-report
+  forwarder read the reply from the agent's transcript file, but pi has no transcript —
+  it carries its reply inline on the `turn` event. Every pi worker's report was silently
+  dropped at that gate. It now falls back to the inline text, so pi delegation reports
+  back like claude and droid do.
+
 ## [1.12.6] — 2026-07-12
 
 ### Added
