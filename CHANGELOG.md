@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [1.12.7] — 2026-07-13
+
 ### Fixed
 
 - **A pi worker's reply never reached the agent that spawned it.** The auto-report
@@ -697,7 +699,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v1.12.6...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v1.12.7...HEAD
+[1.12.7]: https://github.com/dip497/hivemind/releases/tag/v1.12.7
 [1.12.6]: https://github.com/dip497/hivemind/releases/tag/v1.12.6
 [1.12.5]: https://github.com/dip497/hivemind/releases/tag/v1.12.5
 [1.12.4]: https://github.com/dip497/hivemind/releases/tag/v1.12.4
