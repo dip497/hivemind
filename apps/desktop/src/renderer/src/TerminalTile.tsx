@@ -11,7 +11,7 @@ import { useTileFont, FontScaleControl, handleFontKey } from "./tile-font";
 import { identifyAgent, detectTileStatus, stabilizeClaudeStatus, normalizeAgentTitle, type TileStatus } from "./agent-state";
 import { registerClaude, unregisterClaude, shouldDeliver, peekWork, claimWork, clearWork, type SendToClaudeDetail } from "./claude-bus";
 import { publishStatus, clearStatus, noteOutput, revalidate, type TileStatusKind } from "./agent-status-bus";
-import { SUBMIT_DELAY_MS, SPAWN_SUBMIT_RETRY_MS } from "../../shared/agent-io";
+import { SUBMIT_DELAY_MS, SPAWN_SUBMIT_RETRY_MS, deliversPromptViaArgv } from "../../shared/agent-io";
 import { Pencil, GripVertical } from "lucide-react";
 import { webUrlForInternalBrowser } from "./browser-open";
 import { useTheme, getTheme } from "./theme-store";
@@ -724,14 +724,15 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
 
     async function doSpawn() {
       try {
-        // Deliver a queued ▶ Work prompt as claude's positional ARGV — claude
-        // auto-submits it, so there's no race against the booting TUI that used to
-        // swallow the typed prompt's Enter (▶ Work silently doing nothing on a cold
-        // start). claimWork consumes once, so a re-attach/respawn never re-delivers,
-        // and the daemon strips it on frozen-restore — the task runs exactly once.
-        // Non-claude agents still take the typed-delivery path in the poll below
-        // (peekWork stays set for them because only claude claims here).
-        const initialPrompt = isClaude ? claimWork(ptyId) : undefined;
+        // Deliver a queued ▶ Work prompt as the agent's positional ARGV — claude and
+        // pi both auto-submit it as a real turn, so there's no race against the
+        // booting TUI that used to swallow the typed prompt's Enter (▶ Work / a
+        // spawned pi worker silently doing nothing on a cold start). claimWork
+        // consumes once, so a re-attach/respawn never re-delivers, and the daemon
+        // strips it on frozen-restore — the task runs exactly once.
+        // Agents without an argv prompt (codex/droid/opencode) still take the typed-
+        // delivery path in the poll below: peekWork stays set because we don't claim.
+        const initialPrompt = deliversPromptViaArgv(agent) ? claimWork(ptyId) : undefined;
         const { pid } = await window.hive.ptySpawn({
           tileId: ptyId,
           cwd,

@@ -22,10 +22,10 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
-/** Mirror of the fire-and-forget lifecycle bridge + supervise `tool_call`
- *  handler in the string. Asserts the event names and the tool_call
- *  block/allow contract (`{ block, reason } | void`). */
-function assertLifecycleAndSupervise(pi: ExtensionAPI): void {
+/** Mirror of the fire-and-forget lifecycle bridge in the string. Asserts the event
+ *  names pi must keep. The supervise `tool_call` broker was REMOVED (pi has no
+ *  permission system — see pi-ext-source.ts), so there is no tool_call mirror here. */
+function assertLifecycle(pi: ExtensionAPI): void {
   // Lifecycle bridge — the three events the string posts status/turn from.
   pi.on("agent_start", async () => {
     // no payload needed
@@ -43,18 +43,6 @@ function assertLifecycleAndSupervise(pi: ExtensionAPI): void {
     }
   });
 
-  // Supervise — a tool_call handler that reads toolName/toolCallId/input, awaits
-  // an approval keyed off ctx.signal, and blocks (or falls open) exactly like the
-  // string's broker. Returning `{ block, reason }` denies; returning nothing allows.
-  pi.on("tool_call", async (event, ctx) => {
-    const name: string = event.toolName;
-    void event.toolCallId;
-    void event.input;
-    const signal: AbortSignal | undefined = ctx.signal;
-    void signal;
-    if (name === "__never__") return { block: true, reason: "Denied by supervisor" };
-    return; // allow / fail-open
-  });
 }
 
 /** Mirror of every `pi.registerTool(...)` call in the string. Asserts the
@@ -189,6 +177,6 @@ function assertOrchestrationTools(pi: ExtensionAPI): void {
 /** The extension factory signature pi calls (`export default function (pi) {…}`).
  *  Kept as a typed reference so a change to how pi hands the API in fails here. */
 export function piExtTypecheckReference(pi: ExtensionAPI): void {
-  assertLifecycleAndSupervise(pi);
+  assertLifecycle(pi);
   assertOrchestrationTools(pi);
 }

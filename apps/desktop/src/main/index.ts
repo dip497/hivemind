@@ -1673,7 +1673,7 @@ function startHcpControlPlane(): void {
   const dispatch = makeDispatch({
     callRenderer: hcpCallRenderer,
     writeToTile: hcpWriteToTile,
-    deliverToTile: (ptyId, text) => hcpMailbox.deliver(ptyId, text),
+    deliverToTile: (ptyId, text, onSent) => hcpMailbox.deliver(ptyId, text, onSent),
     turns: hcpTurns,
     recorder: hcpRecorder,
     spawnAllowed: hcpSpawnAllowed,

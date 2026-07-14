@@ -12,7 +12,7 @@ import path from "node:path";
 import * as pty from "@lydell/node-pty";
 import { SessionManager, type ManagedPty, type SpawnSpec, type SessionSnapshot } from "./pty-session-manager.js";
 import { type ClientMsg, type ServerMsg, frame, makeLineDecoder } from "./pty-protocol.js";
-import { applyInitialPrompt } from "../shared/agent-io.js";
+import { applyInitialPrompt, stripInitialPrompt } from "../shared/agent-io.js";
 import { evictTrackedSession, trackerSource } from "./tile-session-store.js";
 import { sanitizeShellEnv } from "./shell-env.js";
 import { composeResume } from "./providers/registry.js";
@@ -277,7 +277,11 @@ const manager = new SessionManager(factory, {
   // layer): killed mid-tool-call (#18880), post-`cd` mid-session (#22566),
   // version-upgrade across resume (#53417).
   transformSpecOnSpawn: resume.transformSpecOnSpawn,
-  transformSpecOnRestore: resume.transformSpecOnRestore,
+  // Strip the one-time HIVE_INITIAL_PROMPT before ANY provider sees the spec. A
+  // restore re-execs from the persisted spec, so an un-stripped prompt is re-appended
+  // as positional argv and the task RUNS AGAIN — for every agent that takes an argv
+  // prompt (claude, pi). Agent-agnostic on purpose: this is a property of restore.
+  transformSpecOnRestore: (spec, id) => resume.transformSpecOnRestore(stripInitialPrompt(spec), id),
   restoreRetryMs: resume.restoreRetryMs,
   restoreRetryTransform: resume.restoreRetryTransform,
 });

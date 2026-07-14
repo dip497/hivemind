@@ -31,9 +31,18 @@ const MAX_QUEUED = 32;
  *  on Stop; typing into the same frame can land mid-repaint. */
 const IDLE_SETTLE_MS = 250;
 
+/** A held message + an optional "it actually reached the agent" callback. The
+ *  callback is what lets an approval start its answer-timeout from DELIVERY rather
+ *  than from arrival — a request that waited 8 minutes for a busy parent must not
+ *  then time out in 1. */
+interface Held {
+  text: string;
+  onSent?: () => void;
+}
+
 export class Mailbox {
   private busy = new Set<string>();
-  private queued = new Map<string, string[]>();
+  private queued = new Map<string, Held[]>();
 
   constructor(
     /** Raw write into a tile's pty. False → dead/unknown tile. */
@@ -54,7 +63,9 @@ export class Mailbox {
     if (!q?.length) return;
     const next = q.shift()!;
     if (!q.length) this.queued.delete(ptyId);
-    const t = setTimeout(() => this.send(ptyId, next), IDLE_SETTLE_MS);
+    const t = setTimeout(() => {
+      if (this.send(ptyId, next.text)) next.onSent?.();
+    }, IDLE_SETTLE_MS);
     t.unref?.();
   }
 
@@ -64,11 +75,15 @@ export class Mailbox {
    * when the tile is dead AND idle (i.e. the write itself failed) — a queued
    * message reports true, because it will be delivered.
    */
-  deliver(ptyId: string, text: string): boolean {
-    if (!this.busy.has(ptyId)) return this.send(ptyId, text);
+  deliver(ptyId: string, text: string, onSent?: () => void): boolean {
+    if (!this.busy.has(ptyId)) {
+      const ok = this.send(ptyId, text);
+      if (ok) onSent?.();
+      return ok;
+    }
     const q = this.queued.get(ptyId) ?? [];
     if (q.length >= MAX_QUEUED) q.shift(); // drop the stalest, keep the newest
-    q.push(text);
+    q.push({ text, onSent });
     this.queued.set(ptyId, q);
     return true;
   }

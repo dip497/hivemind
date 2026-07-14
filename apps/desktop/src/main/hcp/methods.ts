@@ -28,7 +28,13 @@ const DEFAULT_BROKER_TOOLS = "Bash,Edit,Write,MultiEdit,NotebookEdit,WebFetch";
 
 /** A supervisor has up to this long to answer before the worker falls back to its
  *  own (human) permission prompt. < the hook's command timeout. */
+/** How long the supervisor has to ANSWER, measured from when the request actually
+ *  reached its terminal (not from when the worker asked — it may have been held
+ *  while the supervisor was mid-turn). */
 const APPROVAL_TIMEOUT_MS = 9 * 60 * 1000;
+/** Hard ceiling on the whole wait, so a supervisor that never comes back to its
+ *  prompt can't hang the worker (and leak the pending entry) forever. */
+const APPROVAL_MAX_WAIT_MS = 20 * 60 * 1000;
 
 /** Workflow (multi-agent orchestration) defaults. A `workflow.run` fans work out
  *  to visible worker tiles and awaits their turns. `TIMEOUT` bounds one worker's
@@ -69,6 +75,15 @@ export function stickyAllow(cacheKey: string): boolean {
   return STICKY_ALLOW.has((cacheKey.split(":").pop() ?? "").toLowerCase());
 }
 
+/** Agents with NO permission system of their own, which therefore cannot be
+ *  supervised: there is no native prompt for a broker to intercept or to fail back
+ *  to, so any gate we inject must fail closed and bricks the worker on the first
+ *  hiccup. A `supervise` request for these is refused at spawn, not silently
+ *  downgraded — a caller that thinks it has a gate but doesn't is worse off than one
+ *  that knows it has none. Verified for pi 0.55.3 (its core has no approval path).
+ *  claude/droid are NOT here: their brokers fail open to a real human prompt. */
+const SUPERVISE_UNSUPPORTED = new Set(["pi"]);
+
 /** Normalize a `supervise` arg into the HIVE_SUPERVISE env string (a tool list or
  *  "all"), or null to disable. */
 function normalizeSupervise(s: unknown): string | null {
@@ -97,8 +112,10 @@ export interface MethodDeps {
   writeToTile: (tileId: string, data: string) => boolean;
   /** Deliver a MESSAGE to an agent (typed + Enter), holding it until that agent is
    *  back at its prompt. A message typed into a mid-turn TUI lands in the composer
-   *  unsubmitted and is never read — see hcp/mailbox.ts. */
-  deliverToTile: (ptyId: string, text: string) => boolean;
+   *  unsubmitted and is never read — see hcp/mailbox.ts. `onSent` fires when the
+   *  text actually reaches the terminal (which is when an approval's answer-clock
+   *  should start). Returns false only if the tile's pty is dead. */
+  deliverToTile: (ptyId: string, text: string, onSent?: () => void) => boolean;
   turns: TurnTracker;
   recorder: OutputRecorder;
   /** Sliding-window spawn gate (reuse the ptySpawn rate-limit). false → refuse. */
@@ -173,6 +190,20 @@ export function makeDispatch(deps: MethodDeps): (method: string, params: unknown
     if (!deps.spawnAllowed()) throw new HcpError("RATE_LIMITED", "spawn rate limit exceeded");
     const agent = String(opts.agent ?? "claude");
     const sup = normalizeSupervise(opts.supervise);
+    // pi cannot be supervised. It has NO permission system, so the only gate would be
+    // one we inject — which must fail CLOSED (no human prompt to fall back to) and
+    // therefore bricks the worker on any hiccup. Refuse LOUDLY rather than spawning
+    // an ungated worker the caller believes it is supervising: a false gate is worse
+    // than no gate. (A user-opened pi tile is fully autonomous too — this changes
+    // nothing about pi's actual authority.)
+    if (sup && SUPERVISE_UNSUPPORTED.has(agent)) {
+      throw new HcpError(
+        "BAD_REQUEST",
+        `${agent} workers cannot be supervised — ${agent} has no permission system, so there is nothing to broker. ` +
+          `Spawn this worker WITHOUT supervise (it runs autonomously, like any ${agent} tile), ` +
+          `or spawn a claude worker with supervise if you need to gate its tools.`,
+      );
+    }
     // Default an AGENT-SPAWNED worker to AUTO (bypassPermissions): a delegated
     // worker has no human at its tile, so inheriting the UI's "default" mode would
     // hang it on the first permission prompt. Two cases keep the human/broker in
@@ -332,20 +363,37 @@ export function makeDispatch(deps: MethodDeps): (method: string, params: unknown
         const banner =
           `\n[hive] APPROVAL — worker ${labelOf(worker)} wants to run ${tool}: ${summary}\n` +
           `Reply: hive_approve("${reqId}", "allow" | "deny" | "always" | "never")\n`;
-        // Held if the supervisor is mid-turn. THIS is what stranded approvals in the
-        // parent's composer: the worker blocked for 9.5 min on an answer the parent
-        // was never able to see, because the request arrived while it was busy.
-        deps.deliverToTile(ptyId(parent), banner);
         // Surface the pause in the UI: this worker is now waiting on its parent.
         deps.pushWait(worker, "awaiting_approval");
         return await new Promise((resolve) => {
-          const timer = setTimeout(() => {
+          const done = (decision: "ask") => {
+            const pend = pendingApprovals.get(reqId);
+            if (pend) clearTimeout(pend.timer);
             pendingApprovals.delete(reqId);
             deps.pushWait(worker, null);
-            resolve({ decision: "ask" }); // timed out → human prompt (fail-safe)
-          }, APPROVAL_TIMEOUT_MS);
-          if (typeof timer.unref === "function") timer.unref();
-          pendingApprovals.set(reqId, { resolve, timer, cacheKey, worker });
+            resolve({ decision }); // no answer → "ask" (claude: human prompt; pi: blocks)
+          };
+          // The answer clock starts WHEN THE PARENT ACTUALLY SEES THE REQUEST, not
+          // when it arrives. The banner is held while the parent is mid-turn, so a
+          // request that waited 8 minutes for a busy supervisor must not then get
+          // 1 minute to be answered — that's how a worker ends up blocked on a
+          // question nobody was ever given time to answer.
+          pendingApprovals.set(reqId, { resolve, timer: setTimeout(() => {}, 0), cacheKey, worker });
+          const armAnswerTimeout = () => {
+            const pend = pendingApprovals.get(reqId);
+            if (!pend) return; // already answered
+            clearTimeout(pend.timer);
+            const t = setTimeout(() => done("ask"), APPROVAL_TIMEOUT_MS);
+            t.unref?.();
+            pend.timer = t;
+          };
+          // Ceiling: if the parent NEVER returns to its prompt (dead, wedged), the
+          // request would hang forever and leak. Bound the total wait.
+          const ceiling = setTimeout(() => done("ask"), APPROVAL_MAX_WAIT_MS);
+          ceiling.unref?.();
+          pendingApprovals.get(reqId)!.timer = ceiling;
+          const delivered = deps.deliverToTile(ptyId(parent), banner, armAnswerTimeout);
+          if (!delivered) done("ask"); // parent's pty is gone → don't hang the worker
         });
       }
 

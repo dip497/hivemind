@@ -7,8 +7,28 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Changed
+
+- **pi workers can no longer be supervised — and a `supervise` request for one is now a
+  loud error, not a silent downgrade.** pi has no permission system of its own (a pi tile
+  you open yourself is fully autonomous), so the only gate was one hivemind injected — and
+  with no native prompt to fall back to, that gate had to fail closed. Any hiccup (a busy
+  supervisor, a slow answer, a socket blip) then refused *every* tool and bricked the
+  worker mid-task. A supervisor that is another LLM, answering at minutes of latency, in a
+  repo you already trusted both agents with, was not buying enough to justify that. Need a
+  gated worker? Spawn **claude** with `supervise` — its broker fails open to claude's own
+  permission prompt, so a lost approval still stops at a human.
+
 ### Fixed
 
+- **A spawned pi worker could silently never receive its task.** pi's prompt was typed into
+  its booting TUI and the Enter could be swallowed — the same race that made ▶ Work do
+  nothing on a cold start. pi takes a positional prompt that it auto-submits as a real turn
+  (verified in pi 0.55.3), so it now uses the same deterministic argv path as claude.
+- **A restored pi worker would have re-run its task on every restart.** The initial-prompt
+  strip lived inside claude's resume provider, where it silently did nothing for any other
+  agent. It's now applied to every spec on restore, agent-agnostic — a restore resumes, it
+  never re-submits.
 - **Messages to a busy agent were dropped on the floor.** Every agent-to-agent message
   (a worker's report, an approval request, `hive_send`) is delivered by *typing into the
   target agent's terminal*. If that agent was mid-turn, the text landed in its composer

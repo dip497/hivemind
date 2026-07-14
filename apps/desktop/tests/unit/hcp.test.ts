@@ -99,7 +99,7 @@ function fakeDeps(over: Partial<Parameters<typeof makeDispatch>[0]> = {}) {
     recorder,
     callRenderer: async (_m: string, _p: unknown) => ({ tileId: "tile-x" }),
     writeToTile: write,
-    deliverToTile: (id: string, data: string) => mailbox.deliver(id, data),
+    deliverToTile: (id: string, data: string, onSent?: () => void) => mailbox.deliver(id, data, onSent),
     spawnAllowed: () => true,
     connect: () => true,
     disconnect: () => {},

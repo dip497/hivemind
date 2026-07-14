@@ -19,7 +19,6 @@
 import { randomUUID } from "node:crypto";
 import type { SpawnSpec } from "./pty-session-manager.js";
 import { readTrackedSession } from "./tile-session-store.js";
-import { INITIAL_PROMPT_ENV } from "../shared/agent-io.js";
 
 export interface ClaudeResumeDeps {
   /** Absolute path to the generated tracker `.cjs` (daemon writes the file). */
@@ -223,15 +222,10 @@ export function makeClaudeResumeTransforms(deps: ClaudeResumeDeps): ClaudeResume
     },
     transformSpecOnRestore: (spec, id) => {
       if (!isClaude(spec)) return spec;
-      // A frozen session re-execs from its persisted spec. The spawn env still
-      // carries HIVE_INITIAL_PROMPT (the one-time ▶ Work task), which the factory
-      // would re-append as claude's positional argv → the task would RUN AGAIN on
-      // every restore. Strip it here so a restore only resumes; it never re-submits.
-      if (spec.env && INITIAL_PROMPT_ENV in spec.env) {
-        const env = { ...spec.env };
-        delete env[INITIAL_PROMPT_ENV];
-        spec = { ...spec, env };
-      }
+      // NOTE: HIVE_INITIAL_PROMPT is stripped for EVERY agent in the daemon's restore
+      // (see pty-daemon.ts + shared/agent-io.stripInitialPrompt). It used to be
+      // stripped here, which silently did nothing for pi — the strip is a property of
+      // restore, not of claude.
       const args = spec.args ?? [];
       // PREFER the live session the tile was last in (tracked via the SessionStart
       // hook) — follows a `/resume <other>` the user did, or any id claude

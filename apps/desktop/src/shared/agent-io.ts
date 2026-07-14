@@ -49,3 +49,40 @@ export function applyInitialPrompt(
   delete next[INITIAL_PROMPT_ENV];
   return { args: [...args, prompt], env: next };
 }
+
+/**
+ * Drop the one-time initial prompt from a spec's env. MUST run on every RESTORE,
+ * for every agent.
+ *
+ * A frozen session re-execs from its persisted spec, and the spawn env is part of
+ * that spec — so an un-stripped HIVE_INITIAL_PROMPT gets re-appended as a positional
+ * argv and THE TASK RUNS AGAIN, every single restore. This lives here, agent-agnostic,
+ * rather than inside one agent's resume provider: the strip is a property of restore
+ * itself, and the version that lived in claude-resume silently did nothing for pi.
+ */
+export function stripInitialPrompt<T extends { env?: Record<string, string> }>(spec: T): T {
+  if (!spec.env || !(INITIAL_PROMPT_ENV in spec.env)) return spec;
+  const env = { ...spec.env };
+  delete env[INITIAL_PROMPT_ENV];
+  return { ...spec, env };
+}
+
+/**
+ * Agents whose CLI takes the initial task as a POSITIONAL ARG and auto-submits it
+ * as a real turn — the deterministic delivery. Everything else falls back to typing
+ * the prompt into the booting TUI and hoping the Enter lands, which is the race that
+ * made ▶ Work silently do nothing on a cold start.
+ *
+ * - claude: `claude "<prompt>"` submits in interactive mode (verified; GH #11476 asks
+ *   to DISABLE this, confirming it's the behavior).
+ * - pi:     `pi "<prompt>"` → main.js parses it into `initialMessage` → interactive-mode
+ *   calls `session.prompt(initialMessage)` (verified in pi 0.55.3's dist).
+ *
+ * codex/droid/opencode are NOT here: unverified, and a wrong flag breaks their CLI.
+ */
+const ARGV_PROMPT_AGENTS = new Set(["claude", "pi"]);
+
+/** Whether this agent id takes its initial prompt as argv (see ARGV_PROMPT_AGENTS). */
+export function deliversPromptViaArgv(agentId: string | undefined | null): boolean {
+  return !!agentId && ARGV_PROMPT_AGENTS.has(agentId);
+}
