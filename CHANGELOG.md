@@ -7,6 +7,20 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Fixed
+
+- **Messages to a busy agent were dropped on the floor.** Every agent-to-agent message
+  (a worker's report, an approval request, `hive_send`) is delivered by *typing into the
+  target agent's terminal*. If that agent was mid-turn, the text landed in its composer
+  unsubmitted — never read — so a supervised worker would block the full 9.5-minute
+  approval timeout waiting on an answer its parent never got the chance to see. Messages
+  are now held in a per-tile mailbox and delivered when the agent is back at its prompt,
+  one per turn. Agents without turn hooks (codex, opencode) are unaffected — they deliver
+  immediately, as before.
+- **`name` never reached a spawned worker.** `tile.spawn_agent` enumerates its parameters
+  by hand and `name` was missing from the list, so the v1.13.0 feature silently did
+  nothing on the main spawn path — workers stayed unnamed in reports and on the canvas.
+
 ## [1.13.0] — 2026-07-15
 
 ### Added

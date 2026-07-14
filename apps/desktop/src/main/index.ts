@@ -74,6 +74,7 @@ import { randomUUID } from "node:crypto";
 import { startHcpServer } from "./hcp/hcp-server.js";
 import { makeDispatch } from "./hcp/methods.js";
 import { labelOf as hcpLabelOf } from "./hcp/names.js";
+import { Mailbox } from "./hcp/mailbox.js";
 import { TurnTracker } from "./hcp/turn-tracker.js";
 import { SubagentTracker } from "./hcp/subagent-tracker.js";
 import { SubagentReaper } from "./hcp/subagent-reaper.js";
@@ -1188,6 +1189,11 @@ const hcpWriteToTile = (tileId: string, data: string): boolean => {
   if (hasSession(tileId)) { writePty(tileId, data); return true; }
   return false; // dead/unknown tile → agent.send surfaces TILE_NOT_FOUND
 };
+// Turn-aware delivery for every agent-to-agent message (reports, approval
+// requests, hive_send). Typing into a MID-TURN TUI drops the text in the composer
+// unsubmitted — the message is never read and whoever waits on it hangs. The
+// mailbox holds it until the tile is back at its prompt. See hcp/mailbox.ts.
+const hcpMailbox = new Mailbox(hcpWriteToTile, SUBMIT_DELAY_MS);
 
 ipcMain.handle("ptySpawn", wrap(async (e, opts: Parameters<typeof spawnPty>[0]) => {
   // Spawn rate-limit: a compromised renderer (XSS via rendered diff/issue
@@ -1218,7 +1224,7 @@ ipcMain.handle("ptySpawn", wrap(async (e, opts: Parameters<typeof spawnPty>[0]) 
     };
     return spawnRemotePty(opts, {
       onData: (data) => { hcpRecorder.record(opts.tileId, data); hcpBroadcast?.(toBareId(opts.tileId), data); safeSendR(`pty:data:${opts.tileId}`, data); },
-      onExit: (code, signal) => { hcpSubagentReaper.cancel(toBareId(opts.tileId)); if (hcpSubagents.forget(toBareId(opts.tileId))) pushSubagent(toBareId(opts.tileId), false); safeSendR(`pty:exit:${opts.tileId}`, { code, signal }); },
+      onExit: (code, signal) => { hcpSubagentReaper.cancel(toBareId(opts.tileId)); hcpMailbox.forget(toPtyId(opts.tileId)); if (hcpSubagents.forget(toBareId(opts.tileId))) pushSubagent(toBareId(opts.tileId), false); safeSendR(`pty:exit:${opts.tileId}`, { code, signal }); },
     });
   }
   if (opts.cwd) {
@@ -1667,6 +1673,7 @@ function startHcpControlPlane(): void {
   const dispatch = makeDispatch({
     callRenderer: hcpCallRenderer,
     writeToTile: hcpWriteToTile,
+    deliverToTile: (ptyId, text) => hcpMailbox.deliver(ptyId, text),
     turns: hcpTurns,
     recorder: hcpRecorder,
     spawnAllowed: hcpSpawnAllowed,
@@ -1711,7 +1718,13 @@ function startHcpControlPlane(): void {
         // reports the PTY id (`hm:<bare>` = HIVEMIND_TILE); the renderer status bus
         // keys by the BARE tile id, so normalize before pushing.
         const s = (data ?? {}) as { tileId?: string; state?: string };
-        if (s.tileId && (s.state === "working" || s.state === "idle")) pushTurnState(toBareId(s.tileId), s.state);
+        if (s.tileId && (s.state === "working" || s.state === "idle")) {
+          pushTurnState(toBareId(s.tileId), s.state);
+          // Same signal gates delivery: hold agent-to-agent messages while this
+          // tile is mid-turn (its TUI would swallow them), release at its prompt.
+          if (s.state === "working") hcpMailbox.setBusy(toPtyId(s.tileId));
+          else hcpMailbox.setIdle(toPtyId(s.tileId));
+        }
         return;
       }
       if (topic === "notification") {
@@ -1750,6 +1763,9 @@ function startHcpControlPlane(): void {
       // running, the subagent-busy override re-lifts the tile to "working" — see
       // the status-bus precedence — so this is safe to push unconditionally.
       pushTurnState(toBareId(d.tileId), "idle");
+      // Back at its prompt → release one held message (a report / approval that
+      // arrived while this tile was mid-turn and would have been swallowed).
+      hcpMailbox.setIdle(toPtyId(d.tileId));
       // Arm the watchdog: if the set is still non-empty at turn-end and no further
       // subagent edge arrives within the grace window, those are lost SubagentStops
       // (interrupt / error / compaction) — reap them so the tile doesn't read
@@ -1771,14 +1787,11 @@ function startHcpControlPlane(): void {
       // worker just reported (this is the agent-to-agent "mailbox" delivery —
       // also what an auto-reporting spawned worker uses to reach its parent).
       const banner = `\n[hive] from ${hcpLabelOf(toBareId(d.tileId))}:\n${reply}\n`;
-      // Type the message, then Enter as a separate keystroke (claude's TUI drops a
-      // newline bundled with the text). dests are BARE ids; writeToTile keys on
-      // the pty namespace → convert (the forward no-op'd without this).
-      for (const dst of dests) {
-        const pid = toPtyId(dst);
-        hcpWriteToTile(pid, banner);
-        setTimeout(() => hcpWriteToTile(pid, "\r"), SUBMIT_DELAY_MS);
-      }
+      // Deliver via the mailbox: if the destination agent is mid-turn, typing the
+      // report into its TUI would leave it stranded in the composer, unsubmitted
+      // and unread — so it's held until that agent is back at its prompt. dests are
+      // BARE ids; the pty namespace is what writeToTile takes → convert.
+      for (const dst of dests) hcpMailbox.deliver(toPtyId(dst), banner);
     },
   });
   hcpBroadcast = server.broadcast;

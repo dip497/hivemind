@@ -13,6 +13,8 @@ import { OutputRecorder, stripAnsi } from "../../src/main/hcp/output-recorder.ts
 import { makeDispatch } from "../../src/main/hcp/methods.ts";
 import { startHcpServer } from "../../src/main/hcp/hcp-server.ts";
 import { PipeManager } from "../../src/main/hcp/pipes.ts";
+import { Mailbox } from "../../src/main/hcp/mailbox.ts";
+import { SUBMIT_DELAY_MS } from "../../src/shared/agent-io.ts";
 
 test("PipeManager: edges, self-loop refused, forget removes both directions", () => {
   const pm = new PipeManager();
@@ -87,11 +89,17 @@ function fakeDeps(over: Partial<Parameters<typeof makeDispatch>[0]> = {}) {
   const turns = new TurnTracker();
   const recorder = new OutputRecorder();
   const writes: Array<[string, string]> = [];
+  const write = (id: string, data: string) => { writes.push([id, data]); return true; };
+  // The REAL mailbox, not a stub — messages to an agent go through it in production
+  // (it holds them while the target is mid-turn), so the dispatch tests must too.
+  // No tile is ever marked busy here, so it delivers straight through.
+  const mailbox = new Mailbox(write, SUBMIT_DELAY_MS);
   const deps = {
     turns,
     recorder,
     callRenderer: async (_m: string, _p: unknown) => ({ tileId: "tile-x" }),
-    writeToTile: (id: string, data: string) => { writes.push([id, data]); return true; },
+    writeToTile: write,
+    deliverToTile: (id: string, data: string) => mailbox.deliver(id, data),
     spawnAllowed: () => true,
     connect: () => true,
     disconnect: () => {},

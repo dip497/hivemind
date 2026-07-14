@@ -91,8 +91,14 @@ export interface MethodDeps {
   /** Run a renderer verb (returns its result); rejects/throws HcpError on
    *  no-renderer / timeout. */
   callRenderer: (method: string, params: unknown, timeoutMs: number) => Promise<unknown>;
-  /** Write to a tile's pty. Returns false if the tile has no live pty. */
+  /** Write to a tile's pty RIGHT NOW. Returns false if the tile has no live pty.
+   *  Raw bytes only (key sequences) — for anything the agent must READ, use
+   *  `deliverToTile`, which waits for it to be at its prompt. */
   writeToTile: (tileId: string, data: string) => boolean;
+  /** Deliver a MESSAGE to an agent (typed + Enter), holding it until that agent is
+   *  back at its prompt. A message typed into a mid-turn TUI lands in the composer
+   *  unsubmitted and is never read — see hcp/mailbox.ts. */
+  deliverToTile: (ptyId: string, text: string) => boolean;
   turns: TurnTracker;
   recorder: OutputRecorder;
   /** Sliding-window spawn gate (reuse the ptySpawn rate-limit). false → refuse. */
@@ -245,7 +251,7 @@ export function makeDispatch(deps: MethodDeps): (method: string, params: unknown
         // workflow.run). AUTO-REPORT is on unless report:false; the read epoch is
         // armed so a follow-up agent.read waits for THIS agent's first turn.
         const tileId = await doSpawn({
-          agent: p.agent, prompt: p.prompt, frame: p.frame, mode: p.mode, model: p.model,
+          agent: p.agent, name: p.name, prompt: p.prompt, frame: p.frame, mode: p.mode, model: p.model,
           callerTile: p.callerTile, report: p.report, supervise: p.supervise,
         });
         return { tileId };
@@ -257,12 +263,16 @@ export function makeDispatch(deps: MethodDeps): (method: string, params: unknown
         if (!tileId) throw new HcpError("BAD_REQUEST", "tileId required");
         const submit = p.submit !== false; // default: press Enter
         armRead(tileId);
-        // Type the text, then press Enter as a SEPARATE keystroke a tick later —
-        // claude's TUI drops a newline that arrives in the same write as the text
-        // (the prompt would sit unsubmitted). Mirrors tmux send-keys.
-        const ok = deps.writeToTile(ptyId(tileId), text);
+        // With submit (the default) this is a MESSAGE: deliver via the mailbox, which
+        // types text-then-Enter as separate writes (a bundled newline is dropped by
+        // claude's TUI) and, crucially, HOLDS it if the target agent is mid-turn —
+        // otherwise it strands in the composer, unsubmitted and unread.
+        // submit:false is a raw paste into the composer, which is only meaningful
+        // right now, so it stays an immediate write.
+        const ok = submit
+          ? deps.deliverToTile(ptyId(tileId), text)
+          : deps.writeToTile(ptyId(tileId), text);
         if (!ok) throw new HcpError("TILE_NOT_FOUND", `no live agent for tile ${tileId}`);
-        if (submit) setTimeout(() => deps.writeToTile(ptyId(tileId), "\r"), SUBMIT_DELAY_MS);
         return { ok: true };
       }
 
@@ -298,8 +308,9 @@ export function makeDispatch(deps: MethodDeps): (method: string, params: unknown
         const message = String(p.message ?? "").trim();
         if (!message) throw new HcpError("BAD_REQUEST", "message required");
         const banner = `\n[hive] report from ${labelOf(child)}:\n${message}\n`;
-        deps.writeToTile(ptyId(parent), banner);
-        setTimeout(() => deps.writeToTile(ptyId(parent), "\r"), SUBMIT_DELAY_MS);
+        // Held if the parent is mid-turn — a report typed into a busy TUI never
+        // gets read, and the worker thinks it delivered.
+        deps.deliverToTile(ptyId(parent), banner);
         return { delivered: true, parent };
       }
 
@@ -321,8 +332,10 @@ export function makeDispatch(deps: MethodDeps): (method: string, params: unknown
         const banner =
           `\n[hive] APPROVAL — worker ${labelOf(worker)} wants to run ${tool}: ${summary}\n` +
           `Reply: hive_approve("${reqId}", "allow" | "deny" | "always" | "never")\n`;
-        deps.writeToTile(ptyId(parent), banner);
-        setTimeout(() => deps.writeToTile(ptyId(parent), "\r"), SUBMIT_DELAY_MS);
+        // Held if the supervisor is mid-turn. THIS is what stranded approvals in the
+        // parent's composer: the worker blocked for 9.5 min on an answer the parent
+        // was never able to see, because the request arrived while it was busy.
+        deps.deliverToTile(ptyId(parent), banner);
         // Surface the pause in the UI: this worker is now waiting on its parent.
         deps.pushWait(worker, "awaiting_approval");
         return await new Promise((resolve) => {

@@ -10,6 +10,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { setName, labelOf } from "../../src/main/hcp/names.js";
+import { makeDispatch } from "../../src/main/hcp/methods.js";
+import { TurnTracker } from "../../src/main/hcp/turn-tracker.js";
+import { OutputRecorder } from "../../src/main/hcp/output-recorder.js";
 
 /** MIRROR of index.ts: transcript wins, else pi's inline turn text. */
 function pickReply(
@@ -45,6 +48,34 @@ test("names are dropped on close — a recycled id must not inherit the old name
   setName("tile-claude-2", "test-writer");
   setName("tile-claude-2", null);
   assert.equal(labelOf("tile-claude-2"), "tile-claude-2");
+});
+
+test("tile.spawn_agent actually forwards `name` — it enumerates its params, and a dropped one is silent", async () => {
+  // v1.13.0 shipped `name` end-to-end EXCEPT here: the tile.spawn_agent case lists
+  // its params by hand, `name` wasn't in the list, and the feature was dead with no
+  // error anywhere. This asserts the wire, not the sanitizer.
+  const seen: Array<Record<string, unknown>> = [];
+  const dispatch = makeDispatch({
+    turns: new TurnTracker(),
+    recorder: new OutputRecorder(),
+    callRenderer: async (_m: string, p: unknown) => {
+      seen.push(p as Record<string, unknown>);
+      return { tileId: "tile-w" };
+    },
+    writeToTile: () => true,
+    deliverToTile: () => true,
+    spawnAllowed: () => true,
+    connect: () => true,
+    disconnect: () => {},
+    forgetPipes: () => {},
+    spawnEdge: () => {},
+    setSupervise: () => {},
+    pushWait: () => {},
+  } as unknown as Parameters<typeof makeDispatch>[0]);
+
+  await dispatch("tile.spawn_agent", { agent: "pi", name: "student-fe", callerTile: "hm:tile-p" });
+  assert.equal(seen[0]?.name, "student-fe", "the renderer must receive the name — it's the tile label");
+  assert.equal(labelOf("tile-w"), "student-fe (tile-w)", "and main must remember it — it tags every report back");
 });
 
 /** MIRROR of the sanitizer in methods.ts doSpawn. */
