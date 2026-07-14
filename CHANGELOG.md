@@ -7,6 +7,30 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Added
+
+- **Name your workers.** `hive_spawn_agent` takes a `name` ("reviewer", "test-writer").
+  It becomes the worker's tile label on the canvas and tags every message it sends back —
+  `[hive] from reviewer (tile-claude-…)` instead of a bare id. Spawn more than one worker
+  and you can finally tell them apart, on the canvas and in the parent's terminal.
+
+### Changed
+
+- **Supervised workers stop nagging.** A plain `allow` from the supervising agent is now
+  remembered for that worker+tool across the file-touching tools (Edit/Write/MultiEdit/…)
+  instead of re-asking on every call — approving each edit one at a time stalled the
+  worker and burned a parent turn per file. **Bash is exempt**: each command is a distinct
+  action, so an allow there is never cached and still re-asks unless you answer `always`.
+
+### Fixed
+
+- **A supervised pi worker could run an unapproved tool.** pi has no native permission
+  prompt, so hivemind's broker is the only gate — but it "failed open" on a timed-out,
+  errored, or unanswered approval, silently running the very tool the supervisor was being
+  asked about. It now fails **closed**: anything that isn't an explicit `allow` blocks, with
+  a reason the agent can act on. (claude is unaffected — its broker falls through to
+  claude's own permission prompt, which stops at a human.)
+
 ## [1.12.7] — 2026-07-13
 
 ### Fixed

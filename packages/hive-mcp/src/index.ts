@@ -272,6 +272,7 @@ const TOOLS: Tool[] = [
       type: "object",
       properties: {
         agent: { type: "string", description: "Agent to launch: 'claude' (default), 'codex', 'opencode', 'droid', 'pi', …" },
+        name: { type: "string", description: "Short display name for this worker ('reviewer', 'test-writer'). Becomes its tile label on the canvas, and tags every message it sends back to you ('[hive] from reviewer (tile-…)'). Name your workers when you spawn more than one — it's how you and the user tell them apart." },
         prompt: { type: "string", description: "Initial task delivered once the agent is ready." },
         frame: { type: "string", description: "Frame to spawn into — a frame id, repo/worktree name, or title (e.g. 'manageark'). Omit to use the spawning agent's own frame. Discover with hive_list_frames." },
         mode: { type: "string", description: "claude permission mode. Omit (default) → the worker runs AUTONOMOUSLY ('bypassPermissions' / --dangerously-skip-permissions), since a delegated worker has no human at its tile to answer prompts. Pass 'plan', 'acceptEdits', or 'default' to keep a human in the loop, or use `supervise` to route its prompts to YOU instead." },
@@ -471,6 +472,7 @@ const LinkIssueArgs = z.object({
 });
 const SpawnAgentArgs = z.object({
   agent: z.string().optional(),
+  name: z.string().optional(),
   prompt: z.string().optional(),
   frame: z.string().optional(),
   mode: z.string().optional(),

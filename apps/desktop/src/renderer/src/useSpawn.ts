@@ -342,7 +342,7 @@ export function useSpawn(ctx: SpawnCtx) {
   // claude/registry-agent branch of spawnTile, plus prompt delivery via the
   // claude-bus work queue. `agent` is a registry id ("claude", "codex", …).
   const hcpSpawnAgent = useCallback(
-    (opts: { agent?: string; prompt?: string; frame?: string; mode?: string; model?: string; callerTile?: string; background?: boolean }): string => {
+    (opts: { agent?: string; prompt?: string; frame?: string; mode?: string; model?: string; callerTile?: string; background?: boolean; name?: string }): string => {
       // Frame preference: explicit > the CALLER agent's frame (so a worker lands
       // beside the agent that spawned it) > the active/first frame.
       // The caller passes its HIVEMIND_TILE, which is the PTY id (`hm:<tileId>`
@@ -391,6 +391,9 @@ export function useSpawn(ctx: SpawnCtx) {
         cmd = "claude";
         label = `claude #${n}${m && m !== "default" ? ` · ${m}` : ""}`;
       }
+      // A spawner-chosen name wins over the generated "Pi #3" label — on a canvas
+      // of a dozen workers, "reviewer" is what tells them apart. Main sanitizes it.
+      if (opts.name) label = opts.name;
       // Background (workflow / report:false) workers: place WITHOUT stealing
       // focus or centering the viewport, and mark them so useAgentAwareness skips
       // their "finished" notification — they're gathered in bulk, not driven.

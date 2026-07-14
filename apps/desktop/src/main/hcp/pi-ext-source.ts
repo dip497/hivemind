@@ -141,9 +141,17 @@ export default function (pi) {
   // HIVE_SUPERVISE is injected into a supervised tile's env by ptySpawn (main).
   // "all" → broker every tool; else a comma-list of tool names (case-insensitive,
   // pi tool names are lowercase: bash/read/write/edit/…). A brokered tool routes
-  // to the supervisor via agent.await_approval; only "deny" blocks — allow / ask /
-  // timeout / any error fails OPEN so pi never hangs. Give the wait ~9.5 min
-  // (slightly over the main-side APPROVAL_TIMEOUT_MS) so a lost response fails open.
+  // to the supervisor via agent.await_approval. Anything that is not an explicit
+  // "allow" BLOCKS — this fails CLOSED, unlike claude's broker hook.
+  //
+  // Why the asymmetry: claude's hook fails open to claude's OWN permission prompt,
+  // so a lost approval still stops at a human. pi has NO native permission prompt
+  // — nothing in its core asks before a tool runs; the only gate that exists is
+  // this handler. Failing open here would mean a timed-out / errored / unanswered
+  // approval SILENTLY EXECUTES the tool the supervisor was asked about. Blocking
+  // returns a reason to pi's model instead, which is visible in the tile and can
+  // be retried. Wait ~9.5 min (just over the main-side APPROVAL_TIMEOUT_MS) so a
+  // slow supervisor is a block, not a race.
   const superviseSpec = (process.env.HIVE_SUPERVISE || "").trim();
   if (superviseSpec) {
     const brokerAll = superviseSpec.toLowerCase() === "all";
@@ -161,10 +169,20 @@ export default function (pi) {
         ctx && ctx.signal,
         APPROVAL_WAIT_MS,
       );
-      if (res && res.ok && res.result && res.result.decision === "deny") {
+      const decision = res && res.ok && res.result ? res.result.decision : null;
+      if (decision === "allow") return; // approved → run it
+      if (decision === "deny") {
         return { block: true, reason: (res.result.reason) || "Denied by supervisor" };
       }
-      return; // allow / ask / timeout / any error → FAIL-OPEN
+      // "ask" (no supervisor / timed out), a transport error, or a malformed reply.
+      // pi has no human permission prompt to fall through to, so BLOCK.
+      return {
+        block: true,
+        reason:
+          "Blocked: no approval from your supervisor for '" + name + "' (timed out or unreachable). " +
+          "This worker is supervised and pi has no local permission prompt, so unapproved tool calls are refused. " +
+          "Report what you need to the supervisor and wait to be told to retry.",
+      };
     });
   }
 
@@ -195,6 +213,7 @@ export default function (pi) {
       "Spawn a NEW coding agent as a tile on the hivemind canvas and hand it a prompt. Returns its tileId. Delegate a subtask to a sibling agent. By default the worker AUTO-REPORTS: its reply is delivered back into your session when it finishes a turn. Pass \`supervise\` to route the worker's tool-permission prompts to YOU (answer with hive_approve). Requires the hivemind desktop app.",
     parameters: Type.Object({
       agent: Type.Optional(Type.String({ description: "Agent to launch: 'claude' (default), 'codex', 'droid', 'pi', …" })),
+      name: Type.Optional(Type.String({ description: "Short display name ('reviewer', 'test-writer') — becomes the worker's tile label and tags every message it reports back to you. Name your workers when you spawn more than one." })),
       prompt: Type.Optional(Type.String({ description: "Initial task delivered once the agent is ready." })),
       frame: Type.Optional(Type.String({ description: "Frame to spawn into (id, repo/worktree name, or title). Omit to use your own frame." })),
       mode: Type.Optional(Type.String({ description: "claude permission mode. Omit → the worker runs autonomously (bypassPermissions). Pass 'plan'/'acceptEdits'/'default' to keep a human in the loop." })),
@@ -203,7 +222,7 @@ export default function (pi) {
     }),
     async execute(toolCallId, params, signal) {
       return call("tile.spawn_agent", {
-        agent: params.agent, prompt: params.prompt, frame: params.frame,
+        agent: params.agent, name: params.name, prompt: params.prompt, frame: params.frame,
         mode: params.mode, model: params.model, supervise: params.supervise,
         callerTile: tile,
       }, signal);

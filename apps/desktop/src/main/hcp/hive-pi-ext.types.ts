@@ -75,6 +75,7 @@ function assertOrchestrationTools(pi: ExtensionAPI): void {
     description: "spawn",
     parameters: Type.Object({
       agent: Type.Optional(Type.String()),
+      name: Type.Optional(Type.String()),
       prompt: Type.Optional(Type.String()),
       frame: Type.Optional(Type.String()),
       mode: Type.Optional(Type.String()),

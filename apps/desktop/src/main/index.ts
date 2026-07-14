@@ -73,6 +73,7 @@ import { startPlanBridge, type PlanRequest } from "./plan-bridge.js";
 import { randomUUID } from "node:crypto";
 import { startHcpServer } from "./hcp/hcp-server.js";
 import { makeDispatch } from "./hcp/methods.js";
+import { labelOf as hcpLabelOf } from "./hcp/names.js";
 import { TurnTracker } from "./hcp/turn-tracker.js";
 import { SubagentTracker } from "./hcp/subagent-tracker.js";
 import { SubagentReaper } from "./hcp/subagent-reaper.js";
@@ -1769,7 +1770,7 @@ function startHcpControlPlane(): void {
       // Tag the forward with its source so the receiving agent knows which
       // worker just reported (this is the agent-to-agent "mailbox" delivery —
       // also what an auto-reporting spawned worker uses to reach its parent).
-      const banner = `\n[hive] from ${toBareId(d.tileId)}:\n${reply}\n`;
+      const banner = `\n[hive] from ${hcpLabelOf(toBareId(d.tileId))}:\n${reply}\n`;
       // Type the message, then Enter as a separate keystroke (claude's TUI drops a
       // newline bundled with the text). dests are BARE ids; writeToTile keys on
       // the pty namespace → convert (the forward no-op'd without this).

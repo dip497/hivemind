@@ -15,6 +15,7 @@ import type { TurnTracker } from "./turn-tracker.js";
 import type { OutputRecorder } from "./output-recorder.js";
 import { readLastAssistantMessage } from "./transcript.js";
 import { toPtyId as ptyId, toBareId as bareOf } from "../../shared/tile-id.js";
+import { setName, labelOf } from "./names.js";
 import { SUBMIT_DELAY_MS } from "../../shared/agent-io.js";
 
 /** Max agent-spawn depth (user = 0). Bounds recursive agent-spawns-agent fan-out
@@ -53,6 +54,20 @@ const KEYMAP: Record<string, string> = {
 /** Gap between successive keys, so a TUI registers each (e.g. arrow THEN enter)
  *  rather than processing a bundled write at once — mirrors SUBMIT_DELAY_MS. */
 const KEY_GAP_MS = 40;
+
+/** Tools where a plain `allow` is remembered for the rest of that worker's life
+ *  (see `agent.approve`). File-touching tools only — approving them one call at a
+ *  time is pure friction. Bash is deliberately ABSENT: each command is a distinct
+ *  action, so a cached allow there would be a blanket shell. Names are lowercased
+ *  before lookup — claude says "Edit"/"Write", pi says "edit"/"write". */
+const STICKY_ALLOW = new Set(["edit", "write", "read", "multiedit", "notebookedit", "webfetch"]);
+
+/** Whether a plain `allow` on this approveCache key (`<worker>:<tool>`) should be
+ *  remembered. The worker id contains no ":" (it's `tile-<kind>-<ts>`), so the tool
+ *  is the last segment; case is normalized (claude "Edit" vs pi "edit"). */
+export function stickyAllow(cacheKey: string): boolean {
+  return STICKY_ALLOW.has((cacheKey.split(":").pop() ?? "").toLowerCase());
+}
 
 /** Normalize a `supervise` arg into the HIVE_SUPERVISE env string (a tool list or
  *  "all"), or null to disable. */
@@ -142,7 +157,7 @@ export function makeDispatch(deps: MethodDeps): (method: string, params: unknown
   // workflow workers pass report:false and gather via waitForTurn instead.
   const doSpawn = async (opts: {
     agent?: unknown; prompt?: unknown; frame?: unknown; mode?: unknown; model?: unknown;
-    callerTile?: unknown; report?: unknown; supervise?: unknown;
+    callerTile?: unknown; report?: unknown; supervise?: unknown; name?: unknown;
   }): Promise<string> => {
     const callerDepth = opts.callerTile ? (depthOf.get(bareOf(String(opts.callerTile))) ?? 0) : 0;
     const childDepth = callerDepth + 1;
@@ -159,16 +174,21 @@ export function makeDispatch(deps: MethodDeps): (method: string, params: unknown
     // a `supervise`d worker routes its prompts to the parent (its PreToolUse broker
     // only fires if permissions aren't skipped).
     const mode = opts.mode != null ? opts.mode : sup ? undefined : "bypassPermissions";
+    // A spawner-chosen display name ("reviewer", "test-writer") — becomes the tile
+    // label and tags every message this worker sends back. Bounded so a worker
+    // can't smuggle a whole paragraph (or ANSI) into the parent's terminal banner.
+    const name = typeof opts.name === "string" ? opts.name.replace(/[\p{C}]/gu, "").trim().slice(0, 40) : "";
     const res = (await deps.callRenderer(
       "tile.spawn_agent",
       // `background` = a silent worker (report:false → gathered in bulk, e.g. a
       // workflow worker). The renderer uses it to NOT steal focus / center the
       // viewport on spawn and to suppress the per-worker "finished" notification.
-      { agent, prompt: opts.prompt, frame: opts.frame, mode, model: opts.model, callerTile: opts.callerTile, background: opts.report === false },
+      { agent, prompt: opts.prompt, frame: opts.frame, mode, model: opts.model, callerTile: opts.callerTile, background: opts.report === false, name: name || undefined },
       RENDERER_TIMEOUT,
     )) as { tileId?: string };
     if (!res?.tileId) throw new HcpError("INTERNAL", "spawn returned no tileId");
     depthOf.set(res.tileId, childDepth);
+    if (name) setName(res.tileId, name);
     if (opts.callerTile) {
       const parentBare = bareOf(String(opts.callerTile));
       parentOf.set(res.tileId, parentBare);
@@ -202,6 +222,7 @@ export function makeDispatch(deps: MethodDeps): (method: string, params: unknown
     parentOf.delete(bare);
     for (const [child, parent] of parentOf) if (parent === bare) parentOf.delete(child);
     depthOf.delete(bare);
+    setName(bare, null);
     deps.setSupervise(bare, null);
     for (const [reqId, pend] of pendingApprovals) {
       if (pend.cacheKey.startsWith(`${bare}:`)) {
@@ -276,7 +297,7 @@ export function makeDispatch(deps: MethodDeps): (method: string, params: unknown
         if (!parent) throw new HcpError("TILE_NOT_FOUND", "no parent agent to report to");
         const message = String(p.message ?? "").trim();
         if (!message) throw new HcpError("BAD_REQUEST", "message required");
-        const banner = `\n[hive] report from ${child}:\n${message}\n`;
+        const banner = `\n[hive] report from ${labelOf(child)}:\n${message}\n`;
         deps.writeToTile(ptyId(parent), banner);
         setTimeout(() => deps.writeToTile(ptyId(parent), "\r"), SUBMIT_DELAY_MS);
         return { delivered: true, parent };
@@ -298,7 +319,7 @@ export function makeDispatch(deps: MethodDeps): (method: string, params: unknown
         const reqId = randomUUID();
         const summary = summarizeTool(tool, inp);
         const banner =
-          `\n[hive] APPROVAL — worker ${worker} wants to run ${tool}: ${summary}\n` +
+          `\n[hive] APPROVAL — worker ${labelOf(worker)} wants to run ${tool}: ${summary}\n` +
           `Reply: hive_approve("${reqId}", "allow" | "deny" | "always" | "never")\n`;
         deps.writeToTile(ptyId(parent), banner);
         setTimeout(() => deps.writeToTile(ptyId(parent), "\r"), SUBMIT_DELAY_MS);
@@ -330,6 +351,16 @@ export function makeDispatch(deps: MethodDeps): (method: string, params: unknown
         else throw new HcpError("BAD_REQUEST", "decision must be allow | deny | always | never");
         if (decision === "always") approveCache.set(pend.cacheKey, "allow");
         if (decision === "never") approveCache.set(pend.cacheKey, "deny");
+        // A plain `allow` STICKS for the file-touching tools. Approving "edit" once
+        // and then being re-asked on every subsequent edit stalls the worker ~9min
+        // per file and burns a parent turn each time — the supervisor ends up
+        // rubber-stamping, which is worse than not supervising at all.
+        // BASH IS EXEMPT: every command is a different action ("ls" ≠ "rm -rf /"),
+        // so caching an allow there would hand the worker a blanket shell. Bash
+        // (and anything else) still re-asks unless the parent says `always`.
+        if (decision === "allow" && stickyAllow(pend.cacheKey)) {
+          approveCache.set(pend.cacheKey, "allow");
+        }
         clearTimeout(pend.timer);
         pendingApprovals.delete(reqId);
         deps.pushWait(pend.worker, null); // resolved → clear the "waiting" status

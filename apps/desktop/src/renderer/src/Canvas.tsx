@@ -691,7 +691,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace, updateAvai
         const p = (cmd.params ?? {}) as Record<string, unknown>;
         switch (cmd.method) {
           case "tile.spawn_agent": {
-            const tileId = hcpSpawnAgent(p as { agent?: string; prompt?: string; frame?: string; mode?: string; model?: string; callerTile?: string; background?: boolean });
+            const tileId = hcpSpawnAgent(p as { agent?: string; prompt?: string; frame?: string; mode?: string; model?: string; callerTile?: string; background?: boolean; name?: string });
             await window.hive.hcpResult(cmd.id, true, { tileId });
             break;
           }
