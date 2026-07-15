@@ -3,7 +3,7 @@
  * call-to-action. Pure presentational; driven by props (Canvas owns the toast
  * queue + the spawn actions). Extracted to keep Canvas.tsx focused.
  */
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { AlertCircle, CheckCircle2, AlertTriangle, Sparkles, X } from "lucide-react";
 import { useTileFocus } from "./canvas-camera";
 import { toastKindOf, toastTtlMs, type Toast, type NoticeKind } from "./useAgentAwareness";
@@ -33,6 +33,133 @@ function relTime(at: number, now: number): string {
 /** Background-event toast stack — borderless glass cards. Click to fly to the
  *  tile + mark seen; hover the [×] to dismiss. One accent (the app brand) tints
  *  the icon, verb, and the TTL line; see `.hm-toast` in styles.css. */
+/** Identity for the title — never a raw tile id (the status-bus fallback before a
+ *  label has published), which isn't a name. */
+function displayName(label: string): string {
+  return label.startsWith("tile-") ? "agent" : label;
+}
+
+/** One toast card. Owns its own PAUSABLE auto-dismiss timer: it stops while the
+ *  pointer is over the card (you're reading it / reaching for ×) AND while the
+ *  window is blurred (you're away — the OS popup has it), and resumes with the
+ *  remaining time. The countdown bar pauses in lockstep via a `.paused` class, so
+ *  the visible progress always matches the real timer. (Emil/Sonner: a toast must
+ *  never vanish under the pointer.) */
+function ToastCard({
+  t, now, leaving, onExpire, onFinish, onView,
+}: {
+  t: Toast;
+  now: number;
+  leaving: boolean;
+  onExpire: (id: string) => void;
+  onFinish: (id: string) => void;
+  onView: (id: string) => void;
+}) {
+  const focus = useTileFocus();
+  const k = toastKindOf(t);
+  const { Icon, verb, pulse } = NOTICE[k];
+  const ttl = toastTtlMs(t);
+  const [hovered, setHovered] = useState(false);
+  const [winBlurred, setWinBlurred] = useState(false);
+  const paused = hovered || winBlurred;
+  const remainingRef = useRef(ttl);
+  const startRef = useRef(0);
+
+  // Pause on window blur/focus (you're away → let the OS notification carry it).
+  useEffect(() => {
+    const blur = () => setWinBlurred(true);
+    const focusIn = () => setWinBlurred(false);
+    window.addEventListener("blur", blur);
+    window.addEventListener("focus", focusIn);
+    return () => { window.removeEventListener("blur", blur); window.removeEventListener("focus", focusIn); };
+  }, []);
+
+  // The pausable countdown. While running, a timeout fires onExpire; when it
+  // PAUSES (or unmounts) the cleanup banks the elapsed time into `remaining`, so
+  // resuming continues rather than restarting. leaving → no timer (exit playing).
+  useEffect(() => {
+    if (leaving || paused || remainingRef.current <= 0) return;
+    startRef.current = Date.now();
+    const id = setTimeout(() => onExpire(t.id), remainingRef.current);
+    return () => {
+      clearTimeout(id);
+      remainingRef.current = Math.max(0, remainingRef.current - (Date.now() - startRef.current));
+    };
+  }, [paused, leaving, t.id, onExpire]);
+
+  const go = () => { focus(t.tileId); onView(t.tileId); };
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      aria-label={`${displayName(t.label)} ${verb}${t.frame ? ` in ${t.frame}` : ""}`}
+      onClick={go}
+      onKeyDown={(ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); go(); } }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className={`hm-toast ${leaving ? "hm-toast-out" : "hm-toast-in"} ${paused ? "paused" : ""} hm-soft group cursor-pointer`}
+      style={{ "--ttl": `${ttl}ms` } as CSSProperties}
+      onAnimationEnd={(ev) => {
+        // Only the card's OWN exit animation retires it — the countdown bar and
+        // the icon beat also bubble animationend up to here.
+        if (ev.target === ev.currentTarget && leaving) onFinish(t.id);
+      }}
+    >
+      <div className="flex items-start gap-2.5 px-3 py-2.5">
+        <span
+          aria-hidden
+          className={`hm-toast-icon mt-px shrink-0 ${pulse ? "hm-toast-attn" : ""}`}
+        >
+          <Icon size={15} strokeWidth={2.25} />
+        </span>
+        <div className="flex flex-col min-w-0 flex-1 leading-tight">
+          <span className="font-mono text-[13px] font-semibold tracking-[-0.01em] text-[var(--color-fg)] truncate">
+            {displayName(t.label)}
+          </span>
+          <span className="hm-toast-verb text-[11.5px] font-medium mt-0.5">{verb}</span>
+          {t.detail && (
+            <span className="font-mono text-[11px] mt-1 text-[var(--color-fg2)] truncate">{t.detail}</span>
+          )}
+          <span className="text-[10.5px] tracking-[0.01em] mt-1 text-[var(--color-fg3)] truncate">
+            {t.frame ? <>{t.frame} · </> : null}{relTime(t.at, now)}
+          </span>
+          {/* Inline actions (FUTURE SEAM — see Toast.actions). Renders a button row
+              only when a toast supplies actions; the first use is Approve/Deny on a
+              supervised-worker approval. stopPropagation so a button click doesn't
+              also fire the card's focus-tile onClick; each action dismisses the toast. */}
+          {t.actions && t.actions.length > 0 && (
+            <div className="flex gap-1.5 mt-2">
+              {t.actions.map((a) => (
+                <button
+                  key={a.label}
+                  onClick={(ev) => { ev.stopPropagation(); a.run(); onExpire(t.id); }}
+                  className={`px-2 py-1 rounded text-[11px] font-medium hm-soft ${
+                    a.primary
+                      ? "bg-[var(--color-brand)] text-white hover:opacity-90"
+                      : "text-[var(--color-fg2)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg4)]"
+                  }`}
+                >
+                  {a.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <button
+          onClick={(ev) => { ev.stopPropagation(); onExpire(t.id); }}
+          className="shrink-0 -mr-1 -mt-1 size-5 grid place-items-center rounded text-[var(--color-fg3)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg4)] opacity-0 group-hover:opacity-100 hm-soft"
+          aria-label="Dismiss notification"
+          title="dismiss"
+        >
+          <X size={12} />
+        </button>
+      </div>
+      {/* Auto-dismiss progress line — shrinks over --ttl and pauses with .paused. */}
+      <span aria-hidden className="hm-toast-bar" />
+    </div>
+  );
+}
+
 export function Toasts({
   toasts,
   onDismiss,
@@ -42,7 +169,6 @@ export function Toasts({
   onDismiss: (id: string) => void;
   onView: (id: string) => void;
 }) {
-  const focus = useTileFocus();
   // Live relative timestamps. One interval for the whole stack (cheap: 1-3 cards).
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -50,12 +176,10 @@ export function Toasts({
     return () => clearInterval(i);
   }, []);
 
-  // Exit animations need the node to still be mounted while they play, so a
-  // dismissal marks the card `leaving` first and drops it from the parent's
-  // state once the animation ends — rather than yanking it from the DOM and
-  // letting it vanish mid-air. `onAnimationEnd` (not a setTimeout) keeps the
-  // unmount tied to the actual animation, including when reduced-motion swaps
-  // in the shorter cross-fade.
+  // Exit animations need the node mounted while they play, so a dismissal marks
+  // the card `leaving` first and drops it once the animation ends — rather than
+  // yanking it from the DOM mid-air. `onAnimationEnd` ties the unmount to the
+  // real animation, incl. the reduced-motion cross-fade.
   const [leaving, setLeaving] = useState<Set<string>>(new Set());
   const beginDismiss = (id: string) =>
     setLeaving((s) => (s.has(id) ? s : new Set(s).add(id)));
@@ -66,62 +190,17 @@ export function Toasts({
 
   return (
     <div className="flex flex-col items-end gap-2 max-h-[60vh] overflow-y-auto pr-0.5">
-      {toasts.map((t) => {
-        const k = toastKindOf(t);
-        const { Icon, verb, pulse } = NOTICE[k];
-        const ttl = toastTtlMs(t);
-        const go = () => { focus(t.tileId); onView(t.tileId); };
-        return (
-          <div
-            key={t.id}
-            role="button"
-            tabIndex={0}
-            aria-label={`${t.label} ${verb}${t.frame ? ` in ${t.frame}` : ""}`}
-            onClick={go}
-            onKeyDown={(ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); go(); } }}
-            className={`hm-toast ${leaving.has(t.id) ? "hm-toast-out" : "hm-toast-in"} hm-soft group cursor-pointer`}
-            style={{ "--ttl": `${ttl}ms` } as CSSProperties}
-            onAnimationEnd={(ev) => {
-              // Only the card's OWN exit animation retires it — the countdown
-              // bar and the icon's pulse also bubble animationend up to here.
-              if (ev.target === ev.currentTarget && leaving.has(t.id)) finishDismiss(t.id);
-            }}
-          >
-            <div className="flex items-start gap-2.5 px-3 py-2.5">
-              <span
-                aria-hidden
-                className={`hm-toast-icon mt-0.5 shrink-0 ${pulse ? "animate-pulse" : ""}`}
-              >
-                <Icon size={15} strokeWidth={2.25} />
-              </span>
-              <div className="flex flex-col min-w-0 flex-1 leading-tight">
-                <span className="font-mono text-[12px] font-semibold tracking-[-0.01em] text-[var(--color-fg)] truncate">
-                  {/* Identity only. A raw tile id (the bus fallback when no label
-                      has published yet) is never a name — show "agent" instead. */}
-                  {t.label.startsWith("tile-") ? "agent" : t.label}
-                </span>
-                <span className="hm-toast-verb text-[10.5px] mt-0.5">{verb}</span>
-                {t.detail && (
-                  <span className="font-mono text-[10px] mt-1 text-[var(--color-fg2)] truncate">{t.detail}</span>
-                )}
-                <span className="text-[9.5px] mt-1 text-[var(--color-fg3)]">
-                  {t.frame ? <>{t.frame} · </> : null}{relTime(t.at, now)}
-                </span>
-              </div>
-              <button
-                onClick={(ev) => { ev.stopPropagation(); beginDismiss(t.id); }}
-                className="shrink-0 -mr-1 -mt-1 size-5 grid place-items-center rounded text-[var(--color-fg3)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg4)] opacity-0 group-hover:opacity-100 hm-soft"
-                aria-label="Dismiss notification"
-                title="dismiss"
-              >
-                <X size={12} />
-              </button>
-            </div>
-            {/* Auto-dismiss progress line — shrinks with the JS timer (same TTL). */}
-            <span aria-hidden className="hm-toast-bar" />
-          </div>
-        );
-      })}
+      {toasts.map((t) => (
+        <ToastCard
+          key={t.id}
+          t={t}
+          now={now}
+          leaving={leaving.has(t.id)}
+          onExpire={beginDismiss}
+          onFinish={finishDismiss}
+          onView={onView}
+        />
+      ))}
     </div>
   );
 }

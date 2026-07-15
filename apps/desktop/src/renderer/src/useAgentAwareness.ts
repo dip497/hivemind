@@ -39,6 +39,23 @@ export interface Toast {
   frame?: string;
   /** Creation ts — the rich toast renders a relative "just now" / "12s" stamp. */
   at: number;
+  /** Inline actions rendered as a button row under the context line. FUTURE SEAM
+   *  (nothing sets this yet): the first real use is a supervised-worker approval —
+   *  push a `needs` toast with actions `[{label:"Approve", primary:true, run: () =>
+   *  hive_approve(reqId,"allow")}, {label:"Deny", run: () => hive_approve(reqId,
+   *  "deny")}]` so the human answers from the toast instead of tabbing to the tile.
+   *  `run` returns the toast id to dismiss (or void to keep it open, e.g. pending). */
+  actions?: ToastAction[];
+}
+
+/** An inline toast button. Kept intentionally minimal — a label, a handler, and a
+ *  primary flag for the accent-filled variant. The handler owns any async work
+ *  (e.g. the HCP call); the toast just renders the button and dismisses on click. */
+export interface ToastAction {
+  label: string;
+  run: () => void;
+  /** Accent-filled (the affirmative action, e.g. Approve). Others render quiet. */
+  primary?: boolean;
 }
 
 /** The notice class for a toast, deriving it from the status when the caller
@@ -91,9 +108,10 @@ export function useAgentAwareness(ctx: AgentAwarenessCtx) {
       const kept = ts.filter((x) => x.tileId !== t.tileId);
       return [...kept, { ...t, id, at }];
     });
-    const ttl = toastTtlMs(t);
-    setTimeout(() => dismissToast(id), ttl);
-  }, [dismissToast]);
+    // Auto-dismiss is owned by the CARD (a pausable timer that stops on hover and
+    // on window-blur), so a toast never vanishes while you're reading it or
+    // reaching for its ×. See ToastCard in canvas-overlays.tsx.
+  }, []);
 
   // Expose pushToast to the (earlier-declared) bind/unbind worktree handlers.
   useEffect(() => { pushToastRef.current = pushToast; }, [pushToast, pushToastRef]);

@@ -265,24 +265,40 @@ html.glass-on .hm-toast {
   height: 2px;
   width: 100%;
   background: color-mix(in srgb, var(--color-brand) 70%, transparent);
+  /* transform-scale (GPU), not width (layout), so the shrink is composited. */
+  transform-origin: left;
   animation: hm-toast-shrink var(--ttl, 7s) linear forwards;
 }
-@keyframes hm-toast-shrink { from { width: 100%; } to { width: 0%; } }
+@keyframes hm-toast-shrink { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+/* Pause the countdown in lockstep with the JS timer while the card is hovered or
+   the window is blurred (ToastCard toggles `.paused`) — a toast must never drain
+   while you're reading it. */
+.hm-toast.paused .hm-toast-bar,
+.hm-toast.paused .hm-toast-attn { animation-play-state: paused; }
+/* Attention BEAT on the needs-you icon: ONE short double-tap on mount, then rest.
+   An infinite pulse on a persistent element is the slop tell — motion should mark
+   the arrival, not loop forever. */
+.hm-toast-attn { animation: hm-toast-beat 400ms var(--hm-ease-out) 2; transform-origin: center; }
+@keyframes hm-toast-beat {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.18); }
+}
 /* Enter — slide in from the right, ease-out-quint. No scale pop (motion conveys
    arrival; the flourish was decorative). */
 .hm-toast-in { animation: hm-toast-in var(--hm-dur-3) var(--hm-ease-out); }
 @keyframes hm-toast-in {
-  /* A glass surface should MATERIALIZE, not just slide: blur + scale resolve
-     together so it reads as a pane of glass arriving, not a rectangle flying in. */
-  from { opacity: 0; transform: translateX(16px) scale(0.97); filter: blur(2px); }
-  to   { opacity: 1; transform: translateX(0) scale(1); filter: blur(0); }
+  /* transform + opacity ONLY (GPU). The static backdrop-filter already reads as
+     glass; animating a second `filter: blur` on top — on up to 3 glass cards at
+     once — was the most expensive thing here and risked jank on spawn storms. */
+  from { opacity: 0; transform: translateX(16px) scale(0.97); }
+  to   { opacity: 1; transform: translateX(0) scale(1); }
 }
-/* Exit retraces the entry, on the mirrored curve. A toast that slides in from the
-   right and then simply blinks out of existence breaks the spatial contract: if
-   something disappears one way, we expect it to have come from there. Faster than
-   the entrance — leaving should never cost the user attention. */
+/* Exit retraces the entry path (same X axis → the spatial contract holds) but on
+   ease-OUT: a toast exit isn't reversible — it never returns — so it should resolve
+   quickly and cleanly, not ease-IN (which delays the very moment you're watching).
+   Faster than the entrance — leaving should never cost the user attention. */
 .hm-toast-out {
-  animation: hm-toast-out 160ms var(--hm-ease-in) forwards;
+  animation: hm-toast-out 150ms var(--hm-ease-out) forwards;
   pointer-events: none;
 }
 @keyframes hm-toast-out {
@@ -297,8 +313,11 @@ html.glass-on .hm-toast {
   @keyframes hm-toast-fade-in  { from { opacity: 0; } to { opacity: 1; } }
   @keyframes hm-toast-fade-out { from { opacity: 1; } to { opacity: 0; } }
   /* The countdown bar KEEPS animating. It isn't decorative motion — it's the only
-     signal that the toast self-dismisses, and freezing it at 100% width says the
-     opposite. A 2px linear width shrink is not vestibular. */
+     signal that the toast self-dismisses, and freezing it at full width says the
+     opposite. A 2px linear scaleX shrink is not vestibular. */
+  /* But the icon's attention BEAT is decorative — drop it under reduced motion
+     (the accent color already marks needs-you). */
+  .hm-toast-attn { animation: none; }
 }
 
 /* ── Shared surface utilities — one depth language for the issue UI (and any
