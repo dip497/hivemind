@@ -63,6 +63,34 @@ test("one message per idle window — delivering starts the next turn", async ()
   assert.deepEqual(writes, ["first", "\r", "second", "\r"]);
 });
 
+test("duplicate idle signals release exactly ONE message — pi posts turn AND status:idle", async () => {
+  // pi's agent_end fires BOTH a `turn` and a `status:idle` event, so setIdle is called
+  // twice per turn. A pop-per-setIdle mailbox drained two messages at once and typed the
+  // second into the now-busy TUI, where it was lost — the very bug the mailbox exists to
+  // stop, reborn for pi parents.
+  const { mb, writes } = harness();
+  mb.setBusy(PID);
+  mb.deliver(PID, "A");
+  mb.deliver(PID, "B");
+  mb.deliver(PID, "C");
+  mb.setIdle(PID); // from the `turn` event
+  mb.setIdle(PID); // from the `status:idle` event — same turn
+  await settle();
+  assert.deepEqual(writes, ["A", "\r"], "one message, not two");
+  assert.equal(mb.pending(PID), 2);
+});
+
+test("a message arriving in the post-turn settle window is queued, not raced ahead", async () => {
+  const { mb, writes } = harness();
+  mb.setBusy(PID);
+  mb.deliver(PID, "A");
+  mb.setIdle(PID); // schedules A's release ~250ms out
+  mb.deliver(PID, "B"); // arrives DURING the settle window
+  await settle();
+  assert.deepEqual(writes, ["A", "\r"], "B did not jump the queue and collide with A");
+  assert.equal(mb.pending(PID), 1);
+});
+
 test("a tile we never heard a turn from (codex/opencode — no hooks) delivers immediately", async () => {
   const { mb, writes } = harness();
   mb.deliver("hm:tile-codex-9", "report");

@@ -373,25 +373,24 @@ export function makeDispatch(deps: MethodDeps): (method: string, params: unknown
             deps.pushWait(worker, null);
             resolve({ decision }); // no answer → "ask" (claude: human prompt; pi: blocks)
           };
-          // The answer clock starts WHEN THE PARENT ACTUALLY SEES THE REQUEST, not
-          // when it arrives. The banner is held while the parent is mid-turn, so a
-          // request that waited 8 minutes for a busy supervisor must not then get
-          // 1 minute to be answered — that's how a worker ends up blocked on a
-          // question nobody was ever given time to answer.
-          pendingApprovals.set(reqId, { resolve, timer: setTimeout(() => {}, 0), cacheKey, worker });
+          // Two timers, never both live. Until the banner is DELIVERED, only the
+          // ceiling runs — a supervisor that never returns to its prompt (dead,
+          // wedged) can't hang the worker or leak the pending entry forever. On
+          // delivery, swap the ceiling for the answer clock: it starts WHEN THE
+          // PARENT ACTUALLY SEES THE REQUEST, not when the worker asked — the banner
+          // may have been held minutes while the parent was mid-turn, and a request
+          // that waited 8 minutes must not then get 1 to be answered.
+          const ceiling = setTimeout(() => done("ask"), APPROVAL_MAX_WAIT_MS);
+          ceiling.unref?.();
+          pendingApprovals.set(reqId, { resolve, timer: ceiling, cacheKey, worker });
           const armAnswerTimeout = () => {
             const pend = pendingApprovals.get(reqId);
             if (!pend) return; // already answered
-            clearTimeout(pend.timer);
+            clearTimeout(pend.timer); // drop the ceiling
             const t = setTimeout(() => done("ask"), APPROVAL_TIMEOUT_MS);
             t.unref?.();
             pend.timer = t;
           };
-          // Ceiling: if the parent NEVER returns to its prompt (dead, wedged), the
-          // request would hang forever and leak. Bound the total wait.
-          const ceiling = setTimeout(() => done("ask"), APPROVAL_MAX_WAIT_MS);
-          ceiling.unref?.();
-          pendingApprovals.get(reqId)!.timer = ceiling;
           const delivered = deps.deliverToTile(ptyId(parent), banner, armAnswerTimeout);
           if (!delivered) done("ask"); // parent's pty is gone → don't hang the worker
         });
