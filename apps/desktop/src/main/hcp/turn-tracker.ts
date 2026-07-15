@@ -93,6 +93,7 @@ export class TurnTracker {
   /** Drop a tile's state (on close). */
   forget(tileId: string): void {
     this.state.delete(tileId);
+    this.reportedThisTurn.delete(tileId); // else a report-then-close-without-turn leaks
     const ws = this.waiters.get(tileId);
     if (ws) for (const w of ws) { clearTimeout(w.timer); w.resolve({ seq: -1, transcriptPath: null, text: null }); }
     this.waiters.delete(tileId);

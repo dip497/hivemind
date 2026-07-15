@@ -55,7 +55,7 @@ test("tile.spawn_agent actually forwards `name` — it enumerates its params, an
   // its params by hand, `name` wasn't in the list, and the feature was dead with no
   // error anywhere. This asserts the wire, not the sanitizer.
   const seen: Array<Record<string, unknown>> = [];
-  const dispatch = makeDispatch({
+  const { dispatch } = makeDispatch({
     turns: new TurnTracker(),
     recorder: new OutputRecorder(),
     callRenderer: async (_m: string, p: unknown) => {

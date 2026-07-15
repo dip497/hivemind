@@ -7,6 +7,18 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Fixed
+
+- **A crashed or user-closed worker leaked its state and hung anyone waiting on it.** Full
+  HCP teardown only ran on the `tile.close` *verb* (an agent closing another agent). Every
+  other way a tile went away — the agent process exiting, a crash, the user closing the
+  tile — cleaned almost nothing: the per-tile maps (parent/depth/read-epoch/approval-cache)
+  leaked for the life of the app, a parent blocked in `hive_read` on the dead worker hung
+  the full 120s timeout instead of resolving at once, and a supervised worker's pending
+  approval lingered up to 20 minutes. Every pty-exit path now funnels through one teardown
+  that drops the state and wakes anything blocked on the tile. (The local exit path also
+  wasn't even doing the mailbox cleanup the remote path did.)
+
 ### Added
 
 - **pi workers can now report back.** A pi worker had no `hive_report` tool — only claude

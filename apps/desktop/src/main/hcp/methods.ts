@@ -144,7 +144,19 @@ const RENDERER_TIMEOUT = 15_000;
 const DEFAULT_READ_TIMEOUT = 120_000;
 const REVIEW_TIMEOUT = 24 * 60 * 60 * 1000; // human review may take a long time
 
-export function makeDispatch(deps: MethodDeps): (method: string, params: unknown) => Promise<unknown> {
+export interface Dispatcher {
+  /** Handle one HCP method call. */
+  dispatch: (method: string, params: unknown) => Promise<unknown>;
+  /** Drop ALL per-tile HCP state for a tile that has gone away, WITHOUT the
+   *  renderer round-trip `tile.close` does. MUST be called on every pty-exit and
+   *  user-close path — otherwise the maps (parentOf/depthOf/sendSeq/approveCache/
+   *  pendingApprovals) leak, a blocked hive_read/approval on the dead worker hangs
+   *  its full timeout instead of resolving, and its UI "awaiting" status lingers.
+   *  Idempotent — safe to call twice (e.g. tile.close then the resulting pty-exit). */
+  forgetTile: (tileId: string) => void;
+}
+
+export function makeDispatch(deps: MethodDeps): Dispatcher {
   // Per-tile read epoch: set at spawn/send so agent.read waits for the turn that
   // FOLLOWS the prompt we just delivered (not a stale earlier turn).
   const sendSeq = new Map<string, number>();
@@ -243,11 +255,13 @@ export function makeDispatch(deps: MethodDeps): (method: string, params: unknown
     return res.tileId;
   };
 
-  // Close a tile and drop ALL its per-tile state (pid-keyed: turns/recorder/
-  // epochs; bare-keyed: pipes/parent/depth/supervision/approvals). Shared by the
-  // `tile.close` verb and workflow's `close_when_done`.
-  const closeTile = async (tileId: string): Promise<unknown> => {
-    const r = await deps.callRenderer("tile.close", { tileId }, RENDERER_TIMEOUT);
+  // Drop ALL per-tile HCP state (pid-keyed: turns/recorder/epochs; bare-keyed:
+  // pipes/parent/depth/supervision/approvals). Runs on EVERY teardown path — the
+  // `tile.close` verb, and (via forgetTile below) every pty-exit/user-close. Wakes
+  // anything blocked on the dead tile (readers via turns.forget → seq -1; approvals
+  // resolved "worker closed") so a crash doesn't hang a parent for the full timeout.
+  // Idempotent: every op is a delete/forget that no-ops when already gone.
+  const forgetTileState = (tileId: string): void => {
     const pid = ptyId(tileId);
     const bare = bareOf(tileId);
     deps.turns.forget(pid);
@@ -270,10 +284,17 @@ export function makeDispatch(deps: MethodDeps): (method: string, params: unknown
     }
     for (const key of approveCache.keys()) if (key.startsWith(`${bare}:`)) approveCache.delete(key);
     deps.pushWait(bare, null);
+  };
+
+  // Close a tile: ask the renderer to remove it, then drop its state. Shared by the
+  // `tile.close` verb and workflow's `close_when_done`.
+  const closeTile = async (tileId: string): Promise<unknown> => {
+    const r = await deps.callRenderer("tile.close", { tileId }, RENDERER_TIMEOUT);
+    forgetTileState(tileId);
     return r;
   };
 
-  return async (method, rawParams) => {
+  const dispatch = async (method: string, rawParams: unknown): Promise<unknown> => {
     const p = (rawParams ?? {}) as Record<string, unknown>;
     switch (method) {
       case "tile.spawn_agent": {
@@ -606,4 +627,6 @@ export function makeDispatch(deps: MethodDeps): (method: string, params: unknown
         throw new HcpError("UNKNOWN_METHOD", `unknown method: ${method}`);
     }
   };
+
+  return { dispatch, forgetTile: forgetTileState };
 }

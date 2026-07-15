@@ -1195,6 +1195,23 @@ const hcpWriteToTile = (tileId: string, data: string): boolean => {
 // mailbox holds it until the tile is back at its prompt. See hcp/mailbox.ts.
 const hcpMailbox = new Mailbox(hcpWriteToTile, SUBMIT_DELAY_MS);
 
+// Assigned from makeDispatch() below (declared later in the file). onPtyExit runs
+// before that line only in response to an actual pty exit, by which point it's set;
+// the no-op default guards the impossible early-fire.
+let hcpForgetTile: (tileId: string) => void = () => {};
+// The ONE teardown path for a tile whose pty has exited (crash, kill, or a
+// tile.close that killed it). Both the local and remote onExit handlers funnel
+// through here so no teardown path leaks HCP state — previously only the
+// `tile.close` VERB cleaned the methods.ts maps, so a crashed/user-closed worker
+// leaked every per-tile map and left a blocked hive_read/approval hanging.
+const onPtyExit = (tileId: string): void => {
+  const bare = toBareId(tileId);
+  hcpSubagentReaper.cancel(bare);
+  hcpMailbox.forget(toPtyId(tileId));
+  if (hcpSubagents.forget(bare)) pushSubagent(bare, false);
+  hcpForgetTile(tileId); // turns/recorder/pipes/sendSeq/parent/depth/name/supervise/approvals
+};
+
 ipcMain.handle("ptySpawn", wrap(async (e, opts: Parameters<typeof spawnPty>[0]) => {
   // Spawn rate-limit: a compromised renderer (XSS via rendered diff/issue
   // content) could fork-bomb the host through ptySpawn. Cap spawns per sliding
@@ -1224,7 +1241,7 @@ ipcMain.handle("ptySpawn", wrap(async (e, opts: Parameters<typeof spawnPty>[0]) 
     };
     return spawnRemotePty(opts, {
       onData: (data) => { hcpRecorder.record(opts.tileId, data); hcpBroadcast?.(toBareId(opts.tileId), data); safeSendR(`pty:data:${opts.tileId}`, data); },
-      onExit: (code, signal) => { hcpSubagentReaper.cancel(toBareId(opts.tileId)); hcpMailbox.forget(toPtyId(opts.tileId)); if (hcpSubagents.forget(toBareId(opts.tileId))) pushSubagent(toBareId(opts.tileId), false); safeSendR(`pty:exit:${opts.tileId}`, { code, signal }); },
+      onExit: (code, signal) => { onPtyExit(opts.tileId); safeSendR(`pty:exit:${opts.tileId}`, { code, signal }); },
     });
   }
   if (opts.cwd) {
@@ -1248,7 +1265,7 @@ ipcMain.handle("ptySpawn", wrap(async (e, opts: Parameters<typeof spawnPty>[0]) 
   };
   return spawnPty(opts, {
     onData: (data) => { hcpRecorder.record(opts.tileId, data); hcpBroadcast?.(toBareId(opts.tileId), data); safeSend(`pty:data:${opts.tileId}`, data); },
-    onExit: (code, signal) => safeSend(`pty:exit:${opts.tileId}`, { code, signal }),
+    onExit: (code, signal) => { onPtyExit(opts.tileId); safeSend(`pty:exit:${opts.tileId}`, { code, signal }); },
   });
 }));
 ipcMain.on("ptyWrite", (_e, tileId: string, data: string) =>
@@ -1670,7 +1687,7 @@ function startHcpControlPlane(): void {
   const pushSpawn = (child: string, parent: string | null, connected: boolean) => {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("hcp:spawn", { child, parent, connected });
   };
-  const dispatch = makeDispatch({
+  const _hcp = makeDispatch({
     callRenderer: hcpCallRenderer,
     writeToTile: hcpWriteToTile,
     deliverToTile: (ptyId, text, onSent) => hcpMailbox.deliver(ptyId, text, onSent),
@@ -1686,6 +1703,8 @@ function startHcpControlPlane(): void {
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("hcp:wait", { tileId, status });
     },
   });
+  const dispatch = _hcp.dispatch;
+  hcpForgetTile = _hcp.forgetTile; // wire the pty-exit teardown to the dispatch's per-tile cleanup
   const server = startHcpServer(hcpSockPath(userData), {
     token,
     rendererUp: () => !!mainWindow && !mainWindow.isDestroyed(),

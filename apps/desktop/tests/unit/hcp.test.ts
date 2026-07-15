@@ -114,7 +114,7 @@ function fakeDeps(over: Partial<Parameters<typeof makeDispatch>[0]> = {}) {
 
 test("dispatch agent.send: writes text + carriage return", async () => {
   const { deps, writes } = fakeDeps();
-  const dispatch = makeDispatch(deps);
+  const { dispatch } = makeDispatch(deps);
   const r = await dispatch("agent.send", { tileId: "t1", text: "hello" });
   assert.deepEqual(r, { ok: true });
   // Text is typed immediately; Enter follows as a SEPARATE keystroke a tick later
@@ -127,7 +127,7 @@ test("dispatch agent.send: writes text + carriage return", async () => {
 
 test("dispatch agent.read: returns transcript reply after a turn", async () => {
   const { deps, turns } = fakeDeps();
-  const dispatch = makeDispatch(deps);
+  const { dispatch } = makeDispatch(deps);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tx2-"));
   const f = path.join(dir, "t.jsonl");
   fs.writeFileSync(f, JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "the reply" }] } }));
@@ -140,7 +140,7 @@ test("dispatch agent.read: returns transcript reply after a turn", async () => {
 
 test("dispatch agent.send_keys: maps symbolic tokens to terminal bytes", async () => {
   const { deps, writes } = fakeDeps();
-  const dispatch = makeDispatch(deps);
+  const { dispatch } = makeDispatch(deps);
   const r = await dispatch("agent.send_keys", { tileId: "t1", keys: ["Down", "Enter"] });
   assert.deepEqual(r, { ok: true, keys: 2 });
   // First key writes immediately; the rest are staggered. Wait out the gap.
@@ -150,21 +150,21 @@ test("dispatch agent.send_keys: maps symbolic tokens to terminal bytes", async (
 
 test("dispatch agent.send_keys: unknown tokens pass through as literal text", async () => {
   const { deps, writes } = fakeDeps();
-  const dispatch = makeDispatch(deps);
+  const { dispatch } = makeDispatch(deps);
   await dispatch("agent.send_keys", { tileId: "t1", keys: ["2"] });
   assert.deepEqual(writes, [["hm:t1", "2"]]);
 });
 
 test("approval: no parent → fail-safe ask (falls through to human prompt)", async () => {
   const { deps } = fakeDeps();
-  const dispatch = makeDispatch(deps);
+  const { dispatch } = makeDispatch(deps);
   const r = await dispatch("agent.await_approval", { callerTile: "orphan", tool_name: "Bash", tool_input: { command: "ls" } });
   assert.deepEqual(r, { decision: "ask" });
 });
 
 test("approval: worker awaits, parent approves 'always' → allow + cached (no second round-trip)", async () => {
   const { deps, writes } = fakeDeps();
-  const dispatch = makeDispatch(deps);
+  const { dispatch } = makeDispatch(deps);
   // Spawn registers parentOf[tile-x] = parent (fake callRenderer returns tile-x).
   await dispatch("tile.spawn_agent", { agent: "claude", callerTile: "parent", report: false });
   const pending = dispatch("agent.await_approval", { callerTile: "tile-x", tool_name: "Bash", tool_input: { command: "rm -rf /tmp/x" } });
@@ -185,7 +185,7 @@ test("approval: worker awaits, parent approves 'always' → allow + cached (no s
 
 test("approval: deny carries a reason back to the worker", async () => {
   const { deps, writes } = fakeDeps();
-  const dispatch = makeDispatch(deps);
+  const { dispatch } = makeDispatch(deps);
   await dispatch("tile.spawn_agent", { agent: "claude", callerTile: "parent", report: false });
   const pending = dispatch("agent.await_approval", { callerTile: "tile-x", tool_name: "Write", tool_input: { file_path: "/etc/passwd" } });
   await new Promise((r) => setTimeout(r, 10));
@@ -196,14 +196,14 @@ test("approval: deny carries a reason back to the worker", async () => {
 
 test("approval: stale/unknown reqId → BAD_REQUEST", async () => {
   const { deps } = fakeDeps();
-  const dispatch = makeDispatch(deps);
+  const { dispatch } = makeDispatch(deps);
   await assert.rejects(dispatch("agent.approve", { reqId: "nope", decision: "allow" }), (e: { code?: string }) => e.code === "BAD_REQUEST");
 });
 
 test("spawn supervise: records the broker policy (default set + 'all')", async () => {
   const supervised: Array<[string, string | null]> = [];
   const { deps } = fakeDeps({ setSupervise: (id: string, spec: string | null) => { supervised.push([id, spec]); } });
-  const dispatch = makeDispatch(deps);
+  const { dispatch } = makeDispatch(deps);
   await dispatch("tile.spawn_agent", { agent: "claude", callerTile: "parent", supervise: true, report: false });
   assert.deepEqual(supervised.at(-1), ["tile-x", "Bash,Edit,Write,MultiEdit,NotebookEdit,WebFetch"]);
   await dispatch("tile.spawn_agent", { agent: "claude", callerTile: "parent", supervise: "all", report: false });
@@ -221,7 +221,7 @@ test("tile-id: toPtyId / toBareId are idempotent inverses", async () => {
 test("dispatch tile.spawn_agent: enforces MAX_SPAWN_DEPTH (anti-fork-bomb)", async () => {
   let n = 0;
   const { deps } = fakeDeps({ callRenderer: async () => ({ tileId: `t${++n}` }) });
-  const dispatch = makeDispatch(deps);
+  const { dispatch } = makeDispatch(deps);
   await dispatch("tile.spawn_agent", {});                              // t1, depth 1 (user=0)
   await dispatch("tile.spawn_agent", { callerTile: "t1" });            // t2, depth 2
   await dispatch("tile.spawn_agent", { callerTile: "t2" });            // t3, depth 3
@@ -234,7 +234,7 @@ test("dispatch tile.spawn_agent: enforces MAX_SPAWN_DEPTH (anti-fork-bomb)", asy
 test("dispatch tile.spawn_agent: rate-limited → RATE_LIMITED", async () => {
   const { deps } = fakeDeps({ spawnAllowed: () => false });
   await assert.rejects(
-    makeDispatch(deps)("tile.spawn_agent", { agent: "claude" }),
+    makeDispatch(deps).dispatch("tile.spawn_agent", { agent: "claude" }),
     (e: unknown) => (e as { code?: string })?.code === "RATE_LIMITED",
   );
 });
@@ -355,4 +355,24 @@ test("single-delivery ladder: an explicit hive_report suppresses that turn's aut
   assert.equal(tt.recordTurn("hm:worker", null, "raw turn text"), true);
   // The flag is per-turn: a later turn with no explicit report auto-reports normally.
   assert.equal(tt.recordTurn("hm:worker", null, "next turn"), false);
+});
+
+test("forgetTile (pty-exit teardown) wakes a blocked hive_read instead of hanging it", async () => {
+  const { deps } = fakeDeps();
+  const { dispatch, forgetTile } = makeDispatch(deps);
+  await dispatch("tile.spawn_agent", { agent: "claude", callerTile: "hm:tile-p" });
+  const read = dispatch("agent.read", { tileId: "tile-x", timeoutMs: 60_000 });
+  forgetTile("tile-x"); // worker's pty exits (crash) → teardown must resolve the read now
+  const r = (await read) as { finalStatus: string };
+  assert.equal(r.finalStatus, "timeout", "a crashed worker resolves the read immediately, doesn't hang 60s");
+});
+
+test("forgetTile resolves a supervised worker's pending approval (deny), not leak it", async () => {
+  const { deps } = fakeDeps();
+  const { dispatch, forgetTile } = makeDispatch(deps);
+  await dispatch("tile.spawn_agent", { agent: "claude", supervise: true, callerTile: "hm:tile-p" });
+  const approval = dispatch("agent.await_approval", { callerTile: "hm:tile-x", tool_name: "Bash", tool_input: { command: "ls" } });
+  forgetTile("tile-x"); // worker crashed mid-approval
+  const r = (await approval) as { decision: string };
+  assert.equal(r.decision, "deny", "a crashed worker's approval resolves deny, doesn't hang 20 min");
 });

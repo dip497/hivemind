@@ -23,7 +23,7 @@ test("an approval for a BUSY supervisor is held, then delivered when it hits its
   // timeout. (Worker is claude here — pi can no longer be supervised at all.)
   const writes: string[] = [];
   const mailbox = new Mailbox((_id, d) => { writes.push(d); return true; }, 1);
-  const dispatch = makeDispatch({
+  const { dispatch } = makeDispatch({
     turns: new TurnTracker(),
     recorder: new OutputRecorder(),
     callRenderer: async () => ({ tileId: "tile-w" }),
@@ -59,7 +59,7 @@ test("an approval for a BUSY supervisor is held, then delivered when it hits its
 });
 
 test("approval with a dead supervisor resolves instead of hanging the worker", async () => {
-  const dispatch = makeDispatch({
+  const { dispatch } = makeDispatch({
     turns: new TurnTracker(),
     recorder: new OutputRecorder(),
     callRenderer: async () => ({ tileId: "tile-w" }),
@@ -97,7 +97,7 @@ test("a plain allow NEVER sticks for bash — each command is a different action
 
 
 test("spawning a pi worker with supervise is REFUSED — never silently ungated", async () => {
-  const dispatch = makeDispatch({
+  const { dispatch } = makeDispatch({
     turns: new TurnTracker(),
     recorder: new OutputRecorder(),
     callRenderer: async () => ({ tileId: "tile-w" }),
