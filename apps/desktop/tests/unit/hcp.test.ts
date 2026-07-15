@@ -334,3 +334,25 @@ test("hcp-server: agent.stream subscription receives broadcast chunks", async ()
   assert.deepEqual(got, [{ seq: 1, chunk: "hello " }, { seq: 2, chunk: "world" }]);
   srv.close();
 });
+
+test("recordTurn reports whether a blocking reader took the turn (auto-report dedup)", () => {
+  const tt = new TurnTracker();
+  // A parent's hive_read is blocked on the worker's next turn.
+  const reader = tt.waitForTurn("hm:worker", tt.currentSeq("hm:worker"), 2000);
+  // Worker finishes → the reader takes it, so the auto-report must stand down.
+  assert.equal(tt.recordTurn("hm:worker", null, "reply"), true);
+  // No one waiting → the auto-report is the delivery channel, so it must fire.
+  assert.equal(tt.recordTurn("hm:lonely", null, "reply"), false);
+  return reader; // settle the promise
+});
+
+test("single-delivery ladder: an explicit hive_report suppresses that turn's auto-report", () => {
+  const tt = new TurnTracker();
+  // Worker calls hive_report mid-turn (agent.report → markReported).
+  tt.markReported("hm:worker");
+  // Turn ends. recordTurn must report the reply was already delivered (by the explicit
+  // report) so the auto-report banner stands down — no duplicate, no spurious turn.
+  assert.equal(tt.recordTurn("hm:worker", null, "raw turn text"), true);
+  // The flag is per-turn: a later turn with no explicit report auto-reports normally.
+  assert.equal(tt.recordTurn("hm:worker", null, "next turn"), false);
+});

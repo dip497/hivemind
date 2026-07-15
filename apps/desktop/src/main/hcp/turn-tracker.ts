@@ -19,6 +19,16 @@ type Waiter = { afterSeq: number; resolve: (r: TurnRecord) => void; timer: NodeJ
 export class TurnTracker {
   private state = new Map<string, TurnRecord>();
   private waiters = new Map<string, Waiter[]>();
+  /** Tiles that called hive_report (agent.report) during their CURRENT turn. Part
+   *  of the single-delivery ladder: a worker that authored its own summary this
+   *  turn must not ALSO have its raw turn auto-forwarded. Cleared at turn-end. */
+  private reportedThisTurn = new Set<string>();
+
+  /** The worker pushed an explicit report this turn — suppress the auto-report of
+   *  the same turn (the worker's summary is the better message). Keyed by pty id. */
+  markReported(tileId: string): void {
+    this.reportedThisTurn.add(tileId);
+  }
 
   private get(tileId: string): TurnRecord {
     let r = this.state.get(tileId);
@@ -32,24 +42,36 @@ export class TurnTracker {
   }
 
   /** A Stop hook reported a finished turn. Bumps seq, stores the transcript, and
-   *  wakes any waiter whose epoch is now satisfied. */
-  recordTurn(tileId: string, transcriptPath: string | null, text?: string | null): void {
+   *  wakes any waiter whose epoch is now satisfied.
+   *
+   *  Returns whether this reply was ALREADY DELIVERED by a more specific channel, so
+   *  the caller suppresses the fallback auto-report (the single-delivery ladder:
+   *  read > explicit hive_report > auto-report). True when EITHER a blocking reader
+   *  (agent.read) took it OR the worker authored an explicit report this turn —
+   *  in both cases an auto-report banner would be a duplicate that spawns a spurious
+   *  extra turn on the parent. */
+  recordTurn(tileId: string, transcriptPath: string | null, text?: string | null): boolean {
     const r = this.get(tileId);
     r.seq += 1;
     r.transcriptPath = transcriptPath;
     r.text = text ?? null; // pi carries the inline reply here; claude/droid → null
+    const reported = this.reportedThisTurn.delete(tileId); // explicit report this turn
     const ws = this.waiters.get(tileId);
-    if (!ws || ws.length === 0) return;
-    const remaining: Waiter[] = [];
-    for (const w of ws) {
-      if (r.seq > w.afterSeq) {
-        clearTimeout(w.timer);
-        w.resolve({ ...r });
-      } else {
-        remaining.push(w);
+    let woke = false;
+    if (ws && ws.length > 0) {
+      const remaining: Waiter[] = [];
+      for (const w of ws) {
+        if (r.seq > w.afterSeq) {
+          clearTimeout(w.timer);
+          w.resolve({ ...r });
+          woke = true;
+        } else {
+          remaining.push(w);
+        }
       }
+      this.waiters.set(tileId, remaining);
     }
-    this.waiters.set(tileId, remaining);
+    return woke || reported;
   }
 
   /** Resolve on the first turn after `afterSeq`, or `null` on timeout. */

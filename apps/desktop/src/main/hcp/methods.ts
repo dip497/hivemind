@@ -342,6 +342,10 @@ export function makeDispatch(deps: MethodDeps): (method: string, params: unknown
         // Held if the parent is mid-turn — a report typed into a busy TUI never
         // gets read, and the worker thinks it delivered.
         deps.deliverToTile(ptyId(parent), banner);
+        // Single-delivery ladder: the worker authored its own summary this turn, so
+        // when its turn ends, DON'T also auto-forward the raw turn (that would be a
+        // second message the parent re-processes). recordTurn reads + clears this.
+        deps.turns.markReported(ptyId(child));
         return { delivered: true, parent };
       }
 

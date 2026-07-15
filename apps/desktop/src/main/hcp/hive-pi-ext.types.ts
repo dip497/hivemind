@@ -115,6 +115,18 @@ function assertOrchestrationTools(pi: ExtensionAPI): void {
   });
 
   pi.registerTool({
+    name: "hive_report",
+    label: "Report to spawner",
+    description: "report",
+    parameters: Type.Object({ message: Type.String() }),
+    async execute(toolCallId, params) {
+      void toolCallId;
+      void params.message;
+      return { content: [{ type: "text", text: "ok" }], details: {} };
+    },
+  });
+
+  pi.registerTool({
     name: "hive_list_tiles",
     label: "List hive tiles",
     description: "list",

@@ -1756,7 +1756,12 @@ function startHcpControlPlane(): void {
       const safeTp = tp && tp.endsWith(".jsonl") && okRoots.some((r) => tp!.startsWith(r)) ? tp : null;
       // pi carries its reply inline on the turn event (no transcript path); pass
       // it through so agent.read returns it directly. claude/droid send no text.
-      hcpTurns.recordTurn(d.tileId, safeTp, typeof d.text === "string" ? d.text : null);
+      // Single-delivery ladder: true if this reply was already delivered by a more
+      // specific channel — a blocking hive_read took it, OR the worker authored an
+      // explicit hive_report this turn. Either way the auto-report banner below
+      // stands down, so the parent isn't handed the same reply twice (the duplicate
+      // would arrive as an unsolicited banner that spawns a spurious extra turn).
+      const deliveredElsewhere = hcpTurns.recordTurn(d.tileId, safeTp, typeof d.text === "string" ? d.text : null);
       // Turn END → idle (hook-driven status). The hook reports the PTY id; the
       // renderer status bus keys by BARE — normalize (recordTurn above stays on
       // the pty id, the turn-tracker's key). If a background subagent is still
@@ -1772,8 +1777,13 @@ function startHcpControlPlane(): void {
       // "working" forever. A real background subagent will keep emitting edges.
       if (hcpSubagents.busy(d.tileId)) hcpSubagentReaper.arm(d.tileId);
       // Pipe forwarding: feed this agent's reply into any piped destinations.
+      // Skip if a blocking reader already took it — hive_read is the delivery
+      // channel this turn; the auto-report is only the fallback for when nobody's
+      // reading. (Exotic: a worker fan-piped to several tiles where only one reads
+      // would skip the others too — acceptable; the common auto-report pipe is the
+      // single worker→spawner edge, which IS the reader.)
       const dests = hcpPipes.dests(toBareId(d.tileId));
-      if (dests.length === 0) return;
+      if (dests.length === 0 || deliveredElsewhere) return;
       // claude/droid carry the reply in a transcript; pi carries it inline on the
       // turn event. Gating on the transcript alone silently dropped every pi
       // worker's auto-report to its parent.

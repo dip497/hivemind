@@ -7,7 +7,22 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Added
+
+- **pi workers can now report back.** A pi worker had no `hive_report` tool — only claude
+  workers did — so a delegated pi worker had no clean way to hand a result to the agent
+  that spawned it (the report routes by *who spawned it*, so the worker needn't know the
+  parent's id). Added it to pi's extension.
+
 ### Changed
+
+- **A worker's result now reaches its parent exactly once.** There were three overlapping
+  channels — a blocking `hive_read`, an explicit `hive_report`, and the automatic
+  report-on-turn — and a worker spawned with the default `report:true` that was *also*
+  read (or that called `hive_report`) delivered the same reply twice, the duplicate landing
+  as an unsolicited banner that spawned a spurious extra turn on the parent. They now form
+  a single-delivery ladder: **read > explicit report > auto-report**. Exactly one fires.
+  (Supervision is unrelated — it's the approval channel, not a result channel.)
 
 - **pi workers can no longer be supervised — and a `supervise` request for one is now a
   loud error, not a silent downgrade.** pi has no permission system of its own (a pi tile

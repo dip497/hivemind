@@ -22,7 +22,7 @@
  *                           claude-Stop equivalent). pi writes no transcript path,
  *                           so the reply rides the event itself, read by agent.read.
  *   2. ORCHESTRATION TOOLS: `hive_spawn_agent` / `hive_read` / `hive_send` /
- *      `hive_list_tiles` / `hive_workflow` / `hive_approve`, registered so pi's LLM
+ *      `hive_report` / `hive_list_tiles` / `hive_workflow` / `hive_approve`, so pi's LLM
  *      can drive other agents. Each makes a token-authenticated HCP req/res call.
  *
  * NO SUPERVISE: pi has no permission system, so a pi worker cannot be supervised and
@@ -232,6 +232,19 @@ export default function (pi) {
       const p = { tileId: params.tileId, text: params.text };
       if (typeof params.submit === "boolean") p.submit = params.submit;
       return call("agent.send", p, signal);
+    },
+  });
+
+  pi.registerTool({
+    name: "hive_report",
+    label: "Report to spawner",
+    description:
+      "Report a result back to the agent that SPAWNED you (your parent). If you were launched by another agent via hive_spawn_agent, call this when you finish your delegated task — your message is delivered into the parent's session so it can collect your findings without polling. Prefer a concise summary over dumping everything. No-op error if you have no parent. Requires the hivemind desktop app.",
+    parameters: Type.Object({
+      message: Type.String({ description: "Your result/findings to send to the parent agent." }),
+    }),
+    async execute(toolCallId, params, signal) {
+      return call("agent.report", { callerTile: tile, message: params.message }, signal);
     },
   });
 
