@@ -7,6 +7,18 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Fixed
+
+- **Typing into a selected agent tile dropped frames on a 1× (non-HiDPI) display.** A
+  selected tile was forced onto xterm's DOM renderer for crisper text, but that renderer
+  mutates a DOM node per cell per frame — and a live agent TUI repaints its whole viewport
+  on every keystroke, so typing triggered a layout/paint storm that lagged the whole
+  window. The code even said agents must stay on the GPU (WebGL) renderer for this exact
+  reason; the crispness boost had quietly overridden it. Agent tiles now stay on WebGL
+  (already supersampled to a ≥2× atlas, so still crisp at dpr=1). Plain shell tiles keep
+  the DOM crispness boost.
+
+
 ## [1.14.0] — 2026-07-15
 
 ### Fixed
