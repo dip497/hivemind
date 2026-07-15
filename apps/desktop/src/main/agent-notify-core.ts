@@ -23,22 +23,25 @@ export function composeNotice(rec: AgentNotice, focused: boolean): ComposedNotic
   const needs = rec.kind === "needs";
   const error = rec.kind === "error";
   // Frame (workspace) name is the most useful context — which project wants you.
-  // Fall back to the repo basename, then to a bare verb.
+  // Fall back to the repo basename. This is what disambiguates two same-named
+  // agents, so it always goes in the body (see below).
   const ctx = (rec.frame || (rec.repo ? path.basename(rec.repo) : "")).trim();
-  const who = rec.label || "agent";
+  // TITLE is the agent's IDENTITY only (its session title / spawn name / "claude
+  // #2"), never "<name> needs you" — the verb belongs in the body. This matches
+  // the in-app toast (identity on top, action beneath) so the two surfaces read
+  // the same. Falls back to "agent" only if we truly have no label.
+  const label = rec.label?.trim();
+  const who = label && !label.startsWith("tile-") ? label : "agent";
   // For an error, prefer the explicit detail/signal, then the exit code, so the
-  // popup body tells you HOW it died (137 = OOM-kill, 143 = SIGTERM, …) without
-  // making you tab back to read the terminal.
+  // body tells you HOW it died (137 = OOM-kill, 143 = SIGTERM, …) without a tab-back.
   const how = rec.detail?.trim() || (rec.exitCode !== undefined ? `exit code ${rec.exitCode}` : "");
+  // BODY = "<action> · <how?> · <where?>" — the action, the failure detail (errors
+  // only), and the project context, joined so nothing empty leaves a stray "· ".
+  const action = needs ? "Needs your input" : error ? "Crashed" : "Finished";
+  const body = [action, error ? how : "", ctx].filter(Boolean).join(" · ");
   return {
-    title: needs ? `${who} needs you` : error ? `${who} failed` : `${who} finished`,
-    body: ctx
-      ? `${needs ? "Waiting for you" : error ? `Crashed · ${how || "non-zero exit"}` : "Done"} · ${ctx}`
-      : needs
-        ? "Waiting for your input"
-        : error
-          ? how || "Agent exited unexpectedly"
-          : "Task finished",
+    title: who,
+    body,
     // A crash is as time-critical as a permission prompt — wake the dock/taskbar.
     urgency: needs || error ? "critical" : "normal",
   };

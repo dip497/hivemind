@@ -95,7 +95,11 @@ export function Toasts({
                 <Icon size={15} strokeWidth={2.25} />
               </span>
               <div className="flex flex-col min-w-0 flex-1 leading-tight">
-                <span className="font-mono text-[11.5px] text-[var(--color-fg)] truncate">{t.label}</span>
+                <span className="font-mono text-[12px] font-semibold tracking-[-0.01em] text-[var(--color-fg)] truncate">
+                  {/* Identity only. A raw tile id (the bus fallback when no label
+                      has published yet) is never a name — show "agent" instead. */}
+                  {t.label.startsWith("tile-") ? "agent" : t.label}
+                </span>
                 <span className="hm-toast-verb text-[10.5px] mt-0.5">{verb}</span>
                 {t.detail && (
                   <span className="font-mono text-[10px] mt-1 text-[var(--color-fg2)] truncate">{t.detail}</span>

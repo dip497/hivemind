@@ -165,10 +165,15 @@ export function useAgentAwareness(ctx: AgentAwarenessCtx) {
       const next = new Map(prev);
       next.set(e.tileId, { label: e.label, status: e.status, seen });
       commitStatuses(next);
-      // Resolve the notice class + the frame context once, for both surfaces.
+      // Resolve the notice class + the project context once, for both surfaces.
+      // `frame` is the frame title (a worktree's branch); `repo` is the repo dir
+      // basename — the fallback context so a bare "claude" is still pinned to a
+      // project when the frame has no title. Both surfaces read the same fields.
       const kind: NoticeKind = crashed ? "error" : needsHuman ? "needs" : "done";
       const fid = frameOfRef.current[e.tileId];
       const fr = fid ? framesRef.current.find((f) => f.id === fid) : undefined;
+      const repo = ((fr?.worktreePath ?? fr?.workspacePath) || "")
+        .split("/").filter(Boolean).pop() || undefined;
       // Toast only for background events — suppress when the tile is selected.
       // Gated by user prefs (master / per-kind / DND) for the in-app surface.
       if (!selected && (needsHuman || finished || crashed) && shouldNotify(getNotificationSettings(), kind, "inApp")) {
@@ -178,7 +183,7 @@ export function useAgentAwareness(ctx: AgentAwarenessCtx) {
           status: e.status,
           kind,
           ...(crashed ? { detail: e.detail ?? (e.exitCode !== undefined ? `exit code ${e.exitCode}` : undefined) } : {}),
-          ...(fr?.title ? { frame: fr.title } : {}),
+          ...(fr?.title ? { frame: fr.title } : repo ? { frame: repo } : {}),
         });
       }
       // Native OS notification for the SAME transitions, NOT gated on selection
@@ -193,6 +198,7 @@ export function useAgentAwareness(ctx: AgentAwarenessCtx) {
             label: e.label,
             kind,
             ...(fr?.title ? { frame: fr.title } : {}),
+            ...(repo ? { repo } : {}),
             ...(crashed
               ? { ...(e.exitCode !== undefined ? { exitCode: e.exitCode } : {}), ...(e.detail ? { detail: e.detail } : {}) }
               : {}),

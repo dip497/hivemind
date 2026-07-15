@@ -14,30 +14,30 @@ test("needs → critical urgency, 'needs you' title", () => {
   const r = composeNotice({ tileId: "t1", label: "claude #2 · plan", kind: "needs" }, false);
   assert.ok(r);
   assert.equal(r.urgency, "critical");
-  assert.equal(r.title, "claude #2 · plan needs you");
-  assert.equal(r.body, "Waiting for your input");
+  assert.equal(r.title, "claude #2 · plan"); // TITLE = identity only
+  assert.equal(r.body, "Needs your input");   // verb moved to the body
 });
 
 test("done → normal urgency, 'finished' title", () => {
   const r = composeNotice({ tileId: "t1", label: "codex", kind: "done" }, false);
   assert.ok(r);
   assert.equal(r.urgency, "normal");
-  assert.equal(r.title, "codex finished");
-  assert.equal(r.body, "Task finished");
+  assert.equal(r.title, "codex");
+  assert.equal(r.body, "Finished");
 });
 
 test("error → critical urgency, 'failed' title + exit code in body", () => {
   const r = composeNotice({ tileId: "t1", label: "claude #3", kind: "error", exitCode: 137 }, false);
   assert.ok(r);
   assert.equal(r.urgency, "critical");
-  assert.equal(r.title, "claude #3 failed");
-  assert.equal(r.body, "exit code 137"); // no frame/repo → bare how (the code) shows
+  assert.equal(r.title, "claude #3");
+  assert.equal(r.body, "Crashed · exit code 137"); // action + how, no context
 });
 
 test("error with no code and no context falls back to a generic line", () => {
   const r = composeNotice({ tileId: "t1", label: "claude", kind: "error" }, false);
   assert.ok(r);
-  assert.equal(r.body, "Agent exited unexpectedly");
+  assert.equal(r.body, "Crashed");
 });
 
 test("error with frame shows 'Crashed · …' and the context", () => {
@@ -47,7 +47,7 @@ test("error with frame shows 'Crashed · …' and the context", () => {
   );
   assert.ok(r);
   assert.equal(r.urgency, "critical");
-  assert.equal(r.title, "claude failed");
+  assert.equal(r.title, "claude");
   assert.equal(r.body, "Crashed · exit code 1 · billing-api");
 });
 
@@ -71,7 +71,7 @@ test("repo basename is appended as context when provided", () => {
     false,
   );
   assert.ok(r);
-  assert.equal(r.body, "Waiting for you · motadata-itsm-server");
+  assert.equal(r.body, "Needs your input · motadata-itsm-server");
 });
 
 test("frame name is preferred over repo as the context", () => {
@@ -80,8 +80,8 @@ test("frame name is preferred over repo as the context", () => {
     false,
   );
   assert.ok(r);
-  assert.equal(r.title, "Refactor auth finished");
-  assert.equal(r.body, "Done · billing-api");
+  assert.equal(r.title, "Refactor auth");
+  assert.equal(r.body, "Finished · billing-api");
 });
 
 test("ignores unknown kinds and missing tileId", () => {
@@ -94,5 +94,12 @@ test("ignores unknown kinds and missing tileId", () => {
 test("falls back to 'agent' when label is empty", () => {
   const r = composeNotice({ tileId: "t1", label: "", kind: "done" }, false);
   assert.ok(r);
-  assert.equal(r.title, "agent finished");
+  assert.equal(r.title, "agent");
+});
+
+test("a raw tile id never surfaces as the title — falls back to 'agent'", () => {
+  const r = composeNotice({ tileId: "tile-claude-123", label: "tile-claude-123", kind: "needs", frame: "api" }, false);
+  assert.ok(r);
+  assert.equal(r.title, "agent");
+  assert.equal(r.body, "Needs your input · api");
 });
