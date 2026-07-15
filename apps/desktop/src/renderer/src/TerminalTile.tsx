@@ -552,13 +552,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
         // actively STREAMING stays on WebGL, so a multi-agent fan-out can't
         // re-spike the renderer. Swaps happen only on unselected tiles → invisible.
         //
-        // EXCEPT agent tiles (see the 539-544 note): a live agent TUI repaints its
-        // whole viewport on every keystroke, and the DOM renderer mutates a DOM node
-        // per cell per frame → a layout/paint storm that lags the WHOLE window while
-        // you type. Agents stay on WebGL, which `installCrispDpr` already supersamples
-        // to a ≥2× atlas → crisp at dpr=1 anyway, so the DOM boost buys nothing here.
-        (agent == null &&
-          (window.devicePixelRatio || 1) < 2 &&
+        ((window.devicePixelRatio || 1) < 2 &&
           (selectedRef.current === true || Date.now() - lastStreamTs > STREAM_QUIET_MS)),
     });
 

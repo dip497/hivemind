@@ -7,6 +7,15 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Reverted
+
+- The v1.14.1 "keep agent tiles on WebGL while typing" change is undone: it reduced text
+  crispness on 1× displays (WebGL uses grayscale AA vs the DOM renderer's subpixel AA) and
+  did **not** actually recover the frame rate — profiling points the FPS cost at Chromium
+  compositing (translucent/blurred tiles over an animated wallpaper), not terminal glyph
+  rendering. Agent tiles go back to the DOM crispness path pending a compositing-side fix.
+
+
 ## [1.14.1] — 2026-07-15
 
 ### Fixed
