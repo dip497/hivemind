@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [1.14.2] — 2026-07-15
+
 ### Reverted
 
 - The v1.14.1 "keep agent tiles on WebGL while typing" change is undone: it reduced text
@@ -811,7 +813,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v1.14.1...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v1.14.2...HEAD
+[1.14.2]: https://github.com/dip497/hivemind/releases/tag/v1.14.2
 [1.14.1]: https://github.com/dip497/hivemind/releases/tag/v1.14.1
 [1.14.0]: https://github.com/dip497/hivemind/releases/tag/v1.14.0
 [1.13.0]: https://github.com/dip497/hivemind/releases/tag/v1.13.0
