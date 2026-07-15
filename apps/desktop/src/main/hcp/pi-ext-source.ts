@@ -21,9 +21,9 @@
  *        - `agent_end`    → turn (with inline text) + status idle  (turn END; the
  *                           claude-Stop equivalent). pi writes no transcript path,
  *                           so the reply rides the event itself, read by agent.read.
- *   2. ORCHESTRATION TOOLS: `hive_spawn_agent` / `hive_read` / `hive_send` /
- *      `hive_report` / `hive_list_tiles` / `hive_workflow` / `hive_approve`, so pi's LLM
- *      can drive other agents. Each makes a token-authenticated HCP req/res call.
+ *   2. ORCHESTRATION TOOLS: spawn/read/send/report, list_frames/list_tiles, focus,
+ *      close_tile, connect/disconnect, send_keys, workflow, approve — so pi's LLM can
+ *      drive the canvas + other agents. Each makes a token-authenticated HCP req/res call.
  *
  * NO SUPERVISE: pi has no permission system, so a pi worker cannot be supervised and
  * `supervise` is REFUSED at spawn (methods.ts). The long note at the old broker's
@@ -249,15 +249,83 @@ export default function (pi) {
   });
 
   pi.registerTool({
+    name: "hive_list_frames",
+    label: "List hive frames",
+    description:
+      "List the canvas frames (workspaces) — each with its id, title, repo/worktree path, branch, and tile COUNT (not the tiles themselves). This is the CHEAP overview: call it first to see what frames exist, then hive_list_tiles(frame) for the tiles inside one. Requires the hivemind desktop app.",
+    parameters: Type.Object({}),
+    async execute(toolCallId, params, signal) {
+      return call("tile.list_frames", {}, signal);
+    },
+  });
+
+  pi.registerTool({
     name: "hive_list_tiles",
     label: "List hive tiles",
     description:
-      "List the tiles on the hivemind canvas grouped by frame — returns { frames:[{ frameId, title, repo, branch, tiles:[{ tileId, kind, label, status }] }], loose:[…] }. Pass \`frame\` to filter to a single frame. Requires the hivemind desktop app.",
+      "List the tiles on the hivemind canvas grouped by frame — returns { frames:[{ frameId, title, repo, branch, tiles:[{ tileId, kind, label, status }] }], loose:[…] }. This is HEAVIER than hive_list_frames (it returns every tile); prefer passing \`frame\` to scope it to one frame rather than dumping the whole canvas. Requires the hivemind desktop app.",
     parameters: Type.Object({
-      frame: Type.Optional(Type.String({ description: "Filter to one frame (id, repo name, or title). Omit to list all frames." })),
+      frame: Type.Optional(Type.String({ description: "Filter to one frame (id, repo name, or title) — recommended. Omit to list ALL tiles in ALL frames (can be large)." })),
     }),
     async execute(toolCallId, params, signal) {
       return call("tile.list", { frame: params.frame }, signal);
+    },
+  });
+
+  pi.registerTool({
+    name: "hive_focus",
+    label: "Focus a hive tile",
+    description:
+      "Bring a tile (by tileId) into view and select it on the canvas — pans/centers it so the user sees it. Requires the hivemind desktop app.",
+    parameters: Type.Object({ tileId: Type.String() }),
+    async execute(toolCallId, params, signal) {
+      return call("tile.focus", { tileId: params.tileId }, signal);
+    },
+  });
+
+  pi.registerTool({
+    name: "hive_close_tile",
+    label: "Close a hive tile",
+    description:
+      "Close a tile (by tileId) — ends its session and removes it from the canvas. Use to clean up a worker you spawned once you've collected its result. Requires the hivemind desktop app.",
+    parameters: Type.Object({ tileId: Type.String() }),
+    async execute(toolCallId, params, signal) {
+      return call("tile.close", { tileId: params.tileId }, signal);
+    },
+  });
+
+  pi.registerTool({
+    name: "hive_connect",
+    label: "Pipe hive agents",
+    description:
+      "Pipe one agent's output into another's input: whenever the source agent (srcTileId) finishes a turn, its reply is automatically sent to the destination agent (dstTileId). Chains workers without you relaying by hand. Requires the hivemind desktop app.",
+    parameters: Type.Object({ srcTileId: Type.String(), dstTileId: Type.String() }),
+    async execute(toolCallId, params, signal) {
+      return call("tile.connect", { srcTileId: params.srcTileId, dstTileId: params.dstTileId }, signal);
+    },
+  });
+
+  pi.registerTool({
+    name: "hive_disconnect",
+    label: "Unpipe hive agents",
+    description:
+      "Remove a pipe created with hive_connect. Omit dstTileId to remove ALL pipes out of srcTileId. Requires the hivemind desktop app.",
+    parameters: Type.Object({ srcTileId: Type.String(), dstTileId: Type.Optional(Type.String()) }),
+    async execute(toolCallId, params, signal) {
+      const p = { srcTileId: params.srcTileId };
+      if (typeof params.dstTileId === "string") p.dstTileId = params.dstTileId;
+      return call("tile.disconnect", p, signal);
+    },
+  });
+
+  pi.registerTool({
+    name: "hive_send_keys",
+    label: "Send keys to a hive agent",
+    description:
+      "Send symbolic keystrokes to a tile (by tileId) — e.g. ['Down','Enter'] to pick a menu item, ['Escape'] to cancel, ['C-c'] for Ctrl-C. For plain text use hive_send instead; this is for navigating a TUI's prompts. Requires the hivemind desktop app.",
+    parameters: Type.Object({ tileId: Type.String(), keys: Type.Array(Type.String()) }),
+    async execute(toolCallId, params, signal) {
+      return call("agent.send_keys", { tileId: params.tileId, keys: params.keys }, signal);
     },
   });
 

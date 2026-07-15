@@ -127,6 +127,17 @@ function assertOrchestrationTools(pi: ExtensionAPI): void {
   });
 
   pi.registerTool({
+    name: "hive_list_frames",
+    label: "List hive frames",
+    description: "frames",
+    parameters: Type.Object({}),
+    async execute(toolCallId) {
+      void toolCallId;
+      return { content: [{ type: "text", text: "{}" }], details: {} };
+    },
+  });
+
+  pi.registerTool({
     name: "hive_list_tiles",
     label: "List hive tiles",
     description: "list",
@@ -135,6 +146,69 @@ function assertOrchestrationTools(pi: ExtensionAPI): void {
       void toolCallId;
       void params.frame;
       return { content: [{ type: "text", text: "[]" }], details: {} };
+    },
+  });
+
+  pi.registerTool({
+    name: "hive_focus",
+    label: "Focus a hive tile",
+    description: "focus",
+    parameters: Type.Object({ tileId: Type.String() }),
+    async execute(toolCallId, params) {
+      void toolCallId;
+      void params.tileId;
+      return { content: [{ type: "text", text: "ok" }], details: {} };
+    },
+  });
+
+  pi.registerTool({
+    name: "hive_close_tile",
+    label: "Close a hive tile",
+    description: "close",
+    parameters: Type.Object({ tileId: Type.String() }),
+    async execute(toolCallId, params) {
+      void toolCallId;
+      void params.tileId;
+      return { content: [{ type: "text", text: "ok" }], details: {} };
+    },
+  });
+
+  pi.registerTool({
+    name: "hive_connect",
+    label: "Pipe hive agents",
+    description: "connect",
+    parameters: Type.Object({ srcTileId: Type.String(), dstTileId: Type.String() }),
+    async execute(toolCallId, params) {
+      void toolCallId;
+      void params.srcTileId;
+      void params.dstTileId;
+      return { content: [{ type: "text", text: "ok" }], details: {} };
+    },
+  });
+
+  pi.registerTool({
+    name: "hive_disconnect",
+    label: "Unpipe hive agents",
+    description: "disconnect",
+    parameters: Type.Object({ srcTileId: Type.String(), dstTileId: Type.Optional(Type.String()) }),
+    async execute(toolCallId, params) {
+      void toolCallId;
+      void params.srcTileId;
+      void params.dstTileId;
+      return { content: [{ type: "text", text: "ok" }], details: {} };
+    },
+  });
+
+  pi.registerTool({
+    name: "hive_send_keys",
+    label: "Send keys to a hive agent",
+    description: "keys",
+    parameters: Type.Object({ tileId: Type.String(), keys: Type.Array(Type.String()) }),
+    async execute(toolCallId, params) {
+      void toolCallId;
+      void params.tileId;
+      void params.keys;
+      return { content: [{ type: "text", text: "ok" }], details: {} };
     },
   });
 
