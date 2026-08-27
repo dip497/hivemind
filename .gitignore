@@ -26,11 +26,14 @@ linux-unpacked/
 
 # Per-developer / local dev artifacts — never committed.
 # Ignore .claude/ contents (settings.local.json, agents, local skills) but SHIP
-# the hive-browser skill — it's part of the Browser-tile feature, not local cruft.
+# the skills that are part of the product / the contribution process, not local cruft:
+# hive-browser backs the Browser tile; adding-an-agent-provider is the procedure a
+# contributor (or their agent) follows to wire a new CLI agent end to end.
 .claude/*
 !.claude/skills/
 .claude/skills/*
 !.claude/skills/hive-browser/
+!.claude/skills/adding-an-agent-provider/
 .hyperresearch/
 research/
 # screenshots/ are the README demo images — they MUST be committed so GitHub

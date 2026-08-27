@@ -85,6 +85,13 @@ socket boundary alone.
 
 ## Adding a provider
 
+> The three code edits below are the *architecture*. For the full procedure — probing
+> the real CLI's capabilities before you decide what it supports, picking the
+> integration tier, the registries that drift, and the lifecycle proof that says when
+> it's actually done — follow the `adding-an-agent-provider` skill
+> (`.claude/skills/adding-an-agent-provider/`). Provider PRs fail on the research, not
+> on these three files.
+
 1. **main:** `providers/<name>.ts` implementing `AgentProvider`
    (`id`, `matches(cmd)`, optional `resume(ctx)` returning spec transforms). If
    the agent has a hook/event system, inject hooks in its spawn transform that

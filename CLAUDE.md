@@ -98,6 +98,18 @@ Summaries must be specific — "Mamba achieves linear-time sequence modeling via
 - Run `/home/dipendra-sharma/projects/hivemind/.venv/bin/hyperresearch --help` for the full command list
 <!-- hyperresearch:end -->
 
+## Adding or completing an agent integration
+
+Wiring a new CLI agent (kiro, gemini, amp, …) — or finishing a half-wired one — follows
+the `adding-an-agent-provider` skill in `.claude/skills/adding-an-agent-provider/`.
+Read it before touching `providers/`, `agents.tsx`, or `agent-state.ts`.
+
+The part people skip: **probe the real binary before deciding what it supports.** A
+provider PR that assumes "no hooks / no session ids" without running `--help` ships an
+agent the control plane cannot drive — `hive_read` times out, `hive_workflow` gathers
+nothing, and a tile waiting on approval notifies "Finished". `checklist.md` next to the
+skill is the definition of done; it goes in the PR description.
+
 <!-- release:start -->
 ## Release management
 
