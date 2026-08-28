@@ -185,7 +185,7 @@ export default function (pi) {
     description:
       "Spawn a NEW coding agent as a tile on the hivemind canvas and hand it a prompt. Returns its tileId. Delegate a subtask to a sibling agent. By default the worker AUTO-REPORTS: its reply is delivered back into your session when it finishes a turn. Pass \`supervise\` (CLAUDE workers only) to route the worker's tool-permission prompts to YOU (answer with hive_approve); supervising a pi worker is an error. Requires the hivemind desktop app.",
     parameters: Type.Object({
-      agent: Type.Optional(Type.String({ description: "Agent to launch: 'claude' (default), 'codex', 'droid', 'pi', …" })),
+      agent: Type.Optional(Type.String({ description: "Agent to launch: 'claude' (default), 'codex', 'droid', 'pi', 'hermes', …" })),
       name: Type.Optional(Type.String({ description: "Short display name ('reviewer', 'test-writer') — becomes the worker's tile label and tags every message it reports back to you. Name your workers when you spawn more than one." })),
       prompt: Type.Optional(Type.String({ description: "Initial task delivered once the agent is ready." })),
       frame: Type.Optional(Type.String({ description: "Frame to spawn into (id, repo/worktree name, or title). Omit to use your own frame." })),
@@ -358,7 +358,7 @@ export default function (pi) {
       stages: Type.Optional(Type.Array(Type.String(), { description: "pipeline: one prompt per stage. Each may use {input}." })),
       input: Type.Optional(Type.String({ description: "pipeline: optional seed for the first stage's {input}." })),
       reduce_prompt: Type.Optional(Type.String({ description: "mapreduce: the reducer prompt. Use {results}." })),
-      agent: Type.Optional(Type.String({ description: "Runtime for every worker: 'claude' (default), 'codex', 'droid', 'pi', …" })),
+      agent: Type.Optional(Type.String({ description: "Runtime for every worker: 'claude' (default), 'codex', 'droid', 'pi', 'hermes', …" })),
       model: Type.Optional(Type.String({ description: "claude only — model alias applied to every worker." })),
       frame: Type.Optional(Type.String({ description: "Frame to spawn workers into. Omit to use your own frame." })),
       supervise: superviseParam,

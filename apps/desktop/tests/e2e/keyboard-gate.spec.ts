@@ -45,7 +45,17 @@ test("an unselected terminal is locked + blurred (no keyboard); selecting re-ena
   expect(await termFocused(), "selected terminal is focused").toBe(true);
 
   // 2) deselect via the pane → locked + blurred (keys can't reach it).
-  await page.mouse.click(5, 200);
+  //    A shell tile (1200x820) nearly fills the 1280x720 viewport, so fixed
+  //    coords can land ON the tile (a select, not a deselect). Escape fit-alls
+  //    first, then click a point guaranteed OUTSIDE the node's bbox.
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(700);
+  const box = await term.boundingBox();
+  if (box) {
+    const x = box.x - 20 < 0 ? box.x + box.width + 20 : box.x - 20;
+    const y = box.y - 20 < 0 ? box.y + box.height + 20 : box.y - 20;
+    await page.mouse.click(x, y);
+  }
   await page.waitForTimeout(400);
   expect(await wrapperLocked(), "unselected tile is locked").toBe(true);
   expect(await termFocused(), "unselected terminal is blurred").toBe(false);

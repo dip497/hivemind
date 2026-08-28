@@ -82,6 +82,7 @@
     "@xterm/xterm": "catalog:",
     "@xyflow/react": "catalog:",
     "chokidar": "catalog:",
+    "yaml": "catalog:",
     "class-variance-authority": "catalog:",
     "clsx": "catalog:",
     "cmdk": "catalog:",

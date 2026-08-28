@@ -7,6 +7,32 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Added
+
+- **Hermes agent provider** (Nous Research `hermes`). First-class wiring like droid:
+  deterministic working/idle/needs-you status + inline turn replies via hermes's
+  shell-hook system (`pre_llm_call` / `post_llm_call` / `pre_approval_request`),
+  injected through an ephemeral `HERMES_HOME` overlay that symlinks the user's real
+  `~/.hermes` (auth, sessions, skills) and merges our hooks into a hivemind-owned
+  config.yaml — the user's own settings and hooks are preserved. Reboot-resume via
+  `hermes --in <cwd> --resume latest`. A full HCP worker: `hive_read`,
+  `hive_workflow`, and auto-report gather its replies directly.
+
+### Fixed
+
+- **Panning a tile-covered canvas was nearly impossible.** xyflow auto-adds
+  `nopan` to every draggable node, so no drag starting on a tile could pan —
+  and right-drag pan was additionally disabled for the selected tile. On a
+  canvas full of tiles the only escape was a pixel-perfect click on empty pane
+  (or middle-mouse). Holding **Space** now makes node elements
+  pointer-transparent for the duration of the hold, so Space+left-drag pans
+  from anywhere — including directly over tiles and frames. Cleared on keyup
+  and on window blur.
+- **`hive_workflow` with pi workers returned `timeout` despite completed turns.**
+  The gather step read only the transcript path; inline-reply runtimes (pi's bridge,
+  hermes's `post_llm_call`) carry the reply on the turn event itself — it now
+  prefers the inline text and falls back to the transcript.
+
 ## [1.15.0] — 2026-07-30
 
 ### Added

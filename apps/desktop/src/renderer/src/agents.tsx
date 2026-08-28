@@ -79,6 +79,21 @@ function PiIcon({ size = 16, className }: { size?: number; className?: string })
   );
 }
 
+/** Hermes (Nous Research) — its winged-caduceus mark approximated as a
+ *  monochrome staff + wings silhouette, stroked with currentColor so it themes
+ *  like the other brand marks. (No simple-icons entry; clean approximation.) */
+function HermesIcon({ size = 16, className }: { size?: number; className?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" className={className} aria-hidden>
+      <path d="M12 3v18" strokeLinecap="round" />
+      <circle cx="12" cy="3.2" r="1.1" fill="currentColor" stroke="none" />
+      <path d="M12 6.5 5.5 9.2c-1.2.5-1.2 2.1 0 2.6L12 14.5" strokeLinejoin="round" />
+      <path d="M12 6.5l6.5 2.7c1.2.5 1.2 2.1 0 2.6L12 14.5" strokeLinejoin="round" />
+      <path d="M9 18.6h6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 /** A generic agent mark for tools without a bundled logo yet (gemini/…). */
 function GenericAgentIcon({ size = 16, className }: { size?: number; className?: string }) {
   return (
@@ -115,6 +130,12 @@ export const AGENTS: AgentDef[] = [
   // restart is handled by the pi provider (`pi --session <id>`, resolved from
   // ~/.pi/agent/sessions for the tile cwd). It reads AGENTS.md natively.
   { id: "pi", label: "Pi", cmd: "pi", icon: PiIcon, enabled: true },
+  // hermes (Nous Research): Claude-Code-shaped shell hooks (config.yaml
+  // `hooks:`) + a config-home override (HERMES_HOME) → deterministic
+  // working/idle/needs-you + inline turn replies via an ephemeral home overlay.
+  // Session resume across a daemon restart via `--in <cwd> --resume latest`
+  // (hermes resolves the workspace's newest session itself).
+  { id: "hermes", label: "Hermes", cmd: "hermes", icon: HermesIcon, enabled: true },
   { id: "gemini", label: "Gemini", cmd: "gemini", icon: GenericAgentIcon, enabled: false },
 ];
 

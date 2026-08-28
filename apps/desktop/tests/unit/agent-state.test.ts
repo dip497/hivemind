@@ -108,6 +108,23 @@ test("opencode: △ Permission required → blocked", () => {
   assert.equal(detectAgentState("opencode", "running\nesc to interrupt"), "working");
 });
 
+test("hermes: Dangerous Command panel → blocked, spinner/interrupt hint → working", () => {
+  // Real strings from hermes 0.20.4's approval panel (cli.py `_panel_box_width`
+  // render: title "⚠️  Dangerous Command", choices Allow once / Allow for this
+  // session / Deny / Show full command).
+  const blocked = [
+    "⚠️  Dangerous Command",
+    "❯ Allow once",
+    "  Allow for this session",
+    "  Deny",
+    "  Show full command",
+  ].join("\n");
+  assert.equal(detectAgentState("hermes", blocked), "blocked");
+  // "Ctrl+C cancels" contains the `ctrl+c cancel` hint → working (substring match).
+  assert.equal(detectAgentState("hermes", "⠋ Working…  Ctrl+C cancels"), "working");
+  assert.equal(detectAgentState("hermes", "❯ "), "idle");
+});
+
 test("cline: defaults to working, ready → idle", () => {
   assert.equal(detectAgentState("cline", "random output"), "working");
   assert.equal(detectAgentState("cline", "cline is ready for your message"), "idle");

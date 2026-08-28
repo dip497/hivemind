@@ -521,8 +521,13 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
           const pid = ptyId(tileId);
           const afterSeq = sendSeq.get(pid) ?? deps.turns.currentSeq(pid);
           const rec = await deps.turns.waitForTurn(pid, afterSeq, perTurnMs);
-          const text = rec?.transcriptPath ? readLastAssistantMessage(rec.transcriptPath) : null;
-          const status: WR["status"] = rec?.transcriptPath ? "turn" : "timeout";
+          // Inline-reply runtimes (pi's bridge, hermes's post_llm_call hook) carry
+          // the reply on the turn event itself — no transcript to read. Reading
+          // only the transcriptPath silently reported timeout for every completed
+          // pi worker; prefer the inline text, fall back to the transcript.
+          const text = rec?.text && rec.text.length > 0 ? rec.text
+            : rec?.transcriptPath ? readLastAssistantMessage(rec.transcriptPath) : null;
+          const status: WR["status"] = rec ? "turn" : "timeout";
           if (closeWhenDone && status === "turn") { try { await closeTile(tileId); } catch { /* best-effort */ } }
           return { item: label, tileId, status, text };
         };
