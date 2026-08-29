@@ -1,5 +1,3 @@
-<img width="1920" height="1200" alt="image" src="https://github.com/user-attachments/assets/ba5ad456-c477-4ee2-997b-dac61f37a488" /><div align="center">
-
 <img src="assets/icon.png" width="116" alt="hivemind" />
 
 # hivemind
