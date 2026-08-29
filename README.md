@@ -18,7 +18,6 @@ Local-first · Markdown-backed · No SDK lock-in · No telemetry · No cloud.
 <br/>
 
 <img width="1920" height="1200" alt="image" src="https://github.com/user-attachments/assets/8b33c851-c4fb-456b-8231-a2ddd3583dfd" />
-" alt="hivemind — an issues board and a live diff of an agent's fix, side by side on one canvas" width="880" />
 
 <sub>An issue board and the live diff of a fix, side by side on one infinite canvas. The agent edits; the diff updates as you watch.</sub>
 
