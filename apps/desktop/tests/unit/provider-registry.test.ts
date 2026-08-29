@@ -81,5 +81,15 @@ test("composeResume restoreRetryMs is the max across providers (≥ claude's 5s)
 });
 
 test("registry order is claude before codex (preserves restore chaining)", () => {
-  assert.deepEqual(PROVIDERS.map((p) => p.id), ["claude", "codex", "droid", "pi"]);
+  assert.deepEqual(PROVIDERS.map((p) => p.id), ["claude", "codex", "droid", "pi", "hermes"]);
+});
+
+test("hermes provider matches + injects the overlay home env on spawn", () => {
+  assert.equal(providerFor("hermes")?.id, "hermes");
+  assert.equal(providerFor("/home/u/.local/bin/hermes")?.id, "hermes");
+  const r = composeResume({ ...ctx, hermesHome: "/x/hermes-home", hermesStopHookPath: "/x/hs.cjs", hermesNotifyHookPath: "/x/hn.cjs" });
+  const out = r.transformSpecOnSpawn(spec("hermes"), "t1");
+  assert.equal(out.env?.HERMES_HOME, "/x/hermes-home");
+  assert.equal(out.env?.HERMES_ACCEPT_HOOKS, "1");
+  assert.equal(out.env?.HIVEMIND_TILE, "t1");
 });

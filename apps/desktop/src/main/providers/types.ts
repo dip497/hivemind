@@ -61,6 +61,16 @@ export interface ProviderSpawnContext {
    *  daemon seeds it + writes droid's hooks.json there). Unset → droid runs with
    *  its normal home and no injected hooks (screen-scrape status only). */
   droidHome?: string;
+  /** The ephemeral HERMES_HOME overlay for hermes hook injection (the daemon
+   *  seeds it + writes a merged config.yaml with our hooks there). Unset →
+   *  hermes runs with its normal home and no injected hooks (screen-scrape
+   *  status only). */
+  hermesHome?: string;
+  /** Hermes-specific turn hook (post_llm_call → turn event with the inline
+   *  reply). See hcp/hermes-stop-hook-source.ts. */
+  hermesStopHookPath?: string;
+  /** Hermes-specific notify hook (pre_approval_request → "needs you"). */
+  hermesNotifyHookPath?: string;
 }
 
 export interface AgentProvider {

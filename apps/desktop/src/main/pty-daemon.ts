@@ -25,6 +25,9 @@ import { notificationHookSource } from "./hcp/notification-hook-source.js";
 import { userpromptHookSource } from "./hcp/userprompt-hook-source.js";
 import { seedDroidHome } from "./hcp/droid-home.js";
 import { droidHooksSettings } from "./droid-resume.js";
+import { seedHermesHome } from "./hcp/hermes-home.js";
+import { hermesStopHookSource, hermesNotifyHookSource } from "./hcp/hermes-stop-hook-source.js";
+import { hermesHooksConfig } from "./hermes-resume.js";
 import { readOrCreateToken, hcpSockPath } from "./hcp/token.js";
 
 const socketPath = process.argv[2] || process.env.HIVEMIND_PTY_SOCK;
@@ -126,6 +129,24 @@ try {
   });
 } catch { /* best-effort */ }
 
+// Hermes (Nous Research) deterministic hooks: same shape as droid — an
+// EPHEMERAL HERMES_HOME overlay (symlinks to the real ~/.hermes + our merged
+// config.yaml) so hermes's config.yaml `hooks:` block carries our HCP bridges.
+// The turn bridge maps post_llm_call's extra.assistant_response to the inline
+// turn reply; the notify bridge maps pre_approval_request to "needs you".
+// Best-effort: a seed failure just disables hermes hooks (scrape still works).
+const hermesStopHookPath = path.join(userDataDir, "hcp-hermes-stop-hook.cjs");
+try { fs.writeFileSync(hermesStopHookPath, hermesStopHookSource()); } catch { /* best-effort */ }
+const hermesNotifyHookPath = path.join(userDataDir, "hcp-hermes-notify-hook.cjs");
+try { fs.writeFileSync(hermesNotifyHookPath, hermesNotifyHookSource()); } catch { /* best-effort */ }
+const hermesHome = path.join(userDataDir, "hermes-home");
+try {
+  seedHermesHome({
+    hermesHome,
+    hooks: hermesHooksConfig({ execPath: process.execPath, hermesStopHookPath, userpromptHookPath, hermesNotifyHookPath, hcpSock }),
+  });
+} catch { /* best-effort */ }
+
 // Provider spawn transforms (resume + deterministic-signal hook injection),
 // composed across every registered agent provider (claude, codex, …). Each
 // provider no-ops for specs it doesn't own, so the composition is order-safe.
@@ -148,6 +169,9 @@ const resume = composeResume({
   hcpToken,
   piExtPath,
   droidHome,
+  hermesHome,
+  hermesStopHookPath,
+  hermesNotifyHookPath,
 });
 
 const snapshotPath = (id: string): string => {

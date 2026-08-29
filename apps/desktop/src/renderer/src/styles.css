@@ -696,6 +696,18 @@ body.canvas-resizing .react-flow__node .react-flow__resize-control {
   pointer-events: auto;
 }
 
+/* Space+drag pan from ANYWHERE — including over a tile. xyflow auto-adds
+   `.nopan` to every draggable node, so a pane-drag that starts on a node
+   element is dropped by d3-zoom's filter; on a canvas fully covered by tiles
+   there is no empty pane left to drag from. While Space is held
+   (useCanvasShortcuts toggles `space-pan` on <body>), every node element — and
+   the tile-local wheel/pan handlers with it — goes pointer-transparent, so the
+   pointerdown reaches `.react-flow__pane` and the built-in
+   panActivationKeyCode pan runs. */
+body.space-pan .react-flow__node {
+  pointer-events: none !important;
+}
+
 /* ── Markdown preview (editor Preview mode) ───────────────────────────────────
    The rendered HTML is injected as innerHTML (sanitized via DOMPurify), so it
    can't carry Tailwind classes — style the elements directly, themed to the app

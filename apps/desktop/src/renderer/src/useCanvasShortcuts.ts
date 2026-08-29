@@ -50,6 +50,18 @@ export function useCanvasShortcuts(ctx: CanvasShortcutsCtx) {
       }
     };
     const onKey = (e: KeyboardEvent) => {
+      // ── Space = pan modifier ───────────────────────────────────────────
+      // Holding Space makes EVERY canvas element pointer-transparent (see
+      // styles.css `body.space-pan`) so the drag lands on the pane and xyflow's
+      // panActivationKeyCode pan takes over — even when the cursor is over a
+      // tile. Without this, xyflow's auto-added `nopan` on draggable nodes
+      // blocks pan from any node element, and on a tile-covered canvas there is
+      // no empty pane left to drag from (the "can't pan unless I hit a gap"
+      // trap). Guarded by inEditable so a Space typed into a terminal/editor
+      // never locks the canvas.
+      if (e.code === "Space" && !e.repeat) {
+        if (!inEditable(e.target)) document.body.classList.add("space-pan");
+      }
       // ── modifier shortcuts (kept for muscle memory) ──
       if (e.metaKey || e.ctrlKey) {
         if (e.key === "\\") { e.preventDefault(); spawnClaude(); }
@@ -118,6 +130,12 @@ export function useCanvasShortcuts(ctx: CanvasShortcutsCtx) {
       setSelectedTileId(id);
       focusTile(id);
     };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === "Space") document.body.classList.remove("space-pan");
+    };
+    // A held Space + window blur (alt-tab) would leave the pan lock stuck —
+    // clear it whenever the window loses focus.
+    const clearSpacePan = () => document.body.classList.remove("space-pan");
     window.addEventListener("hivemind:spawn-claude", onSpawn);
     window.addEventListener("hivemind:canvas-toggle", onToggle as EventListener);
     window.addEventListener("hivemind:add-frame", onAddFrame);
@@ -125,6 +143,8 @@ export function useCanvasShortcuts(ctx: CanvasShortcutsCtx) {
     window.addEventListener("hivemind:focus-tile", onFocusTile as EventListener);
     window.addEventListener("hivemind:focus-selected", onFocusSelected);
     window.addEventListener("keydown", onKey);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", clearSpacePan);
     return () => {
       window.removeEventListener("hivemind:spawn-claude", onSpawn);
       window.removeEventListener("hivemind:canvas-toggle", onToggle as EventListener);
@@ -133,6 +153,8 @@ export function useCanvasShortcuts(ctx: CanvasShortcutsCtx) {
       window.removeEventListener("hivemind:focus-tile", onFocusTile as EventListener);
       window.removeEventListener("hivemind:focus-selected", onFocusSelected);
       window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", clearSpacePan);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [repoPath]);
