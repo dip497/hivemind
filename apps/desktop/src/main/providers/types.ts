@@ -61,6 +61,16 @@ export interface ProviderSpawnContext {
    *  daemon seeds it + writes droid's hooks.json there). Unset → droid runs with
    *  its normal home and no injected hooks (screen-scrape status only). */
   droidHome?: string;
+  /** The ephemeral KIRO_HOME overlay for kiro hook injection (the daemon seeds
+   *  it + writes `agents/hivemind.json` there). Unset → kiro runs with its
+   *  normal home, no `--agent hivemind` selected, no injected hooks
+   *  (screen-scrape status only). */
+  kiroHome?: string;
+  /** kiro-specific PreToolUse permission-broker hook (exit-code contract, NOT
+   *  claude's stdout-JSON contract — see hcp/kiro-approval-hook-source.ts).
+   *  With `hcpSock`, wired into the shared `agents/hivemind.json`; the script
+   *  itself no-ops unless the spawn env carries HIVE_SUPERVISE. */
+  kiroApprovalHookPath?: string;
 }
 
 export interface AgentProvider {

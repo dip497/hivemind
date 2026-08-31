@@ -86,7 +86,7 @@ hive_workflow({
 ### Common options
 
 - `agent` — runtime for every worker: `"claude"` (default), `"codex"`, `"droid"`,
-  `"opencode"`, or **`"pi"`**. `pi` is a first-class runtime — turn-detection,
+  `"opencode"`, `"kiro"`, or **`"pi"`**. `pi` is a first-class runtime — turn-detection,
   reply, supervise, and even the orchestration tools all work with `agent:"pi"`
   exactly like claude. Non-claude runtimes must be installed on the host or the
   worker comes back `status:"error"`.

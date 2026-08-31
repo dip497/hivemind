@@ -9,6 +9,7 @@
 import net from "node:net";
 import fs from "node:fs";
 import path from "node:path";
+import { homedir } from "node:os";
 import * as pty from "@lydell/node-pty";
 import { SessionManager, type ManagedPty, type SpawnSpec, type SessionSnapshot } from "./pty-session-manager.js";
 import { type ClientMsg, type ServerMsg, frame, makeLineDecoder } from "./pty-protocol.js";
@@ -25,6 +26,9 @@ import { notificationHookSource } from "./hcp/notification-hook-source.js";
 import { userpromptHookSource } from "./hcp/userprompt-hook-source.js";
 import { seedDroidHome } from "./hcp/droid-home.js";
 import { droidHooksSettings } from "./droid-resume.js";
+import { seedKiroHome } from "./hcp/kiro-home.js";
+import { kiroAgentConfig } from "./kiro-resume.js";
+import { kiroApprovalHookSource } from "./hcp/kiro-approval-hook-source.js";
 import { readOrCreateToken, hcpSockPath } from "./hcp/token.js";
 
 const socketPath = process.argv[2] || process.env.HIVEMIND_PTY_SOCK;
@@ -126,6 +130,46 @@ try {
   });
 } catch { /* best-effort */ }
 
+// kiro (kiro-cli) deterministic hooks + MCP: kiro has no inline hook flag
+// either, so we point it at an EPHEMERAL KIRO_HOME (seeded with symlinks to the
+// real ~/.kiro + our own `agents/hivemind.json` — hooks + mcpServers.hive),
+// selected at spawn with `--agent hivemind` (kiro-resume.ts). kiro's own
+// PreToolUse broker script differs from claude/droid's (exit-code contract,
+// not stdout JSON) — see kiro-approval-hook-source.ts.
+const kiroApprovalHookPath = path.join(userDataDir, "hcp-kiro-approval-hook.cjs");
+try { fs.writeFileSync(kiroApprovalHookPath, kiroApprovalHookSource()); } catch { /* best-effort */ }
+// Best-effort resolve of the `hive` CLI so the generated agent config's
+// mcpServers.hive can spawn it (mirrors main/index.ts's resolveHiveCliPath,
+// duplicated sync here since the daemon is a separate electron-as-node process
+// that doesn't share main's async installer helpers). Falls back to bare
+// "hive" (PATH lookup at kiro's own spawn time) if nothing is found now.
+function resolveHiveCliPathSync(): string {
+  const candidates = [
+    path.join(homedir(), ".local", "bin", "hive"),
+    ...((process.env.PATH ?? "").split(":").filter(Boolean).map((d) => path.join(d, "hive"))),
+  ];
+  for (const p of candidates) {
+    try { if (fs.statSync(p).isFile()) return p; } catch { /* not here */ }
+  }
+  return "hive";
+}
+const kiroHome = path.join(userDataDir, "kiro-home");
+try {
+  seedKiroHome({
+    kiroHome,
+    agentConfig: kiroAgentConfig({
+      execPath: process.execPath,
+      stopHookPath,
+      userpromptHookPath,
+      kiroApprovalHookPath,
+      trackerPath,
+      tileSessionsDir,
+      hcpSock,
+      hiveCliPath: resolveHiveCliPathSync(),
+    }),
+  });
+} catch { /* best-effort */ }
+
 // Provider spawn transforms (resume + deterministic-signal hook injection),
 // composed across every registered agent provider (claude, codex, …). Each
 // provider no-ops for specs it doesn't own, so the composition is order-safe.
@@ -148,6 +192,8 @@ const resume = composeResume({
   hcpToken,
   piExtPath,
   droidHome,
+  kiroHome,
+  kiroApprovalHookPath,
 });
 
 const snapshotPath = (id: string): string => {

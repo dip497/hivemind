@@ -51,6 +51,10 @@ test("pi takes the argv prompt path too — it auto-submits it like claude", () 
   assert.equal(deliversPromptViaArgv("codex"), false);
   assert.equal(deliversPromptViaArgv("droid"), false);
   assert.equal(deliversPromptViaArgv("opencode"), false);
+  // Unverified whether `kiro-cli chat "prompt"` stays interactive after
+  // answering or exits (maintainer audit, PR #2) — stays on the typed path,
+  // same as droid.
+  assert.equal(deliversPromptViaArgv("kiro"), false);
   assert.equal(deliversPromptViaArgv(undefined), false);
 
   // The prompt lands LAST, after pi's injected `-e <ext>` — `pi -e x.mjs "task"`.

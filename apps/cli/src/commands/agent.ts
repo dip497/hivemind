@@ -23,6 +23,9 @@ const KNOWN_AGENTS = [
   "amp",
   "cursor",
   "pi",
+  // The actual binary (`which kiro-cli`) — NOT bare `kiro`, which is the Kiro
+  // IDE, a different product.
+  "kiro-cli",
 ];
 
 const contextCmd = defineCommand({

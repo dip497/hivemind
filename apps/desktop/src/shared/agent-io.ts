@@ -78,7 +78,9 @@ export function stripInitialPrompt<T extends { env?: Record<string, string> }>(s
  * - pi:     `pi "<prompt>"` → main.js parses it into `initialMessage` → interactive-mode
  *   calls `session.prompt(initialMessage)` (verified in pi 0.55.3's dist).
  *
- * codex/droid/opencode are NOT here: unverified, and a wrong flag breaks their CLI.
+ * codex/droid/opencode/kiro are NOT here: unverified, and a wrong flag breaks
+ * their CLI. (kiro specifically: whether `kiro-cli chat "prompt"` stays
+ * interactive after answering, or exits — no binary available to confirm.)
  */
 const ARGV_PROMPT_AGENTS = new Set(["claude", "pi"]);
 

@@ -79,6 +79,17 @@ function PiIcon({ size = 16, className }: { size?: number; className?: string })
   );
 }
 
+/** Kiro (kiro.dev) — the official brand mark (owl-face silhouette with two eyes),
+ *  monochrome via currentColor so it themes with the tile chrome. Source: the
+ *  official Kiro SVG from kiro.dev (MIT via lobe-icons). */
+function KiroIcon({ size = 16, className }: { size?: number; className?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" fillRule="evenodd" className={className} aria-hidden>
+      <path d="M4.594 6.677C6.67-2.226 18.746-2.211 21.16 6.632c.353 1.297 1.725 7.582-1.673 13.747-1.545 2.797-5.841 5.49-6.99 1.883C8.6 25.477 3.315 24.1 5.789 18.609l-.318.143c-3.57 1.305-3.863-1.208-3.173-2.513.45-.84.727-1.335.937-1.897.353-.975.458-1.568.593-2.498.27-1.837.277-3.607.765-5.167zm8.37.01a.92.92 0 00-.81.428c-.217.323-.33.825-.33 1.462 0 .705.15 1.89 1.14 1.89h.008c.757 0 1.214-.705 1.214-1.89 0-.622-.127-1.125-.367-1.455a1.014 1.014 0 00-.855-.435zm4.08 0a.92.92 0 00-.81.428c-.217.323-.33.825-.33 1.462 0 .705.15 1.89 1.14 1.89h.008c.757 0 1.215-.705 1.215-1.89 0-.622-.128-1.125-.368-1.455a1.014 1.014 0 00-.855-.435z" />
+    </svg>
+  );
+}
+
 /** A generic agent mark for tools without a bundled logo yet (gemini/…). */
 function GenericAgentIcon({ size = 16, className }: { size?: number; className?: string }) {
   return (
@@ -115,6 +126,19 @@ export const AGENTS: AgentDef[] = [
   // restart is handled by the pi provider (`pi --session <id>`, resolved from
   // ~/.pi/agent/sessions for the tile cwd). It reads AGENTS.md natively.
   { id: "pi", label: "Pi", cmd: "pi", icon: PiIcon, enabled: true },
+  // kiro (kiro.dev — Kiro CLI): ships claude's hook vocabulary (agentSpawn /
+  // userPromptSubmit / preToolUse / postToolUse / stop) via a named custom
+  // agent config selected with `--agent`. hivemind injects one
+  // (`agents/hivemind.json`, in an ephemeral KIRO_HOME overlay — see
+  // hcp/kiro-home.ts) wiring those hooks + `mcpServers.hive`, so a kiro tile is
+  // a real HCP worker: working/idle is hook-driven, a captured `session_id`
+  // gives PER-TILE resume (`--resume-id`, falling back to cwd-scoped
+  // `--resume` if none was captured yet), and `supervise` brokers tool
+  // permission via a kiro-specific PreToolUse hook. "blocked" status is still
+  // screen-scrape only (detectKiro) — kiro has no notification-style event to
+  // hook, and its approval-prompt chrome is unverified without the binary
+  // (see agent-state.ts's ASSUMPTION comment on detectKiro).
+  { id: "kiro", label: "Kiro", cmd: "kiro-cli", icon: KiroIcon, enabled: true },
   { id: "gemini", label: "Gemini", cmd: "gemini", icon: GenericAgentIcon, enabled: false },
 ];
 

@@ -271,7 +271,7 @@ const TOOLS: Tool[] = [
     inputSchema: {
       type: "object",
       properties: {
-        agent: { type: "string", description: "Agent to launch: 'claude' (default), 'codex', 'opencode', 'droid', 'pi', …" },
+        agent: { type: "string", description: "Agent to launch: 'claude' (default), 'codex', 'opencode', 'droid', 'kiro', 'pi', …" },
         name: { type: "string", description: "Short display name for this worker ('reviewer', 'test-writer'). Becomes its tile label on the canvas, and tags every message it sends back to you ('[hive] from reviewer (tile-…)'). Name your workers when you spawn more than one — it's how you and the user tell them apart." },
         prompt: { type: "string", description: "Initial task delivered once the agent is ready." },
         frame: { type: "string", description: "Frame to spawn into — a frame id, repo/worktree name, or title (e.g. 'manageark'). Omit to use the spawning agent's own frame. Discover with hive_list_frames." },
@@ -413,7 +413,7 @@ const TOOLS: Tool[] = [
         stages: { type: "array", items: { type: "string" }, description: "pipeline: one prompt per stage, run in order. Each may use {input} to reference the prior stage's reply." },
         input: { type: "string", description: "pipeline: optional seed value substituted into the FIRST stage's {input}." },
         reduce_prompt: { type: "string", description: "mapreduce: the reducer agent's prompt. Use {results} for all worker outputs joined together." },
-        agent: { type: "string", description: "Runtime for every worker: 'claude' (default), 'codex', 'droid', 'pi', … Non-claude runtimes must be installed on the host or the worker fails to spawn (status:'error')." },
+        agent: { type: "string", description: "Runtime for every worker: 'claude' (default), 'codex', 'droid', 'kiro', 'pi', … Non-claude runtimes must be installed on the host or the worker fails to spawn (status:'error')." },
         model: { type: "string", description: "claude only — model alias like 'opus' or 'sonnet' applied to every worker; omit for the workspace default." },
         frame: { type: "string", description: "Frame to spawn workers into. Omit to use your own frame. Discover with hive_list_frames." },
         supervise: { description: "Broker the workers' tool-permission prompts to YOU (answer with hive_approve) instead of a human — for unattended fan-out. true brokers the mutating tools; 'all' brokers every tool; or a comma-string / array of tool names.", type: ["boolean", "string", "array"], items: { type: "string" } },

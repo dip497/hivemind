@@ -27,6 +27,18 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
   optional description, a "stage all changes" toggle, a live status line (branch, staged
   count, ahead/behind), and **Commit**, **Commit & Push**, **Push**, and **Pull** actions.
   Pull is fast-forward-only and reports a diverged branch cleanly instead of forcing a merge.
+- **kiro-cli as a spawnable, fully-wired agent.** Adds `kiro` to the agent registry
+  (`kiro-cli`, resumable, hook-driven status) alongside claude/codex/droid/pi. kiro-cli
+  ships claude's hook vocabulary (`agentSpawn`/`userPromptSubmit`/`preToolUse`/
+  `postToolUse`/`stop`) via a named custom agent config; hivemind injects one
+  (`agents/hivemind.json`) into an ephemeral `KIRO_HOME` overlay (mirroring droid's
+  `FACTORY_HOME_OVERRIDE` seam) wiring those hooks + `mcpServers.hive`, so a kiro tile
+  reports working/idle deterministically, resumes PER-TILE after a daemon restart
+  (`--resume-id` from a captured `session_id`, falling back to cwd-scoped `--resume`),
+  and can broker tool approvals under `supervise`. "blocked"/waiting status is still
+  screen-scrape only — kiro has no notification-style hook event, and its approval-prompt
+  chrome is unverified without the binary (flagged in code + the PR). Registries updated:
+  `apps/cli` `KNOWN_AGENTS` (both), `packages/hive-mcp` tool descriptions, `README.md`.
 
 ### Fixed
 

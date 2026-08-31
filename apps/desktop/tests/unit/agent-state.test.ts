@@ -97,6 +97,22 @@ test("amp: approval footer → blocked, esc to cancel → working", () => {
   assert.equal(detectAgentState("amp", "≈ Running tools…  Esc to cancel"), "working");
 });
 
+// ASSUMPTION: no kiro-cli binary was available to capture its real
+// approval-prompt screen text (see the ASSUMPTION comment on detectKiro in
+// agent-state.ts) — this pins the assumed heuristic shape, modeled on
+// droid's/amp's (option chrome + a yes/no-shaped question), not a captured
+// kiro transcript. Update both once real kiro output is captured.
+test("kiro: option chrome + question → blocked, spinner+esc → working", () => {
+  assert.equal(
+    detectAgentState("kiro", "Allow this tool to run?\nAllow  Deny\nEnter to select"),
+    "blocked",
+  );
+  assert.equal(detectAgentState("kiro", "do you want to proceed?\n❯ yes"), "blocked");
+  assert.equal(detectAgentState("kiro", "● Editing file…\nesc to cancel"), "working");
+  assert.equal(detectAgentState("kiro", "kiro is working…"), "working");
+  assert.equal(detectAgentState("kiro", "> "), "idle");
+});
+
 test("grok: scope selector → blocked, braille+verb → working", () => {
   assert.equal(detectAgentState("grok", "Yes, proceed\nNo, reject"), "blocked");
   assert.equal(detectAgentState("grok", "⠋ Waiting… 1.8s"), "working");
