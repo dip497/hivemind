@@ -7,6 +7,27 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Fixed
+
+- **Tiles now stay glued to their frame.** A newly-placed tile (editor, diff, terminal)
+  was inset with the wrong padding (24/48px) versus the auto-fit derivation (28/36px), so
+  the frame visibly jumped a few pixels the instant its first tile landed and could nudge
+  into a neighbour. Placement now matches the derivation exactly — the frame grows cleanly
+  around the tile and carries it when you drag the frame.
+- **The editor/diff now grows its frame even without a global repo.** When a frame was bound
+  to a worktree or workspace zone but the canvas had no global repo, the auto-fit effect
+  excluded the editor/diff tile from the frame's bounding box (though it still rendered), so
+  the frame never expanded to contain it. Auto-fit now honours the frame's zone repo, mirroring
+  the render gate.
+- **Nested worktree layers no longer scatter.** With 3+ worktree sub-frames in one repo frame,
+  pairwise collision separation staggered them into a diagonal cascade. They now reflow into a
+  clean left-to-right row (wrapping past the row width) in reading order, staying inside the
+  parent frame.
+- **Sibling-frame reflow no longer jumps the whole nest.** The reflow's row origin was taken
+  from the anchor frame's corner, so dragging a sub-frame that wasn't reading-order-first
+  shifted every sibling and the parent. The origin is now the group's top-left, independent
+  of which sibling is the anchor.
+
 ## [1.15.0] — 2026-07-30
 
 ### Added

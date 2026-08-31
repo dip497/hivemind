@@ -128,8 +128,20 @@ export function useFrameOps(ctx: FrameOpsCtx) {
   useEffect(() => {
     const present = new Set<string>();
     const kindOf = new Map<string, TileKind>();
+    // A tile's effective repo can come from its owner FRAME (a worktree branch
+    // zone or a bound workspace folder) even when the canvas has no global repo
+    // — this MUST mirror canvas-node-build's `tileRepo` render gate. Gating on
+    // the global `repoPath` alone excluded an editor/diff living inside such a
+    // frame from the member-rect set, so the frame never grew to contain it and
+    // the tile visually escaped its layer ("editor won't stay in the frame").
+    const frameProvidesRepo = (tid: string): boolean => {
+      const fid = frameOf[tid];
+      if (!fid) return false;
+      const owner = framesRef.current.find((f) => f.id === fid);
+      return !!(owner?.worktreePath || owner?.workspacePath);
+    };
     for (const t of tiles) {
-      if ((t.kind === "editor" || t.kind === "diff") && !repoPath) continue;
+      if ((t.kind === "editor" || t.kind === "diff") && !repoPath && !frameProvidesRepo(t.id)) continue;
       present.add(t.id);
       kindOf.set(t.id, t.kind);
     }

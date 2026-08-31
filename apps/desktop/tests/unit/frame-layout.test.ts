@@ -221,6 +221,88 @@ test("nested: anchoring on a worktree CHILD pins its parent in the top-level pas
   assert.ok(dP2.dx !== 0 || dP2.dy !== 0, "the sibling repo P2 yields instead");
 });
 
+test("nested: 3 sibling children reflow into a clean row (no diagonal scatter)", () => {
+  // REGRESSION: with 3+ overlapping worktree children, pairwise collision
+  // nudging staggered them diagonally ("nested layers get lost / dispersed").
+  // separateSiblingFrames must reflow them left→right in reading order, all on
+  // one row (same top), and keep them inside the parent.
+  const frames: FrameGeom[] = [
+    { id: "P", x: 0, y: 0, w: 460, h: 200 },
+    { id: "C1", x: 28, y: 64, w: 460, h: 200, parentFrameId: "P" },
+    { id: "C2", x: 516, y: 64, w: 460, h: 200, parentFrameId: "P" },
+    { id: "C3", x: 1004, y: 64, w: 460, h: 200, parentFrameId: "P" },
+  ];
+  // Each child grows to a ~656px tile box overlapping its neighbour.
+  const members = new Map([
+    ["C1", [mem(56, 100, 600, 400)]],
+    ["C2", [mem(200, 150, 600, 400)]],
+    ["C3", [mem(340, 200, 600, 400)]],
+  ]);
+  const { geometry } = computeFrameLayout(frames, members, "C1", K);
+  const P = geometry.get("P")!, C1 = geometry.get("C1")!, C2 = geometry.get("C2")!, C3 = geometry.get("C3")!;
+  assert.equal(overlap(C1, C2), false, "C1/C2 must not overlap");
+  assert.equal(overlap(C2, C3), false, "C2/C3 must not overlap");
+  assert.equal(overlap(C1, C3), false, "C1/C3 must not overlap");
+  // A clean row: all three share the same top (no diagonal scatter).
+  assert.equal(C1.y, C2.y, "C1 and C2 on the same row");
+  assert.equal(C2.y, C3.y, "C2 and C3 on the same row");
+  // Left→right in reading order.
+  assert.ok(C1.x < C2.x && C2.x < C3.x, "children ordered left→right");
+  assert.ok(contains(P, C1) && contains(P, C2) && contains(P, C3), "parent contains all three");
+});
+
+test("nested: 3 sibling reflow is anchor-independent (origin is the group's, not the anchor's)", () => {
+  // REGRESSION: separateSiblingFrames used to take the row origin from the
+  // anchor's current corner. When the anchor wasn't reading-order-first, the
+  // whole row (and the parent wrapping it) shifted to the anchor's position —
+  // dragging the rightmost sibling shoved the entire nest. The origin must be
+  // the group's min x/y regardless of which sibling is the anchor; the anchor
+  // only affects sort/tie-breaking via current position, not the origin.
+  const frames: FrameGeom[] = [
+    { id: "P", x: 0, y: 0, w: 460, h: 200 },
+    { id: "C1", x: 28, y: 64, w: 460, h: 200, parentFrameId: "P" },
+    { id: "C2", x: 516, y: 64, w: 460, h: 200, parentFrameId: "P" },
+    { id: "C3", x: 1004, y: 64, w: 460, h: 200, parentFrameId: "P" },
+  ];
+  const members = new Map([
+    ["C1", [mem(56, 100, 600, 400)]],
+    ["C2", [mem(200, 150, 600, 400)]],
+    ["C3", [mem(340, 200, 600, 400)]],
+  ]);
+  const layoutC1 = computeFrameLayout(frames, members, "C1", K).geometry;
+  const layoutC3 = computeFrameLayout(frames, members, "C3", K).geometry;
+  for (const id of ["P", "C1", "C2", "C3"]) {
+    assert.deepEqual(
+      layoutC3.get(id),
+      layoutC1.get(id),
+      `${id} geometry must be identical regardless of anchor (C1 vs C3)`,
+    );
+  }
+});
+
+test("nested: 4 sibling children all stacked at one spot fan out into a row", () => {
+  const frames: FrameGeom[] = [
+    { id: "P", x: 0, y: 0, w: 460, h: 200 },
+    { id: "C1", x: 0, y: 0, w: 460, h: 200, parentFrameId: "P" },
+    { id: "C2", x: 0, y: 0, w: 460, h: 200, parentFrameId: "P" },
+    { id: "C3", x: 0, y: 0, w: 460, h: 200, parentFrameId: "P" },
+    { id: "C4", x: 0, y: 0, w: 460, h: 200, parentFrameId: "P" },
+  ];
+  const members = new Map([
+    ["C1", [mem(100, 100, 500, 400)]],
+    ["C2", [mem(120, 100, 500, 400)]],
+    ["C3", [mem(140, 100, 500, 400)]],
+    ["C4", [mem(160, 100, 500, 400)]],
+  ]);
+  const { geometry } = computeFrameLayout(frames, members, "C1", K);
+  const P = geometry.get("P")!;
+  const kids = ["C1", "C2", "C3", "C4"].map((id) => geometry.get(id)!);
+  for (let i = 0; i < kids.length; i++)
+    for (let j = i + 1; j < kids.length; j++)
+      assert.equal(overlap(kids[i]!, kids[j]!), false, `C${i + 1}/C${j + 1} overlap`);
+  kids.forEach((k, i) => assert.ok(contains(P, k), `parent must contain C${i + 1}`));
+});
+
 // ── arrangeBoxes (opt-in tidy) ───────────────────────────────────────────────
 const box = (id: string, x: number, y: number, w: number, h: number): ArrangeBox => ({ id, x, y, w, h });
 const ARR = { originX: 100, originY: 200, padX: 24, padTop: 48, gap: 24, maxRowWidth: 1000 };

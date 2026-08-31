@@ -7,8 +7,8 @@
  */
 import { useCallback, useEffect, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import { frameColorFor } from "./frame-color";
-import { nextSlotInFrame, FRAME_ROW_MAX } from "./frame-layout";
-import { defaultSizeForKind, defaultTileSize } from "./canvas-sizing";
+import { nextSlotInFrame, FRAME_ROW_MAX, FRAME_GAP } from "./frame-layout";
+import { defaultSizeForKind, defaultTileSize, FRAME_PAD, FRAME_HEADER } from "./canvas-sizing";
 import { agentById } from "./agents";
 import { defaultShell, type FrameState, type TileInstance } from "./canvas-persistence";
 import { queueWork } from "./claude-bus";
@@ -58,9 +58,17 @@ export function useSpawn(ctx: SpawnCtx) {
   } = ctx;
 
   const placeInFrame = useCallback((id: string, frame: FrameState, opts?: { background?: boolean }) => {
-    const padX = 24;
-    const padTop = 48;
-    const gap = 24;
+    // CRITICAL: these MUST match the auto-fit derivation in `tileBox`
+    // (frame.x = minTileX − FRAME_PAD, frame.y = minTileY − FRAME_HEADER). If
+    // they diverge, the auto-fit effect recomputes the frame's box a few px off
+    // from where the tile was placed — exceeding the 2px dead-band — so the
+    // frame visibly jumps the instant its first tile lands (and can nudge into a
+    // neighbour, triggering a needless separation cascade).
+    //   padX   = FRAME_PAD    → placed tile at frame.x+PAD ⇒ derived frame.x = tile.x−PAD = frame.x ✓
+    //   padTop = FRAME_HEADER → placed tile at frame.y+HEADER ⇒ derived frame.y = tile.y−HEADER = frame.y ✓
+    const padX = FRAME_PAD;
+    const padTop = FRAME_HEADER;
+    const gap = FRAME_GAP;
     const pos = positionsRef.current;
     const sizeOf = (tid: string) => {
       if (sizesRef.current[tid]) return sizesRef.current[tid]!;
