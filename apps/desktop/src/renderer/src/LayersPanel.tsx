@@ -13,6 +13,7 @@ import { useEffect, useState, type ReactNode, type PointerEvent as ReactPointerE
 import { Layers, ChevronRight, ChevronDown, GitBranch, Server, Folder, FolderOpen, PanelLeftClose, Globe } from "lucide-react";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { AgentIcon } from "./agents";
+import { FrameRailMenu, type FrameActions } from "./FrameRailMenu";
 
 export type LayerKind = "claude" | "terminal" | "editor" | "diff" | "issues" | "browser" | "planReview" | "workbench";
 
@@ -45,6 +46,11 @@ interface Props {
   selectedTileId: string | null;
   onFocusTile: (id: string) => void;
   onFocusFrame: (id: string) => void;
+  /** When provided, right-clicking a frame row opens a context menu that
+   *  mirrors the frame header (spawn agent/tile, worktree, workspace, remote,
+   *  arrange, rename/color/delete). Optional so the panel still renders without
+   *  a host that wires these (e.g. tests). */
+  frameActions?: FrameActions;
 }
 
 const STATUS_COLOR: Record<TileStatusKind, string> = {
@@ -133,7 +139,7 @@ function WorkspaceIcon({ color, remote, worktree, collapsed }: { color: string; 
   );
 }
 
-export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocusFrame }: Props) {
+export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocusFrame, frameActions }: Props) {
   // Persisted: panel hidden + which frame groups are collapsed. Now that the
   // panel is DOCKED (a flex sibling, not an overlay) it no longer occludes any
   // tile, so it defaults to SHOWN; collapsing leaves a narrow icon rail. The
@@ -169,6 +175,11 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
     return () => window.removeEventListener("hivemind:toggle-layers", onToggle);
   }, []);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  // Right-click-a-frame context menu (only when a host wired frameActions).
+  const [menu, setMenu] = useState<{ frame: LayerFrame; x: number; y: number } | null>(null);
+  // Inline frame rename — active frame id + its draft. Started from the context
+  // menu ("Rename") or a double-click on the frame title; commits on Enter/blur.
+  const [renaming, setRenaming] = useState<{ id: string; draft: string } | null>(null);
 
   // Live status per tile, from the shared bus (same source as frame chips).
   const [status, setStatus] = useState<Map<string, TileStatusKind>>(new Map());
@@ -340,7 +351,11 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
     const agg = frameAgg(gid);
     return (
       <div key={gid} className={depth === 0 ? "mt-1.5 first:mt-1" : ""}>
-        <div className="group/grp flex items-center gap-0.5 h-8 pr-2 mx-2 rounded-lg hover:bg-[var(--color-bg3)] transition-colors" style={{ paddingLeft: depth * 14 }}>
+        <div
+          className="group/grp flex items-center gap-0.5 h-8 pr-2 mx-2 rounded-lg hover:bg-[var(--color-bg3)] transition-colors"
+          style={{ paddingLeft: depth * 14 }}
+          onContextMenu={frameActions ? (e) => { e.preventDefault(); setMenu({ frame, x: e.clientX, y: e.clientY }); } : undefined}
+        >
           <button
             onClick={() => toggleGroup(gid)}
             className="size-5 grid place-items-center rounded text-[var(--color-fg3)] hover:text-[var(--color-fg)]"
@@ -348,10 +363,39 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
           >
             {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
           </button>
+          {renaming?.id === gid ? (
+            <div className="flex-1 flex items-center gap-2 min-w-0">
+              <WorkspaceIcon color={frame.color} remote={frame.remote} worktree={isWt} collapsed={isCollapsed} />
+              <input
+                autoFocus
+                value={renaming.draft}
+                onChange={(e) => setRenaming({ id: gid, draft: e.target.value })}
+                onBlur={() => {
+                  const t = renaming.draft.trim();
+                  if (t) frameActions?.onRename(gid, t);
+                  setRenaming(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    const t = renaming.draft.trim();
+                    if (t) frameActions?.onRename(gid, t);
+                    setRenaming(null);
+                  } else if (e.key === "Escape") {
+                    setRenaming(null);
+                  }
+                  // Don't let the panel's key handlers see rename typing.
+                  e.stopPropagation();
+                }}
+                className="flex-1 min-w-0 bg-[var(--color-bg)] border border-[var(--color-brand)] rounded px-1.5 py-0.5 text-[13px] font-semibold text-[var(--color-fg)] outline-none"
+                aria-label="Rename frame"
+              />
+            </div>
+          ) : (
           <button
             onClick={() => onFocusFrame(frame.id)}
+            onDoubleClick={frameActions ? () => setRenaming({ id: gid, draft: frame.title }) : undefined}
             className="flex-1 flex items-center gap-2 min-w-0 text-left text-[14px] font-semibold tracking-[-0.014em] text-[var(--color-fg)]"
-            title={isWt ? `Focus worktree ${frame.branch ?? frame.title}` : `Focus ${frame.title}`}
+            title={isWt ? `Focus worktree ${frame.branch ?? frame.title}` : `Focus ${frame.title}${frameActions ? " · double-click to rename" : ""}`}
           >
             <WorkspaceIcon color={frame.color} remote={frame.remote} worktree={isWt} collapsed={isCollapsed} />
             <span className="truncate">{frame.title}</span>
@@ -389,6 +433,7 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
               )}
             </span>
           </button>
+          )}
         </div>
         {!isCollapsed && (items.length > 0 || kids.length > 0) && (
           // Nesting guide rail — a faint vertical line the child rows hang from,
@@ -470,6 +515,19 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
         title="Drag to resize"
         aria-hidden
       />
+      {menu && frameActions && (
+        <FrameRailMenu
+          frame={menu.frame}
+          x={menu.x}
+          y={menu.y}
+          actions={frameActions}
+          onClose={() => setMenu(null)}
+          onRequestRename={(id) => {
+            const f = frames.find((x) => x.id === id);
+            setRenaming({ id, draft: f?.title ?? "" });
+          }}
+        />
+      )}
     </aside>
   );
 }

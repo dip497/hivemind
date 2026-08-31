@@ -47,6 +47,7 @@ const GIT_DEFAULT_TIMEOUT_MS = 30_000;
 const GIT_TIMEOUTS: Record<string, number> = {
   push: 5 * 60_000,
   fetch: 5 * 60_000,
+  pull: 5 * 60_000,
   clone: 10 * 60_000,
   diff: 60_000, // large diffs on big repos take a beat
 };
@@ -593,6 +594,18 @@ export async function gitPush(repoPath: string, setUpstream = false): Promise<vo
     args.push("-u", "origin", branch);
   }
   await rawGit(repoPath, args);
+}
+
+/**
+ * Update the current branch from its upstream. `--ff-only` is deliberate: it
+ * fast-forwards when the local branch hasn't diverged and FAILS CLEANLY when it
+ * has, instead of silently creating a merge commit or leaving the tree in a
+ * half-merged conflict state from the UI (a merge/rebase is a decision the user
+ * should make in a terminal, with the diff in front of them). The caller surfaces
+ * the failure as a toast telling them to reconcile manually.
+ */
+export async function gitPull(repoPath: string): Promise<void> {
+  await rawGit(repoPath, ["pull", "--ff-only"]);
 }
 
 // ── conflict helpers ───────────────────────────────────────────────────

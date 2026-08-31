@@ -53,6 +53,12 @@ import { useAgentAwareness } from "./useAgentAwareness";
 import { unmarkBackgroundTile } from "./worker-tiles";
 import { useCanvasShortcuts } from "./useCanvasShortcuts";
 import { useNodeDragStop } from "./useNodeDragStop";
+import { WindowsView } from "./WindowsView";
+import { GitCommitModal } from "./GitCommitModal";
+import { useGitPush, useGitPull } from "./queries";
+import {
+  loadViewMode, saveViewMode, loadMinimized, saveMinimized, nextActiveTab, type ViewMode,
+} from "./windows-view-state";
 import type { WorktreeEntry } from "../../shared/ipc";
 
 // snapViewportCrisp moved to canvas-camera.tsx
@@ -571,6 +577,75 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace, updateAvai
     focusTile(id);
   }, [focusTile]);
 
+  // ── Windowed ("editor-like") view mode ─────────────────────────────────────
+  // A second way to look at the SAME session: the graph rail on the left + a
+  // single frame-colored tab strip + one active tile body (WindowsView). Option
+  // B — the tile bodies render from the SAME baseNodes data as the canvas, keyed
+  // by tile id, so a mode switch remounts a body at most once (terminals reattach
+  // to their PTY daemon by id; diff/issues/browser re-fetch cheaply).
+  const [viewMode, setViewMode] = useState<ViewMode>(() => loadViewMode());
+  useEffect(() => { saveViewMode(viewMode); }, [viewMode]);
+  // Tiles minimized OUT of the tab strip (still in the graph rail so you can
+  // restore them). Per-repo, reloaded when the persistence key changes.
+  const [minimizedTabs, setMinimizedTabs] = useState<Set<string>>(() => loadMinimized(persistKey));
+  useEffect(() => { setMinimizedTabs(loadMinimized(persistKey)); }, [persistKey]);
+  useEffect(() => { saveMinimized(persistKey, minimizedTabs); }, [persistKey, minimizedTabs]);
+  // The active tab in windows mode. Tracks the canvas selection where sensible
+  // but is its own state so minimizing/closing can pick a sane neighbour.
+  const [activeTabId, setActiveTabId] = useState<string | null>(null);
+
+  // Tabs shown in the strip: every open tile (as the Layers panel sees them),
+  // minus the minimized set. Order follows layerTiles (tiles in open order).
+  const tabTiles = useMemo(
+    () => layerTiles.filter((t) => !minimizedTabs.has(t.id)),
+    [layerTiles, minimizedTabs],
+  );
+  // Keep activeTabId valid as tiles open/close/minimize (pure nextActiveTab).
+  useEffect(() => {
+    setActiveTabId((cur) => nextActiveTab(cur, tabTiles.map((t) => t.id)));
+  }, [tabTiles]);
+
+  const selectTab = useCallback((id: string) => {
+    setActiveTabId(id);
+    setSelectedTileId(id);
+  }, []);
+  const minimizeTab = useCallback((id: string) => {
+    setMinimizedTabs((s) => {
+      if (s.has(id)) return s;
+      const next = new Set(s);
+      next.add(id);
+      return next;
+    });
+  }, []);
+  const restoreTab = useCallback((id: string) => {
+    setMinimizedTabs((s) => {
+      if (!s.has(id)) return s;
+      const next = new Set(s);
+      next.delete(id);
+      return next;
+    });
+    setActiveTabId(id);
+    setSelectedTileId(id);
+  }, []);
+  const toggleViewMode = useCallback(() => {
+    setViewMode((m) => (m === "canvas" ? "windows" : "canvas"));
+  }, []);
+  // ⌘/Ctrl+E toggles the mode; Settings dispatches an explicit set. Both keep
+  // localStorage in sync via the persist effect above.
+  useEffect(() => {
+    const onToggle = () => toggleViewMode();
+    const onSet = (e: Event) => {
+      const m = (e as CustomEvent<{ mode?: ViewMode }>).detail?.mode;
+      if (m === "canvas" || m === "windows") setViewMode(m);
+    };
+    window.addEventListener("hivemind:toggle-view-mode", onToggle);
+    window.addEventListener("hivemind:set-view-mode", onSet as EventListener);
+    return () => {
+      window.removeEventListener("hivemind:toggle-view-mode", onToggle);
+      window.removeEventListener("hivemind:set-view-mode", onSet as EventListener);
+    };
+  }, [toggleViewMode]);
+
   // Permission mode the next Claude spawn launches in. Verified flag values
   // (code.claude.com/docs cli-reference): default | acceptEdits | plan | auto |
   // dontAsk | bypassPermissions. Persisted so it survives restarts.
@@ -620,6 +695,26 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace, updateAvai
     return () => window.removeEventListener("hivemind:attach-remote", onAttach as EventListener);
   }, []);
 
+  // Git commit/sync modal — open for a specific repo (a frame's worktree /
+  // workspace / base repo). Opened from the frame header git button or the rail
+  // "Git ▸ Commit…" entry, both firing `hivemind:frame-git` {frameId}.
+  const [gitModalRepo, setGitModalRepo] = useState<string | null>(null);
+  useEffect(() => {
+    const onGit = (e: Event) => {
+      const fid = (e as CustomEvent<{ frameId?: string; repoPath?: string }>).detail;
+      // Either an explicit repoPath (base/global git button) or a frame id we
+      // resolve to its effective repo (worktree/workspace/base).
+      if (fid?.repoPath) { setGitModalRepo(fid.repoPath); return; }
+      if (fid?.frameId) {
+        const f = framesRef.current.find((x) => x.id === fid.frameId);
+        const repo = f?.worktreePath ?? f?.workspacePath ?? repoPathRef.current ?? null;
+        if (repo) setGitModalRepo(repo);
+      }
+    };
+    window.addEventListener("hivemind:frame-git", onGit as EventListener);
+    return () => window.removeEventListener("hivemind:frame-git", onGit as EventListener);
+  }, []);
+
   // Position a new tile inside a frame. Tiles pack left-to-right then WRAP to a
   // new row past FRAME_ROW_MAX (so a frame grows DOWN, not infinitely right).
   // The frame's SIZE is the auto-fit effect's job — it derives geometry from
@@ -634,6 +729,44 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace, updateAvai
     setFrameOf, setPositions, setSelectedTileId, setFocusReq, setFrames,
     setSelectedFrameId, setTiles, setSpawnPick, focusTile,
   });
+
+  // Rail context-menu actions — the SAME surface the on-canvas frame header
+  // exposes, reused from the Layers rail (drives a workspace in windows mode,
+  // where the header isn't visible; handy in canvas mode too). Each maps to an
+  // existing handler/event so behaviour is identical to the header.
+  const gitPushMut = useGitPush();
+  const gitPullMut = useGitPull();
+  const repoOfFrame = useCallback((frameId: string): string | null => {
+    const f = framesRef.current.find((x) => x.id === frameId);
+    return f?.worktreePath ?? f?.workspacePath ?? repoPathRef.current ?? null;
+  }, []);
+  const frameActions = useMemo(() => ({
+    onOpenInFrame: (frameId: string, kind: string) => frameOpen(frameId, kind),
+    onCreateWorktree,
+    onAttachWorktree,
+    onBindWorkspace: (frameId: string) => bindWorkspace(frameId),
+    onAttachRemote: (frameId: string) =>
+      window.dispatchEvent(new CustomEvent("hivemind:attach-remote", { detail: { frameId } })),
+    onArrange: (frameId: string, mode: "columns" | "rows" | "grid") => arrangeFrame(frameId, mode),
+    onRename: (frameId: string, title: string) => updateFrameTitle(frameId, title),
+    onColor: (frameId: string, color: string) => updateFrameColor(frameId, color),
+    onDelete: (frameId: string) => deleteFrame(frameId),
+    onGit: (frameId: string) =>
+      window.dispatchEvent(new CustomEvent("hivemind:frame-git", { detail: { frameId } })),
+    // Quick push/pull straight from the rail (the modal offers the full flow +
+    // first-push upstream handling; these are the common already-tracked case).
+    onPush: (frameId: string) => { const r = repoOfFrame(frameId); if (r) gitPushMut.mutate({ repoPath: r }); },
+    onPull: (frameId: string) => { const r = repoOfFrame(frameId); if (r) gitPullMut.mutate({ repoPath: r }); },
+    repoPathForFrame: (frameId: string): string | null => {
+      const f = framesRef.current.find((x) => x.id === frameId);
+      return f?.worktreePath ?? f?.workspacePath ?? repoPath ?? null;
+    },
+    // Depend on the stable `.mutate` function refs, NOT the mutation objects
+    // themselves — useMutation returns a fresh object every time isPending/
+    // isError/etc changes, so depending on `gitPushMut`/`gitPullMut` directly
+    // recreated `frameActions` (and re-rendered LayersPanel) on every push/pull
+    // status tick even though nothing this memo actually reads had changed.
+  }), [frameOpen, onCreateWorktree, onAttachWorktree, bindWorkspace, arrangeFrame, updateFrameTitle, updateFrameColor, deleteFrame, repoPath, repoOfFrame, gitPushMut.mutate, gitPullMut.mutate]);
   const openFileFromTerminal = useCallback((sourceTileId: string, path: string) => {
     const sourceFrameId = frameOfRef.current[sourceTileId] ?? selectedFrameIdRef.current;
     const existing = tilesRef.current.find((t) => (
@@ -1237,6 +1370,22 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace, updateAvai
       {/* t3code-style DOCKED layout: the Layers panel is a flex SIBLING of the
           canvas (not an overlay), so the canvas sits BESIDE it and is never
           occluded. Collapses to a narrow icon rail; both keep the canvas clear. */}
+      {viewMode === "windows" ? (
+        <WindowsView
+          nodes={baseNodes}
+          frames={layerFrames}
+          tiles={layerTiles}
+          tabTiles={tabTiles}
+          activeTabId={activeTabId}
+          selectedTileId={selectedTileId}
+          onSelectTab={selectTab}
+          onMinimizeTab={minimizeTab}
+          onCloseTab={closeTile}
+          onFocusTile={restoreTab}
+          onFocusFrame={focusFrameFromPanel}
+          frameActions={frameActions}
+        />
+      ) : (
       <div className="flex-1 min-h-0 flex flex-row">
         {!zen && layerTiles.length > 0 && (
           <LayersPanel
@@ -1245,6 +1394,7 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace, updateAvai
             selectedTileId={selectedTileId}
             onFocusTile={focusTileFromPanel}
             onFocusFrame={focusFrameFromPanel}
+            frameActions={frameActions}
           />
         )}
         {/* Suppress the native context menu inside the canvas so RIGHT-mouse drag
@@ -1555,6 +1705,14 @@ export function Canvas({ cwd, repoPath, root = null, onInitWorkspace, updateAvai
         )}
       </div>
       </div>
+      )}
+      {/* Git commit/sync modal — at the Canvas root so it shows in BOTH view
+          modes (opened per-frame via hivemind:frame-git). */}
+      <GitCommitModal
+        repoPath={gitModalRepo}
+        open={gitModalRepo !== null}
+        onOpenChange={(o) => { if (!o) setGitModalRepo(null); }}
+      />
     </div>
     </PinnedLayerContext.Provider>
   );

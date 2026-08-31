@@ -56,6 +56,7 @@ export function useCanvasShortcuts(ctx: CanvasShortcutsCtx) {
         else if ((e.key === "b" || e.key === "B") && repoPath) { e.preventDefault(); spawnVis("tree"); }
         else if (e.key === "t" || e.key === "T") { e.preventDefault(); spawnVis("shell"); }
         else if ((e.key === "d" || e.key === "D") && repoPath) { e.preventDefault(); spawnVis("diff"); }
+        else if (e.key === "e" || e.key === "E") { e.preventDefault(); window.dispatchEvent(new CustomEvent("hivemind:toggle-view-mode")); }
         return;
       }
       // Focus-mode hotkeys (".", Escape) fire ONLY when no editable element is

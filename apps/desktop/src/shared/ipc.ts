@@ -269,6 +269,8 @@ export interface HiveIpc {
   gitDiscard(repoPath: string, files: string[]): Promise<void>;
   gitCommit(repoPath: string, message: string, allowEmpty?: boolean): Promise<{ sha: string }>;
   gitPush(repoPath: string, setUpstream?: boolean): Promise<void>;
+  /** Update the current branch from upstream (fast-forward only). */
+  gitPull(repoPath: string): Promise<void>;
   gitConflictedFile(
     repoPath: string,
     file: string

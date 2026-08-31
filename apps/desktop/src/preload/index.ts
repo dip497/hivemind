@@ -74,6 +74,7 @@ const api: HiveIpc & {
     ipcRenderer.invoke("gitCommit", repoPath, message, allowEmpty),
   gitPush: (repoPath, setUpstream) =>
     ipcRenderer.invoke("gitPush", repoPath, setUpstream),
+  gitPull: (repoPath) => ipcRenderer.invoke("gitPull", repoPath),
   gitConflictedFile: (repoPath, file) =>
     ipcRenderer.invoke("gitConflictedFile", repoPath, file),
   gitWriteResolved: (repoPath, file, contents) =>

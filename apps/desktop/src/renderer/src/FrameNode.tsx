@@ -8,7 +8,7 @@
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { GitBranch, FolderGit2, Plus, LayoutGrid, Server } from "lucide-react";
+import { GitBranch, FolderGit2, Plus, LayoutGrid, Server, GitCommitHorizontal } from "lucide-react";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { WorktreePicker } from "./WorktreePicker";
 import { useGitBranch } from "./queries";
@@ -377,6 +377,19 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
             />
           );
         })()}
+        {/* Git — open the commit/sync modal for this frame's repo. Shown when
+            the frame has a repo: a worktree sub-frame (always), a bound
+            workspace, or the base repo. */}
+        {(isWorktreeChild || data.workspacePath || data.repoPath) && (
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent("hivemind:frame-git", { detail: { frameId: data.id } }))}
+            className="size-4 grid place-items-center rounded text-[var(--color-fg2)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)]"
+            title="Git — commit, push, pull"
+            aria-label="git"
+          >
+            <GitCommitHorizontal size={12} />
+          </button>
+        )}
         <button
           ref={addBtnRef}
           onClick={() => setShowAdd((x) => !x)}

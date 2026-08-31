@@ -369,6 +369,30 @@ export function useGitPush() {
   });
 }
 
+export function useGitPull() {
+  const qc = useQueryClient();
+  return useMutation<void, Error, { repoPath: string }>({
+    mutationFn: ({ repoPath }) => window.hive.gitPull(repoPath),
+    onSuccess: (_d, { repoPath }) => {
+      // A pull can change files, the branch head, and ahead/behind — refresh
+      // status, branch, diff, and the file list so every git-aware tile updates.
+      qc.invalidateQueries({ queryKey: ["git:status", repoPath] });
+      qc.invalidateQueries({ queryKey: ["git:branch", repoPath] });
+      qc.invalidateQueries({ queryKey: ["git:diff", repoPath] });
+      qc.invalidateQueries({ queryKey: ["git:list-files", repoPath] });
+      toast.success("pulled");
+    },
+    // --ff-only fails when the branch has diverged; say so instead of a raw
+    // git error, since the fix (reconcile in a terminal) isn't obvious.
+    onError: (e) =>
+      toast.error("pull failed", {
+        description: /not possible to fast-forward|diverg/i.test(e.message)
+          ? "Branch has diverged — reconcile in a terminal (merge/rebase)."
+          : e.message,
+      }),
+  });
+}
+
 // ── worktree ─────────────────────────────────────────────────────────────
 
 export function useWorktrees(repoPath: string | null | undefined) {

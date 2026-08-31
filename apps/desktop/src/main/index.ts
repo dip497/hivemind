@@ -55,6 +55,7 @@ import {
   gitListFiles,
   gitListBranches,
   gitPush,
+  gitPull,
   gitStage,
   gitStatus,
   gitUnstage,
@@ -923,6 +924,7 @@ ipcMain.handle("gitCommit", wrap((_e, repoPath: string, message: string, allowEm
 ipcMain.handle("gitPush", wrap((_e, repoPath: string, setUpstream?: boolean) =>
   gitPush(repoPath, setUpstream)
 ));
+ipcMain.handle("gitPull", wrap((_e, repoPath: string) => gitPull(repoPath)));
 ipcMain.handle("gitConflictedFile", wrap((_e, repoPath: string, file: string) =>
   gitConflictedFile(repoPath, assertInRepo(repoPath, file))
 ));

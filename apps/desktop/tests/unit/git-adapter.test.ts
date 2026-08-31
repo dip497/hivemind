@@ -8,10 +8,13 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync, mkdirSync, appendFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { gitStatus, gitListFiles } from "../../src/main/git-adapter.ts";
+import { gitStatus, gitListFiles, gitCommit, gitPull } from "../../src/main/git-adapter.ts";
 
 function git(cwd: string, ...args: string[]): void {
   execFileSync("git", args, { cwd, stdio: "pipe" });
+}
+function gitOut(cwd: string, ...args: string[]): string {
+  return execFileSync("git", args, { cwd, stdio: "pipe" }).toString().trim();
 }
 
 function makeRepo(): string {
@@ -62,5 +65,71 @@ test("gitListFiles hides tracked-but-gitignored files", async () => {
     assert.ok(!files.includes("build/out.js"));
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+/** A bare "remote" + two clones, so pull/commit hit real refs. */
+function makeRemoteAndClones(): { remote: string; a: string; b: string } {
+  const remote = mkdtempSync(path.join(tmpdir(), "hm-remote-"));
+  git(remote, "init", "-q", "--bare");
+  const a = mkdtempSync(path.join(tmpdir(), "hm-clone-a-"));
+  git(a, "clone", "-q", remote, ".");
+  git(a, "config", "user.email", "a@t.com");
+  git(a, "config", "user.name", "a");
+  writeFileSync(path.join(a, "f.txt"), "1\n");
+  git(a, "add", "-A");
+  git(a, "commit", "-qm", "init");
+  git(a, "push", "-q", "-u", "origin", "HEAD");
+  const b = mkdtempSync(path.join(tmpdir(), "hm-clone-b-"));
+  git(b, "clone", "-q", remote, ".");
+  git(b, "config", "user.email", "b@t.com");
+  git(b, "config", "user.name", "b");
+  return { remote, a, b };
+}
+
+test("gitCommit records a commit and returns its sha", async () => {
+  const { remote, a, b } = makeRemoteAndClones();
+  try {
+    writeFileSync(path.join(a, "f.txt"), "2\n");
+    git(a, "add", "-A");
+    const { sha } = await gitCommit(a, "second");
+    assert.match(sha, /^[0-9a-f]{40}$/);
+    assert.equal(gitOut(a, "rev-parse", "HEAD"), sha);
+    assert.equal(gitOut(a, "log", "-1", "--pretty=%s"), "second");
+  } finally {
+    for (const d of [remote, a, b]) rmSync(d, { recursive: true, force: true });
+  }
+});
+
+test("gitPull fast-forwards the current branch from upstream", async () => {
+  const { remote, a, b } = makeRemoteAndClones();
+  try {
+    // A pushes a new commit; B pulls it.
+    writeFileSync(path.join(a, "f.txt"), "2\n");
+    git(a, "add", "-A");
+    git(a, "commit", "-qm", "from-a");
+    git(a, "push", "-q");
+    await gitPull(b);
+    assert.equal(gitOut(b, "log", "-1", "--pretty=%s"), "from-a");
+  } finally {
+    for (const d of [remote, a, b]) rmSync(d, { recursive: true, force: true });
+  }
+});
+
+test("gitPull (--ff-only) rejects a diverged branch", async () => {
+  const { remote, a, b } = makeRemoteAndClones();
+  try {
+    // A advances the remote.
+    writeFileSync(path.join(a, "f.txt"), "2\n");
+    git(a, "add", "-A");
+    git(a, "commit", "-qm", "from-a");
+    git(a, "push", "-q");
+    // B makes its OWN divergent commit (does not fetch), so ff-only must fail.
+    writeFileSync(path.join(b, "g.txt"), "b\n");
+    git(b, "add", "-A");
+    git(b, "commit", "-qm", "from-b");
+    await assert.rejects(() => gitPull(b), /fast-forward|ff-only|diverg|rejected/i);
+  } finally {
+    for (const d of [remote, a, b]) rmSync(d, { recursive: true, force: true });
   }
 });
