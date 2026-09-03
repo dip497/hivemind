@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [1.16.0] — 2026-09-03
+
 ### Fixed
 
 - **Smoother canvas under load.** Terminal output now crosses from the PTY daemon to the
@@ -900,7 +902,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v1.15.0...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v1.16.0...HEAD
+[1.16.0]: https://github.com/dip497/hivemind/releases/tag/v1.16.0
 [1.15.0]: https://github.com/dip497/hivemind/releases/tag/v1.15.0
 [1.14.3]: https://github.com/dip497/hivemind/releases/tag/v1.14.3
 [1.14.2]: https://github.com/dip497/hivemind/releases/tag/v1.14.2
