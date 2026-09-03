@@ -7,6 +7,17 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Fixed
+
+- **Smoother canvas under load.** Terminal output now crosses from the PTY daemon to the
+  window in a few coalesced messages per tile per tick instead of one IPC message per pty
+  read (hundreds a second per streaming agent), and the daemon's NDJSON decoder no longer
+  re-copies its buffer once per frame. A tile whose output outruns the renderer (a `cat` of a
+  huge file, a runaway build log) now pauses the child process on a write-queue watermark
+  rather than buffering unboundedly in renderer memory. Session snapshots are written
+  asynchronously so a busy disk can't stall every terminal at once. The glass wallpaper's
+  drift is stepped (~4 updates/s) so frosted tiles stop re-blurring on every frame.
+
 ### Added
 
 - **Windowed ("editor-like") view mode.** Switch the canvas into a VS Code-style layout

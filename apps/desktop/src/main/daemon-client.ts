@@ -290,6 +290,15 @@ export function writePty(tileId: string, data: string): void {
 export function resizePty(tileId: string, cols: number, rows: number): void {
   void send({ t: "resize", id: tileId, cols, rows });
 }
+/** Renderer back-pressure (see TerminalTile flow control): ask the daemon to
+ *  stop reading the child's output until resumePty. The daemon also resumes on
+ *  its own on detach/kill/reattach, so a dropped resume can't wedge a session. */
+export function pausePty(tileId: string): void {
+  void send({ t: "pause", id: tileId });
+}
+export function resumePty(tileId: string): void {
+  void send({ t: "resume", id: tileId });
+}
 /** Explicit close (× button): terminate the session in the daemon. */
 export function killPty(tileId: string): void {
   cbs.delete(tileId);

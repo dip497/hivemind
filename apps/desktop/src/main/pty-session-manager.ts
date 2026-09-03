@@ -46,6 +46,11 @@ export interface ManagedPty {
   kill(signal?: string): void;
   onData(cb: (data: string) => void): void;
   onExit(cb: (code: number, signal: number | undefined) => void): void;
+  /** Flow control (optional — node-pty has it, test fakes may not). `pause`
+   *  stops reading the child's output so it blocks on a full pty buffer;
+   *  `resume` drains again. Driven by the renderer's write-queue watermarks. */
+  pause?(): void;
+  resume?(): void;
 }
 
 export interface SpawnSpec {
@@ -106,6 +111,10 @@ interface Session {
    *  so a reattach's replay would otherwise lose it — we re-emit it (see
    *  `withTitle`) so the client's xterm re-fires onTitleChange on reattach. */
   lastTitle?: string;
+  /** Flow-control state: true while the pty is paused on the client's behalf.
+   *  Always cleared on detach/kill/reattach so a paused session can never be
+   *  handed to a new client (or left to rot) in a stopped state. */
+  paused?: boolean;
 }
 
 // claude's resume-failure message (stable across recent versions). Matched
@@ -123,8 +132,11 @@ export interface SessionManagerOptions {
   /** Called when the manager has been idle (no sessions) for idleMs. */
   onEmpty?: () => void;
   /** OPTIONAL — invoked by the daemon to persist a snapshot to disk. Wired
-   *  externally so SessionManager stays storage-agnostic (and unit-testable). */
-  onSnapshot?: (id: string, snapshot: SessionSnapshot) => void;
+   *  externally so SessionManager stays storage-agnostic (and unit-testable).
+   *  May return a Promise (async disk write); flushSnapshot/flushAll resolve
+   *  only after it settles, and a rejection re-dirties the session so a later
+   *  flush retries. */
+  onSnapshot?: (id: string, snapshot: SessionSnapshot) => void | Promise<void>;
   /** OPTIONAL — invoked when a session is explicitly killed so the daemon can
    *  unlink its on-disk snapshot file. */
   onSnapshotEvict?: (id: string) => void;
@@ -184,7 +196,7 @@ export class SessionManager {
   private readonly scrollback: number;
   private readonly idleMs: number;
   private readonly onEmpty?: () => void;
-  private readonly onSnapshot?: (id: string, snap: SessionSnapshot) => void;
+  private readonly onSnapshot?: (id: string, snap: SessionSnapshot) => void | Promise<void>;
   private readonly onSnapshotEvict?: (id: string) => void;
   private readonly snapshotDebounceMs: number;
   private readonly transformSpecOnRestore?: (spec: SpawnSpec, id: string) => SpawnSpec;
@@ -232,6 +244,9 @@ export class SessionManager {
     const existing = this.sessions.get(id);
     if (existing && !existing.exited) {
       existing.client = client;
+      // A pause belongs to the PREVIOUS client's back-pressure; the new one
+      // starts from a clean slate (and will re-pause itself if it must).
+      this.setPaused(existing, false);
       existing.spec = { ...existing.spec, cols: spec.cols, rows: spec.rows };
       try {
         existing.pty.resize(spec.cols, spec.rows);
@@ -317,11 +332,19 @@ export class SessionManager {
       // Output-driven resume retry: scan a small rolling buffer for claude's
       // "No conversation found" error. Firing here (not on PTY exit) is robust
       // to a slow SessionEnd hook that delays the exit past restoreRetryMs.
+      // The watch is BOUNDED: once the restored session has clearly come up
+      // (well past the retry window) the error can no longer be a resume
+      // failure, so stop paying a 4 KB concat + regex on every chunk for the
+      // rest of the session's life.
       if (session.retryWatch !== undefined && !session.retried) {
-        session.retryWatch = (session.retryWatch + d).slice(-4096);
-        if (RESUME_FAIL_RE.test(session.retryWatch)) {
+        if (Date.now() - session.spawnedAt > this.restoreRetryMs * 6) {
           session.retryWatch = undefined;
-          if (this.tryRestoreRetry(session)) return;
+        } else {
+          session.retryWatch = (session.retryWatch + d).slice(-4096);
+          if (RESUME_FAIL_RE.test(session.retryWatch)) {
+            session.retryWatch = undefined;
+            if (this.tryRestoreRetry(session)) return;
+          }
         }
       }
     });
@@ -391,6 +414,7 @@ export class SessionManager {
   private respawnInPlace(session: Session, retrySpec: SpawnSpec): void {
     const p = this.factory(retrySpec);
     session.pty = p;
+    session.paused = false; // fresh pty starts flowing
     session.spec = retrySpec;
     session.exited = false;
     session.spawnedAt = Date.now();
@@ -427,6 +451,27 @@ export class SessionManager {
     this.sessions.get(id)?.pty.write(data);
   }
 
+  /** Renderer back-pressure: stop reading the child's output. Idempotent. */
+  pause(id: string): void {
+    const s = this.sessions.get(id);
+    if (s && !s.exited) this.setPaused(s, true);
+  }
+  /** Undo `pause`. Idempotent. */
+  resume(id: string): void {
+    const s = this.sessions.get(id);
+    if (s) this.setPaused(s, false);
+  }
+  private setPaused(s: Session, paused: boolean): void {
+    if (!!s.paused === paused) return;
+    s.paused = paused;
+    try {
+      if (paused) s.pty.pause?.();
+      else s.pty.resume?.();
+    } catch {
+      /* pty already gone */
+    }
+  }
+
   resize(id: string, cols: number, rows: number): void {
     const s = this.sessions.get(id);
     if (!s) return;
@@ -449,6 +494,9 @@ export class SessionManager {
     const s = this.sessions.get(id);
     if (s) {
       s.client = null;
+      // Nobody is reading now, so nothing is applying back-pressure: let the
+      // process run on (the headless term keeps the screen for the replay).
+      this.setPaused(s, false);
       this.flushSnapshot(s);
     }
     this.scheduleIdle();
@@ -539,8 +587,9 @@ export class SessionManager {
       // Drain the xterm write queue before serializing — without this, the
       // snapshot misses output emitted in the same tick as the flush trigger.
       s.term.write("", () => {
+        let r: void | Promise<void>;
         try {
-          this.onSnapshot?.(s.id, {
+          r = this.onSnapshot?.(s.id, {
             id: s.id,
             spec: s.spec,
             replay: s.serializer.serialize({ scrollback: this.scrollback }),
@@ -550,8 +599,19 @@ export class SessionManager {
         } catch {
           // Disk write failed — re-dirty so a later attempt retries.
           s.dirty = true;
+          resolve();
+          return;
         }
-        resolve();
+        // Async persist: settle only once the bytes are on disk (flushAll on
+        // SIGTERM awaits this); a rejection re-dirties for a later retry.
+        if (r && typeof (r as Promise<void>).then === "function") {
+          (r as Promise<void>).then(
+            () => resolve(),
+            () => { s.dirty = true; resolve(); },
+          );
+        } else {
+          resolve();
+        }
       });
     });
   }

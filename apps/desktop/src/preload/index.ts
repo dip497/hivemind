@@ -105,6 +105,7 @@ const api: HiveIpc & {
   ptyResize: (tileId, cols, rows) => ipcRenderer.send("ptyResize", tileId, cols, rows),
   ptyKill: (tileId) => ipcRenderer.send("ptyKill", tileId),
   ptyDetach: (tileId) => ipcRenderer.send("ptyDetach", tileId),
+  ptyFlow: (tileId, paused) => ipcRenderer.send("ptyFlow", tileId, paused),
   persistentPty: process.env.HIVEMIND_PTY_DAEMON !== "0",
 
   notifyAgent: (notice) => ipcRenderer.send("notify:agent", notice),

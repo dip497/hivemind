@@ -31,7 +31,11 @@ export class OutputRecorder {
     const clean = stripAnsi(data);
     if (!clean) return;
     const cur = (this.buf.get(tileId) ?? "") + clean;
-    this.buf.set(tileId, cur.length > CAP ? cur.slice(cur.length - CAP) : cur);
+    // Trim lazily: slicing back to CAP on EVERY append copied up to 256 KB per
+    // pty chunk (hundreds of times a second per streaming tile). Letting the
+    // ring overshoot to 2×CAP before trimming makes the copy amortized O(1)
+    // per byte; readers only ever see the last ≤CAP bytes via since().
+    this.buf.set(tileId, cur.length > CAP * 2 ? cur.slice(cur.length - CAP) : cur);
     this.total.set(tileId, (this.total.get(tileId) ?? 0) + clean.length);
   }
 
@@ -43,7 +47,8 @@ export class OutputRecorder {
   /** Text appended since `fromTotal`. Approximate if the ring dropped older
    *  bytes (returns at most the ring's worth). */
   since(tileId: string, fromTotal: number): string {
-    const buf = this.buf.get(tileId) ?? "";
+    const raw = this.buf.get(tileId) ?? "";
+    const buf = raw.length > CAP ? raw.slice(raw.length - CAP) : raw;
     const appended = (this.total.get(tileId) ?? 0) - fromTotal;
     if (appended <= 0) return "";
     return appended >= buf.length ? buf : buf.slice(buf.length - appended);

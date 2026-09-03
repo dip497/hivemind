@@ -1,5 +1,5 @@
 /** Electron main process — owns the BrowserWindow + IPC + PtyHost + git/worktree. */
-import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, screen, session, shell, webContents } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, screen, session, shell, webContents, type WebContents } from "electron";
 import path from "node:path";
 import { promises as fsp, statSync, readFileSync, writeFileSync, existsSync, cpSync, mkdirSync, readdirSync, unlinkSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -29,10 +29,12 @@ import os from "node:os";
 import type { IssuePatch } from "@hivemind/core/types";
 import * as ptyHost from "./pty-host.js";
 import * as ptyDaemon from "./daemon-client.js";
+import { PtyOutputBuffer } from "./pty-output-buffer.js";
 import { isRemote, parseRemote, formatRemote } from "../shared/remote-uri.js";
 import { listSavedHosts, saveHost, savedAuth, forgetSavedHost } from "./remote/saved-hosts.js";
 import {
   spawnRemotePty, writeRemotePty, resizeRemotePty, killRemotePty, hasRemotePty,
+  pauseRemotePty, resumeRemotePty,
 } from "./remote/pty.js";
 import { readRemoteFile, writeRemoteFile } from "./remote/git.js";
 import { remoteConns, type HostAuth } from "./remote/conn.js";
@@ -43,7 +45,7 @@ import { remoteConns, type HostAuth } from "./remote/conn.js";
 // in-process PTYs (which die with the window).
 const PERSIST_PTY = process.env.HIVEMIND_PTY_DAEMON !== "0";
 const ptyMod = PERSIST_PTY ? ptyDaemon : ptyHost;
-const { spawnPty, writePty, resizePty, killPty, detachPty, hasSession } = ptyMod;
+const { spawnPty, writePty, resizePty, killPty, detachPty, hasSession, pausePty, resumePty } = ptyMod;
 const killAllPtys = ptyMod.killAll;
 import { applyShellEnvToProcess } from "./shell-env.js";
 import {
@@ -1214,6 +1216,45 @@ const onPtyExit = (tileId: string): void => {
   hcpForgetTile(tileId); // turns/recorder/pipes/sendSeq/parent/depth/name/supervise/approvals
 };
 
+// ── pty output → renderer ─────────────────────────────────────
+// Every pty chunk used to be its own `webContents.send` — one IPC message +
+// one renderer task per kernel read, hundreds a second per streaming agent.
+// The buffer coalesces each tile's output for a few ms (see pty-output-buffer)
+// and ships one message; the renderer's xterm parses the batch in one go.
+// Senders are looked up per tile at flush time so a tile that re-attached from
+// a new renderer (view-mode switch, reload) gets its bytes at the live target.
+const ptySenders = new Map<string, WebContents>();
+const ptyOut = new PtyOutputBuffer(
+  (tileId, data) => {
+    const target = ptySenders.get(tileId);
+    if (!target || target.isDestroyed()) return;
+    try { target.send(`pty:data:${tileId}`, data); } catch { /* sender torn down */ }
+  },
+  {
+    // Minimized / hidden: the renderer can't paint, so stretch the batching —
+    // backgroundThrottling is off (a backgrounded claude must keep streaming),
+    // which otherwise means parsing every chunk at full rate while unseen.
+    hidden: () => !mainWindow || mainWindow.isDestroyed() || mainWindow.isMinimized() || !mainWindow.isVisible(),
+  },
+);
+/** Route a tile's pty output through the coalescer. */
+function relayPtyData(sender: WebContents, tileId: string, data: string): void {
+  if (ptySenders.get(tileId) !== sender) ptySenders.set(tileId, sender);
+  ptyOut.push(tileId, data);
+}
+/** Ship whatever is buffered for the tile, THEN the exit — the last bytes must
+ *  land ahead of the "[hivemind] exited" banner. */
+function relayPtyExit(sender: WebContents, tileId: string, info: { code: number; signal?: number }): void {
+  ptyOut.flush(tileId);
+  ptySenders.delete(tileId);
+  if (sender.isDestroyed()) return;
+  try { sender.send(`pty:exit:${tileId}`, info); } catch { /* sender torn down */ }
+}
+function dropPtyRelay(tileId: string): void {
+  ptyOut.forget(tileId);
+  ptySenders.delete(tileId);
+}
+
 ipcMain.handle("ptySpawn", wrap(async (e, opts: Parameters<typeof spawnPty>[0]) => {
   // Spawn rate-limit: a compromised renderer (XSS via rendered diff/issue
   // content) could fork-bomb the host through ptySpawn. Cap spawns per sliding
@@ -1237,13 +1278,9 @@ ipcMain.handle("ptySpawn", wrap(async (e, opts: Parameters<typeof spawnPty>[0]) 
   // cwd stat + shell-env patch (those are for the LOCAL host). The data/exit
   // plumbing below is identical.
   if (isRemote(opts.cwd)) {
-    const safeSendR = (channel: string, payload: unknown) => {
-      if (sender.isDestroyed()) return;
-      try { sender.send(channel, payload); } catch { /* sender gone */ }
-    };
     return spawnRemotePty(opts, {
-      onData: (data) => { hcpRecorder.record(opts.tileId, data); hcpBroadcast?.(toBareId(opts.tileId), data); safeSendR(`pty:data:${opts.tileId}`, data); },
-      onExit: (code, signal) => { onPtyExit(opts.tileId); safeSendR(`pty:exit:${opts.tileId}`, { code, signal }); },
+      onData: (data) => { hcpRecorder.record(opts.tileId, data); hcpBroadcast?.(toBareId(opts.tileId), data); relayPtyData(sender, opts.tileId, data); },
+      onExit: (code, signal) => { onPtyExit(opts.tileId); relayPtyExit(sender, opts.tileId, { code, signal }); },
     });
   }
   if (opts.cwd) {
@@ -1254,37 +1291,38 @@ ipcMain.handle("ptySpawn", wrap(async (e, opts: Parameters<typeof spawnPty>[0]) 
   // (or, in daemon mode, the daemon process that inherits this env) spawns —
   // otherwise `claude`/`gh`/nvm-node may not resolve. Idempotent + cached.
   await applyShellEnvToProcess();
-  // Guard against `Object has been destroyed` — a PTY can outlive the
-  // renderer (window closed mid-session) and emit data/exit after the
-  // sender is gone. Silently drop those instead of crashing main.
-  const safeSend = (channel: string, payload: unknown) => {
-    if (sender.isDestroyed()) return;
-    try {
-      sender.send(channel, payload);
-    } catch {
-      /* race — sender destroyed between check and send */
-    }
-  };
+  // A PTY can outlive the renderer (window closed mid-session) and emit
+  // data/exit after the sender is gone — the relay helpers check
+  // `isDestroyed()` and drop those instead of crashing main.
   return spawnPty(opts, {
-    onData: (data) => { hcpRecorder.record(opts.tileId, data); hcpBroadcast?.(toBareId(opts.tileId), data); safeSend(`pty:data:${opts.tileId}`, data); },
-    onExit: (code, signal) => { onPtyExit(opts.tileId); safeSend(`pty:exit:${opts.tileId}`, { code, signal }); },
+    onData: (data) => { hcpRecorder.record(opts.tileId, data); hcpBroadcast?.(toBareId(opts.tileId), data); relayPtyData(sender, opts.tileId, data); },
+    onExit: (code, signal) => { onPtyExit(opts.tileId); relayPtyExit(sender, opts.tileId, { code, signal }); },
   });
 }));
+// Renderer back-pressure (TerminalTile flow control): pause/resume reading the
+// child's output on the transport that owns this tile.
+ipcMain.on("ptyFlow", (_e, tileId: string, paused: boolean) => {
+  if (hasRemotePty(tileId)) { if (paused) pauseRemotePty(tileId); else resumeRemotePty(tileId); }
+  else if (paused) pausePty(tileId);
+  else resumePty(tileId);
+});
 ipcMain.on("ptyWrite", (_e, tileId: string, data: string) =>
   hasRemotePty(tileId) ? writeRemotePty(tileId, data) : writePty(tileId, data)
 );
 ipcMain.on("ptyResize", (_e, tileId: string, cols: number, rows: number) =>
   hasRemotePty(tileId) ? resizeRemotePty(tileId, cols, rows) : resizePty(tileId, cols, rows)
 );
-ipcMain.on("ptyKill", (_e, tileId: string) =>
-  hasRemotePty(tileId) ? killRemotePty(tileId) : killPty(tileId)
-);
+ipcMain.on("ptyKill", (_e, tileId: string) => {
+  dropPtyRelay(tileId);
+  if (hasRemotePty(tileId)) killRemotePty(tileId); else killPty(tileId);
+});
 // Detach (window closed / tile unmounted): daemon keeps the session alive;
 // in-process path treats it as a kill. Remote PTYs can't survive an ssh drop,
 // so detach == kill there too.
-ipcMain.on("ptyDetach", (_e, tileId: string) =>
-  hasRemotePty(tileId) ? killRemotePty(tileId) : detachPty(tileId)
-);
+ipcMain.on("ptyDetach", (_e, tileId: string) => {
+  dropPtyRelay(tileId);
+  if (hasRemotePty(tileId)) killRemotePty(tileId); else detachPty(tileId);
+});
 
 // ── lifecycle ─────────────────────────────────────────────────
 

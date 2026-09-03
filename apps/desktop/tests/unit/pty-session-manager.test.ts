@@ -340,3 +340,73 @@ test("snapshot carries the OSC title; reboot-restored attach re-emits it", async
   const r = await mgr2.createOrAttach("repo:t1", spec, { onData: () => {}, onExit: () => {} });
   assert.match(r.replay, /\x1b\]0;Refactor the parser\x07/, "restored replay must re-emit the title");
 });
+
+// ── flow control ─────────────────────────────────────────────────────────────
+class FlowPty extends FakePty {
+  paused = false;
+  pause() { this.paused = true; }
+  resume() { this.paused = false; }
+}
+function makeFlowManager(opts = {}) {
+  const created: FlowPty[] = [];
+  const mgr = new SessionManager((spec) => {
+    const p = new FlowPty(spec);
+    created.push(p);
+    return p;
+  }, opts);
+  const spec: SpawnSpec = { cwd: "/r", cmd: "bash", args: [], cols: 80, rows: 24 };
+  return { mgr, created, spec };
+}
+
+test("pause/resume forward to the pty and are idempotent", async () => {
+  const { mgr, created, spec } = makeFlowManager();
+  await mgr.createOrAttach("t", spec, { onData: () => {}, onExit: () => {} });
+  mgr.pause("t");
+  mgr.pause("t");
+  assert.equal(created[0]!.paused, true);
+  mgr.resume("t");
+  assert.equal(created[0]!.paused, false);
+  mgr.pause("nope"); // unknown id — no throw
+});
+
+test("detach and reattach both clear a client's pause (a paused session never rots or is handed over stopped)", async () => {
+  const { mgr, created, spec } = makeFlowManager();
+  await mgr.createOrAttach("t", spec, { onData: () => {}, onExit: () => {} });
+  mgr.pause("t");
+  mgr.detach("t");
+  assert.equal(created[0]!.paused, false, "detach resumes");
+  mgr.pause("t");
+  await mgr.createOrAttach("t", spec, { onData: () => {}, onExit: () => {} });
+  assert.equal(created[0]!.paused, false, "reattach resumes");
+});
+
+test("a pty without pause/resume is tolerated", async () => {
+  const { mgr, spec } = makeManager();
+  await mgr.createOrAttach("t", spec, { onData: () => {}, onExit: () => {} });
+  mgr.pause("t");
+  mgr.resume("t");
+});
+
+test("async onSnapshot: flushAll waits for the write; a rejection re-dirties for retry", async () => {
+  let resolveWrite: (() => void) | null = null;
+  let calls = 0;
+  const { mgr, created, spec } = makeManager({
+    onSnapshot: () => {
+      calls++;
+      if (calls === 1) return Promise.reject(new Error("disk full"));
+      return new Promise<void>((r) => { resolveWrite = r; });
+    },
+  });
+  await mgr.createOrAttach("t", spec, { onData: () => {}, onExit: () => {} });
+  created[0]!.emit("x");
+  await mgr.flushAll(); // first write rejects → session stays dirty
+  assert.equal(calls, 1);
+  let settled = false;
+  const p = mgr.flushAll().then(() => { settled = true; });
+  await new Promise((r) => setTimeout(r, 5));
+  assert.equal(calls, 2, "the rejected snapshot is retried");
+  assert.equal(settled, false, "flushAll waits for the async write");
+  resolveWrite!();
+  await p;
+  assert.equal(settled, true);
+});

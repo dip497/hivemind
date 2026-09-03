@@ -201,21 +201,51 @@ const snapshotPath = (id: string): string => {
   const safe = Buffer.from(id).toString("base64url");
   return path.join(sessionsDir, `${safe}.json`);
 };
-function persistSnapshot(id: string, snap: SessionSnapshot): void {
+// One write chain per session id so a later snapshot can never land on disk
+// before an earlier one (the writes are async now — see persistSnapshot).
+const snapshotWrites = new Map<string, Promise<void>>();
+function persistSnapshot(id: string, snap: SessionSnapshot): Promise<void> {
   const p = snapshotPath(id);
-  try {
-    // Atomic-ish: write to a sibling tmp then rename (avoids torn JSON if the
-    // process is killed mid-write — partial file would fail JSON.parse on
-    // next boot and the session would be lost otherwise).
-    const tmp = `${p}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(snap), "utf8");
-    fs.renameSync(tmp, p);
-  } catch {
-    /* disk full / readonly fs — session loses reboot survival, that's it */
-  }
+  // ASYNC fs. The daemon is one thread relaying EVERY tile's output; a sync
+  // write of a multi-MB replay blocked that relay for every session (visible
+  // as all terminals stuttering together whenever one tile went quiet for 2s
+  // on a busy disk). The serialize itself is still CPU, but the disk wait no
+  // longer stalls the socket.
+  const body = JSON.stringify(snap);
+  const prev = snapshotWrites.get(id) ?? Promise.resolve();
+  const next = prev
+    .then(async () => {
+      // Atomic-ish: write to a sibling tmp then rename (avoids torn JSON if the
+      // process is killed mid-write — partial file would fail JSON.parse on
+      // next boot and the session would be lost otherwise).
+      const tmp = `${p}.tmp`;
+      await fs.promises.writeFile(tmp, body, "utf8");
+      await fs.promises.rename(tmp, p);
+    })
+    .catch(() => {
+      /* disk full / readonly fs — session loses reboot survival, that's it */
+    })
+    .finally(() => {
+      if (snapshotWrites.get(id) === next) snapshotWrites.delete(id);
+    });
+  snapshotWrites.set(id, next);
+  return next;
 }
 function evictSnapshot(id: string): void {
-  try { fs.unlinkSync(snapshotPath(id)); } catch { /* already gone */ }
+  // Chain the unlink behind any in-flight write for this id: with async
+  // persistence, an unlink that raced a pending write's rename would let the
+  // killed session's file reappear on disk and resurrect it on the next boot.
+  const p = snapshotPath(id);
+  const prev = snapshotWrites.get(id) ?? Promise.resolve();
+  const next = prev
+    .then(async () => {
+      await fs.promises.unlink(p).catch(() => { /* already gone */ });
+      await fs.promises.unlink(`${p}.tmp`).catch(() => { /* none pending */ });
+    })
+    .finally(() => {
+      if (snapshotWrites.get(id) === next) snapshotWrites.delete(id);
+    });
+  snapshotWrites.set(id, next);
   // Drop the tile's per-tile tracked-session file so killed tiles don't leave
   // stale ids behind.
   evictTrackedSession(tileSessionsDir, id);
@@ -291,6 +321,8 @@ const factory = (spec: SpawnSpec): ManagedPty => {
     write: (d) => p.write(d),
     resize: (c, r) => p.resize(c, r),
     kill: (sig) => p.kill(sig),
+    pause: () => p.pause(),
+    resume: () => p.resume(),
     onData: (cb) => p.onData(cb),
     onExit: (cb) => p.onExit(({ exitCode, signal }) => cb(exitCode, signal)),
   };
@@ -365,9 +397,38 @@ try {
   /* not present — fine */
 }
 
+// Outgoing `data` frames are coalesced per connection: a streaming TUI emits
+// hundreds of tiny pty reads a second, and each one used to be its own
+// JSON.stringify + socket write here plus a JSON.parse on the app side. Holding
+// them for a few ms turns that into one frame per tile per tick — well under a
+// display frame, so nothing is felt, and the per-frame overhead on both event
+// loops drops by an order of magnitude during bursts. Size-capped so a starved
+// timer can't grow memory; `exit` / `attached` flush first to keep ordering.
+const DATA_FLUSH_MS = 4;
+const DATA_FLUSH_BYTES = 256 * 1024;
+
 const server = net.createServer((sock) => {
   const send = (msg: ServerMsg) => {
     if (!sock.destroyed) sock.write(frame(msg));
+  };
+  const pendingData = new Map<string, string>();
+  let flushTimer: ReturnType<typeof setTimeout> | null = null;
+  const flushData = () => {
+    if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
+    if (pendingData.size === 0) return;
+    for (const [id, data] of pendingData) send({ t: "data", id, data });
+    pendingData.clear();
+  };
+  const queueData = (id: string, data: string) => {
+    const cur = pendingData.get(id);
+    const next = cur ? cur + data : data;
+    if (next.length >= DATA_FLUSH_BYTES) {
+      pendingData.delete(id);
+      send({ t: "data", id, data: next });
+      return;
+    }
+    pendingData.set(id, next);
+    if (!flushTimer) flushTimer = setTimeout(flushData, DATA_FLUSH_MS);
   };
   // Sessions this connection attached — detached (NOT killed) when it drops,
   // so closing the window leaves the processes running.
@@ -385,11 +446,18 @@ const server = net.createServer((sock) => {
         attached.add(msg.id);
         void manager
           .createOrAttach(msg.id, msg.spec, {
-            onData: (data) => send({ t: "data", id: msg.id, data }),
-            onExit: (code, signal) =>
-              send({ t: "exit", id: msg.id, code, signal: signal ?? null }),
+            onData: (data) => queueData(msg.id, data),
+            // Final bytes must land before the exit banner.
+            onExit: (code, signal) => {
+              flushData();
+              send({ t: "exit", id: msg.id, code, signal: signal ?? null });
+            },
           })
           .then((r) => {
+            // Anything queued for this id is already inside the replay
+            // (serialized after drain) — ship the queue first so the client
+            // sees the same order it always did.
+            flushData();
             send({ t: "attached", reqId: msg.reqId, id: msg.id, pid: r.pid, isNew: r.isNew, replay: r.replay });
           })
           .catch((e: unknown) => {
@@ -411,11 +479,19 @@ const server = net.createServer((sock) => {
         break;
       case "detach":
         attached.delete(msg.id);
+        pendingData.delete(msg.id);
         manager.detach(msg.id);
         break;
       case "kill":
         attached.delete(msg.id);
+        pendingData.delete(msg.id);
         manager.kill(msg.id);
+        break;
+      case "pause":
+        manager.pause(msg.id);
+        break;
+      case "resume":
+        manager.resume(msg.id);
         break;
       case "list":
         send({ t: "sessions", reqId: msg.reqId, ids: manager.list() });
@@ -436,6 +512,8 @@ const server = net.createServer((sock) => {
     /* client vanished mid-write — ignore */
   });
   sock.on("close", () => {
+    if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
+    pendingData.clear();
     // Window closed: detach (keep processes alive). Never kill on disconnect.
     for (const id of attached) manager.detach(id);
     attached.clear();
