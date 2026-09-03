@@ -1226,6 +1226,11 @@ const onPtyExit = (tileId: string): void => {
 const ptySenders = new Map<string, WebContents>();
 const ptyOut = new PtyOutputBuffer(
   (tileId, data) => {
+    // The HCP output recorder is fed from the coalesced batch, not per pty
+    // read: its three strip-ANSI regex passes then run once per batch, and an
+    // escape sequence split across two reads is stripped as a whole. (The
+    // agent.stream broadcast stays per chunk — subscribers want immediacy.)
+    hcpRecorder.record(tileId, data);
     const target = ptySenders.get(tileId);
     if (!target || target.isDestroyed()) return;
     try { target.send(`pty:data:${tileId}`, data); } catch { /* sender torn down */ }
@@ -1253,6 +1258,24 @@ function relayPtyExit(sender: WebContents, tileId: string, info: { code: number;
 function dropPtyRelay(tileId: string): void {
   ptyOut.forget(tileId);
   ptySenders.delete(tileId);
+  const t = ptyPauseTimers.get(tileId);
+  if (t) { clearTimeout(t); ptyPauseTimers.delete(tileId); }
+}
+// ── pty flow control ──────────────────────────────────────────
+// A pause is a short LEASE, not a latch. node-pty reports a child's exit only
+// once its socket closes, and if the socket is still paused it force-destroys
+// it 200 ms after the exit WITHOUT draining — the child's final bytes would be
+// lost from the renderer, the daemon's screen and the snapshot. So main resumes
+// every pause on its own after PTY_PAUSE_MAX_MS (< 200 ms), and the renderer
+// simply re-requests the pause on each batch it receives while still over its
+// high-water mark. Net effect under a flood: a duty cycle of one batch per
+// lease, bounded memory, and a child exit is always drained within the lease.
+const PTY_PAUSE_MAX_MS = 120;
+const ptyPauseTimers = new Map<string, ReturnType<typeof setTimeout>>();
+function setPtyPaused(tileId: string, paused: boolean): void {
+  if (hasRemotePty(tileId)) { if (paused) pauseRemotePty(tileId); else resumeRemotePty(tileId); }
+  else if (paused) pausePty(tileId);
+  else resumePty(tileId);
 }
 
 ipcMain.handle("ptySpawn", wrap(async (e, opts: Parameters<typeof spawnPty>[0]) => {
@@ -1279,8 +1302,9 @@ ipcMain.handle("ptySpawn", wrap(async (e, opts: Parameters<typeof spawnPty>[0]) 
   // plumbing below is identical.
   if (isRemote(opts.cwd)) {
     return spawnRemotePty(opts, {
-      onData: (data) => { hcpRecorder.record(opts.tileId, data); hcpBroadcast?.(toBareId(opts.tileId), data); relayPtyData(sender, opts.tileId, data); },
-      onExit: (code, signal) => { onPtyExit(opts.tileId); relayPtyExit(sender, opts.tileId, { code, signal }); },
+      onData: (data) => { hcpBroadcast?.(toBareId(opts.tileId), data); relayPtyData(sender, opts.tileId, data); },
+      // Flush (records the tail + ships it) BEFORE the HCP teardown forgets the tile.
+      onExit: (code, signal) => { relayPtyExit(sender, opts.tileId, { code, signal }); onPtyExit(opts.tileId); },
     });
   }
   if (opts.cwd) {
@@ -1295,16 +1319,23 @@ ipcMain.handle("ptySpawn", wrap(async (e, opts: Parameters<typeof spawnPty>[0]) 
   // data/exit after the sender is gone — the relay helpers check
   // `isDestroyed()` and drop those instead of crashing main.
   return spawnPty(opts, {
-    onData: (data) => { hcpRecorder.record(opts.tileId, data); hcpBroadcast?.(toBareId(opts.tileId), data); relayPtyData(sender, opts.tileId, data); },
-    onExit: (code, signal) => { onPtyExit(opts.tileId); relayPtyExit(sender, opts.tileId, { code, signal }); },
+    onData: (data) => { hcpBroadcast?.(toBareId(opts.tileId), data); relayPtyData(sender, opts.tileId, data); },
+    // Flush (records the tail + ships it) BEFORE the HCP teardown forgets the tile.
+    onExit: (code, signal) => { relayPtyExit(sender, opts.tileId, { code, signal }); onPtyExit(opts.tileId); },
   });
 }));
 // Renderer back-pressure (TerminalTile flow control): pause/resume reading the
-// child's output on the transport that owns this tile.
+// child's output on the transport that owns this tile. See PTY_PAUSE_MAX_MS.
 ipcMain.on("ptyFlow", (_e, tileId: string, paused: boolean) => {
-  if (hasRemotePty(tileId)) { if (paused) pauseRemotePty(tileId); else resumeRemotePty(tileId); }
-  else if (paused) pausePty(tileId);
-  else resumePty(tileId);
+  const prev = ptyPauseTimers.get(tileId);
+  if (prev) { clearTimeout(prev); ptyPauseTimers.delete(tileId); }
+  setPtyPaused(tileId, paused);
+  if (paused) {
+    ptyPauseTimers.set(tileId, setTimeout(() => {
+      ptyPauseTimers.delete(tileId);
+      setPtyPaused(tileId, false);
+    }, PTY_PAUSE_MAX_MS));
+  }
 });
 ipcMain.on("ptyWrite", (_e, tileId: string, data: string) =>
   hasRemotePty(tileId) ? writeRemotePty(tileId, data) : writePty(tileId, data)

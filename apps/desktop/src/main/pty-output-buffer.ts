@@ -100,6 +100,12 @@ export class PtyOutputBuffer {
     if (this.pending.size === 0) this.cancelTimer();
   }
 
+  /** Drop everything without sending (the connection is gone). */
+  clear(): void {
+    this.pending.clear();
+    this.cancelTimer();
+  }
+
   /** Bytes currently held for a tile (tests / diagnostics). */
   pendingBytes(tileId: string): number {
     return this.pending.get(tileId)?.length ?? 0;

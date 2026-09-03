@@ -464,14 +464,23 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
     // and, past a high-water mark, ask main to PAUSE the pty: the child blocks
     // on its full pty buffer instead of us buffering on its behalf. Resume once
     // the queue drains under the low mark. Same scheme as VS Code's terminal.
+    //
+    // A pause is a short LEASE that main lets expire on its own (so a child that
+    // exits while paused still gets its final bytes drained — see main's
+    // PTY_PAUSE_MAX_MS). We therefore re-request it on EVERY batch that arrives
+    // while still over the mark; the explicit resume below is the fast path.
     const FLOW_HIGH_CHARS = 200_000;
     const FLOW_LOW_CHARS = 20_000;
     let flowPending = 0;
     let flowPaused = false;
-    const setFlowPaused = (paused: boolean) => {
-      if (flowPaused === paused) return;
-      flowPaused = paused;
-      try { window.hive.ptyFlow(ptyId, paused); } catch { /* bridge without flow control */ }
+    const requestFlowPause = () => {
+      flowPaused = true;
+      try { window.hive.ptyFlow(ptyId, true); } catch { /* bridge without flow control */ }
+    };
+    const releaseFlowPause = () => {
+      if (!flowPaused) return;
+      flowPaused = false;
+      try { window.hive.ptyFlow(ptyId, false); } catch { /* bridge without flow control */ }
     };
     // Restore keyboard focus after an operation that recreates the renderer canvas
     // (acquire/release/context-loss) — a focused selected terminal must not silently
@@ -648,9 +657,9 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       flowPending += d.length;
       term.write(d, () => {
         flowPending -= d.length;
-        if (flowPaused && flowPending <= FLOW_LOW_CHARS) setFlowPaused(false);
+        if (flowPaused && flowPending <= FLOW_LOW_CHARS) releaseFlowPause();
       });
-      if (!flowPaused && flowPending >= FLOW_HIGH_CHARS) setFlowPaused(true);
+      if (flowPending >= FLOW_HIGH_CHARS) requestFlowPause();
       // Crisp-when-idle renderer choice: note the stream, and reconcile only on
       // TRANSITIONS (quiet→streaming now, streaming→quiet later) and only for an
       // UNSELECTED tile (the selected tile is always DOM, so it never swaps).
@@ -907,7 +916,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       // Never leave the child paused on our behalf once we stop reading — the
       // daemon resumes on detach too, but the in-process/remote paths rely on
       // this. (term.dispose() below drops the write callbacks that would have.)
-      setFlowPaused(false);
+      releaseFlowPause();
       try {
         // Persistent + not an explicit close → detach (keep the session alive
         // in the daemon). Otherwise kill.

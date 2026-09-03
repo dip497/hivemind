@@ -106,6 +106,10 @@ interface Session {
    *  retry fires the instant the error prints — not when the PTY finally exits
    *  (a slow SessionEnd hook can delay exit well past restoreRetryMs). */
   retryWatch?: string;
+  /** Output seen while `retryWatch` is active; the watch retires once this
+   *  passes RETRY_WATCH_MAX_BYTES (the resume error prints at startup, so a
+   *  session that has emitted that much has clearly come up). */
+  retryWatchBytes: number;
   /** Latest OSC 0/2 window title the process set (claude's live "session name"),
    *  captured from the headless term. SerializeAddon does NOT serialize the title,
    *  so a reattach's replay would otherwise lose it — we re-emit it (see
@@ -123,6 +127,10 @@ interface Session {
 const RESUME_FAIL_RE = /No conversation found with session ID|session ID:\s*\S+\s*(?:not found|does not exist)/i;
 
 const DEFAULT_SCROLLBACK = 5000; // lines of replay scrollback per session
+// Stop scanning restored-session output for the resume-failure message after
+// this much output. Bounded by BYTES, not time: a slow start on a loaded box
+// must not retire the watch before claude has printed anything.
+const RETRY_WATCH_MAX_BYTES = 512 * 1024;
 
 export interface SessionManagerOptions {
   /** Scrollback lines kept in each session's headless xterm (replay capacity). */
@@ -315,6 +323,7 @@ export class SessionManager {
         frozenSnap && this.restoreRetryTransform && (effectiveSpec.args ?? []).includes("--resume")
           ? ""
           : undefined,
+      retryWatchBytes: 0,
     };
     this.sessions.set(id, session);
     // Capture the OSC 0/2 window title the headless term parses. SerializeAddon
@@ -332,19 +341,18 @@ export class SessionManager {
       // Output-driven resume retry: scan a small rolling buffer for claude's
       // "No conversation found" error. Firing here (not on PTY exit) is robust
       // to a slow SessionEnd hook that delays the exit past restoreRetryMs.
-      // The watch is BOUNDED: once the restored session has clearly come up
-      // (well past the retry window) the error can no longer be a resume
-      // failure, so stop paying a 4 KB concat + regex on every chunk for the
-      // rest of the session's life.
+      // The watch is BOUNDED by output volume: the resume error is among the
+      // first things claude prints, so once a restored session has emitted
+      // RETRY_WATCH_MAX_BYTES it has clearly come up — stop paying a 4 KB
+      // concat + regex on every chunk for the rest of the session's life.
       if (session.retryWatch !== undefined && !session.retried) {
-        if (Date.now() - session.spawnedAt > this.restoreRetryMs * 6) {
+        session.retryWatch = (session.retryWatch + d).slice(-4096);
+        session.retryWatchBytes += d.length;
+        if (RESUME_FAIL_RE.test(session.retryWatch)) {
           session.retryWatch = undefined;
-        } else {
-          session.retryWatch = (session.retryWatch + d).slice(-4096);
-          if (RESUME_FAIL_RE.test(session.retryWatch)) {
-            session.retryWatch = undefined;
-            if (this.tryRestoreRetry(session)) return;
-          }
+          if (this.tryRestoreRetry(session)) return;
+        } else if (session.retryWatchBytes > RETRY_WATCH_MAX_BYTES) {
+          session.retryWatch = undefined;
         }
       }
     });

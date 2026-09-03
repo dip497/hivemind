@@ -84,3 +84,16 @@ test("empty chunks are ignored", () => {
   b.push("a", "");
   assert.equal(t.scheduledMs(), null);
 });
+
+test("clear drops everything and cancels the timer", () => {
+  const t = fakeTimers();
+  const sent: [string, string][] = [];
+  const b = new PtyOutputBuffer((id, d) => sent.push([id, d]), t);
+  b.push("a", "A");
+  b.push("b", "B");
+  b.clear();
+  assert.equal(t.scheduledMs(), null);
+  t.fire();
+  assert.deepEqual(sent, []);
+  assert.equal(b.pendingBytes("a"), 0);
+});

@@ -410,3 +410,31 @@ test("async onSnapshot: flushAll waits for the write; a rejection re-dirties for
   await p;
   assert.equal(settled, true);
 });
+
+test("restore retry watch retires after 512 KB of output (bytes, not time) — no retry on a late error", async () => {
+  const { mgr, created, spec } = makeManager({
+    transformSpecOnRestore: (s) => ({ ...s, args: ["--resume", "u-1"] }),
+    restoreRetryTransform: (s) => ({ ...s, args: ["--session-id", "u-1"] }),
+  });
+  mgr.restoreSnapshot({ id: "t", spec, replay: "", savedAt: Date.now() });
+  await mgr.createOrAttach("t", spec, { onData: () => {}, onExit: () => {} });
+  assert.equal(created.length, 1);
+  const chunk = "x".repeat(64 * 1024);
+  for (let i = 0; i < 9; i++) created[0]!.emit(chunk); // 576 KB → watch retired
+  created[0]!.emit("No conversation found with session ID: u-1\r\n");
+  assert.equal(created.length, 1, "past the byte bound the error is a normal message, not a resume failure");
+});
+
+test("restore retry still fires on a slow start — the bound is output volume, not wall clock", async () => {
+  const { mgr, created, spec } = makeManager({
+    transformSpecOnRestore: (s) => ({ ...s, args: ["--resume", "u-1"] }),
+    restoreRetryTransform: (s) => ({ ...s, args: ["--session-id", "u-1"] }),
+    restoreRetryMs: 1, // exit-path window is effectively closed; only the output watch can retry
+  });
+  mgr.restoreSnapshot({ id: "t", spec, replay: "", savedAt: Date.now() });
+  await mgr.createOrAttach("t", spec, { onData: () => {}, onExit: () => {} });
+  await new Promise((r) => setTimeout(r, 15)); // "slow start": nothing printed for > 6× restoreRetryMs
+  created[0]!.emit("No conversation found with session ID: u-1\r\n");
+  assert.equal(created.length, 2, "first output carrying the error still triggers the retry");
+  assert.deepEqual(created[1]!.spec.args, ["--session-id", "u-1"]);
+});
