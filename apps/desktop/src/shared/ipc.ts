@@ -337,6 +337,11 @@ export interface HiveIpc {
   /** Window closed / tile unmounted: keep the session alive (daemon mode) or
    *  kill it (in-process mode). Distinct from ptyKill, which always terminates. */
   ptyDetach(tileId: string): void;
+  /** Renderer back-pressure. `paused=true` stops reading the child's output
+   *  (it blocks on a full pty buffer) until `paused=false`. TerminalTile flips
+   *  it on xterm's write-queue watermarks so a flood (`cat hugefile`, a runaway
+   *  build log) can't outrun the parser and balloon renderer memory. */
+  ptyFlow(tileId: string, paused: boolean): void;
   /** True when HIVEMIND_PTY_DAEMON=1 — terminals persist across window close. */
   persistentPty: boolean;
 

@@ -13,6 +13,7 @@ import { homedir } from "node:os";
 import * as pty from "@lydell/node-pty";
 import { SessionManager, type ManagedPty, type SpawnSpec, type SessionSnapshot } from "./pty-session-manager.js";
 import { type ClientMsg, type ServerMsg, frame, makeLineDecoder } from "./pty-protocol.js";
+import { PtyOutputBuffer } from "./pty-output-buffer.js";
 import { applyInitialPrompt, stripInitialPrompt } from "../shared/agent-io.js";
 import { evictTrackedSession, trackerSource } from "./tile-session-store.js";
 import { sanitizeShellEnv } from "./shell-env.js";
@@ -201,21 +202,61 @@ const snapshotPath = (id: string): string => {
   const safe = Buffer.from(id).toString("base64url");
   return path.join(sessionsDir, `${safe}.json`);
 };
-function persistSnapshot(id: string, snap: SessionSnapshot): void {
+// One write chain per session id so a later snapshot can never land on disk
+// before an earlier one (the writes are async now — see persistSnapshot).
+const snapshotWrites = new Map<string, Promise<void>>();
+// The NEWEST unwritten body per id. A chained task writes whatever is latest
+// when it runs, so a disk slower than the debounce doesn't queue up (and hold
+// in memory) a stack of superseded multi-MB replays — only the last one lands.
+const snapshotLatest = new Map<string, string>();
+/** Settle every in-flight snapshot write/evict (exit paths await this). */
+const settleSnapshotWrites = (): Promise<unknown> => Promise.allSettled([...snapshotWrites.values()]);
+function persistSnapshot(id: string, snap: SessionSnapshot): Promise<void> {
   const p = snapshotPath(id);
-  try {
-    // Atomic-ish: write to a sibling tmp then rename (avoids torn JSON if the
-    // process is killed mid-write — partial file would fail JSON.parse on
-    // next boot and the session would be lost otherwise).
-    const tmp = `${p}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(snap), "utf8");
-    fs.renameSync(tmp, p);
-  } catch {
-    /* disk full / readonly fs — session loses reboot survival, that's it */
-  }
+  // ASYNC fs. The daemon is one thread relaying EVERY tile's output; a sync
+  // write of a multi-MB replay blocked that relay for every session (visible
+  // as all terminals stuttering together whenever one tile went quiet for 2s
+  // on a busy disk). The serialize itself is still CPU, but the disk wait no
+  // longer stalls the socket.
+  snapshotLatest.set(id, JSON.stringify(snap));
+  const prev = snapshotWrites.get(id) ?? Promise.resolve();
+  const next = prev
+    .then(async () => {
+      const body = snapshotLatest.get(id);
+      if (body === undefined) return; // an earlier task already wrote a newer body
+      snapshotLatest.delete(id);
+      // Atomic-ish: write to a sibling tmp then rename (avoids torn JSON if the
+      // process is killed mid-write — partial file would fail JSON.parse on
+      // next boot and the session would be lost otherwise).
+      const tmp = `${p}.tmp`;
+      await fs.promises.writeFile(tmp, body, "utf8");
+      await fs.promises.rename(tmp, p);
+    })
+    .catch(() => {
+      /* disk full / readonly fs — session loses reboot survival, that's it */
+    })
+    .finally(() => {
+      if (snapshotWrites.get(id) === next) snapshotWrites.delete(id);
+    });
+  snapshotWrites.set(id, next);
+  return next;
 }
 function evictSnapshot(id: string): void {
-  try { fs.unlinkSync(snapshotPath(id)); } catch { /* already gone */ }
+  // Chain the unlink behind any in-flight write for this id: with async
+  // persistence, an unlink that raced a pending write's rename would let the
+  // killed session's file reappear on disk and resurrect it on the next boot.
+  const p = snapshotPath(id);
+  snapshotLatest.delete(id); // a queued write for a killed session must not land
+  const prev = snapshotWrites.get(id) ?? Promise.resolve();
+  const next = prev
+    .then(async () => {
+      await fs.promises.unlink(p).catch(() => { /* already gone */ });
+      await fs.promises.unlink(`${p}.tmp`).catch(() => { /* none pending */ });
+    })
+    .finally(() => {
+      if (snapshotWrites.get(id) === next) snapshotWrites.delete(id);
+    });
+  snapshotWrites.set(id, next);
   // Drop the tile's per-tile tracked-session file so killed tiles don't leave
   // stale ids behind.
   evictTrackedSession(tileSessionsDir, id);
@@ -291,6 +332,8 @@ const factory = (spec: SpawnSpec): ManagedPty => {
     write: (d) => p.write(d),
     resize: (c, r) => p.resize(c, r),
     kill: (sig) => p.kill(sig),
+    pause: () => p.pause(),
+    resume: () => p.resume(),
     onData: (cb) => p.onData(cb),
     onExit: (cb) => p.onExit(({ exitCode, signal }) => cb(exitCode, signal)),
   };
@@ -348,6 +391,10 @@ for (const snap of loadAllSnapshots()) manager.restoreSnapshot(snap);
 // NOT registered — that listener is sync-only per Node docs and can't await.
 const flushOnExit = async (): Promise<void> => {
   try { await manager.flushAll(); } catch { /* ignore */ }
+  // flushAll only covers DIRTY live sessions; a write (or a kill's chained
+  // unlink) already in flight is a separate promise that process.exit would cut
+  // off mid-rename — leaving a stale or resurrected snapshot for the next boot.
+  try { await settleSnapshotWrites(); } catch { /* ignore */ }
 };
 process.on("SIGTERM", () => { void flushOnExit().then(() => process.exit(0)); });
 process.on("SIGINT", () => { void flushOnExit().then(() => process.exit(0)); });
@@ -365,10 +412,25 @@ try {
   /* not present — fine */
 }
 
+// Outgoing `data` frames are coalesced per connection (the same PtyOutputBuffer
+// main uses toward the renderer): a streaming TUI emits hundreds of tiny pty
+// reads a second, and each one used to be its own JSON.stringify + socket write
+// here plus a JSON.parse on the app side. Holding them for a few ms turns that
+// into one frame per tile per tick — well under a display frame, so nothing is
+// felt, and the per-frame overhead on both event loops drops by an order of
+// magnitude during bursts. Size-capped so a starved timer can't grow memory;
+// `exit` / `attached` flush their tile first to keep ordering.
+const DATA_FLUSH_MS = 4;
+const DATA_FLUSH_BYTES = 256 * 1024;
+
 const server = net.createServer((sock) => {
   const send = (msg: ServerMsg) => {
     if (!sock.destroyed) sock.write(frame(msg));
   };
+  const outBuf = new PtyOutputBuffer(
+    (id, data) => send({ t: "data", id, data }),
+    { delayMs: DATA_FLUSH_MS, maxBytes: DATA_FLUSH_BYTES },
+  );
   // Sessions this connection attached — detached (NOT killed) when it drops,
   // so closing the window leaves the processes running.
   const attached = new Set<string>();
@@ -385,11 +447,18 @@ const server = net.createServer((sock) => {
         attached.add(msg.id);
         void manager
           .createOrAttach(msg.id, msg.spec, {
-            onData: (data) => send({ t: "data", id: msg.id, data }),
-            onExit: (code, signal) =>
-              send({ t: "exit", id: msg.id, code, signal: signal ?? null }),
+            onData: (data) => outBuf.push(msg.id, data),
+            // Final bytes must land before the exit banner.
+            onExit: (code, signal) => {
+              outBuf.flush(msg.id);
+              send({ t: "exit", id: msg.id, code, signal: signal ?? null });
+            },
           })
           .then((r) => {
+            // Anything queued for this id is already inside the replay
+            // (serialized after drain) — ship the queue first so the client
+            // sees the same order it always did.
+            outBuf.flush(msg.id);
             send({ t: "attached", reqId: msg.reqId, id: msg.id, pid: r.pid, isNew: r.isNew, replay: r.replay });
           })
           .catch((e: unknown) => {
@@ -411,11 +480,19 @@ const server = net.createServer((sock) => {
         break;
       case "detach":
         attached.delete(msg.id);
+        outBuf.forget(msg.id);
         manager.detach(msg.id);
         break;
       case "kill":
         attached.delete(msg.id);
+        outBuf.forget(msg.id);
         manager.kill(msg.id);
+        break;
+      case "pause":
+        manager.pause(msg.id);
+        break;
+      case "resume":
+        manager.resume(msg.id);
         break;
       case "list":
         send({ t: "sessions", reqId: msg.reqId, ids: manager.list() });
@@ -425,8 +502,9 @@ const server = net.createServer((sock) => {
         break;
       case "shutdown":
         // The app detected a rebuild and is replacing us. Sessions persist via
-        // their on-disk snapshots; the fresh daemon replays + respawns them.
-        process.exit(0);
+        // their on-disk snapshots; the fresh daemon replays + respawns them —
+        // so land every pending snapshot write first.
+        void flushOnExit().then(() => process.exit(0));
         break;
     }
   });
@@ -436,6 +514,7 @@ const server = net.createServer((sock) => {
     /* client vanished mid-write — ignore */
   });
   sock.on("close", () => {
+    outBuf.clear();
     // Window closed: detach (keep processes alive). Never kill on disconnect.
     for (const id of attached) manager.detach(id);
     attached.clear();
@@ -462,7 +541,7 @@ const bootGuard = setTimeout(() => {
     // Flush any snapshots that were dirty (shouldn't be any — frozen aren't
     // dirty — but cheap insurance), then exit. Async-await so the snapshot
     // write completes before the process dies.
-    void manager.flushAll().finally(() => process.exit(0));
+    void flushOnExit().finally(() => process.exit(0));
   }
 }, 30000);
 bootGuard.unref?.();

@@ -72,7 +72,7 @@ import {
   worktreePrune,
   worktreeRemove,
 } from "../main/git-adapter";
-import { spawnPty, writePty, resizePty, killPty } from "../main/pty-host";
+import { spawnPty, writePty, resizePty, killPty, pausePty, resumePty } from "../main/pty-host";
 import { applyShellEnvToProcess } from "../main/shell-env";
 import chokidar from "chokidar";
 
@@ -232,6 +232,7 @@ const PREVIEW_SCRIPT = `
     ptyWrite:          notify("ptyWrite"),
     ptyResize:         notify("ptyResize"),
     ptyKill:           notify("ptyKill"),
+    ptyFlow:           notify("ptyFlow"),
     onPtyData:         (tileId, cb) => subscribe(ptyEvents, tileId + ":data", cb),
     onPtyExit:         (tileId, cb) => subscribe(ptyEvents, tileId + ":exit", cb),
     onFsChanged:       (repoPath, cb) => subscribe(fsEvents, repoPath, cb),
@@ -316,6 +317,7 @@ const NOTIFY: Record<string, (...args: unknown[]) => void> = {
   ptyWrite: (tileId: string, data: string) => writePty(tileId, data),
   ptyResize: (tileId: string, cols: number, rows: number) => resizePty(tileId, cols, rows),
   ptyKill: (tileId: string) => killPty(tileId),
+  ptyFlow: (tileId: string, paused: boolean) => (paused ? pausePty(tileId) : resumePty(tileId)),
 };
 
 /** Constant-time equality to avoid token-leak via timing. */

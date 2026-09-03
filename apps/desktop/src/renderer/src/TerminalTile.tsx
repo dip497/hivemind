@@ -444,6 +444,44 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
     let lastStreamTs = 0;
     const STREAM_QUIET_MS = 1500;
     let streamQuietTimer: ReturnType<typeof setTimeout> | undefined;
+    // One armed timer that re-checks quietness when it fires, instead of a
+    // clearTimeout+setTimeout pair on EVERY pty chunk (hundreds a second while
+    // an agent streams — timer-heap churn that showed up under load).
+    const armQuietTimer = (ms: number) => {
+      streamQuietTimer = setTimeout(() => {
+        streamQuietTimer = undefined;
+        const since = Date.now() - lastStreamTs;
+        if (since < STREAM_QUIET_MS) { armQuietTimer(STREAM_QUIET_MS - since + 120); return; }
+        if (!selectedRef.current) reconcileWebglSlots();
+      }, ms);
+    };
+    // ── Flow control ────────────────────────────────────────────────────────
+    // xterm parses writes on its own frame budget, so when output arrives faster
+    // than it can parse (a `cat` of a big file, a runaway build log, a whole
+    // replay on reattach) the unparsed backlog just grows in memory — unbounded,
+    // and every frame spent draining it is a frame the canvas doesn't get. Count
+    // the bytes still queued (write callbacks fire as each chunk is consumed)
+    // and, past a high-water mark, ask main to PAUSE the pty: the child blocks
+    // on its full pty buffer instead of us buffering on its behalf. Resume once
+    // the queue drains under the low mark. Same scheme as VS Code's terminal.
+    //
+    // A pause is a short LEASE that main lets expire on its own (so a child that
+    // exits while paused still gets its final bytes drained — see main's
+    // PTY_PAUSE_MAX_MS). We therefore re-request it on EVERY batch that arrives
+    // while still over the mark; the explicit resume below is the fast path.
+    const FLOW_HIGH_CHARS = 200_000;
+    const FLOW_LOW_CHARS = 20_000;
+    let flowPending = 0;
+    let flowPaused = false;
+    const requestFlowPause = () => {
+      flowPaused = true;
+      try { window.hive.ptyFlow(ptyId, true); } catch { /* bridge without flow control */ }
+    };
+    const releaseFlowPause = () => {
+      if (!flowPaused) return;
+      flowPaused = false;
+      try { window.hive.ptyFlow(ptyId, false); } catch { /* bridge without flow control */ }
+    };
     // Restore keyboard focus after an operation that recreates the renderer canvas
     // (acquire/release/context-loss) — a focused selected terminal must not silently
     // lose input. Deferred a frame so it runs after the DOM swap settles.
@@ -616,17 +654,20 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
     // can deliver bytes (e.g. shell rc-file prompt) before our await resolves
     // here. Subscribing first means we never drop the opening banner.
     unsubData = window.hive.onPtyData(ptyId, (d) => {
-      term.write(d);
+      flowPending += d.length;
+      term.write(d, () => {
+        flowPending -= d.length;
+        if (flowPaused && flowPending <= FLOW_LOW_CHARS) releaseFlowPause();
+      });
+      if (flowPending >= FLOW_HIGH_CHARS) requestFlowPause();
       // Crisp-when-idle renderer choice: note the stream, and reconcile only on
       // TRANSITIONS (quiet→streaming now, streaming→quiet later) and only for an
       // UNSELECTED tile (the selected tile is always DOM, so it never swaps).
-      const wasQuiet = Date.now() - lastStreamTs > STREAM_QUIET_MS;
-      lastStreamTs = Date.now();
+      const now = Date.now();
+      const wasQuiet = now - lastStreamTs > STREAM_QUIET_MS;
+      lastStreamTs = now;
       if (wasQuiet && !selectedRef.current) reconcileWebglSlots();
-      clearTimeout(streamQuietTimer);
-      streamQuietTimer = setTimeout(() => {
-        if (!selectedRef.current) reconcileWebglSlots();
-      }, STREAM_QUIET_MS + 120);
+      if (!streamQuietTimer) armQuietTimer(STREAM_QUIET_MS + 120);
       // Agent tiles get authoritative state from the screen poll (mark dirty so
       // the next poll tick actually scans); plain shells use the cheap heuristic.
       if (agent) {
@@ -872,6 +913,10 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       // Unregister from the slot manager — this releases our WebGL slot (disposes
       // the addon + dpr override) and lets another tile claim it.
       unregisterWebglSlotClient(ptyId);
+      // Never leave the child paused on our behalf once we stop reading — the
+      // daemon resumes on detach too, but the in-process/remote paths rely on
+      // this. (term.dispose() below drops the write callbacks that would have.)
+      releaseFlowPause();
       try {
         // Persistent + not an explicit close → detach (keep the session alive
         // in the daemon). Otherwise kill.

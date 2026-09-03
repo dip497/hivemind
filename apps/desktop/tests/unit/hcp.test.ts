@@ -376,3 +376,15 @@ test("forgetTile resolves a supervised worker's pending approval (deny), not lea
   const r = (await approval) as { decision: string };
   assert.equal(r.decision, "deny", "a crashed worker's approval resolves deny, doesn't hang 20 min");
 });
+
+test("OutputRecorder: lazy trim still never returns more than the ring cap, and since() is exact after overshoot", () => {
+  const rec = new OutputRecorder();
+  const CAP = 256 * 1024;
+  const chunk = "a".repeat(64 * 1024);
+  for (let i = 0; i < 7; i++) rec.record("t", chunk); // 448 KB → overshoots the cap, then trims
+  const m = rec.mark("t");
+  rec.record("t", "TAIL");
+  assert.equal(rec.since("t", m), "TAIL");
+  assert.equal(rec.since("t", 0).length, CAP, "reads are bounded by the cap");
+  assert.ok(rec.since("t", 0).endsWith("TAIL"));
+});

@@ -998,13 +998,13 @@ html.content-glass .md-preview code {
   background: radial-gradient(circle, var(--wp-1), transparent 62%);
   top: -22%;
   left: -12%;
-  animation: hm-wp-drift-a 34s ease-in-out infinite alternate;
+  animation: hm-wp-drift-a 34s steps(136) infinite alternate;
 }
 .hm-wp-b {
   background: radial-gradient(circle, var(--wp-2), transparent 62%);
   bottom: -28%;
   right: -16%;
-  animation: hm-wp-drift-b 42s ease-in-out infinite alternate;
+  animation: hm-wp-drift-b 42s steps(168) infinite alternate;
 }
 .hm-wp-c {
   background: radial-gradient(circle, var(--wp-3), transparent 64%);
@@ -1013,7 +1013,7 @@ html.content-glass .md-preview code {
   width: 55vw;
   height: 55vw;
   opacity: 0.4;
-  animation: hm-wp-drift-c 50s ease-in-out infinite alternate;
+  animation: hm-wp-drift-c 50s steps(200) infinite alternate;
 }
 /* Fine grain — fractal-noise data URI at low opacity kills gradient banding and
    reads as a frosted texture. Static (no animation cost). */
@@ -1059,7 +1059,7 @@ html.content-glass .md-preview code {
   object-fit: cover;
   filter: brightness(var(--wp-brightness, 0.85)) saturate(1.05);
   transform-origin: center;
-  animation: hm-kenburns 44s ease-in-out infinite alternate;
+  animation: hm-kenburns 44s steps(176) infinite alternate;
 }
 @keyframes hm-kenburns {
   from { transform: scale(1.04) translate(0, 0); }
@@ -1079,7 +1079,17 @@ html.wp-static .hm-wp-image {
 /* NOTE: deliberately NO animated `filter`/`hue-rotate` on the wallpaper root —
    animating filter forces a continuous full-screen GPU re-composite (Chromium
    anti-pattern). The "alive" motion comes purely from the blooms' transform
-   drift (translate/scale), which the compositor handles for free. */
+   drift (translate/scale), which the compositor handles for free.
+
+   PERF: the drifts (and the photo Ken-Burns) use `steps()` — ~4 steps/s — instead
+   of a continuous easing. The transform itself is free, but every frosted tile
+   sits on the wallpaper with `backdrop-filter`, and a backdrop that changes
+   EVERY frame makes every one of those tiles re-blur every frame: N tiles ×
+   ~1M px × blur(18px) at 60 Hz, competing with the xterm WebGL canvases for the
+   GPU — the "fps drops once a few agents are streaming" cost. Stepping the
+   animation leaves the backdrop unchanged between steps, so the compositor has
+   nothing to redraw ~56 of every 60 frames. Each step moves a 60px-blurred bloom
+   by ~1 px (12vw / 136 steps), so the drift still reads as continuous. */
 @keyframes hm-wp-drift-a {
   from { transform: translate3d(0, 0, 0) scale(1); }
   to   { transform: translate3d(12vw, 8vh, 0) scale(1.18); }

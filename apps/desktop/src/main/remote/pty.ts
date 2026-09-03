@@ -64,6 +64,11 @@ class RemotePty {
   }
 
   write(data: string): void { this.stream.write(data); }
+  /** Back-pressure: pausing the channel stops 'data' events AND stops ssh2
+   *  granting the remote side more window, so the remote process blocks on
+   *  write instead of the output piling up in main. */
+  pause(): void { try { this.stream.pause(); } catch { /* channel gone */ } }
+  resume(): void { try { this.stream.resume(); } catch { /* channel gone */ } }
   resize(cols: number, rows: number): void {
     try { this.stream.setWindow(rows, cols, 0, 0); } catch { /* channel gone */ }
   }
@@ -98,6 +103,12 @@ export function writeRemotePty(tileId: string, data: string): void {
 }
 export function resizeRemotePty(tileId: string, cols: number, rows: number): void {
   remotePtys.get(tileId)?.resize(cols, rows);
+}
+export function pauseRemotePty(tileId: string): void {
+  remotePtys.get(tileId)?.pause();
+}
+export function resumeRemotePty(tileId: string): void {
+  remotePtys.get(tileId)?.resume();
 }
 export function killRemotePty(tileId: string): void {
   const p = remotePtys.get(tileId);

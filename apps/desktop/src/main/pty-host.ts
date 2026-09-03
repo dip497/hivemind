@@ -95,6 +95,15 @@ export function detachPty(tileId: string): void {
   killPty(tileId);
 }
 
+/** Renderer back-pressure: stop reading the child's output (it blocks on a
+ *  full pty buffer) until resumePty. See TerminalTile's flow-control watermarks. */
+export function pausePty(tileId: string): void {
+  try { ptys.get(tileId)?.pause(); } catch { /* already gone */ }
+}
+export function resumePty(tileId: string): void {
+  try { ptys.get(tileId)?.resume(); } catch { /* already gone */ }
+}
+
 export function resizePty(tileId: string, cols: number, rows: number): void {
   const p = ptys.get(tileId);
   if (p) p.resize(cols, rows);
