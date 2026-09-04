@@ -11,6 +11,14 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Fixed
 
+- **No more frame drops while typing into or streaming from an agent tile.** The glass
+  wallpaper's three blooms carried a circular mask, a 60px blur, and a screen blend, each of
+  which made Chromium re-render that 1.4-megapixel layer on every frame any tile repainted
+  (a focused claude tile repaints on every keystroke and every token). The softness is now
+  baked into the gradients, the mask is gone (it was invisible), and grain, sheen and vignette
+  are one plain layer. Measured on the real app: a focused streaming tile went from ~15 to
+  60 FPS, eight streaming tiles from ~13 to 44. The look is unchanged.
+
 - **Smoother canvas under load.** Terminal output now crosses from the PTY daemon to the
   window in a few coalesced messages per tile per tick instead of one IPC message per pty
   read (hundreds a second per streaming agent), and the daemon's NDJSON decoder no longer
