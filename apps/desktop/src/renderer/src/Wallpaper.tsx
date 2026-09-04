@@ -106,16 +106,15 @@ export function Wallpaper({ embedded = false }: { embedded?: boolean } = {}): Re
     const scene = wallpaper === "video" ? "aurora" : wallpaper;
     return (
       <div className={`hm-wallpaper${cls}${paused ? " paused" : ""}`} data-scene={scene} aria-hidden="true">
-        {/* Three drifting gradient blooms (screen-blended) → depth + slow color
-            motion. A fine grain breaks up the gradient banding, a top sheen adds
-            the "lit from above" glass feel, and a vignette focuses the center.
+        {/* Three drifting gradient blooms → depth + slow color motion, then ONE
+            static veil layer (vignette + top sheen + fine grain). Kept to four
+            plain composited layers with no filters/masks/blend modes on purpose —
+            see the PERF notes on .hm-wp-bloom / .hm-wp-veil in styles.css.
             Colors per scene come from CSS vars set by [data-scene] in styles.css. */}
         <div className="hm-wp-bloom hm-wp-a" />
         <div className="hm-wp-bloom hm-wp-b" />
         <div className="hm-wp-bloom hm-wp-c" />
-        <div className="hm-wp-grain" />
-        <div className="hm-wp-sheen" />
-        <div className="hm-wp-vignette" />
+        <div className="hm-wp-veil" />
       </div>
     );
   })();

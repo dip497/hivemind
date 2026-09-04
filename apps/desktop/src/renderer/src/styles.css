@@ -984,30 +984,38 @@ html.content-glass .md-preview code {
 .hm-wallpaper[data-scene="nebula"] { --wp-base: #0a0816; --wp-1: #a855f7; --wp-2: #6366f1; --wp-3: #ec4899; }
 .hm-wallpaper[data-scene="mono"]   { --wp-base: #0b0d12; --wp-1: #475569; --wp-2: #64748b; --wp-3: #334155; }
 
+/* PERF — the blooms are plain composited textures on purpose. They used to
+   carry `border-radius: 50%` + `filter: blur(60px)` + `mix-blend-mode: screen`,
+   and each of those makes Chromium give the 1.4-megapixel layer its own render
+   surface (a mask pass, a two-pass blur, a backdrop-read blend) that is
+   re-executed on EVERY frame anything above it repaints — and a streaming or
+   typed-into terminal repaints every frame. Bisected on the real app: hiding
+   the blooms took a focused streaming tile from ~15 to 60 FPS; removing the
+   tile's backdrop-filter changed nothing. The blur is baked into the gradient
+   falloff instead, the circle mask was invisible anyway (the gradient reaches
+   transparent well inside it), and over the near-black base `screen` and plain
+   alpha are indistinguishable. Net: three textured quads moved by transform. */
 .hm-wp-bloom {
   position: absolute;
   width: 75vw;
   height: 75vw;
-  border-radius: 50%;
-  filter: blur(60px);
   opacity: 0.55;
-  mix-blend-mode: screen;
   will-change: transform;
 }
 .hm-wp-a {
-  background: radial-gradient(circle, var(--wp-1), transparent 62%);
+  background: radial-gradient(circle, var(--wp-1) 0%, color-mix(in srgb, var(--wp-1) 55%, transparent) 28%, transparent 64%);
   top: -22%;
   left: -12%;
   animation: hm-wp-drift-a 34s steps(136) infinite alternate;
 }
 .hm-wp-b {
-  background: radial-gradient(circle, var(--wp-2), transparent 62%);
+  background: radial-gradient(circle, var(--wp-2) 0%, color-mix(in srgb, var(--wp-2) 55%, transparent) 28%, transparent 64%);
   bottom: -28%;
   right: -16%;
   animation: hm-wp-drift-b 42s steps(168) infinite alternate;
 }
 .hm-wp-c {
-  background: radial-gradient(circle, var(--wp-3), transparent 64%);
+  background: radial-gradient(circle, var(--wp-3) 0%, color-mix(in srgb, var(--wp-3) 55%, transparent) 28%, transparent 66%);
   top: 28%;
   left: 38%;
   width: 55vw;
@@ -1015,21 +1023,24 @@ html.content-glass .md-preview code {
   opacity: 0.4;
   animation: hm-wp-drift-c 50s steps(200) infinite alternate;
 }
-/* Fine grain — fractal-noise data URI at low opacity kills gradient banding and
-   reads as a frosted texture. Static (no animation cost). */
-.hm-wp-grain {
+/* The static finish over the blooms — ONE layer holding three backgrounds
+   (top → bottom): the vignette that focuses the centre, the top-down sheen
+   (the "lit from above" glass tell), and a fine fractal-noise grain that kills
+   gradient banding. These were three full-window elements, one of them
+   `mix-blend-mode: overlay` (a per-frame backdrop-read surface); a single
+   plain layer composites as one quad. The grain's opacity is baked into the SVG
+   (3.5% plain alpha reads like the old 4% overlay) so it needs no blend mode. */
+.hm-wp-veil {
   position: absolute;
   inset: 0;
-  opacity: 0.04;
-  mix-blend-mode: overlay;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-image:
+    radial-gradient(ellipse at center, transparent 40%, rgba(0, 0, 0, 0.6)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 30%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+  background-repeat: no-repeat, no-repeat, repeat;
+  background-size: 100% 100%, 100% 100%, 160px 160px;
 }
-/* Top-down sheen — the "lit from above" glass tell (Apple liquid-glass cue). */
-.hm-wp-sheen {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 30%);
-}
+/* Vignette for the photo / video scenes (their media element sits underneath). */
 .hm-wp-vignette {
   position: absolute;
   inset: 0;
