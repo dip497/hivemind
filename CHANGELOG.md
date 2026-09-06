@@ -62,6 +62,15 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Changed
 
+- **Agent providers now live in one catalog** (`packages/hive-agents`): each of claude, codex,
+  droid, kiro and pi is a single browser-safe definition (identity, explicit typed capabilities —
+  prompt delivery, turn signal, resume granularity, supervise, model flag, permission modes,
+  blocked detection — and its status detector) plus, where it has one, a node half (session
+  resume, hook injection, daemon-start asset/overlay preparation) with its provider-owned assets
+  (the pi bridge extension, the kiro approval hook, the droid/kiro home overlays) beside it.
+  Runtime behaviour is unchanged and pinned by golden tests captured before the move. The desktop
+  keeps thin re-export shims at the old paths for now; the UI list, CLI agent lists and HCP still
+  read their own copies until the follow-up that switches them to the catalog.
 - **BREAKING: `hive ctl read --timeout` is honoured end-to-end.** The wait is now a loop of short
   HCP requests (≤ 10 s each) instead of one long request that silently died at the caller's tool
   timeout (Claude Code's Bash default is 120 s); the default total wait is 100 s. A read that runs

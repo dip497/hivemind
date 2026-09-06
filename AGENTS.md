@@ -21,6 +21,7 @@ apps/
   cli/       `hive` CLI (citty + bun-compile); `hive ctl` = agent control plane (HCP client)
 packages/
   hive-core/ storage + parsing for .hivemind/ (gray-matter + zod), skill templates + agentic installer → packages/hive-core/AGENTS.md
+  hive-agents/ the agent-provider catalog: one def (+ node half) per CLI agent, read by UI/CLI/HCP
   tsconfig/  shared TS config
 templates/   source of the hive-browser skill (embedded into hive-core)
 docs/design/ architecture design docs (e.g. remote-frames.md)

@@ -131,6 +131,9 @@ importers:
 
   apps/cli:
     dependencies:
+      '@hivemind/agents':
+        specifier: workspace:*
+        version: link:../../packages/hive-agents
       '@hivemind/core':
         specifier: workspace:*
         version: link:../../packages/hive-core
@@ -183,6 +186,9 @@ importers:
       '@fontsource/jetbrains-mono':
         specifier: ^5.2.8
         version: 5.2.8
+      '@hivemind/agents':
+        specifier: workspace:*
+        version: link:../../packages/hive-agents
       '@hivemind/core':
         specifier: workspace:*
         version: link:../../packages/hive-core
@@ -364,6 +370,18 @@ importers:
       vite:
         specifier: 'catalog:'
         version: 5.4.21(@types/node@22.19.19)(lightningcss@1.32.0)
+
+  packages/hive-agents:
+    devDependencies:
+      '@hivemind/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      '@types/node':
+        specifier: 'catalog:'
+        version: 22.19.19
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
 
   packages/hive-core:
     dependencies:
