@@ -16,7 +16,7 @@ import os from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { composeResume } from "../../src/main/providers/registry.ts";
+import { composeResume, composeResumeFrom, PROVIDERS as REGISTRY } from "../../src/main/providers/registry.ts";
 import type { SpawnSpec } from "../../src/main/pty-session-manager.ts";
 import { droidHooksSettings } from "../../src/main/droid-resume.ts";
 import { kiroAgentConfig } from "../../src/main/kiro-resume.ts";
@@ -48,10 +48,12 @@ const CTX = {
   userpromptHookPath: "/x/ud/hcp-userprompt-hook.cjs",
   hcpSock: "/x/ud/hcp.sock",
   hcpToken: "golden-token",
-  piExtPath: "/x/ud/hive-pi-ext.mjs",
-  droidHome: "/x/ud/droid-home",
-  kiroHome: "/x/ud/kiro-home",
-  kiroApprovalHookPath: "/x/ud/hcp-kiro-approval-hook.cjs",
+  // Provider-private paths, as each provider's prepare() would return them.
+  providers: {
+    pi: { piExtPath: "/x/ud/hive-pi-ext.mjs" },
+    droid: { droidHome: "/x/ud/droid-home" },
+    kiro: { kiroHome: "/x/ud/kiro-home", kiroApprovalHookPath: "/x/ud/hcp-kiro-approval-hook.cjs" },
+  },
 };
 
 /** One canonical spawn per provider: the UI's command + default args. */
@@ -104,14 +106,13 @@ function fakeDeps() {
   };
 }
 
-async function capture() {
+async function capture(resume = composeResume(CTX)) {
   // Restore transforms scan the user's session stores under $HOME (codex / pi /
   // droid): point HOME at an empty dir so the snapshot is machine-independent.
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "golden-home-"));
   const prevHome = process.env.HOME;
   process.env.HOME = home;
   try {
-    const resume = composeResume(CTX);
     const { dispatch } = makeDispatch(fakeDeps());
     const out: Record<string, unknown> = {};
     for (const p of PROVIDERS) {
@@ -140,7 +141,7 @@ async function capture() {
     }
     out.files = {
       "droid-home/.factory/hooks.json": droidHooksSettings({ execPath: CTX.execPath, stopHookPath: CTX.stopHookPath, userpromptHookPath: CTX.userpromptHookPath, notificationHookPath: CTX.notificationHookPath, hcpSock: CTX.hcpSock }),
-      "kiro-home/.kiro/agents/hivemind.json": kiroAgentConfig({ execPath: CTX.execPath, stopHookPath: CTX.stopHookPath, userpromptHookPath: CTX.userpromptHookPath, kiroApprovalHookPath: CTX.kiroApprovalHookPath, trackerPath: CTX.trackerPath, tileSessionsDir: CTX.tileSessionsDir, hcpSock: CTX.hcpSock }),
+      "kiro-home/.kiro/agents/hivemind.json": kiroAgentConfig({ execPath: CTX.execPath, stopHookPath: CTX.stopHookPath, userpromptHookPath: CTX.userpromptHookPath, kiroApprovalHookPath: CTX.providers.kiro.kiroApprovalHookPath, trackerPath: CTX.trackerPath, tileSessionsDir: CTX.tileSessionsDir, hcpSock: CTX.hcpSock }),
     };
     out.assets = {
       "hive-pi-ext.mjs": sha(piExtSource()),
@@ -166,4 +167,14 @@ test("provider golden: spawn/restore/retry transforms, injected files, assets, d
     assert.deepEqual(actual[key], expected[key], `golden drift for "${key}" — runtime behaviour changed (UPDATE_GOLDEN=1 only if intended)`);
   }
   assert.deepEqual(Object.keys(actual).sort(), Object.keys(expected).sort());
+});
+
+test("provider transforms are order-independent: reversed composition matches the golden outputs", async () => {
+  const forward = JSON.parse(JSON.stringify(await capture())) as Record<string, unknown>;
+  const reversed = JSON.parse(JSON.stringify(await capture(composeResumeFrom([...REGISTRY].reverse(), CTX)))) as Record<string, unknown>;
+  for (const key of Object.keys(forward)) {
+    const f = forward[key] as Record<string, unknown>, r = reversed[key] as Record<string, unknown>;
+    if (f && typeof f === "object") for (const sub of Object.keys(f)) assert.deepEqual(r[sub], f[sub], `order-dependent output at ${key}.${sub} — a provider transform touched a spec it does not own`);
+  }
+  assert.deepEqual(reversed, forward, "a provider transform touched a spec it does not own — composition must not depend on order");
 });

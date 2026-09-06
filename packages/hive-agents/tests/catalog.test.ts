@@ -25,14 +25,19 @@ describe("agent catalog", () => {
     expect(workerAgents().map((d) => d.id)).toEqual(["claude", "droid", "pi", "kiro"]);
     for (const d of CATALOG) if (!d.caps.turnSignal) expect(d.note).toBeTruthy();
   });
-  test("node parts exist exactly for providers that inject or resume", () => {
-    expect(Object.keys(NODE_PARTS).sort()).toEqual(["claude", "codex", "droid", "kiro", "pi"]);
+  test("drift guard: node halves and catalog defs agree", () => {
+    const ids = new Set(CATALOG.map((d) => d.id));
+    // Every node half belongs to a catalogued provider.
+    for (const id of Object.keys(NODE_PARTS)) expect(ids.has(id), `NODE_PARTS["${id}"] has no catalog def`).toBe(true);
+    // Every provider whose capabilities need injection/resume has a node half
+    // (or says explicitly that it needs none).
     for (const d of CATALOG) {
-      const parts = NODE_PARTS[d.id];
-      if (d.caps.resume === "none") expect(parts?.resume).toBeUndefined();
-      else expect(parts?.resume).toBeDefined();
+      const needs = d.caps.resume !== "none" || d.caps.turnSignal;
+      const has = !!NODE_PARTS[d.id]?.resume;
+      if (needs && !d.noNodeHalf) expect(has, `${d.id} declares resume/turnSignal but has no node half`).toBe(true);
+      if (!needs) expect(has, `${d.id} has a node half but declares neither resume nor a turn signal`).toBe(false);
     }
-    expect(PROVIDERS.map((p) => p.id)).toEqual(["claude", "codex", "droid", "kiro", "pi"]);
+    expect(PROVIDERS.map((p) => p.id)).toEqual(CATALOG.filter((d) => NODE_PARTS[d.id]).map((d) => d.id));
     expect(providerFor("/opt/pi")?.id).toBe("pi");
     const r = composeResume({ execPath: "/x", trackerPath: "/x/t", tileSessionsDir: "/x/s" });
     expect(r.transformSpecOnSpawn({ cwd: "/", cmd: "bash", args: [], cols: 1, rows: 1 }, "t").args).toEqual([]);

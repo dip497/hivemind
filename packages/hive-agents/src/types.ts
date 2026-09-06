@@ -16,7 +16,8 @@
  * one line in catalog.ts (+ one in node.ts). Nothing else names it.
  */
 
-/** herdr's three-state model. "blocked" = needs the human (approval/question). */
+/** The three-state model ported from herdr (the Rust agent multiplexer the
+ *  scrape detectors come from). "blocked" = needs the human (approval/question). */
 export type AgentState = "idle" | "working" | "blocked";
 
 /** UI status buckets a tile renders. claude distinguishes permission/question;
@@ -69,6 +70,11 @@ export interface AgentProviderDef {
   detect: (screen: string) => TileStatus;
   /** One line shown wherever the agent is offered when it cannot be a worker. */
   note?: string;
+  /** Declares that this provider needs NO node half even though its capabilities
+   *  (resume / turn signal) would normally require one — e.g. a runtime whose own
+   *  CLI resumes and reports without any injection. The drift test accepts the
+   *  flag in place of a NODE_PARTS entry. */
+  noNodeHalf?: true;
 }
 
 // ── daemon-side ──────────────────────────────────────────────────────────────
@@ -98,8 +104,9 @@ export interface ProviderResumeTransforms {
 
 /** Everything the daemon generated that a provider might wire into a spawn: the
  *  electron-as-node exec path, the per-tile session dir, the shared HCP hook
- *  script paths + socket/token, and the provider-prepared paths (`prepare`). A
- *  provider uses whatever subset it supports; unset paths disable that hook. */
+ *  script paths + socket/token — provider-agnostic — plus each provider's own
+ *  prepared paths under `providers[id]`. A provider uses whatever subset it
+ *  supports; an unset path disables that hook. */
 export interface ProviderSpawnContext {
   execPath: string;
   trackerPath: string;
@@ -114,14 +121,12 @@ export interface ProviderSpawnContext {
   userpromptHookPath?: string;
   hcpSock?: string;
   hcpToken?: string;
-  /** pi: on-disk path of the generated bridge extension (`pi -e <path>`). */
-  piExtPath?: string;
-  /** droid: the ephemeral FACTORY_HOME_OVERRIDE overlay. */
-  droidHome?: string;
-  /** kiro: the ephemeral KIRO_HOME overlay. */
-  kiroHome?: string;
-  /** kiro: its PreToolUse permission-broker hook (exit-code contract). */
-  kiroApprovalHookPath?: string;
+  /** Provider-private paths, keyed by provider id — whatever that provider's
+   *  `prepare()` returned at daemon start (an extension file, a config-home
+   *  overlay, its own hook script). Opaque to everything but the owning
+   *  provider: `resume(ctx)` reads only `ctx.providers?.[ownId]`, so a new
+   *  provider never edits this shared type. */
+  providers?: Record<string, Record<string, string>>;
 }
 
 /** What the daemon hands a provider at start so it can write its assets and
@@ -141,8 +146,9 @@ export interface DaemonPaths {
 export interface AgentNodeParts {
   /** Build this provider's spawn-time transforms from the daemon's context. */
   resume?: (ctx: ProviderSpawnContext) => ProviderResumeTransforms;
-  /** Daemon start: write assets / seed homes. Returns the ctx fields it filled. */
-  prepare?: (paths: DaemonPaths) => Partial<ProviderSpawnContext>;
+  /** Daemon start: write assets / seed homes. Returns this provider's private
+   *  paths; the daemon stores them at `ctx.providers[id]` for `resume`. */
+  prepare?: (paths: DaemonPaths) => Record<string, string>;
   /** Provider-owned generated sources (an extension, a hook script), by file name. */
   assets?: Record<string, () => string>;
 }

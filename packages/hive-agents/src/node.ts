@@ -49,7 +49,7 @@ export const NODE_PARTS: Record<string, AgentNodeParts> = {
     resume: (ctx) =>
       makeDroidResumeTransforms({
         execPath: ctx.execPath,
-        droidHome: ctx.droidHome,
+        droidHome: ctx.providers?.droid?.droidHome,
         stopHookPath: ctx.stopHookPath,
         userpromptHookPath: ctx.userpromptHookPath,
         notificationHookPath: ctx.notificationHookPath,
@@ -71,10 +71,10 @@ export const NODE_PARTS: Record<string, AgentNodeParts> = {
     resume: (ctx) =>
       makeKiroResumeTransforms({
         execPath: ctx.execPath,
-        kiroHome: ctx.kiroHome,
+        kiroHome: ctx.providers?.kiro?.kiroHome,
         stopHookPath: ctx.stopHookPath,
         userpromptHookPath: ctx.userpromptHookPath,
-        kiroApprovalHookPath: ctx.kiroApprovalHookPath,
+        kiroApprovalHookPath: ctx.providers?.kiro?.kiroApprovalHookPath,
         trackerPath: ctx.trackerPath,
         tileSessionsDir: ctx.tileSessionsDir,
         legacyMapFile: ctx.legacyMapFile,
@@ -104,7 +104,7 @@ export const NODE_PARTS: Record<string, AgentNodeParts> = {
     assets: { "hcp-kiro-approval-hook.cjs": kiroApprovalHookSource },
   },
   pi: {
-    resume: (ctx) => makePiResumeTransforms({ hcpSock: ctx.hcpSock, hcpToken: ctx.hcpToken, piExtPath: ctx.piExtPath }),
+    resume: (ctx) => makePiResumeTransforms({ hcpSock: ctx.hcpSock, hcpToken: ctx.hcpToken, piExtPath: ctx.providers?.pi?.piExtPath }),
     // The lifecycle-bridge extension pi loads via `-e`, written next to the
     // daemon's other generated scripts.
     prepare: (p) => {
@@ -123,13 +123,12 @@ export interface AgentProvider {
   resume?: (ctx: ProviderSpawnContext) => ProviderResumeTransforms;
 }
 
-/** Every provider with a daemon half, as an adapter, in NODE_PARTS order (the
- *  historical registry order — claude first; it only matters if two providers
- *  ever claimed one spec, which exact-binary matching prevents). Scrape-only
+/** Every provider with a daemon half, as an adapter, in catalog order. Order is
+ *  immaterial: each transform no-ops for specs it doesn't own (exact-binary
+ *  match), which the golden order-independence test proves. Scrape-only
  *  providers have nothing to compose and are not listed. */
-export const PROVIDERS: AgentProvider[] = Object.keys(NODE_PARTS)
-  .map((id) => CATALOG.find((d) => d.id === id))
-  .filter((d): d is AgentProviderDef => !!d)
+export const PROVIDERS: AgentProvider[] = CATALOG
+  .filter((d: AgentProviderDef) => !!NODE_PARTS[d.id])
   .map((d) => ({
     id: d.id,
     matches: (cmd: string) => agentForCmd(cmd)?.id === d.id,
@@ -142,8 +141,8 @@ export function providerFor(cmd: string): AgentProvider | undefined {
 }
 
 /** The composed transforms, shaped exactly like the SessionManager's transform
- *  options. Applies provider transforms in catalog order; each no-ops for specs
- *  it doesn't own, so chaining is safe. */
+ *  options. Each provider no-ops for specs it doesn't own, so chaining is safe
+ *  in any order. */
 export interface ComposedResume {
   transformSpecOnSpawn: (spec: SpawnSpec, id: string) => SpawnSpec;
   transformSpecOnRestore: (spec: SpawnSpec, id: string) => SpawnSpec;
@@ -152,7 +151,13 @@ export interface ComposedResume {
 }
 
 export function composeResume(ctx: ProviderSpawnContext): ComposedResume {
-  const ts: ProviderResumeTransforms[] = PROVIDERS.map((p) => p.resume?.(ctx)).filter(
+  return composeResumeFrom(PROVIDERS, ctx);
+}
+
+/** Compose an explicit provider list (tests compose in reversed order to prove
+ *  order-independence). */
+export function composeResumeFrom(providers: readonly AgentProvider[], ctx: ProviderSpawnContext): ComposedResume {
+  const ts: ProviderResumeTransforms[] = providers.map((p) => p.resume?.(ctx)).filter(
     (t): t is ProviderResumeTransforms => !!t,
   );
   return {
@@ -168,20 +173,21 @@ export function composeResume(ctx: ProviderSpawnContext): ComposedResume {
       return null;
     },
     // The window in which a fast death triggers a restore-retry: the largest any
-    // provider asks for (default 5s, claude's value).
+    // provider asks for (5s floor).
     restoreRetryMs: Math.max(5000, ...ts.map((t) => t.restoreRetryMs ?? 0)),
   };
 }
 
 /** Daemon start: let every provider write its assets / seed its overlay.
- *  Best-effort per provider — a failure only disables that provider's
- *  deterministic signals (its transforms then see the field unset). */
-export function prepareProviders(paths: DaemonPaths): Partial<ProviderSpawnContext> {
-  let out: Partial<ProviderSpawnContext> = {};
+ *  Returns the per-provider private paths for `ctx.providers`. Best-effort per
+ *  provider — a failure only disables that provider's deterministic signals
+ *  (its transforms then see their paths unset). */
+export function prepareProviders(paths: DaemonPaths): Record<string, Record<string, string>> {
+  const out: Record<string, Record<string, string>> = {};
   for (const d of CATALOG) {
     const prep = NODE_PARTS[d.id]?.prepare;
     if (!prep) continue;
-    try { out = { ...out, ...prep(paths) }; } catch { /* best-effort */ }
+    try { out[d.id] = prep(paths); } catch { /* best-effort */ }
   }
   return out;
 }

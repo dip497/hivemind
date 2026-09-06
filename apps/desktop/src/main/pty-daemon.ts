@@ -184,10 +184,11 @@ const resume = composeResume({
   userpromptHookPath,
   hcpSock,
   hcpToken,
-  piExtPath,
-  droidHome,
-  kiroHome,
-  kiroApprovalHookPath,
+  providers: {
+    pi: { piExtPath },
+    droid: { droidHome },
+    kiro: { kiroHome, kiroApprovalHookPath },
+  },
 });
 
 const snapshotPath = (id: string): string => {
