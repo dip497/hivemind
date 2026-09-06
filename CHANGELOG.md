@@ -52,6 +52,14 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
   byte `offset` so a client can resume exactly where it stopped; `--timeout` bounds the tail.
   Server side: `agent.stream` subscriptions accept `since`/`lines` and every event carries `offset`.
 
+### Fixed
+
+- The PTY daemon refuses to start on a non-absolute socket path. Everything it emits (hook
+  scripts, the pi bridge extension, session snapshots, the HCP socket + token) lives next to
+  that socket, so a relative path made it write into the launcher's current directory — the
+  stray `undefined/hive-pi-ext.mjs` found at the repo root. It now exits with a clear error
+  instead. (The stray directory is deleted.)
+
 ### Changed
 
 - **BREAKING: `hive ctl read --timeout` is honoured end-to-end.** The wait is now a loop of short

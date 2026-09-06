@@ -52,6 +52,15 @@ if (!socketPath) {
   console.error("[pty-daemon] no socket path given");
   process.exit(1);
 }
+// Every file this daemon emits (hook scripts, the pi extension, session
+// snapshots, the HCP socket + token) lives NEXT TO the socket. A relative
+// socket path would make all of that land in whatever the launcher's cwd is —
+// a stray `undefined/hive-pi-ext.mjs` in a repo root was exactly that — so
+// refuse anything but an absolute path instead of writing into the cwd.
+if (!path.isAbsolute(socketPath)) {
+  console.error(`[pty-daemon] socket path must be absolute (got ${JSON.stringify(socketPath)})`);
+  process.exit(1);
+}
 
 // Disk snapshots — survive daemon death + OS reboot. Stored next to the socket
 // under <userData>/sessions/<base64url-id>.json. The PTY itself can't be
