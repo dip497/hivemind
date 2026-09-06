@@ -28,9 +28,12 @@ describe("agents golden", () => {
     }
     const r = hive(["agent", "detect", "--json"], { cwd: ws, env: { PATH: `${bin}:${path.dirname(process.execPath)}:/usr/bin:/bin`, XDG_CONFIG_HOME: path.join(ws, "xdg") } });
     expect(r.code).toBe(0);
-    expect(Object.keys((r.json as { data: Record<string, unknown> }).data).sort()).toEqual(
-      ["amp", "claude", "codex", "cursor", "droid", "gemini", "hermes", "kiro-cli", "openclaw", "opencode", "pi"],
-    );
+    const found = Object.keys((r.json as { data: Record<string, unknown> }).data);
+    // Every stand-in binary that is a catalogued agent is probed and found …
+    expect(found).toEqual(expect.arrayContaining(["amp", "claude", "codex", "cursor", "droid", "gemini", "hermes", "kiro-cli", "openclaw", "opencode", "pi"]));
+    // … and nothing that is not an agent binary (`kiro` is the IDE; `vim` is vim).
+    expect(found).not.toContain("kiro");
+    expect(found).not.toContain("vim");
     fs.rmSync(ws, { recursive: true, force: true }); fs.rmSync(bin, { recursive: true, force: true });
   });
 });

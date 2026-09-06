@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const { isCodex, newestCodexSessionForCwd, makeCodexResumeTransforms } = await import(
-  "@hivemind/agents/providers/codex.node"
+  "@hivemind/agents/providers/codex/node"
 );
 
 function sessionFile(root: string, rel: string, id: string, cwd: string, mtime: number): void {

@@ -2,9 +2,9 @@
  * gemini (Gemini CLI) — recognised for status scraping; not spawnable yet
  * (`enabled: false`) until its spawn flow is wired and probed.
  */
-import type { AgentProviderDef, AgentState } from "../types.js";
-import { hasConfirmationPrompt } from "../detect-helpers.js";
-import { GENERIC_AGENT_ICON } from "../icon.js";
+import type { AgentProviderDef, AgentState } from "../../types.js";
+import { hasConfirmationPrompt } from "../../detect-helpers.js";
+import { GENERIC_AGENT_ICON } from "../../icon.js";
 
 export function detectGemini(content: string): AgentState {
   const lower = content.toLowerCase();

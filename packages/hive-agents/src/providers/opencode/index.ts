@@ -3,8 +3,8 @@
  * no default flags), scrape-only status, no CLI resume (reopen sessions from
  * its in-app list). Not an HCP worker.
  */
-import type { AgentProviderDef, AgentState } from "../types.js";
-import { hasInterruptPattern } from "../detect-helpers.js";
+import type { AgentProviderDef, AgentState } from "../../types.js";
+import { hasInterruptPattern } from "../../detect-helpers.js";
 
 export function detectOpencode(content: string): AgentState {
   const lower = content.toLowerCase();

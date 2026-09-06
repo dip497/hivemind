@@ -49,9 +49,9 @@
  * (e.g. the daemon restarted before the tile's first hook fired).
  */
 import { basename } from "node:path";
-import type { SpawnSpec } from "../types.js";
-import { readTrackedSession } from "../tile-session-store.js";
-import { shq } from "../shq.js";
+import type { AgentPlugin, SpawnSpec } from "../../types.js";
+import { readTrackedSession } from "../../tile-session-store.js";
+import { shq } from "../../shq.js";
 
 /** The name of the custom agent config hivemind writes into the KIRO_HOME
  *  overlay (`agents/hivemind.json`) and selects at spawn with `--agent`. */
@@ -232,3 +232,48 @@ export function makeKiroResumeTransforms(deps: KiroResumeDeps = {}): KiroResumeT
     },
   };
 }
+
+import fs from "node:fs";
+import fsPath from "node:path";
+import { kiro } from "./index.js";
+import { seedKiroHome } from "./home.js";
+import { kiroApprovalHookSource } from "./approval-hook-source.js";
+
+/** The kiro plugin: at daemon start it writes kiro's own PreToolUse broker
+ *  (exit-code contract) and seeds the KIRO_HOME overlay with our
+ *  `agents/hivemind.json` (selected at spawn with `--agent hivemind`). */
+export const plugin: AgentPlugin = {
+  def: kiro,
+  prepare: (p) => {
+    const kiroApprovalHookPath = fsPath.join(p.userDataDir, "hcp-kiro-approval-hook.cjs");
+    fs.writeFileSync(kiroApprovalHookPath, kiroApprovalHookSource());
+    const kiroHome = fsPath.join(p.userDataDir, "kiro-home");
+    seedKiroHome({
+      kiroHome,
+      agentConfig: kiroAgentConfig({
+        execPath: p.execPath,
+        stopHookPath: p.stopHookPath,
+        userpromptHookPath: p.userpromptHookPath,
+        kiroApprovalHookPath,
+        trackerPath: p.trackerPath,
+        tileSessionsDir: p.tileSessionsDir,
+        hcpSock: p.hcpSock,
+      }),
+    });
+    return { kiroHome, kiroApprovalHookPath };
+  },
+  resume: (ctx) =>
+    makeKiroResumeTransforms({
+      execPath: ctx.execPath,
+      kiroHome: ctx.providers?.[kiro.id]?.kiroHome,
+      stopHookPath: ctx.stopHookPath,
+      userpromptHookPath: ctx.userpromptHookPath,
+      kiroApprovalHookPath: ctx.providers?.[kiro.id]?.kiroApprovalHookPath,
+      trackerPath: ctx.trackerPath,
+      tileSessionsDir: ctx.tileSessionsDir,
+      legacyMapFile: ctx.legacyMapFile,
+      hcpSock: ctx.hcpSock,
+      hcpToken: ctx.hcpToken,
+    }),
+  assets: { "hcp-kiro-approval-hook.cjs": kiroApprovalHookSource },
+};

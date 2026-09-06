@@ -12,8 +12,10 @@
  *     hook injection), daemon-start preparation (writing provider assets,
  *     seeding a config-home overlay) and the provider-owned asset sources.
  *
- * Adding a provider = one def file (+ one .node.ts if it has resume/hooks) and
- * one line in catalog.ts (+ one in node.ts). Nothing else names it.
+ * A provider is a directory, providers/<id>/: `index.ts` (the def), `node.ts`
+ * (the plugin object, if it has resume/hooks) and its assets beside them. It
+ * is registered ONCE per half: the def in catalog.ts, the plugin in node.ts's
+ * PLUGINS. Nothing else names it.
  */
 
 /** The three-state model ported from herdr (the Rust agent multiplexer the
@@ -64,6 +66,14 @@ export interface AgentIcon {
   attrs?: Record<string, string>;
 }
 
+/** What a launcher can ask for at spawn; a def honours what it declares in caps. */
+export interface SpawnOptions {
+  /** A claude-style permission mode ("default", "plan", "acceptEdits", "bypassPermissions"). */
+  mode?: string;
+  /** A model alias ("opus", "sonnet", "default"). */
+  model?: string;
+}
+
 export interface AgentProviderDef {
   /** Stable id — the tile/detector/CLI key ("claude", "codex", …). */
   id: string;
@@ -79,14 +89,23 @@ export interface AgentProviderDef {
   /** Spawnable from the UI / CLI today. false = recognised for status only. */
   enabled: boolean;
   caps: AgentCapabilities;
-  /** Screen-scrape status for a rendered viewport. */
-  detect: (screen: string) => TileStatus;
+  /** Screen-scrape status for a rendered viewport. A def WITHOUT one is not
+   *  recognised for status at all (a user-run tile of it is treated like any
+   *  unknown program): it exists for `hive agent detect` / `--assignee` only,
+   *  until real screen text is captured. */
+  detect?: (screen: string) => TileStatus;
   /** The agent's mark as inline SVG: the viewBox, the inner markup (paths /
    *  shapes using `currentColor`) and any root attributes (fill / stroke /
    *  fillRule). Rendered by the UI generically — no per-provider React code. */
   icon: AgentIcon;
   /** One line shown wherever the agent is offered when it cannot be a worker. */
   note?: string;
+  /** Build the spawn args for a launch. The def owns its own flag vocabulary
+   *  (claude's permission modes + model alias live in claude's def, not in the
+   *  UI). Default: `defaultArgs`. */
+  spawnArgs?: (opts: SpawnOptions) => string[];
+  /** The tile label for the n-th spawn (default `"<label> #<n>"`). */
+  spawnLabel?: (n: number, opts: SpawnOptions) => string;
   /** Declares that this provider needs NO node half even though its capabilities
    *  (resume / turn signal) would normally require one — e.g. a runtime whose own
    *  CLI resumes and reports without any injection. The drift test accepts the
@@ -158,6 +177,14 @@ export interface DaemonPaths {
   userpromptHookPath: string;
   notificationHookPath: string;
   hcpSock: string;
+}
+
+/** A complete provider plugin as the daemon sees it: the def plus its node
+ *  half. One object per provider, exported by `providers/<id>/node.ts` and
+ *  listed ONCE in node.ts's PLUGINS. Scrape-only providers have no plugin
+ *  object — their def alone (listed in catalog.ts) is the whole registration. */
+export interface AgentPlugin extends AgentNodeParts {
+  def: AgentProviderDef;
 }
 
 export interface AgentNodeParts {

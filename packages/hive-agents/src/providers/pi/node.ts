@@ -23,7 +23,7 @@
 import { homedir } from "node:os";
 import { join, basename } from "node:path";
 import { readdirSync, statSync, openSync, readSync, closeSync } from "node:fs";
-import type { SpawnSpec } from "../types.js";
+import type { AgentPlugin, SpawnSpec } from "../../types.js";
 
 export function isPi(spec: { cmd: string }): boolean {
   return basename(spec.cmd.trim().split(/\s+/)[0] ?? "") === "pi";
@@ -165,3 +165,21 @@ export function makePiResumeTransforms(
     },
   };
 }
+
+import fs from "node:fs";
+import fsPath from "node:path";
+import { pi } from "./index.js";
+import { piExtSource } from "./ext-source.js";
+
+/** The pi plugin: at daemon start it writes the lifecycle-bridge extension pi
+ *  loads via `-e`; every pi spawn gets `-e <path>` + the HCP env. */
+export const plugin: AgentPlugin = {
+  def: pi,
+  prepare: (p) => {
+    const piExtPath = fsPath.join(p.userDataDir, "hive-pi-ext.mjs");
+    fs.writeFileSync(piExtPath, piExtSource());
+    return { piExtPath };
+  },
+  resume: (ctx) => makePiResumeTransforms({ hcpSock: ctx.hcpSock, hcpToken: ctx.hcpToken, piExtPath: ctx.providers?.[pi.id]?.piExtPath }),
+  assets: { "hive-pi-ext.mjs": piExtSource },
+};

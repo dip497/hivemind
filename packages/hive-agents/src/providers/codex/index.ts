@@ -5,8 +5,8 @@
  * (./codex.node.ts). Safe interactive default: works in the workspace, asks
  * before risky / out-of-sandbox actions.
  */
-import type { AgentProviderDef, AgentState } from "../types.js";
-import { hasConfirmationPrompt, hasInterruptPattern } from "../detect-helpers.js";
+import type { AgentProviderDef, AgentState } from "../../types.js";
+import { hasConfirmationPrompt, hasInterruptPattern } from "../../detect-helpers.js";
 
 export function detectCodex(content: string): AgentState {
   const lower = content.toLowerCase();

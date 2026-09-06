@@ -62,15 +62,30 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Changed
 
-- **Agent providers now live in one catalog** (`packages/hive-agents`): each of claude, codex,
-  droid, kiro and pi is a single browser-safe definition (identity, explicit typed capabilities —
-  prompt delivery, turn signal, resume granularity, supervise, model flag, permission modes,
-  blocked detection — and its status detector) plus, where it has one, a node half (session
-  resume, hook injection, daemon-start asset/overlay preparation) with its provider-owned assets
-  (the pi bridge extension, the kiro approval hook, the droid/kiro home overlays) beside it.
-  Runtime behaviour is unchanged and pinned by golden tests captured before the move. The desktop
-  keeps thin re-export shims at the old paths for now; the UI list, CLI agent lists and HCP still
-  read their own copies until the follow-up that switches them to the catalog.
+- **Agent providers are one catalog entry each** (`packages/hive-agents`, see
+  `docs/design/agent-providers.md`). A provider is a browser-safe def — identity, an inline SVG
+  mark, its status detector and **explicit typed capabilities**: prompt delivery, turn signal,
+  resume granularity (none / cwd / tile), supervise (broker / human / none), model flag,
+  permission modes, blocked detection — plus, where it injects hooks or resumes, a node half with
+  its provider-owned assets (the pi bridge extension, the kiro approval hook, the droid/kiro home
+  overlays) beside it. The desktop UI list and icons, the status detectors, initial-prompt
+  delivery, the PTY daemon's overlay/asset preparation, HCP spawn/read/workflow, `hive ctl
+  --agent`, `hive agent detect` and `--assignee` all read that catalog; no provider is named
+  anywhere else, and a unit test greps to keep it that way. Each provider is one directory
+  (`providers/<id>/index.ts` + a `node.ts` plugin object with its assets beside it); the ten
+  agents hivemind only recognises for status (gemini, cursor, cline, amp, …) are catalog defs
+  too, so there is no second list. Adding a runtime is one directory and one line per list —
+  the e2e suite proves it every run by dropping in a throwaway sixth provider and driving its
+  whole lifecycle. Runtime behaviour for claude, codex,
+  droid, kiro and pi is unchanged and pinned by golden tests captured before the move (also
+  asserted with the providers composed in reversed order).
+- **What a runtime cannot do is now refused, not timed out.** `hive ctl workflow --agent codex`
+  (no turn signal) exits 7 `UNSUPPORTED` before spawning anything; `hive ctl read` on such a tile
+  answers `UNSUPPORTED`; an unknown `--agent` is a usage error listing the spawnable ids.
+- `hive agent detect` now probes `droid` and `--assignee droid` resolves as an agent — the
+  hand-kept CLI lists had missed a catalogued provider.
+- `HIVEMIND_SHELL_ENV=0` (see Added) is also how the e2e suite keeps stand-in agent binaries
+  first on PATH.
 - **BREAKING: `hive ctl read --timeout` is honoured end-to-end.** The wait is now a loop of short
   HCP requests (≤ 10 s each) instead of one long request that silently died at the caller's tool
   timeout (Claude Code's Bash default is 120 s); the default total wait is 100 s. A read that runs

@@ -7,8 +7,8 @@
  * Bare `kiro` is a DIFFERENT product (the Kiro IDE) — recognised for status
  * only, never spawned. Daemon-side transforms: ./kiro.node.ts.
  */
-import type { AgentProviderDef, AgentState } from "../types.js";
-import { hasConfirmationPrompt } from "../detect-helpers.js";
+import type { AgentProviderDef, AgentState } from "../../types.js";
+import { hasConfirmationPrompt } from "../../detect-helpers.js";
 
 // ASSUMPTION (maintainer audit, PR #2): no kiro-cli binary is available to
 // capture its real approval-prompt chrome, so this "blocked" heuristic is

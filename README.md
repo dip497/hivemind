@@ -4,7 +4,7 @@
 
 **A canvas-per-project mission control for AI coding agents.**
 
-Drop `claude`, `codex`, `gemini`, `opencode`, `kiro`, or `pi` into real workspaces where they can
+Drop `claude`, `codex`, `droid`, `opencode`, `kiro`, or `pi` into real workspaces where they can
 read issues, update status, mark acceptance criteria, and comment their own
 progress — through a Kanban PM model that's just plain markdown on disk.
 
@@ -212,7 +212,7 @@ teaches every agent this vocabulary.
 | | |
 |---|---|
 | **Canvas-per-project** | One infinite [xyflow](https://reactflow.dev) canvas per repo. Frames bind to a workspace path, so multiple repos coexist on one screen, each with its own auto-assigned color. |
-| **Pluggable agents** | `claude` / `codex` / `gemini` / `opencode` / `kiro` / `pi` each run in their own WebGL-accelerated xterm tile. Agents are an extensible registry — adding one is a single entry. Live status (idle / working / waiting / done) is detected from the command and shown on the frame header. |
+| **Pluggable agents** | `claude` / `codex` / `droid` / `opencode` / `kiro` / `pi` each run in their own WebGL-accelerated xterm tile. Every agent is one catalog entry (`packages/hive-agents`) with explicit capabilities — prompt delivery, turn signal, resume, supervise — that the UI, the CLI and the control plane all read; what a runtime cannot do is refused up front, never timed out. Live status (idle / working / waiting / done) is detected from the command and shown on the frame header. |
 | **PM you can `cat`** | Issues, acceptance criteria, cycles, and an activity log are markdown + YAML frontmatter under `.hivemind/`. No DB, no API. |
 | **CLI-first agent integration** | `hive init` installs skills that teach any agent to `hive show`, `hive ctl set-state`, `add-comment`, `mark-acceptance`, … from Bash — no MCP server, so it works the same for every runtime. |
 | **Live diff review** | A Pierre-backed diff tile: split / unified, a changed-files sidebar with per-file **reviewed** checks, multi-line comments, and **send-to-agent** for any comment or selection. |
@@ -255,6 +255,7 @@ apps/
 packages/
 ├── hive-core/   storage + parsing (gray-matter + zod schemas), skill templates,
 │                 the agentic-stack installer
+├── hive-agents/ the agent-provider catalog — one def (+ node half) per CLI agent
 └── tsconfig/    shared TS config
 
 templates/
@@ -330,7 +331,7 @@ host**, then spawn an agent per frame. Several agents work side by side — each
 to its own directory, branch, and issues — and you watch every diff update live.
 
 **Which agents are supported?**
-`claude` (Claude Code), `codex`, `gemini`, `opencode`, `kiro`, and `pi` out of the box. The agent
+`claude` (Claude Code), `codex`, `droid`, `opencode`, `kiro`, and `pi` out of the box (`gemini` is recognised for status). The agent
 registry takes one entry per CLI, so any terminal-native coding agent can be added.
 
 **Is this like tmux for AI agents?**

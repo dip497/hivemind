@@ -10,7 +10,7 @@ import { frameColorFor } from "./frame-color";
 import { nextSlotInFrame, FRAME_ROW_MAX, FRAME_GAP } from "./frame-layout";
 import { defaultSizeForKind, defaultTileSize, FRAME_PAD, FRAME_HEADER } from "./canvas-sizing";
 import { agentById } from "./agents";
-import { agentById as catalogAgentById, defaultAgent } from "@hivemind/agents";
+import { agentById as catalogAgentById, defaultAgent, spawnArgsFor, spawnLabelFor } from "@hivemind/agents";
 import { AGENT_TILE_KIND } from "./tile-kinds";
 import { defaultShell, type FrameState, type TileInstance } from "./canvas-persistence";
 import { queueWork } from "./claude-bus";
@@ -229,20 +229,13 @@ export function useSpawn(ctx: SpawnCtx) {
         // keys off the cmd (identifyAgent), not the kind. Permission modes and
         // the model alias are layered on only where the provider declares them.
         const def = (opts?.agent ? catalogAgentById(opts.agent.id) : undefined) ?? defaultAgent();
-        const m = def.caps.permissionModes ? (opts?.mode || claudeMode) : undefined;
-        // bypassPermissions is gated behind its own flag — `--permission-mode
-        // bypassPermissions` is refused at startup; the canonical entry is
-        // `--dangerously-skip-permissions` (cli-reference).
-        args = def.caps.permissionModes
-          ? (m === "bypassPermissions" ? ["--dangerously-skip-permissions"] : m && m !== "default" ? ["--permission-mode", m] : [])
-          : [...(opts?.agent?.args ?? def.defaultArgs ?? [])];
-        // Model alias (opus/sonnet) only for providers that honour it — a stray
-        // `--model` would break the others' CLI.
-        if (def.caps.modelFlag && claudeModel && claudeModel !== "default") args.push("--model", claudeModel);
+        const so = {
+          mode: def.caps.permissionModes ? (opts?.mode || claudeMode) : undefined,
+          model: def.caps.modelFlag ? claudeModel : undefined,
+        };
+        args = spawnArgsFor(def, so);
         cmd = def.bin;
-        label = def.caps.permissionModes
-          ? `${def.id} #${n}${m && m !== "default" ? ` · ${m}` : ""}`
-          : `${opts?.agent?.label ?? def.label} #${n}`;
+        label = spawnLabelFor(def, n, so);
       } else if (kind === "shell") {
         const sh = defaultShell();
         cmd = sh.cmd; args = sh.args;
@@ -381,18 +374,15 @@ export function useSpawn(ctx: SpawnCtx) {
       const n = ++claudeSeqRef.current;
       const newId = `tile-claude-${Date.now()}`;
       const def = catalogAgentById(opts.agent) ?? defaultAgent();
-      const m = def.caps.permissionModes ? (opts.mode || claudeMode) : undefined;
-      let args: string[] = def.caps.permissionModes
-        ? (m === "bypassPermissions" ? ["--dangerously-skip-permissions"] : m && m !== "default" ? ["--permission-mode", m] : [])
-        : [...(def.defaultArgs ?? [])];
-      // Model alias — per-spawn override wins over the workspace default; only
-      // for providers that honour it.
-      const model = opts.model || claudeModel;
-      if (def.caps.modelFlag && model && model !== "default") args = [...args, "--model", model];
+      // Per-spawn overrides win over the workspace defaults; a def only sees
+      // the options it declares it honours.
+      const so = {
+        mode: def.caps.permissionModes ? (opts.mode || claudeMode) : undefined,
+        model: def.caps.modelFlag ? (opts.model || claudeModel) : undefined,
+      };
+      const args = spawnArgsFor(def, so);
       const cmd = def.bin;
-      let label = def.caps.permissionModes
-        ? `${def.id} #${n}${m && m !== "default" ? ` · ${m}` : ""}`
-        : `${def.label} #${n}`;
+      let label = spawnLabelFor(def, n, so);
       // A spawner-chosen name wins over the generated "Pi #3" label — on a canvas
       // of a dozen workers, "reviewer" is what tells them apart. Main sanitizes it.
       if (opts.name) label = opts.name;

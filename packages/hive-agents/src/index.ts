@@ -6,4 +6,4 @@ export * from "./types.js";
 export * from "./catalog.js";
 export * from "./detect-helpers.js";
 export { GENERIC_AGENT_ICON } from "./icon.js";
-export { detectClaudeState, type ClaudeState } from "./providers/claude-state.js";
+export { detectClaudeState, type ClaudeState } from "./providers/claude/state.js";

@@ -17,8 +17,8 @@
  *    once with `--session-id <uuid>` so a missing JSONL doesn't kill the tile.
  */
 import { randomUUID } from "node:crypto";
-import type { SpawnSpec } from "../types.js";
-import { readTrackedSession } from "../tile-session-store.js";
+import type { AgentPlugin, SpawnSpec } from "../../types.js";
+import { readTrackedSession } from "../../tile-session-store.js";
 
 export interface ClaudeResumeDeps {
   /** Absolute path to the generated tracker `.cjs` (daemon writes the file). */
@@ -69,7 +69,7 @@ export interface ClaudeResumeDeps {
 
 const isClaude = (spec: SpawnSpec): boolean => (spec.cmd ?? "").split("/").pop() === "claude";
 
-import { shq } from "../shq.js";
+import { shq } from "../../shq.js";
 export { shq };
 
 /** The merged hooks settings JSON for a tile. claude MERGES this with the
@@ -262,3 +262,26 @@ export function makeClaudeResumeTransforms(deps: ClaudeResumeDeps): ClaudeResume
     },
   };
 }
+
+import { claude } from "./index.js";
+
+/** The claude plugin: def + native-tier spawn transforms. */
+export const plugin: AgentPlugin = {
+  def: claude,
+  resume: (ctx) =>
+    makeClaudeResumeTransforms({
+      trackerPath: ctx.trackerPath,
+      tileSessionsDir: ctx.tileSessionsDir,
+      legacyMapFile: ctx.legacyMapFile,
+      execPath: ctx.execPath,
+      planHookPath: ctx.planHookPath,
+      planBridgeSock: ctx.planBridgeSock,
+      stopHookPath: ctx.stopHookPath,
+      approvalHookPath: ctx.approvalHookPath,
+      subagentHookPath: ctx.subagentHookPath,
+      notificationHookPath: ctx.notificationHookPath,
+      userpromptHookPath: ctx.userpromptHookPath,
+      hcpSock: ctx.hcpSock,
+      hcpToken: ctx.hcpToken,
+    }),
+};

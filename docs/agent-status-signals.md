@@ -11,8 +11,8 @@ two capability surfaces, split by the Electron process boundary:
 
 | Surface | Lives in | Responsibility |
 |---|---|---|
-| **Signal injection** (main) | `main/providers/` | spawn-time spec transforms: session resume **and** injecting the hooks that emit deterministic events |
-| **Scrape detection** (renderer) | `renderer/src/agent-state.ts` | a screen-scrape status detector — the universal fallback every provider has |
+| **Signal injection** (daemon) | `packages/hive-agents/src/providers/<id>.node.ts` | spawn-time spec transforms: session resume **and** injecting the hooks that emit deterministic events |
+| **Scrape detection** (browser-safe) | `packages/hive-agents/src/providers/<id>.ts` (`detect`) | a screen-scrape status detector — the universal fallback every provider has |
 
 Both surfaces are keyed by the same provider **`id`** (`"claude"`, `"codex"`, …).
 
@@ -92,14 +92,10 @@ socket boundary alone.
 > (`.claude/skills/adding-an-agent-provider/`). Provider PRs fail on the research, not
 > on these three files.
 
-1. **main:** `providers/<name>.ts` implementing `AgentProvider`
-   (`id`, `matches(cmd)`, optional `resume(ctx)` returning spec transforms). If
-   the agent has a hook/event system, inject hooks in its spawn transform that
-   emit the canonical `turn` / `subagent` / `notification` events. If it has none,
-   omit `resume` — the scrape carries it.
-2. Register it in `providers/registry.ts` `PROVIDERS`.
-3. **renderer:** add a scrape detector in `agent-state.ts` keyed by the same `id`
-   (an entry in `ALIASES` + `DETECTORS`).
+1. `packages/hive-agents/src/providers/<id>.ts` — the def: identity, typed capabilities, icon, `detect()`.
+2. `packages/hive-agents/src/providers/<id>.node.ts` — the transforms + `prepare()` (tier 1+), assets beside it.
+3. One line in `catalog.ts` (+ one in `node.ts`). Every reader — UI, daemon, HCP, CLI — picks it up.
+   See `docs/design/agent-providers.md` and the `adding-an-agent-provider` skill.
 
 Nothing in the daemon, the trackers, the status bus, or the IPC layer changes.
 `composeResume()` folds the new provider in automatically (each provider no-ops

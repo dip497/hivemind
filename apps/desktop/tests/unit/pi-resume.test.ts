@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const { isPi, newestPiSessionForCwd, makePiResumeTransforms } = await import(
-  "@hivemind/agents/providers/pi.node"
+  "@hivemind/agents/providers/pi/node"
 );
 
 /** Write a pi session JSONL: a `session` header (type/id/cwd top-level) + a

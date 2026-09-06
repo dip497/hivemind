@@ -6,7 +6,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, lstatSync, readlin
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const { seedDroidHome } = await import("@hivemind/agents/providers/droid-home");
+const { seedDroidHome } = await import("@hivemind/agents/providers/droid/home");
 
 function fakeFactory(): string {
   const real = mkdtempSync(join(tmpdir(), "real-factory-"));

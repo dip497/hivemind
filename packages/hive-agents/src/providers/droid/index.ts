@@ -6,8 +6,8 @@
  * in-app (no permission flags on the CLI; the detector reads the prompts).
  * Resumes the newest session for the tile's cwd (./droid.node.ts).
  */
-import type { AgentProviderDef, AgentState } from "../types.js";
-import { hasBrailleSpinner } from "../detect-helpers.js";
+import type { AgentProviderDef, AgentState } from "../../types.js";
+import { hasBrailleSpinner } from "../../detect-helpers.js";
 
 export function detectDroid(content: string): AgentState {
   const lower = content.toLowerCase();

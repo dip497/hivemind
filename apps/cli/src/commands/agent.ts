@@ -14,10 +14,9 @@ import {
 import { err, ok } from "../format.js";
 import { CATALOG } from "@hivemind/agents";
 
-/** Binaries `hive agent detect` probes: every catalogued provider's binary plus
- *  agent CLIs hivemind recognises for status but does not spawn. */
-const EXTRA_AGENT_BINS = ["openclaw", "hermes", "amp", "cursor"];
-const KNOWN_AGENTS = [...CATALOG.map((d) => d.bin), ...EXTRA_AGENT_BINS];
+/** Binaries `hive agent detect` probes: every catalogued provider's binary,
+ *  spawnable or recognised-only. */
+const KNOWN_AGENTS = CATALOG.map((d) => d.bin);
 
 const contextCmd = defineCommand({
   meta: { name: "context", description: "Regenerate .hivemind/.agent.md" },

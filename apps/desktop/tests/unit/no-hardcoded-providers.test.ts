@@ -1,7 +1,7 @@
 // Guard: no agent provider is named outside its own catalog def. The desktop
-// UI, the daemon, HCP and the CLI must read @hivemind/agents — a provider id
-// or binary appearing as a string literal in their source means a registry has
-// drifted back into being hand-maintained.
+// UI, the daemon, HCP, the CLI and hive-core must read @hivemind/agents — a
+// provider id, binary or alias appearing as a string literal in their source
+// means a registry has drifted back into being hand-maintained.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -11,7 +11,9 @@ import { CATALOG } from "@hivemind/agents";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "../../..", "..");
-const SCAN = [path.join(ROOT, "apps/desktop/src"), path.join(ROOT, "apps/cli/src")];
+// Every app's sources and the shared core package (templates, installer). Tests
+// and the catalog package itself are the only places a provider may be named.
+const SCAN = [path.join(ROOT, "apps/desktop/src"), path.join(ROOT, "apps/cli/src"), path.join(ROOT, "packages/hive-core/src")];
 
 /** Files allowed to carry a provider name, each with the reason. */
 const ALLOW: Record<string, string> = {
@@ -24,7 +26,7 @@ function walk(dir: string, out: string[] = []): string[] {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, e.name);
     if (e.isDirectory()) walk(p, out);
-    else if (/\.(ts|tsx)$/.test(e.name)) out.push(p);
+    else if (/\.(ts|tsx)$/.test(e.name) && !/\.test\.tsx?$/.test(e.name)) out.push(p); // tests may name providers
   }
   return out;
 }

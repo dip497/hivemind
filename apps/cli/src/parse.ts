@@ -16,10 +16,8 @@ export function parseState(s: string): IssueState | null {
   return (STATES as string[]).includes(norm) ? (norm as IssueState) : null;
 }
 
-/** Ids that resolve as an AGENT assignee: every catalogued provider id plus
- *  agent CLIs hivemind recognises for status but does not spawn. */
-const EXTRA_AGENT_IDS = ["openclaw", "hermes", "amp", "cursor"];
-const KNOWN_AGENTS = new Set([...CATALOG.map((d) => d.id), ...EXTRA_AGENT_IDS]);
+/** Ids that resolve as an AGENT assignee: every catalogued provider id. */
+const KNOWN_AGENTS = new Set(CATALOG.map((d) => d.id));
 
 /**
  * Heuristic: if the id matches a known agent CLI, assignee.type = agent.

@@ -6,7 +6,7 @@
  * cannot be supervised (a `supervise` request is refused, never downgraded).
  * Resumes the newest session for the tile's cwd (./pi.node.ts).
  */
-import type { AgentProviderDef, AgentState } from "../types.js";
+import type { AgentProviderDef, AgentState } from "../../types.js";
 
 export function detectPi(content: string): AgentState {
   return content.includes("Working...") ? "working" : "idle";

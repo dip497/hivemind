@@ -13,7 +13,7 @@
 import { homedir } from "node:os";
 import { join, basename } from "node:path";
 import { readdirSync, statSync, openSync, readSync, closeSync } from "node:fs";
-import type { SpawnSpec } from "../types.js";
+import type { AgentPlugin, SpawnSpec } from "../../types.js";
 
 export function isCodex(spec: { cmd: string }): boolean {
   return basename(spec.cmd.trim().split(/\s+/)[0] ?? "") === "codex";
@@ -102,3 +102,11 @@ export function makeCodexResumeTransforms(
     },
   };
 }
+
+import { codex } from "./index.js";
+
+/** The codex plugin: def + newest-session-for-cwd resume. */
+export const plugin: AgentPlugin = {
+  def: codex,
+  resume: () => makeCodexResumeTransforms(),
+};

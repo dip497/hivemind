@@ -14,7 +14,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import { trackerSettings } from "@hivemind/agents/providers/claude.node";
+import { trackerSettings } from "@hivemind/agents/providers/claude/node";
 import { startPlanBridge } from "../../src/main/plan-bridge.ts";
 import { planHookSource } from "../../src/main/plan-review-hook-source.ts";
 

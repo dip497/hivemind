@@ -3,7 +3,7 @@
 // reject git-arg injection / path escapes before it ever shells out.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { shq } from "@hivemind/agents/providers/claude.node";
+import { shq } from "@hivemind/agents/providers/claude/node";
 import { worktreeCreate } from "../../src/main/git-adapter.ts";
 
 test("shq: a single-quoted value can't break out of the hook command", () => {

@@ -28,8 +28,8 @@
 import { homedir } from "node:os";
 import { join, basename } from "node:path";
 import { readdirSync, statSync, openSync, readSync, closeSync } from "node:fs";
-import type { SpawnSpec } from "../types.js";
-import { shq } from "../shq.js";
+import type { AgentPlugin, SpawnSpec } from "../../types.js";
+import { shq } from "../../shq.js";
 
 export interface DroidResumeDeps {
   /** Node/electron-as-node binary that runs the hook scripts (process.execPath). */
@@ -186,3 +186,33 @@ export function makeDroidResumeTransforms(deps: DroidResumeDeps = {}): DroidResu
     },
   };
 }
+
+import fsPath from "node:path";
+import { droid } from "./index.js";
+import { seedDroidHome } from "./home.js";
+
+/** The droid plugin: at daemon start it seeds the ephemeral
+ *  FACTORY_HOME_OVERRIDE overlay (symlinks to the real ~/.factory + our
+ *  hooks.json built from the SHARED HCP hook scripts) and hands its path back;
+ *  every droid spawn then gets the overlay + HCP env. */
+export const plugin: AgentPlugin = {
+  def: droid,
+  prepare: (p) => {
+    const droidHome = fsPath.join(p.userDataDir, "droid-home");
+    seedDroidHome({
+      droidHome,
+      hooks: droidHooksSettings({ execPath: p.execPath, stopHookPath: p.stopHookPath, userpromptHookPath: p.userpromptHookPath, notificationHookPath: p.notificationHookPath, hcpSock: p.hcpSock }),
+    });
+    return { droidHome };
+  },
+  resume: (ctx) =>
+    makeDroidResumeTransforms({
+      execPath: ctx.execPath,
+      droidHome: ctx.providers?.[droid.id]?.droidHome,
+      stopHookPath: ctx.stopHookPath,
+      userpromptHookPath: ctx.userpromptHookPath,
+      notificationHookPath: ctx.notificationHookPath,
+      hcpSock: ctx.hcpSock,
+      hcpToken: ctx.hcpToken,
+    }),
+};

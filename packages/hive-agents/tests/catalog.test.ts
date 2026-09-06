@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { CATALOG, agentById, agentForCmd, identifyProvider, spawnableAgents, workerAgents, detectStatus } from "../src/index.js";
-import { PROVIDERS, providerFor, NODE_PARTS, composeResume } from "../src/node.js";
+import { PLUGINS, PROVIDERS, providerFor, NODE_PARTS, composeResume } from "../src/node.js";
 
 describe("agent catalog", () => {
   test("ids and binaries are unique; every def declares every capability", () => {
@@ -10,7 +10,7 @@ describe("agent catalog", () => {
     expect(new Set(bins).size).toBe(bins.length);
     for (const d of CATALOG) {
       expect(Object.keys(d.caps).sort()).toEqual(["blockedDetection", "modelFlag", "permissionModes", "promptDelivery", "resume", "supervise", "turnSignal"]);
-      expect(typeof d.detect("")).toBe("string");
+      if (d.detect) expect(typeof d.detect("")).toBe("string");
     }
   });
   test("spawn matching is exact-binary; identification also takes aliases", () => {
@@ -31,7 +31,9 @@ describe("agent catalog", () => {
   });
   test("drift guard: node halves and catalog defs agree", () => {
     const ids = new Set(CATALOG.map((d) => d.id));
-    // Every node half belongs to a catalogued provider.
+    // Every plugin's def IS a catalogued def (same object — not a copy that could drift).
+    for (const p of PLUGINS) expect(CATALOG.includes(p.def), `plugin "${p.def.id}" is not the catalogued def`).toBe(true);
+    expect(new Set(PLUGINS.map((p) => p.def.id)).size).toBe(PLUGINS.length);
     for (const id of Object.keys(NODE_PARTS)) expect(ids.has(id), `NODE_PARTS["${id}"] has no catalog def`).toBe(true);
     // Every provider whose capabilities need injection/resume has a node half
     // (or says explicitly that it needs none).
