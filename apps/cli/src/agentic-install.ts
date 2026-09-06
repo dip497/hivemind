@@ -89,7 +89,8 @@ async function writeSkillIfMissing(cwd: string, name: string, body: string): Pro
 export async function installHiveSkill(cwd: string): Promise<AgenticReport["skill"]> {
   const work = await writeSkillIfMissing(cwd, "hive-work", templates.HIVE_WORK_SKILL);
   const workflow = await writeSkillIfMissing(cwd, "hive-workflow", templates.hiveWorkflowSkill());
-  return work || workflow ? "created" : "unchanged";
+  const ctl = await writeSkillIfMissing(cwd, "hivemind", templates.HIVEMIND_SKILL);
+  return work || workflow || ctl ? "created" : "unchanged";
 }
 
 /** The full agentic stack: CLAUDE.md section + MCP + skill. */

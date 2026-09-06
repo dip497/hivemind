@@ -39,7 +39,7 @@ const addMcpCmd = defineCommand({
 const addSkillCmd = defineCommand({
   meta: {
     name: "skill",
-    description: "Add the hive-work claude skill to .claude/skills/ (idempotent)",
+    description: "Add the hive-work, hive-workflow and hivemind (hive ctl) skills to .claude/skills/ (idempotent)",
   },
   args: { json: { type: "boolean", description: "Emit JSON" } },
   async run({ args }) {
@@ -48,10 +48,10 @@ const addSkillCmd = defineCommand({
     const skill = await installHiveSkill(cwd);
     return ok(
       ctx,
-      { skill, path: ".claude/skills/hive-work/SKILL.md" },
+      { skill, path: ".claude/skills/{hive-work,hive-workflow,hivemind}/SKILL.md" },
       () =>
         [
-          `✓ skill  ${skill}  (.claude/skills/hive-work/SKILL.md)`,
+          `✓ skill  ${skill}  (.claude/skills/{hive-work,hive-workflow,hivemind}/SKILL.md)`,
           skill === "unchanged"
             ? `  already present — left your edits intact.`
             : `  claude loads this skill to learn the hive issue + control-plane workflow.`,

@@ -308,6 +308,95 @@ In a multi-repo setup, hive can reach issues in OTHER registered workspaces:
 - Use \`state: "blocked"\` for external dependencies (waiting on review, on a third party, on a missing decision). Don't use it for "I'm tired" — that's \`in_progress\`.
 `;
 
+/** The `hivemind` skill: the `hive ctl` vocabulary for agents that drive the
+ *  control plane from the shell (spawn/send/read/workflow/approve/report).
+ *  Installed by `hive add skill` next to hive-work / hive-workflow. */
+export const HIVEMIND_SKILL = `---
+name: hivemind
+description: Use when running inside hivemind ($HIVEMIND_TILE is set) or when asked to spawn or coordinate agents on the hivemind canvas, read a worker's reply, run a fanout/pipeline workflow, answer a worker's approval, or report back to a parent agent. Everything goes through the \`hive ctl\` CLI via Bash.
+---
+
+# hivemind control plane — \`hive ctl\`
+
+\`hive ctl <verb> … --json\` drives the running hivemind app. \`--json\` prints ONE line:
+the result on success, \`{"ok":false,"code":"…","message":"…"}\` on failure.
+Exit codes: 0 ok · 2 usage · 3 app not running · 4 timeout · 5 not found · 6 unauthorized · 7 refused · 1 other.
+Ids are stable strings: a tile id (\`tileId\`) lives as long as the tile; your own is \`$HIVEMIND_TILE\`.
+Frames are repo/worktree groups on the canvas: \`hive ctl frames --json\`. \`hive ctl list --json\` shows every tile with its agent status.
+
+## Spawn a worker into a frame
+\`\`\`bash
+hive ctl spawn --agent claude --name "auth tests" --frame my-repo \\
+  --prompt "Write tests for src/auth.ts. When done run: hive ctl report '<one-paragraph summary>'" --json
+# → {"tileId":"a1b2…"}   omit --frame to spawn beside you; --agent codex|pi|… picks the runtime
+\`\`\`
+Reporting is on by default: the worker's finished replies are delivered into YOUR terminal. \`--no-report\` turns it off.
+
+## Send a task
+\`\`\`bash
+hive ctl send <tileId> "Now cover the expired-token path too." --json
+\`\`\`
+
+## Read the reply, with a timeout you control
+\`\`\`bash
+hive ctl read <tileId> --timeout 90000 --json
+# → {"text":"…","finalStatus":"turn","truncated":false}
+# still working → exit 4 and {"text":null,"finalStatus":"timeout",…}; call again, nothing is lost.
+hive ctl read <tileId> --poll --json              # never blocks: current state, exit 0
+hive ctl stream <tileId> --lines 40 --snapshot    # what is on its screen right now (ANSI-stripped)
+\`\`\`
+Keep \`--timeout\` below your tool's own limit (Claude Code's Bash default is 120000 ms) or pass a matching tool timeout. The wait is made of short polls, so it is always safe to interrupt and retry.
+
+## Fanout / pipeline / mapreduce (blocks until every worker has replied)
+\`\`\`bash
+hive ctl workflow --shape fanout --items "auth || billing || search" \\
+  --prompt "Review the {item} module and list concrete bugs." --close --json
+# → {"shape":"fanout","items":[{"item":"auth","tileId":"…","status":"ok","text":"…"},…]}
+
+hive ctl workflow --shape pipeline --input "docs/spec.md" \\
+  --stages "Draft an implementation plan for {input} || Critique this plan: {input} || Rewrite the plan applying the critique: {input}" --json
+# → {"shape":"pipeline","steps":[…],"output":"<final stage text>"}
+
+hive ctl workflow --shape mapreduce --items "a || b" --prompt "Summarise {item}" --reduce-prompt "Merge these: {results}" --json
+\`\`\`
+\`--timeout <ms>\` is the per-worker turn ceiling (default 600000); give the Bash tool a timeout at least as long as the whole run. \`--frame\`, \`--agent\`, \`--model\`, \`--max-concurrent\` apply to every worker.
+
+## Supervise a worker and answer its approvals
+\`\`\`bash
+hive ctl spawn --supervise all --prompt "…" --json        # its tool calls are brokered to you
+# a pending call appears in YOUR terminal:  [hive] APPROVAL — worker … wants to run Bash: … reqId
+hive ctl approve <reqId> allow --json                       # allow | deny | always | never
+\`\`\`
+
+## Connect two agents
+\`\`\`bash
+hive ctl connect <srcTileId> <dstTileId> --json    # src's finished replies become dst's prompts
+hive ctl disconnect <srcTileId> [<dstTileId>]
+\`\`\`
+
+## Report back (you are the worker)
+\`\`\`bash
+hive ctl report "Done: 12 tests added, all green. Files: src/auth.test.ts. Open question: none." --json
+# → {"delivered":true,"parent":"…"}   goes to the tile that spawned you
+\`\`\`
+
+## Issues
+\`\`\`bash
+hive show <id> --json · hive list --state todo --json · hive new "Title" --parent <id> --json
+hive update <id> --assignee claude --assignee-type agent --json
+hive ctl set-state <id> in_progress --note "starting" --json     # backlog|todo|in_progress|in_review|done|cancelled
+hive ctl add-comment <id> "found the root cause in …" --json
+hive ctl mark-acceptance <id> 0 --json                            # 0-based index from \`hive show --json\`; --undone reopens
+hive ctl list-workspaces --json · hive ctl delete-issue <id> --json
+\`\`\`
+Ids from other registered repos resolve automatically.
+
+## Also
+\`hive ctl focus <tileId>\` · \`hive ctl close <tileId>\` · \`hive ctl keys <tileId> Down,Enter\` (drive a TUI) ·
+\`hive ctl open-review --file plan.md\` (opens a review tile, blocks until the human decides) ·
+\`hive ctl stream <tileId> --json\` (NDJSON live output with byte offsets; resume with \`--since <offset>\`).
+`;
+
 export const SAMPLE_ISSUE_BODY = `## Description
 
 Brief description of what needs to be done and why.
