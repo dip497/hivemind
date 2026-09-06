@@ -388,3 +388,45 @@ test("OutputRecorder: lazy trim still never returns more than the ring cap, and 
   assert.equal(rec.since("t", 0).length, CAP, "reads are bounded by the cap");
   assert.ok(rec.since("t", 0).endsWith("TAIL"));
 });
+
+test("OutputRecorder.tail: last N ANSI-stripped lines, trailing newline not a line", () => {
+  const rec = new OutputRecorder();
+  rec.record("t", "one\n\x1b[31mtwo\x1b[0m\nthree\n");
+  assert.equal(rec.tail("t", 2), "two\nthree\n");
+  assert.equal(rec.tail("t", 10), "one\ntwo\nthree\n");
+  assert.equal(rec.tail("t", 0), "");
+  assert.equal(rec.tail("none", 3), "");
+  rec.record("t", "four"); // partial line counts once
+  assert.equal(rec.tail("t", 1), "four");
+});
+
+test("hcp-server: agent.stream sub with lines/since replays first and stamps offsets", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hcp-replay-"));
+  const sock = path.join(dir, "s.sock");
+  const rec = new OutputRecorder();
+  rec.record("t", "a\nb\n");
+  const srv = startHcpServer(sock, {
+    token: "k", rendererUp: () => true, onEvent() {}, dispatch: async () => ({}),
+    replay: (id, o) => (typeof o.lines === "number" ? rec.tail(id, o.lines) : rec.since(id, o.since ?? 0)),
+    offsetOf: (id) => rec.mark(id),
+  });
+  const got: unknown[] = [];
+  await new Promise<void>((resolve) => {
+    const c = net.connect(sock, () => c.write(JSON.stringify({ t: "sub", id: "s1", topic: "agent.stream", params: { tileId: "t", lines: 1 }, token: "k" }) + "\n"));
+    let buf = "";
+    c.setEncoding("utf8");
+    c.on("data", (d: string) => {
+      buf += d;
+      for (const line of buf.split("\n").slice(0, -1)) got.push(JSON.parse(line));
+      buf = buf.slice(buf.lastIndexOf("\n") + 1);
+      if (got.length >= 3) { srv.broadcast("t", "c\n"); }
+      if (got.length >= 4) { c.end(); resolve(); }
+    });
+  });
+  const [, res, replay, live] = got as Array<Record<string, unknown>>;
+  assert.deepEqual(res, { t: "res", id: "s1", ok: true, result: { subscriptionId: "s1", offset: 4 } });
+  assert.deepEqual(replay, { t: "evt", subId: "s1", topic: "agent.stream", data: { seq: 0, chunk: "b\n", offset: 4, replay: true } });
+  assert.equal((live.data as { chunk: string }).chunk, "c\n");
+  srv.close();
+  fs.rmSync(dir, { recursive: true, force: true });
+});

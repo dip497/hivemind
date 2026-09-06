@@ -387,7 +387,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         const summary = summarizeTool(tool, inp);
         const banner =
           `\n[hive] APPROVAL — worker ${labelOf(worker)} wants to run ${tool}: ${summary}\n` +
-          `Reply: hive_approve("${reqId}", "allow" | "deny" | "always" | "never")\n`;
+          `Reply: hive ctl approve ${reqId} allow|deny|always|never   (MCP: hive_approve("${reqId}", …))\n`;
         // Surface the pause in the UI: this worker is now waiting on its parent.
         deps.pushWait(worker, "awaiting_approval");
         return await new Promise((resolve) => {

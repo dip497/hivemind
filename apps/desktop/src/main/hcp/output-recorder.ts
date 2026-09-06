@@ -54,6 +54,23 @@ export class OutputRecorder {
     return appended >= buf.length ? buf : buf.slice(buf.length - appended);
   }
 
+  /** The last `lines` lines currently held for a tile (ANSI-stripped). */
+  tail(tileId: string, lines: number): string {
+    const raw = this.buf.get(tileId) ?? "";
+    if (lines <= 0 || !raw) return "";
+    let i = raw.length;
+    let n = 0;
+    // Walk back over `lines` newlines (a trailing newline doesn't count as a line).
+    if (raw.endsWith("\n")) i -= 1;
+    while (i > 0) {
+      const nl = raw.lastIndexOf("\n", i - 1);
+      if (nl < 0) { i = 0; break; }
+      n += 1;
+      if (n >= lines) { i = nl + 1; break; }
+      i = nl;
+    }
+    return raw.slice(i);
+  }
   forget(tileId: string): void {
     this.buf.delete(tileId);
     this.total.delete(tileId);

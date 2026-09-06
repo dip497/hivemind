@@ -7,8 +7,38 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Added
+
+- **`hive ctl` is now a full control plane — every verb the MCP server had, from the shell.**
+  New subcommands `report`, `open-review`, `set-state`, `add-comment`, `mark-acceptance`,
+  `delete-issue`, `list-workspaces`; `spawn` gains `--name`, `--model`, `--report/--no-report`;
+  `workflow` gains `--model`. Every subcommand takes `--json` and prints the **same shape the
+  matching MCP tool returned** on one line, and failures print `{ok:false,code,message}` with a
+  meaningful exit status (2 usage · 3 app not running · 4 timeout · 5 not found · 6 unauthorized ·
+  7 rate-limited/depth · 1 other). Issue verbs resolve ids from other registered repos.
+- **`hivemind` skill** (`hive add skill` / `hive init`) documents the `hive ctl` vocabulary for
+  agents with copy-pasteable examples: spawn a worker into a frame, send a task, read a reply with a
+  timeout, fanout/pipeline/mapreduce, supervise + approve, connect two agents, report back as a
+  worker, and the issue verbs. Instructions only — all correctness lives in the CLI.
+- `hive ctl stream --lines N` / `--since <offset>` replay the recorded (ANSI-stripped) tail before
+  going live; `--snapshot` prints the replay and exits; `--json` emits NDJSON events carrying the
+  byte `offset` so a client can resume exactly where it stopped; `--timeout` bounds the tail.
+  Server side: `agent.stream` subscriptions accept `since`/`lines` and every event carries `offset`.
+
 ### Changed
 
+- **BREAKING: `hive ctl read --timeout` is honoured end-to-end.** The wait is now a loop of short
+  HCP requests (≤ 10 s each) instead of one long request that silently died at the caller's tool
+  timeout (Claude Code's Bash default is 120 s); the default total wait is 100 s. A read that runs
+  out of time still prints `{text:null, finalStatus:"timeout"}` but now **exits 4**. New
+  `hive ctl read --poll` returns the current turn state immediately (exit 0).
+- **BREAKING: `hive ctl` error output.** Errors used to be a bare message on stderr with exit 1;
+  they are now structured (see above) and exit codes distinguish causes. Scripts that only checked
+  `exit != 0` keep working.
+- The approval banner a supervising agent sees now says `hive ctl approve <reqId> …` (the MCP
+  `hive_approve` form is still shown alongside until MCP is retired).
+- `issueToJson` / `rootForId` moved from the MCP server into `@hivemind/core` so the CLI, the MCP
+  server and the desktop share one JSON projection of an issue.
 - **Views are plugins; switching views no longer disturbs live tiles.** The canvas
   runtime (`Workspace.tsx`) now owns frames, tiles, sessions and commands, and the
   Canvas and Windows views are built-in plugins behind a registry with a react-flow-free

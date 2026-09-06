@@ -29,6 +29,14 @@ export interface HcpServerDeps {
   rendererUp: () => boolean;
   dispatch: (method: string, params: unknown) => Promise<unknown>;
   onEvent: (topic: string, data: unknown) => void;
+  /** agent.stream replay: the recorder's ANSI-stripped text for a tile — the
+   *  last `lines` lines, or everything appended after byte offset `since`.
+   *  Lets `hive ctl stream --lines/--since` catch up instead of only seeing
+   *  chunks that arrive after it connected. */
+  replay?: (tileId: string, opts: { since?: number; lines?: number }) => string;
+  /** The recorder's current byte offset for a tile — attached to every stream
+   *  event so a client can resume exactly where it stopped (`--since`). */
+  offsetOf?: (tileId: string) => number;
 }
 
 export interface HcpServer {
@@ -102,14 +110,23 @@ export function startHcpServer(sockPath: string, deps: HcpServerDeps): HcpServer
           send({ t: "res", id: msg.id, ok: false, error: { code: "UNKNOWN_METHOD", message: `unknown sub topic: ${msg.topic}` } });
           return;
         }
-        const tileId = String((msg.params as { tileId?: string })?.tileId ?? "");
+        const sp = (msg.params ?? {}) as { tileId?: string; since?: number; lines?: number };
+        const tileId = String(sp.tileId ?? "");
         if (!tileId) {
           send({ t: "res", id: msg.id, ok: false, error: { code: "BAD_REQUEST", message: "tileId required" } });
           return;
         }
         subs.set(msg.id, { id: msg.id, tileId, send, seq: 0, isBackedUp: () => conn.writableLength > 4 * 1024 * 1024 });
         mySubIds.add(msg.id);
-        send({ t: "res", id: msg.id, ok: true, result: { subscriptionId: msg.id } });
+        const offset = deps.offsetOf?.(tileId) ?? 0;
+        send({ t: "res", id: msg.id, ok: true, result: { subscriptionId: msg.id, offset } });
+        // Catch-up: replay what the recorder already holds (seq 0, replay:true)
+        // before live chunks start flowing.
+        const wantsReplay = typeof sp.since === "number" || typeof sp.lines === "number";
+        if (wantsReplay && deps.replay) {
+          const chunk = deps.replay(tileId, { since: sp.since, lines: sp.lines });
+          if (chunk) send({ t: "evt", subId: msg.id, topic: "agent.stream", data: { seq: 0, chunk, offset, replay: true } });
+        }
         return;
       }
       // req
@@ -146,7 +163,7 @@ export function startHcpServer(sockPath: string, deps: HcpServerDeps): HcpServer
         // (the seq gap tells the client bytes were dropped) instead of growing
         // memory unbounded for a slow reader.
         if (sub.isBackedUp()) continue;
-        sub.send({ t: "evt", subId: sub.id, topic: "agent.stream", data: { seq: sub.seq, chunk } });
+        sub.send({ t: "evt", subId: sub.id, topic: "agent.stream", data: { seq: sub.seq, chunk, offset: deps.offsetOf?.(tileId) } });
       }
     },
   };

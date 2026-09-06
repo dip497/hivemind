@@ -1780,6 +1780,11 @@ function startHcpControlPlane(): void {
     token,
     rendererUp: () => !!mainWindow && !mainWindow.isDestroyed(),
     dispatch,
+    // Stream replay/resume for `hive ctl stream --lines/--since`: the recorder
+    // is keyed by pty id, subscriptions by bare tile id.
+    replay: (tileId, opts) =>
+      typeof opts.lines === "number" ? hcpRecorder.tail(toPtyId(tileId), opts.lines) : hcpRecorder.since(toPtyId(tileId), opts.since ?? 0),
+    offsetOf: (tileId) => hcpRecorder.mark(toPtyId(tileId)),
     onEvent: (topic, data) => {
       if (topic === "subagent") {
         // SubagentStart/Stop hook: a tile gained/lost an in-flight Task subagent.
