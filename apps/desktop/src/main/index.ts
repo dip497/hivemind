@@ -21,7 +21,7 @@ import {
   updateIssue,
   writeAgentContext,
   writeConfig,
-  templates,
+  installAgenticStack as coreInstallAgenticStack,
   type IssueState,
   type LinkType,
 } from "@hivemind/core";
@@ -476,7 +476,7 @@ ipcMain.handle("resolveProject", wrap(async (e, rootHint?: string) => {
 
 // ── BrowserTile CDP bridge ────────────────────────────────────
 // Each BrowserTile registers its <webview> guest's webContents id here, keyed
-// by tileId. An agent (or in-app automation / MCP tool) then drives the VISIBLE
+// by tileId. An agent (or in-app automation / `hive ctl`) then drives the VISIBLE
 // tile by sending raw Chrome DevTools Protocol commands through `browserCdp` —
 // Page.navigate, Input.dispatchMouseEvent (click), DOM.getDocument,
 // Page.captureScreenshot, Runtime.evaluate, etc. This is the whole reason to
@@ -724,94 +724,21 @@ ipcMain.handle(
     await writeConfig(root, { prefix, next_id: 1, agents: {} });
     await writeAgentContext(root);
     // Install the agentic stack by default — a brand-new workspace should be
-    // agent-ready so "Work on this" actually works (claude gets the hive MCP +
-    // hive-work skill). Idempotent.
-    await installAgenticStack(dir, root);
+    // agent-ready so "Work on this" actually works (the agent gets the hive
+    // skills + CLAUDE.md section). Idempotent.
+    await installAgenticStack(dir);
     return { root };
   })
 );
 
-// Resolve the installed `hive` CLI for .mcp.json (claude's MCP spawns it).
-async function resolveHiveCliPath(): Promise<string> {
-  const candidates = [
-    path.join(os.homedir(), ".local", "bin", "hive"),
-    ...(process.env.PATH ?? "").split(":").filter(Boolean).map((d) => path.join(d, "hive")),
-  ];
-  for (const p of candidates) {
-    try {
-      const st = await fsp.stat(p);
-      if (st.isFile()) return p;
-    } catch {
-      /* not here */
-    }
-  }
-  return "hive";
-}
-
-// Idempotent installer for the agentic stack (mirrors `hive init --agentic`):
-// CLAUDE.md agentic section + .mcp.json (merged) + .claude/skills/hive-work.
-// Without this, a spawned claude has no hive MCP tools / skill, so working an
-// issue silently does nothing — the gap the user hit.
-async function installAgenticStack(dir: string, root: string): Promise<void> {
-  const hiveCli = await resolveHiveCliPath();
-
-  const claudePath = path.join(dir, "CLAUDE.md");
-  const MARK = /<!--\s*hivemind:agentic:start\s*-->[\s\S]*?<!--\s*hivemind:agentic:end\s*-->\n?/;
-  try {
-    const existing = await fsp.readFile(claudePath, "utf8");
-    const next = MARK.test(existing)
-      ? existing.replace(MARK, templates.agenticClaudeAppend().trim() + "\n")
-      : existing + templates.agenticClaudeAppend();
-    await fsp.writeFile(claudePath, next, "utf8");
-  } catch {
-    await fsp.writeFile(
-      claudePath,
-      `# CLAUDE.md\n\n(Project rules go here.)\n${templates.agenticClaudeAppend()}`,
-      "utf8",
-    );
-  }
-
-  const mcpPath = path.join(dir, ".mcp.json");
-  const ours = JSON.parse(templates.mcpJson(hiveCli, root)) as { mcpServers: Record<string, unknown> };
-  let merged: { mcpServers?: Record<string, unknown> } = {};
-  try {
-    merged = JSON.parse(await fsp.readFile(mcpPath, "utf8")) as typeof merged;
-  } catch {
-    /* fresh */
-  }
-  merged.mcpServers = { ...(merged.mcpServers ?? {}), ...ours.mcpServers };
-  await fsp.writeFile(mcpPath, JSON.stringify(merged, null, 2) + "\n", "utf8");
-
-  const skillPath = path.join(dir, ".claude", "skills", "hive-work", "SKILL.md");
-  try {
-    await fsp.stat(skillPath);
-  } catch {
-    await fsp.mkdir(path.dirname(skillPath), { recursive: true });
-    await fsp.writeFile(skillPath, templates.HIVE_WORK_SKILL, "utf8");
-  }
-
-  // hive-browser skill — lets a spawned agent drive a Browser tile over CDP.
-  // Just a markdown file (zero runtime deps): the agent-browser CLI is fetched
-  // on demand via npx, and the CDP bridge stays opt-in. Write-if-absent so we
-  // never clobber a user's edits.
-  const browserSkillPath = path.join(dir, ".claude", "skills", "hive-browser", "SKILL.md");
-  try {
-    await fsp.stat(browserSkillPath);
-  } catch {
-    await fsp.mkdir(path.dirname(browserSkillPath), { recursive: true });
-    await fsp.writeFile(browserSkillPath, templates.hiveBrowserSkill(), "utf8");
-  }
-
-  // hive-workflow skill — teaches an agent to fan work out via hive_workflow.
-  // This one is hivemind-managed: unlike the write-if-absent skills above, it is
-  // REGENERATED on every init so it tracks the app version across upgrades.
-  try {
-    const workflowSkillPath = path.join(dir, ".claude", "skills", "hive-workflow", "SKILL.md");
-    await fsp.mkdir(path.dirname(workflowSkillPath), { recursive: true });
-    await fsp.writeFile(workflowSkillPath, templates.hiveWorkflowSkill(), "utf8");
-  } catch {
-    /* best-effort — a skill write failure must not block init */
-  }
+// Idempotent installer for the agentic stack (the same code path as `hive init`
+// — @hivemind/core's installAgenticStack): CLAUDE.md agentic section + the
+// hive skills (hive-work / hive-workflow / hivemind / hive-browser) + retirement
+// of a stale `.mcp.json` hive entry. Without this, a spawned agent has no skill
+// telling it how to work an issue with `hive`, so "Work on this" would silently
+// do nothing — the gap the user hit.
+async function installAgenticStack(dir: string): Promise<void> {
+  await coreInstallAgenticStack(dir);
 }
 
 // Ensure the agentic stack exists for an already-initialized workspace (called
@@ -825,7 +752,7 @@ ipcMain.handle(
     // has nothing to install, and throwing here surfaced a noisy main-process
     // "Error occurred in handler for 'installAgentic'" for an expected state.
     if (!root) return { ok: false, reason: "no-workspace" as const };
-    await installAgenticStack(dir, root);
+    await installAgenticStack(dir);
     return { ok: true as const };
   }),
 );
@@ -1194,7 +1121,7 @@ const hcpWriteToTile = (tileId: string, data: string): boolean => {
   return false; // dead/unknown tile → agent.send surfaces TILE_NOT_FOUND
 };
 // Turn-aware delivery for every agent-to-agent message (reports, approval
-// requests, hive_send). Typing into a MID-TURN TUI drops the text in the composer
+// requests, agent.send). Typing into a MID-TURN TUI drops the text in the composer
 // unsubmitted — the message is never read and whoever waits on it hangs. The
 // mailbox holds it until the tile is back at its prompt. See hcp/mailbox.ts.
 const hcpMailbox = new Mailbox(hcpWriteToTile, SUBMIT_DELAY_MS);
@@ -1207,7 +1134,7 @@ let hcpForgetTile: (tileId: string) => void = () => {};
 // tile.close that killed it). Both the local and remote onExit handlers funnel
 // through here so no teardown path leaks HCP state — previously only the
 // `tile.close` VERB cleaned the methods.ts maps, so a crashed/user-closed worker
-// leaked every per-tile map and left a blocked hive_read/approval hanging.
+// leaked every per-tile map and left a blocked agent.read/approval hanging.
 const onPtyExit = (tileId: string): void => {
   const bare = toBareId(tileId);
   hcpSubagentReaper.cancel(bare);
@@ -1710,7 +1637,7 @@ ipcMain.handle(
 );
 
 // ── HCP: the control plane ───────────────────────────────────────────────────
-// A 0600 unix socket where the hive MCP (and CLIs) drive the running app: spawn
+// A 0600 unix socket where `hive ctl` (and any driver) drives the running app: spawn
 // agents on the canvas, send them input, read their replies. Renderer verbs
 // (tile.*) cross the request-id-correlated "hcp:command"/"hcp:result" channel
 // (twin of plan-review). Main verbs (agent.send/read) run here against the
@@ -1852,8 +1779,8 @@ function startHcpControlPlane(): void {
       // pi carries its reply inline on the turn event (no transcript path); pass
       // it through so agent.read returns it directly. claude/droid send no text.
       // Single-delivery ladder: true if this reply was already delivered by a more
-      // specific channel — a blocking hive_read took it, OR the worker authored an
-      // explicit hive_report this turn. Either way the auto-report banner below
+      // specific channel — a blocking agent.read (hive ctl read) took it, OR the
+      // worker authored an explicit agent.report (hive ctl report) this turn. Either way the auto-report banner below
       // stands down, so the parent isn't handed the same reply twice (the duplicate
       // would arrive as an unsolicited banner that spawns a spurious extra turn).
       const deliveredElsewhere = hcpTurns.recordTurn(d.tileId, safeTp, typeof d.text === "string" ? d.text : null);
@@ -1872,7 +1799,7 @@ function startHcpControlPlane(): void {
       // "working" forever. A real background subagent will keep emitting edges.
       if (hcpSubagents.busy(d.tileId)) hcpSubagentReaper.arm(d.tileId);
       // Pipe forwarding: feed this agent's reply into any piped destinations.
-      // Skip if a blocking reader already took it — hive_read is the delivery
+      // Skip if a blocking reader already took it — agent.read is the delivery
       // channel this turn; the auto-report is only the fallback for when nobody's
       // reading. (Exotic: a worker fan-piped to several tiles where only one reads
       // would skip the others too — acceptable; the common auto-report pipe is the

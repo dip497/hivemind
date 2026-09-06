@@ -42,8 +42,8 @@ export interface Toast {
   /** Inline actions rendered as a button row under the context line. FUTURE SEAM
    *  (nothing sets this yet): the first real use is a supervised-worker approval —
    *  push a `needs` toast with actions `[{label:"Approve", primary:true, run: () =>
-   *  hive_approve(reqId,"allow")}, {label:"Deny", run: () => hive_approve(reqId,
-   *  "deny")}]` so the human answers from the toast instead of tabbing to the tile.
+   *  approve(reqId,"allow")}, {label:"Deny", run: () => approve(reqId,
+   *  "deny")}]` (agent.approve over HCP) so the human answers from the toast instead of tabbing to the tile.
    *  `run` returns the toast id to dismiss (or void to keep it open, e.g. pending). */
   actions?: ToastAction[];
 }

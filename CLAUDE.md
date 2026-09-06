@@ -106,8 +106,8 @@ Read it before touching `providers/`, `agents.tsx`, or `agent-state.ts`.
 
 The part people skip: **probe the real binary before deciding what it supports.** A
 provider PR that assumes "no hooks / no session ids" without running `--help` ships an
-agent the control plane cannot drive — `hive_read` times out, `hive_workflow` gathers
-nothing, and a tile waiting on approval notifies "Finished". `checklist.md` next to the
+agent the control plane cannot drive — `hive ctl read` times out, `hive ctl workflow`
+gathers nothing, and a tile waiting on approval notifies "Finished". `checklist.md` next to the
 skill is the definition of done; it goes in the PR description.
 
 <!-- release:start -->
@@ -168,13 +168,13 @@ If the release workflow fails but the tag is pushed: delete the tag (`git tag -d
 
 | Change | Bump |
 |---|---|
-| New tile type, new MCP tool, new agent integration, new install path | minor |
+| New tile type, new `hive ctl` verb, new agent integration, new install path | minor |
 | Bug fix in PTY daemon, CSS tweak, tile spawn-position fix | patch |
-| Breaking change to `hive` CLI, breaking change to `.hivemind/` schema, breaking change to MCP tool shape | major |
+| Breaking change to `hive` CLI (incl. a `hive ctl --json` shape), breaking change to `.hivemind/` schema | major |
 
 `0.x.x` versions: minor can break things; document loudly in CHANGELOG.
 
 ### Hand-off rule
 
-If you (Claude) made any change that ships to users — code, dependency, install behavior, MCP tool surface — append a one-line entry to `CHANGELOG.md` under `## [Unreleased]` BEFORE handing the session back. The maintainer can then cut a release with `./scripts/release.sh <bump>` and the changelog is ready.
+If you (Claude) made any change that ships to users — code, dependency, install behavior, `hive ctl` surface — append a one-line entry to `CHANGELOG.md` under `## [Unreleased]` BEFORE handing the session back. The maintainer can then cut a release with `./scripts/release.sh <bump>` and the changelog is ready.
 <!-- release:end -->

@@ -7,7 +7,34 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Removed
+
+- **BREAKING: the hive MCP server is gone.** `packages/hive-mcp`, `hive mcp-stdio`, `hive add mcp`
+  and the `.mcp.json` hivemind wrote into workspaces are removed. Agents drive hivemind through
+  the **`hive` CLI** instead (`hive show --json`, `hive ctl set-state`, `hive ctl spawn|send|read|
+  workflow|approve|report|…`) — one vocabulary for every runtime (claude, codex, pi, droid, kiro),
+  not just the ones with MCP support. `hive init` / `hive add skill` / the desktop's "Work on this"
+  install the rewritten `hive-work` and `hive-workflow` skills plus the `hivemind` skill, refresh a
+  generated skill that still tells the agent to use `mcp__hive__*`, and **remove the stale `hive`
+  entry from an existing `.mcp.json`** so claude stops reporting a failed MCP server. Kiro's
+  generated agent config no longer wires `mcpServers.hive`. Spawned agents now carry
+  `HIVE_AGENT_ID` (claude / pi / droid / kiro) so Activity rows written via `hive ctl` are signed
+  by the runtime, as the MCP server used to do.
+- `templates/agentic/{CLAUDE.md,.mcp.json,hive-work,hive-workflow}` — the skill sources now live
+  in `packages/hive-core/src/templates.ts` and the installer in `packages/hive-core/src/agentic.ts`
+  (shared by the CLI and the desktop, so they can no longer drift).
+
 ### Added
+
+- `hive new --ac "criterion one || criterion two"` creates an issue with its acceptance checklist
+  (parity with the retired `hive_create_issue.acceptance_criteria`).
+- `HIVEMIND_SHELL_ENV=0` makes the app use the environment it was launched with as-is (PATH
+  included) instead of re-resolving the login shell's — for CI/e2e and for launching from a
+  terminal whose exact env you want inside tiles.
+- **Acceptance test for the CLI-first control plane:** `apps/desktop/tests/e2e/hcp-cross-provider.spec.ts`
+  drives two different providers (claude and droid, as scripted stand-ins on PATH that honour the
+  real hook injection) through `hive ctl spawn / workflow --shape fanout / send / read / report /
+  stream` against the running app — repeatable, no LLM.
 
 - **`hive ctl` is now a full control plane — every verb the MCP server had, from the shell.**
   New subcommands `report`, `open-review`, `set-state`, `add-comment`, `mark-acceptance`,

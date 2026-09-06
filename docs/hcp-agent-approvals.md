@@ -1,5 +1,9 @@
 # HCP Phase 6 — Agent-Supervised Approvals
 
+> Status: shipped. The agent-facing calls are now `hive ctl spawn --supervise …` and
+> `hive ctl approve <reqId> allow|deny|always|never` (the MCP server this doc
+> references was retired; `hive_approve(...)` below reads as `hive ctl approve`).
+
 > When a spawned worker hits a tool-permission prompt, it **escalates to the agent
 > that spawned it** instead of stopping for a human. The supervisor approves /
 > denies / answers programmatically and the worker resumes. A human stays in the

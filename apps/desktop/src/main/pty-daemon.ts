@@ -131,29 +131,14 @@ try {
   });
 } catch { /* best-effort */ }
 
-// kiro (kiro-cli) deterministic hooks + MCP: kiro has no inline hook flag
-// either, so we point it at an EPHEMERAL KIRO_HOME (seeded with symlinks to the
-// real ~/.kiro + our own `agents/hivemind.json` — hooks + mcpServers.hive),
+// kiro (kiro-cli) deterministic hooks: kiro has no inline hook flag either, so
+// we point it at an EPHEMERAL KIRO_HOME (seeded with symlinks to the real
+// ~/.kiro + our own `agents/hivemind.json` — hooks),
 // selected at spawn with `--agent hivemind` (kiro-resume.ts). kiro's own
 // PreToolUse broker script differs from claude/droid's (exit-code contract,
 // not stdout JSON) — see kiro-approval-hook-source.ts.
 const kiroApprovalHookPath = path.join(userDataDir, "hcp-kiro-approval-hook.cjs");
 try { fs.writeFileSync(kiroApprovalHookPath, kiroApprovalHookSource()); } catch { /* best-effort */ }
-// Best-effort resolve of the `hive` CLI so the generated agent config's
-// mcpServers.hive can spawn it (mirrors main/index.ts's resolveHiveCliPath,
-// duplicated sync here since the daemon is a separate electron-as-node process
-// that doesn't share main's async installer helpers). Falls back to bare
-// "hive" (PATH lookup at kiro's own spawn time) if nothing is found now.
-function resolveHiveCliPathSync(): string {
-  const candidates = [
-    path.join(homedir(), ".local", "bin", "hive"),
-    ...((process.env.PATH ?? "").split(":").filter(Boolean).map((d) => path.join(d, "hive"))),
-  ];
-  for (const p of candidates) {
-    try { if (fs.statSync(p).isFile()) return p; } catch { /* not here */ }
-  }
-  return "hive";
-}
 const kiroHome = path.join(userDataDir, "kiro-home");
 try {
   seedKiroHome({
@@ -166,7 +151,6 @@ try {
       trackerPath,
       tileSessionsDir,
       hcpSock,
-      hiveCliPath: resolveHiveCliPathSync(),
     }),
   });
 } catch { /* best-effort */ }

@@ -150,7 +150,7 @@ export interface Dispatcher {
   /** Drop ALL per-tile HCP state for a tile that has gone away, WITHOUT the
    *  renderer round-trip `tile.close` does. MUST be called on every pty-exit and
    *  user-close path — otherwise the maps (parentOf/depthOf/sendSeq/approveCache/
-   *  pendingApprovals) leak, a blocked hive_read/approval on the dead worker hangs
+   *  pendingApprovals) leak, a blocked agent.read/approval on the dead worker hangs
    *  its full timeout instead of resolving, and its UI "awaiting" status lingers.
    *  Idempotent — safe to call twice (e.g. tile.close then the resulting pty-exit). */
   forgetTile: (tileId: string) => void;
@@ -387,7 +387,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         const summary = summarizeTool(tool, inp);
         const banner =
           `\n[hive] APPROVAL — worker ${labelOf(worker)} wants to run ${tool}: ${summary}\n` +
-          `Reply: hive ctl approve ${reqId} allow|deny|always|never   (MCP: hive_approve("${reqId}", …))\n`;
+          `Reply: hive ctl approve ${reqId} allow|deny|always|never\n`;
         // Surface the pause in the UI: this worker is now waiting on its parent.
         deps.pushWait(worker, "awaiting_approval");
         return await new Promise((resolve) => {
@@ -492,8 +492,8 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         // deterministically via the turn-tracker (NOT screen-scrape), and return
         // the aggregated transcript replies. Workers are spawned report:false —
         // the workflow gathers them itself, so their replies don't also spam the
-        // orchestrator's terminal. The orchestrator's MCP tool call blocks until
-        // this returns (long client-side ceiling, like agent.read/review.open).
+        // orchestrator's terminal. The orchestrator's `hive ctl workflow` call blocks until
+        // this returns (`hive ctl workflow` blocks with a matching client ceiling).
         const shape = String(p.shape ?? "fanout");
         const caller = p.callerTile != null ? String(p.callerTile) : undefined;
         const agent = p.agent != null ? String(p.agent) : "claude";

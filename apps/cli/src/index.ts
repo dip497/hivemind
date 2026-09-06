@@ -22,7 +22,6 @@ import { workspaceCmd } from "./commands/workspace.js";
 import { agentCmd } from "./commands/agent.js";
 import { upgradeCmd } from "./commands/upgrade.js";
 import { resolveCmd } from "./commands/mention.js";
-import { mcpStdioCmd } from "./commands/mcp.js";
 import { ctlCmd } from "./commands/ctl.js";
 
 /**
@@ -61,7 +60,6 @@ const main = defineCommand({
     agent: agentCmd,
     upgrade: upgradeCmd,
     resolve: resolveCmd,
-    "mcp-stdio": mcpStdioCmd,
     ctl: ctlCmd,
   },
 });

@@ -111,7 +111,8 @@ function piEnv(deps: PiResumeDeps, spec: SpawnSpec, id: string): Record<string, 
   const env: Record<string, string> = { ...spec.env };
   env.HIVE_HCP_SOCK = deps.hcpSock;
   env.HCP_TOKEN = deps.hcpToken;
-  env.HIVEMIND_TILE = id; // the bridge extension + the agent's hive MCP attribute to this tile
+  env.HIVEMIND_TILE = id; // the bridge extension + the agent's `hive ctl` calls attribute to this tile
+  env.HIVE_AGENT_ID = "pi"; // signs Activity rows written via `hive ctl`
   env.HIVE_AGENT_DEPTH = spec.env?.HIVE_AGENT_DEPTH ?? "0";
   return env;
 }

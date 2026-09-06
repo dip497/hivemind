@@ -3,7 +3,7 @@
  *
  * Two namespaces flow through the control plane:
  *   - BARE id  — `tile-claude-<ts>`: what the renderer's tiles array + tile.list
- *     expose, and what every MCP/CLI driver passes back in.
+ *     expose, and what every driver (`hive ctl`, the pi extension) passes back in.
  *   - PTY id   — `hm:<bareId>` (a persistent daemon pty, see TerminalTile): the
  *     key for the pty itself, the OutputRecorder, the TurnTracker, and the
  *     injected `HIVEMIND_TILE` env (so the Stop hook reports under it).

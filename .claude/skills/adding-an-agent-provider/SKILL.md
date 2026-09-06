@@ -15,8 +15,8 @@ A real example: a PR added an agent and stated "no hook system exposed, status i
 screen-scrape only". That CLI ships `agentSpawn` / `userPromptSubmit` / `preToolUse` /
 `postToolUse` / `stop` hooks with a JSON stdin contract and a blocking exit code — the
 same shape hivemind already consumes for claude. Nobody had run `--help`. The result
-would have shipped as a "fully-wired agent" that silently cannot be driven: `hive_read`
-returns `timeout` forever, `hive_workflow` gathers nothing, and a tile parked on an
+would have shipped as a "fully-wired agent" that silently cannot be driven: `hive ctl read`
+returns `timeout` forever, `hive ctl workflow` gathers nothing, and a tile parked on an
 approval prompt notifies **"Finished"**.
 
 **A half-wired agent is worse than an absent one**, because the failure is silent. This
@@ -42,7 +42,7 @@ Three rules:
    reviewers check first, because they are what gets a provider shipped half-wired.
 
 Never infer a capability from another agent's shape. Two CLIs that look alike in the
-TUI can differ completely in hooks, session storage, and MCP support.
+TUI can differ completely in hooks, session storage, and shell access.
 
 ```bash
 which <bin>; <bin> --version; <bin> --help
@@ -53,12 +53,12 @@ Then the vendor docs, via the repo's context7 rule:
 
 ```bash
 npx ctx7@latest library "<Product> CLI" "<your question>"
-npx ctx7@latest docs /<org>/<project> "hooks, session resume, mcp configuration"
+npx ctx7@latest docs /<org>/<project> "hooks, session resume, running shell commands"
 ```
 
 When docs are thin, read the shipped package: `ls -l $(readlink -f $(which <bin>))`,
 then grep its `dist/` for flag strings. Finish with one adversarial search per topic
-("<agent> hooks", "<agent> resume session", "<agent> mcp server").
+("<agent> hooks", "<agent> resume session", "<agent> run shell command").
 
 ### The capability probe
 
@@ -73,7 +73,7 @@ Answer all ten with a source. This table goes in the PR description.
 | 5 | **Hook / event system**: which events, stdin shape, exit-code semantics, can a hook block a tool? | Tier. Deterministic turn/status/approval, or none |
 | 6 | **Session ids**: assignable at spawn? discoverable after? resume by id or by cwd? | `transformSpecOnSpawn` / `transformSpecOnRestore` |
 | 7 | Config-home override env var (`FACTORY_HOME_OVERRIDE`, `KIRO_HOME`, …) | Whether we can inject config without touching the user's real home |
-| 8 | MCP support + config file location and scope | Whether the worker can call `hive_report` / `hive_read` |
+| 8 | Can the agent run shell commands (Bash tool) + does it inherit the spawn env | Whether the worker can call `hive ctl report` / `hive ctl read` (needs `hive` on PATH + HIVE_HCP_SOCK/HCP_TOKEN/HIVEMIND_TILE from the env) |
 | 9 | Headless / non-interactive mode | Not used by tiles, but it reveals how args are parsed |
 | 10 | What the TUI prints while **working**, and while **waiting for approval** | The scrape detector strings — capture real output, do not guess |
 
@@ -90,13 +90,13 @@ means the probe was wrong — go back to Phase 1.
 
 | Tier | The CLI gives you | You get | Copy from |
 |---|---|---|---|
-| **0 — raw** | nothing but a TUI | scrape status only. **Not an HCP worker** — `hive_read` times out, workflows gather nothing | `providers/codex.ts` |
+| **0 — raw** | nothing but a TUI | scrape status only. **Not an HCP worker** — `hive ctl read` times out, workflows gather nothing | `providers/codex.ts` |
 | **1 — resume** | discoverable session files/ids | Tier 0 + survives a daemon restart | `codex-resume.ts`, `pi-resume.ts`, `droid-resume.ts` (newest-session-for-cwd) |
-| **2 — injected runtime** | a config-home override **or** an extension loader | deterministic `turn` / `status`, MCP inside the worker → a real HCP worker | `droid-resume.ts` + `hcp/droid-home.ts` (home overlay), `hcp/pi-ext-source.ts` (extension) |
+| **2 — injected runtime** | a config-home override **or** an extension loader | deterministic `turn` / `status`, `hive ctl` from inside the worker → a real HCP worker | `droid-resume.ts` + `hcp/droid-home.ts` (home overlay), `hcp/pi-ext-source.ts` (extension) |
 | **3 — native** | pre-assignable session id + blocking permission hook | Tier 2 + per-tile resume + `supervise` approval brokering | `claude-resume.ts` |
 
 Tier 2 is the important line: **below it the agent cannot report back**, so
-`hive_spawn_agent` / `hive_workflow` with that runtime produce workers that look alive
+`hive ctl spawn` / `hive ctl workflow` with that runtime produce workers that look alive
 and deliver nothing.
 
 ---
@@ -137,7 +137,7 @@ grep -rn '"droid"' --include=*.ts --include=*.tsx --include=*.md . \
 Every hit is a registry your agent probably belongs in too. Today that includes
 `apps/cli/src/commands/agent.ts` and `apps/cli/src/parse.ts` (`KNOWN_AGENTS` — without
 it `hive agent detect` misses the CLI and `--assignee <id>` resolves as a *member*, not
-an agent), the runtime lists in `packages/hive-mcp/src/index.ts`, the agent lists in
+an agent), the runtime lists in the `hive-workflow` skill (packages/hive-core/src/templates.ts), the agent lists in
 `README.md`, and `CHANGELOG.md` under `## [Unreleased]` — required by the hand-off rule
 in `CLAUDE.md`, because `scripts/release.sh` cuts the release notes from it.
 
@@ -172,9 +172,9 @@ Fill `checklist.md` (next to this file) into the PR description. Every row gets
 Manual pass, in order:
 
 1. Spawn from the frame launcher → the tile starts and shows **working**, then **idle**.
-2. `hive_send` to it mid-turn → the message lands at its prompt, not mid-render.
-3. `hive_read` from another agent → returns the reply, not `finalStatus:"timeout"`.
-4. `hive_spawn_agent` with `report:true` → the worker's reply reaches the spawner once
+2. `hive ctl send` to it mid-turn → the message lands at its prompt, not mid-render.
+3. `hive ctl read` from another agent → returns the reply, not `finalStatus:"timeout"`.
+4. `hive ctl spawn` (report on by default) → the worker's reply reaches the spawner once
    (exactly once — not once from `read` and again from auto-report).
 5. Trigger a tool-approval prompt → tile status is **waiting**, notification says
    *Needs your input*.
@@ -209,4 +209,4 @@ nobody discovers it by watching a workflow return empty:
 3. the CHANGELOG line.
 
 Wording that works: *"scrape-only status and no turn signal — drive it by hand on the
-canvas; `hive_read` / `hive_workflow` cannot gather from it yet."*
+canvas; `hive ctl read` / `hive ctl workflow` cannot gather from it yet."*

@@ -597,7 +597,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   }, [openPlanReview, closeTile]);
 
   // HCP control plane: main forwards a workspace verb (e.g. tile.spawn_agent
-  // from an agent's hive MCP). Execute it and reply with the result/error.
+  // from an agent's `hive ctl`). Execute it and reply with the result/error.
   useEffect(() => {
     const off = window.hive.onHcpCommand(async (cmd) => {
       try {

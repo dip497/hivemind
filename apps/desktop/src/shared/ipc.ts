@@ -328,8 +328,8 @@ export interface HiveIpc {
      *  TUI — see applyInitialPrompt / HIVE_INITIAL_PROMPT. */
     initialPrompt?: string;
   }): Promise<{ pid: number }>;
-  /** Install the agentic stack (hive MCP + hive-work skill + CLAUDE.md) into a
-   *  repo so a spawned claude can actually work issues. Idempotent. */
+  /** Install the agentic stack (hive skills + CLAUDE.md section) into a repo so
+   *  a spawned agent can actually work issues with `hive`. Idempotent. */
   installAgentic(dir: string): Promise<{ ok: boolean }>;
   ptyWrite(tileId: string, data: string): void;
   ptyResize(tileId: string, cols: number, rows: number): void;

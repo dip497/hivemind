@@ -137,7 +137,7 @@ export function droidHooksSettings(deps: DroidResumeDeps): Record<string, unknow
 
 /** Env injected into a spawned droid: the ephemeral home (so it loads OUR hooks
  *  without touching ~/.factory) + the HCP socket/token/tile-id (so its hooks +
- *  hive MCP reach the control plane, attributed to this tile). */
+ *  `hive ctl` calls reach the control plane, attributed to this tile). */
 function droidEnv(deps: DroidResumeDeps, spec: SpawnSpec, id: string): Record<string, string> | undefined {
   if (!deps.droidHome && !(deps.hcpSock && deps.hcpToken)) return spec.env;
   const env: Record<string, string> = { ...spec.env };
@@ -145,7 +145,8 @@ function droidEnv(deps: DroidResumeDeps, spec: SpawnSpec, id: string): Record<st
   if (deps.hcpSock && deps.hcpToken) {
     env.HIVE_HCP_SOCK = deps.hcpSock;
     env.HCP_TOKEN = deps.hcpToken;
-    env.HIVEMIND_TILE = id; // hooks + the agent's own hive MCP attribute to this tile
+    env.HIVEMIND_TILE = id; // hooks + the agent's own `hive ctl` calls attribute to this tile
+    env.HIVE_AGENT_ID = "droid"; // signs Activity rows written via `hive ctl`
     env.HIVE_AGENT_DEPTH = spec.env?.HIVE_AGENT_DEPTH ?? "0";
   }
   return env;

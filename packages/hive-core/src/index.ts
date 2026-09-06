@@ -5,4 +5,5 @@ export * from "./agent-context.js";
 export * from "./registry.js";
 export * from "./cross-repo.js";
 export * from "./json.js";
+export * from "./agentic.js";
 export * as templates from "./templates.js";

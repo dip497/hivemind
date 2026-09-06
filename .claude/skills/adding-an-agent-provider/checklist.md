@@ -17,7 +17,7 @@ Every answer needs a source: a doc URL, a `--help` line, or the file you grepped
 | 5 | Hook system: events, stdin, exit codes, can it block? | | |
 | 6 | Session ids: assignable / discoverable / resume by id or cwd? | | |
 | 7 | Config-home override env var | | |
-| 8 | MCP support + config location | | |
+| 8 | Shell access + spawn-env inheritance (`hive` on PATH) | | |
 | 9 | Headless / non-interactive mode | | |
 | 10 | TUI text while working / while awaiting approval | | |
 
@@ -34,10 +34,10 @@ that is the highest tier the CLI supports.
 | Status: working / idle | scrape detector, or hooks | | |
 | Status: waiting on approval | `blocked` branch in the detector | | |
 | Turn signal | hooks / injected extension | | |
-| `hive_send` lands at the prompt | mailbox turn-gate | | |
-| `hive_read` returns a reply | turn tracker | | |
-| `hive_report` / auto-report | hive MCP inside the worker | | |
-| `hive_workflow` with this runtime | turn-tracker gather | | |
+| `hive ctl send` lands at the prompt | mailbox turn-gate | | |
+| `hive ctl read` returns a reply | turn tracker | | |
+| `hive ctl report` / auto-report | `hive` CLI inside the worker (spawn env) | | |
+| `hive ctl workflow` with this runtime | turn-tracker gather | | |
 | Approvals / `supervise` | blocking pre-tool hook | | |
 | Session resume after a daemon restart | `transformSpecOnRestore` | | |
 | Per-tile resume (not just per-cwd) | spawn-time id binding, or captured session id | | |
@@ -55,7 +55,7 @@ that is the highest tier the CLI supports.
 - [ ] `main/hcp/<id>-home.ts` + `pty-daemon.ts` + `providers/types.ts` — Tier 2+ only
 - [ ] `apps/cli/src/commands/agent.ts` — `KNOWN_AGENTS`
 - [ ] `apps/cli/src/parse.ts` — `KNOWN_AGENTS`
-- [ ] `packages/hive-mcp/src/index.ts` — runtime lists in the tool descriptions
+- [ ] `packages/hive-core/src/templates.ts` — runtime lists in the `hive-workflow` skill
 - [ ] `README.md` — agent lists
 - [ ] `CHANGELOG.md` — `## [Unreleased]`
 
@@ -84,4 +84,4 @@ The limitation is stated in all three places:
 - [ ] CHANGELOG line
 
 Suggested wording: *"scrape-only status and no turn signal — drive it by hand on the
-canvas; `hive_read` / `hive_workflow` cannot gather from it yet."*
+canvas; `hive ctl read` / `hive ctl workflow` cannot gather from it yet."*

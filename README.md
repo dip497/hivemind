@@ -48,7 +48,7 @@ agents work in parallel — each scoped to its own directory, issues, and branch
 The project-management layer underneath is deliberately boring: issues, acceptance
 criteria, cycles, and an activity log are **plain markdown files with YAML
 frontmatter** under `.hivemind/`. No database, no API, no account. An agent reads
-and writes them through a small MCP server, so it can pick up an issue, flip its
+and writes them through the `hive` CLI, so it can pick up an issue, flip its
 state, tick acceptance criteria, and comment its progress — and you see all of it
 land live in the board tile.
 
@@ -123,9 +123,9 @@ to skip the slow electron-builder step (the CLI still installs).
 # 1. Initialize hivemind inside a git repo
 cd ~/my-project
 hive init --prefix MYP        # writes .hivemind/config.yaml + the agentic stack
-                              # (.mcp.json + .claude/skills/ + CLAUDE.md) by default
+                              # (.claude/skills/ + CLAUDE.md section) by default
 # hive init --prefix MYP --no-agentic   # tracker only, skip the agentic stack
-# hive add mcp / hive add skill         # add a single piece later
+# hive add skill                        # (re)install the skills later
 
 # 2. Create an issue
 hive new "Fix token expiry comparison"
@@ -140,7 +140,7 @@ In the canvas:
 - Press `2` to spawn the selected agent; the tool island (top) switches agent and
   the number keys `1`–`7` spawn terminal / agent / explorer / diff / issues / frame / browser.
 - Click **▶ Work** on any issue → the agent spawns pre-loaded with the issue and the
-  full MCP tool surface.
+  `hive` skills.
 - Press `⌘L` to toggle the **Layers** panel — every tile grouped by frame, with live
   agent status.
 - Press `7` for a **Browser** tile — a real web view that pans and zooms with the canvas.
@@ -151,26 +151,24 @@ In the canvas:
 ## How agents talk to hivemind
 
 ```text
-agent tile (claude / codex / …)
-      │  reads .mcp.json, spawns the server over stdio
+agent tile (claude / codex / pi / droid / …)
+      │  runs the CLI from Bash (the skills say how)
       ▼
-hive mcp-stdio  ──►  get_issue · set_state · add_comment · mark_acceptance · …
-      │  edits markdown
+hive show · hive ctl set-state · add-comment · mark-acceptance · …   ──►  edits markdown
+      │
       ▼
 .hivemind/issues/*.md  ──►  filesystem watcher  ──►  live board tile
 ```
 
-1. `hive init --agentic` drops `.mcp.json`, `CLAUDE.md`, and the `hive-work` skill
-   into your repo.
+1. `hive init` drops the agentic section into `CLAUDE.md` and the `hive-work`,
+   `hive-workflow`, `hivemind` and `hive-browser` skills into `.claude/skills/`.
 2. You start an agent (in a canvas tile or any terminal) inside that repo.
-3. The agent auto-loads `.mcp.json`, spawns `hive mcp-stdio`, and gets the hive tools:
-   `get_issue`, `set_state`, `add_comment`, `mark_acceptance`, and friends.
-4. The skill activates on any `MYP-123` mention and runs the agent through an
-   **execution contract**: load the issue → do the work → end the session by setting
-   the issue's disposition.
+3. The skill activates on any `MYP-123` mention and runs the agent through an
+   **execution contract** with the `hive` CLI (`--json` everywhere): load the issue →
+   do the work → end the session by setting the issue's disposition.
 
-State changes flow MCP → markdown → filesystem watcher → live UI. No SDK, no API key.
-Agents use your existing CLI login.
+State changes flow CLI → markdown → filesystem watcher → live UI. No SDK, no API key,
+no MCP server. Any agent that can run a shell command can drive it.
 
 ### The control plane — agents that drive the canvas
 
@@ -182,25 +180,30 @@ per-install capability token + the agent's own tile id are injected into every
 spawned agent, so these tools "just work" from inside a tile and return a clear
 *"app not running"* when it isn't.
 
-| Tool | What it does |
+| `hive ctl …` | What it does |
 |---|---|
-| `hive_spawn_agent` | Launch an agent tile (`claude`/`codex`/…) and hand it a task → returns its `tileId`. `frame:` picks which workspace it lands in (by id / repo name / title); by default the worker **auto-reports** — its reply is delivered back into your session when it finishes (no polling), with a visible reporting edge drawn on the canvas. |
-| `hive_send` / `hive_send_keys` | Send text, or **key tokens** (`Down`/`Enter`/`Esc`/…), to a tile's terminal — e.g. answer a worker's native `AskUserQuestion` picker. |
-| `hive_read` | Optional synchronous read: block until an agent finishes a turn, return its reply (parsed cleanly from the session transcript, never screen-scraped). |
-| `hive_approve` | Answer a **supervised** worker's tool-permission request (`allow`/`deny`/`always`/`never`) — see below. |
-| `hive_list_tiles` / `hive_list_frames` | List tiles **grouped by frame** (with live status), or list the frames themselves. Filter by `frame`. |
-| `hive_focus` / `hive_close_tile` | Bring a tile into view, or shut a worker down. |
-| `hive_connect` / `hive_disconnect` | Pipe one agent's finished-turn replies into another's input — chain workers (animated data-flow edge). |
-| `hive_open_review` / `hive_report` | Open a plan in the review tile and block for human approve/deny; or push a result back to the agent that spawned you. |
+| `spawn --agent claude --frame repo --prompt "…"` | Launch an agent tile (`claude`/`codex`/`pi`/`droid`/…) and hand it a task → `{tileId}`. `--frame` picks which workspace it lands in (id / repo name / title); by default the worker **auto-reports** — its reply is delivered back into your terminal when it finishes (no polling), with a visible reporting edge drawn on the canvas. |
+| `send <tile> "…"` / `keys <tile> Down,Enter` | Send text, or **key tokens** (`Down`/`Enter`/`Esc`/…), to a tile's terminal — e.g. answer a worker's native `AskUserQuestion` picker. |
+| `read <tile> --timeout 90000` / `--poll` | Block until an agent finishes a turn and print its reply (parsed cleanly from the session transcript, never screen-scraped); exit 4 on timeout. `--poll` never blocks. |
+| `workflow --shape fanout\|pipeline\|mapreduce` | Spawn a fleet of visible workers, drive them, block until every reply is gathered. |
+| `approve <reqId> allow\|deny\|always\|never` | Answer a **supervised** worker's tool-permission request — see below. |
+| `list` / `frames` | List tiles **grouped by frame** (with live status), or list the frames themselves. |
+| `focus <tile>` / `close <tile>` | Bring a tile into view, or shut a worker down. |
+| `connect <src> <dst>` / `disconnect` | Pipe one agent's finished-turn replies into another's input — chain workers (animated data-flow edge). |
+| `open-review --file plan.md` / `report "…"` | Open a plan in the review tile and block for human approve/deny; or push a result back to the agent that spawned you. |
+| `stream <tile> --lines 40 --snapshot` | Read what is on a tile's screen right now (ANSI-stripped), or tail it live. |
+
+Every subcommand takes `--json` and fails with `{"ok":false,"code","message"}` plus a
+meaningful exit status (2 usage · 3 app not running · 4 timeout · 5 not found · 6 unauthorized).
 
 **Supervised approvals.** Spawn with `supervise` and the worker stops escalating
 its tool-permission prompts to a human — they're brokered to **the agent that
 spawned it** instead (an injected `PreToolUse` hook blocks on the socket until you
-answer with `hive_approve`). `always`/`never` remember the decision per
+answer with `hive ctl approve`). `always`/`never` remember the decision per
 worker+tool; it **fails safe** to the normal human prompt on timeout or no
 supervisor. So you can fire a worker and let it run *under your watch*, approving
-only the calls that need judgement. The same surface is on the CLI: `hive ctl
-spawn|send|keys|read|approve|list|frames|focus|close|connect`.
+only the calls that need judgement. The `hivemind` skill installed by `hive init`
+teaches every agent this vocabulary.
 
 ---
 
@@ -211,13 +214,13 @@ spawn|send|keys|read|approve|list|frames|focus|close|connect`.
 | **Canvas-per-project** | One infinite [xyflow](https://reactflow.dev) canvas per repo. Frames bind to a workspace path, so multiple repos coexist on one screen, each with its own auto-assigned color. |
 | **Pluggable agents** | `claude` / `codex` / `gemini` / `opencode` / `kiro` / `pi` each run in their own WebGL-accelerated xterm tile. Agents are an extensible registry — adding one is a single entry. Live status (idle / working / waiting / done) is detected from the command and shown on the frame header. |
 | **PM you can `cat`** | Issues, acceptance criteria, cycles, and an activity log are markdown + YAML frontmatter under `.hivemind/`. No DB, no API. |
-| **MCP integration** | `.mcp.json` autowires a stdio MCP server so agents can `get_issue`, `set_state`, `add_comment`, `mark_acceptance`, … from inside their tile. |
+| **CLI-first agent integration** | `hive init` installs skills that teach any agent to `hive show`, `hive ctl set-state`, `add-comment`, `mark-acceptance`, … from Bash — no MCP server, so it works the same for every runtime. |
 | **Live diff review** | A Pierre-backed diff tile: split / unified, a changed-files sidebar with per-file **reviewed** checks, multi-line comments, and **send-to-agent** for any comment or selection. |
 | **Git worktrees as sub-frames** | Attach a branch worktree → a nested sub-frame scoped to that branch. Line several branches up side by side and arrange them as columns. |
 | **Remote SSH frames** | Bind a frame to a directory on another machine over SSH — its terminals are real PTYs on the host, the editor reads/writes over SFTP, diff/status run `git` on the remote. One pooled `ssh2` connection per host; agent / key / password auth; TOFU host keys. |
 | **Browser tile** | A real Chromium web view (Electron `<webview>`) that lives in the DOM, so it pans / zooms / clips with the canvas — multi-tab, address bar, find-in-page, per-session logins. |
 | **Agents can browse** | Opt-in: a spawned agent drives the *visible* Browser tile over CDP via the `hive-browser` skill (built on [agent-browser](https://github.com/vercel-labs/agent-browser)) — navigate, click, read, screenshot the same page you're watching. |
-| **Multi-agent control plane** | An agent in one tile can **spawn, drive, and supervise** other agents on the canvas over a local `0600` socket (HCP): pick the target frame, converse, pipe agents together, auto-report results, and broker a worker's permission prompts back to its parent (`supervise` + `hive_approve`). Same surface from the shell via `hive ctl`. Complements Claude Code's native subagents by making the agent mesh **visible, spatial, and cross-tool**. |
+| **Multi-agent control plane** | An agent in one tile can **spawn, drive, and supervise** other agents on the canvas over a local `0600` socket (HCP): pick the target frame, converse, pipe agents together, auto-report results, and broker a worker's permission prompts back to its parent (`--supervise` + `hive ctl approve`). One vocabulary for every runtime: `hive ctl`. Complements Claude Code's native subagents by making the agent mesh **visible, spatial, and cross-tool**. |
 | **Layers + arrange** | A Figma-style layers rail lists every tile grouped by frame with live status; opt-in arrange snaps a frame's tiles and worktrees into Columns / Rows / Grid. |
 | **Persistent terminals** | A detached PTY daemon outlives the window. Headless xterm + SerializeAddon replays the *current screen* (alt-screen, SGR colors, cursor) on reopen — not a raw byte fast-forward. |
 | **Reboot-resume** | Every `claude` spawn is `--session-id`-bound at spawn time; after a reboot the daemon respawns with `--resume <uuid>`, continuing the same conversation. Codex resumes from its session dir. |
@@ -234,8 +237,8 @@ spawn|send|keys|read|approve|list|frames|focus|close|connect`.
 └── config.yaml  workspace prefix, next id
 
 apps/
-├── cli/         hive CLI (citty + bun-compile). Hosts the MCP server via
-│                 `hive mcp-stdio`.
+├── cli/         hive CLI (citty + bun-compile). `hive ctl` is the agent
+│                 control plane (HCP client).
 └── desktop/     Electron + electron-vite + React renderer.
                  ├─ Canvas       xyflow infinite canvas
                  ├─ TerminalTile xterm.js + WebGL + agent-status bus
@@ -250,12 +253,12 @@ apps/
                  └─ pty-daemon   detached node-pty + headless-xterm snapshots
 
 packages/
-├── hive-core/   storage + parsing (gray-matter + zod schemas)
-├── hive-mcp/    stdio MCP server wrapping hive-core
+├── hive-core/   storage + parsing (gray-matter + zod schemas), skill templates,
+│                 the agentic-stack installer
 └── tsconfig/    shared TS config
 
 templates/
-└── agentic/     per-workspace templates copied by `hive init --agentic`
+└── agentic/     source of the hive-browser skill (embedded into hive-core)
 ```
 
 ---
@@ -332,15 +335,15 @@ registry takes one entry per CLI, so any terminal-native coding agent can be add
 
 **Is this like tmux for AI agents?**
 Same idea — many agents, one screen — but hivemind keeps the structure agents need:
-a diff tile next to each terminal, an issues board they read and update over MCP, git
+a diff tile next to each terminal, an issues board they read and update with the `hive` CLI, git
 worktrees as nested frames, and sessions that survive the window and resume after a
 reboot. Think tmux's parallelism with a project-management layer on top.
 
 **How is the project tracker stored?**
 As plain markdown with YAML frontmatter under `.hivemind/` — issues, acceptance
 criteria, cycles, and an activity log. No database, no API, no cloud account. You can
-`cat`, `grep`, and `git`-version your backlog, and agents read and write it through a
-small MCP server.
+`cat`, `grep`, and `git`-version your backlog, and agents read and write it through the
+`hive` CLI.
 
 **Is it local-first and private?**
 Yes. Everything runs on your machine, the data is files on your disk, there's no

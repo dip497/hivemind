@@ -6,9 +6,9 @@ import path from "node:path";
 // @hivemind/* workspace packages ship .ts source via package.json `main`
 // (zero build step in dev). For production Electron, we must BUNDLE them
 // into main/preload because node has no .ts loader at runtime. Their
-// transitive npm deps (gray-matter, yaml, zod, @modelcontextprotocol/sdk)
+// transitive npm deps (gray-matter, yaml, zod)
 // stay externalized — they're plain JS and load fine from app.asar.
-const BUNDLE_INTERNAL = ["@hivemind/core", "@hivemind/core/storage", "@hivemind/mcp"];
+const BUNDLE_INTERNAL = ["@hivemind/core", "@hivemind/core/storage"];
 
 // ---------------------------------------------------------------------------
 // shiki language / theme allowlist

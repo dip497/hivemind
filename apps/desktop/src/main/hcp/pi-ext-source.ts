@@ -4,8 +4,8 @@
  * system, but it DOES expose an extension API (`export default function (pi) {
  * pi.on(event, handler); pi.registerTool(...) }`), so we bridge pi's lifecycle
  * events to the HCP socket the same way claude's Stop hook does — AND give a pi
- * worker the same orchestration powers claude gets from the hive MCP server, but
- * over the HCP socket directly (no MCP dependency).
+ * worker the same orchestration powers claude gets from `hive ctl`, but over the
+ * HCP socket directly (no CLI dependency inside pi).
  *
  * The generated module is self-contained ESM: its ONLY runtime imports are
  * `node:net` and `typebox` (pi bundles typebox and exposes it to extensions —

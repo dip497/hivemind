@@ -56,20 +56,17 @@ test("kiroHooksSettings is empty without execPath/hcpSock (no injection)", () =>
   assert.deepEqual(kiroHooksSettings({ execPath: "/x" }), {}, "needs the socket too");
 });
 
-test("kiroAgentConfig nests hooks under a `hooks` key and wires mcpServers.hive", () => {
-  const cfg = kiroAgentConfig({ ...HOOK_DEPS, hiveCliPath: "/x/hive" }) as any;
+test("kiroAgentConfig nests hooks under a `hooks` key and wires NO MCP server (workers use `hive ctl`)", () => {
+  const cfg = kiroAgentConfig(HOOK_DEPS) as any;
   assert.equal(cfg.name, KIRO_HIVEMIND_AGENT);
   assert.ok(cfg.hooks && cfg.hooks.stop, "hooks nested under `hooks`");
-  assert.equal(cfg.mcpServers.hive.command, "/x/hive");
-  assert.deepEqual(cfg.mcpServers.hive.args, ["mcp-stdio"]);
-  assert.equal(cfg.mcpServers.hive.env.HIVE_AGENT_ID, "kiro");
+  assert.equal(cfg.mcpServers, undefined, "the hive MCP server is retired; kiro drives HCP via the hive CLI on PATH");
   // No default-on trust flag — matches the skill's anti-pattern list.
   assert.equal(cfg.allowedTools, undefined);
 });
 
-test("kiroAgentConfig omits mcpServers without a hiveCliPath, and hooks without execPath/hcpSock", () => {
+test("kiroAgentConfig omits hooks without execPath/hcpSock", () => {
   const cfg = kiroAgentConfig({}) as any;
-  assert.equal(cfg.mcpServers, undefined);
   assert.equal(cfg.hooks, undefined);
 });
 

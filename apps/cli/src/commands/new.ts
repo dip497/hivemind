@@ -25,6 +25,7 @@ export const newCmd = defineCommand({
     state: { type: "string", description: "Initial state (default: backlog)" },
     github: { type: "string", description: "Linked GitHub issue/PR number" },
     description: { type: "string", description: "Initial description body" },
+    ac: { type: "string", description: "Acceptance criteria, '||'-separated (each becomes a checklist item)" },
     json: { type: "boolean" },
   },
   async run({ args }) {
@@ -68,6 +69,9 @@ export const newCmd = defineCommand({
         assignee,
         github: githubNum && githubNum > 0 ? githubNum : null,
         description: args.description ? String(args.description) : "",
+        acceptanceCriteria: args.ac
+          ? String(args.ac).split("||").map((t) => t.trim()).filter(Boolean).map((text) => ({ done: false, text }))
+          : undefined,
         who: detectWho(),
       });
       await writeAgentContext(root);

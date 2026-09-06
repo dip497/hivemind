@@ -170,9 +170,9 @@ test("approval: worker awaits, parent approves 'always' → allow + cached (no s
   const pending = dispatch("agent.await_approval", { callerTile: "tile-x", tool_name: "Bash", tool_input: { command: "rm -rf /tmp/x" } });
   await new Promise((r) => setTimeout(r, 10));
   // The approval prompt is delivered into the PARENT's pty; pull the reqId out.
-  const banner = writes.find(([id, data]) => id === "hm:parent" && data.includes("hive_approve"));
+  const banner = writes.find(([id, data]) => id === "hm:parent" && data.includes("hive ctl approve"));
   assert.ok(banner, "approval banner delivered to parent");
-  const reqId = banner![1].match(/hive_approve\("([^"]+)"/)![1];
+  const reqId = banner![1].match(/hive ctl approve (\S+) /)![1];
   const ar = await dispatch("agent.approve", { reqId, decision: "always" });
   assert.deepEqual(ar, { ok: true, decision: "allow" });
   assert.equal((await pending as { decision: string }).decision, "allow");
@@ -189,7 +189,7 @@ test("approval: deny carries a reason back to the worker", async () => {
   await dispatch("tile.spawn_agent", { agent: "claude", callerTile: "parent", report: false });
   const pending = dispatch("agent.await_approval", { callerTile: "tile-x", tool_name: "Write", tool_input: { file_path: "/etc/passwd" } });
   await new Promise((r) => setTimeout(r, 10));
-  const reqId = writes.find(([id, d]) => id === "hm:parent" && d.includes("hive_approve"))![1].match(/hive_approve\("([^"]+)"/)![1];
+  const reqId = writes.find(([id, d]) => id === "hm:parent" && d.includes("hive ctl approve"))![1].match(/hive ctl approve (\S+) /)![1];
   await dispatch("agent.approve", { reqId, decision: "deny", reason: "not that file" });
   assert.deepEqual(await pending, { decision: "deny", reason: "not that file" });
 });

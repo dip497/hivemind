@@ -110,13 +110,13 @@ export function IssuesTile({ root, onClose, selected = false, pinned, onTogglePi
   const filtered = useMemo(() => applyFilters(issues, filters), [issues, filters]);
 
   const workOn = async (issue: IssueSummary) => {
-    // Ensure the repo has the hive MCP + work skill (idempotent), then spawn claude
+    // Ensure the repo has the hive skills + CLAUDE.md section (idempotent), then spawn claude
     // with the work prompt attached (delivered once it's ready — see claude-bus).
     const repoDir = root ? root.replace(/\/\.hivemind\/?$/, "") : null;
     if (repoDir) {
       try { await window.hive.installAgentic(repoDir); } catch { /* best-effort */ }
     }
-    const work = `Work on ${issue.id}: load it via hive_get_issue, complete the acceptance criteria, and end with hive_set_state. Title: "${issue.title}".`;
+    const work = `Work on ${issue.id}: load it with \`hive show ${issue.id} --json\`, complete the acceptance criteria, and end with \`hive ctl set-state\`. Title: "${issue.title}".`;
     window.dispatchEvent(new CustomEvent("hivemind:deliver-to-claude", { detail: { text: work } }));
   };
 

@@ -3,7 +3,7 @@
  * `hcp-approval-hook.cjs`, run by `claude` (electron-as-node) BEFORE a tool call
  * on a SUPERVISED worker. Instead of the human approving in the terminal, the
  * request is brokered to the agent that spawned this worker (its parent), which
- * answers via `hive_approve`. The parent's decision becomes claude's
+ * answers via `hive ctl approve`. The parent's decision becomes claude's
  * `permissionDecision`.
  *
  * Self-contained CommonJS, zero deps (raw string, like stopHookSource). Speaks

@@ -2,7 +2,7 @@
  * Seed the EPHEMERAL kiro KIRO_HOME override home. kiro-cli loads custom agent
  * configs from `<KIRO_HOME>/.kiro/agents/<name>.json` (selected with
  * `--agent <name>`), and we point kiro at this hivemind-owned home (per
- * install) so we can inject our own agent config (hooks + mcpServers.hive)
+ * install) so we can inject our own agent config (hooks)
  * WITHOUT touching the user's real ~/.kiro.
  *
  * The home must still look complete to kiro — auth, settings, sessions,

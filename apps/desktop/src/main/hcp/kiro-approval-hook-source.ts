@@ -2,7 +2,7 @@
  * The kiro `preToolUse` permission-broker hook — emitted to disk as
  * `hcp-kiro-approval-hook.cjs`, run by `kiro-cli` (electron-as-node) BEFORE a
  * tool call. Brokers a SUPERVISED kiro worker's tool-permission decisions to
- * the agent that spawned it (its parent), which answers via `hive_approve` —
+ * the agent that spawned it (its parent), which answers via `hive ctl approve` —
  * same `agent.await_approval` req/res wire protocol as claude's
  * `hcp-approval-hook.cjs` (see approval-hook-source.ts).
  *

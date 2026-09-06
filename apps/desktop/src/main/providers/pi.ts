@@ -5,7 +5,7 @@
  * hivemind injects that extension + the HCP socket/token/tile-id env into every
  * pi spawn, bridging pi's agent_start/message_end/agent_end to the HCP
  * `status`/`turn` topics. So a pi tile reports turn-completion, status, and its
- * inline reply deterministically (hive_read / auto-report / workflow work with
+ * inline reply deterministically (agent.read / auto-report / workflow work with
  * `agent: pi`), mirroring claude's Stop hook — no longer raw / screen-scrape
  * only (the renderer `detectPi` scrape remains the fallback). Like codex, pi
  * can't pre-assign a session id, so on restore it resolves the newest session

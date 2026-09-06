@@ -13,7 +13,6 @@
   },
   "dependencies": {
     "@hivemind/core": "workspace:*",
-    "@hivemind/mcp": "workspace:*",
     "citty": "catalog:",
     "yaml": "catalog:",
     "zod": "catalog:"

@@ -55,9 +55,9 @@ export interface ClaudeResumeDeps {
    *  This is the hook-driven replacement for the working/idle screen-scrape. */
   userpromptHookPath?: string;
   /** The HCP control-plane unix socket (owned by Electron main). Injected into
-   *  the agent's env as HIVE_HCP_SOCK so its hive MCP can drive the canvas. */
+   *  the agent's env as HIVE_HCP_SOCK so `hive ctl` can drive the canvas. */
   hcpSock?: string;
-  /** The HCP capability token, injected as HCP_TOKEN so the agent's MCP is
+  /** The HCP capability token, injected as HCP_TOKEN so the agent's `hive ctl` is
    *  authorized to call the control plane. */
   hcpToken?: string;
   /** Absolute path to the generated permission-broker hook `.cjs` (daemon writes
@@ -159,7 +159,7 @@ export function trackerSettings(deps: ClaudeResumeDeps, id: string, supervise?: 
   return JSON.stringify({ hooks });
 }
 
-/** The HCP env injected into a spawned claude so its hive MCP can drive the
+/** The HCP env injected into a spawned claude so `hive ctl` can drive the
  *  control plane: the socket path + capability token + this agent's own tile id
  *  (so spawns/sends from this agent default to ITS frame) + its spawn depth
  *  (for the anti-fork-bomb gate). */
@@ -169,10 +169,12 @@ function hcpEnv(deps: ClaudeResumeDeps, spec: SpawnSpec, id: string): Record<str
     ...spec.env,
     HIVE_HCP_SOCK: deps.hcpSock,
     HCP_TOKEN: deps.hcpToken,
-    // The agent's OWN tile id — so its hive_spawn_agent/hive_send default to the
+    // The agent's OWN tile id — so its `hive ctl spawn`/`send` default to the
     // frame it lives in (the hook command sets HIVEMIND_TILE only for the hook
     // subprocess; the agent process itself needs it too).
     HIVEMIND_TILE: id,
+    // Signs the Activity rows this agent writes through `hive ctl`.
+    HIVE_AGENT_ID: "claude",
     // Top-level (user-spawned) agents are depth 0. HCP-spawned children get an
     // incremented value once spawn-env threading lands (Phase 2); default 0.
     HIVE_AGENT_DEPTH: spec.env?.HIVE_AGENT_DEPTH ?? "0",

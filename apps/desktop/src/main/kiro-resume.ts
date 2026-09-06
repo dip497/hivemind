@@ -9,7 +9,7 @@
  * `{"decision":"block","reason":"…"}` on stdout. So kiro is a first-class hook
  * provider, not scrape-only — same tier as droid.
  *
- * Injection seam — kiro has no inline `--settings` flag. Its hooks (+ mcpServers
+ * Injection seam — kiro has no inline `--settings` flag. Its hooks
  * + allowedTools) live in a NAMED custom-agent config file, `<KIRO_HOME>/.kiro/
  * agents/<name>.json`, selected at spawn with `--agent <name>` (docs/cli/custom-
  * agents/configuration-reference). `KIRO_HOME` overrides `~/.kiro` wholesale
@@ -31,7 +31,7 @@
  * the hook's stdin JSON (see hcp/stop-hook-source.ts, shared verbatim with
  * droid/claude). If kiro's `stop` payload does NOT carry a `transcript_path`
  * field, the "turn" event we forward to HCP simply carries `transcriptPath:
- * null` — `agent.read`/`hive_workflow` degrade to the timeout-based gather path
+ * null` — `agent.read`/`workflow.run` degrade to the timeout-based gather path
  * instead of a clean transcript read, but nothing breaks. Same fallback droid
  * already relies on if its own transcript_path assumption were ever wrong.
  *
@@ -129,27 +129,18 @@ export function kiroHooksSettings(deps: KiroResumeDeps): Record<string, unknown[
   return hooks;
 }
 
-/** The full `agents/hivemind.json` custom-agent config: hooks (above) +
- *  `mcpServers.hive` (so the worker can call `hive_report`/`hive_send`/…, same
- *  as claude's `.mcp.json`) so a spawned kiro is a real HCP worker, not just a
- *  hook emitter. `allowedTools` is deliberately left EMPTY — per the skill's
+/** The full `agents/hivemind.json` custom-agent config: hooks (above). A
+ *  spawned kiro is a real HCP worker through the `hive` CLI on its PATH
+ *  (`hive ctl report`/`send`/…) — the HCP socket/token/tile-id ride the spawn
+ *  env (kiroEnv). `allowedTools` is deliberately left EMPTY — per the skill's
  *  anti-pattern list, hivemind never ships a default-on trust flag; a kiro tile
  *  keeps its own default per-tool prompts, answered by the human on the canvas
  *  (or brokered via `preToolUse` under `supervise`). */
-export function kiroAgentConfig(deps: KiroResumeDeps & { hiveCliPath?: string }): Record<string, unknown> {
+export function kiroAgentConfig(deps: KiroResumeDeps): Record<string, unknown> {
   const config: Record<string, unknown> = {
     name: KIRO_HIVEMIND_AGENT,
     description: "hivemind control-plane wiring (auto-generated — do not edit by hand)",
   };
-  if (deps.hiveCliPath) {
-    // No HIVE_ROOT: hive-mcp resolves the repo root by walking up from the MCP
-    // server subprocess's cwd when unset (packages/hive-mcp/src/index.ts), and
-    // that subprocess inherits kiro-cli's own cwd (the tile's project dir) — the
-    // same per-project resolution claude/codex get from a project-local
-    // `.mcp.json`, without needing one here (this config is a shared, per-
-    // install file, not per-project).
-    config.mcpServers = { hive: { command: deps.hiveCliPath, args: ["mcp-stdio"], env: { HIVE_AGENT_ID: "kiro" } } };
-  }
   const hooks = kiroHooksSettings(deps);
   if (Object.keys(hooks).length) config.hooks = hooks;
   return config;
@@ -157,7 +148,7 @@ export function kiroAgentConfig(deps: KiroResumeDeps & { hiveCliPath?: string })
 
 /** Env injected into a spawned kiro: the ephemeral home (so it loads OUR
  *  hivemind.json without touching ~/.kiro) + the HCP socket/token/tile-id (so
- *  its hooks + hive MCP reach the control plane, attributed to this tile) +
+ *  its hooks + `hive ctl` reach the control plane, attributed to this tile) +
  *  HIVE_SUPERVISE passthrough (read by kiroApprovalHookPath at runtime — see
  *  its docblock). */
 function kiroEnv(deps: KiroResumeDeps, spec: SpawnSpec, id: string): Record<string, string> | undefined {
@@ -167,7 +158,8 @@ function kiroEnv(deps: KiroResumeDeps, spec: SpawnSpec, id: string): Record<stri
   if (deps.hcpSock && deps.hcpToken) {
     env.HIVE_HCP_SOCK = deps.hcpSock;
     env.HCP_TOKEN = deps.hcpToken;
-    env.HIVEMIND_TILE = id; // hooks + the agent's own hive MCP attribute to this tile
+    env.HIVEMIND_TILE = id; // hooks + the agent's own `hive ctl` calls attribute to this tile
+    env.HIVE_AGENT_ID = "kiro"; // signs Activity rows written via `hive ctl`
     env.HIVE_AGENT_DEPTH = spec.env?.HIVE_AGENT_DEPTH ?? "0";
   }
   return env; // HIVE_SUPERVISE, if present on spec.env, passes through via the spread above
@@ -194,7 +186,7 @@ export interface KiroResumeTransforms {
 export function makeKiroResumeTransforms(deps: KiroResumeDeps = {}): KiroResumeTransforms {
   return {
     // Fresh spawn: select our generated custom agent (`--agent hivemind`) so
-    // the hooks + mcpServers.hive in the KIRO_HOME overlay take effect, and
+    // the hooks in the KIRO_HOME overlay take effect, and
     // inject the home + HCP env. No-ops the `--agent` injection if the spec
     // already picks one (user override) or the home wasn't seeded (best-effort
     // seed failure → run kiro with no injected config, scrape-only status).

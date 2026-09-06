@@ -440,7 +440,7 @@ ${GREEN}✓ hivemind ready.${NC}
   ${BLUE}1. Initialize a workspace in any git repo:${NC}
      cd ~/my-project
      hive init --prefix MYP
-     hive init --agentic              # adds .mcp.json + claude skill + CLAUDE.md
+     hive init --agentic              # adds the hive skills + CLAUDE.md section
 
   ${BLUE}2. Create your first issue:${NC}
      hive new "Fix token expiry"

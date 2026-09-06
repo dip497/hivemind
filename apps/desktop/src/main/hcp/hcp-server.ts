@@ -1,6 +1,6 @@
 /**
- * HCP server — a 0600 unix socket (NDJSON) owned by Electron main. Drivers (the
- * hive MCP server, a CLI) issue token-authenticated `req`s; injected hooks fire
+ * HCP server — a 0600 unix socket (NDJSON) owned by Electron main. Drivers
+ * (`hive ctl`, the pi extension) issue token-authenticated `req`s; injected hooks fire
  * unauthenticated one-shot `event`s (the 0600 socket gates them to same-uid).
  * Drivers may also `sub`scribe to an agent's live output and receive `evt`
  * chunks until they `unsub` or disconnect (the agent.stream feature).

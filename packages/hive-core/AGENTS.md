@@ -1,7 +1,7 @@
 # AGENTS.md — packages/hive-core
 
 The storage + parsing layer for `.hivemind/`. Pure TypeScript, no Electron, no
-React — consumed by the desktop main process, the `hive` CLI, and the MCP server.
+React — consumed by the desktop main process and the `hive` CLI.
 Ships `.ts` source via `package.json` `main` (bundled by consumers; no build).
 
 ## Modules

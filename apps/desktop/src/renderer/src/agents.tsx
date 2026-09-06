@@ -130,7 +130,7 @@ export const AGENTS: AgentDef[] = [
   // userPromptSubmit / preToolUse / postToolUse / stop) via a named custom
   // agent config selected with `--agent`. hivemind injects one
   // (`agents/hivemind.json`, in an ephemeral KIRO_HOME overlay — see
-  // hcp/kiro-home.ts) wiring those hooks + `mcpServers.hive`, so a kiro tile is
+  // hcp/kiro-home.ts) wiring those hooks, so a kiro tile is
   // a real HCP worker: working/idle is hook-driven, a captured `session_id`
   // gives PER-TILE resume (`--resume-id`, falling back to cwd-scoped
   // `--resume` if none was captured yet), and `supervise` brokers tool

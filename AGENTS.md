@@ -11,19 +11,18 @@ canvas) that is mission-control for AI coding agents. Every tile is a live
 terminal / diff / file-tree / editor / issues board; tiles live in **frames**
 (workspaces) bound to a real repo on disk — local, a git worktree, or a remote
 SSH host. Issues are plain markdown under `.hivemind/`; agents read/update them
-through an MCP server. Local-first, no cloud, no telemetry.
+with the `hive` CLI (`hive ctl` is the control plane). Local-first, no cloud, no telemetry.
 
 ## Monorepo layout
 
 ```
 apps/
   desktop/   Electron main + preload + React renderer (the canvas app)   → apps/desktop/AGENTS.md
-  cli/       `hive` CLI (citty + bun-compile); hosts the MCP server
+  cli/       `hive` CLI (citty + bun-compile); `hive ctl` = agent control plane (HCP client)
 packages/
-  hive-core/ storage + parsing for .hivemind/ (gray-matter + zod)         → packages/hive-core/AGENTS.md
-  hive-mcp/  stdio MCP server (tools wrapping hive-core)
+  hive-core/ storage + parsing for .hivemind/ (gray-matter + zod), skill templates + agentic installer → packages/hive-core/AGENTS.md
   tsconfig/  shared TS config
-templates/   per-workspace agentic templates (`hive init --agentic`)
+templates/   source of the hive-browser skill (embedded into hive-core)
 docs/design/ architecture design docs (e.g. remote-frames.md)
 scripts/     release.sh + helpers
 ```
@@ -78,7 +77,7 @@ GitHub Actions builds + publishes. **Do not run it unless explicitly asked.**
 <claude-mem-context>
 # Memory Context
 
-# [hivemind] recent context, 2026-06-19 2:43pm GMT+5:30
+# [hivemind] recent context, 2026-09-05 10:16pm GMT+5:30
 
 No previous sessions found.
 </claude-mem-context>
