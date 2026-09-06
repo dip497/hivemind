@@ -83,14 +83,36 @@ test("drag terminal by its header", async () => {
 
   await page.mouse.move(sx, sy);
   await page.mouse.down();
-  for (let i = 1; i <= 18; i++) {
-    await page.mouse.move(sx + (140 * i) / 18, sy + (90 * i) / 18, { steps: 1 });
-    await page.waitForTimeout(14);
+  // Many small moves with a pause each (xyflow samples pointer events per
+  // animation frame; under load a coarse move can be swallowed), and an explicit
+  // check that the drag actually ENGAGED — xyflow marks the node `.dragging` —
+  // so a swallowed pointerdown fails loudly here instead of as a 0px delta.
+  const steps = 40;
+  const dx0 = 140;
+  const dy0 = 90;
+  for (let i = 1; i <= 4; i++) {
+    await page.mouse.move(sx + (dx0 * i) / steps, sy + (dy0 * i) / steps, { steps: 1 });
+    await page.waitForTimeout(20);
+  }
+  await expect(term, "drag never engaged (no .dragging on the node)").toHaveClass(/dragging/, { timeout: 2_000 });
+  for (let i = 5; i <= steps; i++) {
+    await page.mouse.move(sx + (dx0 * i) / steps, sy + (dy0 * i) / steps, { steps: 1 });
+    await page.waitForTimeout(20);
   }
   await page.mouse.up();
-  await page.waitForTimeout(400);
 
-  const after = await term.boundingBox();
+  // Poll until the position settles (two identical reads) rather than one read
+  // after a fixed sleep — the drop is applied on a frame.
+  const after = await (async () => {
+    let last: { x: number; y: number } | null = null;
+    for (let i = 0; i < 40; i++) {
+      const b = await term.boundingBox();
+      if (b && last && Math.abs(b.x - last.x) < 0.5 && Math.abs(b.y - last.y) < 0.5 && b.x !== before!.x) return b;
+      last = b ? { x: b.x, y: b.y } : null;
+      await page.waitForTimeout(50);
+    }
+    return term.boundingBox();
+  })();
   expect(after).toBeTruthy();
   const dx = after!.x - before!.x;
   const dy = after!.y - before!.y;
