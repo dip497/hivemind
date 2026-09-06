@@ -1,0 +1,1045 @@
+{
+  "claude": {
+    "identify": {
+      "bare": "claude",
+      "path": "claude"
+    },
+    "promptViaArgv": true,
+    "spawn": {
+      "cmd": "claude",
+      "args": [
+        "--settings",
+        "<settings-json>",
+        "--session-id",
+        "<uuid>",
+        "--dangerously-skip-permissions"
+      ],
+      "env": {
+        "HIVE_AGENT_DEPTH": "1",
+        "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
+        "HCP_TOKEN": "golden-token",
+        "HIVEMIND_TILE": "tile-g",
+        "HIVE_AGENT_ID": "claude"
+      },
+      "settings": {
+        "hooks": {
+          "SessionStart": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/tile-session-tracker.cjs' '/x/ud/tile-sessions'"
+                }
+              ]
+            }
+          ],
+          "PreToolUse": [
+            {
+              "matcher": "ExitPlanMode",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/plan-review-hook.cjs' '/x/ud/plan-bridge.sock'",
+                  "timeout": 345600
+                }
+              ]
+            }
+          ],
+          "Stop": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-stop-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "SubagentStart": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-subagent-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "SubagentStop": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-subagent-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "Notification": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-notification-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "UserPromptSubmit": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-userprompt-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "spawnSupervised": {
+      "cmd": "claude",
+      "args": [
+        "--settings",
+        "<settings-json>",
+        "--session-id",
+        "<uuid>",
+        "--dangerously-skip-permissions"
+      ],
+      "env": {
+        "HIVE_AGENT_DEPTH": "1",
+        "HIVE_SUPERVISE": "all",
+        "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
+        "HCP_TOKEN": "golden-token",
+        "HIVEMIND_TILE": "tile-g",
+        "HIVE_AGENT_ID": "claude"
+      },
+      "settings": {
+        "hooks": {
+          "SessionStart": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/tile-session-tracker.cjs' '/x/ud/tile-sessions'"
+                }
+              ]
+            }
+          ],
+          "PreToolUse": [
+            {
+              "matcher": "ExitPlanMode",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/plan-review-hook.cjs' '/x/ud/plan-bridge.sock'",
+                  "timeout": 345600
+                }
+              ]
+            },
+            {
+              "matcher": "*",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "HIVEMIND_TILE='tile-g' HIVE_SUPERVISE='all' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-approval-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 600
+                }
+              ]
+            }
+          ],
+          "Stop": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-stop-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "SubagentStart": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-subagent-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "SubagentStop": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-subagent-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "Notification": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-notification-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "UserPromptSubmit": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-userprompt-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "spawnWithPrompt": {
+      "args": [
+        "--settings",
+        "<settings-json>",
+        "--session-id",
+        "<uuid>",
+        "--dangerously-skip-permissions",
+        "do the thing"
+      ],
+      "envHasPrompt": false
+    },
+    "restoreFresh": {
+      "cmd": "claude",
+      "args": [
+        "--settings",
+        "<settings-json>",
+        "--continue",
+        "--dangerously-skip-permissions"
+      ],
+      "env": {
+        "HIVE_AGENT_DEPTH": "1",
+        "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
+        "HCP_TOKEN": "golden-token",
+        "HIVEMIND_TILE": "tile-g",
+        "HIVE_AGENT_ID": "claude"
+      },
+      "settings": {
+        "hooks": {
+          "SessionStart": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/tile-session-tracker.cjs' '/x/ud/tile-sessions'"
+                }
+              ]
+            }
+          ],
+          "PreToolUse": [
+            {
+              "matcher": "ExitPlanMode",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/plan-review-hook.cjs' '/x/ud/plan-bridge.sock'",
+                  "timeout": 345600
+                }
+              ]
+            }
+          ],
+          "Stop": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-stop-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "SubagentStart": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-subagent-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "SubagentStop": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-subagent-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "Notification": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-notification-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "UserPromptSubmit": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-userprompt-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "restoreAlreadyResuming": {
+      "cmd": "claude",
+      "args": [
+        "--settings",
+        "<settings-json>",
+        "--resume",
+        "sess-1",
+        "--dangerously-skip-permissions"
+      ],
+      "env": {
+        "HIVE_AGENT_DEPTH": "1",
+        "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
+        "HCP_TOKEN": "golden-token",
+        "HIVEMIND_TILE": "tile-g",
+        "HIVE_AGENT_ID": "claude"
+      },
+      "settings": {
+        "hooks": {
+          "SessionStart": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/tile-session-tracker.cjs' '/x/ud/tile-sessions'"
+                }
+              ]
+            }
+          ],
+          "PreToolUse": [
+            {
+              "matcher": "ExitPlanMode",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/plan-review-hook.cjs' '/x/ud/plan-bridge.sock'",
+                  "timeout": 345600
+                }
+              ]
+            }
+          ],
+          "Stop": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-stop-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "SubagentStart": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-subagent-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "SubagentStop": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-subagent-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "Notification": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-notification-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "UserPromptSubmit": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-userprompt-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "retry": {
+      "cmd": "claude",
+      "args": [
+        "--session-id",
+        "sess-1",
+        "--settings",
+        "<settings-json>",
+        "--dangerously-skip-permissions"
+      ],
+      "env": {
+        "HIVE_AGENT_DEPTH": "1",
+        "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
+        "HCP_TOKEN": "golden-token",
+        "HIVEMIND_TILE": "tile-g",
+        "HIVE_AGENT_ID": "claude"
+      },
+      "settings": {
+        "hooks": {
+          "SessionStart": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/tile-session-tracker.cjs' '/x/ud/tile-sessions'"
+                }
+              ]
+            }
+          ],
+          "PreToolUse": [
+            {
+              "matcher": "ExitPlanMode",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/plan-review-hook.cjs' '/x/ud/plan-bridge.sock'",
+                  "timeout": 345600
+                }
+              ]
+            }
+          ],
+          "Stop": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-stop-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "SubagentStart": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-subagent-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "SubagentStop": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-subagent-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "Notification": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-notification-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "UserPromptSubmit": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-userprompt-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "superviseSpawn": {
+      "tileId": "tile-x"
+    },
+    "status": [
+      {
+        "screen": "❯ ",
+        "status": "idle"
+      },
+      {
+        "screen": "✻ Thinking… (esc to interrupt)",
+        "status": "working"
+      },
+      {
+        "screen": "x\n  1. No\n  2. Yes, allow",
+        "status": "permission"
+      },
+      {
+        "screen": "Pick:\n↑/↓ to navigate",
+        "status": "question"
+      },
+      {
+        "screen": "⠋ Reading files… esc to interrupt",
+        "status": "working"
+      }
+    ]
+  },
+  "codex": {
+    "identify": {
+      "bare": "codex",
+      "path": "codex"
+    },
+    "promptViaArgv": false,
+    "spawn": {
+      "cmd": "codex",
+      "args": [
+        "--sandbox",
+        "workspace-write",
+        "--ask-for-approval",
+        "on-request"
+      ],
+      "env": {
+        "HIVE_AGENT_DEPTH": "1"
+      }
+    },
+    "spawnSupervised": {
+      "cmd": "codex",
+      "args": [
+        "--sandbox",
+        "workspace-write",
+        "--ask-for-approval",
+        "on-request"
+      ],
+      "env": {
+        "HIVE_AGENT_DEPTH": "1",
+        "HIVE_SUPERVISE": "all"
+      }
+    },
+    "spawnWithPrompt": {
+      "args": [
+        "--sandbox",
+        "workspace-write",
+        "--ask-for-approval",
+        "on-request",
+        "do the thing"
+      ],
+      "envHasPrompt": false
+    },
+    "restoreFresh": {
+      "cmd": "codex",
+      "args": [
+        "--sandbox",
+        "workspace-write",
+        "--ask-for-approval",
+        "on-request"
+      ],
+      "env": {
+        "HIVE_AGENT_DEPTH": "1"
+      }
+    },
+    "restoreAlreadyResuming": {
+      "cmd": "codex",
+      "args": [
+        "--sandbox",
+        "workspace-write",
+        "resume",
+        "sess-1"
+      ],
+      "env": {
+        "HIVE_AGENT_DEPTH": "1"
+      }
+    },
+    "retry": {
+      "cmd": "codex",
+      "args": [
+        "--sandbox",
+        "workspace-write"
+      ],
+      "env": {
+        "HIVE_AGENT_DEPTH": "1"
+      }
+    },
+    "superviseSpawn": {
+      "tileId": "tile-x"
+    },
+    "status": [
+      {
+        "screen": "allow command?\n[y/n]",
+        "status": "blocked"
+      },
+      {
+        "screen": "press enter to confirm or esc to cancel",
+        "status": "blocked"
+      },
+      {
+        "screen": "generating\nesc to interrupt",
+        "status": "working"
+      },
+      {
+        "screen": "• Working (0s • esc…",
+        "status": "working"
+      },
+      {
+        "screen": "❯ ",
+        "status": "idle"
+      }
+    ]
+  },
+  "droid": {
+    "identify": {
+      "bare": "droid",
+      "path": "droid"
+    },
+    "promptViaArgv": false,
+    "spawn": {
+      "cmd": "droid",
+      "args": [],
+      "env": {
+        "HIVE_AGENT_DEPTH": "1",
+        "FACTORY_HOME_OVERRIDE": "/x/ud/droid-home",
+        "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
+        "HCP_TOKEN": "golden-token",
+        "HIVEMIND_TILE": "tile-g",
+        "HIVE_AGENT_ID": "droid"
+      }
+    },
+    "spawnSupervised": {
+      "cmd": "droid",
+      "args": [],
+      "env": {
+        "HIVE_AGENT_DEPTH": "1",
+        "HIVE_SUPERVISE": "all",
+        "FACTORY_HOME_OVERRIDE": "/x/ud/droid-home",
+        "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
+        "HCP_TOKEN": "golden-token",
+        "HIVEMIND_TILE": "tile-g",
+        "HIVE_AGENT_ID": "droid"
+      }
+    },
+    "spawnWithPrompt": {
+      "args": [
+        "do the thing"
+      ],
+      "envHasPrompt": false
+    },
+    "restoreFresh": {
+      "cmd": "droid",
+      "args": [],
+      "env": {
+        "HIVE_AGENT_DEPTH": "1",
+        "FACTORY_HOME_OVERRIDE": "/x/ud/droid-home",
+        "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
+        "HCP_TOKEN": "golden-token",
+        "HIVEMIND_TILE": "tile-g",
+        "HIVE_AGENT_ID": "droid"
+      }
+    },
+    "restoreAlreadyResuming": {
+      "cmd": "droid",
+      "args": [
+        "--resume",
+        "sess-1"
+      ],
+      "env": {
+        "HIVE_AGENT_DEPTH": "1",
+        "FACTORY_HOME_OVERRIDE": "/x/ud/droid-home",
+        "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
+        "HCP_TOKEN": "golden-token",
+        "HIVEMIND_TILE": "tile-g",
+        "HIVE_AGENT_ID": "droid"
+      }
+    },
+    "retry": {
+      "cmd": "droid",
+      "args": [],
+      "env": {
+        "HIVE_AGENT_DEPTH": "1",
+        "FACTORY_HOME_OVERRIDE": "/x/ud/droid-home",
+        "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
+        "HCP_TOKEN": "golden-token",
+        "HIVEMIND_TILE": "tile-g",
+        "HIVE_AGENT_ID": "droid"
+      }
+    },
+    "superviseSpawn": {
+      "tileId": "tile-x"
+    },
+    "status": [
+      {
+        "screen": "EXECUTE rm x\n> Yes, allow\n> No, cancel\nEnter to select",
+        "status": "blocked"
+      },
+      {
+        "screen": "⠹ Thinking...\n(Press ESC to stop)",
+        "status": "working"
+      },
+      {
+        "screen": "❯ ",
+        "status": "idle"
+      },
+      {
+        "screen": "some output\nesc to stop",
+        "status": "working"
+      }
+    ]
+  },
+  "kiro": {
+    "identify": {
+      "bare": "kiro",
+      "path": "kiro"
+    },
+    "promptViaArgv": false,
+    "spawn": {
+      "cmd": "kiro-cli",
+      "args": [
+        "chat",
+        "--agent",
+        "hivemind"
+      ],
+      "env": {
+        "HIVE_AGENT_DEPTH": "1",
+        "KIRO_HOME": "/x/ud/kiro-home",
+        "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
+        "HCP_TOKEN": "golden-token",
+        "HIVEMIND_TILE": "tile-g",
+        "HIVE_AGENT_ID": "kiro"
+      }
+    },
+    "spawnSupervised": {
+      "cmd": "kiro-cli",
+      "args": [
+        "chat",
+        "--agent",
+        "hivemind"
+      ],
+      "env": {
+        "HIVE_AGENT_DEPTH": "1",
+        "HIVE_SUPERVISE": "all",
+        "KIRO_HOME": "/x/ud/kiro-home",
+        "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
+        "HCP_TOKEN": "golden-token",
+        "HIVEMIND_TILE": "tile-g",
+        "HIVE_AGENT_ID": "kiro"
+      }
+    },
+    "spawnWithPrompt": {
+      "args": [
+        "chat",
+        "--agent",
+        "hivemind",
+        "do the thing"
+      ],
+      "envHasPrompt": false
+    },
+    "restoreFresh": {
+      "cmd": "kiro-cli",
+      "args": [
+        "chat",
+        "--resume",
+        "--agent",
+        "hivemind"
+      ],
+      "env": {
+        "HIVE_AGENT_DEPTH": "1",
+        "KIRO_HOME": "/x/ud/kiro-home",
+        "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
+        "HCP_TOKEN": "golden-token",
+        "HIVEMIND_TILE": "tile-g",
+        "HIVE_AGENT_ID": "kiro"
+      }
+    },
+    "restoreAlreadyResuming": {
+      "cmd": "kiro-cli",
+      "args": [
+        "chat",
+        "--resume-id",
+        "sess-1",
+        "--agent",
+        "hivemind"
+      ],
+      "env": {
+        "HIVE_AGENT_DEPTH": "1",
+        "KIRO_HOME": "/x/ud/kiro-home",
+        "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
+        "HCP_TOKEN": "golden-token",
+        "HIVEMIND_TILE": "tile-g",
+        "HIVE_AGENT_ID": "kiro"
+      }
+    },
+    "retry": {
+      "cmd": "kiro-cli",
+      "args": [
+        "chat",
+        "--agent",
+        "hivemind"
+      ],
+      "env": {
+        "HIVE_AGENT_DEPTH": "1",
+        "KIRO_HOME": "/x/ud/kiro-home",
+        "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
+        "HCP_TOKEN": "golden-token",
+        "HIVEMIND_TILE": "tile-g",
+        "HIVE_AGENT_ID": "kiro"
+      }
+    },
+    "superviseSpawn": {
+      "tileId": "tile-x"
+    },
+    "status": [
+      {
+        "screen": "Allow this tool to run?\nAllow  Deny\nEnter to select",
+        "status": "blocked"
+      },
+      {
+        "screen": "do you want to proceed?\n❯ yes",
+        "status": "blocked"
+      },
+      {
+        "screen": "● Editing file…\nesc to cancel",
+        "status": "working"
+      },
+      {
+        "screen": "kiro is working…",
+        "status": "working"
+      },
+      {
+        "screen": "> ",
+        "status": "idle"
+      }
+    ]
+  },
+  "pi": {
+    "identify": {
+      "bare": "pi",
+      "path": "pi"
+    },
+    "promptViaArgv": true,
+    "spawn": {
+      "cmd": "pi",
+      "args": [
+        "-e",
+        "/x/ud/hive-pi-ext.mjs"
+      ],
+      "env": {
+        "HIVE_AGENT_DEPTH": "1",
+        "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
+        "HCP_TOKEN": "golden-token",
+        "HIVEMIND_TILE": "tile-g",
+        "HIVE_AGENT_ID": "pi"
+      }
+    },
+    "spawnSupervised": {
+      "cmd": "pi",
+      "args": [
+        "-e",
+        "/x/ud/hive-pi-ext.mjs"
+      ],
+      "env": {
+        "HIVE_AGENT_DEPTH": "1",
+        "HIVE_SUPERVISE": "all",
+        "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
+        "HCP_TOKEN": "golden-token",
+        "HIVEMIND_TILE": "tile-g",
+        "HIVE_AGENT_ID": "pi"
+      }
+    },
+    "spawnWithPrompt": {
+      "args": [
+        "-e",
+        "/x/ud/hive-pi-ext.mjs",
+        "do the thing"
+      ],
+      "envHasPrompt": false
+    },
+    "restoreFresh": {
+      "cmd": "pi",
+      "args": [
+        "-e",
+        "/x/ud/hive-pi-ext.mjs"
+      ],
+      "env": {
+        "HIVE_AGENT_DEPTH": "1",
+        "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
+        "HCP_TOKEN": "golden-token",
+        "HIVEMIND_TILE": "tile-g",
+        "HIVE_AGENT_ID": "pi"
+      }
+    },
+    "restoreAlreadyResuming": {
+      "cmd": "pi",
+      "args": [
+        "--session",
+        "sess-1",
+        "-e",
+        "/x/ud/hive-pi-ext.mjs"
+      ],
+      "env": {
+        "HIVE_AGENT_DEPTH": "1",
+        "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
+        "HCP_TOKEN": "golden-token",
+        "HIVEMIND_TILE": "tile-g",
+        "HIVE_AGENT_ID": "pi"
+      }
+    },
+    "retry": {
+      "cmd": "pi",
+      "args": [
+        "-e",
+        "/x/ud/hive-pi-ext.mjs"
+      ],
+      "env": {
+        "HIVE_AGENT_DEPTH": "1",
+        "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
+        "HCP_TOKEN": "golden-token",
+        "HIVEMIND_TILE": "tile-g",
+        "HIVE_AGENT_ID": "pi"
+      }
+    },
+    "superviseSpawn": {
+      "error": "BAD_REQUEST"
+    },
+    "status": [
+      {
+        "screen": "out\nWorking...",
+        "status": "working"
+      },
+      {
+        "screen": "❯ ",
+        "status": "idle"
+      },
+      {
+        "screen": "",
+        "status": "idle"
+      }
+    ]
+  },
+  "files": {
+    "droid-home/.factory/hooks.json": {
+      "UserPromptSubmit": [
+        {
+          "hooks": [
+            {
+              "type": "command",
+              "command": "ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-userprompt-hook.cjs' '/x/ud/hcp.sock'",
+              "timeout": 10
+            }
+          ]
+        }
+      ],
+      "Stop": [
+        {
+          "hooks": [
+            {
+              "type": "command",
+              "command": "ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-stop-hook.cjs' '/x/ud/hcp.sock'",
+              "timeout": 10
+            }
+          ]
+        }
+      ],
+      "Notification": [
+        {
+          "hooks": [
+            {
+              "type": "command",
+              "command": "ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-notification-hook.cjs' '/x/ud/hcp.sock'",
+              "timeout": 10
+            }
+          ]
+        }
+      ]
+    },
+    "kiro-home/.kiro/agents/hivemind.json": {
+      "name": "hivemind",
+      "description": "hivemind control-plane wiring (auto-generated — do not edit by hand)",
+      "hooks": {
+        "agentSpawn": [
+          {
+            "command": "ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/tile-session-tracker.cjs' '/x/ud/tile-sessions'"
+          }
+        ],
+        "userPromptSubmit": [
+          {
+            "command": "ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/tile-session-tracker.cjs' '/x/ud/tile-sessions'"
+          },
+          {
+            "command": "ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-userprompt-hook.cjs' '/x/ud/hcp.sock'"
+          }
+        ],
+        "stop": [
+          {
+            "command": "ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-stop-hook.cjs' '/x/ud/hcp.sock'"
+          }
+        ],
+        "preToolUse": [
+          {
+            "matcher": "*",
+            "command": "ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-kiro-approval-hook.cjs' '/x/ud/hcp.sock'"
+          }
+        ]
+      }
+    }
+  },
+  "assets": {
+    "hive-pi-ext.mjs": "a133bce4d7a59dc32ae5a176e392474cbb3a94bc5402b737f7353f579da40182",
+    "hcp-kiro-approval-hook.cjs": "12f2f3f27c1b060bd94f9c35f0986be8d6379d8d9e246e48050f395b75c2ed41"
+  }
+}

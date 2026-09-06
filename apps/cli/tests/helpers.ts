@@ -6,7 +6,11 @@ export const CLI = path.join(import.meta.dir, "..", "src", "index.ts");
 export interface Run { code: number | null; stdout: string; stderr: string; json: unknown }
 function parse(status: number | null, stdout: string, stderr: string): Run {
   let json: unknown = undefined;
-  try { json = JSON.parse(stdout.trim().split("\n").pop() || ""); } catch { /* not json */ }
+  // `--json` output is either one line (ctl) or a pretty-printed object (the
+  // top-level commands): try the whole stdout first, then the last line.
+  try { json = JSON.parse(stdout.trim()); } catch {
+    try { json = JSON.parse(stdout.trim().split("\n").pop() || ""); } catch { /* not json */ }
+  }
   return { code: status, stdout, stderr, json };
 }
 type Opts = { cwd?: string; env?: Record<string, string | undefined> };
