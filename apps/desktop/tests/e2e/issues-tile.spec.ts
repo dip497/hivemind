@@ -77,12 +77,25 @@ test("clicking a card opens the issue peek", async () => {
   await expect(page.getByRole("button", { name: /Work on this/i })).toBeVisible({ timeout: 5_000 });
 });
 
-test("card state dropdown changes the issue state (manual override)", async () => {
-  // The dropdown is the manual path; the agent owns automatic transitions via
-  // the hive-work skill (set_state over MCP), which needs a live claude — not
-  // exercised here. This verifies the manual write path works.
+test("changing the state from the issue peek persists it (manual override)", async () => {
+  // The manual path is the peek's state picker (the card itself no longer
+  // carries a <select>; the tile's only select is the group-by control).
+  // Agents own automatic transitions via set_state, which needs a live agent
+  // — not exercised here. This verifies the manual write path works.
   const node = page.locator(".react-flow__node-issues");
-  const select = node.locator("select").first();
-  await select.selectOption("in_progress");
-  await expect.poll(async () => node.locator("select").first().inputValue(), { timeout: 6_000, intervals: [400] }).toBe("in_progress");
+  // `force`: the card's hover transition keeps Playwright's "stable" check
+  // from ever passing under xvfb; the click itself lands fine.
+  await node.getByText("Wire up the flux capacitor").first().click({ force: true });
+  const peek = page.getByRole("dialog");
+  await expect(peek).toBeVisible({ timeout: 5_000 });
+  // The state picker is a button showing the current label; its popover lists
+  // every state as a button.
+  await peek.getByRole("button", { name: /Todo/ }).first().click();
+  await peek.getByRole("button", { name: /In progress/ }).first().click();
+  await expect.poll(
+    async () => fs.readFile(path.join(workspace, ".hivemind", "issues", "XX-1.md"), "utf8").catch(() => ""),
+    { timeout: 6_000, intervals: [300] },
+  ).toMatch(/state:\s*in_progress/);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 3_000 });
 });

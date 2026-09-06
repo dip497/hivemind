@@ -82,8 +82,11 @@ test("corner-handle drag resizes a terminal tile", async () => {
   // viewport (ViewportSnap / SelectZoomReset). Measuring the handle mid-settle
   // gave a stale bbox → the drag missed → flaky resize. Wait for the handle to
   // be visible, then for its position to stop moving before we grab it.
+  // Bottom-LEFT corner: the bottom-right one sits under the sonner toast
+  // stack (the "Update available" toast in a fresh profile), which swallows
+  // the pointer — elementFromPoint there is the toast, not the handle.
   const handle = page.locator(
-    `${termSel} .react-flow__resize-control.bottom.right.handle`
+    `${termSel} .react-flow__resize-control.bottom.left.handle`
   );
   await expect(handle).toBeVisible();
   await page.waitForTimeout(300);
@@ -104,7 +107,7 @@ test("corner-handle drag resizes a terminal tile", async () => {
   // may compress into a single callback that snaps to maxWidth.
   const steps = 18;
   for (let i = 1; i <= steps; i++) {
-    await page.mouse.move(sx + (160 * i) / steps, sy + (110 * i) / steps, { steps: 1 });
+    await page.mouse.move(sx - (160 * i) / steps, sy + (110 * i) / steps, { steps: 1 });
     await page.waitForTimeout(15);
   }
   await page.mouse.up();

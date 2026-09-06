@@ -83,7 +83,12 @@ test("creates an issue via the modal and persists it to disk", async () => {
   // Dialog closes on submit. (Canvas-only: there's no board view to render the
   // card into — the issue lives on disk + in the IssuesTile when opened. The
   // on-disk assertions below are the source of truth.)
-  await page.waitForSelector('[role="dialog"]', { state: "hidden", timeout: 3_000 });
+  // The create dialog closes and the new issue opens in the peek dialog
+  // (App: onCreated → setPeekId), so "no dialog at all" never holds. Wait for
+  // the CREATE dialog's heading to go, then dismiss the peek.
+  await expect(page.getByRole("heading", { name: "New issue" })).toBeHidden({ timeout: 3_000 });
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 3_000 });
 
   // Assert the on-disk file. Prefix XX, next_id starts at 1 → first id is XX-1.
   const issuePath = path.join(workspace, ".hivemind", "issues", "XX-1.md");

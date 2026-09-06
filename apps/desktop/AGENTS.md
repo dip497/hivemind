@@ -92,13 +92,11 @@ tile bodies live in the TileHost and are never remounted by a view.
   (else Electron windows open on your desktop). `playwright.config.ts` isolates the
   profile via a fresh `XDG_CONFIG_HOME` — main's `app.setName("hivemind-dev")` makes
   userData ignore `--user-data-dir`, so without it every spec restores YOUR dev canvas
-  and spawns its agents. Under xvfb + a fresh profile these fail on `main` too, so
-  compare against a baseline run, not against green: `editor.spec` "re-clicking an
-  already-open file" (tree-row `hasText` never matches), `init-workspace` +
-  `issue-create` (the created issue's peek dialog stays open), `issues-tile` "card
-  state dropdown" (`select.first()` is the group-by control), `resize.spec` corner
-  drag (timing), and the three `shipped-features` diff-tile specs (Pierre worker under
-  software GL). Verified 2026-09-06 on a 43ca4ff worktree.
+  and spawns its agents. The suite is a gate: 56/56 must pass headless. Specs
+  assume the FRESH profile (Layers rail visible, no stored layout) and the real
+  UI (the created issue opens in the peek; in-diff search is collapsed to its
+  icon; the sonner toast stack covers the bottom-right corner; tree rows expose
+  the file name only as their accessible name) — wait on state, never on time.
 - Perf: `scripts/perf-views.mjs` (+ `perf-views-compare.mjs`) is the reproducible
   multi-agent workload for view/canvas changes — see docs/design/workspace-views.md.
 - After editing a file the linter may touch it; re-Read before Edit if an edit

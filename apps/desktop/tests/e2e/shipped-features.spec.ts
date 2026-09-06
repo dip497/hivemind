@@ -20,12 +20,16 @@ test.beforeAll(async () => {
   sh("git init -q -b main");
   sh('git config user.email t@t.t'); sh('git config user.name t');
   mkdirSync(path.join(repo, "src"));
-  writeFileSync(path.join(repo, "src/app.ts"), Array.from({ length: 40 }, (_, i) => `export const fn${i} = () => ${i};`).join("\n") + "\n");
+  writeFileSync(path.join(repo, "src/app.ts"), Array.from({ length: 120 }, (_, i) => `export const fn${i} = () => ${i};`).join("\n") + "\n");
   sh("git add -A"); sh('git commit -qm init');
   sh("git update-ref refs/remotes/origin/main HEAD"); // branch-mode base
   sh('git commit -qm c2 --allow-empty');
   // working-tree changes: modify + add + delete-equivalent
-  writeFileSync(path.join(repo, "src/app.ts"), Array.from({ length: 40 }, (_, i) => `export const fn${i} = () => ${i === 3 ? 999 : i};`).join("\n") + "\n");
+  // Touch every 4th line of a 120-line file: enough hunks that the rendered
+  // diff overflows the tile's scroller at any window size (the "diff body
+  // scrolls" spec needs something to scroll — a single-line change fit inside
+  // an 810 px scroller at 1600×1000 and read as "stuck").
+  writeFileSync(path.join(repo, "src/app.ts"), Array.from({ length: 120 }, (_, i) => `export const fn${i} = () => ${i === 3 ? 999 : i % 4 === 0 ? i + 1000 : i};`).join("\n") + "\n");
   writeFileSync(path.join(repo, "src/new.ts"), "export const fresh = true;\n");
 
   app = await electron.launch({
@@ -66,7 +70,8 @@ test("diff tile renders per-file headers with +/- counts and review controls", a
   // header controls from the CodeView migration (on the rendered file)
   expect(body).toMatch(/viewed/);
   expect(body).toMatch(/open/);
-  expect(await page.locator('input[placeholder="search diff…"]').count()).toBeGreaterThan(0);
+  // In-diff search is collapsed to its icon until clicked.
+  expect(await page.getByRole("button", { name: "search diff" }).count()).toBeGreaterThan(0);
   // both changed files counted in the tile chrome (CodeView virtualizes the
   // off-screen file out of the DOM, so assert the count chip, not its header).
   const chrome = await page.evaluate(() => document.querySelector(".react-flow__node-diff")?.textContent || "");
@@ -75,6 +80,8 @@ test("diff tile renders per-file headers with +/- counts and review controls", a
 
 test("in-diff search finds line matches and navigates", async () => {
   await openDiff();
+  // The search box is collapsed to an icon — open it first.
+  await page.getByRole("button", { name: "search diff" }).first().click();
   await page.fill('input[placeholder="search diff…"]', "fn3");
   await page.waitForTimeout(800);
   const counter = () => page.evaluate(() => {
