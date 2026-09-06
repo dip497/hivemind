@@ -12,6 +12,11 @@
  * Existing `process.env` values always win — Electron-managed vars are not
  * clobbered. PATH is the deliberate exception (always replaced with the
  * resolved-and-merged value).
+ *
+ * `HIVEMIND_SHELL_ENV=0` skips the whole thing: the environment hivemind was
+ * launched with is used as-is (PATH included). For CI / the e2e suite, where
+ * the launcher controls PATH deliberately (stand-in agent binaries), and for
+ * anyone who starts the app from a terminal and wants exactly that shell's env.
  */
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -40,6 +45,10 @@ let processPatched = false;
  *  AND inside an ENOENT retry — second call is a no-op when patched.
  *  Returns the env map for tests; production callers can ignore the return. */
 export async function applyShellEnvToProcess(): Promise<Record<string, string>> {
+  if (process.env.HIVEMIND_SHELL_ENV === "0") {
+    processPatched = true;
+    return { ...process.env } as Record<string, string>;
+  }
   const result = await resolveShellEnv();
   if (!processPatched) {
     processPatched = true;
