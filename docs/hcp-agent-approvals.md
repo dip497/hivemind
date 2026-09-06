@@ -114,7 +114,7 @@ parent agent ── hive_approve(reqId, allow|deny|always|never, reason?) ──
 - `main/index.ts` — `pendingApprovals` map + socket `approval` handler +
   remember-cache + deliver-to-parent + resolve-on-`hive_approve`.
 - `hcp/methods.ts` — `agent.approve` verb; record supervise policy at spawn.
-- `packages/hive-mcp/src/index.ts` — `hive_approve` tool; `supervise` on spawn.
+- `apps/cli/src/commands/ctl.ts` — `hive ctl approve`; `--supervise` on `hive ctl spawn` / `hive ctl workflow`
 - `apps/cli/src/commands/ctl.ts` — `approve` subcommand.
 
 ## Explicitly out of scope (v1)
