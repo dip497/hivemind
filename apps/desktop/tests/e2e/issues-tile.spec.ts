@@ -75,6 +75,10 @@ test("clicking a card opens the issue peek", async () => {
   // The peek slide-over has a distinctive "Work on this" button (the tile card's
   // is just "work"). Poll until it appears — readIssue is async.
   await expect(page.getByRole("button", { name: /Work on this/i })).toBeVisible({ timeout: 5_000 });
+  // Leave the canvas as we found it: the modal peek marks everything behind it
+  // aria-hidden, which would hide the card from the next test's role query.
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 3_000 });
 });
 
 test("changing the state from the issue peek persists it (manual override)", async () => {
@@ -83,9 +87,14 @@ test("changing the state from the issue peek persists it (manual override)", asy
   // Agents own automatic transitions via set_state, which needs a live agent
   // — not exercised here. This verifies the manual write path works.
   const node = page.locator(".react-flow__node-issues");
-  // `force`: the card's hover transition keeps Playwright's "stable" check
-  // from ever passing under xvfb; the click itself lands fine.
-  await node.getByText("Wire up the flux capacitor").first().click({ force: true });
+  // Open via the card's stable handle: its root is role=button "Open issue
+  // XX-1". The old `force: true` click on the card TEXT was the flake — the
+  // previous test left the modal peek open, so the forced click hit the
+  // overlay (closing the peek) instead of the card. With the peek closed by
+  // its own test, a plain actionable click is deterministic.
+  const card = node.getByRole("button", { name: "Open issue XX-1" });
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await card.click();
   const peek = page.getByRole("dialog");
   await expect(peek).toBeVisible({ timeout: 5_000 });
   // The state picker is a button showing the current label; its popover lists

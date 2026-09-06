@@ -26,10 +26,10 @@ export default defineConfig({
   timeout: 60_000,
   fullyParallel: false,
   workers: 1,
-  // One retry: the canvas drag/resize tests are timing-sensitive under load
-  // (xvfb + heavy build). A genuine regression fails twice; a flake passes on
-  // retry — so the suite stops red-flagging on the known resize flake.
-  retries: 1,
+  // No retries: the suite is a gate, and a flaky gate is not a gate. Every
+  // spec must pass first time (they run under xvfb in CI-like conditions); a
+  // test that needs a retry has a real ordering/timing bug to fix.
+  retries: 0,
   reporter: [["list"]],
   // Reap detached pty-daemons spawned during the run (persistence is default-on).
   globalTeardown: "./tests/e2e/global-teardown.ts",
