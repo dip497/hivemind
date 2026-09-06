@@ -97,9 +97,10 @@ it again on unmount. Details that matter:
   size — never `display:none` / 0×0 (xterm's fit computes garbage) and never
   full-window (every parked terminal reflowed + re-sized its PTY, on park, on
   restore and on each window resize). The host dispatches
-  `hivemind:surface-adopted` / `-parked` on the element; `TerminalTile` refits
-  once (rAF-coalesced) on adopt, skips its ResizeObserver while parked, and
-  ranks a parked tile 0 for the WebGL slot manager.
+  `hivemind:surface-adopted` / `-parked` on the element; `TerminalTile` skips
+  its ResizeObserver while parked, defers a fit while its host is hidden, and
+  ranks a parked or hidden tile 0 for the WebGL slot manager (see "Switch-path
+  attribution" below for why resizing a live WebGL terminal must be avoided).
 - **Selection is decided on the shared layer.** React synthetic events from a
   portaled body never reach a view's own handlers (xyflow's `onNodeClick`), so
   the surface element's native `pointerdown` (primary button) calls the runtime's
@@ -213,34 +214,58 @@ discarded.
 | streams survive the switch | no | yes |
 | renderer RSS while streaming | 245 MB | 241 MB |
 
-**Switch-path attribution (2026-09-06, CDP CPU profile + `performance.measure`
-on 97ab40a).** The review build spent 300–850 ms of main-thread long tasks per
-switch. Two causes, both in the fix commit, neither in the pre-fix build:
+**Switch-path attribution (2026-09-06; per-switch CDP CPU profiles +
+`performance.measure` per tile, runtime bisect flags over every switch-path
+addition).** The review build spent 300–900 ms of main-thread long tasks per
+switch. Bisecting each addition (mount-after-adopt gate, microtask/frozen
+park, adopt/park handlers + parked priority, RO gate, derived Windows
+selection, unmount viewport read) changed nothing — with all of them disabled
+the long tasks stayed. Per-switch profiles put 326–584 ms of self-time in
+`WebglRenderer.handleResize`, GC ≤ 31 ms, and the cost was identical with 3 s
+or 30 s of scrollback: **resizing a live WebGL terminal** makes Chromium flush
+the context's pending draws before it reallocates the canvas (100–600 ms per
+tile on swiftshader, and the dominant cost with a GPU too). A fresh canvas has
+no pending draws, which is why the baseline — which destroys and recreates
+every terminal on a switch — paid ~150 ms for four *creations*. Two secondary
+costs were real but small: the refit in `onAdopted` doubled the fits
+(ResizeObserver notifications land after rAF, so they never coalesced), and
+the switch stall could cross the 1.5 s crisp-when-idle threshold and trigger
+DOM→WebGL re-acquires (`getContext`, 0.4–2.4 s per tile here). A third one
+appeared on the first switch only: a tile that had been off-screen in the
+canvas "intersected" the viewport behind an inactive tab and lazily acquired a
+WebGL context (760 ms).
 
-1. Every terminal got **two fits** per adoption — the explicit refit in
-   `onAdopted` plus the `ResizeObserver` fit; ResizeObserver notifications are
-   delivered *after* rAF callbacks in the same frame, so the two never
-   coalesced. A fit on a WebGL-rendered terminal is an atlas rebuild
-   (`WebglRenderer.handleResize`, 100–280 ms each under software GL).
-2. That stall starved PTY delivery past the 1.5 s crisp-when-idle threshold:
-   background terminals were released to the DOM renderer, then re-acquired
-   WebGL on the next output chunk (`getContext` + shader init, 0.4–2.4 s per
-   tile here) — a snowball that showed as `data-after-gap 1.8–4.7 s` and 1.1–
-   1.7 s long tasks. The forced `offsetWidth` read per slot added 35–55 ms.
+Fix (`TerminalTile`): a tile whose host is not shown — `visibility:hidden`
+under an inactive Windows tab, or parked — **defers its fit** until it is
+shown (re-checked two frames later, because xyflow mounts a node
+`visibility:hidden` until measured; otherwise applied by the selection effect
+when the tab is activated) and **ranks 0 for the WebGL slot manager** (never
+acquires a context while hidden). The only terminal that resizes on a switch
+is the shown one, which is the selected one, on the cheap DOM renderer
+(1–38 ms). On the way back the deferred tiles are at their old size, so their
+fit is a no-op. Adoption counts as stream activity so the quiet timer cannot
+fire off a switch stall; the ResizeObserver is the single fit path; slot sizes
+come from an observer, not `offsetWidth`.
 
-Fix: one fit per tile (ResizeObserver only), adoption counts as stream activity
-(the quiet timer cannot fire off a switch stall), slot size from the observer
-only. Profiler after the fix: 4 fits per switch, zero renderer swaps, zero
-output gaps, no forced layouts — the switch's only remaining work is the one
-fit per tile the pre-fix build also did (the WebGL atlas rebuild, ~0 on a GPU,
-100–600 ms each on swiftshader). Harness pair after the fix (base worktree at
-load 5; branch at load 4.9 climbing to 13 during the run — the box was running
-a Java/Kafka stack): canvas scenes identical (quiet 59.7 vs 59.3 fps, zero long
-tasks in every canvas scene on both), switch medians 593 / 661 ms vs base
-301 / 266 ms with per-switch long tasks of 0–777 ms (several switches at 0–74)
-— the residual is the per-tile WebGL atlas rebuild in the one remaining fit,
-which a GPU makes cheap and which the baseline dodges only by starting from
-empty terminals. Re-measure on a quiet GPU box to confirm the ~0 target.
+Per switch after the fix (4 streaming tiles, xvfb, load 7–11, this machine):
+
+| # | to | painted | long tasks | base 43ca4ff (same harness) |
+|---|---|---:|---:|---:|
+| 1 | windows | 220 ms | 0 | 301 ms / 184 ms |
+| 2 | canvas | 182 ms | 90 ms | 224 / 176 |
+| 3 | windows | 219 ms | 0 | 381 / 140 |
+| 4 | canvas | 165 ms | 56 ms | 379 / 205 |
+| 5 | windows | 223 ms | 0 | 147 / 115 |
+| 6 | canvas | 174 ms | 55 ms | 266 / 164 |
+| 7 | windows | 198 ms | 0 | 254 / 173 |
+| 8 | canvas | 227 ms | 55 ms | 140 / 72 |
+
+Medians 220 ms → windows (0 ms long tasks on every switch) and 182 ms →
+canvas (55–90 ms: the canvas view's own mount commit — react-flow, four
+nodes, the rail), against the baseline's 301 / 266 ms with 72–205 ms long
+tasks; sessions intact (4 live xterms throughout). Canvas scenes unchanged:
+quiet 59.4 fps, streaming 9.7 vs 9.6, pan 9.7 vs 9.9, drag 9.3 vs 10.2, zero
+long tasks in every canvas scene on both sides.
 
 Reading: canvas scenes (quiet, streaming, typing, pan, drag) are equal within
 noise — zero long tasks, input-loop lag ≤ 15 ms in both — and the remaining

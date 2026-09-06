@@ -159,6 +159,10 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
   const overlayHostRef = useRef<HTMLDivElement | null>(null);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<Terminal | null>(null);
+  // A size change that arrived while the tile was hidden (inactive Windows tab)
+  // — applied by the selection effect when the tile is shown again.
+  const pendingFitRef = useRef(false);
+  const scheduleFitRef = useRef<(() => void) | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const webglRef = useRef<WebglAddon | null>(null);
   // Live `selected` for the WebGL slot manager's priority() (read outside render).
@@ -560,6 +564,11 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
     // parked tiles rank 0 and never hold a WebGL slot.
     let inViewport = true;
     let parked = !!host.closest("#hm-tile-park");
+    /** Laid out AND visible (not under a `visibility:hidden` ancestor — an
+     *  inactive Windows tab, the park). */
+    const hostShown = () => {
+      try { return host.checkVisibility({ visibilityProperty: true }); } catch { return true; }
+    };
     const io = new IntersectionObserver(
       (entries) => {
         const v = !!entries[entries.length - 1]?.isIntersecting;
@@ -592,7 +601,12 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
     surfaceEl?.addEventListener(SURFACE_PARKED, onParked);
     registerWebglSlotClient({
       id: ptyId,
-      priority: () => (parked ? 0 : selectedRef.current ? 2 : inViewport ? 1 : 0),
+      // A hidden host (inactive Windows tab, parked surface) ranks like an
+      // off-screen tile: it neither needs nor should acquire a WebGL context
+      // — acquiring one costs a GL context + shader compile, and doing it for
+      // every tab that merely intersects the viewport behind the active one
+      // made the first switch into Windows a long task.
+      priority: () => (parked || !hostShown() ? 0 : selectedRef.current ? 2 : inViewport ? 1 : 0),
       acquire: acquireWebgl,
       release: releaseWebgl,
       // Crisp boost: the FOCUSED tile on a low-DPI screen renders via DOM (native
@@ -918,10 +932,33 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
         }
       });
     };
+    // Resizing a live WebGL terminal is the single most expensive thing a view
+    // switch can do: Chromium must flush the context's pending draws before it
+    // can reallocate the canvas (100-600 ms per tile on software GL, and still
+    // the dominant cost on a GPU), so refitting every terminal on every switch
+    // made the switch a 0.5-1 s long task. A tile that is NOT SHOWN (an inactive
+    // Windows tab is laid out but visibility:hidden; a parked surface likewise)
+    // doesn't need its new size until it is shown: defer the fit, and let the
+    // shown tile — which is the selected one, on the cheap DOM renderer — be the
+    // only one that resizes. On the way back the deferred tiles are at their old
+    // size again, so their fit is a no-op.
     const ro = new ResizeObserver(() => {
       if (parked) return; // a parked surface holds its size; adoption refits
+      if (!hostShown()) {
+        pendingFitRef.current = true;
+        // Hidden for a frame only? xyflow mounts a node `visibility:hidden`
+        // until it has measured it, so a freshly (re)mounted canvas node is
+        // hidden exactly when the ResizeObserver fires. Re-check two frames on;
+        // a tab that stays hidden waits for its selection instead.
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          if (pendingFitRef.current && hostShown()) { pendingFitRef.current = false; scheduleFit(); }
+        }));
+        return;
+      }
+      pendingFitRef.current = false;
       scheduleFit();
     });
+    scheduleFitRef.current = () => { pendingFitRef.current = false; scheduleFit(); };
     ro.observe(host);
 
     return () => {
@@ -958,6 +995,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       } catch {
         /* ignore */
       }
+      scheduleFitRef.current = null;
       cancelMousePatch();
       term.dispose();
       termRef.current = null;
@@ -992,6 +1030,9 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
     if (!term) return;
     term.options.disableStdin = !selected;
     if (selected) {
+      // Shown now (the active tab / the focused tile): apply a fit that was
+      // deferred while hidden, before focusing.
+      if (pendingFitRef.current) scheduleFitRef.current?.();
       term.focus();
       // Focusing a terminal (e.g. from the Layers panel) snaps to the LATEST
       // output / live prompt — never leave it parked mid-scrollback. Editor /
