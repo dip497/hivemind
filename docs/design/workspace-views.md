@@ -233,9 +233,14 @@ Fix: one fit per tile (ResizeObserver only), adoption counts as stream activity
 only. Profiler after the fix: 4 fits per switch, zero renderer swaps, zero
 output gaps, no forced layouts — the switch's only remaining work is the one
 fit per tile the pre-fix build also did (the WebGL atlas rebuild, ~0 on a GPU,
-100–600 ms each on swiftshader). The base/branch harness pair could not be
-re-taken at low load afterwards (the machine ran a Java/Kafka stack at load
-10–24); numbers to re-measure on a quiet box.
+100–600 ms each on swiftshader). Harness pair after the fix (base worktree at
+load 5; branch at load 4.9 climbing to 13 during the run — the box was running
+a Java/Kafka stack): canvas scenes identical (quiet 59.7 vs 59.3 fps, zero long
+tasks in every canvas scene on both), switch medians 593 / 661 ms vs base
+301 / 266 ms with per-switch long tasks of 0–777 ms (several switches at 0–74)
+— the residual is the per-tile WebGL atlas rebuild in the one remaining fit,
+which a GPU makes cheap and which the baseline dodges only by starting from
+empty terminals. Re-measure on a quiet GPU box to confirm the ~0 target.
 
 Reading: canvas scenes (quiet, streaming, typing, pan, drag) are equal within
 noise — zero long tasks, input-loop lag ≤ 15 ms in both — and the remaining
