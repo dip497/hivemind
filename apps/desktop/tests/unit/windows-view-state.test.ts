@@ -20,18 +20,17 @@ const {
 
 beforeEach(() => store.clear());
 
-test("viewMode defaults to canvas, round-trips through storage", () => {
-  assert.equal(loadViewMode(), "canvas");
+test("viewMode is unset by default and round-trips any view id through storage", () => {
+  assert.equal(loadViewMode(), null);
   saveViewMode("windows");
   assert.equal(loadViewMode(), "windows");
-  saveViewMode("canvas");
-  assert.equal(loadViewMode(), "canvas");
+  saveViewMode("mars-base");
+  assert.equal(loadViewMode(), "mars-base");
 });
 
-test("viewMode ignores garbage → canvas", () => {
-  store.set("hivemind:view-mode", "nonsense");
-  assert.equal(loadViewMode(), "canvas");
-});
+// Validation against the registered plugins is resolveViewId's job (see
+// workspace-view.test.ts) — the raw pref stays a plain string so a plugin can
+// be added or removed without a storage migration.
 
 test("minimized set is per-repo and round-trips", () => {
   const repoA = "/tmp/a";

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Bell, ExternalLink, LayoutGrid, Loader2, PanelsTopLeft, Plus, Settings } from "lucide-react";
+import { Bell, ExternalLink, LayoutGrid, Loader2, Plus, Settings } from "lucide-react";
 import path from "path-browserify";
 import type { UpdateStatus } from "../../shared/ipc";
 import {
@@ -10,11 +10,12 @@ import {
   useIssues,
   useProject,
 } from "./queries";
-import { Canvas } from "./Canvas";
+import { Workspace } from "./Workspace";
 import { IssuePeek } from "./components/IssuePeek";
 import { NewIssueModal } from "./components/NewIssueModal";
 import { getNotificationSettings, setNotificationSettingsCache, subscribeNotificationSettings, saveNotificationSettings } from "./notification-settings";
-import { loadViewMode, saveViewMode, type ViewMode } from "./windows-view-state";
+import { listViews, resolveViewId } from "./workspace/workspace-view";
+import { setViewMode, useViewMode } from "./workspace/view-mode-store";
 import type { NotificationSettings } from "../../shared/ipc";
 
 // Last 8 opened folders, most recent first. Persisted via localStorage —
@@ -342,7 +343,7 @@ export function App() {
           on top — frame = workspace, so the per-Frame "+ workspace" bind is the
           canonical add-a-workspace action; Open/Init/Recents live in the sidebar. */}
       <div className="fixed inset-0 z-30 bg-[var(--color-bg)]">
-        <Canvas
+        <Workspace
           cwd={cwd}
           repoPath={repoPath}
           root={root}
@@ -438,27 +439,14 @@ function Switch({
   );
 }
 
-/** View preference — canvas (infinite board) vs. windows ("editor-like": a tab
- *  strip + one active tile, graph rail on the left). The mode itself lives in
- *  Canvas state; Settings writes localStorage AND dispatches a set event so the
- *  live canvas switches immediately (no relaunch). ⌘E toggles the same. */
+/** View preference — one card per registered view plugin (canvas, windows, …).
+ *  Reads/writes the same external store Workspace renders from
+ *  (view-mode-store), so a ⌘E while Settings is open updates the card in the
+ *  same tick and a card click switches the live workspace immediately. */
 function ViewPrefs() {
-  const [mode, setMode] = useState<ViewMode>(() => loadViewMode());
-  // Reflect an external change (⌘E) while Settings is open.
-  useEffect(() => {
-    const onToggle = () => setMode(loadViewMode());
-    window.addEventListener("hivemind:toggle-view-mode", onToggle);
-    return () => window.removeEventListener("hivemind:toggle-view-mode", onToggle);
-  }, []);
-  const set = (m: ViewMode) => {
-    setMode(m);
-    saveViewMode(m);
-    window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: m } }));
-  };
-  const opts: { id: ViewMode; label: string; hint: string; icon: typeof LayoutGrid }[] = [
-    { id: "canvas", label: "Canvas", hint: "Infinite board of tiles", icon: LayoutGrid },
-    { id: "windows", label: "Windows", hint: "Tabs + one active tile", icon: PanelsTopLeft },
-  ];
+  const mode = resolveViewId(useViewMode());
+  const set = (m: string) => setViewMode(m);
+  const opts = listViews();
   return (
     <div className="mt-4 rounded-lg border border-[var(--color-line2)] bg-[var(--color-bg3)] p-3">
       <div className="flex items-center justify-between gap-2">
@@ -468,8 +456,8 @@ function ViewPrefs() {
         </div>
         <kbd className="font-mono text-[9.5px] text-[var(--color-fg3)]">⌘E</kbd>
       </div>
-      {/* Segmented control — one active mode. */}
-      <div className="mt-3 grid grid-cols-2 gap-2">
+      {/* Segmented control — one active view. */}
+      <div className="mt-3 grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.max(1, opts.length)}, minmax(0, 1fr))` }}>
         {opts.map((o) => {
           const active = mode === o.id;
           return (

@@ -1,29 +1,22 @@
 /**
- * canvas-node-build — the pure react-flow node-array builder, lifted out of
- * Canvas.tsx's heavy `baseNodes` memo. Given a snapshot of canvas state + the
- * tile/frame callbacks, returns the Node[] (frames first — parents before
- * worktree children — then tiles, with zone-repo scoping + relative nesting +
- * baked zIndex). No React: Canvas calls it inside a useMemo with the same deps.
+ * canvas-node-build — the pure react-flow node-array builder for the CANVAS
+ * view. Given the workspace model + canvas geometry, returns the Node[] (frames
+ * first — parents before worktree children — then tiles, with relative nesting +
+ * baked zIndex). Tile nodes carry SHELL data only (`CanvasTileNodeData`: id,
+ * resize, pin, close) — the body and its repo scoping are the tile surface's
+ * (workspace/tile-surfaces.ts), rendered by the shared TileHost into the node's
+ * `<TileSlot>`. No React: CanvasView calls it inside a useMemo.
  */
 import type { Node } from "@xyflow/react";
-import { identifyAgent } from "./agent-state";
 import { defaultSizeForKind } from "./canvas-sizing";
-import { defaultShell, type FrameState, type TileInstance } from "./canvas-persistence";
+import type { FrameState, TileInstance } from "./canvas-persistence";
 import type { ArrangeMode } from "./frame-layout";
 import type { WorktreeEntry } from "../../shared/ipc";
-
-/** Auto-derive a short tile name from the command. Uses identifyAgent for known
- *  agents (claude, codex, gemini, …), falls back to the cmd basename. */
-export function autoNameFromCmd(cmd: string): string {
-  const agent = identifyAgent(cmd);
-  if (agent) return agent;
-  return cmd.split("/").pop()?.split(/\s+/)[0] ?? "terminal";
-}
+import { effectiveRepoOf, type PinRect, type TileSurfaceType } from "./workspace/tile-surfaces";
+import type { CanvasTileNodeData } from "./canvas-nodes";
 
 export interface NodeBuildCtx {
   repoPath: string | null;
-  root: string | null;
-  cwd: string;
   tiles: TileInstance[];
   frames: FrameState[];
   frameOf: Record<string, string>;
@@ -31,10 +24,6 @@ export interface NodeBuildCtx {
   pinnedIds: Set<string>;
   sizes: Record<string, { width: number; height: number }>;
   positions: Record<string, { x: number; y: number }>;
-  editorTabs: Record<string, string[]>;
-  browserOpenReqs: Record<string, { url: string; seq: number }>;
-  tileNames: Record<string, string>;
-  agentTitles: Record<string, string>;
   frameTiles: Map<string, string[]>;
   framesChipNames: Record<string, string>;
   updateFrameTitle: (id: string, title: string) => void;
@@ -47,29 +36,28 @@ export interface NodeBuildCtx {
   unbindBranch: (id: string) => void;
   bindWorkspace: (id: string) => void;
   unbindWorkspace: (id: string) => void;
-  openFileInTile: (tileId: string, file: string) => void;
-  openUrlInBrowser: (sourceTileId: string, url: string) => void;
-  openFileFromTerminal: (sourceTileId: string, path: string) => void;
-  closeTabInTile: (tileId: string, file: string) => void;
   closeTile: (id: string) => void;
   onNodeResizeCommit: (id: string, w: number, h: number, x?: number, y?: number) => void;
-  renameTile: (id: string, name: string) => void;
-  setAgentTitle: (id: string, title: string) => void;
   /** Toggle a tile's pinned state. `rect` is the tile's SCREEN rect (top-left +
    *  size) captured from its DOM at click time (ignored when unpinning). */
-  onTogglePin: (id: string, rect: { sx: number; sy: number; w: number; h: number }) => void;
+  onTogglePin: (id: string, rect: PinRect) => void;
   /** Persist a pinned panel's new anchor and/or size after a drag/resize. */
   onPinChange: (id: string, patch: { anchor?: { sx: number; sy: number }; size?: { w: number; h: number } }) => void;
 }
 
+/** react-flow node type per tile kind — doubles as the `.react-flow__node-<type>`
+ *  CSS hook and matches the surface `type` the TileHost renders. */
+const NODE_TYPE: Record<TileInstance["kind"], TileSurfaceType> = {
+  claude: "terminal", shell: "terminal", editor: "workbench", workbench: "workbench",
+  diff: "diff", issues: "issues", browser: "browser", planReview: "planReview",
+};
+
 export function buildBaseNodes(ctx: NodeBuildCtx): Node[] {
   const {
-    repoPath, root, cwd, tiles, frames, frameOf, pinnedIds, sizes, positions, editorTabs, browserOpenReqs,
-    tileNames, agentTitles, frameTiles, framesChipNames,
+    repoPath, tiles, frames, frameOf, pinnedIds, sizes, positions, frameTiles, framesChipNames,
     updateFrameTitle, updateFrameColor, deleteFrame, arrangeFrame, bringFrameToFront,
     onAttachWorktree, onCreateWorktree, unbindBranch, bindWorkspace, unbindWorkspace,
-    openFileInTile, openUrlInBrowser, openFileFromTerminal, closeTabInTile, closeTile, onNodeResizeCommit, renameTile, setAgentTitle,
-    onTogglePin, onPinChange,
+    closeTile, onNodeResizeCommit, onTogglePin, onPinChange,
   } = ctx;
 
   const out: Node[] = [];
@@ -79,7 +67,8 @@ export function buildBaseNodes(ctx: NodeBuildCtx): Node[] {
 
   /** Build a node spec; parenting comes from the EXPLICIT frameOf map (not
    *  geometry). NO extent:'parent' — tiles move freely; membership changes only
-   *  on drop (onNodeDragStop). */
+   *  on drop (onNodeDragStop). The tile's repo/cwd scoping is NOT here any more
+   *  — the surface builder applies the zone-repo override to the body data. */
   const mkTile = (base: Omit<Node, "position">, ax: number, ay: number): Node => {
     const p = positions[base.id];
     const px = p?.x ?? ax;
@@ -89,10 +78,10 @@ export function buildBaseNodes(ctx: NodeBuildCtx): Node[] {
     const style = { ...(base.style as Record<string, unknown>), zIndex: 100 };
     // Pin controls live on EVERY tile's data (rendered by the node wrapper as a
     // corner badge; the floating panel when pinned). `onTogglePin`/`onPinChange`
-    // are stable (Canvas useCallback); the wrapper supplies the id, so no
-    // per-build closure churns React.memo. Anchor/size come from the persisted
+    // are stable (useCallback); the wrapper supplies the id, so no per-build
+    // closure churns React.memo. Anchor/size come from the persisted
     // TileInstance so a pinned panel restores at its saved screen spot + size.
-    const pinTile = tiles.find((x) => x.id === base.id);
+    const pinTile = tiles.find((t) => t.id === base.id);
     const pinData = {
       pinned: pinnedIds.has(base.id),
       pinAnchor: pinTile?.pinAnchor,
@@ -104,38 +93,18 @@ export function buildBaseNodes(ctx: NodeBuildCtx): Node[] {
       // ephemeral (never pinned); frames aren't tiles — both excluded.
       headerPin: pinTile ? pinTile.kind !== "planReview" : false,
     };
+    const data = { ...(base.data as Record<string, unknown>), ...pinData };
     const parentFrame = frameOf[base.id] ? frames.find((f) => f.id === frameOf[base.id]) : undefined;
     if (parentFrame) {
-      const owner = parentFrame;
-      // Zone repo for tiles inside this frame: a worktree (branch zone) wins,
-      // else a bound workspace folder, else nothing (keep base repoPath/cwd/root).
-      const zoneRepo = owner?.worktreePath ?? owner?.workspacePath;
-      // A workspace zone is a DIFFERENT repo bound to the frame. A worktree zone
-      // is the SAME repo on another branch (no .hivemind of its own — issues
-      // stay the project's, so it keeps the base root).
-      const isWorkspaceZone = !owner?.worktreePath && owner?.workspacePath != null;
-      const bd = base.data as Record<string, unknown>;
-      const data = zoneRepo
-        ? {
-            ...bd,
-            ...("cwd" in bd ? { cwd: zoneRepo } : {}),
-            ...("repoPath" in bd ? { repoPath: zoneRepo } : {}),
-            // Issues/diff/tree scope by `root` (.hivemind). For a workspace zone,
-            // point them at THAT repo's root. CRITICAL: never fall through to the
-            // canvas base root here (that leaked the launch repo's issues board
-            // into an unrelated frame — the cross-repo leak bug).
-            ...("root" in bd && isWorkspaceZone ? { root: owner?.workspaceRoot ?? null } : {}),
-          }
-        : base.data;
       return {
         ...base,
         style,
-        data: { ...(data as Record<string, unknown>), ...pinData },
+        data,
         position: { x: px - parentFrame.x, y: py - parentFrame.y },
         parentId: parentFrame.id,
       };
     }
-    return { ...base, style, data: { ...(base.data as Record<string, unknown>), ...pinData }, position: { x: px, y: py } };
+    return { ...base, style, data, position: { x: px, y: py } };
   };
 
   // Clamp the default to the visible viewport so a wide tile spawns grabbable.
@@ -196,127 +165,14 @@ export function buildBaseNodes(ctx: NodeBuildCtx): Node[] {
     });
   }
 
-  // Every tile is an instance. editor/diff/issues need a repo — skip them only
-  // if NO repo is available. The repo can come from the tile's owner frame
-  // (a worktree branch zone or a bound workspace folder) even when the canvas
-  // has no global repo (e.g. launched into an empty playground, then a worktree
-  // was attached). Gating on the global `repoPath` alone dropped the editor/diff
-  // inside such a frame — "editor won't open in the worktree". Use the effective
-  // zone repo; mkTile applies the same override to the node's data.
-  const tileRepo = (id: string): string | null => {
-    const owner = frameOf[id] ? frames.find((f) => f.id === frameOf[id]) : undefined;
-    return owner?.worktreePath ?? owner?.workspacePath ?? repoPath ?? null;
-  };
+  // Every tile is an instance. editor/diff need a repo — skip them only if NO
+  // repo is available (global or the owner frame's zone). Same gate as the
+  // surface builder, so a node never exists without a body.
   for (const t of tiles) {
-    const effRepo = tileRepo(t.id);
-    if ((t.kind === "editor" || t.kind === "diff") && !effRepo) continue;
-    let node: Omit<Node, "position">;
+    if ((t.kind === "editor" || t.kind === "diff") && !effectiveRepoOf(t.id, frameOf, frames, repoPath)) continue;
     const { width: w, height: h } = defaultSizeForKind(t.kind);
-    if (t.kind === "editor") {
-      node = {
-        id: t.id,
-        type: "workbench",
-        style: sized(t.id, w, h),
-        data: {
-          repoPath: effRepo,
-          tabs: editorTabs[t.id] ?? [],
-          onOpenFile: (file: string) => openFileInTile(t.id, file),
-          onOpenInBrowser: (url: string) => openUrlInBrowser(t.id, url),
-          onCloseTab: (file: string) => closeTabInTile(t.id, file),
-          onClose: () => closeTile(t.id),
-          onResize: onNodeResizeCommit,
-        },
-        dragHandle: ".tile-drag-handle",
-      };
-    } else if (t.kind === "diff") {
-      node = {
-        id: t.id,
-        type: "diff",
-        style: sized(t.id, w, h),
-        data: {
-          repoPath: effRepo,
-          initialMode: "working" as const,
-          initialBase: "origin/main",
-          onResize: onNodeResizeCommit,
-          onClose: () => closeTile(t.id),
-        },
-        dragHandle: ".tile-drag-handle",
-      };
-    } else if (t.kind === "issues") {
-      node = {
-        id: t.id,
-        type: "issues",
-        style: sized(t.id, w, h),
-        data: { root, onResize: onNodeResizeCommit, onClose: () => closeTile(t.id) },
-        dragHandle: ".tile-drag-handle",
-      };
-    } else if (t.kind === "browser") {
-      // No repo needed — a browser tile is repo-agnostic.
-      node = {
-        id: t.id,
-        type: "browser",
-        style: sized(t.id, w, h),
-        data: {
-          tileId: t.id,
-          frameId: frameOf[t.id] ?? null,
-          url: t.url,
-          openReq: browserOpenReqs[t.id] ?? null,
-          onResize: onNodeResizeCommit,
-          onClose: () => closeTile(t.id),
-        },
-        dragHandle: ".tile-drag-handle",
-      };
-    } else if (t.kind === "planReview") {
-      // Ephemeral plan-handoff review (data carried on the tile's `review`).
-      // A malformed/absent review can't happen via the open path, but guard so
-      // a stale persisted tile never crashes the build.
-      const r = t.review ?? { plan: "", cwd: "" };
-      node = {
-        id: t.id,
-        type: "planReview",
-        style: sized(t.id, w, h),
-        data: {
-          requestId: r.requestId,
-          hcpCmdId: r.hcpCmdId,
-          plan: r.plan,
-          cwd: r.cwd,
-          onResize: onNodeResizeCommit,
-          onClose: () => closeTile(t.id),
-        },
-        dragHandle: ".tile-drag-handle",
-      };
-    } else {
-      // claude / shell — both render as a TerminalTile.
-      const cmd = t.cmd ?? defaultShell().cmd;
-      const args = t.args ?? defaultShell().args;
-      node = {
-        id: t.id,
-        type: "terminal",
-        style: sized(t.id, w, h),
-        data: {
-          tileId: t.id,
-          cwd,
-          cmd,
-          args,
-          label: t.label,
-          // NOTE: the live agent OSC title is deliberately NOT used here. It
-          // updates ~every 600ms while an agent streams; feeding it into node data
-          // rebuilt the whole react-flow node array each tick → cursor-flicker
-          // (react-flow z-fight) + focus stolen off the input mid-type. The live
-          // title still shows in the Layers panel (its own memo) and the terminal
-          // status line; tiles show the rename / auto name.
-          name: tileNames[t.id] ?? autoNameFromCmd(cmd),
-          onRename: renameTile,
-          onAgentTitle: setAgentTitle,
-          onOpenInBrowser: (url: string) => openUrlInBrowser(t.id, url),
-          onOpenInEditor: (path: string) => openFileFromTerminal(t.id, path),
-          onResize: onNodeResizeCommit,
-          onClose: () => closeTile(t.id),
-        },
-        dragHandle: ".tile-drag-handle",
-      };
-    }
-    out.push(mkTile(node, x, y));
+    const data: CanvasTileNodeData = { tileId: t.id, onClose: () => closeTile(t.id), onResize: onNodeResizeCommit };
+    out.push(mkTile({ id: t.id, type: NODE_TYPE[t.kind], style: sized(t.id, w, h), data, dragHandle: ".tile-drag-handle" }, x, y));
     x += (sizes[t.id]?.width ?? w) + gap;
   }
   return out;

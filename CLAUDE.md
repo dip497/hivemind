@@ -143,7 +143,7 @@ What it does (`scripts/release.sh`):
 
 Before running `./scripts/release.sh`:
 
-- [ ] All e2e tests green locally: `cd apps/desktop && pnpm test:e2e` (30 + known resize flake).
+- [ ] All e2e tests green locally: `cd apps/desktop && unset ELECTRON_RUN_AS_NODE && xvfb-run -a --server-args="-screen 0 1600x1000x24" pnpm test:e2e` (55 tests across 18 specs; the profile is isolated per run — see apps/desktop/AGENTS.md for the specs known to be xvfb-sensitive).
 - [ ] Unit tests green: `pnpm test:unit` from `apps/desktop`.
 - [ ] CHANGELOG `[Unreleased]` section has at least one entry describing the user-visible change.
 - [ ] No uncommitted changes (`git status` clean).

@@ -18,7 +18,7 @@ design:
 
 > **Encode the remote target *in the path string itself* as an `ssh://` URI.**
 > `ssh://user@host:port/abs/remote/path`. A remote frame's `workspacePath` is
-> such a URI. It flows through `canvas-node-build.mkTile` into every tile's
+> such a URI. It flows through `workspace/tile-surfaces.buildTileSurfaces` into every tile's
 > `data.cwd` / `data.repoPath` **unchanged** — no IPC signature changes, no
 > "host" field threaded through 30 channels. Each backend helper gains one
 > branch: `if (isRemote(p)) …route over SSH… else …local…`.

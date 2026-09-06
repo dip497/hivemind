@@ -54,8 +54,9 @@ test("right-drag STARTING ON A TILE pans (the realistic case)", async () => {
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "shell" })));
   await page.waitForSelector(".react-flow__node-terminal", { timeout: 8_000 });
   await page.waitForTimeout(800);
-  // deselect so the tile is locked (click empty corner).
-  await page.mouse.click(8, 8);
+  // deselect so the tile is locked — click the PANE (a screen corner lands on
+  // the Layers rail in a fresh profile), away from the tile.
+  await page.locator(".react-flow__pane").click({ position: { x: 1200, y: 40 }, force: true });
   await page.waitForTimeout(300);
   const box = await page.locator(".react-flow__node-terminal").first().boundingBox();
   const cx = box!.x + box!.width / 2;

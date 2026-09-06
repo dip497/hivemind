@@ -1,9 +1,21 @@
 /**
- * Canvas persistence — the localStorage layout blob (per repo) plus the canvas
- * data types it round-trips. Pure (no React): load returns a PersistedLayout,
- * save serializes a snapshot. Migrations from the pre-unification shapes live
- * here too, isolated so they're unit-testable. Canvas.tsx owns the React state;
- * this module owns how it sleeps + wakes.
+ * Workspace core persistence — the localStorage blob (per repo) holding what
+ * EVERY view shares: frames (identity + bindings + their canvas rect, see
+ * FrameState), open tiles, tile→frame membership, user renames, editor tabs.
+ * Pure (no React): load returns a PersistedLayout, save serializes a snapshot.
+ * Migrations from the pre-unification shapes live here too, isolated so they're
+ * unit-testable. Workspace.tsx owns the React state; this module owns how it
+ * sleeps + wakes.
+ *
+ * Since blob version 2 the CANVAS VIEW's geometry (tile positions / sizes /
+ * viewport) is OWNED by the canvas view's own versioned layout blob
+ * (workspace/views/canvas-layout.ts) like every other view's arrangement state.
+ * A pre-v2 blob's inline geometry is read once so the canvas store can import it
+ * (that import is the migration). The v2 writer still MIRRORS the geometry into
+ * this blob (`legacy` below) so a pre-v2 build pointed at the same profile —
+ * a downgrade, or the AppImage sharing a dev profile — keeps every tile where
+ * it was instead of collapsing to the default row. Drop the mirror one release
+ * after v2 ships.
  */
 import type { TileKind } from "./tile-kinds";
 import { frameColorFor, LEGACY_FRAME_COLOR } from "./frame-color";
@@ -80,6 +92,10 @@ interface LegacyExtraTerm { id: string; label: string; cmd: string; args: string
 // for the no-repo case) so each project's canvas comes back the way the user
 // left it. Stored as a single JSON blob per repo to avoid N localStorage keys.
 export interface PersistedLayout {
+  /** Blob schema version. Absent = v1 (geometry still inline). */
+  version?: number;
+  /** Canvas geometry. Read from a pre-v2 blob for migration; since v2 only a
+   *  downgrade-safety MIRROR of the canvas view's own blob (never read by v2+). */
   sizes: Record<string, { width: number; height: number }>;
   positions: Record<string, { x: number; y: number }>;
   frames: FrameState[];
@@ -100,15 +116,18 @@ export interface PersistedLayout {
    *  membership from geometry avoids the bootstrap deadlock where a big tile
    *  whose center sits outside a collapsed frame never gets claimed. */
   frameOf?: Record<string, string>;
-  /** Last viewport position so reopen drops user back where they were instead
-   *  of resetting to (16, 24, zoom=1). */
+  /** Canvas viewport — same migration/mirror status as `positions`. */
   viewport?: { x: number; y: number; zoom: number };
 }
 
-/** The fields a save snapshot must supply (everything round-tripped). */
+/** Current core blob schema. v2 = geometry moved out to the canvas view store. */
+export const LAYOUT_VERSION = 2;
+
+/** The fields a save snapshot must supply (everything the core round-trips),
+ *  plus the optional downgrade mirror of the canvas geometry (see header). */
 export type LayoutSnapshot = Required<
-  Pick<PersistedLayout, "sizes" | "positions" | "frames" | "tileNames" | "tiles" | "editorTabs" | "frameOf">
-> & { viewport: PersistedLayout["viewport"] };
+  Pick<PersistedLayout, "frames" | "tileNames" | "tiles" | "editorTabs" | "frameOf">
+> & { legacy?: Pick<PersistedLayout, "sizes" | "positions" | "viewport"> };
 
 export const LAYOUT_KEY = (repoPath: string | null) =>
   `hivemind:canvas-layout:${repoPath ?? "__global__"}`;
@@ -198,6 +217,7 @@ export function loadLayout(repoPath: string | null): PersistedLayout {
       if (v?.issues) tiles.push({ id: "tile-issues-1", kind: "issues", label: "Issues" });
     }
     return {
+      version: typeof p.version === "number" ? p.version : 1,
       sizes,
       positions,
       frames,
@@ -221,11 +241,12 @@ export function saveLayout(repoPath: string | null, snap: LayoutSnapshot): void 
   if (typeof window === "undefined" || !repoPath) return;
   // planReview tiles are ephemeral (tied to a live, blocked agent hook) — drop
   // them so a reload doesn't resurrect a dead review with a stale requestId.
-  const persisted: LayoutSnapshot = snap.tiles
-    ? { ...snap, tiles: snap.tiles.filter((t) => t.kind !== "planReview") }
-    : snap;
+  const { legacy, ...core } = snap;
+  const persisted = core.tiles
+    ? { ...core, tiles: core.tiles.filter((t) => t.kind !== "planReview") }
+    : core;
   try {
-    window.localStorage.setItem(LAYOUT_KEY(repoPath), JSON.stringify(persisted));
+    window.localStorage.setItem(LAYOUT_KEY(repoPath), JSON.stringify({ version: LAYOUT_VERSION, ...legacy, ...persisted }));
   } catch {
     // QuotaExceeded / private-mode etc — swallow; layout is best-effort.
   }

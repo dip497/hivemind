@@ -7,6 +7,25 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Changed
+
+- **Views are plugins; switching views no longer disturbs live tiles.** The canvas
+  runtime (`Workspace.tsx`) now owns frames, tiles, sessions and commands, and the
+  Canvas and Windows views are built-in plugins behind a registry with a react-flow-free
+  contract (`docs/design/workspace-views.md`). Every tile body is mounted once by a shared
+  tile host and lent to whichever view is active, so ⌘E / Settings ▸ View keeps local **and
+  remote** PTYs, unsaved editor buffers and browser tabs exactly as they were — previously a
+  view switch remounted every tile, which killed remote (`ssh://`) agent sessions outright.
+  A view that crashes or is no longer installed falls back to the canvas without touching a
+  session. Each view keeps its own versioned layout (canvas geometry, windows tab state);
+  existing saved layouts migrate automatically on first launch (and a layout saved by an older
+  build on the same profile is picked up again, not discarded). The spawn-target and
+  send-to-claude pickers now show in every view; the Windows view's active tab follows whatever
+  selects a tile (spawn, "open in editor", an agent's `tile.focus`, a toast), and the camera
+  resumes where it was after a view round trip. Settings ▸ View and ⌘E share one store, so the
+  card can no longer go stale. Known limit: a browser tile's page reloads once per view switch
+  (Chromium re-attaches a moved `<webview>`); its tabs and address survive.
+
 ## [1.16.0] — 2026-09-03
 
 ### Fixed

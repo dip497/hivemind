@@ -17,6 +17,7 @@ import { webUrlForInternalBrowser } from "./browser-open";
 import { useTheme, getTheme } from "./theme-store";
 import { FullscreenShell, useReparentFullscreen } from "./tile-fullscreen";
 import { HeaderPinButton, type PinRect } from "./canvas-nodes";
+import { SURFACE_ADOPTED, SURFACE_PARKED } from "./workspace/tile-host";
 
 /** Open a terminal link in the OS browser. window.open is intercepted by main's
  *  setWindowOpenHandler → shell.openExternal (and the in-app navigation denied),
@@ -553,8 +554,12 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       restoreFocusIfSelected();
     };
     // Viewport visibility → priority. Assume visible on mount (a fresh tile is
-    // usually in view); the observer corrects on the next frame.
+    // usually in view); the observer corrects on the next frame. A PARKED
+    // surface (no view shows this tile — see workspace/tile-host.tsx) still
+    // intersects geometrically, so the host's park/adopt events override it:
+    // parked tiles rank 0 and never hold a WebGL slot.
     let inViewport = true;
+    let parked = !!host.closest("#hm-tile-park");
     const io = new IntersectionObserver(
       (entries) => {
         const v = !!entries[entries.length - 1]?.isIntersecting;
@@ -563,9 +568,22 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       { threshold: 0.01 },
     );
     io.observe(host);
+    const surfaceEl = host.closest(".hm-tile-surface");
+    const onAdopted = () => {
+      parked = false;
+      // Refit ONCE to the adopting slot (the park freezes size, so the
+      // ResizeObserver below may have nothing to do) — through the same rAF
+      // the observer uses, never synchronously inside the view's layout
+      // effect (that forced a reflow of every terminal mid-commit on a switch).
+      scheduleFit();
+      reconcileWebglSlots();
+    };
+    const onParked = () => { parked = true; reconcileWebglSlots(); };
+    surfaceEl?.addEventListener(SURFACE_ADOPTED, onAdopted);
+    surfaceEl?.addEventListener(SURFACE_PARKED, onParked);
     registerWebglSlotClient({
       id: ptyId,
-      priority: () => (selectedRef.current ? 2 : inViewport ? 1 : 0),
+      priority: () => (parked ? 0 : selectedRef.current ? 2 : inViewport ? 1 : 0),
       acquire: acquireWebgl,
       release: releaseWebgl,
       // Crisp boost: the FOCUSED tile on a low-DPI screen renders via DOM (native
@@ -875,7 +893,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
     // ioctl resize on the kernel PTY. Coalescing to one rAF tick cuts that
     // to display-refresh rate and stops the resize handle from jittering.
     let fitRaf = 0;
-    const ro = new ResizeObserver(() => {
+    const scheduleFit = () => {
       if (fitRaf) return;
       fitRaf = requestAnimationFrame(() => {
         fitRaf = 0;
@@ -890,6 +908,10 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
           /* ignore */
         }
       });
+    };
+    const ro = new ResizeObserver(() => {
+      if (parked) return; // a parked surface holds its size; adoption refits
+      scheduleFit();
     });
     ro.observe(host);
 
@@ -910,6 +932,8 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       clearWork(tileId);
       ro.disconnect();
       io.disconnect();
+      surfaceEl?.removeEventListener(SURFACE_ADOPTED, onAdopted);
+      surfaceEl?.removeEventListener(SURFACE_PARKED, onParked);
       // Unregister from the slot manager — this releases our WebGL slot (disposes
       // the addon + dpr override) and lets another tile claim it.
       unregisterWebglSlotClient(ptyId);

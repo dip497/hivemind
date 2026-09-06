@@ -50,6 +50,10 @@ test("ctrl+n opens new-issue modal", async () => {
   // Give the modal a moment; if no root, fallback to checking the global
   // listener didn't crash.
   await page.waitForTimeout(300);
+  // Dismiss it — the dialog overlay would otherwise intercept the next test's
+  // clicks on the tile.
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(300);
 });
 
 test("corner-handle drag resizes a terminal tile", async () => {

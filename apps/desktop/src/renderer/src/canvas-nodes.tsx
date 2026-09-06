@@ -2,8 +2,11 @@
  * Canvas node types — the memoized react-flow node wrappers (terminal / diff /
  * workbench / issues / frame), the per-tile wheel/pan authority hook, the shared
  * NodeResizer props, and the `nodeTypes` map handed to <ReactFlow>. These are
- * pure presentational adapters around the tile components; extracted so Canvas.tsx
- * orchestrates state rather than also declaring the view shells.
+ * the CANVAS VIEW's shells only: each tile node renders a `<TileSlot>` and the
+ * shared TileHost (workspace/tile-host.tsx) supplies the live body — a node
+ * never mounts a terminal/editor itself, so react-flow mounting/unmounting a
+ * node can't disturb a session. Node `data` carries just what the shell needs
+ * (resize + pin + close); the body's data lives on the tile surface.
  *
  * Pinned tiles: a pinned tile stays a react-flow node for BOOKKEEPING, but its
  * content is rendered via `createPortal` into a fixed, non-transformed screen-space
@@ -14,106 +17,24 @@
  * reparent limit). See TileShell + FloatingPinnedPanel below.
  */
 import {
-  memo, useCallback, useContext, useEffect, useRef, useState, lazy, Suspense,
+  memo, useCallback, useContext, useEffect, useRef, useState,
   createContext, type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
 import { NodeResizer, useReactFlow, type NodeTypes } from "@xyflow/react";
 import { Pin, X } from "lucide-react";
 import { clampAnchor } from "./pin-anchor";
-import { TerminalTile } from "./TerminalTile";
-import { BrowserTile } from "./BrowserTile";
-import { IssuesTile } from "./IssuesTile";
-import { PlanReviewTile } from "./PlanReviewTile";
 import { FrameNode, type FrameNodeData } from "./FrameNode";
-import { TileErrorBoundary } from "./TileErrorBoundary";
+import { TileSlot } from "./workspace/tile-host";
+import type { PinRect } from "./workspace/tile-surfaces";
 
-const DiffTile = lazy(() => import("./DiffTile").then((m) => ({ default: m.DiffTile })));
-const WorkbenchTile = lazy(() => import("./WorkbenchTile").then((m) => ({ default: m.WorkbenchTile })));
-
-/** Screen-space rect captured from a tile's DOM at pin time (SCREEN pixels). */
-export type PinRect = { sx: number; sy: number; w: number; h: number };
+export type { PinRect };
 
 /** The DOM node every pinned tile portals its floating panel into. Canvas mounts a
  *  single fixed full-window `<div id="hm-pinned-layer">` and provides it here; the
  *  node wrappers `useContext` it. A React context (vs getElementById) keeps the
  *  reference stable across re-renders and re-renders portals when it first mounts. */
 export const PinnedLayerContext = createContext<HTMLElement | null>(null);
-
-export type TerminalNodeData = {
-  tileId: string;
-  cwd: string;
-  cmd: string;
-  args?: string[];
-  label?: string;
-  name?: string;
-  onRename?: (id: string, name: string) => void;
-  onAgentTitle?: (id: string, title: string) => void;
-  onOpenInBrowser?: (url: string) => void;
-  onOpenInEditor?: (path: string) => void;
-  onClose?: () => void;
-  pinned?: boolean;
-  onTogglePin?: (id: string, rect: PinRect) => void;
-};
-
-export type DiffNodeData = {
-  repoPath: string;
-  initialMode?: "working" | "branch";
-  initialBase?: string;
-  onClose?: () => void;
-  pinned?: boolean;
-  onTogglePin?: (id: string, rect: PinRect) => void;
-};
-
-export type WorkbenchNodeData = {
-  repoPath: string;
-  tabs: string[];
-  onOpenFile: (path: string) => void;
-  onOpenInBrowser?: (url: string) => void;
-  onCloseTab: (path: string) => void;
-  onClose: () => void;
-  pinned?: boolean;
-  onTogglePin?: (id: string, rect: PinRect) => void;
-};
-
-export type BrowserNodeData = {
-  tileId: string;
-  frameId?: string | null;
-  url?: string;
-  openReq?: { url: string; seq: number } | null;
-  onClose?: () => void;
-  pinned?: boolean;
-  onTogglePin?: (id: string, rect: PinRect) => void;
-};
-
-export type IssuesNodeData = {
-  root: string | null;
-  onClose: () => void;
-  pinned?: boolean;
-  onTogglePin?: (id: string, rect: PinRect) => void;
-};
-
-export type PlanReviewNodeData = {
-  requestId?: string;
-  hcpCmdId?: string;
-  plan: string;
-  cwd: string;
-  agentTileId?: string;
-  onClose?: () => void;
-};
-
-/** Discriminated union of every tile kind's `TileBody` props, keyed by `type`.
- *  Replaces the old `data: Record<string, unknown>` + `as unknown as X` casts:
- *  each node wrapper below already holds statically-typed data and constructs
- *  one of these variants directly, so a field rename breaks the build instead
- *  of silently arriving as `undefined`. */
-export type TileBodyProps =
-  | { type: "terminal"; data: TerminalNodeData; selected: boolean }
-  | { type: "diff"; data: DiffNodeData; selected: boolean }
-  | { type: "workbench"; data: WorkbenchNodeData; selected: boolean }
-  | { type: "browser"; data: BrowserNodeData; selected: boolean }
-  | { type: "issues"; data: IssuesNodeData; selected: boolean }
-  | { type: "planReview"; data: PlanReviewNodeData; selected: boolean };
 
 // Each node wrapper is memoized so a Canvas re-render does NOT re-render
 // every tile when its `data` is shallow-equal. Each is also wrapped in
@@ -179,7 +100,11 @@ export type ShellPin = {
   headerPin?: boolean;
 };
 
-type WithResize<T> = T & {
+/** Node `data` for every TILE node the canvas builds (canvas-node-build). Shell
+ *  concerns only — the body comes from the TileHost via `<TileSlot>`. */
+export type CanvasTileNodeData = {
+  tileId: string;
+  onClose?: () => void;
   onResize: (id: string, w: number, h: number, x?: number, y?: number) => void;
 } & ShellPin;
 
@@ -610,126 +535,19 @@ function useTileWheelZoom(selected: boolean): React.RefObject<HTMLDivElement | n
   return ref;
 }
 
-// Fallback shown while a lazy-loaded heavy tile (diff/editor) fetches its chunk.
-function TileLoading({ label }: { label: string }) {
-  return (
-    <div className="w-full h-full grid place-items-center rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] text-[12px] text-[var(--color-fg3)]">
-      {label}
-    </div>
-  );
-}
-
-/**
- * TileBody — the SHARED, chrome-less body for every tile kind. Given a node's
- * `type` + `data` (exactly the shapes `buildBaseNodes` produces, typed via the
- * `TileBodyProps` discriminated union above), it renders the pure tile
- * component (TerminalTile / DiffTile / …) with NO react-flow shell, resize
- * handles, or pin chip. Two consumers render it:
- *   • the react-flow node wrappers below (inside a TileShell) — each already
- *     holds statically-typed `data` and constructs its own union member
- *     directly, so a field rename is a compile error here, not a silent
- *     `undefined` at runtime; and
- *   • the windowed view (WindowsView), which mounts EVERY open tab's body at
- *     once and hides the inactive ones with `visibility` (see WindowsView's
- *     docblock for why — remount-is-harmless only holds for LOCAL tiles;
- *     detach on a remote (`ssh://`) tile kills the session outright).
- */
-export function TileBody(props: TileBodyProps): ReactNode {
-  switch (props.type) {
-    case "terminal": {
-      const { data, selected } = props;
-      return (
-        <TileErrorBoundary label={data.label ?? "terminal"} onClose={data.onClose}>
-          <TerminalTile {...data} selected={selected} />
-        </TileErrorBoundary>
-      );
-    }
-    case "diff": {
-      const { data } = props;
-      return (
-        <TileErrorBoundary label="Diff" onClose={data.onClose}>
-          <Suspense fallback={<TileLoading label="Loading diff…" />}>
-            <DiffTile {...data} />
-          </Suspense>
-        </TileErrorBoundary>
-      );
-    }
-    case "workbench": {
-      const { data } = props;
-      return (
-        <TileErrorBoundary label="Editor" onClose={data.onClose}>
-          <Suspense fallback={<TileLoading label="Loading editor…" />}>
-            <WorkbenchTile
-              repoPath={data.repoPath}
-              tabs={data.tabs}
-              onOpenFile={data.onOpenFile}
-              onOpenInBrowser={data.onOpenInBrowser}
-              onCloseTab={data.onCloseTab}
-              onClose={data.onClose}
-              pinned={data.pinned}
-              onTogglePin={data.onTogglePin}
-            />
-          </Suspense>
-        </TileErrorBoundary>
-      );
-    }
-    case "browser": {
-      const { data, selected } = props;
-      return (
-        <TileErrorBoundary label="Browser" onClose={data.onClose}>
-          <BrowserTile
-            tileId={data.tileId}
-            frameId={data.frameId}
-            url={data.url}
-            openReq={data.openReq}
-            selected={selected}
-            onClose={data.onClose}
-            pinned={data.pinned}
-            onTogglePin={data.onTogglePin}
-          />
-        </TileErrorBoundary>
-      );
-    }
-    case "issues": {
-      const { data, selected } = props;
-      return (
-        <TileErrorBoundary label="Issues" onClose={data.onClose}>
-          <IssuesTile
-            root={data.root}
-            onClose={data.onClose}
-            selected={selected}
-            pinned={data.pinned}
-            onTogglePin={data.onTogglePin}
-          />
-        </TileErrorBoundary>
-      );
-    }
-    case "planReview": {
-      const { data } = props;
-      return (
-        <TileErrorBoundary label="Plan review" onClose={data.onClose}>
-          <PlanReviewTile {...data} />
-        </TileErrorBoundary>
-      );
-    }
-    default:
-      return null;
-  }
-}
-
 const TerminalNode = memo(function TerminalNode({
   id,
   data,
   selected,
 }: {
   id: string;
-  data: WithResize<TerminalNodeData>;
+  data: CanvasTileNodeData;
   selected: boolean;
 }) {
   const wheelRef = useTileWheelZoom(selected);
   return (
     <TileShell id={id} selected={selected} pin={data} onClose={data.onClose} onResize={data.onResize} wheelRef={wheelRef}>
-      <TileBody type="terminal" data={data} selected={selected} />
+      <TileSlot tileId={id} />
     </TileShell>
   );
 });
@@ -740,13 +558,13 @@ const DiffNode = memo(function DiffNode({
   selected,
 }: {
   id: string;
-  data: WithResize<DiffNodeData>;
+  data: CanvasTileNodeData;
   selected: boolean;
 }) {
   const wheelRef = useTileWheelZoom(selected);
   return (
     <TileShell id={id} selected={selected} pin={data} onClose={data.onClose} onResize={data.onResize} minWidth={400} minHeight={240} wheelRef={wheelRef}>
-      <TileBody type="diff" data={data} selected={selected} />
+      <TileSlot tileId={id} />
     </TileShell>
   );
 });
@@ -757,13 +575,13 @@ const WorkbenchNode = memo(function WorkbenchNode({
   selected,
 }: {
   id: string;
-  data: WithResize<WorkbenchNodeData>;
+  data: CanvasTileNodeData;
   selected: boolean;
 }) {
   const wheelRef = useTileWheelZoom(selected);
   return (
     <TileShell id={id} selected={selected} pin={data} onClose={data.onClose} onResize={data.onResize} minWidth={520} minHeight={360} wheelRef={wheelRef}>
-      <TileBody type="workbench" data={data} selected={selected} />
+      <TileSlot tileId={id} />
     </TileShell>
   );
 });
@@ -774,13 +592,13 @@ const BrowserNode = memo(function BrowserNode({
   selected,
 }: {
   id: string;
-  data: WithResize<BrowserNodeData>;
+  data: CanvasTileNodeData;
   selected: boolean;
 }) {
   const wheelRef = useTileWheelZoom(selected);
   return (
     <TileShell id={id} selected={selected} pin={data} onClose={data.onClose} onResize={data.onResize} minWidth={420} minHeight={280} wheelRef={wheelRef}>
-      <TileBody type="browser" data={data} selected={selected} />
+      <TileSlot tileId={id} />
     </TileShell>
   );
 });
@@ -791,13 +609,13 @@ const IssuesNode = memo(function IssuesNode({
   selected,
 }: {
   id: string;
-  data: WithResize<IssuesNodeData>;
+  data: CanvasTileNodeData;
   selected: boolean;
 }) {
   const wheelRef = useTileWheelZoom(selected);
   return (
     <TileShell id={id} selected={selected} pin={data} onClose={data.onClose} onResize={data.onResize} minWidth={280} wheelRef={wheelRef}>
-      <TileBody type="issues" data={data} selected={selected} />
+      <TileSlot tileId={id} />
     </TileShell>
   );
 });
@@ -808,13 +626,13 @@ const PlanReviewNode = memo(function PlanReviewNode({
   selected,
 }: {
   id: string;
-  data: WithResize<PlanReviewNodeData>;
+  data: CanvasTileNodeData;
   selected: boolean;
 }) {
   const wheelRef = useTileWheelZoom(selected);
   return (
     <TileShell id={id} selected={selected} pin={data} onClose={data.onClose} onResize={data.onResize} minWidth={420} minHeight={300} wheelRef={wheelRef}>
-      <TileBody type="planReview" data={data} selected={selected} />
+      <TileSlot tileId={id} />
     </TileShell>
   );
 });
