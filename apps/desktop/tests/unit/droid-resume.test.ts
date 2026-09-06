@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const { isDroid, newestDroidSessionForCwd, makeDroidResumeTransforms, droidHooksSettings } =
-  await import("../../src/main/droid-resume.ts");
+  await import("@hivemind/agents/providers/droid.node");
 
 // Mirrors ~/.factory/sessions/<cwd-slug>/<id>.jsonl: first line is a
 // `session_start` record carrying { id, cwd }.

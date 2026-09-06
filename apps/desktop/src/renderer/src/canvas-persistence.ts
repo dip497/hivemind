@@ -20,6 +20,8 @@
 import type { TileKind } from "./tile-kinds";
 import { frameColorFor, LEGACY_FRAME_COLOR } from "./frame-color";
 import { identifyAgent } from "./agent-state";
+import { defaultAgent } from "@hivemind/agents";
+import { AGENT_TILE_KIND } from "./tile-kinds";
 
 /** Linux only. `-i` keeps the shell interactive so it doesn't exit, `-l`
  *  sources the login profile (PATH includes ~/.local/bin → claude resolves). */
@@ -196,7 +198,8 @@ export function loadLayout(repoPath: string | null): PersistedLayout {
       tiles = [];
       editorTabs = {};
       for (const e of Array.isArray(p.extras) ? p.extras : []) {
-        const kind: TileKind = identifyAgent(e.cmd) === "claude" ? "claude" : "shell";
+        // Legacy (v1) extras: only the default provider's command was an agent tile.
+        const kind: TileKind = identifyAgent(e.cmd) === defaultAgent().id ? AGENT_TILE_KIND : "shell";
         tiles.push({ id: e.id, kind, label: e.label, cmd: e.cmd, args: e.args });
       }
       const v = p.vis;

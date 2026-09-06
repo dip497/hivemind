@@ -1,7 +1,7 @@
 // Unit test for the agent-provider registry. Run: pnpm test:unit
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { providerFor, composeResume, PROVIDERS } from "../../src/main/providers/registry.ts";
+import { providerFor, composeResume, PROVIDERS } from "@hivemind/agents/node";
 import type { SpawnSpec } from "../../src/main/pty-session-manager.ts";
 
 const ctx = {

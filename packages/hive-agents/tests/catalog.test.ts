@@ -21,8 +21,12 @@ describe("agent catalog", () => {
     expect(agentForCmd("bash")).toBeUndefined();
   });
   test("spawnable vs worker sets follow the declared capabilities", () => {
-    expect(spawnableAgents().map((d) => d.id)).toEqual(["claude", "codex", "opencode", "droid", "pi", "kiro"]);
-    expect(workerAgents().map((d) => d.id)).toEqual(["claude", "droid", "pi", "kiro"]);
+    // Derived from the defs, so a provider added by its one catalog line is
+    // covered without editing this test.
+    expect(spawnableAgents().map((d) => d.id)).toEqual(CATALOG.filter((d) => d.enabled).map((d) => d.id));
+    expect(workerAgents().map((d) => d.id)).toEqual(CATALOG.filter((d) => d.enabled && d.caps.turnSignal).map((d) => d.id));
+    for (const id of ["claude", "droid", "pi", "kiro"]) expect(workerAgents().map((d) => d.id)).toContain(id);
+    expect(workerAgents().map((d) => d.id)).not.toContain("codex");
     for (const d of CATALOG) if (!d.caps.turnSignal) expect(d.note).toBeTruthy();
   });
   test("drift guard: node halves and catalog defs agree", () => {

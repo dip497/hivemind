@@ -10,6 +10,8 @@ import { frameColorFor } from "./frame-color";
 import { nextSlotInFrame, FRAME_ROW_MAX, FRAME_GAP } from "./frame-layout";
 import { defaultSizeForKind, defaultTileSize, FRAME_PAD, FRAME_HEADER } from "./canvas-sizing";
 import { agentById } from "./agents";
+import { agentById as catalogAgentById, defaultAgent } from "@hivemind/agents";
+import { AGENT_TILE_KIND } from "./tile-kinds";
 import { defaultShell, type FrameState, type TileInstance } from "./canvas-persistence";
 import { queueWork } from "./claude-bus";
 import { markBackgroundTile } from "./worker-tiles";
@@ -221,26 +223,26 @@ export function useSpawn(ctx: SpawnCtx) {
       let cmd: string | undefined;
       let args: string[] | undefined;
       let label: string;
-      if (kind === "claude" && opts?.agent) {
-        // A non-claude agent (codex / opencode / …) runs in the same agent-
-        // terminal kind; its binary + default flags come from the registry, and
-        // status detection keys off the cmd (identifyAgent), not the kind.
-        cmd = opts.agent.cmd;
-        args = opts.agent.args ?? [];
-        label = `${opts.agent.label} #${n}`;
-      } else if (kind === "claude") {
-        const m = opts?.mode || claudeMode;
+      if (kind === AGENT_TILE_KIND) {
+        // Any catalogued provider runs in the same agent-terminal kind; its
+        // binary + default flags come from the catalog, and status detection
+        // keys off the cmd (identifyAgent), not the kind. Permission modes and
+        // the model alias are layered on only where the provider declares them.
+        const def = (opts?.agent ? catalogAgentById(opts.agent.id) : undefined) ?? defaultAgent();
+        const m = def.caps.permissionModes ? (opts?.mode || claudeMode) : undefined;
         // bypassPermissions is gated behind its own flag — `--permission-mode
         // bypassPermissions` is refused at startup; the canonical entry is
         // `--dangerously-skip-permissions` (cli-reference).
-        args = m === "bypassPermissions"
-          ? ["--dangerously-skip-permissions"]
-          : m && m !== "default" ? ["--permission-mode", m] : [];
-        // claude-only model alias (opus/sonnet). Never emitted for registry
-        // agents (codex/pi/droid) — a stray `--model` would break their CLI.
-        if (claudeModel && claudeModel !== "default") args.push("--model", claudeModel);
-        cmd = "claude";
-        label = `claude #${n}${m && m !== "default" ? ` · ${m}` : ""}`;
+        args = def.caps.permissionModes
+          ? (m === "bypassPermissions" ? ["--dangerously-skip-permissions"] : m && m !== "default" ? ["--permission-mode", m] : [])
+          : [...(opts?.agent?.args ?? def.defaultArgs ?? [])];
+        // Model alias (opus/sonnet) only for providers that honour it — a stray
+        // `--model` would break the others' CLI.
+        if (def.caps.modelFlag && claudeModel && claudeModel !== "default") args.push("--model", claudeModel);
+        cmd = def.bin;
+        label = def.caps.permissionModes
+          ? `${def.id} #${n}${m && m !== "default" ? ` · ${m}` : ""}`
+          : `${opts?.agent?.label ?? def.label} #${n}`;
       } else if (kind === "shell") {
         const sh = defaultShell();
         cmd = sh.cmd; args = sh.args;
@@ -254,7 +256,7 @@ export function useSpawn(ctx: SpawnCtx) {
       setTiles((cur) => [...cur, { id: newId, kind, label, cmd, args, ...(kind === "browser" && opts?.url ? { url: opts.url } : {}) }]);
       // "Work on this": hand the fresh claude tile its prompt. It delivers it to
       // itself the first time it's ready (see claude-bus queueWork/claimWork).
-      if (kind === "claude" && opts?.work) queueWork(newId, opts.work);
+      if (kind === AGENT_TILE_KIND && opts?.work) queueWork(newId, opts.work);
     },
     [claudeMode, claudeModel, placeInFrame, ensureFrame, focusTile],
   );
@@ -281,13 +283,12 @@ export function useSpawn(ctx: SpawnCtx) {
   // Spawn a registry agent from a global surface (the tool island). claude keeps
   // its permission-mode path; other agents carry their registry cmd/flags.
   const spawnAgent = useCallback((agent: { id: string; cmd: string; defaultArgs?: string[]; label: string }, mode?: string) => {
-    if (agent.id === "claude") { spawnInto("claude", { mode }); return; }
-    spawnInto("claude", { agent: { id: agent.id, cmd: agent.cmd, args: agent.defaultArgs, label: agent.label } });
+    spawnInto(AGENT_TILE_KIND, { mode, agent: { id: agent.id, cmd: agent.cmd, args: agent.defaultArgs, label: agent.label } });
   }, [spawnInto]);
 
   // Back-compat thin wrappers for the many existing call sites.
   const spawnClaude = useCallback(
-    (mode?: string, work?: string) => spawnInto("claude", { mode, work }),
+    (mode?: string, work?: string) => spawnInto(AGENT_TILE_KIND, { mode, work }),
     [spawnInto],
   );
   const spawnVis = useCallback(
@@ -301,13 +302,13 @@ export function useSpawn(ctx: SpawnCtx) {
     // A registry agent (codex / opencode / …) opens as an agent-terminal tile
     // carrying its binary + default flags.
     const agent = agentById(kind);
-    if (agent && agent.id !== "claude") {
-      spawnTile("claude", frameId, { agent: { id: agent.id, cmd: agent.cmd, args: agent.defaultArgs, label: agent.label } });
+    if (agent) {
+      spawnTile(AGENT_TILE_KIND, frameId, { agent: { id: agent.id, cmd: agent.cmd, args: agent.defaultArgs, label: agent.label } });
       return;
     }
     const k: TileKind =
       kind === "tree" ? "editor"
-      : kind === "claude" || kind === "shell" || kind === "diff" || kind === "issues" || kind === "browser" ? kind
+      : kind === AGENT_TILE_KIND || kind === "shell" || kind === "diff" || kind === "issues" || kind === "browser" ? kind
       : "shell";
     spawnTile(k, frameId);
   }, [spawnTile]);
@@ -348,7 +349,7 @@ export function useSpawn(ctx: SpawnCtx) {
   // HCP control-plane spawn: create an agent tile and return its id so the
   // caller (main, via the renderer command channel) can drive it. Mirrors the
   // claude/registry-agent branch of spawnTile, plus prompt delivery via the
-  // claude-bus work queue. `agent` is a registry id ("claude", "codex", …).
+  // claude-bus work queue. `agent` is a catalog id.
   const hcpSpawnAgent = useCallback(
     (opts: { agent?: string; prompt?: string; frame?: string; mode?: string; model?: string; callerTile?: string; background?: boolean; name?: string }): string => {
       // Frame preference: explicit > the CALLER agent's frame (so a worker lands
@@ -379,26 +380,19 @@ export function useSpawn(ctx: SpawnCtx) {
       const frame = resolved ?? callerFrame ?? ensureFrame();
       const n = ++claudeSeqRef.current;
       const newId = `tile-claude-${Date.now()}`;
-      const reg = opts.agent && opts.agent !== "claude" ? agentById(opts.agent) : null;
-      let cmd: string;
-      let args: string[];
-      let label: string;
-      if (reg) {
-        cmd = reg.cmd;
-        args = reg.defaultArgs ?? [];
-        label = `${reg.label} #${n}`;
-      } else {
-        const m = opts.mode || claudeMode;
-        args = m === "bypassPermissions"
-          ? ["--dangerously-skip-permissions"]
-          : m && m !== "default" ? ["--permission-mode", m] : [];
-        // claude-only model alias (opus/sonnet). Per-spawn override wins over the
-        // workspace default; never emitted for registry agents above.
-        const model = opts.model || claudeModel;
-        if (model && model !== "default") args.push("--model", model);
-        cmd = "claude";
-        label = `claude #${n}${m && m !== "default" ? ` · ${m}` : ""}`;
-      }
+      const def = catalogAgentById(opts.agent) ?? defaultAgent();
+      const m = def.caps.permissionModes ? (opts.mode || claudeMode) : undefined;
+      let args: string[] = def.caps.permissionModes
+        ? (m === "bypassPermissions" ? ["--dangerously-skip-permissions"] : m && m !== "default" ? ["--permission-mode", m] : [])
+        : [...(def.defaultArgs ?? [])];
+      // Model alias — per-spawn override wins over the workspace default; only
+      // for providers that honour it.
+      const model = opts.model || claudeModel;
+      if (def.caps.modelFlag && model && model !== "default") args = [...args, "--model", model];
+      const cmd = def.bin;
+      let label = def.caps.permissionModes
+        ? `${def.id} #${n}${m && m !== "default" ? ` · ${m}` : ""}`
+        : `${def.label} #${n}`;
       // A spawner-chosen name wins over the generated "Pi #3" label — on a canvas
       // of a dozen workers, "reviewer" is what tells them apart. Main sanitizes it.
       if (opts.name) label = opts.name;
@@ -407,7 +401,7 @@ export function useSpawn(ctx: SpawnCtx) {
       // their "finished" notification — they're gathered in bulk, not driven.
       if (opts.background) markBackgroundTile(newId);
       placeInFrame(newId, frame, { background: opts.background });
-      setTiles((cur) => [...cur, { id: newId, kind: "claude", label, cmd, args }]);
+      setTiles((cur) => [...cur, { id: newId, kind: AGENT_TILE_KIND, label, cmd, args }]);
       if (opts.prompt) queueWork(newId, opts.prompt);
       return newId;
     },

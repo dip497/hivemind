@@ -48,6 +48,15 @@ export function identifyProvider(cmd: string | undefined | null): AgentProviderD
   return BY_ALIAS.get(binOf(cmd).toLowerCase());
 }
 
+/** The provider spawned when none is named: the first spawnable entry. The UI's
+ *  spawn button, `hive ctl spawn` and HCP all default to it, and legacy layouts
+ *  identify agent tiles by it. */
+export function defaultAgent(): AgentProviderDef {
+  const d = CATALOG.find((x) => x.enabled);
+  if (!d) throw new Error("agent catalog has no spawnable provider");
+  return d;
+}
+
 /** Providers offered for spawning (UI pickers, `--agent` choices). */
 export function spawnableAgents(): AgentProviderDef[] {
   return CATALOG.filter((d) => d.enabled);

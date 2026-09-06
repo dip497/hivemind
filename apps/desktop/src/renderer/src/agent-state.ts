@@ -5,56 +5,32 @@
  * 15 CLI agents. We feed xterm's rendered viewport instead of a terminal tail
  * snapshot and return hivemind's UI status buckets.
  *
- * Claude keeps its own richer detector (./claude-state.ts) which distinguishes
- * permission vs. question; every other agent collapses both into "blocked".
+ * The catalogued providers' detectors live with their defs (@hivemind/agents);
+ * claude's distinguishes permission vs. question, every other agent collapses
+ * both into "blocked". The detectors for agents hivemind recognises but does
+ * not spawn stay here.
  */
-import { detectClaudeState, type ClaudeState } from "./claude-state";
-import { agentById, BRAILLE, cursorWordActive, hasBrailleSpinner } from "@hivemind/agents";
+import { BRAILLE, CATALOG, agentById, cursorWordActive, hasBrailleSpinner, type AgentState, type TileStatus } from "@hivemind/agents";
 
-export type Agent =
-  | "pi"
-  | "claude"
-  | "codex"
-  | "gemini"
-  | "cursor"
-  | "antigravity"
-  | "cline"
-  | "opencode"
-  | "copilot"
-  | "kimi"
-  | "kiro"
-  | "droid"
-  | "amp"
-  | "grok"
-  | "hermes";
+/** An agent id: a catalogued provider ("claude", "codex", …) or one of the
+ *  recognised-but-unspawnable herdr agents below. */
+export type Agent = string;
+export type { AgentState, TileStatus };
 
-/** herdr's three-state model. "blocked" = needs the human (approval/question). */
-export type AgentState = "idle" | "working" | "blocked";
-
-/** UI status buckets hivemind tiles render. Claude gets permission/question. */
-export type TileStatus = "working" | "idle" | "blocked" | "permission" | "question";
-
-const ALIASES: Record<string, Agent> = {
-  pi: "pi",
-  claude: "claude",
-  "claude-code": "claude",
-  codex: "codex",
-  gemini: "gemini",
+/** Agents hivemind RECOGNISES for status scraping but does not spawn (no
+ *  provider def): the herdr-ported detectors below. Catalogued providers carry
+ *  their own aliases + detector in their def. */
+const EXTRA_ALIASES: Record<string, Agent> = {
   cursor: "cursor",
   "cursor-agent": "cursor",
   agy: "antigravity",
   antigravity: "antigravity",
   "antigravity-cli": "antigravity",
   cline: "cline",
-  opencode: "opencode",
-  "open-code": "opencode",
   copilot: "copilot",
   "github-copilot": "copilot",
   ghcs: "copilot",
   kimi: "kimi",
-  kiro: "kiro",
-  "kiro-cli": "kiro",
-  droid: "droid",
   amp: "amp",
   "amp-local": "amp",
   grok: "grok",
@@ -62,6 +38,16 @@ const ALIASES: Record<string, Agent> = {
   hermes: "hermes",
   "hermes-agent": "hermes",
 };
+
+const ALIASES: Record<string, Agent> = (() => {
+  const out: Record<string, Agent> = { ...EXTRA_ALIASES };
+  for (const d of CATALOG) {
+    out[d.id] = d.id;
+    out[d.bin] = d.id;
+    for (const alias of d.aliases ?? []) out[alias] = d.id;
+  }
+  return out;
+})();
 
 /**
  * Identify which agent a tile is running from its spawn command. Strips a path
@@ -238,29 +224,25 @@ function detectHermes(content: string): AgentState {
   return "idle";
 }
 
-/** A catalogued provider's own detector (its def owns the strings). */
-const fromCatalog = (id: string) => (c: string): AgentState => agentById(id)!.detect(c) as AgentState;
-
-const DETECTORS: Record<Exclude<Agent, "claude">, (c: string) => AgentState> = {
-  pi: fromCatalog("pi"),
-  codex: fromCatalog("codex"),
-  gemini: fromCatalog("gemini"),
+/** herdr detectors for the recognised-but-unspawnable agents. Catalogued
+ *  providers are dispatched to their def's detector (detectAgentState). */
+const EXTRA_DETECTORS: Record<string, (c: string) => AgentState> = {
   cursor: detectCursor,
   antigravity: detectAntigravity,
   cline: detectCline,
-  opencode: fromCatalog("opencode"),
   copilot: detectCopilot,
   kimi: detectKimi,
-  kiro: fromCatalog("kiro"),
-  droid: fromCatalog("droid"),
   amp: detectAmp,
   grok: detectGrok,
   hermes: detectHermes,
 };
 
-/** herdr three-state detection for a known non-claude agent. */
-export function detectAgentState(agent: Exclude<Agent, "claude">, screen: string): AgentState {
-  return DETECTORS[agent](screen);
+/** herdr three-state detection for a known non-claude agent (a catalogued
+ *  provider's detector collapses permission/question into "blocked"). */
+export function detectAgentState(agent: Agent, screen: string): AgentState {
+  const d = agentById(agent);
+  if (d) { const t = d.detect(screen); return t === "permission" || t === "question" ? "blocked" : t; }
+  return EXTRA_DETECTORS[agent]?.(screen) ?? "idle";
 }
 
 /**
@@ -318,13 +300,11 @@ export function normalizeAgentTitle(raw: string): string {
 }
 
 /**
- * One call → the UI status bucket for any agent. Claude uses its richer
- * detector (permission/question); the rest map blocked → "blocked".
+ * One call → the UI status bucket for any agent. A provider whose detector
+ * distinguishes permission/question keeps them; the rest map to "blocked".
  */
 export function detectTileStatus(agent: Agent, screen: string): TileStatus {
-  if (agent === "claude") {
-    const s: ClaudeState = detectClaudeState(screen);
-    return s; // "permission" | "question" | "working" | "idle" are all TileStatus
-  }
-  return detectAgentState(agent, screen);
+  // A catalogued provider's detector already returns the UI bucket (claude's
+  // keeps permission/question); the herdr extras return the three-state model.
+  return agentById(agent)?.detect(screen) ?? detectAgentState(agent, screen);
 }

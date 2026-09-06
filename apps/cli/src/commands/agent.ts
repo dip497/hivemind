@@ -12,21 +12,12 @@ import {
   writeConfig,
 } from "@hivemind/core";
 import { err, ok } from "../format.js";
+import { CATALOG } from "@hivemind/agents";
 
-const KNOWN_AGENTS = [
-  "claude",
-  "codex",
-  "gemini",
-  "opencode",
-  "openclaw",
-  "hermes",
-  "amp",
-  "cursor",
-  "pi",
-  // The actual binary (`which kiro-cli`) — NOT bare `kiro`, which is the Kiro
-  // IDE, a different product.
-  "kiro-cli",
-];
+/** Binaries `hive agent detect` probes: every catalogued provider's binary plus
+ *  agent CLIs hivemind recognises for status but does not spawn. */
+const EXTRA_AGENT_BINS = ["openclaw", "hermes", "amp", "cursor"];
+const KNOWN_AGENTS = [...CATALOG.map((d) => d.bin), ...EXTRA_AGENT_BINS];
 
 const contextCmd = defineCommand({
   meta: { name: "context", description: "Regenerate .hivemind/.agent.md" },

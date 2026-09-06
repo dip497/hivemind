@@ -7,7 +7,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, lstatSync, readlin
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const { seedKiroHome } = await import("../../src/main/hcp/kiro-home.ts");
+const { seedKiroHome } = await import("@hivemind/agents/providers/kiro-home");
 
 function fakeKiro(): string {
   const real = mkdtempSync(join(tmpdir(), "real-kiro-"));

@@ -33,10 +33,16 @@ export const droid: AgentProviderDef = {
     promptDelivery: "typed",
     turnSignal: true,
     resume: "cwd",
-    supervise: false,
+    supervise: "human",
     modelFlag: false,
     permissionModes: false,
     blockedDetection: true,
+  },
+  /** a geometric rendering of Factory's looped-petal star mark (Factory ships no simple-icons logo). */
+  icon: {
+    viewBox: "0 0 24 24",
+    attrs: { fill: "none", stroke: "currentColor", strokeWidth: "1.2" },
+    body: '<ellipse cx="12" cy="12" rx="10" ry="2.6" /><ellipse cx="12" cy="12" rx="10" ry="2.6" transform="rotate(45 12 12)" /><ellipse cx="12" cy="12" rx="10" ry="2.6" transform="rotate(90 12 12)" /><ellipse cx="12" cy="12" rx="10" ry="2.6" transform="rotate(135 12 12)" />',
   },
   detect: detectDroid,
 };

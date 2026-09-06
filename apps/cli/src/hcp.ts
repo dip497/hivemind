@@ -32,7 +32,9 @@ export const EXIT = {
   notFound: 5,
   /** UNAUTHORIZED — bad/missing HCP token. */
   unauthorized: 6,
-  /** RATE_LIMITED / DEPTH_EXCEEDED — the control plane refused for now. */
+  /** RATE_LIMITED / DEPTH_EXCEEDED — the control plane refused for now — or
+   *  UNSUPPORTED: the provider lacks the capability (no turn signal, no
+   *  permission system) so the verb cannot succeed for it. */
   refused: 7,
 } as const;
 
@@ -51,7 +53,7 @@ export function exitCodeFor(code: string): number {
     case "TIMEOUT": return EXIT.timeout;
     case "TILE_NOT_FOUND": case "NOT_FOUND": return EXIT.notFound;
     case "UNAUTHORIZED": return EXIT.unauthorized;
-    case "RATE_LIMITED": case "DEPTH_EXCEEDED": return EXIT.refused;
+    case "RATE_LIMITED": case "DEPTH_EXCEEDED": case "UNSUPPORTED": return EXIT.refused;
     default: return EXIT.error;
   }
 }

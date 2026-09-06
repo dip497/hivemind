@@ -7,8 +7,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const { isKiro, kiroHooksSettings, kiroAgentConfig, makeKiroResumeTransforms, KIRO_HIVEMIND_AGENT } =
-  await import("../../src/main/kiro-resume.ts");
-const { tileSessionFile } = await import("../../src/main/tile-session-store.ts");
+  await import("@hivemind/agents/providers/kiro.node");
+const { tileSessionFile } = await import("@hivemind/agents/node");
 
 const HOOK_DEPS = {
   execPath: "/x/electron",

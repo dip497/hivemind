@@ -33,6 +33,7 @@ import { snapViewportCrisp, FocusMode, FocusOnTile, PanMomentum, ViewportSnap } 
 import { buildBaseNodes } from "../../canvas-node-build";
 import type { WorkspaceViewPlugin, WorkspaceViewProps } from "../workspace-view";
 import { useCanvasRuntime } from "./canvas-runtime";
+import { AGENT_TILE_KIND } from "../../tile-kinds";
 
 // Stable references for props passed to <ReactFlow>. The xyflow perf guide
 // (reactflow.dev/learn/advanced-use/performance) flags unmemoized object/array
@@ -101,7 +102,7 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
     // tiles (terminal/shell/diff/editor) snap to 100% with the content-corner
     // clamp; the rest get the framed focus. Mirrors the onNodeClick decision.
     const kind = tiles.find((x) => x.id === id)?.kind;
-    const exact = kind === "claude" || kind === "shell" || kind === "diff" || kind === "editor";
+    const exact = kind === AGENT_TILE_KIND || kind === "shell" || kind === "diff" || kind === "editor";
     focusTile(id, { exact });
   }, [selectTile, focusTile, tiles]);
   const focusFrameFromPanel = useCallback((id: string) => {

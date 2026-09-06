@@ -5,7 +5,7 @@
  * arg MUST be POSIX-escaped with shq() (reused from claude-resume).
  */
 import type { Client } from "ssh2";
-import { shq } from "../claude-resume.js";
+import { shq } from "@hivemind/agents/node";
 
 export interface ExecResult {
   stdout: string;

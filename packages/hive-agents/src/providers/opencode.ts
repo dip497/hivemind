@@ -27,10 +27,16 @@ export const opencode: AgentProviderDef = {
     promptDelivery: "typed",
     turnSignal: false,
     resume: "none",
-    supervise: false,
+    supervise: "human",
     modelFlag: false,
     permissionModes: false,
     blockedDetection: true,
+  },
+  /** opencode's leading block glyph. */
+  icon: {
+    viewBox: "-3 6 30 30",
+    attrs: { fill: "currentColor" },
+    body: '<path d="M18 30H6V18H18V30Z" opacity="0.65" /><path d="M18 12H6V30H18V12ZM24 36H0V6H24V36Z" />',
   },
   detect: detectOpencode,
   note: "scrape-only status and no turn signal — drive it by hand on the canvas; `hive ctl read` / `hive ctl workflow` cannot gather from it.",

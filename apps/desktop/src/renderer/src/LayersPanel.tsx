@@ -14,8 +14,10 @@ import { Layers, ChevronRight, ChevronDown, GitBranch, Server, Folder, FolderOpe
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { AgentIcon } from "./agents";
 import { FrameRailMenu, type FrameActions } from "./FrameRailMenu";
+import { defaultAgent } from "@hivemind/agents";
+import { AGENT_TILE_KIND } from "./tile-kinds";
 
-export type LayerKind = "claude" | "terminal" | "editor" | "diff" | "issues" | "browser" | "planReview" | "workbench";
+export type LayerKind = typeof AGENT_TILE_KIND | "terminal" | "editor" | "diff" | "issues" | "browser" | "planReview" | "workbench";
 
 export interface LayerTile {
   id: string;
@@ -23,7 +25,7 @@ export interface LayerTile {
   name: string;
   /** Frame id this tile belongs to, or null when loose on the canvas. */
   frameId: string | null;
-  /** For agent tiles (kind "claude"): the registry agent id (claude/codex/…)
+  /** For agent tiles (kind AGENT_TILE_KIND): the registry agent id (claude/codex/…)
    *  so the right logo shows even though they share the agent-terminal kind. */
   agent?: string;
 }
@@ -304,8 +306,8 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
         title={`${t.name} · ${st}`}
       >
         <span aria-hidden className="w-4 shrink-0 grid place-items-center font-mono text-[11px] text-[var(--color-fg3)]">
-          {t.kind === "claude"
-            ? <AgentIcon id={t.agent ?? "claude"} size={14} />
+          {t.kind === AGENT_TILE_KIND
+            ? <AgentIcon id={t.agent ?? defaultAgent().id} size={14} />
             : t.kind === "browser"
               ? <Globe size={12} aria-hidden />
               : KIND_GLYPH[t.kind]}

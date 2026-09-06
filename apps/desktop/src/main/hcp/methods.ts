@@ -16,6 +16,7 @@ import type { OutputRecorder } from "./output-recorder.js";
 import { readLastAssistantMessage } from "./transcript.js";
 import { toPtyId as ptyId, toBareId as bareOf } from "../../shared/tile-id.js";
 import { setName, labelOf } from "./names.js";
+import { agentById, defaultAgent, spawnableAgents, workerAgents } from "@hivemind/agents";
 import { SUBMIT_DELAY_MS } from "../../shared/agent-io.js";
 
 /** Max agent-spawn depth (user = 0). Bounds recursive agent-spawns-agent fan-out
@@ -75,14 +76,16 @@ export function stickyAllow(cacheKey: string): boolean {
   return STICKY_ALLOW.has((cacheKey.split(":").pop() ?? "").toLowerCase());
 }
 
-/** Agents with NO permission system of their own, which therefore cannot be
- *  supervised: there is no native prompt for a broker to intercept or to fail back
- *  to, so any gate we inject must fail closed and bricks the worker on the first
- *  hiccup. A `supervise` request for these is refused at spawn, not silently
- *  downgraded — a caller that thinks it has a gate but doesn't is worse off than one
- *  that knows it has none. Verified for pi 0.55.3 (its core has no approval path).
- *  claude/droid are NOT here: their brokers fail open to a real human prompt. */
-const SUPERVISE_UNSUPPORTED = new Set(["pi"]);
+/** Whether a provider can be supervised is declared in its catalog def
+ *  (`caps.supervise`). A runtime with no permission system of its own has
+ *  nothing to broker: there is no native prompt for a broker to intercept or to
+ *  fail back to, so any gate we injected must fail closed and would brick the
+ *  worker on the first hiccup. A `supervise` request for it is refused at
+ *  spawn, not silently downgraded — a caller that thinks it has a gate but
+ *  doesn't is worse off than one that knows it has none. */
+function superviseUnsupported(agent: string): boolean {
+  return agentById(agent)?.caps.supervise === "none";
+}
 
 /** Normalize a `supervise` arg into the HIVE_SUPERVISE env string (a tool list or
  *  "all"), or null to disable. */
@@ -103,6 +106,10 @@ function summarizeTool(tool: string, inp: Record<string, unknown>): string {
 }
 
 export interface MethodDeps {
+  /** Provider id of a (user-spawned) tile, from its command — for the
+   *  capability checks on read/workflow. Optional: HCP-spawned tiles are
+   *  tracked internally. */
+  agentOf?: (bareTileId: string) => string | undefined;
   /** Run a renderer verb (returns its result); rejects/throws HcpError on
    *  no-renderer / timeout. */
   callRenderer: (method: string, params: unknown, timeoutMs: number) => Promise<unknown>;
@@ -173,6 +180,19 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
   // bare tileId → spawn depth (HCP-spawned children only; user-spawned agents
   // are absent → treated as depth 0). Enforced against MAX_SPAWN_DEPTH.
   const depthOf = new Map<string, number>();
+  /** bare tileId → provider id, for tiles spawned through HCP (user-spawned
+   *  tiles are resolved by deps.agentOf from their command). */
+  const agentOfTile = new Map<string, string>();
+  const providerOf = (tileId: string): string | undefined => agentOfTile.get(bareOf(tileId)) ?? deps.agentOf?.(bareOf(tileId));
+  /** Refuse a verb that needs a deterministic turn signal from a provider that
+   *  has none — an honest UNSUPPORTED instead of a read that times out. */
+  const requireTurnSignal = (tileId: string, verb: string): void => {
+    const id = providerOf(tileId);
+    const def = id ? agentById(id) : undefined;
+    if (def && !def.caps.turnSignal) {
+      throw new HcpError("UNSUPPORTED", `${verb}: ${def.id} has no turn signal (${def.note ?? "scrape-only status"}) — drive it by hand or use a worker runtime: ${workerAgents().map((d) => d.id).join(", ")}`);
+    }
+  };
   // Agent-supervised approvals (HCP Phase 6). A supervised worker's PreToolUse
   // broker hook calls `agent.await_approval` (held here until the parent answers
   // via `agent.approve`). `approveCache` remembers always/never per worker+tool.
@@ -200,7 +220,11 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       throw new HcpError("DEPTH_EXCEEDED", `agent spawn depth ${childDepth} exceeds max ${MAX_SPAWN_DEPTH}`);
     }
     if (!deps.spawnAllowed()) throw new HcpError("RATE_LIMITED", "spawn rate limit exceeded");
-    const agent = String(opts.agent ?? "claude");
+    const agent = String(opts.agent ?? defaultAgent().id);
+    const def = agentById(agent);
+    if (!def || !def.enabled) {
+      throw new HcpError("BAD_REQUEST", `unknown agent '${agent}' — spawnable: ${spawnableAgents().map((d) => d.id).join(", ")}`);
+    }
     const sup = normalizeSupervise(opts.supervise);
     // pi cannot be supervised. It has NO permission system, so the only gate would be
     // one we inject — which must fail CLOSED (no human prompt to fall back to) and
@@ -208,7 +232,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     // an ungated worker the caller believes it is supervising: a false gate is worse
     // than no gate. (A user-opened pi tile is fully autonomous too — this changes
     // nothing about pi's actual authority.)
-    if (sup && SUPERVISE_UNSUPPORTED.has(agent)) {
+    if (sup && superviseUnsupported(agent)) {
       throw new HcpError(
         "BAD_REQUEST",
         `${agent} workers cannot be supervised — ${agent} has no permission system, so there is nothing to broker. ` +
@@ -237,6 +261,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     )) as { tileId?: string };
     if (!res?.tileId) throw new HcpError("INTERNAL", "spawn returned no tileId");
     depthOf.set(res.tileId, childDepth);
+    agentOfTile.set(res.tileId, agent);
     if (name) setName(res.tileId, name);
     if (opts.callerTile) {
       const parentBare = bareOf(String(opts.callerTile));
@@ -456,6 +481,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       case "agent.read": {
         const tileId = String(p.tileId ?? "");
         if (!tileId) throw new HcpError("BAD_REQUEST", "tileId required");
+        requireTurnSignal(tileId, "agent.read");
         const timeoutMs = typeof p.timeoutMs === "number" ? p.timeoutMs : DEFAULT_READ_TIMEOUT;
         const pid = ptyId(tileId);
         const afterSeq = sendSeq.get(pid) ?? deps.turns.currentSeq(pid);
@@ -496,7 +522,12 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         // this returns (`hive ctl workflow` blocks with a matching client ceiling).
         const shape = String(p.shape ?? "fanout");
         const caller = p.callerTile != null ? String(p.callerTile) : undefined;
-        const agent = p.agent != null ? String(p.agent) : "claude";
+        const agent = p.agent != null ? String(p.agent) : defaultAgent().id;
+        {
+          const def = agentById(agent);
+          if (!def || !def.enabled) throw new HcpError("BAD_REQUEST", `unknown agent '${agent}' — spawnable: ${spawnableAgents().map((d) => d.id).join(", ")}`);
+          if (!def.caps.turnSignal) throw new HcpError("UNSUPPORTED", `workflow.run: ${def.id} has no turn signal, so its workers' replies cannot be gathered (${def.note ?? "scrape-only status"}) — use a worker runtime: ${workerAgents().map((d) => d.id).join(", ")}`);
+        }
         const frame = p.frame != null ? String(p.frame) : undefined;
         // claude-only model alias applied to every worker in the fleet.
         const model = p.model != null ? String(p.model) : undefined;

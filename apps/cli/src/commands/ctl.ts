@@ -26,7 +26,8 @@ import {
   type IssueState,
 } from "@hivemind/core";
 import { EXIT, HcpCliError, exitCodeFor, hcpCall, hcpStream, ownTile } from "../hcp.js";
-import { UsageError, boolFlag, intFlag, parseKeys, readSchedule, workflowParams } from "../ctl-args.js";
+import { UnsupportedError, UsageError, boolFlag, intFlag, parseKeys, readSchedule, resolveAgent, workflowParams } from "../ctl-args.js";
+import { defaultAgent, spawnableAgents, workerAgents } from "@hivemind/agents";
 import { detectWho } from "../who.js";
 
 const ISSUE_STATES = ["backlog", "todo", "in_progress", "in_review", "done", "cancelled"] as const;
@@ -45,6 +46,7 @@ function fail(e: unknown, json: boolean): never {
   let code = "INTERNAL", message = String((e as Error)?.message ?? e), exit: number = EXIT.error;
   if (e instanceof HcpCliError) { code = e.code; exit = e.exit; }
   else if (e instanceof UsageError) { code = "USAGE"; exit = EXIT.usage; }
+  else if (e instanceof UnsupportedError) { code = "UNSUPPORTED"; exit = EXIT.refused; }
   else if (e instanceof HiveError) {
     code = e.code;
     exit = e.code === "not_found" || e.code === "no_root" ? EXIT.notFound : e.code.includes("invalid") ? EXIT.usage : EXIT.error;
@@ -92,7 +94,7 @@ const frames = sub("frames", "List canvas frames (id, title, repo, branch, tile 
   () => hcpCall("tile.list_frames", {}));
 
 const spawn = sub("spawn", "Spawn an agent tile; prints { tileId, … }", {
-  agent: { type: "string", description: "agent id (claude, codex, pi, …)", default: "claude" },
+  agent: { type: "string", description: `agent id: ${spawnableAgents().map((d) => d.id).join(" | ")} (default ${defaultAgent().id})` },
   prompt: { type: "string", description: "initial task" },
   name: { type: "string", description: "tile title" },
   frame: { type: "string", description: "frame to spawn into (id, repo/worktree name, or title); default: the caller's frame" },
@@ -101,7 +103,7 @@ const spawn = sub("spawn", "Spawn an agent tile; prints { tileId, … }", {
   report: { type: "boolean", description: "worker auto-reports its finished reply to the caller (--no-report to disable)" },
   supervise: { type: "string", description: "broker the worker's tool permissions to this CLI/agent: 'all', or a comma-list of tools" },
 }, (a) => hcpCall("tile.spawn_agent", {
-  agent: a.agent, prompt: a.prompt, name: a.name, frame: a.frame, mode: a.mode, model: a.model,
+  agent: resolveAgent(a.agent), prompt: a.prompt, name: a.name, frame: a.frame, mode: a.mode, model: a.model,
   report: boolFlag(a.report), supervise: a.supervise, callerTile: ownTile(),
 }));
 
@@ -149,7 +151,7 @@ const workflow = sub("workflow", "Run a multi-agent workflow (fanout | pipeline 
   stages: { type: "string", description: "pipeline: '||'-separated stage prompts; each may use {input}" },
   input: { type: "string", description: "pipeline: seed value for the first stage's {input}" },
   "reduce-prompt": { type: "string", description: "mapreduce: reducer prompt; use {results}" },
-  agent: { type: "string", default: "claude", description: "runtime per worker (claude, codex, pi, …)" },
+  agent: { type: "string", description: `runtime per worker: ${workerAgents().map((d) => d.id).join(" | ")} (default ${defaultAgent().id})` },
   model: { type: "string", description: "model override for every worker" },
   frame: { type: "string", description: "frame to spawn workers into (id, repo name, or title)" },
   supervise: { type: "string", description: "broker workers' tool perms to this CLI: 'all' or a comma-list of tools" },

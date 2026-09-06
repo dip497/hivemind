@@ -69,6 +69,8 @@ import { CANVAS_LAYOUT, loadCanvasLayout } from "./workspace/views/canvas-layout
 import { CanvasRuntimeContext, type CanvasRuntime, type FocusModeReq, type FocusReq, type Viewport } from "./workspace/views/canvas-runtime";
 // Registers the built-in view plugins (side effect) before the first render.
 import "./workspace/views";
+import { defaultAgent } from "@hivemind/agents";
+import { AGENT_TILE_KIND } from "./tile-kinds";
 
 // Snap on drop to an 8px grid (Figma's standard). The drop xyflow hands us is
 // raw cursor; rounding to 8px means the tile travels a few px from cursor to
@@ -421,7 +423,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
       const effRepo = owner?.worktreePath ?? owner?.workspacePath ?? repoPath ?? null;
       if ((t.kind === "editor" || t.kind === "diff") && !effRepo) continue;
       const kind: LayerTile["kind"] = t.kind === "shell" ? "terminal" : t.kind;
-      const agent = t.kind === "claude" ? (agentForCmd(t.cmd)?.id ?? "claude") : undefined;
+      const agent = t.kind === AGENT_TILE_KIND ? (agentForCmd(t.cmd)?.id ?? defaultAgent().id) : undefined;
       out.push({ id: t.id, kind, name: tileNames[t.id] ?? agentTitles[t.id] ?? t.label, frameId: fo[t.id] ?? null, agent });
     }
     return out;
@@ -465,7 +467,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   );
   // Which agent the tool island's spawn button creates (claude / codex / …).
   const [agentSel, setAgentSel] = useState<string>(
-    () => localStorage.getItem("hivemind:agent-sel") || "claude",
+    () => localStorage.getItem("hivemind:agent-sel") || defaultAgent().id,
   );
   const agentSelRef = useRef(agentSel);
   useEffect(() => { agentSelRef.current = agentSel; localStorage.setItem("hivemind:agent-sel", agentSel); }, [agentSel]);
@@ -754,7 +756,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     const onDeliver = (e: Event) => {
       const text = (e as CustomEvent<{ text: string }>).detail?.text;
       if (!text) return;
-      const claudes = tilesRef.current.filter((t) => t.kind === "claude");
+      const claudes = tilesRef.current.filter((t) => t.kind === AGENT_TILE_KIND);
       if (claudes.length === 0) { spawnClaude(undefined, text); return; }
       setClaudePick({ text });
     };
@@ -998,7 +1000,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
                 ×
               </button>
             </div>
-            {tiles.filter((t) => t.kind === "claude").map((t) => {
+            {tiles.filter((t) => t.kind === AGENT_TILE_KIND).map((t) => {
               const name = tileNames[t.id] ?? agentTitles[t.id] ?? t.label;
               const frame = frames.find((f) => f.id === frameOf[t.id]);
               return (
@@ -1007,7 +1009,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
                   onClick={() => { deliverToClaude(claudePick.text, t.id); setClaudePick(null); }}
                   className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[12px] text-left text-[var(--color-fg2)] hover:bg-[var(--color-bg4)] hover:text-[var(--color-fg)] cursor-pointer"
                 >
-                  <AgentIcon id="claude" size={13} className="shrink-0 text-[var(--color-fg3)]" />
+                  <AgentIcon id={agentForCmd(t.cmd)?.id ?? defaultAgent().id} size={13} className="shrink-0 text-[var(--color-fg3)]" />
                   <span className="truncate flex-1">{name}</span>
                   {frame && <span className="shrink-0 text-[10px] text-[var(--color-fg3)]">{frame.title}</span>}
                 </button>

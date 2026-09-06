@@ -21,10 +21,16 @@ export const pi: AgentProviderDef = {
     promptDelivery: "argv",
     turnSignal: true,
     resume: "cwd",
-    supervise: false,
+    supervise: "none",
     modelFlag: false,
     permissionModes: false,
     blockedDetection: false,
+  },
+  /** pi's block glyph. */
+  icon: {
+    viewBox: "0 0 800 800",
+    attrs: { fill: "currentColor", fillRule: "evenodd" },
+    body: '<path d="M165.29 165.29 H517.36 V400 H400 V517.36 H282.65 V634.72 H165.29 Z M282.65 282.65 V400 H400 V282.65 Z" /><path d="M517.36 400 H634.72 V634.72 H517.36 Z" />',
   },
   detect: detectPi,
   note: "pi has no permission system: it always runs autonomously and cannot be supervised.",

@@ -26,6 +26,7 @@ import {
   type LinkType,
 } from "@hivemind/core";
 import os from "node:os";
+import { agentForCmd } from "@hivemind/agents";
 import type { IssuePatch } from "@hivemind/core/types";
 import * as ptyHost from "./pty-host.js";
 import * as ptyDaemon from "./daemon-client.js";
@@ -1205,7 +1206,12 @@ function setPtyPaused(tileId: string, paused: boolean): void {
   else resumePty(tileId);
 }
 
+/** bare tileId → provider id, recorded at every agent spawn so HCP can check a
+ *  provider's capabilities before reading from / gathering it. */
+const hcpAgentOf = new Map<string, string>();
+
 ipcMain.handle("ptySpawn", wrap(async (e, opts: Parameters<typeof spawnPty>[0]) => {
+  { const d = agentForCmd(opts.cmd); if (d) hcpAgentOf.set(toBareId(opts.tileId), d.id); else hcpAgentOf.delete(toBareId(opts.tileId)); }
   // Spawn rate-limit: a compromised renderer (XSS via rendered diff/issue
   // content) could fork-bomb the host through ptySpawn. Cap spawns per sliding
   // window — the dev-bridge already guards the identical call; the IPC path
@@ -1686,6 +1692,7 @@ function startHcpControlPlane(): void {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("hcp:spawn", { child, parent, connected });
   };
   const _hcp = makeDispatch({
+    agentOf: (bare) => hcpAgentOf.get(bare),
     callRenderer: hcpCallRenderer,
     writeToTile: hcpWriteToTile,
     deliverToTile: (ptyId, text, onSent) => hcpMailbox.deliver(ptyId, text, onSent),

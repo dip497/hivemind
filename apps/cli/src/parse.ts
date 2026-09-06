@@ -1,4 +1,5 @@
 import { type Assignee, type IssueState } from "@hivemind/core";
+import { CATALOG } from "@hivemind/agents";
 
 const STATES: IssueState[] = [
   "backlog",
@@ -15,18 +16,10 @@ export function parseState(s: string): IssueState | null {
   return (STATES as string[]).includes(norm) ? (norm as IssueState) : null;
 }
 
-const KNOWN_AGENTS = new Set([
-  "claude",
-  "codex",
-  "gemini",
-  "opencode",
-  "openclaw",
-  "hermes",
-  "amp",
-  "cursor",
-  "pi",
-  "kiro",
-]);
+/** Ids that resolve as an AGENT assignee: every catalogued provider id plus
+ *  agent CLIs hivemind recognises for status but does not spawn. */
+const EXTRA_AGENT_IDS = ["openclaw", "hermes", "amp", "cursor"];
+const KNOWN_AGENTS = new Set([...CATALOG.map((d) => d.id), ...EXTRA_AGENT_IDS]);
 
 /**
  * Heuristic: if the id matches a known agent CLI, assignee.type = agent.

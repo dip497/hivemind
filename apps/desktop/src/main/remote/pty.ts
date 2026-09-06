@@ -10,7 +10,7 @@
  */
 import type { Client, ClientChannel, PseudoTtyOptions } from "ssh2";
 import { parseRemote } from "../../shared/remote-uri.js";
-import { shq } from "../claude-resume.js";
+import { shq } from "@hivemind/agents/node";
 import { remoteConns } from "./conn.js";
 
 interface SpawnOpts {

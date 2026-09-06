@@ -49,6 +49,9 @@ export type HcpErrorCode =
   | "DEPTH_EXCEEDED"
   | "TILE_NOT_FOUND"
   | "TIMEOUT"
+  /** The target provider lacks the capability the verb needs (no turn signal →
+   *  nothing to read/gather; no permission system → nothing to supervise). */
+  | "UNSUPPORTED"
   | "INTERNAL";
 
 export class HcpError extends Error {

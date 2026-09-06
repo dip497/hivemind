@@ -25,8 +25,8 @@ import {
   type SpawnSpec,
   type SessionSnapshot,
 } from "../../src/main/pty-session-manager.ts";
-import { makeClaudeResumeTransforms, trackerSettings, type ClaudeResumeTransforms } from "../../src/main/claude-resume.ts";
-import { trackerSource, readTrackedSession } from "../../src/main/tile-session-store.ts";
+import { makeClaudeResumeTransforms, trackerSettings, type ClaudeResumeTransforms } from "@hivemind/agents/providers/claude.node";
+import { trackerSource, readTrackedSession } from "@hivemind/agents/node";
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 

@@ -1,5 +1,7 @@
 /** Golden for the CLI's view of agent providers — captured before the
- *  provider-catalog consolidation, must pass unchanged after it. */
+ *  provider-catalog consolidation. One deliberate change after it: the CLI now
+ *  reads the catalog, so `droid` (a catalogued provider the hand-kept lists had
+ *  missed) is probed by `hive agent detect` and resolves as an agent assignee. */
 import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -12,7 +14,7 @@ const IDS = ["claude", "codex", "droid", "kiro", "kiro-cli", "pi", "opencode", "
 describe("agents golden", () => {
   test("parseAssignee: which ids resolve as agents", () => {
     expect(Object.fromEntries(IDS.map((id) => [id, parseAssignee(id)?.type]))).toEqual({
-      claude: "agent", codex: "agent", droid: "member", kiro: "agent", "kiro-cli": "member", pi: "agent", opencode: "agent", gemini: "agent", sarah: "member",
+      claude: "agent", codex: "agent", droid: "agent", kiro: "agent", "kiro-cli": "member", pi: "agent", opencode: "agent", gemini: "agent", sarah: "member",
     });
   });
 
@@ -27,7 +29,7 @@ describe("agents golden", () => {
     const r = hive(["agent", "detect", "--json"], { cwd: ws, env: { PATH: `${bin}:${path.dirname(process.execPath)}:/usr/bin:/bin`, XDG_CONFIG_HOME: path.join(ws, "xdg") } });
     expect(r.code).toBe(0);
     expect(Object.keys((r.json as { data: Record<string, unknown> }).data).sort()).toEqual(
-      ["amp", "claude", "codex", "cursor", "gemini", "hermes", "kiro-cli", "openclaw", "opencode", "pi"],
+      ["amp", "claude", "codex", "cursor", "droid", "gemini", "hermes", "kiro-cli", "openclaw", "opencode", "pi"],
     );
     fs.rmSync(ws, { recursive: true, force: true }); fs.rmSync(bin, { recursive: true, force: true });
   });

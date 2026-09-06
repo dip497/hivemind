@@ -2,6 +2,25 @@
  * Pure helpers behind `hive ctl` — argument shaping and the read/poll schedule.
  * No I/O, so they're unit-tested directly (tests/ctl-args.test.ts).
  */
+import { agentById, defaultAgent, spawnableAgents, workerAgents } from "@hivemind/agents";
+
+export class UnsupportedError extends Error {
+  code = "UNSUPPORTED";
+  constructor(message: string) { super(message); this.name = "UnsupportedError"; }
+}
+
+/** Validate a `--agent` value against the catalog: unknown → USAGE listing the
+ *  spawnable ids; `needsWorker` → UNSUPPORTED (exit 7) for a runtime with no
+ *  turn signal, BEFORE any tile is spawned. */
+export function resolveAgent(id: string | undefined, needsWorker = false): string {
+  const agent = id ?? defaultAgent().id;
+  const def = agentById(agent);
+  if (!def || !def.enabled) throw new UsageError(`--agent must be one of ${spawnableAgents().map((d) => d.id).join(", ")} (got ${agent})`);
+  if (needsWorker && !def.caps.turnSignal) {
+    throw new UnsupportedError(`${def.id} has no turn signal, so its replies cannot be gathered (${def.note ?? "scrape-only status"}) — use one of: ${workerAgents().map((d) => d.id).join(", ")}`);
+  }
+  return agent;
+}
 
 /** Split a `||`-separated list (workflow items / stages). */
 export function splitDouble(s: string | undefined): string[] | undefined {
@@ -75,7 +94,7 @@ export function workflowParams(f: WorkflowFlags, callerTile?: string): { params:
   const perTurn = intFlag(f.timeout, "timeout", 600_000);
   const params: Record<string, unknown> = {
     shape, items, prompt: f.prompt, stages, input: f.input, reduce_prompt: f["reduce-prompt"],
-    agent: f.agent ?? "claude", model: f.model, frame: f.frame, supervise: f.supervise,
+    agent: resolveAgent(f.agent, true), model: f.model, frame: f.frame, supervise: f.supervise,
     max_concurrent: f["max-concurrent"] != null ? intFlag(f["max-concurrent"], "max-concurrent", 6) : undefined,
     timeout_ms: f.timeout != null ? perTurn : undefined,
     close_when_done: f.close || undefined,

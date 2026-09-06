@@ -39,9 +39,14 @@ export interface AgentCapabilities {
   /** Session resume across a daemon restart: none, the newest session for the
    *  tile's cwd, or the tile's OWN session (a captured / pre-assigned id). */
   resume: "none" | "cwd" | "tile";
-  /** Tool-permission prompts can be brokered to a supervising agent
-   *  (`hive ctl spawn --supervise`). */
-  supervise: boolean;
+  /** What `hive ctl spawn --supervise` can do for this runtime:
+   *  - "broker": its tool-permission prompts are brokered to the supervising
+   *    agent (a blocking pre-tool hook), falling back to the human.
+   *  - "human": it has its own permission prompts but no broker hook — a
+   *    supervise request is accepted and the prompts stay with the human.
+   *  - "none": it has NO permission system at all, so there is nothing to
+   *    gate or fall back to; a supervise request is refused at spawn. */
+  supervise: "broker" | "human" | "none";
   /** Honours hivemind's `--model` alias at spawn. */
   modelFlag: boolean;
   /** Honours claude-style permission modes (`--permission-mode`, bypass). */
@@ -49,6 +54,14 @@ export interface AgentCapabilities {
   /** The scrape detector has a "blocked" (needs-you) branch. Without one an
    *  approval prompt reads as idle and the notification says "Finished". */
   blockedDetection: boolean;
+}
+
+export interface AgentIcon {
+  viewBox: string;
+  /** Inner SVG markup. App-owned constants, never user input. */
+  body: string;
+  /** Root <svg> attributes (e.g. fill, stroke, strokeWidth, fillRule). */
+  attrs?: Record<string, string>;
 }
 
 export interface AgentProviderDef {
@@ -68,6 +81,10 @@ export interface AgentProviderDef {
   caps: AgentCapabilities;
   /** Screen-scrape status for a rendered viewport. */
   detect: (screen: string) => TileStatus;
+  /** The agent's mark as inline SVG: the viewBox, the inner markup (paths /
+   *  shapes using `currentColor`) and any root attributes (fill / stroke /
+   *  fillRule). Rendered by the UI generically — no per-provider React code. */
+  icon: AgentIcon;
   /** One line shown wherever the agent is offered when it cannot be a worker. */
   note?: string;
   /** Declares that this provider needs NO node half even though its capabilities

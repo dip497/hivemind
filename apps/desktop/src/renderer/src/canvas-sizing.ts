@@ -4,6 +4,7 @@
  */
 import type { TileKind } from "./tile-kinds";
 import { WORKBENCH_TILE_ID } from "./canvas-persistence";
+import { AGENT_TILE_KIND } from "./tile-kinds";
 
 /** Fallback tile dimensions for tiles never explicitly resized (so they have
  *  no entry in the `sizes` map). Mirrors the defaults in the nodes useMemo.
@@ -32,7 +33,7 @@ export function defaultSizeForKind(kind: TileKind): { width: number; height: num
       return { width: 1280, height: 920 };
     case "browser":
       return { width: 1280, height: 860 };
-    case "claude":
+    case AGENT_TILE_KIND:
       // Compact default — the larger 15px terminal font makes a smaller tile
       // read comfortably, and a tighter box leaves more canvas free.
       return { width: 1100, height: 740 };

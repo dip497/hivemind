@@ -1,3 +1,4 @@
+import { agentById } from "@hivemind/agents";
 /**
  * Delay (ms) between typing text into an agent's TUI and the SEPARATE Enter
  * keystroke. claude's input loop drops a newline that arrives in the same write
@@ -68,23 +69,11 @@ export function stripInitialPrompt<T extends { env?: Record<string, string> }>(s
 }
 
 /**
- * Agents whose CLI takes the initial task as a POSITIONAL ARG and auto-submits it
- * as a real turn — the deterministic delivery. Everything else falls back to typing
- * the prompt into the booting TUI and hoping the Enter lands, which is the race that
- * made ▶ Work silently do nothing on a cold start.
- *
- * - claude: `claude "<prompt>"` submits in interactive mode (verified; GH #11476 asks
- *   to DISABLE this, confirming it's the behavior).
- * - pi:     `pi "<prompt>"` → main.js parses it into `initialMessage` → interactive-mode
- *   calls `session.prompt(initialMessage)` (verified in pi 0.55.3's dist).
- *
- * codex/droid/opencode/kiro are NOT here: unverified, and a wrong flag breaks
- * their CLI. (kiro specifically: whether `kiro-cli chat "prompt"` stays
- * interactive after answering, or exits — no binary available to confirm.)
+ * Whether this agent takes its initial prompt as a POSITIONAL ARG the CLI
+ * auto-submits (deterministic delivery) — declared per provider in the catalog
+ * (`caps.promptDelivery`). Everything else falls back to typing the prompt into
+ * the booting TUI once it reads idle.
  */
-const ARGV_PROMPT_AGENTS = new Set(["claude", "pi"]);
-
-/** Whether this agent id takes its initial prompt as argv (see ARGV_PROMPT_AGENTS). */
 export function deliversPromptViaArgv(agentId: string | undefined | null): boolean {
-  return !!agentId && ARGV_PROMPT_AGENTS.has(agentId);
+  return agentById(agentId)?.caps.promptDelivery === "argv";
 }

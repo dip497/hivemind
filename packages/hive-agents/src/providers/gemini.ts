@@ -4,6 +4,7 @@
  */
 import type { AgentProviderDef, AgentState } from "../types.js";
 import { hasConfirmationPrompt } from "../detect-helpers.js";
+import { GENERIC_AGENT_ICON } from "../icon.js";
 
 export function detectGemini(content: string): AgentState {
   const lower = content.toLowerCase();
@@ -28,11 +29,13 @@ export const gemini: AgentProviderDef = {
     promptDelivery: "typed",
     turnSignal: false,
     resume: "none",
-    supervise: false,
+    supervise: "human",
     modelFlag: false,
     permissionModes: false,
     blockedDetection: true,
   },
+  /** No brand mark wired yet — the generic agent glyph. */
+  icon: GENERIC_AGENT_ICON,
   detect: detectGemini,
   note: "not wired yet — recognised for status only.",
 };

@@ -10,6 +10,8 @@
  *     UserPromptSubmit hook commands), the positional initial prompt.
  *   - droid:  `$FACTORY_HOME_OVERRIDE/.factory/hooks.json` (top-level event keys),
  *     the initial prompt typed into its stdin once the tile reads idle.
+ *   - faux:   `$FAUX_HOOKS` (the throwaway sixth provider's node half), argv prompt.
+ *   - codex (or any other name): no hooks — a raw-tier stand-in with no turn signal.
  * Each turn: fire UserPromptSubmit → run the snippet → append the reply to a
  * transcript JSONL (Claude/droid shape) → fire Stop with `transcript_path`.
  * Follow-up prompts arrive as stdin lines (`hive ctl send` types text + Enter).
@@ -40,6 +42,16 @@ function hooksTable() {
     if (!home) return {};
     try { return JSON.parse(fs.readFileSync(path.join(home, ".factory", "hooks.json"), "utf8")); } catch { return {}; }
   }
+  if (provider === "faux") {
+    // The throwaway sixth provider (zz-sixth-provider.spec.ts): its node half
+    // writes a claude-shaped hooks file and points the spawn env at it.
+    const file = process.env.FAUX_HOOKS;
+    if (!file) return {};
+    try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return {}; }
+  }
+  // "codex" and any other name: a raw-tier runtime — no hooks at all. Turns
+  // never reach the control plane, which is exactly what the no-turn-signal
+  // path under test must surface instead of timing out.
   return {};
 }
 const HOOKS = hooksTable();

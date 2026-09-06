@@ -3,7 +3,7 @@
 // hermetically, unlike an e2e that fights shell-env PATH resolution.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { detectClaudeState } from "../../src/renderer/src/claude-state.ts";
+import { detectClaudeState } from "@hivemind/agents";
 
 test("working: 'esc to interrupt' on screen", () => {
   assert.equal(detectClaudeState("Thinking…\nDoing the thing (esc to interrupt)"), "working");

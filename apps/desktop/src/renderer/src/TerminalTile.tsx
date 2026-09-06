@@ -18,6 +18,7 @@ import { useTheme, getTheme } from "./theme-store";
 import { FullscreenShell, useReparentFullscreen } from "./tile-fullscreen";
 import { HeaderPinButton, type PinRect } from "./canvas-nodes";
 import { SURFACE_ADOPTED, SURFACE_PARKED } from "./workspace/tile-host";
+import { defaultAgent } from "@hivemind/agents";
 
 /** Open a terminal link in the OS browser. window.open is intercepted by main's
  *  setWindowOpenHandler → shell.openExternal (and the in-app navigation denied),
@@ -237,9 +238,10 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
   // Which agent (if any) is running. herdr-ported detection covers 15 CLI
   // agents (claude, codex, gemini, cursor, droid, amp, opencode, grok, …);
   // null = plain shell → cheap activity heuristic only. `isClaude` keeps the
-  // send-to-claude bus wiring claude-only.
+  // send-to-agent bus (claude-bus) wired to the DEFAULT provider's tiles only —
+  // a bare/`latest` send never lands on another runtime's tile.
   const agent = identifyAgent(cmd);
-  const isClaude = agent === "claude";
+  const isClaude = agent === defaultAgent().id;
   // NOTE: we deliberately DON'T seed claude's hook-driven turn state on mount.
   // liveTurn is authoritative ONLY once a real UserPromptSubmit/Stop hook fires.
   // An earlier version seeded "idle" here to suppress the stale-replayed-buffer

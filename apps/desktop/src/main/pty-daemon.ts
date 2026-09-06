@@ -15,21 +15,14 @@ import { SessionManager, type ManagedPty, type SpawnSpec, type SessionSnapshot }
 import { type ClientMsg, type ServerMsg, frame, makeLineDecoder } from "./pty-protocol.js";
 import { PtyOutputBuffer } from "./pty-output-buffer.js";
 import { applyInitialPrompt, stripInitialPrompt } from "../shared/agent-io.js";
-import { evictTrackedSession, trackerSource } from "./tile-session-store.js";
 import { sanitizeShellEnv } from "./shell-env.js";
-import { composeResume } from "./providers/registry.js";
+import { composeResume, evictTrackedSession, prepareProviders, trackerSource } from "@hivemind/agents/node";
 import { planHookSource } from "./plan-review-hook-source.js";
 import { stopHookSource } from "./hcp/stop-hook-source.js";
-import { piExtSource } from "./hcp/pi-ext-source.js";
 import { approvalHookSource } from "./hcp/approval-hook-source.js";
 import { subagentHookSource } from "./hcp/subagent-hook-source.js";
 import { notificationHookSource } from "./hcp/notification-hook-source.js";
 import { userpromptHookSource } from "./hcp/userprompt-hook-source.js";
-import { seedDroidHome } from "./hcp/droid-home.js";
-import { droidHooksSettings } from "./droid-resume.js";
-import { seedKiroHome } from "./hcp/kiro-home.js";
-import { kiroAgentConfig } from "./kiro-resume.js";
-import { kiroApprovalHookSource } from "./hcp/kiro-approval-hook-source.js";
 import { readOrCreateToken, hcpSockPath } from "./hcp/token.js";
 
 const socketPath = process.argv[2] || process.env.HIVEMIND_PTY_SOCK;
@@ -117,59 +110,33 @@ try { fs.writeFileSync(notificationHookPath, notificationHookSource()); } catch 
 // UserPromptSubmit hook — turn START → working (hook-driven status; pairs with Stop).
 const userpromptHookPath = path.join(userDataDir, "hcp-userprompt-hook.cjs");
 try { fs.writeFileSync(userpromptHookPath, userpromptHookSource()); } catch { /* best-effort */ }
-// pi lifecycle-bridge extension — pi has no hook system but loads an ESM
-// extension via `pi -e`; this bridges pi's agent_start/message_end/agent_end to
-// HCP so a pi tile reports turn/status/reply like claude's Stop hook. Injected
-// into spawned pi tiles via pi-resume (env + `-e` arg). Best-effort write.
-const piExtPath = path.join(userDataDir, "hive-pi-ext.mjs");
-try { fs.writeFileSync(piExtPath, piExtSource()); } catch { /* best-effort */ }
 const hcpSock = hcpSockPath(userDataDir);
 const hcpToken = readOrCreateToken(userDataDir);
 
-// Droid (Factory) deterministic hooks: droid has no inline `--settings`, so we
-// point it at an EPHEMERAL FACTORY_HOME_OVERRIDE home (seeded with symlinks to
-// the real ~/.factory + our hooks.json) — never touching the user's ~/.factory.
-// The hooks.json reuses the SAME HCP hook scripts (droid's Stop carries
-// transcript_path like claude). Best-effort: a seed failure just disables droid
-// hooks (the screen-scrape detector still drives status).
-const droidHome = path.join(userDataDir, "droid-home");
-try {
-  seedDroidHome({
-    droidHome,
-    hooks: droidHooksSettings({ execPath: process.execPath, stopHookPath, userpromptHookPath, notificationHookPath, hcpSock }),
-  });
-} catch { /* best-effort */ }
-
-// kiro (kiro-cli) deterministic hooks: kiro has no inline hook flag either, so
-// we point it at an EPHEMERAL KIRO_HOME (seeded with symlinks to the real
-// ~/.kiro + our own `agents/hivemind.json` — hooks),
-// selected at spawn with `--agent hivemind` (kiro-resume.ts). kiro's own
-// PreToolUse broker script differs from claude/droid's (exit-code contract,
-// not stdout JSON) — see kiro-approval-hook-source.ts.
-const kiroApprovalHookPath = path.join(userDataDir, "hcp-kiro-approval-hook.cjs");
-try { fs.writeFileSync(kiroApprovalHookPath, kiroApprovalHookSource()); } catch { /* best-effort */ }
-const kiroHome = path.join(userDataDir, "kiro-home");
-try {
-  seedKiroHome({
-    kiroHome,
-    agentConfig: kiroAgentConfig({
-      execPath: process.execPath,
-      stopHookPath,
-      userpromptHookPath,
-      kiroApprovalHookPath,
-      trackerPath,
-      tileSessionsDir,
-      hcpSock,
-    }),
-  });
-} catch { /* best-effort */ }
+// Provider-owned assets + config-home overlays (the pi bridge extension, the
+// droid FACTORY_HOME_OVERRIDE overlay, the kiro KIRO_HOME overlay + its own
+// approval hook, …): every catalogued provider's `prepare()` runs here and
+// hands back ITS private paths, which the spawn transforms read under
+// ctx.providers[id]. Best-effort per provider — a failure only disables that
+// provider's deterministic signals (the screen-scrape detector still drives
+// status). Nothing here names a provider.
+const providerPaths = prepareProviders({
+  userDataDir,
+  execPath: process.execPath,
+  trackerPath,
+  tileSessionsDir,
+  stopHookPath,
+  userpromptHookPath,
+  notificationHookPath,
+  hcpSock,
+});
 
 // Provider spawn transforms (resume + deterministic-signal hook injection),
-// composed across every registered agent provider (claude, codex, …). Each
-// provider no-ops for specs it doesn't own, so the composition is order-safe.
-// To add a provider: implement it under providers/ and register it — no change
-// here. The transforms are electron-free (in claude-resume.ts / codex-resume.ts),
-// so they stay unit-testable with a fake agent; the daemon just supplies paths.
+// composed across every catalogued provider (@hivemind/agents). Each provider
+// no-ops for specs it doesn't own, so the composition is order-safe. To add a
+// provider: one def (+ node half) in the catalog — no change here. The
+// transforms are electron-free, so they stay unit-testable with a fake agent;
+// the daemon just supplies paths.
 const resume = composeResume({
   trackerPath,
   tileSessionsDir,
@@ -184,11 +151,7 @@ const resume = composeResume({
   userpromptHookPath,
   hcpSock,
   hcpToken,
-  providers: {
-    pi: { piExtPath },
-    droid: { droidHome },
-    kiro: { kiroHome, kiroApprovalHookPath },
-  },
+  providers: providerPaths,
 });
 
 const snapshotPath = (id: string): string => {
