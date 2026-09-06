@@ -213,6 +213,30 @@ discarded.
 | streams survive the switch | no | yes |
 | renderer RSS while streaming | 245 MB | 241 MB |
 
+**Switch-path attribution (2026-09-06, CDP CPU profile + `performance.measure`
+on 97ab40a).** The review build spent 300–850 ms of main-thread long tasks per
+switch. Two causes, both in the fix commit, neither in the pre-fix build:
+
+1. Every terminal got **two fits** per adoption — the explicit refit in
+   `onAdopted` plus the `ResizeObserver` fit; ResizeObserver notifications are
+   delivered *after* rAF callbacks in the same frame, so the two never
+   coalesced. A fit on a WebGL-rendered terminal is an atlas rebuild
+   (`WebglRenderer.handleResize`, 100–280 ms each under software GL).
+2. That stall starved PTY delivery past the 1.5 s crisp-when-idle threshold:
+   background terminals were released to the DOM renderer, then re-acquired
+   WebGL on the next output chunk (`getContext` + shader init, 0.4–2.4 s per
+   tile here) — a snowball that showed as `data-after-gap 1.8–4.7 s` and 1.1–
+   1.7 s long tasks. The forced `offsetWidth` read per slot added 35–55 ms.
+
+Fix: one fit per tile (ResizeObserver only), adoption counts as stream activity
+(the quiet timer cannot fire off a switch stall), slot size from the observer
+only. Profiler after the fix: 4 fits per switch, zero renderer swaps, zero
+output gaps, no forced layouts — the switch's only remaining work is the one
+fit per tile the pre-fix build also did (the WebGL atlas rebuild, ~0 on a GPU,
+100–600 ms each on swiftshader). The base/branch harness pair could not be
+re-taken at low load afterwards (the machine ran a Java/Kafka stack at load
+10–24); numbers to re-measure on a quiet box.
+
 Reading: canvas scenes (quiet, streaming, typing, pan, drag) are equal within
 noise — zero long tasks, input-loop lag ≤ 15 ms in both — and the remaining
 frame cost is software rasterisation of four DOM-rendered terminals, not React

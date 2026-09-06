@@ -214,14 +214,15 @@ export function surfaceEl(tileId: string): HTMLDivElement {
  *  SAME commit — moves the element straight from one slot to the other with no
  *  park hop in between: each DOM insertion of a `<webview>` re-creates its
  *  guest, so the hop cost a second page load and leaked a WebContents. */
-function parkSurface(tileId: string, from: HTMLElement, rect: { w: number; h: number }) {
+function parkSurface(tileId: string, from: HTMLElement, rect: { w: number; h: number } | null) {
   queueMicrotask(() => {
     const el = surfaces.get(tileId);
     if (!el || el.parentElement !== from) return; // adopted elsewhere (or dropped) meanwhile
     // Hold the last slot size so nothing inside refits/resizes the PTY while
     // parked (a full-window park made every parked terminal reflow twice and
-    // re-resize on every window resize).
-    el.style.cssText = `position:absolute;left:0;top:0;width:${Math.max(1, rect.w)}px;height:${Math.max(1, rect.h)}px;display:flex;flex-direction:column;`;
+    // re-resize on every window resize). No size known (slot never laid out)
+    // → keep the fill-the-park sizing.
+    if (rect) el.style.cssText = `position:absolute;left:0;top:0;width:${Math.max(1, rect.w)}px;height:${Math.max(1, rect.h)}px;display:flex;flex-direction:column;`;
     park().appendChild(el);
     el.dispatchEvent(new CustomEvent(SURFACE_PARKED));
   });
@@ -313,9 +314,10 @@ export function TileSlot({ tileId, className, style }: { tileId: string; classNa
     if (el.parentElement !== slot) slot.appendChild(el);
     if (!adoptedOnce.has(tileId)) { adoptedOnce.add(tileId); notifyAdopted(); }
     el.dispatchEvent(new CustomEvent(SURFACE_ADOPTED));
-    // Track the slot's size asynchronously so the cleanup below never forces a
-    // synchronous layout mid-commit (one per tile on every view switch).
-    let last = { w: slot.offsetWidth, h: slot.offsetHeight };
+    // Track the slot's size through a ResizeObserver ONLY (its first
+    // notification arrives right after layout): reading offsetWidth here forced
+    // a synchronous layout per tile inside the commit on every view switch.
+    let last: { w: number; h: number } | null = null;
     const ro = new ResizeObserver((entries) => {
       const r = entries[entries.length - 1]?.contentRect;
       if (r && r.width > 0 && r.height > 0) last = { w: r.width, h: r.height };

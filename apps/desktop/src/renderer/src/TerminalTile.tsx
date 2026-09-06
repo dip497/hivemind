@@ -571,11 +571,20 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
     const surfaceEl = host.closest(".hm-tile-surface");
     const onAdopted = () => {
       parked = false;
-      // Refit ONCE to the adopting slot (the park freezes size, so the
-      // ResizeObserver below may have nothing to do) — through the same rAF
-      // the observer uses, never synchronously inside the view's layout
-      // effect (that forced a reflow of every terminal mid-commit on a switch).
-      scheduleFit();
+      // No explicit refit: the park freezes the surface at its last slot size,
+      // so adopting into a different-size slot fires the ResizeObserver below
+      // (one fit per tile), and adopting into a same-size slot needs none. A
+      // second fit here doubled the cost of every switch — a WebGL fit is an
+      // atlas rebuild, and ResizeObserver notifications land AFTER rAF in the
+      // same frame, so the two never coalesced.
+      //
+      // Count the adoption as stream activity. A view switch stalls PTY delivery
+      // for a moment; if that gap crossed STREAM_QUIET_MS the crisp-when-idle
+      // logic released every background terminal to the DOM renderer and then
+      // re-acquired WebGL on the next chunk (a GL context + shader compile per
+      // tile) — a snowball of long tasks that turned a 300 ms switch into 2 s.
+      lastStreamTs = Date.now();
+      if (!streamQuietTimer) armQuietTimer(STREAM_QUIET_MS + 120);
       reconcileWebglSlots();
     };
     const onParked = () => { parked = true; reconcileWebglSlots(); };
