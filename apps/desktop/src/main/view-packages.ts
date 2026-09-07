@@ -12,12 +12,11 @@
  * response so plugin code cannot reach the network or embed anything.
  */
 import { app, net, protocol, type BrowserWindow, type WebFrameMain } from "electron";
-import path from "node:path";
-import { existsSync, statSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { listInstalledViews, type InstalledView } from "@hivemind/core/views";
+import { ENTRY_PAGE, VIEW_SCHEME, entryPage, entryUrl, mimeFor, newNonce, pluginCsp, resolvePackageFile } from "./view-package-files.js";
 
-export const VIEW_SCHEME = "hm-view";
+export { VIEW_SCHEME, entryUrl } from "./view-package-files.js";
 
 export interface ViewPackageInfo extends InstalledView {
   /** Where the iframe loads from (null when the package will not load). */
@@ -26,32 +25,6 @@ export interface ViewPackageInfo extends InstalledView {
 
 /** id → package dir of every loadable package from the last scan. Only these are served. */
 const served = new Map<string, string>();
-
-/** The CSP every plugin document gets. No network (connect-src 'none'), no
- *  frames, no forms, nothing from any other scheme; inline script/style are
- *  allowed because a bundled single-file plugin is exactly that. */
-export const PLUGIN_CSP = [
-  "default-src 'none'",
-  `script-src ${VIEW_SCHEME}: 'unsafe-inline' 'wasm-unsafe-eval'`,
-  `style-src ${VIEW_SCHEME}: 'unsafe-inline'`,
-  `img-src ${VIEW_SCHEME}: data: blob:`,
-  `font-src ${VIEW_SCHEME}: data:`,
-  `media-src ${VIEW_SCHEME}: data: blob:`,
-  "worker-src blob:",
-  "connect-src 'none'",
-  "frame-src 'none'",
-  "object-src 'none'",
-  "form-action 'none'",
-  "base-uri 'none'",
-].join("; ");
-
-const MIME: Record<string, string> = {
-  ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; charset=utf-8",
-  ".css": "text/css; charset=utf-8", ".json": "application/json", ".wasm": "application/wasm",
-  ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp", ".svg": "image/svg+xml",
-  ".woff": "font/woff", ".woff2": "font/woff2", ".ttf": "font/ttf", ".mp3": "audio/mpeg", ".ogg": "audio/ogg", ".mp4": "video/mp4", ".webm": "video/webm",
-  ".glb": "model/gltf-binary", ".gltf": "model/gltf+json", ".txt": "text/plain; charset=utf-8",
-};
 
 /** Scan both roots; remember the loadable ones for the protocol handler. */
 export async function listViewPackages(repoRoot: string | null): Promise<ViewPackageInfo[]> {
@@ -64,10 +37,6 @@ export async function listViewPackages(repoRoot: string | null): Promise<ViewPac
   });
 }
 
-/** A `.html` entry is loaded as-is; a `.js` entry through a generated page. */
-export function entryUrl(id: string, entry: string): string {
-  return entry.endsWith(".js") ? `${VIEW_SCHEME}://${id}/__entry.html?js=${encodeURIComponent(entry)}` : `${VIEW_SCHEME}://${id}/${entry}`;
-}
 
 /** Call BEFORE app ready. */
 export function registerViewScheme(): void {
@@ -84,20 +53,19 @@ export function handleViewProtocol(): void {
       const dir = served.get(u.host);
       if (!dir) return new Response("unknown view", { status: 404 });
       const rel = decodeURIComponent(u.pathname.replace(/^\/+/, ""));
-      const headers = { "Content-Security-Policy": PLUGIN_CSP, "X-Content-Type-Options": "nosniff", "Cache-Control": "no-store" };
-      if (rel === "__entry.html") {
-        const js = u.searchParams.get("js") ?? "";
-        if (!/^[\w./-]+\.js$/.test(js) || js.split("/").includes("..")) return new Response("bad entry", { status: 400 });
-        const html = `<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;height:100%;overflow:hidden;background:transparent}</style></head><body><script type="module" src="./${js}"></script></body></html>`;
-        return new Response(html, { status: 200, headers: { ...headers, "Content-Type": MIME[".html"]! } });
+      const nonce = newNonce();
+      const headers = { "Content-Security-Policy": pluginCsp(nonce), "X-Content-Type-Options": "nosniff", "Cache-Control": "no-store" };
+      if (rel === ENTRY_PAGE) {
+        const html = entryPage(u.searchParams.get("js") ?? "", nonce);
+        if (!html) return new Response("bad entry", { status: 400 });
+        return new Response(html, { status: 200, headers: { ...headers, "Content-Type": mimeFor(".html") } });
       }
-      const abs = path.resolve(dir, rel);
-      if (abs !== dir && !abs.startsWith(dir + path.sep)) return new Response("forbidden", { status: 403 });
-      if (!existsSync(abs) || !statSync(abs).isFile()) return new Response("not found", { status: 404 });
-      const res = await net.fetch(pathToFileURL(abs).toString(), { headers: request.headers });
+      const file = resolvePackageFile(dir, rel);
+      if (file.status !== 200) return new Response(file.status === 403 ? "forbidden" : "not found", { status: file.status });
+      const res = await net.fetch(pathToFileURL(file.abs).toString(), { headers: request.headers });
       const out = new Headers(res.headers);
       for (const [k, v] of Object.entries(headers)) out.set(k, v);
-      out.set("Content-Type", MIME[path.extname(abs).toLowerCase()] ?? "application/octet-stream");
+      out.set("Content-Type", mimeFor(file.abs));
       return new Response(res.body, { status: res.status, headers: out });
     } catch {
       return new Response("bad request", { status: 400 });
