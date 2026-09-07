@@ -4,8 +4,10 @@ name: release
 #   1. builds the CLI single-binary (`bun build --compile`)
 #   2. builds the renderer + Electron main (electron-vite)
 #   3. packages the AppImage (electron-builder --linux AppImage)
-#   4. creates the GitHub Release using the tag as the version
-#   5. uploads `hive` and `hivemind-<version>-x86_64.AppImage` as assets
+# and, in a parallel job on a macOS arm64 runner, the same two artifacts for
+# Apple Silicon (`hive-darwin-arm64` + an ad-hoc-signed `hivemind.app` zip).
+# A final `publish` job downloads both jobs' assets and creates the GitHub
+# Release from the tag.
 #
 # Triggered automatically by `git tag v0.1.0 && git push origin v0.1.0`,
 # or manually via the "Run workflow" button (uses the workflow_dispatch input).
@@ -128,6 +130,113 @@ jobs:
           name: linux-x86_64
           path: release-assets/
 
+  build-macos:
+    name: build macos arm64
+    runs-on: macos-14  # Apple Silicon runner
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.1"
+
+      - name: pnpm install (workspace)
+        run: pnpm install --frozen-lockfile
+
+      - name: Build CLI single-binary
+        # `bun build --compile` with no --target compiles for the HOST, so this
+        # produces a darwin-arm64 binary here and a linux-x64 one in build-linux.
+        # (Never `strip` it — see the linux job.)
+        run: pnpm --filter @hivemind/cli run build
+
+      - name: Build renderer + main
+        run: pnpm --filter @hivemind/desktop run build
+
+      - name: pnpm deploy (materialize workspace deps for electron-builder)
+        run: pnpm --filter @hivemind/desktop deploy --legacy desktop-deploy
+
+      - name: Copy build output into deploy
+        run: |
+          cp -r apps/desktop/out desktop-deploy/
+          cp -r apps/desktop/icons desktop-deploy/
+
+      - name: Drop optional native dep cpu-features
+        # Same reason as the linux job: ssh2's OPTIONAL cpu-features dep breaks
+        # electron-builder's native rebuild; ssh2 works fine without it.
+        run: |
+          find "$GITHUB_WORKSPACE" \( -name 'cpu-features' -o -name 'cpu-features@*' \) -prune -exec rm -rf {} + 2>/dev/null || true
+
+      - name: Package .app + ad-hoc sign + zip
+        # electron-builder is told to emit a bare `dir` (the .app) and to SKIP
+        # signing (`mac.identity: null` — we have no Apple Developer cert).
+        # But an arm64 bundle with an INVALID signature is SIGKILLed by the
+        # kernel, and electron-builder's repacking invalidates the ad-hoc
+        # signature Electron ships with. So we re-apply an ad-hoc signature
+        # (`--sign -`) ourselves, then archive with `ditto` (NOT `zip`: ditto
+        # preserves the framework symlinks and resource forks inside the
+        # bundle). Users still get a Gatekeeper quarantine prompt on first
+        # launch — install.sh strips the quarantine xattr.
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./apps/desktop/package.json').version")
+          cd desktop-deploy
+          npx --yes electron-builder --mac dir \
+            --config.directories.output=dist-electron
+          app=$(ls -d dist-electron/*/hivemind.app 2>/dev/null | head -1)
+          test -n "$app" || { echo "no .app built"; exit 1; }
+          codesign --force --deep --sign - "$app"
+          codesign --verify --deep --strict "$app"
+          cd ..
+          mkdir -p release-assets
+          ditto -c -k --sequesterRsrc --keepParent \
+            "desktop-deploy/$app" "release-assets/hivemind-${version}-arm64-mac.zip"
+        env:
+          DEBUG: electron-builder
+
+      - name: Stage release artifacts
+        run: |
+          set -euo pipefail
+          cp apps/cli/dist/hive release-assets/hive-darwin-arm64
+          chmod +x release-assets/hive-darwin-arm64
+          ls -la release-assets/
+
+      - name: Upload artifacts (workflow result)
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-arm64
+          path: release-assets/
+
+  publish:
+    name: publish github release
+    needs: [build-linux, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Flatten
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          find artifacts -type f -exec cp {} release-assets/ \;
+          ls -la release-assets/
+
       - name: Resolve release tag
         id: tag
         run: |
@@ -145,4 +254,6 @@ jobs:
           generate_release_notes: true
           files: |
             release-assets/hive-linux-x86_64
+            release-assets/hive-darwin-arm64
             release-assets/*.AppImage
+            release-assets/*-mac.zip

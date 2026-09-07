@@ -3,9 +3,30 @@
 All notable changes are documented here, in [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-Each release is published to [GitHub Releases](https://github.com/dip497/hivemind/releases) with prebuilt artifacts (`hive-linux-x86_64`, `hivemind-<version>-x86_64.AppImage`).
+Each release is published to [GitHub Releases](https://github.com/dip497/hivemind/releases) with prebuilt artifacts (`hive-linux-x86_64`, `hivemind-<version>-x86_64.AppImage`, `hive-darwin-arm64`, `hivemind-<version>-arm64-mac.zip`).
 
 ## [Unreleased]
+
+### Added
+
+- **macOS (Apple Silicon) support.** `install.sh` now installs on Darwin arm64: it
+  downloads a `hivemind.app` bundle, unpacks it with `ditto`, strips the Gatekeeper
+  quarantine xattr, writes a `hivemind` launcher, and aliases the app into
+  `~/Applications`. `hivemind upgrade` / `uninstall` (incl. `--purge` of both
+  `~/Library/Application Support/hivemind` and `~/.config/hivemind`) work the same as on
+  Linux. Upgrading while the app is running is refused rather than staged — on macOS the
+  Dock launches the bundle directly, so a staged swap would never be applied.
+- Release workflow builds and publishes macOS arm64 assets (`hive-darwin-arm64`,
+  `hivemind-<version>-arm64-mac.zip`) alongside the Linux ones; a new `publish` job
+  creates the Release from both build jobs.
+- `pnpm --filter @hivemind/desktop dist:mac` packages an ad-hoc signed `.app` locally, and
+  `install.sh --dev` uses it — so Intel macs and Linux arm64 (no prebuilt) build from source.
+- `scripts/install-plan-test.sh` asserts the installer's platform → release-asset matrix.
+
+### Changed
+
+- `@hivemind/cli`'s `build` script no longer hardcodes `--target=bun-linux-x64`; it
+  compiles for the host, so the same command produces the right binary on every runner.
 
 ## [1.16.0] — 2026-09-03
 

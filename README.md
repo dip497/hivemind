@@ -9,7 +9,7 @@ read issues, update status, mark acceptance criteria, and comment their own
 progress — through a Kanban PM model that's just plain markdown on disk.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
-[![Platform: Linux](https://img.shields.io/badge/platform-Linux%20x86__64-blue.svg)](#install)
+[![Platform](https://img.shields.io/badge/platform-Linux%20x86__64%20%7C%20macOS%20arm64-blue.svg)](#install)
 [![Release](https://img.shields.io/github/v/release/dip497/hivemind?color=success)](https://github.com/dip497/hivemind/releases)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6.svg)](#)
 
@@ -85,8 +85,9 @@ land live in the board tile.
 
 ## Install
 
-Linux x86_64 only for now. **No build toolchain needed** — the installer downloads
-prebuilt binaries from the latest [GitHub Release](https://github.com/dip497/hivemind/releases).
+Linux x86_64 and macOS Apple Silicon. **No build toolchain needed** — the installer
+downloads prebuilt binaries from the latest [GitHub Release](https://github.com/dip497/hivemind/releases).
+(Intel macs and Linux arm64 build from source with `--dev`.)
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/dip497/hivemind/main/install.sh)
@@ -95,12 +96,22 @@ bash <(curl -fsSL https://raw.githubusercontent.com/dip497/hivemind/main/install
 The script will:
 
 1. Resolve the latest release tag from GitHub.
-2. Download the `hive` CLI single-binary and the Electron AppImage into `~/.hivemind-app/`.
-3. Symlink them into `~/.local/bin/` as `hive` and `hivemind`.
+2. Download the `hive` CLI single-binary and the desktop app (Linux: an AppImage,
+   extracted so no libfuse2 is needed; macOS: a `hivemind.app` bundle) into `~/.hivemind-app/`.
+3. Put `hive` and a `hivemind` launcher in `~/.local/bin/`, and register the app with the
+   desktop (Linux: a `.desktop` entry; macOS: a `~/Applications/hivemind.app` alias).
 4. Check that an agent CLI (`claude`, `codex`, …) is on `PATH` (warning only).
 
 Re-run anytime to upgrade — it's a no-op if you're already on the latest tag. Pin a
 version with `HIVEMIND_VERSION=v1.0.0 bash <(curl …)`.
+
+**macOS note:** the release is ad-hoc signed, not Apple-notarized (no paid Developer
+cert), so the installer strips the `com.apple.quarantine` xattr for you. If you install
+the `.app` by hand instead, do it yourself or Gatekeeper reports it as damaged:
+
+```bash
+xattr -dr com.apple.quarantine ~/.hivemind-app/hivemind.app
+```
 
 <details>
 <summary><b>Build from source</b></summary>
@@ -112,7 +123,9 @@ cd hivemind
 ```
 
 Requires `git`, `node` ≥ 22, `pnpm` ≥ 10, `bun` ≥ 1.1. Set `HIVEMIND_SKIP_APPIMAGE=1`
-to skip the slow electron-builder step (the CLI still installs).
+to skip the slow electron-builder step (the CLI still installs). The source build
+packages whatever the host is — an AppImage on Linux, an ad-hoc signed `.app` on macOS —
+so this is the path for Intel macs and Linux arm64, which have no prebuilt.
 </details>
 
 ---
@@ -347,8 +360,10 @@ Yes. Everything runs on your machine, the data is files on your disk, there's no
 telemetry, and agents use your existing CLI login — no extra API keys or SDK lock-in.
 
 **What platforms does it run on?**
-Linux x86_64 today, via a prebuilt AppImage. macOS and Windows are open contribution
-areas (blocked on `@lydell/node-pty` build + packaging).
+Linux x86_64 (AppImage) and macOS Apple Silicon (`.app`) have prebuilt releases. Intel
+macs and Linux arm64 work from source (`./install.sh --dev`) — they just have no
+published binary, since the bundled native pty module is per-arch. Windows is an open
+contribution area.
 
 ---
 
@@ -356,8 +371,10 @@ areas (blocked on `@lydell/node-pty` build + packaging).
 
 PRs welcome. High-value areas:
 
-- **macOS / Windows support** — currently Linux-only because of `@lydell/node-pty`
-  build + AppImage packaging.
+- **Windows support** — Linux and macOS ship prebuilts; Windows needs packaging plus a
+  ConPTY path through `pty-daemon.ts`.
+- **Intel mac / Linux arm64 prebuilts** — the code already builds there; it needs release
+  jobs on those runners (the `.app`/AppImage bundles an arch-specific `@lydell/node-pty`).
 - **More agents** — the registry (`apps/desktop/src/renderer/src/agents.tsx`) takes one
   entry per agent; wire status detection + resume semantics.
 - **Reboot-resume for non-claude agents** — `pty-daemon.ts`'s
