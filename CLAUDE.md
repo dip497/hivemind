@@ -137,7 +137,9 @@ What it does (`scripts/release.sh`):
 ### What the workflows do
 
 - **`.github/workflows/ci.yml`** runs on every push to `main` and PR: typecheck + build + unit tests (`pnpm test:unit`). Heavy Playwright e2e is intentionally NOT run here — release builds validate the full build path.
-- **`.github/workflows/release.yml`** runs on `v*.*.*` tags (and manual `workflow_dispatch`). Builds the CLI single-binary (`bun build --compile`), the Electron renderer + main (`electron-vite`), packages the AppImage via `pnpm deploy` + `electron-builder`, then creates the GitHub Release and uploads `hive-linux-x86_64` + `hivemind-<version>-x86_64.AppImage`.
+- **`.github/workflows/release.yml`** runs on `v*.*.*` tags (and manual `workflow_dispatch`). Three jobs: `build-linux` (ubuntu) → `hive-linux-x86_64` + `hivemind-<version>-x86_64.AppImage`; `build-macos` (macos-14, Apple Silicon) → `hive-darwin-arm64` + `hivemind-<version>-arm64-mac.zip`; `publish` downloads both jobs' artifacts and creates the GitHub Release. Each build job compiles the CLI with `bun build --compile` (no `--target` — host arch), builds the renderer + main with `electron-vite`, then packages via `pnpm deploy` + `electron-builder`.
+
+  macOS specifics worth not re-deriving: we have no Apple Developer cert, so `mac.identity` is `null` (electron-builder skips signing entirely — it does NOT fall back to ad-hoc). An arm64 bundle with an invalid signature is SIGKILLed by the kernel, and electron-builder's repack invalidates the signature Electron ships with — so the workflow re-applies an ad-hoc signature (`codesign --force --deep --sign -`) and archives with `ditto` (preserves the framework symlinks `zip` mangles). Users still hit Gatekeeper quarantine; `install.sh` strips the xattr. Only arm64 is published: the bundle carries a host-arch `@lydell/node-pty`, so cross-arch packaging would ship the wrong native module. Intel macs use `--dev`.
 
 ### Pre-release checklist
 
@@ -145,6 +147,7 @@ Before running `./scripts/release.sh`:
 
 - [ ] All e2e tests green locally: `cd apps/desktop && pnpm test:e2e` (30 + known resize flake).
 - [ ] Unit tests green: `pnpm test:unit` from `apps/desktop`.
+- [ ] Installer platform matrix green: `bash scripts/install-plan-test.sh` (asserts the release-asset names install.sh asks for match what release.yml uploads — a rename on either side breaks every install).
 - [ ] CHANGELOG `[Unreleased]` section has at least one entry describing the user-visible change.
 - [ ] No uncommitted changes (`git status` clean).
 
@@ -168,7 +171,7 @@ If the release workflow fails but the tag is pushed: delete the tag (`git tag -d
 
 | Change | Bump |
 |---|---|
-| New tile type, new MCP tool, new agent integration, new install path | minor |
+| New tile type, new MCP tool, new agent integration, new install path, new release platform | minor |
 | Bug fix in PTY daemon, CSS tweak, tile spawn-position fix | patch |
 | Breaking change to `hive` CLI, breaking change to `.hivemind/` schema, breaking change to MCP tool shape | major |
 
