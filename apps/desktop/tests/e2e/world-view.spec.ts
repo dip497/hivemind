@@ -142,6 +142,7 @@ test("a crash in the World view falls back to the canvas with every session inta
   await page.waitForSelector(".react-flow", { timeout: 5_000 });
   expect(await activeView()).toBe("canvas");
   await expect(page.locator("[data-view-failure]")).toHaveCount(0);
+  await page.waitForSelector(".react-flow__node-terminal .xterm");
   await expect(page.locator(".xterm")).toHaveCount(1);
   expect(await probe(".react-flow__node-terminal .xterm")).toBe("kept");
   await expect(page.locator(".hm-term-root").filter({ hasText: "exited" })).toHaveCount(0);

@@ -11,6 +11,22 @@ for (const scene of ["canvas_quiet", "canvas_streaming_idle", "canvas_streaming_
   add(`${scene} · longtask total`, `${scene}.longtask_total_ms`, "ms");
   add(`${scene} · loop lag p95`, `${scene}.lag_p95_ms`, "ms");
 }
+for (const scene of ["world_quiet", "world_streaming_idle", "world_docked_streaming_idle", "world_docked_typing", "world_orbit", "world_dock_undock"]) {
+  add(`${scene} · fps`, `${scene}.fps`);
+  add(`${scene} · frame p95`, `${scene}.frame_p95_ms`, "ms");
+  add(`${scene} · longtask total`, `${scene}.longtask_total_ms`, "ms");
+  add(`${scene} · loop lag p95`, `${scene}.lag_p95_ms`, "ms");
+  add(`${scene} · frames drawn`, `${scene}.frames_drawn`);
+}
+add("switch → world (median)", "switch_to_world_median_ms", "ms");
+add("switch world → canvas (median)", "switch_world_to_canvas_median_ms", "ms");
+add("canvas<->world switch longtask max (plain)", "world_switch_longtask_max_ms", "ms");
+add("world → canvas right after an undock", "world_switch_after_undock.ms", "ms");
+add("… its longtask", "world_switch_after_undock.longtask_ms", "ms");
+add("xterm instances after world switches", "xterm_instances_after_world_switches");
+add("cpu % canvas quiet", "canvas_quiet_cpu.total_cpu_pct");
+add("cpu % world quiet", "world_quiet_cpu.total_cpu_pct");
+add("cpu % world docked + streaming", "world_docked_cpu.total_cpu_pct");
 add("tiles typed into", "typed_into");
 add("xterm count while streaming", "xterm_count_streaming");
 add("react-flow nodes", "node_count");
@@ -23,4 +39,5 @@ add("cpu % windows view", "windows_cpu.total_cpu_pct");
 console.log(`| metric | ${a.label} | ${b.label} |\n|---|---:|---:|`);
 for (const [l, x, y, u] of rows) console.log(`| ${l} | ${x ?? "–"}${u} | ${y ?? "–"}${u} |`);
 console.log("\nswitch samples after:", JSON.stringify(b.switches));
+console.log("world switch samples after:", JSON.stringify(b.world_switches));
 console.log("switch samples base:", JSON.stringify(a.switches));

@@ -312,7 +312,8 @@ Shipped as the third built-in plugin, `"world"` (`workspace/views/world/`):
   transition, never a scene rebuild. Hover shows the tile name (a DOM label);
   orbit / pan / zoom via `OrbitControls` with damping OFF.
 - **Docking**: click a block → `commands.selectTile` + a `<TileSlot>` in a DOM
-  panel over the WebGL canvas (`data-world-dock`). One slot at most; every other
+  pane *beside* the WebGL canvas (`data-world-dock`, 56 % width, sibling not
+  overlay — see the numbers below for why). One slot at most; every other
   tile stays parked. Esc undocks unless the docked terminal has the keyboard
   (Esc is a TUI interrupt) — then × / a header click first. Click an island →
   the camera flies to it in one step (no tween loop). A selection that changes
@@ -320,15 +321,83 @@ Shipped as the third built-in plugin, `"world"` (`workspace/views/world/`):
   selection you arrive with is left alone (entering shows the map).
 - **Render on demand**: `invalidate()` schedules at most one frame; only camera
   change, status change, hover change, dock/undock and resize invalidate.
-  Nothing renders while `document.hidden` (one catch-up frame on return); the
-  view unmounts on every switch, and `dispose()` releases renderer, geometry,
-  materials and listeners. The e2e suite reads the scene's frame counter to
-  prove no frames are drawn while nothing changes.
+  Nothing renders while `document.hidden` (one catch-up frame on return). The
+  e2e suite reads the scene's frame counter to prove no frames are drawn while
+  nothing changes.
+- **Retained across switches**: the component unmounts on every switch like
+  any view, but the `WorldScene` (renderer, GL context, compiled programs,
+  geometry) is module state keyed by `layoutKey`: unmount `detach()`es it —
+  canvas out of the DOM, every listener and the ResizeObserver off, nothing
+  can schedule a frame — and the next mount `attach()`es the same scene and
+  draws one frame. `dispose()` (real teardown) runs on workspace change and
+  `beforeunload`. A context + shader compile per mount was 0.5–1.5 s of long
+  tasks per switch to the world (measured); retained it is 0.
 - **Lazy**: `component: lazy(() => import("./WorldView"))`; three.js is forced
   into `vendor-three-*.js` by `manualChunks`, the view into `WorldView-*.js`.
   `renderer-chunks.test.ts` pins the entry chunk size (baseline + 4%) and asserts
   the three chunk exists and is not statically imported.
 - **Layout blob**: `useViewLayout` `"world"` v1 — camera pose + island spots.
+
+**Measured 2026-09-07** — `scripts/perf-views.mjs` world scene set, same
+harness and machine as above (xvfb 1600×1000, software GL, 4 shell tiles
+× ~50 lines/s, in-process PTYs). Interleaved runs: `base` is the branch tip
+before the world view (bfe9ad6, built in a worktree, `PERF_SKIP_WORLD=1`),
+`world` is this branch; 4 valid runs each, alternated base/world, 1-min load
+10–24 throughout (shared machine; ±20 % is noise). Two earlier world runs with
+the dock as a DOM overlay and a per-mount scene are excluded; their failures
+are what the two rules above fix.
+
+Canvas / windows scenes, median of 4 runs per side (unchanged within noise):
+
+| metric | base bfe9ad6 | world build |
+|---|---:|---:|
+| canvas quiet · lag p95 | 0.2 ms | 0.3 ms |
+| canvas streaming · fps / lag p95 / longtasks | 9.4 / 3.8 ms / 0 | 12.2 / 3.9 ms / 0 |
+| typing while streaming · lag p95 | 11.9 ms | 13.3 ms |
+| wheel pan · fps / lag p95 | 8.1 / 12.1 ms | 10.8 / 11.3 ms |
+| tile drag · fps / lag p95 | 8.0 / 15.6 ms | 10.2 / 12.4 ms |
+| windows streaming · fps / lag p95 | 10.3 / 17.0 ms | 14.6 / 12.8 ms |
+| switch → windows / → canvas (median) | 354 / 234 ms | 250 / 211 ms |
+| canvas quiet CPU (all processes) | 10.5 % | 9.2 % |
+| streaming CPU / windows CPU | 50.7 / 51.1 % | 55.4 / 53.1 % |
+
+World scenes (the two final runs; the acceptance comparisons are within-run so
+shared load cancels):
+
+| metric | run A | run B | acceptance |
+|---|---:|---:|---|
+| world quiet · fps / lag p95 / longtasks / **frames drawn** | 58.4 / 0.3 ms / 0 / **0** | 55 / 0.4 ms / 0 / **0** | render on demand |
+| world idle CPU vs canvas idle CPU | 8.6 vs 9.0 % (−0.4) | 11.4 vs 9.1 % (+2.3) | within 2 % — B is at the edge, the median over the 4 world runs is +0.3 |
+| world streaming, undocked · lag p95 / frames drawn | 9.0 ms / 0 | 9.4 ms / 0 | parked tiles paint nothing |
+| world streaming, docked · lag p95 / frames drawn | 12.5 ms / 0 | 10.5 ms / 0 | terminal repaints do not touch the scene |
+| **typing into the docked tile · lag p95** vs canvas typing | **8.8 vs 12.6 ms** (−3.8) | **10.4 vs 10.1 ms** (+0.3) | within 5 ms ✓ |
+| orbit (60 pointer moves) · frames drawn / frame p95 / longtasks | 60 / 160 ms / 0 | 60 / 121 ms / 0 | one frame per move, no loop |
+| canvas ↔ world switch, median / long-task max over 7 (plain) | 183 → world, 156 → canvas / 173 ms | 246 → world, 195 → canvas / 0 ms | ~0 both directions ✓ (the 173 ms was the first → world of run A; every other switch 0) |
+| world → canvas right after an undock | 386 ms / 318 ms long task | 350 ms / 281 ms | see below |
+| dock/undock cycle ×8 · lag p95 / long-task max | 123 ms / 286 ms | 173 ms / 370 ms | — |
+| live xterm instances after all switches | 4 | 4 | sessions intact |
+| streaming CPU docked in world vs canvas streaming | 53 vs 58.5 % | 56 vs 56.3 % | — |
+
+For comparison the canvas ↔ windows switches in the same runs carried 0 ms →
+windows and 51–76 ms → canvas long tasks (the canvas view's own mount commit).
+
+Two trade-offs the numbers forced:
+
+- **The dock is a sibling pane, not an overlay.** With the terminal panel
+  positioned over a full-window WebGL canvas, every terminal repaint made the
+  compositor blend the two layers: docked typing lag was 5.9 ms *over* the
+  canvas typing lag (limit 5 ms). Side by side the layers do not overlap and
+  typing in the dock is at or below canvas typing. The price is that the scene
+  narrows to 44 % while a tile is docked (one resize + one frame).
+- **The docked tile is resized twice.** Docking adopts a surface that was last
+  laid out at its canvas size; undocking parks it at the dock size. The next
+  switch to the canvas therefore refits one live WebGL terminal to its canvas
+  size — the 280–320 ms long task on the "right after an undock" row (the
+  same `WebglRenderer.handleResize` flush documented above). A plain switch
+  after a session that never docked, or docked and switched without
+  undocking, pays nothing. Not fixed here: it is the geometry-of-a-parked-
+  tile gap in the table below, and the honest fix is the host restoring the
+  view's own slot size on adopt rather than the plugin's.
 
 #### What the World view needed that the contract did not provide
 
@@ -349,6 +418,8 @@ carry across the boundary, or to do on its behalf.
 | **Assets** | None: procedural geometry, no textures/fonts. | Plugins that ship assets need a manifest-declared asset path served into the iframe. |
 | **Crash isolation** | The ViewHost boundary + a test seam that throws in render. | An iframe crash is a process/iframe reload, not a React boundary; the host must detect and fall back the same way. |
 | **Perf visibility** | `frameCount` on the scene (test seam) to prove render-on-demand. | A plugin-side "frames drawn" counter the host can read for its own budget checks. |
+| **Expensive state across mounts** | The view unmounts on every switch, but a GL context + shader compile per mount cost 0.5–1.5 s; the scene lives in module state and is attached/detached per mount, disposed on workspace change / unload. | A plugin lifecycle with `hide`/`show` distinct from `unmount`, so an iframe (its whole GL state) survives a switch, plus a host-driven "you are hidden, do nothing" signal. |
+| **Geometry of a parked tile** | Nothing: a tile undocked from the 56 % pane stays laid out at that size and refits (one ~300 ms WebGL flush) on the next switch to the canvas. | The host owns slot sizes per view: on park it restores the size the *previous* view gave the tile, or fits lazily only when the surface is next shown. |
 
 ### Phase 4 — isolated community plugins
 

@@ -22,7 +22,7 @@ import { useViewLayout } from "../../view-layout-store";
 import type { WorkspaceViewProps } from "../../workspace-view";
 import type { TileStatusKind } from "../../../agent-status-bus";
 import { WORLD_LAYOUT, placeIslands, type WorldCamera } from "./world-layout";
-import { WorldScene, type WorldStatus } from "./world-scene";
+import { WorldScene, type WorldSceneEvents, type WorldStatus } from "./world-scene";
 
 // Chunk-load marker (test seam): set when THIS lazy chunk is evaluated, so the
 // e2e suite can prove three.js + the scene are not part of the default path
@@ -38,6 +38,18 @@ export function toWorldStatus(s: TileStatusKind | null): WorldStatus {
     case "blocked": case "permission": case "question": case "plan_review": case "awaiting_approval": return "blocked";
     default: return "unknown";
   }
+}
+
+// The retained scene (module state — one per renderer, like the tile park).
+let retained: { key: string | null; scene: WorldScene } | null = null;
+function retainedScene(): WorldScene | null { return retained?.scene ?? null; }
+function retainScene(key: string | null, events: WorldSceneEvents, camera: WorldCamera | null): WorldScene {
+  if (retained && retained.key !== key) { retained.scene.dispose(); retained = null; }
+  if (!retained) retained = { key, scene: new WorldScene(events, camera) };
+  return retained.scene;
+}
+if (typeof window !== "undefined") {
+  window.addEventListener("beforeunload", () => { retained?.scene.dispose(); retained = null; });
 }
 
 export default function WorldView({ model, commands }: WorkspaceViewProps) {
@@ -63,25 +75,31 @@ export default function WorldView({ model, commands }: WorkspaceViewProps) {
   const nameRef = useRef(nameOf);
   nameRef.current = nameOf;
 
-  // ── scene lifecycle: build once per mount, dispose on unmount ──────────────
+  // ── scene lifecycle: ONE retained scene, attached per mount ────────────────
+  // A WebGL context + shader compile per mount cost ~0.5–1.5 s of long tasks
+  // per view switch (measured), so the scene outlives the component: unmount
+  // detaches it (no DOM, no listeners, nothing can schedule a frame) and the
+  // next mount re-attaches the same renderer and draws one frame. It is torn
+  // down for real when the workspace (layoutKey) changes or the window unloads.
   useLayoutEffect(() => {
     const host = hostRef.current;
     if (!host) return;
-    const scene = new WorldScene(host, {
+    const events: WorldSceneEvents = {
       onHover: (tileId, frameId, at) => setHover(at ? { tileId, frameId, x: at.x, y: at.y } : null),
       onClickTile: (tileId) => { setDocked(tileId); commandsRef.current.selectTile(tileId); },
-      onClickFrame: (frameId) => { scene.flyToFrame(frameId); commandsRef.current.selectFrame(frameId); },
+      onClickFrame: (frameId) => { retainedScene()?.flyToFrame(frameId); commandsRef.current.selectFrame(frameId); },
       onCameraSettled: (camera: WorldCamera) => setLayout((l) => ({ ...l, camera })),
-    }, layoutRef.current.camera);
+    };
+    const scene = retainScene(layoutKey, events, layoutRef.current.camera);
+    scene.attach(host, events);
     sceneRef.current = scene;
     // Test seam: the e2e suite projects a tile to click it and reads the frame
     // counter to prove render-on-demand. Same spirit as the `__probe` tags.
     const outer = host.parentElement as (HTMLElement & { __world?: WorldScene }) | null;
     if (outer) outer.__world = scene;
-    return () => { scene.dispose(); sceneRef.current = null; if (outer) delete outer.__world; };
-    // The scene lives for the mount; layout/camera are read once at creation.
+    return () => { scene.detach(); sceneRef.current = null; if (outer) delete outer.__world; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [layoutKey]);
 
   // ── content reconcile: frames / tiles / membership / placements ────────────
   const islands = useMemo(() => placeIslands(frames.map((f) => f.id), layout.islands), [frames, layout.islands]);
@@ -147,9 +165,11 @@ export default function WorldView({ model, commands }: WorkspaceViewProps) {
   const dockedName = dockedValid ? nameOf.get(docked!) ?? docked : null;
 
   return (
-    <div className="relative flex-1 min-h-0 select-none" data-world-view>
-      {/* The WebGL canvas mounts here (world-scene.ts). */}
-      <div ref={hostRef} className="absolute inset-0" />
+    <div className="relative flex-1 min-h-0 flex flex-row select-none" data-world-view>
+      {/* The WebGL canvas mounts here (world-scene.ts). The dock is a SIBLING
+          pane, not an overlay: a DOM panel over a full-window WebGL layer made
+          the compositor blend both on every terminal repaint. */}
+      <div ref={hostRef} className="relative flex-1 min-h-0" />
       {/* Hover label — DOM over the canvas. */}
       {hover && hoverName && (
         <div
@@ -164,12 +184,21 @@ export default function WorldView({ model, commands }: WorkspaceViewProps) {
           exists at a time; undocked tiles stay parked. */}
       {dockedValid && (
         <div
-          className="absolute right-4 top-4 bottom-4 z-20 flex w-[56%] min-w-[420px] flex-col overflow-hidden rounded-xl border border-[var(--color-line)] bg-[var(--color-bg)] shadow-2xl"
+          // pt-12 clears App's top-right New/Settings cluster, which overlays
+          // every view (the Windows tab strip reserves the same space with pr-24).
+          className="relative z-20 flex w-[56%] min-w-[420px] shrink-0 flex-col overflow-hidden border-l border-[var(--color-line)] bg-[var(--color-bg)] pt-12"
           data-world-dock={docked}
           role="dialog"
           aria-label={`Docked: ${dockedName}`}
         >
-          <div className="flex h-8 shrink-0 items-center gap-2 border-b border-[var(--color-line)] bg-[var(--color-bg2)] px-3 text-[12px] text-[var(--color-fg)]">
+          {/* Focusable: a click here must TAKE the keyboard from the docked
+              terminal so Esc reaches the panel. A plain div would blur to
+              <body>, and the terminal's blur handler reclaims focus from
+              body/canvas chrome on the next frame (a race the user loses). */}
+          <div
+            tabIndex={-1}
+            className="flex h-8 shrink-0 items-center gap-2 border-b border-[var(--color-line)] bg-[var(--color-bg2)] px-3 text-[12px] text-[var(--color-fg)] outline-none"
+          >
             <span className="truncate">{dockedName}</span>
             <kbd className="ml-auto font-mono text-[9.5px] text-[var(--color-fg3)]">Esc</kbd>
             <button onClick={undock} aria-label="Undock" className="grid h-6 w-6 place-items-center rounded hover:bg-[var(--color-bg3)]">

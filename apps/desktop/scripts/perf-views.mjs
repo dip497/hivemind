@@ -8,7 +8,9 @@
 // Workload: N shell tiles in a throwaway git repo, each running a bash loop that
 // prints ~50 lines/s (a stand-in for N streaming agents). Scenes: quiet canvas,
 // canvas streaming, typing into the selected terminal while streaming, wheel
-// pan, tile drag, 8 canvas<->windows switches, windows view streaming. Per scene:
+// pan, tile drag, 8 canvas<->windows switches, windows view streaming, then the
+// World view: quiet (no streaming), streaming undocked/docked, typing into the
+// docked terminal, orbit, dock/undock cycles, 8 canvas<->world switches. Per scene:
 // rAF frame intervals (fps / p95 / >50ms), `longtask` entries, a 16 ms timer's
 // drift (event-loop lag = input-latency proxy); CPU/RSS via app.getAppMetrics().
 // The Electron profile is isolated (XDG_CONFIG_HOME) and PTYs run in-process.
@@ -94,6 +96,31 @@ out.idle_after_spawn = await metrics();
 await page.mouse.click(1500, 950); // pane: deselect
 await page.waitForTimeout(5000);
 out.canvas_quiet = await sample(3000);
+out.canvas_quiet_cpu = await metrics();
+
+// ── world, quiet (no streaming): the view's own idle cost vs the canvas ─────
+// Explicit target: three views are registered (canvas / windows / world).
+const setView = async (mode, sel) => {
+  await page.evaluate((m) => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: m } })), mode);
+  await page.waitForSelector(sel, { timeout: 30000 });
+};
+const worldFrames = () => page.evaluate(() => document.querySelector("[data-world-view]")?.__world?.frameCount ?? -1);
+// PERF_SKIP_WORLD=1 runs the canvas/windows scenes only (a baseline build that
+// predates the World view).
+const SKIP_WORLD = process.env.PERF_SKIP_WORLD === "1";
+log("world quiet");
+if (!SKIP_WORLD) {
+await setView("world", "[data-world-canvas]");
+await page.waitForTimeout(2500); // chunk + first frames settle
+{
+  const f0 = await worldFrames();
+  out.world_quiet = await sample(3000);
+  out.world_quiet.frames_drawn = (await worldFrames()) - f0; // render-on-demand: expect 0
+}
+out.world_quiet_cpu = await metrics();
+await setView("canvas", ".react-flow__node-terminal");
+await page.waitForTimeout(1500);
+}
 // Start the stream in EVERY tile. Focus each terminal deterministically: select
 // via the runtime's focus-tile event (pans + selects), click its screen, and
 // only type once xterm's textarea is the active element — never type into
@@ -198,6 +225,101 @@ await page.waitForSelector('[role="tablist"]');
 await page.waitForTimeout(700);
 out.windows_streaming_idle = await sample(4000);
 out.windows_cpu = await metrics();
+
+log("world streaming");
+// ── world, streaming: idle (nothing docked), docked, typing into the dock,
+//    orbit, dock/undock cycles, canvas<->world switches ───────────────────────
+if (!SKIP_WORLD) {
+await setView("world", "[data-world-canvas]");
+await page.waitForTimeout(1500);
+{
+  const f0 = await worldFrames();
+  out.world_streaming_idle = await sample(4000);
+  out.world_streaming_idle.frames_drawn = (await worldFrames()) - f0; // still 0: streaming tiles are parked
+}
+const worldHost = async () => page.locator("[data-world-view]").boundingBox();
+const projectTile = (id) => page.evaluate((tid) => document.querySelector("[data-world-view]").__world.projectTile(tid), id);
+const dockTile = async (id) => {
+  const pt = await projectTile(id); const hb = await worldHost();
+  if (!pt || !hb) return false;
+  await page.mouse.click(hb.x + pt.x, hb.y + pt.y);
+  await page.waitForSelector(`[data-world-dock="${id}"]`, { timeout: 5000 });
+  return true;
+};
+const undock = async () => {
+  await page.locator("[data-world-dock] button[aria-label='Undock']").click();
+  await page.waitForFunction(() => !document.querySelector("[data-world-dock]"), null, { timeout: 5000 });
+};
+out.world_docked = await dockTile(ids[0]);
+await page.waitForTimeout(800);
+{
+  const f0 = await worldFrames();
+  out.world_docked_streaming_idle = await sample(4000);
+  out.world_docked_streaming_idle.frames_drawn = (await worldFrames()) - f0;
+}
+out.world_docked_cpu = await metrics();
+// typing into the DOCKED terminal while everything streams (compare with canvas_streaming_typing)
+{
+  await page.locator("[data-world-dock] .xterm-screen").click({ timeout: 5000 }).catch(() => {});
+  await page.waitForTimeout(200);
+  const focused = await page.evaluate(() => document.activeElement?.classList.contains("xterm-helper-textarea") ?? false);
+  out.world_dock_typing_focused = focused;
+  await page.evaluate(() => window.__perf.start());
+  for (let k = 0; k < 40; k++) { await page.keyboard.type("x"); await page.waitForTimeout(40); }
+  out.world_docked_typing = await page.evaluate(() => window.__perf.stop());
+}
+log("world orbit");
+// orbit: left-drag on the scene (OrbitControls rotate), 60 moves
+{
+  const hb = await worldHost();
+  const sx = hb.x + hb.width * 0.25, sy = hb.y + hb.height * 0.75;
+  await page.mouse.move(sx, sy);
+  await page.mouse.down();
+  const f0 = await worldFrames();
+  await page.evaluate(() => window.__perf.start());
+  for (let k = 1; k <= 60; k++) { await page.mouse.move(sx + k * 4, sy + Math.sin(k / 6) * 20); await page.waitForTimeout(16); }
+  await page.mouse.up();
+  await page.waitForTimeout(300);
+  out.world_orbit = await page.evaluate(() => window.__perf.stop());
+  out.world_orbit.frames_drawn = (await worldFrames()) - f0;
+}
+log("world switches");
+// Plain canvas<->world switches (nothing docked) — the apples-to-apples
+// comparison with canvas<->windows.
+await undock();
+await page.waitForTimeout(1500);
+out.world_switches = [];
+for (let k = 0; k < 4; k++) {
+  await page.waitForTimeout(700);
+  out.world_switches.push({ to: "canvas", ...(await switchTo("canvas", ".react-flow__node-terminal")) });
+  await page.waitForTimeout(700);
+  out.world_switches.push({ to: "world", ...(await switchTo("world", "[data-world-canvas]")) });
+}
+out.switch_to_world_median_ms = med(out.world_switches.filter((s) => s.to === "world").map((s) => s.ms));
+out.switch_world_to_canvas_median_ms = med(out.world_switches.filter((s) => s.to === "canvas").map((s) => s.ms));
+out.world_switch_longtask_max_ms = Math.max(0, ...out.world_switches.slice(1).map((s) => s.longtask_ms)); // slice(1): the first canvas switch follows the docked scenes
+out.xterm_instances_after_world_switches = await page.locator(".xterm").count();
+log("world dock/undock");
+{
+  await page.evaluate(() => window.__perf.start());
+  for (let k = 0; k < 6; k++) {
+    await dockTile(ids[k % ids.length]);
+    await page.waitForTimeout(250);
+    await undock();
+    await page.waitForTimeout(250);
+  }
+  out.world_dock_undock = await page.evaluate(() => window.__perf.stop());
+}
+// One switch right after an undock: the parked terminal is refit from the
+// dock size back to its canvas size (a streaming buffer reflow) — reported
+// separately because it is the price of the size change, not of the view.
+await page.waitForTimeout(700);
+out.world_switch_after_undock = await switchTo("canvas", ".react-flow__node-terminal");
+await page.waitForTimeout(700);
+await setView("world", "[data-world-canvas]");
+await page.waitForTimeout(700);
+await setView("canvas", ".react-flow__node-terminal");
+}
 
 await fs.writeFile(outFile, JSON.stringify(out, null, 2));
 console.log(JSON.stringify(out, null, 2));

@@ -29,7 +29,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **World view — a Three.js map of the workspace (⌘E cycles canvas → windows → world).** One
   island per frame, one block per tile coloured by live agent status (idle / working / needs-you /
   exited), hover shows the tile name, orbit/pan/zoom; click a block and its LIVE terminal docks in
-  a panel over the scene (a real tile slot — keys go straight to the shell — never a texture), Esc
+  a pane beside the scene (a real tile slot — keys go straight to the shell — never a texture), Esc
   or × undocks; click an island to fly to it. Camera and island placements persist per repo.
   three.js ships in its own lazy chunk, so the canvas and windows views pay nothing for it (a build
   guard pins the entry-chunk size); the scene renders on demand only — no animation loop, zero

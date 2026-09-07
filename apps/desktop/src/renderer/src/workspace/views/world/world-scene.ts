@@ -6,8 +6,13 @@
  * `invalidate()` schedules at most one frame, and only camera change, status
  * change, hover change, dock/undock, resize and explicit `setX` calls invalidate.
  * While `document.hidden` nothing renders (one frame is drawn on return).
- * `dispose()` releases the renderer, geometries, materials and every listener —
- * the view unmounts on every switch, so an inactive World does zero work.
+ * The view unmounts on every switch. Creating a WebGL context + compiling the
+ * scene's shaders on every mount cost ~0.5–1.5 s of main-thread long tasks per
+ * switch (measured under xvfb), so the WorldScene is RETAINED across mounts:
+ * `detach()` removes the canvas from the DOM and every listener (no rAF can be
+ * pending, no input reaches it — an inactive World does zero WORK; it holds one
+ * dormant GL context, which is memory, not work), and `attach(host)` puts the
+ * same renderer back and draws one frame. `dispose()` is for teardown proper.
  *
  * Geometry: one island per frame (a plate + a low building), one block per
  * tile on the island's grid. Colour = agent status (idle / working / blocked /
@@ -83,14 +88,17 @@ export class WorldScene {
   /** Frames drawn so far (test/diagnostic: proves render-on-demand). */
   public frameCount = 0;
 
-  constructor(private host: HTMLElement, private events: WorldSceneEvents, initialCamera: WorldCamera | null) {
+  private host: HTMLElement | null = null;
+  private events: WorldSceneEvents;
+
+  constructor(events: WorldSceneEvents, initialCamera: WorldCamera | null) {
+    this.events = events;
     this.renderer = new WebGLRenderer({ antialias: true, powerPreference: "low-power" });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.setClearColor(new Color(0x0b0e14), 1);
     const canvas = this.renderer.domElement;
     canvas.style.cssText = "position:absolute;inset:0;width:100%;height:100%;display:block;";
     canvas.setAttribute("data-world-canvas", "");
-    host.appendChild(canvas);
 
     this.camera = new PerspectiveCamera(50, 1, 0.1, 500);
     if (initialCamera) {
@@ -105,7 +113,6 @@ export class WorldScene {
     this.controls.maxDistance = 200;
     if (initialCamera) this.controls.target.set(...initialCamera.target);
     this.controls.update();
-    this.controls.addEventListener("change", this.onCameraChange);
 
     this.scene.add(new AmbientLight(0xffffff, 0.55));
     const sun = new DirectionalLight(0xffffff, 1.1);
@@ -118,24 +125,54 @@ export class WorldScene {
     this.scene.add(ground);
 
     this.ro = new ResizeObserver(() => this.resize());
+  }
+
+  /** Put the canvas into `host`, bind input + visibility, draw one frame. */
+  attach(host: HTMLElement, events: WorldSceneEvents): void {
+    if (this.disposed) throw new Error("WorldScene attached after dispose");
+    if (this.host) this.detach();
+    this.host = host;
+    this.events = events;
+    const canvas = this.renderer.domElement;
+    host.appendChild(canvas);
     this.ro.observe(host);
     this.resize();
-
     canvas.addEventListener("pointermove", this.onPointerMove);
     canvas.addEventListener("pointerleave", this.onPointerLeave);
     canvas.addEventListener("click", this.onClick);
     document.addEventListener("visibilitychange", this.onVisibility);
+    this.controls.addEventListener("change", this.onCameraChange);
+    this.invalidate();
   }
+
+  /** Leave the DOM and every listener; keep the GL context + scene graph. After
+   *  this, nothing can schedule a frame until `attach` — zero work while away. */
+  detach(): void {
+    if (!this.host) return;
+    if (this.cameraTimer) { clearTimeout(this.cameraTimer); this.cameraTimer = null; }
+    this.ro.disconnect();
+    const canvas = this.renderer.domElement;
+    canvas.removeEventListener("pointermove", this.onPointerMove);
+    canvas.removeEventListener("pointerleave", this.onPointerLeave);
+    canvas.removeEventListener("click", this.onClick);
+    document.removeEventListener("visibilitychange", this.onVisibility);
+    this.controls.removeEventListener("change", this.onCameraChange);
+    if (this.hovered) { const e = this.tiles.get(this.hovered); if (e) { e.hovered = false; this.paint(e); } this.hovered = null; }
+    canvas.remove();
+    this.host = null;
+  }
+
+  get attached(): boolean { return this.host !== null; }
 
   // ── on-demand rendering ────────────────────────────────────────────────────
 
   /** Ask for ONE frame. Coalesces; no-op while hidden or after dispose. */
   invalidate = (): void => {
-    if (this.disposed || this.pending || document.hidden) return;
+    if (this.disposed || !this.host || this.pending || document.hidden) return;
     this.pending = true;
     requestAnimationFrame(() => {
       this.pending = false;
-      if (this.disposed || document.hidden) return;
+      if (this.disposed || !this.host || document.hidden) return;
       this.renderer.render(this.scene, this.camera);
       this.frameCount++;
     });
@@ -146,6 +183,7 @@ export class WorldScene {
   };
 
   private resize(): void {
+    if (!this.host) return;
     const w = this.host.clientWidth;
     const h = this.host.clientHeight;
     if (w === 0 || h === 0) return;
@@ -301,7 +339,7 @@ export class WorldScene {
     e.mesh.getWorldPosition(v);
     v.y += 0.9;
     v.project(this.camera);
-    if (v.z > 1) return null;
+    if (v.z > 1 || !this.host) return null;
     const w = this.host.clientWidth;
     const h = this.host.clientHeight;
     return { x: (v.x + 1) / 2 * w, y: (1 - v.y) / 2 * h };
@@ -353,20 +391,13 @@ export class WorldScene {
     else if (hit?.frameId) this.events.onClickFrame(hit.frameId);
   };
 
+  /** Full teardown (window unload / a different workspace). */
   dispose(): void {
+    this.detach();
     this.disposed = true;
-    if (this.cameraTimer) clearTimeout(this.cameraTimer);
-    this.ro.disconnect();
-    const canvas = this.renderer.domElement;
-    canvas.removeEventListener("pointermove", this.onPointerMove);
-    canvas.removeEventListener("pointerleave", this.onPointerLeave);
-    canvas.removeEventListener("click", this.onClick);
-    document.removeEventListener("visibilitychange", this.onVisibility);
-    this.controls.removeEventListener("change", this.onCameraChange);
     this.controls.dispose();
     this.scene.traverse((o) => disposeObject(o));
     this.renderer.dispose();
-    canvas.remove();
   }
 }
 
