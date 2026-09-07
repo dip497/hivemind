@@ -21,7 +21,9 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
   creates the Release from both build jobs.
 - `pnpm --filter @hivemind/desktop dist:mac` packages an ad-hoc signed `.app` locally, and
   `install.sh --dev` uses it — so Intel macs and Linux arm64 (no prebuilt) build from source.
-- `scripts/install-plan-test.sh` asserts the installer's platform → release-asset matrix.
+- `scripts/install-plan-test.sh` asserts the installer's platform → release-asset matrix,
+  and `scripts/install-macos-test.sh` drives the real macOS install/uninstall helpers
+  against a fake `.app` (macOS-only tools shimmed). Both run in CI.
 
 ### Changed
 

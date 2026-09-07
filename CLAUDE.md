@@ -147,7 +147,7 @@ Before running `./scripts/release.sh`:
 
 - [ ] All e2e tests green locally: `cd apps/desktop && pnpm test:e2e` (30 + known resize flake).
 - [ ] Unit tests green: `pnpm test:unit` from `apps/desktop`.
-- [ ] Installer platform matrix green: `bash scripts/install-plan-test.sh` (asserts the release-asset names install.sh asks for match what release.yml uploads — a rename on either side breaks every install).
+- [ ] Installer tests green: `bash scripts/install-plan-test.sh` + `bash scripts/install-macos-test.sh` (the second drives the real Darwin helpers with `ditto`/`xattr` shimmed, so the mac path is covered without a mac). The first asserts the release-asset names install.sh asks for match what release.yml uploads — a rename on either side breaks every install.
 - [ ] CHANGELOG `[Unreleased]` section has at least one entry describing the user-visible change.
 - [ ] No uncommitted changes (`git status` clean).
 

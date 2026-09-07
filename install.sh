@@ -298,6 +298,13 @@ resolve_assets() {
   esac
 }
 
+# Test seam: `HIVEMIND_LIB_ONLY=1 source install.sh` stops here, leaving every
+# function defined and the platform resolved, so scripts/install-macos-test.sh
+# can drive the real install helpers instead of a copy of them.
+if [ "${HIVEMIND_LIB_ONLY:-0}" = "1" ]; then
+  return 0 2>/dev/null || exit 0
+fi
+
 # ── flags ─────────────────────────────────────────────────────────────────
 MODE="prebuilt"
 for arg in "$@"; do
