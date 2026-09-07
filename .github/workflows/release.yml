@@ -219,6 +219,24 @@ jobs:
           chmod +x release-assets/hive-darwin-arm64
           ls -la release-assets/
 
+      - name: Verify the bundle is arm64 and signed
+        # The .app carries a HOST-arch @lydell/node-pty, and the CLI is compiled
+        # for the host — so anything built on the wrong runner would ship a
+        # binary that dies on launch with no build error. Assert instead.
+        run: |
+          set -euo pipefail
+          app=$(ls -d desktop-deploy/dist-electron/*/hivemind.app | head -1)
+          for bin in release-assets/hive-darwin-arm64 \
+                     "$app/Contents/MacOS/hivemind" \
+                     $(find "$app" -name '*.node'); do
+            archs=$(lipo -archs "$bin")
+            echo "$archs  $bin"
+            case " $archs " in *" arm64 "*) ;; *) echo "NOT arm64: $bin"; exit 1 ;; esac
+          done
+          # `codesign --verify` above proves the signature is INTERNALLY valid;
+          # this proves the bundle is actually signed (ad-hoc = no Authority).
+          codesign -dv "$app" 2>&1 | grep -q "Signature=adhoc" || { echo "bundle is not ad-hoc signed"; exit 1; }
+
       - name: Upload artifacts (workflow result)
         uses: actions/upload-artifact@v4
         with:
