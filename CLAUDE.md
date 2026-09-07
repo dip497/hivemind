@@ -143,7 +143,8 @@ What it does (`scripts/release.sh`):
 
 Before running `./scripts/release.sh`:
 
-- [ ] All e2e tests green locally: `cd apps/desktop && unset ELECTRON_RUN_AS_NODE && xvfb-run -a --server-args="-screen 0 1600x1000x24" pnpm test:e2e` (56 tests across 18 specs, all must pass; the profile is isolated per run — see apps/desktop/AGENTS.md).
+- [ ] All e2e tests green locally: `cd apps/desktop && unset ELECTRON_RUN_AS_NODE && xvfb-run -a --server-args="-screen 0 1600x1000x24" pnpm test:e2e --retries=0` (75 tests across 22 specs, all must pass; the profile is isolated per run — see apps/desktop/AGENTS.md).
+- [ ] Perf harness unchanged within noise vs the previous release: `apps/desktop/scripts/perf-views.mjs` on both builds, `perf-views-compare.mjs` on the two JSONs (same machine, interleaved runs; the acceptance rows are in `docs/design/workspace-views.md`).
 - [ ] Unit tests green: `pnpm test:unit` from `apps/desktop`.
 - [ ] CHANGELOG `[Unreleased]` section has at least one entry describing the user-visible change.
 - [ ] No uncommitted changes (`git status` clean).
@@ -169,6 +170,8 @@ If the release workflow fails but the tag is pushed: delete the tag (`git tag -d
 | Change | Bump |
 |---|---|
 | New tile type, new `hive ctl` verb, new agent integration, new install path | minor |
+| New built-in view plugin, a new host→plugin message or SDK method (additive) | minor |
+| Breaking change to the view protocol (`@hivemind/view-sdk` `PROTOCOL_VERSION`), the manifest, or the package roots | major |
 | Bug fix in PTY daemon, CSS tweak, tile spawn-position fix | patch |
 | Breaking change to `hive` CLI (incl. a `hive ctl --json` shape), breaking change to `.hivemind/` schema | major |
 

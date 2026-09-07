@@ -1,8 +1,12 @@
 # Workspace Views — plugin architecture
 
-**Status:** milestone 1 implemented (core/view split, TileHost, canvas + windows
-as built-in plugins, versioned per-view layouts, crash fallback).
-**Date:** 2026-09-05.
+**Status:** all milestones done — 1: core/view split, TileHost, canvas + windows
+as built-in plugins, versioned per-view layouts, crash fallback (2026-09-05);
+phase 3: the built-in World view (2026-09-07); phase 4: isolated community
+views + `@hivemind/view-sdk` (2026-09-07). Open follow-ups are listed in each
+phase's section (docked-typing lag in a community view on software GL, the
+World's switch-after-undock, publishing the SDK to npm).
+**Date:** 2026-09-05, updated 2026-09-07.
 
 The same workspace — frames bound to repos, live agent tiles, their sessions —
 can be looked at through different *views*: today an infinite canvas and a
@@ -289,7 +293,7 @@ switch back). Likewise `FrameState` still carries `x/y/w/h` on the core record.
 
 ## Follow-up phases
 
-### Phase 2 — headless layout engines + frame geometry split
+### Phase 2 — headless layout engines + frame geometry split (not started)
 
 - Give a plugin an optional `layout` hook the runtime runs for *every*
   registered plugin regardless of the active view (a headless "layout engine").
@@ -473,13 +477,17 @@ message or a host behaviour below.
   Electron runs the preload only in the main frame, so there is no
   `window.hive`, no `process`, no `require` (asserted by the e2e suite from
   inside the frame). `parent.document` throws.
-- **CSP on the plugin document** (`PLUGIN_CSP`): `default-src 'none'`; scripts,
-  styles, images, fonts, media only from `hm-view:` (+ inline/data/blob for a
-  single-file bundle); `connect-src 'none'` (no fetch/XHR/WebSocket anywhere —
+- **CSP on the plugin document** (`pluginCsp(nonce)`, one nonce per
+  response): `default-src 'none'`; scripts only from `hm-view:` or carrying the
+  response nonce — which only the bootstrap page main generates for a `.js`
+  entry has, so an inline `<script>` in a plugin's own page does not run (ship
+  code as `.js` files); styles/images/fonts/media from `hm-view:` (+ inline
+  styles, data/blob); `connect-src 'none'` (no fetch/XHR/WebSocket anywhere —
   `fetch("https://…")` rejects), `frame-src 'none'`, `object-src 'none'`,
   `form-action 'none'`, `base-uri 'none'`. The renderer's own CSP does not allow
   `connect-src hm-view:`, so the host cannot be tricked into fetching plugin
-  code either.
+  code either. Files are resolved on their REAL path (`view-package-files.ts`):
+  a symlink inside a downloaded package that points outside it is a 403.
 - **Process.** Measured, not assumed: the sandboxed frame is an
   out-of-process iframe (its own renderer pid, `WebFrameMain.osProcessId`), so
   a busy loop in a plugin cannot stall the host's main thread at all.
@@ -621,8 +629,8 @@ frame counted. Plugin authors never touch `postMessage`.
 |---|---|
 | sandbox flags | `allow-scripts` only. No same-origin, forms, popups, modals, top-navigation, pointer-lock, downloads. |
 | origin | `hm-view://<id>` per package, opaque under the sandbox. `frame-src hm-view:` is the only frame source the app allows; the plugin CSP has `frame-src 'none'`, so it cannot embed anything. |
-| CSP (plugin doc) | `default-src 'none'`; `connect-src 'none'`; sources only from its own scheme (+ inline/data/blob); no objects, forms, base. Stamped by main on every response. |
-| filesystem | main serves only files under the package dirs of the last scan; `..` → 403; unknown id → 404. No other IPC reaches a frame (no preload). |
+| CSP (plugin doc) | `default-src 'none'`; `connect-src 'none'`; scripts only from its own scheme or with the per-response nonce (no `unsafe-inline` for scripts); styles/media from its scheme (+ inline styles, data/blob); no objects, forms, base. Stamped by main on every response. |
+| filesystem | main serves only files under the package dirs of the last scan, checked on the realpath (`..` and symlinks that leave the package → 403); unknown id → 404. No other IPC reaches a frame (no preload). Unit-tested; the browser's enforcement of the nonce is not unit-testable here (Chromium applies it) — it is covered by the community e2e spec loading the fixtures' external scripts. |
 | host API | none. No `window.hive`, `process`, `require`; `parent.document` throws. |
 | protocol | every inbound message validated (shape, ids, sizes, permission); ≥ 8 refusals, a flood, or a runaway disables the plugin for the session. |
 | what a malicious plugin CAN do | draw anything in its own box; call the granted command vocabulary on real tiles (select/focus always; close/spawn only with the manifest permission the user installed); ask for a live terminal to be placed at a rect (the terminal stays the host's — keystrokes go to the PTY, never to the plugin); burn its own process's CPU until the watchdog drops it; persist ≤ 64 KB under its id. |

@@ -27,7 +27,7 @@ Local-first · Markdown-backed · No SDK lock-in · No telemetry · No cloud.
 
 ## Contents
 
-[Why](#why) · [The whole canvas](#the-whole-canvas) · [Install](#install) · [Quick start](#quick-start) · [How agents talk to hivemind](#how-agents-talk-to-hivemind) · [Features](#features) · [Architecture](#architecture) · [Persistence](#persistence-model) · [Development](#development) · [Contributing](#contributing)
+[Why](#why) · [The whole canvas](#the-whole-canvas) · [Install](#install) · [Views](#views) · [Quick start](#quick-start) · [How agents talk to hivemind](#how-agents-talk-to-hivemind) · [Features](#features) · [Architecture](#architecture) · [Persistence](#persistence-model) · [Development](#development) · [Contributing](#contributing)
 
 ---
 
@@ -76,7 +76,7 @@ land live in the board tile.
 1. `hivemind .` in any repo → an infinite canvas opens, scoped to that project.
 2. Press `2` (or a frame's **+**) → an agent tile spawns, running in the repo's `cwd`.
 3. Click **▶ Work** on an issue → the agent spawns pre-loaded with that issue and the
-   full MCP tool surface; it works, you watch the diff update live.
+   `hivemind` skill (the `hive ctl` vocabulary); it works, you watch the diff update live.
 4. Click a frame's **worktree** button to spin a branch into a nested sub-frame, or
    **remote** to bind the frame to a directory on an SSH host — same terminals,
    editor, and diff, now running on that machine.
@@ -207,6 +207,33 @@ teaches every agent this vocabulary.
 
 ---
 
+## Views
+
+The same workspace — frames bound to repos, live agent tiles, their sessions — can be looked
+at through different views. **⌘E** (or Settings ▸ View) cycles them; nothing about a tile
+changes when you switch, because every tile body is mounted once and lent to the active view:
+
+- **Canvas** — the infinite xyflow board above.
+- **Windows** — one tab per tile, VS Code style.
+- **World** — a Three.js map: one island per frame, one block per tile coloured by live agent
+  status, hover for names, click a block to dock its *live* terminal beside the scene (Esc undocks),
+  click an island to fly to it. The scene draws only when something changes.
+- **Community views** — a view is a package (`hivemind-view.json` + one bundled entry):
+
+  ```bash
+  hive views install examples/views/orbit/dist   # or any package dir
+  hive views list                                # what will load, and why not
+  hive views remove orbit
+  ```
+
+  It runs in a sandboxed out-of-process iframe on its own origin — no filesystem, network,
+  node or app API — and talks to hivemind through `@hivemind/view-sdk` (structure, names,
+  per-tile status, selection, a hole-punch for live terminals). A plugin that floods, spins or
+  sends junk is disabled and you land back on the canvas with every session intact. Start from
+  `examples/views/orbit`.
+
+---
+
 ## Features
 
 | | |
@@ -214,7 +241,8 @@ teaches every agent this vocabulary.
 | **Canvas-per-project** | One infinite [xyflow](https://reactflow.dev) canvas per repo. Frames bind to a workspace path, so multiple repos coexist on one screen, each with its own auto-assigned color. |
 | **Pluggable agents** | `claude` / `codex` / `droid` / `opencode` / `kiro` / `pi` each run in their own WebGL-accelerated xterm tile. Every agent is one catalog entry (`packages/hive-agents`) with explicit capabilities — prompt delivery, turn signal, resume, supervise — that the UI, the CLI and the control plane all read; what a runtime cannot do is refused up front, never timed out. Live status (idle / working / waiting / done) is detected from the command and shown on the frame header. |
 | **PM you can `cat`** | Issues, acceptance criteria, cycles, and an activity log are markdown + YAML frontmatter under `.hivemind/`. No DB, no API. |
-| **CLI-first agent integration** | `hive init` installs skills that teach any agent to `hive show`, `hive ctl set-state`, `add-comment`, `mark-acceptance`, … from Bash — no MCP server, so it works the same for every runtime. |
+| **CLI-first agent integration** | `hive init` installs skills that teach any agent to `hive show`, `hive ctl set-state`, `add-comment`, `mark-acceptance`, … from Bash — there is no MCP server, so it works the same for every runtime, and what a runtime cannot do (`codex` has no turn signal) is refused up front with a `hive ctl` exit code, never timed out. |
+| **Views** | ⌘E cycles how the same workspace is shown: the infinite **Canvas**, a tab-strip **Windows** view, a Three.js **World** (islands per frame, blocks coloured by agent status, click one to dock its live terminal), and any **community view** you install — a sandboxed plugin (`hive views install <dir>`, `@hivemind/view-sdk`) with no access to files, network or the app. Switching never touches a session. |
 | **Live diff review** | A Pierre-backed diff tile: split / unified, a changed-files sidebar with per-file **reviewed** checks, multi-line comments, and **send-to-agent** for any comment or selection. |
 | **Git worktrees as sub-frames** | Attach a branch worktree → a nested sub-frame scoped to that branch. Line several branches up side by side and arrange them as columns. |
 | **Remote SSH frames** | Bind a frame to a directory on another machine over SSH — its terminals are real PTYs on the host, the editor reads/writes over SFTP, diff/status run `git` on the remote. One pooled `ssh2` connection per host; agent / key / password auth; TOFU host keys. |

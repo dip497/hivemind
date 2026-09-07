@@ -7,138 +7,117 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+One release: agents drive hivemind through the `hive` CLI (the MCP server is gone), agent
+providers are a catalog, the workspace is viewable through plugins (canvas, windows, a Three.js
+World, and sandboxed community views), and the e2e/perf harnesses gate every change. **Major bump**
+— see BREAKING items and the migration at the end of this section.
+
 ### Added
-- **Community views — sandboxed view plugins loaded at runtime.** Ship a workspace view as a
-  package (`hivemind-view.json` + one bundled entry), install it with `hive views install <dir>`
-  (`list` / `remove` too), and it appears in the view switcher and the ⌘E cycle after the
-  built-ins. The plugin runs in a sandboxed out-of-process iframe on its own `hm-view://<id>`
-  origin with a strict CSP: no `window.hive`, no node, no network. It talks to the app over one
-  validated MessagePort (`@hivemind/view-sdk`: projection with pre-resolved colours, per-tile
-  status, selection, reveal, a hole-punch for LIVE terminals — a real tile slot is placed where
-  the plugin asks, keys go to the shell, never to the plugin). Malformed traffic, floods and
-  runaway CPU disable a plugin for the session and drop you back on the canvas with every
-  session intact. Example plugin in `examples/views/orbit`.
-- Docking a tile in the World view (or a community view) and coming back to the canvas no
-  longer refits the terminal: a dock slot hands the tile back at its canvas size.
+
+- **`hive ctl` is a full control plane — every verb the MCP server had, from the shell.** New
+  subcommands `report`, `open-review`, `set-state`, `add-comment`, `mark-acceptance`,
+  `delete-issue`, `list-workspaces`; `spawn` gains `--name`, `--model`, `--report/--no-report`;
+  `workflow` gains `--model`. Every subcommand takes `--json` and prints the same shape the
+  matching MCP tool returned, on one line; failures print `{ok:false,code,message}` with a
+  meaningful exit status (2 usage · 3 app not running · 4 timeout · 5 not found · 6 unauthorized ·
+  7 refused/unsupported · 1 other). Issue verbs resolve ids from other registered repos.
+  `hive ctl stream --lines N` / `--since <offset>` replay the recorded tail before going live,
+  `--snapshot` prints and exits, `--json` emits NDJSON with the byte `offset` for exact resume.
+- **`hivemind` skill** (`hive add skill` / `hive init`): the `hive ctl` vocabulary for agents with
+  copy-pasteable examples — spawn a worker into a frame, send, read with a timeout,
+  fanout/pipeline/mapreduce, supervise + approve, connect two agents, report back, issue verbs.
+- `hive new --ac "criterion one || criterion two"` creates an issue with its acceptance checklist.
+- Spawned agents carry `HIVE_AGENT_ID` (claude / pi / droid / kiro) so Activity rows written via
+  `hive ctl` are signed by the runtime, as the MCP server used to do.
+- **Views are plugins (⌘E / Settings ▸ View cycles them).** The workspace runtime owns frames,
+  tiles, sessions and commands; Canvas and Windows are built-in plugins behind a registry with a
+  react-flow-free contract (`docs/design/workspace-views.md`). Every tile body is mounted once by
+  a shared tile host and lent to whichever view is active, so switching keeps local **and remote**
+  PTYs, unsaved editor buffers and browser tabs exactly as they were. A view that crashes or is
+  no longer installed falls back to the canvas without touching a session. Each view keeps its
+  own versioned layout; existing saved layouts migrate on first launch. The view contract exposes
+  live agent status per tile (`commands.subscribeTileStatus` / `tileStatus`).
+- **World view — a Three.js map of the workspace.** One island per frame, one block per tile
+  coloured by live agent status, hover names, orbit/pan/zoom; click a block and its LIVE
+  terminal docks in a pane beside the scene (a real tile slot, keys go straight to the shell,
+  never a texture), Esc or × undocks, click an island to fly to it. Camera and placements persist
+  per repo. three.js ships in its own lazy chunk (a build guard pins the entry-chunk size); the
+  scene renders on demand only and is retained across switches.
+- **Community views — sandboxed view plugins loaded at runtime.** Ship a view as a package
+  (`hivemind-view.json` + one bundled entry), `hive views install <dir>` (`list` / `remove`
+  too), and it joins the switcher after the built-ins. The plugin runs in a sandboxed
+  out-of-process iframe on its own `hm-view://<id>` origin with a strict CSP (no `window.hive`,
+  no node, no network, no inline scripts) and talks to the app over one validated MessagePort
+  (`@hivemind/view-sdk`: projection with pre-resolved colours, per-tile status, selection,
+  reveal, a hole-punch that places a real tile slot where the plugin asks). Malformed traffic,
+  floods and runaway CPU disable a plugin for the session and drop you back on the canvas with
+  every session intact. Example plugin: `examples/views/orbit`.
+- `HIVEMIND_SHELL_ENV=0` uses the launch environment as-is (PATH included) instead of the login
+  shell's — for CI/e2e and for launching from a terminal whose exact env you want inside tiles.
+- **Test + perf harnesses.** The Playwright e2e suite runs headless under xvfb with `retries=0`
+  as a real gate; it includes a cross-provider acceptance test that drives two scripted
+  stand-in providers through `hive ctl spawn / workflow / send / read / report / stream`, a
+  throwaway sixth provider's whole lifecycle, view-switch preservation, World and community-view
+  specs (docking, sandbox facts, hostile plugins). `apps/desktop/scripts/perf-views.mjs`
+  (+ `perf-views-compare.mjs`) measures every view — canvas, windows, World, community, a
+  CPU-burning plugin — and the design doc records the numbers per milestone.
+
+### Changed
+
+- **Agent providers are one catalog entry each** (`packages/hive-agents`,
+  `docs/design/agent-providers.md`): a browser-safe def — identity, inline SVG mark, status
+  detector, explicit typed capabilities (prompt delivery, turn signal, resume granularity,
+  supervise, model flag, permission modes, blocked detection) — plus, where needed, a node half
+  with its provider-owned assets beside it. The desktop UI, status detection, prompt delivery,
+  the PTY daemon, HCP, `hive ctl --agent`, `hive agent detect` and `--assignee` all read that
+  catalog; a unit test greps that no provider is named anywhere else. Adding a runtime is one
+  directory. Behaviour for claude, codex, droid, kiro and pi is unchanged and pinned by golden
+  tests captured before the move.
+- **What a runtime cannot do is refused, not timed out.** `hive ctl workflow --agent codex` (no
+  turn signal) exits 7 `UNSUPPORTED` before spawning; `hive ctl read` on such a tile answers
+  `UNSUPPORTED`; an unknown `--agent` is a usage error listing the spawnable ids.
+- `hive agent detect` probes `droid` and `--assignee droid` resolves as an agent.
+- **BREAKING: `hive ctl read --timeout` is honoured end-to-end.** The wait is a loop of short
+  HCP requests (≤ 10 s each) instead of one long request that died at the caller's tool timeout;
+  the default total wait is 100 s. A read that runs out of time prints
+  `{text:null, finalStatus:"timeout"}` and **exits 4**. `hive ctl read --poll` returns the
+  current turn state immediately.
+- **BREAKING: `hive ctl` error output** is structured (`{ok:false,code,message}` under `--json`)
+  with distinct exit codes; scripts that only checked `exit != 0` keep working.
+- The approval banner a supervising agent sees says `hive ctl approve <reqId> …`.
+- `issueToJson` / `rootForId` moved into `@hivemind/core` so the CLI and the desktop share one
+  JSON projection of an issue.
+- Docking a tile (World or a community view) and coming back to the canvas no longer refits the
+  terminal: a dock slot hands the tile back at its canvas size.
+- Known limit: a browser tile's page reloads once per view switch (Chromium re-attaches a moved
+  `<webview>`); its tabs and address survive.
 
 ### Removed
 
 - **BREAKING: the hive MCP server is gone.** `packages/hive-mcp`, `hive mcp-stdio`, `hive add mcp`
-  and the `.mcp.json` hivemind wrote into workspaces are removed. Agents drive hivemind through
-  the **`hive` CLI** instead (`hive show --json`, `hive ctl set-state`, `hive ctl spawn|send|read|
-  workflow|approve|report|…`) — one vocabulary for every runtime (claude, codex, pi, droid, kiro),
-  not just the ones with MCP support. `hive init` / `hive add skill` / the desktop's "Work on this"
-  install the rewritten `hive-work` and `hive-workflow` skills plus the `hivemind` skill, refresh a
-  generated skill that still tells the agent to use `mcp__hive__*`, and **remove the stale `hive`
-  entry from an existing `.mcp.json`** so claude stops reporting a failed MCP server. Kiro's
-  generated agent config no longer wires `mcpServers.hive`. Spawned agents now carry
-  `HIVE_AGENT_ID` (claude / pi / droid / kiro) so Activity rows written via `hive ctl` are signed
-  by the runtime, as the MCP server used to do.
-- `templates/agentic/{CLAUDE.md,.mcp.json,hive-work,hive-workflow}` — the skill sources now live
-  in `packages/hive-core/src/templates.ts` and the installer in `packages/hive-core/src/agentic.ts`
-  (shared by the CLI and the desktop, so they can no longer drift).
-
-### Added
-
-- **World view — a Three.js map of the workspace (⌘E cycles canvas → windows → world).** One
-  island per frame, one block per tile coloured by live agent status (idle / working / needs-you /
-  exited), hover shows the tile name, orbit/pan/zoom; click a block and its LIVE terminal docks in
-  a pane beside the scene (a real tile slot — keys go straight to the shell — never a texture), Esc
-  or × undocks; click an island to fly to it. Camera and island placements persist per repo.
-  three.js ships in its own lazy chunk, so the canvas and windows views pay nothing for it (a build
-  guard pins the entry-chunk size); the scene renders on demand only — no animation loop, zero
-  work while hidden or when another view is active.
-- The view contract exposes live agent status per tile (`commands.subscribeTileStatus` /
-  `tileStatus`, backed by the awareness bus) so a view colours one object per tile without any
-  model churn. Canvas and Windows are unchanged.
-- `hive new --ac "criterion one || criterion two"` creates an issue with its acceptance checklist
-  (parity with the retired `hive_create_issue.acceptance_criteria`).
-- `HIVEMIND_SHELL_ENV=0` makes the app use the environment it was launched with as-is (PATH
-  included) instead of re-resolving the login shell's — for CI/e2e and for launching from a
-  terminal whose exact env you want inside tiles.
-- **Acceptance test for the CLI-first control plane:** `apps/desktop/tests/e2e/hcp-cross-provider.spec.ts`
-  drives two different providers (claude and droid, as scripted stand-ins on PATH that honour the
-  real hook injection) through `hive ctl spawn / workflow --shape fanout / send / read / report /
-  stream` against the running app — repeatable, no LLM.
-
-- **`hive ctl` is now a full control plane — every verb the MCP server had, from the shell.**
-  New subcommands `report`, `open-review`, `set-state`, `add-comment`, `mark-acceptance`,
-  `delete-issue`, `list-workspaces`; `spawn` gains `--name`, `--model`, `--report/--no-report`;
-  `workflow` gains `--model`. Every subcommand takes `--json` and prints the **same shape the
-  matching MCP tool returned** on one line, and failures print `{ok:false,code,message}` with a
-  meaningful exit status (2 usage · 3 app not running · 4 timeout · 5 not found · 6 unauthorized ·
-  7 rate-limited/depth · 1 other). Issue verbs resolve ids from other registered repos.
-- **`hivemind` skill** (`hive add skill` / `hive init`) documents the `hive ctl` vocabulary for
-  agents with copy-pasteable examples: spawn a worker into a frame, send a task, read a reply with a
-  timeout, fanout/pipeline/mapreduce, supervise + approve, connect two agents, report back as a
-  worker, and the issue verbs. Instructions only — all correctness lives in the CLI.
-- `hive ctl stream --lines N` / `--since <offset>` replay the recorded (ANSI-stripped) tail before
-  going live; `--snapshot` prints the replay and exits; `--json` emits NDJSON events carrying the
-  byte `offset` so a client can resume exactly where it stopped; `--timeout` bounds the tail.
-  Server side: `agent.stream` subscriptions accept `since`/`lines` and every event carries `offset`.
+  and the `.mcp.json` hivemind wrote into workspaces are removed. Agents use the `hive` CLI
+  (`hive show --json`, `hive ctl …`) — one vocabulary for every runtime, not just the ones with
+  MCP support. Kiro's generated agent config no longer wires `mcpServers.hive`.
+- `templates/agentic/{CLAUDE.md,.mcp.json,hive-work,hive-workflow}` — the skill sources live in
+  `packages/hive-core/src/templates.ts` and the installer in `packages/hive-core/src/agentic.ts`
+  (shared by the CLI and the desktop).
 
 ### Fixed
 
-- The PTY daemon refuses to start on a non-absolute socket path. Everything it emits (hook
-  scripts, the pi bridge extension, session snapshots, the HCP socket + token) lives next to
-  that socket, so a relative path made it write into the launcher's current directory — the
-  stray `undefined/hive-pi-ext.mjs` found at the repo root. It now exits with a clear error
-  instead. (The stray directory is deleted.)
+- The PTY daemon refuses to start on a non-absolute socket path (it used to write its hook
+  scripts, the pi bridge extension and the HCP socket into the launcher's current directory —
+  the stray `undefined/` at the repo root). The stray directory is deleted.
 
-### Changed
+### Migration
 
-- **Agent providers are one catalog entry each** (`packages/hive-agents`, see
-  `docs/design/agent-providers.md`). A provider is a browser-safe def — identity, an inline SVG
-  mark, its status detector and **explicit typed capabilities**: prompt delivery, turn signal,
-  resume granularity (none / cwd / tile), supervise (broker / human / none), model flag,
-  permission modes, blocked detection — plus, where it injects hooks or resumes, a node half with
-  its provider-owned assets (the pi bridge extension, the kiro approval hook, the droid/kiro home
-  overlays) beside it. The desktop UI list and icons, the status detectors, initial-prompt
-  delivery, the PTY daemon's overlay/asset preparation, HCP spawn/read/workflow, `hive ctl
-  --agent`, `hive agent detect` and `--assignee` all read that catalog; no provider is named
-  anywhere else, and a unit test greps to keep it that way. Each provider is one directory
-  (`providers/<id>/index.ts` + a `node.ts` plugin object with its assets beside it); the ten
-  agents hivemind only recognises for status (gemini, cursor, cline, amp, …) are catalog defs
-  too, so there is no second list. Adding a runtime is one directory and one line per list —
-  the e2e suite proves it every run by dropping in a throwaway sixth provider and driving its
-  whole lifecycle. Runtime behaviour for claude, codex,
-  droid, kiro and pi is unchanged and pinned by golden tests captured before the move (also
-  asserted with the providers composed in reversed order).
-- **What a runtime cannot do is now refused, not timed out.** `hive ctl workflow --agent codex`
-  (no turn signal) exits 7 `UNSUPPORTED` before spawning anything; `hive ctl read` on such a tile
-  answers `UNSUPPORTED`; an unknown `--agent` is a usage error listing the spawnable ids.
-- `hive agent detect` now probes `droid` and `--assignee droid` resolves as an agent — the
-  hand-kept CLI lists had missed a catalogued provider.
-- `HIVEMIND_SHELL_ENV=0` (see Added) is also how the e2e suite keeps stand-in agent binaries
-  first on PATH.
-- **BREAKING: `hive ctl read --timeout` is honoured end-to-end.** The wait is now a loop of short
-  HCP requests (≤ 10 s each) instead of one long request that silently died at the caller's tool
-  timeout (Claude Code's Bash default is 120 s); the default total wait is 100 s. A read that runs
-  out of time still prints `{text:null, finalStatus:"timeout"}` but now **exits 4**. New
-  `hive ctl read --poll` returns the current turn state immediately (exit 0).
-- **BREAKING: `hive ctl` error output.** Errors used to be a bare message on stderr with exit 1;
-  they are now structured (see above) and exit codes distinguish causes. Scripts that only checked
-  `exit != 0` keep working.
-- The approval banner a supervising agent sees now says `hive ctl approve <reqId> …` (the MCP
-  `hive_approve` form is still shown alongside until MCP is retired).
-- `issueToJson` / `rootForId` moved from the MCP server into `@hivemind/core` so the CLI, the MCP
-  server and the desktop share one JSON projection of an issue.
-- **Views are plugins; switching views no longer disturbs live tiles.** The canvas
-  runtime (`Workspace.tsx`) now owns frames, tiles, sessions and commands, and the
-  Canvas and Windows views are built-in plugins behind a registry with a react-flow-free
-  contract (`docs/design/workspace-views.md`). Every tile body is mounted once by a shared
-  tile host and lent to whichever view is active, so ⌘E / Settings ▸ View keeps local **and
-  remote** PTYs, unsaved editor buffers and browser tabs exactly as they were — previously a
-  view switch remounted every tile, which killed remote (`ssh://`) agent sessions outright.
-  A view that crashes or is no longer installed falls back to the canvas without touching a
-  session. Each view keeps its own versioned layout (canvas geometry, windows tab state);
-  existing saved layouts migrate automatically on first launch (and a layout saved by an older
-  build on the same profile is picked up again, not discarded). The spawn-target and
-  send-to-claude pickers now show in every view; the Windows view's active tab follows whatever
-  selects a tile (spawn, "open in editor", an agent's `tile.focus`, a toast), and the camera
-  resumes where it was after a view round trip. Settings ▸ View and ⌘E share one store, so the
-  card can no longer go stale. Known limit: a browser tile's page reloads once per view switch
-  (Chromium re-attaches a moved `<webview>`); its tabs and address survive.
+1. Run `hive init` (or `hive add skill`) in each workspace: it installs the rewritten `hive-work`,
+   `hive-workflow` and `hivemind` skills, refreshes any generated skill that still says
+   `mcp__hive__*`, and **removes the stale `hive` entry from an existing `.mcp.json`** so claude
+   stops reporting a failed MCP server. Delete any hand-written `hive` MCP config elsewhere.
+2. `hive add mcp` and `hive mcp-stdio` no longer exist; nothing replaces them — the CLI is the API.
+3. Scripts parsing `hive ctl` output: read `--json` (`{ok, data}` / `{ok:false,code,message}`)
+   and the exit codes above; a `read` that times out now exits 4.
+4. Nothing in `.hivemind/` changed shape; saved canvas layouts migrate automatically.
 
 ## [1.16.0] — 2026-09-03
 

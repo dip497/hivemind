@@ -32,3 +32,8 @@ hm.setLayout({ camera });                         // ≤ 64 KB, persisted under 
 `spawnClaude` / `addFrame` need `"workspace:spawn"`. Unknown permissions are refused
 at install. Protocol details: `src/protocol.ts`; a complete example:
 `examples/views/orbit` in the hivemind repo.
+
+Status: consumed as TypeScript source inside the hivemind monorepo (workspace
+dependency). Publishing to npm is not set up yet — a `dist/` build and a `files`
+list are the missing pieces; the protocol is versioned (`PROTOCOL_VERSION`) so a
+published package can pin what it speaks.
