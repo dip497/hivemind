@@ -1,0 +1,1 @@
+{ "id": "greedy", "name": "Greedy", "version": "0.0.1", "entry": "index.html", "permissions": ["fs:read"] }

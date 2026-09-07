@@ -14,7 +14,7 @@
  * Full contract + follow-up phases (Three.js demo, isolated community plugins):
  * docs/design/workspace-views.md.
  */
-import type { ComponentType } from "react";
+import { useSyncExternalStore, type ComponentType } from "react";
 import type { LucideIcon } from "lucide-react";
 import type { FrameState, TileInstance } from "../canvas-persistence";
 import type { LayerFrame, LayerTile } from "../LayersPanel";
@@ -115,21 +115,44 @@ export interface WorkspaceViewPlugin {
   icon: LucideIcon;
   /** May be `React.lazy(...)` — the ViewHost wraps it in Suspense. */
   component: ComponentType<WorkspaceViewProps>;
+  /** Built-ins run in the renderer; community views run in a sandboxed iframe
+   *  (workspace/views/community). Default "builtin". */
+  source?: "builtin" | "community";
 }
 
 // ── registry ─────────────────────────────────────────────────────────────────
-// Built-in views register at startup (workspace/views/index.ts). Third-party
-// views are NOT loaded here: anything registered runs in the privileged
-// renderer with full `window.hive` access, so registration is a build-time
-// decision. Isolated community plugins are a later phase (see the design doc).
+// Built-in views register at startup (workspace/views/index.ts) and run in the
+// privileged renderer. Community views register at runtime through
+// workspace/views/community (their code runs in a sandboxed iframe; the
+// registered component is the host that embeds it). The registry is an
+// external store: `useViews()` re-renders switchers when the set changes
+// (a repo switch, a `hive views install`, a plugin disabled for misbehaving).
 
 const views = new Map<string, WorkspaceViewPlugin>();
+const listeners = new Set<() => void>();
+let snapshot: WorkspaceViewPlugin[] = [];
+function changed() { snapshot = [...views.values()]; for (const l of listeners) l(); }
 
 /** The view we fall back to when the stored/requested one is unknown or crashes. */
 export const FALLBACK_VIEW_ID = "canvas";
 
 export function registerView(plugin: WorkspaceViewPlugin): void {
   views.set(plugin.id, plugin);
+  changed();
+}
+
+export function unregisterView(id: string): void {
+  if (views.delete(id)) changed();
+}
+
+export function subscribeViews(l: () => void): () => void {
+  listeners.add(l);
+  return () => { listeners.delete(l); };
+}
+
+/** The registered views as a stable array (registration order); re-renders on change. */
+export function useViews(): WorkspaceViewPlugin[] {
+  return useSyncExternalStore(subscribeViews, () => snapshot, () => snapshot);
 }
 
 export function getView(id: string): WorkspaceViewPlugin | undefined {
@@ -138,7 +161,7 @@ export function getView(id: string): WorkspaceViewPlugin | undefined {
 
 /** Registration order — also the ⌘E cycle order and the Settings list order. */
 export function listViews(): WorkspaceViewPlugin[] {
-  return [...views.values()];
+  return snapshot;
 }
 
 /** Map a stored/requested id to one that is actually registered: the id itself,
@@ -161,4 +184,5 @@ export function nextViewId(current: string | null): string | null {
 /** Test seam — forget every registration. */
 export function _resetViewsForTest(): void {
   views.clear();
+  changed();
 }

@@ -421,29 +421,239 @@ carry across the boundary, or to do on its behalf.
 | **Expensive state across mounts** | The view unmounts on every switch, but a GL context + shader compile per mount cost 0.5–1.5 s; the scene lives in module state and is attached/detached per mount, disposed on workspace change / unload. | A plugin lifecycle with `hide`/`show` distinct from `unmount`, so an iframe (its whole GL state) survives a switch, plus a host-driven "you are hidden, do nothing" signal. |
 | **Geometry of a parked tile** | Nothing: a tile undocked from the 56 % pane stays laid out at that size and refits (one ~300 ms WebGL flush) on the next switch to the canvas. | The host owns slot sizes per view: on park it restores the size the *previous* view gave the tile, or fits lazily only when the surface is next shown. |
 
-### Phase 4 — isolated community plugins
+### Phase 4 — isolated community plugins — as built
 
-Never load third-party code into the privileged renderer (it has
-`window.hive`: PTY spawn, file write, git). The design:
+Someone outside this repo can ship a view — a Mars base, a city, a game — as a
+package that hivemind loads at runtime, without that code ever running in the
+privileged renderer. Built from the phase-3 gaps table; every row there is a
+message or a host behaviour below.
 
-- A community view runs in an **isolated `<webview>`/iframe** with no
-  `window.hive`. The host streams it a read-only projection of the model over a
-  `MessagePort` (tiles, frames, membership, names, statuses) and accepts a fixed
-  command vocabulary back (`selectTile`, `focusTile`, `closeTile`,
-  `spawnTile`, `addFrame`) — the same `WorkspaceCommands`, serialized.
-- Tile bodies cannot cross the boundary. The plugin declares **surface
-  rectangles** (`{ tileId, x, y, w, h }` in its viewport, updated per frame or
-  on change); the host renders the real `<TileSlot>`s in an overlay layer
-  positioned over those rectangles ("hole-punch"). A plugin that wants a live
-  terminal inside a 3D scene projects the object to a screen rect and asks for
-  a surface there.
-- Manifest (`hivemind-view.json`: id, name, version, entry, permissions) loaded
-  from a user directory; registry gains `source: "builtin" | "community"` and the
-  fallback rule stays "builtin canvas". Layout blobs are per plugin id, so an
-  uninstalled plugin's state is inert, not corrupting.
-- Capability gating: default permission set is read-only model + the command
-  vocabulary; no fs, no network, no PTY. Anything more is a host feature the
-  plugin requests, not code it ships.
+#### Package format + loading
+
+```
+<pkg>/hivemind-view.json      { id, name, version, entry, protocol?, permissions?, assets? }
+<pkg>/index.html | dist/x.js  one bundled entry (.html loaded as-is; .js wrapped in a host page)
+```
+
+- **Manifest** (`@hivemind/view-sdk/manifest`, `validateViewManifest`): id
+  `[a-z0-9-]{2,64}` (directory name, registry id, layout-blob key), semver-ish
+  version, a relative entry that cannot leave the package, `protocol` (default
+  1; a newer one is refused at load), `permissions` from the known set
+  (`workspace:spawn`, `workspace:close`; anything else is refused at install
+  AND at load — "requesting an ungranted permission" is a manifest error, not a
+  runtime surprise). Every problem is reported, not just the first.
+- **Roots** (`@hivemind/core/views`): `$XDG_CONFIG_HOME/hivemind/views/<id>/`
+  (installed) and `<repo>/.hivemind/views/<id>/` (shipped with a repo; a user
+  package with the same id shadows it). Directory name must equal the manifest
+  id once installed.
+- **CLI**: `hive views list|install <dir>|remove <id>` (`--json`). Thin: validate
+  + copy (`node_modules` skipped). `list` prints exactly what the app will and
+  will not load, with the reason. Remove deletes the package only; the plugin's
+  layout blob (`hivemind:view-layout:<id>:<repo>`) stays behind, inert.
+- **Registry**: main scans on demand (`views:list` IPC, rescanned per repo
+  switch and on `hivemind:reload-views`); the renderer registers each loadable
+  package as a plugin with `source: "community"`, registration order = after
+  the built-ins = ⌘E order. The registry became an external store (`useViews`)
+  so switchers re-render when a view appears, disappears, or is disabled.
+  Fallback stays the built-in canvas: a disabled or removed view simply stops
+  resolving and `resolveViewId` lands on canvas with every session intact.
+
+#### Isolation
+
+- **Origin + scheme.** Packages are served over `hm-view://<id>/<path>` by main
+  (`main/view-packages.ts`). Why a scheme and not `file://`: the app page is
+  itself `file://` in production, so a file iframe would share the privileged
+  origin unless sandboxed; a scheme gives every package a distinct origin
+  before the sandbox makes it opaque, lets the renderer CSP say exactly
+  `frame-src hm-view:` and nothing else, confines reads to the package dirs of
+  the last scan (never a path from the URL — traversal is a 403), and lets
+  main stamp a CSP on every response.
+- **Sandbox.** `<iframe sandbox="allow-scripts">` — no `allow-same-origin`
+  (opaque origin), no forms, popups, top navigation, pointer lock, downloads.
+  Electron runs the preload only in the main frame, so there is no
+  `window.hive`, no `process`, no `require` (asserted by the e2e suite from
+  inside the frame). `parent.document` throws.
+- **CSP on the plugin document** (`PLUGIN_CSP`): `default-src 'none'`; scripts,
+  styles, images, fonts, media only from `hm-view:` (+ inline/data/blob for a
+  single-file bundle); `connect-src 'none'` (no fetch/XHR/WebSocket anywhere —
+  `fetch("https://…")` rejects), `frame-src 'none'`, `object-src 'none'`,
+  `form-action 'none'`, `base-uri 'none'`. The renderer's own CSP does not allow
+  `connect-src hm-view:`, so the host cannot be tricked into fetching plugin
+  code either.
+- **Process.** Measured, not assumed: the sandboxed frame is an
+  out-of-process iframe (its own renderer pid, `WebFrameMain.osProcessId`), so
+  a busy loop in a plugin cannot stall the host's main thread at all.
+- **One MessagePort.** The host creates a `MessageChannel` on iframe load and
+  posts `port2` with a `hivemind-view:port` window message (target `"*"` — the
+  frame's origin is opaque, and nothing but the port rides along). Everything
+  else is on the port, validated both ways (`@hivemind/view-sdk/protocol`).
+- **Validation + thresholds** (`community/host-link.ts`): every inbound message
+  is schema-checked before it touches state; commands are checked against the
+  granted permissions and against the workspace (unknown tile/frame ids,
+  unspawnable kinds are refused); `revealed` must answer an outstanding
+  request. Refusals count: ≥ 8 disables the plugin; > 600 messages in one
+  second disables it (a flood); > 1.5 s of main-thread long tasks attributed
+  to its iframe within 3 s disables it (only reachable if a frame ever runs in
+  process); and main's watchdog disables a frame whose process sits at ≥ 60 %
+  of a core for three 2 s samples (`views:runaway`). "Disabled" = unregistered
+  for the session (a rescan will not bring it back), a toast with the reason,
+  the fallback rule.
+
+#### Protocol v1 (the gaps table, made concrete)
+
+| direction | message | phase-3 gap it closes |
+|---|---|---|
+| host → plugin | `hello {v, pluginId, capabilities, theme, layout, viewport, visible}` | granted permissions; theme colours as `#rrggbb`; the plugin's own persisted blob |
+| host → plugin | `structure {frames[{id,title,color:#hex}], tiles[{id,frameId,kind,name}]}` | membership + structure only; colours pre-resolved (`cssColorToHexString`) |
+| host → plugin | `names {names}` | name updates separated from structural ones (a title tick never looks structural) |
+| host → plugin | `selection {tileId, frameId, fresh}` | `fresh` = changed since the plugin mounted |
+| host → plugin | `status {tileId, status}` after `subscribeStatus` | the per-tile stream, bucketed (`idle/working/blocked/exited/unknown`) |
+| host → plugin | `reveal {requestId, tileId}` → `revealed {requestId, rect}` | "reveal this tile": plugins own their camera and answer with a rect |
+| host → plugin | `resize {w,h}`, `visibility {visible}`, `theme {theme}` | viewport + hidden signal |
+| plugin → host | `ready {v}` | version handshake (mismatch disables) |
+| plugin → host | `command {name, args}` | exactly the `WorkspaceCommands` vocabulary minus the status functions; `spawnTile` takes kind + frame only |
+| plugin → host | `surfaceRects {rects[{tileId,x,y,w,h}]}` (≤ 16) | the hole-punch: the host places a real `<TileSlot>` per rect above the iframe, pointer events only on the slots |
+| plugin → host | `framesDrawn {count}` | the render-on-demand counter (≤ 1/s) |
+| plugin → host | `layout {data}` (≤ 64 KB) | the plugin's blob, persisted under its id |
+| plugin → host | `error {message}` | host log |
+
+**`@hivemind/view-sdk`** (`packages/hive-view-sdk`, dependency-free, browser
+TS): `connect()` resolves after `hello`; `on("structure"|"names"|"selection"|
+"resize"|"visibility"|"theme")`; `subscribeStatus(tileId, cb)` with ref-
+counting; `commands.*` typed and gated locally by the granted permissions;
+`setSurfaceRects` (deduplicated); `onReveal`; `reportFrame`; `setLayout`
+(debounced); `createInvalidator(client, draw)` — one rAF per burst of
+invalidations, nothing while hidden, one catch-up frame on return, every drawn
+frame counted. Plugin authors never touch `postMessage`.
+
+#### Performance
+
+- **Compositor.** The World's lesson (a DOM terminal above a full-window GPU
+  layer is a blend per repaint) applies to an iframe layer too. When the
+  plugin's surfaces form one band flush against an edge — the common dock —
+  the iframe is clipped with a rectangular `clip-path: inset(...)`
+  (`edge-band.ts`), so the two layers never overlap; a rect clip is a
+  compositor clip, not a mask. Floating rects stay plain overlays. The plugin
+  still believes it is full-size (it draws under the slot; the pixels are just
+  never composited), so nothing in the protocol changes.
+- **One commit per frame.** Plugin messages arrive one task each; an undock
+  is `selectTile(null)` + `rects: []`. Applied separately, the first deselects
+  a still-visible tile — on low-DPI that swaps it from the DOM renderer back
+  to WebGL (a GL context + atlas, 0.5 s on software GL) before the second
+  parks it. The host batches everything a plugin sends within one animation
+  frame into one commit, exactly like a built-in view's own handler.
+- **Geometry of a parked tile — fixed** (host, all views): `<TileSlot transient>`
+  marks a dock/overlay slot. Leaving it, the surface parks at the size the
+  ARRANGING view last gave the tile (`stableSize` in tile-host) and the
+  terminal refits at once, hidden, on the cheap DOM renderer the selected tile
+  already uses. The next switch to the canvas finds every tile at its size and
+  refits nothing. (The first switch after an undock still pays one WebGL
+  re-acquire for the tile that was reading on the DOM renderer while docked —
+  the canvas's own select→deselect cost, tens of ms on a GPU, 0.1–0.7 s on
+  software GL. That is the crisp-boost trade, not geometry.)
+- **Runaway containment.** Out-of-process, so a spinning plugin does not touch
+  host typing lag (e2e: host event-loop lag p95 ≈ 4 ms with a terminal docked
+  by the CPU-burning fixture, on a loaded machine). The flood fixture is
+  disabled within ~300 ms; the CPU fixture by main's watchdog. Note for
+  headless runs: under xvfb an out-of-process frame's `requestAnimationFrame`
+  runs at ~1–2 fps and a spinning frame on a loaded box is descheduled to
+  single-digit CPU %, so the suite sets `HIVEMIND_VIEW_RUNAWAY_CPU=1` to prove
+  the wiring, not the number.
+- **Measured 2026-09-07 (phase 4)** — `scripts/perf-views.mjs` with the
+  community scene set, same harness and rig as the phase-3 numbers (xvfb
+  1600×1000, software GL, 4 shell tiles × ~50 lines/s). `base` = ce047e4
+  (milestone 4, `PERF_SKIP_COMMUNITY=1`), `branch` = this tree; runs alternated
+  base/branch, **1-min load 10–36 throughout** (one base run at load 36 is
+  excluded from the medians below; treat ±30 % as noise on this rig).
+
+  Canvas / windows / world scenes, medians (2 base, 3 branch): unchanged within
+  noise — canvas quiet lag 0.6 / 0.6 ms, canvas streaming lag 7.8 / 6.5 ms,
+  typing while streaming 18 / 20 ms, pan 6.5 / 5.3 fps, drag 7.4 / 6.2 fps,
+  windows streaming 9.3 / 8.8 fps, switch → windows 326 / 314 ms, → canvas
+  336 / 298 ms, canvas quiet CPU 13 / 13.6 %, world docked typing 12.3 / 12.6 ms.
+
+  Community (Orbit) scenes, the three branch runs:
+
+  | metric | run A | run B | run C | acceptance |
+  |---|---:|---:|---:|---|
+  | orbit quiet · lag p95 / longtasks / **frames drawn** | — | 0.3 ms / 0 / **0** | 0.2 ms / 0 / **0** | render on demand ✓ |
+  | orbit quiet CPU vs canvas quiet CPU | — | 14.8 vs 15.1 % | 10.3 vs 12.2 % | within 2 % ✓ (−0.3, −1.9) |
+  | orbit streaming, undocked · lag p95 / frames drawn | 15.4 ms / 0 | 6.2 ms / 0 | 18.4 ms / 0 | parked tiles paint nothing ✓ |
+  | orbit docked, streaming · lag p95 | 18.1 ms | 15.6 ms | 24.3 ms | — |
+  | **typing into the docked tile** vs canvas typing (same run) | **19.9 vs 22.3** (−2.4) | **20.7 vs 11.3** (+9.4) | **32.0 vs 19.8** (+12.2) | within 5 ms: **1 of 3** ✗ |
+  | world docked typing, same runs (reference) | 13.1 | 12.6 | 12.0 | |
+  | typing with the CPU-burning plugin docked | 25.3 (+3.0) | 16.6 (+5.3) | 29.4 (+9.6) | ≈ the plain dock: the runaway adds nothing ✓ |
+  | canvas ↔ orbit plain switch · median → orbit / → canvas · longtask max | 601 / 374 / 135 ms | 393 / 154 / 55 ms | 632 / 755 / 170 ms | → orbit 0 ms on 7 of 8 switches; → canvas like windows (55–170 vs 62–151) ✓ |
+  | orbit → canvas right after an undock · longtask | 374 ms | 386 ms | 1014 ms | see below |
+  | dock/undock ×6 · longtask max | 58 ms | 53 ms | 129 ms | (World: 486–532) |
+  | live xterms after all switches | 4 | 4 | 4 | ✓ |
+  | plugin frame pid ≠ host pid | ✓ | ✓ | ✓ | out of process ✓ |
+
+  Reading: everything about the plugin itself is cheap — the scene draws
+  nothing while idle, a switch to it costs no host long task, a dock/undock
+  cycle is 50–130 ms (the World's is 500 because its scene resizes), and a
+  runaway plugin is invisible to host typing. **The one miss is docked typing
+  lag**: 8–12 ms above the same run's canvas typing in two runs of three, and
+  8–20 ms above the World's dock in the same runs, with no host long tasks
+  during typing. Before the `inset()` clip it was 38.8 vs 6.6 ms, so overlap
+  was most of it; what is left is plugin-independent (the hostile plugin's dock
+  reads the same as Orbit's) and is most likely the cost of compositing a
+  second, out-of-process surface under a DOM terminal that repaints ~50×/s on
+  a software compositor. On a GPU that composite is trivial; on this rig it is
+  not. The follow-up that would remove it on any rig is to SHRINK the iframe
+  box for an edge dock rather than clip it — that needs the protocol to carry
+  both the plugin's drawable viewport and the full box, so a plugin can still
+  place a rect flush against the far edge. Not done in this milestone.
+
+  The switch to the canvas right after an undock still carries one long task
+  (370–390 ms in two runs) — per the CPU profile that is `getContext` (the
+  docked tile reading on the DOM renderer re-acquires WebGL when it goes back
+  to streaming unselected), not a refit; the same profile shows no
+  `handleResize` on that switch any more. The World's equivalent measured
+  675–845 ms on this tree against 389–504 on the base in the same batch, i.e.
+  worse, not better, by one re-acquire's worth; with the profiles showing only
+  `getContext` + first render on both sides, the difference is not explained
+  and is flagged for the reviewer's own runs on a GPU box.
+
+#### Security checklist
+
+| | |
+|---|---|
+| sandbox flags | `allow-scripts` only. No same-origin, forms, popups, modals, top-navigation, pointer-lock, downloads. |
+| origin | `hm-view://<id>` per package, opaque under the sandbox. `frame-src hm-view:` is the only frame source the app allows; the plugin CSP has `frame-src 'none'`, so it cannot embed anything. |
+| CSP (plugin doc) | `default-src 'none'`; `connect-src 'none'`; sources only from its own scheme (+ inline/data/blob); no objects, forms, base. Stamped by main on every response. |
+| filesystem | main serves only files under the package dirs of the last scan; `..` → 403; unknown id → 404. No other IPC reaches a frame (no preload). |
+| host API | none. No `window.hive`, `process`, `require`; `parent.document` throws. |
+| protocol | every inbound message validated (shape, ids, sizes, permission); ≥ 8 refusals, a flood, or a runaway disables the plugin for the session. |
+| what a malicious plugin CAN do | draw anything in its own box; call the granted command vocabulary on real tiles (select/focus always; close/spawn only with the manifest permission the user installed); ask for a live terminal to be placed at a rect (the terminal stays the host's — keystrokes go to the PTY, never to the plugin); burn its own process's CPU until the watchdog drops it; persist ≤ 64 KB under its id. |
+| what it CANNOT do | read terminal contents or keystrokes; reach the filesystem, network, PTYs, git, or another plugin; spawn an agent with a command line of its choosing; escape to the app's origin; run code in the host renderer; survive a disable within the session. |
+| install trust | `hive views install` copies and validates; it does not sign or scan. A repo-local `.hivemind/views` package is code from that checkout — same sandbox, same rules. |
+
+#### The example: Orbit (`examples/views/orbit`)
+
+Small enough to read in one sitting (`src/main.ts`, ~150 lines, 2D canvas, no
+framework): every frame is a sun, its tiles orbit it coloured by status, loose
+tiles orbit the centre; hover names a tile (the plugin's own DOM label), click
+docks its LIVE terminal in the right half (one `surfaceRects`), click empty
+space or Esc undocks, the wheel changes the spread (persisted via `setLayout`).
+`node build.mjs` bundles with esbuild into `dist/`; the e2e suite installs
+that with the real CLI.
+
+#### What the World would need to become a community plugin
+
+- **A retained GL context across mounts.** The World keeps its `WorldScene`
+  (context, programs, geometry) in module state and re-attaches it per mount;
+  an iframe is torn down with its view. Phase 5 would need a `hide`/`show`
+  lifecycle that keeps the frame alive (and idle) between switches — or accept
+  a context + shader compile per switch.
+- **A sibling dock pane.** The World's dock is beside the scene (56 %) to keep
+  the compositor from blending the terminal over WebGL; a plugin gets the same
+  effect for free from the edge-band clip, as long as its dock is flush with
+  an edge.
+- **`projectTile()` as a test seam** becomes `reveal`; `frameCount` becomes
+  `framesDrawn`; `flyToFrame` is plugin-internal; `focusTile` semantics stay
+  host-defined.
+- **Three.js in the bundle** (~600 KB) — fine, it is the plugin's own chunk.
 
 ## Testing
 
@@ -451,6 +661,19 @@ Never load third-party code into the privileged renderer (it has
   (registry + fallback + cycle), `view-layout-store.test.ts` (versioned blobs +
   both migrations), `canvas-node-build.test.ts` (shell-only nodes),
   `canvas-persistence.test.ts` (v2 core blob, legacy geometry still readable).
+- Unit (phase 4): `packages/hive-view-sdk/tests` (protocol validators both
+  directions, manifest, the client over a real MessageChannel),
+  `packages/hive-core/src/views.test.ts` (roots, install/remove, shadowing),
+  `apps/cli/tests/views.test.ts` (the CLI as a subprocess),
+  `community-host-link.test.ts` (ready gate, version mismatch, permission
+  gating, id checks, the three thresholds, reveal), `community-edge-band.test.ts`.
+- E2E (phase 4): `community-view.spec.ts` — `hive views install` of the built
+  Orbit example → ⌘E order → the frame sees no privileged API and no network →
+  click a planet docks the same xterm through the hole-punch, typed keys
+  arrive, undock parks it, frames are drawn only for changes → the flood and
+  CPU fixtures are disabled and the canvas is back with the session intact →
+  an unknown permission is refused by install and by the loader → `hive views
+  remove` takes the view out of the switcher.
 - E2E: `view-switch-preserve.spec.ts` — same xterm and CodeMirror DOM instance
   across canvas → windows → canvas, minimize keeps the surface alive, unsaved
   editor text survives, unknown view id falls back. `windows-view.spec.ts`

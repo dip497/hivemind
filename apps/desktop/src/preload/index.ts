@@ -122,6 +122,12 @@ const api: HiveIpc & {
   setBrowserCdpEnabled: (enabled) => ipcRenderer.invoke("setBrowserCdpEnabled", enabled),
   relaunchApp: () => ipcRenderer.invoke("relaunchApp"),
   getAppVersion: () => ipcRenderer.invoke("getAppVersion"),
+  listViews: (repoRoot) => ipcRenderer.invoke("views:list", repoRoot),
+  onViewRunaway: (cb) => {
+    const listener = (_e: unknown, ev: { id: string; cpuPct: number }) => cb(ev);
+    ipcRenderer.on("views:runaway", listener);
+    return () => ipcRenderer.removeListener("views:runaway", listener);
+  },
   checkForUpdate: () => ipcRenderer.invoke("checkForUpdate"),
   runUpgrade: () => ipcRenderer.invoke("runUpgrade"),
   onUpdateProgress: (cb) => {

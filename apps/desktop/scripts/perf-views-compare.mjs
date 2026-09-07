@@ -24,7 +24,23 @@ add("canvas<->world switch longtask max (plain)", "world_switch_longtask_max_ms"
 add("world → canvas right after an undock", "world_switch_after_undock.ms", "ms");
 add("… its longtask", "world_switch_after_undock.longtask_ms", "ms");
 add("xterm instances after world switches", "xterm_instances_after_world_switches");
+for (const scene of ["community_quiet", "community_streaming_idle", "community_docked_streaming_idle", "community_docked_typing", "community_dock_undock", "hostile_docked_typing"]) {
+  add(`${scene} · fps`, `${scene}.fps`);
+  add(`${scene} · longtask total`, `${scene}.longtask_total_ms`, "ms");
+  add(`${scene} · loop lag p95`, `${scene}.lag_p95_ms`, "ms");
+  add(`${scene} · frames drawn`, `${scene}.frames_drawn`);
+}
+add("switch → community (median)", "switch_to_community_median_ms", "ms");
+add("switch community → canvas (median)", "switch_community_to_canvas_median_ms", "ms");
+add("canvas<->community switch longtask max (plain)", "community_switch_longtask_max_ms", "ms");
+add("community → canvas right after an undock", "community_switch_after_undock.ms", "ms");
+add("… its longtask", "community_switch_after_undock.longtask_ms", "ms");
+add("xterm instances after community switches", "xterm_instances_after_community_switches");
 add("cpu % canvas quiet", "canvas_quiet_cpu.total_cpu_pct");
+add("cpu % community quiet", "community_quiet_cpu.total_cpu_pct");
+add("cpu % community streaming (undocked)", "community_streaming_cpu.total_cpu_pct");
+add("cpu % community docked + streaming", "community_docked_cpu.total_cpu_pct");
+add("cpu % hostile docked + streaming", "hostile_docked_cpu.total_cpu_pct");
 add("cpu % world quiet", "world_quiet_cpu.total_cpu_pct");
 add("cpu % world docked + streaming", "world_docked_cpu.total_cpu_pct");
 add("tiles typed into", "typed_into");

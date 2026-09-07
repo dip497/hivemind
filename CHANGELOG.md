@@ -7,6 +7,20 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Added
+- **Community views — sandboxed view plugins loaded at runtime.** Ship a workspace view as a
+  package (`hivemind-view.json` + one bundled entry), install it with `hive views install <dir>`
+  (`list` / `remove` too), and it appears in the view switcher and the ⌘E cycle after the
+  built-ins. The plugin runs in a sandboxed out-of-process iframe on its own `hm-view://<id>`
+  origin with a strict CSP: no `window.hive`, no node, no network. It talks to the app over one
+  validated MessagePort (`@hivemind/view-sdk`: projection with pre-resolved colours, per-tile
+  status, selection, reveal, a hole-punch for LIVE terminals — a real tile slot is placed where
+  the plugin asks, keys go to the shell, never to the plugin). Malformed traffic, floods and
+  runaway CPU disable a plugin for the session and drop you back on the canvas with every
+  session intact. Example plugin in `examples/views/orbit`.
+- Docking a tile in the World view (or a community view) and coming back to the canvas no
+  longer refits the terminal: a dock slot hands the tile back at its canvas size.
+
 ### Removed
 
 - **BREAKING: the hive MCP server is gone.** `packages/hive-mcp`, `hive mcp-stdio`, `hive add mcp`

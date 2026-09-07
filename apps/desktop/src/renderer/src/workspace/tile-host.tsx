@@ -209,22 +209,35 @@ export function surfaceEl(tileId: string): HTMLDivElement {
   return el;
 }
 
+/** The last size a NON-transient slot (a view's own arrangement) gave each
+ *  tile. A transient slot — a dock pane, a hole-punch overlay — parks the
+ *  surface back at this size, so the next switch to the arranging view finds
+ *  the tile already at its size and refits nothing (the "geometry of a parked
+ *  tile" gap: a terminal parked at the dock's size paid a ~300 ms WebGL refit
+ *  on the first switch back). */
+const stableSize = new Map<string, { w: number; h: number }>();
+
 /** Freeze a surface at `rect` and return it to the park. Deferred to a
  *  microtask so a view switch — old slot's cleanup + new slot's adoption in the
  *  SAME commit — moves the element straight from one slot to the other with no
  *  park hop in between: each DOM insertion of a `<webview>` re-creates its
  *  guest, so the hop cost a second page load and leaked a WebContents. */
-function parkSurface(tileId: string, from: HTMLElement, rect: { w: number; h: number } | null) {
+function parkSurface(tileId: string, from: HTMLElement, rect: { w: number; h: number } | null, transient: boolean) {
   queueMicrotask(() => {
     const el = surfaces.get(tileId);
     if (!el || el.parentElement !== from) return; // adopted elsewhere (or dropped) meanwhile
     // Hold the last slot size so nothing inside refits/resizes the PTY while
     // parked (a full-window park made every parked terminal reflow twice and
     // re-resize on every window resize). No size known (slot never laid out)
-    // → keep the fill-the-park sizing.
-    if (rect) el.style.cssText = `position:absolute;left:0;top:0;width:${Math.max(1, rect.w)}px;height:${Math.max(1, rect.h)}px;display:flex;flex-direction:column;`;
+    // → keep the fill-the-park sizing. Leaving a transient slot: restore the
+    // arranging view's size instead, and tell the body it changed (it refits
+    // NOW, while hidden — on the cheap renderer the selected tile uses).
+    if (rect && !transient) stableSize.set(tileId, rect);
+    const size = transient ? stableSize.get(tileId) ?? rect : rect;
+    if (size) el.style.cssText = `position:absolute;left:0;top:0;width:${Math.max(1, size.w)}px;height:${Math.max(1, size.h)}px;display:flex;flex-direction:column;`;
     park().appendChild(el);
-    el.dispatchEvent(new CustomEvent(SURFACE_PARKED));
+    const resized = !!(rect && size && (size.w !== rect.w || size.h !== rect.h));
+    el.dispatchEvent(new CustomEvent(SURFACE_PARKED, { detail: { resized } }));
   });
 }
 
@@ -235,6 +248,7 @@ function dropSurface(tileId: string) {
   el.remove();
   surfaces.delete(tileId);
   adoptedOnce.delete(tileId);
+  stableSize.delete(tileId);
 }
 
 /** True when a live surface exists for this tile (test/diagnostic hook). */
@@ -301,8 +315,18 @@ export function TileHost({ surfaces: list, selectedTileId, onSurfacePointerDown 
  *
  * The slot is `position:relative` and sized by the caller (`className`/`style`
  * — default fills its parent), and the surface is `absolute; inset:0` inside.
+ * `SURFACE_PARKED` carries `{ resized }` — true when the park restored a size
+ * other than the slot's (leaving a transient slot).
  */
-export function TileSlot({ tileId, className, style }: { tileId: string; className?: string; style?: CSSProperties }) {
+export function TileSlot({ tileId, className, style, transient = false }: {
+  tileId: string;
+  className?: string;
+  style?: CSSProperties;
+  /** A slot that is not the view's arrangement — a dock pane, an overlay. On
+   *  unmount the surface parks at the size the ARRANGING view last gave it,
+   *  not this slot's, so the switch back refits nothing. */
+  transient?: boolean;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   // Layout effect (not passive): adopt BEFORE paint so a freshly-switched view
   // never flashes an empty slot, and before the body's own effects measure.
@@ -326,8 +350,8 @@ export function TileSlot({ tileId, className, style }: { tileId: string; classNa
     return () => {
       ro.disconnect();
       // The move itself is deferred — see parkSurface.
-      parkSurface(tileId, slot, last);
+      parkSurface(tileId, slot, last, transient);
     };
-  }, [tileId]);
+  }, [tileId, transient]);
   return <div ref={ref} data-tile-slot={tileId} className={className ?? "relative w-full h-full"} style={style} />;
 }

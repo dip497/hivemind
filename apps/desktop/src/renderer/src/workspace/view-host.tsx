@@ -11,7 +11,7 @@
  */
 import { Component, Suspense, type ErrorInfo, type ReactNode } from "react";
 import { AlertTriangle } from "lucide-react";
-import { getView, listViews, type WorkspaceViewProps } from "./workspace-view";
+import { getView, useViews, type WorkspaceViewProps } from "./workspace-view";
 
 class ViewErrorBoundary extends Component<
   { viewId: string; onError: (viewId: string, err: Error) => void; children: ReactNode },
@@ -32,7 +32,7 @@ export function ViewFailure({ viewId, error, onSwitch, onRetry }: {
   onSwitch: (id: string) => void;
   onRetry: () => void;
 }) {
-  const others = listViews().filter((v) => v.id !== viewId);
+  const others = useViews().filter((v) => v.id !== viewId);
   return (
     <div className="flex-1 min-h-0 grid place-items-center p-6" role="alert" data-view-failure>
       <div className="max-w-[440px] rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] p-4 shadow-2xl">

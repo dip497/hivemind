@@ -14,7 +14,7 @@ import { Workspace } from "./Workspace";
 import { IssuePeek } from "./components/IssuePeek";
 import { NewIssueModal } from "./components/NewIssueModal";
 import { getNotificationSettings, setNotificationSettingsCache, subscribeNotificationSettings, saveNotificationSettings } from "./notification-settings";
-import { listViews, resolveViewId } from "./workspace/workspace-view";
+import { resolveViewId, useViews } from "./workspace/workspace-view";
 import { setViewMode, useViewMode } from "./workspace/view-mode-store";
 import type { NotificationSettings } from "../../shared/ipc";
 
@@ -446,7 +446,7 @@ function Switch({
 function ViewPrefs() {
   const mode = resolveViewId(useViewMode());
   const set = (m: string) => setViewMode(m);
-  const opts = listViews();
+  const opts = useViews();
   return (
     <div className="mt-4 rounded-lg border border-[var(--color-line2)] bg-[var(--color-bg3)] p-3">
       <div className="flex items-center justify-between gap-2">

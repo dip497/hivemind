@@ -86,6 +86,7 @@ import { notifyStatusFor } from "./hcp/notification-map.js";
 import { OutputRecorder } from "./hcp/output-recorder.js";
 import { readOrCreateToken, hcpSockPath } from "./hcp/token.js";
 import { HcpError } from "./hcp/protocol.js";
+import { handleViewProtocol, listViewPackages, registerViewScheme, startViewWatchdog } from "./view-packages.js";
 import { PipeManager } from "./hcp/pipes.js";
 import { readLastAssistantMessage } from "./hcp/transcript.js";
 import { toBareId, toPtyId } from "../shared/tile-id.js";
@@ -386,11 +387,13 @@ async function createWindow(): Promise<void> {
     }
   });
 
+  const stopViewWatchdog = startViewWatchdog(mainWindow);
   mainWindow.on("closed", () => {
     // Use the pre-captured wc — mainWindow.webContents getter throws after
     // the window is destroyed. unwatchAll just needs the reference to clean
     // up watchers keyed off it; it doesn't call methods on a dead object.
     try { unwatchAll(wc); } catch { /* watcher map already cleaned */ }
+    stopViewWatchdog();
     mainWindow = null;
   });
   wc.setWindowOpenHandler(({ url }) => {
@@ -1420,7 +1423,11 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     // range-requests (seek/loop) work.
     { scheme: "hivemedia", privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
   ]);
+  // Community view packages: hm-view://<id>/… served to sandboxed iframes.
+  registerViewScheme();
   app.whenReady().then(async () => {
+    handleViewProtocol();
+    ipcMain.handle("views:list", wrap(async (_e, repoRoot: string | null) => listViewPackages(repoRoot ? String(repoRoot) : null)));
     // Browser-tile extensions (prototype): load every UNPACKED extension in
     // <userData>/browser-extensions/<name>/ into the SAME session the <webview>
     // tiles use (partition "persist:browser"). Drop an unpacked extension dir

@@ -23,6 +23,7 @@ import type { WorkspaceViewProps } from "../../workspace-view";
 import type { TileStatusKind } from "../../../agent-status-bus";
 import { WORLD_LAYOUT, placeIslands, type WorldCamera } from "./world-layout";
 import { WorldScene, type WorldSceneEvents, type WorldStatus } from "./world-scene";
+import { bucketTileStatus } from "../../tile-status-bucket";
 
 // Chunk-load marker (test seam): set when THIS lazy chunk is evaluated, so the
 // e2e suite can prove three.js + the scene are not part of the default path
@@ -30,15 +31,7 @@ import { WorldScene, type WorldSceneEvents, type WorldStatus } from "./world-sce
 (window as Window & { __hivemindWorldLoaded?: true }).__hivemindWorldLoaded = true;
 
 /** Bus status → the scene's colour buckets. */
-export function toWorldStatus(s: TileStatusKind | null): WorldStatus {
-  switch (s) {
-    case "working": return "working";
-    case "idle": return "idle";
-    case "exited": return "exited";
-    case "blocked": case "permission": case "question": case "plan_review": case "awaiting_approval": return "blocked";
-    default: return "unknown";
-  }
-}
+export const toWorldStatus: (s: TileStatusKind | null) => WorldStatus = bucketTileStatus;
 
 // The retained scene (module state — one per renderer, like the tile park).
 let retained: { key: string | null; scene: WorldScene } | null = null;
@@ -206,7 +199,7 @@ export default function WorldView({ model, commands }: WorkspaceViewProps) {
             </button>
           </div>
           <div className="relative flex-1 min-h-0">
-            <TileSlot tileId={docked!} />
+            <TileSlot tileId={docked!} transient />
           </div>
         </div>
       )}

@@ -167,9 +167,25 @@ export interface UpdateStatus {
   ok: boolean;
 }
 
+/** One community view package as the main process sees it (see main/view-packages.ts). */
+export interface ViewPackageInfo {
+  id: string;
+  dir: string;
+  source: "user" | "repo";
+  manifest: { id: string; name: string; version: string; entry: string; protocol: number; permissions: string[]; assets?: string } | null;
+  error: string | null;
+  url: string | null;
+}
+
 // ── full IPC surface ──────────────────────────────────────────────────────
 
 export interface HiveIpc {
+  // ── community views ───────────────────────────────────────
+  /** Installed view packages (user dir + this repo's .hivemind/views), each
+   *  with its load URL or the reason it will not load. Rescans on every call. */
+  listViews(repoRoot: string | null): Promise<ViewPackageInfo[]>;
+  /** Main's watchdog saw a plugin frame peg a core for several samples. */
+  onViewRunaway(cb: (e: { id: string; cpuPct: number }) => void): () => void;
   // ── app version + self-update ─────────────────────────────
   /** This app's version string (from apps/desktop/package.json). */
   getAppVersion(): Promise<string>;

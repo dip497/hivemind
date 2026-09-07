@@ -598,7 +598,16 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       if (!streamQuietTimer) armQuietTimer(STREAM_QUIET_MS + 120);
       reconcileWebglSlots();
     };
-    const onParked = () => { parked = true; reconcileWebglSlots(); };
+    const onParked = (e: Event) => {
+      parked = true;
+      reconcileWebglSlots();
+      // Parked at a size other than the slot we just left (a dock pane hands
+      // the tile back at its arranging view's size): fit NOW, hidden, so the
+      // switch back finds it at size. The tile was the selected one in that
+      // slot, i.e. on the DOM renderer where a fit is cheap (a WebGL fit here
+      // would be the same flush the switch used to pay — moved, not saved).
+      if ((e as CustomEvent<{ resized?: boolean }>).detail?.resized) scheduleFitRef.current?.();
+    };
     surfaceEl?.addEventListener(SURFACE_ADOPTED, onAdopted);
     surfaceEl?.addEventListener(SURFACE_PARKED, onParked);
     registerWebglSlotClient({

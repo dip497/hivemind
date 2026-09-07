@@ -59,8 +59,9 @@ import { useGitPush, useGitPull } from "./queries";
 import { buildTileSurfaces } from "./workspace/tile-surfaces";
 import { TileHost } from "./workspace/tile-host";
 import { ViewHost } from "./workspace/view-host";
+import { loadCommunityViews } from "./workspace/views/community/registry";
 import {
-  FALLBACK_VIEW_ID, getView, resolveViewId,
+  FALLBACK_VIEW_ID, getView, resolveViewId, useViews,
   type SpawnOpts, type WorkspaceCommands, type WorkspaceViewModel,
 } from "./workspace/workspace-view";
 import { saveViewLayout, useDebouncedSave } from "./workspace/view-layout-store";
@@ -433,6 +434,15 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   // The stored id (view-mode-store, shared with Settings ▸ View and ⌘E) is a
   // plain string so a view can be added/removed without a schema change;
   // resolveViewId maps unknown ids to the fallback.
+  // Community views (sandboxed packages) come and go with the repo; the
+  // registry is an external store, so this also re-renders the switchers.
+  useViews();
+  useEffect(() => {
+    void loadCommunityViews(root);
+    const reload = () => { void loadCommunityViews(root); };
+    window.addEventListener("hivemind:reload-views", reload);
+    return () => window.removeEventListener("hivemind:reload-views", reload);
+  }, [root]);
   const activeViewId = resolveViewId(useViewMode());
   // Crash bookkeeping: which view failed (+ why) and a retry counter that
   // remounts the boundary. A failure in a non-fallback view auto-switches to the

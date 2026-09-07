@@ -25,34 +25,13 @@ import {
 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { ISLAND_SIZE, placeTiles, type WorldCamera } from "./world-layout";
+import { cssColorToHex } from "../../css-color";
 
 export type WorldStatus = "idle" | "working" | "blocked" | "exited" | "unknown";
 
 export interface WorldFrameInput { id: string; title: string; color: string; x: number; z: number }
 export interface WorldTileInput { id: string; frameId: string | null; name: string }
 
-/** Frame colours are CSS strings (oklch(...)) three.js cannot parse; resolve
- *  them through a 2D canvas fill, which Chromium understands, and cache. */
-const cssColorCache = new Map<string, number>();
-let cssCtx: CanvasRenderingContext2D | null | undefined;
-export function cssColorToHex(css: string): number {
-  const hit = cssColorCache.get(css);
-  if (hit !== undefined) return hit;
-  let hex = 0x8899aa;
-  try {
-    if (cssCtx === undefined) cssCtx = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
-    if (cssCtx) {
-      cssCtx.clearRect(0, 0, 1, 1);
-      cssCtx.fillStyle = "#000";
-      cssCtx.fillStyle = css; // an unparsable string leaves the previous value
-      cssCtx.fillRect(0, 0, 1, 1);
-      const [r, g, b] = cssCtx.getImageData(0, 0, 1, 1).data;
-      hex = ((r ?? 0) << 16) | ((g ?? 0) << 8) | (b ?? 0);
-    }
-  } catch { /* keep the fallback */ }
-  cssColorCache.set(css, hex);
-  return hex;
-}
 
 /** Status → block colour. Chosen to read at a glance on a dark ground. */
 const STATUS_COLOR: Record<WorldStatus, number> = {
