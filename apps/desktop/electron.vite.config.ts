@@ -124,6 +124,10 @@ export default defineConfig({
             if (id.includes("/@radix-ui/")) return "vendor-radix";
             if (id.includes("/@xyflow/")) return "vendor-xyflow";
             if (id.includes("/@xterm/")) return "vendor-xterm";
+            // three.js is only reached through the lazy World view; its own
+            // chunk keeps it out of the default path (renderer-chunks.test.ts
+            // asserts the entry chunk stays put and this chunk exists).
+            if (id.includes("/node_modules/three/") || /\/node_modules\/\.pnpm\/three@/.test(id)) return "vendor-three";
             if (id.includes("/@tanstack/")) return "vendor-tanstack";
             // @pierre/diffs main-thread surface; the worker bundle stays separate.
             if (id.includes("/@pierre/")) return "vendor-pierre";

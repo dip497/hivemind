@@ -25,6 +25,11 @@ const MARK = "UNSAVED_VIEW_SWITCH_MARKER";
 const toggleView = async () => {
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:toggle-view-mode")));
 };
+// Three views are registered (canvas → windows → world → canvas on ⌘E), so a
+// round trip back to the canvas is an explicit switch, not a second toggle.
+const toView = async (mode: string) => {
+  await page.evaluate((m) => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: m } })), mode);
+};
 const probe = (sel: string) =>
   page.evaluate((s) => (document.querySelector(s) as unknown as Record<string, unknown> | null)?.__probe ?? null, sel);
 // Tag the live canvas xterm. A React unmount+remount would create a brand-new
@@ -77,7 +82,7 @@ test("the terminal body is one instance, adopted by each view in turn — never 
   expect(await page.getAttribute("[data-active-view]", "data-active-view")).toBe("windows");
 
   // → Canvas. Same element again, back inside the react-flow node.
-  await toggleView();
+  await toView("canvas");
   await page.waitForSelector(".react-flow__node-terminal");
   await expect(page.locator(".xterm")).toHaveCount(1);
   expect(await probe(".react-flow__node-terminal .xterm")).toBe("kept");
@@ -110,7 +115,7 @@ test("the camera survives a canvas → windows → canvas round trip (no snap ba
   await toggleView();
   await page.waitForSelector('[role="tablist"]');
   await page.waitForTimeout(300);
-  await toggleView();
+  await toView("canvas");
   await page.waitForSelector(".react-flow__viewport");
   // Remount resumes from the live viewport, not react-flow's launch-time default.
   // react-flow applies `defaultViewport` once its container is measured (the
@@ -134,7 +139,7 @@ test("a minimized tab keeps its surface alive (parked, not unmounted) and comes 
   await rail.locator("button", { hasText: /shell/i }).first().click();
   await expect(page.locator('[role="tab"]')).toHaveCount(1);
   expect(await probe('[data-tile-id] .xterm')).toBe("kept");
-  await toggleView();
+  await toView("canvas");
   await page.waitForSelector(".react-flow__node-terminal");
 });
 
@@ -161,7 +166,7 @@ test("an unsaved editor buffer survives a view switch (same CodeMirror instance)
   expect(await probe('[data-tile-id] .cm-content')).toBe("cm");
   await expect(page.locator(".cm-content")).toHaveCount(1);
 
-  await toggleView();
+  await toView("canvas");
   await page.waitForSelector(".react-flow__node-workbench");
   await expect(page.locator(".react-flow__node-workbench .cm-content")).toContainText(MARK);
   expect(await probe(".react-flow__node-workbench .cm-content")).toBe("cm");

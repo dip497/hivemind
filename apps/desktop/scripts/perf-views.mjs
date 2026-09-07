@@ -166,23 +166,25 @@ log("drag");
 
 log("switches");
 // ── view switches ───────────────────────────────────────────────────────────
-const switchTo = (sel) => page.evaluate((s) => new Promise((res) => {
+// Explicit target (three views are registered: canvas / windows / world, so a
+// toggle no longer round-trips between two).
+const switchTo = (mode, sel) => page.evaluate(([m, s]) => new Promise((res) => {
   const t0 = performance.now();
   const long = []; let po;
   try { po = new PerformanceObserver((l) => { for (const e of l.getEntries()) long.push(e.duration); }); po.observe({ entryTypes: ["longtask"] }); } catch {}
-  window.dispatchEvent(new CustomEvent("hivemind:toggle-view-mode"));
+  window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: m } }));
   const check = () => {
     if (document.querySelector(s)) requestAnimationFrame(() => requestAnimationFrame(() => { po?.disconnect(); res({ ms: +(performance.now() - t0).toFixed(0), longtask_ms: +long.reduce((a, b) => a + b, 0).toFixed(0), xterms: document.querySelectorAll(".xterm").length }); }));
     else requestAnimationFrame(check);
   };
   check();
-}), sel);
+}), [mode, sel]);
 out.switches = [];
 for (let k = 0; k < 4; k++) {
   await page.waitForTimeout(700);
-  out.switches.push({ to: "windows", ...(await switchTo('[role="tablist"]')) });
+  out.switches.push({ to: "windows", ...(await switchTo("windows", '[role="tablist"]')) });
   await page.waitForTimeout(700);
-  out.switches.push({ to: "canvas", ...(await switchTo(".react-flow__node-terminal")) });
+  out.switches.push({ to: "canvas", ...(await switchTo("canvas", ".react-flow__node-terminal")) });
 }
 const med = (a) => { const b = [...a].sort((x, y) => x - y); return b[Math.floor(b.length / 2)] ?? 0; };
 out.switch_to_windows_median_ms = med(out.switches.filter((s) => s.to === "windows").map((s) => s.ms));
@@ -191,7 +193,7 @@ out.xterm_instances_after_switches = await page.locator(".xterm").count();
 
 log("windows");
 // ── windows view, streaming ─────────────────────────────────────────────────
-await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:toggle-view-mode")));
+await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "windows" } })));
 await page.waitForSelector('[role="tablist"]');
 await page.waitForTimeout(700);
 out.windows_streaming_idle = await sample(4000);

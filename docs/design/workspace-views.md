@@ -300,22 +300,55 @@ switch back). Likewise `FrameState` still carries `x/y/w/h` on the core record.
   `CANVAS_LAYOUT.version` to 2 with a migrate).
 - Commands grow only as views need them (`renameTile`, `openFile`, …).
 
-### Phase 3 — small Three.js demo view (built-in, privileged)
+### Phase 3 — the World view (built-in, privileged) — as built
 
-Register a third built-in plugin `"world"` behind a feature flag:
+Shipped as the third built-in plugin, `"world"` (`workspace/views/world/`):
 
-- A WebGL scene (three + `CSS3DRenderer` for slots). One structure per frame
-  (a building / hab module) laid out on a grid, one object per tile inside it;
-  colour and animation driven by `agent-status-bus` (working = pulsing,
-  blocked = red beacon, exited = dark).
-- Selecting an object → `commands.selectTile`; the selected tile's `<TileSlot>`
-  is rendered on a `CSS3DObject` facing the camera (one live terminal in the
-  scene at a time keeps it cheap; the rest show status). Double-click →
-  `commands.focusTile` moves the camera.
-- Layout blob: camera pose + per-frame plot coordinates, version 1, `initial`
-  auto-placing frames on a spiral so it works on first open.
-- Dependency note: `three` is a new renderer dependency; lazy-load the plugin
-  chunk so canvas/windows users pay nothing.
+- **Scene** (`world-scene.ts`, plain three.js, no React): one island per frame
+  (a plate + a building tinted with the frame colour) auto-placed on a square
+  spiral (`world-layout.ts`, `placeIslands`), one block per tile on the island's
+  grid (`placeTiles`). Block colour = agent status through
+  `commands.subscribeTileStatus` — one subscription per block, one repaint per
+  transition, never a scene rebuild. Hover shows the tile name (a DOM label);
+  orbit / pan / zoom via `OrbitControls` with damping OFF.
+- **Docking**: click a block → `commands.selectTile` + a `<TileSlot>` in a DOM
+  panel over the WebGL canvas (`data-world-dock`). One slot at most; every other
+  tile stays parked. Esc undocks unless the docked terminal has the keyboard
+  (Esc is a TUI interrupt) — then × / a header click first. Click an island →
+  the camera flies to it in one step (no tween loop). A selection that changes
+  while the world is up (rail, an agent's `tile.focus`) docks that tile; the
+  selection you arrive with is left alone (entering shows the map).
+- **Render on demand**: `invalidate()` schedules at most one frame; only camera
+  change, status change, hover change, dock/undock and resize invalidate.
+  Nothing renders while `document.hidden` (one catch-up frame on return); the
+  view unmounts on every switch, and `dispose()` releases renderer, geometry,
+  materials and listeners. The e2e suite reads the scene's frame counter to
+  prove no frames are drawn while nothing changes.
+- **Lazy**: `component: lazy(() => import("./WorldView"))`; three.js is forced
+  into `vendor-three-*.js` by `manualChunks`, the view into `WorldView-*.js`.
+  `renderer-chunks.test.ts` pins the entry chunk size (baseline + 4%) and asserts
+  the three chunk exists and is not statically imported.
+- **Layout blob**: `useViewLayout` `"world"` v1 — camera pose + island spots.
+
+#### What the World view needed that the contract did not provide
+
+This list is the input for the isolated community plugin API (phase 4): each row
+is something a plugin outside the privileged renderer will need the host to
+carry across the boundary, or to do on its behalf.
+
+| need | how the World view got it | what phase 4 has to offer |
+|---|---|---|
+| **Live status per tile** | Not on the model (a ~1 Hz tick must not re-render bodies). Added `commands.subscribeTileStatus(tileId, cb)` + `tileStatus(id)` backed by the awareness bus. | A per-tile status stream over the `MessagePort` (subscribe/unsubscribe by id), replaying the last value. |
+| **Frame colour as a number** | `FrameState.color` is a CSS string (`oklch(...)`) three.js cannot parse; resolved through a 2D-canvas fill (`cssColorToHex`). | Send colours pre-resolved (hex) in the projection, or document the CSS form. |
+| **Display names** | `model.layerTiles[].name` (renames + agent titles resolved by the runtime) — read through a ref so title churn never triggers a reconcile. | The projection carries resolved names; name updates must be separable from structural updates. |
+| **Membership + structure only** | The scene reconciles from `frames`, `tiles`, `frameOf` — `agentTitles` is deliberately not a dependency. | Structural updates (frames/tiles/membership) as their own message type. |
+| **A live surface inside the scene** | A real `<TileSlot>` in a DOM overlay; the slot fills the panel through the host's adopted-surface CSS. | The hole-punch: the plugin declares a screen rect, the host positions the slot. `projectTile()` already yields the rect a plugin would send. |
+| **Selection coming from elsewhere** | `model.selectedTileId` — with a view-side rule to ignore the selection you arrive with. | Selection is host state; the projection must say whether a selection is new since the plugin mounted. |
+| **Fly-to / focus semantics** | `commands.focusTile` is defined by the canvas; the world does its own camera move and calls `selectFrame`. | Plugins own their camera; the host only asks "reveal this tile" and the plugin answers with a rect. |
+| **View switching in tests / tools** | ⌘E order is registration order, so a third view changed every "toggle back" round trip; `hivemind:set-view-mode` became the explicit way to target a view (specs + perf harness). | The host exposes explicit `setView(id)`; cycle order is a host concern. |
+| **Assets** | None: procedural geometry, no textures/fonts. | Plugins that ship assets need a manifest-declared asset path served into the iframe. |
+| **Crash isolation** | The ViewHost boundary + a test seam that throws in render. | An iframe crash is a process/iframe reload, not a React boundary; the host must detect and fall back the same way. |
+| **Perf visibility** | `frameCount` on the scene (test seam) to prove render-on-demand. | A plugin-side "frames drawn" counter the host can read for its own budget checks. |
 
 ### Phase 4 — isolated community plugins
 
