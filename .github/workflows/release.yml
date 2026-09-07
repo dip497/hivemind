@@ -21,6 +21,11 @@ on:
         description: "Tag/version to publish (e.g. v0.1.0)"
         required: true
         default: "v0.0.1"
+      publish:
+        description: "Create the GitHub Release? 'false' = build the assets only (use this to smoke-test a platform's build)"
+        required: false
+        default: "false"
+        type: string
 
 permissions:
   contents: write  # needed to create releases + upload assets
@@ -223,6 +228,10 @@ jobs:
   publish:
     name: publish github release
     needs: [build-linux, build-macos]
+    # A tag push always publishes. A MANUAL run only publishes when it explicitly
+    # asks to — the default is build-only, so dispatching to smoke-test a build
+    # can never cut an accidental release.
+    if: github.event_name != 'workflow_dispatch' || inputs.publish == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Download all build artifacts
