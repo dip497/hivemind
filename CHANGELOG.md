@@ -32,6 +32,14 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - `@hivemind/cli`'s `build` script no longer hardcodes `--target=bun-linux-x64`; it
   compiles for the host, so the same command produces the right binary on every runner.
 
+### Fixed
+
+- **A failed desktop-app download no longer strands you on a CLI-only install** (Linux
+  too, not just the new macOS path). `install.sh` stamped `.installed-version` even when
+  the AppImage download failed or came back empty, so the `hivemind upgrade` the warning
+  tells you to re-run short-circuited on "already on $TAG" and never retried. Only a
+  successful app install stamps now.
+
 ## [1.16.0] — 2026-09-03
 
 ### Fixed
