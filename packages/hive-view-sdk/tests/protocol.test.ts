@@ -16,6 +16,7 @@ describe("parsePluginMessage", () => {
       { type: "unsubscribeStatus", tileId: "t1" },
       { type: "surfaceRects", rects: [{ tileId: "t1", x: 1, y: 2, w: 3, h: 4 }] },
       { type: "surfaceRects", rects: [] },
+      { type: "surfaceRects", rects: [{ tileId: "t1", x: 1, y: 2, w: 3, h: 4, chrome: "none" }] },
       { type: "revealed", requestId: 3, rect: null },
       { type: "revealed", requestId: 3, rect: { x: 0, y: 0, w: 1, h: 1 } },
       { type: "framesDrawn", count: 0 },
@@ -41,6 +42,7 @@ describe("parsePluginMessage", () => {
       { type: "surfaceRects", rects: [{ tileId: "t", x: NaN, y: 0, w: 1, h: 1 }] },
       { type: "surfaceRects", rects: [{ tileId: "t", x: 0, y: 0, w: 1, h: 1 }, { tileId: "t", x: 0, y: 0, w: 1, h: 1 }] },
       { type: "surfaceRects", rects: Array.from({ length: MAX_SURFACE_RECTS + 1 }, (_, i) => ({ tileId: `t${i}`, x: 0, y: 0, w: 1, h: 1 })) },
+      { type: "surfaceRects", rects: [{ tileId: "t1", x: 1, y: 2, w: 3, h: 4, chrome: "sidebar" }] },
       { type: "revealed", requestId: "3", rect: null },
       { type: "framesDrawn", count: -1 },
       { type: "layout", data: "x".repeat(LAYOUT_MAX_BYTES + 1) },
@@ -68,6 +70,8 @@ describe("parseHostMessage", () => {
     expect(parseHostMessage({ type: "status", tileId: "t", status: "purple" }).ok).toBe(false);
     expect(parseHostMessage({ type: "selection", tileId: null, frameId: null, fresh: false }).ok).toBe(true);
     expect(parseHostMessage({ type: "selection", tileId: null, frameId: null }).ok).toBe(false);
+    expect(parseHostMessage({ type: "undock", tileId: "t1" }).ok).toBe(true);
+    expect(parseHostMessage({ type: "undock" }).ok).toBe(false);
     expect(parseHostMessage({ type: "bogus" }).ok).toBe(false);
   });
 });

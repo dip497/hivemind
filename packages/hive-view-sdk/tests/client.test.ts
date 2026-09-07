@@ -63,6 +63,22 @@ describe("view-sdk client", () => {
     expect(inbox.filter((m) => m.type === "surfaceRects")).toEqual([{ type: "surfaceRects", rects: [{ tileId: "t1", x: 1, y: 3, w: 10, h: 10 }] }]);
   });
 
+  test("undock from the host drops the rect on the client and fires the event", async () => {
+    const { client, inbox, send } = await scriptedHost();
+    client.setSurfaceRects([{ tileId: "t1", x: 0, y: 0, w: 10, h: 10, chrome: "none" }, { tileId: "t2", x: 20, y: 0, w: 10, h: 10 }]);
+    const seen: string[] = [];
+    client.on("undock", ({ tileId }) => seen.push(tileId));
+    send({ type: "undock", tileId: "t1" });
+    await tick();
+    expect(seen).toEqual(["t1"]);
+    // Re-sending the remaining rect is a no-op (the client already forgot t1) …
+    client.setSurfaceRects([{ tileId: "t2", x: 20, y: 0, w: 10, h: 10 }]);
+    await tick();
+    expect(inbox.filter((m) => m.type === "surfaceRects")).toHaveLength(1);
+    // … and the first send carried the chrome flag through.
+    expect((inbox.find((m) => m.type === "surfaceRects") as { rects: unknown[] }).rects[0]).toEqual({ tileId: "t1", x: 0, y: 0, w: 10, h: 10, chrome: "none" });
+  });
+
   test("reveal round-trips through the handler; malformed host messages are dropped", async () => {
     const { client, inbox, send } = await scriptedHost();
     client.onReveal((id) => (id === "t1" ? { x: 5, y: 6, w: 7, h: 8 } : null));

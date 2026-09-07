@@ -118,6 +118,29 @@ export interface WorkspaceViewPlugin {
   /** Built-ins run in the renderer; community views run in a sandboxed iframe
    *  (workspace/views/community). Default "builtin". */
   source?: "builtin" | "community";
+  /** Host chrome the runtime draws OVER this view (workspace/host-chrome.tsx).
+   *  Partial: see `resolveChrome` for the defaults. */
+  chrome?: Partial<ViewChrome>;
+}
+
+/** What the workspace runtime renders around a view, whatever the view is. */
+export interface ViewChrome {
+  /** Where the tool island (spawn / frame / browser / appearance) sits.
+   *  "hidden" still leaves a small collapsed handle — a view can never strand
+   *  the user without a way to spawn. */
+  island: "top" | "bottom" | "hidden";
+  /** Mount the animated wallpaper layer (and frost tile content) under this
+   *  view. Off for views that paint their own world (World, community): the
+   *  wallpaper would be invisible under an opaque scene and its animation and
+   *  glass blur would still cost every frame. */
+  wallpaper: boolean;
+}
+
+/** A view's chrome with the defaults filled in: a compact bottom island and
+ *  no wallpaper — the safe choice for a view that draws its own scene. The
+ *  built-ins opt into their own placement + wallpaper explicitly. */
+export function resolveChrome(plugin: Pick<WorkspaceViewPlugin, "chrome"> | null | undefined): ViewChrome {
+  return { island: plugin?.chrome?.island ?? "bottom", wallpaper: plugin?.chrome?.wallpaper ?? false };
 }
 
 // ── registry ─────────────────────────────────────────────────────────────────

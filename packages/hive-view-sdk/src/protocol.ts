@@ -27,7 +27,10 @@ const STATUSES: readonly ViewStatus[] = ["unknown", "idle", "working", "blocked"
 export interface ViewFrame { id: string; title: string; /** `#rrggbb` */ color: string }
 export interface ViewTile { id: string; frameId: string | null; kind: string; name: string }
 export interface ViewRect { x: number; y: number; w: number; h: number }
-export interface SurfaceRect extends ViewRect { tileId: string }
+/** `chrome` (protocol 1.1, additive): "bar" (default) lets the host draw its
+ *  thin slot bar — name, status, pop-out, undock — on the surface; "none"
+ *  leaves the whole rect to the surface (the plugin then owns undocking). */
+export interface SurfaceRect extends ViewRect { tileId: string; chrome?: "bar" | "none" }
 /** Host colours resolved to `#rrggbb` (keys are the CSS variables minus `--color-`). */
 export interface ViewTheme { colors: Record<string, string> }
 
@@ -46,7 +49,10 @@ export type HostMessage =
   | { type: "reveal"; requestId: number; tileId: string }
   | { type: "resize"; w: number; h: number }
   | { type: "visibility"; visible: boolean }
-  | { type: "theme"; theme: ViewTheme };
+  | { type: "theme"; theme: ViewTheme }
+  /** The user undocked a surface from the host's bar (or Shift+Esc): the
+   *  host has already released the tile; drop the rect on your side. */
+  | { type: "undock"; tileId: string };
 
 // ── plugin → host ───────────────────────────────────────────────────────────
 
@@ -142,8 +148,10 @@ export function parsePluginMessage(raw: unknown): ParseResult<PluginMessage> {
         if (!isRect(r) || !isId((r as SurfaceRect).tileId)) return bad("each rect needs tileId,x,y,w,h numbers");
         if (seen.has((r as SurfaceRect).tileId)) return bad("duplicate tileId");
         seen.add((r as SurfaceRect).tileId);
+        const c = (r as SurfaceRect).chrome;
+        if (c !== undefined && c !== "bar" && c !== "none") return bad("chrome must be \"bar\" or \"none\"");
       }
-      return { ok: true, msg: { type: "surfaceRects", rects: (raw.rects as SurfaceRect[]).map((r) => ({ tileId: r.tileId, x: r.x, y: r.y, w: r.w, h: r.h })) } };
+      return { ok: true, msg: { type: "surfaceRects", rects: (raw.rects as SurfaceRect[]).map((r) => ({ tileId: r.tileId, x: r.x, y: r.y, w: r.w, h: r.h, ...(r.chrome ? { chrome: r.chrome } : {}) })) } };
     }
     case "revealed":
       if (!isNum(raw.requestId)) return bad("requestId must be a number");
@@ -189,6 +197,8 @@ export function parseHostMessage(raw: unknown): ParseResult<HostMessage> {
       return typeof raw.visible === "boolean" ? { ok: true, msg: raw as unknown as HostMessage } : bad("visible must be a boolean");
     case "theme":
       return isObj(raw.theme) ? { ok: true, msg: raw as unknown as HostMessage } : bad("theme must be an object");
+    case "undock":
+      return isId(raw.tileId) ? { ok: true, msg: raw as unknown as HostMessage } : bad("tileId must be a string");
     default:
       return { ok: false, reason: `unknown message type ${JSON.stringify(raw.type)}` };
   }

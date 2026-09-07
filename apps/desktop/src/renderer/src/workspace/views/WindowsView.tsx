@@ -133,7 +133,7 @@ export function WindowsView({ model, commands }: WorkspaceViewProps) {
         />
       )}
 
-      <div className="relative flex-1 min-h-0 flex flex-col bg-[var(--color-bg)]">
+      <div className="relative flex-1 min-h-0 flex flex-col bg-[var(--color-bg)]" data-windows-view>
         {/* Single tab strip — one tab per non-minimized tile, tinted by frame.
             `pr-24` keeps the strip clear of App's top-right New/Settings cluster
             (the view switcher lives in Settings + ⌘E). */}
@@ -240,4 +240,5 @@ export const windowsViewPlugin: WorkspaceViewPlugin = {
   hint: "Tabs + one active tile",
   icon: PanelsTopLeft,
   component: WindowsView,
+  chrome: { island: "bottom", wallpaper: true },
 };

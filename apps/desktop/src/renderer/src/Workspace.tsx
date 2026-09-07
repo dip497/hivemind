@@ -32,7 +32,7 @@ import { statusOf, setWaitStatus, setSubagentBusy, setNotify, setTurnState, type
 import { frameAtPoint } from "./frame-layout";
 import { Wallpaper } from "./Wallpaper";
 import { CanvasOverlay } from "./CanvasOverlay";
-import { applyTheme } from "./theme-store";
+import { applyTheme, setWallpaperActive } from "./theme-store";
 import type { PinRect } from "./workspace/tile-surfaces";
 import { clampAnchor } from "./pin-anchor";
 import type { TileKind } from "./tile-kinds";
@@ -59,9 +59,10 @@ import { useGitPush, useGitPull } from "./queries";
 import { buildTileSurfaces } from "./workspace/tile-surfaces";
 import { TileHost } from "./workspace/tile-host";
 import { ViewHost } from "./workspace/view-host";
+import { HostChrome } from "./workspace/host-chrome";
 import { loadCommunityViews } from "./workspace/views/community/registry";
 import {
-  FALLBACK_VIEW_ID, getView, resolveViewId, useViews,
+  FALLBACK_VIEW_ID, getView, resolveChrome, resolveViewId, useViews,
   type SpawnOpts, type WorkspaceCommands, type WorkspaceViewModel,
 } from "./workspace/workspace-view";
 import { saveViewLayout, useDebouncedSave } from "./workspace/view-layout-store";
@@ -444,6 +445,9 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     return () => window.removeEventListener("hivemind:reload-views", reload);
   }, [root]);
   const activeViewId = resolveViewId(useViewMode());
+  // Host chrome + wallpaper policy come from the active view's preference.
+  const chrome = resolveChrome(activeViewId ? getView(activeViewId) : null);
+  useEffect(() => { setWallpaperActive(chrome.wallpaper); }, [chrome.wallpaper]);
   // Crash bookkeeping: which view failed (+ why) and a retry counter that
   // remounts the boundary. A failure in a non-fallback view auto-switches to the
   // fallback with a toast; a failure IN the fallback shows the failure panel.
@@ -930,10 +934,11 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     <div className="relative h-full w-full flex flex-col" data-active-view={activeViewId ?? ""}>
       {/* Live wallpaper — fixed full-window layer behind ALL app content (z-index
           -1), so it shows through every view AND the panels beside it. */}
-      <Wallpaper />
+      {chrome.wallpaper && <Wallpaper />}
       {/* Custom OVERLAY media — user's transparent foreground plane OVER the
-          tiles. Fixed full-window + pointer-events:none. */}
-      <CanvasOverlay />
+          tiles. Fixed full-window + pointer-events:none. Same policy as the
+          wallpaper: never over a view that paints its own scene. */}
+      {chrome.wallpaper && <CanvasOverlay />}
       {/* The active view plugin, behind its crash boundary. Bodies are NOT in
           this subtree (TileHost below), so a view crash or switch never touches
           a live session. */}
@@ -945,6 +950,21 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
         failed={viewFailure && viewFailure.id === activeViewId ? viewFailure.error : null}
         onSwitch={switchView}
         onRetry={() => { setViewFailure(null); setViewAttempt((n) => n + 1); }}
+      />
+      {/* Host chrome over EVERY view: the tool island + the appearance drawer.
+          Outside the ViewHost boundary, so a crashed view still has them. */}
+      <HostChrome
+        chrome={chrome}
+        repoPath={repoPath}
+        onToggle={spawnVis}
+        agentSel={agentSel}
+        onAgentChange={setAgentSel}
+        onSpawnAgent={spawnAgent}
+        onFrame={addFrame}
+        onBrowser={spawnBrowser}
+        updateAvailable={updateAvailable}
+        onUpgrade={() => onUpgrade?.()}
+        upgrading={upgrading}
       />
       {/* Shared-layer selection: a body's native pointerdown selects its tile
           (React synthetic events from a portaled body never reach a view's own

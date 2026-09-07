@@ -224,12 +224,29 @@ const listeners = new Set<() => void>();
 
 /** Push the current theme into the DOM: CSS vars on <html> + the `glass-on`
  *  class. Idempotent — safe to call on every change and once on boot. */
+/** Whether the ACTIVE VIEW mounts the wallpaper (Workspace sets it from the
+ *  view's chrome preference). Glass and frosted content only make sense over
+ *  a wallpaper; under a view that paints its own scene (World, a community
+ *  plugin) panels and terminals are the opaque theme, whatever the user's
+ *  glass setting is — the setting itself is untouched. Not persisted. */
+let wallpaperActive = true;
+export function setWallpaperActive(on: boolean): void {
+  if (on === wallpaperActive) return;
+  wallpaperActive = on;
+  applyTheme(state);
+  for (const l of listeners) l();
+}
+export function isWallpaperActive(): boolean { return wallpaperActive; }
+/** Glass as it applies right now: the user's setting AND a wallpaper to frost over. */
+export function effectiveGlass(t: ThemeState = state): boolean { return t.glass && wallpaperActive; }
+
 export function applyTheme(t: ThemeState = state): void {
   if (typeof document === "undefined") return;
   const root = document.documentElement;
-  root.classList.toggle("glass-on", t.glass);
+  const glass = effectiveGlass(t);
+  root.classList.toggle("glass-on", glass);
   root.classList.toggle("wp-static", !t.animate);
-  root.classList.toggle("content-glass", t.glass && t.contentGlass);
+  root.classList.toggle("content-glass", glass && t.contentGlass);
   root.style.setProperty("--glass-blur", `${t.blur}px`);
   // color-mix wants a percentage; opacity is the SOLID fraction of the panel.
   root.style.setProperty("--glass-opacity", `${Math.round(t.opacity * 100)}%`);

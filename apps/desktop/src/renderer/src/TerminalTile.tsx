@@ -14,7 +14,7 @@ import { publishStatus, clearStatus, noteOutput, revalidate, type TileStatusKind
 import { SUBMIT_DELAY_MS, SPAWN_SUBMIT_RETRY_MS, deliversPromptViaArgv } from "../../shared/agent-io";
 import { Pencil, GripVertical } from "lucide-react";
 import { webUrlForInternalBrowser } from "./browser-open";
-import { useTheme, getTheme } from "./theme-store";
+import { useTheme, getTheme, effectiveGlass, type ThemeState } from "./theme-store";
 import { FullscreenShell, useReparentFullscreen } from "./tile-fullscreen";
 import { HeaderPinButton, type PinRect } from "./canvas-nodes";
 import { SURFACE_ADOPTED, SURFACE_PARKED } from "./workspace/tile-host";
@@ -73,8 +73,12 @@ const TERM_THEME = {
  *  single tint lives on the tile ROOT (.hm-term-root, like every other tile) and
  *  the whole body — including the host's padding band — reads as one uniform tint
  *  (no "gap" frame). Else the opaque aubergine. */
-const termBgFor = (t: { glass: boolean; contentGlass: boolean }): string =>
-  t.glass && t.contentGlass ? "rgba(0,0,0,0)" : TERM_THEME.background;
+// Frost-tile-content applies only while the active view mounts the wallpaper
+// (theme-store.effectiveGlass): a terminal docked in the World or a plugin
+// scene is the opaque theme background, never a window onto a wallpaper that
+// is not there.
+const termBgFor = (t: ThemeState): string =>
+  effectiveGlass(t) && t.contentGlass ? "rgba(0,0,0,0)" : TERM_THEME.background;
 
 // ── render-quality diagnostics ───────────────────────────────────────────────
 // A toggleable HUD (Ctrl/Cmd+Shift+D, shared across tiles) that surfaces the

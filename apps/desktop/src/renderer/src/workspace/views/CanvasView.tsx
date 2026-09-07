@@ -23,8 +23,8 @@ import {
 } from "@xyflow/react";
 import { Eye, EyeOff, LayoutGrid } from "lucide-react";
 import { LayersPanel } from "../../LayersPanel";
-import { ToolIsland, ZoomIsland } from "../../canvas-islands";
-import { ThemeCustomizer } from "../../ThemeCustomizer";
+import { ZoomIsland } from "../../canvas-islands";
+import { setChromeSuppressed } from "../chrome-store";
 import { CanvasEmptyState, Toasts } from "../../canvas-overlays";
 import { nodeTypes, PinnedLayerContext } from "../../canvas-nodes";
 import { pipeEdgeTypes } from "../../canvas-pipe-edge";
@@ -170,8 +170,9 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
   // panel) for a clean full-canvas view. The eye toggle stays so you can restore.
   const [zen, setZen] = useState<boolean>(() => localStorage.getItem("hivemind:zen") === "1");
   useEffect(() => { localStorage.setItem("hivemind:zen", zen ? "1" : "0"); }, [zen]);
+  // Zen hides the host chrome (island + drawer) too; restore it on unmount.
+  useEffect(() => { setChromeSuppressed(zen); return () => setChromeSuppressed(false); }, [zen]);
   // Appearance customizer (glass / wallpaper / accent).
-  const [customizerOpen, setCustomizerOpen] = useState(false);
 
   const isEmpty = nodes.length === 0;
 
@@ -502,24 +503,9 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
           <ViewportSnap req={snapReq} activeRef={inMomentumRef} />
           <ViewportMirror target={currentViewportRef} />
 
-          {/* Excalidraw-style floating tool island — top-center. Hidden in zen. */}
-          {!zen && (
-          <Panel position="top-center" className="!m-0 !mt-3">
-            <ToolIsland
-              repoPath={repoPath}
-              onToggle={(k) => spawnVis(k)}
-              agentSel={rt.agentSel}
-              onAgentChange={rt.setAgentSel}
-              onSpawnAgent={(a) => rt.spawnAgent(a)}
-              onFrame={addFrame}
-              onBrowser={rt.spawnBrowser}
-              onTheme={() => setCustomizerOpen((o) => !o)}
-              updateAvailable={rt.updateAvailable}
-              onUpgrade={rt.onUpgrade}
-              upgrading={rt.upgrading}
-            />
-          </Panel>
-          )}
+          {/* The tool island is host chrome now (workspace/host-chrome.tsx),
+              drawn by the runtime over every view; zen suppresses it through
+              chrome-store (effect above). */}
 
           {/* Background-event toasts — BOTTOM-right (top-right collides with the
               Board/List/Canvas switcher). An agent that goes blocked or finishes
@@ -578,7 +564,6 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
             onInitWorkspace={rt.onInitWorkspace}
           />
         )}
-        <ThemeCustomizer open={customizerOpen} onClose={() => setCustomizerOpen(false)} />
         </div>
       </div>
     </PinnedLayerContext.Provider>
@@ -591,4 +576,5 @@ export const canvasViewPlugin: WorkspaceViewPlugin = {
   hint: "Infinite board of tiles",
   icon: LayoutGrid,
   component: CanvasView,
+  chrome: { island: "top", wallpaper: true },
 };

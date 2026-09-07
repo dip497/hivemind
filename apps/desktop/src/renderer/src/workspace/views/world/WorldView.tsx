@@ -16,8 +16,8 @@
  *    `useViewLayout("world", v1)`, debounced.
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { X } from "lucide-react";
 import { TileSlot } from "../../tile-host";
+import { SlotBar } from "../../slot-chrome";
 import { useViewLayout } from "../../view-layout-store";
 import type { WorkspaceViewProps } from "../../workspace-view";
 import type { TileStatusKind } from "../../../agent-status-bus";
@@ -184,20 +184,11 @@ export default function WorldView({ model, commands }: WorkspaceViewProps) {
           role="dialog"
           aria-label={`Docked: ${dockedName}`}
         >
-          {/* Focusable: a click here must TAKE the keyboard from the docked
-              terminal so Esc reaches the panel. A plain div would blur to
-              <body>, and the terminal's blur handler reclaims focus from
-              body/canvas chrome on the next frame (a race the user loses). */}
-          <div
-            tabIndex={-1}
-            className="flex h-8 shrink-0 items-center gap-2 border-b border-[var(--color-line)] bg-[var(--color-bg2)] px-3 text-[12px] text-[var(--color-fg)] outline-none"
-          >
-            <span className="truncate">{dockedName}</span>
-            <kbd className="ml-auto font-mono text-[9.5px] text-[var(--color-fg3)]">Esc</kbd>
-            <button onClick={undock} aria-label="Undock" className="grid h-6 w-6 place-items-center rounded hover:bg-[var(--color-bg3)]">
-              <X size={13} />
-            </button>
-          </div>
+          {/* The host's slot bar: name, status, pop-out, undock (Shift+Esc). Its
+              row is focusable, so a click there TAKES the keyboard from the
+              docked terminal and plain Esc reaches the panel (the terminal's
+              blur handler reclaims focus from <body>, never from a real target). */}
+          <SlotBar tileId={docked!} name={dockedName ?? docked!} commands={commands} onUndock={undock} />
           <div className="relative flex-1 min-h-0">
             <TileSlot tileId={docked!} transient />
           </div>

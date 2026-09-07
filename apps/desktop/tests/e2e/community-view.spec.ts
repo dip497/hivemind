@@ -23,14 +23,18 @@ const APP_DIR = process.cwd();
 const CLI = path.resolve(APP_DIR, "../cli/src/index.ts");
 const ORBIT = path.resolve(APP_DIR, "../../examples/views/orbit");
 const FIXTURES = path.join(APP_DIR, "tests/e2e/fixtures/views");
-const viewsDir = () => path.join(process.env.XDG_CONFIG_HOME!, "hivemind", "views");
+// Own profile (see host-chrome.spec.ts): the app resumes userData under XDG,
+// and the HCP socket the CLI reaches lives there too.
+const XDG = fs.mkdtempSync(path.join(os.tmpdir(), "hm-community-xdg-"));
+const ENV = { ...process.env, XDG_CONFIG_HOME: XDG } as Record<string, string>;
+const viewsDir = () => path.join(XDG, "hivemind", "views");
 
 /** The app's control-plane socket + token (isolated userData under this run's XDG);
  *  set once the app is up so `hive views install|remove` can ask it to rescan. */
 let hcpEnv: Record<string, string> = {};
 /** `hive … --json` as a subprocess; non-zero exits are part of the contract (parsed, not thrown). */
 const hive = (...args: string[]) => {
-  const r = spawnSync("bun", [CLI, ...args, "--json"], { cwd: repo, encoding: "utf8", env: { ...process.env, ...hcpEnv } });
+  const r = spawnSync("bun", [CLI, ...args, "--json"], { cwd: repo, encoding: "utf8", env: { ...ENV, ...hcpEnv } });
   try { return JSON.parse(r.stdout.trim()); } catch { throw new Error(`hive ${args.join(" ")} → exit ${r.status}\n${r.stdout}\n${r.stderr}`); }
 };
 const toView = (mode: string) => page.evaluate((m) => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: m } })), mode);
@@ -60,11 +64,11 @@ test.beforeAll(async () => {
     // on this loaded, GPU-less runner a spinning out-of-process frame gets so
     // little CPU that it reads 2–6 %, so the suite lowers the bar to prove the
     // main → renderer → disable → fallback path, not the number.
-    env: { ...process.env, HIVEMIND_VIEW_RUNAWAY_CPU: "1" },
+    env: { ...ENV, HIVEMIND_VIEW_RUNAWAY_CPU: "1" },
   });
   page = await app.firstWindow();
   page.on("console", (m) => { if (m.type() === "error" && !/Content Security Policy/.test(m.text())) console.log("[r.error]", m.text()); });
-  const userData = path.join(process.env.XDG_CONFIG_HOME!, "hivemind-dev");
+  const userData = path.join(XDG, "hivemind-dev");
   const sock = path.join(userData, "hcp.sock"), tokenFile = path.join(userData, "hcp.token");
   await expect.poll(() => fs.existsSync(sock) && fs.existsSync(tokenFile), { timeout: 20_000 }).toBe(true);
   hcpEnv = { HIVE_HCP_SOCK: sock, HCP_TOKEN: fs.readFileSync(tokenFile, "utf8").trim() };
@@ -80,6 +84,7 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   await app?.close();
   await fs.promises.rm(repo, { recursive: true, force: true }).catch(() => {});
+  await fs.promises.rm(XDG, { recursive: true, force: true }).catch(() => {});
 });
 
 test("an installed view is registered after the built-ins: ⌘E cycles canvas → windows → world → orbit → canvas", async () => {

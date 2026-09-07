@@ -14,7 +14,16 @@ import { toast } from "sonner";
 import { PROTOCOL_VERSION } from "@hivemind/view-sdk/protocol";
 import type { ViewPackageInfo } from "../../../../../shared/ipc";
 import { getView, registerView, unregisterView, listViews } from "../../workspace-view";
-import { makeCommunityView } from "./CommunityView";
+import { lazy, createElement, type ComponentType } from "react";
+import type { WorkspaceViewProps } from "../../workspace-view";
+
+// The host component is its own chunk (like the World view): nobody without
+// a community view installed pays for it, and the entry-chunk guard
+// (renderer-chunks.test.ts) stays meaningful.
+const CommunityViewLazy = lazy(() => import("./CommunityView").then((m) => ({ default: m.CommunityViewHost })));
+function makeCommunityView(pkg: ViewPackageInfo): ComponentType<WorkspaceViewProps> {
+  return function CommunityViewFor(props: WorkspaceViewProps) { return createElement(CommunityViewLazy, { pkg, ...props }); };
+}
 
 export interface CommunityLoadReport {
   packages: ViewPackageInfo[];

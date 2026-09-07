@@ -112,6 +112,7 @@ hm.on("structure", (m) => {
 hm.on("names", (m) => { for (const [id, n] of Object.entries(m.names)) names.set(id, n); if (hover) showLabel(); });
 hm.on("selection", (m) => { if (m.fresh && m.tileId && m.tileId !== docked) dock(m.tileId); });
 hm.on("resize", () => { if (docked) dock(docked); else invalidate(); });
+hm.on("undock", () => { docked = null; hm.commands.selectTile(null); invalidate(); }); // the host already released the tile
 hm.onReveal((tileId) => {
   layout(); // positions as of NOW (the next frame may not have drawn yet, e.g. right after an undock)
   const b = bodies.find((x) => x.tile.id === tileId);

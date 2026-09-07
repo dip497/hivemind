@@ -4,7 +4,7 @@
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import {
-  registerView, getView, listViews, resolveViewId, nextViewId, FALLBACK_VIEW_ID, _resetViewsForTest,
+  registerView, getView, listViews, resolveViewId, nextViewId, FALLBACK_VIEW_ID, _resetViewsForTest, resolveChrome,
   type WorkspaceViewPlugin,
 } from "../../src/renderer/src/workspace/workspace-view.ts";
 
@@ -51,4 +51,12 @@ test("re-registering an id replaces the plugin in place", () => {
   registerView(v2);
   assert.equal(getView("canvas")?.label, "Canvas v2");
   assert.equal(listViews().length, 1);
+});
+
+test("resolveChrome: a view that says nothing gets a bottom island and no wallpaper; explicit prefs win; hidden is a valid placement", () => {
+  assert.deepEqual(resolveChrome(undefined), { island: "bottom", wallpaper: false });
+  assert.deepEqual(resolveChrome({ chrome: {} }), { island: "bottom", wallpaper: false });
+  assert.deepEqual(resolveChrome({ chrome: { island: "top", wallpaper: true } }), { island: "top", wallpaper: true });
+  assert.deepEqual(resolveChrome({ chrome: { wallpaper: true } }), { island: "bottom", wallpaper: true });
+  assert.deepEqual(resolveChrome({ chrome: { island: "hidden" } }), { island: "hidden", wallpaper: false });
 });

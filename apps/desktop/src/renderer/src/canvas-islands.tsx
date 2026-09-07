@@ -22,8 +22,11 @@ export function ToolIsland({
   updateAvailable,
   onUpgrade,
   upgrading,
+  compact = false,
 }: {
   repoPath: string | null;
+  /** Tighter padding for the bottom placement over a scene (host-chrome). */
+  compact?: boolean;
   onToggle: (k: "tree" | "shell" | "diff" | "issues") => void;
   /** Currently-selected agent id (which the spawn button creates). */
   agentSel: string;
@@ -53,7 +56,7 @@ export function ToolIsland({
   }, [agentMenu]);
 
   return (
-    <div className="hm-island flex items-center gap-0.5 p-1.5">
+    <div className={`hm-island flex items-center gap-0.5 ${compact ? "p-1" : "p-1.5"}`} data-tool-island>
       <ToolButton label="Terminal" hint="1" onClick={() => onToggle("shell")}
         icon={<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M4 6l2 2-2 2M8 10h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>} />
       {/* Agent button — spawns the SELECTED agent; the ▾ opens a switcher. */}

@@ -641,7 +641,49 @@ frame counted. Plugin authors never touch `postMessage`.
 | what it CANNOT do | read terminal contents or keystrokes; reach the filesystem, network, PTYs, git, or another plugin; spawn an agent with a command line of its choosing; escape to the app's origin; run code in the host renderer; survive a disable within the session. |
 | install trust | `hive views install` copies and validates; it does not sign or scan. A repo-local `.hivemind/views` package is code from that checkout — same sandbox, same rules. |
 
-#### The example: Orbit (`examples/views/orbit`)
+#### Host chrome everywhere (milestone 6a)
+
+The real-display demo showed three things a plugin scene lacked: a way to
+spawn, chrome on a docked surface, and a sane background.
+
+- **The tool island is host chrome.** `workspace/host-chrome.tsx` renders
+  `ToolIsland` (shell / agent / explorer / diff / issues / frame / browser /
+  appearance / update) and the appearance drawer from the workspace runtime,
+  over the active view and outside the ViewHost boundary. A view declares
+  `chrome: { island: "top" | "bottom" | "hidden", wallpaper }` on its plugin;
+  `resolveChrome` fills the defaults (bottom, no wallpaper). Canvas keeps its
+  top-centre island; Windows, World and community views get a compact bottom
+  one. `hidden` still leaves a small wrench handle that expands the island — a
+  view can never strand the user without a way to spawn. The canvas's zen mode
+  suppresses the chrome through `chrome-store` and its eye button restores it.
+- **Docked-slot bar** (`workspace/slot-chrome.tsx`): on every surface the host
+  places for a non-arranging view — the World's dock pane, a community rect —
+  a 28 px bar with the tile name, a live status dot (per-tile subscription),
+  *pop out* (select + `focusTile` exact + switch to the canvas) and *undock*.
+  **Shift+Esc undocks even while the terminal has the keyboard** (plain Esc
+  belongs to a focused TUI). A plugin rect may say `chrome: "none"` (protocol
+  1.1, additive) to own the whole rect; an undock from the host's bar sends
+  the plugin `undock {tileId}` after releasing the tile, and the SDK client
+  forgets that rect on its side whether or not the plugin listens. A slot
+  flush with the top-right corner keeps its bar below App's Settings cluster.
+- **Wallpaper policy.** `Workspace` mounts the animated `Wallpaper` layer (and
+  the user's overlay media) only when the active view's chrome says
+  `wallpaper: true` (canvas, windows). Under the World or a plugin nothing is
+  mounted, and `theme-store.setWallpaperActive(false)` turns off the `glass-on`
+  / `content-glass` root classes and the terminal's transparent background
+  (`termBgFor` → the opaque theme background), so a docked terminal in a scene
+  is the terminal, not a window onto a wallpaper that is not there. The user's
+  glass setting itself is untouched and comes back with the canvas.
+  Measured (one branch run, same harness, load ~10): the World's quiet-scene
+  CPU went from 10.7–15 % (milestone 5 runs, wallpaper animating underneath an
+  opaque scene) to 0 %, and the Orbit quiet scene from 10.3–14.8 % to 0 %;
+  canvas and switch rows unchanged within noise (canvas streaming 9.7 fps,
+  typing 17.7 ms, switch → windows 322 / → canvas 356 ms vs 288–314 / 296–298).
+- **Chunking.** The community host is its own lazy chunk now (like the World),
+  so the entry-chunk guard keeps its meaning: 800 KB against the 786 KB
+  baseline after this milestone's chrome.
+
+
 
 Small enough to read in one sitting (`src/main.ts`, ~150 lines, 2D canvas, no
 framework): every frame is a sun, its tiles orbit it coloured by status, loose

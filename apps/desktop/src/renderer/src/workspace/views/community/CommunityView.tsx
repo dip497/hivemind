@@ -13,12 +13,13 @@
  * attributed to its iframe) disables it for the session; the registry then
  * resolves the active view to the fallback (canvas) with the sessions intact.
  */
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { PORT_HANDSHAKE, PROTOCOL_VERSION, type HostMessage, type SurfaceRect, type ViewPermission, type ViewTheme } from "@hivemind/view-sdk/protocol";
 import type { ViewPackageInfo } from "../../../../../shared/ipc";
 import type { WorkspaceViewProps } from "../../workspace-view";
 import { TileSlot } from "../../tile-host";
+import { SlotBar } from "../../slot-chrome";
 import { loadViewLayout, saveViewLayout, type ViewLayoutSpec } from "../../view-layout-store";
 import { cssColorToHexString } from "../../css-color";
 import { CommunityLink } from "./host-link";
@@ -42,12 +43,17 @@ function layoutSpec(pluginId: string): ViewLayoutSpec<unknown> {
   return { viewId: pluginId, version: 1, initial: () => null, migrate: () => null };
 }
 
-export function makeCommunityView(pkg: ViewPackageInfo): ComponentType<WorkspaceViewProps> {
+/** The host for one package. Rendered through the lazy wrapper in registry.ts
+ *  (`pkg` is fixed per registered view; the props are the view contract). */
+export function CommunityViewHost({ pkg, model, commands }: WorkspaceViewProps & { pkg: ViewPackageInfo }) {
   const manifest = pkg.manifest!;
   const url = pkg.url!;
-  const capabilities = manifest.permissions as ViewPermission[];
+  const capabilities = useMemo(() => manifest.permissions as ViewPermission[], [manifest]);
+  return <CommunityView pkg={pkg} url={url} manifest={manifest} capabilities={capabilities} model={model} commands={commands} />;
+}
 
-  return function CommunityView({ model, commands }: WorkspaceViewProps) {
+function CommunityView({ pkg, url, manifest, capabilities, model, commands }: WorkspaceViewProps & { pkg: ViewPackageInfo; url: string; manifest: NonNullable<ViewPackageInfo["manifest"]>; capabilities: ViewPermission[] }) {
+  {
     const { frames, tiles, frameOf, layerTiles, selectedTileId, selectedFrameId, layoutKey } = model;
     const rootRef = useRef<HTMLDivElement>(null);
     const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -203,6 +209,13 @@ export function makeCommunityView(pkg: ViewPackageInfo): ComponentType<Workspace
       return () => po?.disconnect();
     }, []);
 
+    // Undock from the host's bar (or Shift+Esc): release the tile NOW — the
+    // surface parks whether or not the plugin cooperates — and tell the plugin.
+    const undock = useCallback((tileId: string) => {
+      setRects((rs) => rs.filter((r) => r.tileId !== tileId));
+      send({ type: "undock", tileId });
+    }, [send]);
+
     // Test seam (same spirit as the World view's `__world`).
     useEffect(() => {
       const el = rootRef.current as (HTMLDivElement & { __community?: CommunityLink }) | null;
@@ -216,7 +229,8 @@ export function makeCommunityView(pkg: ViewPackageInfo): ComponentType<Workspace
     // dock — the common case) the iframe is clipped with a rectangular
     // `inset()` so the two layers never overlap; a rect clip is free, unlike a
     // polygon mask. Floating rects stay plain overlays.
-    const clip = useMemo(() => edgeBandClip(rects, box()), [rects]); // eslint-disable-line react-hooks/exhaustive-deps
+    const hostBox = useMemo(() => box(), [rects]); // eslint-disable-line react-hooks/exhaustive-deps
+    const clip = useMemo(() => edgeBandClip(rects, hostBox), [rects, hostBox]);
 
     return (
       <div ref={rootRef} className="relative flex-1 min-h-0 overflow-hidden" data-community-view={pkg.id} data-community-ready={ready ? "1" : "0"}>
@@ -232,16 +246,25 @@ export function makeCommunityView(pkg: ViewPackageInfo): ComponentType<Workspace
           style={clip ? { clipPath: clip } : undefined}
           data-community-clip={clip ?? undefined}
         />
-        {/* The hole-punch overlay: one live slot per rect, pointer events only on the slots. */}
+        {/* The hole-punch overlay: one live slot per rect, pointer events only
+            on the slots. Unless the rect says `chrome: "none"`, the host's slot
+            bar sits at the top of it (name, status, pop-out, undock). */}
         <div className="pointer-events-none absolute inset-0" data-community-surfaces>
           {rects.map((r) => (
-            <TileSlot
+            <div
               key={r.tileId}
-              tileId={r.tileId}
-              transient
-              className="pointer-events-auto absolute overflow-hidden"
-              style={{ left: r.x, top: r.y, width: r.w, height: r.h }}
-            />
+              className="pointer-events-auto absolute flex flex-col overflow-hidden bg-[var(--color-bg)]"
+              // App's top-right New/Settings cluster overlays every view; a slot
+              // flush with the top-right corner keeps its bar below it (the
+              // World's dock pane does the same with pt-12).
+              style={{ left: r.x, top: r.y, width: r.w, height: r.h, paddingTop: r.y <= 1 && r.x + r.w >= hostBox.w - 1 ? 48 : 0 }}
+              data-community-slot={r.tileId}
+            >
+              {r.chrome !== "none" && (
+                <SlotBar tileId={r.tileId} name={nameOf.get(r.tileId) ?? r.tileId} commands={commands} onUndock={() => undock(r.tileId)} />
+              )}
+              <TileSlot tileId={r.tileId} transient className="relative min-h-0 flex-1" />
+            </div>
           ))}
         </div>
         {!ready && (
@@ -251,5 +274,5 @@ export function makeCommunityView(pkg: ViewPackageInfo): ComponentType<Workspace
         )}
       </div>
     );
-  };
+  }
 }

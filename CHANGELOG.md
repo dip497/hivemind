@@ -53,6 +53,13 @@ World, and sandboxed community views), and the e2e/perf harnesses gate every cha
   reveal, a hole-punch that places a real tile slot where the plugin asks). Malformed traffic,
   floods and runaway CPU disable a plugin for the session and drop you back on the canvas with
   every session intact. Example plugin: `examples/views/orbit`.
+- **Host chrome in every view.** The tool island (spawn, frame, browser, appearance, update) is
+  drawn by the workspace over whichever view is active — the canvas keeps it top-centre, Windows,
+  World and community views get a compact bottom island — so you can spawn from anywhere. A tile
+  docked in the World or a community view gets a host bar: name, live status, pop out to the
+  canvas, undock; **Shift+Esc undocks even while the terminal has the keyboard**. The animated
+  wallpaper and glass apply only under the canvas and Windows; scenes paint their own world and
+  docked terminals there are the opaque theme background.
 - `HIVEMIND_SHELL_ENV=0` uses the launch environment as-is (PATH included) instead of the login
   shell's — for CI/e2e and for launching from a terminal whose exact env you want inside tiles.
 - **Test + perf harnesses.** The Playwright e2e suite runs headless under xvfb with `retries=0`

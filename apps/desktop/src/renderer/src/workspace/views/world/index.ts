@@ -20,4 +20,6 @@ export const worldViewPlugin: WorkspaceViewPlugin = {
   hint: "A 3D map of your frames and agents — click a tile to land in it.",
   icon: Globe,
   component: lazy(() => import("./WorldView")),
+  // The scene is opaque: no wallpaper under it, a compact island over it.
+  chrome: { island: "bottom", wallpaper: false },
 };

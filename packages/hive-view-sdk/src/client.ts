@@ -24,6 +24,10 @@ type EventMap = {
   resize: { w: number; h: number };
   visibility: { visible: boolean };
   theme: Extract<HostMessage, { type: "theme" }>["theme"];
+  /** The host undocked this surface (its bar, or Shift+Esc); the tile is
+   *  already released — forget the rect. The client drops it from what it
+   *  last sent, so a plugin that ignores the event still stays consistent. */
+  undock: { tileId: string };
 };
 
 export interface ViewClient {
@@ -116,6 +120,11 @@ class Client implements ViewClient {
       case "resize": this.viewport = { w: m.w, h: m.h }; this.emit("resize", this.viewport); break;
       case "visibility": this.visible = m.visible; this.emit("visibility", { visible: m.visible }); break;
       case "theme": this.emit("theme", m.theme); break;
+      case "undock": {
+        try { const kept = (JSON.parse(this.lastRects || "[]") as SurfaceRect[]).filter((r) => r.tileId !== m.tileId); this.lastRects = JSON.stringify(kept); } catch { this.lastRects = ""; }
+        this.emit("undock", { tileId: m.tileId });
+        break;
+      }
       case "reveal": this.answerReveal(m.requestId, m.tileId); break;
       default: break;
     }
@@ -155,7 +164,7 @@ class Client implements ViewClient {
   }
 
   setSurfaceRects(rects: SurfaceRect[]) {
-    const norm = rects.map((r) => ({ tileId: r.tileId, x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.w), h: Math.round(r.h) }));
+    const norm = rects.map((r) => ({ tileId: r.tileId, x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.w), h: Math.round(r.h), ...(r.chrome ? { chrome: r.chrome } : {}) }));
     const key = JSON.stringify(norm);
     if (key === this.lastRects) return;
     this.lastRects = key;
