@@ -192,6 +192,9 @@ importers:
       '@hivemind/core':
         specifier: workspace:*
         version: link:../../packages/hive-core
+      '@hivemind/view-sdk':
+        specifier: workspace:*
+        version: link:../../packages/hive-view-sdk
       '@lezer/highlight':
         specifier: ^1.2.3
         version: 1.2.3
@@ -377,6 +380,21 @@ importers:
         specifier: 'catalog:'
         version: 5.4.21(@types/node@22.19.19)(lightningcss@1.32.0)
 
+  examples/views/orbit:
+    devDependencies:
+      '@hivemind/tsconfig':
+        specifier: workspace:*
+        version: link:../../../packages/tsconfig
+      '@hivemind/view-sdk':
+        specifier: workspace:*
+        version: link:../../../packages/hive-view-sdk
+      esbuild:
+        specifier: 0.28.0
+        version: 0.28.0
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
   packages/hive-agents:
     devDependencies:
       '@hivemind/tsconfig':
@@ -391,6 +409,9 @@ importers:
 
   packages/hive-core:
     dependencies:
+      '@hivemind/view-sdk':
+        specifier: workspace:*
+        version: link:../hive-view-sdk
       gray-matter:
         specifier: 'catalog:'
         version: 4.0.3
@@ -400,6 +421,18 @@ importers:
       zod:
         specifier: 'catalog:'
         version: 3.25.76
+    devDependencies:
+      '@hivemind/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      '@types/node':
+        specifier: 'catalog:'
+        version: 22.19.19
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
+  packages/hive-view-sdk:
     devDependencies:
       '@hivemind/tsconfig':
         specifier: workspace:*

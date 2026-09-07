@@ -6,4 +6,5 @@ export * from "./registry.js";
 export * from "./cross-repo.js";
 export * from "./json.js";
 export * from "./agentic.js";
+export * from "./views.js";
 export * as templates from "./templates.js";

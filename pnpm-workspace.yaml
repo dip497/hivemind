@@ -1,6 +1,7 @@
 packages:
   - apps/*
   - packages/*
+  - examples/views/*
 
 # cpu-features is an OPTIONAL native dep of ssh2 (remote SSH frames) — it only
 # selects a faster cipher when present, and ssh2 falls back to pure JS without

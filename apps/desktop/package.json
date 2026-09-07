@@ -61,6 +61,7 @@
     "@fontsource/jetbrains-mono": "^5.2.8",
     "@hivemind/agents": "workspace:*",
     "@hivemind/core": "workspace:*",
+    "@hivemind/view-sdk": "workspace:*",
     "@lezer/highlight": "^1.2.3",
     "@lydell/node-pty": "catalog:",
     "@pierre/diffs": "catalog:",

@@ -13,13 +13,15 @@
     "./agent-context": "./src/agent-context.ts",
     "./registry": "./src/registry.ts",
     "./cross-repo": "./src/cross-repo.ts",
-    "./templates": "./src/templates.ts"
+    "./templates": "./src/templates.ts",
+    "./views": "./src/views.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "bun test"
   },
   "dependencies": {
+    "@hivemind/view-sdk": "workspace:*",
     "gray-matter": "catalog:",
     "yaml": "catalog:",
     "zod": "catalog:"

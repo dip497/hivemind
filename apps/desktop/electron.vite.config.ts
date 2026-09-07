@@ -8,7 +8,7 @@ import path from "node:path";
 // into main/preload because node has no .ts loader at runtime. Their
 // transitive npm deps (gray-matter, yaml, zod)
 // stay externalized — they're plain JS and load fine from app.asar.
-const BUNDLE_INTERNAL = ["@hivemind/core", "@hivemind/core/storage", "@hivemind/agents", "@hivemind/agents/node"];
+const BUNDLE_INTERNAL = ["@hivemind/core", "@hivemind/core/storage", "@hivemind/agents", "@hivemind/agents/node", "@hivemind/view-sdk", "@hivemind/view-sdk/manifest", "@hivemind/view-sdk/protocol"];
 
 // ---------------------------------------------------------------------------
 // shiki language / theme allowlist
