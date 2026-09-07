@@ -28,7 +28,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { LayerTile, LayerFrame } from "./LayersPanel";
-import { statusOf, setWaitStatus, setSubagentBusy, setNotify, setTurnState, type TileStatusKind } from "./agent-status-bus";
+import { statusOf, setWaitStatus, setSubagentBusy, setNotify, setTurnState, type TileStatusKind, subscribeTileStatus } from "./agent-status-bus";
 import { frameAtPoint } from "./frame-layout";
 import { Wallpaper } from "./Wallpaper";
 import { CanvasOverlay } from "./CanvasOverlay";
@@ -885,6 +885,10 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     spawnVis,
     spawnClaude: () => spawnClaude(),
     addFrame,
+    // Module-level bus functions: stable identities, so status never enters the
+    // memo deps — a status transition re-renders nothing here.
+    subscribeTileStatus: (tileId, cb) => subscribeTileStatus(tileId, (e) => cb(e.status, e)),
+    tileStatus: statusOf,
   }), [setSelectedTileId, setSelectedFrameId, focusTile, closeTile, spawnTile, spawnVis, spawnClaude, addFrame]);
 
   // The canvas plugin's private runtime access (milestone-1 seam).

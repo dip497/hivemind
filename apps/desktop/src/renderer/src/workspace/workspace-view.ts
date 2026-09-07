@@ -20,6 +20,7 @@ import type { FrameState, TileInstance } from "../canvas-persistence";
 import type { LayerFrame, LayerTile } from "../LayersPanel";
 import type { FrameActions } from "../FrameRailMenu";
 import type { TileKind } from "../tile-kinds";
+import type { StatusEvent, TileStatusKind } from "../agent-status-bus";
 
 /** Read-only snapshot of the workspace a view renders from. */
 export interface WorkspaceViewModel {
@@ -69,6 +70,15 @@ export interface WorkspaceCommands {
   spawnVis: (which: "tree" | "shell" | "diff" | "issues") => void;
   spawnClaude: () => void;
   addFrame: () => void;
+  /** Live agent status, PER TILE, off the awareness bus. Deliberately not on
+   *  the model: a status transition (~1 Hz while agents work) reaches only the
+   *  subscribers of that tile — a 3D view colours one object, a rail recolours
+   *  one row — and never re-renders every body the way a model change would.
+   *  Replays the last known status synchronously on subscribe. Returns the
+   *  unsubscribe; a view MUST call it when the object/row goes away. */
+  subscribeTileStatus: (tileId: string, cb: (status: TileStatusKind, event: StatusEvent) => void) => () => void;
+  /** Last known effective status of a tile (null before it has reported). */
+  tileStatus: (tileId: string) => TileStatusKind | null;
 }
 
 export interface WorkspaceViewProps {
@@ -83,9 +93,10 @@ export interface WorkspaceViewProps {
  *  • Never render a tile body yourself; one `<TileSlot>` per visible tile. A
  *    second instance of a live terminal is a correctness AND a perf bug.
  *  • Do not subscribe to terminal output or per-chunk events. Status comes from
- *    `agent-status-bus` per tile (~1 Hz, selective); `model.agentTitles` churns
- *    ~600 ms while an agent streams — never key a heavy memo or a whole-scene
- *    rebuild on it.
+ *    `commands.subscribeTileStatus` per tile (~1 Hz, selective — a change
+ *    touches one subscriber, not the model); `model.agentTitles` churns ~600 ms
+ *    while an agent streams — never key a heavy memo or a whole-scene rebuild
+ *    on it.
  *  • Own your listeners/timers/rAF loops and tear them ALL down on unmount; the
  *    runtime unmounts the previous view on every switch and remounts it later.
  *    A view that is not active must do zero work (no background render loop).
