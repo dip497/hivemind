@@ -143,7 +143,7 @@ What it does (`scripts/release.sh`):
 
 Before running `./scripts/release.sh`:
 
-- [ ] All e2e tests green locally: `cd apps/desktop && unset ELECTRON_RUN_AS_NODE && xvfb-run -a --server-args="-screen 0 1600x1000x24" pnpm test:e2e --retries=0` (75 tests across 22 specs, all must pass; the profile is isolated per run — see apps/desktop/AGENTS.md).
+- [ ] All e2e tests green locally: `cd apps/desktop && unset ELECTRON_RUN_AS_NODE && xvfb-run -a --server-args="-screen 0 1600x1000x24" pnpm test:e2e --retries=0` (76 tests across 22 specs, all must pass; the profile is isolated per run — see apps/desktop/AGENTS.md).
 - [ ] Perf harness unchanged within noise vs the previous release: `apps/desktop/scripts/perf-views.mjs` on both builds, `perf-views-compare.mjs` on the two JSONs (same machine, interleaved runs; the acceptance rows are in `docs/design/workspace-views.md`).
 - [ ] Unit tests green: `pnpm test:unit` from `apps/desktop`.
 - [ ] CHANGELOG `[Unreleased]` section has at least one entry describing the user-visible change.

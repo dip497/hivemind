@@ -447,6 +447,9 @@ function ViewPrefs() {
   const mode = resolveViewId(useViewMode());
   const set = (m: string) => setViewMode(m);
   const opts = useViews();
+  // Opening the panel rescans the community view packages (a `hive views
+  // install` while the app runs, without the CLI reaching the socket).
+  useEffect(() => { window.dispatchEvent(new CustomEvent("hivemind:reload-views")); }, []);
   return (
     <div className="mt-4 rounded-lg border border-[var(--color-line2)] bg-[var(--color-bg3)] p-3">
       <div className="flex items-center justify-between gap-2">

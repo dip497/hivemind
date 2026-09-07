@@ -45,7 +45,8 @@ World, and sandboxed community views), and the e2e/perf harnesses gate every cha
   scene renders on demand only and is retained across switches.
 - **Community views — sandboxed view plugins loaded at runtime.** Ship a view as a package
   (`hivemind-view.json` + one bundled entry), `hive views install <dir>` (`list` / `remove`
-  too), and it joins the switcher after the built-ins. The plugin runs in a sandboxed
+  too — both ask a running app to rescan, so the switcher updates without a restart), and it
+  joins the switcher after the built-ins. The plugin runs in a sandboxed
   out-of-process iframe on its own `hm-view://<id>` origin with a strict CSP (no `window.hive`,
   no node, no network, no inline scripts) and talks to the app over one validated MessagePort
   (`@hivemind/view-sdk`: projection with pre-resolved colours, per-tile status, selection,

@@ -620,6 +620,13 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         return await deps.callRenderer("tile.list", { frame: p.frame }, RENDERER_TIMEOUT);
       case "tile.list_frames":
         return await deps.callRenderer("tile.list_frames", {}, RENDERER_TIMEOUT);
+      // Community view packages are scanned when the registry loads; `hive
+      // views install|remove` calls this so a running app picks the change
+      // up without a restart (the renderer re-reads both roots and updates
+      // its registry — the switcher and ⌘E order follow, an active view that
+      // vanished falls back to the canvas).
+      case "views.rescan":
+        return await deps.callRenderer("views.rescan", {}, RENDERER_TIMEOUT);
       case "tile.focus": {
         if (!p.tileId) throw new HcpError("BAD_REQUEST", "tileId required");
         return await deps.callRenderer("tile.focus", { tileId: p.tileId }, RENDERER_TIMEOUT);

@@ -25,9 +25,12 @@ const ORBIT = path.resolve(APP_DIR, "../../examples/views/orbit");
 const FIXTURES = path.join(APP_DIR, "tests/e2e/fixtures/views");
 const viewsDir = () => path.join(process.env.XDG_CONFIG_HOME!, "hivemind", "views");
 
+/** The app's control-plane socket + token (isolated userData under this run's XDG);
+ *  set once the app is up so `hive views install|remove` can ask it to rescan. */
+let hcpEnv: Record<string, string> = {};
 /** `hive … --json` as a subprocess; non-zero exits are part of the contract (parsed, not thrown). */
 const hive = (...args: string[]) => {
-  const r = spawnSync("bun", [CLI, ...args, "--json"], { cwd: repo, encoding: "utf8", env: process.env });
+  const r = spawnSync("bun", [CLI, ...args, "--json"], { cwd: repo, encoding: "utf8", env: { ...process.env, ...hcpEnv } });
   try { return JSON.parse(r.stdout.trim()); } catch { throw new Error(`hive ${args.join(" ")} → exit ${r.status}\n${r.stdout}\n${r.stderr}`); }
 };
 const toView = (mode: string) => page.evaluate((m) => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: m } })), mode);
@@ -48,7 +51,10 @@ test.beforeAll(async () => {
   expect(installed.ok).toBe(true);
   expect(installed.data.dir).toBe(path.join(viewsDir(), "orbit"));
   app = await electron.launch({
-    args: [path.join(APP_DIR, "out/main/index.js"), "--no-sandbox", `--user-data-dir=/tmp/hm-community-ud-${Date.now()}`],
+    // No --user-data-dir: the profile is isolated by this run's XDG_CONFIG_HOME
+    // (playwright.config.ts), and that is where the app's HCP socket lands
+    // (<XDG>/hivemind-dev/hcp.sock) for the CLI to reach.
+    args: [path.join(APP_DIR, "out/main/index.js"), "--no-sandbox"],
     cwd: repo,
     // The CPU watchdog's real threshold is 60 % of a core (main/view-packages.ts);
     // on this loaded, GPU-less runner a spinning out-of-process frame gets so
@@ -58,6 +64,10 @@ test.beforeAll(async () => {
   });
   page = await app.firstWindow();
   page.on("console", (m) => { if (m.type() === "error" && !/Content Security Policy/.test(m.text())) console.log("[r.error]", m.text()); });
+  const userData = path.join(process.env.XDG_CONFIG_HOME!, "hivemind-dev");
+  const sock = path.join(userData, "hcp.sock"), tokenFile = path.join(userData, "hcp.token");
+  await expect.poll(() => fs.existsSync(sock) && fs.existsSync(tokenFile), { timeout: 20_000 }).toBe(true);
+  hcpEnv = { HIVE_HCP_SOCK: sock, HCP_TOKEN: fs.readFileSync(tokenFile, "utf8").trim() };
   await page.waitForLoadState("domcontentloaded");
   await page.waitForSelector(".react-flow", { timeout: 15_000 });
   await page.waitForTimeout(300);
@@ -141,9 +151,23 @@ test("click a planet: the LIVE terminal docks through the hole-punch, typed keys
   expect(await probe(".react-flow__node-terminal .xterm")).toBe("kept");
 });
 
+test("`hive views install` while the app runs: the CLI asks the app to rescan and the view appears without a restart", async () => {
+  // The spec's own XDG profile holds the HCP socket the app opened, so the
+  // CLI reaches it exactly as a user's shell would.
+  for (const id of ["hostile-flood", "hostile-loop"]) {
+    const r = hive("views", "install", path.join(FIXTURES, id));
+    expect(r.ok).toBe(true);
+    expect(r.data.rescanned).toBe(true);
+  }
+  // No reloadViews() here: the rescan came from the CLI's HCP call.
+  await expect.poll(async () => (await report()).registered).toEqual(["orbit", "hostile-flood", "hostile-loop"]);
+  const seen: string[] = [];
+  await toView("canvas");
+  for (let i = 0; i < 6; i++) { await toggleView(); await page.waitForTimeout(150); seen.push((await activeView())!); }
+  expect(seen).toEqual(["windows", "world", "orbit", "hostile-flood", "hostile-loop", "canvas"]);
+});
+
 test("a flooding plugin and a CPU-burning plugin are disabled; the canvas comes back with the session intact", async () => {
-  for (const id of ["hostile-flood", "hostile-loop"]) expect(hive("views", "install", path.join(FIXTURES, id)).ok).toBe(true);
-  await reloadViews();
   await expect.poll(async () => (await report()).registered).toEqual(["orbit", "hostile-flood", "hostile-loop"]);
 
   await toView("hostile-flood");
@@ -186,11 +210,13 @@ test("a package asking for an unknown permission is refused by install AND by th
   expect(hive("views", "list").data.find((v: { id: string }) => v.id === "greedy").error).toMatch(/unknown permission/);
 });
 
-test("`hive views remove` takes the view out of the switcher; if it was active the canvas is shown", async () => {
+test("`hive views remove` of the ACTIVE view: the app rescans, the switcher drops it, the canvas is shown", async () => {
   await toView("orbit");
   await page.waitForSelector('[data-community-view="orbit"][data-community-ready="1"]', { timeout: 15_000 });
-  expect(hive("views", "remove", "orbit").ok).toBe(true);
-  await reloadViews();
+  const r = hive("views", "remove", "orbit");
+  expect(r.ok).toBe(true);
+  expect(r.data.rescanned).toBe(true);
+  // No reloadViews(): the CLI's rescan did it.
   await expect.poll(async () => (await report()).registered).toEqual([]);
   await expect.poll(activeView).toBe("canvas");
   await expect(page.locator(".xterm")).toHaveCount(1);

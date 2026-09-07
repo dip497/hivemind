@@ -454,10 +454,14 @@ message or a host behaviour below.
   + copy (`node_modules` skipped). `list` prints exactly what the app will and
   will not load, with the reason. Remove deletes the package only; the plugin's
   layout blob (`hivemind:view-layout:<id>:<repo>`) stays behind, inert.
-- **Registry**: main scans on demand (`views:list` IPC, rescanned per repo
-  switch and on `hivemind:reload-views`); the renderer registers each loadable
-  package as a plugin with `source: "community"`, registration order = after
-  the built-ins = ⌘E order. The registry became an external store (`useViews`)
+- **Registry**: main scans on demand (`views:list` IPC) — per repo switch, on
+  `hivemind:reload-views` (Settings ▸ View dispatches it when opened), and on
+  the HCP verb `views.rescan`, which `hive views install|remove` call when the
+  app's socket is reachable (the CLI prints "app rescanned" or "restart the
+  app, or open Settings ▸ View"). The renderer registers each loadable package
+  as a plugin with `source: "community"`, registration order = after the
+  built-ins = ⌘E order; the registry is an external store, so the switcher
+  updates live, and removing the ACTIVE view resolves to the canvas. The registry became an external store (`useViews`)
   so switchers re-render when a view appears, disappears, or is disabled.
   Fallback stays the built-in canvas: a disabled or removed view simply stops
   resolving and `resolveViewId` lands on canvas with every session intact.

@@ -9,6 +9,15 @@
 import { defineCommand } from "citty";
 import { HiveError, findRoot, installView, listInstalledViews, removeView } from "@hivemind/core";
 import { err, ok } from "../format.js";
+import { hcpCall } from "../hcp.js";
+
+/** Ask a running app to re-read the view packages. False when no app is
+ *  reachable (the change is picked up on the next start or when Settings ▸
+ *  View is opened). */
+async function rescanApp(): Promise<boolean> {
+  try { await hcpCall("views.rescan", {}, 5000); return true; } catch { return false; }
+}
+const afterNote = (rescanned: boolean) => (rescanned ? "app rescanned" : "app not running or unreachable — restart it, or open Settings ▸ View");
 
 const fail = (ctx: { json: boolean }, e: unknown, fallback: string): never =>
   err(ctx, e instanceof HiveError ? e.code : fallback, e instanceof Error ? e.message : String(e));
@@ -37,7 +46,8 @@ const installCmd = defineCommand({
     const ctx = { json: !!args.json };
     try {
       const v = await installView(String(args.dir));
-      return ok(ctx, v, () => `installed ${v.id} ${v.manifest?.version} → ${v.dir}`);
+      const rescanned = await rescanApp();
+      return ok(ctx, { ...v, rescanned }, () => `installed ${v.id} ${v.manifest?.version} → ${v.dir}; ${afterNote(rescanned)}`);
     } catch (e) { return fail(ctx, e, "install_failed"); }
   },
 });
@@ -49,7 +59,8 @@ const removeCmd = defineCommand({
     const ctx = { json: !!args.json };
     try {
       await removeView(String(args.id));
-      return ok(ctx, { id: String(args.id) }, () => `removed ${args.id}`);
+      const rescanned = await rescanApp();
+      return ok(ctx, { id: String(args.id), rescanned }, () => `removed ${args.id}; ${afterNote(rescanned)}`);
     } catch (e) { return fail(ctx, e, "remove_failed"); }
   },
 });

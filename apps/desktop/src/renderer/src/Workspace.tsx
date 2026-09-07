@@ -658,6 +658,11 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
             await window.hive.hcpResult(cmd.id, true, { frames, loose });
             break;
           }
+          case "views.rescan": {
+            const r = await loadCommunityViews(rootRef.current);
+            await window.hive.hcpResult(cmd.id, true, { registered: r.registered, refused: r.refused });
+            break;
+          }
           case "tile.list_frames": {
             const frames = framesRef.current.map((f) => ({
               id: f.id,

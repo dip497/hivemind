@@ -430,3 +430,11 @@ test("hcp-server: agent.stream sub with lines/since replays first and stamps off
   srv.close();
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+test("dispatch views.rescan: asks the renderer to re-read the view packages and returns its registry", async () => {
+  const calls: string[] = [];
+  const { deps } = fakeDeps({ callRenderer: async (m: string) => { calls.push(m); return { registered: ["orbit"], refused: { greedy: "unknown permission" } }; } });
+  const { dispatch } = makeDispatch(deps);
+  assert.deepEqual(await dispatch("views.rescan", {}), { registered: ["orbit"], refused: { greedy: "unknown permission" } });
+  assert.deepEqual(calls, ["views.rescan"]);
+});
