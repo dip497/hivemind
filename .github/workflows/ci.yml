@@ -47,3 +47,8 @@ jobs:
         # Cheap guard on the install.sh ↔ release.yml contract: the asset names
         # the installer asks for must match the ones the release uploads.
         run: bash scripts/install-plan-test.sh
+
+      - name: Installer macOS path
+        # Runs install.sh's Darwin helpers against a fake .app (ditto/xattr/pkill
+        # shimmed), so the mac install/uninstall path is covered on this ubuntu box.
+        run: bash scripts/install-macos-test.sh
