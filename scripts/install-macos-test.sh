@@ -14,6 +14,10 @@ REPO_ROOT="$PWD"
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"
+# The registry honours XDG_CONFIG_HOME, and CI runners set it — so leaving it
+# alone would point `uninstall --purge` at the real one outside this prefix and
+# make the assertions below read a directory nothing ever touched.
+unset XDG_CONFIG_HOME
 export HIVEMIND_APP_DIR="$HOME/.hivemind-app"
 export HIVEMIND_BIN_DIR="$HOME/.local/bin"
 mkdir -p "$HOME" "$HIVEMIND_APP_DIR" "$HIVEMIND_BIN_DIR" "$TMP/shims"
