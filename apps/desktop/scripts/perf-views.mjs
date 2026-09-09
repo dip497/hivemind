@@ -16,7 +16,8 @@
 // rAF frame intervals (fps / p95 / >50ms), `longtask` entries, a 16 ms timer's
 // drift (event-loop lag = input-latency proxy); CPU/RSS via app.getAppMetrics().
 // The Electron profile is isolated (XDG_CONFIG_HOME) and PTYs run in-process.
-// xvfb has no GPU: absolute numbers are pessimistic; compare deltas only.
+// Record the actual GL renderer before interpreting absolute FPS; Xvfb alone
+// does not establish which hardware or software backend Chromium selected.
 import { _electron as electron } from "@playwright/test";
 import fs from "node:fs/promises"; import os from "node:os"; import path from "node:path"; import { execFileSync } from "node:child_process";
 
@@ -38,6 +39,14 @@ if (!SKIP_COMMUNITY) {
   for (const dir of [path.resolve(import.meta.dirname, "../../../examples/views/orbit/dist"), path.resolve(import.meta.dirname, "../tests/e2e/fixtures/views/hostile-loop")]) {
     execFileSync("bun", [CLI, "views", "install", dir], { stdio: "ignore", env: process.env });
   }
+}
+// PERF_PLUGIN_SURFACES=theme|opaque seeds settings.json before launch, so the
+// two surface policies (a docked terminal in a scene: the user's glass +
+// per-slot wallpaper vs. an opaque background) can be measured on one build.
+if (process.env.PERF_PLUGIN_SURFACES) {
+  const dir = path.join(process.env.XDG_CONFIG_HOME, "hivemind");
+  await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(path.join(dir, "settings.json"), JSON.stringify({ v: 1, appearance: { pluginSurfaces: process.env.PERF_PLUGIN_SURFACES } }));
 }
 const app = await electron.launch({
   args: [path.resolve(import.meta.dirname, "../out/main/index.js"), "--no-sandbox", `--user-data-dir=/tmp/hm-perf-ud-${Date.now()}`],

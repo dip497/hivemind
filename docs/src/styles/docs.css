@@ -1,0 +1,7 @@
+:root { --sl-color-accent-low: #302713; --sl-color-accent: #bc851d; --sl-color-accent-high: #f0c56a; --sl-font: 'Inter', ui-sans-serif, system-ui, sans-serif; }
+:root[data-theme='light'] { --sl-color-accent-low: #fff3d6; --sl-color-accent: #8a5a00; --sl-color-accent-high: #563700; }
+:root[data-theme='dark'] { --sl-color-black: #101112; --sl-color-gray-6: #191b1c; --sl-color-gray-5: #2b2d2e; }
+.site-title { letter-spacing: -.035em; font-weight: 650; }
+.site-title img { border-radius: 9px; }
+.sl-markdown-content { line-height: 1.8; }
+.sl-markdown-content :is(h1,h2,h3) { letter-spacing: -.025em; }

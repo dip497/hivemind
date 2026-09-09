@@ -1,0 +1,133 @@
+{
+  "label": "effects-off",
+  "tiles": 4,
+  "at": "2026-09-08T08:44:13.371Z",
+  "idle_after_spawn": {
+    "total_cpu_pct": 9.2,
+    "renderer_rss_mb": 224,
+    "procs": [
+      {
+        "type": "Browser",
+        "cpu": 0.2,
+        "rssMB": 226
+      },
+      {
+        "type": "GPU",
+        "cpu": 7.4,
+        "rssMB": 260
+      },
+      {
+        "type": "Tab",
+        "cpu": 1.6,
+        "rssMB": 224
+      }
+    ]
+  },
+  "canvas_quiet": {
+    "seconds": 2.99,
+    "frames": 180,
+    "fps": 60.2,
+    "frame_p50_ms": 16.6,
+    "frame_p95_ms": 17.5,
+    "frame_max_ms": 18.4,
+    "frames_over_50ms": 0,
+    "frames_over_100ms": 0,
+    "longtasks": 0,
+    "longtask_total_ms": 0,
+    "longtask_max_ms": 0,
+    "lag_p50_ms": 0,
+    "lag_p95_ms": 0.1,
+    "lag_max_ms": 0.6
+  },
+  "canvas_quiet_cpu": {
+    "total_cpu_pct": 0,
+    "renderer_rss_mb": 225,
+    "procs": [
+      {
+        "type": "Browser",
+        "cpu": 0,
+        "rssMB": 227
+      },
+      {
+        "type": "GPU",
+        "cpu": 0,
+        "rssMB": 230
+      },
+      {
+        "type": "Tab",
+        "cpu": 0,
+        "rssMB": 225
+      }
+    ]
+  },
+  "typed_into": 4,
+  "node_count": 5,
+  "xterm_count_streaming": 4,
+  "canvas_streaming_idle": {
+    "seconds": 4.88,
+    "frames": 57,
+    "fps": 11.7,
+    "frame_p50_ms": 82.1,
+    "frame_p95_ms": 122.2,
+    "frame_max_ms": 139.8,
+    "frames_over_50ms": 57,
+    "frames_over_100ms": 7,
+    "longtasks": 0,
+    "longtask_total_ms": 0,
+    "longtask_max_ms": 0,
+    "lag_p50_ms": 0,
+    "lag_p95_ms": 13,
+    "lag_max_ms": 17.9
+  },
+  "streaming_cpu": {
+    "total_cpu_pct": 37.5,
+    "renderer_rss_mb": 256,
+    "procs": [
+      {
+        "type": "Browser",
+        "cpu": 0.9,
+        "rssMB": 225
+      },
+      {
+        "type": "GPU",
+        "cpu": 34.5,
+        "rssMB": 320
+      },
+      {
+        "type": "Tab",
+        "cpu": 2.1,
+        "rssMB": 256
+      }
+    ]
+  },
+  "canvas_streaming_typing": {
+    "seconds": 2.55,
+    "frames": 29,
+    "fps": 11.4,
+    "frame_p50_ms": 84.8,
+    "frame_p95_ms": 138.7,
+    "frame_max_ms": 163.7,
+    "frames_over_50ms": 28,
+    "frames_over_100ms": 7,
+    "longtasks": 0,
+    "longtask_total_ms": 0,
+    "longtask_max_ms": 0,
+    "lag_p50_ms": 0.1,
+    "lag_p95_ms": 35.6,
+    "lag_max_ms": 52.8
+  },
+  "appearance": {
+    "glass": {
+      "enabled": false,
+      "contentGlass": false,
+      "opacity": 0.72,
+      "blur": 18,
+      "contentOpacity": 0.25,
+      "animate": false
+    },
+    "wallpaper": {
+      "kind": "none",
+      "brightness": 0.85
+    }
+  }
+}

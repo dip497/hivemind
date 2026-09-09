@@ -78,7 +78,11 @@ GitHub Actions builds + publishes. **Do not run it unless explicitly asked.**
 <claude-mem-context>
 # Memory Context
 
-# [hivemind] recent context, 2026-09-05 10:16pm GMT+5:30
+# [hivemind] recent context, 2026-09-08 12:41pm GMT+5:30
 
 No previous sessions found.
 </claude-mem-context>
+## Website hosting
+
+The website and docs live in `docs/` and use the GitHub Pages workflow. Do not create
+or deploy ChatGPT Sites for this project.

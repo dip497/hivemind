@@ -683,6 +683,50 @@ spawn, chrome on a docked surface, and a sane background.
   so the entry-chunk guard keeps its meaning: 800 KB against the 786 KB
   baseline after this milestone's chrome.
 
+#### Configuration: settings.json (milestone 6b)
+
+The 2.0 principle: **the user's configuration wins everywhere**, and it lives
+in one file the user owns.
+
+- **The file.** `$HIVE_SETTINGS`, else `$XDG_CONFIG_HOME/hivemind/settings.json`
+  — the same path for the app, the CLI and a dev run (the dev profile isolates
+  the canvas, not the theme). Shape `{ v: 1, appearance, views, plugins,
+  agents, migrated }`, defined once in `@hivemind/core/settings-schema` (browser
+  safe: renderer, main and CLI share it). Every read merges through
+  `mergeSettings` — junk falls back per field, numbers clamp, unknown ids drop
+  — and every write is atomic (temp + rename) and preserves top-level keys the
+  schema does not own (the pre-2.0 `browserCdp` flag lives in the same file).
+- **Ownership.** Main owns the file (`main/settings-store.ts`): a synchronous
+  read at boot feeds the renderer's first paint (no theme flash), writes come
+  back over IPC debounced, and every change is broadcast on `settings:changed`
+  — so a CLI edit + `settings.reload` over HCP repaints a running app.
+- **Appearance is the one theme object**: preset id, 13 palette tokens, accent,
+  radius, fonts, glass, wallpaper, the terminal palette (4 + 16 ANSI),
+  `pluginSurfaces`, overlay media. Presets: ubuntu (the pre-2.0 look, asserted
+  byte-identical by a golden test on `terminalThemeFor`), dracula, nord,
+  solarized-dark, one-dark. `TerminalTile` derives its xterm theme from the
+  appearance instead of a hard-coded literal.
+- **Migration.** The renderer imports its pre-2.0 localStorage keys
+  (`hivemind:theme`, view mode, agent selection, claude mode/model) once, main
+  marks `migrated`, and the keys stay in place so a downgrade still reads them.
+- **Surfaces inside a scene supersede 6a's wallpaper policy.**
+  `appearance.pluginSurfaces` is `"theme"` (default) or `"opaque"`. With
+  `"theme"` a tile docked in the World or a community view renders exactly as
+  on the canvas — glass on, and the wallpaper painted **behind that slot only**
+  (`<Wallpaper embedded />` inside the slot box, z-0 under the bar and the
+  surface). Nothing full-window is composited, so the CPU saving measured in 6a
+  survives when nothing is docked and a video wallpaper decodes only while a
+  slot exists. `"opaque"` keeps 6a's behaviour verbatim. `theme-store` derives
+  both answers (`effectiveGlass`, `slotWallpaper`) and `useSurfacePolicy()`
+  re-renders the views that need them.
+- **Surfaces.** Settings is paged (Appearance / Views / Agents / Notifications
+  / Shortcuts / About); the pages are a lazy chunk, the appearance drawer stays
+  the quick editor over the same store. `hive config get|set|path` and
+  `hive theme list|use|export|import` edit the same file and print whether the
+  running app picked the change up. Plugins get the full token set in
+  `hello` + `theme` (protocol 1.1, additive) and `applyThemeVars` maps it to
+  `--hm-*` custom properties; the three examples use it.
+
 
 
 Small enough to read in one sitting (`src/main.ts`, ~150 lines, 2D canvas, no

@@ -7,6 +7,28 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Simplify fullscreen Settings into consistent rows and compact view choices; pause covered wallpapers and overlay videos without changing preferences or agent sessions.
+
+- Let each view choose toolbar actions, order, and labels through Settings or the CLI, with empty toolbars supported and tool activation kept separate.
+
+- Add per-view toolbar Off alongside Collapsed, preserving custom controls and Settings recovery without remounting live tools.
+
+- Make Browser an opt-in bundled tool plugin for fresh profiles, preserve existing settings, load its UI on demand, and add `hive ctl open-tool` with shared activation checks.
+
+- Add a canvas-painted controls example that navigates workspaces and docks existing tools through the sandboxed view SDK.
+
+- Batch terminal renderer checks during view switches and keep preserved terminals in sync with each view’s transparency policy.
+
+- Preserve unchanged tile surfaces when another tile changes, avoiding unnecessary terminal and editor renders.
+
+- Add read-only `hive packages inspect` for bundles of workspace views and agent presets, including permissions, startup plans, file digests, and strict validation.
+
+- Add a static website and task-focused guides with Markdown exports for coding agents.
+
+- Shorten website and Settings copy, removing repeated taglines and filler.
+
+- Redesign Settings with separate Views and Extensions pages, in-app extension installation and removal, automatic per-view toolbar placement, keyboard navigation, and safer extension replacement.
+
 One release: agents drive hivemind through the `hive` CLI (the MCP server is gone), agent
 providers are a catalog, the workspace is viewable through plugins (canvas, windows, a Three.js
 World, and sandboxed community views), and the e2e/perf harnesses gate every change. **Major bump**
@@ -58,8 +80,26 @@ World, and sandboxed community views), and the e2e/perf harnesses gate every cha
   World and community views get a compact bottom island — so you can spawn from anywhere. A tile
   docked in the World or a community view gets a host bar: name, live status, pop out to the
   canvas, undock; **Shift+Esc undocks even while the terminal has the keyboard**. The animated
-  wallpaper and glass apply only under the canvas and Windows; scenes paint their own world and
-  docked terminals there are the opaque theme background.
+  wallpaper and glass apply only under the canvas and Windows; scenes paint their own world.
+- **One user-owned configuration file: `settings.json`.** Appearance, default view + per-view
+  chrome, disabled community views and agent defaults live in
+  `$XDG_CONFIG_HOME/hivemind/settings.json` (override with `$HIVE_SETTINGS`), owned by the app
+  and validated on every read and write. Your pre-2.0 theme and preferences are imported once
+  from the renderer's localStorage. Appearance is now the ONE theme object — palette tokens,
+  accent, radius, fonts, glass, wallpaper **and the terminal palette** — with presets
+  (Ubuntu, Dracula, Nord, Solarized Dark, One Dark); Ubuntu is byte-identical to the pre-2.0
+  look. Settings is paged (Appearance / Views / Agents / Notifications / Shortcuts / About):
+  pick a preset, edit the terminal colours, enable or disable an installed community view, set
+  the default agent/model/permission mode, or read the shortcut list.
+- **`hive config get|set|path` and `hive theme list|use|export|import`.** Edit the same file from
+  the shell; a running app picks the change up over the control plane (`settings.reload`) with no
+  restart, and says so.
+- **Your theme applies inside plugin views (`appearance.pluginSurfaces`).** A terminal docked in
+  the World or a community view renders exactly as on the canvas — glass, and the wallpaper
+  painted behind that slot only, never full-window, so nothing is composited when nothing is
+  docked. Set it to `opaque` (Settings ▸ Appearance) for a solid terminal background instead.
+  Community views receive the whole palette (`applyThemeVars` in `@hivemind/view-sdk`), so a
+  plugin's chrome can follow your theme; the Orbit, Office and Solar examples do.
 - `HIVEMIND_SHELL_ENV=0` uses the launch environment as-is (PATH included) instead of the login
   shell's — for CI/e2e and for launching from a terminal whose exact env you want inside tiles.
 - **Test + perf harnesses.** The Playwright e2e suite runs headless under xvfb with `retries=0`
@@ -111,6 +151,24 @@ World, and sandboxed community views), and the e2e/perf harnesses gate every cha
   (shared by the CLI and the desktop).
 
 ### Fixed
+
+- **Settings edits no longer overwrite each other.** The app persisted the whole settings object a
+  moment after you changed something, so anything written in between — `hive theme use`, another
+  window — was silently reverted. Every writer now applies dotted-path patches inside a lock held
+  across the read and the write (`<settings>.json.lock`; a writer that cannot take it fails with a
+  clear error rather than removing someone else's lock, and a lock left by a crashed writer is
+  cleared explicitly), the app sends only the paths you actually changed, one write at a time, and
+  an edit you are still making is kept on screen when someone else's change arrives. If a write
+  fails (a read-only file, a lock it could not take) the edit is kept and goes out with your next
+  change rather than being retried in a loop.
+- **Opening a file from a terminal no longer loses the file.** Clicking a path in a terminal opened
+  an empty editor when the frame had no editor tile yet — the editor spawned, the path was dropped.
+  The path now travels with the spawn (`SpawnOpts.file`), including when the spawn reuses the
+  frame's existing editor, so every caller that opens a file into a fresh editor gets the tab.
+- **Closing a tile no longer leaves its geometry behind.** `positions`, `sizes` and `frameOf`
+  entries keyed by a closed tile's id stayed in the persisted layout for the life of the
+  workspace (and `frameOf` kept claiming a tile that no longer existed). They are dropped with
+  the tile.
 
 - The PTY daemon refuses to start on a non-absolute socket path (it used to write its hook
   scripts, the pi bridge extension and the HCP socket into the launcher's current directory —

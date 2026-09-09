@@ -1,0 +1,199 @@
+{
+  "version": 2,
+  "completed": true,
+  "at": "2026-09-09T07:21:59.388Z",
+  "workload": "3 shell terminals, 50 lines/sec each; 1920x1200 viewport; quiet and wheel pan; forward/reverse effect order",
+  "os": {
+    "platform": "linux",
+    "release": "7.0.0-31-generic",
+    "cpu": "11th Gen Intel(R) Core(TM) i7-11850H @ 2.50GHz",
+    "cpus": 16,
+    "load": [
+      2.79,
+      3.27,
+      6.05
+    ],
+    "loadEnd": [
+      3.9,
+      3.4,
+      5.96
+    ]
+  },
+  "samples": [
+    {
+      "workload": "quiet",
+      "effect": "default",
+      "round": 0,
+      "scene": "idle",
+      "panVerified": null,
+      "fps": 59.53774626216679,
+      "frames": 178,
+      "seconds": 2.9896999999999987,
+      "frameP95": 16.80000000000109,
+      "frameMax": 24.899999999999636,
+      "lagP95": 0.10000000149011612,
+      "longTaskMs": 0,
+      "domTerminals": 10,
+      "webglCanvases": 0,
+      "wallpaperPaused": false,
+      "focused": true,
+      "viewport": "transform: translate(386px, -2967px) scale(0.613955);",
+      "load": [
+        2.38,
+        3.15,
+        5.97
+      ]
+    },
+    {
+      "workload": "quiet",
+      "effect": "default",
+      "round": 0,
+      "scene": "pan",
+      "panVerified": true,
+      "fps": 60.7194433504004,
+      "frames": 185,
+      "seconds": 3.046800000000001,
+      "frameP95": 16.80000000000109,
+      "frameMax": 24.700000000000728,
+      "lagP95": 0.19999999552965164,
+      "longTaskMs": 0,
+      "domTerminals": 10,
+      "webglCanvases": 0,
+      "wallpaperPaused": false,
+      "focused": true,
+      "viewport": "transform: translate(386px, -2967px) scale(0.613955);",
+      "load": [
+        2.35,
+        3.13,
+        5.95
+      ]
+    },
+    {
+      "workload": "streaming",
+      "effect": "default",
+      "round": 0,
+      "scene": "idle",
+      "panVerified": null,
+      "fps": 52.758114064378205,
+      "frames": 158,
+      "seconds": 2.994800000000003,
+      "frameP95": 35.400000000001455,
+      "frameMax": 37.400000000001455,
+      "lagP95": 8.600000001490116,
+      "longTaskMs": 0,
+      "domTerminals": 0,
+      "webglCanvases": 20,
+      "wallpaperPaused": false,
+      "focused": true,
+      "viewport": "transform: translate(472px, -413px) scale(0.25);",
+      "load": [
+        2.65,
+        3.16,
+        5.91
+      ]
+    },
+    {
+      "workload": "streaming",
+      "effect": "default",
+      "round": 0,
+      "scene": "pan",
+      "panVerified": true,
+      "fps": 55.41335725783048,
+      "frames": 210,
+      "seconds": 3.789699999999997,
+      "frameP95": 33,
+      "frameMax": 38.79999999999927,
+      "lagP95": 7.5,
+      "longTaskMs": 0,
+      "domTerminals": 0,
+      "webglCanvases": 20,
+      "wallpaperPaused": false,
+      "focused": true,
+      "viewport": "transform: translate(472px, -413px) scale(0.25);",
+      "load": [
+        2.67,
+        3.16,
+        5.89
+      ]
+    }
+  ],
+  "webgl": {
+    "available": true,
+    "vendor": "Google Inc. (Intel)",
+    "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics (TGL GT1), OpenGL 4.6)"
+  },
+  "gpu": {
+    "features": {
+      "2d_canvas": "enabled",
+      "canvas_oop_rasterization": "enabled_on",
+      "direct_rendering_display_compositor": "disabled_off_ok",
+      "gpu_compositing": "enabled",
+      "multiple_raster_threads": "enabled_on",
+      "opengl": "enabled_on",
+      "rasterization": "enabled",
+      "raw_draw": "disabled_off_ok",
+      "skia_graphite": "disabled_off",
+      "video_decode": "enabled",
+      "video_encode": "disabled_software",
+      "vulkan": "disabled_off",
+      "webgl": "enabled",
+      "webgl2": "enabled",
+      "webgpu": "disabled_off",
+      "webnn": "disabled_off"
+    },
+    "info": {
+      "auxAttributes": {
+        "amdSwitchable": false,
+        "canSupportThreadedTextureMailbox": false,
+        "glImplementationParts": "(gl=none,angle=none)",
+        "glResetNotificationStrategy": 0,
+        "inProcessGpu": true,
+        "initializationTime": 0,
+        "isAsan": false,
+        "isClangCoverage": false,
+        "jpegDecodeAcceleratorSupported": false,
+        "optimus": true,
+        "passthroughCmdDecoder": false,
+        "sandboxed": false,
+        "subpixelFontRendering": true,
+        "targetCpuBits": 64,
+        "visibilityCallbackCallCount": 0
+      },
+      "gpuDevice": [
+        {
+          "active": true,
+          "deviceId": 9656,
+          "gpuPreference": 0,
+          "vendorId": 4318
+        },
+        {
+          "active": false,
+          "deviceId": 39520,
+          "gpuPreference": 0,
+          "vendorId": 32902
+        }
+      ]
+    }
+  },
+  "display": {
+    "dpr": 1,
+    "width": 1919,
+    "height": 1199,
+    "focused": true
+  },
+  "windowBounds": {
+    "x": 0,
+    "y": 0,
+    "width": 1919,
+    "height": 1199
+  },
+  "effects": [
+    "default"
+  ],
+  "rounds": 1,
+  "workloads": [
+    "quiet",
+    "streaming"
+  ],
+  "pointerTarget": "react-flow__pane selection"
+}

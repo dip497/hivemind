@@ -174,6 +174,8 @@ If the release workflow fails but the tag is pushed: delete the tag (`git tag -d
 | Breaking change to the view protocol (`@hivemind/view-sdk` `PROTOCOL_VERSION`), the manifest, or the package roots | major |
 | Bug fix in PTY daemon, CSS tweak, tile spawn-position fix | patch |
 | Breaking change to `hive` CLI (incl. a `hive ctl --json` shape), breaking change to `.hivemind/` schema | major |
+| New `settings.json` section, field or theme preset (old files keep working) | minor |
+| Breaking change to the `settings.json` schema (`v` bump, a field that no longer merges) | major |
 
 `0.x.x` versions: minor can break things; document loudly in CHANGELOG.
 

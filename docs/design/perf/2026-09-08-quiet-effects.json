@@ -1,0 +1,444 @@
+{
+  "at": "2026-09-08T12:40:51.584Z",
+  "workload": "3 shell terminals, 50 lines/sec each; 1920x1200 viewport; quiet and wheel pan; forward/reverse effect order",
+  "os": {
+    "platform": "linux",
+    "release": "7.0.0-31-generic",
+    "cpu": "11th Gen Intel(R) Core(TM) i7-11850H @ 2.50GHz",
+    "cpus": 16,
+    "load": [
+      13.6,
+      11.89,
+      8.85
+    ]
+  },
+  "samples": [
+    {
+      "workload": "quiet",
+      "effect": "default",
+      "round": 0,
+      "scene": "idle",
+      "fps": 2.250056251406285,
+      "frames": 6,
+      "seconds": 2.6666000000000003,
+      "frameP95": 516.6000000000004,
+      "frameMax": 516.6000000000004,
+      "lagP95": 3.5,
+      "longTaskMs": 0,
+      "domTerminals": 3,
+      "webglCanvases": 0,
+      "wallpaperPaused": false,
+      "focused": true,
+      "viewport": "transform: translate(252px, 74px) scale(1);",
+      "load": [
+        15.59,
+        12.37,
+        9.06
+      ]
+    },
+    {
+      "workload": "quiet",
+      "effect": "default",
+      "round": 0,
+      "scene": "pan",
+      "fps": 2.642960973466815,
+      "frames": 74,
+      "seconds": 27.9989,
+      "frameP95": 649.8999999999996,
+      "frameMax": 800,
+      "lagP95": 4.300000000745058,
+      "longTaskMs": 0,
+      "domTerminals": 3,
+      "webglCanvases": 0,
+      "wallpaperPaused": false,
+      "focused": true,
+      "viewport": "transform: translate(252px, 74px) scale(1);",
+      "load": [
+        26.5,
+        15.37,
+        10.17
+      ]
+    },
+    {
+      "workload": "quiet",
+      "effect": "static",
+      "round": 0,
+      "scene": "idle",
+      "fps": 60.004089664211804,
+      "frames": 179,
+      "seconds": 2.9831299999999974,
+      "frameP95": 16.799999999995634,
+      "frameMax": 16.80000000000291,
+      "lagP95": 0.3999999985098839,
+      "longTaskMs": 0,
+      "domTerminals": 3,
+      "webglCanvases": 0,
+      "wallpaperPaused": false,
+      "focused": true,
+      "viewport": "transform: translate(252px, 74px) scale(1);",
+      "load": [
+        25.26,
+        15.3,
+        10.17
+      ]
+    },
+    {
+      "workload": "quiet",
+      "effect": "static",
+      "round": 0,
+      "scene": "pan",
+      "fps": 60.001962495126925,
+      "frames": 181,
+      "seconds": 3.0165679999999995,
+      "frameP95": 16.700000000004366,
+      "frameMax": 16.80000000000291,
+      "lagP95": 0.19999999925494194,
+      "longTaskMs": 0,
+      "domTerminals": 3,
+      "webglCanvases": 0,
+      "wallpaperPaused": false,
+      "focused": true,
+      "viewport": "transform: translate(252px, 74px) scale(1);",
+      "load": [
+        25.26,
+        15.3,
+        10.17
+      ]
+    },
+    {
+      "workload": "quiet",
+      "effect": "no-backdrop",
+      "round": 0,
+      "scene": "idle",
+      "fps": 31.51012614777313,
+      "frames": 94,
+      "seconds": 2.983167999999998,
+      "frameP95": 116.59999999999854,
+      "frameMax": 150.09999999999854,
+      "lagP95": 2.300000000745058,
+      "longTaskMs": 0,
+      "domTerminals": 3,
+      "webglCanvases": 0,
+      "wallpaperPaused": false,
+      "focused": true,
+      "viewport": "transform: translate(252px, 74px) scale(1);",
+      "load": [
+        25,
+        15.41,
+        10.24
+      ]
+    },
+    {
+      "workload": "quiet",
+      "effect": "no-backdrop",
+      "round": 0,
+      "scene": "pan",
+      "fps": 6.625573223750817,
+      "frames": 89,
+      "seconds": 13.432800000000002,
+      "frameP95": 366.6999999999971,
+      "frameMax": 550,
+      "lagP95": 3.699999999254942,
+      "longTaskMs": 0,
+      "domTerminals": 3,
+      "webglCanvases": 0,
+      "wallpaperPaused": false,
+      "focused": true,
+      "viewport": "transform: translate(252px, 74px) scale(1);",
+      "load": [
+        25.71,
+        16.06,
+        10.53
+      ]
+    },
+    {
+      "workload": "quiet",
+      "effect": "off",
+      "round": 0,
+      "scene": "idle",
+      "fps": 60.00320017067584,
+      "frames": 180,
+      "seconds": 2.9998399999999963,
+      "frameP95": 16.79999999998836,
+      "frameMax": 16.80000000000291,
+      "lagP95": 0.10000000149011612,
+      "longTaskMs": 0,
+      "domTerminals": 3,
+      "webglCanvases": 0,
+      "wallpaperPaused": null,
+      "focused": true,
+      "viewport": "transform: translate(252px, 74px) scale(1);",
+      "load": [
+        23.65,
+        15.79,
+        10.47
+      ]
+    },
+    {
+      "workload": "quiet",
+      "effect": "off",
+      "round": 0,
+      "scene": "pan",
+      "fps": 60.002681684097674,
+      "frames": 179,
+      "seconds": 2.983199999999997,
+      "frameP95": 16.79999999998836,
+      "frameMax": 16.80000000000291,
+      "lagP95": 0.10000000149011612,
+      "longTaskMs": 0,
+      "domTerminals": 3,
+      "webglCanvases": 0,
+      "wallpaperPaused": null,
+      "focused": true,
+      "viewport": "transform: translate(252px, 74px) scale(1);",
+      "load": [
+        23.65,
+        15.79,
+        10.47
+      ]
+    },
+    {
+      "workload": "quiet",
+      "effect": "off",
+      "round": 1,
+      "scene": "idle",
+      "fps": 60.00453218589456,
+      "frames": 179,
+      "seconds": 2.9831080000000076,
+      "frameP95": 16.70000000001164,
+      "frameMax": 16.80000000000291,
+      "lagP95": 0.19999999925494194,
+      "longTaskMs": 0,
+      "domTerminals": 3,
+      "webglCanvases": 0,
+      "wallpaperPaused": null,
+      "focused": true,
+      "viewport": "transform: translate(252px, 74px) scale(1);",
+      "load": [
+        22.31,
+        15.64,
+        10.46
+      ]
+    },
+    {
+      "workload": "quiet",
+      "effect": "off",
+      "round": 1,
+      "scene": "pan",
+      "fps": 60.003370975897525,
+      "frames": 178,
+      "seconds": 2.9665,
+      "frameP95": 16.70000000001164,
+      "frameMax": 16.80000000000291,
+      "lagP95": 0.20000000298023224,
+      "longTaskMs": 0,
+      "domTerminals": 3,
+      "webglCanvases": 0,
+      "wallpaperPaused": null,
+      "focused": true,
+      "viewport": "transform: translate(252px, 74px) scale(1);",
+      "load": [
+        20.85,
+        15.45,
+        10.42
+      ]
+    },
+    {
+      "workload": "quiet",
+      "effect": "no-backdrop",
+      "round": 1,
+      "scene": "idle",
+      "fps": 6.826787163053153,
+      "frames": 19,
+      "seconds": 2.783153999999995,
+      "frameP95": 266.6999999999971,
+      "frameMax": 266.6999999999971,
+      "lagP95": 3,
+      "longTaskMs": 0,
+      "domTerminals": 3,
+      "webglCanvases": 0,
+      "wallpaperPaused": false,
+      "focused": true,
+      "viewport": "transform: translate(252px, 74px) scale(1);",
+      "load": [
+        21.42,
+        15.66,
+        10.52
+      ]
+    },
+    {
+      "workload": "quiet",
+      "effect": "no-backdrop",
+      "round": 1,
+      "scene": "pan",
+      "fps": 2.532153542098174,
+      "frames": 79,
+      "seconds": 31.198740000000004,
+      "frameP95": 600,
+      "frameMax": 850,
+      "lagP95": 4.800000000745058,
+      "longTaskMs": 0,
+      "domTerminals": 3,
+      "webglCanvases": 0,
+      "wallpaperPaused": false,
+      "focused": true,
+      "viewport": "transform: translate(252px, 74px) scale(1);",
+      "load": [
+        25.07,
+        17.03,
+        11.13
+      ]
+    },
+    {
+      "workload": "quiet",
+      "effect": "static",
+      "round": 1,
+      "scene": "idle",
+      "fps": 60.00464035885449,
+      "frames": 180,
+      "seconds": 2.9997679999999964,
+      "frameP95": 16.80000000000291,
+      "frameMax": 16.80000000000291,
+      "lagP95": 1.5,
+      "longTaskMs": 0,
+      "domTerminals": 3,
+      "webglCanvases": 0,
+      "wallpaperPaused": false,
+      "focused": true,
+      "viewport": "transform: translate(252px, 74px) scale(1);",
+      "load": [
+        24.03,
+        16.95,
+        11.14
+      ]
+    },
+    {
+      "workload": "quiet",
+      "effect": "static",
+      "round": 1,
+      "scene": "pan",
+      "fps": 60.00276510438269,
+      "frames": 217,
+      "seconds": 3.6165,
+      "frameP95": 16.79999999998836,
+      "frameMax": 16.80000000000291,
+      "lagP95": 1.800000000745058,
+      "longTaskMs": 0,
+      "domTerminals": 3,
+      "webglCanvases": 0,
+      "wallpaperPaused": false,
+      "focused": true,
+      "viewport": "transform: translate(252px, 74px) scale(1);",
+      "load": [
+        24.98,
+        17.26,
+        11.27
+      ]
+    },
+    {
+      "workload": "quiet",
+      "effect": "default",
+      "round": 1,
+      "scene": "idle",
+      "fps": 1.5789689753649123,
+      "frames": 3,
+      "seconds": 1.8999740000000165,
+      "frameP95": 716.5,
+      "frameMax": 716.5,
+      "lagP95": 5.100000001490116,
+      "longTaskMs": 53,
+      "domTerminals": 3,
+      "webglCanvases": 0,
+      "wallpaperPaused": false,
+      "focused": true,
+      "viewport": "transform: translate(252px, 74px) scale(1);",
+      "load": [
+        26.35,
+        17.67,
+        11.44
+      ]
+    },
+    {
+      "workload": "quiet",
+      "effect": "default",
+      "round": 1,
+      "scene": "pan",
+      "fps": 3.559475601412692,
+      "frames": 77,
+      "seconds": 21.632400000000022,
+      "frameP95": 516.6999999999825,
+      "frameMax": 550,
+      "lagP95": 4,
+      "longTaskMs": 0,
+      "domTerminals": 3,
+      "webglCanvases": 0,
+      "wallpaperPaused": false,
+      "focused": true,
+      "viewport": "transform: translate(252px, 74px) scale(1);",
+      "load": [
+        29.27,
+        19.12,
+        12.08
+      ]
+    }
+  ],
+  "gpu": {
+    "features": {
+      "2d_canvas": "enabled",
+      "canvas_oop_rasterization": "enabled_on",
+      "direct_rendering_display_compositor": "disabled_off_ok",
+      "gpu_compositing": "enabled",
+      "multiple_raster_threads": "enabled_on",
+      "opengl": "enabled_on",
+      "rasterization": "enabled",
+      "raw_draw": "disabled_off_ok",
+      "skia_graphite": "disabled_off",
+      "video_decode": "enabled",
+      "video_encode": "disabled_software",
+      "vulkan": "disabled_off",
+      "webgl": "enabled",
+      "webgl2": "enabled",
+      "webgpu": "disabled_off",
+      "webnn": "disabled_off"
+    },
+    "info": {
+      "auxAttributes": {
+        "amdSwitchable": false,
+        "canSupportThreadedTextureMailbox": false,
+        "glImplementationParts": "(gl=none,angle=none)",
+        "glResetNotificationStrategy": 0,
+        "inProcessGpu": true,
+        "initializationTime": 0,
+        "isAsan": false,
+        "isClangCoverage": false,
+        "jpegDecodeAcceleratorSupported": false,
+        "optimus": true,
+        "passthroughCmdDecoder": false,
+        "sandboxed": false,
+        "subpixelFontRendering": true,
+        "targetCpuBits": 64,
+        "visibilityCallbackCallCount": 0
+      },
+      "gpuDevice": [
+        {
+          "active": true,
+          "deviceId": 9656,
+          "gpuPreference": 0,
+          "vendorId": 4318
+        },
+        {
+          "active": false,
+          "deviceId": 39520,
+          "gpuPreference": 0,
+          "vendorId": 32902
+        }
+      ]
+    }
+  },
+  "display": {
+    "dpr": 1,
+    "width": 1920,
+    "height": 1200,
+    "focused": true
+  }
+}

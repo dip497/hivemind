@@ -2,11 +2,13 @@
 
 # hivemind
 
-**A canvas-per-project mission control for AI coding agents.**
+**A Linux workspace for coding agents.**
 
-Drop `claude`, `codex`, `droid`, `opencode`, `kiro`, or `pi` into real workspaces where they can
-read issues, update status, mark acceptance criteria, and comment their own
-progress — through a Kanban PM model that's just plain markdown on disk.
+Run agents alongside terminals, editors, and diffs. Group tools by repository,
+git worktree, or SSH host. Track issues as Markdown files and coordinate agents
+with the `hive` CLI.
+
+[Documentation](https://dip497.github.io/hivemind/guide/) · [Install](#install) · [Releases](https://github.com/dip497/hivemind/releases)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![Platform: Linux](https://img.shields.io/badge/platform-Linux%20x86__64-blue.svg)](#install)
@@ -27,7 +29,7 @@ Local-first · Markdown-backed · No SDK lock-in · No telemetry · No cloud.
 
 ## Contents
 
-[Why](#why) · [The whole canvas](#the-whole-canvas) · [Install](#install) · [Views](#views) · [Quick start](#quick-start) · [How agents talk to hivemind](#how-agents-talk-to-hivemind) · [Features](#features) · [Architecture](#architecture) · [Persistence](#persistence-model) · [Development](#development) · [Contributing](#contributing)
+[Why](#why) · [The whole canvas](#the-whole-canvas) · [Install](#install) · [Views](#views) · [Quick start](#quick-start) · [How agents talk to hivemind](#how-agents-talk-to-hivemind) · [Features](#features) · [Architecture](#architecture) · [Configuration](#configuration) · [Persistence](#persistence-model) · [Development](#development) · [Contributing](#contributing)
 
 ---
 
@@ -229,8 +231,14 @@ changes when you switch, because every tile body is mounted once and lent to the
   It runs in a sandboxed out-of-process iframe on its own origin — no filesystem, network,
   node or app API — and talks to hivemind through `@hivemind/view-sdk` (structure, names,
   per-tile status, selection, a hole-punch for live terminals). A plugin that floods, spins or
-  sends junk is disabled and you land back on the canvas with every session intact. Start from
-  `examples/views/orbit`.
+  sends junk is disabled and you land back on the canvas with every session intact. Three
+  examples to start from: `examples/views/orbit` (2D canvas, ~150 lines),
+  `examples/views/office` (an isometric pixel office) and `examples/views/solar` (a three.js
+  solar system). Each follows your theme through the SDK's `applyThemeVars`.
+
+Your appearance applies inside a view too: a terminal docked in the World or a community scene
+renders exactly as on the canvas (glass, and the wallpaper painted behind that slot only).
+Settings ▸ Appearance ▸ *Surfaces inside plugin views* switches it to a solid background.
 
 ---
 
@@ -288,6 +296,25 @@ packages/
 
 templates/
 └── agentic/     source of the hive-browser skill (embedded into hive-core)
+```
+
+---
+
+## Configuration
+
+Everything you can set lives in one file you own — `$XDG_CONFIG_HOME/hivemind/settings.json`
+(`$HIVE_SETTINGS` overrides it): appearance (palette, accent, radius, fonts, glass, wallpaper,
+terminal colours, plugin surfaces), the default view and per-view chrome, disabled community
+views, and agent defaults. Edit it from Settings (⚙, top right), from the appearance drawer, or
+from the shell — a running app applies the change immediately:
+
+```bash
+hive theme list                  # presets: ubuntu, dracula, nord, solarized-dark, one-dark
+hive theme use dracula
+hive theme export my-theme.json  # and `hive theme import my-theme.json`
+hive config path
+hive config get appearance.glass.blur
+hive config set appearance.pluginSurfaces '"opaque"'
 ```
 
 ---

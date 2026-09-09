@@ -1,0 +1,721 @@
+{
+  "label": "refactor-current",
+  "tiles": 4,
+  "at": "2026-09-08T08:34:25.847Z",
+  "idle_after_spawn": {
+    "total_cpu_pct": 37.5,
+    "renderer_rss_mb": 223,
+    "procs": [
+      {
+        "type": "Browser",
+        "cpu": 0.2,
+        "rssMB": 225
+      },
+      {
+        "type": "GPU",
+        "cpu": 36.2,
+        "rssMB": 430
+      },
+      {
+        "type": "Tab",
+        "cpu": 1.1,
+        "rssMB": 223
+      }
+    ]
+  },
+  "canvas_quiet": {
+    "seconds": 2.84,
+    "frames": 84,
+    "fps": 29.6,
+    "frame_p50_ms": 16.6,
+    "frame_p95_ms": 159.4,
+    "frame_max_ms": 168.8,
+    "frames_over_50ms": 11,
+    "frames_over_100ms": 11,
+    "longtasks": 0,
+    "longtask_total_ms": 0,
+    "longtask_max_ms": 0,
+    "lag_p50_ms": 0,
+    "lag_p95_ms": 1.9,
+    "lag_max_ms": 10
+  },
+  "canvas_quiet_cpu": {
+    "total_cpu_pct": 31,
+    "renderer_rss_mb": 231,
+    "procs": [
+      {
+        "type": "Browser",
+        "cpu": 0,
+        "rssMB": 226
+      },
+      {
+        "type": "GPU",
+        "cpu": 30.8,
+        "rssMB": 367
+      },
+      {
+        "type": "Tab",
+        "cpu": 0.2,
+        "rssMB": 231
+      }
+    ]
+  },
+  "world_quiet": {
+    "seconds": 3,
+    "frames": 181,
+    "fps": 60.3,
+    "frame_p50_ms": 16.6,
+    "frame_p95_ms": 17.5,
+    "frame_max_ms": 17.9,
+    "frames_over_50ms": 0,
+    "frames_over_100ms": 0,
+    "longtasks": 0,
+    "longtask_total_ms": 0,
+    "longtask_max_ms": 0,
+    "lag_p50_ms": 0,
+    "lag_p95_ms": 0.3,
+    "lag_max_ms": 1.2,
+    "frames_drawn": 0
+  },
+  "world_quiet_cpu": {
+    "total_cpu_pct": 0,
+    "renderer_rss_mb": 234,
+    "procs": [
+      {
+        "type": "Browser",
+        "cpu": 0,
+        "rssMB": 227
+      },
+      {
+        "type": "GPU",
+        "cpu": 0,
+        "rssMB": 316
+      },
+      {
+        "type": "Tab",
+        "cpu": 0,
+        "rssMB": 234
+      }
+    ]
+  },
+  "community_quiet": {
+    "seconds": 3,
+    "frames": 181,
+    "fps": 60.3,
+    "frame_p50_ms": 16.9,
+    "frame_p95_ms": 17.3,
+    "frame_max_ms": 17.6,
+    "frames_over_50ms": 0,
+    "frames_over_100ms": 0,
+    "longtasks": 0,
+    "longtask_total_ms": 0,
+    "longtask_max_ms": 0,
+    "lag_p50_ms": 0,
+    "lag_p95_ms": 0.2,
+    "lag_max_ms": 0.6,
+    "frames_drawn": 0
+  },
+  "community_quiet_cpu": {
+    "total_cpu_pct": 1,
+    "renderer_rss_mb": 219,
+    "procs": [
+      {
+        "type": "Browser",
+        "cpu": 0,
+        "rssMB": 223
+      },
+      {
+        "type": "GPU",
+        "cpu": 0.1,
+        "rssMB": 333
+      },
+      {
+        "type": "Tab",
+        "cpu": 0.9,
+        "rssMB": 219
+      },
+      {
+        "type": "Tab",
+        "cpu": 0,
+        "rssMB": 88
+      }
+    ]
+  },
+  "typed_into": 4,
+  "node_count": 5,
+  "xterm_count_streaming": 4,
+  "canvas_streaming_idle": {
+    "seconds": 4.46,
+    "frames": 17,
+    "fps": 3.8,
+    "frame_p50_ms": 269.4,
+    "frame_p95_ms": 329.5,
+    "frame_max_ms": 329.5,
+    "frames_over_50ms": 16,
+    "frames_over_100ms": 16,
+    "longtasks": 0,
+    "longtask_total_ms": 0,
+    "longtask_max_ms": 0,
+    "lag_p50_ms": 0,
+    "lag_p95_ms": 7.6,
+    "lag_max_ms": 31.1
+  },
+  "streaming_cpu": {
+    "total_cpu_pct": 34.6,
+    "renderer_rss_mb": 243,
+    "procs": [
+      {
+        "type": "Browser",
+        "cpu": 0.9,
+        "rssMB": 224
+      },
+      {
+        "type": "GPU",
+        "cpu": 32.6,
+        "rssMB": 513
+      },
+      {
+        "type": "Tab",
+        "cpu": 1.1,
+        "rssMB": 243
+      }
+    ]
+  },
+  "canvas_streaming_typing": {
+    "seconds": 2.51,
+    "frames": 7,
+    "fps": 2.8,
+    "frame_p50_ms": 322.2,
+    "frame_p95_ms": 597.4,
+    "frame_max_ms": 597.4,
+    "frames_over_50ms": 7,
+    "frames_over_100ms": 7,
+    "longtasks": 0,
+    "longtask_total_ms": 0,
+    "longtask_max_ms": 0,
+    "lag_p50_ms": 0,
+    "lag_p95_ms": 31.2,
+    "lag_max_ms": 454.8
+  },
+  "canvas_pan": {
+    "seconds": 49.99,
+    "frames": 180,
+    "fps": 3.6,
+    "frame_p50_ms": 258.6,
+    "frame_p95_ms": 413.2,
+    "frame_max_ms": 500.5,
+    "frames_over_50ms": 180,
+    "frames_over_100ms": 180,
+    "longtasks": 5,
+    "longtask_total_ms": 319,
+    "longtask_max_ms": 95,
+    "lag_p50_ms": 0,
+    "lag_p95_ms": 26.3,
+    "lag_max_ms": 84.9
+  },
+  "canvas_drag": {
+    "seconds": 30.1,
+    "frames": 39,
+    "fps": 1.3,
+    "frame_p50_ms": 885.4,
+    "frame_p95_ms": 1195.8,
+    "frame_max_ms": 1212,
+    "frames_over_50ms": 39,
+    "frames_over_100ms": 39,
+    "longtasks": 32,
+    "longtask_total_ms": 3189,
+    "longtask_max_ms": 163,
+    "lag_p50_ms": 0,
+    "lag_p95_ms": 9.6,
+    "lag_max_ms": 171.1
+  },
+  "switches": [
+    {
+      "to": "windows",
+      "ms": 2608,
+      "longtask_ms": 498,
+      "xterms": 4
+    },
+    {
+      "to": "canvas",
+      "ms": 4165,
+      "longtask_ms": 1334,
+      "xterms": 4
+    },
+    {
+      "to": "windows",
+      "ms": 4158,
+      "longtask_ms": 3233,
+      "xterms": 4
+    },
+    {
+      "to": "canvas",
+      "ms": 1475,
+      "longtask_ms": 1435,
+      "xterms": 4
+    },
+    {
+      "to": "windows",
+      "ms": 1590,
+      "longtask_ms": 636,
+      "xterms": 4
+    },
+    {
+      "to": "canvas",
+      "ms": 1320,
+      "longtask_ms": 1242,
+      "xterms": 4
+    },
+    {
+      "to": "windows",
+      "ms": 746,
+      "longtask_ms": 227,
+      "xterms": 4
+    },
+    {
+      "to": "canvas",
+      "ms": 851,
+      "longtask_ms": 250,
+      "xterms": 4
+    }
+  ],
+  "switch_to_windows_median_ms": 2608,
+  "switch_to_canvas_median_ms": 1475,
+  "xterm_instances_after_switches": 4,
+  "windows_streaming_idle": {
+    "seconds": 4,
+    "frames": 18,
+    "fps": 4.5,
+    "frame_p50_ms": 223.5,
+    "frame_p95_ms": 284.2,
+    "frame_max_ms": 284.2,
+    "frames_over_50ms": 17,
+    "frames_over_100ms": 17,
+    "longtasks": 7,
+    "longtask_total_ms": 379,
+    "longtask_max_ms": 63,
+    "lag_p50_ms": 0,
+    "lag_p95_ms": 39.1,
+    "lag_max_ms": 62.5
+  },
+  "windows_cpu": {
+    "total_cpu_pct": 40,
+    "renderer_rss_mb": 315,
+    "procs": [
+      {
+        "type": "Browser",
+        "cpu": 0.7,
+        "rssMB": 227
+      },
+      {
+        "type": "GPU",
+        "cpu": 37.4,
+        "rssMB": 551
+      },
+      {
+        "type": "Tab",
+        "cpu": 1.9,
+        "rssMB": 315
+      }
+    ]
+  },
+  "world_streaming_idle": {
+    "seconds": 3.96,
+    "frames": 101,
+    "fps": 25.5,
+    "frame_p50_ms": 37.3,
+    "frame_p95_ms": 57.5,
+    "frame_max_ms": 94.8,
+    "frames_over_50ms": 13,
+    "frames_over_100ms": 0,
+    "longtasks": 9,
+    "longtask_total_ms": 534,
+    "longtask_max_ms": 89,
+    "lag_p50_ms": 50.5,
+    "lag_p95_ms": 102.2,
+    "lag_max_ms": 121.9,
+    "frames_drawn": 0
+  },
+  "world_docked": true,
+  "world_docked_streaming_idle": {
+    "seconds": 3.72,
+    "frames": 18,
+    "fps": 4.8,
+    "frame_p50_ms": 195.4,
+    "frame_p95_ms": 293.7,
+    "frame_max_ms": 293.7,
+    "frames_over_50ms": 18,
+    "frames_over_100ms": 18,
+    "longtasks": 9,
+    "longtask_total_ms": 522,
+    "longtask_max_ms": 75,
+    "lag_p50_ms": 0,
+    "lag_p95_ms": 42.9,
+    "lag_max_ms": 64.6,
+    "frames_drawn": 0
+  },
+  "world_docked_cpu": {
+    "total_cpu_pct": 40,
+    "renderer_rss_mb": 307,
+    "procs": [
+      {
+        "type": "Browser",
+        "cpu": 0.8,
+        "rssMB": 227
+      },
+      {
+        "type": "GPU",
+        "cpu": 36.7,
+        "rssMB": 445
+      },
+      {
+        "type": "Tab",
+        "cpu": 2.5,
+        "rssMB": 307
+      }
+    ]
+  },
+  "world_dock_typing_focused": true,
+  "world_docked_typing": {
+    "seconds": 2.48,
+    "frames": 12,
+    "fps": 4.8,
+    "frame_p50_ms": 196.7,
+    "frame_p95_ms": 265.3,
+    "frame_max_ms": 265.3,
+    "frames_over_50ms": 12,
+    "frames_over_100ms": 12,
+    "longtasks": 1,
+    "longtask_total_ms": 54,
+    "longtask_max_ms": 54,
+    "lag_p50_ms": 0,
+    "lag_p95_ms": 35.9,
+    "lag_max_ms": 55.4
+  },
+  "world_orbit": {
+    "seconds": 19.35,
+    "frames": 60,
+    "fps": 3.1,
+    "frame_p50_ms": 212.5,
+    "frame_p95_ms": 874,
+    "frame_max_ms": 1269.2,
+    "frames_over_50ms": 60,
+    "frames_over_100ms": 60,
+    "longtasks": 39,
+    "longtask_total_ms": 3323,
+    "longtask_max_ms": 647,
+    "lag_p50_ms": 0,
+    "lag_p95_ms": 39.9,
+    "lag_max_ms": 711.4,
+    "frames_drawn": 60
+  },
+  "world_switches": [
+    {
+      "to": "canvas",
+      "ms": 2451,
+      "longtask_ms": 2445,
+      "xterms": 4
+    },
+    {
+      "to": "world",
+      "ms": 593,
+      "longtask_ms": 171,
+      "xterms": 4
+    },
+    {
+      "to": "canvas",
+      "ms": 2484,
+      "longtask_ms": 2219,
+      "xterms": 4
+    },
+    {
+      "to": "world",
+      "ms": 1076,
+      "longtask_ms": 0,
+      "xterms": 4
+    },
+    {
+      "to": "canvas",
+      "ms": 2767,
+      "longtask_ms": 2620,
+      "xterms": 4
+    },
+    {
+      "to": "world",
+      "ms": 690,
+      "longtask_ms": 264,
+      "xterms": 4
+    },
+    {
+      "to": "canvas",
+      "ms": 202,
+      "longtask_ms": 168,
+      "xterms": 4
+    },
+    {
+      "to": "world",
+      "ms": 790,
+      "longtask_ms": 0,
+      "xterms": 4
+    }
+  ],
+  "switch_to_world_median_ms": 790,
+  "switch_world_to_canvas_median_ms": 2484,
+  "world_switch_longtask_max_ms": 2620,
+  "xterm_instances_after_world_switches": 4,
+  "world_dock_undock": {
+    "seconds": 11.05,
+    "frames": 56,
+    "fps": 5.1,
+    "frame_p50_ms": 171.2,
+    "frame_p95_ms": 541,
+    "frame_max_ms": 914.5,
+    "frames_over_50ms": 44,
+    "frames_over_100ms": 38,
+    "longtasks": 37,
+    "longtask_total_ms": 5725,
+    "longtask_max_ms": 759,
+    "lag_p50_ms": 0.1,
+    "lag_p95_ms": 81.1,
+    "lag_max_ms": 757.9
+  },
+  "world_switch_after_undock": {
+    "ms": 1466,
+    "longtask_ms": 1347,
+    "xterms": 4
+  },
+  "community_streaming_idle": {
+    "seconds": 3.98,
+    "frames": 221,
+    "fps": 55.5,
+    "frame_p50_ms": 17.7,
+    "frame_p95_ms": 34.3,
+    "frame_max_ms": 53.4,
+    "frames_over_50ms": 1,
+    "frames_over_100ms": 0,
+    "longtasks": 1,
+    "longtask_total_ms": 52,
+    "longtask_max_ms": 52,
+    "lag_p50_ms": 7.5,
+    "lag_p95_ms": 27.6,
+    "lag_max_ms": 48.2,
+    "frames_drawn": 0
+  },
+  "community_streaming_cpu": {
+    "total_cpu_pct": 36.7,
+    "renderer_rss_mb": 354,
+    "procs": [
+      {
+        "type": "Browser",
+        "cpu": 1,
+        "rssMB": 233
+      },
+      {
+        "type": "GPU",
+        "cpu": 30.7,
+        "rssMB": 504
+      },
+      {
+        "type": "Tab",
+        "cpu": 5,
+        "rssMB": 354
+      },
+      {
+        "type": "Tab",
+        "cpu": 0,
+        "rssMB": 88
+      }
+    ]
+  },
+  "community_docked": true,
+  "community_docked_streaming_idle": {
+    "seconds": 3.65,
+    "frames": 22,
+    "fps": 6,
+    "frame_p50_ms": 192.9,
+    "frame_p95_ms": 218.8,
+    "frame_max_ms": 222.4,
+    "frames_over_50ms": 19,
+    "frames_over_100ms": 19,
+    "longtasks": 0,
+    "longtask_total_ms": 0,
+    "longtask_max_ms": 0,
+    "lag_p50_ms": 0,
+    "lag_p95_ms": 25,
+    "lag_max_ms": 36.9,
+    "frames_drawn": 0
+  },
+  "community_docked_cpu": {
+    "total_cpu_pct": 28.6,
+    "renderer_rss_mb": 382,
+    "procs": [
+      {
+        "type": "Browser",
+        "cpu": 1,
+        "rssMB": 233
+      },
+      {
+        "type": "GPU",
+        "cpu": 26.2,
+        "rssMB": 516
+      },
+      {
+        "type": "Tab",
+        "cpu": 1.4,
+        "rssMB": 382
+      },
+      {
+        "type": "Tab",
+        "cpu": 0,
+        "rssMB": 90
+      }
+    ]
+  },
+  "community_dock_typing_focused": true,
+  "community_docked_typing": {
+    "seconds": 2.16,
+    "frames": 12,
+    "fps": 5.6,
+    "frame_p50_ms": 198.9,
+    "frame_p95_ms": 239.5,
+    "frame_max_ms": 239.5,
+    "frames_over_50ms": 12,
+    "frames_over_100ms": 12,
+    "longtasks": 2,
+    "longtask_total_ms": 119,
+    "longtask_max_ms": 64,
+    "lag_p50_ms": 0,
+    "lag_p95_ms": 33.2,
+    "lag_max_ms": 64.1
+  },
+  "community_switches": [
+    {
+      "to": "canvas",
+      "ms": 1192,
+      "longtask_ms": 1097,
+      "xterms": 4
+    },
+    {
+      "to": "orbit",
+      "ms": 726,
+      "longtask_ms": 52,
+      "xterms": 4
+    },
+    {
+      "to": "canvas",
+      "ms": 159,
+      "longtask_ms": 102,
+      "xterms": 4
+    },
+    {
+      "to": "orbit",
+      "ms": 790,
+      "longtask_ms": 59,
+      "xterms": 4
+    },
+    {
+      "to": "canvas",
+      "ms": 218,
+      "longtask_ms": 192,
+      "xterms": 4
+    },
+    {
+      "to": "orbit",
+      "ms": 542,
+      "longtask_ms": 51,
+      "xterms": 4
+    },
+    {
+      "to": "canvas",
+      "ms": 166,
+      "longtask_ms": 103,
+      "xterms": 4
+    },
+    {
+      "to": "orbit",
+      "ms": 1049,
+      "longtask_ms": 60,
+      "xterms": 4
+    }
+  ],
+  "switch_to_community_median_ms": 790,
+  "switch_community_to_canvas_median_ms": 218,
+  "community_switch_longtask_max_ms": 192,
+  "xterm_instances_after_community_switches": 4,
+  "community_dock_undock": {
+    "seconds": 10.97,
+    "frames": 154,
+    "fps": 14,
+    "frame_p50_ms": 30.1,
+    "frame_p95_ms": 269.1,
+    "frame_max_ms": 559.3,
+    "frames_over_50ms": 47,
+    "frames_over_100ms": 34,
+    "longtasks": 30,
+    "longtask_total_ms": 2215,
+    "longtask_max_ms": 260,
+    "lag_p50_ms": 0.1,
+    "lag_p95_ms": 56,
+    "lag_max_ms": 341.7
+  },
+  "community_switch_after_undock": {
+    "ms": 1964,
+    "longtask_ms": 1745,
+    "xterms": 4
+  },
+  "hostile_dock_typing_focused": true,
+  "hostile_docked_typing": {
+    "seconds": 5.15,
+    "frames": 7,
+    "fps": 1.4,
+    "frame_p50_ms": 620.3,
+    "frame_p95_ms": 1359.8,
+    "frame_max_ms": 1359.8,
+    "frames_over_50ms": 7,
+    "frames_over_100ms": 7,
+    "longtasks": 7,
+    "longtask_total_ms": 976,
+    "longtask_max_ms": 396,
+    "lag_p50_ms": 0.1,
+    "lag_p95_ms": 34,
+    "lag_max_ms": 707.8
+  },
+  "hostile_docked_cpu": {
+    "total_cpu_pct": 34.1,
+    "renderer_rss_mb": 374,
+    "procs": [
+      {
+        "type": "Browser",
+        "cpu": 1.2,
+        "rssMB": 233
+      },
+      {
+        "type": "GPU",
+        "cpu": 26.6,
+        "rssMB": 510
+      },
+      {
+        "type": "Tab",
+        "cpu": 0.8,
+        "rssMB": 374
+      },
+      {
+        "type": "Tab",
+        "cpu": 5.5,
+        "rssMB": 93
+      }
+    ]
+  },
+  "hostile_frame_pids": [
+    {
+      "url": "file:///home/dipendra-sharma/pro",
+      "pid": 653998,
+      "cpu": 0
+    },
+    {
+      "url": "hm-view://hostile-loop/index.htm",
+      "pid": 711621,
+      "cpu": 4
+    }
+  ]
+}
