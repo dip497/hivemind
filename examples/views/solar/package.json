@@ -1,0 +1,19 @@
+{
+  "name": "@hivemind/example-view-solar",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Example community view for hivemind: a solar system — every frame is a planet, every tile a moon lit by live agent status; fly to a planet, click a moon to dock its live terminal.",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@hivemind/tsconfig": "workspace:*",
+    "@hivemind/view-sdk": "workspace:*",
+    "@types/three": "0.185.4",
+    "esbuild": "0.28.0",
+    "three": "0.185.1",
+    "typescript": "catalog:"
+  }
+}

@@ -93,6 +93,12 @@ const list = sub("list", "List tiles on the canvas grouped by frame (with agent 
 const frames = sub("frames", "List canvas frames (id, title, repo, branch, tile count)", {},
   () => hcpCall("tile.list_frames", {}));
 
+const openTool = sub("open-tool", "Open an enabled tool plugin", {
+  tool: { type: "positional", required: true, description: "tool id (for example hivemind/web/browser)" },
+  frame: { type: "string", description: "target frame id (default: current selection)" },
+  url: { type: "string", description: "Browser URL: http, https, or about:blank" },
+}, (a) => hcpCall("tool.open", { tool: a.tool, frame: a.frame, url: a.url }));
+
 const spawn = sub("spawn", "Spawn an agent tile; prints { tileId, … }", {
   agent: { type: "string", description: `agent id: ${spawnableAgents().map((d) => d.id).join(" | ")} (default ${defaultAgent().id})` },
   prompt: { type: "string", description: "initial task" },
@@ -282,7 +288,7 @@ const listWorkspacesCmd = sub("list-workspaces", "List every registered workspac
 export const ctlCmd = defineCommand({
   meta: { name: "ctl", description: "Drive the running hivemind app (spawn/send/read/stream/workflow/report) and the issue verbs agents use" },
   subCommands: {
-    list, frames, spawn, send, keys, read, stream, workflow, approve, report, "open-review": openReview,
+    list, frames, "open-tool": openTool, spawn, send, keys, read, stream, workflow, approve, report, "open-review": openReview,
     focus, close, connect, disconnect,
     "set-state": setState, "add-comment": addComment, "mark-acceptance": markAcceptance,
     "delete-issue": deleteIssueCmd, "list-workspaces": listWorkspacesCmd,

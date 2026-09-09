@@ -10,7 +10,7 @@
  * (`createInvalidator`), nothing while hidden, one status subscription per
  * tile, names separate from structure.
  */
-import { connect, createInvalidator, type ViewFrame, type ViewStatus, type ViewTile } from "@hivemind/view-sdk";
+import { applyThemeVars, connect, createInvalidator, type ViewFrame, type ViewStatus, type ViewTile } from "@hivemind/view-sdk";
 
 const STATUS_COLOR: Record<ViewStatus, string> = { unknown: "#6b7280", idle: "#3b82f6", working: "#22c55e", blocked: "#f59e0b", exited: "#ef4444" };
 const DOCK_FRACTION = 0.5;
@@ -31,9 +31,16 @@ let bodies: Body[] = [];
 let hover: string | null = null;
 let docked: string | null = null;
 let spread = (hm.hello.layout as { spread?: number } | null)?.spread ?? 1;
-const theme = hm.hello.theme.colors;
-label.style.background = theme.bg2 ?? "#222";
-label.style.color = theme.fg ?? "#eee";
+// The user's theme, live: the host re-sends `theme` on every settings change,
+// and applyThemeVars keeps the --hm-* custom properties in sync for the CSS.
+let theme = hm.hello.theme.colors;
+const paintChrome = () => {
+  label.style.background = theme.bg2 ?? "#222";
+  label.style.color = theme.fg ?? "#eee";
+};
+paintChrome();
+applyThemeVars(hm);
+hm.on("theme", (t) => { theme = t.colors; paintChrome(); invalidate(); });
 
 const { invalidate } = createInvalidator(hm, draw);
 

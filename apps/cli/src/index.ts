@@ -23,7 +23,9 @@ import { agentCmd } from "./commands/agent.js";
 import { upgradeCmd } from "./commands/upgrade.js";
 import { resolveCmd } from "./commands/mention.js";
 import { ctlCmd } from "./commands/ctl.js";
+import { packagesCmd } from "./commands/packages.js";
 import { viewsCmd } from "./commands/views.js";
+import { configCmd, themeCmd } from "./commands/config.js";
 
 /**
  * Intercept `hive @ID` BEFORE citty sees argv — citty treats unknown
@@ -63,6 +65,9 @@ const main = defineCommand({
     resolve: resolveCmd,
     ctl: ctlCmd,
     views: viewsCmd,
+    packages: packagesCmd,
+    config: configCmd,
+    theme: themeCmd,
   },
 });
 

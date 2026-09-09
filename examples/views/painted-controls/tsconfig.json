@@ -1,0 +1,5 @@
+{
+  "extends": "@hivemind/tsconfig/base.json",
+  "compilerOptions": { "noEmit": true, "lib": ["ES2023", "DOM"], "types": [], "moduleResolution": "Bundler", "module": "ESNext" },
+  "include": ["src/**/*"]
+}
