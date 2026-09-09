@@ -63,7 +63,7 @@ export async function readViewPackage(dir: string, source: ViewSource, installed
 
 async function scan(root: string, source: ViewSource): Promise<InstalledView[]> {
   let names: string[];
-  try { names = (await fs.readdir(root, { withFileTypes: true })).filter((d) => d.isDirectory()).map((d) => d.name).sort(); }
+  try { names = (await fs.readdir(root, { withFileTypes: true })).filter((d) => d.isDirectory() && !d.name.startsWith(".")).map((d) => d.name).sort(); }
   catch { return []; }
   return Promise.all(names.map((n) => readViewPackage(path.join(root, n), source)));
 }
@@ -86,9 +86,33 @@ export async function installView(srcDir: string): Promise<InstalledView> {
   const dest = path.join(userViewsDir(), pkg.id);
   if (path.resolve(dest) === src) throw new HiveError("invalid_view", `"${src}" is already the installed copy`);
   await fs.mkdir(userViewsDir(), { recursive: true });
-  await fs.rm(dest, { recursive: true, force: true });
-  await fs.cp(src, dest, { recursive: true, dereference: true, filter: (p) => path.basename(p) !== "node_modules" });
-  return readViewPackage(dest, "user");
+  // Copy and validate before moving the installed version: a missing asset or
+  // failed copy must not destroy a working extension (desktop and CLI share this).
+  const staging = await fs.mkdtemp(path.join(userViewsDir(), ".install-"));
+  const next = path.join(staging, "next");
+  const backup = path.join(staging, "previous");
+  let keepBackup = false;
+  try {
+    await fs.cp(src, next, { recursive: true, dereference: true, filter: (p) => path.basename(p) !== "node_modules" });
+    const copied = await readViewPackage(next, "user", false);
+    if (copied.error || copied.id !== pkg.id) throw new HiveError("invalid_view", copied.error ?? "package changed during installation");
+    let replaced = false;
+    try { await fs.rename(dest, backup); replaced = true; }
+    catch (e) { if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e; }
+    try { await fs.rename(next, dest); }
+    catch (e) {
+      if (replaced) {
+        keepBackup = true;
+        await fs.rename(backup, dest);
+        keepBackup = false;
+      }
+      throw e;
+    }
+    return readViewPackage(dest, "user");
+  } finally {
+    // If restoring failed, retain the previous files for recovery.
+    if (!keepBackup) await fs.rm(staging, { recursive: true, force: true });
+  }
 }
 
 /** Remove a user-installed view. Its layout blobs in the app are left alone (inert). */

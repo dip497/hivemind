@@ -12,8 +12,11 @@
 import { useSyncExternalStore } from "react";
 import { loadViewMode, saveViewMode } from "../windows-view-state";
 import { nextViewId, resolveViewId } from "./workspace-view";
+import { getSettings, patchSettings } from "../settings-store";
 
-let current: string | null = loadViewMode();
+// settings.json `views.defaultView` wins; the pre-2.0 localStorage key is the
+// fallback (and was imported into the file once by settings-store).
+let current: string | null = getSettings().migrated ? getSettings().views.defaultView : (loadViewMode() ?? getSettings().views.defaultView);
 const listeners = new Set<() => void>();
 
 export function getViewMode(): string | null {
@@ -23,7 +26,7 @@ export function getViewMode(): string | null {
 export function setViewMode(id: string | null): void {
   if (id === current) return;
   current = id;
-  if (id) saveViewMode(id);
+  if (id) { saveViewMode(id); if (getSettings().views.defaultView !== id) patchSettings("views.defaultView", id); }
   for (const l of listeners) l();
 }
 

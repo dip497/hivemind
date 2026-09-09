@@ -14,7 +14,8 @@ import { publishStatus, clearStatus, noteOutput, revalidate, type TileStatusKind
 import { SUBMIT_DELAY_MS, SPAWN_SUBMIT_RETRY_MS, deliversPromptViaArgv } from "../../shared/agent-io";
 import { Pencil, GripVertical } from "lucide-react";
 import { webUrlForInternalBrowser } from "./browser-open";
-import { useTheme, getTheme, effectiveGlass, type ThemeState } from "./theme-store";
+import { useTheme, useSurfacePolicy, getTheme, effectiveGlass, type ThemeState } from "./theme-store";
+import { terminalThemeFor } from "@hivemind/core/settings-schema";
 import { FullscreenShell, useReparentFullscreen } from "./tile-fullscreen";
 import { HeaderPinButton, type PinRect } from "./canvas-nodes";
 import { SURFACE_ADOPTED, SURFACE_PARKED } from "./workspace/tile-host";
@@ -41,44 +42,19 @@ function openExternalLink(uri: string, openInBrowser?: (url: string) => void): v
 // DPR-driven (see terminal-dpr.ts); 15 is the default for comfortable reading.
 const DEFAULT_FONT = 15;
 
-// Ubuntu / GNOME Terminal palette — the signature aubergine background + Tango
-// ANSI colors. Extracted so the "Frost tile content" theme option can swap just
-// the background to transparent live (xterm honors `theme` updates at runtime;
-// `allowTransparency` must be set at construction, so it's always on — it costs
-// nothing while the bg stays opaque).
-const TERM_THEME = {
-  background: "#300A24",
-  foreground: "#FFFFFF",
-  cursor: "#FFFFFF",
-  cursorAccent: "#300A24",
-  selectionBackground: "rgba(255,255,255,0.25)",
-  black: "#2E3436",
-  brightBlack: "#555753",
-  red: "#CC0000",
-  brightRed: "#EF2929",
-  green: "#4E9A06",
-  brightGreen: "#8AE234",
-  yellow: "#C4A000",
-  brightYellow: "#FCE94F",
-  blue: "#3465A4",
-  brightBlue: "#729FCF",
-  magenta: "#75507B",
-  brightMagenta: "#AD7FA8",
-  cyan: "#06989A",
-  brightCyan: "#34E2E2",
-  white: "#D3D7CF",
-  brightWhite: "#EEEEEC",
-} as const;
+// The terminal palette comes from settings.appearance.terminal (the ubuntu
+// preset is the historical Ubuntu / GNOME Terminal palette, byte-identical —
+// golden-tested in hive-core). `allowTransparency` must be set at construction,
+// so it follows the user's glass setting, not the per-view gate.
+const termThemeFor = (t: ThemeState) => terminalThemeFor(t.terminal);
 /** The terminal background: FULLY transparent when content-glass is on, so the
  *  single tint lives on the tile ROOT (.hm-term-root, like every other tile) and
  *  the whole body — including the host's padding band — reads as one uniform tint
  *  (no "gap" frame). Else the opaque aubergine. */
-// Frost-tile-content applies only while the active view mounts the wallpaper
-// (theme-store.effectiveGlass): a terminal docked in the World or a plugin
-// scene is the opaque theme background, never a window onto a wallpaper that
-// is not there.
+// Scene views may opt out of glass; otherwise their wallpaper lives in the
+// docked slot. The runtime surface policy determines the terminal background.
 const termBgFor = (t: ThemeState): string =>
-  effectiveGlass(t) && t.contentGlass ? "rgba(0,0,0,0)" : TERM_THEME.background;
+  effectiveGlass(t) && t.contentGlass ? "rgba(0,0,0,0)" : t.terminal.background;
 
 // ── render-quality diagnostics ───────────────────────────────────────────────
 // A toggleable HUD (Ctrl/Cmd+Shift+D, shared across tiles) that surfaces the
@@ -102,20 +78,8 @@ function readCanvasZoom(): number {
   try { return new DOMMatrixReadOnly(getComputedStyle(vp).transform).a; } catch { return 1; }
 }
 /**
- * Renderer: WebGL + a per-instance device-pixel-ratio override (see
- * ./terminal-dpr.ts) — the technique opencove uses, adapted for DPR=1 displays.
- *
- * WebGL rasterizes glyphs into a GPU atlas at `cellPx × devicePixelRatio`. On
- * HiDPI (DPR≥2) that's dense → crisp (why opencove looks sharp on retina). On a
- * DPR=1 laptop the atlas is 1× → thin/soft, and the canvas zoom makes it worse.
- * installCrispDpr() overrides xterm's internal dpr to a supersample FLOOR of 2,
- * so the atlas is always rasterized ≥2× and downsampled to the display — crisp
- * at zoom 1, no CSS hacks, no PTY reflow, mouse-mapping intact.
- *
- * (Earlier attempts — a CSS-scale SSAA wrapper, then switching to the DOM
- * renderer — both fell short: the wrapper caused reflow/mouse drift, and the DOM
- * renderer doesn't supersample and still blurs under the canvas transform. The
- * DPR override is the actual fix.)
+ * WebGL slots are shared across live terminals. Low-DPI terminals can opt into
+ * DOM text rendering; both renderers use the display's native pixel ratio.
  */
 
 interface Props {
@@ -193,13 +157,15 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
   // when the theme toggles, WITHOUT recreating the terminal. xterm applies
   // `theme` updates at runtime; the effect is gated on the COMPUTED bg, so
   // opacity-slider drags (which don't change it) never trigger a refresh.
-  const termBg = termBgFor(useTheme());
+  const theme = useTheme();
+  const surfacePolicy = useSurfacePolicy();
+  const termBg = surfacePolicy.glass && theme.contentGlass ? "rgba(0,0,0,0)" : theme.terminal.background;
+  const termPalette = theme.terminal;
   useEffect(() => {
     const term = termRef.current;
     if (!term) return;
-    // Selection stays the neutral white default (TERM_THEME.selectionBackground).
-    term.options.theme = { ...TERM_THEME, background: termBg };
-  }, [termBg]);
+    term.options.theme = { ...termThemeFor(theme), background: termBg };
+  }, [termBg, termPalette]);
   // Unique PTY identity per MOUNT (not per prop). Fixes React.StrictMode
   // double-mount race: the first mount's awaited ptySpawn could resolve AFTER
   // its cleanup ran, killing the second mount's PTY (same tileId in the
@@ -346,7 +312,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       // native terminal), so opaque terminals must keep it OFF to stay crisp.
       // (Toggling content-glass later needs a reload to apply to open terminals.)
       allowTransparency: getTheme().glass && getTheme().contentGlass,
-      theme: { ...TERM_THEME, background: termBgFor(getTheme()) },
+      theme: { ...termThemeFor(getTheme()), background: termBgFor(getTheme()) },
       // No blink — a blinking cursor repaints EVERY terminal ~2×/s forever, so
       // the canvas never feels fully still/crisp (perpetual GPU compositing
       // across all tiles). Cursor stays solid + visible; zero idle repaint.
@@ -1180,7 +1146,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
   }, [selected, effLabel]);
 
   return (
-    <div className="hm-term-root flex h-full flex-col rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] overflow-hidden shadow-[0_8px_22px_rgba(0,0,0,0.45)]">
+    <div className="hm-term-root flex h-full flex-col rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] overflow-hidden shadow-[0_8px_22px_rgba(0,0,0,0.45)]" data-term-bg={termBg}>
       {/* Entire header is the drag handle. Previously only the ⋮⋮ icon (~5px
           wide) carried `.tile-drag-handle` — invisible target, users
           clicked the wide header bar expecting drag and nothing happened

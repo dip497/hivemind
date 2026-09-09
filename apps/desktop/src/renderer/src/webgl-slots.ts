@@ -45,6 +45,7 @@ export interface WebglSlotClient {
 }
 
 const clients = new Map<string, WebglSlotClient>();
+let reconcilePending = false;
 
 /**
  * Decide which clients hold WebGL, then apply. Keep-until-needed to avoid context
@@ -88,33 +89,45 @@ function reconcile(): void {
     }
   }
 
+  // Free displaced contexts before granting replacements, even when the new
+  // holder registered first. Chromium's context limit applies during swaps too.
   for (const c of all) {
-    const want = keep.has(c.id) && !domForced.has(c.id);
-    if (want && !c._hasSlot) {
-      c._hasSlot = true;
-      try { c.acquire(); } catch { /* swap failed — leave on DOM */ c._hasSlot = false; }
-    } else if (!want && c._hasSlot) {
+    if (!keep.has(c.id) && c._hasSlot) {
       c._hasSlot = false;
       try { c.release(); } catch { /* already gone */ }
+    }
+  }
+  for (const c of all) {
+    if (keep.has(c.id) && !c._hasSlot) {
+      c._hasSlot = true;
+      try { c.acquire(); } catch { /* swap failed — leave on DOM */ c._hasSlot = false; }
     }
   }
 }
 
 export function registerWebglSlotClient(client: WebglSlotClient): void {
   clients.set(client.id, client);
-  reconcile();
+  reconcileWebglSlots();
 }
 
 export function unregisterWebglSlotClient(id: string): void {
   const c = clients.get(id);
   clients.delete(id);
   if (c?._hasSlot) {
+    c._hasSlot = false;
     try { c.release(); } catch { /* already gone */ }
   }
-  reconcile();
+  reconcileWebglSlots();
 }
 
 /** Re-evaluate slots after a client's priority changed (focus / visibility). */
 export function reconcileWebglSlots(): void {
-  reconcile();
+  // A view commit parks/adopts many surfaces. Read visibility only after those
+  // DOM mutations finish, once per client rather than once per surface event.
+  if (reconcilePending) return;
+  reconcilePending = true;
+  queueMicrotask(() => {
+    reconcilePending = false;
+    reconcile();
+  });
 }

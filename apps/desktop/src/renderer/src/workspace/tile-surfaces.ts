@@ -145,6 +145,43 @@ export interface TileSurfaceCtx {
   onTogglePin: (id: string, rect: PinRect) => void;
 }
 
+/** One cache per workspace. Reusing a surface also preserves its bound handlers,
+ * allowing TileHost's memo to skip untouched bodies. Inputs follow the immutable
+ * workspace state contract; callback changes must invalidate too. Frame geometry
+ * is deliberately absent: moving a frame does not change its tiles' contents. */
+export function createTileSurfaceBuilder(): (ctx: TileSurfaceCtx) => TileSurface[] {
+  type Entry = { inputs: readonly unknown[]; surface: TileSurface | undefined };
+  let previous = new Map<string, Entry>();
+  return (ctx) => {
+    // First frame wins per id — must match the pure builder's `frames.find`.
+    const owners = new Map<string, FrameState>();
+    for (const frame of ctx.frames) if (!owners.has(frame.id)) owners.set(frame.id, frame);
+    const next = new Map<string, Entry>();
+    const surfaces: TileSurface[] = [];
+    for (const tile of ctx.tiles) {
+      const frameId = ctx.frameOf[tile.id];
+      const owner = frameId ? owners.get(frameId) : undefined;
+      const inputs: readonly unknown[] = [
+        tile, ctx.repoPath, ctx.root, ctx.cwd, ctx.frameOf[tile.id],
+        owner?.worktreePath, owner?.workspacePath, owner?.workspaceRoot,
+        ctx.pinnedIds.has(tile.id), ctx.editorTabs[tile.id],
+        ctx.browserOpenReqs[tile.id], ctx.tileNames[tile.id],
+        ctx.openFileInTile, ctx.openUrlInBrowser, ctx.openFileFromTerminal,
+        ctx.closeTabInTile, ctx.closeTile, ctx.renameTile, ctx.setAgentTitle, ctx.onTogglePin,
+      ];
+      const cached = previous.get(tile.id);
+      const entry = cached && inputs.every((value, i) => Object.is(value, cached.inputs[i]))
+        ? cached
+        : { inputs, surface: buildTileSurfaces({ ...ctx, tiles: [tile], frames: owner ? [owner] : [] })[0] };
+      next.set(tile.id, entry);
+      if (entry.surface) surfaces.push(entry.surface);
+    }
+    // Closed tiles and their callbacks must not accumulate across a long session.
+    previous = next;
+    return surfaces;
+  };
+}
+
 /**
  * Build the surface list for every open tile. editor/diff need a repo — they're
  * skipped only if NO repo is available (global or zone). Order follows `tiles`

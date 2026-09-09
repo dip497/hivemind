@@ -14,7 +14,8 @@ import { toast } from "sonner";
 import { PROTOCOL_VERSION } from "@hivemind/view-sdk/protocol";
 import type { ViewPackageInfo } from "../../../../../shared/ipc";
 import { getView, registerView, unregisterView, listViews } from "../../workspace-view";
-import { lazy, createElement, type ComponentType } from "react";
+import { getSettings } from "../../../settings-store";
+import { lazy, createElement, useSyncExternalStore, type ComponentType } from "react";
 import type { WorkspaceViewProps } from "../../workspace-view";
 
 // The host component is its own chunk (like the World view): nobody without
@@ -53,10 +54,19 @@ if (typeof window !== "undefined" && window.hive?.onViewRunaway) {
 }
 
 let last: CommunityLoadReport = { packages: [], refused: {}, registered: [] };
+const reportListeners = new Set<() => void>();
+const subscribeReport = (listener: () => void) => {
+  reportListeners.add(listener);
+  return () => { reportListeners.delete(listener); };
+};
+export function useCommunityReport(): CommunityLoadReport {
+  return useSyncExternalStore(subscribeReport, () => last, () => last);
+}
 function publish() {
-  last = { ...last, registered: listViews().filter((v) => v.source === "community").map((v) => v.id) };
+  last = { ...last, refused: { ...last.refused }, registered: listViews().filter((v) => v.source === "community").map((v) => v.id) };
   for (const [id, why] of disabled) last.refused[id] = `disabled: ${why}`;
   (window as Window & { __hivemindViews?: CommunityLoadReport }).__hivemindViews = last;
+  for (const listener of reportListeners) listener();
 }
 
 export async function loadCommunityViews(repoRoot: string | null): Promise<CommunityLoadReport> {
@@ -70,6 +80,8 @@ export async function loadCommunityViews(repoRoot: string | null): Promise<Commu
     if (!why && (!p.manifest || !p.url)) why = "no manifest";
     if (!why && p.manifest!.protocol > PROTOCOL_VERSION) why = `needs protocol ${p.manifest!.protocol}; this app speaks ${PROTOCOL_VERSION}`;
     if (!why && disabled.has(p.id)) why = `disabled: ${disabled.get(p.id)}`;
+    // The user switched it off in Settings ▸ Views (settings.json `plugins.disabled`).
+    if (!why && getSettings().plugins.disabled.includes(p.id)) why = "disabled in Settings";
     if (!why && getView(p.id) && getView(p.id)!.source !== "community") why = `"${p.id}" is a built-in view`;
     if (!why && keep.has(p.id)) why = "duplicate id";
     if (why) { refused[p.id] = why; continue; }

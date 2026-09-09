@@ -20,6 +20,8 @@ import type { ViewPackageInfo } from "../../../../../shared/ipc";
 import type { WorkspaceViewProps } from "../../workspace-view";
 import { TileSlot } from "../../tile-host";
 import { SlotBar } from "../../slot-chrome";
+import { Wallpaper } from "../../../Wallpaper";
+import { ACCENTS, effectiveGlass, getTheme, useSurfacePolicy } from "../../../theme-store";
 import { loadViewLayout, saveViewLayout, type ViewLayoutSpec } from "../../view-layout-store";
 import { cssColorToHexString } from "../../css-color";
 import { CommunityLink } from "./host-link";
@@ -35,7 +37,17 @@ function readTheme(): ViewTheme {
     const v = cs.getPropertyValue(`--color-${k}`).trim();
     if (v) colors[k] = cssColorToHexString(v);
   }
-  return { colors };
+  const t = getTheme();
+  return {
+    colors,
+    mode: t.mode,
+    accent: cssColorToHexString(ACCENTS[t.accent].brand),
+    radius: t.radius,
+    fonts: { ui: t.uiFont, mono: t.monoFont },
+    surface: cssColorToHexString(t.palette.bg2),
+    terminalBackground: cssColorToHexString(t.terminal.background),
+    glass: effectiveGlass(t),
+  };
 }
 
 /** Plugin layout blobs are opaque to the host: `{ v: 1, data: <whatever the plugin sent> }`. */
@@ -187,9 +199,16 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
       ro.observe(el);
       const onVis = () => send({ type: "visibility", visible: !document.hidden });
       document.addEventListener("visibilitychange", onVis);
-      const mo = new MutationObserver(() => { if (linkRef.current?.stats.ready) send({ type: "theme", theme: readTheme() }); });
-      mo.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-theme", "style"] });
-      return () => { ro.disconnect(); document.removeEventListener("visibilitychange", onVis); mo.disconnect(); };
+      // Any appearance change (a preset from Settings, `hive theme use`, a
+      // slider) lands on <html>'s style/class; coalesce to one theme message.
+      let themeTimer = 0;
+      const mo = new MutationObserver(() => {
+        if (!linkRef.current?.stats.ready) return;
+        if (themeTimer) return;
+        themeTimer = window.setTimeout(() => { themeTimer = 0; send({ type: "theme", theme: readTheme() }); }, 50);
+      });
+      mo.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-theme", "data-preset", "style"] });
+      return () => { ro.disconnect(); document.removeEventListener("visibilitychange", onVis); mo.disconnect(); if (themeTimer) clearTimeout(themeTimer); };
     }, [send]);
 
     // ── runaway watchdog: long tasks attributed to THIS iframe ──────────────
@@ -230,6 +249,7 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
     // `inset()` so the two layers never overlap; a rect clip is free, unlike a
     // polygon mask. Floating rects stay plain overlays.
     const hostBox = useMemo(() => box(), [rects]); // eslint-disable-line react-hooks/exhaustive-deps
+    const policy = useSurfacePolicy();
     const clip = useMemo(() => edgeBandClip(rects, hostBox), [rects, hostBox]);
 
     return (
@@ -260,10 +280,17 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
               style={{ left: r.x, top: r.y, width: r.w, height: r.h, paddingTop: r.y <= 1 && r.x + r.w >= hostBox.w - 1 ? 48 : 0 }}
               data-community-slot={r.tileId}
             >
+              {/* The user's theme wins everywhere: with pluginSurfaces "theme"
+                  the wallpaper is painted behind THIS slot only (clipped by the
+                  slot box), so the docked terminal frosts exactly as on the
+                  canvas while nothing full-window is composited. */}
+              {policy.slotWallpaper && <Wallpaper embedded />}
               {r.chrome !== "none" && (
-                <SlotBar tileId={r.tileId} name={nameOf.get(r.tileId) ?? r.tileId} commands={commands} onUndock={() => undock(r.tileId)} />
+                <div className="relative z-10 shrink-0">
+                  <SlotBar tileId={r.tileId} name={nameOf.get(r.tileId) ?? r.tileId} commands={commands} onUndock={() => undock(r.tileId)} />
+                </div>
               )}
-              <TileSlot tileId={r.tileId} transient className="relative min-h-0 flex-1" />
+              <TileSlot tileId={r.tileId} transient className="relative z-10 min-h-0 flex-1" />
             </div>
           ))}
         </div>

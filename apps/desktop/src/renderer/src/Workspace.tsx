@@ -33,8 +33,12 @@ import { frameAtPoint } from "./frame-layout";
 import { Wallpaper } from "./Wallpaper";
 import { CanvasOverlay } from "./CanvasOverlay";
 import { applyTheme, setWallpaperActive } from "./theme-store";
+import { patchSettings, useSettings } from "./settings-store";
+import { BROWSER_TOOL_ID } from "@hivemind/core/tool-plugins";
+import { toolCreationAllowed } from "./tool-availability";
 import type { PinRect } from "./workspace/tile-surfaces";
 import { clampAnchor } from "./pin-anchor";
+import { pickEditorTile } from "./workspace/editor-target";
 import type { TileKind } from "./tile-kinds";
 import {
   loadLayout,
@@ -56,7 +60,7 @@ import { useCanvasShortcuts } from "./useCanvasShortcuts";
 import { useNodeDragStop } from "./useNodeDragStop";
 import { GitCommitModal } from "./GitCommitModal";
 import { useGitPush, useGitPull } from "./queries";
-import { buildTileSurfaces } from "./workspace/tile-surfaces";
+import { createTileSurfaceBuilder } from "./workspace/tile-surfaces";
 import { TileHost } from "./workspace/tile-host";
 import { ViewHost } from "./workspace/view-host";
 import { HostChrome } from "./workspace/host-chrome";
@@ -249,6 +253,26 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     setAgentTitles((m) => {
       if (!(id in m)) return m;
       const { [id]: _t, ...rest } = m;
+      return rest;
+    });
+    // Geometry + frame membership are keyed by tile id too, and a closed tile's
+    // id never comes back — without this they ride along in the persisted
+    // layout blob for the life of the workspace (and `frameOf` keeps claiming a
+    // tile that no longer exists). Same drop-if-present shape as above, so a
+    // close that touches nothing re-renders nothing.
+    setPositions((m) => {
+      if (!(id in m)) return m;
+      const { [id]: _p, ...rest } = m;
+      return rest;
+    });
+    setSizes((m) => {
+      if (!(id in m)) return m;
+      const { [id]: _s, ...rest } = m;
+      return rest;
+    });
+    setFrameOf((m) => {
+      if (!(id in m)) return m;
+      const { [id]: _f, ...rest } = m;
       return rest;
     });
   }, []);
@@ -446,7 +470,12 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   }, [root]);
   const activeViewId = resolveViewId(useViewMode());
   // Host chrome + wallpaper policy come from the active view's preference.
-  const chrome = resolveChrome(activeViewId ? getView(activeViewId) : null);
+  const settings = useSettings();
+  const chrome = useMemo(() => {
+    const base = resolveChrome(activeViewId ? getView(activeViewId) : null);
+    const over = activeViewId ? settings.views.chrome[activeViewId] : undefined;
+    return over?.island ? { ...base, island: over.island } : base;
+  }, [activeViewId, settings.views.chrome]);
   useEffect(() => { setWallpaperActive(chrome.wallpaper); }, [chrome.wallpaper]);
   // Crash bookkeeping: which view failed (+ why) and a retry counter that
   // remounts the boundary. A failure in a non-fallback view auto-switches to the
@@ -471,20 +500,16 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   // Permission mode the next Claude spawn launches in. Verified flag values
   // (code.claude.com/docs cli-reference): default | acceptEdits | plan | auto |
   // dontAsk | bypassPermissions. Persisted so it survives restarts.
-  const [claudeMode] = useState<string>(
-    () => localStorage.getItem("hivemind:claude-mode") || "default",
-  );
-  useEffect(() => { localStorage.setItem("hivemind:claude-mode", claudeMode); }, [claudeMode]);
-  // Default model for new claude spawns (a Settings picker can set it later).
-  const [claudeModel] = useState<string>(
-    () => localStorage.getItem("hivemind:claude-model") || "default",
-  );
-  // Which agent the tool island's spawn button creates (claude / codex / …).
-  const [agentSel, setAgentSel] = useState<string>(
-    () => localStorage.getItem("hivemind:agent-sel") || defaultAgent().id,
-  );
+  // (Settings ▸ Agents; settings.json `agents`. The pre-2.0 localStorage keys
+  // were imported once by settings-store.)
+  const claudeMode = settings.agents.permissionMode;
+  const claudeModel = settings.agents.model;
+  // Which agent the tool island's spawn button creates (claude / codex / …):
+  // settings.agents.defaultAgent, validated against the catalog.
+  const agentSel = agentById(settings.agents.defaultAgent)?.id ?? defaultAgent().id;
+  const setAgentSel = useCallback((id: string) => patchSettings("agents.defaultAgent", id), []);
   const agentSelRef = useRef(agentSel);
-  useEffect(() => { agentSelRef.current = agentSel; localStorage.setItem("hivemind:agent-sel", agentSel); }, [agentSel]);
+  useEffect(() => { agentSelRef.current = agentSel; }, [agentSel]);
 
   // Monotonic session counter — `xs.length + 1` produced DUPLICATE labels
   // (#3, #3) after kill+respawn. This only ever increases.
@@ -532,7 +557,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     positionsRef, sizesRef, tilesRef, frameOfRef, framesRef, selectedFrameIdRef,
     selectedTileIdRef, repoPathRef, rootRef, lastActiveFrameRef, claudeSeqRef,
     setFrameOf, setPositions, setSelectedTileId, setFocusReq, setFrames,
-    setSelectedFrameId, setTiles, setSpawnPick, focusTile,
+    setSelectedFrameId, setTiles, setSpawnPick, focusTile, openFileInTile,
   });
 
   // Rail context-menu actions — the SAME surface the on-canvas frame header
@@ -567,16 +592,15 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   }), [frameOpen, onCreateWorktree, onAttachWorktree, bindWorkspace, arrangeFrame, updateFrameTitle, updateFrameColor, deleteFrame, repoPath, repoOfFrame, gitPushMut.mutate, gitPullMut.mutate]);
   const openFileFromTerminal = useCallback((sourceTileId: string, path: string) => {
     const sourceFrameId = frameOfRef.current[sourceTileId] ?? selectedFrameIdRef.current;
-    const existing = tilesRef.current.find((t) => (
-      (t.kind === "editor" || t.kind === "workbench") &&
-      (!sourceFrameId || frameOfRef.current[t.id] === sourceFrameId)
-    ));
+    const existing = pickEditorTile(tilesRef.current, frameOfRef.current, sourceFrameId);
     if (existing) {
-      openFileInTile(existing.id, path);
-      setTimeout(() => { setSelectedTileId(existing.id); focusTile(existing.id); }, 0);
+      openFileInTile(existing, path);
+      setTimeout(() => { setSelectedTileId(existing); focusTile(existing); }, 0);
       return;
     }
-    spawnTile("editor", sourceFrameId ?? null, {});
+    // No editor in that frame: the fresh one must still open the file the user
+    // clicked — spawnTile mints its id, so the path rides in `opts.file`.
+    spawnTile("editor", sourceFrameId ?? null, { file: path });
   }, [openFileInTile, focusTile, spawnTile]);
 
   const openUrlInBrowser = useCallback((sourceTileId: string, url: string) => {
@@ -619,6 +643,17 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
       try {
         const p = (cmd.params ?? {}) as Record<string, unknown>;
         switch (cmd.method) {
+          case "tool.open": {
+            if (p.tool !== BROWSER_TOOL_ID) throw new Error("Unsupported tool");
+            if (!toolCreationAllowed("browser")) throw new Error("Browser is disabled");
+            const selectedTile = selectedTileIdRef.current;
+            const frameId = typeof p.frame === "string" ? p.frame : selectedFrameIdRef.current ?? (selectedTile ? frameOfRef.current[selectedTile] ?? null : null);
+            if (frameId && !framesRef.current.some((frame) => frame.id === frameId)) throw new Error("Unknown frame id");
+            const tileId = spawnTile("browser", frameId, { url: typeof p.url === "string" ? p.url : undefined });
+            if (!tileId) throw new Error("Browser is disabled");
+            await window.hive.hcpResult(cmd.id, true, { tileId });
+            break;
+          }
           case "tile.spawn_agent": {
             const tileId = hcpSpawnAgent(p as { agent?: string; prompt?: string; frame?: string; mode?: string; model?: string; callerTile?: string; background?: boolean; name?: string });
             await window.hive.hcpResult(cmd.id, true, { tileId });
@@ -703,7 +738,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
       }
     });
     return off;
-  }, [hcpSpawnAgent, focusTile, closeTile]);
+  }, [hcpSpawnAgent, spawnTile, focusTile, closeTile]);
 
   // HCP pipes → animated data-flow edges. Add on connect; on disconnect remove
   // the one edge (dst set) or all of src's edges (dst null).
@@ -879,12 +914,17 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   // ── the shared tile surfaces (bodies) — rendered ONCE by the TileHost ─────
   // agentTitles intentionally NOT an input: a live title change must not
   // re-render every tile body (cursor-flicker + focus loss while streaming).
-  const surfaces = useMemo(() => buildTileSurfaces({
+  // buildSurfaces carries the per-workspace reuse cache (keyed on persistKey);
+  // the memo below must list EVERY input that can change a body — the builder
+  // diffs per tile and reuses the rest (callbacks included, so a changed
+  // handler can never leave a stale closure behind).
+  const buildSurfaces = useMemo(() => createTileSurfaceBuilder(), [persistKey]);
+  const surfaces = useMemo(() => buildSurfaces({
     repoPath, root, cwd, tiles, frames, frameOf, pinnedIds, editorTabs, browserOpenReqs, tileNames,
     openFileInTile, openUrlInBrowser, openFileFromTerminal, closeTabInTile, closeTile, renameTile, setAgentTitle,
     onTogglePin: togglePin,
   }), [
-    repoPath, root, cwd, tiles, frames, frameOf, pinnedIds, editorTabs, browserOpenReqs, tileNames,
+    buildSurfaces, repoPath, root, cwd, tiles, frames, frameOf, pinnedIds, editorTabs, browserOpenReqs, tileNames,
     openFileInTile, openUrlInBrowser, openFileFromTerminal, closeTabInTile, closeTile, renameTile, setAgentTitle, togglePin,
   ]);
 
@@ -951,10 +991,12 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
         onSwitch={switchView}
         onRetry={() => { setViewFailure(null); setViewAttempt((n) => n + 1); }}
       />
-      {/* Host chrome over EVERY view: the tool island + the appearance drawer.
-          Outside the ViewHost boundary, so a crashed view still has them. */}
+      {/* Reset transient toolbar expansion on view/placement changes without
+          touching live tile bodies. Settings lives above this in App. */}
       <HostChrome
+        key={`${activeViewId}:${chrome.island}`}
         chrome={chrome}
+        toolbar={activeViewId ? settings.views.toolbars[activeViewId] : undefined}
         repoPath={repoPath}
         onToggle={spawnVis}
         agentSel={agentSel}

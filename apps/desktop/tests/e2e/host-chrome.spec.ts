@@ -40,6 +40,10 @@ test.beforeAll(async () => {
   page.on("console", (m) => { if (m.type() === "error" && !/Content Security Policy/.test(m.text())) console.log("[r.error]", m.text()); });
   await page.waitForLoadState("domcontentloaded");
   await page.waitForSelector(".react-flow", { timeout: 15_000 });
+  // These cases test toolbar ownership and wallpaper mounting, not animation
+  // throughput. Keep glass enabled, but isolate them from the known software-
+  // rendering cost of animated gradients (measured by perf-canvas-effects).
+  await page.evaluate(() => window.hive.settingsSet("appearance.glass.animate", false));
   await page.waitForTimeout(300);
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "shell" })));
   await page.waitForSelector(".react-flow__node-terminal .xterm", { timeout: 10_000 });
@@ -69,17 +73,18 @@ test("the island is host chrome: top on the canvas, a compact bottom island in w
   }
 });
 
-test("the island's Theme button opens the appearance drawer from a non-canvas view", async () => {
-  await toView("world");
-  await page.waitForSelector("[data-world-canvas]");
+test("the toolbar's Theme button opens the unified Appearance settings from a non-canvas view", async () => {
+  await toView("windows");
   const theme = page.locator('[data-host-island="bottom"] [data-tool-island]').getByTitle(/^Theme/);
   await theme.click();
-  await expect(page.getByRole("dialog", { name: "Appearance settings" })).toBeVisible({ timeout: 5_000 });
-  await theme.click(); // the island button toggles the same drawer closed
-  await expect(page.getByRole("dialog", { name: "Appearance settings" })).toHaveCount(0);
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(page.locator('[data-settings-page="appearance"]')).toHaveAttribute("aria-current", "page");
+  await page.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(theme).toBeFocused();
 });
 
-test("wallpaper policy: the animated layer and glass exist under the canvas and windows, never under world or a community view", async () => {
+test("wallpaper policy: the full-window layer is mounted only under the canvas and windows; in a scene the theme still applies but nothing composites until a slot exists", async () => {
   await toView("canvas");
   await page.waitForSelector(".react-flow__node-terminal");
   await expect(page.locator(".hm-wallpaper")).toHaveCount(1);
@@ -90,8 +95,11 @@ test("wallpaper policy: the animated layer and glass exist under the canvas and 
   for (const [view, ready] of [["world", "[data-world-canvas]"], ["orbit", '[data-community-view="orbit"][data-community-ready="1"]']] as const) {
     await toView(view);
     await page.waitForSelector(ready, { timeout: 15_000 });
-    await expect(page.locator(".hm-wallpaper"), `${view}: no wallpaper layer`).toHaveCount(0);
-    expect(await page.evaluate(() => document.documentElement.classList.contains("glass-on")), `${view}: no glass`).toBe(false);
+    // 6b: the user's theme wins everywhere (appearance.pluginSurfaces
+    // "theme"), so glass stays on — but nothing full-window is composited; a
+    // wallpaper element exists only inside a docked slot (settings-appearance.spec).
+    await expect(page.locator(".hm-wallpaper"), `${view}: no full-window wallpaper layer`).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.classList.contains("glass-on")), `${view}: the theme still applies`).toBe(true);
   }
   await toView("canvas");
   await page.waitForSelector(".react-flow__node-terminal");
@@ -154,4 +162,56 @@ test("community slot bar: the host's undock releases the tile and tells the plug
   await expect(page.locator("[data-community-slot]")).toHaveCount(0);
   await toView("canvas");
   await page.waitForSelector(".react-flow__node-terminal .xterm");
+});
+
+test("toolbar Off is per-view, persists through restart, and Settings restores it", async () => {
+  await toView("canvas");
+  const original = await page.locator(".xterm").first().elementHandle();
+  const settings = () => page.getByRole("button", { name: "settings", exact: true });
+  await settings().click();
+  await page.locator('[data-settings-page="views"]').click();
+  await page.getByLabel("Display", { exact: true }).selectOption("off");
+  await page.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(page.locator("[data-host-island], [data-host-island-handle]")).toHaveCount(0);
+  await expect(settings()).toBeFocused();
+  expect(await page.locator(".xterm").first().evaluate((node, old) => node === old, original)).toBe(true);
+  await original?.dispose();
+  await toView("windows");
+  await expect(page.locator('[data-host-island="bottom"]')).toBeVisible();
+  await toView("canvas");
+  await expect(page.locator("[data-host-island], [data-host-island-handle]")).toHaveCount(0);
+  const config = () => JSON.parse(execFileSync("bun", [CLI, "config", "get", "views.chrome", "--json"], { env: ENV, encoding: "utf8" })).data;
+  await expect.poll(config).toMatchObject({ canvas: { island: "off" } });
+  await app.close();
+  app = await electron.launch({ args: [path.join(APP_DIR, "out/main/index.js"), "--no-sandbox"], cwd: repo, env: ENV });
+  page = await app.firstWindow();
+  await page.waitForSelector(".react-flow");
+  await expect(page.locator("[data-host-island], [data-host-island-handle]")).toHaveCount(0);
+  // Exercise keyboard recovery through the app-owned Settings button.
+  await settings().focus();
+  await page.keyboard.press("Enter");
+  await page.locator('[data-settings-page="views"]').click();
+  await expect(page.getByLabel("Display", { exact: true })).toHaveValue("off");
+  await page.getByLabel("Display", { exact: true }).selectOption("auto");
+  await page.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(page.locator('[data-host-island="top"]')).toBeVisible();
+});
+
+test("collapsed toolbar expansion does not leak across views or placement changes", async () => {
+  const configure = (chrome: Record<string, { island: "hidden" | "off" }>) => page.evaluate((value) => window.hive.settingsSet("views.chrome", value), chrome);
+  await configure({ canvas: { island: "hidden" }, windows: { island: "hidden" } });
+  await toView("canvas");
+  await expect(page.locator("[data-host-island]")).toHaveCount(0);
+  await page.getByRole("button", { name: "show tools", exact: true }).click();
+  await expect(page.locator("[data-host-island]")).toBeVisible();
+  await toView("windows");
+  await expect(page.getByRole("button", { name: "show tools", exact: true })).toHaveAttribute("aria-expanded", "false");
+  await expect(page.locator("[data-host-island]")).toHaveCount(0);
+  await page.getByRole("button", { name: "show tools", exact: true }).click();
+  await configure({ windows: { island: "off" } });
+  await expect(page.locator("[data-host-island], [data-host-island-handle]")).toHaveCount(0);
+  await configure({ windows: { island: "hidden" } });
+  await expect(page.getByRole("button", { name: "show tools", exact: true })).toHaveAttribute("aria-expanded", "false");
+  await expect(page.locator("[data-host-island]")).toHaveCount(0);
+  await configure({});
 });

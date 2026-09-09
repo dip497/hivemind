@@ -18,6 +18,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { TileSlot } from "../../tile-host";
 import { SlotBar } from "../../slot-chrome";
+import { Wallpaper } from "../../../Wallpaper";
+import { useSurfacePolicy } from "../../../theme-store";
 import { useViewLayout } from "../../view-layout-store";
 import type { WorkspaceViewProps } from "../../workspace-view";
 import type { TileStatusKind } from "../../../agent-status-bus";
@@ -154,6 +156,7 @@ export default function WorldView({ model, commands }: WorkspaceViewProps) {
   }, []);
   if (crash) throw new Error("world view crashed (test)");
 
+  const policy = useSurfacePolicy();
   const hoverName = hover?.tileId ? nameOf.get(hover.tileId) : hover?.frameId ? frames.find((f) => f.id === hover.frameId)?.title : null;
   const dockedName = dockedValid ? nameOf.get(docked!) ?? docked : null;
 
@@ -188,8 +191,11 @@ export default function WorldView({ model, commands }: WorkspaceViewProps) {
               row is focusable, so a click there TAKES the keyboard from the
               docked terminal and plain Esc reaches the panel (the terminal's
               blur handler reclaims focus from <body>, never from a real target). */}
-          <SlotBar tileId={docked!} name={dockedName ?? docked!} commands={commands} onUndock={undock} />
-          <div className="relative flex-1 min-h-0">
+          {policy.slotWallpaper && <Wallpaper embedded />}
+          <div className="relative z-10 shrink-0">
+            <SlotBar tileId={docked!} name={dockedName ?? docked!} commands={commands} onUndock={undock} />
+          </div>
+          <div className="relative z-10 flex-1 min-h-0">
             <TileSlot tileId={docked!} transient />
           </div>
         </div>

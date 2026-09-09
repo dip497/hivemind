@@ -16,12 +16,13 @@ import { defaultShell, type FrameState, type TileInstance } from "./canvas-persi
 import { queueWork } from "./claude-bus";
 import { markBackgroundTile } from "./worker-tiles";
 import type { TileKind } from "./tile-kinds";
+import { checkToolCreation } from "./tool-availability";
 
 /** Kinds that are one-per-frame (spawn → focus existing). claude/shell are not. */
 const SINGLETON_KINDS: ReadonlySet<TileKind> = new Set(["editor", "diff", "issues"]);
 
 type FocusReq = { id: string; cx: number; cy: number; w: number; h: number; n: number; exact?: boolean } | null;
-type SpawnOpts = { mode?: string; work?: string; url?: string; agent?: { id: string; cmd: string; args?: string[]; label: string } };
+type SpawnOpts = { mode?: string; work?: string; url?: string; file?: string; agent?: { id: string; cmd: string; args?: string[]; label: string } };
 type SpawnPick = ({ kind: TileKind } & SpawnOpts) | null;
 
 export interface SpawnCtx {
@@ -48,6 +49,11 @@ export interface SpawnCtx {
   setTiles: Dispatch<SetStateAction<TileInstance[]>>;
   setSpawnPick: Dispatch<SetStateAction<SpawnPick>>;
   focusTile: (id: string) => void;
+  /** Open a file as a tab in an editor tile — spawnTile mints the new tile's
+   *  id, so a caller that wants the fresh editor to show a file passes
+   *  `opts.file` and this delivers it (the same shape as `queueWork` for a
+   *  fresh agent tile). */
+  openFileInTile: (tileId: string, file: string) => void;
 }
 
 export function useSpawn(ctx: SpawnCtx) {
@@ -56,7 +62,7 @@ export function useSpawn(ctx: SpawnCtx) {
     positionsRef, sizesRef, tilesRef, frameOfRef, framesRef, selectedFrameIdRef,
     selectedTileIdRef, repoPathRef, rootRef, lastActiveFrameRef, claudeSeqRef,
     setFrameOf, setPositions, setSelectedTileId, setFocusReq, setFrames,
-    setSelectedFrameId, setTiles, setSpawnPick, focusTile,
+    setSelectedFrameId, setTiles, setSpawnPick, focusTile, openFileInTile,
   } = ctx;
 
   const placeInFrame = useCallback((id: string, frame: FrameState, opts?: { background?: boolean }) => {
@@ -211,12 +217,16 @@ export function useSpawn(ctx: SpawnCtx) {
   // one-per-frame — if the frame already has one, focus it instead of making a
   // duplicate. placeInFrame lays it out + auto-grows the frame + selects/foci.
   const spawnTile = useCallback(
-    (kind: TileKind, targetFrameId: string | null, opts?: SpawnOpts): void => {
+    (kind: TileKind, targetFrameId: string | null, opts?: SpawnOpts): string | undefined => {
+      if (!checkToolCreation(kind)) return;
       const frame = (targetFrameId ? framesRef.current.find((f) => f.id === targetFrameId) : undefined) ?? ensureFrame();
       const fid = frame.id;
       if (SINGLETON_KINDS.has(kind)) {
         const existing = tilesRef.current.find((t) => t.kind === kind && frameOfRef.current[t.id] === fid);
-        if (existing) { setSelectedTileId(existing.id); focusTile(existing.id); return; }
+        if (existing) {
+          if (opts?.file) openFileInTile(existing.id, opts.file);
+          setSelectedTileId(existing.id); focusTile(existing.id); return;
+        }
       }
       const n = ++claudeSeqRef.current;
       const newId = `tile-${kind}-${Date.now()}`;
@@ -250,8 +260,13 @@ export function useSpawn(ctx: SpawnCtx) {
       // "Work on this": hand the fresh claude tile its prompt. It delivers it to
       // itself the first time it's ready (see claude-bus queueWork/claimWork).
       if (kind === AGENT_TILE_KIND && opts?.work) queueWork(newId, opts.work);
+      // An editor spawned to show a specific file (a path clicked in a terminal,
+      // a "reveal in editor") carries it in `opts.file`: the id was minted here,
+      // so the caller could not open the tab itself.
+      if (opts?.file) openFileInTile(newId, opts.file);
+      return newId;
     },
-    [claudeMode, claudeModel, placeInFrame, ensureFrame, focusTile],
+    [claudeMode, claudeModel, placeInFrame, ensureFrame, focusTile, openFileInTile],
   );
 
   // Spawn from a global surface (ToolIsland / palette / hotkey). A current
@@ -259,6 +274,7 @@ export function useSpawn(ctx: SpawnCtx) {
   // selected tile — spawns straight in, no picker. Only ask when nothing is
   // selected to disambiguate AND 2+ frames exist.
   const spawnInto = useCallback((kind: TileKind, opts?: SpawnOpts) => {
+    if (!checkToolCreation(kind)) return;
     const selTile = selectedTileIdRef.current;
     const selFrame =
       selectedFrameIdRef.current ?? (selTile ? frameOfRef.current[selTile] ?? null : null);

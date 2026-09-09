@@ -98,6 +98,7 @@ function fakeDeps(over: Partial<Parameters<typeof makeDispatch>[0]> = {}) {
     turns,
     recorder,
     callRenderer: async (_m: string, _p: unknown) => ({ tileId: "tile-x" }),
+    reloadSettings: async () => ({ ok: true }),
     writeToTile: write,
     deliverToTile: (id: string, data: string, onSent?: () => void) => mailbox.deliver(id, data, onSent),
     spawnAllowed: () => true,
@@ -437,4 +438,40 @@ test("dispatch views.rescan: asks the renderer to re-read the view packages and 
   const { dispatch } = makeDispatch(deps);
   assert.deepEqual(await dispatch("views.rescan", {}), { registered: ["orbit"], refused: { greedy: "unknown permission" } });
   assert.deepEqual(calls, ["views.rescan"]);
+});
+
+test("tool.open: optional tools default off and recheck activation for every request", async () => {
+  let enabled = false;
+  let calls = 0;
+  const { deps } = fakeDeps({
+    toolsSettings: () => ({ enabledPlugins: enabled ? ["hivemind/web"] : [], disabledTools: [] }),
+    callRenderer: async (method, params) => { calls++; assert.equal(method, "tool.open"); assert.deepEqual(params, { tool: "hivemind/web/browser", frame: undefined, url: "about:blank" }); return { tileId: "browser-1" }; },
+  });
+  const { dispatch } = makeDispatch(deps);
+  const request = { tool: "hivemind/web/browser", url: "about:blank" };
+  await assert.rejects(dispatch("tool.open", request), { code: "UNAUTHORIZED" });
+  enabled = true;
+  assert.deepEqual(await dispatch("tool.open", request), { tileId: "browser-1" });
+  enabled = false;
+  await assert.rejects(dispatch("tool.open", request), { code: "UNAUTHORIZED" });
+  assert.equal(calls, 1);
+});
+
+test("tool.open: unknown tools, disabled contributions, invalid URLs and spawn floods are refused", async () => {
+  let disabledTools: string[] = [];
+  let spawn = true;
+  const { deps } = fakeDeps({
+    toolsSettings: () => ({ enabledPlugins: ["hivemind/web"], disabledTools }),
+    spawnAllowed: () => spawn,
+    callRenderer: async () => { assert.fail("denied request reached renderer"); },
+  });
+  const { dispatch } = makeDispatch(deps);
+  await assert.rejects(dispatch("tool.open", { tool: "unknown/browser" }), { code: "UNSUPPORTED" });
+  for (const url of ["javascript:alert(1)", "file:///etc/passwd", "broken", 123]) {
+    await assert.rejects(dispatch("tool.open", { tool: "hivemind/web/browser", url }), { code: "BAD_REQUEST" });
+  }
+  disabledTools = ["hivemind/web/browser"];
+  await assert.rejects(dispatch("tool.open", { tool: "hivemind/web/browser" }), { code: "UNAUTHORIZED" });
+  disabledTools = []; spawn = false;
+  await assert.rejects(dispatch("tool.open", { tool: "hivemind/web/browser" }), { code: "RATE_LIMITED" });
 });

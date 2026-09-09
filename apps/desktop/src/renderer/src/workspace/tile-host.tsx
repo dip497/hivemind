@@ -34,12 +34,12 @@
 import { lazy, memo, Suspense, useEffect, useLayoutEffect, useRef, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { TerminalTile } from "../TerminalTile";
-import { BrowserTile } from "../BrowserTile";
 import { IssuesTile } from "../IssuesTile";
 import { PlanReviewTile } from "../PlanReviewTile";
 import { TileErrorBoundary } from "../TileErrorBoundary";
 import type { TileSurface, TileSurfaceSpec } from "./tile-surfaces";
 
+const BrowserTile = lazy(() => import("../BrowserTile").then((m) => ({ default: m.BrowserTile })));
 const DiffTile = lazy(() => import("../DiffTile").then((m) => ({ default: m.DiffTile })));
 const WorkbenchTile = lazy(() => import("../WorkbenchTile").then((m) => ({ default: m.WorkbenchTile })));
 
@@ -103,6 +103,7 @@ export function TileBody(props: TileBodyProps): ReactNode {
       const { data, selected } = props;
       return (
         <TileErrorBoundary label="Browser" onClose={data.onClose}>
+          <Suspense fallback={<TileLoading label="Loading browser…" />}>
           <BrowserTile
             tileId={data.tileId}
             frameId={data.frameId}
@@ -113,6 +114,7 @@ export function TileBody(props: TileBodyProps): ReactNode {
             pinned={data.pinned}
             onTogglePin={data.onTogglePin}
           />
+          </Suspense>
         </TileErrorBoundary>
       );
     }

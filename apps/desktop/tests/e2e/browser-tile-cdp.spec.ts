@@ -27,6 +27,7 @@ test.beforeAll(async () => {
   page.on("console", (m) => console.log(`[r.${m.type()}]`, m.text()));
   await page.waitForLoadState("domcontentloaded");
   await page.waitForSelector(".react-flow", { timeout: 10_000 });
+  await page.evaluate(() => window.hive.settingsSet("tools.enabledPlugins", ["hivemind/web"]));
   await page.waitForTimeout(300);
 });
 

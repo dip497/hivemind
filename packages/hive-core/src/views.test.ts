@@ -51,6 +51,28 @@ describe("view packages", () => {
     expect(await listInstalledViews()).toEqual([]);
   });
 
+  test("a failed replacement copy preserves the installed version", async () => {
+    const source = path.join(tmp, "source");
+    pkg(source, good("orbit"));
+    await installView(source);
+    fs.writeFileSync(path.join(source, "hivemind-view.json"), JSON.stringify({ ...good("orbit"), version: "2.0.0" }));
+    fs.symlinkSync(path.join(tmp, "missing-asset"), path.join(source, "broken-asset"));
+    await expect(installView(source)).rejects.toThrow();
+    const installed = await listInstalledViews();
+    expect(installed).toHaveLength(1);
+    expect(installed[0]!.manifest?.version).toBe("1.0.0");
+    expect(fs.existsSync(path.join(installed[0]!.dir, "index.html"))).toBe(true);
+  });
+
+  test("replacement publishes the new version and removes staging files", async () => {
+    const source = path.join(tmp, "source");
+    pkg(source, good("orbit"));
+    await installView(source);
+    fs.writeFileSync(path.join(source, "hivemind-view.json"), JSON.stringify({ ...good("orbit"), version: "2.0.0" }));
+    expect((await installView(source)).manifest?.version).toBe("2.0.0");
+    expect(fs.readdirSync(userViewsDir())).toEqual(["orbit"]);
+  });
+
   test("repo-local views are listed after user ones; a duplicate id is shadowed", async () => {
     const repo = path.join(tmp, "repo");
     pkg(path.join(repo, ".hivemind", "views", "orbit"), good("orbit"));

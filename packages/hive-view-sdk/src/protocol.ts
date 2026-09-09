@@ -31,8 +31,22 @@ export interface ViewRect { x: number; y: number; w: number; h: number }
  *  thin slot bar — name, status, pop-out, undock — on the surface; "none"
  *  leaves the whole rect to the surface (the plugin then owns undocking). */
 export interface SurfaceRect extends ViewRect { tileId: string; chrome?: "bar" | "none" }
-/** Host colours resolved to `#rrggbb` (keys are the CSS variables minus `--color-`). */
-export interface ViewTheme { colors: Record<string, string> }
+/** The host theme, resolved. `colors` are the `--color-*` tokens as `#rrggbb`;
+ *  the rest (protocol 1.1, additive — a 1.0 host sends only `colors`) is the
+ *  user's appearance: mode, accent, radius, fonts, the surface + terminal
+ *  backgrounds, and whether glass is on. `applyThemeVars` maps all of it to
+ *  CSS custom properties on the plugin document. */
+export interface ViewTheme {
+  colors: Record<string, string>;
+  mode?: "dark" | "light";
+  accent?: string;
+  radius?: number;
+  fonts?: { ui: string; mono: string };
+  /** The panel surface colour (`#rrggbb`) and the terminal background. */
+  surface?: string;
+  terminalBackground?: string;
+  glass?: boolean;
+}
 
 // ── host → plugin ───────────────────────────────────────────────────────────
 

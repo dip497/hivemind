@@ -126,7 +126,7 @@ test("click a building: its live terminal docks in a DOM panel, typed keys arriv
   // surface parks again.
   await page.keyboard.press("Escape");
   await expect(dock).toHaveCount(1);
-  await dock.locator("> div").first().click({ position: { x: 20, y: 10 } });
+  await dock.locator("[data-slot-bar]").click({ position: { x: 20, y: 10 } });
   await page.keyboard.press("Escape");
   await expect(dock).toHaveCount(0);
   await expect(page.locator(".xterm")).toHaveCount(1);

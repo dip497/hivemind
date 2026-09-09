@@ -16,6 +16,7 @@
  */
 import { useSyncExternalStore, type ComponentType } from "react";
 import type { LucideIcon } from "lucide-react";
+import type { IslandPlacement } from "@hivemind/core/settings-schema";
 import type { FrameState, TileInstance } from "../canvas-persistence";
 import type { LayerFrame, LayerTile } from "../LayersPanel";
 import type { FrameActions } from "../FrameRailMenu";
@@ -55,6 +56,8 @@ export type SpawnOpts = {
   mode?: string;
   work?: string;
   url?: string;
+  /** Editor tiles: the file the fresh (or reused) editor should open. */
+  file?: string;
   agent?: { id: string; cmd: string; args?: string[]; label: string };
 };
 
@@ -126,9 +129,9 @@ export interface WorkspaceViewPlugin {
 /** What the workspace runtime renders around a view, whatever the view is. */
 export interface ViewChrome {
   /** Where the tool island (spawn / frame / browser / appearance) sits.
-   *  "hidden" still leaves a small collapsed handle — a view can never strand
-   *  the user without a way to spawn. */
-  island: "top" | "bottom" | "hidden";
+   *  "hidden" leaves a collapsed handle; "off" mounts neither toolbar nor
+   *  handle. App-level Settings remains available independently. */
+  island: IslandPlacement;
   /** Mount the animated wallpaper layer (and frost tile content) under this
    *  view. Off for views that paint their own world (World, community): the
    *  wallpaper would be invisible under an opaque scene and its animation and

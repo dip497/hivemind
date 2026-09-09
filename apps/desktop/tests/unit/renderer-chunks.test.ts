@@ -12,7 +12,10 @@ const OUT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../ou
 /** The entry chunk size when the World view landed (bytes). A growth beyond
  *  the margin means something heavy joined the default path. Update the
  *  baseline deliberately, in the same commit as the change that moved it. */
-const ENTRY_BASELINE = 786_063;
+// Re-baselined at milestone 6b: settings.json plumbing (schema, settings +
+// theme stores) is on the default path by design — the theme must paint on the
+// first frame. The Settings dialog's own pages are a lazy chunk.
+const ENTRY_BASELINE = 813_910;
 const ENTRY_MARGIN = 0.04;
 
 test("the default renderer path does not carry three.js; the three chunk exists and is lazy", (t) => {

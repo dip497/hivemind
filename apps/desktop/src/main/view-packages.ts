@@ -1,3 +1,5 @@
+import { stat } from "node:fs/promises";
+import path from "node:path";
 /**
  * Community view packages, main-process side: list them for the renderer and
  * serve their files to the sandboxed iframe over `hm-view://<id>/<path>`.
@@ -11,9 +13,9 @@
  * an arbitrary path from a URL), and (d) lets us stamp a strict CSP on every
  * response so plugin code cannot reach the network or embed anything.
  */
-import { app, net, protocol, type BrowserWindow, type WebFrameMain } from "electron";
+import { app, net, protocol, dialog, ipcMain, type BrowserWindow, type WebFrameMain } from "electron";
 import { pathToFileURL } from "node:url";
-import { listInstalledViews, type InstalledView } from "@hivemind/core/views";
+import { listInstalledViews, readViewPackage, installView, removeView, type InstalledView } from "@hivemind/core/views";
 import { ENTRY_PAGE, VIEW_SCHEME, entryPage, entryUrl, mimeFor, newNonce, pluginCsp, resolvePackageFile } from "./view-package-files.js";
 
 export { VIEW_SCHEME, entryUrl } from "./view-package-files.js";
@@ -30,11 +32,15 @@ const served = new Map<string, string>();
 export async function listViewPackages(repoRoot: string | null): Promise<ViewPackageInfo[]> {
   const views = await listInstalledViews(repoRoot);
   served.clear();
-  return views.map((v) => {
+  return Promise.all(views.map(async (v) => {
     if (v.error || !v.manifest) return { ...v, url: null };
     served.set(v.id, v.dir);
-    return { ...v, url: entryUrl(v.id, v.manifest.entry) };
-  });
+    const entry = await stat(path.join(v.dir, v.manifest.entry)).catch(() => null);
+    const revision = entry ? `${entry.mtimeMs}-${entry.ctimeMs}-${entry.size}` : "missing";
+    const url = new URL(entryUrl(v.id, v.manifest.entry));
+    url.searchParams.set("revision", revision);
+    return { ...v, url: url.toString() };
+  }));
 }
 
 
@@ -113,4 +119,42 @@ export function startViewWatchdog(win: BrowserWindow): () => void {
     for (const id of strikes.keys()) if (!seen.has(id)) strikes.delete(id);
   }, WATCHDOG_INTERVAL_MS);
   return () => clearInterval(timer);
+}
+
+/** The renderer can install only the package selected in the native picker.
+ * Re-read the manifest before installing so changed permissions require review. */
+export function installViewManagementIpc(getWindow: () => BrowserWindow | null): void {
+  let pending: { token: string; dir: string; manifest: string } | null = null;
+  const assertSender = (event: Electron.IpcMainInvokeEvent) => {
+    const win = getWindow();
+    if (!win || event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame) throw new Error("Only the workspace can manage extensions");
+    return win;
+  };
+  ipcMain.handle("views:preview-install", async (event) => {
+    const win = assertSender(event);
+    pending = null;
+    const result = await dialog.showOpenDialog(win, { title: "Choose a view extension", buttonLabel: "Review extension", properties: ["openDirectory"] });
+    if (result.canceled || !result.filePaths[0]) return null;
+    const pkg = await readViewPackage(result.filePaths[0], "user", false);
+    if (pkg.error) throw new Error(pkg.error);
+    if (["canvas", "windows", "world"].includes(pkg.id)) throw new Error("This extension uses a built-in view ID");
+    const existing = (await listInstalledViews()).find((view) => view.id === pkg.id);
+    const token = newNonce();
+    pending = { token, dir: pkg.dir, manifest: JSON.stringify(pkg.manifest) };
+    return { token, package: { ...pkg, url: null }, replacesVersion: existing ? existing.manifest?.version ?? "unknown" : null };
+  });
+  ipcMain.handle("views:install", async (event, token: string) => {
+    assertSender(event);
+    if (!pending || token !== pending.token) throw new Error("Choose the extension folder again");
+    const candidate = pending;
+    pending = null;
+    const pkg = await readViewPackage(candidate.dir, "user", false);
+    if (pkg.error || JSON.stringify(pkg.manifest) !== candidate.manifest) throw new Error("The extension changed. Choose its folder again to review it.");
+    await installView(candidate.dir);
+  });
+  ipcMain.handle("views:remove", async (event, id: string) => {
+    assertSender(event);
+    if (typeof id !== "string") throw new Error("Invalid extension ID");
+    await removeView(id);
+  });
 }

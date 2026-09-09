@@ -13,7 +13,7 @@
  */
 import {
   COMMAND_PERMISSION, PORT_HANDSHAKE, PROTOCOL_VERSION, parseHostMessage,
-  type CommandName, type HostMessage, type PluginMessage, type SurfaceRect, type ViewCommands, type ViewPermission, type ViewRect, type ViewStatus,
+  type CommandName, type HostMessage, type PluginMessage, type SurfaceRect, type ViewCommands, type ViewPermission, type ViewRect, type ViewStatus, type ViewTheme,
 } from "./protocol.js";
 
 type Hello = Extract<HostMessage, { type: "hello" }>;
@@ -217,4 +217,30 @@ export function createInvalidator(client: ViewClient, draw: () => void): { inval
   };
   const off = client.on("visibility", ({ visible }) => { if (visible && dirtyWhileHidden) { dirtyWhileHidden = false; invalidate(); } });
   return { invalidate, dispose: off };
+}
+
+/**
+ * Map the host theme to CSS custom properties on `root` (default: the plugin
+ * document's <html>) and keep them updated on every `theme` message:
+ *
+ *   --hm-color-<token>   every `colors` entry (bg, bg2, fg, brand, ok, …)
+ *   --hm-accent          --hm-radius (px)   --hm-font-ui   --hm-font-mono
+ *   --hm-surface         --hm-terminal-bg   --hm-glass (0 | 1)   --hm-mode
+ *
+ * So a plugin's CSS can say `background: var(--hm-color-bg2)` and follow the
+ * user's appearance without reading messages itself. Returns the unsubscribe.
+ */
+export function applyThemeVars(client: ViewClient, root: HTMLElement = document.documentElement): () => void {
+  const apply = (t: ViewTheme) => {
+    for (const [k, v] of Object.entries(t.colors)) root.style.setProperty(`--hm-color-${k}`, v);
+    if (t.accent) root.style.setProperty("--hm-accent", t.accent);
+    if (t.radius !== undefined) root.style.setProperty("--hm-radius", `${t.radius}px`);
+    if (t.fonts) { root.style.setProperty("--hm-font-ui", t.fonts.ui); root.style.setProperty("--hm-font-mono", t.fonts.mono); }
+    if (t.surface) root.style.setProperty("--hm-surface", t.surface);
+    if (t.terminalBackground) root.style.setProperty("--hm-terminal-bg", t.terminalBackground);
+    if (t.glass !== undefined) root.style.setProperty("--hm-glass", t.glass ? "1" : "0");
+    if (t.mode) { root.style.setProperty("--hm-mode", t.mode); root.dataset.hmMode = t.mode; }
+  };
+  apply(client.hello.theme);
+  return client.on("theme", apply);
 }

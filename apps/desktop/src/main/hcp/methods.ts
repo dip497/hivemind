@@ -17,6 +17,8 @@ import { readLastAssistantMessage } from "./transcript.js";
 import { toPtyId as ptyId, toBareId as bareOf } from "../../shared/tile-id.js";
 import { setName, labelOf } from "./names.js";
 import { agentById, defaultAgent, spawnableAgents, workerAgents } from "@hivemind/agents";
+import { BROWSER_TOOL_ID, tileKindAvailability } from "@hivemind/core/tool-plugins";
+import type { ToolsSettings } from "@hivemind/core/settings-schema";
 import { SUBMIT_DELAY_MS } from "../../shared/agent-io.js";
 
 /** Max agent-spawn depth (user = 0). Bounds recursive agent-spawns-agent fan-out
@@ -106,6 +108,8 @@ function summarizeTool(tool: string, inp: Record<string, unknown>): string {
 }
 
 export interface MethodDeps {
+  /** Settled main-process tool preferences; absent means no optional tools enabled. */
+  toolsSettings?: () => ToolsSettings;
   /** Provider id of a (user-spawned) tile, from its command — for the
    *  capability checks on read/workflow. Optional: HCP-spawned tiles are
    *  tracked internally. */
@@ -113,6 +117,8 @@ export interface MethodDeps {
   /** Run a renderer verb (returns its result); rejects/throws HcpError on
    *  no-renderer / timeout. */
   callRenderer: (method: string, params: unknown, timeoutMs: number) => Promise<unknown>;
+  /** Re-read settings.json (edited by the CLI) and broadcast it. */
+  reloadSettings: () => Promise<unknown>;
   /** Write to a tile's pty RIGHT NOW. Returns false if the tile has no live pty.
    *  Raw bytes only (key sequences) — for anything the agent must READ, use
    *  `deliverToTile`, which waits for it to be at its prompt. */
@@ -616,6 +622,20 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       }
 
       // ── canvas verbs (renderer) ──────────────────────────────────────────
+      case "tool.open": {
+        if (p.tool !== BROWSER_TOOL_ID) throw new HcpError("UNSUPPORTED", "Unknown tool id");
+        const availability = tileKindAvailability("browser", deps.toolsSettings?.() ?? { enabledPlugins: [], disabledTools: [] });
+        if (!availability?.available) throw new HcpError("UNAUTHORIZED", "Browser is disabled; enable it in Settings under Extensions");
+        if (p.frame !== undefined && (typeof p.frame !== "string" || !p.frame || p.frame.length > 256)) throw new HcpError("BAD_REQUEST", "frame must be an id");
+        if (p.url !== undefined) {
+          if (typeof p.url !== "string" || p.url.length > 8192) throw new HcpError("BAD_REQUEST", "Invalid URL");
+          let url: URL;
+          try { url = new URL(p.url); } catch { throw new HcpError("BAD_REQUEST", "Invalid URL"); }
+          if (!["http:", "https:"].includes(url.protocol) && p.url !== "about:blank") throw new HcpError("BAD_REQUEST", "URL must use http or https, or be about:blank");
+        }
+        if (!deps.spawnAllowed()) throw new HcpError("RATE_LIMITED", "spawn rate limit exceeded");
+        return await deps.callRenderer("tool.open", { tool: p.tool, frame: p.frame, url: p.url }, RENDERER_TIMEOUT);
+      }
       case "tile.list":
         return await deps.callRenderer("tile.list", { frame: p.frame }, RENDERER_TIMEOUT);
       case "tile.list_frames":
@@ -627,6 +647,10 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       // vanished falls back to the canvas).
       case "views.rescan":
         return await deps.callRenderer("views.rescan", {}, RENDERER_TIMEOUT);
+      // `hive config set` / `hive theme use` edited settings.json: re-read it
+      // and push the result to the renderer (main owns the file while running).
+      case "settings.reload":
+        return await deps.reloadSettings();
       case "tile.focus": {
         if (!p.tileId) throw new HcpError("BAD_REQUEST", "tileId required");
         return await deps.callRenderer("tile.focus", { tileId: p.tileId }, RENDERER_TIMEOUT);

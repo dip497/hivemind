@@ -25,12 +25,15 @@ export const SLOT_BAR_HEIGHT = 28;
 export function SlotBar({ tileId, name, commands, onUndock, popOutView = "canvas" }: {
   tileId: string;
   name: string;
-  commands: Pick<WorkspaceCommands, "subscribeTileStatus" | "focusTile" | "selectTile">;
+  commands: Pick<WorkspaceCommands, "subscribeTileStatus" | "focusTile" | "selectTile" | "tileStatus">;
   onUndock: () => void;
   /** The arranging view to pop the tile out into. */
   popOutView?: string;
 }) {
-  const [status, setStatus] = useState<TileStatusKind | null>(() => null);
+  // Seed from the bus: `subscribeTileStatus` only replays a status that was
+  // already emitted, so a tile the rail shows as idle would otherwise sit on
+  // "unknown" forever. Same rule as LayersPanel: no entry on the bus = idle.
+  const [status, setStatus] = useState<TileStatusKind | null>(() => commands.tileStatus(tileId));
   useEffect(() => commands.subscribeTileStatus(tileId, (s) => setStatus(s)), [tileId, commands]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -46,7 +49,7 @@ export function SlotBar({ tileId, name, commands, onUndock, popOutView = "canvas
     commands.focusTile(tileId, { exact: true });
     setViewMode(popOutView);
   };
-  const bucket = bucketTileStatus(status);
+  const bucket = status === null ? "idle" : bucketTileStatus(status);
   return (
     <div
       tabIndex={-1}
@@ -54,7 +57,7 @@ export function SlotBar({ tileId, name, commands, onUndock, popOutView = "canvas
       style={{ height: SLOT_BAR_HEIGHT }}
       data-slot-bar={tileId}
     >
-      <span className={`size-2 shrink-0 rounded-full ${DOT[bucket]}`} title={status ?? "no status yet"} data-slot-status={bucket} aria-hidden />
+      <span className={`size-2 shrink-0 rounded-full ${DOT[bucket]}`} title={status ?? "idle"} data-slot-status={bucket} aria-hidden />
       <span className="min-w-0 flex-1 truncate">{name}</span>
       <kbd className="font-mono text-[9.5px] text-[var(--color-fg3)]">⇧Esc</kbd>
       <button onClick={popOut} aria-label="Pop out to canvas" title="Pop out: show this tile on the canvas" className="grid size-6 place-items-center rounded hover:bg-[var(--color-bg3)]">
