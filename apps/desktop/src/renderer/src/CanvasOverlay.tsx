@@ -12,6 +12,7 @@
  * Videos are always muted + loop + playsInline (autoplay requires muted).
  */
 import { useEffect, useRef } from "react";
+import { useWorkspaceOccluded } from "./workspace-occlusion";
 import { useTheme, type MediaLayer, type MediaAnchor } from "./theme-store";
 
 const clampSize = (n: number) => Math.min(1, Math.max(0.15, n));
@@ -63,6 +64,8 @@ export function MediaLayerView({
   scene: string;
 }): React.ReactElement | null {
   const reduceMotion = usePrefersReducedMotion();
+  const occluded = useWorkspaceOccluded();
+  const paused = reduceMotion || occluded;
   const videoRef = useRef<HTMLVideoElement>(null);
 
   // Honor prefers-reduced-motion: pause the clip so the layer is still shown
@@ -70,9 +73,9 @@ export function MediaLayerView({
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
-    if (reduceMotion) v.pause();
+    if (paused) v.pause();
     else void v.play().catch(() => {});
-  }, [reduceMotion, layer.url]);
+  }, [paused, layer.url]);
 
   if (!layer.url) return null;
 
@@ -87,6 +90,7 @@ export function MediaLayerView({
     position: "fixed",
     zIndex: z,
     opacity: layer.opacity,
+    visibility: occluded ? "hidden" : "visible",
     pointerEvents: "none",
     ...box,
   };
@@ -100,7 +104,7 @@ export function MediaLayerView({
         src={layer.url}
         // tiling isn't meaningful for <video> — fall back to cover.
         style={{ ...base, objectFit }}
-        autoPlay={!reduceMotion}
+        autoPlay={!paused}
         loop
         muted
         playsInline

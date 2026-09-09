@@ -167,6 +167,8 @@ export interface UpdateStatus {
   ok: boolean;
 }
 
+import type { LegacyRendererState, Settings } from "@hivemind/core/settings-schema";
+
 /** One community view package as the main process sees it (see main/view-packages.ts). */
 export interface ViewPackageInfo {
   id: string;
@@ -180,10 +182,30 @@ export interface ViewPackageInfo {
 // ── full IPC surface ──────────────────────────────────────────────────────
 
 export interface HiveIpc {
+  // ── settings.json (main owns it; see main/settings-store.ts) ──
+  /** The whole settings object, synchronously (boot: no theme flash). */
+  settingsSync(): Settings;
+  settingsGet(): Promise<Settings>;
+  /** Set one dotted path and persist; resolves with the new settings. */
+  settingsSet(path: string, value: unknown): Promise<Settings>;
+  /** Apply several dotted-path patches in one locked read/modify/write. The
+   *  renderer sends THIS rather than a whole object: a full replace built from a
+   *  debounced UI snapshot reverts whatever the CLI (or another window) wrote in
+   *  the meantime. Resolves with the settings as written. */
+  settingsPatch(patches: readonly { path: string; value: unknown }[]): Promise<Settings>;
+  /** Whole-object write (a theme import). Merged onto the file under the same lock. */
+  settingsReplace(next: Settings): Promise<Settings>;
+  /** One-time import of the renderer's pre-2.0 localStorage keys. */
+  settingsMigrate(legacy: LegacyRendererState): Promise<Settings>;
+  settingsPath(): Promise<string>;
+  onSettingsChanged(cb: (s: Settings) => void): () => void;
   // ── community views ───────────────────────────────────────
   /** Installed view packages (user dir + this repo's .hivemind/views), each
    *  with its load URL or the reason it will not load. Rescans on every call. */
   listViews(repoRoot: string | null): Promise<ViewPackageInfo[]>;
+  previewViewInstall(): Promise<{ token: string; package: ViewPackageInfo; replacesVersion: string | null } | null>;
+  installViewPackage(token: string): Promise<void>;
+  removeViewPackage(id: string): Promise<void>;
   /** Main's watchdog saw a plugin frame peg a core for several samples. */
   onViewRunaway(cb: (e: { id: string; cpuPct: number }) => void): () => void;
   // ── app version + self-update ─────────────────────────────

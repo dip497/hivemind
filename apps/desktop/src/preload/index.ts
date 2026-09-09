@@ -122,7 +122,22 @@ const api: HiveIpc & {
   setBrowserCdpEnabled: (enabled) => ipcRenderer.invoke("setBrowserCdpEnabled", enabled),
   relaunchApp: () => ipcRenderer.invoke("relaunchApp"),
   getAppVersion: () => ipcRenderer.invoke("getAppVersion"),
+  settingsSync: () => ipcRenderer.sendSync("settings:get-sync"),
+  settingsGet: () => ipcRenderer.invoke("settings:get"),
+  settingsSet: (p, v) => ipcRenderer.invoke("settings:set", p, v),
+  settingsPatch: (patches) => ipcRenderer.invoke("settings:patch", patches),
+  settingsReplace: (next) => ipcRenderer.invoke("settings:replace", next),
+  settingsMigrate: (legacy) => ipcRenderer.invoke("settings:migrate", legacy),
+  settingsPath: () => ipcRenderer.invoke("settings:path"),
+  onSettingsChanged: (cb) => {
+    const listener = (_e: unknown, s: Parameters<typeof cb>[0]) => cb(s);
+    ipcRenderer.on("settings:changed", listener);
+    return () => ipcRenderer.removeListener("settings:changed", listener);
+  },
   listViews: (repoRoot) => ipcRenderer.invoke("views:list", repoRoot),
+  previewViewInstall: () => ipcRenderer.invoke("views:preview-install"),
+  installViewPackage: (token) => ipcRenderer.invoke("views:install", token),
+  removeViewPackage: (id) => ipcRenderer.invoke("views:remove", id),
   onViewRunaway: (cb) => {
     const listener = (_e: unknown, ev: { id: string; cpuPct: number }) => cb(ev);
     ipcRenderer.on("views:runaway", listener);

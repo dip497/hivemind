@@ -1,3 +1,4 @@
+import { installViewManagementIpc } from "./view-packages.js";
 /** Electron main process — owns the BrowserWindow + IPC + PtyHost + git/worktree. */
 import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, screen, session, shell, webContents, type WebContents } from "electron";
 import path from "node:path";
@@ -87,6 +88,8 @@ import { OutputRecorder } from "./hcp/output-recorder.js";
 import { readOrCreateToken, hcpSockPath } from "./hcp/token.js";
 import { HcpError } from "./hcp/protocol.js";
 import { handleViewProtocol, listViewPackages, registerViewScheme, startViewWatchdog } from "./view-packages.js";
+import { installSettingsIpc, reloadSettings, getSettings as getAppSettings } from "./settings-store.js";
+import { patchSettingsExtras } from "@hivemind/core/settings";
 import { PipeManager } from "./hcp/pipes.js";
 import { readLastAssistantMessage } from "./hcp/transcript.js";
 import { toBareId, toPtyId } from "../shared/tile-id.js";
@@ -560,7 +563,7 @@ ipcMain.handle("getBrowserSettings", () => ({
   port: process.env.HIVEMIND_BROWSER_CDP_PORT ?? "9333",
 }));
 ipcMain.handle("setBrowserCdpEnabled", wrap(async (_e, enabled: boolean) => {
-  writeSettings({ browserCdp: !!enabled });
+  await writeSettings({ browserCdp: !!enabled });
   return { ok: true as const };
 }));
 
@@ -570,7 +573,7 @@ ipcMain.handle("setBrowserCdpEnabled", wrap(async (_e, enabled: boolean) => {
 // own snapshot on load + on every change here (pushed back via the setter).
 ipcMain.handle("getNotificationSettings", () => getNotificationSettings());
 ipcMain.handle("setNotificationSettings", wrap(async (_e, s: unknown) => {
-  setNotificationSettings(normalizeNotificationSettings(s));
+  await setNotificationSettings(normalizeNotificationSettings(s));
   return { ok: true as const };
 }));
 // The install.sh launcher (`~/.local/bin/hivemind`). Relaunching THROUGH it is
@@ -1354,10 +1357,12 @@ function readSettings(): { browserCdp?: boolean } {
   try { return JSON.parse(readFileSync(settingsFile(), "utf8")) as { browserCdp?: boolean }; }
   catch { return {}; }
 }
-function writeSettings(patch: Record<string, unknown>): void {
-  let cur: Record<string, unknown> = {};
-  try { cur = JSON.parse(readFileSync(settingsFile(), "utf8")) as Record<string, unknown>; } catch { /* fresh */ }
-  writeFileSync(settingsFile(), JSON.stringify({ ...cur, ...patch }, null, 2));
+// The theme lives in this same file (identical path in a packaged app), so the
+// write goes through the shared lock in @hivemind/core/settings instead of a
+// read-then-write that would erase a concurrent theme edit. The READ above stays
+// synchronous: it runs before app-ready, and reads lose nothing.
+async function writeSettings(patch: Record<string, unknown>): Promise<void> {
+  await patchSettingsExtras(patch, settingsFile());
 }
 // Enable the agent-browser CDP bridge when the env var OR the persisted setting
 // asks for it. The env var stays an escape hatch; the Settings toggle is the
@@ -1427,6 +1432,8 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
   registerViewScheme();
   app.whenReady().then(async () => {
     handleViewProtocol();
+    installSettingsIpc(() => mainWindow);
+    installViewManagementIpc(() => mainWindow);
     ipcMain.handle("views:list", wrap(async (_e, repoRoot: string | null) => listViewPackages(repoRoot ? String(repoRoot) : null)));
     // Browser-tile extensions (prototype): load every UNPACKED extension in
     // <userData>/browser-extensions/<name>/ into the SAME session the <webview>
@@ -1701,6 +1708,8 @@ function startHcpControlPlane(): void {
   const _hcp = makeDispatch({
     agentOf: (bare) => hcpAgentOf.get(bare),
     callRenderer: hcpCallRenderer,
+    toolsSettings: () => getAppSettings().tools,
+    reloadSettings: () => reloadSettings().then((s) => ({ ok: true, preset: s.appearance.preset })),
     writeToTile: hcpWriteToTile,
     deliverToTile: (ptyId, text, onSent) => hcpMailbox.deliver(ptyId, text, onSent),
     turns: hcpTurns,

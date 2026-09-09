@@ -1,7 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import * as SettingsDialog from "@radix-ui/react-dialog";
+import "./settings.css";
+import { setWorkspaceOccluded } from "./workspace-occlusion";
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Bell, ExternalLink, LayoutGrid, Loader2, Plus, Settings } from "lucide-react";
+import { Bell, ExternalLink, Loader2, Plus, Settings, X, Palette, PanelsTopLeft, Puzzle, Bot, Keyboard, Info } from "lucide-react";
 import path from "path-browserify";
 import type { UpdateStatus } from "../../shared/ipc";
 import {
@@ -14,9 +17,8 @@ import { Workspace } from "./Workspace";
 import { IssuePeek } from "./components/IssuePeek";
 import { NewIssueModal } from "./components/NewIssueModal";
 import { getNotificationSettings, setNotificationSettingsCache, subscribeNotificationSettings, saveNotificationSettings } from "./notification-settings";
-import { resolveViewId, useViews } from "./workspace/workspace-view";
-import { setViewMode, useViewMode } from "./workspace/view-mode-store";
 import type { NotificationSettings } from "../../shared/ipc";
+const SettingsPages = lazy(() => import("./settings-panels"));
 
 // Last 8 opened folders, most recent first. Persisted via localStorage —
 // mirrors VSCode's "Open Recent" (Ctrl+R) behavior at workspace granularity.
@@ -366,7 +368,7 @@ export function App() {
           )}
           <button
             onClick={() => setSettingsOpen(true)}
-            className="pointer-events-auto relative inline-flex items-center justify-center size-8 rounded-lg hm-island text-[var(--color-fg2)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)] transition-colors"
+            className="pointer-events-auto relative inline-flex items-center justify-center size-8 rounded-lg hm-island text-[var(--color-fg2)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)]"
             title={update.status?.updateAvailable ? "Settings — update available" : "Settings"}
             aria-label="settings"
           >
@@ -409,6 +411,17 @@ export function App() {
 
 const REPO_URL = "https://github.com/dip497/hivemind";
 
+type SettingsPage = "appearance" | "views" | "extensions" | "agents" | "notifications" | "shortcuts" | "about";
+const PAGES = [
+  { id: "appearance", label: "Appearance", icon: Palette, description: "Theme, wallpaper, and effects." },
+  { id: "views", label: "Views", icon: PanelsTopLeft, description: "Workspace layout and toolbar." },
+  { id: "extensions", label: "Extensions", icon: Puzzle, description: "Manage tools and workspace views." },
+  { id: "agents", label: "Agents", icon: Bot, description: "Defaults for new agents." },
+  { id: "notifications", label: "Notifications", icon: Bell, description: "Alerts and sounds." },
+  { id: "shortcuts", label: "Shortcuts", icon: Keyboard, description: "Keyboard shortcuts." },
+  { id: "about", label: "About", icon: Info, description: "Version and updates." },
+] as const;
+
 /** Small accessible switch — matches the existing agent-browser toggle's
  *  track/knob styling so every preference in Settings reads as one family. */
 function Switch({
@@ -423,74 +436,14 @@ function Switch({
   disabled?: boolean;
 }) {
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      disabled={disabled}
-      onClick={() => onChange(!checked)}
-      className={`relative w-9 h-5 rounded-full transition-colors shrink-0 disabled:opacity-40 ${
-        checked ? "bg-[var(--color-brand)]" : "bg-[var(--color-line2)]"
-      }`}
-    >
-      <span className={`absolute top-0.5 size-4 rounded-full bg-white transition-all ${checked ? "left-[18px]" : "left-0.5"}`} />
+    <button type="button" role="switch" aria-checked={checked} aria-label={label}
+      disabled={disabled} onClick={() => onChange(!checked)} className="settings-switch">
+      <span />
     </button>
   );
 }
 
-/** View preference — one card per registered view plugin (canvas, windows, …).
- *  Reads/writes the same external store Workspace renders from
- *  (view-mode-store), so a ⌘E while Settings is open updates the card in the
- *  same tick and a card click switches the live workspace immediately. */
-function ViewPrefs() {
-  const mode = resolveViewId(useViewMode());
-  const set = (m: string) => setViewMode(m);
-  const opts = useViews();
-  // Opening the panel rescans the community view packages (a `hive views
-  // install` while the app runs, without the CLI reaching the socket).
-  useEffect(() => { window.dispatchEvent(new CustomEvent("hivemind:reload-views")); }, []);
-  return (
-    <div className="mt-4 rounded-lg border border-[var(--color-line2)] bg-[var(--color-bg3)] p-3">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <LayoutGrid size={14} className="text-[var(--color-fg2)]" />
-          <span className="text-[13px] font-medium text-[var(--color-fg)]">View</span>
-        </div>
-        <kbd className="font-mono text-[9.5px] text-[var(--color-fg3)]">⌘E</kbd>
-      </div>
-      {/* Segmented control — one active view. */}
-      <div className="mt-3 grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.max(1, opts.length)}, minmax(0, 1fr))` }}>
-        {opts.map((o) => {
-          const active = mode === o.id;
-          return (
-            <button
-              key={o.id}
-              onClick={() => set(o.id)}
-              aria-pressed={active}
-              className={`flex flex-col items-start gap-1 rounded-lg border p-2.5 text-left transition-colors ${
-                active
-                  ? "border-[var(--color-brand)] bg-[color-mix(in_srgb,var(--color-brand)_12%,transparent)]"
-                  : "border-[var(--color-line2)] hover:bg-[var(--color-bg4)]"
-              }`}
-            >
-              <span className="flex items-center gap-1.5 text-[12px] font-medium text-[var(--color-fg)]">
-                <o.icon size={14} className={active ? "text-[var(--color-brand)]" : "text-[var(--color-fg3)]"} />
-                {o.label}
-              </span>
-              <span className="text-[10.5px] text-[var(--color-fg3)] leading-snug">{o.hint}</span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
-/** Notifications preference card — master switch, per-kind mute, surface choice
- *  (in-app toast vs. native OS popup), and a Do-Not-Disturb window. Reads the
- *  renderer cache live; writes through `save` (persist + refresh) so a toggle
- *  takes effect immediately on both surfaces with no relaunch. */
 function NotificationPrefs() {
   const [s, setS] = useState<NotificationSettings>(() => getNotificationSettings());
   useEffect(() => subscribeNotificationSettings(setS), []);
@@ -509,8 +462,8 @@ function NotificationPrefs() {
   ];
 
   return (
-    <div className="mt-4 rounded-lg border border-[var(--color-line2)] bg-[var(--color-bg3)] p-3">
-      <div className="flex items-center justify-between gap-2">
+    <div className="settings-section">
+      <div className="settings-row">
         <div className="flex items-center gap-2">
           <Bell size={14} className="text-[var(--color-fg2)]" />
           <span className="text-[13px] font-medium text-[var(--color-fg)]">Notifications</span>
@@ -519,15 +472,16 @@ function NotificationPrefs() {
       </div>
 
       {/* Per-kind mute — which agent transitions reach you. */}
-      <div className={`mt-3 space-y-1.5 ${dim ? "opacity-40 pointer-events-none" : ""}`}>
-        <div className="u-eyebrow">Notify me about</div>
+      <div className="settings-section">
+        <div className="settings-subheading">Notify me about</div>
         {kinds.map((k) => (
-          <div key={k.key} className="flex items-center justify-between gap-3">
+          <div key={k.key} className="settings-row">
             <div className="min-w-0">
               <div className="text-[12px] text-[var(--color-fg)]">{k.label}</div>
-              <div className="text-[10.5px] text-[var(--color-fg3)] leading-snug">{k.hint}</div>
+              <div className="settings-note">{k.hint}</div>
             </div>
             <Switch
+              disabled={dim}
               checked={s.kinds[k.key]}
               onChange={(v) => update({ kinds: { ...s.kinds, [k.key]: v } })}
               label={`Notify on ${k.label}`}
@@ -537,45 +491,47 @@ function NotificationPrefs() {
       </div>
 
       {/* Surface choice — in-app toast vs. native OS popup, independent. */}
-      <div className={`mt-3 space-y-1.5 ${dim ? "opacity-40 pointer-events-none" : ""}`}>
-        <div className="u-eyebrow">Where</div>
-        <div className="flex items-center justify-between gap-3">
+      <div className="settings-section">
+        <div className="settings-subheading">Delivery</div>
+        <div className="settings-row">
           <div className="text-[12px] text-[var(--color-fg)]">In-app toasts</div>
-          <Switch checked={s.inApp} onChange={(v) => update({ inApp: v })} label="In-app toasts" />
+          <Switch disabled={dim} checked={s.inApp} onChange={(v) => update({ inApp: v })} label="In-app toasts" />
         </div>
-        <div className="flex items-center justify-between gap-3">
+        <div className="settings-row">
           <div className="text-[12px] text-[var(--color-fg)]">Native OS popups</div>
-          <Switch checked={s.osPopups} onChange={(v) => update({ osPopups: v })} label="Native OS popups" />
+          <Switch disabled={dim} checked={s.osPopups} onChange={(v) => update({ osPopups: v })} label="Native OS popups" />
         </div>
       </div>
 
       {/* Do-Not-Disturb — mutes finished/failed (NOT needs-you) during a window. */}
-      <div className={`mt-3 ${dim ? "opacity-40 pointer-events-none" : ""}`}>
-        <div className="flex items-center justify-between gap-3">
+      <div className="settings-section">
+        <div className="settings-row">
           <div className="min-w-0">
             <div className="text-[12px] text-[var(--color-fg)]">Do Not Disturb</div>
-            <div className="text-[10.5px] text-[var(--color-fg3)] leading-snug">Mutes finished/failed; needs-you still fires</div>
+            <div className="settings-note">Mutes finished/failed; needs-you still fires</div>
           </div>
-          <Switch checked={s.dnd.enabled} onChange={(v) => update({ dnd: { ...s.dnd, enabled: v } })} label="Do Not Disturb" />
+          <Switch disabled={dim} checked={s.dnd.enabled} onChange={(v) => update({ dnd: { ...s.dnd, enabled: v } })} label="Do Not Disturb" />
         </div>
         {s.dnd.enabled && (
           <div className="mt-2 flex items-center gap-2">
             <input
               type="time"
+              disabled={dim}
               value={s.dnd.start}
               onChange={(e) => update({ dnd: { ...s.dnd, start: e.target.value } })}
               className="font-mono text-[11px] bg-[var(--color-bg2)] border border-[var(--color-line2)] rounded px-2 py-1 text-[var(--color-fg)] focus-visible:outline-none"
               aria-label="DND start"
             />
-            <span className="text-[11px] text-[var(--color-fg3)]">to</span>
+            <span className="text-[11px] text-[var(--color-fg2)]">to</span>
             <input
               type="time"
+              disabled={dim}
               value={s.dnd.end}
               onChange={(e) => update({ dnd: { ...s.dnd, end: e.target.value } })}
               className="font-mono text-[11px] bg-[var(--color-bg2)] border border-[var(--color-line2)] rounded px-2 py-1 text-[var(--color-fg)] focus-visible:outline-none"
               aria-label="DND end"
             />
-            <span className="text-[10px] text-[var(--color-fg3)] ml-auto">local time</span>
+            <span className="text-[10px] text-[var(--color-fg2)] ml-auto">local time</span>
           </div>
         )}
       </div>
@@ -612,6 +568,22 @@ function SettingsModal({
   /** An upgrade is in flight — disable the button + show a spinner. */
   upgrading: boolean;
 }) {
+  const [page, setPage] = useState<SettingsPage>("appearance");
+  const settingsReturnFocus = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    setWorkspaceOccluded(open);
+    return () => setWorkspaceOccluded(false);
+  }, [open]);
+  useEffect(() => {
+    const openPage = (event: Event) => {
+      const requested = (event as CustomEvent<{ page?: string }>).detail?.page;
+      const target = PAGES.find((item) => item.id === requested);
+      if (target) setPage(target.id);
+      onOpenChange(true);
+    };
+    window.addEventListener("hivemind:open-settings", openPage);
+    return () => window.removeEventListener("hivemind:open-settings", openPage);
+  }, [onOpenChange]);
   const [active, setActive] = useState(false);   // live this session
   const [enabled, setEnabled] = useState(false); // persisted choice
   const [port, setPort] = useState("9333");
@@ -629,7 +601,6 @@ function SettingsModal({
     }).catch(() => {});
   }, [open, onCheck]);
 
-  if (!open) return null;
   // The toggle is "dirty" when the persisted choice no longer matches what's
   // actually running — that's exactly when a relaunch is needed.
   const needsRelaunch = enabled !== active;
@@ -642,19 +613,41 @@ function SettingsModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/50" onClick={() => onOpenChange(false)}>
-      <div
-        className="w-[480px] bg-[var(--color-bg2)] border border-[var(--color-line2)] rounded-lg shadow-2xl p-4"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="text-[15px] font-semibold text-[var(--color-fg)]">Settings</h2>
-
+    <SettingsDialog.Root open={open} onOpenChange={onOpenChange}>
+      <SettingsDialog.Portal>
+        <SettingsDialog.Overlay className="settings-overlay" />
+        <SettingsDialog.Content className="settings-dialog" aria-describedby="settings-description"
+          onOpenAutoFocus={() => { settingsReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; }}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            const target = settingsReturnFocus.current;
+            (target?.isConnected ? target : document.querySelector<HTMLElement>('[aria-label="settings"]'))?.focus({ preventScroll: true });
+          }}
+        >
+          <aside className="settings-sidebar">
+            <SettingsDialog.Title className="settings-title">Settings</SettingsDialog.Title>
+            <nav aria-label="Settings sections">
+              {PAGES.map((pg) => <button key={pg.id} onClick={() => setPage(pg.id)} aria-current={page === pg.id ? "page" : undefined} aria-label={pg.label} title={pg.label} data-settings-page={pg.id}>
+                <pg.icon size={16} strokeWidth={1.7} aria-hidden="true" /><span>{pg.label}</span>
+              </button>)}
+            </nav>
+            <span className="settings-sidebar-foot">Hivemind {version ? `v${version}` : ""}</span>
+          </aside>
+          <div className="settings-main">
+            <header className="settings-page-header">
+              <div><h2>{PAGES.find((p) => p.id === page)?.label}</h2>
+                <SettingsDialog.Description className="sr-only" id="settings-description">{PAGES.find((p) => p.id === page)?.description}</SettingsDialog.Description>
+              </div>
+              <SettingsDialog.Close className="settings-icon-button" aria-label="Close"><X size={18} /></SettingsDialog.Close>
+            </header>
+            <div key={page} className="settings-page-content" data-settings-body>
+        {page === "about" && (<>
         {/* About + update status */}
-        <div className="mt-4 rounded-lg border border-[var(--color-line2)] bg-[var(--color-bg3)] p-3">
+        <div className="settings-section">
           <div className="flex items-baseline justify-between gap-2">
             <div className="flex items-baseline gap-2">
               <span className="text-[14px] font-semibold text-[var(--color-fg)]">hivemind</span>
-              <span className="text-[11px] font-mono text-[var(--color-fg3)]">{version ? `v${version}` : "version…"}</span>
+              <span className="text-[11px] font-mono text-[var(--color-fg2)]">{version ? `v${version}` : "version…"}</span>
             </div>
             <a
               href={REPO_URL}
@@ -662,10 +655,10 @@ function SettingsModal({
               rel="noreferrer"
               className="inline-flex items-center gap-1 text-[11px] text-[var(--color-fg2)] hover:text-[var(--color-fg)]"
             >
-              GitHub <ExternalLink className="size-3 text-[var(--color-fg3)]" />
+              GitHub <ExternalLink className="size-3 text-[var(--color-fg2)]" />
             </a>
           </div>
-          <div className="mt-2 flex items-center justify-between gap-2">
+          <div className="settings-row">
             {update?.updateAvailable ? (
               <>
                 <span className="inline-flex items-center gap-1.5 text-[12px] text-[var(--color-fg)]">
@@ -698,74 +691,45 @@ function SettingsModal({
                 <button
                   onClick={() => onCheck({ force: true })}
                   disabled={checking}
-                  className="px-2 py-1 text-[11px] border border-[var(--color-line2)] text-[var(--color-fg2)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg4)] rounded disabled:opacity-40"
+                  className="settings-button"
                 >
                   {checking ? "Checking…" : "Check now"}
                 </button>
               </>
             )}
           </div>
-          <div className="mt-2 flex items-center justify-between text-[11px]">
-            <span className="text-[var(--color-fg3)]">License</span>
+          <div className="settings-row">
+            <span className="text-[var(--color-fg2)]">License</span>
             <span className="font-mono text-[var(--color-fg2)]">MIT</span>
           </div>
         </div>
 
-        <NotificationPrefs />
+        </>)}
 
-        <ViewPrefs />
+        {page === "notifications" && <NotificationPrefs />}
 
-        <div className="mt-4 flex items-start gap-3">
-          <button
-            role="switch"
-            aria-checked={enabled}
-            disabled={busy}
-            onClick={onToggle}
-            className={`mt-0.5 shrink-0 relative w-9 h-5 rounded-full transition-colors disabled:opacity-50 ${
-              enabled ? "bg-[var(--color-brand)]" : "bg-[var(--color-line2)]"
-            }`}
-            title="Enable agent browser control"
-          >
-            <span className={`absolute top-0.5 size-4 rounded-full bg-white transition-all ${enabled ? "left-[18px]" : "left-0.5"}`} />
-          </button>
-          <div className="min-w-0">
-            <div className="text-[13px] font-medium text-[var(--color-fg)]">Enable agent browser control</div>
-            <p className="mt-1 text-[11.5px] text-[var(--color-fg2)] leading-relaxed">
-              Lets a spawned agent drive a Browser tile (navigate, click, read, screenshot)
-              over the Chrome DevTools Protocol via the <code className="font-mono text-[10.5px] bg-[var(--color-bg3)] px-1 rounded">hive-browser</code> skill.
-            </p>
-            <p className="mt-1.5 text-[11px] text-[var(--color-warn)] leading-relaxed">
-              ⚠ Opens a loopback debug port (127.0.0.1:{port}) that also exposes this app's
-              window to local processes. Only enable it for agents you trust.
-            </p>
+
+        <Suspense fallback={<p role="status" className="settings-note">Loading preferences…</p>}><SettingsPages page={page} onExtensions={() => setPage("extensions")} /></Suspense>
+
+        {page === "agents" && (
+          <section className="settings-section settings-agent-bridge" aria-label="Browser control">
+            <div className="settings-row">
+              <div><label>Agent browser control</label><p>Let agents interact with Browser panels.</p></div>
+              <Switch checked={enabled} onChange={() => void onToggle()} disabled={busy} label="Enable agent browser control" />
+            </div>
+            <p className="settings-note">Opens 127.0.0.1:{port}. Local processes can also control the app window. Only enable this for agents you trust.</p>
+            <div className="settings-row">
+              <span className="settings-note">{active ? "Active this session" : "Off this session"}</span>
+              {needsRelaunch && <button onClick={() => void window.hive.relaunchApp()} className="settings-button" title="Restart hivemind to apply">Relaunch to apply</button>}
+            </div>
+          </section>
+        )}
           </div>
         </div>
 
-        <div className="mt-4 flex items-center justify-between gap-2">
-          <span className="text-[11px] text-[var(--color-fg3)]">
-            {active ? <>Bridge is <b className="text-[var(--color-fg2)]">active</b> this session.</>
-                    : <>Bridge is <b className="text-[var(--color-fg2)]">off</b> this session.</>}
-          </span>
-          <div className="flex gap-2">
-            {needsRelaunch && (
-              <button
-                onClick={() => void window.hive.relaunchApp()}
-                className="px-3 py-1.5 text-[12px] font-medium text-white bg-[var(--color-brand)] rounded hover:opacity-90"
-                title="Restart hivemind to apply"
-              >
-                Relaunch to apply
-              </button>
-            )}
-            <button
-              onClick={() => onOpenChange(false)}
-              className="px-3 py-1.5 text-[12px] text-[var(--color-fg2)] hover:text-[var(--color-fg)] rounded"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+      </SettingsDialog.Content>
+    </SettingsDialog.Portal>
+  </SettingsDialog.Root>
   );
 }
 
