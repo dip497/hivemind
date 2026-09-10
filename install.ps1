@@ -73,12 +73,6 @@ if /i "%~1"=="uninstall" (
   powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$($BinDir -replace '"','""')\hivemind-uninstall.ps1" %2
   exit /b %ERRORLEVEL%
 )
-rem Apply an upgrade staged while the app was running (see Install-App).
-if exist "$AppDir\app.staged" (
-  rmdir /s /q "$AppDir\app" 2>nul
-  move /y "$AppDir\app.staged" "$AppDir\app" >nul
-  echo hivemind: applied staged upgrade 1>&2
-)
 start "" "$appExe" %*
 "@ | Set-Content -Path $launcher -Encoding ASCII
   Ok "launcher $launcher"
@@ -92,7 +86,7 @@ param([switch]`$Purge)
 Write-Host "hivemind: uninstalling..."
 Get-Process -Name hivemind | Stop-Process -Force
 Start-Sleep -Milliseconds 300
-Remove-Item -Recurse -Force "$AppDir\app", "$AppDir\app.staged"
+Remove-Item -Recurse -Force "$AppDir\app"
 Remove-Item -Force "$(Join-Path ([Environment]::GetFolderPath('Programs')) 'hivemind.lnk')"
 if (`$Purge) {
   # Two homes on Windows: Electron's userData, and the XDG-style registry the
@@ -136,10 +130,13 @@ function Test-AppRunning {
   [bool](Get-Process -Name hivemind -ErrorAction SilentlyContinue)
 }
 
-# Unpack the release zip. Like macOS (and unlike Linux) a running app cannot be
-# swapped underneath itself, but unlike macOS the launcher IS on the normal
-# start path (Start Menu shortcut points at the exe, yet `hivemind` is how the
-# docs tell you to launch), so a staged dir is applied by the .cmd shim.
+# Unpack the release zip.
+#
+# NO staged-upgrade path, matching macOS and unlike Linux. Two reasons, either
+# sufficient: Windows holds a lock on a running .exe, so the swap cannot happen
+# at all while the app is up; and the Start Menu shortcut launches the bundle
+# directly, so a staged dir would sit unapplied while the user kept starting the
+# old build. The caller refuses to touch a running install instead.
 function Install-App ($zip) {
   $dest = Join-Path $AppDir "app"
   $staging = Join-Path $AppDir "unpack"
@@ -151,17 +148,9 @@ function Install-App ($zip) {
   if ($entries.Count -eq 1 -and $entries[0].PSIsContainer) { $root = $entries[0].FullName }
   if (-not (Test-Path (Join-Path $root "hivemind.exe"))) { Die "no hivemind.exe inside $zip" }
 
-  if (Test-AppRunning) {
-    Remove-Item -Recurse -Force "$AppDir\app.staged" -ErrorAction SilentlyContinue
-    Move-Item $root "$AppDir\app.staged"
-    Remove-Item -Recurse -Force $staging -ErrorAction SilentlyContinue
-    Warn "hivemind is running - upgrade STAGED. Quit & reopen it to apply. Your canvas + sessions are safe."
-    return $false
-  }
   Remove-Item -Recurse -Force $dest -ErrorAction SilentlyContinue
   Move-Item $root $dest
   Remove-Item -Recurse -Force $staging -ErrorAction SilentlyContinue
-  return $true
 }
 
 # ---------------------------------------------------------------- prebuilt ---
@@ -187,6 +176,12 @@ function Install-Prebuilt {
     return
   }
 
+  if (Test-AppRunning) {
+    Warn "hivemind is running - the app was NOT upgraded (Windows locks a running .exe)."
+    Warn "Quit hivemind, then re-run ``hivemind upgrade``. Your canvas + sessions are untouched."
+    return
+  }
+
   $bare = $tag.TrimStart("v")
   $cliUrl = "https://github.com/$Repo/releases/download/$tag/hive-windows-x64.exe"
   $appUrl = "https://github.com/$Repo/releases/download/$tag/hivemind-$bare-x64-win.zip"
@@ -205,11 +200,13 @@ function Install-Prebuilt {
     Say "downloading desktop app"
     Invoke-WebRequest -Uri $appUrl -OutFile $tmpApp -UseBasicParsing
     Say "unpacking"
-    $applied = Install-App $tmpApp
+    Install-App $tmpApp
     Write-Launcher; Write-Uninstaller; Add-StartMenuShortcut; Add-ToUserPath
-    # Only stamp when the app actually landed, so the `hivemind upgrade` we tell
-    # the user to re-run isn't a no-op (the bug install.sh had).
-    if ($applied) { Set-Content -Path $VersionFile -Value $tag; Ok "installed $tag" }
+    # Stamped only after the app actually landed — a failed download throws, so
+    # the `hivemind upgrade` we tell the user to re-run isn't a no-op (the bug
+    # install.sh had).
+    Set-Content -Path $VersionFile -Value $tag
+    Ok "installed $tag"
   } catch {
     Die "install failed: $($_.Exception.Message)"
   } finally {
@@ -237,7 +234,7 @@ function Install-Dev {
     Say "packaging app"; pnpm --filter "@hivemind/desktop" run dist:win
     $zip = Get-ChildItem (Join-Path $src "apps\desktop\dist-electron") -Filter *.zip | Select-Object -First 1
     if (-not $zip) { Die "no zip produced - check the electron-builder output" }
-    Install-App $zip.FullName | Out-Null
+    Install-App $zip.FullName
     Write-Launcher; Write-Uninstaller; Add-StartMenuShortcut; Add-ToUserPath
     Ok "dev install ready"
   } finally { Pop-Location }

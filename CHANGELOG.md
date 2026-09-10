@@ -19,7 +19,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
   in-app and `hive upgrade` route through `install.ps1`; the `hive`/`hivemind`
   lookups use `%LOCALAPPDATA%`, `path.delimiter` and `.exe`.
 - `install.ps1` — PowerShell installer mirroring `install.sh`'s contract: prebuilt or
-  `-Dev`, staged upgrade when the app is running, Start Menu shortcut, PATH entry,
+  `-Dev`, Start Menu shortcut, PATH entry, refusal to upgrade a running app
+  (Windows locks a running `.exe`, and the Start Menu shortcut would bypass a staged swap),
   `hivemind upgrade` / `uninstall` / `uninstall -Purge`. `install.sh` now redirects
   Git Bash / MSYS / Cygwin users to it instead of failing as "unsupported OS".
 - Release workflow builds Windows and asserts the bundle (parse-checks `install.ps1`,
