@@ -14,6 +14,7 @@ import * as pty from "@lydell/node-pty";
 import { SessionManager, type ManagedPty, type SpawnSpec, type SessionSnapshot } from "./pty-session-manager.js";
 import { type ClientMsg, type ServerMsg, frame, makeLineDecoder } from "./pty-protocol.js";
 import { PtyOutputBuffer } from "./pty-output-buffer.js";
+import { ipcPath, repairShellSpec } from "./platform.js";
 import { applyInitialPrompt, stripInitialPrompt } from "../shared/agent-io.js";
 import { sanitizeShellEnv } from "./shell-env.js";
 import { composeResume, evictTrackedSession, prepareProviders, trackerSource } from "@hivemind/agents/node";
@@ -87,7 +88,7 @@ try { fs.writeFileSync(trackerPath, trackerSource()); } catch { /* best-effort *
 // derive the same socket path from userDataDir, so no extra arg-passing. main
 // binds the bridge in plan-bridge.ts.
 const planHookPath = path.join(userDataDir, "plan-review-hook.cjs");
-const planBridgeSock = path.join(userDataDir, "plan-bridge.sock");
+const planBridgeSock = ipcPath(userDataDir, "plan-bridge.sock");
 try { fs.writeFileSync(planHookPath, planHookSource()); } catch { /* best-effort */ }
 
 // HCP: the daemon writes the Stop hook (turn reporter) and shares the control-
@@ -274,8 +275,10 @@ const factory = (spec: SpawnSpec): ManagedPty => {
   // A ▶ Work prompt (HIVE_INITIAL_PROMPT) becomes claude's trailing positional
   // arg — claude auto-submits it, so no typing race against the booting TUI. The
   // env key is dropped from the child so claude never sees a stray var.
-  const { args: execArgs, env: execEnv } = applyInitialPrompt(spec.args ?? [], env);
-  const p = pty.spawn(spec.cmd, execArgs, {
+  // A canvas written on another OS can name a shell this one doesn't have.
+  const runSpec = repairShellSpec({ cmd: spec.cmd, args: spec.args });
+  const { args: execArgs, env: execEnv } = applyInitialPrompt(runSpec.args ?? [], env);
+  const p = pty.spawn(runSpec.cmd, execArgs, {
     cwd: spec.cwd,
     cols: spec.cols,
     rows: spec.rows,

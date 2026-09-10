@@ -4,8 +4,10 @@ name: release
 #   1. builds the CLI single-binary (`bun build --compile`)
 #   2. builds the renderer + Electron main (electron-vite)
 #   3. packages the AppImage (electron-builder --linux AppImage)
-#   4. creates the GitHub Release using the tag as the version
-#   5. uploads `hive` and `hivemind-<version>-x86_64.AppImage` as assets
+# and, in a parallel job on a macOS arm64 runner, the same two artifacts for
+# Apple Silicon (`hive-darwin-arm64` + an ad-hoc-signed `hivemind.app` zip).
+# A final `publish` job downloads both jobs' assets and creates the GitHub
+# Release from the tag.
 #
 # Triggered automatically by `git tag v0.1.0 && git push origin v0.1.0`,
 # or manually via the "Run workflow" button (uses the workflow_dispatch input).
@@ -19,6 +21,11 @@ on:
         description: "Tag/version to publish (e.g. v0.1.0)"
         required: true
         default: "v0.0.1"
+      publish:
+        description: "Create the GitHub Release? 'false' = build the assets only (use this to smoke-test a platform's build)"
+        required: false
+        default: "false"
+        type: string
 
 permissions:
   contents: write  # needed to create releases + upload assets
@@ -128,6 +135,263 @@ jobs:
           name: linux-x86_64
           path: release-assets/
 
+  build-macos:
+    name: build macos arm64
+    runs-on: macos-14  # Apple Silicon runner
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.1"
+
+      - name: pnpm install (workspace)
+        run: pnpm install --frozen-lockfile
+
+      - name: Build CLI single-binary
+        # `bun build --compile` with no --target compiles for the HOST, so this
+        # produces a darwin-arm64 binary here and a linux-x64 one in build-linux.
+        # (Never `strip` it — see the linux job.)
+        run: pnpm --filter @hivemind/cli run build
+
+      - name: Build renderer + main
+        run: pnpm --filter @hivemind/desktop run build
+
+      - name: pnpm deploy (materialize workspace deps for electron-builder)
+        run: pnpm --filter @hivemind/desktop deploy --legacy desktop-deploy
+
+      - name: Copy build output into deploy
+        run: |
+          cp -r apps/desktop/out desktop-deploy/
+          cp -r apps/desktop/icons desktop-deploy/
+
+      - name: Drop optional native dep cpu-features
+        # Same reason as the linux job: ssh2's OPTIONAL cpu-features dep breaks
+        # electron-builder's native rebuild; ssh2 works fine without it.
+        run: |
+          find "$GITHUB_WORKSPACE" \( -name 'cpu-features' -o -name 'cpu-features@*' \) -prune -exec rm -rf {} + 2>/dev/null || true
+
+      - name: Package .app + ad-hoc sign + zip
+        # electron-builder is told to emit a bare `dir` (the .app) and to SKIP
+        # signing (`mac.identity: null` — we have no Apple Developer cert).
+        # But an arm64 bundle with an INVALID signature is SIGKILLed by the
+        # kernel, and electron-builder's repacking invalidates the ad-hoc
+        # signature Electron ships with. So we re-apply an ad-hoc signature
+        # (`--sign -`) ourselves, then archive with `ditto` (NOT `zip`: ditto
+        # preserves the framework symlinks and resource forks inside the
+        # bundle). Users still get a Gatekeeper quarantine prompt on first
+        # launch — install.sh strips the quarantine xattr.
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./apps/desktop/package.json').version")
+          cd desktop-deploy
+          npx --yes electron-builder --mac dir \
+            --config.directories.output=dist-electron
+          app=$(ls -d dist-electron/*/hivemind.app 2>/dev/null | head -1)
+          test -n "$app" || { echo "no .app built"; exit 1; }
+          codesign --force --deep --sign - "$app"
+          codesign --verify --deep --strict "$app"
+          cd ..
+          mkdir -p release-assets
+          ditto -c -k --sequesterRsrc --keepParent \
+            "desktop-deploy/$app" "release-assets/hivemind-${version}-arm64-mac.zip"
+        env:
+          DEBUG: electron-builder
+
+      - name: Stage release artifacts
+        run: |
+          set -euo pipefail
+          cp apps/cli/dist/hive release-assets/hive-darwin-arm64
+          chmod +x release-assets/hive-darwin-arm64
+          ls -la release-assets/
+
+      - name: Verify the bundle is arm64 and signed
+        # The .app carries a HOST-arch @lydell/node-pty, and the CLI is compiled
+        # for the host — so anything built on the wrong runner would ship a
+        # binary that dies on launch with no build error. Assert instead.
+        run: |
+          set -euo pipefail
+          app=$(ls -d desktop-deploy/dist-electron/*/hivemind.app | head -1)
+          for bin in release-assets/hive-darwin-arm64 \
+                     "$app/Contents/MacOS/hivemind" \
+                     $(find "$app" -name '*.node'); do
+            archs=$(lipo -archs "$bin")
+            echo "$archs  $bin"
+            case " $archs " in *" arm64 "*) ;; *) echo "NOT arm64: $bin"; exit 1 ;; esac
+          done
+          # `codesign --verify` above proves the signature is INTERNALLY valid;
+          # this proves the bundle is actually signed (ad-hoc = no Authority).
+          codesign -dv "$app" 2>&1 | grep -q "Signature=adhoc" || { echo "bundle is not ad-hoc signed"; exit 1; }
+
+      - name: Upload artifacts (workflow result)
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-arm64
+          path: release-assets/
+
+  build-windows:
+    name: build windows x64
+    runs-on: windows-latest
+    timeout-minutes: 40
+    # UNVALIDATED PLATFORM. Nobody has launched this build on real hardware yet,
+    # so a Windows failure must not block a Linux/macOS release: this job is not
+    # in `publish`'s `needs`, and its assets are deliberately NOT in the release
+    # `files:` list. To ship Windows once someone confirms it runs: add
+    # `hive-windows-x64.exe` + `*-win.zip` to that list. Nothing else changes.
+    continue-on-error: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.1"
+
+      - name: pnpm install (workspace)
+        run: pnpm install --frozen-lockfile
+
+      - name: Syntax-check install.ps1
+        # The only Windows host in the project. A parse error here would
+        # otherwise surface as a broken one-liner on a user's machine.
+        shell: pwsh
+        run: |
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile("install.ps1", [ref]$null, [ref]$errors) | Out-Null
+          if ($errors) { $errors | ForEach-Object { Write-Host $_ }; exit 1 }
+          Write-Host "install.ps1 parses"
+
+      - name: Build CLI single-binary
+        run: pnpm --filter @hivemind/cli run build
+
+      - name: Build renderer + main
+        run: pnpm --filter @hivemind/desktop run build
+
+      - name: pnpm deploy (materialize workspace deps for electron-builder)
+        run: pnpm --filter @hivemind/desktop deploy --legacy desktop-deploy
+
+      - name: Copy build output into deploy
+        shell: pwsh
+        run: |
+          Copy-Item -Recurse -Force apps/desktop/out desktop-deploy/
+          Copy-Item -Recurse -Force apps/desktop/icons desktop-deploy/
+
+      - name: Package zip
+        # No code signing: an Authenticode cert costs money and we have none, so
+        # users get a SmartScreen prompt on first run. Documented in install.ps1.
+        shell: pwsh
+        run: |
+          cd desktop-deploy
+          npx --yes electron-builder --win zip --config.directories.output=dist-electron
+
+      - name: Verify the bundle is x64 with a win32 pty
+        # Same class of check as the macOS job: nothing fails the build when the
+        # native module is missing or the wrong arch, it just dies on a user's
+        # machine. The inventory prints FIRST so a failure says what IS in the
+        # bundle instead of only what isn't — which is how the first version of
+        # this step was caught asserting the POSIX filename.
+        shell: pwsh
+        run: |
+          $app = Get-ChildItem desktop-deploy/dist-electron -Recurse -Filter hivemind.exe | Select-Object -First 1
+          if (-not $app) { throw "no hivemind.exe produced" }
+          Write-Host "app: $($app.FullName)"
+
+          Write-Host "`n--- native modules in the bundle ---"
+          Get-ChildItem desktop-deploy/dist-electron -Recurse -Include *.node,*.dll,*winpty*.exe -ErrorAction SilentlyContinue |
+            ForEach-Object { Write-Host "  $($_.FullName.Replace((Get-Location).Path, ''))" }
+
+          Write-Host "`n--- node-pty packages pnpm installed ---"
+          Get-ChildItem desktop-deploy/node_modules/@lydell -ErrorAction SilentlyContinue |
+            ForEach-Object { Write-Host "  $($_.Name)" }
+          Get-ChildItem desktop-deploy/node_modules/@lydell -Recurse -Filter pty.node -ErrorAction SilentlyContinue |
+            ForEach-Object { Write-Host "  prebuild: $($_.FullName.Replace((Get-Location).Path, ''))" }
+
+          Write-Host "`n--- asar contents (node-pty) ---"
+          $asar = Join-Path $app.Directory "resources\app.asar"
+          if (Test-Path $asar) {
+            npx --yes @electron/asar list $asar 2>$null | Select-String "node-pty" | Select-Object -First 20 |
+              ForEach-Object { Write-Host "  $_" }
+          }
+
+          # Windows has no pty.node — that is the POSIX name. node-pty drives
+          # ConPTY here, so the binaries are conpty.node plus conpty.dll, and
+          # BOTH have to be outside the asar: a .dll is not covered by
+          # electron-builder's implicit native-module unpacking, and ConPTY
+          # cannot LoadLibrary out of an archive.
+          $need = @{ "conpty.node" = $null; "conpty.dll" = $null }
+          foreach ($name in @($need.Keys)) {
+            $need[$name] = Get-ChildItem desktop-deploy/dist-electron -Recurse -Filter $name -ErrorAction SilentlyContinue |
+                           Where-Object { $_.FullName -match "win32-x64" -and $_.FullName -match "unpacked" } |
+                           Select-Object -First 1
+          }
+          $missing = @($need.Keys | Where-Object { -not $need[$_] })
+          if ($missing) { throw "not unpacked in the bundle: $($missing -join ', ') - the terminal would be dead" }
+          foreach ($name in @($need.Keys)) { Write-Host "ok: $($need[$name].FullName)" }
+
+      - name: Stage release artifacts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release-assets | Out-Null
+          $cli = Get-ChildItem apps/cli/dist -Filter "hive*" | Where-Object { -not $_.PSIsContainer } | Select-Object -First 1
+          if (-not $cli) { throw "no CLI binary produced" }
+          Copy-Item $cli.FullName release-assets/hive-windows-x64.exe
+          $zip = Get-ChildItem desktop-deploy/dist-electron -Filter *.zip | Select-Object -First 1
+          if (-not $zip) { throw "no app zip produced" }
+          Copy-Item $zip.FullName release-assets/
+          Get-ChildItem release-assets
+
+      - name: Upload artifacts (workflow result)
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64
+          path: release-assets/
+
+  publish:
+    name: publish github release
+    needs: [build-linux, build-macos]
+    # A tag push always publishes. A MANUAL run only publishes when it explicitly
+    # asks to — the default is build-only, so dispatching to smoke-test a build
+    # can never cut an accidental release.
+    if: github.event_name != 'workflow_dispatch' || inputs.publish == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Flatten
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          find artifacts -type f -exec cp {} release-assets/ \;
+          ls -la release-assets/
+
       - name: Resolve release tag
         id: tag
         run: |
@@ -143,6 +407,9 @@ jobs:
           tag_name: ${{ steps.tag.outputs.tag }}
           name: ${{ steps.tag.outputs.tag }}
           generate_release_notes: true
+          # Windows assets are built but NOT listed here — see build-windows.
           files: |
             release-assets/hive-linux-x86_64
+            release-assets/hive-darwin-arm64
             release-assets/*.AppImage
+            release-assets/*-mac.zip

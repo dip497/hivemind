@@ -82,6 +82,7 @@ import { labelOf as hcpLabelOf } from "./hcp/names.js";
 import { Mailbox } from "./hcp/mailbox.js";
 import { TurnTracker } from "./hcp/turn-tracker.js";
 import { SubagentTracker } from "./hcp/subagent-tracker.js";
+import { ipcPath, upgradeCommand } from "./platform.js";
 import { SubagentReaper } from "./hcp/subagent-reaper.js";
 import { notifyStatusFor } from "./hcp/notification-map.js";
 import { OutputRecorder } from "./hcp/output-recorder.js";
@@ -582,9 +583,13 @@ ipcMain.handle("setNotificationSettings", wrap(async (_e, s: unknown) => {
 // `.staged` and the launcher swaps it in on its next start. A plain
 // app.relaunch() re-execs the current (old) AppRun and silently skips that swap.
 function resolveLauncherPath(): string | null {
+  const launcher = process.platform === "win32" ? "hivemind.cmd" : "hivemind";
   const candidates = [
-    path.join(os.homedir(), ".local", "bin", "hivemind"),
-    ...(process.env.PATH ?? "").split(":").filter(Boolean).map((d) => path.join(d, "hivemind")),
+    process.platform === "win32"
+      ? path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local"), "hivemind", "bin", launcher)
+      : path.join(os.homedir(), ".local", "bin", launcher),
+    // path.delimiter, not ":" — PATH is ";"-separated on Windows.
+    ...(process.env.PATH ?? "").split(path.delimiter).filter(Boolean).map((d) => path.join(d, launcher)),
   ];
   for (const p of candidates) {
     try { if (statSync(p).isFile()) return p; } catch { /* not here */ }
@@ -653,8 +658,8 @@ ipcMain.handle("checkForUpdate", async () => {
 // The bare-CLI `upgrade` arg path still uses runUpgradeAndExit (it runs in a
 // real terminal, so inherited stdio + exit is correct there).
 ipcMain.handle("runUpgrade", () => new Promise<{ ok: boolean; code: number | null }>((resolve) => {
-  const url = "https://raw.githubusercontent.com/dip497/hivemind/main/install.sh";
-  const child = spawn("bash", ["-c", `curl -fsSL ${url} | bash`], { stdio: ["ignore", "pipe", "pipe"] });
+  const up = upgradeCommand("dip497/hivemind");
+  const child = spawn(up.file, up.args, { stdio: ["ignore", "pipe", "pipe"] });
   const relay = (d: Buffer) => {
     const line = d.toString().split("\n").map((s) => s.trim()).filter(Boolean).pop();
     if (line && mainWindow && !mainWindow.isDestroyed()) {
@@ -1393,9 +1398,9 @@ if (process.env.HIVEMIND_BROWSER_CDP === "1" || readSettings().browserCdp === tr
 // Handle it at the binary level so upgrade is correct regardless of launcher age:
 // run the official installer, stream its output, and exit — never create a window.
 function runUpgradeAndExit(): void {
-  const url = "https://raw.githubusercontent.com/dip497/hivemind/main/install.sh";
+  const up = upgradeCommand("dip497/hivemind");
   process.stdout.write("hivemind: upgrading via the official installer…\n");
-  const child = spawn("bash", ["-c", `curl -fsSL ${url} | bash`], { stdio: "inherit" });
+  const child = spawn(up.file, up.args, { stdio: "inherit" });
   child.on("error", () => app.exit(127));
   child.on("close", (code) => app.exit(code ?? 0));
 }
@@ -1633,7 +1638,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
 // the daemon injects into the hook command (both derive from userData).
 const planReplies = new Map<string, PlanRequest["reply"]>();
 function startPlanReviewBridge(): void {
-  const sock = path.join(app.getPath("userData"), "plan-bridge.sock");
+  const sock = ipcPath(app.getPath("userData"), "plan-bridge.sock");
   startPlanBridge(sock, (req) => {
     const win = mainWindow;
     if (!win || win.isDestroyed()) { req.reply("allow"); return; } // fail-open: no UI

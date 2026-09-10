@@ -3,6 +3,8 @@ import type { HiveIpc, PlanReviewOpen, HcpCommand, HcpPipeEvent, HcpSpawnEvent, 
 declare global {
   interface Window {
     hive: HiveIpc & {
+      /** Host OS, exposed synchronously so the first canvas can pick a shell. */
+      platform: NodeJS.Platform;
       /** An agent handed off a plan (PreToolUse/ExitPlanMode) → open the review. */
       onPlanReviewOpen: (cb: (p: PlanReviewOpen) => void) => () => void;
       /** The agent/hook went away before a decision → close the review tile. */

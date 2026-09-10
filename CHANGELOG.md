@@ -3,7 +3,7 @@
 All notable changes are documented here, in [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-Each release is published to [GitHub Releases](https://github.com/dip497/hivemind/releases) with prebuilt artifacts (`hive-linux-x86_64`, `hivemind-<version>-x86_64.AppImage`).
+Each release is published to [GitHub Releases](https://github.com/dip497/hivemind/releases) with prebuilt artifacts (`hive-linux-x86_64`, `hivemind-<version>-x86_64.AppImage`, `hive-darwin-arm64`, `hivemind-<version>-arm64-mac.zip`).
 
 ## [Unreleased]
 
@@ -35,6 +35,25 @@ World, and sandboxed community views), and the e2e/perf harnesses gate every cha
 — see BREAKING items and the migration at the end of this section.
 
 ### Added
+
+- **Windows x64 support in the code, unvalidated in the wild.** The POSIX assumptions
+  that made the app Linux/macOS-only now live behind one seam
+  (`apps/desktop/src/main/platform.ts`): the three unix sockets become named pipes
+  (`\\.\pipe\hivemind-<hash>-<name>`) since Windows has no filesystem sockets; new
+  terminals default to `powershell.exe` and a canvas carrying another OS's shell is
+  repaired rather than failing; the login-shell env resolver no-ops (there is no
+  `$SHELL -ilc env` on Windows, and it was burning its 8s timeout every launch);
+  in-app and `hive upgrade` route through `install.ps1`; the `hive`/`hivemind`
+  lookups use `%LOCALAPPDATA%`, `path.delimiter` and `.exe`.
+- `install.ps1` — PowerShell installer mirroring `install.sh`'s contract: prebuilt or
+  `-Dev`, Start Menu shortcut, PATH entry, refusal to upgrade a running app
+  (Windows locks a running `.exe`, and the Start Menu shortcut would bypass a staged swap),
+  `hivemind upgrade` / `uninstall` / `uninstall -Purge`. `install.sh` now redirects
+  Git Bash / MSYS / Cygwin users to it instead of failing as "unsupported OS".
+- Release workflow builds Windows and asserts the bundle (parse-checks `install.ps1`,
+  requires the unpacked `win32-x64` `conpty.node` + `conpty.dll`), but does **not** publish its assets and cannot
+  fail a release — the platform has never been launched on real hardware. Publishing
+  is a one-line change once it has.
 
 - **`hive ctl` is a full control plane — every verb the MCP server had, from the shell.** New
   subcommands `report`, `open-review`, `set-state`, `add-comment`, `mark-acceptance`,
@@ -184,10 +203,50 @@ World, and sandboxed community views), and the e2e/perf harnesses gate every cha
 3. Scripts parsing `hive ctl` output: read `--json` (`{ok, data}` / `{ok:false,code,message}`)
    and the exit codes above; a `read` that times out now exits 4.
 4. Nothing in `.hivemind/` changed shape; saved canvas layouts migrate automatically.
+## [1.17.0] — 2026-09-07
+
+### Added
+
+- **macOS (Apple Silicon) support.** `install.sh` now installs on Darwin arm64: it
+  downloads a `hivemind.app` bundle, unpacks it with `ditto`, strips the Gatekeeper
+  quarantine xattr, writes a `hivemind` launcher, and aliases the app into
+  `~/Applications`. `hivemind upgrade` / `uninstall` (incl. `--purge` of both
+  `~/Library/Application Support/hivemind` and `~/.config/hivemind`) work the same as on
+  Linux. Upgrading while the app is running is refused rather than staged — on macOS the
+  Dock launches the bundle directly, so a staged swap would never be applied.
+- Release workflow builds and publishes macOS arm64 assets (`hive-darwin-arm64`,
+  `hivemind-<version>-arm64-mac.zip`) alongside the Linux ones; a new `publish` job
+  creates the Release from both build jobs.
+- `pnpm --filter @hivemind/desktop dist:mac` packages an ad-hoc signed `.app` locally, and
+  `install.sh --dev` uses it — so Intel macs and Linux arm64 (no prebuilt) build from source.
+- `scripts/install-plan-test.sh` asserts the installer's platform → release-asset matrix,
+  and `scripts/install-macos-test.sh` drives the real macOS install/uninstall helpers
+  against a fake `.app` (macOS-only tools shimmed). Both run in CI.
+
+### Changed
+
+- `@hivemind/cli`'s `build` script no longer hardcodes `--target=bun-linux-x64`; it
+  compiles for the host, so the same command produces the right binary on every runner.
+
+### Fixed
+
+- **A failed desktop-app download no longer strands you on a CLI-only install** (Linux
+  too, not just the new macOS path). `install.sh` stamped `.installed-version` even when
+  the AppImage download failed or came back empty, so the `hivemind upgrade` the warning
+  tells you to re-run short-circuited on "already on $TAG" and never retried. Only a
+  successful app install stamps now.
 
 ## [1.16.0] — 2026-09-03
 
 ### Fixed
+
+- **No more frame drops while typing into or streaming from an agent tile.** The glass
+  wallpaper's three blooms carried a circular mask, a 60px blur, and a screen blend, each of
+  which made Chromium re-render that 1.4-megapixel layer on every frame any tile repainted
+  (a focused claude tile repaints on every keystroke and every token). The softness is now
+  baked into the gradients, the mask is gone (it was invisible), and grain, sheen and vignette
+  are one plain layer. Measured on the real app: a focused streaming tile went from ~15 to
+  60 FPS, eight streaming tiles from ~13 to 44. The look is unchanged.
 
 - **Smoother canvas under load.** Terminal output now crosses from the PTY daemon to the
   window in a few coalesced messages per tile per tick instead of one IPC message per pty
@@ -1080,7 +1139,8 @@ World, and sandboxed community views), and the e2e/perf harnesses gate every cha
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v1.16.0...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v1.17.0...HEAD
+[1.17.0]: https://github.com/dip497/hivemind/releases/tag/v1.17.0
 [1.16.0]: https://github.com/dip497/hivemind/releases/tag/v1.16.0
 [1.15.0]: https://github.com/dip497/hivemind/releases/tag/v1.15.0
 [1.14.3]: https://github.com/dip497/hivemind/releases/tag/v1.14.3

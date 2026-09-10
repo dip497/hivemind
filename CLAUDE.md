@@ -137,7 +137,11 @@ What it does (`scripts/release.sh`):
 ### What the workflows do
 
 - **`.github/workflows/ci.yml`** runs on every push to `main` and PR: typecheck + build + unit tests (`pnpm test:unit`). Heavy Playwright e2e is intentionally NOT run here — release builds validate the full build path.
-- **`.github/workflows/release.yml`** runs on `v*.*.*` tags (and manual `workflow_dispatch`). Builds the CLI single-binary (`bun build --compile`), the Electron renderer + main (`electron-vite`), packages the AppImage via `pnpm deploy` + `electron-builder`, then creates the GitHub Release and uploads `hive-linux-x86_64` + `hivemind-<version>-x86_64.AppImage`.
+- **`.github/workflows/release.yml`** runs on `v*.*.*` tags (and manual `workflow_dispatch`). Three jobs: `build-linux` (ubuntu) → `hive-linux-x86_64` + `hivemind-<version>-x86_64.AppImage`; `build-macos` (macos-14, Apple Silicon) → `hive-darwin-arm64` + `hivemind-<version>-arm64-mac.zip`; `publish` downloads both jobs' artifacts and creates the GitHub Release. A manual `workflow_dispatch` is BUILD-ONLY unless you pass `-f publish=true` — use `gh workflow run release.yml --ref <branch> -f tag=vX.Y.Z-test` to smoke-test a platform's build without cutting a release; the assets land as run artifacts. Each build job compiles the CLI with `bun build --compile` (no `--target` — host arch), builds the renderer + main with `electron-vite`, then packages via `pnpm deploy` + `electron-builder`.
+
+  Windows specifics: `build-windows` (windows-latest) produces `hive-windows-x64.exe` + `hivemind-<version>-x64-win.zip`, but it is `continue-on-error: true`, is NOT in `publish`'s `needs`, and its assets are deliberately absent from the release `files:` list — the platform builds but has never been launched, and an unvalidated platform must not be able to break a Linux/macOS release. Shipping it is one edit: add those two names to `files:`. The job also parse-checks `install.ps1` (the only Windows host the project has) and asserts the unpacked `win32-x64` `conpty.node` + `conpty.dll` made it into the bundle (Windows drives ConPTY — there is no `pty.node`, and a `.dll` is not covered by electron-builder's implicit native-module unpacking), because nothing else fails when the native module is missing or wrong-arch.
+
+  macOS specifics worth not re-deriving: we have no Apple Developer cert, so `mac.identity` is `null` (electron-builder skips signing entirely — it does NOT fall back to ad-hoc). An arm64 bundle with an invalid signature is SIGKILLed by the kernel, and electron-builder's repack invalidates the signature Electron ships with — so the workflow re-applies an ad-hoc signature (`codesign --force --deep --sign -`) and archives with `ditto` (preserves the framework symlinks `zip` mangles). Users still hit Gatekeeper quarantine; `install.sh` strips the xattr. Only arm64 is published: the bundle carries a host-arch `@lydell/node-pty`, so cross-arch packaging would ship the wrong native module. Intel macs use `--dev`.
 
 ### Pre-release checklist
 
@@ -146,6 +150,7 @@ Before running `./scripts/release.sh`:
 - [ ] All e2e tests green locally: `cd apps/desktop && unset ELECTRON_RUN_AS_NODE && xvfb-run -a --server-args="-screen 0 1600x1000x24" pnpm test:e2e --retries=0` (99 tests across 29 specs, all must pass; the profile is isolated per run — see apps/desktop/AGENTS.md). **Run this on a quiet machine.** The suite takes 13-16 minutes and launches Electron ~30 times; at system load 25-30 on 16 CPUs a rotating handful of specs fails on cold-boot and timing, every one of which passes in isolation. Check `uptime` first — a red run on a loaded box is not evidence of a regression.
 - [ ] Perf harness unchanged within noise vs the previous release: `apps/desktop/scripts/perf-views.mjs` on both builds, `perf-views-compare.mjs` on the two JSONs (same machine, interleaved runs; the acceptance rows are in `docs/design/workspace-views.md`). This compares two builds and is valid under xvfb; **absolute FPS, frame-time and latency gates are not** — xvfb renders on the llvmpipe CPU rasterizer. Measure those on a real display with the backend recorded, as `scripts/perf-canvas-effects.mjs` does; see `docs/design/performance-native-2026-09-09.md`.
 - [ ] Unit tests green: `pnpm test:unit` from `apps/desktop`.
+- [ ] Installer tests green: `bash scripts/install-plan-test.sh` + `bash scripts/install-macos-test.sh` (the second drives the real Darwin helpers with `ditto`/`xattr` shimmed, so the mac path is covered without a mac). The first asserts the release-asset names install.sh asks for match what release.yml uploads — a rename on either side breaks every install.
 - [ ] CHANGELOG `[Unreleased]` section has at least one entry describing the user-visible change.
 - [ ] No uncommitted changes (`git status` clean).
 
@@ -169,8 +174,9 @@ If the release workflow fails but the tag is pushed: delete the tag (`git tag -d
 
 | Change | Bump |
 |---|---|
-| New tile type, new `hive ctl` verb, new agent integration, new install path | minor |
+| New tile type, new `hive ctl` verb, new agent integration, new install path, new release platform | minor |
 | New built-in view plugin, a new host→plugin message or SDK method (additive) | minor |
+| POSIX assumption removed / platform seam added (`apps/desktop/src/main/platform.ts`) | patch |
 | Breaking change to the view protocol (`@hivemind/view-sdk` `PROTOCOL_VERSION`), the manifest, or the package roots | major |
 | Bug fix in PTY daemon, CSS tweak, tile spawn-position fix | patch |
 | Breaking change to `hive` CLI (incl. a `hive ctl --json` shape), breaking change to `.hivemind/` schema | major |
