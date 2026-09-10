@@ -13,7 +13,7 @@ const repo = 'https://github.com/dip497/hivemind';
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{title}</title>
   <meta name="description" content={description} />
-  <meta name="theme-color" content="#F6F4ED" />
+  <meta name="theme-color" content="#EDE8DB" />
   <link rel="icon" href={link('favicon.svg')} />
   <link rel="alternate" type="text/markdown" href={link('llms.txt')} />
   <meta property="og:title" content={title} />
@@ -70,11 +70,11 @@ const repo = 'https://github.com/dip497/hivemind';
         <div class="tone t2" aria-hidden="true"></div>
         <p class="cap">The desk</p>
         <div class="stack" aria-hidden="true">
-          <div class="tile" style="left:8%;top:24%;width:66%;height:42%">
+          <div class="tile" style="left:5%;top:17%;width:73%;height:45%">
             <div class="bar">CLAUDE · API</div>
             <div class="rows"><i style="width:84%"></i><i class="f" style="width:62%"></i><i style="width:71%"></i><i class="f" style="width:44%"></i></div>
           </div>
-          <div class="tile" style="left:36%;top:50%;width:62%;height:40%">
+          <div class="tile" style="left:29%;top:47%;width:69%;height:45%">
             <div class="bar">DIFF · LIMITS.TS</div>
             <div class="rows"><i style="width:70%"></i><i class="f" style="width:52%"></i><i style="width:80%"></i></div>
           </div>
@@ -87,7 +87,7 @@ const repo = 'https://github.com/dip497/hivemind';
       <section class="panel black impact-panel">
         <p class="cap">2 · you type one line</p>
         <svg class="impact" viewBox="0 0 1200 240" preserveAspectRatio="none" aria-hidden="true">
-          <g stroke="#F6F4ED" stroke-width="2" opacity=".5">
+          <g stroke="currentColor" stroke-width="2" opacity=".45">
             <path d="M600 120 L0 -60" /><path d="M600 120 L120 -70" /><path d="M600 120 L260 -80" />
             <path d="M600 120 L420 -90" /><path d="M600 120 L600 -100" /><path d="M600 120 L780 -90" />
             <path d="M600 120 L940 -80" /><path d="M600 120 L1080 -70" /><path d="M600 120 L1200 -60" />
@@ -109,9 +109,9 @@ const repo = 'https://github.com/dip497/hivemind';
         <div class="tone t1" aria-hidden="true"></div>
         <p class="cap">3 · the swarm lands</p>
         <div class="stack inset" aria-hidden="true">
-          <div class="tile" style="left:6%;top:6%;width:54%;height:34%"><div class="bar">SCOUT</div><div class="rows"><i style="width:78%"></i><i class="f" style="width:50%"></i></div></div>
-          <div class="tile" style="left:42%;top:30%;width:54%;height:34%"><div class="bar">BUILDER</div><div class="rows"><i style="width:66%"></i><i class="f" style="width:72%"></i></div></div>
-          <div class="tile" style="left:16%;top:56%;width:54%;height:34%"><div class="bar">GUARD</div><div class="rows"><i style="width:58%"></i><i class="f" style="width:40%"></i></div></div>
+          <div class="tile" style="left:5%;top:5%;width:58%;height:33%"><div class="bar">SCOUT</div><div class="rows"><i style="width:78%"></i><i class="f" style="width:50%"></i></div></div>
+          <div class="tile" style="left:39%;top:31%;width:58%;height:33%"><div class="bar">BUILDER</div><div class="rows"><i style="width:66%"></i><i class="f" style="width:72%"></i></div></div>
+          <div class="tile" style="left:15%;top:60%;width:58%;height:33%"><div class="bar">GUARD</div><div class="rows"><i style="width:58%"></i><i class="f" style="width:40%"></i></div></div>
         </div>
         <div class="foot">
           <h2>One tile, one job</h2>
@@ -202,15 +202,25 @@ const repo = 'https://github.com/dip497/hivemind';
 
 <style is:global>
   :root{
-    --paper:#F6F4ED; --white:#FFFFFF; --ink:#0F0E0C;
-    --ink-2:#3B3934; --ink-3:#6E6B62; --spot:#E8A33B;
+    --paper:#EDE8DB; --white:#F7F4EB; --ink:#17150F;
+    --ink-2:#403D36; --ink-3:#726E64; --spot:#E8A33B;
+    --inkpanel:#17150F; --inkpanel-fg:#F2EEE3;
     --gut:12px; --bd:3.5px;
     --f-d:"Archivo",Impact,sans-serif;
     --f-m:"JetBrains Mono",ui-monospace,Menlo,monospace;
     color-scheme:light;
   }
-  /* Deliberately single-theme: this page is ink on paper. Inverting it would
-     turn the panel rules and screentone inside out for no gain. */
+  /* Night edition. The single-theme rule was there to protect drawn artwork,
+     and there is none left — the panels are UI, so they invert cleanly. */
+  @media (prefers-color-scheme:dark){
+    :root{
+      --paper:#131211; --white:#1C1A17; --ink:#F2EEE3;
+      --ink-2:#B6B1A5; --ink-3:#837E73;
+      --inkpanel:#000000; --inkpanel-fg:#F2EEE3;
+      color-scheme:dark;
+    }
+    body::before{mix-blend-mode:screen;opacity:.10}
+  }
   *{box-sizing:border-box}
   html{scroll-behavior:smooth}
   body{
@@ -227,7 +237,10 @@ const repo = 'https://github.com/dip497/hivemind';
   .skip:focus{top:12px}
   :focus-visible{outline:3px solid var(--spot);outline-offset:3px}
 
-  .page{max-width:1160px;margin:0 auto;padding:20px 18px 0}
+  /* Near full-bleed: a comic page keeps a trim edge, but 380px of dead paper
+     either side is not a trim. Panels also get real heights so the page fills
+     the screen instead of shrinking into a column on a big monitor. */
+  .page{max-width:min(1720px,100%);margin:0 auto;padding:16px 20px 0}
 
   /* screentone — three densities, the way a page does its shading */
   .tone{position:absolute;inset:0;pointer-events:none}
@@ -248,27 +261,34 @@ const repo = 'https://github.com/dip497/hivemind';
   /* panels */
   .grid{display:grid;gap:var(--gut);margin-top:var(--gut)}
   .one{grid-template-columns:1fr}
-  .r-hero{grid-template-columns:1.5fr 1fr}
+  .r-hero{grid-template-columns:1.5fr 1fr;min-height:clamp(430px,70vh,680px)}
   .r-three{grid-template-columns:repeat(3,1fr)}
+  .r-three .panel{min-height:clamp(400px,50vh,540px)}
   .r-split{grid-template-columns:1fr 1fr}
+  .r-split .panel{min-height:clamp(300px,38vh,430px)}
   .panel{position:relative;border:var(--bd) solid var(--ink);background:var(--white);overflow:hidden}
-  .panel.black{background:var(--ink);color:var(--paper)}
+  .panel.black{background:var(--inkpanel);color:var(--inkpanel-fg);border-color:var(--inkpanel)}
   .cap{
     position:absolute;top:0;left:0;z-index:6;margin:0;background:var(--white);color:var(--ink);
     border-right:var(--bd) solid var(--ink);border-bottom:var(--bd) solid var(--ink);
     padding:7px 12px;font-weight:700;font-size:10px;letter-spacing:.12em;text-transform:uppercase;max-width:80%
   }
   .body{position:relative;z-index:5;padding:22px}
+  /* a taller panel must distribute its content, not stack it at the top */
+  .r-hero>.panel:first-child{display:grid}
+  .r-hero>.panel:first-child>.body{align-self:center;width:100%}
+  .r-split>.panel{display:grid}
+  .r-split>.panel>.body{align-self:center;width:100%}
   .body.pc{padding-top:50px}
 
   h1,h2{font-family:var(--f-d);margin:0;text-transform:uppercase;letter-spacing:-.035em;text-wrap:balance}
-  h1{font-weight:900;font-size:clamp(32px,5.2vw,62px);line-height:.9}
+  h1{font-weight:900;font-size:clamp(34px,4.6vw,78px);line-height:.9}
   h1 em{font-style:normal;color:var(--spot);-webkit-text-stroke:2px var(--ink);paint-order:stroke fill}
-  h2{font-weight:800;font-size:16px;line-height:1.06}
-  h2.big{font-size:clamp(19px,2.4vw,28px);line-height:1.04}
-  h2.invert{color:var(--paper)}
+  h2{font-weight:800;font-size:clamp(16px,1.15vw,19px);line-height:1.06}
+  h2.big{font-size:clamp(20px,2vw,34px);line-height:1.04}
+  h2.invert{color:var(--inkpanel-fg)}
   p{margin:0}
-  .say{font-size:14px;line-height:1.62;color:var(--ink-2);max-width:44ch;margin-top:16px}
+  .say{font-size:clamp(14px,1vw,16.5px);line-height:1.62;color:var(--ink-2);max-width:44ch;margin-top:16px}
   .fine{font-size:11.5px;line-height:1.6;color:var(--ink-3);letter-spacing:.05em;margin-top:16px}
   .fine.invert{color:#8E8A80}
   .fine a{text-decoration-color:var(--spot);text-decoration-thickness:2px;text-underline-offset:3px}
@@ -284,18 +304,19 @@ const repo = 'https://github.com/dip497/hivemind';
 
   /* the caption strip pinned to the bottom of a story panel */
   .foot{position:absolute;bottom:0;left:0;right:0;z-index:6;background:var(--white);border-top:var(--bd) solid var(--ink);padding:13px 15px}
-  .foot p{font-size:12.5px;line-height:1.55;color:var(--ink-2);margin-top:6px}
+  .foot p{font-size:clamp(12.5px,.85vw,14px);line-height:1.55;color:var(--ink-2);margin-top:6px}
 
   /* impact frame */
-  .impact-panel{min-height:230px}
+  .impact-panel{min-height:clamp(240px,32vh,360px)}
   .impact{position:absolute;inset:0;z-index:3}
-  .impact-body{position:relative;z-index:6;display:grid;place-items:center;gap:16px;min-height:230px;padding-top:46px}
+  .impact-body{position:relative;z-index:6;display:grid;place-items:center;gap:18px;min-height:inherit;padding:56px 24px 26px}
   .sfx{
     font-family:var(--f-d);font-weight:900;text-transform:uppercase;line-height:.85;letter-spacing:-.05em;
-    color:var(--paper);-webkit-text-stroke:5px var(--ink);paint-order:stroke fill;
+    color:var(--white);-webkit-text-stroke:5px var(--ink);paint-order:stroke fill;
     font-size:clamp(44px,8.5vw,100px);transform:rotate(-3deg);margin:0
   }
   .sfx.small{font-size:clamp(34px,5.6vw,58px);transform:rotate(-6deg)}
+  .impact-body .sfx{color:var(--inkpanel-fg);-webkit-text-stroke:5px var(--inkpanel)}
   .denied{display:grid;place-items:center;min-height:200px;padding-bottom:104px}
 
   .balloon{
@@ -306,12 +327,12 @@ const repo = 'https://github.com/dip497/hivemind';
     border-left:14px solid transparent;border-top:18px solid var(--ink)}
   .talk{display:grid;gap:18px;align-content:start;padding-bottom:108px}
 
-  .term{
-    background:var(--ink);color:#DDD9CF;border:var(--bd) solid var(--ink);
-    padding:13px 14px;margin:0;font-family:var(--f-m);font-size:11.5px;line-height:1.85;
+  .term{font-size:clamp(11.5px,.78vw,13.5px);
+    background:var(--inkpanel);color:#DDD9CF;border:var(--bd) solid var(--inkpanel);
+    padding:14px 15px;margin:0;font-family:var(--f-m);line-height:1.85;
     white-space:pre;overflow-x:auto
   }
-  .term.inverted{border-color:var(--paper)}
+  .term.inverted{border-color:var(--inkpanel-fg)}
   .term.tall{font-size:12px}
   .term .c{color:#7E7A70}.term .g{color:#8FD98A}.term .w{color:var(--paper)}
   code{font-family:var(--f-m);font-size:.92em;border:2px solid #DDD9CE;padding:0 4px}
@@ -328,8 +349,8 @@ const repo = 'https://github.com/dip497/hivemind';
   .btns.nomargin{margin:0}
 
   .closer{display:flex;align-items:center;justify-content:space-between;gap:22px;flex-wrap:wrap;padding:26px 24px}
-  .closer .btn{box-shadow:5px 5px 0 var(--paper)}
-  .closer .btn:hover{box-shadow:3px 3px 0 var(--paper)}
+  .closer .btn{box-shadow:5px 5px 0 var(--inkpanel-fg)}
+  .closer .btn:hover{box-shadow:3px 3px 0 var(--inkpanel-fg)}
 
   footer{
     border:var(--bd) solid var(--ink);border-top:0;background:var(--white);margin-bottom:28px;

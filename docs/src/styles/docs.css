@@ -33,7 +33,7 @@
 
   --sl-font: "Archivo", ui-sans-serif, system-ui, -apple-system, sans-serif;
   --sl-font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  --sl-content-width: 47rem;
+  --sl-content-width: 54rem;
   --sl-nav-height: 4.1rem;
   --sl-text-code: 0.86rem;
 
@@ -62,13 +62,13 @@
 
 /* the printed page */
 :root[data-theme='light'] {
-  --hm-paper:   #F6F4ED;
-  --hm-card:    #FFFFFF;
-  --hm-ink:     #0F0E0C;
-  --hm-ink-2:   #45423B;
-  --hm-ink-3:   #7C7970;
-  --hm-rule:    #0F0E0C;
-  --hm-hair:    #DDD9CE;
+  --hm-paper:   #EDE8DB;   /* was #F6F4ED — too bright at full width */
+  --hm-card:    #F6F3EA;
+  --hm-ink:     #17150F;
+  --hm-ink-2:   #4A4740;
+  --hm-ink-3:   #817D73;
+  --hm-rule:    #17150F;
+  --hm-hair:    #D2CCBD;
   --hm-spot:    #C9821A;   /* darkened so amber passes contrast on paper */
   --hm-accent-low:  #F6E4C4;
   --hm-accent-high: #7A4E06;
@@ -155,8 +155,11 @@ h1, .content-panel h1 {
 /* a heavy rule under every h2 — the panel edge */
 .sl-markdown-content h2 {
   border-bottom: var(--hm-bd) solid var(--hm-rule);
-  padding-bottom: .34rem;
+  padding-bottom: .3rem;
+  margin-bottom: .9rem;
   font-size: 1.35rem;
+  width: 100%;
+  display: block;
 }
 .sl-markdown-content h3 { font-size: 1.06rem; color: var(--hm-ink); }
 
@@ -172,9 +175,9 @@ h1, .content-panel h1 {
 
 /* ── code: the black panel ─────────────────────────────────────────────── */
 .sl-markdown-content :not(pre) > code {
-  border: 2px solid var(--hm-hair);
+  border: 1px solid var(--hm-hair);
   border-radius: 0;
-  padding: .05rem .32rem;
+  padding: .05rem .3rem;
   font-weight: 500;
 }
 .expressive-code .frame,
