@@ -311,16 +311,36 @@ jobs:
 
       - name: Verify the bundle is x64 with a win32 pty
         # Same class of check as the macOS job: nothing fails the build when the
-        # wrong-arch native module is packaged, it just dies on a user's machine.
+        # native module is missing or the wrong arch, it just dies on a user's
+        # machine. The inventory prints FIRST so a failure says what IS in the
+        # bundle instead of only what isn't.
         shell: pwsh
         run: |
           $app = Get-ChildItem desktop-deploy/dist-electron -Recurse -Filter hivemind.exe | Select-Object -First 1
           if (-not $app) { throw "no hivemind.exe produced" }
-          $pty = Get-ChildItem desktop-deploy/dist-electron -Recurse -Filter pty.node |
-                 Where-Object { $_.FullName -match "win32-x64" } | Select-Object -First 1
-          if (-not $pty) { throw "no win32-x64 pty.node in the bundle - the terminal would be dead" }
           Write-Host "app: $($app.FullName)"
-          Write-Host "pty: $($pty.FullName)"
+
+          Write-Host "`n--- native modules in the bundle ---"
+          Get-ChildItem desktop-deploy/dist-electron -Recurse -Include *.node,*.dll,*winpty*.exe -ErrorAction SilentlyContinue |
+            ForEach-Object { Write-Host "  $($_.FullName.Replace((Get-Location).Path, ''))" }
+
+          Write-Host "`n--- node-pty packages pnpm installed ---"
+          Get-ChildItem desktop-deploy/node_modules/@lydell -ErrorAction SilentlyContinue |
+            ForEach-Object { Write-Host "  $($_.Name)" }
+          Get-ChildItem desktop-deploy/node_modules/@lydell -Recurse -Filter pty.node -ErrorAction SilentlyContinue |
+            ForEach-Object { Write-Host "  prebuild: $($_.FullName.Replace((Get-Location).Path, ''))" }
+
+          Write-Host "`n--- asar contents (node-pty) ---"
+          $asar = Join-Path $app.Directory "resources\app.asar"
+          if (Test-Path $asar) {
+            npx --yes @electron/asar list $asar 2>$null | Select-String "node-pty" | Select-Object -First 20 |
+              ForEach-Object { Write-Host "  $_" }
+          }
+
+          $pty = Get-ChildItem desktop-deploy/dist-electron -Recurse -Filter pty.node -ErrorAction SilentlyContinue |
+                 Where-Object { $_.FullName -match "win32-x64" } | Select-Object -First 1
+          if (-not $pty) { throw "no win32-x64 pty.node unpacked in the bundle - the terminal would be dead" }
+          Write-Host "`npty: $($pty.FullName)"
 
       - name: Stage release artifacts
         shell: pwsh
