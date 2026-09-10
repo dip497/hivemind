@@ -103,7 +103,11 @@ test("click a building: its live terminal docks in a DOM panel, typed keys arriv
   const framesBefore = await page.evaluate(() => (document.querySelector("[data-world-view]") as unknown as { __world: { frameCount: number } }).__world.frameCount);
   await page.waitForTimeout(1000);
   const framesAfterIdle = await page.evaluate(() => (document.querySelector("[data-world-view]") as unknown as { __world: { frameCount: number } }).__world.frameCount);
-  expect(framesAfterIdle).toBe(framesBefore);
+  // Render-on-demand means "no CONTINUOUS draw", not "not one more frame ever":
+  // a rAF queued by the interaction just before the baseline can land inside the
+  // idle window. A real regression redraws every frame (~60 in a second here),
+  // so one settle frame is noise and 2+ is the signal.
+  expect(framesAfterIdle).toBeLessThanOrEqual(framesBefore + 1);
   // Hover shows the tile name; click docks it.
   const pt = await page.evaluate((id) => (document.querySelector("[data-world-view]") as unknown as { __world: { projectTile: (id: string) => { x: number; y: number } | null } }).__world.projectTile(id), tileId!);
   expect(pt).toBeTruthy();

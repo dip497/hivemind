@@ -47,7 +47,23 @@ test.beforeAll(async () => {
   });
   page = await app.firstWindow();
   await page.waitForLoadState("domcontentloaded");
-  await page.waitForSelector(".react-flow", { timeout: 15_000 });
+  // A COLD Electron boot — bundle parse, GPU init, first paint — behind every
+  // other spec's launches. 15s was a bet on a quiet machine: when it lost, the
+  // whole spec was reported as failing "at 0ms" with nothing to look at. Give
+  // the boot real headroom and, if it still loses, say what the window actually
+  // showed instead of just naming the selector.
+  try {
+    await page.waitForSelector(".react-flow", { timeout: 60_000 });
+  } catch (e) {
+    const seen = await page.evaluate(() => ({
+      url: location.href,
+      readyState: document.readyState,
+      title: document.title,
+      body: document.body?.innerText?.slice(0, 400) ?? null,
+      roots: [...document.body?.children ?? []].map((el) => `${el.tagName}.${el.className}`).slice(0, 8),
+    })).catch((probeError) => ({ probeFailed: String(probeError) }));
+    throw new Error(`workspace-zones: the app never rendered .react-flow — window showed ${JSON.stringify(seen)}`, { cause: e });
+  }
   await page.waitForTimeout(500);
 });
 
