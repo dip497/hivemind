@@ -313,7 +313,8 @@ jobs:
         # Same class of check as the macOS job: nothing fails the build when the
         # native module is missing or the wrong arch, it just dies on a user's
         # machine. The inventory prints FIRST so a failure says what IS in the
-        # bundle instead of only what isn't.
+        # bundle instead of only what isn't — which is how the first version of
+        # this step was caught asserting the POSIX filename.
         shell: pwsh
         run: |
           $app = Get-ChildItem desktop-deploy/dist-electron -Recurse -Filter hivemind.exe | Select-Object -First 1
@@ -337,10 +338,20 @@ jobs:
               ForEach-Object { Write-Host "  $_" }
           }
 
-          $pty = Get-ChildItem desktop-deploy/dist-electron -Recurse -Filter pty.node -ErrorAction SilentlyContinue |
-                 Where-Object { $_.FullName -match "win32-x64" } | Select-Object -First 1
-          if (-not $pty) { throw "no win32-x64 pty.node unpacked in the bundle - the terminal would be dead" }
-          Write-Host "`npty: $($pty.FullName)"
+          # Windows has no pty.node — that is the POSIX name. node-pty drives
+          # ConPTY here, so the binaries are conpty.node plus conpty.dll, and
+          # BOTH have to be outside the asar: a .dll is not covered by
+          # electron-builder's implicit native-module unpacking, and ConPTY
+          # cannot LoadLibrary out of an archive.
+          $need = @{ "conpty.node" = $null; "conpty.dll" = $null }
+          foreach ($name in @($need.Keys)) {
+            $need[$name] = Get-ChildItem desktop-deploy/dist-electron -Recurse -Filter $name -ErrorAction SilentlyContinue |
+                           Where-Object { $_.FullName -match "win32-x64" -and $_.FullName -match "unpacked" } |
+                           Select-Object -First 1
+          }
+          $missing = @($need.Keys | Where-Object { -not $need[$_] })
+          if ($missing) { throw "not unpacked in the bundle: $($missing -join ', ') - the terminal would be dead" }
+          foreach ($name in @($need.Keys)) { Write-Host "ok: $($need[$name].FullName)" }
 
       - name: Stage release artifacts
         shell: pwsh
