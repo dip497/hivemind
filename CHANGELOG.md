@@ -30,6 +30,13 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
   fail a release — the platform has never been launched on real hardware. Publishing
   is a one-line change once it has.
 
+### Changed
+
+- `asarUnpack` now covers `@lydell/node-pty*` rather than `@lydell/node-pty` alone, so the
+  platform package holding the actual prebuilt binary (`@lydell/node-pty-<platform>-<arch>`)
+  is explicitly unpacked on every OS instead of relying on electron-builder's implicit
+  native-module handling — which covers `.node` files but not the `.dll` that ConPTY needs.
+
 ## [1.17.0] — 2026-09-07
 
 ### Added
