@@ -19,13 +19,13 @@
    quietly paint one theme's text on the other theme's ground. */
 :root {
   /* night edition */
-  --hm-paper:   #121110;
-  --hm-card:    #1A1917;
-  --hm-ink:     #F4F1E8;
-  --hm-ink-2:   #C0BCB1;
-  --hm-ink-3:   #8B877D;
-  --hm-rule:    #F4F1E8;
-  --hm-hair:    #2E2C28;
+  --hm-paper:   #0B0A09;
+  --hm-card:    #1C1A17;
+  --hm-ink:     #F7F4EC;
+  --hm-ink-2:   #CFC9BC;   /* was #C0BCB1 — too dim against near-black */
+  --hm-ink-3:   #979286;
+  --hm-rule:    #F7F4EC;
+  --hm-hair:    #35322C;
   --hm-spot:    #E8A33B;
   --hm-accent-low:  #3A2A0E;
   --hm-accent-high: #F5C877;
@@ -155,11 +155,12 @@ h1, .content-panel h1 {
 /* a heavy rule under every h2 — the panel edge */
 .sl-markdown-content h2 {
   border-bottom: var(--hm-bd) solid var(--hm-rule);
-  padding-bottom: .3rem;
-  margin-bottom: .9rem;
+  padding-bottom: .28rem;
   font-size: 1.35rem;
   width: 100%;
   display: block;
+  margin-top: 2.4rem;
+  margin-bottom: 0;
 }
 .sl-markdown-content h3 { font-size: 1.06rem; color: var(--hm-ink); }
 
@@ -172,6 +173,12 @@ h1, .content-panel h1 {
 .sl-markdown-content a:hover { color: var(--hm-spot); }
 
 .sl-markdown-content strong { color: var(--hm-ink); font-weight: 700; }
+
+/* Starlight gives every sibling a top margin; a heading that already has a
+   rule under it does not need that gap as well. */
+.sl-markdown-content h2 + * { margin-top: .75rem !important; }
+.sl-markdown-content h3 { margin-top: 1.8rem; }
+.sl-markdown-content h3 + * { margin-top: .6rem !important; }
 
 /* ── code: the black panel ─────────────────────────────────────────────── */
 .sl-markdown-content :not(pre) > code {

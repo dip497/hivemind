@@ -70,13 +70,22 @@ const repo = 'https://github.com/dip497/hivemind';
         <div class="tone t2" aria-hidden="true"></div>
         <p class="cap">The desk</p>
         <div class="stack" aria-hidden="true">
-          <div class="tile" style="left:5%;top:17%;width:73%;height:45%">
+          <div class="tile" style="left:4%;top:14%;width:66%;height:48%">
             <div class="bar">CLAUDE · API</div>
-            <div class="rows"><i style="width:84%"></i><i class="f" style="width:62%"></i><i style="width:71%"></i><i class="f" style="width:44%"></i></div>
+            <div class="rows"><b class="p">$ hive ctl read</b>
+              <i style="width:88%"></i><i class="f" style="width:66%"></i>
+              <i style="width:74%"></i><i class="f" style="width:52%"></i>
+              <b class="p">$ pytest -q</b><i class="ok" style="width:40%"></i></div>
           </div>
-          <div class="tile" style="left:29%;top:47%;width:69%;height:45%">
+          <div class="tile" style="left:32%;top:44%;width:64%;height:46%">
             <div class="bar">DIFF · LIMITS.TS</div>
-            <div class="rows"><i style="width:70%"></i><i class="f" style="width:52%"></i><i style="width:80%"></i></div>
+            <div class="rows"><i class="add" style="width:78%"></i><i class="add" style="width:60%"></i>
+              <i class="del" style="width:52%"></i><i style="width:70%"></i>
+              <i class="f" style="width:44%"></i><i class="add" style="width:64%"></i></div>
+          </div>
+          <div class="tile" style="left:2%;top:66%;width:34%;height:28%">
+            <div class="bar">SHELL</div>
+            <div class="rows"><b class="p">$ git status</b><i class="f" style="width:62%"></i></div>
           </div>
         </div>
       </section>
@@ -120,7 +129,7 @@ const repo = 'https://github.com/dip497/hivemind';
       </section>
 
       <section class="panel">
-        <div class="tone t2" aria-hidden="true"></div>
+        
         <p class="cap">4 · they hand work over</p>
         <div class="body pc talk">
           <p class="balloon">limits.ts:14 — the window is pruned <em>after</em> the push, so the Nth call always passes.</p>
@@ -144,19 +153,91 @@ const repo = 'https://github.com/dip497/hivemind';
       </section>
     </div>
 
-    <!-- ══════════ PAGE 3 ══════════ -->
-    <div class="grid r-split">
+    <!-- ══════════ PAGE 3 · THE VIEWS ══════════ -->
+    <div class="grid one">
       <section class="panel">
-        <p class="cap">6 · the workspace is a plugin</p>
+        <p class="cap">6 · one hive, three ways to look at it</p>
         <div class="body pc">
-          <h2 class="big">Look at the same hive<br />however you like.</h2>
-          <p class="say">An infinite canvas. Tabs. A Three.js solar system where every project is a planet
-            you fly to. Or one you write yourself — views are a sandboxed plugin API, and your terminals
-            survive the switch.</p>
-          <p class="fine"><a href={link('guide/views/')}>Workspace views →</a></p>
+          <h2 class="big">The workspace is a plugin.</h2>
+          <p class="say">Your terminals, editor buffers and browser tabs survive the switch — tile bodies
+            are mounted once and lent to whichever view is on screen.</p>
+
+          <div class="views">
+            <figure class="view">
+              <svg viewBox="0 0 320 210" role="img" aria-label="Canvas view: two frames as zones on an infinite board, each holding tiles">
+                <rect x="2" y="2" width="316" height="206" fill="none" stroke="currentColor" stroke-width="3"/>
+                <g stroke="currentColor" stroke-width="2.5" stroke-dasharray="7 6" fill="none" opacity=".6">
+                  <rect x="16" y="30" width="136" height="164"/><rect x="168" y="30" width="136" height="164"/>
+                </g>
+                <g class="lab on"><rect x="16" y="16" width="48" height="17" fill="currentColor"/><text x="22" y="29">API</text></g>
+                <g class="lab on"><rect x="168" y="16" width="52" height="17" fill="currentColor"/><text x="174" y="29">WEB</text></g>
+                <g class="win">
+                  <rect x="28" y="46" width="112" height="62"/><rect x="28" y="46" width="112" height="13" class="fill"/>
+                  <rect x="34" y="66" width="84" height="4" class="fill o6"/><rect x="34" y="76" width="62" height="4" class="fill o3"/>
+                  <rect x="34" y="86" width="72" height="4" class="fill o6"/>
+                  <rect x="28" y="120" width="112" height="60"/><rect x="28" y="120" width="112" height="13" class="fill"/>
+                  <rect x="34" y="140" width="70" height="4" class="fill o6"/><rect x="34" y="150" width="88" height="4" class="fill o3"/>
+                  <rect x="180" y="46" width="112" height="76"/><rect x="180" y="46" width="112" height="13" class="fill"/>
+                  <rect x="186" y="66" width="90" height="4" class="fill o6"/><rect x="186" y="76" width="58" height="4" class="fill o3"/>
+                  <rect x="186" y="86" width="78" height="4" class="fill o6"/><rect x="186" y="96" width="46" height="4" class="fill o3"/>
+                  <rect x="180" y="134" width="112" height="46"/><rect x="180" y="134" width="112" height="13" class="fill"/>
+                  <rect x="186" y="154" width="66" height="4" class="fill o6"/>
+                </g>
+              </svg>
+              <figcaption><b>Canvas</b> — an infinite board. Frames are zones; drag, zoom, arrange.</figcaption>
+            </figure>
+
+            <figure class="view">
+              <svg viewBox="0 0 320 210" role="img" aria-label="Windows view: a tab strip with one active tile filling the pane">
+                <rect x="2" y="2" width="316" height="206" fill="none" stroke="currentColor" stroke-width="3"/>
+                <g class="win">
+                  <rect x="14" y="14" width="78" height="25" class="fill"/>
+                  <rect x="96" y="14" width="72" height="25"/><rect x="172" y="14" width="66" height="25"/>
+                  <rect x="242" y="14" width="64" height="25"/>
+                </g>
+                <g class="lab on"><text x="24" y="31">CLAUDE</text></g>
+                <g class="lab"><text x="106" y="31">DIFF</text><text x="182" y="31">TREE</text><text x="252" y="31">SHELL</text></g>
+                <g class="win"><rect x="14" y="49" width="292" height="147"/><rect x="14" y="49" width="292" height="15" class="fill"/></g>
+                <g class="fill">
+                  <rect x="26" y="78" width="180" height="5" class="o6"/><rect x="26" y="92" width="130" height="5" class="o3"/>
+                  <rect x="26" y="106" width="216" height="5" class="o6"/><rect x="26" y="120" width="96" height="5" class="o3"/>
+                  <rect x="26" y="134" width="164" height="5" class="o6"/><rect x="26" y="148" width="120" height="5" class="o3"/>
+                  <rect x="26" y="162" width="188" height="5" class="o6"/>
+                </g>
+              </svg>
+              <figcaption><b>Windows</b> — one tab per tile, for when you want the whole screen.</figcaption>
+            </figure>
+
+            <figure class="view">
+              <svg viewBox="0 0 320 210" role="img" aria-label="World view: isometric islands, one per frame, with blocks for tiles and a docked terminal">
+                <rect x="2" y="2" width="316" height="206" fill="none" stroke="currentColor" stroke-width="3"/>
+                <g class="iso">
+                  <path d="M96 118 L166 154 L96 190 L26 154 Z"/>
+                  <path d="M206 84 L266 116 L206 148 L146 116 Z"/>
+                  <path d="M72 128 L96 140 L96 116 L72 104 Z" class="fill o3"/>
+                  <path d="M96 140 L120 128 L120 104 L96 116 Z" class="fill o6"/>
+                  <path d="M72 104 L96 92 L120 104 L96 116 Z" class="fill"/>
+                  <path d="M112 152 L130 161 L130 145 L112 136 Z" class="fill o3"/>
+                  <path d="M130 161 L148 152 L148 136 L130 145 Z" class="fill o6"/>
+                  <path d="M112 136 L130 127 L148 136 L130 145 Z" class="fill"/>
+                  <path d="M192 104 L210 113 L210 95 L192 86 Z" class="fill o3"/>
+                  <path d="M210 113 L228 104 L228 86 L210 95 Z" class="fill o6"/>
+                  <path d="M192 86 L210 77 L228 86 L210 95 Z" class="fill"/>
+                </g>
+                <g class="win"><rect x="222" y="128" width="82" height="62"/><rect x="222" y="128" width="82" height="13" class="fill"/></g>
+                <g class="fill"><rect x="228" y="148" width="60" height="4" class="o6"/><rect x="228" y="158" width="44" height="4" class="o3"/><rect x="228" y="168" width="52" height="4" class="o6"/></g>
+                <path d="M214 120 L224 128" stroke="currentColor" stroke-width="2.5" stroke-dasharray="5 4" fill="none"/>
+              </svg>
+              <figcaption><b>World</b> — a Three.js scene. Click a block, its live terminal docks beside it.</figcaption>
+            </figure>
+          </div>
+          <p class="fine"><a href={link('guide/views/')}>Views are a sandboxed plugin API — write your own →</a></p>
         </div>
       </section>
+    </div>
 
+    <!-- ══════════ PAGE 4 ══════════ -->
+    <div class="grid r-split">
       <section class="panel">
         <p class="cap">hive ctl</p>
         <div class="body pc">
@@ -170,6 +251,18 @@ const repo = 'https://github.com/dip497/hivemind';
 <span class="w">$</span> hive ctl read tile-builder --timeout 60000</pre>
           <p class="fine" style="margin-top:14px">Every verb takes <code>--json</code> and returns a real exit
             status, so anything that can spawn a process can drive your workspace.</p>
+        </div>
+      </section>
+
+      <section class="panel">
+        <p class="cap">Also in this issue</p>
+        <div class="body pc">
+          <ul class="more">
+            <li><b>Worktrees as frames.</b> Every agent on its own branch, physically unable to collide with a sibling.</li>
+            <li><b>Issues as Markdown</b> in your repo. No tracker, no account, greppable, reviewable in a diff.</li>
+            <li><b>Remote hosts over SSH</b> in the same canvas as everything local — PTYs on the host, editor over SFTP.</li>
+            <li><b>Bring any CLI.</b> claude, codex, droid, kiro, pi — the provider catalog is a directory, not a fork.</li>
+          </ul>
         </div>
       </section>
     </div>
@@ -214,8 +307,8 @@ const repo = 'https://github.com/dip497/hivemind';
      and there is none left — the panels are UI, so they invert cleanly. */
   @media (prefers-color-scheme:dark){
     :root{
-      --paper:#131211; --white:#1C1A17; --ink:#F2EEE3;
-      --ink-2:#B6B1A5; --ink-3:#837E73;
+      --paper:#0B0A09; --white:#1C1A17; --ink:#F7F4EC;
+      --ink-2:#DAD4C6; --ink-3:#A09A8E;
       --inkpanel:#000000; --inkpanel-fg:#F2EEE3;
       color-scheme:dark;
     }
@@ -244,8 +337,8 @@ const repo = 'https://github.com/dip497/hivemind';
 
   /* screentone — three densities, the way a page does its shading */
   .tone{position:absolute;inset:0;pointer-events:none}
-  .t1{background-image:radial-gradient(var(--ink) 1px,transparent 1.1px);background-size:6px 6px;opacity:.20}
-  .t2{background-image:radial-gradient(var(--ink) 1.3px,transparent 1.4px);background-size:6px 6px;opacity:.40}
+  .t1{background-image:radial-gradient(var(--ink) 1px,transparent 1.1px);background-size:6px 6px;opacity:.13}
+  .t2{background-image:radial-gradient(var(--ink) 1.3px,transparent 1.4px);background-size:6px 6px;opacity:.30}
   .t3{background-image:radial-gradient(var(--ink) 1.7px,transparent 1.8px);background-size:5px 5px;opacity:.55}
 
   /* masthead */
@@ -288,23 +381,29 @@ const repo = 'https://github.com/dip497/hivemind';
   h2.big{font-size:clamp(20px,2vw,34px);line-height:1.04}
   h2.invert{color:var(--inkpanel-fg)}
   p{margin:0}
-  .say{font-size:clamp(14px,1vw,16.5px);line-height:1.62;color:var(--ink-2);max-width:44ch;margin-top:16px}
+  .say{font-family:var(--f-d);font-weight:400;text-transform:none;letter-spacing:0;font-size:clamp(15px,1.05vw,17.5px);line-height:1.62;color:var(--ink-2);max-width:46ch;margin-top:16px}
   .fine{font-size:11.5px;line-height:1.6;color:var(--ink-3);letter-spacing:.05em;margin-top:16px}
   .fine.invert{color:#8E8A80}
-  .fine a{text-decoration-color:var(--spot);text-decoration-thickness:2px;text-underline-offset:3px}
+  .fine a{color:var(--ink);text-decoration-color:var(--spot);text-decoration-thickness:2px;text-underline-offset:3px}
+  .fine a:hover{color:var(--spot)}
 
   /* the app, drawn as line art and tone */
   .stack{position:absolute;inset:0;z-index:4}
   .stack.inset{top:44px;bottom:104px}
   .tile{position:absolute;background:var(--white);border:3px solid var(--ink);overflow:hidden}
   .tile .bar{height:16px;border-bottom:3px solid var(--ink);display:flex;align-items:center;padding:0 6px;font-size:7px;letter-spacing:.08em;font-weight:700}
-  .tile .rows{padding:6px;display:grid;gap:4px}
-  .tile .rows i{display:block;height:4px;background:var(--ink);opacity:.72}
-  .tile .rows i.f{opacity:.26}
+  .tile .rows{padding:7px 8px;display:grid;gap:5px;align-content:start}
+  .tile .rows i{display:block;height:4px;background:var(--ink);opacity:.6}
+  .tile .rows i.f{opacity:.28}
+  .tile .rows i.add{background:#3E8B4F;opacity:.9}
+  .tile .rows i.del{background:#B4432F;opacity:.9}
+  .tile .rows i.ok{background:#3E8B4F;opacity:.72}
+  .tile .rows b{font-size:clamp(7px,.5vw,9px);font-weight:500;opacity:.92}
+  .tile .rows b.p{color:#5CA96D}
 
   /* the caption strip pinned to the bottom of a story panel */
   .foot{position:absolute;bottom:0;left:0;right:0;z-index:6;background:var(--white);border-top:var(--bd) solid var(--ink);padding:13px 15px}
-  .foot p{font-size:clamp(12.5px,.85vw,14px);line-height:1.55;color:var(--ink-2);margin-top:6px}
+  .foot p{font-family:var(--f-d);font-weight:400;font-size:clamp(13px,.9vw,15px);line-height:1.55;color:var(--ink-2);margin-top:6px}
 
   /* impact frame */
   .impact-panel{min-height:clamp(240px,32vh,360px)}
@@ -348,6 +447,23 @@ const repo = 'https://github.com/dip497/hivemind';
   .btns{display:flex;gap:11px;flex-wrap:wrap;margin-top:20px}
   .btns.nomargin{margin:0}
 
+  .views{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:22px}
+  .view{margin:0;display:grid;gap:10px}
+  .view svg{display:block;width:100%;height:auto;color:var(--ink);background:var(--white)}
+  .view .win rect{fill:none;stroke:currentColor;stroke-width:2.5}
+  .view .win rect.fill,.view .fill rect,.view rect.fill{fill:currentColor;stroke:none}
+  .view .iso path{fill:none;stroke:currentColor;stroke-width:2.5;stroke-linejoin:round}
+  .view .iso path.fill{fill:currentColor}
+  .view .o6{opacity:.55}.view .o3{opacity:.28}
+  .view .lab text{font-family:var(--f-m);font-size:9.5px;font-weight:700;letter-spacing:.09em;fill:currentColor}
+  .view .lab.on text{fill:var(--white)}
+  .view figcaption{font-family:var(--f-d);font-weight:400;font-size:clamp(12.5px,.78vw,14px);line-height:1.5;color:var(--ink-2)}
+  .view figcaption b{color:var(--ink);font-weight:500}
+  .more{margin:0;padding:0;list-style:none;display:grid;gap:14px}
+  .more li{font-family:var(--f-d);font-weight:400;font-size:clamp(13.5px,.88vw,15.5px);line-height:1.58;
+    color:var(--ink-2);padding-left:15px;border-left:3px solid var(--spot)}
+  .more b{color:var(--ink);font-weight:500}
+
   .closer{display:flex;align-items:center;justify-content:space-between;gap:22px;flex-wrap:wrap;padding:26px 24px}
   .closer .btn{box-shadow:5px 5px 0 var(--inkpanel-fg)}
   .closer .btn:hover{box-shadow:3px 3px 0 var(--inkpanel-fg)}
@@ -362,6 +478,7 @@ const repo = 'https://github.com/dip497/hivemind';
 
   @media(max-width:900px){
     .r-hero,.r-three,.r-split{grid-template-columns:1fr}
+    .views{grid-template-columns:1fr}
     .mast{grid-template-columns:1fr}
     .mast .l{border-right:0;border-bottom:var(--bd) solid var(--ink)}
     .mast .r{border-left:0;border-top:var(--bd) solid var(--ink);text-align:left;flex-direction:row;gap:16px}
