@@ -1,7 +1,256 @@
-:root { --sl-color-accent-low: #302713; --sl-color-accent: #bc851d; --sl-color-accent-high: #f0c56a; --sl-font: 'Inter', ui-sans-serif, system-ui, sans-serif; }
-:root[data-theme='light'] { --sl-color-accent-low: #fff3d6; --sl-color-accent: #8a5a00; --sl-color-accent-high: #563700; }
-:root[data-theme='dark'] { --sl-color-black: #101112; --sl-color-gray-6: #191b1c; --sl-color-gray-5: #2b2d2e; }
-.site-title { letter-spacing: -.035em; font-weight: 650; }
-.site-title img { border-radius: 9px; }
-.sl-markdown-content { line-height: 1.8; }
-.sl-markdown-content :is(h1,h2,h3) { letter-spacing: -.025em; }
+/* ─────────────────────────────────────────────────────────────────────────
+   Hivemind docs — the manga edition.
+
+   The landing page is a comic page: ink on paper, screentone, heavy panel
+   rules. These docs are the same world with the volume turned down, because
+   a docs site is for reading, not for looking at. So the *chrome* carries
+   the style — masthead, panel rules, mono labels — and the prose column is
+   left alone: no tone behind paragraphs, no uppercase body, comfortable
+   measure.
+
+   Dark mode is the "night edition": the same page printed white-on-black,
+   not a different design.
+   ───────────────────────────────────────────────────────────────────────── */
+
+/* Starlight's default is dark, so the bare :root carries the night edition and
+   [data-theme='light'] swaps only the palette. The --sl-* mappings are declared
+   once and re-resolve, because custom-property substitution is dynamic —
+   redefining --hm-* in a second bare :root would win over the light block and
+   quietly paint one theme's text on the other theme's ground. */
+:root {
+  /* night edition */
+  --hm-paper:   #121110;
+  --hm-card:    #1A1917;
+  --hm-ink:     #F4F1E8;
+  --hm-ink-2:   #C0BCB1;
+  --hm-ink-3:   #8B877D;
+  --hm-rule:    #F4F1E8;
+  --hm-hair:    #2E2C28;
+  --hm-spot:    #E8A33B;
+  --hm-accent-low:  #3A2A0E;
+  --hm-accent-high: #F5C877;
+  --hm-bd: 3px;
+
+  --sl-font: "Archivo", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --sl-font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --sl-content-width: 47rem;
+  --sl-nav-height: 4.1rem;
+  --sl-text-code: 0.86rem;
+
+  --sl-color-bg: var(--hm-paper);
+  --sl-color-bg-nav: var(--hm-card);
+  --sl-color-bg-sidebar: var(--hm-paper);
+  --sl-color-bg-inline-code: var(--hm-card);
+  --sl-color-text: var(--hm-ink-2);
+  --sl-color-white: var(--hm-ink);
+  --sl-color-black: var(--hm-paper);
+  --sl-color-gray-1: var(--hm-ink);
+  --sl-color-gray-2: var(--hm-ink-2);
+  --sl-color-gray-3: var(--hm-ink-3);
+  --sl-color-gray-4: var(--hm-ink-3);
+  --sl-color-gray-5: var(--hm-hair);
+  --sl-color-gray-6: var(--hm-card);
+  --sl-color-gray-7: var(--hm-paper);
+  --sl-color-hairline: var(--hm-hair);
+  --sl-color-hairline-light: var(--hm-hair);
+  --sl-color-hairline-shade: var(--hm-rule);
+  --sl-color-accent: var(--hm-spot);
+  --sl-color-accent-low: var(--hm-accent-low);
+  --sl-color-accent-high: var(--hm-accent-high);
+  --sl-color-text-accent: var(--hm-spot);
+}
+
+/* the printed page */
+:root[data-theme='light'] {
+  --hm-paper:   #F6F4ED;
+  --hm-card:    #FFFFFF;
+  --hm-ink:     #0F0E0C;
+  --hm-ink-2:   #45423B;
+  --hm-ink-3:   #7C7970;
+  --hm-rule:    #0F0E0C;
+  --hm-hair:    #DDD9CE;
+  --hm-spot:    #C9821A;   /* darkened so amber passes contrast on paper */
+  --hm-accent-low:  #F6E4C4;
+  --hm-accent-high: #7A4E06;
+}
+
+/* ── masthead ──────────────────────────────────────────────────────────── */
+.header {
+  border-bottom: var(--hm-bd) solid var(--hm-rule) !important;
+  box-shadow: none !important;
+  background: var(--hm-card);
+}
+.site-title {
+  font-weight: 900;
+  letter-spacing: -.035em;
+  font-size: 1.32rem;
+  color: var(--hm-ink);
+  text-transform: uppercase;
+}
+.site-title img { border-radius: 0; }
+
+/* Search: a caption box, not a pill. */
+site-search button[data-open-modal] {
+  border: 2px solid var(--hm-rule) !important;
+  border-radius: 0 !important;
+  background: var(--hm-card) !important;
+  font-family: var(--sl-font-mono);
+  font-size: .74rem;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+site-search kbd {
+  font-family: var(--sl-font-mono);
+  background: transparent;
+  border: 1px solid var(--hm-hair);
+  border-radius: 0;
+}
+
+/* ── sidebar: panel gutter ─────────────────────────────────────────────── */
+.sidebar-pane {
+  border-inline-end: var(--hm-bd) solid var(--hm-rule) !important;
+  background: var(--sl-color-bg-sidebar);
+}
+.sidebar-content .large,
+summary .large {
+  font-family: var(--sl-font-mono);
+  font-size: .68rem !important;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--hm-ink-3);
+}
+.sidebar-content a {
+  border-radius: 0;
+  font-size: .89rem;
+  padding-block: .34rem;
+}
+/* the current page reads as a caption box */
+.sidebar-content a[aria-current='page'],
+.sidebar-content a[aria-current='page']:hover {
+  background: var(--hm-ink);
+  color: var(--hm-paper);
+  font-weight: 600;
+  border-radius: 0;
+  box-shadow: 3px 3px 0 var(--hm-spot);
+}
+
+/* ── the page itself ───────────────────────────────────────────────────── */
+.content-panel + .content-panel { border-top: var(--hm-bd) solid var(--hm-rule); }
+
+.sl-markdown-content { line-height: 1.72; }
+
+h1, .content-panel h1 {
+  font-weight: 900 !important;
+  letter-spacing: -.04em;
+  text-transform: uppercase;
+  line-height: .96;
+}
+.sl-markdown-content :is(h2, h3, h4) {
+  font-weight: 800;
+  letter-spacing: -.02em;
+  text-transform: uppercase;
+  color: var(--hm-ink);
+}
+/* a heavy rule under every h2 — the panel edge */
+.sl-markdown-content h2 {
+  border-bottom: var(--hm-bd) solid var(--hm-rule);
+  padding-bottom: .34rem;
+  font-size: 1.35rem;
+}
+.sl-markdown-content h3 { font-size: 1.06rem; color: var(--hm-ink); }
+
+.sl-markdown-content a {
+  color: var(--hm-ink);
+  text-decoration-color: var(--hm-spot);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+.sl-markdown-content a:hover { color: var(--hm-spot); }
+
+.sl-markdown-content strong { color: var(--hm-ink); font-weight: 700; }
+
+/* ── code: the black panel ─────────────────────────────────────────────── */
+.sl-markdown-content :not(pre) > code {
+  border: 2px solid var(--hm-hair);
+  border-radius: 0;
+  padding: .05rem .32rem;
+  font-weight: 500;
+}
+.expressive-code .frame,
+.expressive-code pre {
+  border-radius: 0 !important;
+  border: var(--hm-bd) solid var(--hm-rule) !important;
+  box-shadow: none !important;
+}
+.expressive-code .frame.is-terminal .header,
+.expressive-code figcaption {
+  font-family: var(--sl-font-mono);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  font-size: .68rem;
+}
+
+/* ── asides: caption boxes ─────────────────────────────────────────────── */
+.starlight-aside {
+  border-radius: 0;
+  border: var(--hm-bd) solid var(--hm-rule);
+  border-inline-start-width: var(--hm-bd);
+  background: var(--hm-card);
+  box-shadow: 5px 5px 0 var(--hm-hair);
+}
+.starlight-aside__title {
+  font-family: var(--sl-font-mono);
+  font-size: .7rem;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+  color: var(--hm-ink);
+}
+.starlight-aside--caution { box-shadow: 5px 5px 0 var(--hm-spot); }
+.starlight-aside--danger  { box-shadow: 5px 5px 0 #C4452A; }
+
+/* ── tables ────────────────────────────────────────────────────────────── */
+.sl-markdown-content table { border-collapse: collapse; }
+.sl-markdown-content :is(th, td) { border: 1px solid var(--hm-hair); padding: .5rem .7rem; }
+.sl-markdown-content th {
+  border-bottom: var(--hm-bd) solid var(--hm-rule);
+  font-family: var(--sl-font-mono);
+  font-size: .7rem;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  text-align: left;
+  color: var(--hm-ink);
+}
+
+/* ── on this page ──────────────────────────────────────────────────────── */
+#starlight__on-this-page,
+.right-sidebar-panel h2 {
+  font-family: var(--sl-font-mono);
+  font-size: .68rem !important;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--hm-ink-3);
+}
+.right-sidebar-panel a { font-size: .84rem; border-radius: 0; }
+
+/* ── prev / next: two panels ───────────────────────────────────────────── */
+.pagination-links a {
+  border-radius: 0;
+  border: var(--hm-bd) solid var(--hm-rule);
+  box-shadow: 5px 5px 0 var(--hm-hair);
+  background: var(--hm-card);
+}
+.pagination-links a:hover { border-color: var(--hm-rule); box-shadow: 5px 5px 0 var(--hm-spot); }
+.pagination-links svg { color: var(--hm-spot); }
+.pagination-links span { font-family: var(--sl-font-mono); font-size: .68rem; letter-spacing: .12em; text-transform: uppercase; }
+.pagination-links .link-title { font-family: var(--sl-font); font-weight: 800; letter-spacing: -.02em; text-transform: uppercase; font-size: 1.05rem; }
+
+/* ── misc chrome ───────────────────────────────────────────────────────── */
+starlight-theme-select select, .social-icons a { border-radius: 0; }
+.sl-markdown-content hr { border-top: var(--hm-bd) solid var(--hm-rule); }
+.sl-markdown-content blockquote {
+  border-inline-start: var(--hm-bd) solid var(--hm-spot);
+  padding-inline-start: 1rem;
+}
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }

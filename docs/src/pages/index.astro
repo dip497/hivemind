@@ -1,41 +1,355 @@
 ---
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 const link = (path: string) => `${base}/${path}`;
-const title = 'Hivemind — A workspace for your coding agents';
-const description = 'A Linux workspace for coding agents, terminals, editors, and diffs. Control it from the desktop or the hive CLI.';
+const title = 'Hivemind — a workspace for your coding agents';
+const description =
+  'A Linux workspace that runs coding-agent CLIs on one canvas, next to the terminals, editor and diffs they are working on. Local, open source, driven from the shell.';
+const repo = 'https://github.com/dip497/hivemind';
 ---
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><meta name="description" content={description} /><meta name="theme-color" content="#101112" /><title>{title}</title><link rel="icon" href={link('icon.png')} /><link rel="alternate" type="text/markdown" href={link('llms.txt')} /><meta property="og:title" content={title} /><meta property="og:description" content={description} /><meta property="og:type" content="website" /></head>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{title}</title>
+  <meta name="description" content={description} />
+  <meta name="theme-color" content="#F6F4ED" />
+  <link rel="icon" href={link('favicon.svg')} />
+  <link rel="alternate" type="text/markdown" href={link('llms.txt')} />
+  <meta property="og:title" content={title} />
+  <meta property="og:description" content={description} />
+  <meta property="og:type" content="website" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" />
+</head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
+
 <div class="page">
-<header><a class="brand" href={link('')} aria-label="Hivemind home"><img src={link('icon.png')} width="33" height="33" alt="" />hivemind</a><nav aria-label="Main navigation"><a href={link('guide/')}>Documentation</a><a href="https://github.com/dip497/hivemind">GitHub</a></nav></header>
-<main id="main">
-<section class="hero">
-<div class="eyebrow"><span></span> OPEN SOURCE · LOCAL FIRST · LINUX</div>
-<h1>A workspace for<br /><span>coding agents.</span></h1>
-<p class="lede">Run agents alongside your terminals, editor, and diffs.</p>
-<div class="actions"><a class="button primary" href="https://github.com/dip497/hivemind/releases">Download for Linux</a><a class="button" href={link('guide/getting-started/')}>Read the quickstart</a></div>
 
-<div class="product"><div class="product-bar"><div><i></i><i></i><i></i></div><span>hivemind / workspace</span><span>LOCAL</span></div><img src={link('workspace.webp')} alt="Hivemind with live terminal, file explorer, and diff tools arranged in a workspace" width="900" height="532" fetchpriority="high" /></div>
-</section>
-<section class="overview" aria-labelledby="overview-title"><h2 id="overview-title">Projects, tools, and agents.</h2><div class="features"><article><span class="number">01 / CONTEXT</span><h3>Project workspaces</h3><p>Group tools by repository, git worktree, or SSH host.</p></article><article><span class="number">02 / VISIBILITY</span><h3>Terminals and code</h3><p>Read agent output, edit files, and review diffs side by side.</p></article><article><span class="number">03 / CONTROL</span><h3>CLI control</h3><p>Use <code>hive</code> to start agents, send tasks, and read replies.</p></article></div></section>
-<section class="cli" aria-labelledby="cli-title"><div><h2 id="cli-title">Control it from the shell.</h2><p>Agents can use the same CLI to delegate tasks and read results.</p><a class="text-link" href={link('guide/agent-workflows/')}>Agent workflow guide</a></div><div class="terminal"><div class="terminal-label">hive ctl</div><pre><code><span class="comment"># Find your workspaces</span>
-<span class="prompt">$</span> hive ctl frames
+  <!-- ══════════ MASTHEAD ══════════ -->
+  <header class="mast">
+    <div class="l"><b>FREE</b><span>MIT · NO<br />ACCOUNT</span></div>
+    <div class="m">
+      <svg width="30" height="30" viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="1.4" y="1.4" width="9.2" height="9.2" fill="currentColor" />
+        <rect x="13.4" y="1.4" width="9.2" height="9.2" fill="none" stroke="currentColor" stroke-width="2.2" />
+        <rect x="1.4" y="13.4" width="9.2" height="9.2" fill="none" stroke="currentColor" stroke-width="2.2" />
+        <rect x="13.4" y="13.4" width="9.2" height="9.2" fill="none" stroke="currentColor" stroke-width="2.2" />
+      </svg>
+      <span class="title">HIVEMIND</span>
+    </div>
+    <nav class="r" aria-label="Main">
+      <a href={link('guide/')}>DOCS</a>
+      <a href={link('guide/views/')}>VIEWS</a>
+      <a href={repo}>GITHUB ↗</a>
+    </nav>
+  </header>
 
-<span class="comment"># See who is working</span>
-<span class="prompt">$</span> hive ctl list
+  <main id="main">
 
-<span class="comment"># Start a focused task</span>
-<span class="prompt">$</span> hive ctl spawn --agent claude \
-    --prompt "Review the current diff"</code></pre></div></section>
-<section class="extensions"><div class="eyebrow">IN DEVELOPMENT</div><h2>Switch workspace views.</h2><p>Switch between a canvas, tabs, and community views while keeping your tools open.</p><a class="text-link" href={link('guide/views/')}>Workspace views</a></section>
+    <!-- ══════════ PAGE 1 ══════════ -->
+    <div class="grid r-hero">
+      <section class="panel">
+        <div class="tone t1" aria-hidden="true"></div>
+        <p class="cap">Page 1 · 23:40, one open branch</p>
+        <div class="body pc">
+          <h1>One of you.<br /><em>Eleven jobs.</em></h1>
+          <p class="say">Hivemind runs coding-agent CLIs on one canvas, next to the terminals,
+            editor and diffs they are working on. On your machine, with your keys.</p>
+          <div class="btns">
+            <a class="btn spot" href={`${repo}/releases`}>Download for Linux</a>
+            <a class="btn" href="#how">How it works</a>
+          </div>
+          <p class="fine">NO CLOUD · NO ACCOUNT · MIT</p>
+        </div>
+      </section>
 
-</main>
-<footer><a class="brand" href={link('')}><img src={link('icon.png')} width="24" height="24" alt="" />hivemind</a><span>Open source. MIT licensed.</span><nav aria-label="Footer"><a href={link('guide/')}>Docs</a><a href={link('llms.txt')}>For agents</a><a href="https://github.com/dip497/hivemind">Source</a></nav></footer>
+      <section class="panel">
+        <div class="tone t2" aria-hidden="true"></div>
+        <p class="cap">The desk</p>
+        <div class="stack" aria-hidden="true">
+          <div class="tile" style="left:8%;top:24%;width:66%;height:42%">
+            <div class="bar">CLAUDE · API</div>
+            <div class="rows"><i style="width:84%"></i><i class="f" style="width:62%"></i><i style="width:71%"></i><i class="f" style="width:44%"></i></div>
+          </div>
+          <div class="tile" style="left:36%;top:50%;width:62%;height:40%">
+            <div class="bar">DIFF · LIMITS.TS</div>
+            <div class="rows"><i style="width:70%"></i><i class="f" style="width:52%"></i><i style="width:80%"></i></div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ══════════ IMPACT FRAME ══════════ -->
+    <div class="grid one">
+      <section class="panel black impact-panel">
+        <p class="cap">2 · you type one line</p>
+        <svg class="impact" viewBox="0 0 1200 240" preserveAspectRatio="none" aria-hidden="true">
+          <g stroke="#F6F4ED" stroke-width="2" opacity=".5">
+            <path d="M600 120 L0 -60" /><path d="M600 120 L120 -70" /><path d="M600 120 L260 -80" />
+            <path d="M600 120 L420 -90" /><path d="M600 120 L600 -100" /><path d="M600 120 L780 -90" />
+            <path d="M600 120 L940 -80" /><path d="M600 120 L1080 -70" /><path d="M600 120 L1200 -60" />
+            <path d="M600 120 L0 300" /><path d="M600 120 L120 320" /><path d="M600 120 L260 330" />
+            <path d="M600 120 L420 340" /><path d="M600 120 L600 350" /><path d="M600 120 L780 340" />
+            <path d="M600 120 L940 330" /><path d="M600 120 L1080 320" /><path d="M600 120 L1200 300" />
+          </g>
+        </svg>
+        <div class="body impact-body">
+          <p class="sfx">SPAWN</p>
+          <pre class="term inverted"><span class="w">$</span> hive ctl spawn <span class="g">--agent</span> claude <span class="g">--frame</span> api <span class="g">--prompt</span> <span class="g">"add the rate-limit test"</span></pre>
+        </div>
+      </section>
+    </div>
+
+    <!-- ══════════ PAGE 2 ══════════ -->
+    <div class="grid r-three" id="how">
+      <section class="panel">
+        <div class="tone t1" aria-hidden="true"></div>
+        <p class="cap">3 · the swarm lands</p>
+        <div class="stack inset" aria-hidden="true">
+          <div class="tile" style="left:6%;top:6%;width:54%;height:34%"><div class="bar">SCOUT</div><div class="rows"><i style="width:78%"></i><i class="f" style="width:50%"></i></div></div>
+          <div class="tile" style="left:42%;top:30%;width:54%;height:34%"><div class="bar">BUILDER</div><div class="rows"><i style="width:66%"></i><i class="f" style="width:72%"></i></div></div>
+          <div class="tile" style="left:16%;top:56%;width:54%;height:34%"><div class="bar">GUARD</div><div class="rows"><i style="width:58%"></i><i class="f" style="width:40%"></i></div></div>
+        </div>
+        <div class="foot">
+          <h2>One tile, one job</h2>
+          <p>A repo, a git worktree or an SSH host. Each agent gets its own cell and cannot wander into a sibling's.</p>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="tone t2" aria-hidden="true"></div>
+        <p class="cap">4 · they hand work over</p>
+        <div class="body pc talk">
+          <p class="balloon">limits.ts:14 — the window is pruned <em>after</em> the push, so the Nth call always passes.</p>
+          <pre class="term"><span class="c"># hand the find over</span>
+<span class="w">$</span> hive ctl send tile-builder</pre>
+        </div>
+        <div class="foot">
+          <h2>Agents drive agents</h2>
+          <p>Fan out, pipeline, map-reduce, supervise. One CLI, no MCP server to babysit.</p>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="tone t3" aria-hidden="true"></div>
+        <p class="cap">5 · nothing ships unread</p>
+        <div class="body pc denied"><p class="sfx small">DENIED</p></div>
+        <div class="foot">
+          <h2>A gate you control</h2>
+          <p>Approve or refuse a plan and read the whole transcript. Nothing merges because a model felt sure.</p>
+        </div>
+      </section>
+    </div>
+
+    <!-- ══════════ PAGE 3 ══════════ -->
+    <div class="grid r-split">
+      <section class="panel">
+        <p class="cap">6 · the workspace is a plugin</p>
+        <div class="body pc">
+          <h2 class="big">Look at the same hive<br />however you like.</h2>
+          <p class="say">An infinite canvas. Tabs. A Three.js solar system where every project is a planet
+            you fly to. Or one you write yourself — views are a sandboxed plugin API, and your terminals
+            survive the switch.</p>
+          <p class="fine"><a href={link('guide/views/')}>Workspace views →</a></p>
+        </div>
+      </section>
+
+      <section class="panel">
+        <p class="cap">hive ctl</p>
+        <div class="body pc">
+          <pre class="term tall"><span class="c"># see who is working</span>
+<span class="w">$</span> hive ctl list --json
+
+<span class="c"># put a worker in a repo</span>
+<span class="w">$</span> hive ctl spawn <span class="g">--agent</span> claude <span class="g">--frame</span> api
+
+<span class="c"># and wait for the answer</span>
+<span class="w">$</span> hive ctl read tile-builder --timeout 60000</pre>
+          <p class="fine" style="margin-top:14px">Every verb takes <code>--json</code> and returns a real exit
+            status, so anything that can spawn a process can drive your workspace.</p>
+        </div>
+      </section>
+    </div>
+
+    <!-- ══════════ CLOSER ══════════ -->
+    <div class="grid one">
+      <section class="panel black closer">
+        <div>
+          <h2 class="big invert">Next chapter: your repo.</h2>
+          <p class="fine invert">ONE BINARY · LINUX x86_64 · MIT</p>
+        </div>
+        <div class="btns nomargin">
+          <a class="btn spot" href={`${repo}/releases`}>Download</a>
+          <a class="btn" href={repo}>Read the source</a>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer>
+    <span>HIVEMIND · OPEN SOURCE, MIT</span>
+    <span>
+      <a href={link('guide/')}>DOCS</a> ·
+      <a href={link('guide/cli/')}>CLI</a> ·
+      <a href={link('llms.txt')}>FOR AGENTS</a> ·
+      <a href={repo}>GITHUB</a>
+    </span>
+  </footer>
 </div>
-</body></html>
-<style>
-:global(*){box-sizing:border-box} :global(html){color-scheme:dark;scroll-behavior:smooth} :global(body){margin:0;background:#101112;color:#f3f2ee;font-family:Inter,ui-sans-serif,system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased} :global(a){color:inherit;text-decoration:none} :global(a:focus-visible){outline:2px solid #eabe62;outline-offset:6px} .page{max-width:1160px;margin:auto;padding:0 36px}header{height:96px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #292b2c}.brand{display:inline-flex;align-items:center;gap:10px;font-size:23px;font-weight:630;letter-spacing:-1px}.brand img{border-radius:9px}nav{display:flex;gap:28px;font-size:14px;color:#bfc0bc}nav a:hover,.text-link:hover{color:#eabe62}.hero{text-align:center;padding-top:86px}.eyebrow{font-size:11px;font-weight:550;letter-spacing:1.8px;color:#b5b6b1}.eyebrow>span{display:inline-block;width:6px;height:6px;border-radius:50%;background:#eabe62;margin-right:8px;vertical-align:middle}h1{font-size:clamp(48px,6.6vw,82px);line-height:1.08;letter-spacing:-4px;font-weight:530;margin:27px 0 22px}h1 span{color:#eabe62}.lede{font-size:20px;line-height:1.6;color:#b8b9b5;letter-spacing:-.3px}.actions{display:flex;justify-content:center;gap:12px;margin:29px 0 17px}.button{display:inline-flex;align-items:center;gap:24px;justify-content:space-between;padding:13px 20px;border:1px solid #363838;border-radius:7px;font-size:14px;font-weight:550;min-height:46px}.button:hover{border-color:#b5b6b1}.primary{background:#eabe62;color:#17150f;border-color:#eabe62}.primary:hover{background:#f6d288;border-color:#f6d288}.small{font-size:12px;color:#9a9c96}.product{max-width:1020px;margin:55px auto 0;border:1px solid #363838;border-radius:12px;overflow:hidden;box-shadow:0 28px 70px #0005}.product-bar{height:36px;background:#191b1c;display:flex;align-items:center;justify-content:space-between;padding:0 16px;font-family:monospace;font-size:10px;color:#959993;letter-spacing:1px}.product-bar>div{display:flex;gap:5px}.product-bar i{width:6px;height:6px;border:1px solid #727773;border-radius:50%}.product img{display:block;width:100%;height:auto}section.overview{padding:105px 0 88px}h2{font-size:clamp(30px,4vw,44px);line-height:1.15;letter-spacing:-1.7px;font-weight:500;margin:19px 0 28px}.features{display:grid;grid-template-columns:repeat(3,1fr);gap:42px;margin-top:48px}.number{font-family:monospace;font-size:11px;color:#d3ad60;letter-spacing:.6px}h3{font-size:19px;letter-spacing:-.5px;font-weight:550;margin:17px 0 12px}.features p,.cli p,.extensions p{font-size:16px;line-height:1.8;color:#b5b6b1;margin:0}.features code{color:#e9c474}.cli{border-top:1px solid #292b2c;border-bottom:1px solid #292b2c;padding:70px 0;display:grid;grid-template-columns:1fr 1fr;gap:65px}.cli h2{margin-bottom:20px}.text-link{display:inline-flex;gap:25px;margin-top:24px;font-size:14px;color:#eabe62}.terminal{background:#17191a;border:1px solid #303233;border-radius:9px;align-self:center;overflow:hidden}.terminal-label{border-bottom:1px solid #303233;padding:13px 20px;color:#a7aaa4;font:12px monospace}.terminal pre{font-size:13px;line-height:1.8;padding:20px;margin:0;overflow-x:auto;color:#e5e5df}.comment{color:#92968e}.prompt{color:#eabe62}.extensions{padding:88px 0;max-width:640px}.extensions .eyebrow{color:#eabe62}.closing{display:flex;align-items:center;justify-content:space-between;padding:48px 0;border-top:1px solid #292b2c}.closing h2{margin:0;font-size:32px}footer{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:30px 0 40px;color:#a4a69f;font-size:12px}footer .brand{font-size:19px}footer nav{font-size:12px;gap:20px}.skip{position:absolute;left:20px;top:-80px;padding:12px;background:#eabe62;color:#101112;z-index:5}.skip:focus{top:12px}@media(max-width:700px){.page{padding:0 22px}header{height:76px}nav{gap:18px;font-size:12px}.brand{font-size:21px}.hero{padding-top:56px}h1{letter-spacing:-2px}.lede{font-size:17px}.actions{flex-direction:column;max-width:300px;margin:26px auto 18px}.product{margin-top:36px}.features,.cli{grid-template-columns:1fr;gap:32px}section.overview{padding:65px 0}.cli{padding:45px 0}.extensions{padding:60px 0}.closing{align-items:flex-start;flex-direction:column;gap:25px}footer{align-items:flex-start;flex-wrap:wrap}footer>span{display:none}.eyebrow{font-size:10px;letter-spacing:1.3px}}@media(prefers-reduced-motion:reduce){:global(html){scroll-behavior:auto}}
+
+<style is:global>
+  :root{
+    --paper:#F6F4ED; --white:#FFFFFF; --ink:#0F0E0C;
+    --ink-2:#3B3934; --ink-3:#6E6B62; --spot:#E8A33B;
+    --gut:12px; --bd:3.5px;
+    --f-d:"Archivo",Impact,sans-serif;
+    --f-m:"JetBrains Mono",ui-monospace,Menlo,monospace;
+    color-scheme:light;
+  }
+  /* Deliberately single-theme: this page is ink on paper. Inverting it would
+     turn the panel rules and screentone inside out for no gain. */
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;background:var(--paper);color:var(--ink);
+    font-family:var(--f-m);font-size:15px;line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+  }
+  body::before{
+    content:"";position:fixed;inset:0;z-index:99;pointer-events:none;opacity:.28;mix-blend-mode:multiply;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='110' height='110'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='110' height='110' filter='url(%23n)' opacity='0.5'/></svg>");
+  }
+  a{color:inherit}
+  .skip{position:absolute;left:14px;top:-60px;background:var(--ink);color:var(--paper);padding:10px 14px;z-index:200}
+  .skip:focus{top:12px}
+  :focus-visible{outline:3px solid var(--spot);outline-offset:3px}
+
+  .page{max-width:1160px;margin:0 auto;padding:20px 18px 0}
+
+  /* screentone — three densities, the way a page does its shading */
+  .tone{position:absolute;inset:0;pointer-events:none}
+  .t1{background-image:radial-gradient(var(--ink) 1px,transparent 1.1px);background-size:6px 6px;opacity:.20}
+  .t2{background-image:radial-gradient(var(--ink) 1.3px,transparent 1.4px);background-size:6px 6px;opacity:.40}
+  .t3{background-image:radial-gradient(var(--ink) 1.7px,transparent 1.8px);background-size:5px 5px;opacity:.55}
+
+  /* masthead */
+  .mast{border:var(--bd) solid var(--ink);background:var(--white);display:grid;grid-template-columns:auto 1fr auto;align-items:stretch}
+  .mast .l{border-right:var(--bd) solid var(--ink);padding:9px 13px;display:grid;align-content:center;gap:2px;text-align:center;font-size:9px;letter-spacing:.1em;line-height:1.5}
+  .mast .l b{font-family:var(--f-d);font-weight:900;font-size:16px;letter-spacing:0}
+  .mast .m{display:flex;align-items:center;gap:12px;padding:7px 16px;color:var(--ink)}
+  .mast .title{font-family:var(--f-d);font-weight:900;font-size:clamp(22px,3.4vw,36px);letter-spacing:-.035em;line-height:1}
+  .mast .r{border-left:var(--bd) solid var(--ink);padding:9px 15px;display:flex;flex-direction:column;justify-content:center;gap:3px;text-align:right;font-size:9.5px;letter-spacing:.1em}
+  .mast .r a{text-decoration:none}
+  .mast .r a:hover{color:#9A6B10}
+
+  /* panels */
+  .grid{display:grid;gap:var(--gut);margin-top:var(--gut)}
+  .one{grid-template-columns:1fr}
+  .r-hero{grid-template-columns:1.5fr 1fr}
+  .r-three{grid-template-columns:repeat(3,1fr)}
+  .r-split{grid-template-columns:1fr 1fr}
+  .panel{position:relative;border:var(--bd) solid var(--ink);background:var(--white);overflow:hidden}
+  .panel.black{background:var(--ink);color:var(--paper)}
+  .cap{
+    position:absolute;top:0;left:0;z-index:6;margin:0;background:var(--white);color:var(--ink);
+    border-right:var(--bd) solid var(--ink);border-bottom:var(--bd) solid var(--ink);
+    padding:7px 12px;font-weight:700;font-size:10px;letter-spacing:.12em;text-transform:uppercase;max-width:80%
+  }
+  .body{position:relative;z-index:5;padding:22px}
+  .body.pc{padding-top:50px}
+
+  h1,h2{font-family:var(--f-d);margin:0;text-transform:uppercase;letter-spacing:-.035em;text-wrap:balance}
+  h1{font-weight:900;font-size:clamp(32px,5.2vw,62px);line-height:.9}
+  h1 em{font-style:normal;color:var(--spot);-webkit-text-stroke:2px var(--ink);paint-order:stroke fill}
+  h2{font-weight:800;font-size:16px;line-height:1.06}
+  h2.big{font-size:clamp(19px,2.4vw,28px);line-height:1.04}
+  h2.invert{color:var(--paper)}
+  p{margin:0}
+  .say{font-size:14px;line-height:1.62;color:var(--ink-2);max-width:44ch;margin-top:16px}
+  .fine{font-size:11.5px;line-height:1.6;color:var(--ink-3);letter-spacing:.05em;margin-top:16px}
+  .fine.invert{color:#8E8A80}
+  .fine a{text-decoration-color:var(--spot);text-decoration-thickness:2px;text-underline-offset:3px}
+
+  /* the app, drawn as line art and tone */
+  .stack{position:absolute;inset:0;z-index:4}
+  .stack.inset{top:44px;bottom:104px}
+  .tile{position:absolute;background:var(--white);border:3px solid var(--ink);overflow:hidden}
+  .tile .bar{height:16px;border-bottom:3px solid var(--ink);display:flex;align-items:center;padding:0 6px;font-size:7px;letter-spacing:.08em;font-weight:700}
+  .tile .rows{padding:6px;display:grid;gap:4px}
+  .tile .rows i{display:block;height:4px;background:var(--ink);opacity:.72}
+  .tile .rows i.f{opacity:.26}
+
+  /* the caption strip pinned to the bottom of a story panel */
+  .foot{position:absolute;bottom:0;left:0;right:0;z-index:6;background:var(--white);border-top:var(--bd) solid var(--ink);padding:13px 15px}
+  .foot p{font-size:12.5px;line-height:1.55;color:var(--ink-2);margin-top:6px}
+
+  /* impact frame */
+  .impact-panel{min-height:230px}
+  .impact{position:absolute;inset:0;z-index:3}
+  .impact-body{position:relative;z-index:6;display:grid;place-items:center;gap:16px;min-height:230px;padding-top:46px}
+  .sfx{
+    font-family:var(--f-d);font-weight:900;text-transform:uppercase;line-height:.85;letter-spacing:-.05em;
+    color:var(--paper);-webkit-text-stroke:5px var(--ink);paint-order:stroke fill;
+    font-size:clamp(44px,8.5vw,100px);transform:rotate(-3deg);margin:0
+  }
+  .sfx.small{font-size:clamp(34px,5.6vw,58px);transform:rotate(-6deg)}
+  .denied{display:grid;place-items:center;min-height:200px;padding-bottom:104px}
+
+  .balloon{
+    position:relative;background:var(--white);border:3.5px solid var(--ink);border-radius:22px;
+    padding:12px 16px;font-size:12.5px;line-height:1.55
+  }
+  .balloon::after{content:"";position:absolute;left:32px;bottom:-17px;width:0;height:0;
+    border-left:14px solid transparent;border-top:18px solid var(--ink)}
+  .talk{display:grid;gap:18px;align-content:start;padding-bottom:108px}
+
+  .term{
+    background:var(--ink);color:#DDD9CF;border:var(--bd) solid var(--ink);
+    padding:13px 14px;margin:0;font-family:var(--f-m);font-size:11.5px;line-height:1.85;
+    white-space:pre;overflow-x:auto
+  }
+  .term.inverted{border-color:var(--paper)}
+  .term.tall{font-size:12px}
+  .term .c{color:#7E7A70}.term .g{color:#8FD98A}.term .w{color:var(--paper)}
+  code{font-family:var(--f-m);font-size:.92em;border:2px solid #DDD9CE;padding:0 4px}
+
+  .btn{
+    display:inline-block;font-family:var(--f-d);font-weight:800;font-size:13px;letter-spacing:.02em;
+    text-transform:uppercase;text-decoration:none;color:var(--ink);border:var(--bd) solid var(--ink);
+    background:var(--white);padding:10px 15px;box-shadow:5px 5px 0 var(--ink);
+    transition:transform .08s ease,box-shadow .08s ease
+  }
+  .btn:hover{transform:translate(2px,2px);box-shadow:3px 3px 0 var(--ink)}
+  .btn.spot{background:var(--spot)}
+  .btns{display:flex;gap:11px;flex-wrap:wrap;margin-top:20px}
+  .btns.nomargin{margin:0}
+
+  .closer{display:flex;align-items:center;justify-content:space-between;gap:22px;flex-wrap:wrap;padding:26px 24px}
+  .closer .btn{box-shadow:5px 5px 0 var(--paper)}
+  .closer .btn:hover{box-shadow:3px 3px 0 var(--paper)}
+
+  footer{
+    border:var(--bd) solid var(--ink);border-top:0;background:var(--white);margin-bottom:28px;
+    padding:14px 17px;display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;
+    font-size:10px;letter-spacing:.08em
+  }
+  footer a{text-decoration:none}
+  footer a:hover{color:#9A6B10}
+
+  @media(max-width:900px){
+    .r-hero,.r-three,.r-split{grid-template-columns:1fr}
+    .mast{grid-template-columns:1fr}
+    .mast .l{border-right:0;border-bottom:var(--bd) solid var(--ink)}
+    .mast .r{border-left:0;border-top:var(--bd) solid var(--ink);text-align:left;flex-direction:row;gap:16px}
+    .panel .stack{position:relative;height:220px;inset:auto}
+    .stack.inset{top:auto;bottom:auto;margin:44px 0 0}
+    .foot{position:relative}
+    .talk,.denied{padding-bottom:22px}
+  }
+  @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.btn{transition:none}}
 </style>
+</body>
+</html>
