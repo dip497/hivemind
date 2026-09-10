@@ -1,5 +1,6 @@
 /**
- * Linux-only user-shell environment resolver. Hand-rolled equivalent of
+ * POSIX user-shell environment resolver — a no-op on Windows, which has no
+ * login shell to interrogate (see resolveShellEnv). Hand-rolled equivalent of
  * sindresorhus/shell-env + superset.sh's `execWithShellEnv`, with TTL
  * caching, concurrent-dogpile latch, ANSI stripping, oh-my-zsh-friendly
  * spawn env, and POSIX-shell fallbacks. No runtime npm dep.
@@ -49,6 +50,13 @@ export async function applyShellEnvToProcess(): Promise<Record<string, string>> 
 }
 
 async function resolveShellEnv(): Promise<CachedResult> {
+  // Windows has no login shell to interrogate: a process already inherits the
+  // full user + machine environment, and there is no `$SHELL -ilc env` to run.
+  // Without this guard the resolver spends SHELL_TIMEOUT_MS failing to spawn
+  // /bin/zsh on every launch before falling back to the same env we start with.
+  if (process.platform === "win32") {
+    return { env: { ...process.env } as Record<string, string>, expires: Infinity, source: "fallback" };
+  }
   const now = Date.now();
   if (cache && cache.expires > now) return cache;
   if (inFlight) return inFlight;

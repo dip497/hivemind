@@ -89,6 +89,8 @@ Linux x86_64 and macOS Apple Silicon. **No build toolchain needed** — the inst
 downloads prebuilt binaries from the latest [GitHub Release](https://github.com/dip497/hivemind/releases).
 (Intel macs and Linux arm64 build from source with `--dev`.)
 
+Windows x64 builds, but is **not yet published or validated** — see [Windows](#windows-experimental).
+
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/dip497/hivemind/main/install.sh)
 ```
@@ -112,6 +114,23 @@ the `.app` by hand instead, do it yourself or Gatekeeper reports it as damaged:
 ```bash
 xattr -dr com.apple.quarantine ~/.hivemind-app/hivemind.app
 ```
+
+### Windows (experimental)
+
+The code is Windows-capable — named pipes instead of unix sockets, PowerShell
+instead of bash, ConPTY through `@lydell/node-pty`'s win32 prebuild — and CI
+builds and asserts the bundle on a Windows runner. **But nobody has launched it
+on real hardware yet**, so the release does not publish Windows assets.
+
+To try it you need the artifacts from a release workflow run (`windows-x64`),
+or a source build:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/dip497/hivemind/main/install.ps1))) -Dev
+```
+
+If it works — or doesn't — please [open an issue](https://github.com/dip497/hivemind/issues).
+Publishing Windows assets is a one-line change to `release.yml` once someone confirms it runs.
 
 <details>
 <summary><b>Build from source</b></summary>
@@ -362,8 +381,8 @@ telemetry, and agents use your existing CLI login — no extra API keys or SDK l
 **What platforms does it run on?**
 Linux x86_64 (AppImage) and macOS Apple Silicon (`.app`) have prebuilt releases. Intel
 macs and Linux arm64 work from source (`./install.sh --dev`) — they just have no
-published binary, since the bundled native pty module is per-arch. Windows is an open
-contribution area.
+published binary, since the bundled native pty module is per-arch. Windows x64 builds
+in CI but ships nothing yet; it needs someone to confirm the app launches.
 
 ---
 
@@ -371,8 +390,9 @@ contribution area.
 
 PRs welcome. High-value areas:
 
-- **Windows support** — Linux and macOS ship prebuilts; Windows needs packaging plus a
-  ConPTY path through `pty-daemon.ts`.
+- **Validate the Windows build** — the port is written (pipes, PowerShell, ConPTY) and
+  CI produces a bundle; it has never been run. One session on a Windows box turns this
+  from experimental into shipped.
 - **Intel mac / Linux arm64 prebuilts** — the code already builds there; it needs release
   jobs on those runners (the `.app`/AppImage bundles an arch-specific `@lydell/node-pty`).
 - **More agents** — the registry (`apps/desktop/src/renderer/src/agents.tsx`) takes one

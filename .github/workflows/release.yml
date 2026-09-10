@@ -243,6 +243,103 @@ jobs:
           name: macos-arm64
           path: release-assets/
 
+  build-windows:
+    name: build windows x64
+    runs-on: windows-latest
+    timeout-minutes: 40
+    # UNVALIDATED PLATFORM. Nobody has launched this build on real hardware yet,
+    # so a Windows failure must not block a Linux/macOS release: this job is not
+    # in `publish`'s `needs`, and its assets are deliberately NOT in the release
+    # `files:` list. To ship Windows once someone confirms it runs: add
+    # `hive-windows-x64.exe` + `*-win.zip` to that list. Nothing else changes.
+    continue-on-error: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.1"
+
+      - name: pnpm install (workspace)
+        run: pnpm install --frozen-lockfile
+
+      - name: Syntax-check install.ps1
+        # The only Windows host in the project. A parse error here would
+        # otherwise surface as a broken one-liner on a user's machine.
+        shell: pwsh
+        run: |
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile("install.ps1", [ref]$null, [ref]$errors) | Out-Null
+          if ($errors) { $errors | ForEach-Object { Write-Host $_ }; exit 1 }
+          Write-Host "install.ps1 parses"
+
+      - name: Build CLI single-binary
+        run: pnpm --filter @hivemind/cli run build
+
+      - name: Build renderer + main
+        run: pnpm --filter @hivemind/desktop run build
+
+      - name: pnpm deploy (materialize workspace deps for electron-builder)
+        run: pnpm --filter @hivemind/desktop deploy --legacy desktop-deploy
+
+      - name: Copy build output into deploy
+        shell: pwsh
+        run: |
+          Copy-Item -Recurse -Force apps/desktop/out desktop-deploy/
+          Copy-Item -Recurse -Force apps/desktop/icons desktop-deploy/
+
+      - name: Package zip
+        # No code signing: an Authenticode cert costs money and we have none, so
+        # users get a SmartScreen prompt on first run. Documented in install.ps1.
+        shell: pwsh
+        run: |
+          cd desktop-deploy
+          npx --yes electron-builder --win zip --config.directories.output=dist-electron
+
+      - name: Verify the bundle is x64 with a win32 pty
+        # Same class of check as the macOS job: nothing fails the build when the
+        # wrong-arch native module is packaged, it just dies on a user's machine.
+        shell: pwsh
+        run: |
+          $app = Get-ChildItem desktop-deploy/dist-electron -Recurse -Filter hivemind.exe | Select-Object -First 1
+          if (-not $app) { throw "no hivemind.exe produced" }
+          $pty = Get-ChildItem desktop-deploy/dist-electron -Recurse -Filter pty.node |
+                 Where-Object { $_.FullName -match "win32-x64" } | Select-Object -First 1
+          if (-not $pty) { throw "no win32-x64 pty.node in the bundle - the terminal would be dead" }
+          Write-Host "app: $($app.FullName)"
+          Write-Host "pty: $($pty.FullName)"
+
+      - name: Stage release artifacts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release-assets | Out-Null
+          $cli = Get-ChildItem apps/cli/dist -Filter "hive*" | Where-Object { -not $_.PSIsContainer } | Select-Object -First 1
+          if (-not $cli) { throw "no CLI binary produced" }
+          Copy-Item $cli.FullName release-assets/hive-windows-x64.exe
+          $zip = Get-ChildItem desktop-deploy/dist-electron -Filter *.zip | Select-Object -First 1
+          if (-not $zip) { throw "no app zip produced" }
+          Copy-Item $zip.FullName release-assets/
+          Get-ChildItem release-assets
+
+      - name: Upload artifacts (workflow result)
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64
+          path: release-assets/
+
   publish:
     name: publish github release
     needs: [build-linux, build-macos]
@@ -279,6 +376,7 @@ jobs:
           tag_name: ${{ steps.tag.outputs.tag }}
           name: ${{ steps.tag.outputs.tag }}
           generate_release_notes: true
+          # Windows assets are built but NOT listed here — see build-windows.
           files: |
             release-assets/hive-linux-x86_64
             release-assets/hive-darwin-arm64

@@ -7,6 +7,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { ipcPath } from "../platform.js";
 
 /** Read the token at `<userData>/hcp.token`, creating it on first use. */
 export function readOrCreateToken(userDataDir: string): string {
@@ -29,7 +30,9 @@ export function readOrCreateToken(userDataDir: string): string {
   return token;
 }
 
-/** Well-known socket path, derived from userData (both main + daemon agree). */
+/** Well-known socket address, derived from userData (both main + daemon agree,
+ *  and agent CLIs receive it verbatim as HIVE_HCP_SOCK). A named pipe on
+ *  Windows — see ipcPath. */
 export function hcpSockPath(userDataDir: string): string {
-  return path.join(userDataDir, "hcp.sock");
+  return ipcPath(userDataDir, "hcp.sock");
 }

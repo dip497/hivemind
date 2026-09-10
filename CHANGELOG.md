@@ -7,6 +7,26 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Added
+
+- **Windows x64 support in the code, unvalidated in the wild.** The POSIX assumptions
+  that made the app Linux/macOS-only now live behind one seam
+  (`apps/desktop/src/main/platform.ts`): the three unix sockets become named pipes
+  (`\\.\pipe\hivemind-<hash>-<name>`) since Windows has no filesystem sockets; new
+  terminals default to `powershell.exe` and a canvas carrying another OS's shell is
+  repaired rather than failing; the login-shell env resolver no-ops (there is no
+  `$SHELL -ilc env` on Windows, and it was burning its 8s timeout every launch);
+  in-app and `hive upgrade` route through `install.ps1`; the `hive`/`hivemind`
+  lookups use `%LOCALAPPDATA%`, `path.delimiter` and `.exe`.
+- `install.ps1` — PowerShell installer mirroring `install.sh`'s contract: prebuilt or
+  `-Dev`, staged upgrade when the app is running, Start Menu shortcut, PATH entry,
+  `hivemind upgrade` / `uninstall` / `uninstall -Purge`. `install.sh` now redirects
+  Git Bash / MSYS / Cygwin users to it instead of failing as "unsupported OS".
+- Release workflow builds Windows and asserts the bundle (parse-checks `install.ps1`,
+  requires a `win32-x64` `pty.node`), but does **not** publish its assets and cannot
+  fail a release — the platform has never been launched on real hardware. Publishing
+  is a one-line change once it has.
+
 ## [1.17.0] — 2026-09-07
 
 ### Added

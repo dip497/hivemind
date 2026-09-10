@@ -11,6 +11,7 @@
     "start": "ELECTRON_DISABLE_SANDBOX=1 electron-vite preview",
     "dist": "electron-vite build && electron-builder --linux AppImage",
     "dist:mac": "electron-vite build && electron-builder --mac dir && codesign --force --deep --sign - dist-electron/mac-arm64/hivemind.app",
+    "dist:win": "electron-vite build && electron-builder --win zip",
     "typecheck": "tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.node.json",
     "test:unit": "tsx --test tests/unit/*.test.ts",
     "test:e2e": "electron-vite build && playwright test",
@@ -36,6 +37,16 @@
     "asarUnpack": [
       "**/node_modules/@lydell/node-pty/**"
     ],
+    "win": {
+      "target": [
+        {
+          "target": "zip",
+          "arch": "x64"
+        }
+      ],
+      "icon": "icons/icon.png",
+      "artifactName": "hivemind-${version}-x64-win.zip"
+    },
     "mac": {
       "target": [
         {
