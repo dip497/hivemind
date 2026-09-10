@@ -11,6 +11,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { app } from "electron";
 import { type ClientMsg, type ServerMsg, SOCKET_NAME, frame, makeLineDecoder } from "./pty-protocol.js";
+import { ipcPath } from "./platform.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -41,7 +42,7 @@ const specs = new Map<string, AttachSpec>();
 let reqSeq = 0;
 let reattaching = false;
 
-const socketPath = () => path.join(app.getPath("userData"), SOCKET_NAME);
+const socketPath = () => ipcPath(app.getPath("userData"), SOCKET_NAME);
 const daemonScript = () => path.join(__dirname, "pty-daemon.js");
 const delay = (ms: number) =>
   new Promise((r) => {

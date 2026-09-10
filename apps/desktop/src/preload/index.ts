@@ -2,6 +2,9 @@ import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { HiveIpc, DiffScope, WorktreeCreateOpts, PlanReviewOpen, HcpCommand, HcpPipeEvent, HcpSpawnEvent, HcpWaitEvent, HcpSubagentEvent, HcpNotifyEvent, HcpTurnStateEvent, AppErrorEvent } from "../shared/ipc.js";
 
 const api: HiveIpc & {
+  /** The host OS, so the renderer can pick a default shell without an IPC
+   *  round-trip (it needs this while building the very first canvas). */
+  platform: NodeJS.Platform;
   /** Resolve a picked File's real filesystem path (for the persistent video wallpaper). */
   getPathForFile: (file: File) => string;
   /** Copy a picked media file into the sandboxed wallpaper dir → its hm-media:// URL. */
@@ -249,6 +252,7 @@ const api: HiveIpc & {
     ipcRenderer.on("app:error", listener);
     return () => ipcRenderer.removeListener("app:error", listener);
   },
+  platform: process.platform,
   // webUtils.getPathForFile is the supported way to get a dropped/picked File's
   // absolute path under contextIsolation (File.path was removed). Used to build
   // the persistent hm-media:// video-wallpaper URL.

@@ -9,9 +9,15 @@ import type { TileKind } from "./tile-kinds";
 import { frameColorFor, LEGACY_FRAME_COLOR } from "./frame-color";
 import { identifyAgent } from "./agent-state";
 
-/** Linux only. `-i` keeps the shell interactive so it doesn't exit, `-l`
- *  sources the login profile (PATH includes ~/.local/bin → claude resolves). */
+/** On POSIX: `-i` keeps the shell interactive so it doesn't exit, `-l` sources
+ *  the login profile (PATH includes ~/.local/bin → claude resolves). Windows
+ *  gets powershell.exe -NoLogo, which loads the profile by default. */
 export function defaultShell(): { cmd: string; args: string[] } {
+  // powershell.exe (5.1) ships with every supported Windows; pwsh may not.
+  // Main repairs a spec that came from another OS (see repairShellSpec), so a
+  // canvas.json carrying the wrong shell still opens — this just gets NEW tiles
+  // right. The ?? keeps browser-mode renders (no bridge) on the POSIX default.
+  if (globalThis.window?.hive?.platform === "win32") return { cmd: "powershell.exe", args: ["-NoLogo"] };
   return { cmd: "/bin/bash", args: ["-il"] };
 }
 

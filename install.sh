@@ -274,7 +274,13 @@ ARCH="${HIVEMIND_ARCH:-$(uname -m)}"
 case "$OS" in
   Linux)  OS_KIND="linux" ;;
   Darwin) OS_KIND="mac" ;;
-  *)      die "unsupported OS: $OS (Linux and macOS only)." ;;
+  # Git Bash / MSYS / Cygwin report these. The bash installer cannot drive a
+  # Windows install (no AppImage, no .app, different paths) — point at the
+  # PowerShell one rather than failing with a generic "unsupported".
+  MINGW*|MSYS*|CYGWIN*|Windows_NT)
+    die "on Windows, install with PowerShell instead:
+    irm https://raw.githubusercontent.com/dip497/hivemind/main/install.ps1 | iex" ;;
+  *)      die "unsupported OS: $OS (Linux, macOS and Windows)." ;;
 esac
 # PLATFORM empty = no prebuilt for this box; --dev still works. NO_PREBUILT
 # carries the reason, reported only if the user actually asked for a prebuilt.

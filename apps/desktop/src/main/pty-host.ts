@@ -4,6 +4,7 @@
  */
 import * as pty from "@lydell/node-pty";
 import { applyShellEnvToProcess, sanitizeShellEnv } from "./shell-env.js";
+import { repairShellSpec } from "./platform.js";
 import { applyInitialPrompt } from "../shared/agent-io.js";
 
 interface SpawnOpts {
@@ -69,8 +70,10 @@ function doSpawn(opts: SpawnOpts): pty.IPty {
   if (!env.TERM_PROGRAM) env.TERM_PROGRAM = "hivemind";
   // Mirror the daemon: a ▶ Work prompt (HIVE_INITIAL_PROMPT) becomes claude's
   // positional argv (auto-submits) rather than being typed into the booting TUI.
-  const { args: execArgs, env: execEnv } = applyInitialPrompt(opts.args ?? [], env);
-  return pty.spawn(opts.cmd, execArgs, {
+  // A canvas written on another OS can name a shell this one doesn't have.
+  const spec = repairShellSpec({ cmd: opts.cmd, args: opts.args });
+  const { args: execArgs, env: execEnv } = applyInitialPrompt(spec.args ?? [], env);
+  return pty.spawn(spec.cmd, execArgs, {
     cwd: opts.cwd,
     cols: opts.cols,
     rows: opts.rows,

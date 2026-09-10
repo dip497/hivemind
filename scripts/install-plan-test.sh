@@ -30,6 +30,17 @@ expect Darwin x86_64 os_kind   mac
 expect Darwin x86_64 platform  none
 expect Linux  aarch64 platform none
 
+# Git Bash reports MINGW64_NT-*; such a user must be sent to install.ps1, not
+# told "unsupported OS" — they are on a supported platform, wrong installer.
+for fake_os in MINGW64_NT-10.0 MSYS_NT-10.0 CYGWIN_NT-10.0; do
+  out=$(HIVEMIND_PRINT_PLAN=1 HIVEMIND_OS="$fake_os" HIVEMIND_ARCH=x86_64 bash install.sh 2>&1 || true)
+  if printf '%s' "$out" | grep -q "install.ps1"; then
+    printf '  ok   %-16s %-8s points at install.ps1\n' "$fake_os" "x86_64"
+  else
+    printf '  FAIL %-16s %-8s should point at install.ps1, said: %s\n' "$fake_os" "x86_64" "$out"; fail=1
+  fi
+done
+
 # An unknown OS is fatal (no dev path either — nothing knows how to package it).
 if HIVEMIND_PRINT_PLAN=1 HIVEMIND_OS=Plan9 HIVEMIND_ARCH=x86_64 bash install.sh >/dev/null 2>&1; then
   echo "  FAIL Plan9: expected a hard failure on an unknown OS"; fail=1
