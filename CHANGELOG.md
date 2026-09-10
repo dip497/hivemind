@@ -24,7 +24,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
   `hivemind upgrade` / `uninstall` / `uninstall -Purge`. `install.sh` now redirects
   Git Bash / MSYS / Cygwin users to it instead of failing as "unsupported OS".
 - Release workflow builds Windows and asserts the bundle (parse-checks `install.ps1`,
-  requires a `win32-x64` `pty.node`), but does **not** publish its assets and cannot
+  requires the unpacked `win32-x64` `conpty.node` + `conpty.dll`), but does **not** publish its assets and cannot
   fail a release — the platform has never been launched on real hardware. Publishing
   is a one-line change once it has.
 
