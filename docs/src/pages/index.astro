@@ -3,8 +3,9 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 const link = (path: string) => `${base}/${path}`;
 const title = 'Hivemind — a workspace for your coding agents';
 const description =
-  'A Linux workspace that runs coding-agent CLIs on one canvas, next to the terminals, editor and diffs they are working on. Local, open source, driven from the shell.';
+  'Run coding-agent CLIs on one canvas, next to the terminals, editor and diffs they are working on. Local, open source, driven from your shell.';
 const repo = 'https://github.com/dip497/hivemind';
+const install = 'bash <(curl -fsSL https://raw.githubusercontent.com/dip497/hivemind/main/install.sh)';
 ---
 <!doctype html>
 <html lang="en">
@@ -13,7 +14,7 @@ const repo = 'https://github.com/dip497/hivemind';
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{title}</title>
   <meta name="description" content={description} />
-  <meta name="theme-color" content="#EDE8DB" />
+  <meta name="theme-color" content="#F7F4EE" />
   <link rel="icon" href={link('favicon.svg')} />
   <link rel="alternate" type="text/markdown" href={link('llms.txt')} />
   <meta property="og:title" content={title} />
@@ -21,471 +22,493 @@ const repo = 'https://github.com/dip497/hivemind';
   <meta property="og:type" content="website" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" />
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
 
-<div class="page">
-
-  <!-- ══════════ MASTHEAD ══════════ -->
-  <header class="mast">
-    <div class="l"><b>FREE</b><span>MIT · NO<br />ACCOUNT</span></div>
-    <div class="m">
-      <svg width="30" height="30" viewBox="0 0 24 24" aria-hidden="true">
+<header class="nav">
+  <div class="nav-in">
+    <a class="brand" href={link('')} aria-label="Hivemind home">
+      <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true">
         <rect x="1.4" y="1.4" width="9.2" height="9.2" fill="currentColor" />
         <rect x="13.4" y="1.4" width="9.2" height="9.2" fill="none" stroke="currentColor" stroke-width="2.2" />
         <rect x="1.4" y="13.4" width="9.2" height="9.2" fill="none" stroke="currentColor" stroke-width="2.2" />
         <rect x="13.4" y="13.4" width="9.2" height="9.2" fill="none" stroke="currentColor" stroke-width="2.2" />
       </svg>
-      <span class="title">HIVEMIND</span>
-    </div>
-    <nav class="r" aria-label="Main">
-      <a href={link('guide/')}>DOCS</a>
-      <a href={link('guide/views/')}>VIEWS</a>
-      <a href={repo}>GITHUB ↗</a>
+      Hivemind
+    </a>
+    <nav class="links" aria-label="Main">
+      <a href="#how">How it works</a>
+      <a href="#views">Views</a>
+      <a href={link('guide/')}>Docs</a>
+      <a href={repo}>GitHub</a>
     </nav>
-  </header>
+    <a class="btn small" href={`${repo}/releases`}>Download</a>
+  </div>
+</header>
 
-  <main id="main">
+<main id="main">
 
-    <!-- ══════════ PAGE 1 ══════════ -->
-    <div class="grid r-hero">
-      <section class="panel">
-        <div class="tone t1" aria-hidden="true"></div>
-        <p class="cap">Page 1 · 23:40, one open branch</p>
-        <div class="body pc">
-          <h1>One of you.<br /><em>Eleven jobs.</em></h1>
-          <p class="say">Hivemind runs coding-agent CLIs on one canvas, next to the terminals,
-            editor and diffs they are working on. On your machine, with your keys.</p>
-          <div class="btns">
-            <a class="btn spot" href={`${repo}/releases`}>Download for Linux</a>
-            <a class="btn" href="#how">How it works</a>
-          </div>
-          <p class="fine">NO CLOUD · NO ACCOUNT · MIT</p>
+  <!-- ─────────── HERO: what it is, then how to get it ─────────── -->
+  <section class="hero">
+    <div class="wrap hero-in">
+      <div class="hero-copy">
+        <p class="eyebrow"><span class="tag">Free &amp; open source</span> Linux · MIT</p>
+        <h1>Run a swarm of coding agents on one canvas.</h1>
+        <p class="lede">Hivemind puts agent CLIs next to the terminals, editor and diffs they are
+          working on — on your own machine, driven from your shell.</p>
+
+        <div class="cta">
+          <a class="btn primary" href={`${repo}/releases`}>Download for Linux</a>
+          <a class="btn ghost" href={link('guide/getting-started/')}>Read the quickstart</a>
         </div>
-      </section>
 
-      <section class="panel">
-        <div class="tone t2" aria-hidden="true"></div>
-        <p class="cap">The desk</p>
-        <div class="stack" aria-hidden="true">
-          <div class="tile" style="left:4%;top:14%;width:66%;height:48%">
-            <div class="bar">CLAUDE · API</div>
-            <div class="rows"><b class="p">$ hive ctl read</b>
-              <i style="width:88%"></i><i class="f" style="width:66%"></i>
-              <i style="width:74%"></i><i class="f" style="width:52%"></i>
-              <b class="p">$ pytest -q</b><i class="ok" style="width:40%"></i></div>
-          </div>
-          <div class="tile" style="left:32%;top:44%;width:64%;height:46%">
-            <div class="bar">DIFF · LIMITS.TS</div>
-            <div class="rows"><i class="add" style="width:78%"></i><i class="add" style="width:60%"></i>
-              <i class="del" style="width:52%"></i><i style="width:70%"></i>
-              <i class="f" style="width:44%"></i><i class="add" style="width:64%"></i></div>
-          </div>
-          <div class="tile" style="left:2%;top:66%;width:34%;height:28%">
-            <div class="bar">SHELL</div>
-            <div class="rows"><b class="p">$ git status</b><i class="f" style="width:62%"></i></div>
-          </div>
+        <div class="install">
+          <code>{install}</code>
+          <button class="copy" type="button" data-copy={install} aria-label="Copy the install command">Copy</button>
         </div>
-      </section>
-    </div>
 
-    <!-- ══════════ IMPACT FRAME ══════════ -->
-    <div class="grid one">
-      <section class="panel black impact-panel">
-        <p class="cap">2 · you type one line</p>
-        <svg class="impact" viewBox="0 0 1200 240" preserveAspectRatio="none" aria-hidden="true">
-          <g stroke="currentColor" stroke-width="2" opacity=".45">
-            <path d="M600 120 L0 -60" /><path d="M600 120 L120 -70" /><path d="M600 120 L260 -80" />
-            <path d="M600 120 L420 -90" /><path d="M600 120 L600 -100" /><path d="M600 120 L780 -90" />
-            <path d="M600 120 L940 -80" /><path d="M600 120 L1080 -70" /><path d="M600 120 L1200 -60" />
-            <path d="M600 120 L0 300" /><path d="M600 120 L120 320" /><path d="M600 120 L260 330" />
-            <path d="M600 120 L420 340" /><path d="M600 120 L600 350" /><path d="M600 120 L780 340" />
-            <path d="M600 120 L940 330" /><path d="M600 120 L1080 320" /><path d="M600 120 L1200 300" />
+        <ul class="trust">
+          <li>No account</li><li>No cloud</li><li>Your keys, your machine</li>
+        </ul>
+      </div>
+
+      <figure class="shot">
+        <figcaption class="shot-cap">A workspace with two agents, a diff and a shell</figcaption>
+        <svg viewBox="0 0 640 420" role="img" aria-label="The Hivemind workspace: a rail of frames and tiles on the left, with an agent terminal, a diff and a shell arranged on the canvas">
+          <rect x="1" y="1" width="638" height="418" rx="6" class="app"/>
+          <rect x="1" y="1" width="638" height="26" rx="6" class="chrome"/>
+          <rect x="1" y="20" width="638" height="8" class="chrome"/>
+          <g class="dot"><circle cx="17" cy="14" r="4"/><circle cx="31" cy="14" r="4"/><circle cx="45" cy="14" r="4"/></g>
+          <text x="320" y="18" class="t-chrome">hivemind — api</text>
+
+          <rect x="1" y="27" width="132" height="392" class="rail"/>
+          <text x="14" y="48" class="t-lab">LAYERS</text>
+          <g class="rail-row"><rect x="10" y="56" width="114" height="20"/></g>
+          <text x="20" y="70" class="t-row on">api</text>
+          <text x="28" y="96" class="t-row on">claude · scout</text>
+          <text x="28" y="118" class="t-row on">claude · builder</text>
+          <text x="28" y="140" class="t-row">diff</text>
+          <text x="28" y="162" class="t-row">shell</text>
+          <g class="rail-row"><rect x="10" y="178" width="114" height="20"/></g>
+          <text x="20" y="192" class="t-row on">web</text>
+          <text x="28" y="218" class="t-row">codex · nurse</text>
+
+          <g class="tile">
+            <rect x="150" y="44" width="292" height="168" rx="4"/>
+            <rect x="150" y="44" width="292" height="20" rx="4" class="bar"/><rect x="150" y="58" width="292" height="6" class="bar"/>
+            <text x="160" y="58" class="t-bar">claude · scout</text><circle cx="430" cy="54" r="4" class="ok"/>
+          </g>
+          <g class="code">
+            <text x="160" y="84">$ hive ctl read tile-scout</text>
+            <text x="160" y="102" class="d">limits.ts:14 — the window is pruned</text>
+            <text x="160" y="118" class="d">after the push, so the Nth call passes</text>
+            <text x="160" y="140">$ pytest -q tests/test_limits.py</text>
+            <text x="160" y="158" class="g">1 failed, 23 passed in 0.44s</text>
+            <text x="160" y="182">$ <tspan class="cur">▊</tspan></text>
+          </g>
+
+          <g class="tile">
+            <rect x="330" y="176" width="298" height="150" rx="4"/>
+            <rect x="330" y="176" width="298" height="20" rx="4" class="bar"/><rect x="330" y="190" width="298" height="6" class="bar"/>
+            <text x="340" y="190" class="t-bar">diff · src/limits.ts</text>
+          </g>
+          <g class="code sm">
+            <text x="340" y="214"><tspan class="g">+</tspan> if (hits.length &gt;= perMinute) return false;</text>
+            <text x="340" y="230"><tspan class="g">+</tspan> hits.push(now);</text>
+            <text x="340" y="246"><tspan class="r">-</tspan> buckets.set(key, hits);</text>
+            <text x="340" y="262" class="d">  return true;</text>
+            <text x="340" y="280"><tspan class="g">+</tspan> export function reset(key) {'{'}</text>
+            <text x="340" y="296" class="d">  buckets.delete(key);</text>
+          </g>
+
+          <g class="tile">
+            <rect x="150" y="238" width="168" height="118" rx="4"/>
+            <rect x="150" y="238" width="168" height="20" rx="4" class="bar"/><rect x="150" y="252" width="168" height="6" class="bar"/>
+            <text x="160" y="252" class="t-bar">shell</text>
+          </g>
+          <g class="code sm">
+            <text x="160" y="278">$ git status -sb</text>
+            <text x="160" y="294" class="d">## feat/limits</text>
+            <text x="160" y="310" class="d"> M src/limits.ts</text>
           </g>
         </svg>
-        <div class="body impact-body">
-          <p class="sfx">SPAWN</p>
-          <pre class="term inverted"><span class="w">$</span> hive ctl spawn <span class="g">--agent</span> claude <span class="g">--frame</span> api <span class="g">--prompt</span> <span class="g">"add the rate-limit test"</span></pre>
-        </div>
-      </section>
+      </figure>
     </div>
+  </section>
 
-    <!-- ══════════ PAGE 2 ══════════ -->
-    <div class="grid r-three" id="how">
-      <section class="panel">
-        <div class="tone t1" aria-hidden="true"></div>
-        <p class="cap">3 · the swarm lands</p>
-        <div class="stack inset" aria-hidden="true">
-          <div class="tile" style="left:5%;top:5%;width:58%;height:33%"><div class="bar">SCOUT</div><div class="rows"><i style="width:78%"></i><i class="f" style="width:50%"></i></div></div>
-          <div class="tile" style="left:39%;top:31%;width:58%;height:33%"><div class="bar">BUILDER</div><div class="rows"><i style="width:66%"></i><i class="f" style="width:72%"></i></div></div>
-          <div class="tile" style="left:15%;top:60%;width:58%;height:33%"><div class="bar">GUARD</div><div class="rows"><i style="width:58%"></i><i class="f" style="width:40%"></i></div></div>
-        </div>
-        <div class="foot">
-          <h2>One tile, one job</h2>
-          <p>A repo, a git worktree or an SSH host. Each agent gets its own cell and cannot wander into a sibling's.</p>
-        </div>
-      </section>
-
-      <section class="panel">
-        
-        <p class="cap">4 · they hand work over</p>
-        <div class="body pc talk">
-          <p class="balloon">limits.ts:14 — the window is pruned <em>after</em> the push, so the Nth call always passes.</p>
-          <pre class="term"><span class="c"># hand the find over</span>
-<span class="w">$</span> hive ctl send tile-builder</pre>
-        </div>
-        <div class="foot">
-          <h2>Agents drive agents</h2>
-          <p>Fan out, pipeline, map-reduce, supervise. One CLI, no MCP server to babysit.</p>
-        </div>
-      </section>
-
-      <section class="panel">
-        <div class="tone t3" aria-hidden="true"></div>
-        <p class="cap">5 · nothing ships unread</p>
-        <div class="body pc denied"><p class="sfx small">DENIED</p></div>
-        <div class="foot">
-          <h2>A gate you control</h2>
-          <p>Approve or refuse a plan and read the whole transcript. Nothing merges because a model felt sure.</p>
-        </div>
-      </section>
+  <!-- ─────────── TRUST STRIP ─────────── -->
+  <section class="strip">
+    <div class="wrap strip-in">
+      <p class="strip-lab">Brings your own agents</p>
+      <ul class="agents">
+        <li>claude</li><li>codex</li><li>droid</li><li>kiro</li><li>pi</li>
+        <li class="more">…the catalog is a directory, not a fork</li>
+      </ul>
     </div>
+  </section>
 
-    <!-- ══════════ PAGE 3 · THE VIEWS ══════════ -->
-    <div class="grid one">
-      <section class="panel">
-        <p class="cap">6 · one hive, three ways to look at it</p>
-        <div class="body pc">
-          <h2 class="big">The workspace is a plugin.</h2>
-          <p class="say">Your terminals, editor buffers and browser tabs survive the switch — tile bodies
-            are mounted once and lent to whichever view is on screen.</p>
+  <!-- ─────────── HOW IT WORKS ─────────── -->
+  <section class="band" id="how">
+    <div class="wrap">
+      <header class="head">
+        <h2>How it works</h2>
+        <p class="sub">Three commands, and the agents do the rest of the talking.</p>
+      </header>
 
-          <div class="views">
-            <figure class="view">
-              <svg viewBox="0 0 320 210" role="img" aria-label="Canvas view: two frames as zones on an infinite board, each holding tiles">
-                <rect x="2" y="2" width="316" height="206" fill="none" stroke="currentColor" stroke-width="3"/>
-                <g stroke="currentColor" stroke-width="2.5" stroke-dasharray="7 6" fill="none" opacity=".6">
-                  <rect x="16" y="30" width="136" height="164"/><rect x="168" y="30" width="136" height="164"/>
-                </g>
-                <g class="lab on"><rect x="16" y="16" width="48" height="17" fill="currentColor"/><text x="22" y="29">API</text></g>
-                <g class="lab on"><rect x="168" y="16" width="52" height="17" fill="currentColor"/><text x="174" y="29">WEB</text></g>
-                <g class="win">
-                  <rect x="28" y="46" width="112" height="62"/><rect x="28" y="46" width="112" height="13" class="fill"/>
-                  <rect x="34" y="66" width="84" height="4" class="fill o6"/><rect x="34" y="76" width="62" height="4" class="fill o3"/>
-                  <rect x="34" y="86" width="72" height="4" class="fill o6"/>
-                  <rect x="28" y="120" width="112" height="60"/><rect x="28" y="120" width="112" height="13" class="fill"/>
-                  <rect x="34" y="140" width="70" height="4" class="fill o6"/><rect x="34" y="150" width="88" height="4" class="fill o3"/>
-                  <rect x="180" y="46" width="112" height="76"/><rect x="180" y="46" width="112" height="13" class="fill"/>
-                  <rect x="186" y="66" width="90" height="4" class="fill o6"/><rect x="186" y="76" width="58" height="4" class="fill o3"/>
-                  <rect x="186" y="86" width="78" height="4" class="fill o6"/><rect x="186" y="96" width="46" height="4" class="fill o3"/>
-                  <rect x="180" y="134" width="112" height="46"/><rect x="180" y="134" width="112" height="13" class="fill"/>
-                  <rect x="186" y="154" width="66" height="4" class="fill o6"/>
-                </g>
-              </svg>
-              <figcaption><b>Canvas</b> — an infinite board. Frames are zones; drag, zoom, arrange.</figcaption>
-            </figure>
-
-            <figure class="view">
-              <svg viewBox="0 0 320 210" role="img" aria-label="Windows view: a tab strip with one active tile filling the pane">
-                <rect x="2" y="2" width="316" height="206" fill="none" stroke="currentColor" stroke-width="3"/>
-                <g class="win">
-                  <rect x="14" y="14" width="78" height="25" class="fill"/>
-                  <rect x="96" y="14" width="72" height="25"/><rect x="172" y="14" width="66" height="25"/>
-                  <rect x="242" y="14" width="64" height="25"/>
-                </g>
-                <g class="lab on"><text x="24" y="31">CLAUDE</text></g>
-                <g class="lab"><text x="106" y="31">DIFF</text><text x="182" y="31">TREE</text><text x="252" y="31">SHELL</text></g>
-                <g class="win"><rect x="14" y="49" width="292" height="147"/><rect x="14" y="49" width="292" height="15" class="fill"/></g>
-                <g class="fill">
-                  <rect x="26" y="78" width="180" height="5" class="o6"/><rect x="26" y="92" width="130" height="5" class="o3"/>
-                  <rect x="26" y="106" width="216" height="5" class="o6"/><rect x="26" y="120" width="96" height="5" class="o3"/>
-                  <rect x="26" y="134" width="164" height="5" class="o6"/><rect x="26" y="148" width="120" height="5" class="o3"/>
-                  <rect x="26" y="162" width="188" height="5" class="o6"/>
-                </g>
-              </svg>
-              <figcaption><b>Windows</b> — one tab per tile, for when you want the whole screen.</figcaption>
-            </figure>
-
-            <figure class="view">
-              <svg viewBox="0 0 320 210" role="img" aria-label="World view: isometric islands, one per frame, with blocks for tiles and a docked terminal">
-                <rect x="2" y="2" width="316" height="206" fill="none" stroke="currentColor" stroke-width="3"/>
-                <g class="iso">
-                  <path d="M96 118 L166 154 L96 190 L26 154 Z"/>
-                  <path d="M206 84 L266 116 L206 148 L146 116 Z"/>
-                  <path d="M72 128 L96 140 L96 116 L72 104 Z" class="fill o3"/>
-                  <path d="M96 140 L120 128 L120 104 L96 116 Z" class="fill o6"/>
-                  <path d="M72 104 L96 92 L120 104 L96 116 Z" class="fill"/>
-                  <path d="M112 152 L130 161 L130 145 L112 136 Z" class="fill o3"/>
-                  <path d="M130 161 L148 152 L148 136 L130 145 Z" class="fill o6"/>
-                  <path d="M112 136 L130 127 L148 136 L130 145 Z" class="fill"/>
-                  <path d="M192 104 L210 113 L210 95 L192 86 Z" class="fill o3"/>
-                  <path d="M210 113 L228 104 L228 86 L210 95 Z" class="fill o6"/>
-                  <path d="M192 86 L210 77 L228 86 L210 95 Z" class="fill"/>
-                </g>
-                <g class="win"><rect x="222" y="128" width="82" height="62"/><rect x="222" y="128" width="82" height="13" class="fill"/></g>
-                <g class="fill"><rect x="228" y="148" width="60" height="4" class="o6"/><rect x="228" y="158" width="44" height="4" class="o3"/><rect x="228" y="168" width="52" height="4" class="o6"/></g>
-                <path d="M214 120 L224 128" stroke="currentColor" stroke-width="2.5" stroke-dasharray="5 4" fill="none"/>
-              </svg>
-              <figcaption><b>World</b> — a Three.js scene. Click a block, its live terminal docks beside it.</figcaption>
-            </figure>
-          </div>
-          <p class="fine"><a href={link('guide/views/')}>Views are a sandboxed plugin API — write your own →</a></p>
-        </div>
-      </section>
+      <ol class="steps">
+        <li>
+          <span class="step-n">1</span>
+          <h3>Put an agent in a repo</h3>
+          <p>Each one gets its own tile inside a frame — a repository, a git worktree, or an SSH host.
+            It cannot wander into a sibling's.</p>
+          <pre class="cmd"><span class="w">$</span> hive ctl spawn <span class="g">--agent</span> claude <span class="g">--frame</span> api</pre>
+        </li>
+        <li>
+          <span class="step-n">2</span>
+          <h3>Let them hand work over</h3>
+          <p>One agent finds the bug and tells another where it is. Fan out, pipeline, map-reduce or
+            supervise — through the same CLI, with no MCP server to babysit.</p>
+          <pre class="cmd"><span class="w">$</span> hive ctl send tile-builder <span class="s">"limits.ts:14"</span></pre>
+        </li>
+        <li>
+          <span class="step-n">3</span>
+          <h3>Approve before anything lands</h3>
+          <p>Read the whole transcript, then approve or refuse the plan. Nothing merges because a
+            model sounded confident.</p>
+          <pre class="cmd"><span class="w">$</span> hive ctl read tile-builder --timeout 60000</pre>
+        </li>
+      </ol>
     </div>
+  </section>
 
-    <!-- ══════════ PAGE 4 ══════════ -->
-    <div class="grid r-split">
-      <section class="panel">
-        <p class="cap">hive ctl</p>
-        <div class="body pc">
-          <pre class="term tall"><span class="c"># see who is working</span>
-<span class="w">$</span> hive ctl list --json
+  <!-- ─────────── VIEWS ─────────── -->
+  <section class="band alt" id="views">
+    <div class="wrap">
+      <header class="head">
+        <h2>Look at the same workspace three ways</h2>
+        <p class="sub">Your terminals, editor buffers and browser tabs survive the switch — tile bodies
+          are mounted once and lent to whichever view is on screen.</p>
+      </header>
 
-<span class="c"># put a worker in a repo</span>
-<span class="w">$</span> hive ctl spawn <span class="g">--agent</span> claude <span class="g">--frame</span> api
+      <div class="views">
+        <figure class="view">
+          <svg viewBox="0 0 320 200" role="img" aria-label="Canvas view: two frames as zones on an infinite board, each holding tiles">
+            <g class="vw-zone"><rect x="16" y="28" width="136" height="156"/><rect x="168" y="28" width="136" height="156"/></g>
+            <g class="vw-tab"><rect x="16" y="14" width="44" height="16"/><rect x="168" y="14" width="48" height="16"/></g>
+            <text x="22" y="26" class="vw-tab-t on">api</text><text x="174" y="26" class="vw-tab-t on">web</text>
+            <g class="vw-win">
+              <rect x="28" y="44" width="112" height="58"/><rect x="28" y="44" width="112" height="12" class="f"/>
+              <rect x="28" y="114" width="112" height="56"/><rect x="28" y="114" width="112" height="12" class="f"/>
+              <rect x="180" y="44" width="112" height="72"/><rect x="180" y="44" width="112" height="12" class="f"/>
+              <rect x="180" y="128" width="112" height="42"/><rect x="180" y="128" width="112" height="12" class="f"/>
+            </g>
+            <g class="vw-line">
+              <rect x="34" y="64" width="84" height="4"/><rect x="34" y="74" width="60" height="4" class="o"/><rect x="34" y="84" width="72" height="4"/>
+              <rect x="34" y="134" width="70" height="4"/><rect x="34" y="144" width="86" height="4" class="o"/>
+              <rect x="186" y="64" width="90" height="4"/><rect x="186" y="74" width="56" height="4" class="o"/><rect x="186" y="84" width="78" height="4"/>
+              <rect x="186" y="148" width="64" height="4"/>
+            </g>
+          </svg>
+          <figcaption><b>Canvas</b> — an infinite board. Frames are zones you drag, zoom and arrange.</figcaption>
+        </figure>
 
-<span class="c"># and wait for the answer</span>
-<span class="w">$</span> hive ctl read tile-builder --timeout 60000</pre>
-          <p class="fine" style="margin-top:14px">Every verb takes <code>--json</code> and returns a real exit
-            status, so anything that can spawn a process can drive your workspace.</p>
-        </div>
-      </section>
+        <figure class="view">
+          <svg viewBox="0 0 320 200" role="img" aria-label="Windows view: a tab strip with one active tile filling the pane">
+            <g class="vw-win">
+              <rect x="14" y="14" width="76" height="24" class="f"/><rect x="94" y="14" width="70" height="24"/>
+              <rect x="168" y="14" width="64" height="24"/><rect x="236" y="14" width="70" height="24"/>
+            </g>
+            <text x="24" y="30" class="vw-tab-t on">claude</text>
+            <text x="104" y="30" class="vw-tab-t">diff</text><text x="178" y="30" class="vw-tab-t">tree</text><text x="246" y="30" class="vw-tab-t">shell</text>
+            <g class="vw-win"><rect x="14" y="48" width="292" height="138"/><rect x="14" y="48" width="292" height="14" class="f"/></g>
+            <g class="vw-line">
+              <rect x="26" y="78" width="180" height="5"/><rect x="26" y="92" width="128" height="5" class="o"/>
+              <rect x="26" y="106" width="216" height="5"/><rect x="26" y="120" width="96" height="5" class="o"/>
+              <rect x="26" y="134" width="164" height="5"/><rect x="26" y="148" width="118" height="5" class="o"/>
+            </g>
+          </svg>
+          <figcaption><b>Windows</b> — one tab per tile, for when you want the whole screen.</figcaption>
+        </figure>
 
-      <section class="panel">
-        <p class="cap">Also in this issue</p>
-        <div class="body pc">
-          <ul class="more">
-            <li><b>Worktrees as frames.</b> Every agent on its own branch, physically unable to collide with a sibling.</li>
-            <li><b>Issues as Markdown</b> in your repo. No tracker, no account, greppable, reviewable in a diff.</li>
-            <li><b>Remote hosts over SSH</b> in the same canvas as everything local — PTYs on the host, editor over SFTP.</li>
-            <li><b>Bring any CLI.</b> claude, codex, droid, kiro, pi — the provider catalog is a directory, not a fork.</li>
-          </ul>
-        </div>
-      </section>
+        <figure class="view">
+          <svg viewBox="0 0 320 200" role="img" aria-label="World view: isometric islands, one per frame, with blocks for tiles and a terminal docked beside them">
+            <g class="vw-iso">
+              <path d="M92 114 L160 148 L92 182 L24 148 Z"/>
+              <path d="M204 82 L262 112 L204 142 L146 112 Z"/>
+              <path d="M70 124 L92 135 L92 113 L70 102 Z" class="s"/><path d="M92 135 L114 124 L114 102 L92 113 Z" class="m"/><path d="M70 102 L92 91 L114 102 L92 113 Z" class="f"/>
+              <path d="M110 148 L128 157 L128 142 L110 133 Z" class="s"/><path d="M128 157 L146 148 L146 133 L128 142 Z" class="m"/><path d="M110 133 L128 124 L146 133 L128 142 Z" class="f"/>
+              <path d="M190 100 L208 109 L208 92 L190 83 Z" class="s"/><path d="M208 109 L226 100 L226 83 L208 92 Z" class="m"/><path d="M190 83 L208 74 L226 83 L208 92 Z" class="f"/>
+            </g>
+            <g class="vw-win"><rect x="218" y="122" width="86" height="60"/><rect x="218" y="122" width="86" height="13" class="f"/></g>
+            <g class="vw-line"><rect x="226" y="144" width="62" height="4"/><rect x="226" y="154" width="44" height="4" class="o"/><rect x="226" y="164" width="52" height="4"/></g>
+          </svg>
+          <figcaption><b>World</b> — a Three.js scene. Click a block and its live terminal docks beside it.</figcaption>
+        </figure>
+      </div>
+      <p class="after"><a href={link('guide/views/')}>Views are a sandboxed plugin API — write your own →</a></p>
     </div>
+  </section>
 
-    <!-- ══════════ CLOSER ══════════ -->
-    <div class="grid one">
-      <section class="panel black closer">
-        <div>
-          <h2 class="big invert">Next chapter: your repo.</h2>
-          <p class="fine invert">ONE BINARY · LINUX x86_64 · MIT</p>
-        </div>
-        <div class="btns nomargin">
-          <a class="btn spot" href={`${repo}/releases`}>Download</a>
-          <a class="btn" href={repo}>Read the source</a>
-        </div>
-      </section>
+  <!-- ─────────── FEATURES ─────────── -->
+  <section class="band">
+    <div class="wrap">
+      <header class="head"><h2>What else is in the box</h2></header>
+      <div class="cards">
+        <article><h3>Worktrees as frames</h3><p>Every agent on its own branch, physically unable to collide with a sibling's work.</p></article>
+        <article><h3>Issues as Markdown</h3><p>They live in your repository. No tracker, no account — greppable, and reviewable in a diff.</p></article>
+        <article><h3>Remote hosts over SSH</h3><p>PTYs on the host, editor over SFTP, in the same canvas as everything local.</p></article>
+        <article><h3>Driven from the shell</h3><p>Every verb takes <code>--json</code> and returns a real exit status, so any script can drive it.</p></article>
+      </div>
     </div>
-  </main>
+  </section>
 
-  <footer>
-    <span>HIVEMIND · OPEN SOURCE, MIT</span>
-    <span>
-      <a href={link('guide/')}>DOCS</a> ·
-      <a href={link('guide/cli/')}>CLI</a> ·
-      <a href={link('llms.txt')}>FOR AGENTS</a> ·
-      <a href={repo}>GITHUB</a>
-    </span>
-  </footer>
-</div>
+  <!-- ─────────── FAQ ─────────── -->
+  <section class="band alt">
+    <div class="wrap narrow">
+      <header class="head"><h2>Questions people actually ask</h2></header>
+      <dl class="faq">
+        <dt>Does my code go anywhere?</dt>
+        <dd>No. Hivemind runs on your machine and shells out to agent CLIs you installed yourself, with
+          your own keys. There is no Hivemind account and no server of ours in the path.</dd>
+        <dt>Which agents work with it?</dt>
+        <dd>claude, codex, droid, kiro and pi today. Adding another is a directory in the provider
+          catalog, not a fork.</dd>
+        <dt>Do I have to learn a new tool?</dt>
+        <dd>The CLIs are the ones you already use. Hivemind arranges them, keeps their sessions alive,
+          and gives them one command to talk to each other.</dd>
+        <dt>How finished is it?</dt>
+        <dd>The canvas is released behaviour. Views-as-plugins, the World view and the new settings
+          commands are development previews — the docs mark which is which.</dd>
+      </dl>
+    </div>
+  </section>
+
+  <!-- ─────────── CLOSE ─────────── -->
+  <section class="close">
+    <div class="wrap close-in">
+      <div>
+        <h2>Start with one repo.</h2>
+        <p class="sub">One binary, Linux x86_64, MIT licensed.</p>
+      </div>
+      <div class="cta">
+        <a class="btn primary" href={`${repo}/releases`}>Download for Linux</a>
+        <a class="btn ghost" href={repo}>Read the source</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-in">
+    <span>Hivemind — open source, MIT licensed.</span>
+    <nav aria-label="Footer">
+      <a href={link('guide/')}>Docs</a>
+      <a href={link('guide/cli/')}>CLI reference</a>
+      <a href={link('llms.txt')}>For agents</a>
+      <a href={repo}>GitHub</a>
+    </nav>
+  </div>
+</footer>
+
+<script is:inline>
+  document.querySelectorAll('.copy').forEach((b) => {
+    b.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(b.dataset.copy);
+        const was = b.textContent;
+        b.textContent = 'Copied'; b.classList.add('done');
+        setTimeout(() => { b.textContent = was; b.classList.remove('done'); }, 1600);
+      } catch { /* clipboard blocked — the command is still selectable */ }
+    });
+  });
+</script>
 
 <style is:global>
+  /* ───────────────────────────────────────────────────────────────────────
+     Readability first. The rules this follows, and why:
+       · sentence case — all-caps forces letter-by-letter reading and slows
+         dyslexic readers 13–18%, so nothing you have to *read* is uppercase
+       · 60–70 characters per line of prose (66 optimal, WCAG caps at 80)
+       · line-height ≥ 1.5 on body text (WCAG 1.4.12)
+       · body text ≥ 4.5:1 against its own background, large text ≥ 3:1
+       · mono is for code and short labels only, never running prose
+     The comic voice survives in the details — the offset shadows, the hard
+     borders, the amber — not in the structure. A visitor should be able to
+     answer "what is this, do I need it, how do I get it" without decoding
+     a page.
+     ─────────────────────────────────────────────────────────────────────── */
   :root{
-    --paper:#EDE8DB; --white:#F7F4EB; --ink:#17150F;
-    --ink-2:#403D36; --ink-3:#726E64; --spot:#E8A33B;
-    --inkpanel:#17150F; --inkpanel-fg:#F2EEE3;
-    --gut:12px; --bd:3.5px;
-    --f-d:"Archivo",Impact,sans-serif;
-    --f-m:"JetBrains Mono",ui-monospace,Menlo,monospace;
+    --paper:#F7F4EE; --surface:#FFFFFF; --sunk:#F1EDE3;
+    --ink:#15130F; --body:#3A362E; --muted:#5E594F;
+    --line:#E1DBCC;
+    --accent:#8A5205; --accent-bg:#E8A33B; --accent-soft:#FBEBCD;
+    --code-bg:#15130F; --code-fg:#E9E5DA; --ok:#2E7D4F;
+    --f:"Archivo",ui-sans-serif,system-ui,-apple-system,sans-serif;
+    --f-m:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    --w:1180px;
     color-scheme:light;
-  }
-  /* Night edition. The single-theme rule was there to protect drawn artwork,
-     and there is none left — the panels are UI, so they invert cleanly. */
-  @media (prefers-color-scheme:dark){
-    :root{
-      --paper:#0B0A09; --white:#1C1A17; --ink:#F7F4EC;
-      --ink-2:#DAD4C6; --ink-3:#A09A8E;
-      --inkpanel:#000000; --inkpanel-fg:#F2EEE3;
-      color-scheme:dark;
-    }
-    body::before{mix-blend-mode:screen;opacity:.10}
   }
   *{box-sizing:border-box}
   html{scroll-behavior:smooth}
   body{
-    margin:0;background:var(--paper);color:var(--ink);
-    font-family:var(--f-m);font-size:15px;line-height:1.6;
+    margin:0;background:var(--paper);color:var(--body);
+    font-family:var(--f);font-size:17px;line-height:1.65;
     -webkit-font-smoothing:antialiased;
   }
-  body::before{
-    content:"";position:fixed;inset:0;z-index:99;pointer-events:none;opacity:.28;mix-blend-mode:multiply;
-    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='110' height='110'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='110' height='110' filter='url(%23n)' opacity='0.5'/></svg>");
-  }
   a{color:inherit}
-  .skip{position:absolute;left:14px;top:-60px;background:var(--ink);color:var(--paper);padding:10px 14px;z-index:200}
+  :focus-visible{outline:3px solid var(--accent);outline-offset:3px;border-radius:2px}
+  .skip{position:absolute;left:16px;top:-60px;background:var(--ink);color:var(--paper);padding:10px 14px;z-index:200;border-radius:4px}
   .skip:focus{top:12px}
-  :focus-visible{outline:3px solid var(--spot);outline-offset:3px}
+  .wrap{max-width:var(--w);margin:0 auto;padding:0 24px}
+  .wrap.narrow{max-width:820px}
 
-  /* Near full-bleed: a comic page keeps a trim edge, but 380px of dead paper
-     either side is not a trim. Panels also get real heights so the page fills
-     the screen instead of shrinking into a column on a big monitor. */
-  .page{max-width:min(1720px,100%);margin:0 auto;padding:16px 20px 0}
-
-  /* screentone — three densities, the way a page does its shading */
-  .tone{position:absolute;inset:0;pointer-events:none}
-  .t1{background-image:radial-gradient(var(--ink) 1px,transparent 1.1px);background-size:6px 6px;opacity:.13}
-  .t2{background-image:radial-gradient(var(--ink) 1.3px,transparent 1.4px);background-size:6px 6px;opacity:.30}
-  .t3{background-image:radial-gradient(var(--ink) 1.7px,transparent 1.8px);background-size:5px 5px;opacity:.55}
-
-  /* masthead */
-  .mast{border:var(--bd) solid var(--ink);background:var(--white);display:grid;grid-template-columns:auto 1fr auto;align-items:stretch}
-  .mast .l{border-right:var(--bd) solid var(--ink);padding:9px 13px;display:grid;align-content:center;gap:2px;text-align:center;font-size:9px;letter-spacing:.1em;line-height:1.5}
-  .mast .l b{font-family:var(--f-d);font-weight:900;font-size:16px;letter-spacing:0}
-  .mast .m{display:flex;align-items:center;gap:12px;padding:7px 16px;color:var(--ink)}
-  .mast .title{font-family:var(--f-d);font-weight:900;font-size:clamp(22px,3.4vw,36px);letter-spacing:-.035em;line-height:1}
-  .mast .r{border-left:var(--bd) solid var(--ink);padding:9px 15px;display:flex;flex-direction:column;justify-content:center;gap:3px;text-align:right;font-size:9.5px;letter-spacing:.1em}
-  .mast .r a{text-decoration:none}
-  .mast .r a:hover{color:#9A6B10}
-
-  /* panels */
-  .grid{display:grid;gap:var(--gut);margin-top:var(--gut)}
-  .one{grid-template-columns:1fr}
-  .r-hero{grid-template-columns:1.5fr 1fr;min-height:clamp(430px,70vh,680px)}
-  .r-three{grid-template-columns:repeat(3,1fr)}
-  .r-three .panel{min-height:clamp(400px,50vh,540px)}
-  .r-split{grid-template-columns:1fr 1fr}
-  .r-split .panel{min-height:clamp(300px,38vh,430px)}
-  .panel{position:relative;border:var(--bd) solid var(--ink);background:var(--white);overflow:hidden}
-  .panel.black{background:var(--inkpanel);color:var(--inkpanel-fg);border-color:var(--inkpanel)}
-  .cap{
-    position:absolute;top:0;left:0;z-index:6;margin:0;background:var(--white);color:var(--ink);
-    border-right:var(--bd) solid var(--ink);border-bottom:var(--bd) solid var(--ink);
-    padding:7px 12px;font-weight:700;font-size:10px;letter-spacing:.12em;text-transform:uppercase;max-width:80%
-  }
-  .body{position:relative;z-index:5;padding:22px}
-  /* a taller panel must distribute its content, not stack it at the top */
-  .r-hero>.panel:first-child{display:grid}
-  .r-hero>.panel:first-child>.body{align-self:center;width:100%}
-  .r-split>.panel{display:grid}
-  .r-split>.panel>.body{align-self:center;width:100%}
-  .body.pc{padding-top:50px}
-
-  h1,h2{font-family:var(--f-d);margin:0;text-transform:uppercase;letter-spacing:-.035em;text-wrap:balance}
-  h1{font-weight:900;font-size:clamp(34px,4.6vw,78px);line-height:.9}
-  h1 em{font-style:normal;color:var(--spot);-webkit-text-stroke:2px var(--ink);paint-order:stroke fill}
-  h2{font-weight:800;font-size:clamp(16px,1.15vw,19px);line-height:1.06}
-  h2.big{font-size:clamp(20px,2vw,34px);line-height:1.04}
-  h2.invert{color:var(--inkpanel-fg)}
+  h1,h2,h3{color:var(--ink);margin:0;text-wrap:balance;letter-spacing:-.02em}
+  h1{font-size:clamp(34px,4.4vw,54px);line-height:1.08;font-weight:800}
+  h2{font-size:clamp(26px,2.8vw,36px);line-height:1.16;font-weight:700}
+  h3{font-size:19px;line-height:1.3;font-weight:700}
   p{margin:0}
-  .say{font-family:var(--f-d);font-weight:400;text-transform:none;letter-spacing:0;font-size:clamp(15px,1.05vw,17.5px);line-height:1.62;color:var(--ink-2);max-width:46ch;margin-top:16px}
-  .fine{font-size:11.5px;line-height:1.6;color:var(--ink-3);letter-spacing:.05em;margin-top:16px}
-  .fine.invert{color:#8E8A80}
-  .fine a{color:var(--ink);text-decoration-color:var(--spot);text-decoration-thickness:2px;text-underline-offset:3px}
-  .fine a:hover{color:var(--spot)}
+  .lede{font-size:clamp(17px,1.25vw,20px);line-height:1.6;color:var(--body);max-width:56ch;margin-top:18px}
+  .sub{font-size:17px;line-height:1.6;color:var(--muted);max-width:64ch;margin-top:12px}
 
-  /* the app, drawn as line art and tone */
-  .stack{position:absolute;inset:0;z-index:4}
-  .stack.inset{top:44px;bottom:104px}
-  .tile{position:absolute;background:var(--white);border:3px solid var(--ink);overflow:hidden}
-  .tile .bar{height:16px;border-bottom:3px solid var(--ink);display:flex;align-items:center;padding:0 6px;font-size:7px;letter-spacing:.08em;font-weight:700}
-  .tile .rows{padding:7px 8px;display:grid;gap:5px;align-content:start}
-  .tile .rows i{display:block;height:4px;background:var(--ink);opacity:.6}
-  .tile .rows i.f{opacity:.28}
-  .tile .rows i.add{background:#3E8B4F;opacity:.9}
-  .tile .rows i.del{background:#B4432F;opacity:.9}
-  .tile .rows i.ok{background:#3E8B4F;opacity:.72}
-  .tile .rows b{font-size:clamp(7px,.5vw,9px);font-weight:500;opacity:.92}
-  .tile .rows b.p{color:#5CA96D}
+  .nav{position:sticky;top:0;z-index:50;background:rgba(247,244,238,.93);
+    backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+  .nav-in{max-width:var(--w);margin:0 auto;padding:0 24px;height:64px;display:flex;align-items:center;gap:26px}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:700;font-size:18px;color:var(--ink);text-decoration:none;letter-spacing:-.02em}
+  .links{display:flex;gap:22px;margin-left:auto;font-size:15px}
+  .links a{color:var(--body);text-decoration:none}
+  .links a:hover{color:var(--ink)}
 
-  /* the caption strip pinned to the bottom of a story panel */
-  .foot{position:absolute;bottom:0;left:0;right:0;z-index:6;background:var(--white);border-top:var(--bd) solid var(--ink);padding:13px 15px}
-  .foot p{font-family:var(--f-d);font-weight:400;font-size:clamp(13px,.9vw,15px);line-height:1.55;color:var(--ink-2);margin-top:6px}
+  .btn{display:inline-flex;align-items:center;justify-content:center;font-weight:600;font-size:16px;
+    text-decoration:none;padding:12px 20px;border-radius:6px;border:2px solid var(--ink);
+    background:var(--surface);color:var(--ink);transition:transform .08s ease,box-shadow .08s ease}
+  .btn.primary{background:var(--accent-bg);box-shadow:4px 4px 0 var(--ink)}
+  .btn.primary:hover{transform:translate(2px,2px);box-shadow:2px 2px 0 var(--ink)}
+  .btn.ghost{background:transparent}
+  .btn.ghost:hover{background:var(--sunk)}
+  .btn.small{padding:8px 15px;font-size:15px;margin-left:4px}
+  .cta{display:flex;gap:12px;flex-wrap:wrap;margin-top:26px}
 
-  /* impact frame */
-  .impact-panel{min-height:clamp(240px,32vh,360px)}
-  .impact{position:absolute;inset:0;z-index:3}
-  .impact-body{position:relative;z-index:6;display:grid;place-items:center;gap:18px;min-height:inherit;padding:56px 24px 26px}
-  .sfx{
-    font-family:var(--f-d);font-weight:900;text-transform:uppercase;line-height:.85;letter-spacing:-.05em;
-    color:var(--white);-webkit-text-stroke:5px var(--ink);paint-order:stroke fill;
-    font-size:clamp(44px,8.5vw,100px);transform:rotate(-3deg);margin:0
-  }
-  .sfx.small{font-size:clamp(34px,5.6vw,58px);transform:rotate(-6deg)}
-  .impact-body .sfx{color:var(--inkpanel-fg);-webkit-text-stroke:5px var(--inkpanel)}
-  .denied{display:grid;place-items:center;min-height:200px;padding-bottom:104px}
+  .hero{padding:clamp(40px,6vw,76px) 0 clamp(36px,5vw,60px)}
+  .hero-in{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);gap:clamp(28px,4vw,56px);align-items:center}
+  .eyebrow{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--muted);margin-bottom:18px}
+  .tag{background:var(--accent-soft);color:var(--accent);border:1px solid #E7CFA0;
+    padding:3px 9px;border-radius:999px;font-size:13px;font-weight:600}
+  .install{display:flex;align-items:stretch;margin-top:22px;border:2px solid var(--ink);border-radius:6px;overflow:hidden}
+  .install code{flex:1;min-width:0;overflow-x:auto;white-space:nowrap;background:var(--code-bg);color:var(--code-fg);
+    font-family:var(--f-m);font-size:13px;padding:12px 14px;border:0;border-radius:0}
+  .copy{border:0;border-left:2px solid var(--ink);background:var(--surface);color:var(--ink);
+    font-family:var(--f);font-weight:600;font-size:14px;padding:0 16px;cursor:pointer}
+  .copy:hover{background:var(--sunk)}
+  .copy.done{background:var(--ok);color:#fff}
+  .trust{list-style:none;display:flex;flex-wrap:wrap;gap:8px 20px;margin:20px 0 0;padding:0;font-size:14.5px;color:var(--muted)}
+  .trust li{position:relative;padding-left:17px}
+  .trust li::before{content:"";position:absolute;left:0;top:.55em;width:8px;height:8px;background:var(--accent-bg);border:1.5px solid var(--ink)}
 
-  .balloon{
-    position:relative;background:var(--white);border:3.5px solid var(--ink);border-radius:22px;
-    padding:12px 16px;font-size:12.5px;line-height:1.55
-  }
-  .balloon::after{content:"";position:absolute;left:32px;bottom:-17px;width:0;height:0;
-    border-left:14px solid transparent;border-top:18px solid var(--ink)}
-  .talk{display:grid;gap:18px;align-content:start;padding-bottom:108px}
+  .shot{margin:0}
+  .shot svg{display:block;width:100%;height:auto;border:2px solid var(--ink);border-radius:8px;box-shadow:8px 8px 0 var(--line)}
+  .shot-cap{font-size:13px;color:var(--muted);margin-bottom:9px}
+  .app{fill:#1A1814}
+  .chrome{fill:#25221C}
+  .dot circle{fill:#5E594E}
+  .rail{fill:#201E19}
+  .tile rect{fill:#141210;stroke:#37332A;stroke-width:1.5}
+  .tile rect.bar{fill:#26231C;stroke:none}
+  .rail-row rect{fill:#2E2A22;stroke:none}
+  .ok{fill:#57C07E}
+  .shot text{font-family:var(--f-m)}
+  .t-chrome{fill:#7C7669;font-size:9px;text-anchor:middle}
+  .t-lab{fill:#6E6858;font-size:8px;letter-spacing:.12em}
+  .t-row{fill:#9E988A;font-size:9px}
+  .t-row.on{fill:#DCD6C8}
+  .t-bar{fill:#ADA799;font-size:9px}
+  .code text{fill:#D3CDBF;font-size:10px}
+  .code.sm text{font-size:9px}
+  .code .d{fill:#948D7F}
+  .code .g,.code tspan.g{fill:#7ACB96}
+  .code .r,.code tspan.r{fill:#E08A72}
+  .cur{fill:#E8A33B}
 
-  .term{font-size:clamp(11.5px,.78vw,13.5px);
-    background:var(--inkpanel);color:#DDD9CF;border:var(--bd) solid var(--inkpanel);
-    padding:14px 15px;margin:0;font-family:var(--f-m);line-height:1.85;
-    white-space:pre;overflow-x:auto
-  }
-  .term.inverted{border-color:var(--inkpanel-fg)}
-  .term.tall{font-size:12px}
-  .term .c{color:#7E7A70}.term .g{color:#8FD98A}.term .w{color:var(--paper)}
-  code{font-family:var(--f-m);font-size:.92em;border:2px solid #DDD9CE;padding:0 4px}
+  .strip{border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--sunk)}
+  .strip-in{display:flex;align-items:center;gap:24px;flex-wrap:wrap;padding-top:18px;padding-bottom:18px}
+  .strip-lab{font-size:14px;color:var(--muted)}
+  .agents{list-style:none;display:flex;flex-wrap:wrap;gap:10px;margin:0;padding:0}
+  .agents li{font-family:var(--f-m);font-size:13.5px;color:var(--ink);background:var(--surface);
+    border:1px solid var(--line);border-radius:4px;padding:5px 11px}
+  .agents li.more{font-family:var(--f);border:0;background:none;color:var(--muted);padding-left:2px}
 
-  .btn{
-    display:inline-block;font-family:var(--f-d);font-weight:800;font-size:13px;letter-spacing:.02em;
-    text-transform:uppercase;text-decoration:none;color:var(--ink);border:var(--bd) solid var(--ink);
-    background:var(--white);padding:10px 15px;box-shadow:5px 5px 0 var(--ink);
-    transition:transform .08s ease,box-shadow .08s ease
-  }
-  .btn:hover{transform:translate(2px,2px);box-shadow:3px 3px 0 var(--ink)}
-  .btn.spot{background:var(--spot)}
-  .btns{display:flex;gap:11px;flex-wrap:wrap;margin-top:20px}
-  .btns.nomargin{margin:0}
+  .band{padding:clamp(44px,5.5vw,80px) 0}
+  .band.alt{background:var(--sunk);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+  .head{margin-bottom:clamp(26px,3vw,40px)}
 
-  .views{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:22px}
-  .view{margin:0;display:grid;gap:10px}
-  .view svg{display:block;width:100%;height:auto;color:var(--ink);background:var(--white)}
-  .view .win rect{fill:none;stroke:currentColor;stroke-width:2.5}
-  .view .win rect.fill,.view .fill rect,.view rect.fill{fill:currentColor;stroke:none}
-  .view .iso path{fill:none;stroke:currentColor;stroke-width:2.5;stroke-linejoin:round}
-  .view .iso path.fill{fill:currentColor}
-  .view .o6{opacity:.55}.view .o3{opacity:.28}
-  .view .lab text{font-family:var(--f-m);font-size:9.5px;font-weight:700;letter-spacing:.09em;fill:currentColor}
-  .view .lab.on text{fill:var(--white)}
-  .view figcaption{font-family:var(--f-d);font-weight:400;font-size:clamp(12.5px,.78vw,14px);line-height:1.5;color:var(--ink-2)}
-  .view figcaption b{color:var(--ink);font-weight:500}
-  .more{margin:0;padding:0;list-style:none;display:grid;gap:14px}
-  .more li{font-family:var(--f-d);font-weight:400;font-size:clamp(13.5px,.88vw,15.5px);line-height:1.58;
-    color:var(--ink-2);padding-left:15px;border-left:3px solid var(--spot)}
-  .more b{color:var(--ink);font-weight:500}
+  .steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+  .steps li{background:var(--surface);border:2px solid var(--ink);border-radius:8px;padding:24px;
+    box-shadow:5px 5px 0 var(--line);display:grid;gap:12px;align-content:start}
+  .step-n{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:999px;
+    background:var(--accent-bg);border:2px solid var(--ink);font-weight:700;font-size:15px;color:var(--ink)}
+  .steps p{font-size:15.5px;line-height:1.6;color:var(--body)}
+  .cmd{margin:4px 0 0;background:var(--code-bg);color:var(--code-fg);border-radius:5px;
+    font-family:var(--f-m);font-size:12.5px;line-height:1.75;padding:11px 12px;white-space:pre-wrap;overflow-wrap:anywhere}
+  .cmd .w{color:#fff}.cmd .g{color:#8FD98A}.cmd .s{color:#E8C77B}
 
-  .closer{display:flex;align-items:center;justify-content:space-between;gap:22px;flex-wrap:wrap;padding:26px 24px}
-  .closer .btn{box-shadow:5px 5px 0 var(--inkpanel-fg)}
-  .closer .btn:hover{box-shadow:3px 3px 0 var(--inkpanel-fg)}
+  .views{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+  .view{margin:0;display:grid;gap:12px}
+  .view svg{display:block;width:100%;height:auto;background:var(--surface);
+    border:2px solid var(--ink);border-radius:6px;color:var(--ink)}
+  .vw-zone rect{fill:none;stroke:currentColor;stroke-width:2;stroke-dasharray:6 5;opacity:.5}
+  .vw-tab rect{fill:currentColor}
+  .vw-tab-t{font-family:var(--f-m);font-size:9px;font-weight:700;fill:currentColor}
+  .vw-tab-t.on{fill:var(--surface)}
+  .vw-win rect{fill:none;stroke:currentColor;stroke-width:2}
+  .vw-win rect.f{fill:currentColor;stroke:none}
+  .vw-line rect{fill:currentColor;opacity:.62}
+  .vw-line rect.o{opacity:.3}
+  .vw-iso path{fill:none;stroke:currentColor;stroke-width:2;stroke-linejoin:round}
+  .vw-iso path.f{fill:currentColor}
+  .vw-iso path.m{fill:currentColor;opacity:.55}
+  .vw-iso path.s{fill:currentColor;opacity:.28}
+  .view figcaption{font-size:15px;line-height:1.55;color:var(--muted)}
+  .view figcaption b{color:var(--ink);font-weight:700}
+  .after{margin-top:26px;font-size:16px}
+  .after a{color:var(--ink);font-weight:600;text-decoration-color:var(--accent-bg);text-decoration-thickness:2px;text-underline-offset:4px}
 
-  footer{
-    border:var(--bd) solid var(--ink);border-top:0;background:var(--white);margin-bottom:28px;
-    padding:14px 17px;display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;
-    font-size:10px;letter-spacing:.08em
-  }
-  footer a{text-decoration:none}
-  footer a:hover{color:#9A6B10}
+  .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:22px}
+  .cards article{display:grid;gap:9px;align-content:start;padding-top:16px;border-top:3px solid var(--ink)}
+  .cards p{font-size:15.5px;line-height:1.6;color:var(--body)}
+  code{font-family:var(--f-m);font-size:.88em;background:var(--sunk);border:1px solid var(--line);
+    border-radius:3px;padding:1px 5px}
 
-  @media(max-width:900px){
-    .r-hero,.r-three,.r-split{grid-template-columns:1fr}
+  .faq{margin:0}
+  .faq dt{font-weight:700;color:var(--ink);font-size:18px;margin-top:26px}
+  .faq dt:first-of-type{margin-top:0}
+  .faq dd{margin:8px 0 0;font-size:16.5px;line-height:1.65;color:var(--body);max-width:68ch}
+
+  .close{background:var(--ink);color:var(--paper);padding:clamp(36px,4.5vw,60px) 0}
+  .close h2{color:var(--paper)}
+  .close .sub{color:#A9A395;margin-top:8px}
+  .close-in{display:flex;align-items:center;justify-content:space-between;gap:26px;flex-wrap:wrap}
+  .close .btn.ghost{border-color:var(--paper);color:var(--paper)}
+  .close .btn.ghost:hover{background:#2A2721}
+  .close .btn.primary{box-shadow:4px 4px 0 var(--paper)}
+  .close .btn.primary:hover{box-shadow:2px 2px 0 var(--paper)}
+
+  .foot{border-top:1px solid var(--line);padding:26px 0 40px;font-size:14.5px;color:var(--muted)}
+  .foot-in{display:flex;justify-content:space-between;gap:18px;flex-wrap:wrap}
+  .foot nav{display:flex;gap:20px}
+  .foot a{text-decoration:none}
+  .foot a:hover{color:var(--ink)}
+
+  @media(max-width:960px){
+    .hero-in{grid-template-columns:1fr}
+    .steps,.cards{grid-template-columns:1fr 1fr}
     .views{grid-template-columns:1fr}
-    .mast{grid-template-columns:1fr}
-    .mast .l{border-right:0;border-bottom:var(--bd) solid var(--ink)}
-    .mast .r{border-left:0;border-top:var(--bd) solid var(--ink);text-align:left;flex-direction:row;gap:16px}
-    .panel .stack{position:relative;height:220px;inset:auto}
-    .stack.inset{top:auto;bottom:auto;margin:44px 0 0}
-    .foot{position:relative}
-    .talk,.denied{padding-bottom:22px}
+  }
+  @media(max-width:640px){
+    body{font-size:16px}
+    .links{display:none}
+    .steps,.cards{grid-template-columns:1fr}
+    .close-in{flex-direction:column;align-items:flex-start}
   }
   @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.btn{transition:none}}
 </style>

@@ -18,6 +18,9 @@ export default defineConfig({
     ],
     head: [
       { tag: 'link', attrs: { rel: 'alternate', type: 'text/markdown', href: `${base}/llms.txt` } },
+      // Default to the printed page. Starlight otherwise follows the OS, which
+      // lands most people in the night edition without ever choosing it.
+      { tag: 'script', content: "try{if(!localStorage.getItem('starlight-theme')){localStorage.setItem('starlight-theme','light');document.documentElement.dataset.theme='light'}}catch(e){}" },
       { tag: 'link', attrs: { rel: 'preconnect', href: 'https://fonts.googleapis.com' } },
       { tag: 'link', attrs: { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: true } },
       { tag: 'link', attrs: { rel: 'stylesheet', href: 'https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap' } },

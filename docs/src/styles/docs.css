@@ -35,7 +35,8 @@
   --sl-font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   --sl-content-width: 54rem;
   --sl-nav-height: 4.1rem;
-  --sl-text-code: 0.86rem;
+  --sl-text-code: 0.88rem;
+  --sl-text-body: 1.03rem;
 
   --sl-color-bg: var(--hm-paper);
   --sl-color-bg-nav: var(--hm-card);
@@ -62,13 +63,13 @@
 
 /* the printed page */
 :root[data-theme='light'] {
-  --hm-paper:   #EDE8DB;   /* was #F6F4ED — too bright at full width */
-  --hm-card:    #F6F3EA;
-  --hm-ink:     #17150F;
-  --hm-ink-2:   #4A4740;
-  --hm-ink-3:   #817D73;
-  --hm-rule:    #17150F;
-  --hm-hair:    #D2CCBD;
+  --hm-paper:   #EFEBE0;   /* warm newsprint: not a lightbox, not a mid-grey */
+  --hm-card:    #FCFAF4;
+  --hm-ink:     #14120E;
+  --hm-ink-2:   #332F29;   /* body text was washing out at small sizes */
+  --hm-ink-3:   #6A665C;
+  --hm-rule:    #14120E;
+  --hm-hair:    #D8D2C4;
   --hm-spot:    #C9821A;   /* darkened so amber passes contrast on paper */
   --hm-accent-low:  #F6E4C4;
   --hm-accent-high: #7A4E06;
@@ -95,9 +96,8 @@ site-search button[data-open-modal] {
   border-radius: 0 !important;
   background: var(--hm-card) !important;
   font-family: var(--sl-font-mono);
-  font-size: .74rem;
-  letter-spacing: .06em;
-  text-transform: uppercase;
+  font-size: .82rem;
+  letter-spacing: .01em;
 }
 site-search kbd {
   font-family: var(--sl-font-mono);
@@ -138,24 +138,22 @@ summary .large {
 /* ── the page itself ───────────────────────────────────────────────────── */
 .content-panel + .content-panel { border-top: var(--hm-bd) solid var(--hm-rule); }
 
-.sl-markdown-content { line-height: 1.72; }
+.sl-markdown-content { line-height: 1.75; font-size: 1.03rem; }
 
 h1, .content-panel h1 {
-  font-weight: 900 !important;
-  letter-spacing: -.04em;
-  text-transform: uppercase;
-  line-height: .96;
+  font-weight: 800 !important;
+  letter-spacing: -.025em;
+  line-height: 1.06;
 }
 .sl-markdown-content :is(h2, h3, h4) {
-  font-weight: 800;
-  letter-spacing: -.02em;
-  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: -.018em;
   color: var(--hm-ink);
 }
 /* a heavy rule under every h2 — the panel edge */
 .sl-markdown-content h2 {
-  border-bottom: var(--hm-bd) solid var(--hm-rule);
-  padding-bottom: .28rem;
+  border-bottom: 1px solid var(--hm-hair);
+  padding-bottom: .34rem;
   font-size: 1.35rem;
   width: 100%;
   display: block;
@@ -176,9 +174,14 @@ h1, .content-panel h1 {
 
 /* Starlight gives every sibling a top margin; a heading that already has a
    rule under it does not need that gap as well. */
-.sl-markdown-content h2 + * { margin-top: .75rem !important; }
-.sl-markdown-content h3 { margin-top: 1.8rem; }
-.sl-markdown-content h3 + * { margin-top: .6rem !important; }
+/* Starlight slips an <a class="sl-anchor-link"> between a heading and its
+   content, so `h2 + *` styles the anchor and the real gap lands one node
+   further along. Zero the anchor and set the element after it. */
+.sl-markdown-content :is(h2, h3) + .sl-anchor-link { margin-top: 0 !important; }
+.sl-markdown-content :is(h2, h3) + .sl-anchor-link + * { margin-top: .8rem !important; }
+.sl-markdown-content h2 + * { margin-top: .8rem !important; }
+.sl-markdown-content h3 { margin-top: 1.9rem; }
+.sl-markdown-content h3 + * { margin-top: .65rem !important; }
 
 /* ── code: the black panel ─────────────────────────────────────────────── */
 .sl-markdown-content :not(pre) > code {
@@ -225,9 +228,9 @@ h1, .content-panel h1 {
 .sl-markdown-content th {
   border-bottom: var(--hm-bd) solid var(--hm-rule);
   font-family: var(--sl-font-mono);
-  font-size: .7rem;
-  letter-spacing: .1em;
-  text-transform: uppercase;
+  font-size: .78rem;
+  letter-spacing: .02em;
+  font-weight: 700;
   text-align: left;
   color: var(--hm-ink);
 }
@@ -252,8 +255,8 @@ h1, .content-panel h1 {
 }
 .pagination-links a:hover { border-color: var(--hm-rule); box-shadow: 5px 5px 0 var(--hm-spot); }
 .pagination-links svg { color: var(--hm-spot); }
-.pagination-links span { font-family: var(--sl-font-mono); font-size: .68rem; letter-spacing: .12em; text-transform: uppercase; }
-.pagination-links .link-title { font-family: var(--sl-font); font-weight: 800; letter-spacing: -.02em; text-transform: uppercase; font-size: 1.05rem; }
+.pagination-links span { font-family: var(--sl-font-mono); font-size: .72rem; letter-spacing: .06em; }
+.pagination-links .link-title { font-family: var(--sl-font); font-weight: 700; letter-spacing: -.02em; font-size: 1.05rem; }
 
 /* ── misc chrome ───────────────────────────────────────────────────────── */
 starlight-theme-select select, .social-icons a { border-radius: 0; }
