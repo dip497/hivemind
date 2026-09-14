@@ -24,7 +24,12 @@ import { isRemote } from "../../shared/remote-uri";
 const SINGLETON_KINDS: ReadonlySet<TileKind> = new Set(["editor", "diff", "issues"]);
 
 type FocusReq = { id: string; cx: number; cy: number; w: number; h: number; n: number; exact?: boolean } | null;
-type SpawnOpts = { mode?: string; work?: string; url?: string; file?: string; agent?: { id: string; cmd: string; args?: string[]; label: string } };
+type SpawnOpts = {
+  mode?: string; work?: string; url?: string; file?: string;
+  agent?: { id: string; cmd: string; args?: string[]; label: string };
+  /** A terminal that shows this existing daemon session instead of starting its own. */
+  session?: { id: string; cmd: string; args?: string[]; label: string };
+};
 type SpawnPick = ({ kind: TileKind } & SpawnOpts) | null;
 
 export interface SpawnCtx {
@@ -256,6 +261,9 @@ export function useSpawn(ctx: SpawnCtx) {
         args = spawnArgsFor(def, so);
         cmd = def.bin;
         label = spawnLabelFor(def, n, so);
+      } else if (kind === "shell" && opts?.session) {
+        cmd = opts.session.cmd; args = opts.session.args;
+        label = opts.session.label;
       } else if (kind === "shell") {
         const sh = defaultShell();
         cmd = sh.cmd; args = sh.args;
@@ -266,7 +274,7 @@ export function useSpawn(ctx: SpawnCtx) {
         label = kind === "editor" ? "Editor" : kind === "diff" ? "Diff" : "Issues";
       }
       placeInFrame(newId, frame);
-      setTiles((cur) => [...cur, { id: newId, kind, label, cmd, args, ...(kind === "browser" && opts?.url ? { url: opts.url } : {}) }]);
+      setTiles((cur) => [...cur, { id: newId, kind, label, cmd, args, ...(kind === "browser" && opts?.url ? { url: opts.url } : {}), ...(kind === "shell" && opts?.session ? { session: opts.session.id } : {}) }]);
       // "Work on this": hand the fresh claude tile its prompt. It delivers it to
       // itself the first time it's ready (see claude-bus queueWork/claimWork).
       if (kind === AGENT_TILE_KIND && opts?.work) queueWork(newId, opts.work);

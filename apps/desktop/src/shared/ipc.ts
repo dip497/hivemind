@@ -117,36 +117,72 @@ export interface WorktreeCreateOpts {
   includeFiles?: string[];
 }
 
-// ── remote (SSH) frames ───────────────────────────────────────────────────
-/** Auth for a remote host. SSH agent is always tried first; these are the
- *  explicit fallbacks. */
-export interface RemoteAuth {
-  /** Path to a private key file. */
-  privateKeyPath?: string;
-  /** Passphrase for an encrypted private key. */
-  passphrase?: string;
-  /** Password (for hosts without key auth). Held in memory only, never persisted. */
-  password?: string;
-  /** Username override (else parsed from the uri, else $USER). */
-  username?: string;
-}
-/** One remote directory entry (SFTP) for the folder picker / tree. */
+// ── machines (saved ssh hosts, shared with `hive machine`) ────────────────
+/** One remote directory entry for the folder picker / tree. */
 export interface RemoteDirEntry {
   name: string;
   isDir: boolean;
   isSymlink: boolean;
-  size: number;
-  mtime: number;
 }
-/** A saved remote connection (password lives encrypted in the OS keychain — the
- *  renderer only learns whether one exists). */
-export interface SavedHost {
+/** `attention` needs a person (host key, auth); `no-hive` works without surviving drops. */
+export type MachineState = "idle" | "connecting" | "online" | "reconnecting" | "offline" | "attention" | "no-hive";
+export interface MachineStatus {
+  state: MachineState;
+  /** ssh's own words for the last failure. */
+  detail?: string;
+  /** Daemon round trip, measured while connected. */
+  rttMs?: number;
+  at: number;
+}
+export interface MachineInfo {
+  id: string;
+  label: string;
+  /** `alias`, `user@host` or `ssh://user@host:port`. */
+  target: string;
+  enabled: boolean;
+  platform?: string;
+  hivePath?: string;
+  /** What its frames' ssh:// uris resolve to. */
   hostId: string;
-  host: string;
-  port: number;
-  user: string;
-  hasPassword: boolean;
-  hasKey: boolean;
+}
+export interface MachinesSnapshot {
+  machines: MachineInfo[];
+  /** By host id, including hosts of frames that are not saved machines. */
+  status: Record<string, MachineStatus>;
+  catalogError?: string;
+}
+export interface MachineProbe {
+  platform: string;
+  hivePath?: string;
+  hiveVersion?: string;
+  daemon?: boolean;
+}
+export interface MachineAddRequest {
+  target: string;
+  label?: string;
+  /** Put this version's `hive` there when it has none (or one too old). */
+  install?: boolean;
+  /** For hosts without key auth; kept in the OS keychain, never in the catalog. */
+  password?: string;
+}
+export interface MachineAddResult {
+  machine: MachineInfo;
+  probe: MachineProbe;
+  installed: boolean;
+  /** Absent unless a password was given and no OS keychain could hold it (it lasts this session only). */
+  passwordSaved?: false;
+}
+/** A terminal session in a machine's daemon. */
+export interface SessionSummary {
+  id: string;
+  state: "live" | "frozen";
+  cmd: string;
+  args: string[];
+  cwd: string;
+  viewers: number;
+  cols: number;
+  rows: number;
+  title?: string;
 }
 
 // ── app version + self-update ─────────────────────────────────────────────
@@ -354,19 +390,22 @@ export interface HiveIpc {
    *  read off disk (incl. over SSH) instead of only on-screen. */
   diagLog(line: string): Promise<void>;
 
-  // ── remote (SSH) frames ───────────────────────────────────
-  /** Probe + register auth for an ssh://[user@]host[:port]/ target; returns the
-   *  remote home dir + the connection-pool host id. Throws on connect failure.
-   *  `remember` saves the host (password encrypted in the OS keychain). */
-  sshConnect(uri: string, auth: RemoteAuth, remember?: boolean): Promise<{ home: string; hostId: string }>;
+  // ── machines ──────────────────────────────────────────────
+  machinesGet(): Promise<MachinesSnapshot>;
+  onMachines(cb: (s: MachinesSnapshot) => void): () => void;
+  /** Probe, optionally install hive, then save. Errors starting `[attention]` need the user to run `ssh <target>` once. */
+  machineAdd(req: MachineAddRequest): Promise<MachineAddResult>;
+  machineCheck(id: string): Promise<MachineProbe>;
+  machineInstall(id: string): Promise<MachineProbe>;
+  machineUpdate(id: string, patch: { label?: string; enabled?: boolean }): Promise<void>;
+  machineRemove(id: string): Promise<void>;
+  /** Store a password for a machine; false when the OS keychain is unavailable (kept in memory only). */
+  machineSetPassword(id: string, password: string): Promise<boolean>;
+  /** Sessions in the daemon behind `uri`'s host; null = this computer. */
+  machineSessions(uri: string | null): Promise<SessionSummary[]>;
+  machineReconnect(hostId: string): Promise<void>;
   /** List a remote directory (for the folder picker). Empty dir → remote home. */
   sshListDir(uri: string, dir: string): Promise<{ dir: string; entries: RemoteDirEntry[] }>;
-  /** Saved connections (host/user/port + whether a password/key is stored). */
-  sshSavedHosts(): Promise<SavedHost[]>;
-  /** Connect using a saved host's stored credentials. Returns its home + parts. */
-  sshConnectSaved(hostId: string): Promise<{ home: string; host: string; port: number; user: string }>;
-  /** Delete a saved connection. */
-  sshForgetHost(hostId: string): Promise<void>;
 
   // ── worktree ──────────────────────────────────────────────
   worktreeList(repoPath: string): Promise<WorktreeEntry[]>;
@@ -390,6 +429,8 @@ export interface HiveIpc {
      *  claude's positional argv (which auto-submits), NOT typed into the booting
      *  TUI — see applyInitialPrompt / HIVE_INITIAL_PROMPT. */
     initialPrompt?: string;
+    /** `tileId` names an existing daemon session to show; never start one. */
+    attachOnly?: boolean;
   }): Promise<{ pid: number }>;
   /** Install the agentic stack (hive skills + CLAUDE.md section) into a repo so
    *  a spawned agent can actually work issues with `hive`. Idempotent. */

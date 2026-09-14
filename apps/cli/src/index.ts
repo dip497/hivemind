@@ -27,6 +27,13 @@ import { packagesCmd } from "./commands/packages.js";
 import { agentsCmd } from "./commands/agents.js";
 import { viewsCmd } from "./commands/views.js";
 import { configCmd, themeCmd } from "./commands/config.js";
+import { daemonCmd } from "./commands/daemon.js";
+import { psCmd } from "./commands/ps.js";
+import { attachCmd } from "./commands/attach.js";
+import { runCmd } from "./commands/run.js";
+import { machineCmd } from "./commands/machine.js";
+import { killCmd } from "./commands/kill.js";
+import { pushCmd } from "./commands/push.js";
 
 /**
  * Intercept `hive @ID` BEFORE citty sees argv — citty treats unknown
@@ -70,6 +77,13 @@ const main = defineCommand({
     packages: packagesCmd,
     config: configCmd,
     theme: themeCmd,
+    daemon: daemonCmd,
+    ps: psCmd,
+    attach: attachCmd,
+    run: runCmd,
+    machine: machineCmd,
+    kill: killCmd,
+    push: pushCmd,
   },
 });
 

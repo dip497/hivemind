@@ -10,6 +10,27 @@ window, combined agent list, machine-scoped navigation, notifications, automatic
 reconnects"), plus what a canvas can do and a one-workspace TUI cannot: several
 machines' agents **live on screen at once**, on links from LAN to transatlantic.
 
+### Implementation status (branch `feat/remote-machines`)
+
+| Piece | State |
+|---|---|
+| Machine catalog (`@hivemind/core` `machines.ts`) | **built**, tested |
+| Multi-viewer sessions, last-interactor-owns-size, `list` detail, `attach noSpawn` | **built**, tested (daemon under node *and* bun) |
+| bun PTY adapter (`bun-pty.ts`), embedded addon, hook-runtime wrapper | **built**, tested; bun ≥ 1.2.10; CI/release bumped to 1.3 |
+| Socket claim (never steal a live daemon's socket), socket `0600` | **built**, tested |
+| CLI: `hive daemon`, `run`, `ps`, `attach`, `kill`, `machine`, `--machine` routing | **built**, tested; E2E over real OpenSSH with the compiled binary |
+| M1: remote terminals run in the remote daemon over system ssh (`DaemonEndpoint` + `hive daemon bridge`), re-attach after drops, detach keeps them alive; in-app ssh2 fallback for hosts without `hive` | **built**, tested; E2E over real OpenSSH in the real app. Password/passphrase via askpass is unit-tested only |
+| M2: remote fs, git, folder picker and the no-`hive` fallback terminal over the system ssh; `ssh2`, SFTP and the TOFU JSON store deleted | **built**, tested (unit + real app over OpenSSH). fish/zsh login shells untested |
+| M4 (daemon side): output positions + per-session epoch, exact delta resume, flood resync for viewers that announce it, ssh compression instead of binary framing | **built**, tested (unit, real daemon, real ssh) |
+| M3 machine UI: one catalog with the CLI (live-watched), Machines dialog (list with live state, add with probe + install, rename/off/remove, folder picker), machine chip on remote frames (state, RTT, sessions running there, retry, change folder), reconnect banner on remote terminals, Layers status dots + Machines strip; old saved hosts migrate in; the probe only counts a `hive` that can run the daemon | **built**, tested (unit + real app over OpenSSH, 8-step UI drive) |
+| Validation on a second, real machine (another person's laptop over a phone hotspot, password auth, its own hivemind already installed) | add + install over ssh, frame bound, round trip on the chip, adopting a `hive run` job, a 17 s outage with recovery, and an app restart: 14/14 |
+| Machine to machine, both directions (same two real machines) | his laptop and my app watching one session at once (typing both ways, size follows the last typist, his kill seen by my app); his CLI adding my laptop, installing hive on it, running/listing/attaching/killing a session there; his daemon pushing a real hook notification to my laptop over the network: 5/5 + 5/5 |
+| `summary`/`cold` interest levels (need tile visibility from the renderer), trust levels UI | not started |
+| M5 (read-only half): standalone daemon owns `hcp.sock`, forwards hook events to viewers that ask (`events` cap), refuses requests at once; desktop accepts them only for its own tiles; `hive push` (ntfy-style POST, per session+topic throttle) | **built**, tested (unit, real daemon, real ssh). Gap: a remote worker's auto-report to its parent needs the reply text in the event (its transcript path is dropped at the boundary), so it isn't delivered yet |
+| Remote `hive ctl` into the desktop (approvals, trust levels), predictive echo | not started (M5 write half, M6) |
+| `hive-linux-arm64` release asset (CLI only, arm runner, compiled-daemon smoke test in both Linux jobs), `install.sh` arm64 path, `machine add --install` downloading the same version's asset for other platforms | **built**; installer + download tested over real ssh; the arm job itself runs only on the next release |
+| macOS as a *compiled* daemon host (spawn-helper extraction) | not started — the CLI refuses with a clear message |
+
 ---
 
 ## 1. What herdr actually built
@@ -42,19 +63,19 @@ is a headless node process (spawned via `ELECTRON_RUN_AS_NODE`) that:
 - keeps disk session snapshots that survive its own death, emits the agent hook
   scripts, hosts the HCP token/socket.
 
-> **Run the same daemon on the remote host and connect `daemon-client.ts` to it
-> through an SSH bridge that surfaces as a local unix socket.**
+> **Run the same daemon on the remote host and talk to it through the stdio of
+> one `ssh … hive daemon bridge` child.**
 
-`daemon-client` already connects to a socket path; herdr's `SshStdioBridge` shows
-the trick — bind a private 0600 local socket, and for each connection spawn the ssh
-child and pump stdio both ways. The client diff shrinks to "which path do I connect
-to". One protocol, one session manager, one set of agent hooks, local and remote.
+herdr surfaces its ssh bridge as a private local socket because its client wants a
+socket. Ours does not need one: `DaemonEndpoint` (built in M1) takes any stream, so the
+local daemon gets a unix socket and a remote one gets the ssh child's stdio — one
+protocol, one session manager, one set of agent hooks, local and remote.
 
 Consequence: remote terminals gain **persistence**. `main/remote/pty.ts` runs remote
 PTYs in-main today precisely because "an SSH drop loses remote shell state"
 (`remote-frames.md`). With the daemon on the far side the PTY is a child of a
-process on the remote box; an SSH drop loses nothing. `RemotePty` /
-`RemotePtyManager` are **deleted**.
+process on the remote box; an SSH drop loses nothing. The in-main `RemotePty` stays
+only as the fallback for hosts without `hive`.
 
 ### The PTY in a single-file `hive` (M0 — resolved on Linux, see Appendix C)
 
@@ -62,9 +83,10 @@ process on the remote box; an SSH drop loses nothing. `RemotePty` /
 
 - **Embedding works.** A static `require("…/pty.node")` makes bun embed the N-API
   addon; the binary runs from an empty directory with no `.node` beside it. node-pty's
-  own loader probes `build/Release`, `prebuilds/<plat>` relative to `__dirname` and
-  fails inside `$bunfs` — a ~10-line `Bun.build` plugin rewrites `loadNativeModule`
-  to that static require. No tarball needed.
+  own loader probes paths relative to `__dirname` and fails inside `$bunfs`, so the
+  shipped build never uses it: `apps/cli/scripts/build.ts` defines `HIVE_PTY_NATIVE`
+  (the addon's absolute path), which turns `require(HIVE_PTY_NATIVE)` into a static
+  require, and `bun-pty.ts` drives that addon directly. No tarball needed.
 - **node-pty's JS layer is broken under bun.** The first `write()` kills the shell
   with `SIGHUP` (master fd closed). node-pty reads via `tty.ReadStream(fd)`; under
   bun a stream on that non-blocking master errors with `EAGAIN` (measured). node-pty
@@ -74,10 +96,13 @@ process on the remote box; an SSH drop loses nothing. `RemotePty` /
 - **Fix: a bun-native shim over the same addon** (~80 lines, replaces node-pty's
   `UnixTerminal` for the daemon's `ManagedPty` factory): `native.fork(...)` → fd;
   reads via `Bun.file(fd).stream()` (event-driven; 20 idle PTYs ≈ 14 ms CPU/s);
-  writes via `fs.writeSync` with EAGAIN retry; `native.resize(fd, cols, rows, 0, 0)`;
-  pause/resume = stop/restart pulling the stream (kernel back-pressure). Prototyped:
-  input, initial size, live resize, exit code all correct — inside a single-file
-  compiled binary.
+  writes via node-pty's own queued `fs.write` + EAGAIN retry; `native.resize(fd,
+  cols, rows, 0, 0)`; pause stops pulling (a read already in flight is held until
+  resume), so the kernel buffer fills and the child blocks. Shipped as
+  `apps/desktop/src/main/bun-pty.ts`; input, size, resize, UTF-8, pause holding
+  1.3 MB, exit ordering all verified on bun 1.3.11 and 1.2.10. **bun ≤ 1.2.0 cannot
+  read a pty this way** (1.1.45 and 1.2.0 measured) — the adapter refuses with a clear
+  error, and CI/release moved from bun 1.1 to 1.3.
 - **macOS (untested — no mac here):** node-pty forks through a `spawn-helper`
   executable that must exist on disk; the binary must extract it to
   `~/.cache/hivemind/<version>/spawn-helper` (chmod +x) on first run. Linux ignores
@@ -291,6 +316,49 @@ Each of these failed or surprised in the Appendix C runs; each is now a requirem
   - servers with `AllowStreamLocalForwarding no` need a relay through the bridge
     connection instead — detect at `machine add`, fall back automatically.
 
+### 7b. Connection, auth and pairing — the security model
+
+**Two directions, two mechanisms.**
+
+| Direction | Carries | Auth | Built |
+|---|---|---|---|
+| laptop → machine | spawn, attach, input, resize, `ps`, fs/git | **OpenSSH** — your keys / agent / FIDO, `known_hosts` | yes (CLI) |
+| machine → laptop | agent status, notifications, approval requests, `hive ctl` from remote agents | a **per-machine capability token** on a per-machine socket forwarded with `ssh -R`, method allowlist = trust level (§12b) | no (M5) |
+
+**Why there is no pair code for ssh machines.** Possession of an ssh key that logs
+in as you *is* the pairing; anyone who has it can already read every file the daemon
+could show them, so a second code adds a ritual, not a boundary. The pairing
+ceremony is the one herdr uses: the first contact is an interactive `ssh <host>`
+that accepts the host key; every background connection afterwards runs
+`BatchMode=yes` + strict host-key checking and stops at **attention** instead of
+prompting or trusting silently. What is enforced today:
+
+- no secrets in `machines.json` (strict schema; `user:password@` rejected);
+- targets that could be read as ssh options (`-oProxyCommand=…`) are rejected, and
+  every remote argument is single-quoted — the remote shell sees one word;
+- the remote `hive` runs by an absolute path recorded at `add`, never via PATH;
+- the daemon socket is `0600` in a `0700` directory, never TCP — a shell as you is
+  reachable only by you;
+- `machine add --install` copies only *this* binary, same platform only, via a temp
+  file + rename.
+
+**Where a pair code *is* needed — any path that is not ssh:**
+- *Phone / mobile relay* (later; orca's model, Appendix D): phone shows a QR with a
+  one-time secret → X25519 key exchange → end-to-end encrypted frames the relay
+  cannot read; a device list with revoke. Outbound-only on both ends.
+- *Remote → laptop*: not a code but a token minted per connection, scoped by trust
+  level, never the desktop's main HCP token (hook events carry no token today —
+  §7a — so the socket and its allowlist are the boundary).
+- *Push*: payloads carry no transcript ("build-box: approval needed"); an approval is
+  never granted by opening a plain URL — the notification opens `hive attach` / the
+  app, where the answer is given.
+
+**Threat model, briefly.** Compromised remote box → it controls its own sessions
+(it already could) and can send status for its own tiles; with `status`/`collaborate`
+trust it cannot run anything on the laptop. Stolen laptop → the ssh keys are the
+crown jewels; use an agent with a passphrase or a FIDO key. Network attacker → ssh.
+Another user on the server → the `0600` socket.
+
 ## 8. Latency: predictive echo (opt-in, last)
 
 Above ~40 ms RTT, echo typed characters locally in `raw`-mode tiles and reconcile
@@ -328,6 +396,111 @@ Real display (`DISPLAY=:1`; xvfb is llvmpipe — `docs/design/performance-native
 New `hive machine` verb, `hive daemon`/`hive bridge`, new remote + linux-arm64
 assets → **minor**. The bridge protocol becomes a versioned public surface; a
 breaking change later would be **major** — hence §7's golden fixtures.
+
+## 12a. CLI surface
+
+Four new top-level verbs, citty subcommands in the existing style (`--json` on every
+leaf → the `{ ok, data }` / `{ ok:false, code, error }` envelope from `format.ts`).
+`hive agents` is taken (agent-provider plugins), so live sessions are `hive ps`.
+
+```
+hive daemon start [--socket P] [--foreground]   start this machine's PTY daemon (detached by default).
+                                                 Idempotent: a live daemon on P → ok, not an error.
+hive daemon status [--socket P] [--json]         { running, socket, pid?, buildStamp?, sessions }
+hive daemon stop   [--socket P]                  graceful shutdown; sessions persist as snapshots
+
+hive ps     [--machine M] [--socket P] [--json]  sessions on a daemon: id, state, cmd, cwd, pid, viewers, size, title
+hive attach <session> [--machine M] [--socket P] [--read-only]
+                                                 this terminal becomes a viewer of <session> (id or unique prefix).
+                                                 detach: ctrl-b d · literal ctrl-b: ctrl-b ctrl-b · never spawns
+hive run [--cwd D] [--id ID] [--attach] [--machine M] -- <command…>
+                                                 start a persistent session (tmux `new -d`); starts the daemon if
+                                                 needed. Without the desktop this is the only thing that creates one.
+
+hive machine add <target> [--label L] [--install] [--json]
+                                                 probe over ssh (uname, find hive by ABSOLUTE path), optionally
+                                                 copy this binary to ~/.local/bin/hive (same platform only), then
+                                                 save the profile. Nothing is saved if the probe fails.
+hive machine list  [--json]
+hive machine check <machine> [--json]            re-probe: reachable, platform, hive path + version, daemon running
+hive machine rename <machine> <label>
+hive machine enable|disable <machine>
+hive machine remove <machine>                    forgets the profile only; the remote daemon and its agents keep running
+```
+
+- `<machine>` / `--machine M` = profile id **or** label (exact; an ambiguous label is
+  an error that lists the ids).
+- `--machine` routes through the profile's ssh target with the system `ssh`
+  (BatchMode for `ps`, `-t` for `attach`) and runs the remote `hive` by the absolute
+  path recorded at `machine add` — the non-interactive PATH is bare (§7a).
+- Default socket: `$HIVEMIND_PTY_SOCK`, else `<config>/hivemind/pty-daemon.sock` —
+  the path the desktop daemon uses on Linux, so on any one machine the desktop,
+  `hive daemon`, `hive ps` and `hive attach` meet at **one** daemon.
+- Exit codes follow `hcp.ts`: 0 ok · 1 error · 2 usage · 3 unavailable (no daemon /
+  host unreachable) · 4 timeout · 5 not found (session / machine).
+
+Daemon protocol additions (all additive; old desktop clients unaffected):
+`list {detail:true}` → `sessions.detail[]`; `attach {noSpawn:true}` → `attached`
+with `error` instead of spawning; a session fans out to **every** attached
+connection and detaching one leaves the others; **the last viewer to interact
+(attach / resize / write) owns the PTY size**.
+
+## 12b. Agents across machines
+
+The desktop app is the hub; agents never hold ssh keys or open their own connections.
+
+- **Local agent → remote**: `hive ctl --machine M read|send|spawn …` — main routes the
+  call over its connection. Spawning on a remote machine is the sanctioned version of
+  "the agent ssh'es into the box": the new tile is visible, persistent, killable.
+- **Cross-machine workflows** fan out over the same `read`/mailbox path; tile ids are
+  namespaced `machineId:tileId`.
+- **Remote agent → anything** is gated by a per-machine **trust level** chosen at
+  `machine add`, enforced as the method allowlist of that machine's HCP endpoint (§7a):
+
+| trust | a remote agent may |
+|---|---|
+| `status` (default) | report turn/status/notification/approval for its own tiles |
+| `collaborate` | + read and message other agents (any machine, incl. local) |
+| `full` | + spawn tiles, **including on the laptop** — only for boxes you own outright |
+
+## 12c. Mobile
+
+herdr ships **no mobile app and no web dashboard** (their docs, "Work from your
+phone"): you ssh from a phone terminal and the TUI switches to a single-column layout
+at `ui.mobile_width_threshold` (default 64 cols; `src/client/shell/mobile.rs`, ~1.1k
+lines). Their notifications are toast / OSC-terminal / OS only — nothing reaches a
+phone that is not connected.
+
+Ours, in order:
+1. **Phone over ssh** — `hive ps` + `hive attach` (§12a) on the machine where the
+   agents run. Works with the laptop closed, because the daemon lives on the server.
+   `hive ps` renders a compact layout below 64 columns.
+2. **Push** (beats herdr) — the remote daemon itself sends approval / turn-done events
+   to a per-machine ntfy/webhook URL. Needs the remote daemon to consume hook events
+   locally *and* forward them to the desktop — `ssh -R` alone only works while the
+   desktop is connected.
+3. A tailnet-only web page, maybe later; a native app, probably never.
+
+Rules: a phone viewer follows the same last-interactor-owns-size rule as everyone;
+approvals are idempotent actions with ids (first answer wins); nothing ever listens on
+a TCP port.
+
+## 12d. Desktop UI screens (M3 — built; trust levels and phone pairing are not)
+
+The CLI is the complete surface today; the app needs these, all backed by the same
+catalog and daemon protocol:
+
+1. **Add machine** (replaces `RemoteConnectModal`'s ssh2 form): target, label, trust
+   level, "install hive if missing" → live probe result (platform, hive version) →
+   save. Host-key / auth failure shows an **attention** card with a copyable
+   `ssh <target>` to run once, never a password prompt inside the app.
+2. **Machines** panel in Settings: status + RTT, check, rename, enable/disable,
+   remove, trust level, push URL.
+3. **Machine chip** on every remote frame and in the agent list (grouped by machine),
+   dimmed with a banner while reconnecting; one machine down never blocks another.
+4. **Session picker**: attach a tile to an existing remote session (`hive ps` data),
+   so work started on a phone or with `hive run` shows up on the canvas.
+5. Later: phone pairing (QR) and per-device revoke, if the relay is built.
 
 ## 12. Not in scope
 
@@ -456,3 +629,19 @@ daemons on one socket path (the unconditional unlink). Another session was rebui
 
 Not yet run: macOS anything; the daemon composed *inside* the compiled binary with
 the shim; `claude` (vs `bash`) through a remote reattach; `tc netem` latency numbers.
+
+## Appendix D — orca (`stablyai/orca`, v1.4.200, 2026-09-11)
+
+The closest competitor in shape (TypeScript + Electron, 66k stars). Read from its
+README, `docs/reference/headless-linux-server.md`, `cloud/README.md`, `package.json`:
+
+| Orca | How | Our position |
+|---|---|---|
+| **Remote runtime** `orca serve` | runs the **whole Electron app under Xvfb** on the server: apt-install GTK/NSS/ALSA/X libs, glibc ≥ 2.31, per-release package names | one self-contained `hive` (bun + embedded pty addon), no system packages — the thing §2 chose |
+| **SSH worktrees** | `ssh2` in-process, auto-reconnect, port forwarding | system OpenSSH (§3a): config aliases, ProxyJump, agent, FIDO for free |
+| **Mobile companion** (iOS/Android app) | phone and desktop each open an outbound WebSocket to a hosted **relay** (director + cells on Cloud Run, Terraform) that splices frames; X25519 host key (`tweetnacl`) | phone over ssh + `hive attach` now (zero infra); a relay only if we choose to run a service |
+| **Push** | separate push gateway; the desktop authenticates with its X25519 key via an encrypted challenge; aggregate-only logging | user-owned ntfy/webhook from the remote daemon (§12c); borrow their rules: host-key-authenticated sender, no content in logs |
+| Persistence | `@xterm/headless` + node-pty, "scrollback that survives restarts" | same building blocks; ours already replay across daemon death and ssh drops |
+
+Take-aways: orca proves the market wants mobile, and shows what a relay costs to run
+properly. Their headless server is the heavy path we avoided.

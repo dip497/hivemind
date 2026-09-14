@@ -37,7 +37,9 @@ import { TerminalTile } from "../TerminalTile";
 import { IssuesTile } from "../IssuesTile";
 import { PlanReviewTile } from "../PlanReviewTile";
 import { TileErrorBoundary } from "../TileErrorBoundary";
-import type { TileSurface, TileSurfaceSpec } from "./tile-surfaces";
+import type { TerminalTileData, TileSurface, TileSurfaceSpec } from "./tile-surfaces";
+import { LinkBanner } from "../machines/LinkBanner";
+import { isRemote } from "../../../shared/remote-uri";
 
 const BrowserTile = lazy(() => import("../BrowserTile").then((m) => ({ default: m.BrowserTile })));
 const DiffTile = lazy(() => import("../DiffTile").then((m) => ({ default: m.DiffTile })));
@@ -54,6 +56,16 @@ function TileLoading({ label }: { label: string }) {
   );
 }
 
+/** A terminal plus its machine's link banner. */
+function TerminalBody({ data, selected }: { data: TerminalTileData; selected: boolean }) {
+  return (
+    <div className="relative w-full h-full">
+      <TerminalTile {...data} selected={selected} />
+      {isRemote(data.cwd) && <LinkBanner cwd={data.cwd} />}
+    </div>
+  );
+}
+
 /**
  * TileBody — the chrome-less body for one tile kind: the pure tile component
  * (TerminalTile / DiffTile / …) with no view shell, resize handles or pin chip.
@@ -66,7 +78,7 @@ export function TileBody(props: TileBodyProps): ReactNode {
       const { data, selected } = props;
       return (
         <TileErrorBoundary label={data.label ?? "terminal"} onClose={data.onClose}>
-          <TerminalTile {...data} selected={selected} />
+          <TerminalBody data={data} selected={selected} />
         </TileErrorBoundary>
       );
     }

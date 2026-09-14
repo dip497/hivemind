@@ -90,11 +90,21 @@ const api: HiveIpc & {
 
   diagLog: (line) => ipcRenderer.invoke("diagLog", line),
 
-  sshConnect: (uri, auth, remember) => ipcRenderer.invoke("sshConnect", uri, auth, remember),
+  machinesGet: () => ipcRenderer.invoke("machines:get"),
+  onMachines: (cb) => {
+    const listener = (_e: unknown, snap: Parameters<typeof cb>[0]) => cb(snap);
+    ipcRenderer.on("machines:changed", listener);
+    return () => ipcRenderer.removeListener("machines:changed", listener);
+  },
+  machineAdd: (req) => ipcRenderer.invoke("machines:add", req),
+  machineCheck: (id) => ipcRenderer.invoke("machines:check", id),
+  machineInstall: (id) => ipcRenderer.invoke("machines:install", id),
+  machineUpdate: (id, patch) => ipcRenderer.invoke("machines:update", id, patch),
+  machineRemove: (id) => ipcRenderer.invoke("machines:remove", id),
+  machineSetPassword: (id, password) => ipcRenderer.invoke("machines:set-password", id, password),
+  machineSessions: (uri) => ipcRenderer.invoke("machines:sessions", uri),
+  machineReconnect: (hostId) => ipcRenderer.invoke("machines:reconnect", hostId),
   sshListDir: (uri, dir) => ipcRenderer.invoke("sshListDir", uri, dir),
-  sshSavedHosts: () => ipcRenderer.invoke("sshSavedHosts"),
-  sshConnectSaved: (hostId) => ipcRenderer.invoke("sshConnectSaved", hostId),
-  sshForgetHost: (hostId) => ipcRenderer.invoke("sshForgetHost", hostId),
 
   worktreeList: (repoPath) => ipcRenderer.invoke("worktreeList", repoPath),
   worktreeCreate: (repoPath, opts: WorktreeCreateOpts) =>

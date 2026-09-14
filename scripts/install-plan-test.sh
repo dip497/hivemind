@@ -28,7 +28,12 @@ expect Darwin arm64  app_asset hivemind-9.9.9-arm64-mac.zip
 # No prebuilt, but --dev must still be reachable: OS resolves, platform doesn't.
 expect Darwin x86_64 os_kind   mac
 expect Darwin x86_64 platform  none
-expect Linux  aarch64 platform none
+# arm64 Linux is a remote machine: the CLI, no desktop app.
+expect Linux  aarch64 platform  linux-arm64
+expect Linux  aarch64 cli_asset hive-linux-arm64
+expect Linux  aarch64 app_asset none
+expect Linux  arm64   cli_asset hive-linux-arm64
+expect Linux  riscv64 platform  none
 
 # Git Bash reports MINGW64_NT-*; such a user must be sent to install.ps1, not
 # told "unsupported OS" — they are on a supported platform, wrong installer.

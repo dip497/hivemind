@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { AlertCircle, CheckCircle2, AlertTriangle, Sparkles, X } from "lucide-react";
 import { useTileFocus } from "./canvas-camera";
+import { openMachines } from "./machines/store";
 import { toastKindOf, toastTtlMs, type Toast, type NoticeKind } from "./useAgentAwareness";
 
 // ── Agent awareness ─────────────────────────────────────────────────────────
@@ -232,6 +233,7 @@ export function CanvasEmptyState({
     { label: "Open terminal", hint: "⌘T", action: onShowShell, disabled: false },
     { label: "Open workbench", hint: "⌘B", action: onShowTree, disabled: !repoPath },
     { label: "Open diff", hint: "⌘D", action: onShowDiff, disabled: !repoPath },
+    { label: "Machines", hint: "", action: () => openMachines({ kind: "manage" }), disabled: false },
   ];
   return (
     <div className="pointer-events-none absolute inset-0 grid place-items-center">

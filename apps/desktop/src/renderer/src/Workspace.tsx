@@ -49,7 +49,9 @@ import {
 import { useStateWithRef } from "./use-state-with-ref";
 import { defaultTileSize } from "./canvas-sizing";
 import { useWorktrees } from "./useWorktrees";
-import { RemoteConnectModal } from "./components/RemoteConnectModal";
+import { MachinesHub } from "./machines/MachinesHub";
+import type { MachinesRequest } from "./machines/store";
+import type { SessionSummary } from "../../shared/ipc";
 import { isRemote } from "../../shared/remote-uri";
 import { getAgents, AgentIcon, agentById, agentForCmd } from "./agents";
 import { useSpawn } from "./useSpawn";
@@ -438,6 +440,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
       id: f.id, title: f.title, color: f.color,
       parentFrameId: f.parentFrameId, branch: f.parentFrameId ? f.branch : undefined,
       remote: isRemote(f.workspacePath),
+      remoteUri: isRemote(f.workspacePath) ? f.workspacePath : undefined,
     })),
     [frames],
   );
@@ -533,16 +536,20 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   // Text awaiting a claude target — set when something wants to deliver a prompt
   // ("Work on this", diff "send review") and 1+ claude tiles exist.
   const [claudePick, setClaudePick] = useState<{ text: string } | null>(null);
-  // Frame awaiting a remote (ssh://) bind — set when FrameNode / the rail fires
-  // `hivemind:attach-remote`; the modal connects, browses, and binds the uri.
-  const [remoteAttach, setRemoteAttach] = useState<string | null>(null);
+  // The Machines dialog: `hivemind:attach-remote` picks where a frame runs, `hivemind:machines` opens it for anything else.
+  const [machinesReq, setMachinesReq] = useState<MachinesRequest | null>(null);
   useEffect(() => {
     const onAttach = (e: Event) => {
       const fid = (e as CustomEvent<{ frameId: string }>).detail?.frameId;
-      if (fid) setRemoteAttach(fid);
+      if (fid) setMachinesReq({ kind: "pick", frameId: fid });
     };
+    const onMachines = (e: Event) => setMachinesReq((e as CustomEvent<MachinesRequest>).detail);
     window.addEventListener("hivemind:attach-remote", onAttach as EventListener);
-    return () => window.removeEventListener("hivemind:attach-remote", onAttach as EventListener);
+    window.addEventListener("hivemind:machines", onMachines as EventListener);
+    return () => {
+      window.removeEventListener("hivemind:attach-remote", onAttach as EventListener);
+      window.removeEventListener("hivemind:machines", onMachines as EventListener);
+    };
   }, []);
 
   // Git commit/sync modal — open for a specific repo (a frame's worktree /
@@ -570,6 +577,15 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     setFrameOf, setPositions, setSelectedTileId, setFocusReq, setFrames,
     setSelectedFrameId, setTiles, setSpawnPick, focusTile, openFileInTile,
   });
+  // A session already running on a machine (the frame's machine chip) opens as a terminal in that frame.
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      const { frameId, session } = (e as CustomEvent<{ frameId: string; session: SessionSummary }>).detail;
+      spawnTile("shell", frameId, { session: { id: session.id, cmd: session.cmd, args: session.args, label: session.title || session.cmd } });
+    };
+    window.addEventListener("hivemind:open-session", onOpen as EventListener);
+    return () => window.removeEventListener("hivemind:open-session", onOpen as EventListener);
+  }, [spawnTile]);
 
   // Rail context-menu actions — the SAME surface the on-canvas frame header
   // exposes, reused from the Layers rail in every view.
@@ -1072,10 +1088,10 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
         </div>
       )}
 
-      <RemoteConnectModal
-        open={remoteAttach !== null}
-        onClose={() => setRemoteAttach(null)}
-        onPick={(uri) => { if (remoteAttach) bindRemote(remoteAttach, uri); setRemoteAttach(null); }}
+      <MachinesHub
+        request={machinesReq}
+        onClose={() => setMachinesReq(null)}
+        onPick={(frameId, uri) => bindRemote(frameId, uri)}
       />
       {claudePick && (
         // z above the tile fullscreen overlay (z-[9999]) so the picker shows ON

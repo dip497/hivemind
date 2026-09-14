@@ -13,6 +13,7 @@ import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { WorktreePicker } from "./WorktreePicker";
 import { useGitBranch } from "./queries";
 import { isRemote, parseRemote, remoteBasename, remoteDisplay } from "../../shared/remote-uri";
+import { MachineChip } from "./machines/MachineChip";
 import { useAgents } from "./agents";
 import type { ArrangeMode } from "./frame-layout";
 import type { WorktreeEntry } from "../../shared/ipc";
@@ -270,6 +271,8 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
               ×
             </button>
           </span>
+        ) : isRemoteWs ? (
+          <MachineChip uri={data.workspacePath!} frameId={data.id} onUnbind={() => data.onUnbindWorkspace(data.id)} />
         ) : wsBound ? (
           <span
             className="flex items-center gap-1 max-w-[60%] rounded px-1.5 py-0.5 text-[10px] font-mono"
@@ -343,11 +346,11 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
           <button
             onClick={() => window.dispatchEvent(new CustomEvent("hivemind:attach-remote", { detail: { frameId: data.id } }))}
             className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-[var(--color-fg2)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)] cursor-pointer"
-            title="Attach an SSH host — tiles inside run on the remote (terminal, editor, diff)"
+            title="Run this frame on a machine — its terminals, editor and diff run there"
             aria-label="attach remote"
           >
             <Server size={11} />
-            remote
+            machine
           </button>
         )}
         {/* ── frame attention dot ───────────────────────────────────────

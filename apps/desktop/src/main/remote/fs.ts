@@ -1,74 +1,68 @@
-/**
- * Remote filesystem over a single cached SFTP session per ssh2 Client. Mirrors
- * the local fs.promises surface the editor uses (readFile/writeFile) plus the
- * readdir the remote folder picker needs. Remote paths are ALWAYS POSIX.
- */
-import { promisify } from "node:util";
-import type { Client, SFTPWrapper, FileEntry, Stats } from "ssh2";
+/** Remote filesystem over the system ssh; remote paths are always POSIX. */
+import { shScript } from "@hivemind/core";
+
+export interface ExecResult {
+  stdout: Buffer;
+  stderr: string;
+  code: number | null;
+}
+export type RunRemote = (cmd: string, input?: string | Buffer) => Promise<ExecResult>;
 
 export interface RemoteDirEntry {
   name: string;
   isDir: boolean;
   isSymlink: boolean;
-  size: number;
-  mtime: number;
 }
 
-/** Refuse to slurp very large files into the editor (stream them later). */
+/** Refuse to slurp very large files into the editor. */
 export const MAX_EDIT_BYTES = 4 * 1024 * 1024;
 
+// A symlink is reported as a link, not a dir: the tree walk must not follow cycles.
+const LIST = `cd "$1" || exit 1
+for f in .* *; do
+  case "$f" in .|..) continue ;; esac
+  if [ -L "$f" ]; then t=l; elif [ -d "$f" ]; then t=d; elif [ -e "$f" ]; then t=f; else continue; fi
+  printf '%s/%s\\000' "$t" "$f"
+done`;
+
+const READ = `n=$(wc -c < "$1" | tr -d ' ') || exit 1
+if [ "$n" -gt ${MAX_EDIT_BYTES} ]; then echo "remote file too large to open ($n bytes): $1" >&2; exit 1; fi
+cat "$1"`;
+
 export class RemoteFs {
-  private constructor(private sftp: SFTPWrapper) {}
+  constructor(private readonly run: RunRemote) {}
 
-  static open(conn: Client): Promise<RemoteFs> {
-    return new Promise((resolve, reject) =>
-      conn.sftp((err, sftp) => (err ? reject(err) : resolve(new RemoteFs(sftp)))),
-    );
+  private async ok(cmd: string, input?: string | Buffer): Promise<Buffer> {
+    const r = await this.run(cmd, input);
+    if (r.code !== 0) throw new Error(r.stderr.trim() || `remote command exited ${r.code}`);
+    return r.stdout;
   }
 
-  /** realpath('.') → the remote $HOME; the folder picker's default start dir. */
-  home(): Promise<string> {
-    return promisify(this.sftp.realpath.bind(this.sftp))(".");
+  /** The folder picker's default start dir. */
+  async home(): Promise<string> {
+    return (await this.ok(shScript('printf %s "$HOME"'))).toString("utf8");
   }
 
-  realpath(p: string): Promise<string> {
-    return promisify(this.sftp.realpath.bind(this.sftp))(p);
+  async realpath(p: string): Promise<string> {
+    return (await this.ok(shScript('cd "$1" && pwd -P', p))).toString("utf8").trim();
   }
 
   async readdir(dir: string): Promise<RemoteDirEntry[]> {
-    const list: FileEntry[] = await promisify(this.sftp.readdir.bind(this.sftp))(dir);
-    // FileEntry.attrs is `Attributes` (raw POSIX bits, no isDirectory() helper),
-    // so classify from the mode's file-type field.
-    const S_IFMT = 0o170000, S_IFDIR = 0o040000, S_IFLNK = 0o120000;
-    return list
-      .filter((e) => e.filename !== "." && e.filename !== "..")
-      .map((e) => ({
-        name: e.filename,
-        isDir: (e.attrs.mode & S_IFMT) === S_IFDIR,
-        isSymlink: (e.attrs.mode & S_IFMT) === S_IFLNK,
-        size: e.attrs.size,
-        mtime: e.attrs.mtime,
-      }))
-      .sort((a, b) =>
-        a.isDir === b.isDir ? a.name.localeCompare(b.name) : a.isDir ? -1 : 1,
-      );
+    // `/` cannot occur in a file name, so it separates type from name; NUL ends a record.
+    return (await this.ok(shScript(LIST, dir))).toString("utf8").split("\0").filter(Boolean)
+      .map((rec) => {
+        const t = rec.slice(0, rec.indexOf("/"));
+        return { name: rec.slice(t.length + 1), isDir: t === "d", isSymlink: t === "l" };
+      })
+      .sort((a, b) => (a.isDir === b.isDir ? a.name.localeCompare(b.name) : a.isDir ? -1 : 1));
   }
 
-  async stat(path: string): Promise<Stats> {
-    return promisify(this.sftp.stat.bind(this.sftp))(path);
-  }
-
-  /** Read a remote text file, refusing files larger than MAX_EDIT_BYTES. */
   async readFile(path: string): Promise<string> {
-    const st = await this.stat(path).catch(() => null);
-    if (st && st.size > MAX_EDIT_BYTES) {
-      throw new Error(`remote file too large to open (${st.size} bytes): ${path}`);
-    }
-    const buf = (await promisify(this.sftp.readFile.bind(this.sftp))(path)) as Buffer;
-    return buf.toString("utf8");
+    return (await this.ok(shScript(READ, path))).toString("utf8");
   }
 
-  writeFile(path: string, data: string): Promise<void> {
-    return promisify(this.sftp.writeFile.bind(this.sftp))(path, data);
+  /** Truncates in place (not replace-by-rename) so the file keeps its mode and owner. */
+  async writeFile(path: string, data: string): Promise<void> {
+    await this.ok(shScript('cat > "$1"', path), data);
   }
 }

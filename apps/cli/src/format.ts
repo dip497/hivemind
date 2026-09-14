@@ -41,14 +41,15 @@ export function ok<T>(ctx: OutCtx, data: T, render?: () => string): void {
   }
 }
 
-export function err(ctx: OutCtx, code: string, message: string): never {
+/** `exit` follows hcp.ts EXIT (1 error · 2 usage · 3 unavailable · 4 timeout). */
+export function err(ctx: OutCtx, code: string, message: string, exit = 1): never {
   if (ctx.json) {
     const result: CliResult<never> = { ok: false, error: message, code };
     console.log(JSON.stringify(result, null, 2));
   } else {
     process.stderr.write(`${c(C.red, "error")} ${c(C.dim, `[${code}]`)} ${message}\n`);
   }
-  process.exit(1);
+  process.exit(exit);
 }
 
 export function renderIssueList(items: IssueSummary[]): string {

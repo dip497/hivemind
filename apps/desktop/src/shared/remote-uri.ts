@@ -83,6 +83,23 @@ export function formatRemote(t: {
   return `${REMOTE_SCHEME}${user}${t.host}${port}${path}`;
 }
 
+/** A saved machine's ssh target (`alias`, `user@host`, `ssh://user@host:port`) as a remote uri at `path`. */
+export function machineUri(target: string, path = "/"): string {
+  const authority = target.startsWith(REMOTE_SCHEME) ? target.slice(REMOTE_SCHEME.length).replace(/\/.*$/, "") : target;
+  return `${REMOTE_SCHEME}${authority}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
+/** The ssh target for a host, round-tripping through `machineHostId` to the same host id. */
+export function sshTargetOf(t: { host: string; port: number; user: string | null }): string {
+  const u = t.user ? `${t.user}@` : "";
+  return t.port !== 22 ? `${REMOTE_SCHEME}${u}${t.host}:${t.port}` : `${u}${t.host}`;
+}
+
+/** The connection key a machine's frames resolve to, so a frame finds its machine by host. */
+export function machineHostId(target: string): string {
+  return parseRemote(machineUri(target)).hostId;
+}
+
 /** Join a remote uri's host authority with a new absolute path (for navigation). */
 export function withRemotePath(uri: string, newPath: string): string {
   const t = parseRemote(uri);

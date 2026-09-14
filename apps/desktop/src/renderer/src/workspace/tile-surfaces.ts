@@ -28,6 +28,8 @@ export type TerminalTileData = {
   cwd: string;
   cmd: string;
   args?: string[];
+  /** An existing daemon session to show instead of the tile's own. */
+  session?: string;
   label?: string;
   name?: string;
   onRename?: (id: string, name: string) => void;
@@ -269,7 +271,7 @@ export function buildTileSurfaces(ctx: TileSurfaceCtx): TileSurface[] {
         out.push({
           id: t.id, kind: t.kind, type: "terminal",
           data: {
-            tileId: t.id, cwd: effCwd, cmd, args, label: t.label,
+            tileId: t.id, cwd: effCwd, cmd, args, label: t.label, ...(t.session ? { session: t.session } : {}),
             // NOTE: the live agent OSC title is deliberately NOT used here. It
             // updates ~every 600ms while an agent streams; feeding it into tile
             // data re-rendered every host — cursor-flicker + focus loss. Live

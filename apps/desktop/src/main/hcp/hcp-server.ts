@@ -43,6 +43,8 @@ export interface HcpServer {
   close: () => void;
   /** Fan a raw output chunk out to every live agent.stream subscriber of a tile. */
   broadcast: (tileId: string, chunk: string) => void;
+  /** Handle a hook event that arrived some other way (a remote machine's daemon). */
+  injectEvent: (topic: string, data: unknown) => void;
 }
 
 interface Sub {
@@ -154,6 +156,9 @@ export function startHcpServer(sockPath: string, deps: HcpServerDeps): HcpServer
     close: () => {
       try { server.close(); } catch { /* ignore */ }
       try { fs.unlinkSync(sockPath); } catch { /* ignore */ }
+    },
+    injectEvent: (topic, data) => {
+      try { deps.onEvent(topic, data); } catch { /* ignore */ }
     },
     broadcast: (tileId, chunk) => {
       for (const sub of subs.values()) {

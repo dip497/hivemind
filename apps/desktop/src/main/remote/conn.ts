@@ -1,161 +1,89 @@
 /**
- * RemoteConnectionManager — one pooled ssh2.Client per host. SSH multiplexes
- * channels, so a single connection carries the interactive PTY(s), one cached
- * SFTP session, and all git execs. Auth: SSH agent first, then an explicit
- * private-key file. Host keys are TOFU-verified (known-hosts.ts).
+ * Remote command execution for one host at a time, over the system ssh with the
+ * app's saved auth (one shared ssh connection per host via ControlMaster). Remote
+ * fs and git run through here; interactive PTYs go through remote/pty.ts.
  */
-import { readFileSync } from "node:fs";
-import { Client } from "ssh2";
-import { parseRemote, type RemoteTarget } from "../../shared/remote-uri.js";
-import { RemoteFs } from "./fs.js";
+import { spawn } from "node:child_process";
+import type { RemoteTarget } from "../../shared/remote-uri.js";
+import { RemoteFs, type ExecResult } from "./fs.js";
 import { ConcurrencyLimiter } from "./exec.js";
-import { verifyHostKey } from "./known-hosts.js";
+import { sshCommand, type SshPaths } from "./ssh.js";
 
 export interface HostAuth {
-  /** Explicit private key path (+ optional passphrase). Agent is tried first. */
+  /** Explicit private key path (+ optional passphrase). Agent keys are tried too. */
   privateKeyPath?: string;
   passphrase?: string;
   /** Password auth (when the host has no key set up). Kept in memory only. */
   password?: string;
-  /** Override the username parsed from the URI (else uri user, else $USER). */
+  /** Override the username parsed from the URI (else uri user, else ssh's default). */
   username?: string;
 }
 
-interface Pooled {
-  client: Client;
-  ready: Promise<void>;
-  fs?: Promise<RemoteFs>;
-}
+const lastLine = (s: string) => s.trim().split("\n").pop() ?? "";
 
 export class RemoteConnectionManager {
-  private pool = new Map<string, Pooled>();
-  /** Per-host git-exec concurrency cap so execs don't starve PTY/SFTP channels. */
+  /** Per-host cap so a burst of git calls can't exhaust the server's MaxSessions. */
   readonly limiter = new ConcurrencyLimiter(4);
-  /** Auth config supplied per host id (set by sshConnect before first use). */
+  /** Auth supplied per host id (a password typed when adding a machine). */
   private auth = new Map<string, HostAuth>();
-  /** Fallback that resolves auth for a host NOT in the in-memory map — wired to
-   *  the keychain-backed saved-hosts store (index.ts). This is what makes a
-   *  remote tile reconnect after an app restart: the in-memory `auth` map is
-   *  empty on a fresh process, so without this every restored pty/fs/git connect
-   *  would hit "All configured authentication methods failed". Injected (not
-   *  imported) so this module stays electron-free + unit-testable. */
+  /** Keychain-backed fallback for a host not in `auth` — what lets a remote tile
+   *  reconnect after an app restart. Injected so this module stays electron-free. */
   private resolveAuth?: (hostId: string) => HostAuth | null;
+  private paths?: () => SshPaths;
 
   setAuth(hostId: string, auth: HostAuth): void {
     this.auth.set(hostId, auth);
+  }
+
+  /** Forget a host's in-memory auth (its machine was removed, or the add that supplied it failed). */
+  clearAuth(hostId: string): void {
+    this.auth.delete(hostId);
   }
 
   setAuthResolver(fn: (hostId: string) => HostAuth | null): void {
     this.resolveAuth = fn;
   }
 
-  /** The auth to use for a host: in-memory (set by an interactive sshConnect)
-   *  first, else the injected keychain resolver (restore-after-restart), else
-   *  empty. Pure — the connect path in get() uses this. */
+  setSshPaths(fn: () => SshPaths): void {
+    this.paths = fn;
+  }
+
+  /** In-memory auth first, else the keychain resolver, else empty. */
   resolveAuthFor(hostId: string): HostAuth {
     return this.auth.get(hostId) ?? this.resolveAuth?.(hostId) ?? {};
   }
 
-  /** Connect (or reuse) the Client for a remote target's host. */
-  async get(target: RemoteTarget): Promise<Client> {
-    const existing = this.pool.get(target.hostId);
-    if (existing) {
-      await existing.ready;
-      return existing.client;
-    }
-    // In-memory auth (set by an interactive sshConnect) first; else the keychain
-    // fallback (the restore-after-restart path, where the in-memory map is empty).
-    const auth = this.resolveAuthFor(target.hostId);
-    const username =
-      auth.username ?? target.user ?? process.env.USER ?? process.env.USERNAME ?? "root";
-
-    const client = new Client();
-    const ready = new Promise<void>((resolve, reject) => {
-      client.once("ready", () => resolve());
-      client.once("error", (e) => reject(e));
-    });
-
-    const entry: Pooled = { client, ready };
-    this.pool.set(target.hostId, entry);
-    client.on("close", () => this.pool.delete(target.hostId));
-    client.on("error", () => this.pool.delete(target.hostId));
-
-    // No usable credential at all → ssh2 would try the "none" method, get
-    // rejected, and surface the opaque "All configured authentication methods
-    // failed". Pre-empt with a message that says what to actually do.
-    const agentSock = auth.password ? undefined : process.env.SSH_AUTH_SOCK;
-    if (!auth.password && !auth.privateKeyPath && !agentSock) {
-      this.pool.delete(target.hostId);
-      throw new Error(
-        "no SSH credential available — provide a password or private key (or start an ssh-agent)",
-      );
-    }
-
-    // Some servers do password auth via keyboard-interactive, not the `password`
-    // method — answer those prompts with the supplied password.
-    if (auth.password) {
-      client.on("keyboard-interactive", (_n, _i, _l, _prompts, finish) =>
-        finish([auth.password as string]),
-      );
-    }
-    client.connect({
-      host: target.host,
-      port: target.port,
-      username,
-      readyTimeout: 20_000,
-      keepaliveInterval: 15_000,
-      keepaliveCountMax: 3,
-      // Only offer the agent when no password was given (else ssh2 tries agent
-      // keys first and may fail before reaching password on key-only setups).
-      ...(auth.password ? {} : { agent: process.env.SSH_AUTH_SOCK }),
-      ...(auth.privateKeyPath
-        ? { privateKey: readFileSync(auth.privateKeyPath), passphrase: auth.passphrase }
-        : {}),
-      ...(auth.password ? { password: auth.password, tryKeyboard: true } : {}),
-      hostHash: "sha256",
-      // TOFU: accept+record on first use, reject on later mismatch.
-      hostVerifier: (keyHashHex: string) => {
-        const v = verifyHostKey(target.hostId, keyHashHex);
-        return v.ok;
-      },
-    });
-
-    try {
-      await ready;
-    } catch (e) {
-      this.pool.delete(target.hostId);
-      throw e;
-    }
-    return client;
+  /** Run one remote shell command; rejects only when ssh itself fails (connect, auth, host key). */
+  exec(target: RemoteTarget, cmd: string, opts: { timeoutMs?: number; input?: string | Buffer } = {}): Promise<ExecResult> {
+    if (!this.paths) return Promise.reject(new Error("remote ssh is not configured"));
+    const c = sshCommand(target, this.resolveAuthFor(target.hostId), this.paths(), cmd);
+    const timeoutMs = opts.timeoutMs ?? 30_000;
+    return this.limiter.run(target.hostId, () => new Promise<ExecResult>((resolve, reject) => {
+      const child = spawn("ssh", c.args, { env: { ...process.env, ...c.env }, stdio: ["pipe", "pipe", "pipe"] });
+      const out: Buffer[] = [];
+      let err = "";
+      const timer = setTimeout(() => {
+        child.kill("SIGKILL");
+        reject(new Error(`remote command timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+      child.stdout.on("data", (d: Buffer) => out.push(d));
+      child.stderr.on("data", (d: Buffer) => { err = (err + d.toString("utf8")).slice(-64_000); });
+      child.on("error", (e) => { clearTimeout(timer); reject(e); });
+      child.on("close", (code) => {
+        clearTimeout(timer);
+        if (code === 255) return reject(new Error(lastLine(err) || "ssh failed"));
+        resolve({ stdout: Buffer.concat(out), stderr: err, code });
+      });
+      child.stdin.on("error", () => { /* ssh exited first */ });
+      child.stdin.end(opts.input ?? "");
+    }));
   }
 
-  /** The cached single SFTP session for a host (opened lazily, reused). */
+  /** The host's filesystem (stateless: every call is one ssh command). */
   async fs(target: RemoteTarget): Promise<RemoteFs> {
-    const client = await this.get(target);
-    const entry = this.pool.get(target.hostId)!;
-    if (!entry.fs) entry.fs = RemoteFs.open(client);
-    return entry.fs;
-  }
-
-  /** Connect from a uri string + auth, returning the resolved home dir (a cheap
-   *  connectivity probe used by the "attach remote" flow). */
-  async probe(uri: string, auth: HostAuth): Promise<{ home: string; hostId: string }> {
-    const target = parseRemote(uri);
-    this.setAuth(target.hostId, auth);
-    const fs = await this.fs(target);
-    const home = await fs.home();
-    return { home, hostId: target.hostId };
-  }
-
-  end(hostId: string): void {
-    this.pool.get(hostId)?.client.end();
-    this.pool.delete(hostId);
-  }
-
-  endAll(): void {
-    for (const id of Array.from(this.pool.keys())) this.end(id);
+    return new RemoteFs((cmd, input) => this.exec(target, cmd, { input }));
   }
 }
 
-/** Process-wide singleton (one pool shared by remote PTY, fs, and git). */
+/** Process-wide singleton shared by remote PTY, fs, and git. */
 export const remoteConns = new RemoteConnectionManager();
