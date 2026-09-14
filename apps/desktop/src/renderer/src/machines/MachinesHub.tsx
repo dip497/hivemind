@@ -133,12 +133,12 @@ function MachineList({ picking, onChoose, onAdd }: { picking: boolean; onChoose:
           <button onClick={onAdd} className={primary}><Plus size={13} /> Add a machine</button>
         </div>
       ) : (
-        <ul className="max-h-[420px] overflow-y-auto p-2 grid gap-1" aria-label="machines">
+        <ul className="max-h-[420px] overflow-y-auto overflow-x-hidden p-2 grid grid-cols-[minmax(0,1fr)] gap-1" aria-label="machines">
           {snap.machines.map((m) => {
             const s = statusOf(snap, m.hostId);
             const doing = busy[m.id];
             return (
-              <li key={m.id} className="group rounded-lg border border-transparent hover:border-[var(--color-line2)] hover:bg-[var(--color-bg3)] transition-colors">
+              <li key={m.id} className="group min-w-0 rounded-lg border border-transparent hover:border-[var(--color-line2)] hover:bg-[var(--color-bg3)] transition-colors">
                 <div className="flex items-center gap-2.5 px-2.5 py-2">
                   <MachineDot status={s} enabled={m.enabled} size={8} />
                   {renaming?.id === m.id ? (
@@ -220,15 +220,19 @@ function MachineList({ picking, onChoose, onAdd }: { picking: boolean; onChoose:
                   </form>
                 )}
                 {notes[m.id] && <p className="px-2.5 pb-2 text-[11px] text-[var(--color-fg2)]">{notes[m.id]}</p>}
-                {m.enabled && s.state === "attention" && <div className="px-2.5 pb-2.5"><AttentionNote target={m.target} detail={s.detail} /></div>}
+                {m.enabled && s.state === "attention" && (
+                  <div className="px-2.5 pb-2.5">
+                    <AttentionNote target={m.target} detail={s.detail} needsPassword={s.needsPassword} onSetPassword={() => setAskPassword(m.id)} />
+                  </div>
+                )}
                 {m.enabled && s.state === "no-hive" && (
                   <div className="mx-2.5 mb-2.5 flex items-center gap-2 rounded-lg bg-[var(--color-bg)] border border-[var(--color-line2)] px-2.5 py-1.5 text-[11.5px] text-[var(--color-fg2)]">
-                    <span className="flex-1">{s.detail ? `${s.detail}: ` : ""}terminals here stop when the connection drops.</span>
+                    <span className="min-w-0 flex-1">{s.detail ? `${s.detail}: ` : ""}terminals here stop when the connection drops.</span>
                     <button onClick={() => run(m, "installing", () => window.hive.machineInstall(m.id))} className="text-[var(--color-brand)] hover:underline cursor-pointer shrink-0">Install hive</button>
                   </div>
                 )}
                 {m.enabled && s.state === "offline" && s.detail && <p className="px-2.5 pb-2 text-[11px] text-[var(--color-fg3)] truncate" title={s.detail}>{s.detail}</p>}
-                {errors[m.id] && <p className="px-2.5 pb-2 text-[11px] text-[var(--color-err)] break-words">{errors[m.id]}</p>}
+                {errors[m.id] && errors[m.id] !== s.detail && <p className="px-2.5 pb-2 text-[11px] text-[var(--color-err)] break-words">{errors[m.id]}</p>}
               </li>
             );
           })}

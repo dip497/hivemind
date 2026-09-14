@@ -90,7 +90,16 @@ function MachinePanel({ anchor, uri, frameId, onUnbind, onClose }: { anchor: DOM
         </span>
         <span className="text-[11px] font-mono text-[var(--color-fg3)] truncate" title={uri}>{t.path}</span>
       </div>
-      {status.state === "attention" && <div className="px-1"><AttentionNote target={target} detail={status.detail} /></div>}
+      {status.state === "attention" && (
+        <div className="px-1">
+          <AttentionNote
+            target={target}
+            detail={status.detail}
+            needsPassword={status.needsPassword}
+            onSetPassword={() => { onClose(); openMachines({ kind: "manage" }); }}
+          />
+        </div>
+      )}
       {(status.state === "reconnecting" || status.state === "offline") && (
         <div className="mx-1 flex items-center gap-2 rounded-md bg-[var(--color-bg)] px-2 py-1.5 text-[11px] text-[var(--color-fg2)]">
           <span className="flex-1 truncate" title={status.detail}>{status.detail ?? "Waiting for the network…"}</span>

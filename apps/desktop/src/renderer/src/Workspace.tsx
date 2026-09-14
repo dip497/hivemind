@@ -25,7 +25,7 @@
  * The work lives in extracted modules/hooks that destructure a `ctx` object —
  * keep it that way (this file was decomposed out of a 3147-LOC god component).
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { LayerTile, LayerFrame } from "./LayersPanel";
 import { statusOf, setWaitStatus, setSubagentBusy, setNotify, setTurnState, type TileStatusKind, subscribeTileStatus } from "./agent-status-bus";
@@ -49,7 +49,8 @@ import {
 import { useStateWithRef } from "./use-state-with-ref";
 import { defaultTileSize } from "./canvas-sizing";
 import { useWorktrees } from "./useWorktrees";
-import { MachinesHub } from "./machines/MachinesHub";
+// Loaded when it is first opened: the dialog (add form, machine list, folder picker) is not startup work.
+const MachinesHub = lazy(() => import("./machines/MachinesHub").then((m) => ({ default: m.MachinesHub })));
 import type { MachinesRequest } from "./machines/store";
 import type { SessionSummary } from "../../shared/ipc";
 import { isRemote } from "../../shared/remote-uri";
@@ -1088,11 +1089,15 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
         </div>
       )}
 
-      <MachinesHub
-        request={machinesReq}
-        onClose={() => setMachinesReq(null)}
-        onPick={(frameId, uri) => bindRemote(frameId, uri)}
-      />
+      {machinesReq && (
+        <Suspense fallback={null}>
+          <MachinesHub
+            request={machinesReq}
+            onClose={() => setMachinesReq(null)}
+            onPick={(frameId, uri) => bindRemote(frameId, uri)}
+          />
+        </Suspense>
+      )}
       {claudePick && (
         // z above the tile fullscreen overlay (z-[9999]) so the picker shows ON
         // TOP of a fullscreened diff/editor instead of behind it.

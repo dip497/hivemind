@@ -19,7 +19,7 @@ import { remoteConns } from "./conn.js";
 import { Catalog } from "./catalog.js";
 import { needsAttention, probeCommand, probeRemote } from "./ssh.js";
 import { closeIdle, endpointFor, hostConnected, hostFailure, readyEndpoints, reconnectHost, resetHost, setRemoteStatusSink, sshPaths } from "./pty.js";
-import { forgetSavedHost, listSavedHosts, saveHost } from "./saved-hosts.js";
+import { forgetSavedHost, listSavedHosts, passwordState, saveHost } from "./saved-hosts.js";
 
 const PING_MS = 10_000;
 const IDLE_CLOSE_MS = 60_000;
@@ -45,10 +45,28 @@ function emit(): void {
   emitTimer.unref?.();
 }
 
+/** ssh listed `password` among the methods it tried, so a password is what this host wants. */
+const offeredPassword = (detail?: string) => /permission denied[^\n]*password/i.test(detail ?? "");
+
 function setStatus(hostId: string, state: MachineState, detail?: string): void {
   const prev = status.get(hostId);
   if (prev?.state === state && prev.detail === detail) return;
-  status.set(hostId, { state, ...(detail ? { detail } : {}), ...(state === "online" && prev?.rttMs !== undefined ? { rttMs: prev.rttMs } : {}), at: Date.now() });
+  let note = detail;
+  let needsPassword = false;
+  if (state === "attention" && offeredPassword(detail)) {
+    const held = passwordState(hostId);
+    // A password is what this host wants either way, so the offer to set one always stands.
+    needsPassword = true;
+    // A password saved by another install (or with no keychain) cannot be read here; saying
+    // "run ssh by hand" would be wrong, since that only ever fixes keys and host keys.
+    if (held === "unreadable") note = "the password saved for this machine can't be read by this app";
+    // Saved, and the host still said no: it is the password that is wrong, not a missing one.
+    else if (held === "ready") note = "the password saved for this machine was refused";
+  }
+  status.set(hostId, {
+    state, ...(note ? { detail: note } : {}), ...(needsPassword ? { needsPassword: true } : {}),
+    ...(state === "online" && prev?.rttMs !== undefined ? { rttMs: prev.rttMs } : {}), at: Date.now(),
+  });
   emit();
 }
 

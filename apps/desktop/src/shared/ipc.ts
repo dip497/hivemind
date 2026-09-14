@@ -132,6 +132,8 @@ export interface MachineStatus {
   detail?: string;
   /** Daemon round trip, measured while connected. */
   rttMs?: number;
+  /** The host offered password auth and we have none it can use — asking for one is the fix. */
+  needsPassword?: boolean;
   at: number;
 }
 export interface MachineInfo {

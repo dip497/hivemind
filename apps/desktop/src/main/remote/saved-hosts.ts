@@ -78,6 +78,14 @@ export function saveHost(host: string, port: number, user: string, auth: HostAut
   return !auth.password || !!row.encPassword;
 }
 
+/** Whether we hold a password this app can actually use for a host. */
+export function passwordState(hostId: string): "none" | "ready" | "unreadable" {
+  const saved = savedAuth(hostId);
+  if (!saved) return "none";
+  if (saved.passwordDecryptFailed) return "unreadable";
+  return saved.auth.password ? "ready" : "none";
+}
+
 /**
  * Resolve the stored auth (decrypting the password) for a saved host.
  *
