@@ -32,14 +32,15 @@ import type { IssuePatch } from "@hivemind/core/types";
 import * as ptyHost from "./pty-host.js";
 import * as ptyDaemon from "./daemon-client.js";
 import { PtyOutputBuffer } from "./pty-output-buffer.js";
-import { isRemote, parseRemote, formatRemote } from "../shared/remote-uri.js";
-import { listSavedHosts, saveHost, savedAuth, forgetSavedHost } from "./remote/saved-hosts.js";
+import { isRemote, parseRemote } from "../shared/remote-uri.js";
+import { savedAuth } from "./remote/saved-hosts.js";
+import { addMachine, checkMachine, initMachines, installOnMachine, machineSessions, reconnectMachineHost, removeMachine, setMachinePassword, snapshot as machinesSnapshot, updateMachine } from "./remote/machines.js";
 import {
   spawnRemotePty, writeRemotePty, resizeRemotePty, killRemotePty, hasRemotePty,
-  pauseRemotePty, resumeRemotePty,
+  pauseRemotePty, resumeRemotePty, detachRemotePty, setRemoteEventSink,
 } from "./remote/pty.js";
 import { readRemoteFile, writeRemoteFile } from "./remote/git.js";
-import { remoteConns, type HostAuth } from "./remote/conn.js";
+import { remoteConns } from "./remote/conn.js";
 // tmux-style persistence is ON by default — terminal sessions live in a
 // detached daemon and survive the window closing. No user-facing flag.
 // `HIVEMIND_PTY_DAEMON=0` is an internal escape hatch (debugging / a hostile
@@ -73,7 +74,7 @@ import { unwatchAll, watchRepo } from "./fs-watcher.js";
 import { registerAgentNotifications } from "./agent-notify.js";
 import { getNotificationSettings, setNotificationSettings } from "./notification-settings-store.js";
 import { normalizeNotificationSettings } from "../shared/notification-settings.js";
-import type { AppErrorEvent } from "../shared/ipc.js";
+import type { AppErrorEvent, MachineAddRequest } from "../shared/ipc.js";
 import { startPlanBridge, type PlanRequest } from "./plan-bridge.js";
 import { randomUUID } from "node:crypto";
 import { startHcpServer } from "./hcp/hcp-server.js";
@@ -1008,37 +1009,16 @@ remoteConns.setAuthResolver((hostId) => {
   if (!saved || saved.passwordDecryptFailed) return null;
   return saved.auth;
 });
-ipcMain.handle("sshConnect", wrap(async (_e, uri: string, auth: HostAuth, remember?: boolean) => {
-  const { home, hostId } = await remoteConns.probe(uri, auth ?? {});
-  if (remember) {
-    const t = parseRemote(uri);
-    saveHost(t.host, t.port, t.user ?? auth?.username ?? "", auth ?? {});
-  }
-  return { home, hostId };
-}));
-// Saved connections (host/user/port + keychain-encrypted password).
-ipcMain.handle("sshSavedHosts", wrap(async () => listSavedHosts()));
-ipcMain.handle("sshForgetHost", wrap(async (_e, hostId: string) => { forgetSavedHost(hostId); }));
-// Connect using a saved host's stored credentials; returns the bits the picker
-// needs to rebuild the uri + browse. The connection is then pooled by hostId,
-// so sshListDir reuses it with no further auth.
-ipcMain.handle("sshConnectSaved", wrap(async (_e, hostId: string) => {
-  const saved = savedAuth(hostId);
-  if (!saved) throw new Error("saved host not found");
-  // A stored password we can't decrypt (keychain key changed — e.g. the app was
-  // renamed) would otherwise fall through to a credential-less connect and a
-  // cryptic "All configured authentication methods failed". Fail loud + clear so
-  // the UI can prompt re-entry. (Connecting anyway with an empty password is
-  // never what the user wants here.)
-  if (saved.passwordDecryptFailed) {
-    throw new Error(
-      "SAVED_PASSWORD_UNREADABLE: the saved password can't be decrypted (the app keychain changed) — re-enter it",
-    );
-  }
-  const uri = formatRemote({ host: saved.host, port: saved.port, user: saved.user || null, path: "/" });
-  const { home } = await remoteConns.probe(uri, saved.auth);
-  return { home, host: saved.host, port: saved.port, user: saved.user };
-}));
+// Machines: the catalog `hive machine` edits, plus each host's live state.
+ipcMain.handle("machines:get", wrap(async () => machinesSnapshot()));
+ipcMain.handle("machines:add", wrap(async (_e, req: MachineAddRequest) => addMachine(req)));
+ipcMain.handle("machines:check", wrap(async (_e, id: string) => checkMachine(String(id))));
+ipcMain.handle("machines:install", wrap(async (_e, id: string) => installOnMachine(String(id))));
+ipcMain.handle("machines:update", wrap(async (_e, id: string, patch: { label?: string; enabled?: boolean }) => updateMachine(String(id), patch ?? {})));
+ipcMain.handle("machines:remove", wrap(async (_e, id: string) => removeMachine(String(id))));
+ipcMain.handle("machines:set-password", wrap(async (_e, id: string, password: string) => setMachinePassword(String(id), String(password))));
+ipcMain.handle("machines:sessions", wrap(async (_e, uri: string | null) => machineSessions(uri ? String(uri) : null)));
+ipcMain.handle("machines:reconnect", wrap(async (_e, hostId: string) => { reconnectMachineHost(String(hostId)); }));
 // List a remote directory for the folder picker. `dir` empty → the host's home.
 ipcMain.handle("sshListDir", wrap(async (_e, uri: string, dir: string) => {
   const target = parseRemote(uri);
@@ -1291,12 +1271,11 @@ ipcMain.on("ptyKill", (_e, tileId: string) => {
   dropPtyRelay(tileId);
   if (hasRemotePty(tileId)) killRemotePty(tileId); else killPty(tileId);
 });
-// Detach (window closed / tile unmounted): daemon keeps the session alive;
-// in-process path treats it as a kill. Remote PTYs can't survive an ssh drop,
-// so detach == kill there too.
+// Detach (window closed / tile unmounted): daemons keep the session alive,
+// local or remote; in-process PTYs treat it as a kill.
 ipcMain.on("ptyDetach", (_e, tileId: string) => {
   dropPtyRelay(tileId);
-  if (hasRemotePty(tileId)) killRemotePty(tileId); else detachPty(tileId);
+  if (hasRemotePty(tileId)) detachRemotePty(tileId); else detachPty(tileId);
 });
 
 // ── lifecycle ─────────────────────────────────────────────────
@@ -1438,6 +1417,12 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
   app.whenReady().then(async () => {
     handleViewProtocol();
     installSettingsIpc(() => mainWindow);
+    void initMachines({
+      send: (snap) => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("machines:changed", snap); },
+      listLocalSessions: () => (PERSIST_PTY ? ptyDaemon.listSessions() : Promise.resolve([])),
+      version: app.getVersion(),
+      stateDir: app.getPath("userData"),
+    }).catch((e: unknown) => console.warn("[machines] init failed:", e));
     installViewManagementIpc(() => mainWindow);
     ipcMain.handle("views:list", wrap(async (_e, repoRoot: string | null) => listViewPackages(repoRoot ? String(repoRoot) : null)));
     // Browser-tile extensions (prototype): load every UNPACKED extension in
@@ -1854,6 +1839,7 @@ function startHcpControlPlane(): void {
       for (const dst of dests) hcpMailbox.deliver(toPtyId(dst), banner);
     },
   });
+  setRemoteEventSink(server.injectEvent);
   hcpBroadcast = server.broadcast;
 }
 
