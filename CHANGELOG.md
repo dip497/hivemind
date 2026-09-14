@@ -7,6 +7,56 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- An agent a repository ships now stays with that repository: it runs in tiles opened there and is refused anywhere else, and opening a second workspace no longer takes the first one's agents away from the tiles still running in it.
+
+- Installing an agent that would take a built-in's id — and with it every ⌘\\, toolbar click and `hive ctl spawn` — now has to say so: `hive agents install --replace`. Agents are never added on their own when the command they name is a general-purpose runtime, because such a command says nothing about which agent it is.
+
+- The canvas controls are one stop on the way to your work, not eight: Tab reaches the cluster, arrow keys move inside it, and the catalog says which command an agent will run before you add it.
+
+- Settings reads as one list, not three layouts. Every agent is a single row — what it is, whether this machine has it and what to install if not, and one control that makes it the default — and views, tools and plugins now share that row. Descriptions sit under the name instead of across the pane, the launch options line up in one column, and the window can be as narrow as 720px.
+
+- Hivemind now works with whatever agents you have. The default agent is your choice if it is installed, otherwise the first agent this machine has — for the toolbar, ⌘\\, the empty canvas and `hive ctl spawn` alike; the empty canvas offers to get an agent when none is installed. The installer reports every agent CLI it finds instead of checking only for `claude`, and `hive agents list` shows where each CLI was found (`--found` lists only those).
+
+- Agents from the plugin catalog are added automatically when their CLI is on your machine — Aider, Mistral Vibe, Qwen Code, Auggie, Crush, Continue and OpenHands to start. Each download is checksum-verified and must name the CLI that was found, which must answer `--version` like one. You see a notice when one is added; removing it keeps it removed, and Settings ▸ Agents can switch this off.
+
+- Security: a repository's `.hivemind/agents/` can no longer replace an agent you already have — a built-in or one you installed. Before, a cloned repository could ship an agent named `claude` that ran its own command from the Claude button; now it is refused and shown with the reason. The catalog review also shows the exact command an agent runs and every flag its options can add.
+
+- ⌘\ now starts your default agent, like the toolbar button, instead of always Claude.
+
+- Settings is organised around plugins: General, then Agents, Views and Tools — each an overview plus a page for every agent, view and tool — and Plugins. The default agent and active view sit on their overviews; a view's toolbar lives on its own page; Browser's agent control lives on the Browser page. The separate Views and Extensions pages are gone.
+
+- A plugin catalog: Settings ▸ Plugins ▸ Browse lists the agents and views published in the repository's `plugins/index.json`, with search and type filters. Installing downloads the files, checks each one's checksum, and shows what the plugin can do before anything is written; a file that changed after it was listed is refused. The four example views are the first entries.
+
+- Hivemind now checks whether each agent's CLI is installed. Settings shows its version and location, or "Not installed" with a link to get it and the install command; the toolbar lists missing agents separately, launching one explains instead of opening a dead tile, and `hive ctl spawn` refuses it with the link. A different program with the same name is flagged instead of being run.
+
+- Gemini, Cursor, Cline, Copilot, Kimi, Amp, Grok, Hermes and Antigravity can now be launched from Hivemind (they start and show status; other agents cannot collect their replies). Gemini, Cursor, Cline, Copilot and Kimi show their own icons.
+
+- With glass on, the Windows view now shows the wallpaper behind its tiles like the canvas does, instead of a solid background.
+
+- Fix terminals that could stay blank after a tile was re-shown: a surface handed back to the same slot was then parked out of sight.
+
+- Settings ▸ Agents is rebuilt as cards with each agent's own icon. Select one to make it the default, switch it off, or set its launch options. Options are now per agent instead of one model and permission mode shared by all, and their values come from the agent's CLI (`claude --help`, `opencode models`…), so new modes and models appear without a Hivemind update. Codex gains model, approval and sandbox choices; opencode, pi, droid and Cursor gain theirs. Your previous model and permission mode move to Claude, the only agent they applied to.
+
+- Saved terminal sessions no longer store the control-plane token and are readable only by you. Startup no longer reads them all (266 ms and 58 MB on a machine with 445); each loads when its tile opens, and ones unopened for 30 days are removed.
+
+- The docs now look and read like the website: the same palette in light and dark, sentence-case labels instead of all-caps, and plain rules and notes instead of heavy comic panels. A new guide, "Add your own agent", covers the agent file format, where Hivemind looks for it, and switching agents on and off.
+
+- Streaming terminals no longer slow the window: xterm.js 6 stops forcing a page layout every frame (649 ms → 2 ms per 4 s with three streaming shells; slowest frame 38 → 12 ms). Alt+Left/Right still move by word.
+
+- `hive agents remove` refuses anything that is not an agent id, so it cannot delete outside the agents folder. Switching off every agent now takes effect instead of being ignored.
+
+- `hive agents install` and `hive agents remove` now update a running app straight away instead of waiting for a restart. `hive ctl spawn --agent` and `hive ctl workflow` accept agents added from a file and refuse any agent switched off in Settings, matching what the app offers. Agents a repository ships in `.hivemind/agents/` now load.
+
+- Settings now lists the agents you have installed, with where each came from and why any of them is unavailable, and lets you switch any of them off — the ones that ship with Hivemind included. Choosing defaults for new agents moved under its own heading on the same page.
+
+- Agents added this way now appear in a running app: Hivemind reads the agent folders at startup, offers what loaded, and says in the log why anything did not.
+
+- Describe an agent in a YAML file instead of code: identity, capabilities, icon, spawn flags for each permission mode and model, and the rules that read its status from the screen. Drop one into `~/.config/hivemind/agents/<id>/agent.yaml` or a repo's `.hivemind/agents/`, and switch any agent off — including the ones that ship with Hivemind. All sixteen built-in agents are now described this way. An agent added this way is launched and its status is read, but it cannot resume a session or report turns, and saying otherwise is refused rather than believed.
+
+- Fix Codex session resume, which never worked: Codex embeds its whole system prompt in the session record, so the record is far larger than the fixed buffer used to read it, every session was silently skipped and every restored Codex tile started fresh.
+
+- Recognise the Cursor agent by its real binary (`cursor-agent`) instead of `cursor`, which is the Cursor IDE, and restore Cursor tiles into their previous chat for that workspace. Cursor now also accepts a model and maps plan, auto-review and force modes.
+
 - Simplify fullscreen Settings into consistent rows and compact view choices; pause covered wallpapers and overlay videos without changing preferences or agent sessions.
 
 - Let each view choose toolbar actions, order, and labels through Settings or the CLI, with empty toolbars supported and tool activation kept separate.

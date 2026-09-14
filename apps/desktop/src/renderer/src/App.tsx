@@ -4,7 +4,7 @@ import { setWorkspaceOccluded } from "./workspace-occlusion";
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Bell, ExternalLink, Loader2, Plus, Settings, X, Palette, PanelsTopLeft, Puzzle, Bot, Keyboard, Info } from "lucide-react";
+import { Bell, ChevronRight, ExternalLink, Loader2, Plus, Settings, X, Palette, PanelsTopLeft, Puzzle, Bot, Keyboard, Info } from "lucide-react";
 import path from "path-browserify";
 import type { UpdateStatus } from "../../shared/ipc";
 import {
@@ -16,6 +16,8 @@ import {
 import { Workspace } from "./Workspace";
 import { IssuePeek } from "./components/IssuePeek";
 import { NewIssueModal } from "./components/NewIssueModal";
+import { resolveSettingsPage } from "./settings-registry";
+import { useExpandedGroups, useSettingsNav } from "./settings-nav";
 import { getNotificationSettings, setNotificationSettingsCache, subscribeNotificationSettings, saveNotificationSettings } from "./notification-settings";
 import type { NotificationSettings } from "../../shared/ipc";
 const SettingsPages = lazy(() => import("./settings-panels"));
@@ -178,6 +180,7 @@ export function App() {
   const [initing, setIniting] = useState(false);
   const [initOpen, setInitOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+
   const update = useUpdateCheck();
   const qc = useQueryClient();
 
@@ -411,16 +414,6 @@ export function App() {
 
 const REPO_URL = "https://github.com/dip497/hivemind";
 
-type SettingsPage = "appearance" | "views" | "extensions" | "agents" | "notifications" | "shortcuts" | "about";
-const PAGES = [
-  { id: "appearance", label: "Appearance", icon: Palette, description: "Theme, wallpaper, and effects." },
-  { id: "views", label: "Views", icon: PanelsTopLeft, description: "Workspace layout and toolbar." },
-  { id: "extensions", label: "Extensions", icon: Puzzle, description: "Manage tools and workspace views." },
-  { id: "agents", label: "Agents", icon: Bot, description: "Defaults for new agents." },
-  { id: "notifications", label: "Notifications", icon: Bell, description: "Alerts and sounds." },
-  { id: "shortcuts", label: "Shortcuts", icon: Keyboard, description: "Keyboard shortcuts." },
-  { id: "about", label: "About", icon: Info, description: "Version and updates." },
-] as const;
 
 /** Small accessible switch — matches the existing agent-browser toggle's
  *  track/knob styling so every preference in Settings reads as one family. */
@@ -568,7 +561,9 @@ function SettingsModal({
   /** An upgrade is in flight — disable the button + show a spinner. */
   upgrading: boolean;
 }) {
-  const [page, setPage] = useState<SettingsPage>("appearance");
+  const [page, setPage] = useState("appearance");
+  const nav = useSettingsNav(page);
+  const [expanded, toggleGroup] = useExpandedGroups();
   const settingsReturnFocus = useRef<HTMLElement | null>(null);
   useEffect(() => {
     setWorkspaceOccluded(open);
@@ -576,41 +571,19 @@ function SettingsModal({
   }, [open]);
   useEffect(() => {
     const openPage = (event: Event) => {
-      const requested = (event as CustomEvent<{ page?: string }>).detail?.page;
-      const target = PAGES.find((item) => item.id === requested);
-      if (target) setPage(target.id);
+      const target = resolveSettingsPage((event as CustomEvent<{ page?: string }>).detail?.page ?? "");
+      if (target) setPage(target);
       onOpenChange(true);
     };
     window.addEventListener("hivemind:open-settings", openPage);
     return () => window.removeEventListener("hivemind:open-settings", openPage);
   }, [onOpenChange]);
-  const [active, setActive] = useState(false);   // live this session
-  const [enabled, setEnabled] = useState(false); // persisted choice
-  const [port, setPort] = useState("9333");
-  const [busy, setBusy] = useState(false);
-
   useEffect(() => {
     if (!open) return;
     // Every time Settings opens, re-check for updates so the panel reflects the
     // latest release — not a cached result from the last mount / 4h interval.
     onCheck();
-    void window.hive.getBrowserSettings().then((s) => {
-      setActive(s.active);
-      setEnabled(s.enabled);
-      setPort(s.port);
-    }).catch(() => {});
   }, [open, onCheck]);
-
-  // The toggle is "dirty" when the persisted choice no longer matches what's
-  // actually running — that's exactly when a relaunch is needed.
-  const needsRelaunch = enabled !== active;
-
-  const onToggle = async () => {
-    const next = !enabled;
-    setBusy(true);
-    try { await window.hive.setBrowserCdpEnabled(next); setEnabled(next); }
-    finally { setBusy(false); }
-  };
 
   return (
     <SettingsDialog.Root open={open} onOpenChange={onOpenChange}>
@@ -627,16 +600,28 @@ function SettingsModal({
           <aside className="settings-sidebar">
             <SettingsDialog.Title className="settings-title">Settings</SettingsDialog.Title>
             <nav aria-label="Settings sections">
-              {PAGES.map((pg) => <button key={pg.id} onClick={() => setPage(pg.id)} aria-current={page === pg.id ? "page" : undefined} aria-label={pg.label} title={pg.label} data-settings-page={pg.id}>
-                <pg.icon size={16} strokeWidth={1.7} aria-hidden="true" /><span>{pg.label}</span>
-              </button>)}
+              {nav.groups.map(({ group, items }) => {
+                const foldable = items.some((item) => item.plugin);
+                const open = expanded.has(group);
+                // Folded shows the overview only; the page you are on always stays in view.
+                const shown = items.filter((item) => !item.plugin || open || item.id === page);
+                return <div key={group} className="settings-nav-group" role="group" aria-label={group}>
+                <h3 className="settings-nav-heading">{foldable
+                  ? <button aria-expanded={open} onClick={() => toggleGroup(group)}><ChevronRight size={12} aria-hidden="true" /><span>{group}</span></button>
+                  : <span className="settings-nav-heading-text">{group}</span>}</h3>
+                {shown.map((item) => <button key={item.id} onClick={() => setPage(item.id)} aria-current={page === item.id ? "page" : undefined}
+                  title={item.label} data-settings-page={item.id}>
+                  <span className="settings-nav-icon" aria-hidden="true">{item.icon}</span><span>{item.label}</span>
+                </button>)}
+              </div>;
+              })}
             </nav>
             <span className="settings-sidebar-foot">Hivemind {version ? `v${version}` : ""}</span>
           </aside>
           <div className="settings-main">
             <header className="settings-page-header">
-              <div><h2>{PAGES.find((p) => p.id === page)?.label}</h2>
-                <SettingsDialog.Description className="sr-only" id="settings-description">{PAGES.find((p) => p.id === page)?.description}</SettingsDialog.Description>
+              <div><h2>{nav.titleOf(page)}</h2>
+                <SettingsDialog.Description className="sr-only" id="settings-description">{nav.describe(page)}</SettingsDialog.Description>
               </div>
               <SettingsDialog.Close className="settings-icon-button" aria-label="Close"><X size={18} /></SettingsDialog.Close>
             </header>
@@ -709,21 +694,8 @@ function SettingsModal({
         {page === "notifications" && <NotificationPrefs />}
 
 
-        <Suspense fallback={<p role="status" className="settings-note">Loading preferences…</p>}><SettingsPages page={page} onExtensions={() => setPage("extensions")} /></Suspense>
+        <Suspense fallback={<p role="status" className="settings-note">Loading preferences…</p>}><SettingsPages page={page} navigate={setPage} /></Suspense>
 
-        {page === "agents" && (
-          <section className="settings-section settings-agent-bridge" aria-label="Browser control">
-            <div className="settings-row">
-              <div><label>Agent browser control</label><p>Let agents interact with Browser panels.</p></div>
-              <Switch checked={enabled} onChange={() => void onToggle()} disabled={busy} label="Enable agent browser control" />
-            </div>
-            <p className="settings-note">Opens 127.0.0.1:{port}. Local processes can also control the app window. Only enable this for agents you trust.</p>
-            <div className="settings-row">
-              <span className="settings-note">{active ? "Active this session" : "Off this session"}</span>
-              {needsRelaunch && <button onClick={() => void window.hive.relaunchApp()} className="settings-button" title="Restart hivemind to apply">Relaunch to apply</button>}
-            </div>
-          </section>
-        )}
           </div>
         </div>
 

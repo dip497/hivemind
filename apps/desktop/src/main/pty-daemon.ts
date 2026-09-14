@@ -15,6 +15,10 @@ import { SessionManager, type ManagedPty, type SpawnSpec, type SessionSnapshot }
 import { type ClientMsg, type ServerMsg, frame, makeLineDecoder } from "./pty-protocol.js";
 import { PtyOutputBuffer } from "./pty-output-buffer.js";
 import { ipcPath, repairShellSpec } from "./platform.js";
+import {
+  fileNameForId, listSnapshotFiles, readSnapshot, redactSnapshot, rehydrateSnapshot, secureDir,
+  staleSnapshotIds, type SnapshotEntry,
+} from "./session-snapshot-store.js";
 import { applyInitialPrompt, stripInitialPrompt } from "../shared/agent-io.js";
 import { sanitizeShellEnv } from "./shell-env.js";
 import { composeResume, evictTrackedSession, prepareProviders, trackerSource } from "@hivemind/agents/node";
@@ -62,7 +66,7 @@ if (!path.isAbsolute(socketPath)) {
 // the daemon replays the snapshot AND spawns a fresh PTY with the stored spec
 // so the user sees their last screen + a working shell taking over.
 const sessionsDir = path.join(path.dirname(socketPath), "sessions");
-try { fs.mkdirSync(sessionsDir, { recursive: true }); } catch { /* ignore */ }
+secureDir(sessionsDir);
 
 // ── live claude session tracking ───────────────────────────────────────────
 // hivemind spawns `claude --session-id <uuid>`, but the user can switch the
@@ -155,11 +159,7 @@ const resume = composeResume({
   providers: providerPaths,
 });
 
-const snapshotPath = (id: string): string => {
-  // URL-safe base64 of the id so any character (including ':') is path-safe.
-  const safe = Buffer.from(id).toString("base64url");
-  return path.join(sessionsDir, `${safe}.json`);
-};
+const snapshotPath = (id: string): string => path.join(sessionsDir, fileNameForId(id));
 // One write chain per session id so a later snapshot can never land on disk
 // before an earlier one (the writes are async now — see persistSnapshot).
 const snapshotWrites = new Map<string, Promise<void>>();
@@ -176,7 +176,7 @@ function persistSnapshot(id: string, snap: SessionSnapshot): Promise<void> {
   // as all terminals stuttering together whenever one tile went quiet for 2s
   // on a busy disk). The serialize itself is still CPU, but the disk wait no
   // longer stalls the socket.
-  snapshotLatest.set(id, JSON.stringify(snap));
+  snapshotLatest.set(id, JSON.stringify(redactSnapshot(snap)));
   const prev = snapshotWrites.get(id) ?? Promise.resolve();
   const next = prev
     .then(async () => {
@@ -187,7 +187,7 @@ function persistSnapshot(id: string, snap: SessionSnapshot): Promise<void> {
       // process is killed mid-write — partial file would fail JSON.parse on
       // next boot and the session would be lost otherwise).
       const tmp = `${p}.tmp`;
-      await fs.promises.writeFile(tmp, body, "utf8");
+      await fs.promises.writeFile(tmp, body, { encoding: "utf8", mode: 0o600 });
       await fs.promises.rename(tmp, p);
     })
     .catch(() => {
@@ -229,35 +229,21 @@ function evictSnapshot(id: string): void {
     }
   } catch { /* no map yet / unreadable — nothing to clean */ }
 }
-function loadAllSnapshots(): SessionSnapshot[] {
-  const out: SessionSnapshot[] = [];
-  let names: string[] = [];
-  try { names = fs.readdirSync(sessionsDir); } catch { return out; }
-  for (const name of names) {
-    if (!name.endsWith(".json")) continue;
-    const filePath = path.join(sessionsDir, name);
-    try {
-      const raw = fs.readFileSync(filePath, "utf8");
-      const snap = JSON.parse(raw) as SessionSnapshot;
-      // Basic shape sanity — old/corrupt snapshots are silently dropped.
-      if (!snap || typeof snap.id !== "string" || typeof snap.replay !== "string" || !snap.spec) {
-        continue;
-      }
-      // Legacy key shape (`hm:<absolute-path>:<tileId>` — 3+ colon-segments
-      // after `hm:`). The new key is `hm:<tileId>` (single segment). No
-      // renderer asks for the legacy id anymore — they'd be loaded into the
-      // frozen map every daemon boot and never attached, leaking memory
-      // forever. Drop both the in-memory load AND the on-disk file.
-      if (snap.id.startsWith("hm:") && snap.id.slice(3).split(":").length > 1) {
-        try { fs.unlinkSync(filePath); } catch { /* already gone */ }
-        continue;
-      }
-      out.push(snap);
-    } catch {
-      /* corrupt — skip */
+function registerSnapshots(): SnapshotEntry[] {
+  const entries: SnapshotEntry[] = [];
+  for (const entry of listSnapshotFiles(sessionsDir)) {
+    // Legacy `hm:<path>:<tileId>` ids are never asked for again.
+    if (entry.id.startsWith("hm:") && entry.id.slice(3).split(":").length > 1) {
+      try { fs.unlinkSync(entry.file); } catch { /* already gone */ }
+      continue;
     }
+    manager.restoreLazySnapshot(entry.id, () => {
+      const snap = readSnapshot(entry.file, entry.id);
+      return snap ? rehydrateSnapshot(snap, hcpToken) : undefined;
+    });
+    entries.push(entry);
   }
-  return out;
+  return entries;
 }
 
 // Real node-pty factory. Mirrors pty-host.doSpawn's env defaults so colors,
@@ -340,7 +326,14 @@ const manager = new SessionManager(factory, {
 // PTY spawned with the stored spec. Idle-exit is held off because frozen
 // sessions count as "available" (size > 0 is not enough — frozen.size is
 // tracked separately by the manager).
-for (const snap of loadAllSnapshots()) manager.restoreSnapshot(snap);
+const bootSnapshots = registerSnapshots();
+
+// Open canvases attach within seconds, so anything unclaimed after this is a candidate.
+const RETENTION_GRACE_MS = 5 * 60 * 1000;
+const retentionTimer = setTimeout(() => {
+  for (const id of staleSnapshotIds(bootSnapshots, manager.frozenIds(), Date.now())) manager.kill(id);
+}, RETENTION_GRACE_MS);
+retentionTimer.unref?.();
 
 // Graceful shutdown — flush any unwritten snapshots before exit so the last
 // ~2s of activity (the debounce window) survives an orderly daemon termination.

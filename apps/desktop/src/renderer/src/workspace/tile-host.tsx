@@ -157,6 +157,8 @@ const surfaces = new Map<string, HTMLDivElement>();
  *  open + fit + ptySpawn, a `<webview>` guest — happens at the slot's real
  *  size and exactly once. Cleared when the tile closes. */
 const adoptedOnce = new Set<string>();
+/** Bumped on every adoption, so a park queued before a re-adoption is dropped. */
+const adoptGen = new Map<string, number>();
 const adoptListeners = new Set<() => void>();
 function notifyAdopted() { for (const l of adoptListeners) l(); }
 function subscribeAdopted(l: () => void) { adoptListeners.add(l); return () => { adoptListeners.delete(l); }; }
@@ -225,9 +227,12 @@ const stableSize = new Map<string, { w: number; h: number }>();
  *  park hop in between: each DOM insertion of a `<webview>` re-creates its
  *  guest, so the hop cost a second page load and leaked a WebContents. */
 function parkSurface(tileId: string, from: HTMLElement, rect: { w: number; h: number } | null, transient: boolean) {
+  const gen = adoptGen.get(tileId);
   queueMicrotask(() => {
     const el = surfaces.get(tileId);
-    if (!el || el.parentElement !== from) return; // adopted elsewhere (or dropped) meanwhile
+    // Adopted again meanwhile — by another slot, or by this one re-running its
+    // effect (StrictMode) while the element never left it.
+    if (!el || el.parentElement !== from || adoptGen.get(tileId) !== gen) return;
     // Hold the last slot size so nothing inside refits/resizes the PTY while
     // parked (a full-window park made every parked terminal reflow twice and
     // re-resize on every window resize). No size known (slot never laid out)
@@ -250,6 +255,7 @@ function dropSurface(tileId: string) {
   el.remove();
   surfaces.delete(tileId);
   adoptedOnce.delete(tileId);
+  adoptGen.delete(tileId);
   stableSize.delete(tileId);
 }
 
@@ -338,6 +344,7 @@ export function TileSlot({ tileId, className, style, transient = false }: {
     const el = surfaceEl(tileId);
     el.style.cssText = ADOPTED_CSS;
     if (el.parentElement !== slot) slot.appendChild(el);
+    adoptGen.set(tileId, (adoptGen.get(tileId) ?? 0) + 1);
     if (!adoptedOnce.has(tileId)) { adoptedOnce.add(tileId); notifyAdopted(); }
     el.dispatchEvent(new CustomEvent(SURFACE_ADOPTED));
     // Track the slot's size through a ResizeObserver ONLY (its first

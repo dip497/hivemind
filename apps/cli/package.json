@@ -3,7 +3,9 @@
   "version": "1.17.0",
   "private": true,
   "type": "module",
-  "bin": { "hive": "./dist/hive" },
+  "bin": {
+    "hive": "./dist/hive"
+  },
   "scripts": {
     "dev": "bun run src/index.ts",
     "build": "bun build src/index.ts --compile --outfile=dist/hive",
@@ -20,7 +22,7 @@
   },
   "devDependencies": {
     "@hivemind/tsconfig": "workspace:*",
-    "@types/bun": "^1.1.13",
+    "@types/bun": "^1.4.2",
     "@types/node": "catalog:",
     "typescript": "catalog:"
   }

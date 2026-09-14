@@ -255,9 +255,17 @@ export interface ToolsSettings {
   disabledTools: string[];
 }
 export interface AgentsSettings {
+  /** Provider ids the user switched off. Built-ins included: an agent is
+   *  configuration now, so any of them can be turned off without uninstalling
+   *  anything. An unknown id here is harmless — it simply matches nothing. */
+  disabled: string[];
   defaultAgent: string;
-  model: string;
-  permissionMode: string;
+  /** Agent id → option id → value, e.g. { claude: { model: "opus" } }. Absent = the agent's own default. */
+  options: Record<string, Record<string, string>>;
+  /** Add catalog agents whose CLI is found on this machine, without asking. */
+  autoInstall: boolean;
+  /** Catalog agents the user removed: never added automatically again. */
+  declined: string[];
 }
 export interface Settings {
   v: 1;
@@ -280,7 +288,7 @@ export const DEFAULT_SETTINGS: Settings = {
   tools: { enabledPlugins: [], disabledTools: [] },
   // Empty = "the agent catalog's default" — hive-core does not depend on
   // @hivemind/agents, and the renderer resolves an unknown id to defaultAgent().
-  agents: { defaultAgent: "", model: "default", permissionMode: "default" },
+  agents: { disabled: [], defaultAgent: "", options: {}, autoInstall: true, declined: [] },
   migrated: false,
 };
 
@@ -453,12 +461,39 @@ export function mergeSettings(raw: unknown, base: Settings = DEFAULT_SETTINGS): 
     plugins: { disabled: (Array.isArray(plugins.disabled) ? plugins.disabled : base.plugins.disabled).filter((x): x is string => typeof x === "string").slice(0, 200) },
     tools,
     agents: {
+      disabled: (Array.isArray(agents.disabled) ? agents.disabled : base.agents.disabled)
+        .filter((x): x is string => typeof x === "string").slice(0, 200),
       defaultAgent: str(agents.defaultAgent, base.agents.defaultAgent, 64),
-      model: str(agents.model, base.agents.model, 128),
-      permissionMode: str(agents.permissionMode, base.agents.permissionMode, 64),
+      options: isObj(agents.options) ? agentOptions(agents.options)
+        : "model" in agents || "permissionMode" in agents ? legacyClaudeOptions(agents.model, agents.permissionMode)
+        : base.agents.options,
+      autoInstall: bool(agents.autoInstall, base.agents.autoInstall),
+      declined: (Array.isArray(agents.declined) ? agents.declined : base.agents.declined)
+        .filter((x): x is string => typeof x === "string" && OPTION_KEY_RE.test(x)).slice(0, 200),
     },
     migrated: bool(p.migrated, base.migrated),
   };
+}
+
+const OPTION_KEY_RE = /^[a-z0-9][a-z0-9-]{0,31}$/;
+
+function agentOptions(raw: Record<string, unknown>): Record<string, Record<string, string>> {
+  const out: Record<string, Record<string, string>> = {};
+  for (const [agent, opts] of Object.entries(raw).slice(0, 64)) {
+    if (!OPTION_KEY_RE.test(agent) || !isObj(opts)) continue;
+    const kept = Object.entries(opts).slice(0, 16)
+      .filter((e): e is [string, string] => OPTION_KEY_RE.test(e[0]) && typeof e[1] === "string" && e[1].length > 0 && e[1].length <= 200);
+    if (kept.length) out[agent] = Object.fromEntries(kept);
+  }
+  return out;
+}
+
+/** The old global model and permission mode only ever reached claude. */
+function legacyClaudeOptions(model: unknown, mode: unknown): Record<string, Record<string, string>> {
+  const claude: Record<string, string> = {};
+  if (typeof model === "string" && model && model !== "default") claude.model = model;
+  if (typeof mode === "string" && mode && mode !== "default") claude.mode = mode;
+  return Object.keys(claude).length ? { claude } : {};
 }
 
 // ── pre-2.0 localStorage → settings ─────────────────────────────────────────
@@ -486,9 +521,11 @@ export function migrateLegacy(legacy: LegacyRendererState, base: Settings = DEFA
     appearance,
     views: { ...base.views, defaultView: legacy.viewMode ?? base.views.defaultView },
     agents: {
+      disabled: base.agents.disabled,
       defaultAgent: legacy.agentSel ?? base.agents.defaultAgent,
-      model: legacy.claudeModel ?? base.agents.model,
-      permissionMode: legacy.claudeMode ?? base.agents.permissionMode,
+      options: legacyClaudeOptions(legacy.claudeModel, legacy.claudeMode),
+      autoInstall: base.agents.autoInstall,
+      declined: base.agents.declined,
     },
     migrated: true,
   }, base);

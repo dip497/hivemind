@@ -35,7 +35,7 @@ const MANAGED_KINDS: ReadonlyMap<string, string> = new Map([[BROWSER_TOOL.tileKi
 export const BUNDLED_TOOL_PLUGINS: readonly ToolPluginContribution[] = Object.freeze([
   Object.freeze({
     id: BROWSER_PLUGIN_ID,
-    tools: Object.freeze([Object.freeze({ key: "browser", label: "Browser" })]),
+    tools: Object.freeze([Object.freeze({ key: "browser", label: "Browser", description: "A web page in a tile, which agents can drive when you allow it." })]),
   }),
 ]);
 

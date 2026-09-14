@@ -16,7 +16,7 @@ import os from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { composeResume, composeResumeFrom, PROVIDERS as REGISTRY } from "@hivemind/agents/node";
+import { composeResume, composeResumeFrom, providers as registry } from "@hivemind/agents/node";
 import type { SpawnSpec } from "../../src/main/pty-session-manager.ts";
 import { droidHooksSettings } from "@hivemind/agents/providers/droid/node";
 import { kiroAgentConfig } from "@hivemind/agents/providers/kiro/node";
@@ -78,7 +78,7 @@ const SCREENS: Record<Agent, string[]> = {
   droid: ["EXECUTE rm x\n> Yes, allow\n> No, cancel\nEnter to select", "⠹ Thinking...\n(Press ESC to stop)", "❯ ", "some output\nesc to stop"],
   kiro: ["Allow this tool to run?\nAllow  Deny\nEnter to select", "do you want to proceed?\n❯ yes", "● Editing file…\nesc to cancel", "kiro is working…", "> "],
   pi: ["out\nWorking...", "❯ ", ""],
-  // Recognised-but-unspawnable (herdr scrape-only) agents are not providers.
+  // Recognised-but-unspawnable (scrape-only) agents are not providers.
   gemini: [], cursor: [], antigravity: [], cline: [], opencode: [], copilot: [], kimi: [], amp: [], grok: [], hermes: [],
 };
 
@@ -171,7 +171,7 @@ test("provider golden: spawn/restore/retry transforms, injected files, assets, d
 
 test("provider transforms are order-independent: reversed composition matches the golden outputs", async () => {
   const forward = JSON.parse(JSON.stringify(await capture())) as Record<string, unknown>;
-  const reversed = JSON.parse(JSON.stringify(await capture(composeResumeFrom([...REGISTRY].reverse(), CTX)))) as Record<string, unknown>;
+  const reversed = JSON.parse(JSON.stringify(await capture(composeResumeFrom([...registry()].reverse(), CTX)))) as Record<string, unknown>;
   for (const key of Object.keys(forward)) {
     const f = forward[key] as Record<string, unknown>, r = reversed[key] as Record<string, unknown>;
     if (f && typeof f === "object") for (const sub of Object.keys(f)) assert.deepEqual(r[sub], f[sub], `order-dependent output at ${key}.${sub} — a provider transform touched a spec it does not own`);

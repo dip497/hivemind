@@ -1,7 +1,7 @@
 /**
  * Agent status bus — a tiny pub/sub so terminal tiles can broadcast their
  * detected state (working / idle / blocked / …) to the Canvas without prop
- * drilling. The Canvas uses it for herdr-style features: live-colored session
+ * drilling. The Canvas uses it for live-colored session
  * chips (the "sidebar"), toast notifications when an OFF-SCREEN agent needs you
  * or finishes, and the done-unseen highlight.
  *

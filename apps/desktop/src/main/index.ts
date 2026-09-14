@@ -1,4 +1,5 @@
 import { installViewManagementIpc } from "./view-packages.js";
+import { installPluginCatalogIpc } from "./plugin-catalog-ipc.js";
 /** Electron main process — owns the BrowserWindow + IPC + PtyHost + git/worktree. */
 import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, screen, session, shell, webContents, type WebContents } from "electron";
 import path from "node:path";
@@ -27,7 +28,10 @@ import {
   type LinkType,
 } from "@hivemind/core";
 import os from "node:os";
-import { agentForCmd } from "@hivemind/agents";
+import { agentById, agentForCmd, getCatalog, preferredAgent, setCatalog, BUILTIN_CATALOG, type AgentProviderDef } from "@hivemind/agents";
+import { agentPresence, discoverOptions, findBin, verifyAgent } from "@hivemind/agents/discover";
+import { agentAllowedIn, loadAgents, toWire } from "@hivemind/agents/load";
+import { NODE_PARTS } from "@hivemind/agents/node";
 import type { IssuePatch } from "@hivemind/core/types";
 import * as ptyHost from "./pty-host.js";
 import * as ptyDaemon from "./daemon-client.js";
@@ -264,8 +268,8 @@ async function createWindow(): Promise<void> {
     height: state.height,
     ...(typeof state.x === "number" ? { x: state.x } : {}),
     ...(typeof state.y === "number" ? { y: state.y } : {}),
-    minWidth: 1100,
-    minHeight: 700,
+    minWidth: 720,
+    minHeight: 560,
     backgroundColor: "#0d0e12",
     // Window / taskbar icon (Linux). The AppImage's desktop icon comes from
     // electron-builder's linux.icon; this sets the live window icon too.
@@ -401,7 +405,8 @@ async function createWindow(): Promise<void> {
     mainWindow = null;
   });
   wc.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    // Only web links reach the OS: plugin manifests supply some of these URLs.
+    if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
     return { action: "deny" };
   });
 
@@ -1222,7 +1227,12 @@ function setPtyPaused(tileId: string, paused: boolean): void {
 const hcpAgentOf = new Map<string, string>();
 
 ipcMain.handle("ptySpawn", wrap(async (e, opts: Parameters<typeof spawnPty>[0]) => {
-  { const d = agentForCmd(opts.cmd); if (d) hcpAgentOf.set(toBareId(opts.tileId), d.id); else hcpAgentOf.delete(toBareId(opts.tileId)); }
+  const spawning = agentForCmd(opts.cmd);
+  // An agent a repository ships runs in that repository, not wherever a tile happens to be.
+  if (spawning && !agentAllowedIn(spawning, opts.cwd)) {
+    throw new Error(`${spawning.label} comes from ${spawning.sourceRoot} and only runs in tiles there`);
+  }
+  { const d = spawning; if (d) hcpAgentOf.set(toBareId(opts.tileId), d.id); else hcpAgentOf.delete(toBareId(opts.tileId)); }
   // Spawn rate-limit: a compromised renderer (XSS via rendered diff/issue
   // content) could fork-bomb the host through ptySpawn. Cap spawns per sliding
   // window — the dev-bridge already guards the identical call; the IPC path
@@ -1305,7 +1315,9 @@ ipcMain.on("ptyDetach", (_e, tileId: string) => {
 // happens. Fire-and-forget — pty.spawn() and child_process.spawn() pick up the
 // patched env on next tick. (superset.sh pattern; we hand-rolled equivalent
 // of sindresorhus/shell-env in ./shell-env.ts so we don't add a runtime dep.)
-void applyShellEnvToProcess();
+// Anything that reads PATH to find an agent waits on this, so a call in the first
+// seconds is answered against the user's shell, not the one Electron inherited.
+const shellEnvReady = applyShellEnvToProcess().catch(() => ({}));
 
 // Safety net for unhandled rejections from libraries we don't control
 // (chokidar's internal `add` throws EACCES/ELOOP from inside async code,
@@ -1439,7 +1451,67 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     handleViewProtocol();
     installSettingsIpc(() => mainWindow);
     installViewManagementIpc(() => mainWindow);
+    installPluginCatalogIpc(() => mainWindow);
     ipcMain.handle("views:list", wrap(async (_e, repoRoot: string | null) => listViewPackages(repoRoot ? String(repoRoot) : null)));
+
+    // A repo's agents belong to that repo. Opening a second workspace must not take the
+    // first one's agents out of the catalog (its tiles still spawn through it), and a
+    // repo's agent must not become spawnable everywhere — ptySpawn enforces the second.
+    const repoAgents = new Map<string, AgentProviderDef[]>();
+    const publishCatalog = (defs: AgentProviderDef[], repoRoot?: string): void => {
+      if (repoRoot) repoAgents.set(path.resolve(repoRoot), defs.filter((d) => d.sourceRoot));
+      const all = defs.filter((d) => !d.sourceRoot);
+      const taken = new Set(all.map((d) => d.id));
+      for (const list of repoAgents.values()) {
+        for (const d of list) if (!taken.has(d.id)) { taken.add(d.id); all.push(d); }
+      }
+      setCatalog(all);
+    };
+    // Built-ins are compiled in (proven identical to the manifests); only plugins come from disk.
+    const scanAgents = async (repoRoot?: string) => {
+      const disabled = (getAppSettings() as { agents?: { disabled?: string[] } }).agents?.disabled ?? [];
+      return loadAgents({
+        builtins: BUILTIN_CATALOG,
+        repoRoot,
+        disabled,
+        nodeHalf: (id) => !!NODE_PARTS[id],
+      });
+    };
+    // Not awaited: the first frame must not wait on optional disk I/O.
+    void scanAgents().then(({ defs, loaded }) => {
+      publishCatalog(defs); // main resolves providers for spawn + HCP binding too
+      for (const a of loaded) {
+        if (a.error) console.warn(`[agents] ${a.id} (${a.source}) not loaded: ${a.error}`);
+      }
+    }).catch((e: unknown) => {
+      console.warn("[agents] manifest scan failed, using built-ins only:", e);
+    });
+    ipcMain.handle("agents:list", wrap(async (_e, repoRoot: string | null) => {
+      const { defs, loaded, shadowed } = await scanAgents(repoRoot ? String(repoRoot) : undefined);
+      // Main resolves providers too (spawn, HCP), so a rescan refreshes this process as well.
+      // The reply stays scoped to the workspace that asked: other repos' agents are in
+      // main's catalog for their own tiles, not in this one's pickers.
+      publishCatalog(defs, repoRoot ? String(repoRoot) : undefined);
+      return { agents: toWire(loaded), shadowed };
+    }));
+    // Disabled built-ins are not in the catalog but still have a card.
+    const knownDef = (id: string) => agentById(id) ?? BUILTIN_CATALOG.find((d) => d.id === id);
+    // Detection must see the PATH tiles launch with, which the login shell supplies.
+    ipcMain.handle("agents:option-choices", wrap(async (_e, id: string) => {
+      await applyShellEnvToProcess();
+      const def = knownDef(String(id));
+      return def ? discoverOptions(def) : {};
+    }));
+    ipcMain.handle("agents:presence", wrap(async () => {
+      await applyShellEnvToProcess();
+      const defs = new Map([...BUILTIN_CATALOG, ...getCatalog()].map((d) => [d.id, d]));
+      return Object.fromEntries([...defs.values()].map((d) => [d.id, agentPresence(d)]));
+    }));
+    ipcMain.handle("agents:verify", wrap(async (_e, id: string) => {
+      await applyShellEnvToProcess();
+      const def = knownDef(String(id));
+      return def ? verifyAgent(def) : { path: null };
+    }));
     // Browser-tile extensions (prototype): load every UNPACKED extension in
     // <userData>/browser-extensions/<name>/ into the SAME session the <webview>
     // tiles use (partition "persist:browser"). Drop an unpacked extension dir
@@ -1720,6 +1792,16 @@ function startHcpControlPlane(): void {
     turns: hcpTurns,
     recorder: hcpRecorder,
     spawnAllowed: hcpSpawnAllowed,
+    // A worker of a remote agent runs on that host: this PATH says nothing about it.
+    defaultAgentId: async () => {
+      await shellEnvReady;
+      return preferredAgent((getAppSettings() as { agents?: { defaultAgent?: string } }).agents?.defaultAgent, (d) => !!findBin(d.bin)).id;
+    },
+    agentInstalled: async (def, callerTile) => {
+      if (callerTile && hasRemotePty(callerTile)) return true;
+      await shellEnvReady;
+      return !!findBin(def.bin);
+    },
     connect: (src, dst) => { const ok = hcpPipes.connect(src, dst); if (ok) pushPipe(src, dst, true); return ok; },
     disconnect: (src, dst) => { hcpPipes.disconnect(src, dst); pushPipe(src, dst ?? null, false); },
     forgetPipes: (id) => { hcpPipes.forget(id); pushPipe(id, null, false); },

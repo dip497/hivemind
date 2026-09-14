@@ -4,7 +4,6 @@
  */
 import type { AgentProviderDef, AgentState } from "../../types.js";
 import { hasConfirmationPrompt } from "../../detect-helpers.js";
-import { GENERIC_AGENT_ICON } from "../../icon.js";
 
 export function detectGemini(content: string): AgentState {
   const lower = content.toLowerCase();
@@ -24,18 +23,26 @@ export const gemini: AgentProviderDef = {
   id: "gemini",
   label: "Gemini",
   bin: "gemini",
-  enabled: false,
+  enabled: true,
   caps: {
     promptDelivery: "typed",
     turnSignal: false,
     resume: "none",
     supervise: "human",
-    modelFlag: false,
-    permissionModes: false,
     blockedDetection: true,
   },
+  options: [
+    { id: "model", label: "Model", flag: "--model" },
+    { id: "mode", label: "Approval", flag: "--approval-mode", unattended: "yolo" },
+  ],
+  install: { url: "https://geminicli.com/docs/get-started/installation/", command: "npm install -g @google/gemini-cli" },
   /** No brand mark wired yet — the generic agent glyph. */
-  icon: GENERIC_AGENT_ICON,
+  /** Google Gemini mark (simple-icons). */
+  icon: {
+    viewBox: "0 0 24 24",
+    attrs: { fill: "currentColor" },
+    body: '<path d="M11.04 19.32Q12 21.51 12 24q0-2.49.93-4.68.96-2.19 2.58-3.81t3.81-2.55Q21.51 12 24 12q-2.49 0-4.68-.93a12.3 12.3 0 0 1-3.81-2.58 12.3 12.3 0 0 1-2.58-3.81Q12 2.49 12 0q0 2.49-.96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93 3.81 2.55t2.55 3.81" />',
+  },
   detect: detectGemini,
-  note: "not wired yet — recognised for status only.",
+  note: "launches and reads status; other agents cannot collect its replies.",
 };

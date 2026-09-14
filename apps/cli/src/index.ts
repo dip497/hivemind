@@ -24,6 +24,7 @@ import { upgradeCmd } from "./commands/upgrade.js";
 import { resolveCmd } from "./commands/mention.js";
 import { ctlCmd } from "./commands/ctl.js";
 import { packagesCmd } from "./commands/packages.js";
+import { agentsCmd } from "./commands/agents.js";
 import { viewsCmd } from "./commands/views.js";
 import { configCmd, themeCmd } from "./commands/config.js";
 
@@ -65,6 +66,7 @@ const main = defineCommand({
     resolve: resolveCmd,
     ctl: ctlCmd,
     views: viewsCmd,
+    agents: agentsCmd,
     packages: packagesCmd,
     config: configCmd,
     theme: themeCmd,

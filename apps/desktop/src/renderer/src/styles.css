@@ -486,14 +486,25 @@ a {
   cursor: pointer;
 }
 
-/* xterm.js scrollbar inside terminal — narrower */
-.xterm-viewport::-webkit-scrollbar {
-  width: 6px;
+/* xterm 6 sizes its scrollbar inline, hence !important. */
+.xterm .xterm-scrollable-element > .scrollbar.vertical,
+.xterm .xterm-scrollable-element > .scrollbar.vertical > .slider {
+  width: 6px !important;
+}
+/* A hard-coded black inset that smudges light and glass themes. */
+.xterm .xterm-scrollable-element > .shadow {
+  display: none;
+}
+/* xterm.css paints the viewport black; xterm 6 puts the theme background on the
+   scrollable element instead, so this black showed through glass terminals. */
+.xterm .xterm-viewport {
+  background-color: transparent;
 }
 
 /* Keep terminal scroll from chaining into the canvas/page at its boundary —
    the wheel scrolls the scrollback and stops there. */
-.xterm-viewport {
+.xterm-viewport,
+.xterm-scrollable-element {
   overscroll-behavior: contain;
 }
 
@@ -795,7 +806,8 @@ html.glass-on {
   /* Frames: a fainter zone tint so the wallpaper reads through them cleanly. */
   --frame-fill: 3%;
 }
-html.glass-on .react-flow {
+html.glass-on .react-flow,
+html.glass-on [data-windows-view] {
   background-color: transparent !important;
 }
 /* Kill the dotted grid under glass — it reads as noise over a live wallpaper. */

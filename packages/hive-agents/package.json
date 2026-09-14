@@ -8,7 +8,11 @@
   "exports": {
     ".": "./src/index.ts",
     "./node": "./src/node.ts",
-    "./providers/*": "./src/providers/*.ts"
+    "./providers/*": "./src/providers/*.ts",
+    "./manifest": "./src/manifest.ts",
+    "./detect-rules": "./src/detect-rules.ts",
+    "./load": "./src/load.ts",
+    "./discover": "./src/discover.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -18,5 +22,8 @@
     "@hivemind/tsconfig": "workspace:*",
     "@types/node": "catalog:",
     "typescript": "catalog:"
+  },
+  "dependencies": {
+    "yaml": "catalog:"
   }
 }

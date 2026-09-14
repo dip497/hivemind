@@ -175,3 +175,10 @@ export function pendingPatches(): Record<string, unknown> {
   return Object.fromEntries([...pending].map(([path, p]) => [path, p.value]));
 }
 export function flushSettings(): void { flush(); }
+
+/** Resolves once written; `patchSettings` alone is a 150 ms debounce. */
+export async function saveSettingsNow(): Promise<void> {
+  flush();
+  // An open write retires this edit too and chains the rest.
+  while (inFlight) await inFlight;
+}

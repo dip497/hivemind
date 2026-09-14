@@ -35,6 +35,27 @@ test("newestCodexSessionForCwd picks the newest session matching the cwd", () =>
   assert.equal(newestCodexSessionForCwd("/proj/missing", root), undefined);
 });
 
+// Regression: a REAL session_meta line is ~22 KB — codex embeds its whole system
+// prompt in payload.base_instructions.text. A fixed-size first-line read truncated
+// it, JSON.parse threw, the catch swallowed it, and resume silently never fired
+// for any codex tile. Fixtures must be realistically sized or they prove nothing.
+test("newestCodexSessionForCwd reads a session_meta line far larger than one read buffer", () => {
+  const root = mkdtempSync(join(tmpdir(), "codex-sess-"));
+  const p = join(root, "big.jsonl");
+  const meta = JSON.stringify({
+    type: "session_meta",
+    payload: {
+      id: "id-big",
+      cwd: "/proj/app",
+      // non-ASCII on purpose: the decode must survive a chunk boundary too
+      base_instructions: { text: "You are Codex — ".repeat(20_000) },
+    },
+  });
+  assert.ok(meta.length > 300_000, "fixture must exceed the chunk size");
+  writeFileSync(p, meta + "\n" + JSON.stringify({ type: "message" }) + "\n");
+  assert.equal(newestCodexSessionForCwd("/proj/app", root), "id-big");
+});
+
 test("transformSpecOnRestore appends `resume <id>` for codex with a matching session", () => {
   const root = mkdtempSync(join(tmpdir(), "codex-sess-"));
   sessionFile(root, "x.jsonl", "sid-1", "/w", 1_000_000);

@@ -22,10 +22,12 @@ export const pi: AgentProviderDef = {
     turnSignal: true,
     resume: "cwd",
     supervise: "none",
-    modelFlag: false,
-    permissionModes: false,
     blockedDetection: false,
   },
+  options: [
+    { id: "model", label: "Model", flag: "--model", list: { args: ["--list-models"], skip: 1, format: "{1}/{2}" } },
+  ],
+  install: { url: "https://github.com/earendil-works/pi/blob/main/packages/coding-agent/README.md", command: "npm install -g --ignore-scripts @earendil-works/pi-coding-agent" },
   /** pi's block glyph. */
   icon: {
     viewBox: "0 0 800 800",

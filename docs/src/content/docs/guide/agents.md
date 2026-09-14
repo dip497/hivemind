@@ -37,6 +37,16 @@ gemini, cursor, antigravity, cline, copilot, kimi, amp, grok, hermes, openclaw �
 scrapes their screen for status when you run them yourself; they are not offered for
 spawning.
 
+cursor is recognised by its agent binary, `cursor-agent` — a bare `cursor` is the Cursor
+editor, not the agent. A cursor tile you start yourself resumes its last chat for that
+folder after a restart.
+
+## Add your own, or turn one off
+
+Any agent can be switched off in **Settings ▸ Agents**, including these built-in ones.
+To add an agent that is not listed here, describe it in one file — see
+[Add your own agent](../agent-providers/).
+
 ## Live status
 
 Tiles show **working**, **idle**, or **blocked** (needs you), detected from the rendered

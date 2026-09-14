@@ -1,0 +1,77 @@
+# Droid — built-in provider manifest.
+# Authoring format for the def half. See packages/hive-agents/src/manifest.ts.
+manifestVersion: 1
+id: droid
+label: Droid
+bin: droid
+enabled: true
+caps:
+  promptDelivery: typed
+  turnSignal: true
+  resume: cwd
+  supervise: human
+  blockedDetection: true
+icon:
+  viewBox: 0 0 24 24
+  attrs:
+    fill: none
+    stroke: currentColor
+    strokeWidth: '1.2'
+  shapes:
+  - ellipse:
+      cx: '12'
+      cy: '12'
+      rx: '10'
+      ry: '2.6'
+  - ellipse:
+      cx: '12'
+      cy: '12'
+      rx: '10'
+      ry: '2.6'
+      transform: rotate(45 12 12)
+  - ellipse:
+      cx: '12'
+      cy: '12'
+      rx: '10'
+      ry: '2.6'
+      transform: rotate(90 12 12)
+  - ellipse:
+      cx: '12'
+      cy: '12'
+      rx: '10'
+      ry: '2.6'
+      transform: rotate(135 12 12)
+options:
+- id: mode
+  label: Autonomy
+  flag: --auto
+  unattended: high
+install:
+  url: https://docs.factory.ai/cli/getting-started/quickstart
+  command: "curl -fsSL https://app.factory.ai/cli | sh"
+detect:
+  rules:
+  - when:
+      all:
+      - containsCS: EXECUTE
+      - any:
+        - contains: enter to select
+        - contains: ↑↓ to navigate
+        - contains: esc to cancel
+        - contains: '> yes, allow'
+        - contains: '> no, cancel'
+    then: blocked
+  - when:
+      all:
+      - any:
+        - contains: enter to select
+        - contains: ↑↓ to navigate
+        - contains: esc to cancel
+      - any:
+        - contains: '> yes, allow'
+        - contains: '> no, cancel'
+    then: blocked
+  - when:
+      contains: esc to stop
+    then: working
+  default: idle

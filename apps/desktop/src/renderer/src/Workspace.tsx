@@ -51,7 +51,7 @@ import { defaultTileSize } from "./canvas-sizing";
 import { useWorktrees } from "./useWorktrees";
 import { RemoteConnectModal } from "./components/RemoteConnectModal";
 import { isRemote } from "../../shared/remote-uri";
-import { AGENTS, AgentIcon, agentById, agentForCmd } from "./agents";
+import { getAgents, AgentIcon, agentById, agentForCmd } from "./agents";
 import { useSpawn } from "./useSpawn";
 import { useFrameOps } from "./useFrameOps";
 import { useAgentAwareness } from "./useAgentAwareness";
@@ -65,6 +65,7 @@ import { TileHost } from "./workspace/tile-host";
 import { ViewHost } from "./workspace/view-host";
 import { HostChrome } from "./workspace/host-chrome";
 import { loadCommunityViews } from "./workspace/views/community/registry";
+import { syncAgentPlugins } from "./agent-plugins";
 import {
   FALLBACK_VIEW_ID, getView, resolveChrome, resolveViewId, useViews,
   type SpawnOpts, type WorkspaceCommands, type WorkspaceViewModel,
@@ -75,7 +76,8 @@ import { CANVAS_LAYOUT, loadCanvasLayout } from "./workspace/views/canvas-layout
 import { CanvasRuntimeContext, type CanvasRuntime, type FocusModeReq, type FocusReq, type Viewport } from "./workspace/views/canvas-runtime";
 // Registers the built-in view plugins (side effect) before the first render.
 import "./workspace/views";
-import { defaultAgent } from "@hivemind/agents";
+import { defaultAgent, preferredAgent } from "@hivemind/agents";
+import { notReady, useAgentPresence } from "./agent-plugins";
 import { AGENT_TILE_KIND } from "./tile-kinds";
 
 // Snap on drop to an 8px grid (Figma's standard). The drop xyflow hands us is
@@ -468,6 +470,20 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     window.addEventListener("hivemind:reload-views", reload);
     return () => window.removeEventListener("hivemind:reload-views", reload);
   }, [root]);
+  // With the root, or agents the repo ships are left out.
+  useEffect(() => { void syncAgentPlugins(root); }, [root]);
+  // Catalog agents whose CLI this machine has are added once the workspace is up; the
+  // delay keeps the network off the first frames.
+  useEffect(() => {
+    const timer = setTimeout(() => void window.hive.autoInstallAgents().then((labels) => {
+      if (!labels.length) return;
+      void syncAgentPlugins();
+      toast.success(`Added ${labels.join(", ")} — found on this machine.`, {
+        action: { label: "Agents", onClick: () => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "agents" } })) },
+      });
+    }).catch(() => {}), 4000);
+    return () => clearTimeout(timer);
+  }, []);
   const activeViewId = resolveViewId(useViewMode());
   // Host chrome + wallpaper policy come from the active view's preference.
   const settings = useSettings();
@@ -497,16 +513,11 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     }
   }, []);
 
-  // Permission mode the next Claude spawn launches in. Verified flag values
-  // (code.claude.com/docs cli-reference): default | acceptEdits | plan | auto |
-  // dontAsk | bypassPermissions. Persisted so it survives restarts.
-  // (Settings ▸ Agents; settings.json `agents`. The pre-2.0 localStorage keys
-  // were imported once by settings-store.)
-  const claudeMode = settings.agents.permissionMode;
-  const claudeModel = settings.agents.model;
+  const agentOptions = settings.agents.options;
   // Which agent the tool island's spawn button creates (claude / codex / …):
   // settings.agents.defaultAgent, validated against the catalog.
-  const agentSel = agentById(settings.agents.defaultAgent)?.id ?? defaultAgent().id;
+  const presence = useAgentPresence();
+  const agentSel = preferredAgent(settings.agents.defaultAgent, (d) => !notReady(presence, d.id)).id;
   const setAgentSel = useCallback((id: string) => patchSettings("agents.defaultAgent", id), []);
   const agentSelRef = useRef(agentSel);
   useEffect(() => { agentSelRef.current = agentSel; }, [agentSel]);
@@ -553,7 +564,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
 
   // Tile spawning + in-frame placement. See useSpawn.
   const { spawnTile, spawnClaude, spawnAgent, spawnVis, spawnInto, frameOpen, openPlanReview, hcpSpawnAgent } = useSpawn({
-    repoPath, claudeMode, claudeModel,
+    repoPath, agentOptions,
     positionsRef, sizesRef, tilesRef, frameOfRef, framesRef, selectedFrameIdRef,
     selectedTileIdRef, repoPathRef, rootRef, lastActiveFrameRef, claudeSeqRef,
     setFrameOf, setPositions, setSelectedTileId, setFocusReq, setFrames,
@@ -702,6 +713,12 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
             await window.hive.hcpResult(cmd.id, true, { registered: r.registered, refused: r.refused });
             break;
           }
+          case "agents.rescan": {
+            // `hive agents install|remove`
+            const problems = await syncAgentPlugins(rootRef.current);
+            await window.hive.hcpResult(cmd.id, true, { problems });
+            break;
+          }
           case "tile.list_frames": {
             const frames = framesRef.current.map((f) => ({
               id: f.id,
@@ -820,7 +837,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
 
   // Spawn the island's CURRENTLY-selected agent (key "2").
   const spawnSelectedAgent = useCallback(() => {
-    const a = agentById(agentSelRef.current) ?? AGENTS[0]!;
+    const a = agentById(agentSelRef.current) ?? getAgents()[0]!;
     spawnAgent(a);
   }, [spawnAgent]);
   const spawnBrowser = useCallback(() => spawnInto("browser"), [spawnInto]);
@@ -894,8 +911,6 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tiles, focusTile]);
 
-  // herdr-style agent awareness: status → in-app toast + OS notification, with
-  // done-unseen tracking + selection-based suppression. See useAgentAwareness.
   const { toasts, dismissToast, markSeen, selectedTileIdsRef } = useAgentAwareness({
     pushToastRef, frameOfRef, framesRef,
   });

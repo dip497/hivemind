@@ -1,4 +1,4 @@
-import { stat } from "node:fs/promises";
+import { rm, stat } from "node:fs/promises";
 import path from "node:path";
 /**
  * Community view packages, main-process side: list them for the renderer and
@@ -121,10 +121,24 @@ export function startViewWatchdog(win: BrowserWindow): () => void {
   return () => clearInterval(timer);
 }
 
-/** The renderer can install only the package selected in the native picker.
- * Re-read the manifest before installing so changed permissions require review. */
+/** The one package under review. Re-read before installing, so changed permissions need review again. */
+let pending: { token: string; dir: string; manifest: string; staged: boolean } | null = null;
+
+/** Review a view folder: the native picker's choice, or a verified catalog download (`staged`). */
+export async function reviewViewDir(dir: string, staged: boolean) {
+  if (pending?.staged) await rm(pending.dir, { recursive: true, force: true }).catch(() => {});
+  pending = null;
+  const pkg = await readViewPackage(dir, "user", false);
+  if (pkg.error) throw new Error(pkg.error);
+  if (["canvas", "windows", "world"].includes(pkg.id)) throw new Error("This extension uses a built-in view ID");
+  const existing = (await listInstalledViews()).find((view) => view.id === pkg.id);
+  const token = newNonce();
+  pending = { token, dir: pkg.dir, manifest: JSON.stringify(pkg.manifest), staged };
+  return { token, package: { ...pkg, url: null }, replacesVersion: existing ? existing.manifest?.version ?? "unknown" : null };
+}
+
+/** The renderer can install only a package it was shown for review. */
 export function installViewManagementIpc(getWindow: () => BrowserWindow | null): void {
-  let pending: { token: string; dir: string; manifest: string } | null = null;
   const assertSender = (event: Electron.IpcMainInvokeEvent) => {
     const win = getWindow();
     if (!win || event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame) throw new Error("Only the workspace can manage extensions");
@@ -132,25 +146,22 @@ export function installViewManagementIpc(getWindow: () => BrowserWindow | null):
   };
   ipcMain.handle("views:preview-install", async (event) => {
     const win = assertSender(event);
+    if (pending?.staged) await rm(pending.dir, { recursive: true, force: true }).catch(() => {});
     pending = null;
     const result = await dialog.showOpenDialog(win, { title: "Choose a view extension", buttonLabel: "Review extension", properties: ["openDirectory"] });
     if (result.canceled || !result.filePaths[0]) return null;
-    const pkg = await readViewPackage(result.filePaths[0], "user", false);
-    if (pkg.error) throw new Error(pkg.error);
-    if (["canvas", "windows", "world"].includes(pkg.id)) throw new Error("This extension uses a built-in view ID");
-    const existing = (await listInstalledViews()).find((view) => view.id === pkg.id);
-    const token = newNonce();
-    pending = { token, dir: pkg.dir, manifest: JSON.stringify(pkg.manifest) };
-    return { token, package: { ...pkg, url: null }, replacesVersion: existing ? existing.manifest?.version ?? "unknown" : null };
+    return reviewViewDir(result.filePaths[0], false);
   });
   ipcMain.handle("views:install", async (event, token: string) => {
     assertSender(event);
     if (!pending || token !== pending.token) throw new Error("Choose the extension folder again");
     const candidate = pending;
     pending = null;
-    const pkg = await readViewPackage(candidate.dir, "user", false);
-    if (pkg.error || JSON.stringify(pkg.manifest) !== candidate.manifest) throw new Error("The extension changed. Choose its folder again to review it.");
-    await installView(candidate.dir);
+    try {
+      const pkg = await readViewPackage(candidate.dir, "user", false);
+      if (pkg.error || JSON.stringify(pkg.manifest) !== candidate.manifest) throw new Error("The extension changed. Choose its folder again to review it.");
+      await installView(candidate.dir);
+    } finally { if (candidate.staged) await rm(candidate.dir, { recursive: true, force: true }).catch(() => {}); }
   });
   ipcMain.handle("views:remove", async (event, id: string) => {
     assertSender(event);

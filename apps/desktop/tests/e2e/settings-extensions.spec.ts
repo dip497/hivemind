@@ -11,7 +11,9 @@ let source: string;
 let xdg: string;
 const settings = async (id: string) => {
   if (!await page.locator(".settings-dialog").count()) await page.getByLabel("settings", { exact: true }).click();
-  await page.locator(`[data-settings-page="${id}"]`).click();
+  // Per-plugin pages sit in folded sidebar groups; open them the way the app links to them.
+  if (id.includes(":")) await page.evaluate((p) => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: p } })), id);
+  else await page.locator(`[data-settings-page="${id}"]`).click();
 };
 const choose = async (dir: string) => {
   await app.evaluate(({ dialog }, selected) => {
@@ -40,13 +42,13 @@ test.beforeAll(async () => {
 test.afterAll(async () => { await app?.close(); fs.rmSync(root, { recursive: true, force: true }); });
 
 test("settings has a focused dialog, view-specific automatic toolbar, and independent extension management", async () => {
-  await settings("views");
+  await settings("view:canvas");
   await expect(page.getByRole("dialog")).toBeVisible();
   await expect(page.getByLabel("Display", { exact: true })).toHaveValue("auto");
   await page.getByLabel("Display", { exact: true }).selectOption("bottom");
-  await page.getByRole("button", { name: /Windows Tabbed workspace/ }).click();
+  await settings("view:windows");
   await expect(page.getByLabel("Display", { exact: true })).toHaveValue("auto");
-  await page.getByRole("button", { name: /Canvas Infinite canvas/ }).click();
+  await settings("view:canvas");
   await expect(page.getByLabel("Display", { exact: true })).toHaveValue("bottom");
   await page.getByLabel("Display", { exact: true }).selectOption("auto");
   await expect.poll(() => JSON.parse(fs.readFileSync(path.join(xdg, "hivemind/settings.json"), "utf8")).views.chrome).toEqual({});
@@ -57,7 +59,7 @@ test("settings has a focused dialog, view-specific automatic toolbar, and indepe
 });
 
 test("install review, cancellation, invalid packages, replacement, disabling and removal use the real package store", async () => {
-  await settings("extensions");
+  await settings("installed");
   await choose(root);
   await expect(page.getByRole("alert")).toContainText("hivemind-view.json");
   await choose(source);
@@ -72,8 +74,8 @@ test("install review, cancellation, invalid packages, replacement, disabling and
   await pkg.getByRole("switch").click();
   await expect(pkg.getByRole("switch")).toHaveAttribute("aria-checked", "false");
   await settings("views");
-  await expect(page.getByRole("button", { name: /Settings demo Extension/ })).toHaveCount(0);
-  await settings("extensions");
+  await expect(page.getByRole("button", { name: /Settings demo/ })).toHaveCount(0);
+  await settings("installed");
   await pkg.getByRole("switch").click();
   const manifestFile = path.join(source, "hivemind-view.json");
   const manifest = JSON.parse(fs.readFileSync(manifestFile, "utf8"));

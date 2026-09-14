@@ -11,14 +11,7 @@ import path from "node:path";
 // electron.launch inherits this process's env, so setting it here propagates.
 process.env.HIVEMIND_PTY_DAEMON = "0";
 
-// Isolate the Electron profile. main calls `app.setName("hivemind-dev")` for
-// unpackaged runs, so userData (and its localStorage — the persisted canvas)
-// resolves to `$XDG_CONFIG_HOME/hivemind-dev` REGARDLESS of the specs'
-// `--user-data-dir` flag. Without this every spec launched into the developer's
-// real dev canvas: it restored their frames + tiles, spawned their agents in
-// in-process PTY mode, wrote migrated blobs back into their profile, and made
-// the assertions (exactly one tab, an empty canvas, …) flaky or wrong. A fresh
-// XDG_CONFIG_HOME per run gives every launch an empty profile.
+// Per run, not per spec: specs share settings.json, so isolate or restore what you persist.
 process.env.XDG_CONFIG_HOME = fs.mkdtempSync(path.join(os.tmpdir(), "hivemind-e2e-xdg-"));
 
 export default defineConfig({

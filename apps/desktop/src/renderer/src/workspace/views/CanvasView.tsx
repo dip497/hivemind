@@ -34,6 +34,8 @@ import { buildBaseNodes } from "../../canvas-node-build";
 import type { WorkspaceViewPlugin, WorkspaceViewProps } from "../workspace-view";
 import { useCanvasRuntime } from "./canvas-runtime";
 import { AGENT_TILE_KIND } from "../../tile-kinds";
+import { agentById, useAgents } from "../../agents";
+import { notReady, useAgentPresence } from "../../agent-plugins";
 
 // Stable references for props passed to <ReactFlow>. The xyflow perf guide
 // (reactflow.dev/learn/advanced-use/performance) flags unmemoized object/array
@@ -61,6 +63,9 @@ function ViewportMirror({ target }: { target: { current: { x: number; y: number;
 
 export function CanvasView({ model, commands }: WorkspaceViewProps) {
   const rt = useCanvasRuntime();
+  const presence = useAgentPresence();
+  // Unknown until the first PATH check, which counts as ready.
+  const anyAgentReady = useAgents().some((a) => a.enabled && !notReady(presence, a.id));
   const {
     repoPath, tiles, frames, frameOf, selectedTileId,
     layerTiles, layerFrames, frameActions, links,
@@ -560,7 +565,12 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
             onShowTree={() => spawnVis("tree")}
             onShowShell={() => spawnVis("shell")}
             onShowDiff={() => spawnVis("diff")}
-            onSpawnClaude={() => spawnClaude()}
+            agentLabel={anyAgentReady ? agentById(rt.agentSel)?.label ?? null : null}
+            onSpawnAgent={() => {
+              const a = anyAgentReady ? agentById(rt.agentSel) : undefined;
+              if (a) rt.spawnAgent(a);
+              else window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "agents" } }));
+            }}
             onInitWorkspace={rt.onInitWorkspace}
           />
         )}

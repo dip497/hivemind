@@ -29,17 +29,20 @@ export const codex: AgentProviderDef = {
   id: "codex",
   label: "Codex",
   bin: "codex",
-  defaultArgs: ["--sandbox", "workspace-write", "--ask-for-approval", "on-request"],
   enabled: true,
   caps: {
     promptDelivery: "typed",
     turnSignal: false,
     resume: "cwd",
     supervise: "human",
-    modelFlag: false,
-    permissionModes: false,
     blockedDetection: true,
   },
+  options: [
+    { id: "model", label: "Model", flag: "--model" },
+    { id: "mode", label: "Approval", flag: "--ask-for-approval", default: "on-request" },
+    { id: "sandbox", label: "Sandbox", flag: "--sandbox", default: "workspace-write" },
+  ],
+  install: { url: "https://developers.openai.com/codex/cli", command: "npm install -g @openai/codex" },
   /** OpenAI Codex mark, monochrome via currentColor. */
   icon: {
     viewBox: "0 0 24 24",

@@ -12,7 +12,7 @@ export default defineConfig({
     customCss: ['./src/styles/docs.css'],
     sidebar: [
       { label: 'Start here', items: [{ label: 'Introduction', slug: 'guide' }, { label: 'Installation', slug: 'guide/getting-started' }] },
-      { label: 'Use Hivemind', items: ['guide/workspaces', 'guide/agents', 'guide/views', 'guide/appearance'] },
+      { label: 'Use Hivemind', items: ['guide/workspaces', 'guide/agents', 'guide/agent-providers', 'guide/views', 'guide/appearance'] },
       { label: 'For agents', items: ['guide/agent-workflows', 'guide/cli'] },
       { label: 'Build with Hivemind', items: ['guide/packages', 'guide/extension-authoring', 'guide/contributing', 'guide/troubleshooting'] },
     ],

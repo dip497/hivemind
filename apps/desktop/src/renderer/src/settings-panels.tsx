@@ -1,4 +1,6 @@
-import { ViewSettings, ExtensionSettings } from "./settings-views";
+import { ViewsOverview, ViewPage } from "./settings-views";
+import { ToolsOverview, ToolPage } from "./settings-tools";
+import { BrowsePlugins, InstalledPlugins } from "./settings-plugins";
 /**
  * Settings pages that read and write settings.json (via settings-store /
  * theme-store): Appearance, Views (installed community packages, per-view
@@ -18,8 +20,9 @@ import { setTheme, useTheme } from "./theme-store";
 import {
   AccentPicker, BackgroundControls, GlassControls, OverlayControls, PresetRow, Section, TerminalColors,
 } from "./appearance-controls";
-import { defaultAgent } from "@hivemind/agents";
-import { AGENTS, agentById } from "./agents";
+import { AgentsOverview, AgentPage } from "./settings-agents";
+import { createContext, useContext } from "react";
+import { pluginPage } from "./settings-registry";
 
 // ── Appearance ──────────────────────────────────────────────────────────────
 // Everyday choices first (theme, accent, background, glass, how tools look in a
@@ -95,49 +98,6 @@ function AppearancePrefs() {
   );
 }
 
-// ── Agents ──────────────────────────────────────────────────────────────────
-// The catalog decides what can be picked and what each provider supports; this
-// page only stores the choice (`settings.agents.*`), exactly as before.
-
-const MODES = ["default", "acceptEdits", "plan", "bypassPermissions"];
-const MODELS = ["default", "sonnet", "opus", "haiku"];
-
-function AgentPrefs() {
-  const s = useSettings();
-  const sel = agentById(s.agents.defaultAgent) ?? agentById(defaultAgent().id);
-  const caps = sel?.def.caps;
-  return (
-    <div className="settings-stack">
-      <Section title="Agents">
-        <div className="settings-row">
-          <div><label htmlFor="default-agent">Default agent</label><p>Used when you create a new agent.</p></div>
-          <select
-            id="default-agent"
-            value={sel?.id ?? ""}
-            onChange={(e) => patchSettings("agents.defaultAgent", e.target.value)}
-          >
-            {AGENTS.filter((a) => a.enabled).map((a) => (
-              <option key={a.id} value={a.id} data-agent-option={a.id}>{a.label}</option>
-            ))}
-          </select>
-        </div>
-        <div className="settings-row">
-          <div><label htmlFor="agent-model">Model</label>{!caps?.modelFlag && <p>{sel?.label} chooses its own model.</p>}</div>
-          <select id="agent-model" aria-label="Model" disabled={!caps?.modelFlag} value={s.agents.model} onChange={(e) => patchSettings("agents.model", e.target.value)}>
-            {MODELS.map((m) => <option key={m} value={m}>{m}</option>)}
-          </select>
-        </div>
-        <div className="settings-row">
-          <div><label htmlFor="agent-permission">Permission mode</label>{!caps?.permissionModes && <p>{sel?.label} has no permission modes; this applies to agents that do.</p>}</div>
-          <select id="agent-permission" aria-label="Permission mode" disabled={!caps?.permissionModes} value={s.agents.permissionMode} onChange={(e) => patchSettings("agents.permissionMode", e.target.value)}>
-            {MODES.map((m) => <option key={m} value={m}>{m}</option>)}
-          </select>
-        </div>
-      </Section>
-    </div>
-  );
-}
-
 // ── Shortcuts (read-only) ───────────────────────────────────────────────────
 
 const SHORTCUTS: [string, string][] = [
@@ -171,11 +131,27 @@ function ShortcutPrefs() {
 
 /** The lazy half of the Settings dialog — one chunk, loaded when it opens
  *  (App.tsx keeps only the cheap pages, so the entry bundle does not grow). */
-export default function SettingsPages({ page, onExtensions }: { page: string; onExtensions: () => void }) {
+const NavigateContext = createContext<(id: string) => void>(() => {});
+export const useSettingsNavigate = (): ((id: string) => void) => useContext(NavigateContext);
+
+/** Must match the registry's `chunk: "lazy"` pages (unit tested); plugin pages (`agent:…`) are always lazy. */
+export const LAZY_SETTINGS_PAGES = ["appearance", "shortcuts", "agents", "views", "tools", "plugins", "installed"] as const;
+
+export default function SettingsPages({ page, navigate }: { page: string; navigate: (id: string) => void }) {
+  return <NavigateContext.Provider value={navigate}>{renderPage(page)}</NavigateContext.Provider>;
+}
+
+function renderPage(page: string) {
   if (page === "appearance") return <AppearancePrefs />;
-  if (page === "views") return <ViewSettings onExtensions={onExtensions} />;
-  if (page === "extensions") return <ExtensionSettings />;
-  if (page === "agents") return <AgentPrefs />;
   if (page === "shortcuts") return <ShortcutPrefs />;
+  if (page === "agents") return <AgentsOverview />;
+  if (page === "views") return <ViewsOverview />;
+  if (page === "tools") return <ToolsOverview />;
+  if (page === "plugins") return <BrowsePlugins />;
+  if (page === "installed") return <InstalledPlugins />;
+  const pp = pluginPage(page);
+  if (pp?.kind === "agent") return <AgentPage id={pp.pluginId} />;
+  if (pp?.kind === "view") return <ViewPage id={pp.pluginId} />;
+  if (pp?.kind === "tool") return <ToolPage id={pp.pluginId} />;
   return null;
 }

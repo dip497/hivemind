@@ -1,0 +1,24 @@
+# Qwen Code — a catalog agent. Launch only: no status reading, resume or turn reports.
+manifestVersion: 1
+id: qwen-code
+label: "Qwen Code"
+bin: qwen
+enabled: true
+caps:
+  promptDelivery: typed
+  turnSignal: false
+  resume: none
+  supervise: human
+  blockedDetection: false
+options:
+  - id: model
+    label: "Model"
+    flag: --model
+  - id: mode
+    label: "Approval"
+    flag: --approval-mode
+    unattended: yolo
+install:
+  url: https://qwenlm.github.io/qwen-code-docs/
+  command: "npm install -g @qwen-code/qwen-code@latest"
+note: "launches only: Hivemind does not read its status yet, and other agents cannot collect its replies."

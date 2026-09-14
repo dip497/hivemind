@@ -37,7 +37,7 @@ description: Diagnose common errors.
   history survive, scroll/form state does not.
 - **Agent cannot browse** — enable agent browser control in Settings, open a Browser
   tile, retry; the `hive-browser` skill reports what is missing.
-- **View missing or disabled** — check Settings → Extensions for runtime load errors and
+- **View missing or disabled** — check Settings → Plugins → Installed for runtime load errors and
   `hive views list` for package errors. A plugin that
   violated its budget stays disabled until the app restarts.
 

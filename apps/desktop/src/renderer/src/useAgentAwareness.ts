@@ -1,11 +1,5 @@
-/**
- * useAgentAwareness — the herdr-style agent status → toast / OS-notification
- * state machine, lifted from Canvas.tsx. Subscribes to the agent-status bus,
- * tracks per-tile status + done-unseen, raises an in-app toast (suppressed when
- * the tile is selected) and a native notification (suppressed by main when the
- * window is focused) on the SAME transitions. Returns the toast list + the
- * markSeen action + the selected-tiles ref the render wires into selection.
- */
+/** Agent status transitions → in-app toast (not for a selected tile) and OS
+ *  notification (main suppresses it while the window is focused). */
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { isBackgroundTile } from "./worker-tiles";

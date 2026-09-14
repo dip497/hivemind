@@ -2,7 +2,8 @@
 # hivemind installer / upgrader — Linux x86_64 + macOS arm64.
 #
 # DEFAULT (no flags): downloads prebuilt binaries from the latest GitHub
-# Release. Needs only `curl`, `bash`, and the `claude` CLI on PATH.
+# Release. Needs only `curl` and `bash`, plus any supported agent CLI (claude, codex,
+# gemini, …) to launch agents — Hivemind finds whichever are installed.
 # No node / pnpm / bun required. Prebuilts exist for Linux x86_64 (AppImage)
 # and macOS Apple Silicon (.app zip); anything else needs `--dev`.
 #
@@ -606,14 +607,17 @@ install_dev() {
   fi
 }
 
-# ── claude CLI presence (warning, not fatal) ──────────────────────────────
-claude_check() {
-  if command -v claude >/dev/null 2>&1; then
-    ok "claude → $(command -v claude)"
+# ── agent CLIs (report, never fatal) ──────────────────────────────────────
+# Hivemind finds agents itself at launch; this just tells you what it will see.
+agents_check() {
+  local hive="$BIN_DIR/hive" found
+  [ -x "$hive" ] || return 0
+  found="$("$hive" agents list --found 2>/dev/null | awk '{print $1}' | paste -sd' ' -)"
+  if [ -n "$found" ] && [ "$found" != "no" ]; then
+    ok "agents found: $found"
   else
-    warn "claude CLI not found. The desktop app launches fine without it,"
-    warn "but spawning a Claude tile will only work after you install it:"
-    warn "  https://docs.claude.com/en/docs/claude-code"
+    warn "No agent CLI found yet. Hivemind launches fine; install one to start agents:"
+    warn "  https://docs.claude.com/en/docs/claude-code  (or codex, gemini, … — see Settings ▸ Agents)"
   fi
 }
 
@@ -624,7 +628,7 @@ if [ "$MODE" = "dev" ]; then
 else
   install_prebuilt
 fi
-claude_check
+agents_check
 
 case ":$PATH:" in
   *":$BIN_DIR:"*) ok "$BIN_DIR already on PATH" ;;

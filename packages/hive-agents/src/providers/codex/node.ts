@@ -13,21 +13,32 @@
 import { homedir } from "node:os";
 import { join, basename } from "node:path";
 import { readdirSync, statSync, openSync, readSync, closeSync } from "node:fs";
+import { StringDecoder } from "node:string_decoder";
 import type { AgentPlugin, SpawnSpec } from "../../types.js";
 
 export function isCodex(spec: { cmd: string }): boolean {
   return basename(spec.cmd.trim().split(/\s+/)[0] ?? "") === "codex";
 }
 
-/** Read just the first line of a (possibly large) jsonl without slurping it. */
-function firstLine(file: string): string {
+/** Chunked: the first line embeds the whole system prompt (~22 KB). */
+function firstLine(file: string, cap = 4 * 1024 * 1024): string {
   const fd = openSync(file, "r");
   try {
-    const buf = Buffer.alloc(8192);
-    const n = readSync(fd, buf, 0, buf.length, 0);
-    const s = buf.toString("utf8", 0, n);
-    const nl = s.indexOf("\n");
-    return nl === -1 ? s : s.slice(0, nl);
+    const buf = Buffer.alloc(64 * 1024);
+    // A chunk boundary can split a multi-byte char.
+    const dec = new StringDecoder("utf8");
+    let out = "";
+    let pos = 0;
+    for (;;) {
+      const n = readSync(fd, buf, 0, buf.length, pos);
+      if (n === 0) return out + dec.end();
+      const s = dec.write(buf.subarray(0, n));
+      const nl = s.indexOf("\n");
+      if (nl !== -1) return out + s.slice(0, nl);
+      out += s;
+      pos += n;
+      if (out.length > cap) return out;
+    }
   } finally {
     closeSync(fd);
   }

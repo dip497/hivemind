@@ -19,7 +19,8 @@
     "./settings": "./src/settings.ts",
     "./packages": "./src/packages.ts",
     "./tool-plugins": "./src/tool-plugins.ts",
-    "./toolbar": "./src/toolbar.ts"
+    "./toolbar": "./src/toolbar.ts",
+    "./plugin-catalog": "./src/plugin-catalog.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

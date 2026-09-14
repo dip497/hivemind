@@ -169,7 +169,7 @@ test("toolbar Off is per-view, persists through restart, and Settings restores i
   const original = await page.locator(".xterm").first().elementHandle();
   const settings = () => page.getByRole("button", { name: "settings", exact: true });
   await settings().click();
-  await page.locator('[data-settings-page="views"]').click();
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "view:canvas" } })));
   await page.getByLabel("Display", { exact: true }).selectOption("off");
   await page.getByRole("button", { name: "Close", exact: true }).click();
   await expect(page.locator("[data-host-island], [data-host-island-handle]")).toHaveCount(0);
@@ -190,7 +190,7 @@ test("toolbar Off is per-view, persists through restart, and Settings restores i
   // Exercise keyboard recovery through the app-owned Settings button.
   await settings().focus();
   await page.keyboard.press("Enter");
-  await page.locator('[data-settings-page="views"]').click();
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "view:canvas" } })));
   await expect(page.getByLabel("Display", { exact: true })).toHaveValue("off");
   await page.getByLabel("Display", { exact: true }).selectOption("auto");
   await page.getByRole("button", { name: "Close", exact: true }).click();
@@ -214,4 +214,16 @@ test("collapsed toolbar expansion does not leak across views or placement change
   await expect(page.getByRole("button", { name: "show tools", exact: true })).toHaveAttribute("aria-expanded", "false");
   await expect(page.locator("[data-host-island]")).toHaveCount(0);
   await configure({});
+});
+
+test("the canvas controls are one tab stop, and arrows move inside them", async () => {
+  await toView("canvas");
+  const controls = page.getByRole("toolbar", { name: "Canvas controls" });
+  await expect(controls).toBeVisible();
+  await controls.getByRole("button").first().focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(controls.getByRole("button").nth(1)).toBeFocused();
+  await expect(controls.locator('button[tabindex="0"]')).toHaveCount(1);
+  await page.keyboard.press("Tab");
+  expect(await page.evaluate(() => !!(document.activeElement as HTMLElement)?.closest('[role="toolbar"]'))).toBe(false);
 });

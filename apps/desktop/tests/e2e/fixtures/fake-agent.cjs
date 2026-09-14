@@ -72,7 +72,7 @@ fs.mkdirSync(transcriptDir, { recursive: true });
 const transcriptPath = path.join(transcriptDir, `${sessionId}.jsonl`);
 
 // ── the initial prompt ────────────────────────────────────────────────────────
-const VALUE_FLAGS = new Set(["--settings", "--session-id", "--permission-mode", "--model", "--resume", "-r"]);
+const VALUE_FLAGS = new Set(["--settings", "--session-id", "--permission-mode", "--model", "--resume", "-r", "--auto"]);
 function positionalPrompt() {
   for (let i = 0; i < args.length; i++) {
     const a = args[i];

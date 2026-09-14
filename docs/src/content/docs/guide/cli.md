@@ -112,14 +112,19 @@ hive ctl delete-issue MYP-1                   # irreversible
 hive ctl list-workspaces
 ```
 
-## Views, config, theme, upgrade
+## Views, agents, config, theme, upgrade
 
-Views and the settings file are on the unreleased development line — expect change.
+Views, agent files and the settings file are on the unreleased development line — expect change.
 
 ```text
 hive views list                         # installed view plugins + load errors
 hive views install <dir>                # dir with hivemind-view.json; asks the app to rescan
 hive views remove <id>
+
+hive agents list                        # every agent, its source, on/off, and why any failed
+hive agents list --found                # only agents whose CLI is on this machine
+hive agents install <dir>               # dir with agent.yaml; checked before it is copied
+hive agents remove <id>                 # agents you installed; switch built-ins off instead
 
 hive config path
 hive config get [dotted.path]
@@ -134,9 +139,14 @@ hive upgrade [--dev]
 `hive config set` takes a JSON value (`'"nord"'` for strings) and asks a running app to
 reload; themes cover ubuntu, dracula, nord, solarized-dark, one-dark.
 
+`hive agents install` and `remove` ask a running app to rescan, so the change shows up
+without a restart. `hive ctl spawn --agent` and `hive ctl workflow` accept agents added
+this way, and refuse any agent switched off in Settings. See
+[Add your own agent](../agent-providers/) for the file format.
+
 ## Optional tools
 
-Browser is an optional bundled tool. Enable it in **Settings > Extensions**, or set
+Browser is an optional bundled tool. Switch it on in **Settings > Tools**, or set
 the enabled plugin list through the CLI. These commands replace the complete list;
 read `hive config get tools.enabledPlugins` first if you have other plugins enabled.
 

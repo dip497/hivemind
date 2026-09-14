@@ -248,8 +248,18 @@ describe("settings schema", () => {
     expect(s.appearance.overlayMedia).toHaveLength(1);
     expect(s.appearance.preset).toBe("ubuntu"); // a legacy user IS on the ubuntu look
     expect(s.views.defaultView).toBe("windows");
-    expect(s.agents).toEqual({ defaultAgent: "codex", model: "opus", permissionMode: "plan" });
+    expect(s.agents).toEqual({ disabled: [], defaultAgent: "codex", options: { claude: { model: "opus", mode: "plan" } }, autoInstall: true, declined: [] });
     expect(migrateLegacy({}).migrated).toBe(true);
+  });
+
+  test("agent options: per agent, validated, and the old global pair moves to claude", () => {
+    const s = mergeSettings({ v: 1, agents: { options: { claude: { model: "opus", mode: "", "Bad Key": "x" }, "../x": { model: "y" }, codex: "nope" } } });
+    expect(s.agents.options).toEqual({ claude: { model: "opus" } });
+    const old = mergeSettings({ v: 1, agents: { defaultAgent: "codex", model: "sonnet", permissionMode: "default" } });
+    expect(old.agents).toEqual({ disabled: [], defaultAgent: "codex", options: { claude: { model: "sonnet" } }, autoInstall: true, declined: [] });
+    const off = mergeSettings({ v: 1, agents: { autoInstall: false, declined: ["aider", "../x", 3] } });
+    expect(off.agents.autoInstall).toBe(false);
+    expect(off.agents.declined).toEqual(["aider"]);
   });
 
   test("getPath/setPath: dotted access, immutable set, prototype keys refused", () => {
@@ -323,13 +333,13 @@ describe("settings concurrency", () => {
       patchSettingsFile([{ path: "appearance.glass.blur", value: 20 }]),
       patchSettingsFile([{ path: "appearance.accent", value: "ember" }]),
       patchSettingsFile([{ path: "views.defaultView", value: "windows" }]),
-      patchSettingsFile([{ path: "agents.model", value: "opus" }]),
+      patchSettingsFile([{ path: "agents.options.claude.model", value: "opus" }]),
     ]);
     const s = await readSettings();
     expect(s.appearance.glass.blur).toBe(20);
     expect(s.appearance.accent).toBe("ember");
     expect(s.views.defaultView).toBe("windows");
-    expect(s.agents.model).toBe("opus");
+    expect(s.agents.options.claude?.model).toBe("opus");
   });
 
   test("a patch is validated like any other write, and unknown top-level keys survive it", async () => {
@@ -367,17 +377,17 @@ describe("settings concurrency", () => {
   });
 
   test("an extras patch leaves the schema settings untouched, and removes a key set to undefined", async () => {
-    await patchSettingsFile([{ path: "agents.model", value: "opus" }]);
+    await patchSettingsFile([{ path: "agents.options.claude.model", value: "opus" }]);
     await patchSettingsExtras({ browserCdp: true, legacyThing: 1 });
     let raw = JSON.parse(fs.readFileSync(settingsPath(), "utf8"));
-    expect(raw.agents.model).toBe("opus");
+    expect(raw.agents.options.claude.model).toBe("opus");
     expect(raw.legacyThing).toBe(1);
 
     await patchSettingsExtras({ legacyThing: undefined });
     raw = JSON.parse(fs.readFileSync(settingsPath(), "utf8"));
     expect("legacyThing" in raw).toBe(false);
     expect(raw.browserCdp).toBe(true);
-    expect(raw.agents.model).toBe("opus");
+    expect(raw.agents.options.claude.model).toBe("opus");
   });
 
   test("a lock we do not own is NEVER deleted, however old it looks — the write fails safely", async () => {
@@ -390,7 +400,7 @@ describe("settings concurrency", () => {
     fs.utimesSync(lock, new Date(Date.now() - 600_000), new Date(Date.now() - 600_000));
     const before = fs.readFileSync(settingsPath(), "utf8").toString();
 
-    await expect(patchSettingsFile([{ path: "agents.model", value: "sonnet" }])).rejects.toBeInstanceOf(SettingsLockError);
+    await expect(patchSettingsFile([{ path: "agents.options.claude.model", value: "sonnet" }])).rejects.toBeInstanceOf(SettingsLockError);
 
     expect(fs.readFileSync(lock, "utf8")).toBe("someone-else"); // untouched
     expect(fs.readFileSync(settingsPath(), "utf8").toString()).toBe(before); // nothing written
@@ -403,8 +413,8 @@ describe("settings concurrency", () => {
     expect(await breakSettingsLock()).toBe(true);
     expect(fs.existsSync(lock)).toBe(false);
     expect(await breakSettingsLock()).toBe(false); // nothing left to clear
-    const s = await patchSettingsFile([{ path: "agents.model", value: "sonnet" }]);
-    expect(s.agents.model).toBe("sonnet");
+    const s = await patchSettingsFile([{ path: "agents.options.claude.model", value: "sonnet" }]);
+    expect(s.agents.options.claude?.model).toBe("sonnet");
     expect(fs.existsSync(lock)).toBe(false); // our own lock released
   });
 

@@ -17,8 +17,6 @@ export const openclaw: AgentProviderDef = {
     turnSignal: false,
     resume: "none",
     supervise: "human",
-    modelFlag: false,
-    permissionModes: false,
     blockedDetection: false,
   },
   icon: GENERIC_AGENT_ICON,

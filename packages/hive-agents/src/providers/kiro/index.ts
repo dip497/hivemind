@@ -51,10 +51,9 @@ export const kiro: AgentProviderDef = {
     turnSignal: true,
     resume: "tile",
     supervise: "broker",
-    modelFlag: false,
-    permissionModes: false,
     blockedDetection: true,
   },
+  install: { url: "https://kiro.dev/docs/cli/", command: "curl -fsSL https://cli.kiro.dev/install | bash" },
   /** the Kiro ghost mark. */
   icon: {
     viewBox: "0 0 24 24",

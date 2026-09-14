@@ -1,0 +1,81 @@
+# Grok — built-in provider manifest.
+# Authoring format for the def half. See packages/hive-agents/src/manifest.ts.
+manifestVersion: 1
+id: grok
+label: Grok
+bin: grok
+aliases:
+- grok-build
+enabled: true
+caps:
+  promptDelivery: typed
+  turnSignal: false
+  resume: none
+  supervise: human
+  blockedDetection: true
+icon:
+  viewBox: 0 0 16 16
+  attrs:
+    fill: none
+  shapes:
+  - rect:
+      x: '2.5'
+      y: '4'
+      width: '11'
+      height: '8.5'
+      rx: '2'
+      stroke: currentColor
+      stroke-width: '1.2'
+  - circle:
+      cx: '6'
+      cy: '8'
+      r: '1'
+      fill: currentColor
+  - circle:
+      cx: '10'
+      cy: '8'
+      r: '1'
+      fill: currentColor
+  - path:
+      d: M8 4V2M5.5 12.5v1M10.5 12.5v1
+      stroke: currentColor
+      stroke-width: '1.2'
+      stroke-linecap: round
+options:
+- id: model
+  label: Model
+  flag: --model
+- id: mode
+  label: Permission mode
+  flag: --permission-mode
+  unattended: bypassPermissions
+install:
+  url: https://docs.x.ai/build/overview
+  command: "curl -fsSL https://x.ai/cli/install.sh | bash"
+detect:
+  rules:
+  - when:
+      any:
+      - contains: use ← → to choose permission whitelist scope
+      - contains: yes, proceed
+      - contains: no, reject
+      - contains: ctrl+o:yolo
+      - contains: :scope
+    then: blocked
+  - when:
+      all:
+      - helper: hasBrailleSpinner
+      - any:
+        - contains: waiting
+        - contains: "run "
+        - contains: "read "
+        - contains: "search "
+        - contains: "list "
+    then: working
+  - when:
+      all:
+      - contains: ctrl+c:cancel
+      - contains: ctrl+enter:interject
+    then: working
+  default: idle
+note: launches and reads status; other agents cannot collect its replies.

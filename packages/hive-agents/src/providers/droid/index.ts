@@ -34,10 +34,12 @@ export const droid: AgentProviderDef = {
     turnSignal: true,
     resume: "cwd",
     supervise: "human",
-    modelFlag: false,
-    permissionModes: false,
     blockedDetection: true,
   },
+  options: [
+    { id: "mode", label: "Autonomy", flag: "--auto", unattended: "high" },
+  ],
+  install: { url: "https://docs.factory.ai/cli/getting-started/quickstart", command: "curl -fsSL https://app.factory.ai/cli | sh" },
   /** a geometric rendering of Factory's looped-petal star mark (Factory ships no simple-icons logo). */
   icon: {
     viewBox: "0 0 24 24",

@@ -1,5 +1,5 @@
 import { defineCommand } from "citty";
-import { CATALOG } from "@hivemind/agents";
+import { agentOption, getCatalog } from "@hivemind/agents";
 import { inspectPackage } from "@hivemind/core/packages";
 import { HiveError } from "@hivemind/core";
 import { err, ok } from "../format.js";
@@ -15,8 +15,8 @@ export const packagesCmd = defineCommand({
       async run({ args }) {
         const ctx = { json: !!args.json };
         try {
-          const report = await inspectPackage(String(args.dir), CATALOG.map((p) => ({
-            id: p.id, enabled: p.enabled, modelFlag: p.caps.modelFlag, supervision: p.caps.supervise,
+          const report = await inspectPackage(String(args.dir), getCatalog().map((p) => ({
+            id: p.id, enabled: p.enabled, modelFlag: !!agentOption(p, "model"), supervision: p.caps.supervise,
           })));
           // Keep even human output escaped: package-authored text must not emit terminal controls.
           return ok(ctx, report, () => JSON.stringify(report, null, 2).replace(/[\x7f-\x9f\u202a-\u202e\u2066-\u2069]/g, escapeControl));

@@ -2,7 +2,8 @@
  * Pure helpers behind `hive ctl` — argument shaping and the read/poll schedule.
  * No I/O, so they're unit-tested directly (tests/ctl-args.test.ts).
  */
-import { agentById, defaultAgent, spawnableAgents, workerAgents } from "@hivemind/agents";
+import { agentById, spawnableAgents, workerAgents } from "@hivemind/agents";
+import { cliDefaultAgent } from "./agent-catalog.js";
 
 export class UnsupportedError extends Error {
   code = "UNSUPPORTED";
@@ -13,7 +14,7 @@ export class UnsupportedError extends Error {
  *  spawnable ids; `needsWorker` → UNSUPPORTED (exit 7) for a runtime with no
  *  turn signal, BEFORE any tile is spawned. */
 export function resolveAgent(id: string | undefined, needsWorker = false): string {
-  const agent = id ?? defaultAgent().id;
+  const agent = id ?? cliDefaultAgent();
   const def = agentById(agent);
   if (!def || !def.enabled) throw new UsageError(`--agent must be one of ${spawnableAgents().map((d) => d.id).join(", ")} (got ${agent})`);
   if (needsWorker && !def.caps.turnSignal) {

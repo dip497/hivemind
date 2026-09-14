@@ -55,32 +55,41 @@ function build(): void {
   if (r.status !== 0) throw new Error(`desktop build failed:\n${r.stdout}\n${r.stderr}`);
 }
 
+/** Restored byte-for-byte on cleanup, never `git checkout`: that discards unrelated uncommitted work. */
+let original: { catalog: string; node: string } | null = null;
+
 /** Drop the provider in: one directory (def + plugin), one line in each list. */
 function installSixthProvider(): void {
+  // Cleanup deletes DIR, so never adopt one that was already there.
+  if (fs.existsSync(DIR)) throw new Error(`refusing to install: ${DIR} already exists and cleanup would delete it`);
+  const cat = fs.readFileSync(CATALOG, "utf8");
+  const node = fs.readFileSync(NODE, "utf8");
+  original = { catalog: cat, node };
   fs.mkdirSync(DIR, { recursive: true });
   fs.copyFileSync(path.join(__dirname, "fixtures/sixth-provider/faux/index.ts"), DEF);
   fs.copyFileSync(path.join(__dirname, "fixtures/sixth-provider/faux/node.ts"), DEF_NODE);
-  const cat = fs.readFileSync(CATALOG, "utf8");
   fs.writeFileSync(CATALOG, cat
     .replace('import { openclaw } from "./providers/openclaw/index.js";', 'import { openclaw } from "./providers/openclaw/index.js";\nimport { faux } from "./providers/faux/index.js";')
     .replace("  claude, codex, opencode, droid, pi, kiro,", "  claude, codex, opencode, droid, pi, kiro, faux,"));
-  const node = fs.readFileSync(NODE, "utf8");
   fs.writeFileSync(NODE, node
     .replace('import { plugin as piPlugin } from "./providers/pi/node.js";', 'import { plugin as piPlugin } from "./providers/pi/node.js";\nimport { plugin as fauxPlugin } from "./providers/faux/node.js";')
-    .replace("[claudePlugin, codexPlugin, droidPlugin, kiroPlugin, piPlugin]", "[claudePlugin, codexPlugin, droidPlugin, kiroPlugin, piPlugin, fauxPlugin]"));
+    .replace("[claudePlugin, codexPlugin, cursorPlugin, droidPlugin, kiroPlugin, piPlugin]", "[claudePlugin, codexPlugin, cursorPlugin, droidPlugin, kiroPlugin, piPlugin, fauxPlugin]"));
   for (const [file, needle] of [[CATALOG, "kiro, faux,"], [NODE, "piPlugin, fauxPlugin]"]] as const) {
     if (!fs.readFileSync(file, "utf8").includes(needle)) throw new Error(`could not add the sixth provider to ${path.basename(file)} — anchor moved`);
   }
 }
-function removeSixthProvider(): void {
-  execSync(`git checkout -- ${JSON.stringify(CATALOG)} ${JSON.stringify(NODE)}`, { cwd: ROOT, stdio: "ignore" });
+/** Returns whether anything was undone. */
+function removeSixthProvider(): boolean {
+  if (!original) return false; // setup never touched a file
+  fs.writeFileSync(CATALOG, original.catalog);
+  fs.writeFileSync(NODE, original.node);
+  original = null;
   fs.rmSync(DIR, { recursive: true, force: true });
+  return true;
 }
 
 test.beforeAll(async () => {
   test.setTimeout(420_000);
-  const dirty = execSync(`git status --porcelain -- ${JSON.stringify(CATALOG)} ${JSON.stringify(NODE)} ${JSON.stringify(DEF)} ${JSON.stringify(DEF_NODE)}`, { cwd: ROOT, encoding: "utf8" }).trim();
-  if (dirty) throw new Error(`refusing to edit a dirty catalog:\n${dirty}`);
   installSixthProvider();
   build();
 
@@ -119,8 +128,7 @@ test.afterAll(async () => {
   // Stand-in agents this spec's tiles spawned (pattern anchored on the fixture
   // path + provider argv so it can never match an unrelated shell).
   try { execSync(`pkill -f "fixtures/fake-agent\\.cjs (claude|droid|codex|faux) "`, { stdio: "ignore" }); } catch { /* none */ }
-  removeSixthProvider();
-  build(); // the on-disk bundle matches the checkout again
+  if (removeSixthProvider()) build(); // the on-disk bundle matches the source again
   fs.rmSync(repo, { recursive: true, force: true });
   fs.rmSync(fakeBin, { recursive: true, force: true });
 });

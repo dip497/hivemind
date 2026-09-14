@@ -1,6 +1,3 @@
-// Unit tests for the multi-agent state detector ported from herdr (detect.rs).
-// Run: pnpm test:unit (node --test via tsx). Covers identifyAgent + each agent's
-// blocked/working/idle heuristics — the real risk surface is the string matching.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {

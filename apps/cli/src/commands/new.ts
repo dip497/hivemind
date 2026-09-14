@@ -1,4 +1,5 @@
 import { defineCommand } from "citty";
+import { ensureAgentCatalog } from "../agent-catalog.js";
 import {
   HiveError,
   createIssue,
@@ -49,6 +50,7 @@ export const newCmd = defineCommand({
       if (!state) {
         return err(ctx, "bad_state", `invalid state: ${args.state}`);
       }
+      if (args.assignee) await ensureAgentCatalog(); // agent vs member is decided by the agent list
       const assignee = parseAssignee(
         args.assignee ? String(args.assignee) : undefined,
         args["assignee-type"] as "agent" | "member" | undefined,

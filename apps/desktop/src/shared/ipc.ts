@@ -168,6 +168,7 @@ export interface UpdateStatus {
 }
 
 import type { LegacyRendererState, Settings } from "@hivemind/core/settings-schema";
+import type { CatalogEntry } from "@hivemind/core/plugin-catalog";
 
 /** One community view package as the main process sees it (see main/view-packages.ts). */
 export interface ViewPackageInfo {
@@ -203,7 +204,31 @@ export interface HiveIpc {
   /** Installed view packages (user dir + this repo's .hivemind/views), each
    *  with its load URL or the reason it will not load. Rescans on every call. */
   listViews(repoRoot: string | null): Promise<ViewPackageInfo[]>;
+  /** Agent providers on disk. Only manifests cross — a def carries detect(). */
+  listAgents(repoRoot: string | null): Promise<{
+    agents: Array<{ id: string; file: string; source: "builtin" | "user" | "repo"; manifest: unknown; error: string | null; disabled: boolean }>;
+    shadowed: Array<{ id: string; by: string; over: string }>;
+  }>;
+  /** Where each agent's CLI was found on PATH (null = not installed). Runs nothing. */
+  agentPresence(): Promise<Record<string, { path: string | null }>>;
+  /** Found, and answering `--version` like a CLI (not a same-named program). */
+  verifyAgent(id: string): Promise<{ path: string | null; version?: string; mismatch?: string }>;
+  /** The values each of an agent's options takes, read from its CLI. Cached per binary version. */
+  agentOptionChoices(id: string): Promise<Record<string, { values: string[]; from: "help" | "list" | null; error?: string }>>;
   previewViewInstall(): Promise<{ token: string; package: ViewPackageInfo; replacesVersion: string | null } | null>;
+  /** The published plugin catalog (hash-pinned agents and views). */
+  pluginCatalog(): Promise<CatalogEntry[]>;
+  /** Download and verify a catalog plugin, then return it for review. A view installs with
+   *  `installViewPackage(token)`, an agent with `installCatalogAgent(token)`. */
+  reviewCatalogPlugin(type: CatalogEntry["type"], id: string): Promise<
+    | ({ type: "view" } & { token: string; package: ViewPackageInfo; replacesVersion: string | null })
+    | { type: "agent"; token: string; id: string; label: string; bin: string; command: string; flags: string[]; worker: boolean; replaces: boolean; install?: { url: string; command?: string } }
+  >;
+  installCatalogAgent(token: string): Promise<void>;
+  /** Remove an agent you installed; a catalog one is then never added automatically again. */
+  removeAgent(id: string): Promise<void>;
+  /** Add catalog agents whose CLI was found; the labels of those added. Runs once per launch. */
+  autoInstallAgents(): Promise<string[]>;
   installViewPackage(token: string): Promise<void>;
   removeViewPackage(id: string): Promise<void>;
   /** Main's watchdog saw a plugin frame peg a core for several samples. */

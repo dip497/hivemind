@@ -5,9 +5,10 @@
  * in this file; the icon is the provider def's own SVG mark, rendered
  * generically (inner markup is an app-owned constant, never user input).
  */
-import type { ReactNode } from "react";
+import { useSyncExternalStore, type ReactNode } from "react";
 import {
-  CATALOG, GENERIC_AGENT_ICON, agentById as catalogAgentById, agentForCmd as catalogAgentForCmd,
+  getCatalog, subscribeCatalog, GENERIC_AGENT_ICON,
+  agentById as catalogAgentById, agentForCmd as catalogAgentForCmd,
   type AgentIcon as AgentIconDef, type AgentProviderDef,
 } from "@hivemind/agents";
 
@@ -29,7 +30,7 @@ export interface AgentDef {
 }
 
 /** Render a catalog icon: viewBox + root attrs + inner markup, theming via currentColor. */
-function SvgMark({ icon, size = 16, className }: { icon: AgentIconDef; size?: number; className?: string }) {
+export function SvgMark({ icon, size = 16, className }: { icon: AgentIconDef; size?: number; className?: string }) {
   return (
     <svg
       width={size}
@@ -55,19 +56,33 @@ function toAgentDef(def: AgentProviderDef): AgentDef {
   };
 }
 
-/** The registry, in catalog order. */
-export const AGENTS: AgentDef[] = CATALOG.map(toAgentDef);
+/** Memoised: useSyncExternalStore loops on a fresh array per call. */
+let cached: AgentDef[] | null = null;
+let cachedById: Map<string, AgentDef> | null = null;
+subscribeCatalog(() => { cached = null; cachedById = null; });
 
-const BY_ID = new Map(AGENTS.map((a) => [a.id, a]));
+export function getAgents(): AgentDef[] {
+  if (!cached) {
+    cached = getCatalog().map(toAgentDef);
+    cachedById = new Map(cached.map((a) => [a.id, a]));
+  }
+  return cached;
+}
+
+export function useAgents(): AgentDef[] {
+  return useSyncExternalStore(subscribeCatalog, getAgents, getAgents);
+}
 
 export function agentById(id: string): AgentDef | undefined {
-  return BY_ID.get(id) ?? (catalogAgentById(id) ? toAgentDef(catalogAgentById(id)!) : undefined);
+  getAgents();
+  return cachedById!.get(id) ?? (catalogAgentById(id) ? toAgentDef(catalogAgentById(id)!) : undefined);
 }
 
 /** Resolve the agent that a PTY command line belongs to (exact binary match). */
 export function agentForCmd(cmd: string | undefined): AgentDef | undefined {
   const d = catalogAgentForCmd(cmd);
-  return d ? BY_ID.get(d.id) : undefined;
+  getAgents();
+  return d ? cachedById!.get(d.id) : undefined;
 }
 
 /** Convenience: render an agent's icon by id (falls back to the generic mark). */

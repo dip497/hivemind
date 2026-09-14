@@ -1,14 +1,5 @@
-/**
- * Multi-agent terminal-state detection by screen scraping — ported from herdr
- * (github.com/ogulcancelik/herdr `src/detect.rs`, AGPL-3.0). herdr is a Rust
- * agent multiplexer; its per-agent output heuristics are battle-tested across
- * 15 CLI agents. We feed xterm's rendered viewport instead of a terminal tail
- * snapshot and return hivemind's UI status buckets.
- *
- * Every detector lives with its provider def in @hivemind/agents; claude's
- * distinguishes permission vs. question, every other agent collapses both into
- * "blocked". This module only routes by id and keeps claude's working-hold.
- */
+/** Agent status read from a tile's rendered screen. Detectors live with each
+ *  provider in @hivemind/agents; this routes by id and adds claude's working-hold. */
 import { agentById, identifyProvider, type AgentState, type TileStatus } from "@hivemind/agents";
 
 /** An agent id — a catalogued provider ("claude", "codex", "cursor", …). Every
@@ -25,8 +16,7 @@ export function identifyAgent(cmd: string): Agent | null {
   return identifyProvider(cmd)?.id ?? null;
 }
 
-/** herdr three-state detection for a known agent (a provider whose detector
- *  distinguishes permission/question collapses them into "blocked"). */
+/** Permission and question both collapse into "blocked". */
 export function detectAgentState(agent: Agent, screen: string): AgentState {
   const t = agentById(agent)?.detect?.(screen) ?? "idle";
   return t === "permission" || t === "question" ? "blocked" : t;

@@ -4,10 +4,11 @@
  * consumes. Not for the renderer. Nothing here knows any provider by name
  * beyond listing its plugin once.
  */
-import { CATALOG, agentForCmd } from "./catalog.js";
+import { getCatalog, agentForCmd } from "./catalog.js";
 import type { AgentNodeParts, AgentPlugin, DaemonPaths, ProviderResumeTransforms, ProviderSpawnContext, SpawnSpec } from "./types.js";
 import { plugin as claudePlugin } from "./providers/claude/node.js";
 import { plugin as codexPlugin } from "./providers/codex/node.js";
+import { plugin as cursorPlugin } from "./providers/cursor/node.js";
 import { plugin as droidPlugin } from "./providers/droid/node.js";
 import { plugin as kiroPlugin } from "./providers/kiro/node.js";
 import { plugin as piPlugin } from "./providers/pi/node.js";
@@ -19,7 +20,7 @@ export * from "./tile-session-store.js";
 
 /** Every provider with a daemon half. A def listed in catalog.ts with no plugin
  *  here is scrape-only: no resume, no hook injection, nothing to prepare. */
-export const PLUGINS: readonly AgentPlugin[] = [claudePlugin, codexPlugin, droidPlugin, kiroPlugin, piPlugin];
+export const PLUGINS: readonly AgentPlugin[] = [claudePlugin, codexPlugin, cursorPlugin, droidPlugin, kiroPlugin, piPlugin];
 
 /** The node halves keyed by provider id (derived — never hand-maintained). */
 export const NODE_PARTS: Readonly<Record<string, AgentNodeParts>> = Object.fromEntries(
@@ -33,20 +34,20 @@ export interface AgentProvider {
   resume?: (ctx: ProviderSpawnContext) => ProviderResumeTransforms;
 }
 
-/** Every plugin as a daemon adapter, in catalog order. Order is immaterial:
- *  each transform no-ops for specs it doesn't own (exact-binary match), which
- *  the golden order-independence test proves. */
-export const PROVIDERS: AgentProvider[] = CATALOG
-  .filter((d) => !!NODE_PARTS[d.id])
-  .map((d) => ({
-    id: d.id,
-    matches: (cmd: string) => agentForCmd(cmd)?.id === d.id,
-    resume: NODE_PARTS[d.id]?.resume,
-  }));
+/** Order is immaterial: each transform no-ops for specs it doesn't own. */
+export function providers(): AgentProvider[] {
+  return getCatalog()
+    .filter((d) => !!NODE_PARTS[d.id])
+    .map((d) => ({
+      id: d.id,
+      matches: (cmd: string) => agentForCmd(cmd)?.id === d.id,
+      resume: NODE_PARTS[d.id]?.resume,
+    }));
+}
 
 export function providerFor(cmd: string): AgentProvider | undefined {
   const d = agentForCmd(cmd);
-  return d ? PROVIDERS.find((p) => p.id === d.id) : undefined;
+  return d ? providers().find((p) => p.id === d.id) : undefined;
 }
 
 /** The composed transforms, shaped exactly like the SessionManager's transform
@@ -60,7 +61,7 @@ export interface ComposedResume {
 }
 
 export function composeResume(ctx: ProviderSpawnContext): ComposedResume {
-  return composeResumeFrom(PROVIDERS, ctx);
+  return composeResumeFrom(providers(), ctx);
 }
 
 /** Compose an explicit provider list (tests compose in reversed order to prove

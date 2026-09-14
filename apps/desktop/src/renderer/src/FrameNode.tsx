@@ -13,7 +13,7 @@ import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { WorktreePicker } from "./WorktreePicker";
 import { useGitBranch } from "./queries";
 import { isRemote, parseRemote, remoteBasename, remoteDisplay } from "../../shared/remote-uri";
-import { AGENTS } from "./agents";
+import { useAgents } from "./agents";
 import type { ArrangeMode } from "./frame-layout";
 import type { WorktreeEntry } from "../../shared/ipc";
 
@@ -105,6 +105,7 @@ const COLORS = [
 ];
 
 export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeData; selected: boolean }) {
+  const agents = useAgents();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(data.title);
   const [showPicker, setShowPicker] = useState(false);
@@ -402,7 +403,7 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
         <AnchoredMenu anchor={addBtnRef.current} open={showAdd} onClose={() => setShowAdd(false)}>
           <div className="px-2 py-1 text-[9px] uppercase tracking-[0.12em] text-[var(--color-fg3)] font-semibold">open in zone</div>
           {/* Agents come from the registry — adding one there adds it here. */}
-          {AGENTS.filter((a) => a.enabled).map((a) => (
+          {agents.filter((a) => a.enabled).map((a) => (
             <button
               key={a.id}
               onClick={() => {

@@ -16,7 +16,7 @@ import type { OutputRecorder } from "./output-recorder.js";
 import { readLastAssistantMessage } from "./transcript.js";
 import { toPtyId as ptyId, toBareId as bareOf } from "../../shared/tile-id.js";
 import { setName, labelOf } from "./names.js";
-import { agentById, defaultAgent, spawnableAgents, workerAgents } from "@hivemind/agents";
+import { agentById, agentOption, defaultAgent, spawnableAgents, workerAgents, type AgentProviderDef } from "@hivemind/agents";
 import { BROWSER_TOOL_ID, tileKindAvailability } from "@hivemind/core/tool-plugins";
 import type { ToolsSettings } from "@hivemind/core/settings-schema";
 import { SUBMIT_DELAY_MS } from "../../shared/agent-io.js";
@@ -133,6 +133,11 @@ export interface MethodDeps {
   recorder: OutputRecorder;
   /** Sliding-window spawn gate (reuse the ptySpawn rate-limit). false → refuse. */
   spawnAllowed: () => boolean;
+  /** The agent a spawn with no `agent` starts (the user's default, if installed).
+   *  May wait: at boot the PATH the answer depends on is still being read. */
+  defaultAgentId?: () => string | Promise<string>;
+  /** The agent's CLI is where it would run (this machine, or the caller's remote host). Absent = assume it is. */
+  agentInstalled?: (def: AgentProviderDef, callerTile?: string) => boolean | Promise<boolean>;
   /** Pipe src's finished-turn replies into dst's input. Returns false on a bad
    *  pair (e.g. src === dst). */
   connect: (srcTileId: string, dstTileId: string) => boolean;
@@ -226,10 +231,13 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       throw new HcpError("DEPTH_EXCEEDED", `agent spawn depth ${childDepth} exceeds max ${MAX_SPAWN_DEPTH}`);
     }
     if (!deps.spawnAllowed()) throw new HcpError("RATE_LIMITED", "spawn rate limit exceeded");
-    const agent = String(opts.agent ?? defaultAgent().id);
+    const agent = String(opts.agent ?? (await deps.defaultAgentId?.()) ?? defaultAgent().id);
     const def = agentById(agent);
     if (!def || !def.enabled) {
       throw new HcpError("BAD_REQUEST", `unknown agent '${agent}' — spawnable: ${spawnableAgents().map((d) => d.id).join(", ")}`);
+    }
+    if (deps.agentInstalled && !(await deps.agentInstalled(def, opts.callerTile ? String(opts.callerTile) : undefined))) {
+      throw new HcpError("UNSUPPORTED", `${def.label} is not installed on this machine (no ${def.bin} on PATH)${def.install ? ` — get it at ${def.install.url}` : ""}`);
     }
     const sup = normalizeSupervise(opts.supervise);
     // pi cannot be supervised. It has NO permission system, so the only gate would be
@@ -246,13 +254,10 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
           `or spawn a claude worker with supervise if you need to gate its tools.`,
       );
     }
-    // Default an AGENT-SPAWNED worker to AUTO (bypassPermissions): a delegated
-    // worker has no human at its tile, so inheriting the UI's "default" mode would
-    // hang it on the first permission prompt. Two cases keep the human/broker in
-    // the loop and must NOT auto-skip: an explicit `mode` from the caller wins, and
-    // a `supervise`d worker routes its prompts to the parent (its PreToolUse broker
-    // only fires if permissions aren't skipped).
-    const mode = opts.mode != null ? opts.mode : sup ? undefined : "bypassPermissions";
+    // No human at a delegated worker's tile, so it runs in the agent's unattended
+    // mode — unless the caller chose one, or it is supervised (its broker hook
+    // only fires while permissions are not skipped).
+    const mode = opts.mode != null ? opts.mode : sup ? undefined : agentOption(def, "mode")?.unattended;
     // A spawner-chosen display name ("reviewer", "test-writer") — becomes the tile
     // label and tags every message this worker sends back. Bounded so a worker
     // can't smuggle a whole paragraph (or ANSI) into the parent's terminal banner.
@@ -528,7 +533,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         // this returns (`hive ctl workflow` blocks with a matching client ceiling).
         const shape = String(p.shape ?? "fanout");
         const caller = p.callerTile != null ? String(p.callerTile) : undefined;
-        const agent = p.agent != null ? String(p.agent) : defaultAgent().id;
+        const agent = p.agent != null ? String(p.agent) : (await deps.defaultAgentId?.()) ?? defaultAgent().id;
         {
           const def = agentById(agent);
           if (!def || !def.enabled) throw new HcpError("BAD_REQUEST", `unknown agent '${agent}' — spawnable: ${spawnableAgents().map((d) => d.id).join(", ")}`);
@@ -625,7 +630,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       case "tool.open": {
         if (p.tool !== BROWSER_TOOL_ID) throw new HcpError("UNSUPPORTED", "Unknown tool id");
         const availability = tileKindAvailability("browser", deps.toolsSettings?.() ?? { enabledPlugins: [], disabledTools: [] });
-        if (!availability?.available) throw new HcpError("UNAUTHORIZED", "Browser is disabled; enable it in Settings under Extensions");
+        if (!availability?.available) throw new HcpError("UNAUTHORIZED", "Browser is disabled; enable it in Settings under Tools");
         if (p.frame !== undefined && (typeof p.frame !== "string" || !p.frame || p.frame.length > 256)) throw new HcpError("BAD_REQUEST", "frame must be an id");
         if (p.url !== undefined) {
           if (typeof p.url !== "string" || p.url.length > 8192) throw new HcpError("BAD_REQUEST", "Invalid URL");
@@ -647,6 +652,11 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       // vanished falls back to the canvas).
       case "views.rescan":
         return await deps.callRenderer("views.rescan", {}, RENDERER_TIMEOUT);
+      // `hive agents install|remove` calls this so a running app picks the change
+      // up without a restart. The renderer owns the workspace root, so it runs
+      // the scan (through main, which refreshes its own catalog on the way).
+      case "agents.rescan":
+        return await deps.callRenderer("agents.rescan", {}, RENDERER_TIMEOUT);
       // `hive config set` / `hive theme use` edited settings.json: re-read it
       // and push the result to the renderer (main owns the file while running).
       case "settings.reload":

@@ -4,7 +4,7 @@ description: Theme, wallpaper, effects, and settings commands.
 ---
 
 **Development preview** — the settings.json system and the `hive config` / `hive theme`
-commands are on the unreleased development line, as are the Extensions and per-view
+commands are on the unreleased development line, as are the plugin pages and per-view
 toolbar settings described below.
 
 ## Settings
@@ -16,8 +16,7 @@ a restart:
 $XDG_CONFIG_HOME/hivemind/settings.json      # $HIVE_SETTINGS overrides the path
 ```
 
-Full-window Settings opens from the gear. Pages: **Appearance · Views · Extensions ·
-Agents · Notifications · Shortcuts · About**.
+Full-window Settings opens from the gear.
 
 ## Appearance page
 
@@ -35,9 +34,15 @@ settings file.
 Wallpaper and glass apply under the canvas and Windows views; World and community
 scenes paint their own background.
 
-## Views page
+## How Settings is organised
 
-Pick the active view and configure the workspace toolbar **for the current view**
+The sidebar has **General** (Appearance, Notifications, Shortcuts, About), then one group
+per kind of plugin — **Agents**, **Views**, **Tools** — each opening on an overview with a
+page for every agent, view and tool, and **Plugins** for browsing and adding more.
+
+## Views
+
+The Views overview picks the active view. Each view's own page configures its toolbar
 under **Display**: Automatic, Top, Bottom, Collapsed, or Off. Collapsed leaves a
 compact handle; Off removes both the toolbar and handle. Custom view controls and
 keyboard shortcuts keep working. The app Settings button remains available to
@@ -47,7 +52,7 @@ Open **Customize actions** to choose shortcuts, move them up or down, or show te
 labels. **Reset actions** restores that view's buttons and labels without changing
 Display. An empty selection removes the toolbar and its handle. Hiding a shortcut
 keeps existing panels open and does not disable the tool. Browser appears only when
-enabled under Extensions, even if selected in this list.
+switched on under Tools, even if selected in this list.
 
 The CLI uses `hidden` for Collapsed and `off` for Off:
 
@@ -58,18 +63,27 @@ hive config set views.toolbars.canvas.actions '["frame", "terminal", "theme"]'
 hive config set views.toolbars.canvas.labels true
 ```
 
-## Extensions page
+## Plugins
 
-Install from folder with a review step (manifest, requested permissions, replaced
-version; saved layout is kept on replace), then enable, disable, or remove installed
-view extensions. Disabled views are skipped at load. The Extensions page reports runtime load problems;
-`hive views list` reports package validation errors.
+**Browse** lists the agents and views published in the Hivemind repository's
+[`plugins/index.json`](https://github.com/dip497/hivemind/tree/main/plugins), each with a
+checksum for every file. Installing downloads the files, checks every checksum, and shows
+what the plugin can do before anything is written; a file that changed after it was
+listed is refused. **Installed** adds a view from a folder (with the same review), and
+lists the views and agents you added, with their load problems.
 
-## Agents page
+## Agents
 
-Default agent, model, and permission mode for spawns. Defaults apply only where the
-runtime supports them (`--model` needs a provider with a model flag) — see
-[Agents](../agents/).
+The overview picks the default agent and shows which agents this machine has: installed,
+not installed, or switched off. Each agent's page says where its CLI was found and which
+version it is — or that it is not installed, with a link to get it — and sets its launch
+options (model, permission mode, and whatever else it declares), read from the agent's own
+CLI; see [Add your own agent](../agent-providers/#launch-options).
+
+## Tools
+
+Switch on optional tools such as Browser. The Browser page also holds **Agent browser
+control**, which lets agents drive Browser panels.
 
 ## Notifications and Shortcuts
 

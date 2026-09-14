@@ -18,7 +18,7 @@ myview/
 
 Install with `hive views install <dir>` (validates the manifest, copies to
 `$XDG_CONFIG_HOME/hivemind/views/<id>`); `hive views list` reports load errors. The
-in-app path is Settings ▸ Extensions → Install from folder, which shows a review step
+in-app path is Settings ▸ Plugins ▸ Installed → Install from folder, which shows a review step
 (manifest, permissions, replaced version) before installing — also preview.
 
 ## Sandbox

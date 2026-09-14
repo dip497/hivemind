@@ -77,14 +77,14 @@ test("the flush sends only the pending paths, and clears them when the write lan
 });
 
 test("an edit made while a write is in flight stays pending (and stays on screen)", async () => {
-  store.patchSettings("agents.model", "opus");
+  store.patchSettings("agents.options.claude.model", "opus");
   store.flushSettings();
-  store.patchSettings("agents.model", "sonnet"); // newer value, same path
-  const written = mergeSettings(setPath(store.getSettings(), "agents.model", "opus"));
+  store.patchSettings("agents.options.claude.model", "sonnet"); // newer value, same path
+  const written = mergeSettings(setPath(store.getSettings(), "agents.options.claude.model", "opus"));
   inflight.shift()!(written);
   await new Promise((r) => setTimeout(r, 0));
-  assert.deepEqual(store.pendingPatches(), { "agents.model": "sonnet" }, "the newer edit is not dropped");
-  assert.equal(store.getSettings().agents.model, "sonnet");
+  assert.deepEqual(store.pendingPatches(), { "agents.options.claude.model": "sonnet" }, "the newer edit is not dropped");
+  assert.equal(store.getSettings().agents.options.claude?.model, "sonnet");
   await settle(); // let the store's follow-up write finish before the next test
   assert.deepEqual(store.pendingPatches(), {});
 });
@@ -95,7 +95,7 @@ test("flushes are serialized: a second flush waits for the write in flight", asy
   store.flushSettings();
   assert.equal(sent.length, before + 1, "one write started");
   // More edits + another flush while the first write is still open.
-  store.patchSettings("agents.permissionMode", "plan");
+  store.patchSettings("agents.options.claude.mode", "plan");
   store.flushSettings();
   store.flushSettings();
   assert.equal(sent.length, before + 1, "no overlapping write was started");
@@ -104,22 +104,22 @@ test("flushes are serialized: a second flush waits for the write in flight", asy
   inflight.shift()!(mergeSettings(setPath(store.getSettings(), "views.defaultView", "world")));
   await new Promise((r) => setTimeout(r, 0));
   assert.equal(sent.length, before + 2, "the deferred flush ran once, after");
-  assert.deepEqual(sent.at(-1), [{ path: "agents.permissionMode", value: "plan" }]);
-  inflight.shift()!(mergeSettings(setPath(store.getSettings(), "agents.permissionMode", "plan")));
+  assert.deepEqual(sent.at(-1), [{ path: "agents.options.claude.mode", value: "plan" }]);
+  inflight.shift()!(mergeSettings(setPath(store.getSettings(), "agents.options.claude.mode", "plan")));
   await new Promise((r) => setTimeout(r, 0));
   assert.deepEqual(store.pendingPatches(), {});
 });
 
 test("ABA: a path edited back to its old value while a write is in flight stays pending", async () => {
-  store.patchSettings("agents.model", "opus");   // A (this is what gets sent)
+  store.patchSettings("agents.options.claude.model", "opus");   // A (this is what gets sent)
   store.flushSettings();
-  store.patchSettings("agents.model", "sonnet"); // B
-  store.patchSettings("agents.model", "opus");   // back to A — same VALUE, newer edit
-  const written = mergeSettings(setPath(store.getSettings(), "agents.model", "opus"));
+  store.patchSettings("agents.options.claude.model", "sonnet"); // B
+  store.patchSettings("agents.options.claude.model", "opus");   // back to A — same VALUE, newer edit
+  const written = mergeSettings(setPath(store.getSettings(), "agents.options.claude.model", "opus"));
   inflight.shift()!(written);
   await new Promise((r) => setTimeout(r, 0));
   // Comparing values would have retired it here and dropped a real edit.
-  assert.deepEqual(store.pendingPatches(), { "agents.model": "opus" }, "the newer edit is still pending");
+  assert.deepEqual(store.pendingPatches(), { "agents.options.claude.model": "opus" }, "the newer edit is still pending");
   assert.equal(sent.at(-1)?.length, 1);
   await settle(); // the follow-up flush the store started
   assert.deepEqual(store.pendingPatches(), {});
@@ -129,13 +129,13 @@ test("a save failure is reported once per streak, and speaks again after a succe
   await settle();
   const before = store.saveErrorReports();
   failNext = true;
-  store.patchSettings("agents.model", "haiku");
+  store.patchSettings("agents.options.claude.model", "haiku");
   store.flushSettings();
   await new Promise((r) => setTimeout(r, 0));
   assert.equal(store.saveErrorReports(), before + 1, "the first failure is reported");
 
   failNext = true;
-  store.patchSettings("agents.model", "opus");
+  store.patchSettings("agents.options.claude.model", "opus");
   store.flushSettings();
   await new Promise((r) => setTimeout(r, 0));
   assert.equal(store.saveErrorReports(), before + 1, "a second failure in the same streak is silent");
@@ -145,7 +145,7 @@ test("a save failure is reported once per streak, and speaks again after a succe
   await settle();
   assert.deepEqual(store.pendingPatches(), {});
   failNext = true;
-  store.patchSettings("agents.model", "sonnet");
+  store.patchSettings("agents.options.claude.model", "sonnet");
   store.flushSettings();
   await new Promise((r) => setTimeout(r, 0));
   assert.equal(store.saveErrorReports(), before + 2, "a failure after a good save is reported again");
@@ -199,7 +199,7 @@ test("an edit made during a write is sent automatically when that write succeeds
   store.patchSettings("views.defaultView", "windows");
   store.flushSettings();                       // the only explicit flush: starts write #1
   assert.equal(sent.length, before + 1);
-  store.patchSettings("agents.permissionMode", "acceptEdits"); // arrives mid-write, NOT flushed
+  store.patchSettings("agents.options.claude.mode", "acceptEdits"); // arrives mid-write, NOT flushed
   assert.equal(sent.length, before + 1, "no overlapping write");
 
   // Completing write #1 must chain write #2 by itself. If the chain ran before
@@ -208,7 +208,7 @@ test("an edit made during a write is sent automatically when that write succeeds
   inflight.shift()!(mergeSettings(setPath(store.getSettings(), "views.defaultView", "windows")));
   await new Promise((r) => setTimeout(r, 0));
   assert.equal(sent.length, before + 2, "the follow-up write was chained automatically");
-  assert.deepEqual(sent.at(-1), [{ path: "agents.permissionMode", value: "acceptEdits" }]);
+  assert.deepEqual(sent.at(-1), [{ path: "agents.options.claude.mode", value: "acceptEdits" }]);
   await settle();
   assert.deepEqual(store.pendingPatches(), {});
 });

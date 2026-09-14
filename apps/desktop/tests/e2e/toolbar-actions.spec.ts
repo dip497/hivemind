@@ -15,7 +15,7 @@ const toView = (mode: string) => page.evaluate((mode) => window.dispatchEvent(ne
 const order = () => page.locator("[data-toolbar-action]").evaluateAll((buttons) => buttons.map((button) => button.getAttribute("data-toolbar-action")));
 const settings = async () => {
   await page.getByRole("button", { name: "settings", exact: true }).click();
-  await page.locator('[data-settings-page="views"]').click();
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "view:canvas" } })));
   await page.getByText("Customize actions", { exact: true }).click();
 };
 const close = () => page.getByRole("button", { name: "Close", exact: true }).click();
@@ -75,7 +75,7 @@ test("selecting Browser as the only shortcut cannot activate it", async () => {
   await page.evaluate(() => window.hive.settingsSet("views.toolbars", { canvas: { actions: ["browser"] } }));
   await expect(page.locator("[data-host-island], [data-host-island-handle]")).toHaveCount(0);
   await page.getByRole("button", { name: "settings", exact: true }).click();
-  await page.locator('[data-settings-page="extensions"]').click();
+  await page.locator('[data-settings-page="tools"]').click();
   await expect(page.getByRole("switch", { name: "Enable Browser", exact: true })).toHaveAttribute("aria-checked", "false");
   await page.getByRole("switch", { name: "Enable Browser", exact: true }).click();
   await close();

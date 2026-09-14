@@ -23,7 +23,7 @@ import {
   GitBranch, FolderGit2, Server, LayoutGrid, Plus, Pencil, Trash2, Palette,
   Bot, GitCommitHorizontal, ChevronRight, ArrowUp, ArrowDown,
 } from "lucide-react";
-import { AGENTS } from "./agents";
+import { useAgents } from "./agents";
 import { WorktreePicker } from "./WorktreePicker";
 import type { LayerFrame } from "./LayersPanel";
 
@@ -136,6 +136,7 @@ export function FrameRailMenu({
   /** Start inline rename of this frame in the rail (owned by LayersPanel). */
   onRequestRename: (frameId: string) => void;
 }) {
+  const agents = useAgents();
   // Which top-level submenu is expanded (only one at a time). null = none.
   const [sub, setSub] = useState<null | "agent" | "open" | "git" | "worktree" | "workspace" | "arrange" | "color">(null);
   const isWorktreeChild = !!frame.parentFrameId;
@@ -161,7 +162,7 @@ export function FrameRailMenu({
         <div className="px-2 pt-1 pb-1 text-[9px] uppercase tracking-[0.12em] text-[var(--color-fg3)] font-semibold truncate">{frame.title}</div>
 
         <SubmenuRow icon={<Bot size={13} />} label="Spawn agent" open={sub === "agent"} onOpen={() => setSub("agent")}>
-          {AGENTS.filter((a) => a.enabled).map((a) => (
+          {agents.filter((a) => a.enabled).map((a) => (
             <Item key={a.id} icon={<a.icon size={13} />} label={a.label} onClick={() => { actions.onOpenInFrame(fid, a.id); close(); }} />
           ))}
         </SubmenuRow>

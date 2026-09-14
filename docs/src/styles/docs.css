@@ -1,235 +1,221 @@
 /* ─────────────────────────────────────────────────────────────────────────
-   Hivemind docs — the manga edition.
+   Hivemind docs — the same system as the landing page (src/pages/index.astro).
 
-   The landing page is a comic page: ink on paper, screentone, heavy panel
-   rules. These docs are the same world with the volume turned down, because
-   a docs site is for reading, not for looking at. So the *chrome* carries
-   the style — masthead, panel rules, mono labels — and the prose column is
-   left alone: no tone behind paragraphs, no uppercase body, comfortable
-   measure.
+   Readability first, by the same rules the landing page states:
+     · sentence case — all-caps forces letter-by-letter reading, so nothing you
+       have to READ is uppercase: not section labels, not "On this page", not
+       the titles of notes
+     · a comfortable measure (~66 characters) and line-height ≥ 1.5 (WCAG 1.4.12)
+     · body text ≥ 4.5:1 against its own background, large text ≥ 3:1
+     · mono for code and short labels only, never running prose
 
-   Dark mode is the "night edition": the same page printed white-on-black,
-   not a different design.
+   The docs used to be "the manga edition": heavy 3px panel rules, uppercase
+   letter-spaced mono labels, offset caption-box shadows. The landing page
+   dropped all of that for being hard to read, and the docs kept it — so the two
+   halves of the site looked like different products. One palette, one set of
+   rules now; the docs are simply the quieter half, because they are for reading.
    ───────────────────────────────────────────────────────────────────────── */
 
-/* Starlight's default is dark, so the bare :root carries the night edition and
-   [data-theme='light'] swaps only the palette. The --sl-* mappings are declared
-   once and re-resolve, because custom-property substitution is dynamic —
-   redefining --hm-* in a second bare :root would win over the light block and
-   quietly paint one theme's text on the other theme's ground. */
+/* Dark is the default; the light block swaps only --hm-*, and --sl-* maps them once. */
 :root {
-  /* night edition */
-  --hm-paper:   #0B0A09;
-  --hm-card:    #1C1A17;
-  --hm-ink:     #F7F4EC;
-  --hm-ink-2:   #CFC9BC;   /* was #C0BCB1 — too dim against near-black */
-  --hm-ink-3:   #979286;
-  --hm-rule:    #F7F4EC;
-  --hm-hair:    #35322C;
-  --hm-spot:    #E8A33B;
-  --hm-accent-low:  #3A2A0E;
-  --hm-accent-high: #F5C877;
-  --hm-bd: 3px;
+  /* dark */
+  --hm-paper:   #0F0E0C;
+  --hm-surface: #1A1815;
+  --hm-sunk:    #151411;
+  --hm-ink:     #F3EFE6;
+  --hm-body:    #D2CCBF;
+  --hm-muted:   #A29C8F;
+  --hm-line:    #34312B;
+  --hm-accent:  #F0B659;   /* links and the current page — readable on dark */
+  --hm-accent-bg:   #E8A33B;
+  --hm-accent-soft: #33260F;
 
   --sl-font: "Archivo", ui-sans-serif, system-ui, -apple-system, sans-serif;
   --sl-font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  --sl-content-width: 54rem;
-  --sl-nav-height: 4.1rem;
+  --sl-content-width: 46rem;       /* ≈ 66 characters at the body size */
+  --sl-nav-height: 3.75rem;
   --sl-text-code: 0.88rem;
-  --sl-text-body: 1.03rem;
+  --sl-text-body: 1.0625rem;
 
   --sl-color-bg: var(--hm-paper);
-  --sl-color-bg-nav: var(--hm-card);
+  --sl-color-bg-nav: var(--hm-paper);
   --sl-color-bg-sidebar: var(--hm-paper);
-  --sl-color-bg-inline-code: var(--hm-card);
-  --sl-color-text: var(--hm-ink-2);
+  --sl-color-bg-inline-code: var(--hm-sunk);
+  --sl-color-text: var(--hm-body);
   --sl-color-white: var(--hm-ink);
   --sl-color-black: var(--hm-paper);
   --sl-color-gray-1: var(--hm-ink);
-  --sl-color-gray-2: var(--hm-ink-2);
-  --sl-color-gray-3: var(--hm-ink-3);
-  --sl-color-gray-4: var(--hm-ink-3);
-  --sl-color-gray-5: var(--hm-hair);
-  --sl-color-gray-6: var(--hm-card);
-  --sl-color-gray-7: var(--hm-paper);
-  --sl-color-hairline: var(--hm-hair);
-  --sl-color-hairline-light: var(--hm-hair);
-  --sl-color-hairline-shade: var(--hm-rule);
-  --sl-color-accent: var(--hm-spot);
-  --sl-color-accent-low: var(--hm-accent-low);
-  --sl-color-accent-high: var(--hm-accent-high);
-  --sl-color-text-accent: var(--hm-spot);
+  --sl-color-gray-2: var(--hm-body);
+  --sl-color-gray-3: var(--hm-muted);
+  --sl-color-gray-4: var(--hm-muted);
+  --sl-color-gray-5: var(--hm-line);
+  --sl-color-gray-6: var(--hm-surface);
+  --sl-color-gray-7: var(--hm-sunk);
+  --sl-color-hairline: var(--hm-line);
+  --sl-color-hairline-light: var(--hm-line);
+  --sl-color-hairline-shade: var(--hm-line);
+  --sl-color-accent: var(--hm-accent);
+  --sl-color-accent-low: var(--hm-accent-soft);
+  --sl-color-accent-high: var(--hm-accent);
+  --sl-color-text-accent: var(--hm-accent);
 }
 
-/* the printed page */
+/* light — exactly the landing page's palette */
 :root[data-theme='light'] {
-  --hm-paper:   #EFEBE0;   /* warm newsprint: not a lightbox, not a mid-grey */
-  --hm-card:    #FCFAF4;
-  --hm-ink:     #14120E;
-  --hm-ink-2:   #332F29;   /* body text was washing out at small sizes */
-  --hm-ink-3:   #6A665C;
-  --hm-rule:    #14120E;
-  --hm-hair:    #D8D2C4;
-  --hm-spot:    #C9821A;   /* darkened so amber passes contrast on paper */
-  --hm-accent-low:  #F6E4C4;
-  --hm-accent-high: #7A4E06;
+  --hm-paper:   #F7F4EE;
+  --hm-surface: #FFFFFF;
+  --hm-sunk:    #F1EDE3;
+  --hm-ink:     #15130F;
+  --hm-body:    #3A362E;
+  --hm-muted:   #5E594F;
+  --hm-line:    #E1DBCC;
+  --hm-accent:  #8A5205;
+  --hm-accent-bg:   #E8A33B;
+  --hm-accent-soft: #FBEBCD;
 }
 
-/* ── masthead ──────────────────────────────────────────────────────────── */
+/* ── header ────────────────────────────────────────────────────────────── */
 .header {
-  border-bottom: var(--hm-bd) solid var(--hm-rule) !important;
+  border-bottom: 1px solid var(--hm-line) !important;
   box-shadow: none !important;
-  background: var(--hm-card);
+  background: var(--hm-paper);
 }
 .site-title {
-  font-weight: 900;
-  letter-spacing: -.035em;
-  font-size: 1.32rem;
+  font-weight: 800;
+  letter-spacing: -.02em;
+  font-size: 1.15rem;
   color: var(--hm-ink);
-  text-transform: uppercase;
 }
 .site-title img { border-radius: 0; }
 
-/* Search: a caption box, not a pill. */
 site-search button[data-open-modal] {
-  border: 2px solid var(--hm-rule) !important;
-  border-radius: 0 !important;
-  background: var(--hm-card) !important;
-  font-family: var(--sl-font-mono);
-  font-size: .82rem;
-  letter-spacing: .01em;
+  border: 1px solid var(--hm-line) !important;
+  border-radius: 8px !important;
+  background: var(--hm-surface) !important;
+  font-size: .88rem;
 }
 site-search kbd {
   font-family: var(--sl-font-mono);
   background: transparent;
-  border: 1px solid var(--hm-hair);
-  border-radius: 0;
+  border: 1px solid var(--hm-line);
+  border-radius: 4px;
 }
 
-/* ── sidebar: panel gutter ─────────────────────────────────────────────── */
-.sidebar-pane {
-  border-inline-end: var(--hm-bd) solid var(--hm-rule) !important;
-  background: var(--sl-color-bg-sidebar);
-}
+/* ── sidebar ───────────────────────────────────────────────────────────── */
+.sidebar-pane { border-inline-end: 1px solid var(--hm-line) !important; }
 .sidebar-content .large,
 summary .large {
-  font-family: var(--sl-font-mono);
-  font-size: .68rem !important;
+  font-family: var(--sl-font);
+  font-size: .82rem !important;
   font-weight: 700;
-  letter-spacing: .14em;
-  text-transform: uppercase;
-  color: var(--hm-ink-3);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--hm-ink);
 }
 .sidebar-content a {
-  border-radius: 0;
-  font-size: .89rem;
-  padding-block: .34rem;
+  border-radius: 6px;
+  font-size: .92rem;
+  padding-block: .32rem;
+  color: var(--hm-body);
 }
-/* the current page reads as a caption box */
+.sidebar-content a:hover { color: var(--hm-ink); background: var(--hm-sunk); }
 .sidebar-content a[aria-current='page'],
 .sidebar-content a[aria-current='page']:hover {
-  background: var(--hm-ink);
-  color: var(--hm-paper);
+  background: var(--hm-accent-soft);
+  color: var(--hm-ink);
   font-weight: 600;
-  border-radius: 0;
-  box-shadow: 3px 3px 0 var(--hm-spot);
+  box-shadow: inset 3px 0 0 var(--hm-accent-bg);
 }
 
-/* ── the page itself ───────────────────────────────────────────────────── */
-.content-panel + .content-panel { border-top: var(--hm-bd) solid var(--hm-rule); }
-
-.sl-markdown-content { line-height: 1.75; font-size: 1.03rem; }
+/* ── the page ──────────────────────────────────────────────────────────── */
+.sl-markdown-content { line-height: 1.72; font-size: var(--sl-text-body); }
 
 h1, .content-panel h1 {
   font-weight: 800 !important;
   letter-spacing: -.025em;
-  line-height: 1.06;
+  line-height: 1.1;
+  color: var(--hm-ink);
+  text-wrap: balance;
 }
 .sl-markdown-content :is(h2, h3, h4) {
   font-weight: 700;
-  letter-spacing: -.018em;
+  letter-spacing: -.015em;
   color: var(--hm-ink);
+  text-wrap: balance;
 }
-/* a heavy rule under every h2 — the panel edge */
 .sl-markdown-content h2 {
-  border-bottom: 1px solid var(--hm-hair);
-  padding-bottom: .34rem;
-  font-size: 1.35rem;
-  width: 100%;
-  display: block;
-  margin-top: 2.4rem;
+  font-size: 1.4rem;
+  margin-top: 2.6rem;
   margin-bottom: 0;
+  padding-bottom: .3rem;
+  border-bottom: 1px solid var(--hm-line);
 }
-.sl-markdown-content h3 { font-size: 1.06rem; color: var(--hm-ink); }
+.sl-markdown-content h3 { font-size: 1.1rem; margin-top: 1.9rem; }
 
 .sl-markdown-content a {
-  color: var(--hm-ink);
-  text-decoration-color: var(--hm-spot);
-  text-decoration-thickness: 2px;
+  color: var(--hm-accent);
+  text-decoration-color: color-mix(in srgb, var(--hm-accent) 45%, transparent);
+  text-decoration-thickness: 1.5px;
   text-underline-offset: 3px;
 }
-.sl-markdown-content a:hover { color: var(--hm-spot); }
-
+.sl-markdown-content a:hover { text-decoration-color: currentColor; }
 .sl-markdown-content strong { color: var(--hm-ink); font-weight: 700; }
 
-/* Starlight gives every sibling a top margin; a heading that already has a
-   rule under it does not need that gap as well. */
-/* Starlight slips an <a class="sl-anchor-link"> between a heading and its
-   content, so `h2 + *` styles the anchor and the real gap lands one node
-   further along. Zero the anchor and set the element after it. */
+/* An anchor link sits between heading and content: space the node after it. */
 .sl-markdown-content :is(h2, h3) + .sl-anchor-link { margin-top: 0 !important; }
 .sl-markdown-content :is(h2, h3) + .sl-anchor-link + * { margin-top: .8rem !important; }
 .sl-markdown-content h2 + * { margin-top: .8rem !important; }
-.sl-markdown-content h3 { margin-top: 1.9rem; }
-.sl-markdown-content h3 + * { margin-top: .65rem !important; }
+.sl-markdown-content h3 + * { margin-top: .6rem !important; }
 
-/* ── code: the black panel ─────────────────────────────────────────────── */
+/* ── code ──────────────────────────────────────────────────────────────── */
 .sl-markdown-content :not(pre) > code {
-  border: 1px solid var(--hm-hair);
-  border-radius: 0;
-  padding: .05rem .3rem;
+  background: var(--hm-sunk);
+  border: 1px solid var(--hm-line);
+  border-radius: 4px;
+  padding: .05rem .32rem;
   font-weight: 500;
+  color: var(--hm-ink);
 }
 .expressive-code .frame,
 .expressive-code pre {
-  border-radius: 0 !important;
-  border: var(--hm-bd) solid var(--hm-rule) !important;
+  border-radius: 8px !important;
+  border: 1px solid var(--hm-line) !important;
   box-shadow: none !important;
 }
 .expressive-code .frame.is-terminal .header,
 .expressive-code figcaption {
   font-family: var(--sl-font-mono);
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  font-size: .68rem;
+  font-size: .78rem;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
-/* ── asides: caption boxes ─────────────────────────────────────────────── */
+/* ── notes ─────────────────────────────────────────────────────────────── */
 .starlight-aside {
-  border-radius: 0;
-  border: var(--hm-bd) solid var(--hm-rule);
-  border-inline-start-width: var(--hm-bd);
-  background: var(--hm-card);
-  box-shadow: 5px 5px 0 var(--hm-hair);
+  border-radius: 8px;
+  border: 1px solid var(--hm-line);
+  border-inline-start: 3px solid var(--hm-accent-bg);
+  background: var(--hm-surface);
+  box-shadow: none;
 }
 .starlight-aside__title {
-  font-family: var(--sl-font-mono);
-  font-size: .7rem;
-  letter-spacing: .13em;
-  text-transform: uppercase;
+  font-family: var(--sl-font);
+  font-size: .95rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--hm-ink);
 }
-.starlight-aside--caution { box-shadow: 5px 5px 0 var(--hm-spot); }
-.starlight-aside--danger  { box-shadow: 5px 5px 0 #C4452A; }
+.starlight-aside--caution { border-inline-start-color: #C9821A; }
+.starlight-aside--danger  { border-inline-start-color: #C4452A; }
 
 /* ── tables ────────────────────────────────────────────────────────────── */
-.sl-markdown-content table { border-collapse: collapse; }
-.sl-markdown-content :is(th, td) { border: 1px solid var(--hm-hair); padding: .5rem .7rem; }
+/* Wide tables scroll inside themselves; the page body never scrolls sideways. */
+.sl-markdown-content table { border-collapse: collapse; display: block; overflow-x: auto; }
+.sl-markdown-content :is(th, td) { border: 1px solid var(--hm-line); padding: .5rem .7rem; vertical-align: top; }
 .sl-markdown-content th {
-  border-bottom: var(--hm-bd) solid var(--hm-rule);
-  font-family: var(--sl-font-mono);
-  font-size: .78rem;
-  letter-spacing: .02em;
+  background: var(--hm-sunk);
+  font-size: .9rem;
   font-weight: 700;
   text-align: left;
   color: var(--hm-ink);
@@ -238,32 +224,35 @@ h1, .content-panel h1 {
 /* ── on this page ──────────────────────────────────────────────────────── */
 #starlight__on-this-page,
 .right-sidebar-panel h2 {
-  font-family: var(--sl-font-mono);
-  font-size: .68rem !important;
-  letter-spacing: .14em;
-  text-transform: uppercase;
-  color: var(--hm-ink-3);
+  font-family: var(--sl-font);
+  font-size: .85rem !important;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--hm-ink);
 }
-.right-sidebar-panel a { font-size: .84rem; border-radius: 0; }
+.right-sidebar-panel a { font-size: .87rem; color: var(--hm-muted); }
+.right-sidebar-panel a[aria-current='true'] { color: var(--hm-accent); }
 
-/* ── prev / next: two panels ───────────────────────────────────────────── */
+/* ── previous / next ───────────────────────────────────────────────────── */
 .pagination-links a {
-  border-radius: 0;
-  border: var(--hm-bd) solid var(--hm-rule);
-  box-shadow: 5px 5px 0 var(--hm-hair);
-  background: var(--hm-card);
+  border-radius: 8px;
+  border: 1px solid var(--hm-line);
+  box-shadow: none;
+  background: var(--hm-surface);
 }
-.pagination-links a:hover { border-color: var(--hm-rule); box-shadow: 5px 5px 0 var(--hm-spot); }
-.pagination-links svg { color: var(--hm-spot); }
-.pagination-links span { font-family: var(--sl-font-mono); font-size: .72rem; letter-spacing: .06em; }
-.pagination-links .link-title { font-family: var(--sl-font); font-weight: 700; letter-spacing: -.02em; font-size: 1.05rem; }
+.pagination-links a:hover { border-color: var(--hm-accent-bg); }
+.pagination-links svg { color: var(--hm-accent); }
+.pagination-links span { font-size: .82rem; color: var(--hm-muted); }
+.pagination-links .link-title { font-weight: 700; letter-spacing: -.01em; font-size: 1.05rem; color: var(--hm-ink); }
 
-/* ── misc chrome ───────────────────────────────────────────────────────── */
-starlight-theme-select select, .social-icons a { border-radius: 0; }
-.sl-markdown-content hr { border-top: var(--hm-bd) solid var(--hm-rule); }
+/* ── misc ──────────────────────────────────────────────────────────────── */
+.sl-markdown-content hr { border-top: 1px solid var(--hm-line); }
 .sl-markdown-content blockquote {
-  border-inline-start: var(--hm-bd) solid var(--hm-spot);
+  border-inline-start: 3px solid var(--hm-accent-bg);
   padding-inline-start: 1rem;
+  color: var(--hm-body);
 }
+:focus-visible { outline: 2px solid var(--hm-accent); outline-offset: 2px; }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }

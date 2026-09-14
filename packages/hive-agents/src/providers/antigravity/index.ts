@@ -1,5 +1,5 @@
 /**
- * Antigravity — recognised for status scraping (herdr detector) when a user runs
+ * Antigravity — recognised for status scraping when a user runs
  * it in a terminal tile; not spawnable by hivemind (`enabled: false`) until it
  * is probed and wired (see the adding-an-agent-provider skill).
  */
@@ -36,19 +36,18 @@ export function detectAntigravity(content: string): AgentState {
 export const antigravity: AgentProviderDef = {
   id: "antigravity",
   label: "Antigravity",
-  bin: "antigravity",
-  aliases: ["agy", "antigravity-cli"],
-  enabled: false,
+  bin: "agy",
+  aliases: ["antigravity-cli"],
+  enabled: true,
   caps: {
     promptDelivery: "typed",
     turnSignal: false,
     resume: "none",
     supervise: "human",
-    modelFlag: false,
-    permissionModes: false,
     blockedDetection: true,
   },
+  install: { url: "https://antigravity.google/docs/cli/overview/", command: "curl -fsSL https://antigravity.google/cli/install.sh | bash" },
   icon: GENERIC_AGENT_ICON,
   detect: detectAntigravity,
-  note: "recognised for status only — not spawnable yet.",
+  note: "launches and reads status; other agents cannot collect its replies.",
 };

@@ -18,8 +18,7 @@
  * PLUGINS. Nothing else names it.
  */
 
-/** The three-state model ported from herdr (the Rust agent multiplexer the
- *  scrape detectors come from). "blocked" = needs the human (approval/question). */
+/** "blocked" = needs the human (approval or question). */
 export type AgentState = "idle" | "working" | "blocked";
 
 /** UI status buckets a tile renders. claude distinguishes permission/question;
@@ -49,10 +48,6 @@ export interface AgentCapabilities {
    *  - "none": it has NO permission system at all, so there is nothing to
    *    gate or fall back to; a supervise request is refused at spawn. */
   supervise: "broker" | "human" | "none";
-  /** Honours hivemind's `--model` alias at spawn. */
-  modelFlag: boolean;
-  /** Honours claude-style permission modes (`--permission-mode`, bypass). */
-  permissionModes: boolean;
   /** The scrape detector has a "blocked" (needs-you) branch. Without one an
    *  approval prompt reads as idle and the notification says "Finished". */
   blockedDetection: boolean;
@@ -66,13 +61,33 @@ export interface AgentIcon {
   attrs?: Record<string, string>;
 }
 
-/** What a launcher can ask for at spawn; a def honours what it declares in caps. */
-export interface SpawnOptions {
-  /** A claude-style permission mode ("default", "plan", "acceptEdits", "bypassPermissions"). */
-  mode?: string;
-  /** A model alias ("opus", "sonnet", "default"). */
-  model?: string;
+/** A launch setting an agent offers. The agent declares the flag; the values
+ *  are read from its CLI at runtime (see options.ts). `model` and `mode` are the
+ *  ids `hive ctl spawn --model/--mode` address. */
+export interface AgentOption {
+  id: string;
+  label: string;
+  /** A chosen value is passed as `flag value`. Absent: only `values` are accepted. */
+  flag?: string;
+  /** Values that need other argv than `flag value` (e.g. `yolo: ["--yolo"]`). */
+  values?: Record<string, string[]>;
+  /** Hivemind's posture when nothing is chosen; unset passes nothing. */
+  default?: string;
+  /** A subcommand listing the values, one per line (built-ins only: it runs a command). */
+  list?: { args: string[]; skip?: number; format?: string };
+  /** What a worker with no human at its tile runs with. */
+  unattended?: string;
 }
+
+export interface AgentInstall {
+  /** The vendor's install page (https). */
+  url: string;
+  /** A one-line install command to copy. */
+  command?: string;
+}
+
+/** Option id → value for one launch. Unset or "" = not chosen. */
+export type SpawnOptions = Partial<Record<string, string>>;
 
 export interface AgentProviderDef {
   /** Stable id — the tile/detector/CLI key ("claude", "codex", …). */
@@ -100,10 +115,12 @@ export interface AgentProviderDef {
   icon: AgentIcon;
   /** One line shown wherever the agent is offered when it cannot be a worker. */
   note?: string;
-  /** Build the spawn args for a launch. The def owns its own flag vocabulary
-   *  (claude's permission modes + model alias live in claude's def, not in the
-   *  UI). Default: `defaultArgs`. */
-  spawnArgs?: (opts: SpawnOptions) => string[];
+  options?: readonly AgentOption[];
+  /** Where to get the CLI when this machine does not have it. Shown, never run. */
+  install?: AgentInstall;
+  /** The repo whose `.hivemind/agents/` this came from. Set by the loader, never read
+   *  from a manifest: it is what keeps a repo's agent to that repo's own tiles. */
+  sourceRoot?: string;
   /** The tile label for the n-th spawn (default `"<label> #<n>"`). */
   spawnLabel?: (n: number, opts: SpawnOptions) => string;
   /** Declares that this provider needs NO node half even though its capabilities

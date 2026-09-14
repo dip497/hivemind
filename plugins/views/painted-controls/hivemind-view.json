@@ -1,0 +1,8 @@
+{
+  "id": "painted-controls",
+  "name": "Painted controls",
+  "version": "0.1.0",
+  "entry": "index.html",
+  "protocol": 1,
+  "permissions": []
+}

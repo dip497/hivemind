@@ -6,7 +6,7 @@ description: Workspace views and their current limitations.
 **Development preview** — views-as-plugins, World, and community views are on the
 unreleased development line (post-1.16.0). The canvas is released behaviour.
 
-⌘E or Settings ▸ Views switches how the workspace is shown. The workspace runtime owns
+⌘E or the Settings ▸ Views overview switches how the workspace is shown. The workspace runtime owns
 frames, tiles, and sessions; a view only arranges them.
 
 ## Built-in views
@@ -36,7 +36,7 @@ Each view keeps a versioned layout per repo; unknown view ids fall back to the c
 
 ## Community views
 
-Open **Settings → Extensions → Install from folder**. Review the package and
+Open **Settings → Plugins → Installed → Install from folder**. Review the package and
 requested permissions before installing. The same page lets you disable, replace,
 or remove a view.
 
@@ -60,8 +60,8 @@ CPU-heavy disables the plugin for the session. Examples in `examples/views/`: or
 ## Chrome in every view
 
 The workspace toolbar (spawn, frame, browser, appearance, update) draws over the active
-view — top-centre on canvas, compact elsewhere; its position is configured per view in
-Settings ▸ Views. Choose Collapsed to keep a handle or Off to use only your view’s
+view — top-centre on canvas, compact elsewhere; its position is configured on each view's
+page under Settings ▸ Views. Choose Collapsed to keep a handle or Off to use only your view’s
 controls. Settings remains accessible in the app header. A docked tile gets a host bar with name, status, pop-out, and undock.
 
 ## Appearance inside views

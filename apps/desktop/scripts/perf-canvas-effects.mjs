@@ -1,10 +1,4 @@
-// Isolated canvas ablation benchmark. Run after the desktop bundle build:
-// env -u ELECTRON_RUN_AS_NODE DISPLAY=:1 node scripts/perf-canvas-effects.mjs /tmp/canvas-effects.json
-// PERF_TERMINALS=<n> sets how many shell terminals the scene holds (default 3).
-// Records the actual GPU backend, and that is the point: under Xvfb this runs on
-// llvmpipe (software), where absolute FPS is meaningless — those runs are only
-// valid for interleaved A/B of two builds. Read acceptance numbers off a real
-// display with `webgl.renderer`/`gpu.features` recorded in the output.
+// PERF_EXTRA_ARGS appends Electron switches; A/B uncapped on a live desktop ("--disable-gpu-vsync --disable-frame-rate-limit").
 import { _electron as electron } from '@playwright/test';
 import fs from 'node:fs/promises';
 import os from 'node:os';
@@ -18,10 +12,11 @@ const root = await fs.mkdtemp(path.join(os.tmpdir(), 'hm-canvas-effects-'));
 const env = { ...process.env, XDG_CONFIG_HOME: path.join(root, 'config'), HIVEMIND_PTY_DAEMON: '0' };
 delete env.ELECTRON_RUN_AS_NODE;
 delete env.HIVE_SETTINGS;
-const result = { version: 2, completed: false, at: new Date().toISOString(), workload: `${NTERM} shell terminals, 50 lines/sec each; 1920x1200 viewport; quiet and wheel pan; forward/reverse effect order`, terminals: NTERM, os: { platform: os.platform(), release: os.release(), cpu: os.cpus()[0]?.model, cpus: os.cpus().length, load: os.loadavg() }, samples: [] };
+const result = { version: 2, completed: false, at: new Date().toISOString(), workload: `${NTERM} shell terminals, 50 lines/sec each; 1920x1200 viewport; quiet and wheel pan; forward/reverse effect order`, terminals: NTERM, os: { platform: os.platform(), release: os.release(), cpu: os.cpus()[0]?.model, cpus: os.cpus().length, load: os.loadavg() }, session: { type: process.env.XDG_SESSION_TYPE ?? null, display: process.env.DISPLAY ?? null, wayland: process.env.WAYLAND_DISPLAY ?? null, extraArgs: (process.env.PERF_EXTRA_ARGS ?? '').split(' ').filter(Boolean) }, samples: [] };
 let app;
 try {
-  app = await electron.launch({ args: [path.resolve(import.meta.dirname, '../out/main/index.js'), '--no-sandbox'], cwd: root, env });
+  const extraArgs = (process.env.PERF_EXTRA_ARGS ?? '').split(' ').filter(Boolean);
+  app = await electron.launch({ args: [path.resolve(import.meta.dirname, '../out/main/index.js'), '--no-sandbox', ...extraArgs], cwd: root, env });
   const page = await app.firstWindow();
   await app.evaluate(({ BrowserWindow }) => { const window = BrowserWindow.getAllWindows()[0]; window.setContentSize(1920, 1200); window.setPosition(0,0); window.focus(); });
   await page.waitForSelector('.react-flow');

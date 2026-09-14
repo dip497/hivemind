@@ -1,0 +1,74 @@
+# Antigravity — built-in provider manifest.
+# Authoring format for the def half. See packages/hive-agents/src/manifest.ts.
+manifestVersion: 1
+id: antigravity
+label: Antigravity
+bin: agy
+aliases:
+- antigravity-cli
+enabled: true
+caps:
+  promptDelivery: typed
+  turnSignal: false
+  resume: none
+  supervise: human
+  blockedDetection: true
+icon:
+  viewBox: 0 0 16 16
+  attrs:
+    fill: none
+  shapes:
+  - rect:
+      x: '2.5'
+      y: '4'
+      width: '11'
+      height: '8.5'
+      rx: '2'
+      stroke: currentColor
+      stroke-width: '1.2'
+  - circle:
+      cx: '6'
+      cy: '8'
+      r: '1'
+      fill: currentColor
+  - circle:
+      cx: '10'
+      cy: '8'
+      r: '1'
+      fill: currentColor
+  - path:
+      d: M8 4V2M5.5 12.5v1M10.5 12.5v1
+      stroke: currentColor
+      stroke-width: '1.2'
+      stroke-linecap: round
+install:
+  url: https://antigravity.google/docs/cli/overview/
+  command: "curl -fsSL https://antigravity.google/cli/install.sh | bash"
+detect:
+  rules:
+  - when:
+      all:
+      - contains: 'requesting permission for:'
+      - any:
+        - contains: do you want to proceed?
+        - all:
+          - contains: tab amend
+          - contains: edit command
+    then: blocked
+  - when:
+      line:
+      - gerundAfterPrefix:
+        - braille
+    then: working
+  - when:
+      line:
+      - contains: /tasks
+      - numBeforeWord: task
+        op: gt
+        value: 0
+    then: working
+    scope:
+      kind: tailNonEmpty
+      n: 5
+  default: idle
+note: launches and reads status; other agents cannot collect its replies.

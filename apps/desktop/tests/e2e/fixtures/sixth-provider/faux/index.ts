@@ -25,8 +25,6 @@ export const faux: AgentProviderDef = {
     turnSignal: true,
     resume: "none",
     supervise: "human",
-    modelFlag: false,
-    permissionModes: false,
     blockedDetection: true,
   },
   icon: GENERIC_AGENT_ICON,

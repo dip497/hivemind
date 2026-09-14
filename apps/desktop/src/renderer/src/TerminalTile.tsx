@@ -6,6 +6,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { registerFileLinks } from "./terminal-file-links";
 import { installCrispDpr, effectiveDpr } from "./terminal-dpr";
 import { patchTerminalMouseWithRetry } from "./terminal-mouse-patch";
+import { wantsDomRenderer, STREAM_QUIET_MS } from "./terminal-renderer-policy";
 import { registerWebglSlotClient, unregisterWebglSlotClient, reconcileWebglSlots } from "./webgl-slots";
 import { useTileFont, FontScaleControl, handleFontKey } from "./tile-font";
 import { identifyAgent, detectTileStatus, stabilizeClaudeStatus, normalizeAgentTitle, type TileStatus } from "./agent-state";
@@ -46,7 +47,24 @@ const DEFAULT_FONT = 15;
 // preset is the historical Ubuntu / GNOME Terminal palette, byte-identical —
 // golden-tested in hive-core). `allowTransparency` must be set at construction,
 // so it follows the user's glass setting, not the per-view gate.
-const termThemeFor = (t: ThemeState) => terminalThemeFor(t.terminal);
+/** Mounted tiles per session id: a persistent id is shared by a tile and its remount. */
+const liveMounts = new Map<string, number>();
+
+const IS_MAC = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform);
+const termThemeFor = (t: ThemeState) => withScrollbar(terminalThemeFor(t.terminal));
+
+/** xterm 6 colours its scrollbar from the theme, not CSS; follow the foreground. */
+function withScrollbar(theme: Record<string, string>): Record<string, string> {
+  const fg = theme.foreground ?? "";
+  const hex = /^#([0-9a-f]{3})$/i.test(fg) ? `#${[...fg.slice(1)].map((c) => c + c).join("")}` : fg;
+  if (!/^#[0-9a-f]{6}$/i.test(hex)) return theme;
+  return {
+    ...theme,
+    scrollbarSliderBackground: `${hex}33`,
+    scrollbarSliderHoverBackground: `${hex}59`,
+    scrollbarSliderActiveBackground: `${hex}80`,
+  };
+}
 /** The terminal background: FULLY transparent when content-glass is on, so the
  *  single tint lives on the tile ROOT (.hm-term-root, like every other tile) and
  *  the whole body — including the host's padding band — reads as one uniform tint
@@ -205,11 +223,8 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
   /** Wrapper around the status dot+label — hidden entirely while idle. */
   const statusWrapRef = useRef<HTMLSpanElement>(null);
 
-  // Which agent (if any) is running. herdr-ported detection covers 15 CLI
-  // agents (claude, codex, gemini, cursor, droid, amp, opencode, grok, …);
-  // null = plain shell → cheap activity heuristic only. `isClaude` keeps the
-  // send-to-agent bus (claude-bus) wired to the DEFAULT provider's tiles only —
-  // a bare/`latest` send never lands on another runtime's tile.
+  // null = plain shell. `isClaude` keeps a bare/`latest` send-to-agent on the
+  // default provider's tiles, never another runtime's.
   const agent = identifyAgent(cmd);
   const isClaude = agent === defaultAgent().id;
   // NOTE: we deliberately DON'T seed claude's hook-driven turn state on mount.
@@ -337,8 +352,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       rescaleOverlappingGlyphs: true,
       // box-drawing / block chars drawn as crisp vectors, not font bitmaps.
       customGlyphs: true,
-      windowsMode: false,
-      // Atlas (glyph cache) — "dynamic" is default in xterm 5 but be explicit.
+      // Atlas (glyph cache) — "dynamic" is the default; be explicit.
       // The WebGL renderer (loaded below) reuses the atlas across frames.
     });
     // Make plain http(s) URLs in terminal output clickable (claude, build logs,
@@ -403,6 +417,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
     // `cancelled` is declared HERE (not below with the spawn vars) because
     // registerWebglSlotClient() synchronously calls acquireWebgl, which reads it.
     let cancelled = false;
+    liveMounts.set(ptyId, (liveMounts.get(ptyId) ?? 0) + 1);
     let webgl: WebglAddon | undefined;
     let disposeDpr: (() => void) | undefined;
     // WebGL context-loss back-off (opencove pattern). The packaged app's GPU
@@ -419,7 +434,6 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
     // the renderer). lastStreamTs tracks recent output; renderer swaps happen only
     // on UNSELECTED tiles (invisible — the selected tile is always DOM).
     let lastStreamTs = 0;
-    const STREAM_QUIET_MS = 1500;
     let streamQuietTimer: ReturnType<typeof setTimeout> | undefined;
     // One armed timer that re-checks quietness when it fires, instead of a
     // clearTimeout+setTimeout pair on EVERY pty chunk (hundreds a second while
@@ -429,7 +443,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
         streamQuietTimer = undefined;
         const since = Date.now() - lastStreamTs;
         if (since < STREAM_QUIET_MS) { armQuietTimer(STREAM_QUIET_MS - since + 120); return; }
-        if (!selectedRef.current) reconcileWebglSlots();
+        if (!selectedRef.current) reconcileWebglSlots(); // the selected tile is always DOM
       }, ms);
     };
     // ── Flow control ────────────────────────────────────────────────────────
@@ -605,15 +619,13 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       // During a WebGL context-loss cooldown, force DOM regardless of agent/DPI —
       // re-acquiring WebGL would just lose the context again and thrash the canvas.
       wantsDom: () =>
-        Date.now() < webglCooldownUntil ||
-        // DOM renderer = subpixel-antialiased (sharp, like a native terminal);
-        // WebGL = grayscale (softer/blurrier). Use DOM at dpr<2 whenever the tile
-        // is SELECTED *or* IDLE (no recent output). Only an UNSELECTED tile that's
-        // actively STREAMING stays on WebGL, so a multi-agent fan-out can't
-        // re-spike the renderer. Swaps happen only on unselected tiles → invisible.
-        //
-        ((window.devicePixelRatio || 1) < 2 &&
-          (selectedRef.current === true || Date.now() - lastStreamTs > STREAM_QUIET_MS)),
+        wantsDomRenderer({
+          dpr: window.devicePixelRatio || 1,
+          now: Date.now(),
+          lastStreamTs,
+          selected: selectedRef.current === true,
+          webglCooldownUntil,
+        }),
     });
 
     // Agents set the terminal window title (OSC 0/2) to a live task summary —
@@ -684,7 +696,8 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       if (flowPending >= FLOW_HIGH_CHARS) requestFlowPause();
       // Crisp-when-idle renderer choice: note the stream, and reconcile only on
       // TRANSITIONS (quiet→streaming now, streaming→quiet later) and only for an
-      // UNSELECTED tile (the selected tile is always DOM, so it never swaps).
+      // UNSELECTED tile — the selected tile is always DOM, so it never swaps.
+      // Edge-triggered: a reconcile per chunk would be hundreds a second.
       const now = Date.now();
       const wasQuiet = now - lastStreamTs > STREAM_QUIET_MS;
       lastStreamTs = now;
@@ -739,6 +752,13 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
     // swallow image pastes, so we leave paste entirely to xterm/the PTY/claude.
     term.attachCustomKeyEventHandler((e) => {
       if (e.type !== "keydown") return true;
+      // Alt+Left/Right moves by word; xterm 6 no longer remaps it.
+      if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+        const left = e.key === "ArrowLeft";
+        term.input(IS_MAC ? (left ? "\x1bb" : "\x1bf") : (left ? "\x1b[1;5D" : "\x1b[1;5C"), true);
+        e.preventDefault();
+        return false;
+      }
       if (!(e.ctrlKey || e.metaKey)) return true;
       // Diagnostics HUD toggle (Ctrl/Cmd+Shift+D), broadcast to every tile.
       if (e.shiftKey && e.key.toLowerCase() === "d") {
@@ -807,7 +827,11 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
           ...(initialPrompt ? { initialPrompt } : {}),
         });
         if (cancelled) {
-          window.hive.ptyKill(ptyId);
+          // A persistent id is shared with the remount (StrictMode, a view move) that
+          // now owns the session; only an explicit close may kill it. With no remount,
+          // let go of the attach this spawn made after the unmount already detached.
+          if (!persistent || killOnUnmountRef.current) window.hive.ptyKill(ptyId);
+          else if (!liveMounts.get(ptyId)) window.hive.ptyDetach(ptyId);
           return;
         }
         // Force the live PTY to match our CURRENT geometry. On a RE-ATTACH the
@@ -944,6 +968,8 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
 
     return () => {
       cancelled = true;
+      const left = (liveMounts.get(ptyId) ?? 1) - 1;
+      if (left > 0) liveMounts.set(ptyId, left); else liveMounts.delete(ptyId);
       if (fitRaf) cancelAnimationFrame(fitRaf);
       if (idleTimer.current) clearTimeout(idleTimer.current);
       if (agentPoll) clearInterval(agentPoll);

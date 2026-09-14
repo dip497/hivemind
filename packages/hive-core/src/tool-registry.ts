@@ -2,6 +2,8 @@
 export interface ToolContribution {
   readonly key: string;
   readonly label: string;
+  /** One line saying what the tool does, for the settings list. */
+  readonly description?: string;
 }
 export interface ToolPluginContribution {
   readonly id: string;

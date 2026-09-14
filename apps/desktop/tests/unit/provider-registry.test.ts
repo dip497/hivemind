@@ -1,7 +1,7 @@
 // Unit test for the agent-provider registry. Run: pnpm test:unit
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { providerFor, composeResume, PROVIDERS } from "@hivemind/agents/node";
+import { providerFor, composeResume, providers } from "@hivemind/agents/node";
 import type { SpawnSpec } from "../../src/main/pty-session-manager.ts";
 
 const ctx = {
@@ -86,5 +86,5 @@ test("composeResume restoreRetryMs is the max across providers (≥ claude's 5s)
 test("every provider with a daemon half is registered, in catalog order", () => {
   // Order is immaterial (each transform no-ops on specs it doesn't own — see the
   // order-independence golden test); this pins the SET, not a chaining order.
-  assert.deepEqual([...PROVIDERS.map((p) => p.id)].sort(), ["claude", "codex", "droid", "kiro", "pi"]);
+  assert.deepEqual([...providers().map((p) => p.id)].sort(), ["claude", "codex", "cursor", "droid", "kiro", "pi"]);
 });

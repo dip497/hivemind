@@ -65,6 +65,11 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
+    // Later specs share settings.json; the view switch's own save is debounced.
+  await page?.evaluate(async () => {
+    window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "canvas" } }));
+    await window.hive.settingsSet("views.defaultView", "canvas");
+  }).catch(() => {});
   await app?.close();
   await fs.rm(repo, { recursive: true, force: true }).catch(() => {});
 });

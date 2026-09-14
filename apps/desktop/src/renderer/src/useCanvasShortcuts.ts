@@ -52,7 +52,7 @@ export function useCanvasShortcuts(ctx: CanvasShortcutsCtx) {
     const onKey = (e: KeyboardEvent) => {
       // ── modifier shortcuts (kept for muscle memory) ──
       if (e.metaKey || e.ctrlKey) {
-        if (e.key === "\\") { e.preventDefault(); spawnClaude(); }
+        if (e.key === "\\") { e.preventDefault(); spawnSelectedAgent(); } // the default agent, like the toolbar
         else if ((e.key === "b" || e.key === "B") && repoPath) { e.preventDefault(); spawnVis("tree"); }
         else if (e.key === "t" || e.key === "T") { e.preventDefault(); spawnVis("shell"); }
         else if ((e.key === "d" || e.key === "D") && repoPath) { e.preventDefault(); spawnVis("diff"); }

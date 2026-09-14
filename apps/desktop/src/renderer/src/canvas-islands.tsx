@@ -1,6 +1,6 @@
 /** Canvas camera controls. The standard workspace toolbar lives independently
  *  in workspace/standard-toolbar so scene views do not depend on xyflow here. */
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useReactFlow, useStore } from "@xyflow/react";
 
 /** Bottom-left zoom + nav island (Excalidraw footer). Uses react-flow's
@@ -10,8 +10,9 @@ export function ZoomIsland({ tileCount, onReset, minimapOn, onToggleMinimap, onF
   const zoom = useStore((s) => s.transform[2]);
   const pct = Math.round(zoom * 100);
   const [fpsOn, setFpsOn] = useState(false);
+  const toolbar = useRovingToolbar();
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-1" role="toolbar" aria-label="Canvas controls" ref={toolbar.ref} onKeyDown={toolbar.onKeyDown}>
       <div className="hm-island flex items-center overflow-hidden">
         <IslandBtn title="Zoom out (Ctrl -)" onClick={() => zoomOut({ duration: 150 })}>
           <svg width="13" height="13" viewBox="0 0 14 14"><path d="M3 7h8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
@@ -48,6 +49,29 @@ export function ZoomIsland({ tileCount, onReset, minimapOn, onToggleMinimap, onF
       </span>
     </div>
   );
+}
+
+/** The cluster is one tab stop; arrows move inside it, as a toolbar should. */
+function useRovingToolbar() {
+  const ref = useRef<HTMLDivElement>(null);
+  const items = useCallback(() => [...(ref.current?.querySelectorAll<HTMLButtonElement>("button") ?? [])], []);
+  // A button's tabIndex reads 0 by default, so the one we chose carries a mark of its own.
+  useEffect(() => {
+    const list = items();
+    if (list.some((b) => b.dataset.roving === "on")) return;
+    list.forEach((b, i) => { b.tabIndex = i === 0 ? 0 : -1; if (i === 0) b.dataset.roving = "on"; });
+  });
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    const step = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+    if (!step && e.key !== "Home" && e.key !== "End") return;
+    const list = items();
+    const from = list.indexOf(document.activeElement as HTMLButtonElement);
+    const to = e.key === "Home" ? 0 : e.key === "End" ? list.length - 1 : (Math.max(from, 0) + step + list.length) % list.length;
+    e.preventDefault();
+    list.forEach((b, i) => { b.tabIndex = i === to ? 0 : -1; if (i === to) b.dataset.roving = "on"; else delete b.dataset.roving; });
+    list[to]?.focus();
+  };
+  return { ref, onKeyDown };
 }
 
 /** Live FPS readout (rAF-sampled, updated 2×/s). Off by default — only mounts

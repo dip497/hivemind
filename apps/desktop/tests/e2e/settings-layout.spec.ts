@@ -58,8 +58,9 @@ test("Settings stays opaque, pauses decoration, preserves a terminal and fits a 
     await app.evaluate(({ BrowserWindow }) => { const win = BrowserWindow.getAllWindows()[0]!; win.setMinimumSize(400, 600); win.setContentSize(500, 800); });
     await expect.poll(() => page.evaluate(() => innerWidth)).toBeLessThanOrEqual(500);
     await expect(page.getByRole("button", { name: "Appearance", exact: true })).toBeVisible();
-    for (const section of ["appearance", "views", "extensions", "agents", "notifications", "shortcuts", "about"]) {
-      await page.locator(`[data-settings-page="${section}"]`).click();
+    for (const section of ["appearance", "notifications", "shortcuts", "about", "agents", "views", "view:canvas", "tools", "tool:hivemind/web", "plugins", "installed"]) {
+      if (section.includes(":")) await page.evaluate((p) => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: p } })), section);
+      else await page.locator(`[data-settings-page="${section}"]`).click();
       await expect.poll(() => page.locator("[data-settings-body]").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
     }
     await page.locator('[data-settings-page="appearance"]').click();

@@ -138,7 +138,16 @@ const api: HiveIpc & {
     return () => ipcRenderer.removeListener("settings:changed", listener);
   },
   listViews: (repoRoot) => ipcRenderer.invoke("views:list", repoRoot),
+  listAgents: (repoRoot) => ipcRenderer.invoke("agents:list", repoRoot),
+  agentOptionChoices: (id) => ipcRenderer.invoke("agents:option-choices", id),
+  agentPresence: () => ipcRenderer.invoke("agents:presence"),
+  verifyAgent: (id) => ipcRenderer.invoke("agents:verify", id),
   previewViewInstall: () => ipcRenderer.invoke("views:preview-install"),
+  pluginCatalog: () => ipcRenderer.invoke("plugins:catalog"),
+  reviewCatalogPlugin: (type, id) => ipcRenderer.invoke("plugins:review", type, id),
+  installCatalogAgent: (token) => ipcRenderer.invoke("plugins:install-agent", token),
+  removeAgent: (id) => ipcRenderer.invoke("agents:remove", id),
+  autoInstallAgents: () => ipcRenderer.invoke("agents:auto-install"),
   installViewPackage: (token) => ipcRenderer.invoke("views:install", token),
   removeViewPackage: (id) => ipcRenderer.invoke("views:remove", id),
   onViewRunaway: (cb) => {

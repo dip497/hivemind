@@ -1,5 +1,5 @@
 /**
- * Grok — recognised for status scraping (herdr detector) when a user runs
+ * Grok — recognised for status scraping when a user runs
  * it in a terminal tile; not spawnable by hivemind (`enabled: false`) until it
  * is probed and wired (see the adding-an-agent-provider skill).
  */
@@ -35,17 +35,20 @@ export const grok: AgentProviderDef = {
   label: "Grok",
   bin: "grok",
   aliases: ["grok-build"],
-  enabled: false,
+  enabled: true,
   caps: {
     promptDelivery: "typed",
     turnSignal: false,
     resume: "none",
     supervise: "human",
-    modelFlag: false,
-    permissionModes: false,
     blockedDetection: true,
   },
+  options: [
+    { id: "model", label: "Model", flag: "--model" },
+    { id: "mode", label: "Permission mode", flag: "--permission-mode", unattended: "bypassPermissions" },
+  ],
+  install: { url: "https://docs.x.ai/build/overview", command: "curl -fsSL https://x.ai/cli/install.sh | bash" },
   icon: GENERIC_AGENT_ICON,
   detect: detectGrok,
-  note: "recognised for status only — not spawnable yet.",
+  note: "launches and reads status; other agents cannot collect its replies.",
 };

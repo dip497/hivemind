@@ -8,7 +8,7 @@ import { AlertCircle, CheckCircle2, AlertTriangle, Sparkles, X } from "lucide-re
 import { useTileFocus } from "./canvas-camera";
 import { toastKindOf, toastTtlMs, type Toast, type NoticeKind } from "./useAgentAwareness";
 
-// ── Agent awareness (ported concept from herdr) ─────────────────────────────
+// ── Agent awareness ─────────────────────────────────────────────────────────
 
 /** Icon + verb per notice class. ONE accent (the app brand, set in CSS) is used
  *  across every kind — the kind is encoded by the icon SHAPE + the verb text
@@ -210,14 +210,18 @@ export function CanvasEmptyState({
   onShowTree,
   onShowShell,
   onShowDiff,
-  onSpawnClaude,
+  agentLabel,
+  onSpawnAgent,
   onInitWorkspace,
 }: {
   repoPath: string | null;
   onShowTree: () => void;
   onShowShell: () => void;
   onShowDiff: () => void;
-  onSpawnClaude: () => void;
+  /** The default agent's name; null when no agent CLI is installed here. */
+  agentLabel: string | null;
+  /** Start the default agent, or open Settings to get one. */
+  onSpawnAgent: () => void;
   /** When set (folder open, no .hivemind/), surface an init action. */
   onInitWorkspace?: () => void;
 }) {
@@ -237,22 +241,24 @@ export function CanvasEmptyState({
           Start with an agent.
         </h2>
         <p className="text-[12.5px] text-[var(--color-fg2)] mt-1.5 leading-relaxed">
-          Nothing renders until you ask for it. Spawn Claude, or mount a tool below.
+          {agentLabel
+            ? <>Nothing renders until you ask for it. Start {agentLabel}, or open a tool below.</>
+            : <>No agent CLI is installed on this machine yet. Get one, or open a tool below.</>}
         </p>
 
         {/* Primary: full-width confident action */}
         <button
-          onClick={onSpawnClaude}
+          onClick={onSpawnAgent}
           className="mt-5 w-full flex items-center gap-3 rounded-lg border border-[var(--color-line2)] bg-[var(--color-bg3)] hover:border-[var(--color-brand)] hover:bg-[var(--color-bg4)] transition-colors px-3.5 py-3 text-left group"
         >
           <span aria-hidden className="grid place-items-center size-8 shrink-0 rounded-md bg-[var(--color-bg4)] text-[var(--color-brand)] group-hover:bg-[var(--color-brand)] group-hover:text-white transition-colors">
             <Sparkles size={16} />
           </span>
           <span className="flex-1 min-w-0">
-            <span className="block text-[13px] font-medium text-[var(--color-fg)]">Talk to Claude</span>
-            <span className="block text-[11.5px] text-[var(--color-fg3)] leading-snug">A dedicated session in its own tile</span>
+            <span className="block text-[13px] font-medium text-[var(--color-fg)]">{agentLabel ? `Start ${agentLabel}` : "Get an agent"}</span>
+            <span className="block text-[11.5px] text-[var(--color-fg3)] leading-snug">{agentLabel ? "A dedicated session in its own tile" : "See which agents Hivemind works with, and how to install one"}</span>
           </span>
-          <kbd className="font-mono text-[10px] text-[var(--color-fg3)] group-hover:text-[var(--color-fg2)] transition-colors shrink-0">⌘\</kbd>
+          {agentLabel && <kbd className="font-mono text-[10px] text-[var(--color-fg3)] group-hover:text-[var(--color-fg2)] transition-colors shrink-0">⌘\</kbd>}
         </button>
 
         {/* When launched in a non-hivemind folder, surface init right next to

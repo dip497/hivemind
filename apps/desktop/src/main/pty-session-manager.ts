@@ -198,7 +198,7 @@ export class SessionManager {
    *  fresh PTY is spawned with the stored spec; the headless term already
    *  carries the pre-reboot screen so the user sees their last state plus a
    *  working new shell. Evicted when attach actually happens or on explicit kill. */
-  private frozen = new Map<string, SessionSnapshot>();
+  private frozen = new Map<string, () => SessionSnapshot | undefined>();
   private idleTimer: ReturnType<typeof setTimeout> | undefined;
   private snapshotTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly scrollback: number;
@@ -228,10 +228,18 @@ export class SessionManager {
     this.restoreRetryMs = opts.restoreRetryMs ?? 5000;
   }
 
-  /** Pre-load a snapshot (called during daemon boot for each *.json on disk).
-   *  The frozen session is materialized as a live one on the next `createOrAttach`. */
+  /** Materialized as a live session on the next `createOrAttach`. */
   restoreSnapshot(snap: SessionSnapshot): void {
-    this.frozen.set(snap.id, snap);
+    this.frozen.set(snap.id, () => snap);
+  }
+
+  /** `load` runs when the tile attaches, and must be synchronous (see createOrAttach). */
+  restoreLazySnapshot(id: string, load: () => SessionSnapshot | undefined): void {
+    this.frozen.set(id, load);
+  }
+
+  frozenIds(): string[] {
+    return Array.from(this.frozen.keys());
   }
 
   /** Spawn a new session, or attach to an existing one and replay its buffer.
@@ -270,8 +278,10 @@ export class SessionManager {
     // PTY with the stored spec, then prime the headless term with the saved
     // VT-escape replay so the client sees its last screen before the new shell
     // emits its first byte. The user's session feels continuous.
-    const frozenSnap = this.frozen.get(id);
-    if (frozenSnap) this.frozen.delete(id);
+    // No await between take and spawn, or a second attach would spawn fresh.
+    const loadFrozen = this.frozen.get(id);
+    if (loadFrozen) this.frozen.delete(id);
+    const frozenSnap = loadFrozen ? loadFrozen() : undefined;
     // Spec from the snapshot wins over the caller's (cwd/cmd/env are what the
     // user had); only cols/rows from the live attach apply (window dims).
     // For RESTORE paths, also run the optional transform so the daemon can

@@ -1,0 +1,69 @@
+# Amp — built-in provider manifest.
+# Authoring format for the def half. See packages/hive-agents/src/manifest.ts.
+manifestVersion: 1
+id: amp
+label: Amp
+bin: amp
+aliases:
+- amp-local
+enabled: true
+caps:
+  promptDelivery: typed
+  turnSignal: false
+  resume: none
+  supervise: human
+  blockedDetection: true
+icon:
+  viewBox: 0 0 16 16
+  attrs:
+    fill: none
+  shapes:
+  - rect:
+      x: '2.5'
+      y: '4'
+      width: '11'
+      height: '8.5'
+      rx: '2'
+      stroke: currentColor
+      stroke-width: '1.2'
+  - circle:
+      cx: '6'
+      cy: '8'
+      r: '1'
+      fill: currentColor
+  - circle:
+      cx: '10'
+      cy: '8'
+      r: '1'
+      fill: currentColor
+  - path:
+      d: M8 4V2M5.5 12.5v1M10.5 12.5v1
+      stroke: currentColor
+      stroke-width: '1.2'
+      stroke-linecap: round
+install:
+  url: https://ampcode.com/docs/cli
+  command: "curl -fsSL https://ampcode.com/install.sh | bash"
+detect:
+  rules:
+  - when:
+      all:
+      - contains: approve
+      - any:
+        - contains: allow all for this session
+        - contains: allow all for every session
+        - contains: allow file for every session
+        - contains: deny with feedback
+      - any:
+        - contains: waiting for approval
+        - contains: invoke tool
+        - contains: run this command?
+        - contains: 'allow editing file:'
+        - contains: 'allow creating file:'
+        - contains: confirm tool call
+    then: blocked
+  - when:
+      contains: esc to cancel
+    then: working
+  default: idle
+note: launches and reads status; other agents cannot collect its replies.

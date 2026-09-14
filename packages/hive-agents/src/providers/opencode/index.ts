@@ -28,10 +28,13 @@ export const opencode: AgentProviderDef = {
     turnSignal: false,
     resume: "none",
     supervise: "human",
-    modelFlag: false,
-    permissionModes: false,
     blockedDetection: true,
   },
+  options: [
+    { id: "mode", label: "Approval", values: { auto: ["--auto"] } },
+    { id: "model", label: "Model", flag: "--model", list: { args: ["models"] } },
+  ],
+  install: { url: "https://opencode.ai/docs/", command: "curl -fsSL https://opencode.ai/install | bash" },
   /** opencode's leading block glyph. */
   icon: {
     viewBox: "-3 6 30 30",

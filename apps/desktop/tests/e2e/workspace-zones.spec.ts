@@ -13,6 +13,7 @@ let app: ElectronApplication;
 let page: Page;
 let repoA: string;
 let repoB: string;
+let xdg: string;
 
 async function seedRepo(prefix: string, issueTitle: string): Promise<string> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), `hm-ws-${prefix}-`));
@@ -40,10 +41,12 @@ async function seedRepo(prefix: string, issueTitle: string): Promise<string> {
 test.beforeAll(async () => {
   repoA = await seedRepo("AAA", "alpha-task");
   repoB = await seedRepo("BBB", "beta-task");
+    // Own config dir: a view another spec persisted must not become this spec's startup view.
+  xdg = await fs.mkdtemp(path.join(os.tmpdir(), "hm-ws-xdg-"));
   app = await electron.launch({
     args: [path.join(process.cwd(), "out/main/index.js"), "--no-sandbox", `--user-data-dir=/tmp/hm-ws-ud-${Date.now()}`],
     cwd: repoA,
-    env: { ...process.env, HIVEMIND_PTY_DAEMON: "0", HIVEMIND_TEST_PICK_DIR: repoB },
+    env: { ...process.env, XDG_CONFIG_HOME: xdg, HIVEMIND_PTY_DAEMON: "0", HIVEMIND_TEST_PICK_DIR: repoB },
   });
   page = await app.firstWindow();
   await page.waitForLoadState("domcontentloaded");
@@ -71,6 +74,7 @@ test.afterAll(async () => {
   await app?.close();
   await fs.rm(repoA, { recursive: true, force: true }).catch(() => {});
   await fs.rm(repoB, { recursive: true, force: true }).catch(() => {});
+  if (xdg) await fs.rm(xdg, { recursive: true, force: true }).catch(() => {});
 });
 
 test("bind a frame to workspace B and the in-zone Issues tile shows B's issues", async () => {

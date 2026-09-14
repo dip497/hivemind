@@ -46,11 +46,11 @@ test("Browser opt-in is shared by Settings, shortcuts, CLI, and view commands; d
   expect(await page.evaluate(() => performance.getEntriesByType("resource").some((r) => /\/BrowserTile-/.test(r.name)))).toBe(false);
   expect(hive("ctl", "open-tool", "hivemind/web/browser", "--url", "about:blank").data.code).toBe("UNAUTHORIZED");
   await page.keyboard.press("7");
-  await expect(page.getByText("Browser is disabled. Enable it in Settings under Extensions.")).toBeVisible();
+  await expect(page.getByText("Browser is disabled. Enable it in Settings under Tools.")).toBeVisible();
   await expect(browsers()).toHaveCount(0);
 
   await page.locator('[aria-label="settings"]').click();
-  await page.locator('[data-settings-page="extensions"]').click();
+  await page.locator('[data-settings-page="tools"]').click();
   await page.getByRole("switch", { name: "Enable Browser", exact: true }).click();
   await expect.poll(() => hive("config", "get", "tools.enabledPlugins").data.data).toEqual(["hivemind/web"]);
   await page.screenshot({ path: "/tmp/hivemind-browser-plugin-settings.png" });

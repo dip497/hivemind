@@ -13,9 +13,9 @@ export function useToolEnabled(kind: string): boolean {
 }
 export function checkToolCreation(kind: string): boolean {
   if (toolCreationAllowed(kind)) return true;
-  toast.error("Browser is disabled. Enable it in Settings under Extensions.", {
+  toast.error("Browser is disabled. Enable it in Settings under Tools.", {
     id: "browser-disabled",
-    action: { label: "Settings", onClick: () => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "extensions" } })) },
+    action: { label: "Settings", onClick: () => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "tools" } })) },
   });
   return false;
 }

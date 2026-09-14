@@ -1,7 +1,4 @@
-/**
- * Shared screen-scrape helpers (ported from herdr's detect.rs). Provider
- * detectors compose these; nothing here knows any agent by name.
- */
+/** Screen-scrape primitives. Nothing here knows any agent by name. */
 
 export const BRAILLE = /[⠀-⣿]/;
 

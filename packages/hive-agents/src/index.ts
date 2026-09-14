@@ -6,4 +6,8 @@ export * from "./types.js";
 export * from "./catalog.js";
 export * from "./detect-helpers.js";
 export { GENERIC_AGENT_ICON } from "./icon.js";
+// ./load.ts is node-only; import it from "@hivemind/agents/load".
+export * from "./manifest.js";
+export * from "./detect-rules.js";
+export * from "./options.js";
 export { detectClaudeState, type ClaudeState } from "./providers/claude/state.js";
