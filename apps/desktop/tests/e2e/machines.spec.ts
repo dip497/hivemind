@@ -12,10 +12,13 @@ import { fileURLToPath } from "node:url";
 const APP_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const HIVE = path.resolve(APP_DIR, "../cli/dist/hive");
 const SSHD = "/usr/sbin/sshd";
-const usable = process.platform === "linux" && fs.existsSync(SSHD) && fs.existsSync(HIVE) && spawnSync("ssh-agent", ["-k"], { stdio: "ignore" }).error === undefined;
+/** A stale `dist/hive` (one without the daemon) would be installed on the fixture and rejected there,
+ *  which reads as a product failure; skip instead and say what to build. */
+const hiveRunsDaemon = fs.existsSync(HIVE) && `${spawnSync(HIVE, ["daemon", "--help"], { encoding: "utf8" }).stdout}`.includes("bridge");
+const usable = process.platform === "linux" && fs.existsSync(SSHD) && hiveRunsDaemon && spawnSync("ssh-agent", ["-k"], { stdio: "ignore" }).error === undefined;
 
 test.describe.configure({ mode: "serial" });
-test.skip(!usable, "needs /usr/sbin/sshd, ssh-agent and a built apps/cli/dist/hive");
+test.skip(!usable, "needs /usr/sbin/sshd, ssh-agent and a current apps/cli/dist/hive (cd apps/cli && bun scripts/build.ts)");
 
 let dir = "";
 let app: ElectronApplication;
