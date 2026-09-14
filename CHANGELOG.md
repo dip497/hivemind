@@ -7,6 +7,19 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Add `hive daemon`, `hive run`, `hive ps`, `hive attach` and `hive kill` for persistent terminal sessions without the desktop app.
+- Remote terminals on a host with `hive` now run in its PTY daemon, so they survive ssh drops and app restarts; other hosts keep the in-app session.
+- Remote frames use your system `ssh` for terminals, files and git, so `~/.ssh/config`, jump hosts and hardware keys work; host keys are recorded in the app's own known_hosts.
+- Add `hive machine` saved ssh machines and `--machine` on `ps`/`run`/`attach`; `machine add --install` puts the matching `hive` on any published platform.
+- Machines can be given a password when a host has no ssh key; the app says so when the OS keychain cannot keep it, and a machine's password can be set again later.
+- Add Machines: saved ssh machines with live status, round trip and one-click setup in the app, a machine chip on remote frames, a reconnect banner on remote terminals, and opening sessions already running on a machine; shares its list with `hive machine` and brings in previously saved hosts.
+- Publish `hive-linux-arm64`; `install.sh` on arm64 Linux installs the CLI alone, for use as a remote machine.
+- A terminal session can have several viewers at once; the one typing owns the size.
+- Reconnecting to a terminal sends only the output you missed, and a viewer on a slow link is sent a fresh screen instead of every byte.
+- Agents in remote terminals now show their status and notifications in the app; add `hive push` to notify a phone when an agent needs input.
+- Fix a second PTY daemon stealing the socket from a running one, and a killed session reappearing after a daemon restart; the daemon socket and snapshots are now owner-only.
+- Build `hive` with bun 1.3.
+
 - Simplify fullscreen Settings into consistent rows and compact view choices; pause covered wallpapers and overlay videos without changing preferences or agent sessions.
 
 - Let each view choose toolbar actions, order, and labels through Settings or the CLI, with empty toolbars supported and tool activation kept separate.

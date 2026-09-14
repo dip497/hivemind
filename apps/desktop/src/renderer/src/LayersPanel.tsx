@@ -9,6 +9,9 @@
  * tile's status here stays in sync with everywhere else. Pure presentational +
  * its own status subscription; Canvas owns the data + focus actions.
  */
+import { MachinesStrip } from "./machines/MachinesStrip";
+import { MachineDot } from "./machines/status";
+import { hostIdOfUri, machineByHost, statusOf, useMachines } from "./machines/store";
 import { useEffect, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
 import { Layers, ChevronRight, ChevronDown, GitBranch, Server, Folder, FolderOpen, PanelLeftClose, Globe } from "lucide-react";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
@@ -40,6 +43,8 @@ export interface LayerFrame {
   branch?: string;
   /** True => bound to a remote SSH host (shown with a Server glyph). */
   remote?: boolean;
+  /** Its ssh:// uri, so the glyph can show the machine's link state. */
+  remoteUri?: string;
 }
 
 interface Props {
@@ -123,9 +128,21 @@ const KIND_GLYPH: Record<LayerKind, string> = {
  */
 const muted = (color: string) => `color-mix(in oklab, ${color} 62%, var(--color-fg3))`;
 
-function WorkspaceIcon({ color, remote, worktree, collapsed }: { color: string; remote?: boolean; worktree: boolean; collapsed: boolean }) {
+function RemoteIcon({ color, uri }: { color: string; uri?: string }) {
+  const snap = useMachines();
+  const hostId = hostIdOfUri(uri);
+  const s = statusOf(snap, hostId);
+  return (
+    <span className="relative shrink-0 grid place-items-center" title={machineByHost(snap, hostId)?.label ?? hostId ?? undefined}>
+      <Server size={15} style={{ color: muted(color) }} />
+      {s.state !== "idle" && <span className="absolute -right-0.5 -bottom-0.5 rounded-full ring-2 ring-[var(--color-bg2)] leading-[0]"><MachineDot status={s} size={6} /></span>}
+    </span>
+  );
+}
+
+function WorkspaceIcon({ color, remote, remoteUri, worktree, collapsed }: { color: string; remote?: boolean; remoteUri?: string; worktree: boolean; collapsed: boolean }) {
   const c = muted(color);
-  if (remote) return <Server size={15} className="shrink-0" style={{ color: c }} />;
+  if (remote) return <RemoteIcon color={color} uri={remoteUri} />;
   if (worktree) return <GitBranch size={15} className="shrink-0" style={{ color: c }} />;
   const Icon = collapsed ? Folder : FolderOpen;
   // Outline + a wash of fill, rather than a solid slug of color: the shape still
@@ -367,7 +384,7 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
           </button>
           {renaming?.id === gid ? (
             <div className="flex-1 flex items-center gap-2 min-w-0">
-              <WorkspaceIcon color={frame.color} remote={frame.remote} worktree={isWt} collapsed={isCollapsed} />
+              <WorkspaceIcon color={frame.color} remote={frame.remote} remoteUri={frame.remoteUri} worktree={isWt} collapsed={isCollapsed} />
               <input
                 autoFocus
                 value={renaming.draft}
@@ -399,7 +416,7 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
             className="flex-1 flex items-center gap-2 min-w-0 text-left text-[14px] font-semibold tracking-[-0.014em] text-[var(--color-fg)]"
             title={isWt ? `Focus worktree ${frame.branch ?? frame.title}` : `Focus ${frame.title}${frameActions ? " · double-click to rename" : ""}`}
           >
-            <WorkspaceIcon color={frame.color} remote={frame.remote} worktree={isWt} collapsed={isCollapsed} />
+            <WorkspaceIcon color={frame.color} remote={frame.remote} remoteUri={frame.remoteUri} worktree={isWt} collapsed={isCollapsed} />
             <span className="truncate">{frame.title}</span>
             <span className="ml-auto flex items-center gap-1.5 min-w-0">
               {/* The frame's aggregate is a SUMMARY of its children. While the group
@@ -510,6 +527,7 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
           </div>
         )}
       </div>
+      <MachinesStrip />
       {/* Right-edge resize grip (t3code-style) — drag to set the panel width. */}
       <div
         onPointerDown={startResize}

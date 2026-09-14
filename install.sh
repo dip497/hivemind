@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
-# hivemind installer / upgrader — Linux x86_64 + macOS arm64.
+# hivemind installer / upgrader — Linux x86_64 + macOS arm64 (Linux arm64: CLI only).
 #
 # DEFAULT (no flags): downloads prebuilt binaries from the latest GitHub
 # Release. Needs only `curl`, `bash`, and the `claude` CLI on PATH.
 # No node / pnpm / bun required. Prebuilts exist for Linux x86_64 (AppImage)
-# and macOS Apple Silicon (.app zip); anything else needs `--dev`.
+# and macOS Apple Silicon (.app zip); Linux arm64 gets the `hive` CLI alone
+# (a remote machine); anything else needs `--dev`.
 #
 #   curl -fsSL https://raw.githubusercontent.com/dip497/hivemind/main/install.sh | bash
 #
 # WITH `--dev`: clones the source repo and builds locally. Needs `git`,
-# `node` ≥ 22, `pnpm` ≥ 10, `bun` ≥ 1.1. Use this if you want to hack on
+# `node` ≥ 22, `pnpm` ≥ 10, `bun` ≥ 1.2.10. Use this if you want to hack on
 # hivemind or if no prebuilt is published for your platform yet.
 #
 #   bash install.sh --dev
@@ -287,9 +288,10 @@ esac
 PLATFORM=""; NO_PREBUILT=""
 case "$OS/$ARCH" in
   Linux/x86_64)  PLATFORM="linux-x86_64" ;;
+  Linux/aarch64|Linux/arm64) PLATFORM="linux-arm64" ;;
   Darwin/arm64)  PLATFORM="darwin-arm64" ;;
   Darwin/x86_64) NO_PREBUILT="no Intel-mac prebuilt yet — the .app bundles an arm64-only native pty module. Use --dev to build locally." ;;
-  *)             NO_PREBUILT="no prebuilt for $OS $ARCH (prebuilts: Linux x86_64, macOS arm64). Use --dev to build locally." ;;
+  *)             NO_PREBUILT="no prebuilt for $OS $ARCH (prebuilts: Linux x86_64 and arm64, macOS arm64). Use --dev to build locally." ;;
 esac
 
 # Release asset names for this platform, given $TAG. The AppImage / zip names
@@ -299,6 +301,7 @@ resolve_assets() {
   local v="${TAG#v}"
   case "$PLATFORM" in
     linux-x86_64) CLI_ASSET="hive-linux-x86_64"; APP_ASSET="hivemind-${v}-x86_64.AppImage" ;;
+    linux-arm64)  CLI_ASSET="hive-linux-arm64"; APP_ASSET="" ;;
     darwin-arm64) CLI_ASSET="hive-darwin-arm64"; APP_ASSET="hivemind-${v}-arm64-mac.zip" ;;
     *)            CLI_ASSET=""; APP_ASSET="" ;;
   esac
@@ -364,6 +367,7 @@ install_prebuilt() {
   # few hundred MB of headroom. Fail EARLY with a clear message instead of a
   # cryptic truncated-download / "extract failed" deep in the process.
   local free_kb need_kb=460000
+  [ "$PLATFORM" = "linux-arm64" ] && need_kb=150000   # CLI only
   free_kb=$(df -Pk "$APP_DIR" 2>/dev/null | awk 'NR==2 {print $4}')
   if [ -n "$free_kb" ] && [ "$free_kb" -lt "$need_kb" ]; then
     die "low disk in $(df -Ph "$APP_DIR" 2>/dev/null | awk 'NR==2{print $6}'): ~$((free_kb/1000))MB free, need ~$((need_kb/1000))MB. Free space, then re-run \`hivemind upgrade\`."
@@ -442,6 +446,12 @@ install_prebuilt() {
   mv -f "$CLI_TMP" "$APP_DIR/hive"
   ln -sf "$APP_DIR/hive" "$BIN_DIR/hive"
   ok "linked $BIN_DIR/hive → $APP_DIR/hive"
+
+  if [ -z "$APP_ASSET" ]; then
+    echo "$TAG" > "$INSTALLED_FILE"
+    ok "installed $TAG — the \`hive\` CLI only (no desktop build for $PLATFORM); add this box as a machine from your desktop"
+    return 0
+  fi
 
   if [ "$OS_KIND" = "mac" ]; then
     # Refuse to replace a LIVE bundle (see unpack_app_macos). Checked before the
@@ -634,6 +644,10 @@ case ":$PATH:" in
 esac
 
 # ── next steps ────────────────────────────────────────────────────────────
+if [ "$MODE" = "prebuilt" ] && [ "$PLATFORM" = "linux-arm64" ]; then
+  printf '\n%b✓ hive ready.%b From your desktop:  hive machine add %s@%s\n' "$GREEN" "$NC" "$(id -un)" "$(hostname)"
+  exit 0
+fi
 cat <<EOF
 
 ${GREEN}✓ hivemind ready.${NC}

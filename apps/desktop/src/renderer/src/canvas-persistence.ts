@@ -48,6 +48,8 @@ export interface TileInstance {
   args?: string[];
   /** browser only — last/initial URL so the tile restores where it was. */
   url?: string;
+  /** Terminal only: an existing daemon session it shows (started by `hive run` or another device); never spawns one. */
+  session?: string;
   /** Pinned = the tile becomes a TRUE screen-fixed floating panel: its content is
    *  portaled out of react-flow's transformed viewport into a fixed full-window
    *  layer, so it holds a constant screen position + size, unaffected by canvas

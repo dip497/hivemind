@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { trackOpenSession } from "./machines/open-sessions";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
@@ -87,6 +88,8 @@ interface Props {
   cwd: string;
   cmd: string;
   args?: string[];
+  /** An existing daemon session (`hive run`, another device) to show; the tile never starts one. */
+  session?: string;
   /** Display label for the canvas session chip / toasts (e.g. "claude #2"). */
   label?: string;
   /** Display name: user rename ?? agent OSC title ?? auto label. Resolved by
@@ -112,7 +115,7 @@ interface Props {
   onTogglePin?: (id: string, rect: PinRect) => void;
 }
 
-export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, onAgentTitle, onOpenInBrowser, onOpenInEditor, onClose, selected, pinned, onTogglePin }: Props) {
+export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onRename, onAgentTitle, onOpenInBrowser, onOpenInEditor, onClose, selected, pinned, onTogglePin }: Props) {
   // Editable header name: starts in display mode; double-click opens input.
   // Persists via onRename → Canvas tileNames → LAYOUT_KEY localStorage.
   const [editing, setEditing] = useState(false);
@@ -191,7 +194,8 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
   // path where its history lives — which is the correct semantics for
   // claude (its session JSONL is tied to that repo).
   const persistent = window.hive.persistentPty === true;
-  const ptyId = persistent ? `hm:${tileId}` : `${tileId}-${reactId}`;
+  const ptyId = session ?? (persistent ? `hm:${tileId}` : `${tileId}-${reactId}`);
+  useEffect(() => trackOpenSession(ptyId), [ptyId]);
   // True only when the user clicks × (explicit close) — then we KILL even in
   // persistent mode. App-close / view-cull unmounts leave it false → detach.
   const killOnUnmountRef = useRef(false);
@@ -805,9 +809,18 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
           cols: term.cols,
           rows: term.rows,
           ...(initialPrompt ? { initialPrompt } : {}),
+          ...(session ? { attachOnly: true } : {}),
         });
         if (cancelled) {
-          window.hive.ptyKill(ptyId);
+          // An adopted session is someone's running job: an abandoned mount only lets go of it.
+          if (session) window.hive.ptyDetach(ptyId); else window.hive.ptyKill(ptyId);
+          return;
+        }
+        // -1 is "no such session"; other negative pids are remote ones, negated on purpose.
+        if (session && pid === -1) {
+          term.writeln(`\x1b[2m[hivemind] could not open session ${session}: it has ended, or its machine is unreachable\x1b[0m`);
+          exited = true;
+          setStatus("exited");
           return;
         }
         // Force the live PTY to match our CURRENT geometry. On a RE-ATTACH the
@@ -971,7 +984,8 @@ export function TerminalTile({ tileId, cwd, cmd, args, label, name, onRename, on
       try {
         // Persistent + not an explicit close → detach (keep the session alive
         // in the daemon). Otherwise kill.
-        if (persistent && !killOnUnmountRef.current) window.hive.ptyDetach(ptyId);
+        // An adopted session is someone's job (`hive run`, another device): closing the tile only lets go.
+        if (session || (persistent && !killOnUnmountRef.current)) window.hive.ptyDetach(ptyId);
         else window.hive.ptyKill(ptyId);
       } catch {
         /* ignore */
