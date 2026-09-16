@@ -1,4 +1,4 @@
-import { tileKindAvailability } from "@hivemind/core/tool-plugins";
+import { bundledToolRegistry, tileKindAvailability, toolIdForTileKind } from "@hivemind/core/tool-plugins";
 import { getSettings, useSettings } from "./settings-store";
 import { toast } from "sonner";
 
@@ -13,8 +13,10 @@ export function useToolEnabled(kind: string): boolean {
 }
 export function checkToolCreation(kind: string): boolean {
   if (toolCreationAllowed(kind)) return true;
-  toast.error("Browser is disabled. Enable it in Settings under Tools.", {
-    id: "browser-disabled",
+  const toolId = toolIdForTileKind(kind);
+  const label = bundledToolRegistry.tools.find((t) => t.id === toolId)?.label ?? "That tool";
+  toast.error(`${label} is disabled. Enable it in Settings under Tools.`, {
+    id: `${toolId ?? kind}-disabled`,
     action: { label: "Settings", onClick: () => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "tools" } })) },
   });
   return false;
