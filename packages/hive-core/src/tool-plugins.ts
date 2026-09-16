@@ -1,16 +1,18 @@
 /**
  * Bundled tool plugins — metadata only.
  *
- * A "tool" here is something the workspace can spawn as a tile. Most tile kinds
- * are unmanaged legacy kinds: they predate this registry, ship with the app and
- * are always available. The managed ones are contributed by a plugin, and a
- * plugin is OFF until the user turns it on (`settings.tools.enabledPlugins`) —
- * installation alone never activates anything, which is the rule
- * `tool-registry.ts` already encodes.
+ * A "tool" here is something the workspace can spawn as a tile, and a plugin
+ * may also contribute commands: the verbs it exposes to the CLI and to agents.
+ * A built-in ships in the box and is available without being switched on; an
+ * installed plugin is OFF until the user turns it on
+ * (`settings.tools.enabledPlugins`), the rule `tool-registry.ts` encodes.
  *
- * This module owns exactly two things: the bundled contribution list, and a
- * pure answer to "may the workspace offer this tile kind?". No I/O, no
- * renderer imports, no knowledge of how a tile is built.
+ * Kinds no plugin claims (`shell`, `terminal`, an agent tile) stay unmanaged:
+ * `tileKindAvailability` answers null and the caller treats that as always
+ * available — a preferences blob must never be able to hide them.
+ *
+ * This module owns the bundled contribution list and pure answers about it. No
+ * I/O, no renderer imports, no knowledge of how a tile is built.
  */
 import { createToolRegistry, type RegisteredCommand, type RegisteredTool, type ToolAvailability, type ToolPluginContribution } from "./tool-registry.js";
 // Type-only: erased at compile time, so the runtime edge stays one-way
@@ -38,6 +40,25 @@ export const BUNDLED_TOOL_PLUGINS: readonly ToolPluginContribution[] = Object.fr
     tools: Object.freeze([Object.freeze({ key: "browser", label: "Browser", description: "A web page in a tile, which agents can drive when you allow it.", tileKind: "browser" })]),
   }),
   Object.freeze({
+    id: ISSUES_PLUGIN_ID,
+    builtin: true,
+    tools: Object.freeze([
+      Object.freeze({ key: "issues", label: "Issues", description: "The workspace's issue list.", tileKind: "issues" }),
+      Object.freeze({ key: "plan-review", label: "Plan review", description: "A plan waiting for your decision.", tileKind: "planReview" }),
+    ]),
+    commands: Object.freeze([
+      Object.freeze({ key: "new", summary: "Open an issue", cli: "hive new \"title\" [--label X] [--parent ID] [--assignee NAME]" }),
+      Object.freeze({ key: "list", summary: "List issues", readOnly: true, cli: "hive list [--state in_progress] [--json]" }),
+      Object.freeze({ key: "show", summary: "Show one issue", readOnly: true, cli: "hive show <ID>" }),
+      Object.freeze({ key: "update", summary: "Change an issue's state", cli: "hive update <ID> --state in_review --note \"...\"" }),
+      Object.freeze({ key: "task-add", summary: "Add a subtask", cli: "hive task add <ID> \"title\"" }),
+      Object.freeze({ key: "task-done", summary: "Complete a subtask", cli: "hive task done <ID> <SUBID>" }),
+      Object.freeze({ key: "link", summary: "Relate two issues", cli: "hive link <ID> --parent <ID>" }),
+      Object.freeze({ key: "close", summary: "Close or reopen an issue", cli: "hive close <ID>    /    hive reopen <ID>" }),
+      Object.freeze({ key: "mention", summary: "Resolve a mention", readOnly: true, cli: "hive @<ID>" }),
+    ]),
+  }),
+  Object.freeze({
     id: CODE_PLUGIN_ID,
     builtin: true,
     tools: Object.freeze([
@@ -46,18 +67,11 @@ export const BUNDLED_TOOL_PLUGINS: readonly ToolPluginContribution[] = Object.fr
     ]),
     // The review loop an agent cannot reach from a shell: comments live in the app.
     commands: Object.freeze([
-      Object.freeze({ key: "review-list", summary: "List review comments on a repository", readOnly: true }),
-      Object.freeze({ key: "review-reply", summary: "Reply to a review comment" }),
-      Object.freeze({ key: "review-resolve", summary: "Mark a review comment resolved" }),
-      Object.freeze({ key: "review-watch", summary: "Wait for the next review comment", readOnly: true }),
-    ]),
-  }),
-  Object.freeze({
-    id: ISSUES_PLUGIN_ID,
-    builtin: true,
-    tools: Object.freeze([
-      Object.freeze({ key: "issues", label: "Issues", description: "The workspace's issue list.", tileKind: "issues" }),
-      Object.freeze({ key: "plan-review", label: "Plan review", description: "A plan waiting for your decision.", tileKind: "planReview" }),
+      Object.freeze({ key: "review-list", summary: "List review comments on a repository", readOnly: true, cli: "hive review list [--status open|resolved|all]" }),
+      Object.freeze({ key: "review-show", summary: "Show one comment with its replies", readOnly: true, cli: "hive review show <ID>" }),
+      Object.freeze({ key: "review-reply", summary: "Reply to a review comment", cli: "hive review reply <ID> \"message\"" }),
+      Object.freeze({ key: "review-resolve", summary: "Mark a review comment resolved", cli: "hive review resolve <ID> --summary \"how\"" }),
+      Object.freeze({ key: "review-watch", summary: "Wait for the next review comment", readOnly: true, cli: "hive review watch [--timeout S]" }),
     ]),
   }),
 ]);

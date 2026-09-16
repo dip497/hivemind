@@ -7,6 +7,10 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- A comment you leave on a diff is now something an agent can answer. Comments live with the workspace instead of inside one window, so `hive review` lists them, replies to them and resolves them — and `hive review watch` waits for your next comment, which is what lets an agent finish a review instead of asking to be re-prompted. Comments you already had are carried over the first time each repository is opened.
+
+- Editor, diff, issues and plan review are plugins now, like the Browser tile already was. `hive tools list` shows what each one contributes: the tiles it can spawn and the commands it offers you and your agents. The tiles that ship with the app stay available without switching anything on.
+
 - The diff and file tree are on current upstream releases again, which brings faster rendering of large diffs and the newer Pierre palette.
 
 - An agent a repository ships now stays with that repository: it runs in tiles opened there and is refused anywhere else, and opening a second workspace no longer takes the first one's agents away from the tiles still running in it.

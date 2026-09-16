@@ -105,18 +105,24 @@ this with the first read capability, not after.
 
 ## Order of work
 
-1. Split diff/editor tiles into pieces (`FileTree`, `ChangesList`, `CommitBar`,
-   `DiffView`, `ConflictView`). No protocol work; overdue anyway.
-2. Capability registry in `hive-core`, with change events. Our own pieces call it instead
-   of reaching into IPC directly.
-3. Move the review-comment store out of localStorage into main.
-4. `packages/hive-mcp`: the host MCP server, exposing app-owned state only — review
-   comments first, since that is the loop with no substitute.
-5. Convert built-in kinds into built-in tool plugins (`hivemind/code`, `hivemind/git`).
-   No user-visible change.
-6. Browser tools, converged names, snapshot-first.
-7. MCP Apps host: tool tiles rendered from `ui://` resources, CSP from `_meta.ui.csp`.
-   Third-party plugins land here.
+- [x] **Built-in kinds are tool plugins.** `hivemind/issues` (issues, planReview) and
+  `hivemind/code` (workbench, diff) contribute their kinds; the registry owns the
+  kind→tool map. Built-ins are marked so no preferences blob can hide them.
+- [x] **Plugins declare commands**, each read-only or not, each with the exact CLI line.
+  `.agent.md` is generated from that list, so a plugin's commands are how an agent
+  discovers them. `hive tools list` shows what every plugin contributes.
+- [x] **The review store moved** to `.hivemind/review.json` (config dir for a repo with no
+  workspace). Main owns it; the renderer asks; localStorage is imported once.
+- [x] **`hive review`** — list, show, reply, resolve, reopen, watch.
+- [ ] Split diff/editor tiles into pieces (`FileTree`, `ChangesList`, `CommitBar`,
+  `DiffView`, `ConflictView`).
+- [ ] Capability registry with change events (`git.*`, `files.*`), so a plugin UI does not
+  go stale when an agent edits a file.
+- [ ] `packages/hive-mcp`: the same commands as MCP tools, for agents that prefer tools to
+  a shell. The registry is already the list.
+- [ ] Browser tools, converged names, snapshot-first.
+- [ ] MCP Apps host: tool tiles rendered from `ui://` resources, CSP from `_meta.ui.csp`.
+  Third-party plugins land here.
 
 Steps 1-4 stand on their own: they fix a real gap (comments an agent cannot see) and clean
 up code we own. Steps 5-7 open the ecosystem, and are worth doing only when someone wants

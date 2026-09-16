@@ -13,6 +13,8 @@ export interface CommandContribution {
   readonly summary: string;
   /** Read-only verbs run without a confirmation prompt. */
   readonly readOnly?: boolean;
+  /** How to invoke it, verbatim — this is what an agent is told to type. */
+  readonly cli?: string;
 }
 export interface ToolPluginContribution {
   readonly id: string;
@@ -90,9 +92,12 @@ export function createToolRegistry(plugins: readonly ToolPluginContribution[]): 
     for (const contribution of commands) {
       if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(contribution.key)) throw new Error("Invalid command key");
       if (!contribution.summary.trim() || contribution.summary.length > 200 || /[\x00-\x1f\x7f]/.test(contribution.summary)) throw new Error("Invalid command summary");
+      // An agent is told to type this: a control character or a newline here
+      // would let a contribution smuggle a second command into the context file.
+      if (contribution.cli !== undefined && (contribution.cli.length > 200 || /[\x00-\x1f\x7f`]/.test(contribution.cli))) throw new Error("Invalid command cli");
       const id = `${plugin.id}/${contribution.key}`;
       if (commandsById.has(id)) throw new Error(`Duplicate command: ${id}`);
-      commandsById.set(id, Object.freeze({ id, pluginId: plugin.id, key: contribution.key, summary: contribution.summary, readOnly: contribution.readOnly === true }));
+      commandsById.set(id, Object.freeze({ id, pluginId: plugin.id, key: contribution.key, summary: contribution.summary, readOnly: contribution.readOnly === true, cli: contribution.cli }));
     }
   }
   const tools = Object.freeze([...byId.values()]);

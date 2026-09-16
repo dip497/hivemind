@@ -13,11 +13,11 @@ const allowed = (kind: string, tools: { enabledPlugins: string[]; disabledTools:
 
 describe("bundled tool plugins", () => {
   test("the built-in tiles are plugins too — only the web plugin is opt-in", () => {
-    expect(BUNDLED_TOOL_PLUGINS.map((p) => p.id)).toEqual([BROWSER_PLUGIN_ID, CODE_PLUGIN_ID, ISSUES_PLUGIN_ID]);
+    expect(BUNDLED_TOOL_PLUGINS.map((p) => p.id)).toEqual([BROWSER_PLUGIN_ID, ISSUES_PLUGIN_ID, CODE_PLUGIN_ID]);
     expect(BROWSER_PLUGIN_ID).toBe("hivemind/web");
     expect(BROWSER_TOOL_ID).toBe("hivemind/web/browser");
     expect(BROWSER_TOOL).toEqual({ toolId: BROWSER_TOOL_ID, tileKind: "browser" });
-    expect(BUNDLED_TOOL_PLUGINS.filter((p) => p.builtin).map((p) => p.id)).toEqual([CODE_PLUGIN_ID, ISSUES_PLUGIN_ID]);
+    expect(BUNDLED_TOOL_PLUGINS.filter((p) => p.builtin).map((p) => p.id)).toEqual([ISSUES_PLUGIN_ID, CODE_PLUGIN_ID]);
     expect(toolIdForTileKind("browser")).toBe(BROWSER_TOOL_ID);
     expect(toolIdForTileKind("diff")).toBe(`${CODE_PLUGIN_ID}/diff`);
     expect(toolIdForTileKind("shell")).toBeNull();
@@ -94,6 +94,17 @@ describe("tile-kind availability", () => {
       .toEqual({ available: false, reason: "plugin-disabled" });
     expect(reg.resolve(prefs(["acme/diff"])).commandAvailability("acme/diff/nope"))
       .toEqual({ available: false, reason: "not-installed" });
+  });
+
+  test("every command an agent is told to type is a safe single line", () => {
+    // The cli strings land verbatim in .agent.md, inside a fenced block.
+    for (const c of bundledToolRegistry.commands) {
+      expect(c.cli, c.id).toBeTruthy();
+      expect(c.cli).not.toMatch(/[\n\r`]/);
+    }
+    expect(() => createToolRegistry([
+      { id: "acme/bad", tools: [], commands: [{ key: "bad", summary: "s", cli: "hive x\nrm -rf /" }] },
+    ])).toThrow(/Invalid command cli/);
   });
 
   test("it reads the preferences shape settings.json stores", () => {
