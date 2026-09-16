@@ -1,169 +1,126 @@
-# Tile plugins: every tile kind becomes a tool plugin
+# Tile plugins: tools that ship their own UI
 
 Status: proposal. 2026-09-16. Branch `feat/tile-plugins`.
 
-## What already exists (do not rebuild it)
+## What already exists
 
-Three seams are already in the tree, and this proposal is the join between them.
+- **A tool-plugin registry** (`packages/hive-core/src/tool-plugins.ts`): a plugin id is
+  `ns/name`, contributes tile kinds, and is OFF until the user enables it. Today one entry:
+  `browser` ← `hivemind/web`. Editor and diff are still unmanaged legacy kinds.
+- **A sandboxed iframe surface**: view packages over `hm-view://`, manifest, install
+  review, permissions refused at install and load, theme vars.
+- **A control plane**: HCP methods (`tile.*`, `agent.*`, `workflow.run`, `tool.open`)
+  fronted by `hive ctl`, whose `--json` is "the same shape as the MCP tool".
+  `packages/hive-mcp` is scaffolded and empty.
 
-1. **A tool-plugin registry** — `packages/hive-core/src/tool-plugins.ts` +
-   `tool-registry.ts`. Metadata only, no I/O. A plugin id is `ns/name`, contributes up to
-   32 tools, and is **OFF until the user enables it** (`settings.tools.enabledPlugins`);
-   installation activates nothing. `tileKindAvailability()` returns `null` for an
-   *unmanaged legacy kind* (ships with the app, always allowed) and a real answer for a
-   *managed* kind. Today `MANAGED_KINDS` has exactly one entry: `browser` ←
-   `hivemind/web`. The shape for "a plugin contributes a tile kind" is already decided.
-2. **A sandboxed UI surface** — view packages served over `hm-view://` into an
-   out-of-process iframe under `default-src 'none'`, with a manifest, an install review,
-   permissions refused at install *and* load, `hive views install`, theme vars, and the
-   draw-on-demand rule. Protocol version 1.
-3. **A control plane** — HCP methods (`tile.focus`, `tile.close`, `views.rescan`, …)
-   fronted by `hive ctl` verbs whose `--json` output is documented as "the same shape as
-   the MCP tool". `packages/hive-mcp` is scaffolded (`@modelcontextprotocol/sdk`, `zod`)
-   with no source yet.
+## The correction: don't invent a protocol
 
-The renderer already knows about three plugin page kinds: `PLUGIN_PAGE_KINDS =
-["agent", "view", "tool"]`. The installable catalog knows only two: `agent` and `view`.
-**That missing third type is the whole gap.** A tool plugin today can only be bundled
-metadata; nobody can ship one.
+MCP-UI and OpenAI's Apps SDK merged into an official MCP spec extension — **MCP Apps
+(SEP-1865), status Stable, 2026-01-26** (`modelcontextprotocol/ext-apps`). It defines
+exactly what we were about to design: a tool that returns a `ui://` HTML resource
+(`text/html;profile=mcp-app`), rendered in a sandboxed iframe, speaking JSON-RPC over
+postMessage (`ui/initialize`, `ui/notifications/tool-result`, `tools/call`, `ui/message`,
+`ui/open-link`, size-change), with CSP declared in `_meta.ui.csp`.
 
-## The move
+Our `hm-view://` machinery is most of an MCP Apps host already. Adopting it means **any
+third-party MCP server that ships a UI resource becomes a spawnable tile with no
+hivemind-specific code** — and our own tiles prove the API is honest.
 
-Every tile kind becomes a tool contributed by a plugin. The built-ins stop being
-"legacy unmanaged kinds" and become plugins we happen to ship.
+Canvas views keep their own protocol (`hivemind-view.json`, protocol 1). A whole-canvas
+view is a genuinely different thing. Tool tiles speak MCP Apps.
 
-| Plugin | Tools (tile kinds) | Ships as |
+## Two kinds of "tool", kept apart
+
+The word is overloaded. Split it and the design stops fighting itself.
+
+| | Host capabilities | Plugin tools |
 | --- | --- | --- |
-| `hivemind/code` | `workbench` (editor), `diff` | built-in, enabled by default |
-| `hivemind/git` | `changes`, `commit`, `conflicts` | built-in |
-| `hivemind/issues` | `issues`, `planReview` | built-in |
-| `hivemind/web` | `browser` | built-in, off by default (today's behaviour) |
-| `acme/diff` | `diff` (replaces) | third-party, sandboxed |
+| Examples | `git.diff`, `files.read`, `review.list` | `browser_navigate`, a plugin's own actions |
+| Author | us | the plugin |
+| Declared in | one capability registry in `hive-core` | the plugin's own MCP server |
+| Reached by | plugin RPC, `hive ctl` | agents, as `mcp__hivemind_<plugin>__<tool>` |
 
-`terminal` stays host-owned. It is a real pty surface the host must position and own; a
-plugin declares where one goes (surface rect), it never renders one.
-
-Two plugin flavours, one registry:
-
-- **Built-in (trusted):** contributes React components in-process, exactly as tiles render
-  today. No iframe, no bundle cost, full speed.
-- **Installed (untrusted):** ships a view-style package; its tool renders in an
-  `hm-view://` iframe pinned to the tile rect.
-
-Both go through the same registry, the same enable switch, the same settings page, and
-the same capability permissions. That is what keeps the API honest: our own diff tile
-calls the same commands a third-party diff tile calls.
-
-## The new plugin type
-
-`type: "tool"` joins `"agent"` and `"view"` in the catalog and installer. Manifest
-(`hivemind-tool.json`), reusing the view package rules verbatim — relative paths only, no
-symlink escape, unknown permission refused at install and load:
+A plugin manifest gains one field, not a schema language:
 
 ```json
-{
-  "id": "acme/diff",
-  "name": "Acme diff",
-  "version": "0.1.0",
-  "protocol": 1,
-  "tools": [
-    { "key": "diff", "label": "Acme diff", "description": "Side-by-side diff",
-      "tileKind": "diff", "replaces": "hivemind/code/diff", "entry": "diff.html" }
-  ],
-  "permissions": ["git:read", "files:read"]
-}
+{ "id": "acme/diff",
+  "tools": [{ "key": "diff", "tileKind": "diff", "entry": "diff.html" }],
+  "mcp": { "command": "${PLUGIN_ROOT}/server" },
+  "permissions": ["git:read", "files:read"] }
 ```
 
-`replaces` is what lets a user say "use Acme diff wherever a diff tile opens". It is a
-user preference (`settings.tools.kindOverrides`), never something a plugin takes by
-installing itself.
+That is Claude Code's plugin model, and the resulting tool namespace is one every agent we
+orchestrate already understands.
 
-`MANAGED_KINDS` stops being a module constant and becomes a map built from
-registry + installed catalog. `tileKindAvailability()` keeps its exact contract, and
-`tile-host.tsx` gains one `case "plugin"` next to the existing kinds.
+**The rule for what agents get:** expose a capability to an agent only when it is
+**app-owned state a shell cannot reach** — comments, tile state, browser pages, plan
+reviews. Never duplicate `git diff` or `cat`; an agent already has a terminal in the repo.
 
-## Capabilities: define once, expose three ways
+## Review comments: the store has to move first
 
-This is the part worth getting right. A capability is declared **once** — name,
-permission, input/output schema (zod, already a dependency of `hive-mcp`), handler — and
-three faces are generated from that one declaration:
+`ReviewComment` lives in renderer **localStorage** (`hivemind:comments:<repoPath>`,
+`code/review-store.ts`), and the only path to an agent is `deliverToClaude(text)` — a
+one-way dump. An agent cannot read localStorage, so no tool design fixes this. Move the
+store into main behind the capability registry, then expose:
 
-```
-                      ┌─ plugin RPC      postMessage command, gated by manifest permission
-capability registry ──┼─ MCP tool        packages/hive-mcp, gated by the agent's grant
-                      └─ hive ctl verb   CLI + HCP method, gated by the same grant
-```
+`review_list({file?, status?})` · `review_get(id)` · `review_reply(id, body)` ·
+`review_resolve(id, summary?)` · `review_dismiss(id, reason)` · **`review_watch({timeoutSeconds})`**
 
-So `git.diff` is simultaneously: a command a tile plugin can call, a tool an agent can
-call over MCP, and `hive ctl git diff --json`. One schema, one handler, one permission
-name, three transports. Adding a capability is one file; forgetting to expose it to
-agents becomes impossible, because the MCP tool list *is* the registry.
+The last one blocks until a human leaves a comment. That is what turns the diff tile into
+a real review loop instead of a one-shot dispatch, and it is the shape the closest prior
+art (agentation.com's annotation MCP: acknowledge → reply → resolve/dismiss + watch) has
+already converged on.
 
-Starting set, all of which map onto IPC handlers or modules that already exist:
+## Browser: use the names everyone else uses
 
-| Capability | Permission | Backed by |
-| --- | --- | --- |
-| `files.read`, `files.list`, `files.watch` | `files:read` | existing file IPC |
-| `files.write` | `files:write` | existing file IPC |
-| `git.status`, `git.diff`, `git.show`, `git.blame`, `git.log` | `git:read` | `main/git-adapter.ts` |
-| `git.stageHunk`, `git.unstage`, `git.commit` | `git:write` | `main/git-adapter.ts` |
-| `review.list`, `review.add`, `review.sendToAgent` | `review:comments` | `code/review-store.ts` |
-| `lsp.request`, `lsp.diagnostics` | `lsp` | new host-side proxy |
+Playwright MCP, Chrome DevTools MCP, browser-use and the agent browsers converged
+independently on an **accessibility-tree snapshot with opaque element refs, not pixels**:
+`browser_navigate`, `browser_snapshot`, `browser_click`, `browser_type`, `browser_find`,
+`browser_take_screenshot`, `browser_evaluate`, `browser_console_messages`,
+`browser_network_requests`, `browser_tabs`. Screenshots are a fallback capability for
+canvas/WebGL, not the default.
 
-Three invariants:
+Use these names verbatim. A nonstandard name costs a failed tool call per session. Note
+that `tool-plugins.ts` already describes the browser as one "agents can drive when you
+allow it" — nothing in the control plane implements that yet.
 
-1. **The host does the work.** A plugin never touches a filesystem or spawns `git`; it
-   asks, main answers. That is also why remote machines come free — a tile carries a
-   `workspacePath` that may be an `ssh://` URI, and the host already routes by it. The
-   same `git.diff` call works local or remote.
-2. **Scoped to the tile.** Every request is rooted at that tile's `workspacePath`;
-   paths that escape are refused, like a view package refusing a symlink out of itself.
-3. **No new powers.** Everything above is already something the app can do. This exposes
-   it under a permission, it does not add capability. `lsp` is the one genuinely new
-   thing, and it benefits our own editor first.
+## Permissions
 
-A tile plugin gets no canvas projection. It gets its own context:
+- Host-owned, never self-granted. A manifest declares what it wants; the user decides.
+- Annotate every tool `readOnlyHint` / `destructiveHint`. Read-only skips confirmation;
+  writes confirm once with "always allow for this plugin". That is the convergent rule.
+- Keep the existing second gate: installed ≠ enabled.
+- **`files:write` scoped to the repo is not a middling permission.** Writing `.git/hooks/*`
+  or `.git/config` (`core.fsmonitor`, `sshCommand`) executes arbitrary code on the user's
+  next git operation, and an in-repo symlink defeats a naive path check. Deny `.git/**`
+  and resolve symlinks before the scope check, or treat `files:write` as full trust.
+- Missing from the capability list on purpose: **exec**. Plugins never run commands. That
+  is what agent tiles are.
 
-```ts
-{ type: "context", tileId, frameId, workspacePath, repo: { branch, head, dirty }, file? }
-```
+## Events, not just requests
 
-## Built-ins move first, or the API is fiction
-
-Order matters. The point is not third-party plugins; it is that **our diff and editor
-tiles get rewritten against the public capability API**. If `git.stageHunk` is awkward, we
-find out before anyone else does. That depends on the piece-split landing first:
-`DiffTile`'s ~1,070-line component broken into `FileTree`, `ChangesList`, `CommitBar`,
-`DiffView`, `ConflictView`.
-
-## Versioning
-
-- New catalog type + new capabilities, additive: **minor** — but a `hive ctl --json`
-  shape change or a `.hivemind/` schema change is **major**, so land capability verbs
-  additively and never reshape an existing verb.
-- Tile plugins get their own `protocol: 1` namespace; the workspace-view protocol stays
-  at 1 and is untouched. A view protocol break would be **major**.
+Request/response alone leaves every plugin UI stale the moment an agent edits a file. The
+capability layer needs push: file-watch, git index/HEAD change, and comment change. Ship
+this with the first read capability, not after.
 
 ## Order of work
 
-1. Split diff/editor tiles into pieces. No protocol work; pays for itself anyway.
-2. Capability registry in `hive-core` + generated MCP server in `packages/hive-mcp`
-   (currently empty) + `hive ctl` verbs. Agents get file/git tools on day one, before any
-   UI plugin exists.
-3. Convert built-in kinds into built-in tool plugins (`hivemind/code`, `hivemind/git`,
-   `hivemind/issues`); `MANAGED_KINDS` becomes dynamic. No user-visible change.
-4. Catalog `type: "tool"`, `hivemind-tool.json`, `hive tools install`, settings page.
-5. `case "plugin"` in tile-host: sandboxed tools with `git:read` + `files:read` only.
-   Ship a read-only third-party diff as the proof.
-6. Writes, then `kindOverrides` ("use Acme diff for diff tiles").
-7. LSP proxy last.
+1. Split diff/editor tiles into pieces (`FileTree`, `ChangesList`, `CommitBar`,
+   `DiffView`, `ConflictView`). No protocol work; overdue anyway.
+2. Capability registry in `hive-core`, with change events. Our own pieces call it instead
+   of reaching into IPC directly.
+3. Move the review-comment store out of localStorage into main.
+4. `packages/hive-mcp`: the host MCP server, exposing app-owned state only — review
+   comments first, since that is the loop with no substitute.
+5. Convert built-in kinds into built-in tool plugins (`hivemind/code`, `hivemind/git`).
+   No user-visible change.
+6. Browser tools, converged names, snapshot-first.
+7. MCP Apps host: tool tiles rendered from `ui://` resources, CSP from `_meta.ui.csp`.
+   Third-party plugins land here.
 
-Steps 1-2 are worth doing whatever happens to 3-7: the piece-split is overdue, and the
-capability registry gives agents real file/git tools regardless of whether anyone ever
-ships a UI plugin.
+Steps 1-4 stand on their own: they fix a real gap (comments an agent cannot see) and clean
+up code we own. Steps 5-7 open the ecosystem, and are worth doing only when someone wants
+to ship a plugin.
 
-## Open question
-
-Whether `lsp` belongs in the same registry or stays internal until our own editor uses it.
-Exposing `lsp.request` to agents is powerful (real go-to-definition instead of grep) and
-also the largest new surface. Defer the decision to step 7.
+**Skipped on purpose:** `replaces` / `kindOverrides` until a competing tile exists, and the
+`lsp` capability — largest new surface, benefits nobody yet.
