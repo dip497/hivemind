@@ -212,7 +212,8 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
   // Clear the draft whenever the composer closes, so a fresh "+" starts empty.
   useEffect(() => { if (!composer) setComposerDraft(""); }, [composer]);
 
-  const codeViewRef = useRef<CodeViewHandle<ReviewComment>>(null);
+  // Second type arg is the caret payload (collab carets) — we render none.
+  const codeViewRef = useRef<CodeViewHandle<ReviewComment, undefined>>(null);
   // The CodeView wrapper — for popover anchor coords + scoping the file lookup.
   const cvHostRef = useRef<HTMLDivElement>(null);
   // The line element the pointer is currently over (from onLineEnter). The gutter
@@ -478,7 +479,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
   useEffect(() => { setChangeIdx(-1); }, [changes.length]);
 
   // ── CodeView options ────────────────────────────────────────────────────
-  const options: CodeViewOptions<ReviewComment> = useMemo(
+  const options: CodeViewOptions<ReviewComment, undefined> = useMemo(
     () => ({
       theme: { dark: "pierre-dark", light: "pierre-light" },
       themeType: "dark",

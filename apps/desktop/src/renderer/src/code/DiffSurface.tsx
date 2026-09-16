@@ -31,7 +31,7 @@ export function DiffSurface({
   const data = q.data;
   const oversized = data != null && new Blob([data]).size > MAX_PREVIEW_BYTES;
   const binary = data != null && data.slice(0, 8192).indexOf("\0") !== -1;
-  const item: CodeViewItem | null =
+  const item: CodeViewItem<undefined> | null =
     data != null && !oversized && !binary
       ? {
           id: `file:${file}`,

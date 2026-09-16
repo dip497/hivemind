@@ -7,6 +7,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- The diff and file tree are on current upstream releases again, which brings faster rendering of large diffs and the newer Pierre palette.
+
 - An agent a repository ships now stays with that repository: it runs in tiles opened there and is refused anywhere else, and opening a second workspace no longer takes the first one's agents away from the tiles still running in it.
 
 - Installing an agent that would take a built-in's id — and with it every ⌘\\, toolbar click and `hive ctl spawn` — now has to say so: `hive agents install --replace`. Agents are never added on their own when the command they name is a general-purpose runtime, because such a command says nothing about which agent it is.
