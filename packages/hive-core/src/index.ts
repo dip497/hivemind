@@ -7,6 +7,7 @@ export * from "./cross-repo.js";
 export * from "./json.js";
 export * from "./agentic.js";
 export * from "./views.js";
+export * from "./review.js";
 export * from "./settings-schema.js";
 export * from "./settings.js";
 export * from "./machines.js";
