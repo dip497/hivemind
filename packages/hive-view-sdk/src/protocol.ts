@@ -24,7 +24,32 @@ export type ViewPermission = (typeof VIEW_PERMISSIONS)[number];
 export type ViewStatus = "unknown" | "idle" | "working" | "blocked" | "exited";
 const STATUSES: readonly ViewStatus[] = ["unknown", "idle", "working", "blocked", "exited"];
 
-export interface ViewFrame { id: string; title: string; /** `#rrggbb` */ color: string }
+/** What a status means, whatever the palette. A view paints `--hm-status-<tone>` (see
+ *  `applyThemeVars`) and never decides for itself which colour "blocked" is — the host decides
+ *  once, for the whole app, so a tile never means one thing in a view and another on the canvas. */
+export type StatusTone = "working" | "attention" | "done" | "idle" | "exited" | "failed";
+export const STATUS_TONES: readonly StatusTone[] = ["working", "attention", "done", "idle", "exited", "failed"];
+
+/** The tone for a status. `done` and `failed` are never a live status: a view that observes a
+ *  turn finishing may show `done`; `failed` is for an exit the host reports as a failure. */
+export function statusTone(s: ViewStatus): StatusTone {
+  switch (s) {
+    case "blocked": return "attention";
+    case "working": return "working";
+    case "exited": return "exited";
+    default: return "idle";
+  }
+}
+
+/** Where a frame runs, when that is a saved machine (protocol 1.1, additive). `state` is the
+ *  link: `online` (with `rttMs` once measured), `connecting`, `reconnecting`, `offline`,
+ *  `attention` (a person must log in), `no-hive` (terminals there die with the connection). */
+export interface ViewFrameMachine {
+  name: string;
+  state: "online" | "connecting" | "reconnecting" | "offline" | "attention" | "no-hive" | "idle";
+  rttMs?: number;
+}
+export interface ViewFrame { id: string; title: string; /** `#rrggbb` */ color: string; machine?: ViewFrameMachine }
 export interface ViewTile { id: string; frameId: string | null; kind: string; name: string }
 export interface ViewRect { x: number; y: number; w: number; h: number }
 /** `chrome` (protocol 1.1, additive): "bar" (default) lets the host draw its
@@ -46,6 +71,9 @@ export interface ViewTheme {
   surface?: string;
   terminalBackground?: string;
   glass?: boolean;
+  /** Protocol 1.1, additive: one `#rrggbb` per status tone, resolved from the host's status
+   *  tokens. A host that predates it sends none, and `applyThemeVars` derives them from `colors`. */
+  status?: Partial<Record<StatusTone, string>>;
 }
 
 // ── host → plugin ───────────────────────────────────────────────────────────

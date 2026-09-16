@@ -37,9 +37,9 @@ export function MachinesHub({ request, onClose, onPick }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [request]);
 
-  // Refresh machines nobody has looked at lately, a few at a time, once per opening — and only once the
-  // list has arrived (the store may still be cold when the dialog opens). Connected ones report
-  // themselves; a host that needs a login waits for the person, since re-probing only piles up failed logins.
+  // The app checks every machine at startup, so opening this only chases the ones still unknown
+  // (added elsewhere since, or saved while the app was closed). A host that needs a login waits for
+  // the person: re-probing it only piles up failed logins.
   const refreshed = useRef<MachinesRequest | null>(null);
   useEffect(() => {
     if (!request) { refreshed.current = null; return; }
@@ -48,7 +48,7 @@ export function MachinesHub({ request, onClose, onPick }: {
     const now = Date.now();
     const due = snap.machines.filter((x) => {
       const s = statusOf(snap, x.hostId);
-      return x.enabled && s.rttMs === undefined && s.state !== "attention" && s.state !== "reconnecting" && now - s.at > CHECK_AFTER_MS;
+      return x.enabled && s.state === "idle" && now - s.at > CHECK_AFTER_MS;
     });
     const next = async (): Promise<void> => {
       const x = due.shift();

@@ -15,7 +15,8 @@
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { PORT_HANDSHAKE, PROTOCOL_VERSION, type HostMessage, type SurfaceRect, type ViewPermission, type ViewTheme } from "@hivemind/view-sdk/protocol";
+import { PORT_HANDSHAKE, PROTOCOL_VERSION, STATUS_TONES, type HostMessage, type SurfaceRect, type ViewFrameMachine, type ViewPermission, type ViewTheme } from "@hivemind/view-sdk/protocol";
+import { hostIdOfUri, machineByHost, statusOf, useMachines } from "../../../machines/store";
 import type { ViewPackageInfo } from "../../../../../shared/ipc";
 import type { WorkspaceViewProps } from "../../workspace-view";
 import { TileSlot } from "../../tile-host";
@@ -47,6 +48,11 @@ function readTheme(): ViewTheme {
     surface: cssColorToHexString(t.palette.bg2),
     terminalBackground: cssColorToHexString(t.terminal.background),
     glass: effectiveGlass(t),
+    // The same status tokens every surface of the app paints with, resolved for the view.
+    status: Object.fromEntries(STATUS_TONES.flatMap((tone) => {
+      const v = cs.getPropertyValue(`--color-status-${tone}`).trim();
+      return v ? [[tone, cssColorToHexString(v)]] : [];
+    })),
   };
 }
 
@@ -152,6 +158,16 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [ready]);
 
+    // A frame bound to a machine carries that machine's name and link state; a local one carries nothing.
+    const machines = useMachines();
+    const machineOf = useCallback((workspacePath?: string): { machine?: ViewFrameMachine } => {
+      const hostId = hostIdOfUri(workspacePath);
+      if (!hostId) return {};
+      const s = statusOf(machines, hostId);
+      const name = machineByHost(machines, hostId)?.label ?? hostId.replace(/:22$/, "");
+      return { machine: { name, state: s.state, ...(s.rttMs !== undefined ? { rttMs: s.rttMs } : {}) } };
+    }, [machines]);
+
     // Structure: frames / tiles / membership (+ current names). Colours resolved.
     const nameOf = useMemo(() => new Map(layerTiles.map((t) => [t.id, t.name])), [layerTiles]);
     const nameRef = useRef(nameOf);
@@ -160,11 +176,11 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
       if (!ready) return;
       send({
         type: "structure",
-        frames: frames.map((f) => ({ id: f.id, title: f.title, color: cssColorToHexString(f.color) })),
+        frames: frames.map((f) => ({ id: f.id, title: f.title, color: cssColorToHexString(f.color), ...machineOf(f.workspacePath) })),
         tiles: tiles.map((t) => ({ id: t.id, frameId: frameOf[t.id] ?? null, kind: t.kind, name: nameRef.current.get(t.id) ?? t.label })),
       });
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [ready, frames, tiles, frameOf]);
+    }, [ready, frames, tiles, frameOf, machineOf]);
     // Names on their own — a title tick must not look structural to the plugin.
     const lastNames = useRef("");
     useEffect(() => {

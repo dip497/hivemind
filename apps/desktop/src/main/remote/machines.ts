@@ -23,6 +23,8 @@ import { forgetSavedHost, listSavedHosts, passwordState, saveHost } from "./save
 
 const PING_MS = 10_000;
 const IDLE_CLOSE_MS = 60_000;
+/** Startup probes, a few at a time: a saved machine should read true before anyone opens anything. */
+const CHECK_PARALLEL = 4;
 const run = promisify(execFile);
 
 const catalog = new Catalog(machinesPath(), () => emit());
@@ -119,6 +121,19 @@ export async function initMachines(opts: { send: (s: MachinesSnapshot) => void; 
     fs.watch(path.dirname(file), (_ev, name) => { if (name === path.basename(file)) void catalog.reload(); }).unref();
   } catch { /* no watch: the app still sees its own edits */ }
   setInterval(pingAll, PING_MS).unref();
+  void checkAll();
+}
+
+/** Ask every enabled machine where it stands, in the background, without holding up the window. */
+async function checkAll(): Promise<void> {
+  const due = catalog.list.filter((m) => m.enabled).map((m) => m.id);
+  const next = async (): Promise<void> => {
+    const id = due.shift();
+    if (!id) return;
+    await checkMachine(id).catch(() => { /* the status carries the reason */ });
+    return next();
+  };
+  await Promise.all(Array.from({ length: CHECK_PARALLEL }, next));
 }
 
 function byId(id: string): Machine {
