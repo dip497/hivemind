@@ -1,6 +1,7 @@
 /** Typed contract for IPC between main and renderer. */
 import type { Issue, IssueSummary, IssueState, AcceptanceItem, Assignee, LinkType, IssuePatch } from "@hivemind/core/types";
 import type { NotificationSettings } from "./notification-settings.js";
+import type { ReviewComment } from "@hivemind/core/review";
 export type { NotificationSettings };
 
 // IssuePatch is owned by @hivemind/core/types (node-free) — re-export so renderer
@@ -352,6 +353,12 @@ export interface HiveIpc {
   ): Promise<{ from: string; to: string; type: LinkType; reciprocal: LinkType }>;
   /** Remove all links between two issues (both ends). */
   unlinkIssue(root: string, id: string, otherId: string): Promise<{ removed: number }>;
+
+  // ── review comments ───────────────────────────────────────
+  /** Every comment on this repo, resolved ones included. */
+  reviewList(repoPath: string): Promise<ReviewComment[]>;
+  /** Replace the whole list — what the diff tile does after an edit. */
+  reviewSave(repoPath: string, comments: ReviewComment[]): Promise<void>;
 
   // ── git ───────────────────────────────────────────────────
   gitStatus(repoPath: string): Promise<GitStatusSnapshot>;

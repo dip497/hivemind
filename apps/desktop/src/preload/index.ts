@@ -63,6 +63,9 @@ const api: HiveIpc & {
   unlinkIssue: (root, id, otherId) =>
     ipcRenderer.invoke("unlinkIssue", root, id, otherId),
 
+  reviewList: (repoPath) => ipcRenderer.invoke("reviewList", repoPath),
+  reviewSave: (repoPath, comments) => ipcRenderer.invoke("reviewSave", repoPath, comments),
+
   gitStatus: (repoPath) => ipcRenderer.invoke("gitStatus", repoPath),
   gitListFiles: (repoPath) => ipcRenderer.invoke("gitListFiles", repoPath),
   gitListBranches: (repoPath) => ipcRenderer.invoke("gitListBranches", repoPath),

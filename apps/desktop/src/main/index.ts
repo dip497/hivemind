@@ -12,6 +12,10 @@ import {
   createIssue,
   deleteIssue as deleteIssueCore,
   findRoot,
+  normalizeComments,
+  readComments,
+  reviewRoot,
+  writeComments,
   linkIssues,
   listIssues,
   listWorkspaces,
@@ -839,6 +843,13 @@ ipcMain.handle("deleteIssue", wrap(async (_e, root: string, id: string) => {
   await deleteIssueCore(root, id);
   await writeAgentContext(root);
 }));
+
+// review comments — the workspace owns them, so the CLI and an agent see the
+// same list the diff tile is showing.
+ipcMain.handle("reviewList", wrap(async (_e, repoPath: string) =>
+  readComments(await reviewRoot(repoPath))));
+ipcMain.handle("reviewSave", wrap(async (_e, repoPath: string, comments: unknown) =>
+  writeComments(await reviewRoot(repoPath), normalizeComments(comments))));
 
 // git
 ipcMain.handle("gitStatus", wrap((_e, repoPath: string) => gitStatus(repoPath)));

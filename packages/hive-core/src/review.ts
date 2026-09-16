@@ -7,7 +7,9 @@
  * and the review loop becomes something a plugin command can serve.
  */
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
+import { findRoot } from "./storage.js";
 
 export type ReviewSide = "deletions" | "additions";
 
@@ -36,6 +38,18 @@ export const REVIEW_FILE = "review.json";
 
 export function reviewPath(root: string): string {
   return path.join(root, REVIEW_FILE);
+}
+
+/** Where a repository's comments live.
+ *
+ *  A `.hivemind/` workspace keeps them with the code. A plain git repo gets
+ *  them in the config dir instead: the diff tile works without `hive init`,
+ *  and leaving a comment must not quietly turn a repo into a workspace. */
+export async function reviewRoot(repoPath: string, homeDir: string = os.homedir()): Promise<string> {
+  const root = await findRoot(repoPath, homeDir);
+  if (root) return root;
+  const base = process.env.XDG_CONFIG_HOME?.trim() || path.join(homeDir, ".config");
+  return path.join(base, "hivemind", "review", repoPath.replace(/[^a-zA-Z0-9]+/g, "_").slice(-120));
 }
 
 const str = (v: unknown, max = 10_000): string | null =>

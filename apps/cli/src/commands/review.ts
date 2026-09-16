@@ -10,13 +10,29 @@
  *   hive review reopen <id> [--json]
  *   hive review watch [--timeout <s>] [--json]     block until a new comment lands
  */
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { defineCommand } from "citty";
 import {
-  HiveError, listComments, readComments, replyTo, reopenComment, requireRoot, resolveComment,
+  HiveError, findRoot, listComments, readComments, replyTo, reopenComment, resolveComment, reviewRoot,
   type ReviewComment,
 } from "@hivemind/core";
 import { err, ok } from "../format.js";
 import { detectWho } from "../who.js";
+
+const run = promisify(execFile);
+
+/** The same directory the app writes to: the workspace when there is one, the
+ *  config dir keyed by repository when the diff tile is on a plain git repo. */
+async function storeRoot(): Promise<string> {
+  const cwd = process.cwd();
+  const root = await findRoot(cwd);
+  if (root) return root;
+  const repo = await run("git", ["rev-parse", "--show-toplevel"], { cwd })
+    .then((r) => r.stdout.trim())
+    .catch(() => cwd);
+  return reviewRoot(repo);
+}
 
 const fail = (ctx: { json: boolean }, e: unknown, fallback: string): never =>
   err(ctx, e instanceof HiveError ? e.code : fallback, e instanceof Error ? e.message : String(e));
@@ -50,7 +66,7 @@ const listCmd = defineCommand({
     const ctx = { json: !!args.json };
     try {
       const status = args.status === "resolved" || args.status === "all" ? args.status : "open";
-      const list = await listComments(await requireRoot(), { file: args.file || undefined, status });
+      const list = await listComments(await storeRoot(), { file: args.file || undefined, status });
       return ok(ctx, list, () =>
         list.length === 0 ? "no comments" : list.map(oneLine).join("\n"));
     } catch (e) { return fail(ctx, e, "list_failed"); }
@@ -63,7 +79,7 @@ const showCmd = defineCommand({
   async run({ args }) {
     const ctx = { json: !!args.json };
     try {
-      const c = (await readComments(await requireRoot())).find((x) => x.id === args.id);
+      const c = (await readComments(await storeRoot())).find((x) => x.id === args.id);
       if (!c) return err(ctx, "not_found", `no comment ${args.id}`);
       return ok(ctx, c, () => detail(c));
     } catch (e) { return fail(ctx, e, "show_failed"); }
@@ -80,7 +96,7 @@ const replyCmd = defineCommand({
   async run({ args }) {
     const ctx = { json: !!args.json };
     try {
-      const c = await replyTo(await requireRoot(), String(args.id), {
+      const c = await replyTo(await storeRoot(), String(args.id), {
         author: detectWho(), body: String(args.message), at: new Date().toISOString(),
       });
       if (!c) return err(ctx, "not_found", `no comment ${args.id}`);
@@ -95,7 +111,7 @@ const resolveCmd = defineCommand({
   async run({ args }) {
     const ctx = { json: !!args.json };
     try {
-      const c = await resolveComment(await requireRoot(), String(args.id), args.summary || undefined);
+      const c = await resolveComment(await storeRoot(), String(args.id), args.summary || undefined);
       if (!c) return err(ctx, "not_found", `no comment ${args.id}`);
       return ok(ctx, c, () => `resolved ${c.id}`);
     } catch (e) { return fail(ctx, e, "resolve_failed"); }
@@ -108,7 +124,7 @@ const reopenCmd = defineCommand({
   async run({ args }) {
     const ctx = { json: !!args.json };
     try {
-      const c = await reopenComment(await requireRoot(), String(args.id));
+      const c = await reopenComment(await storeRoot(), String(args.id));
       if (!c) return err(ctx, "not_found", `no comment ${args.id}`);
       return ok(ctx, c, () => `reopened ${c.id}`);
     } catch (e) { return fail(ctx, e, "reopen_failed"); }
@@ -131,7 +147,7 @@ const watchCmd = defineCommand({
   async run({ args }) {
     const ctx = { json: !!args.json };
     try {
-      const root = await requireRoot();
+      const root = await storeRoot();
       const filter = { file: args.file || undefined, status: "open" as const };
       const seen = new Set((await listComments(root, filter)).map((c) => c.id));
       const seconds = Number.parseInt(String(args.timeout ?? ""), 10);

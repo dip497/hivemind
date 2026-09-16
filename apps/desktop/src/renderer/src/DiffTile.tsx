@@ -183,7 +183,13 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
     };
   }, [viewMenuOpen]);
 
-  const [comments, setComments] = useState<ReviewComment[]>(() => loadComments(repoPath));
+  const [comments, setComments] = useState<ReviewComment[]>([]);
+  // The store is a file main owns, so the first list arrives a tick late.
+  useEffect(() => {
+    let live = true;
+    void loadComments(repoPath).then((list) => { if (live) setComments(list); });
+    return () => { live = false; };
+  }, [repoPath]);
   // Review panel (Figma/GitHub-style) open state — persisted.
   const [reviewOpen, setReviewOpen] = useState<boolean>(
     () => localStorage.getItem("hivemind:review-open") === "1",

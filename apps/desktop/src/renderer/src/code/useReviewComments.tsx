@@ -19,8 +19,13 @@ type Composer = {
 };
 
 export function useReviewComments(repoPath: string, file: string | null) {
-  const [comments, setComments] = useState<ReviewComment[]>(() => loadComments(repoPath));
-  useEffect(() => { setComments(loadComments(repoPath)); }, [repoPath]);
+  const [comments, setComments] = useState<ReviewComment[]>([]);
+  // The store is a file main owns, so the first list arrives a tick late.
+  useEffect(() => {
+    let live = true;
+    void loadComments(repoPath).then((list) => { if (live) setComments(list); });
+    return () => { live = false; };
+  }, [repoPath]);
   const persist = useCallback((next: ReviewComment[]) => {
     setComments(next);
     saveComments(repoPath, next);

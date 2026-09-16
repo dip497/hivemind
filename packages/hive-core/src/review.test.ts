@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import {
   addComment, listComments, normalizeComments, readComments, reopenComment,
-  replyTo, resolveComment, reviewPath, writeComments,
+  replyTo, resolveComment, reviewPath, reviewRoot, writeComments,
 } from "./review.js";
 
 const root = async () => fs.mkdtemp(path.join(os.tmpdir(), "hm-review-"));
@@ -72,6 +72,21 @@ describe("review comments", () => {
     expect(list).toHaveLength(1);
     expect(list[0]).toMatchObject({ id: "c-1", startLine: 9, endLine: 9, side: "additions" });
     expect(list[0]!.author).toBe("unknown");
+  });
+
+  test("a workspace keeps comments with the code; a plain repo does not become one", async () => {
+    const home = await root();
+    const repo = path.join(home, "work", "repo");
+    await fs.mkdir(path.join(repo, ".hivemind"), { recursive: true });
+    expect(await reviewRoot(repo, home)).toBe(path.join(repo, ".hivemind"));
+
+    const bare = path.join(home, "work", "bare");
+    await fs.mkdir(bare, { recursive: true });
+    const elsewhere = await reviewRoot(bare, home);
+    expect(elsewhere.startsWith(bare)).toBe(false);
+    await addComment(elsewhere, seed);
+    // Leaving a comment must not conjure a .hivemind/ the CLI would treat as a root.
+    expect(await fs.exists(path.join(bare, ".hivemind"))).toBe(false);
   });
 
   test("a write is atomic — no .tmp is left behind", async () => {
