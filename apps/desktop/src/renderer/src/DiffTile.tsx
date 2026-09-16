@@ -50,7 +50,6 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import type { DiffScope, GitBranchList, GitFileEntry } from "../../shared/ipc";
-import { OVERSIZE_SENTINEL } from "../../shared/ipc";
 import {
   useDiscardFiles,
   useGitDiff,
@@ -59,6 +58,7 @@ import {
   useUnstageFiles,
 } from "./queries";
 import { CommitBar } from "./code/CommitBar";
+import { useWorkingItems, useBranchItems } from "./code/diff-items";
 import { ConflictView } from "./code/ConflictView";
 import { DiffHeader } from "./code/DiffHeader";
 import { FileTree, clampFilesW, type FileRow } from "./code/FileTree";
@@ -97,15 +97,6 @@ type Overflow = "scroll" | "wrap";
 const VIEWED_KEY_PREFIX = "hivemind:viewed:";
 
 
-/** main returns `${OVERSIZE_SENTINEL}${bytes}` for a file too big to diff. */
-function oversizeBytes(s: string | undefined): number | null {
-  if (!s || !s.startsWith(OVERSIZE_SENTINEL)) return null;
-  const n = Number(s.slice(OVERSIZE_SENTINEL.length));
-  return Number.isFinite(n) ? n : 0;
-}
-function oversizePlaceholder(bytes: number): string {
-  return `⚠ file too large to diff (${(bytes / 1_000_000).toFixed(1)} MB) — open it directly to view\n`;
-}
 
 function loadJson<T>(key: string, fallback: T): T {
   try {
@@ -1213,117 +1204,3 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
 // CommitBar moved to code/CommitBar.tsx (shared with the Code Workbench).
 
 // ── items: working tree (HEAD ↔ WORKING|INDEX, full-content diff) ─────────
-
-interface ItemsResult {
-  items: CodeViewDiffItem<ReviewComment>[];
-  isLoading: boolean;
-  error: Error | null;
-}
-
-function useWorkingItems(repoPath: string, files: GitFileEntry[], staged: boolean): ItemsResult {
-  const newRev: "WORKING" | "INDEX" = staged ? "INDEX" : "WORKING";
-  const changed = useMemo(
-    () => files.filter((f) => f.status !== "ignored" && f.status !== "conflicted"),
-    [files],
-  );
-
-  const results = useQueries({
-    queries: changed.flatMap((f) => {
-      // Added/untracked files have no HEAD blob — fetching it throws. Treat
-      // the old side as empty so the file renders as all-additions.
-      const noHead = f.status === "added" || f.status === "untracked";
-      // Deleted files have no working/index blob — old side only.
-      const noNew = f.status === "deleted";
-      return [
-        {
-          queryKey: ["git:file", repoPath, f.path, noHead ? "EMPTY" : "HEAD"],
-          queryFn: () =>
-            noHead ? Promise.resolve("") : window.hive.gitFileContents(repoPath, f.path, "HEAD"),
-          retry: false,
-        },
-        {
-          queryKey: ["git:file", repoPath, f.path, noNew ? "EMPTY" : newRev],
-          queryFn: () =>
-            noNew ? Promise.resolve("") : window.hive.gitFileContents(repoPath, f.path, newRev),
-          retry: false,
-        },
-      ];
-    }),
-  });
-
-  // Signature gates the parse: only re-parse when a file's content actually
-  // refetched (dataUpdatedAt bumps) or the file set changed.
-  const sig = changed
-    .map((f, i) => `${f.path}:${results[i * 2]?.dataUpdatedAt ?? 0}:${results[i * 2 + 1]?.dataUpdatedAt ?? 0}`)
-    .join("|");
-
-  const items = useMemo(() => {
-    const out: CodeViewDiffItem<ReviewComment>[] = [];
-    changed.forEach((f, i) => {
-      const oldR = results[i * 2];
-      const newR = results[i * 2 + 1];
-      if (oldR?.isLoading || newR?.isLoading) return;
-      const oldUpdated = oldR?.dataUpdatedAt ?? 0;
-      const newUpdated = newR?.dataUpdatedAt ?? 0;
-      // A file the main process refused to load (over DIFF_MAX_FILE_BYTES) comes
-      // back as `${OVERSIZE_SENTINEL}${bytes}`. Diff a one-line placeholder on
-      // BOTH sides instead of the real content so parse/highlight stay trivial —
-      // the raw blob never entered the renderer, and the LCS can't blow up.
-      // Empty old + placeholder new so the file still SHOWS (as a one-line note)
-      // rather than vanishing (identical sides = no diff = dropped from the list).
-      const oversize = oversizeBytes(oldR?.data) ?? oversizeBytes(newR?.data);
-      const oldContents = oversize != null ? "" : (oldR?.data ?? "");
-      const newContents = oversize != null ? oversizePlaceholder(oversize) : (newR?.data ?? "");
-      const oldFile: FileContents = {
-        name: f.path,
-        contents: oldContents,
-        cacheKey: `${repoPath}:HEAD:${f.path}:${oldUpdated}`,
-      };
-      const newFile: FileContents = {
-        name: f.path,
-        contents: newContents,
-        cacheKey: `${repoPath}:${newRev}:${f.path}:${newUpdated}`,
-      };
-      const fileDiff = parseDiffFromFile(oldFile, newFile);
-      out.push({ id: `diff:${f.path}`, type: "diff", fileDiff, version: oldUpdated + newUpdated });
-    });
-    return out;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sig, repoPath, newRev]);
-
-  const isLoading = results.some((r) => r.isLoading) && items.length === 0;
-  // Per-file content errors degrade gracefully (file renders with empty side),
-  // so they're NOT fatal — only report an error when nothing rendered at all.
-  const error =
-    items.length === 0 && !isLoading ? ((results.find((r) => r.error)?.error as Error) ?? null) : null;
-  return { items, isLoading, error };
-}
-
-// ── items: branch (`git diff base...HEAD`, partial patch) ─────────────────
-
-/** A base/head ref dropdown for branch-compare. Native <select> so the menu is
- *  immune to the tile drag-handle and z-stacking. Empty value ⇒ auto (caller's
- *  default). Local + remote branches in separate optgroups. */
-/** Searchable branch combobox — a trigger button + a filterable popover list.
- *  A plain <select> is unusable on repos with hundreds of branches; this filters
- *  local + remote refs as you type. Closes on pick / outside-click / Escape. */
-
-function useBranchItems(repoPath: string, scope: DiffScope, enabled: boolean): ItemsResult {
-  const q = useGitDiff(enabled ? repoPath : null, scope);
-  const items = useMemo(() => {
-    const patch = q.data?.patch;
-    if (!patch || !patch.trim()) return [];
-    const out: CodeViewDiffItem<ReviewComment>[] = [];
-    const base = q.dataUpdatedAt;
-    for (const parsed of parsePatchFiles(patch, q.data?.cacheKey)) {
-      for (const fileDiff of parsed.files) {
-        out.push({ id: `diff:${fileDiff.name}`, type: "diff", fileDiff, version: base });
-      }
-    }
-    return out;
-  }, [q.data, q.dataUpdatedAt]);
-  return { items, isLoading: q.isLoading, error: (q.error as Error) ?? null };
-}
-
-/** Cheap stable 32-bit hash → numeric `version` for CodeView reconciliation. */
-
