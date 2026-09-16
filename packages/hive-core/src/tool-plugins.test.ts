@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
-  BROWSER_PLUGIN_ID, BROWSER_TOOL, BROWSER_TOOL_ID, BUNDLED_TOOL_PLUGINS,
-  bundledToolRegistry, bundledTools, tileKindAvailability, toolIdForTileKind,
+  availableCommands, BROWSER_PLUGIN_ID, BROWSER_TOOL, BROWSER_TOOL_ID, BUNDLED_TOOL_PLUGINS,
+  bundledToolRegistry, bundledTools, CODE_PLUGIN_ID, ISSUES_PLUGIN_ID, tileKindAvailability, toolIdForTileKind,
 } from "./tool-plugins.js";
 import { DEFAULT_SETTINGS, mergeSettings } from "./settings-schema.js";
 import { createToolRegistry } from "./tool-registry.js";
@@ -12,21 +12,30 @@ const allowed = (kind: string, tools: { enabledPlugins: string[]; disabledTools:
   tileKindAvailability(kind, tools)?.available ?? true;
 
 describe("bundled tool plugins", () => {
-  test("the web plugin contributes exactly the Browser tool", () => {
-    expect(BUNDLED_TOOL_PLUGINS.map((p) => p.id)).toEqual([BROWSER_PLUGIN_ID]);
+  test("the built-in tiles are plugins too — only the web plugin is opt-in", () => {
+    expect(BUNDLED_TOOL_PLUGINS.map((p) => p.id)).toEqual([BROWSER_PLUGIN_ID, CODE_PLUGIN_ID, ISSUES_PLUGIN_ID]);
     expect(BROWSER_PLUGIN_ID).toBe("hivemind/web");
-    expect(bundledTools().map((t) => t.id)).toEqual([BROWSER_TOOL_ID]);
     expect(BROWSER_TOOL_ID).toBe("hivemind/web/browser");
     expect(BROWSER_TOOL).toEqual({ toolId: BROWSER_TOOL_ID, tileKind: "browser" });
+    expect(BUNDLED_TOOL_PLUGINS.filter((p) => p.builtin).map((p) => p.id)).toEqual([CODE_PLUGIN_ID, ISSUES_PLUGIN_ID]);
     expect(toolIdForTileKind("browser")).toBe(BROWSER_TOOL_ID);
+    expect(toolIdForTileKind("diff")).toBe(`${CODE_PLUGIN_ID}/diff`);
     expect(toolIdForTileKind("shell")).toBeNull();
   });
 
   test("the bundled contributions pass the registry's own validation", () => {
     // createToolRegistry throws on a malformed id/key/label; building it here is
     // the assertion that the bundled metadata is well-formed.
-    expect(createToolRegistry(BUNDLED_TOOL_PLUGINS).tools.map((t) => t.id)).toEqual([BROWSER_TOOL_ID]);
+    expect(createToolRegistry(BUNDLED_TOOL_PLUGINS).tools.map((t) => t.id)).toEqual(bundledTools().map((t) => t.id));
     expect(bundledToolRegistry.tools[0]!.label).toBe("Browser");
+  });
+
+  test("two plugins cannot contribute the same tile kind", () => {
+    const clash = [
+      { id: "acme/one", tools: [{ key: "diff", label: "One", tileKind: "diff" }] },
+      { id: "acme/two", tools: [{ key: "diff", label: "Two", tileKind: "diff" }] },
+    ];
+    expect(() => createToolRegistry(clash)).toThrow(/already contributed/);
   });
 });
 
@@ -41,21 +50,49 @@ describe("tile-kind availability", () => {
       .toEqual({ available: false, reason: "tool-disabled" });
   });
 
-  test("unmanaged legacy kinds answer null (the caller treats that as always available)", () => {
-    for (const kind of ["shell", "editor", "diff", "issues", "claude", "workbench"]) {
+  test("kinds no plugin contributes answer null (the caller treats that as always available)", () => {
+    for (const kind of ["shell", "editor", "claude", "terminal"]) {
       expect(tileKindAvailability(kind, prefs([]))).toBeNull();
       expect(tileKindAvailability(kind, prefs([BROWSER_PLUGIN_ID], [BROWSER_TOOL_ID]))).toBeNull();
       expect(allowed(kind, prefs([]))).toBe(true);
     }
   });
 
+  test("a built-in tile stays available on settings that enable nothing", () => {
+    // The regression this guards: making diff/issues managed must not let an
+    // empty (or stale) enabledPlugins hide the editor behind a preferences blob.
+    for (const kind of ["diff", "workbench", "issues", "planReview"]) {
+      expect(tileKindAvailability(kind, prefs([]))?.available).toBe(true);
+      expect(allowed(kind, mergeSettings({ v: 1 }).tools)).toBe(true);
+    }
+    // Still per-tool switchable, unlike a legacy kind.
+    expect(tileKindAvailability("diff", prefs([], [`${CODE_PLUGIN_ID}/diff`])))
+      .toEqual({ available: false, reason: "tool-disabled" });
+  });
+
   test("an unknown tool id is never enabled, whatever the preferences claim", () => {
-    // A stale/hand-edited enabledPlugins entry cannot conjure a tool: the kind is
-    // managed, its tool is not in the registry, so it stays unavailable.
-    const managed = new Map([["ghost", "someone/else/ghost"]]);
-    expect(tileKindAvailability("ghost", prefs(["someone/else"]), bundledToolRegistry, managed))
-      .toEqual({ available: false, reason: "not-installed" });
+    // A stale/hand-edited enabledPlugins entry cannot conjure a tool.
     expect(bundledToolRegistry.resolve(prefs(["someone/else"])).availability("someone/else/ghost"))
+      .toEqual({ available: false, reason: "not-installed" });
+    expect(tileKindAvailability("ghost", prefs(["someone/else"]))).toBeNull();
+  });
+
+  test("a plugin's commands follow its tool's availability", () => {
+    const ids = availableCommands(prefs([])).map((c) => c.id);
+    expect(ids).toContain(`${CODE_PLUGIN_ID}/review-list`);
+    // Read-only verbs are marked so an agent can run them without a prompt.
+    const list = bundledToolRegistry.commands.find((c) => c.key === "review-list");
+    expect(list?.readOnly).toBe(true);
+    expect(bundledToolRegistry.commands.find((c) => c.key === "review-resolve")?.readOnly).toBe(false);
+    // A command from a plugin that is off is not offered.
+    const reg = createToolRegistry([
+      { id: "acme/diff", tools: [{ key: "diff", label: "Acme" }], commands: [{ key: "ping", summary: "Ping" }] },
+    ]);
+    expect(availableCommands(prefs([]), reg)).toEqual([]);
+    expect(availableCommands(prefs(["acme/diff"]), reg).map((c) => c.id)).toEqual(["acme/diff/ping"]);
+    expect(reg.resolve(prefs([])).commandAvailability("acme/diff/ping"))
+      .toEqual({ available: false, reason: "plugin-disabled" });
+    expect(reg.resolve(prefs(["acme/diff"])).commandAvailability("acme/diff/nope"))
       .toEqual({ available: false, reason: "not-installed" });
   });
 

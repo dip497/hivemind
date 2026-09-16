@@ -12,7 +12,7 @@
  * pure answer to "may the workspace offer this tile kind?". No I/O, no
  * renderer imports, no knowledge of how a tile is built.
  */
-import { createToolRegistry, type RegisteredTool, type ToolAvailability, type ToolPluginContribution } from "./tool-registry.js";
+import { createToolRegistry, type RegisteredCommand, type RegisteredTool, type ToolAvailability, type ToolPluginContribution } from "./tool-registry.js";
 // Type-only: erased at compile time, so the runtime edge stays one-way
 // (settings-schema → tool-plugins, for the migration constant).
 import type { ToolsSettings } from "./settings-schema.js";
@@ -29,13 +29,36 @@ export interface ToolTileBinding {
 
 export const BROWSER_TOOL: ToolTileBinding = Object.freeze({ toolId: BROWSER_TOOL_ID, tileKind: "browser" });
 
-/** Every tile kind this registry manages, and which tool id owns it. */
-const MANAGED_KINDS: ReadonlyMap<string, string> = new Map([[BROWSER_TOOL.tileKind, BROWSER_TOOL.toolId]]);
+export const CODE_PLUGIN_ID = "hivemind/code";
+export const ISSUES_PLUGIN_ID = "hivemind/issues";
 
 export const BUNDLED_TOOL_PLUGINS: readonly ToolPluginContribution[] = Object.freeze([
   Object.freeze({
     id: BROWSER_PLUGIN_ID,
-    tools: Object.freeze([Object.freeze({ key: "browser", label: "Browser", description: "A web page in a tile, which agents can drive when you allow it." })]),
+    tools: Object.freeze([Object.freeze({ key: "browser", label: "Browser", description: "A web page in a tile, which agents can drive when you allow it.", tileKind: "browser" })]),
+  }),
+  Object.freeze({
+    id: CODE_PLUGIN_ID,
+    builtin: true,
+    tools: Object.freeze([
+      Object.freeze({ key: "editor", label: "Editor", description: "Open and edit files from the workspace.", tileKind: "workbench" }),
+      Object.freeze({ key: "diff", label: "Diff", description: "Review what changed, and leave comments on it.", tileKind: "diff" }),
+    ]),
+    // The review loop an agent cannot reach from a shell: comments live in the app.
+    commands: Object.freeze([
+      Object.freeze({ key: "review-list", summary: "List review comments on a repository", readOnly: true }),
+      Object.freeze({ key: "review-reply", summary: "Reply to a review comment" }),
+      Object.freeze({ key: "review-resolve", summary: "Mark a review comment resolved" }),
+      Object.freeze({ key: "review-watch", summary: "Wait for the next review comment", readOnly: true }),
+    ]),
+  }),
+  Object.freeze({
+    id: ISSUES_PLUGIN_ID,
+    builtin: true,
+    tools: Object.freeze([
+      Object.freeze({ key: "issues", label: "Issues", description: "The workspace's issue list.", tileKind: "issues" }),
+      Object.freeze({ key: "plan-review", label: "Plan review", description: "A plan waiting for your decision.", tileKind: "planReview" }),
+    ]),
   }),
 ]);
 
@@ -64,14 +87,19 @@ export function tileKindAvailability(
   kind: string,
   tools: ToolsSettings,
   registry = bundledToolRegistry,
-  managed: ReadonlyMap<string, string> = MANAGED_KINDS,
 ): ToolAvailability | null {
-  const toolId = managed.get(kind);
+  const toolId = registry.tileKindOwner(kind);
   if (!toolId) return null; // unmanaged legacy kind
   return registry.resolve(tools).availability(toolId);
 }
 
 /** The tool id a managed tile kind belongs to (null for a legacy kind). */
-export function toolIdForTileKind(tileKind: string, managed: ReadonlyMap<string, string> = MANAGED_KINDS): string | null {
-  return managed.get(tileKind) ?? null;
+export function toolIdForTileKind(tileKind: string, registry = bundledToolRegistry): string | null {
+  return registry.tileKindOwner(tileKind);
+}
+
+/** Every command the enabled plugins expose, for the CLI and the MCP server. */
+export function availableCommands(tools: ToolsSettings, registry = bundledToolRegistry): readonly RegisteredCommand[] {
+  const resolved = registry.resolve(tools);
+  return registry.commands.filter((c) => resolved.commandAvailability(c.id).available);
 }
