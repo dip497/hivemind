@@ -147,6 +147,8 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
   const [staged, setStaged] = useState(false);
   const [layout, setLayout] = useState<Layout>("split");
   const [overflow, setOverflow] = useState<Overflow>("scroll");
+  // Reindent-only changes drown a review; every IDE offers this switch.
+  const [ignoreWhitespace, setIgnoreWhitespace] = useState(false);
   // false (default) ⇒ collapse unchanged runs, show only changed hunks + context;
   // true ⇒ expand the whole file. Toggled from the header ("diff"/"full").
   const [expandUnchanged, setExpandUnchanged] = useState(false);
@@ -330,8 +332,8 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
   // ── build CodeView items per mode ───────────────────────────────────────
   const workingItems = useWorkingItems(repoPath, mode === "working" ? status?.files ?? [] : [], staged);
   const branchScope: DiffScope = useMemo(
-    () => ({ kind: "branch", base: branchBase ?? initialBase, head: branchHead }),
-    [branchBase, branchHead, initialBase],
+    () => ({ kind: "branch", base: branchBase ?? initialBase, head: branchHead, ignoreWhitespace }),
+    [branchBase, branchHead, initialBase, ignoreWhitespace],
   );
   const branch = useBranchItems(repoPath, branchScope, mode === "branch");
   // Branch inventory for the base/head pickers — only fetched in branch mode.
@@ -341,7 +343,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
     enabled: mode === "branch",
   });
   // Committed-but-not-pushed: net diff of local commits ahead of @{upstream}.
-  const unpushedScope: DiffScope = useMemo(() => ({ kind: "unpushed" }), []);
+  const unpushedScope: DiffScope = useMemo(() => ({ kind: "unpushed", ignoreWhitespace }), [ignoreWhitespace]);
   const unpushed = useBranchItems(repoPath, unpushedScope, mode === "unpushed");
 
   const revItems = mode === "unpushed" ? unpushed : branch;
@@ -772,6 +774,23 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
           >
             <span aria-hidden className="size-1.5 rounded-full" style={{ background: staged ? "var(--color-ok)" : "var(--color-fg3)" }} />
             staged
+          </button>
+        )}
+
+        {/* Reindent-only noise, hidden by git itself. Working mode diffs file
+            contents in the renderer, so there is no git flag to pass there. */}
+        {mode !== "working" && (
+          <button
+            className={`nodrag inline-flex items-center gap-1 px-2 py-0.5 rounded border text-[10px] font-mono transition-colors ${
+              ignoreWhitespace
+                ? "border-[var(--color-accent)] text-[var(--color-accent)] bg-[var(--color-bg4)]"
+                : "border-[var(--color-line2)] text-[var(--color-fg3)] hover:text-[var(--color-fg2)]"
+            }`}
+            onClick={() => setIgnoreWhitespace((w) => !w)}
+            title={ignoreWhitespace ? "showing every change" : "hide whitespace-only changes"}
+            aria-pressed={ignoreWhitespace}
+          >
+            ws
           </button>
         )}
 
