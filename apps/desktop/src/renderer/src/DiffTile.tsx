@@ -18,6 +18,7 @@
  */
 import {
   useCallback,
+  useDeferredValue,
   useEffect,
   useMemo,
   useRef,
@@ -30,29 +31,19 @@ import { FullscreenShell } from "./tile-fullscreen";
 import { DiffSurface } from "./code/DiffSurface";
 import {
   CodeView,
-  UnresolvedFile,
   WorkerPoolContextProvider,
   type CodeViewHandle,
 } from "@pierre/diffs/react";
 import {
-  parseDiffFromFile,
-  parsePatchFiles,
   type AnnotationSide,
-  type CodeViewDiffItem,
   type CodeViewItem,
   type CodeViewOptions,
   type DiffLineAnnotation,
-  type FileContents,
 } from "@pierre/diffs";
-import {
-  useQueries,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
-import type { DiffScope, GitBranchList, GitFileEntry } from "../../shared/ipc";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import type { DiffScope, GitBranchList } from "../../shared/ipc";
 import {
   useDiscardFiles,
-  useGitDiff,
   useGitStatus,
   useStageFiles,
   useUnstageFiles,
@@ -69,12 +60,6 @@ import {
   workerHighlighterOptions,
   workerPoolOptions,
 } from "./pierre-codeview";
-import { FileTree as PierreFileTree, useFileTree } from "@pierre/trees/react";
-import type {
-  ContextMenuItem,
-  ContextMenuOpenContext,
-  FileTreeRowDecoration,
-} from "@pierre/trees";
 import { DiffReviewPanel } from "./DiffReviewPanel";
 import { newCid, formatCommentMessage, formatReviewMessage, type ReviewComment } from "./diff-comments";
 import { HeaderPinButton, type PinRect } from "./canvas-nodes";
@@ -233,6 +218,15 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
   const stageMut = useStageFiles();
   const unstageMut = useUnstageFiles();
   const discardMut = useDiscardFiles();
+  // Pulled out because the mutation OBJECTS are new every render; these are not.
+  const { mutate: stage } = stageMut;
+  const { mutate: unstage } = unstageMut;
+  const { mutate: discard } = discardMut;
+  // One lookup table instead of a 540-entry scan per rendered file header.
+  const statusByPath = useMemo(
+    () => new Map((status?.files ?? []).map((f) => [f.path, f])),
+    [status?.files],
+  );
 
   const conflicted = status?.conflictedFiles ?? [];
   const hasConflicts = conflicted.length > 0;
@@ -273,13 +267,18 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
     });
   }, []);
 
-  function commentsForFile(file: string): DiffLineAnnotation<ReviewComment>[] {
-    // Anchor the annotation at the range's END line (where the comment "lands");
-    // the annotation body shows the full L{start}–{end} range.
-    return comments
-      .filter((c) => c.file === file)
-      .map((c) => ({ side: c.side, lineNumber: c.endLine, metadata: c }));
-  }
+  // Anchored at the range's END line (where the comment "lands"); the body
+  // shows the full L{start}–{end} range. Grouped once — the items memo below
+  // asks per file, and scanning every comment per file is O(files x comments).
+  const annotationsByFile = useMemo(() => {
+    const m = new Map<string, DiffLineAnnotation<ReviewComment>[]>();
+    for (const c of comments) {
+      const list = m.get(c.file);
+      const a = { side: c.side, lineNumber: c.endLine, metadata: c };
+      if (list) list.push(a); else m.set(c.file, [a]);
+    }
+    return m;
+  }, [comments]);
 
   // ── git invalidation on fs change (owned here, scoped to THIS tile's repo) ──
   // App's central useFsChangedInvalidation only covers the top-level repoPath. A
@@ -382,7 +381,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
     const out = baseItems.map((it) => {
       const file = it.fileDiff.name;
       const isCollapsed = collapsed.has(file) || viewed.has(file);
-      const anns = commentsForFile(file);
+      const anns = annotationsByFile.get(file);
       const annsDigest = anns?.map((a) => `${a.lineNumber}.${a.side}.${a.metadata?.at}`).join(",") ?? "";
       const version = hashNum(`${it.version ?? 0}:${isCollapsed ? 1 : 0}:${annsDigest}`);
       const sig = `${version}:${isCollapsed ? 1 : 0}:${annsDigest}`;
@@ -401,7 +400,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
     itemCache.current = next;
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [baseItems, collapsed, viewed, comments, mode]);
+  }, [baseItems, collapsed, viewed, annotationsByFile]);
 
   // Changed-files list for the sidebar tree — path + add/del counts per file.
   const fileRows = useMemo(
@@ -431,7 +430,10 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
   // ── in-diff search (codiff's hunk-walk algorithm) ──────────────────────
   // Walks each fileDiff's hunks → hunkContent blocks, mapping array indices
   // back to real line numbers + side, so we can scrollTo + highlight each hit.
-  const matches = useMemo(() => collectMatches(baseItems, search), [baseItems, search]);
+  // Deferred: collectMatches walks every line of every file, so running it on
+  // each keystroke stalls typing once a branch has a few hundred files.
+  const deferredSearch = useDeferredValue(search);
+  const matches = useMemo(() => collectMatches(baseItems, deferredSearch), [baseItems, deferredSearch]);
   const [matchIdx, setMatchIdx] = useState(0);
 
   const gotoMatch = useCallback(
@@ -461,7 +463,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
     if (matches.length > 0) gotoMatch(0);
     else codeViewRef.current?.clearSelectedLines();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, matches.length]);
+  }, [deferredSearch, matches.length]);
 
   // ── next/prev-change navigation ────────────────────────────────────────────
   // One anchor per hunk; the ▲/▼ header buttons + n/p keys step through them,
@@ -567,7 +569,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
       const file = fd.name;
       const adds = fd.hunks.reduce((n, h) => n + h.additionLines, 0);
       const dels = fd.hunks.reduce((n, h) => n + h.deletionLines, 0);
-      const entry = status?.files.find((f) => f.path === file);
+      const entry = statusByPath.get(file);
       const isCollapsed = collapsed.has(file) || viewed.has(file);
       const isViewed = viewed.has(file);
       return (
@@ -584,18 +586,21 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
           onToggleCollapsed={() => toggleCollapsed(file)}
           onToggleViewed={() => toggleViewed(file)}
           onToggleStage={() => {
-            if (entry?.staged) unstageMut.mutate({ repoPath, files: [file] });
-            else stageMut.mutate({ repoPath, files: [file] });
+            if (entry?.staged) unstage({ repoPath, files: [file] });
+            else stage({ repoPath, files: [file] });
           }}
           onOpen={() => setActiveFile(file)}
           onDiscard={() => {
             if (mode === "working" && confirm(`discard changes to ${file}?`))
-              discardMut.mutate({ repoPath, files: [file] });
+              discard({ repoPath, files: [file] });
           }}
         />
       );
     },
-    [status, collapsed, viewed, mode, repoPath, toggleCollapsed, toggleViewed, stageMut, unstageMut, discardMut, headerH, chromePx],
+    // `stageMut` & co are a NEW object every render (react-query returns a fresh
+    // result); depending on them rebuilt this callback constantly, and Pierre
+    // re-rendered every sticky header. `.mutate` is stable.
+    [statusByPath, collapsed, viewed, mode, repoPath, toggleCollapsed, toggleViewed, stage, unstage, discard, headerH, chromePx],
   );
 
   const renderAnnotation = useCallback(

@@ -3,7 +3,10 @@
  * staged) built per file so context expansion works, and a branch/unpushed
  * range parsed from one patch.
  */
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
+
+/** A blob at a rev never changes; the fs watcher invalidates these by key. */
+const IMMUTABLE_BLOB = { staleTime: Infinity, gcTime: 10 * 60_000, refetchOnWindowFocus: false, refetchOnMount: false } as const;
 import { useQueries, useQuery } from "@tanstack/react-query";
 import {
   parseDiffFromFile,
@@ -43,12 +46,14 @@ export function useWorkingItems(repoPath: string, files: GitFileEntry[], staged:
           queryFn: () =>
             noHead ? Promise.resolve("") : window.hive.gitFileContents(repoPath, f.path, "HEAD"),
           retry: false,
+          ...IMMUTABLE_BLOB,
         },
         {
           queryKey: ["git:file", repoPath, f.path, noNew ? "EMPTY" : newRev],
           queryFn: () =>
             noNew ? Promise.resolve("") : window.hive.gitFileContents(repoPath, f.path, newRev),
           retry: false,
+          ...IMMUTABLE_BLOB,
         },
       ];
     }),
@@ -60,8 +65,10 @@ export function useWorkingItems(repoPath: string, files: GitFileEntry[], staged:
     .map((f, i) => `${f.path}:${results[i * 2]?.dataUpdatedAt ?? 0}:${results[i * 2 + 1]?.dataUpdatedAt ?? 0}`)
     .join("|");
 
+  const parsed = useRef(new Map<string, { key: string; item: CodeViewDiffItem<ReviewComment> }>());
   const items = useMemo(() => {
     const out: CodeViewDiffItem<ReviewComment>[] = [];
+    const next = new Map<string, { key: string; item: CodeViewDiffItem<ReviewComment> }>();
     changed.forEach((f, i) => {
       const oldR = results[i * 2];
       const newR = results[i * 2 + 1];
@@ -87,9 +94,23 @@ export function useWorkingItems(repoPath: string, files: GitFileEntry[], staged:
         contents: newContents,
         cacheKey: `${repoPath}:${newRev}:${f.path}:${newUpdated}`,
       };
-      const fileDiff = parseDiffFromFile(oldFile, newFile);
-      out.push({ id: `diff:${f.path}`, type: "diff", fileDiff, version: oldUpdated + newUpdated });
+      // Reuse this file's parse (and its object identity) unless ITS content
+      // moved: parseDiffFromFile runs an LCS over both sides, and one agent
+      // write used to re-run it for every changed file in the repo.
+      const key = `${oldUpdated}:${newUpdated}:${oldContents.length}:${newContents.length}`;
+      const prev = parsed.current.get(f.path);
+      const item = prev?.key === key
+        ? prev.item
+        : {
+            id: `diff:${f.path}`,
+            type: "diff" as const,
+            fileDiff: parseDiffFromFile(oldFile, newFile),
+            version: oldUpdated + newUpdated,
+          };
+      next.set(f.path, { key, item });
+      out.push(item);
     });
+    parsed.current = next;
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sig, repoPath, newRev]);
