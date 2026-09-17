@@ -366,6 +366,8 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
     return out;
   }, [rawBaseItems]);
 
+  const itemCache = useRef(new Map<string, { sig: string; base: unknown; item: CodeViewItem<ReviewComment> }>());
+
   // Decorate base items with collapse/viewed/annotations.
   //
   // CodeView reconciles by id + `version`: `syncItemRecord` re-applies an
@@ -374,18 +376,28 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
   // So the final version MUST fold in collapsed + the annotations digest, or
   // toggling collapse/viewed and adding comments would not re-render.
   const items: CodeViewItem<ReviewComment>[] = useMemo(() => {
-    return baseItems.map((it) => {
+    const next = new Map<string, { sig: string; base: unknown; item: CodeViewItem<ReviewComment> }>();
+    const out = baseItems.map((it) => {
       const file = it.fileDiff.name;
       const isCollapsed = collapsed.has(file) || viewed.has(file);
       const anns = commentsForFile(file);
       const annsDigest = anns?.map((a) => `${a.lineNumber}.${a.side}.${a.metadata?.at}`).join(",") ?? "";
-      return {
-        ...it,
-        collapsed: isCollapsed,
-        annotations: anns,
-        version: hashNum(`${it.version ?? 0}:${isCollapsed ? 1 : 0}:${annsDigest}`),
-      };
+      const version = hashNum(`${it.version ?? 0}:${isCollapsed ? 1 : 0}:${annsDigest}`);
+      const sig = `${version}:${isCollapsed ? 1 : 0}:${annsDigest}`;
+      // Hand back the SAME object when nothing about this file changed.
+      // VirtualizedFileDiff compares diff identity between preparing a layout
+      // and rendering it; a fresh object for an unchanged file swaps the diff
+      // mid-flight and it throws. Comments arriving from the workspace a tick
+      // after mount used to replace all of them at once.
+      const prev = itemCache.current.get(it.id);
+      const item = prev && prev.sig === sig && prev.base === it
+        ? prev.item
+        : { ...it, collapsed: isCollapsed, annotations: anns, version };
+      next.set(it.id, { sig, base: it, item });
+      return item;
     });
+    itemCache.current = next;
+    return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [baseItems, collapsed, viewed, comments, mode]);
 

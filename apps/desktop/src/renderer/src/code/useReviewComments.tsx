@@ -7,7 +7,7 @@
  *   • annotation card + anchor + composer → review-ui (ReviewAnnotation,
  *     composerAnchor, ReviewPopover/CommentBox/ActionToolbar)
  */
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { AnnotationSide, DiffLineAnnotation } from "@pierre/diffs";
 import { ReviewPopover, CommentBox, ActionToolbar, ReviewAnnotation, composerAnchor } from "../review-ui";
 import { newCid, formatReviewMessage, type ReviewComment } from "../diff-comments";
@@ -44,9 +44,14 @@ export function useReviewComments(repoPath: string, file: string | null) {
     [],
   );
 
-  const lineAnnotations: DiffLineAnnotation<ReviewComment>[] = file
-    ? comments.filter((c) => c.file === file).map((c) => ({ side: c.side, lineNumber: c.endLine, metadata: c }))
-    : [];
+  // Stable identity: a fresh array every render makes the diff re-apply its
+  // annotations on every parent render, and comments now arrive a tick late.
+  const lineAnnotations: DiffLineAnnotation<ReviewComment>[] = useMemo(
+    () => (file
+      ? comments.filter((c) => c.file === file).map((c) => ({ side: c.side, lineNumber: c.endLine, metadata: c }))
+      : []),
+    [comments, file],
+  );
 
   const renderAnnotation = useCallback(
     (a: DiffLineAnnotation<ReviewComment>) => <ReviewAnnotation comment={a.metadata} />,
