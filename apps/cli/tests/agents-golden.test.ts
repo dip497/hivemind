@@ -29,7 +29,7 @@ describe("agents golden", () => {
     fs.writeFileSync(path.join(ws, ".hivemind", "config.yaml"), "prefix: AG\nnext_id: 1\nagents: {}\n");
     // The agents that ship from the catalog, installed as a machine that found their CLI
     // would have them — so this proves a catalog agent is probed exactly like a bundled one.
-    const examples = path.join(__dirname, "..", "..", "..", "examples", "agents");
+    const examples = path.join(__dirname, "..", "..", "..", "packages", "hive-agents", "tests", "fixtures", "published-agents");
     for (const id of ["gemini", "opencode", "amp", "hermes"]) {
       const dest = path.join(ws, "xdg", "hivemind", "agents", id);
       fs.mkdirSync(dest, { recursive: true });

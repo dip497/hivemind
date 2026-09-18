@@ -39,4 +39,25 @@ describe("hive views", () => {
     expect(r.json).toMatchObject({ ok: false, code: "not_found" });
     fs.rmSync(tmp, { recursive: true, force: true });
   });
+
+  test("new: a starter scoped to its owner, with the SDK the app serves as its types", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hive-views-new-"));
+    const env = { XDG_CONFIG_HOME: path.join(tmp, "xdg") };
+    let r = hive(["views", "new", "pulse", "--owner", "@Dip497", "--json"], { cwd: tmp, env });
+    expect(r.json).toMatchObject({ ok: true, data: { id: "@dip497/pulse" } });
+    const dir = path.join(tmp, "pulse");
+    expect(JSON.parse(fs.readFileSync(path.join(dir, "hivemind-view.json"), "utf8")).id).toBe("@dip497/pulse");
+    expect(fs.readFileSync(path.join(dir, "build.mjs"), "utf8")).toContain('external: ["@hivemind/view-sdk"]');
+    const sdk = path.join(__dirname, "..", "..", "..", "packages", "hive-view-sdk", "src", "protocol.ts");
+    expect(fs.readFileSync(path.join(dir, "types/view-sdk/protocol.ts"), "utf8")).toEndWith(fs.readFileSync(sdk, "utf8"));
+    // The manifest it writes is one the app installs.
+    r = hive(["views", "install", dir, "--json"], { cwd: tmp, env });
+    expect(r.json).toMatchObject({ ok: true, data: { id: "@dip497/pulse" } });
+
+    expect(hive(["views", "new", "pulse", "--owner", "dip497", "--json"], { cwd: tmp, env }).json).toMatchObject({ ok: false, code: "exists" });
+    expect(hive(["views", "new", "Bad--name", "--owner", "dip497", "--json"], { cwd: tmp, env }).json).toMatchObject({ ok: false, code: "bad_name" });
+    // No login to scope it with, and none given: say how, rather than invent one.
+    expect(hive(["views", "new", "other", "--json"], { cwd: tmp, env: { ...env, PATH: path.dirname(process.execPath) } }).json).toMatchObject({ ok: false, code: "no_owner" });
+    fs.rmSync(tmp, { recursive: true, force: true });
+  });
 });

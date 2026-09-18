@@ -1,11 +1,11 @@
 {
-  "id": "tiled",
-  "name": "Tiled",
+  "id": "queue",
+  "name": "Queue",
   "version": "0.1.0",
   "entry": "index.html",
   "protocol": 1,
   "permissions": [],
   "author": "Hivemind",
-  "homepage": "https://github.com/dip497/hivemind/tree/main/examples/views/tiled",
+  "homepage": "https://github.com/dip497/hivemind-plugins/tree/main/views/queue",
   "license": "MIT"
 }

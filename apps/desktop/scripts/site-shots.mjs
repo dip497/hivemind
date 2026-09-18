@@ -62,13 +62,10 @@ for (const [k, v] of [
   ["appearance.wallpaper.kind", opt("image", null) ? "image" : WALLPAPER],
   ["appearance.terminal.background", "#121416"],
 ]) cli("config", "set", k, JSON.stringify(v));
-// The example views, so a shot can show the workspace drawn by a plugin.
+// The published views, installed from HiveHub as anyone would, so a shot can show a plugin.
 const VIEWS = ["queue", "tiled", "board"];
-for (const id of VIEWS) {
-  const dir = path.join(ROOT, "examples/views", id);
-  execFileSync("node", [path.join(dir, "build.mjs")], { stdio: "ignore" });
-  cli("views", "install", path.join(dir, "dist"));
-}
+const published = (name) => `@dip497/${name}`;
+for (const id of VIEWS) cli("views", "install", published(id));
 
 const app = await electron.launch({
   args: [path.join(APP, "out/main/index.js"), "--no-sandbox", "--force-device-scale-factor=2"],
@@ -210,8 +207,8 @@ try {
   await shot(`windows-${MODE}`);
 
   for (const id of VIEWS) {
-    await emit("hivemind:set-view-mode", { mode: id });
-    await page.waitForSelector(`[data-community-view="${id}"][data-community-ready="1"]`, { timeout: 15_000 }).catch(() => {});
+    await emit("hivemind:set-view-mode", { mode: published(id) });
+    await page.waitForSelector(`[data-community-view="${published(id)}"][data-community-ready="1"]`, { timeout: 15_000 }).catch(() => {});
     await shot(`${id}-${MODE}`);
   }
 } finally {

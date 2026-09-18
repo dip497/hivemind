@@ -3,6 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
+import { SDK_FILES } from "../src/view-starter.ts";
 
 const outfile = path.resolve(process.argv[2] ?? path.join(import.meta.dir, "..", "dist", "hive"));
 const plat = `${process.platform}-${process.arch}`;
@@ -24,7 +25,11 @@ if (!addon) console.warn(`[build] no node-pty addon for ${plat} — this hive bu
 const result = await Bun.build({
   entrypoints: [path.join(import.meta.dir, "..", "src", "index.ts")],
   compile: { outfile },
-  define: addon ? { HIVE_PTY_NATIVE: JSON.stringify(addon) } : {},
+  define: {
+    ...(addon ? { HIVE_PTY_NATIVE: JSON.stringify(addon) } : {}),
+    HIVE_VIEW_SDK: JSON.stringify(Object.fromEntries(SDK_FILES.map((f) =>
+      [f, fs.readFileSync(path.join(import.meta.dir, "..", "..", "..", "packages", "hive-view-sdk", "src", f), "utf8")]))),
+  },
 });
 if (!result.success) {
   for (const log of result.logs) console.error(log);

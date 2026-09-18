@@ -12,15 +12,15 @@ credentials, or override permission modes.
 
 ## Inspect the example
 
-From the repository root:
+It lives in [the published plugins](https://github.com/dip497/hivemind-plugins). From a clone:
 
 ```sh
-pnpm --filter @hivemind/example-view-orbit build
-node examples/packages/review-room/build.mjs
-bun apps/cli/src/index.ts packages inspect examples/packages/review-room/dist --json
+npm install && npm run build
+node packages/review-room/build.mjs
+hive packages inspect packages/review-room/dist --json
 ```
 
-This combines Orbit with Pi and Claude presets. The report includes:
+This combines the Board view with Pi and Claude presets. The report includes:
 
 - Every agent prompt, provider, and available supervision.
 - View permissions and a proposed startup plan.

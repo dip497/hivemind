@@ -1,17 +1,10 @@
-// The example community view the view specs drive: Queue (examples/views/queue). It docks a tile's
-// live terminal when its row is clicked, which is what these specs need a plugin to do.
+// The community view the view specs drive: Queue, as published (fixtures/views/queue). It docks a
+// tile's live terminal when its row is clicked, which is what these specs need a plugin to do.
 import { expect, type Page } from "@playwright/test";
-import { execFileSync } from "node:child_process";
 import path from "node:path";
 
-export const QUEUE_DIR = path.resolve(process.cwd(), "../../examples/views/queue");
+export const QUEUE_DIR = path.resolve(process.cwd(), "tests/e2e/fixtures/views/queue");
 export const queueReady = '[data-community-view="queue"][data-community-ready="1"]';
-
-/** Build the example the way its README says; install the RESULT (`dist`). */
-export function buildQueue(): string {
-  execFileSync("node", [path.join(QUEUE_DIR, "build.mjs")], { stdio: "ignore" });
-  return path.join(QUEUE_DIR, "dist");
-}
 
 export const queueFrame = (page: Page) => page.frameLocator('[data-community-view="queue"] iframe');
 

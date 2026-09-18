@@ -13,7 +13,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
-import { buildQueue, dockViaQueue, framesDrawn, queueReady, releaseViaQueue } from "./helpers/queue-view";
+import { QUEUE_DIR, dockViaQueue, framesDrawn, queueReady, releaseViaQueue } from "./helpers/queue-view";
 
 test.use({ trace: "off" });
 
@@ -49,7 +49,7 @@ test.beforeAll(async () => {
   fs.writeFileSync(path.join(repo, "a.ts"), "export const a = 1;\n");
   const git = (...args: string[]) => execFileSync("git", args, { cwd: repo });
   git("init", "-q"); git("config", "user.email", "e2e@test.dev"); git("config", "user.name", "e2e"); git("add", "-A"); git("commit", "-q", "-m", "seed");
-  const installed = hive("views", "install", buildQueue());
+  const installed = hive("views", "install", QUEUE_DIR);
   expect(installed.ok).toBe(true);
   expect(installed.data.dir).toBe(path.join(viewsDir(), "queue"));
   app = await electron.launch({

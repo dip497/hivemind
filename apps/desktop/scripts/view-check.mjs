@@ -70,10 +70,10 @@ const cli = (...a) => spawnSync("bun", [CLI, ...a], { cwd: repo, encoding: "utf8
 if (palette) {
   for (const [k, v] of [["appearance.wallpaper.kind", palette.wallpaper], ["appearance.terminal.background", palette.terminal.background], ["appearance.terminal.foreground", palette.terminal.foreground]]) cli("config", "set", k, JSON.stringify(v));
 }
+// A view from a local checkout (VIEW_DIR, its dist/) or as published on HiveHub.
+const published = (name) => `@dip497/${name}`;
 for (const id of VIEWS) {
-  const dir = path.join(ROOT, "examples/views", id);
-  execFileSync("node", [path.join(dir, "build.mjs")], { stdio: "ignore" });
-  const installed = cli("views", "install", path.join(dir, "dist"), "--json");
+  const installed = cli("views", "install", process.env.VIEW_DIR ?? published(id), "--json");
   if (installed.status !== 0) throw new Error(`views install ${id} failed: ${installed.stdout}${installed.stderr}`);
 }
 
@@ -153,12 +153,12 @@ try {
   let keys;
   for (const view of VIEWS) {
     current = view;
-    await emit("hivemind:set-view-mode", { mode: view });
-    await page.waitForSelector(`[data-community-view="${view}"][data-community-ready="1"]`, { timeout: 20_000 });
+    await emit("hivemind:set-view-mode", { mode: published(view) });
+    await page.waitForSelector(`[data-community-view="${published(view)}"][data-community-ready="1"]`, { timeout: 20_000 });
     await wait(2500);
     await shot("1-arrive");
     // Keys go to the view's own focusable element, the way a person's would after clicking into it.
-    keys = page.frame({ name: `hm-view:${view}` })?.locator('[tabindex="0"]').first();
+    keys = page.frame({ name: `hm-view:${published(view)}` })?.locator('[tabindex="0"]').first();
     await keys?.focus().catch(() => {});
     for (const [key, name] of STEPS[view] ?? []) {
       await keys?.press(key).catch(() => {});

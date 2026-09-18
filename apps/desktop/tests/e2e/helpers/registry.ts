@@ -1,13 +1,13 @@
-// A HiveHub-shaped catalog built from this repository's examples, every id scoped the way a
-// published plugin's is, so an e2e run installs the same kind of id the app gets from HiveHub.
+// A HiveHub-shaped catalog built from the e2e fixtures, every id scoped the way a published
+// plugin's is, so an e2e run installs the same kind of id the app gets from HiveHub.
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 export const SCOPE = "@e2e";
-const REPO = path.resolve("../..");
-const VIEWS = ["queue", "tiled", "board"];
+const FIXTURES = path.resolve("tests/e2e/fixtures");
+const VIEWS = ["queue", "tiled"];
 
 const sha = (b: Buffer | string) => createHash("sha256").update(b).digest("hex");
 const walk = (dir: string, base = dir): string[] => fs.readdirSync(dir).flatMap((n) => {
@@ -19,24 +19,22 @@ const field = (yaml: string, k: string) => yaml.match(new RegExp(`^${k}:\\s*"?([
 
 export interface Registry { dir: string; indexUrl: string; add(p: { id: string; type: "agent" | "view"; name: string; files: Record<string, string>; bin?: string }): void }
 
-/** Write the registry into `dir`; views need their dist built first. */
+/** Write the registry into `dir`. */
 export function buildRegistry(dir: string): Registry {
   const plugins: Record<string, unknown>[] = [];
   for (const v of VIEWS) {
     const dest = path.join(dir, "views", v);
-    fs.cpSync(path.join(REPO, "examples/views", v, "dist"), dest, { recursive: true });
+    fs.cpSync(path.join(FIXTURES, "views", v), dest, { recursive: true });
     const file = path.join(dest, "hivemind-view.json");
     const m = JSON.parse(fs.readFileSync(file, "utf8"));
     m.id = `${SCOPE}/${v}`;
     fs.writeFileSync(file, JSON.stringify(m, null, 2));
-    const pkg = JSON.parse(fs.readFileSync(path.join(REPO, "examples/views", v, "package.json"), "utf8"));
     plugins.push({
-      id: m.id, type: "view", name: m.name, author: "e2e", version: m.version, path: `views/${v}`, files: hashed(dest),
-      description: String(pkg.description ?? m.name).replace(/^Example community view for hivemind: /, ""),
+      id: m.id, type: "view", name: m.name, description: m.name, author: "e2e", version: m.version, path: `views/${v}`, files: hashed(dest),
     });
   }
-  for (const a of fs.readdirSync(path.join(REPO, "examples/agents"))) {
-    const yaml = fs.readFileSync(path.join(REPO, "examples/agents", a, "agent.yaml"), "utf8").replace(/^id:.*$/m, `id: "${SCOPE}/${a}"`);
+  for (const a of fs.readdirSync(path.join(FIXTURES, "agents"))) {
+    const yaml = fs.readFileSync(path.join(FIXTURES, "agents", a, "agent.yaml"), "utf8").replace(/^id:.*$/m, `id: "${SCOPE}/${a}"`);
     fs.mkdirSync(path.join(dir, "agents", a), { recursive: true });
     fs.writeFileSync(path.join(dir, "agents", a, "agent.yaml"), yaml);
     const label = field(yaml, "label") || a;

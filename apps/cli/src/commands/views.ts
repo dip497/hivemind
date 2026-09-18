@@ -6,13 +6,18 @@
  *   hive views install <dir>          validate hivemind-view.json, copy into $XDG_CONFIG_HOME/hivemind/views/<id>
  *   hive views install @owner/name    the same, from HiveHub, every file checked against its hash
  *   hive views remove <id>            delete a user-installed view (its saved layout stays, inert)
+ *   hive views new <name>             a starter view in ./<name>, id @<your GitHub login>/<name>
  */
-import { rm } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { mkdir, rm, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { defineCommand } from "citty";
 import { HiveError, findRoot, installView, listInstalledViews, removeView } from "@hivemind/core";
 import { err, ok } from "../format.js";
 import { hcpCall } from "../hcp.js";
 import { REGISTRY_NAME, stageFromRegistry } from "../registry.js";
+import { starterFiles } from "../view-starter.js";
 
 /** Ask a running app to re-read the view packages. False when no app is
  *  reachable (the change is picked up on the next start or when Settings ▸
@@ -74,7 +79,35 @@ const removeCmd = defineCommand({
   },
 });
 
+/** The GitHub login `gh` is signed in as: a view's scope is its publisher's account. */
+function githubLogin(): string | null {
+  try { return execFileSync("gh", ["api", "user", "--jq", ".login"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim() || null; } catch { return null; }
+}
+
+const newCmd = defineCommand({
+  meta: { name: "new", description: "Start a view in ./<name>: builds on its own, the app serves the SDK" },
+  args: {
+    name: { type: "positional", required: true, description: "lowercase letters, digits and dashes" },
+    owner: { type: "string", description: "your GitHub login (default: the account `gh` is signed in as)" },
+    json: { type: "boolean" },
+  },
+  async run({ args }) {
+    const ctx = { json: !!args.json };
+    const name = String(args.name);
+    const owner = (args.owner ? String(args.owner) : githubLogin())?.replace(/^@/, "").toLowerCase() ?? null;
+    if (!owner) return err(ctx, "no_owner", "pass --owner <your GitHub login>: a view is published under @login/name");
+    if (!REGISTRY_NAME.test(`@${owner}/${name}`) || name.includes("--")) return err(ctx, "bad_name", `@${owner}/${name} is not a view id: lowercase letters, digits and single dashes`);
+    const dir = path.resolve(name);
+    if (existsSync(dir)) return err(ctx, "exists", `${dir} already exists`);
+    for (const [f, body] of Object.entries(starterFiles(owner, name))) {
+      await mkdir(path.dirname(path.join(dir, f)), { recursive: true });
+      await writeFile(path.join(dir, f), body);
+    }
+    return ok(ctx, { id: `@${owner}/${name}`, dir }, () => `created @${owner}/${name} in ${dir}\n  cd ${name} && npm install && npm run dev`);
+  },
+});
+
 export const viewsCmd = defineCommand({
   meta: { name: "views", description: "Community workspace views (sandboxed plugins)" },
-  subCommands: { list: listCmd, install: installCmd, remove: removeCmd },
+  subCommands: { list: listCmd, install: installCmd, remove: removeCmd, new: newCmd },
 });

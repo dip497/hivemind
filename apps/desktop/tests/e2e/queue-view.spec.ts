@@ -6,7 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { buildQueue, dockViaQueue, expandOtherTiles, framesDrawn, queueFrame, queueReady, releaseViaQueue } from "./helpers/queue-view";
+import { QUEUE_DIR, dockViaQueue, expandOtherTiles, framesDrawn, queueFrame, queueReady, releaseViaQueue } from "./helpers/queue-view";
 
 let app: ElectronApplication;
 let page: Page;
@@ -18,7 +18,7 @@ const dockedTerminals = () => page.locator("[data-community-slot] .xterm");
 const terminalIds = () => page.locator(".react-flow__node-terminal").evaluateAll((els) => els.map((e) => e.getAttribute("data-id")!));
 
 test.beforeAll(async () => {
-  execFileSync("bun", [path.resolve(appDir, "../cli/src/index.ts"), "views", "install", buildQueue(), "--json"], { env });
+  execFileSync("bun", [path.resolve(appDir, "../cli/src/index.ts"), "views", "install", QUEUE_DIR, "--json"], { env });
   app = await electron.launch({ args: [path.join(appDir, "out/main/index.js"), "--no-sandbox"], cwd: root, env });
   page = await app.firstWindow();
   await app.evaluate(({ BrowserWindow }) => { BrowserWindow.getAllWindows()[0]?.focus(); });

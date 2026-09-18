@@ -75,13 +75,10 @@ for (const [k, v] of [
   ["appearance.terminal.background", "#121416"],
 ]) cli("config", "set", k, JSON.stringify(v));
 
-// The views the clip switches between, built from the examples in this repository.
+// The views the clip switches between, installed from HiveHub as anyone would.
 const VIEWS = ["queue", "tiled", "board"];
-for (const id of VIEWS) {
-  const dir = path.join(ROOT, "examples/views", id);
-  execFileSync("node", [path.join(dir, "build.mjs")], { stdio: "ignore" });
-  cli("views", "install", path.join(dir, "dist"));
-}
+const published = (name) => VIEWS.includes(name) ? `@dip497/${name}` : name;
+for (const id of VIEWS) cli("views", "install", published(id));
 
 // Stills are for the website, where they are shown at up to 1200 CSS px: capture at 2x so the
 // text in a tile survives the downscale.
@@ -168,7 +165,8 @@ async function type(id, text) {
   await page.keyboard.type(text, { delay: 55 });
   await page.keyboard.press("Enter");
 }
-const toView = async (mode, ready) => {
+const toView = async (name, ready) => {
+  const mode = published(name);
   await emit("hivemind:set-view-mode", { mode });
   if (ready) await page.waitForSelector(`[data-community-view="${mode}"][data-community-ready="1"]`, { timeout: 15_000 }).catch(() => {});
   await wait(1400);
@@ -232,7 +230,7 @@ const SCENE = [
   ["packages", "codex", `clear; git log --oneline -n 8 -- packages 2>&1 | head -n 12; ` +
     BLOCKED.codex("pnpm --filter @hivemind/desktop test:unit", WORKING.codex("Running the unit tests"))],
   ["packages", "codex", work("codex", "grep -rn 'PROTOCOL_VERSION' packages --include=*.ts", "Checking the protocol version")],
-  ["packages", "pi", work("pi", "ls examples/views/*/src", "Reading the example views")],
+  ["packages", "pi", work("pi", "ls apps/desktop/src/renderer/src/workspace/views", "Reading the built-in views")],
 
   ["docs", "claude", work("claude", "find docs/src/content -name '*.md' | sort", "Drafting the upgrade note")],
   ["docs", "claude", work("claude", "sed -n '1,22p' CHANGELOG.md", "Reading the changelog")],
@@ -317,7 +315,7 @@ try {
   await toView("queue", true);
   await wait(1600);
   // Queue docks a live terminal beside its list: click the row, as a person would.
-  const frame = page.frameLocator('[data-community-view="queue"] iframe');
+  const frame = page.frameLocator(`[data-community-view="${published("queue")}"] iframe`);
   const other = frame.locator('.q-group[data-group="other"]');
   if ((await other.count()) && (await other.getAttribute("data-collapsed")) !== null) await other.locator("h2").click().catch(() => {});
   await wait(900);

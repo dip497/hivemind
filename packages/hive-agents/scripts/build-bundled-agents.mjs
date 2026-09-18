@@ -13,7 +13,7 @@ const check = process.argv.includes("--check");
 
 // Which agents ship inside the app, in picker order. A product decision, not an
 // architectural one: every agent is a manifest, and the rest of ours live in the catalog
-// (examples/agents/), added automatically when their CLI is found. What earns a place here
+// (published on HiveHub), added automatically when their CLI is found. What earns a place here
 // is needing the daemon before it can work at all — a hook to inject, a private
 // configuration home to build, a session to resume — so a first run with no network still
 // has agents that do the whole job.

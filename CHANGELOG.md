@@ -7,6 +7,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- `hive views new <name>` starts a view outside this repository, ready to build, install and publish. The app now serves `@hivemind/view-sdk` to every view, so a view no longer bundles its own copy and always speaks the app's version. The example views moved to the published plugins repository.
 - Plugins come from HiveHub and are named `@owner/name`, after the GitHub account that published them, so two people's `board` never collide. `hive views install @owner/name` and `hive agents install @owner/name` install one by name, checking every file against the hash HiveHub recorded. A bare name is only ever built in or installed from a folder.
 - Dragging and resizing a tile follows the pointer again. The tile used to stay put for the whole drag and then slide across on release. It no longer blinks out on every frame of the drag either.
 - The terminal render-debug panel is gone, and Ctrl+Shift+D reaches the program in the terminal again.

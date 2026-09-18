@@ -71,9 +71,9 @@ A view is a package — `hivemind-view.json` plus one bundled entry:
 
 ```bash
 hive views install @dip497/queue          # from HiveHub, every file checked against its hash
-hive views install examples/views/queue/dist   # or from a folder
+hive views install ./my-view/dist           # or from a folder
 hive views list        # what will load, and why not
-hive views remove queue
+hive views remove @dip497/queue
 ```
 
 Install/remove ask a running app to rescan. Plugins run in a sandboxed iframe on their
@@ -81,7 +81,7 @@ own origin: no filesystem, network, node, or app API. They read workspace struct
 names, per-tile status, and selection through the versioned `@hivemind/view-sdk`
 protocol, and can request a surface rect where the host places a real tile (that is how
 a live terminal appears inside a plugin scene). Traffic that is malformed, flooded, or
-CPU-heavy disables the plugin for the session. Examples in `examples/views/`, each built for one kind of person:
+CPU-heavy disables the plugin for the session. Three are published on HiveHub, each built for one kind of person:
 
 - `queue` — for running many agents at once: agents ordered by who needs you, the selected
   one's live terminal docked beside the list.

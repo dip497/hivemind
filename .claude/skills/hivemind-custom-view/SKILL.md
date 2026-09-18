@@ -38,12 +38,13 @@ decide what runs.
 
 ## The smallest view that works
 
-Four files. `hivemind-view.json`, an entry, your code, a build that copies all three
-into one directory.
+`hive views new my-view` writes all of it — the manifest, an entry page, `src/main.ts`, the
+build, and the SDK's source under `types/view-sdk/` for `tsc`. The id is scoped to the GitHub
+login (`@login/my-view`); HiveHub refuses any other scope. The parts:
 
 ```json
 {
-  "id": "my-view",
+  "id": "@login/my-view",
   "name": "My view",
   "version": "0.1.0",
   "entry": "index.html",
@@ -184,19 +185,20 @@ broken app rather than an unimplemented view.
 
 ## Build and install
 
-One directory with the entry, the manifest, and everything bundled. No bare imports at
-runtime — the SDK is a build-time dependency:
+One directory with the entry, the manifest, and everything bundled — except the SDK. The app
+serves `@hivemind/view-sdk` on every view origin and maps the bare import to it, so it stays
+external; a bundled copy would pin an SDK older than the app it runs in. Any other bare import
+at runtime fails.
 
 ```js
-await build({ entryPoints: ["src/main.ts"], bundle: true, format: "esm",
-              target: "es2022", outfile: "dist/my-view.js" });
-cpSync("src/index.html", "dist/index.html");
+await build({ entryPoints: ["src/main.ts"], bundle: true, format: "esm", target: "es2022",
+              outfile: "dist/main.js", external: ["@hivemind/view-sdk"] });
+cpSync("index.html", "dist/index.html");
 cpSync("hivemind-view.json", "dist/hivemind-view.json");
 ```
 
 ```bash
-node build.mjs
-hive views install ./dist      # then ⌘E in the app until your view
+npm run dev                    # build, then hive views install dist; ⌘E in the app until your view
 ```
 
 An `entry` ending in `.js` is wrapped in a host-generated page for you — use that when
@@ -225,7 +227,7 @@ A view that looks impressive and helps nobody is the easiest kind to build and t
 kind to delete. Before any pixels, write down who it is for and the one job it makes easier —
 "never leave an agent waiting", "type into every terminal of this task at once" — and cut
 anything that does not serve that job. `docs/design/views-by-persona-2026-09-16.md` is the worked
-example; `examples/views/{queue,tiled,board}` are the results.
+example; `views/{queue,tiled,board}` in dip497/hivemind-plugins are the results.
 
 ## True, and not guessable
 

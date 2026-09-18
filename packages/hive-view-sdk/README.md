@@ -3,11 +3,12 @@
 Write a hivemind workspace view as a sandboxed plugin. A view is a directory:
 
 ```
-hivemind-view.json   { "id": "queue", "name": "Queue", "version": "0.1.0", "entry": "index.html", "permissions": [] }
+hivemind-view.json   { "id": "@you/queue", "name": "Queue", "version": "0.1.0", "entry": "index.html", "permissions": [] }
 index.html           your bundled page (or point `entry` at a .js module)
 ```
 
-Install it with `hive views install <dir>`; it appears in the app's view switcher.
+Start one with `hive views new <name>`; install it with `hive views install <dir>` and it
+appears in the app's view switcher.
 The page runs in a sandboxed iframe on its own origin — no filesystem, network,
 or app API — and talks to hivemind through this client:
 
@@ -30,11 +31,12 @@ hm.setLayout({ camera });                         // ≤ 64 KB, persisted under 
 
 `closeTile` needs `"permissions": ["workspace:close"]`; `spawnTile` / `spawnVis` /
 `spawnClaude` / `addFrame` need `"workspace:spawn"`. Unknown permissions are refused
-at install. Protocol details: `src/protocol.ts`; a complete example:
-`examples/views/` in the hivemind repo: `queue` (a list with a docked terminal), `tiled` (every
-terminal of a frame laid out as live panes) and `board` (drag, keyboard moves, a persisted layout).
+at install. Protocol details: `src/protocol.ts`; complete views: `views/` in
+[the published plugins](https://github.com/dip497/hivemind-plugins) — `queue` (a list with a
+docked terminal), `tiled` (every terminal of a frame laid out as live panes) and `board` (drag,
+keyboard moves, a persisted layout).
 
-Status: consumed as TypeScript source inside the hivemind monorepo (workspace
-dependency). Publishing to npm is not set up yet — a `dist/` build and a `files`
-list are the missing pieces; the protocol is versioned (`PROTOCOL_VERSION`) so a
-published package can pin what it speaks.
+This is not an npm package. The app builds it into itself and serves it to every view at
+`/__sdk.js`, with an import map that resolves `@hivemind/view-sdk` there — so a view leaves it
+out of its bundle and always gets the SDK of the app it runs in. `hive views new` gives a view
+this source as its types.

@@ -1,7 +1,6 @@
 packages:
   - apps/*
   - packages/*
-  - examples/views/*
 
 catalog:
   typescript: 5.9.3

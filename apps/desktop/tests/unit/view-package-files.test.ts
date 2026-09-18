@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { entryPage, entryUrl, mimeFor, newNonce, pluginCsp, resolvePackageFile } from "../../src/main/view-package-files";
+import { entryPage, entryUrl, withImportMap, mimeFor, newNonce, pluginCsp, resolvePackageFile } from "../../src/main/view-package-files";
 
 function pkg() {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hm-viewpkg-"));
@@ -57,4 +57,12 @@ test("the bootstrap page carries the response nonce and refuses odd entries; the
   assert.notEqual(new URL(entryUrl("@dip497/board", "index.html")).host, new URL(entryUrl("@dip497/queue", "index.html")).host);
   assert.equal(mimeFor("/x/y.js"), "text/javascript; charset=utf-8");
   assert.equal(mimeFor("/x/y.bin"), "application/octet-stream");
+});
+
+test("every plugin document gets the SDK's import map first, under the response nonce", () => {
+  const page = withImportMap('<!doctype html><html><HEAD lang="en"><script type="module" src="./v.js"></script></head></html>', "n0");
+  const map = page.match(/<script type="importmap" nonce="n0">(.*?)<\/script>/)!;
+  assert.deepEqual(JSON.parse(map[1]!), { imports: { "@hivemind/view-sdk": "/__sdk.js" } });
+  assert.ok(page.indexOf("importmap") > page.indexOf("<HEAD") && page.indexOf("importmap") < page.indexOf('type="module"'));
+  assert.ok(withImportMap("<p>no head</p>", "n0").startsWith('<script type="importmap"'));
 });

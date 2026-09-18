@@ -1,5 +1,5 @@
 // Browse → review → install from the plugin catalog, against a HiveHub-shaped registry built
-// from this repository's examples (HIVEMIND_PLUGIN_INDEX), plus one agent entry added to it.
+// from the e2e fixtures (HIVEMIND_PLUGIN_INDEX), plus one agent entry added to it.
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
 import fs from "node:fs";
 import os from "node:os";

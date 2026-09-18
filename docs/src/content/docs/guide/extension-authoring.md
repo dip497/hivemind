@@ -3,28 +3,43 @@ title: Extension authoring
 description: Build and install a workspace view.
 ---
 
-**Development preview** — community views and `@hivemind/view-sdk` are on the
-unreleased development line. The SDK is consumed as TypeScript source in the monorepo
-(not yet on npm); the protocol is versioned (`PROTOCOL_VERSION`).
+**Development preview** — community views are on the unreleased development line; the
+protocol is versioned (`PROTOCOL_VERSION`).
 
-## Package
+## Start one
 
-```text
-myview/
-  hivemind-view.json   { "id": "myview", "name": "My View", "version": "0.1.0",
-                         "entry": "index.html", "protocol": 1, "permissions": [] }
-  index.html           bundled page (or entry points at a .js module)
+```bash
+hive views new pulse          # ./pulse, id @<your GitHub login>/pulse
+cd pulse && npm install
+npm run dev                   # build to dist/, install into the running app
 ```
 
-Install with `hive views install <dir>` (validates the manifest, copies to
-`$XDG_CONFIG_HOME/hivemind/views/<id>`); `hive views list` reports load errors. The
-in-app path is Settings ▸ Plugins ▸ Installed → Install from folder, which shows a review step
-(manifest, permissions, replaced version) before installing — also preview.
+There is no SDK package to install. The app serves `@hivemind/view-sdk` to every view, the
+same version it speaks, so your bundle leaves it out (`external` in `build.mjs`) and stays a
+few kilobytes. `types/view-sdk/` is its source, there for your editor and `tsc`.
+
+```text
+pulse/
+  hivemind-view.json   { "id": "@you/pulse", "name": "Pulse", "version": "0.1.0",
+                         "entry": "index.html", "protocol": 1, "permissions": [] }
+  index.html           the page; loads ./main.js as a module
+  src/main.ts          your view
+  dist/                what you install and publish
+```
+
+`hive views install <dir>` validates the manifest and copies it to
+`$XDG_CONFIG_HOME/hivemind/views/<id>`; `hive views list` reports load errors. In the app,
+Settings ▸ Plugins ▸ Installed → Install from folder shows a review step first.
+
+## Publish
+
+Push the commit, then `hivehub publish dist` (or sign in on HiveHub and name the folder). The
+id's scope must be your GitHub login: nobody can publish into someone else's.
 
 ## Sandbox
 
 The page runs in a sandboxed iframe on its own `hm-view://<id>` origin with a strict
-CSP: no `window.hive`, no node, no network, no inline scripts. All workspace access is
+CSP: no `window.hive`, no node, no network, no inline scripts. `@hivemind/view-sdk` resolves to the app's copy on every page. All workspace access is
 over one validated MessagePort. Budget violations — malformed messages, floods, runaway
 CPU — disable the plugin for the session and return the user to the canvas.
 
@@ -47,8 +62,8 @@ hm.on("structure", ({ tiles }) => {
 });
 ```
 
-Bundle this module as your entry. For a complete view with live docking, name updates,
-status subscriptions, and saved layout, start from `examples/views/tiled` — the smallest of the three examples.
+For a complete view with live docking, name updates, status subscriptions, and saved
+layout, read `views/tiled` in [the published plugins](https://github.com/dip497/hivemind-plugins).
 
 `setSurfaceRects` places host-owned tools in your view; `onReveal` answers focus
 requests; `setLayout` saves up to 64 KB per repository. Canvas/WebGL views can use
@@ -73,6 +88,7 @@ Declared in the manifest, refused at install if unknown:
 - Store camera/placements via `setLayout`; version your blob yourself.
 - A disabled plugin recovers from its layout blob on next mount.
 
-Reference implementations: `examples/views/tiled` (surfaces and layout), `queue` (a list, a docked
-terminal and a WebGL empty state) and `board` (drag, keyboard moves, persisted layout) — copy
-the one closest to what you are building. Protocol types: `packages/hive-view-sdk/src/protocol.ts`.
+Reference implementations, in [the published plugins](https://github.com/dip497/hivemind-plugins):
+`views/tiled` (surfaces and layout), `queue` (a list, a docked terminal and a WebGL empty state)
+and `board` (drag, keyboard moves, persisted layout). Protocol types: `types/view-sdk/protocol.ts`
+in your view.

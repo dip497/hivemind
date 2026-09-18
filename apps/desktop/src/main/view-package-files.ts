@@ -57,6 +57,17 @@ export function entryUrl(id: string, entry: string): string {
 }
 
 export const ENTRY_PAGE = "__entry.html";
+/** The SDK the app serves on every view origin, so a view never bundles its own copy. */
+export const SDK_PATH = "__sdk.js";
+const IMPORT_MAP = JSON.stringify({ imports: { "@hivemind/view-sdk": `/${SDK_PATH}` } });
+
+/** Put the SDK's import map first in a plugin document, so any module script after it can
+ *  import `@hivemind/view-sdk`. It carries the nonce; the page's own inline scripts still don't. */
+export function withImportMap(html: string, nonce: string): string {
+  const tag = `<script type="importmap" nonce="${nonce}">${IMPORT_MAP}</script>`;
+  const head = html.match(/<head\b[^>]*>/i);
+  return head ? html.replace(head[0], head[0] + tag) : tag + html;
+}
 
 /** The bootstrap page for a `.js` entry: one module script, tagged with the
  *  response's nonce. Null when `js` is not a plain relative `.js` path. */

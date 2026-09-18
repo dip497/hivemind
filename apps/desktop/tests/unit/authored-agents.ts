@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import YAML from "yaml";
 import { BUILTIN_CATALOG, defFromManifest, setCatalog } from "@hivemind/agents";
 
-const EXAMPLES = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..", "examples", "agents");
+const EXAMPLES = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..", "packages", "hive-agents", "tests", "fixtures", "published-agents");
 
 export function useAuthoredAgents(): void {
   const catalog = readdirSync(EXAMPLES, { withFileTypes: true })

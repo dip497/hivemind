@@ -10,7 +10,8 @@ import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUNDLED_DIR = join(HERE, "..", "manifests");
-const CATALOG_DIR = join(HERE, "..", "..", "..", "examples", "agents");
+// A snapshot of the agents published on HiveHub: their rules run on this engine.
+const CATALOG_DIR = join(HERE, "fixtures", "published-agents");
 
 export interface AuthoredAgent { id: string; file: string; bundled: boolean }
 
@@ -19,11 +20,9 @@ function scan(): AuthoredAgent[] {
   for (const f of readdirSync(BUNDLED_DIR).filter((n) => n.endsWith(".yaml"))) {
     out.push({ id: f.replace(/\.yaml$/, ""), file: join(BUNDLED_DIR, f), bundled: true });
   }
-  try {
-    for (const d of readdirSync(CATALOG_DIR, { withFileTypes: true })) {
-      if (d.isDirectory()) out.push({ id: d.name, file: join(CATALOG_DIR, d.name, "agent.yaml"), bundled: false });
-    }
-  } catch { /* a checkout without the examples is still a working package */ }
+  for (const d of readdirSync(CATALOG_DIR, { withFileTypes: true })) {
+    if (d.isDirectory()) out.push({ id: d.name, file: join(CATALOG_DIR, d.name, "agent.yaml"), bundled: false });
+  }
   // Sorted by id, never by directory order: the pool feeds a seeded shuffle, so the order
   // of this list is part of every hash in detector-golden.json.
   return out.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));

@@ -384,51 +384,6 @@ importers:
         specifier: 'catalog:'
         version: 5.4.21(@types/node@22.19.19)(lightningcss@1.32.0)
 
-  examples/views/board:
-    devDependencies:
-      '@hivemind/tsconfig':
-        specifier: workspace:*
-        version: link:../../../packages/tsconfig
-      '@hivemind/view-sdk':
-        specifier: workspace:*
-        version: link:../../../packages/hive-view-sdk
-      esbuild:
-        specifier: 0.28.0
-        version: 0.28.0
-      typescript:
-        specifier: 'catalog:'
-        version: 5.9.3
-
-  examples/views/queue:
-    devDependencies:
-      '@hivemind/tsconfig':
-        specifier: workspace:*
-        version: link:../../../packages/tsconfig
-      '@hivemind/view-sdk':
-        specifier: workspace:*
-        version: link:../../../packages/hive-view-sdk
-      esbuild:
-        specifier: 0.28.0
-        version: 0.28.0
-      typescript:
-        specifier: 'catalog:'
-        version: 5.9.3
-
-  examples/views/tiled:
-    devDependencies:
-      '@hivemind/tsconfig':
-        specifier: workspace:*
-        version: link:../../../packages/tsconfig
-      '@hivemind/view-sdk':
-        specifier: workspace:*
-        version: link:../../../packages/hive-view-sdk
-      esbuild:
-        specifier: 0.28.0
-        version: 0.28.0
-      typescript:
-        specifier: 'catalog:'
-        version: 5.9.3
-
   packages/hive-agents:
     dependencies:
       yaml:

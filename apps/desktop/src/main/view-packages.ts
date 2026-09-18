@@ -1,4 +1,4 @@
-import { rm, stat } from "node:fs/promises";
+import { readFile, rm, stat } from "node:fs/promises";
 import path from "node:path";
 /**
  * Community view packages, main-process side: list them for the renderer and
@@ -16,7 +16,7 @@ import path from "node:path";
 import { app, net, protocol, dialog, ipcMain, type BrowserWindow, type WebFrameMain } from "electron";
 import { pathToFileURL } from "node:url";
 import { listInstalledViews, readViewPackage, installView, removeView, type InstalledView } from "@hivemind/core/views";
-import { ENTRY_PAGE, VIEW_SCHEME, entryPage, entryUrl, mimeFor, newNonce, pluginCsp, resolvePackageFile } from "./view-package-files.js";
+import { ENTRY_PAGE, SDK_PATH, VIEW_SCHEME, entryPage, entryUrl, withImportMap, mimeFor, newNonce, pluginCsp, resolvePackageFile } from "./view-package-files.js";
 import { viewHost } from "@hivemind/view-sdk/manifest";
 
 export { VIEW_SCHEME, entryUrl } from "./view-package-files.js";
@@ -53,6 +53,8 @@ export function registerViewScheme(): void {
   ]);
 }
 
+let sdk: string | undefined;
+
 /** Call after app ready. */
 export function handleViewProtocol(): void {
   protocol.handle(VIEW_SCHEME, async (request) => {
@@ -66,10 +68,18 @@ export function handleViewProtocol(): void {
       if (rel === ENTRY_PAGE) {
         const html = entryPage(u.searchParams.get("js") ?? "", nonce);
         if (!html) return new Response("bad entry", { status: 400 });
-        return new Response(html, { status: 200, headers: { ...headers, "Content-Type": mimeFor(".html") } });
+        return new Response(withImportMap(html, nonce), { status: 200, headers: { ...headers, "Content-Type": mimeFor(ENTRY_PAGE) } });
+      }
+      if (rel === SDK_PATH) {
+        sdk ??= await readFile(new URL("./view-sdk.js", import.meta.url), "utf8");
+        return new Response(sdk, { status: 200, headers: { ...headers, "Content-Type": mimeFor(SDK_PATH) } });
       }
       const file = resolvePackageFile(dir, rel);
       if (file.status !== 200) return new Response(file.status === 403 ? "forbidden" : "not found", { status: file.status });
+      if (/\.html?$/i.test(file.abs)) {
+        const html = withImportMap(await readFile(file.abs, "utf8"), nonce);
+        return new Response(html, { status: 200, headers: { ...headers, "Content-Type": mimeFor(ENTRY_PAGE) } });
+      }
       const res = await net.fetch(pathToFileURL(file.abs).toString(), { headers: request.headers });
       const out = new Headers(res.headers);
       for (const [k, v] of Object.entries(headers)) out.set(k, v);
