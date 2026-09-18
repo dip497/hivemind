@@ -26,7 +26,7 @@ const golden = {
   detectors: {}, spawn: {},
 };
 for (const agent of AUTHORED) {
-  const def = defFromManifest(YAML.parse(authoredYaml(agent)), { trusted: agent.bundled, nodeHalf: !!NODE_PARTS[agent.id] });
+  const def = defFromManifest(YAML.parse(authoredYaml(agent)), { trusted: false, nodeHalf: !!NODE_PARTS[agent.id] });
   if (def.detect) {
     const states = CORPUS.map((screen) => def.detect(screen)).join(",");
     golden.detectors[def.id] = createHash("sha256").update(states).digest("hex");

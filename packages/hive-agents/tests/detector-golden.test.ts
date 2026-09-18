@@ -42,7 +42,8 @@ describe("manifest detectors reproduce the frozen behaviour", () => {
     test(`${id} agrees on all ${golden.screens} screens`, () => {
       const agent = AUTHORED.find((a) => a.id === id);
       expect(agent, `${id} is no longer an agent this repository writes`).toBeDefined();
-      const def = defFromManifest(YAML.parse(authoredYaml(agent!)) as unknown, { trusted: agent!.bundled, nodeHalf: !!NODE_PARTS[id] });
+      // Read as an untrusted plugin would be: the detectors may not lean on the bundle's trust.
+      const def = defFromManifest(YAML.parse(authoredYaml(agent!)) as unknown, { trusted: false, nodeHalf: !!NODE_PARTS[id] });
       expect(def.detect).toBeDefined();
       const states = CORPUS.map((screen) => def.detect!(screen)).join(",");
       expect(createHash("sha256").update(states).digest("hex")).toBe(hash);
@@ -57,7 +58,7 @@ describe("every agent this repository writes still launches the same way", () =>
       // agent, and must keep producing the same command line.
       const agent = AUTHORED.find((a) => a.id === id);
       expect(agent, `${id} is no longer an agent this repository writes`).toBeDefined();
-      const def = defFromManifest(YAML.parse(authoredYaml(agent!)) as unknown, { trusted: agent!.bundled, nodeHalf: !!NODE_PARTS[id] });
+      const def = defFromManifest(YAML.parse(authoredYaml(agent!)) as unknown, { trusted: false, nodeHalf: !!NODE_PARTS[id] });
       for (const row of rows) {
         expect(spawnArgsFor(def, row.opts)).toEqual(row.args);
         expect(spawnLabelFor(def, 2, row.opts)).toBe(row.label);

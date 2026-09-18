@@ -18,6 +18,13 @@ const EXAMPLES = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..",
 export function useAuthoredAgents(): void {
   const catalog = readdirSync(EXAMPLES, { withFileTypes: true })
     .filter((d) => d.isDirectory())
-    .map((d) => defFromManifest(YAML.parse(readFileSync(join(EXAMPLES, d.name, "agent.yaml"), "utf8"))));
+    .map((d) => ({
+      // `dir` is where an installed agent's own files (pi's extension, kiro's hook) are
+      // read from — in the fixtures it is the fixture folder itself.
+      ...defFromManifest(YAML.parse(readFileSync(join(EXAMPLES, d.name, "agent.yaml"), "utf8")) as unknown),
+      dir: join(EXAMPLES, d.name),
+    }));
+  // Fixture entries come last, so a def that now ships from the catalog wins over its
+  // still-bundled twin and the tests see what a user who installed it sees.
   setCatalog([...BUILTIN_CATALOG, ...catalog]);
 }

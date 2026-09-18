@@ -1,27 +1,19 @@
-// Every agent Hivemind wrote, wherever it ships from.
+// Every agent Hivemind wrote, from the fixture snapshot of what we publish.
 //
-// Which agents are compiled into the app is a product decision that changes; what they answer
-// must not. So the detector corpus and its golden are taken over this union — an agent moved
-// out of the bundle and into the catalog keeps its hashes and keeps being tested, instead of
-// quietly leaving the suite on the day it stops being bundled.
+// One directory is the whole corpus: a snapshot of the agents we publish, built-ins included.
 import { readdirSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const BUNDLED_DIR = join(HERE, "..", "manifests");
-// A snapshot of the agents published on HiveHub: their rules run on this engine.
 const CATALOG_DIR = join(HERE, "fixtures", "published-agents");
 
-export interface AuthoredAgent { id: string; file: string; bundled: boolean }
+export interface AuthoredAgent { id: string; file: string }
 
 function scan(): AuthoredAgent[] {
   const out: AuthoredAgent[] = [];
-  for (const f of readdirSync(BUNDLED_DIR).filter((n) => n.endsWith(".yaml"))) {
-    out.push({ id: f.replace(/\.yaml$/, ""), file: join(BUNDLED_DIR, f), bundled: true });
-  }
   for (const d of readdirSync(CATALOG_DIR, { withFileTypes: true })) {
-    if (d.isDirectory()) out.push({ id: d.name, file: join(CATALOG_DIR, d.name, "agent.yaml"), bundled: false });
+    if (d.isDirectory()) out.push({ id: d.name, file: join(CATALOG_DIR, d.name, "agent.yaml") });
   }
   // Sorted by id, never by directory order: the pool feeds a seeded shuffle, so the order
   // of this list is part of every hash in detector-golden.json.
