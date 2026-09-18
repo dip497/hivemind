@@ -6,8 +6,36 @@ import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const { isKiro, kiroHooksSettings, kiroAgentConfig, makeKiroResumeTransforms, KIRO_HIVEMIND_AGENT } =
-  await import("@hivemind/agents/providers/kiro/node");
+// kiro is a manifest now: its agent config, its hooks and its transforms all come from it.
+const { manifestRuntime, renderHookDocument, renderHookEvents, transformsFor, specIsAgent } =
+  await import("@hivemind/agents/node");
+const { bundledAgent } = await import("@hivemind/agents");
+const kiroDef = bundledAgent("kiro");
+const KIRO_HIVEMIND_AGENT = "hivemind";
+const isKiro = (spec: { cmd: string }) => specIsAgent(kiroDef, spec);
+const reqFor = (deps: Record<string, string | undefined>, tileId = "") => ({
+  tileId, cwd: "/w", args: [] as string[], env: {}, phase: "spawn" as const,
+  paths: {
+    private: "/x", execPath: deps.execPath ?? "", tileSessionsDir: deps.tileSessionsDir ?? "/x/sessions",
+    home: "/home/u", ...(deps.kiroHome ? { homeReady: true } : {}),
+    ...(deps.hcpSock ? { hcpSock: deps.hcpSock, hcpToken: deps.hcpToken ?? "tok" } : {}),
+    hooks: {
+      ...(deps.trackerPath && deps.tileSessionsDir ? { tracker: { path: deps.trackerPath, arg: deps.tileSessionsDir } } : {}),
+      ...(deps.stopHookPath && deps.hcpSock ? { stop: { path: deps.stopHookPath, arg: deps.hcpSock } } : {}),
+      ...(deps.userpromptHookPath && deps.hcpSock ? { userPrompt: { path: deps.userpromptHookPath, arg: deps.hcpSock } } : {}),
+      ...(deps.kiroApprovalHookPath && deps.hcpSock ? { kiroApproval: { path: deps.kiroApprovalHookPath, arg: deps.hcpSock } } : {}),
+    },
+  },
+});
+const kiroHooksSettings = (deps: Record<string, string | undefined>) =>
+  renderHookEvents(kiroDef.hooks!, reqFor(deps)) ?? {};
+const kiroAgentConfig = (deps: Record<string, string | undefined>) => {
+  const doc = renderHookDocument(kiroDef, reqFor(deps));
+  return doc ? JSON.parse(doc) : { name: KIRO_HIVEMIND_AGENT, description: "hivemind control-plane wiring (auto-generated — do not edit by hand)" };
+};
+const makeKiroResumeTransforms = (deps: Record<string, string | undefined> = {}) =>
+  transformsFor(kiroDef, manifestRuntime(kiroDef, () => undefined)!, reqFor(deps).paths,
+    { ...(deps.legacyMapFile ? { legacyMapFile: deps.legacyMapFile } : {}) });
 const { tileSessionFile } = await import("@hivemind/agents/node");
 
 const HOOK_DEPS = {

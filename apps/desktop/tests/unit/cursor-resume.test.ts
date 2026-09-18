@@ -9,9 +9,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 
-const { isCursor, workspaceKey, newestCursorChatForCwd, makeCursorResumeTransforms } = await import(
-  "@hivemind/agents/providers/cursor/node"
-);
+// cursor resumes because its manifest says where its chats live — no code of its own.
+const { findSession, resumeFromManifest, specIsAgent } = await import("@hivemind/agents/node");
+const { bundledAgent } = await import("@hivemind/agents");
+const cursorDef = bundledAgent("cursor");
+const find = cursorDef.session!.resume!.find!;
+const isCursor = (spec: { cmd: string }) => specIsAgent(cursorDef, spec);
+const workspaceKey = (cwd: string) => createHash("md5").update(cwd).digest("hex");
+const newestCursorChatForCwd = (cwd: string, root?: string) => findSession(find, cwd, root);
+const makeCursorResumeTransforms = (root?: string) => resumeFromManifest(cursorDef, root)!;
 
 function chat(root: string, cwd: string, id: string, updatedAtMs: number, hasConversation = true): void {
   const p = join(root, workspaceKey(cwd), id);

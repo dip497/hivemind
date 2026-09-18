@@ -1,12 +1,20 @@
-// droid-home — seeds the ephemeral FACTORY_HOME_OVERRIDE overlay (symlinks to
-// the real ~/.factory + a hivemind-owned hooks.json).
+// The private configuration home an agent runs with: every child of the real directory
+// linked in so login and sessions stay shared, and the files we own written beside them.
+// Declared by a manifest (droid's `home:` block), performed here.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, lstatSync, readlinkSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const { seedDroidHome } = await import("@hivemind/agents/providers/droid/home");
+const { seedHome } = await import("@hivemind/agents/node");
+
+const { bundledAgent } = await import("@hivemind/agents");
+// The block droid actually ships, so this tests what runs rather than a copy of it.
+const HOME = bundledAgent("droid").home!;
+/** The shape droid's manifest asks for, with the private directory the daemon hands out. */
+const seedDroidHome = (opts: { droidHome: string; realFactory: string; hooks: unknown }) =>
+  seedHome(HOME, opts.droidHome, opts.realFactory, { "hooks.json": JSON.stringify(opts.hooks) });
 
 function fakeFactory(): string {
   const real = mkdtempSync(join(tmpdir(), "real-factory-"));
@@ -21,7 +29,7 @@ test("symlinks every real child + writes our hooks.json", () => {
   const home = mkdtempSync(join(tmpdir(), "droid-home-"));
   seedDroidHome({ droidHome: home, realFactory: real, hooks: { hooks: { Stop: ["x"] } } });
 
-  const dot = join(home, ".factory");
+  const dot = join(home, "droid-home", ".factory");
   // auth + settings + sessions are symlinks pointing back at the real store.
   assert.equal(lstatSync(join(dot, "auth.v2.file")).isSymbolicLink(), true);
   assert.equal(readlinkSync(join(dot, "auth.v2.file")), join(real, "auth.v2.file"));
@@ -36,7 +44,7 @@ test("idempotent: re-seeding leaves links intact and refreshes hooks.json", () =
   const home = mkdtempSync(join(tmpdir(), "droid-home-"));
   seedDroidHome({ droidHome: home, realFactory: real, hooks: { hooks: { Stop: ["a"] } } });
   seedDroidHome({ droidHome: home, realFactory: real, hooks: { hooks: { Stop: ["b"] } } });
-  const dot = join(home, ".factory");
+  const dot = join(home, "droid-home", ".factory");
   assert.equal(readlinkSync(join(dot, "settings.json")), join(real, "settings.json"));
   assert.deepEqual(JSON.parse(readFileSync(join(dot, "hooks.json"), "utf8")), { hooks: { Stop: ["b"] } });
 });
@@ -47,7 +55,7 @@ test("never symlinks the real hooks.json (hivemind owns that name)", () => {
   const home = mkdtempSync(join(tmpdir(), "droid-home-"));
   seedDroidHome({ droidHome: home, realFactory: real, hooks: { hooks: { Stop: ["ours"] } } });
   // Our hooks.json wins; it is NOT a link to the user's file.
-  const p = join(home, ".factory", "hooks.json");
+  const p = join(home, "droid-home", ".factory", "hooks.json");
   assert.equal(lstatSync(p).isSymbolicLink(), false);
   assert.deepEqual(JSON.parse(readFileSync(p, "utf8")), { hooks: { Stop: ["ours"] } });
 });
@@ -55,7 +63,7 @@ test("never symlinks the real hooks.json (hivemind owns that name)", () => {
 test("tolerates a missing real ~/.factory (fresh install) — still writes hooks", () => {
   const home = mkdtempSync(join(tmpdir(), "droid-home-"));
   seedDroidHome({ droidHome: home, realFactory: join(tmpdir(), "does-not-exist-xyz"), hooks: { hooks: {} } });
-  assert.deepEqual(JSON.parse(readFileSync(join(home, ".factory", "hooks.json"), "utf8")), { hooks: {} });
+  assert.deepEqual(JSON.parse(readFileSync(join(home, "droid-home", ".factory", "hooks.json"), "utf8")), { hooks: {} });
 });
 
 test("writes settings.local.json with disableAutoUpdate (silences droid's self-updater)", () => {
@@ -64,7 +72,7 @@ test("writes settings.local.json with disableAutoUpdate (silences droid's self-u
   writeFileSync(join(real, "settings.local.json"), JSON.stringify({ theme: "dark" }));
   const home = mkdtempSync(join(tmpdir(), "droid-home-"));
   seedDroidHome({ droidHome: home, realFactory: real, hooks: { hooks: {} } });
-  const p = join(home, ".factory", "settings.local.json");
+  const p = join(home, "droid-home", ".factory", "settings.local.json");
   assert.equal(lstatSync(p).isSymbolicLink(), false, "hivemind owns it (not a symlink to the user's)");
   assert.deepEqual(JSON.parse(readFileSync(p, "utf8")), { theme: "dark", disableAutoUpdate: true });
 });

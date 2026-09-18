@@ -8,6 +8,10 @@ import {
   CLAUDE_WORKING_HOLD_MS,
   normalizeAgentTitle,
 } from "../../src/renderer/src/agent-state.ts";
+import { useAuthoredAgents } from "./authored-agents.ts";
+
+// gemini, amp, grok, opencode and cline ship from the catalog, not inside the app.
+useAuthoredAgents();
 
 test("normalizeAgentTitle: trims, strips control chars, collapses whitespace, caps length", () => {
   assert.equal(normalizeAgentTitle("  Refactor auth  "), "Refactor auth");

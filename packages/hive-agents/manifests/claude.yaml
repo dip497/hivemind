@@ -36,6 +36,8 @@ icon:
 spawn:
   label: 'claude #{n}'
   labelMode: " · {mode}"
+  titles:
+  - Claude Code
 options:
 - id: mode
   label: Permission mode
@@ -59,54 +61,191 @@ detect:
     n: 20
   rules:
   - when:
-      re: ^\s*2\.\s+Yes,\s
-      flags: m
+      seq:
+      - run: space
+        min: 0
+      - lit: "2."
+      - run: space
+        min: 1
+      - lit: "Yes,"
+      - run: space
+        min: 1
+      at: start
     then: permission
   - when:
       any:
-      - re: ^\s*Press Enter
-        flags: im
-      - re: Enter to select
-        flags: i
-      - re: \u2191/\u2193 to navigate
-      - re: Esc to cancel
-        flags: i
-      - re: \[use arrows
-        flags: i
+      - seq:
+        - run: space
+          min: 0
+        - lit: press enter
+        at: start
+        ci: true
+      - contains: Enter to select
+      - containsCS: "\u2191/\u2193 to navigate"
+      - contains: Esc to cancel
+      - contains: "[use arrows"
     then: question
   - when:
-      re: esc to interrupt
-      flags: i
+      contains: esc to interrupt
     then: working
   - when:
-      re: '[\u2191\u2193\u00b7(]\s*[\d.,]+\s*k?\s*tokens'
-      flags: i
+      seq:
+      - run: "\u2191\u2193\u00b7("
+        min: 1
+        max: 1
+      - run: space
+        min: 0
+      - run: "0123456789.,"
+        min: 1
+      - run: space
+        min: 0
+      - run: k
+        min: 0
+        max: 1
+      - run: space
+        min: 0
+      - lit: tokens
+      ci: true
     then: working
   - when:
-      re: '[\u273b\u2736\u2733\u2722\u273d\u22c6\u273a\u2739\u2738\u2737\u2735\u2734\u2732\u2731\u25cf\u25cb\u25d0\u25d3\u25d1\u25d2\u25cd\u25cc*\u00b7\u271a\u2726\u2727]\s+\S[^\n]*\u2026'
-      flags: u
+      seq:
+      - run: "\u273b\u2736\u2733\u2722\u273d\u22c6\u273a\u2739\u2738\u2737\u2735\u2734\u2732\u2731\u25cf\u25cb\u25d0\u25d3\u25d1\u25d2\u25cd\u25cc*\u00b7\u271a\u2726\u2727"
+        min: 1
+        max: 1
+      - run: space
+        min: 1
+      - run: "!space"
+        min: 1
+        max: 1
+      - upTo: "\u2026"
     then: working
   - when:
       all:
-      - re: \(\d+m\s*\d+s\b|\(\d+s\s*\u00b7
-      - re: tokens|interrupt|thinking|effort
-        flags: i
+      - any:
+        - seq:
+          - lit: "("
+          - run: digit
+            min: 1
+          - lit: m
+          - run: space
+            min: 0
+          - run: digit
+            min: 1
+          - lit: s
+          - notNext: word
+        - seq:
+          - lit: "("
+          - run: digit
+            min: 1
+          - lit: s
+          - run: space
+            min: 0
+          - lit: "\u00b7"
+      - any:
+        - contains: tokens
+        - contains: interrupt
+        - contains: thinking
+        - contains: effort
     then: working
   - when:
-      re: waiting for \d+ background agents?\b
-      flags: i
+      seq:
+      - lit: "waiting for "
+      - run: digit
+        min: 1
+      - lit: " background agent"
+      - run: s
+        min: 0
+        max: 1
+      - notNext: word
+      ci: true
     then: working
     scope:
       kind: screen
   - when:
-      re: ^[\u276f>][\s\xa0](?![\d])
-      flags: m
+      any:
+      - seq:
+        - run: "\u276f>"
+          min: 1
+          max: 1
+        - run: space
+          min: 1
+          max: 1
+        - notNext: digit
+        at: start
+      - seq:
+        - run: "\u276f>"
+          min: 1
+          max: 1
+        - end: true
+        at: start
     then: idle
   - when:
       all:
-      - re: \u23f5\u23f5\s*(bypass permissions|accept edits)
-        flags: i
+      - seq:
+        - lit: "\u23f5\u23f5"
+        - run: space
+          min: 0
+        - any:
+          - bypass permissions
+          - accept edits
+        ci: true
       - not:
-          re: '[\u2502\u256d\u2570]'
+          any:
+          - containsCS: "\u2502"
+          - containsCS: "\u256d"
+          - containsCS: "\u2570"
     then: idle
   default: working
+session:
+  bind:
+    args:
+    - --session-id
+    - '{newId}'
+    unless:
+    - --session-id
+    - --resume
+    - -r
+    - --continue
+    - -c
+    - --from-pr
+  resume:
+    args:
+    - --resume
+    - '{id}'
+    position: before
+    from:
+      tracked: true
+      bound: --session-id
+    fallback:
+    - --continue
+hooks:
+  arg: --settings
+  template: '{"hooks":{events}}'
+  events:
+    SessionStart:
+      hook: tracker
+    PreToolUse:
+    - hook: plan
+      matcher: ExitPlanMode
+      timeout: 345600
+    - hook: approval
+      matcher: supervise
+      when: supervised
+      timeout: 600
+    Stop:
+      hook: stop
+      timeout: 10
+    SubagentStart:
+      hook: subagent
+      timeout: 10
+    SubagentStop:
+      hook: subagent
+      timeout: 10
+    Notification:
+      hook: notification
+      timeout: 10
+    UserPromptSubmit:
+      hook: userPrompt
+      timeout: 10
+launch:
+  hcp: true

@@ -4,28 +4,133 @@
  * consumes. Not for the renderer. Nothing here knows any provider by name
  * beyond listing its plugin once.
  */
-import { getCatalog, agentForCmd } from "./catalog.js";
-import type { AgentNodeParts, AgentPlugin, DaemonPaths, ProviderResumeTransforms, ProviderSpawnContext, SpawnSpec } from "./types.js";
-import { plugin as claudePlugin } from "./providers/claude/node.js";
-import { plugin as codexPlugin } from "./providers/codex/node.js";
-import { plugin as cursorPlugin } from "./providers/cursor/node.js";
-import { plugin as droidPlugin } from "./providers/droid/node.js";
-import { plugin as kiroPlugin } from "./providers/kiro/node.js";
-import { plugin as piPlugin } from "./providers/pi/node.js";
+import { getCatalog, agentForCmd, BUILTIN_CATALOG } from "./catalog.js";
+import { manifestRuntime, transformsFor } from "./runtime-manifest.js";
+import { homePaths } from "./home-overlay.js";
+import type { RuntimePaths } from "./runtime.js";
+import { BUNDLED_ASSETS } from "./bundled-assets.js";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import nodePath from "node:path";
+import type { AgentNodeParts, AgentPlugin, AgentProviderDef, DaemonPaths, ProviderResumeTransforms, ProviderSpawnContext, SpawnSpec } from "./types.js";
 
 export * from "./types.js";
 export * from "./catalog.js";
 export { shq } from "./shq.js";
 export * from "./tile-session-store.js";
+export * from "./session.js";
+export * from "./runtime.js";
+export * from "./runtime-manifest.js";
+export * from "./hooks.js";
+export * from "./home-overlay.js";
+export * from "./bundled-assets.js";
 
-/** Every provider with a daemon half. A def listed in catalog.ts with no plugin
- *  here is scrape-only: no resume, no hook injection, nothing to prepare. */
-export const PLUGINS: readonly AgentPlugin[] = [claudePlugin, codexPlugin, cursorPlugin, droidPlugin, kiroPlugin, piPlugin];
+/** Agents that still need a module of ours. Empty: every agent is its manifest, and what
+ *  a manifest cannot yet say is the list of things left to build, not a list of agents. */
+export const PLUGINS: readonly AgentPlugin[] = [];
 
-/** The node halves keyed by provider id (derived — never hand-maintained). */
-export const NODE_PARTS: Readonly<Record<string, AgentNodeParts>> = Object.fromEntries(
-  PLUGINS.map((p) => [p.def.id, { resume: p.resume, prepare: p.prepare, assets: p.assets }]),
-);
+/** Where an agent's own files live: one directory each, handed out by the daemon so a
+ *  manifest never names a place to write. */
+const privateDir = (userDataDir: string, id: string): string => nodePath.join(userDataDir, "agents", id);
+
+/** What the daemon owns and a runtime may point at. Hook scripts are ours: every agent
+ *  wires up the same ones, each in its own configuration format. */
+const runtimePaths = (p: DaemonPaths, dir: string): RuntimePaths => ({
+  private: dir,
+  hooks: {
+    tracker: { path: p.trackerPath, arg: p.tileSessionsDir },
+    stop: { path: p.stopHookPath, arg: p.hcpSock },
+    userPrompt: { path: p.userpromptHookPath, arg: p.hcpSock },
+    notification: { path: p.notificationHookPath, arg: p.hcpSock },
+  },
+  execPath: p.execPath,
+  ...(p.hcpSock ? { hcpSock: p.hcpSock } : {}),
+  tileSessionsDir: p.tileSessionsDir,
+  home: homedir(),
+});
+
+/** An agent whose manifest describes everything it needs — no module of ours involved.
+ *  The daemon writes what `install` asks for, then applies `launch` on every spawn. */
+function partsFromManifest(def: AgentProviderDef): AgentNodeParts | undefined {
+  const runtime = manifestRuntime(def, (file) => assetBody(def, file));
+  if (!runtime) return undefined;
+  return {
+    prepare: (p) => {
+      const dir = privateDir(p.userDataDir, def.id);
+      const files = runtime.install?.(runtimePaths(p, dir)).files ?? {};
+      if (Object.keys(files).length) {
+        mkdirSync(dir, { recursive: true });
+        for (const [name, body] of Object.entries(files)) writeFileSync(nodePath.join(dir, name), body);
+      }
+      // Whether the overlay is there decides the arguments that select from it.
+      return { privateDir: dir, ...(def.home && existsSync(homePaths(def.home, dir).dir) ? { homeReady: "1" } : {}) };
+    },
+    resume: (ctx) => transformsFor(def, runtime, {
+      private: ctx.providers?.[def.id]?.privateDir ?? privateDir(nodePath.dirname(ctx.tileSessionsDir), def.id),
+      ...(ctx.providers?.[def.id]?.homeReady ? { homeReady: true } : {}),
+      // Our hook scripts and what each is called with. An entry missing here is an event
+      // the manifest asked for that this daemon cannot wire — the renderer drops it.
+      hooks: {
+        ...(ctx.trackerPath ? { tracker: { path: ctx.trackerPath, arg: ctx.tileSessionsDir } } : {}),
+        ...(ctx.planHookPath && ctx.planBridgeSock ? { plan: { path: ctx.planHookPath, arg: ctx.planBridgeSock } } : {}),
+        ...(ctx.approvalHookPath && ctx.hcpSock ? { approval: { path: ctx.approvalHookPath, arg: ctx.hcpSock } } : {}),
+        ...(ctx.stopHookPath && ctx.hcpSock ? { stop: { path: ctx.stopHookPath, arg: ctx.hcpSock } } : {}),
+        ...(ctx.subagentHookPath && ctx.hcpSock ? { subagent: { path: ctx.subagentHookPath, arg: ctx.hcpSock } } : {}),
+        ...(ctx.notificationHookPath && ctx.hcpSock ? { notification: { path: ctx.notificationHookPath, arg: ctx.hcpSock } } : {}),
+        ...(ctx.userpromptHookPath && ctx.hcpSock ? { userPrompt: { path: ctx.userpromptHookPath, arg: ctx.hcpSock } } : {}),
+      },
+      execPath: ctx.execPath,
+      ...(ctx.hcpSock ? { hcpSock: ctx.hcpSock } : {}),
+      ...(ctx.hcpToken ? { hcpToken: ctx.hcpToken } : {}),
+      tileSessionsDir: ctx.tileSessionsDir,
+      home: homedir(),
+    }, { ...(ctx.legacyMapFile ? { legacyMapFile: ctx.legacyMapFile } : {}) }),
+  };
+}
+
+/**
+ * A file an agent ships beside its manifest. The agents compiled into the binary carry
+ * theirs compiled in too; anyone else's are read from the folder they were installed into
+ * — without this an installed agent could declare `assets` and have them silently never
+ * written, which is not a plugin architecture, it is a validation one.
+ */
+const MAX_ASSET = 256 * 1024;
+function assetBody(def: AgentProviderDef, file: string): string | undefined {
+  const compiled = BUNDLED_ASSETS[def.id]?.[file];
+  if (compiled !== undefined || !def.dir) return compiled;
+  // `file` is validated as a plain name with no separators, so it cannot leave the folder.
+  try {
+    const full = nodePath.join(def.dir, file);
+    if (statSync(full).size > MAX_ASSET) return undefined;
+    return readFileSync(full, "utf8");
+  } catch { return undefined; }
+}
+
+/** The daemon half of one agent, whoever wrote it: a hand-written module if there is one,
+ *  otherwise whatever its manifest describes. Memoised per def — a rescan makes new def
+ *  objects, and a stale runtime would keep writing the previous manifest's files. */
+const partsCache = new WeakMap<AgentProviderDef, AgentNodeParts | undefined>();
+export function nodePartsFor(def: AgentProviderDef): AgentNodeParts | undefined {
+  if (partsCache.has(def)) return partsCache.get(def);
+  const hand = PLUGINS.find((p) => p.def.id === def.id);
+  const parts = hand
+    ? { resume: hand.resume, prepare: hand.prepare, assets: hand.assets }
+    : partsFromManifest(def);
+  partsCache.set(def, parts);
+  return parts;
+}
+
+/** The daemon halves of the agents that ship in the box, by id. The drift tests ask this
+ *  what a bundled agent backs its capabilities with; live wiring goes through
+ *  `nodePartsFor`, which serves installed agents too. */
+export const NODE_PARTS: Readonly<Record<string, AgentNodeParts>> = (() => {
+  const parts: Record<string, AgentNodeParts> = {};
+  for (const def of BUILTIN_CATALOG) {
+    const p = nodePartsFor(def);
+    if (p) parts[def.id] = p;
+  }
+  return parts;
+})();
 
 /** Legacy adapter shape (id + matcher + resume) kept for the registry tests. */
 export interface AgentProvider {
@@ -36,12 +141,15 @@ export interface AgentProvider {
 
 /** Order is immaterial: each transform no-ops for specs it doesn't own. */
 export function providers(): AgentProvider[] {
+  // An agent resumes because its manifest says where its sessions live, or because it
+  // ships a daemon half. Both arrive here the same way; neither is privileged.
   return getCatalog()
-    .filter((d) => !!NODE_PARTS[d.id])
-    .map((d) => ({
+    .map((d) => [d, nodePartsFor(d)] as const)
+    .filter((pair): pair is readonly [AgentProviderDef, AgentNodeParts] => !!pair[1])
+    .map(([d, parts]) => ({
       id: d.id,
       matches: (cmd: string) => agentForCmd(cmd)?.id === d.id,
-      resume: NODE_PARTS[d.id]?.resume,
+      resume: parts.resume,
     }));
 }
 
@@ -94,9 +202,13 @@ export function composeResumeFrom(providers: readonly AgentProvider[], ctx: Prov
  *  (its transforms then see their paths unset). */
 export function prepareProviders(paths: DaemonPaths): Record<string, Record<string, string>> {
   const out: Record<string, Record<string, string>> = {};
-  for (const p of PLUGINS) {
-    if (!p.prepare) continue;
-    try { out[p.def.id] = p.prepare(paths); } catch { /* best-effort */ }
+  // Every agent in the live catalog, not only the ones that ship in the box: an installed
+  // agent whose manifest asks for a file or a private home needs that done before its
+  // first spawn too.
+  for (const def of getCatalog()) {
+    const parts = nodePartsFor(def);
+    if (!parts?.prepare) continue;
+    try { out[def.id] = parts.prepare(paths); } catch { /* best-effort */ }
   }
   return out;
 }

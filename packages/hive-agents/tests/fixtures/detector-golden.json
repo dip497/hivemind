@@ -1,0 +1,7060 @@
+{
+  "screens": 8041,
+  "corpus": "b23129464fa2a8e5cc7a9e0a0252f77ef04792a33074a76f23a534c4257b4a09",
+  "detectors": {
+    "amp": "3c99881396231473851f98c0e67a9a4af0b7129eb4e25c25b046c970e43022f7",
+    "antigravity": "19902e3f542ded4bdb750f6c14858e1e890c988060ea77403e7cf970656051e6",
+    "claude": "34d77cee193615405360ddba04d5e82f45ac97446bb4793e22e2e341160eda48",
+    "cline": "3945958076f834868106b0559ac9776db22d1d86bcb5ba7a1b48ba22a6b74c0d",
+    "codex": "958f57ceb80cd8aaae2b897c432a44c56f7bf7fcfd595afe6c494d9529400d47",
+    "copilot": "ea9bd8a765ba9ed133e1932991e8dc4a99beb1d5e9e54cd6afc2bdf9fd286fc4",
+    "cursor": "a6cf550a95e20658e646d8e9f5029a063b49639bfafb0d81fc85911b7aacac2e",
+    "droid": "f5f5390c24c28fddd3cc0935e41d4694defc962398e4269bf2a604f7a0161953",
+    "gemini": "d781d331b4086a3eecde076f5661eb8e63b587a1a903598a96104440f6fcde6b",
+    "grok": "e35082558b172b7cc234f97a8e8c8783e40df3020a339ff64c698f55752a2bdf",
+    "hermes": "badf9ca7a67d986f52cbc66dd21d2e08019cce803e447cf6b584a100d32df630",
+    "kimi": "f7c939308facadec5c40fa8f924a7faac4d9c43609808fc38849ff63b2647142",
+    "kiro": "879e816df8e40b55130e586022b93f4d857dfc73400826df7104df3e7755e0f8",
+    "opencode": "70ca77385bc8ae3d3b1204b3fc6bb7d8f300802c45b42b0844b03505f6e0048c",
+    "pi": "8181dd2b88e1ad71e9ec6231fbb6442510367c1810405156867d924f9fdd511c"
+  },
+  "spawn": {
+    "aider": [
+      {
+        "opts": {},
+        "args": [],
+        "label": "Aider #2"
+      },
+      {
+        "opts": {
+          "model": "default"
+        },
+        "args": [],
+        "label": "Aider #2"
+      },
+      {
+        "opts": {
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Aider #2"
+      },
+      {
+        "opts": {
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Aider #2"
+      },
+      {
+        "opts": {
+          "mode": "default"
+        },
+        "args": [],
+        "label": "Aider #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Aider #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Aider #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Aider #2"
+      },
+      {
+        "opts": {
+          "mode": "plan"
+        },
+        "args": [],
+        "label": "Aider #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Aider #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Aider #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Aider #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits"
+        },
+        "args": [],
+        "label": "Aider #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Aider #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Aider #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Aider #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions"
+        },
+        "args": [],
+        "label": "Aider #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Aider #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Aider #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Aider #2"
+      },
+      {
+        "opts": {
+          "mode": "ask"
+        },
+        "args": [],
+        "label": "Aider #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Aider #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Aider #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Aider #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo"
+        },
+        "args": [],
+        "label": "Aider #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Aider #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Aider #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Aider #2"
+      },
+      {
+        "opts": {
+          "mode": "high"
+        },
+        "args": [],
+        "label": "Aider #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Aider #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Aider #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Aider #2"
+      }
+    ],
+    "amp": [
+      {
+        "opts": {},
+        "args": [],
+        "label": "Amp #2"
+      },
+      {
+        "opts": {
+          "model": "default"
+        },
+        "args": [],
+        "label": "Amp #2"
+      },
+      {
+        "opts": {
+          "model": "opus"
+        },
+        "args": [],
+        "label": "Amp #2"
+      },
+      {
+        "opts": {
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "Amp #2"
+      },
+      {
+        "opts": {
+          "mode": "default"
+        },
+        "args": [],
+        "label": "Amp #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Amp #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "opus"
+        },
+        "args": [],
+        "label": "Amp #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "Amp #2"
+      },
+      {
+        "opts": {
+          "mode": "plan"
+        },
+        "args": [],
+        "label": "Amp #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Amp #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "opus"
+        },
+        "args": [],
+        "label": "Amp #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "Amp #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits"
+        },
+        "args": [],
+        "label": "Amp #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Amp #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "opus"
+        },
+        "args": [],
+        "label": "Amp #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "Amp #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions"
+        },
+        "args": [],
+        "label": "Amp #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Amp #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "opus"
+        },
+        "args": [],
+        "label": "Amp #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "Amp #2"
+      },
+      {
+        "opts": {
+          "mode": "ask"
+        },
+        "args": [],
+        "label": "Amp #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Amp #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "opus"
+        },
+        "args": [],
+        "label": "Amp #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "Amp #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo"
+        },
+        "args": [],
+        "label": "Amp #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Amp #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "opus"
+        },
+        "args": [],
+        "label": "Amp #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "Amp #2"
+      },
+      {
+        "opts": {
+          "mode": "high"
+        },
+        "args": [],
+        "label": "Amp #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Amp #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "opus"
+        },
+        "args": [],
+        "label": "Amp #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "Amp #2"
+      }
+    ],
+    "antigravity": [
+      {
+        "opts": {},
+        "args": [],
+        "label": "Antigravity #2"
+      },
+      {
+        "opts": {
+          "model": "default"
+        },
+        "args": [],
+        "label": "Antigravity #2"
+      },
+      {
+        "opts": {
+          "model": "opus"
+        },
+        "args": [],
+        "label": "Antigravity #2"
+      },
+      {
+        "opts": {
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "Antigravity #2"
+      },
+      {
+        "opts": {
+          "mode": "default"
+        },
+        "args": [],
+        "label": "Antigravity #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Antigravity #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "opus"
+        },
+        "args": [],
+        "label": "Antigravity #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "Antigravity #2"
+      },
+      {
+        "opts": {
+          "mode": "plan"
+        },
+        "args": [],
+        "label": "Antigravity #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Antigravity #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "opus"
+        },
+        "args": [],
+        "label": "Antigravity #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "Antigravity #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits"
+        },
+        "args": [],
+        "label": "Antigravity #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Antigravity #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "opus"
+        },
+        "args": [],
+        "label": "Antigravity #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "Antigravity #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions"
+        },
+        "args": [],
+        "label": "Antigravity #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Antigravity #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "opus"
+        },
+        "args": [],
+        "label": "Antigravity #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "Antigravity #2"
+      },
+      {
+        "opts": {
+          "mode": "ask"
+        },
+        "args": [],
+        "label": "Antigravity #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Antigravity #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "opus"
+        },
+        "args": [],
+        "label": "Antigravity #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "Antigravity #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo"
+        },
+        "args": [],
+        "label": "Antigravity #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Antigravity #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "opus"
+        },
+        "args": [],
+        "label": "Antigravity #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "Antigravity #2"
+      },
+      {
+        "opts": {
+          "mode": "high"
+        },
+        "args": [],
+        "label": "Antigravity #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Antigravity #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "opus"
+        },
+        "args": [],
+        "label": "Antigravity #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "Antigravity #2"
+      }
+    ],
+    "auggie": [
+      {
+        "opts": {},
+        "args": [],
+        "label": "Auggie #2"
+      },
+      {
+        "opts": {
+          "model": "default"
+        },
+        "args": [],
+        "label": "Auggie #2"
+      },
+      {
+        "opts": {
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Auggie #2"
+      },
+      {
+        "opts": {
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Auggie #2"
+      },
+      {
+        "opts": {
+          "mode": "default"
+        },
+        "args": [],
+        "label": "Auggie #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Auggie #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Auggie #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Auggie #2"
+      },
+      {
+        "opts": {
+          "mode": "plan"
+        },
+        "args": [],
+        "label": "Auggie #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Auggie #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Auggie #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Auggie #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits"
+        },
+        "args": [],
+        "label": "Auggie #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Auggie #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Auggie #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Auggie #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions"
+        },
+        "args": [],
+        "label": "Auggie #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Auggie #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Auggie #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Auggie #2"
+      },
+      {
+        "opts": {
+          "mode": "ask"
+        },
+        "args": [],
+        "label": "Auggie #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Auggie #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Auggie #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Auggie #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo"
+        },
+        "args": [],
+        "label": "Auggie #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Auggie #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Auggie #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Auggie #2"
+      },
+      {
+        "opts": {
+          "mode": "high"
+        },
+        "args": [],
+        "label": "Auggie #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Auggie #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Auggie #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Auggie #2"
+      }
+    ],
+    "claude": [
+      {
+        "opts": {},
+        "args": [],
+        "label": "claude #2"
+      },
+      {
+        "opts": {
+          "model": "default"
+        },
+        "args": [],
+        "label": "claude #2"
+      },
+      {
+        "opts": {
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "claude #2"
+      },
+      {
+        "opts": {
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "claude #2"
+      },
+      {
+        "opts": {
+          "mode": "default"
+        },
+        "args": [],
+        "label": "claude #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "default"
+        },
+        "args": [],
+        "label": "claude #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "claude #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "claude #2"
+      },
+      {
+        "opts": {
+          "mode": "plan"
+        },
+        "args": [
+          "--permission-mode",
+          "plan"
+        ],
+        "label": "claude #2 · plan"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "default"
+        },
+        "args": [
+          "--permission-mode",
+          "plan"
+        ],
+        "label": "claude #2 · plan"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "opus"
+        },
+        "args": [
+          "--permission-mode",
+          "plan",
+          "--model",
+          "opus"
+        ],
+        "label": "claude #2 · plan"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--permission-mode",
+          "plan",
+          "--model",
+          "gpt-5"
+        ],
+        "label": "claude #2 · plan"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits"
+        },
+        "args": [
+          "--permission-mode",
+          "acceptEdits"
+        ],
+        "label": "claude #2 · acceptEdits"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "default"
+        },
+        "args": [
+          "--permission-mode",
+          "acceptEdits"
+        ],
+        "label": "claude #2 · acceptEdits"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "opus"
+        },
+        "args": [
+          "--permission-mode",
+          "acceptEdits",
+          "--model",
+          "opus"
+        ],
+        "label": "claude #2 · acceptEdits"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--permission-mode",
+          "acceptEdits",
+          "--model",
+          "gpt-5"
+        ],
+        "label": "claude #2 · acceptEdits"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions"
+        },
+        "args": [
+          "--dangerously-skip-permissions"
+        ],
+        "label": "claude #2 · bypassPermissions"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "default"
+        },
+        "args": [
+          "--dangerously-skip-permissions"
+        ],
+        "label": "claude #2 · bypassPermissions"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "opus"
+        },
+        "args": [
+          "--dangerously-skip-permissions",
+          "--model",
+          "opus"
+        ],
+        "label": "claude #2 · bypassPermissions"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--dangerously-skip-permissions",
+          "--model",
+          "gpt-5"
+        ],
+        "label": "claude #2 · bypassPermissions"
+      },
+      {
+        "opts": {
+          "mode": "ask"
+        },
+        "args": [
+          "--permission-mode",
+          "ask"
+        ],
+        "label": "claude #2 · ask"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "default"
+        },
+        "args": [
+          "--permission-mode",
+          "ask"
+        ],
+        "label": "claude #2 · ask"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "opus"
+        },
+        "args": [
+          "--permission-mode",
+          "ask",
+          "--model",
+          "opus"
+        ],
+        "label": "claude #2 · ask"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--permission-mode",
+          "ask",
+          "--model",
+          "gpt-5"
+        ],
+        "label": "claude #2 · ask"
+      },
+      {
+        "opts": {
+          "mode": "yolo"
+        },
+        "args": [
+          "--permission-mode",
+          "yolo"
+        ],
+        "label": "claude #2 · yolo"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "default"
+        },
+        "args": [
+          "--permission-mode",
+          "yolo"
+        ],
+        "label": "claude #2 · yolo"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "opus"
+        },
+        "args": [
+          "--permission-mode",
+          "yolo",
+          "--model",
+          "opus"
+        ],
+        "label": "claude #2 · yolo"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--permission-mode",
+          "yolo",
+          "--model",
+          "gpt-5"
+        ],
+        "label": "claude #2 · yolo"
+      },
+      {
+        "opts": {
+          "mode": "high"
+        },
+        "args": [
+          "--permission-mode",
+          "high"
+        ],
+        "label": "claude #2 · high"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "default"
+        },
+        "args": [
+          "--permission-mode",
+          "high"
+        ],
+        "label": "claude #2 · high"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "opus"
+        },
+        "args": [
+          "--permission-mode",
+          "high",
+          "--model",
+          "opus"
+        ],
+        "label": "claude #2 · high"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--permission-mode",
+          "high",
+          "--model",
+          "gpt-5"
+        ],
+        "label": "claude #2 · high"
+      }
+    ],
+    "cline": [
+      {
+        "opts": {},
+        "args": [],
+        "label": "Cline #2"
+      },
+      {
+        "opts": {
+          "model": "default"
+        },
+        "args": [],
+        "label": "Cline #2"
+      },
+      {
+        "opts": {
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Cline #2"
+      },
+      {
+        "opts": {
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Cline #2"
+      },
+      {
+        "opts": {
+          "mode": "default"
+        },
+        "args": [],
+        "label": "Cline #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Cline #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Cline #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Cline #2"
+      },
+      {
+        "opts": {
+          "mode": "plan"
+        },
+        "args": [
+          "--plan"
+        ],
+        "label": "Cline #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "default"
+        },
+        "args": [
+          "--plan"
+        ],
+        "label": "Cline #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus",
+          "--plan"
+        ],
+        "label": "Cline #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5",
+          "--plan"
+        ],
+        "label": "Cline #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits"
+        },
+        "args": [],
+        "label": "Cline #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Cline #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Cline #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Cline #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions"
+        },
+        "args": [],
+        "label": "Cline #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Cline #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Cline #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Cline #2"
+      },
+      {
+        "opts": {
+          "mode": "ask"
+        },
+        "args": [],
+        "label": "Cline #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Cline #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Cline #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Cline #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo"
+        },
+        "args": [],
+        "label": "Cline #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Cline #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Cline #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Cline #2"
+      },
+      {
+        "opts": {
+          "mode": "high"
+        },
+        "args": [],
+        "label": "Cline #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Cline #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Cline #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Cline #2"
+      }
+    ],
+    "codex": [
+      {
+        "opts": {},
+        "args": [
+          "--ask-for-approval",
+          "on-request",
+          "--sandbox",
+          "workspace-write"
+        ],
+        "label": "Codex #2"
+      },
+      {
+        "opts": {
+          "model": "default"
+        },
+        "args": [
+          "--ask-for-approval",
+          "on-request",
+          "--sandbox",
+          "workspace-write"
+        ],
+        "label": "Codex #2"
+      },
+      {
+        "opts": {
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus",
+          "--ask-for-approval",
+          "on-request",
+          "--sandbox",
+          "workspace-write"
+        ],
+        "label": "Codex #2"
+      },
+      {
+        "opts": {
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5",
+          "--ask-for-approval",
+          "on-request",
+          "--sandbox",
+          "workspace-write"
+        ],
+        "label": "Codex #2"
+      },
+      {
+        "opts": {
+          "mode": "default"
+        },
+        "args": [
+          "--ask-for-approval",
+          "on-request",
+          "--sandbox",
+          "workspace-write"
+        ],
+        "label": "Codex #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "default"
+        },
+        "args": [
+          "--ask-for-approval",
+          "on-request",
+          "--sandbox",
+          "workspace-write"
+        ],
+        "label": "Codex #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus",
+          "--ask-for-approval",
+          "on-request",
+          "--sandbox",
+          "workspace-write"
+        ],
+        "label": "Codex #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5",
+          "--ask-for-approval",
+          "on-request",
+          "--sandbox",
+          "workspace-write"
+        ],
+        "label": "Codex #2"
+      },
+      {
+        "opts": {
+          "mode": "plan"
+        },
+        "args": [
+          "--ask-for-approval",
+          "plan",
+          "--sandbox",
+          "workspace-write"
+        ],
+        "label": "Codex #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "default"
+        },
+        "args": [
+          "--ask-for-approval",
+          "plan",
+          "--sandbox",
+          "workspace-write"
+        ],
+        "label": "Codex #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus",
+          "--ask-for-approval",
+          "plan",
+          "--sandbox",
+          "workspace-write"
+        ],
+        "label": "Codex #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5",
+          "--ask-for-approval",
+          "plan",
+          "--sandbox",
+          "workspace-write"
+        ],
+        "label": "Codex #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits"
+        },
+        "args": [
+          "--ask-for-approval",
+          "acceptEdits",
+          "--sandbox",
+          "workspace-write"
+        ],
+        "label": "Codex #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "default"
+        },
+        "args": [
+          "--ask-for-approval",
+          "acceptEdits",
+          "--sandbox",
+          "workspace-write"
+        ],
+        "label": "Codex #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus",
+          "--ask-for-approval",
+          "acceptEdits",
+          "--sandbox",
+          "workspace-write"
+        ],
+        "label": "Codex #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5",
+          "--ask-for-approval",
+          "acceptEdits",
+          "--sandbox",
+          "workspace-write"
+        ],
+        "label": "Codex #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions"
+        },
+        "args": [
+          "--ask-for-approval",
+          "bypassPermissions",
+          "--sandbox",
+          "workspace-write"
+        ],
+        "label": "Codex #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "default"
+        },
+        "args": [
+          "--ask-for-approval",
+          "bypassPermissions",
+          "--sandbox",
+          "workspace-write"
+        ],
+        "label": "Codex #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus",
+          "--ask-for-approval",
+          "bypassPermissions",
+          "--sandbox",
+          "workspace-write"
+        ],
+        "label": "Codex #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5",
+          "--ask-for-approval",
+          "bypassPermissions",
+          "--sandbox",
+          "workspace-write"
+        ],
+        "label": "Codex #2"
+      },
+      {
+        "opts": {
+          "mode": "ask"
+        },
+        "args": [
+          "--ask-for-approval",
+          "ask",
+          "--sandbox",
+          "workspace-write"
+        ],
+        "label": "Codex #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "default"
+        },
+        "args": [
+          "--ask-for-approval",
+          "ask",
+          "--sandbox",
+          "workspace-write"
+        ],
+        "label": "Codex #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus",
+          "--ask-for-approval",
+          "ask",
+          "--sandbox",
+          "workspace-write"
+        ],
+        "label": "Codex #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5",
+          "--ask-for-approval",
+          "ask",
+          "--sandbox",
+          "workspace-write"
+        ],
+        "label": "Codex #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo"
+        },
+        "args": [
+          "--ask-for-approval",
+          "yolo",
+          "--sandbox",
+          "workspace-write"
+        ],
+        "label": "Codex #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "default"
+        },
+        "args": [
+          "--ask-for-approval",
+          "yolo",
+          "--sandbox",
+          "workspace-write"
+        ],
+        "label": "Codex #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus",
+          "--ask-for-approval",
+          "yolo",
+          "--sandbox",
+          "workspace-write"
+        ],
+        "label": "Codex #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5",
+          "--ask-for-approval",
+          "yolo",
+          "--sandbox",
+          "workspace-write"
+        ],
+        "label": "Codex #2"
+      },
+      {
+        "opts": {
+          "mode": "high"
+        },
+        "args": [
+          "--ask-for-approval",
+          "high",
+          "--sandbox",
+          "workspace-write"
+        ],
+        "label": "Codex #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "default"
+        },
+        "args": [
+          "--ask-for-approval",
+          "high",
+          "--sandbox",
+          "workspace-write"
+        ],
+        "label": "Codex #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus",
+          "--ask-for-approval",
+          "high",
+          "--sandbox",
+          "workspace-write"
+        ],
+        "label": "Codex #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5",
+          "--ask-for-approval",
+          "high",
+          "--sandbox",
+          "workspace-write"
+        ],
+        "label": "Codex #2"
+      }
+    ],
+    "continue": [
+      {
+        "opts": {},
+        "args": [],
+        "label": "Continue #2"
+      },
+      {
+        "opts": {
+          "model": "default"
+        },
+        "args": [],
+        "label": "Continue #2"
+      },
+      {
+        "opts": {
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Continue #2"
+      },
+      {
+        "opts": {
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Continue #2"
+      },
+      {
+        "opts": {
+          "mode": "default"
+        },
+        "args": [],
+        "label": "Continue #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Continue #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Continue #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Continue #2"
+      },
+      {
+        "opts": {
+          "mode": "plan"
+        },
+        "args": [
+          "--readonly"
+        ],
+        "label": "Continue #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "default"
+        },
+        "args": [
+          "--readonly"
+        ],
+        "label": "Continue #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus",
+          "--readonly"
+        ],
+        "label": "Continue #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5",
+          "--readonly"
+        ],
+        "label": "Continue #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits"
+        },
+        "args": [],
+        "label": "Continue #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Continue #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Continue #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Continue #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions"
+        },
+        "args": [],
+        "label": "Continue #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Continue #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Continue #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Continue #2"
+      },
+      {
+        "opts": {
+          "mode": "ask"
+        },
+        "args": [],
+        "label": "Continue #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Continue #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Continue #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Continue #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo"
+        },
+        "args": [],
+        "label": "Continue #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Continue #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Continue #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Continue #2"
+      },
+      {
+        "opts": {
+          "mode": "high"
+        },
+        "args": [],
+        "label": "Continue #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Continue #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Continue #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Continue #2"
+      }
+    ],
+    "copilot": [
+      {
+        "opts": {},
+        "args": [],
+        "label": "Copilot #2"
+      },
+      {
+        "opts": {
+          "model": "default"
+        },
+        "args": [],
+        "label": "Copilot #2"
+      },
+      {
+        "opts": {
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Copilot #2"
+      },
+      {
+        "opts": {
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Copilot #2"
+      },
+      {
+        "opts": {
+          "mode": "default"
+        },
+        "args": [],
+        "label": "Copilot #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Copilot #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Copilot #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Copilot #2"
+      },
+      {
+        "opts": {
+          "mode": "plan"
+        },
+        "args": [
+          "--mode",
+          "plan"
+        ],
+        "label": "Copilot #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "default"
+        },
+        "args": [
+          "--mode",
+          "plan"
+        ],
+        "label": "Copilot #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus",
+          "--mode",
+          "plan"
+        ],
+        "label": "Copilot #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5",
+          "--mode",
+          "plan"
+        ],
+        "label": "Copilot #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits"
+        },
+        "args": [
+          "--mode",
+          "acceptEdits"
+        ],
+        "label": "Copilot #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "default"
+        },
+        "args": [
+          "--mode",
+          "acceptEdits"
+        ],
+        "label": "Copilot #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus",
+          "--mode",
+          "acceptEdits"
+        ],
+        "label": "Copilot #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5",
+          "--mode",
+          "acceptEdits"
+        ],
+        "label": "Copilot #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions"
+        },
+        "args": [
+          "--mode",
+          "bypassPermissions"
+        ],
+        "label": "Copilot #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "default"
+        },
+        "args": [
+          "--mode",
+          "bypassPermissions"
+        ],
+        "label": "Copilot #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus",
+          "--mode",
+          "bypassPermissions"
+        ],
+        "label": "Copilot #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5",
+          "--mode",
+          "bypassPermissions"
+        ],
+        "label": "Copilot #2"
+      },
+      {
+        "opts": {
+          "mode": "ask"
+        },
+        "args": [
+          "--mode",
+          "ask"
+        ],
+        "label": "Copilot #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "default"
+        },
+        "args": [
+          "--mode",
+          "ask"
+        ],
+        "label": "Copilot #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus",
+          "--mode",
+          "ask"
+        ],
+        "label": "Copilot #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5",
+          "--mode",
+          "ask"
+        ],
+        "label": "Copilot #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo"
+        },
+        "args": [
+          "--mode",
+          "yolo"
+        ],
+        "label": "Copilot #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "default"
+        },
+        "args": [
+          "--mode",
+          "yolo"
+        ],
+        "label": "Copilot #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus",
+          "--mode",
+          "yolo"
+        ],
+        "label": "Copilot #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5",
+          "--mode",
+          "yolo"
+        ],
+        "label": "Copilot #2"
+      },
+      {
+        "opts": {
+          "mode": "high"
+        },
+        "args": [
+          "--mode",
+          "high"
+        ],
+        "label": "Copilot #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "default"
+        },
+        "args": [
+          "--mode",
+          "high"
+        ],
+        "label": "Copilot #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus",
+          "--mode",
+          "high"
+        ],
+        "label": "Copilot #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5",
+          "--mode",
+          "high"
+        ],
+        "label": "Copilot #2"
+      }
+    ],
+    "crush": [
+      {
+        "opts": {},
+        "args": [],
+        "label": "Crush #2"
+      },
+      {
+        "opts": {
+          "model": "default"
+        },
+        "args": [],
+        "label": "Crush #2"
+      },
+      {
+        "opts": {
+          "model": "opus"
+        },
+        "args": [],
+        "label": "Crush #2"
+      },
+      {
+        "opts": {
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "Crush #2"
+      },
+      {
+        "opts": {
+          "mode": "default"
+        },
+        "args": [],
+        "label": "Crush #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Crush #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "opus"
+        },
+        "args": [],
+        "label": "Crush #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "Crush #2"
+      },
+      {
+        "opts": {
+          "mode": "plan"
+        },
+        "args": [],
+        "label": "Crush #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Crush #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "opus"
+        },
+        "args": [],
+        "label": "Crush #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "Crush #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits"
+        },
+        "args": [],
+        "label": "Crush #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Crush #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "opus"
+        },
+        "args": [],
+        "label": "Crush #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "Crush #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions"
+        },
+        "args": [],
+        "label": "Crush #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Crush #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "opus"
+        },
+        "args": [],
+        "label": "Crush #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "Crush #2"
+      },
+      {
+        "opts": {
+          "mode": "ask"
+        },
+        "args": [],
+        "label": "Crush #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Crush #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "opus"
+        },
+        "args": [],
+        "label": "Crush #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "Crush #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo"
+        },
+        "args": [
+          "--yolo"
+        ],
+        "label": "Crush #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "default"
+        },
+        "args": [
+          "--yolo"
+        ],
+        "label": "Crush #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "opus"
+        },
+        "args": [
+          "--yolo"
+        ],
+        "label": "Crush #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--yolo"
+        ],
+        "label": "Crush #2"
+      },
+      {
+        "opts": {
+          "mode": "high"
+        },
+        "args": [],
+        "label": "Crush #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Crush #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "opus"
+        },
+        "args": [],
+        "label": "Crush #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "Crush #2"
+      }
+    ],
+    "cursor": [
+      {
+        "opts": {},
+        "args": [],
+        "label": "Cursor #2"
+      },
+      {
+        "opts": {
+          "model": "default"
+        },
+        "args": [],
+        "label": "Cursor #2"
+      },
+      {
+        "opts": {
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Cursor #2"
+      },
+      {
+        "opts": {
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Cursor #2"
+      },
+      {
+        "opts": {
+          "mode": "default"
+        },
+        "args": [],
+        "label": "Cursor #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Cursor #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Cursor #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Cursor #2"
+      },
+      {
+        "opts": {
+          "mode": "plan"
+        },
+        "args": [
+          "--mode",
+          "plan"
+        ],
+        "label": "Cursor #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "default"
+        },
+        "args": [
+          "--mode",
+          "plan"
+        ],
+        "label": "Cursor #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "opus"
+        },
+        "args": [
+          "--mode",
+          "plan",
+          "--model",
+          "opus"
+        ],
+        "label": "Cursor #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--mode",
+          "plan",
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Cursor #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits"
+        },
+        "args": [
+          "--mode",
+          "acceptEdits"
+        ],
+        "label": "Cursor #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "default"
+        },
+        "args": [
+          "--mode",
+          "acceptEdits"
+        ],
+        "label": "Cursor #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "opus"
+        },
+        "args": [
+          "--mode",
+          "acceptEdits",
+          "--model",
+          "opus"
+        ],
+        "label": "Cursor #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--mode",
+          "acceptEdits",
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Cursor #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions"
+        },
+        "args": [
+          "--mode",
+          "bypassPermissions"
+        ],
+        "label": "Cursor #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "default"
+        },
+        "args": [
+          "--mode",
+          "bypassPermissions"
+        ],
+        "label": "Cursor #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "opus"
+        },
+        "args": [
+          "--mode",
+          "bypassPermissions",
+          "--model",
+          "opus"
+        ],
+        "label": "Cursor #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--mode",
+          "bypassPermissions",
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Cursor #2"
+      },
+      {
+        "opts": {
+          "mode": "ask"
+        },
+        "args": [
+          "--mode",
+          "ask"
+        ],
+        "label": "Cursor #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "default"
+        },
+        "args": [
+          "--mode",
+          "ask"
+        ],
+        "label": "Cursor #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "opus"
+        },
+        "args": [
+          "--mode",
+          "ask",
+          "--model",
+          "opus"
+        ],
+        "label": "Cursor #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--mode",
+          "ask",
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Cursor #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo"
+        },
+        "args": [
+          "--mode",
+          "yolo"
+        ],
+        "label": "Cursor #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "default"
+        },
+        "args": [
+          "--mode",
+          "yolo"
+        ],
+        "label": "Cursor #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "opus"
+        },
+        "args": [
+          "--mode",
+          "yolo",
+          "--model",
+          "opus"
+        ],
+        "label": "Cursor #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--mode",
+          "yolo",
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Cursor #2"
+      },
+      {
+        "opts": {
+          "mode": "high"
+        },
+        "args": [
+          "--mode",
+          "high"
+        ],
+        "label": "Cursor #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "default"
+        },
+        "args": [
+          "--mode",
+          "high"
+        ],
+        "label": "Cursor #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "opus"
+        },
+        "args": [
+          "--mode",
+          "high",
+          "--model",
+          "opus"
+        ],
+        "label": "Cursor #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--mode",
+          "high",
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Cursor #2"
+      }
+    ],
+    "droid": [
+      {
+        "opts": {},
+        "args": [],
+        "label": "Droid #2"
+      },
+      {
+        "opts": {
+          "model": "default"
+        },
+        "args": [],
+        "label": "Droid #2"
+      },
+      {
+        "opts": {
+          "model": "opus"
+        },
+        "args": [],
+        "label": "Droid #2"
+      },
+      {
+        "opts": {
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "Droid #2"
+      },
+      {
+        "opts": {
+          "mode": "default"
+        },
+        "args": [],
+        "label": "Droid #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Droid #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "opus"
+        },
+        "args": [],
+        "label": "Droid #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "Droid #2"
+      },
+      {
+        "opts": {
+          "mode": "plan"
+        },
+        "args": [
+          "--auto",
+          "plan"
+        ],
+        "label": "Droid #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "default"
+        },
+        "args": [
+          "--auto",
+          "plan"
+        ],
+        "label": "Droid #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "opus"
+        },
+        "args": [
+          "--auto",
+          "plan"
+        ],
+        "label": "Droid #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--auto",
+          "plan"
+        ],
+        "label": "Droid #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits"
+        },
+        "args": [
+          "--auto",
+          "acceptEdits"
+        ],
+        "label": "Droid #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "default"
+        },
+        "args": [
+          "--auto",
+          "acceptEdits"
+        ],
+        "label": "Droid #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "opus"
+        },
+        "args": [
+          "--auto",
+          "acceptEdits"
+        ],
+        "label": "Droid #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--auto",
+          "acceptEdits"
+        ],
+        "label": "Droid #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions"
+        },
+        "args": [
+          "--auto",
+          "bypassPermissions"
+        ],
+        "label": "Droid #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "default"
+        },
+        "args": [
+          "--auto",
+          "bypassPermissions"
+        ],
+        "label": "Droid #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "opus"
+        },
+        "args": [
+          "--auto",
+          "bypassPermissions"
+        ],
+        "label": "Droid #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--auto",
+          "bypassPermissions"
+        ],
+        "label": "Droid #2"
+      },
+      {
+        "opts": {
+          "mode": "ask"
+        },
+        "args": [
+          "--auto",
+          "ask"
+        ],
+        "label": "Droid #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "default"
+        },
+        "args": [
+          "--auto",
+          "ask"
+        ],
+        "label": "Droid #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "opus"
+        },
+        "args": [
+          "--auto",
+          "ask"
+        ],
+        "label": "Droid #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--auto",
+          "ask"
+        ],
+        "label": "Droid #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo"
+        },
+        "args": [
+          "--auto",
+          "yolo"
+        ],
+        "label": "Droid #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "default"
+        },
+        "args": [
+          "--auto",
+          "yolo"
+        ],
+        "label": "Droid #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "opus"
+        },
+        "args": [
+          "--auto",
+          "yolo"
+        ],
+        "label": "Droid #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--auto",
+          "yolo"
+        ],
+        "label": "Droid #2"
+      },
+      {
+        "opts": {
+          "mode": "high"
+        },
+        "args": [
+          "--auto",
+          "high"
+        ],
+        "label": "Droid #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "default"
+        },
+        "args": [
+          "--auto",
+          "high"
+        ],
+        "label": "Droid #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "opus"
+        },
+        "args": [
+          "--auto",
+          "high"
+        ],
+        "label": "Droid #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--auto",
+          "high"
+        ],
+        "label": "Droid #2"
+      }
+    ],
+    "gemini": [
+      {
+        "opts": {},
+        "args": [],
+        "label": "Gemini #2"
+      },
+      {
+        "opts": {
+          "model": "default"
+        },
+        "args": [],
+        "label": "Gemini #2"
+      },
+      {
+        "opts": {
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Gemini #2"
+      },
+      {
+        "opts": {
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Gemini #2"
+      },
+      {
+        "opts": {
+          "mode": "default"
+        },
+        "args": [],
+        "label": "Gemini #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Gemini #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Gemini #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Gemini #2"
+      },
+      {
+        "opts": {
+          "mode": "plan"
+        },
+        "args": [
+          "--approval-mode",
+          "plan"
+        ],
+        "label": "Gemini #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "default"
+        },
+        "args": [
+          "--approval-mode",
+          "plan"
+        ],
+        "label": "Gemini #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus",
+          "--approval-mode",
+          "plan"
+        ],
+        "label": "Gemini #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5",
+          "--approval-mode",
+          "plan"
+        ],
+        "label": "Gemini #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits"
+        },
+        "args": [
+          "--approval-mode",
+          "acceptEdits"
+        ],
+        "label": "Gemini #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "default"
+        },
+        "args": [
+          "--approval-mode",
+          "acceptEdits"
+        ],
+        "label": "Gemini #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus",
+          "--approval-mode",
+          "acceptEdits"
+        ],
+        "label": "Gemini #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5",
+          "--approval-mode",
+          "acceptEdits"
+        ],
+        "label": "Gemini #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions"
+        },
+        "args": [
+          "--approval-mode",
+          "bypassPermissions"
+        ],
+        "label": "Gemini #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "default"
+        },
+        "args": [
+          "--approval-mode",
+          "bypassPermissions"
+        ],
+        "label": "Gemini #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus",
+          "--approval-mode",
+          "bypassPermissions"
+        ],
+        "label": "Gemini #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5",
+          "--approval-mode",
+          "bypassPermissions"
+        ],
+        "label": "Gemini #2"
+      },
+      {
+        "opts": {
+          "mode": "ask"
+        },
+        "args": [
+          "--approval-mode",
+          "ask"
+        ],
+        "label": "Gemini #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "default"
+        },
+        "args": [
+          "--approval-mode",
+          "ask"
+        ],
+        "label": "Gemini #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus",
+          "--approval-mode",
+          "ask"
+        ],
+        "label": "Gemini #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5",
+          "--approval-mode",
+          "ask"
+        ],
+        "label": "Gemini #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo"
+        },
+        "args": [
+          "--approval-mode",
+          "yolo"
+        ],
+        "label": "Gemini #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "default"
+        },
+        "args": [
+          "--approval-mode",
+          "yolo"
+        ],
+        "label": "Gemini #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus",
+          "--approval-mode",
+          "yolo"
+        ],
+        "label": "Gemini #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5",
+          "--approval-mode",
+          "yolo"
+        ],
+        "label": "Gemini #2"
+      },
+      {
+        "opts": {
+          "mode": "high"
+        },
+        "args": [
+          "--approval-mode",
+          "high"
+        ],
+        "label": "Gemini #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "default"
+        },
+        "args": [
+          "--approval-mode",
+          "high"
+        ],
+        "label": "Gemini #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus",
+          "--approval-mode",
+          "high"
+        ],
+        "label": "Gemini #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5",
+          "--approval-mode",
+          "high"
+        ],
+        "label": "Gemini #2"
+      }
+    ],
+    "grok": [
+      {
+        "opts": {},
+        "args": [],
+        "label": "Grok #2"
+      },
+      {
+        "opts": {
+          "model": "default"
+        },
+        "args": [],
+        "label": "Grok #2"
+      },
+      {
+        "opts": {
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Grok #2"
+      },
+      {
+        "opts": {
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Grok #2"
+      },
+      {
+        "opts": {
+          "mode": "default"
+        },
+        "args": [],
+        "label": "Grok #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Grok #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Grok #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Grok #2"
+      },
+      {
+        "opts": {
+          "mode": "plan"
+        },
+        "args": [
+          "--permission-mode",
+          "plan"
+        ],
+        "label": "Grok #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "default"
+        },
+        "args": [
+          "--permission-mode",
+          "plan"
+        ],
+        "label": "Grok #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus",
+          "--permission-mode",
+          "plan"
+        ],
+        "label": "Grok #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5",
+          "--permission-mode",
+          "plan"
+        ],
+        "label": "Grok #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits"
+        },
+        "args": [
+          "--permission-mode",
+          "acceptEdits"
+        ],
+        "label": "Grok #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "default"
+        },
+        "args": [
+          "--permission-mode",
+          "acceptEdits"
+        ],
+        "label": "Grok #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus",
+          "--permission-mode",
+          "acceptEdits"
+        ],
+        "label": "Grok #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5",
+          "--permission-mode",
+          "acceptEdits"
+        ],
+        "label": "Grok #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions"
+        },
+        "args": [
+          "--permission-mode",
+          "bypassPermissions"
+        ],
+        "label": "Grok #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "default"
+        },
+        "args": [
+          "--permission-mode",
+          "bypassPermissions"
+        ],
+        "label": "Grok #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus",
+          "--permission-mode",
+          "bypassPermissions"
+        ],
+        "label": "Grok #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5",
+          "--permission-mode",
+          "bypassPermissions"
+        ],
+        "label": "Grok #2"
+      },
+      {
+        "opts": {
+          "mode": "ask"
+        },
+        "args": [
+          "--permission-mode",
+          "ask"
+        ],
+        "label": "Grok #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "default"
+        },
+        "args": [
+          "--permission-mode",
+          "ask"
+        ],
+        "label": "Grok #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus",
+          "--permission-mode",
+          "ask"
+        ],
+        "label": "Grok #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5",
+          "--permission-mode",
+          "ask"
+        ],
+        "label": "Grok #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo"
+        },
+        "args": [
+          "--permission-mode",
+          "yolo"
+        ],
+        "label": "Grok #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "default"
+        },
+        "args": [
+          "--permission-mode",
+          "yolo"
+        ],
+        "label": "Grok #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus",
+          "--permission-mode",
+          "yolo"
+        ],
+        "label": "Grok #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5",
+          "--permission-mode",
+          "yolo"
+        ],
+        "label": "Grok #2"
+      },
+      {
+        "opts": {
+          "mode": "high"
+        },
+        "args": [
+          "--permission-mode",
+          "high"
+        ],
+        "label": "Grok #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "default"
+        },
+        "args": [
+          "--permission-mode",
+          "high"
+        ],
+        "label": "Grok #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus",
+          "--permission-mode",
+          "high"
+        ],
+        "label": "Grok #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5",
+          "--permission-mode",
+          "high"
+        ],
+        "label": "Grok #2"
+      }
+    ],
+    "hermes": [
+      {
+        "opts": {},
+        "args": [],
+        "label": "Hermes #2"
+      },
+      {
+        "opts": {
+          "model": "default"
+        },
+        "args": [],
+        "label": "Hermes #2"
+      },
+      {
+        "opts": {
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Hermes #2"
+      },
+      {
+        "opts": {
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Hermes #2"
+      },
+      {
+        "opts": {
+          "mode": "default"
+        },
+        "args": [],
+        "label": "Hermes #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Hermes #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Hermes #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Hermes #2"
+      },
+      {
+        "opts": {
+          "mode": "plan"
+        },
+        "args": [],
+        "label": "Hermes #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Hermes #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Hermes #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Hermes #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits"
+        },
+        "args": [],
+        "label": "Hermes #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Hermes #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Hermes #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Hermes #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions"
+        },
+        "args": [],
+        "label": "Hermes #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Hermes #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Hermes #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Hermes #2"
+      },
+      {
+        "opts": {
+          "mode": "ask"
+        },
+        "args": [],
+        "label": "Hermes #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Hermes #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Hermes #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Hermes #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo"
+        },
+        "args": [
+          "--yolo"
+        ],
+        "label": "Hermes #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "default"
+        },
+        "args": [
+          "--yolo"
+        ],
+        "label": "Hermes #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus",
+          "--yolo"
+        ],
+        "label": "Hermes #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5",
+          "--yolo"
+        ],
+        "label": "Hermes #2"
+      },
+      {
+        "opts": {
+          "mode": "high"
+        },
+        "args": [],
+        "label": "Hermes #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Hermes #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Hermes #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Hermes #2"
+      }
+    ],
+    "kimi": [
+      {
+        "opts": {},
+        "args": [],
+        "label": "Kimi #2"
+      },
+      {
+        "opts": {
+          "model": "default"
+        },
+        "args": [],
+        "label": "Kimi #2"
+      },
+      {
+        "opts": {
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Kimi #2"
+      },
+      {
+        "opts": {
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Kimi #2"
+      },
+      {
+        "opts": {
+          "mode": "default"
+        },
+        "args": [],
+        "label": "Kimi #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Kimi #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Kimi #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Kimi #2"
+      },
+      {
+        "opts": {
+          "mode": "plan"
+        },
+        "args": [
+          "--plan"
+        ],
+        "label": "Kimi #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "default"
+        },
+        "args": [
+          "--plan"
+        ],
+        "label": "Kimi #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus",
+          "--plan"
+        ],
+        "label": "Kimi #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5",
+          "--plan"
+        ],
+        "label": "Kimi #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits"
+        },
+        "args": [],
+        "label": "Kimi #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Kimi #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Kimi #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Kimi #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions"
+        },
+        "args": [],
+        "label": "Kimi #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Kimi #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Kimi #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Kimi #2"
+      },
+      {
+        "opts": {
+          "mode": "ask"
+        },
+        "args": [],
+        "label": "Kimi #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Kimi #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Kimi #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Kimi #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo"
+        },
+        "args": [
+          "--yolo"
+        ],
+        "label": "Kimi #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "default"
+        },
+        "args": [
+          "--yolo"
+        ],
+        "label": "Kimi #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus",
+          "--yolo"
+        ],
+        "label": "Kimi #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5",
+          "--yolo"
+        ],
+        "label": "Kimi #2"
+      },
+      {
+        "opts": {
+          "mode": "high"
+        },
+        "args": [],
+        "label": "Kimi #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Kimi #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Kimi #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Kimi #2"
+      }
+    ],
+    "kiro": [
+      {
+        "opts": {},
+        "args": [],
+        "label": "Kiro #2"
+      },
+      {
+        "opts": {
+          "model": "default"
+        },
+        "args": [],
+        "label": "Kiro #2"
+      },
+      {
+        "opts": {
+          "model": "opus"
+        },
+        "args": [],
+        "label": "Kiro #2"
+      },
+      {
+        "opts": {
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "Kiro #2"
+      },
+      {
+        "opts": {
+          "mode": "default"
+        },
+        "args": [],
+        "label": "Kiro #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Kiro #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "opus"
+        },
+        "args": [],
+        "label": "Kiro #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "Kiro #2"
+      },
+      {
+        "opts": {
+          "mode": "plan"
+        },
+        "args": [],
+        "label": "Kiro #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Kiro #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "opus"
+        },
+        "args": [],
+        "label": "Kiro #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "Kiro #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits"
+        },
+        "args": [],
+        "label": "Kiro #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Kiro #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "opus"
+        },
+        "args": [],
+        "label": "Kiro #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "Kiro #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions"
+        },
+        "args": [],
+        "label": "Kiro #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Kiro #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "opus"
+        },
+        "args": [],
+        "label": "Kiro #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "Kiro #2"
+      },
+      {
+        "opts": {
+          "mode": "ask"
+        },
+        "args": [],
+        "label": "Kiro #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Kiro #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "opus"
+        },
+        "args": [],
+        "label": "Kiro #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "Kiro #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo"
+        },
+        "args": [],
+        "label": "Kiro #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Kiro #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "opus"
+        },
+        "args": [],
+        "label": "Kiro #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "Kiro #2"
+      },
+      {
+        "opts": {
+          "mode": "high"
+        },
+        "args": [],
+        "label": "Kiro #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Kiro #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "opus"
+        },
+        "args": [],
+        "label": "Kiro #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "Kiro #2"
+      }
+    ],
+    "mistral-vibe": [
+      {
+        "opts": {},
+        "args": [],
+        "label": "Mistral Vibe #2"
+      },
+      {
+        "opts": {
+          "model": "default"
+        },
+        "args": [],
+        "label": "Mistral Vibe #2"
+      },
+      {
+        "opts": {
+          "model": "opus"
+        },
+        "args": [],
+        "label": "Mistral Vibe #2"
+      },
+      {
+        "opts": {
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "Mistral Vibe #2"
+      },
+      {
+        "opts": {
+          "mode": "default"
+        },
+        "args": [],
+        "label": "Mistral Vibe #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Mistral Vibe #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "opus"
+        },
+        "args": [],
+        "label": "Mistral Vibe #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "Mistral Vibe #2"
+      },
+      {
+        "opts": {
+          "mode": "plan"
+        },
+        "args": [
+          "--agent",
+          "plan"
+        ],
+        "label": "Mistral Vibe #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "default"
+        },
+        "args": [
+          "--agent",
+          "plan"
+        ],
+        "label": "Mistral Vibe #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "opus"
+        },
+        "args": [
+          "--agent",
+          "plan"
+        ],
+        "label": "Mistral Vibe #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--agent",
+          "plan"
+        ],
+        "label": "Mistral Vibe #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits"
+        },
+        "args": [
+          "--agent",
+          "acceptEdits"
+        ],
+        "label": "Mistral Vibe #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "default"
+        },
+        "args": [
+          "--agent",
+          "acceptEdits"
+        ],
+        "label": "Mistral Vibe #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "opus"
+        },
+        "args": [
+          "--agent",
+          "acceptEdits"
+        ],
+        "label": "Mistral Vibe #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--agent",
+          "acceptEdits"
+        ],
+        "label": "Mistral Vibe #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions"
+        },
+        "args": [
+          "--agent",
+          "bypassPermissions"
+        ],
+        "label": "Mistral Vibe #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "default"
+        },
+        "args": [
+          "--agent",
+          "bypassPermissions"
+        ],
+        "label": "Mistral Vibe #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "opus"
+        },
+        "args": [
+          "--agent",
+          "bypassPermissions"
+        ],
+        "label": "Mistral Vibe #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--agent",
+          "bypassPermissions"
+        ],
+        "label": "Mistral Vibe #2"
+      },
+      {
+        "opts": {
+          "mode": "ask"
+        },
+        "args": [
+          "--agent",
+          "ask"
+        ],
+        "label": "Mistral Vibe #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "default"
+        },
+        "args": [
+          "--agent",
+          "ask"
+        ],
+        "label": "Mistral Vibe #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "opus"
+        },
+        "args": [
+          "--agent",
+          "ask"
+        ],
+        "label": "Mistral Vibe #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--agent",
+          "ask"
+        ],
+        "label": "Mistral Vibe #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo"
+        },
+        "args": [
+          "--agent",
+          "yolo"
+        ],
+        "label": "Mistral Vibe #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "default"
+        },
+        "args": [
+          "--agent",
+          "yolo"
+        ],
+        "label": "Mistral Vibe #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "opus"
+        },
+        "args": [
+          "--agent",
+          "yolo"
+        ],
+        "label": "Mistral Vibe #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--agent",
+          "yolo"
+        ],
+        "label": "Mistral Vibe #2"
+      },
+      {
+        "opts": {
+          "mode": "high"
+        },
+        "args": [
+          "--agent",
+          "high"
+        ],
+        "label": "Mistral Vibe #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "default"
+        },
+        "args": [
+          "--agent",
+          "high"
+        ],
+        "label": "Mistral Vibe #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "opus"
+        },
+        "args": [
+          "--agent",
+          "high"
+        ],
+        "label": "Mistral Vibe #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--agent",
+          "high"
+        ],
+        "label": "Mistral Vibe #2"
+      }
+    ],
+    "openclaw": [
+      {
+        "opts": {},
+        "args": [],
+        "label": "OpenClaw #2"
+      },
+      {
+        "opts": {
+          "model": "default"
+        },
+        "args": [],
+        "label": "OpenClaw #2"
+      },
+      {
+        "opts": {
+          "model": "opus"
+        },
+        "args": [],
+        "label": "OpenClaw #2"
+      },
+      {
+        "opts": {
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "OpenClaw #2"
+      },
+      {
+        "opts": {
+          "mode": "default"
+        },
+        "args": [],
+        "label": "OpenClaw #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "default"
+        },
+        "args": [],
+        "label": "OpenClaw #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "opus"
+        },
+        "args": [],
+        "label": "OpenClaw #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "OpenClaw #2"
+      },
+      {
+        "opts": {
+          "mode": "plan"
+        },
+        "args": [],
+        "label": "OpenClaw #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "default"
+        },
+        "args": [],
+        "label": "OpenClaw #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "opus"
+        },
+        "args": [],
+        "label": "OpenClaw #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "OpenClaw #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits"
+        },
+        "args": [],
+        "label": "OpenClaw #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "default"
+        },
+        "args": [],
+        "label": "OpenClaw #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "opus"
+        },
+        "args": [],
+        "label": "OpenClaw #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "OpenClaw #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions"
+        },
+        "args": [],
+        "label": "OpenClaw #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "default"
+        },
+        "args": [],
+        "label": "OpenClaw #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "opus"
+        },
+        "args": [],
+        "label": "OpenClaw #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "OpenClaw #2"
+      },
+      {
+        "opts": {
+          "mode": "ask"
+        },
+        "args": [],
+        "label": "OpenClaw #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "default"
+        },
+        "args": [],
+        "label": "OpenClaw #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "opus"
+        },
+        "args": [],
+        "label": "OpenClaw #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "OpenClaw #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo"
+        },
+        "args": [],
+        "label": "OpenClaw #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "default"
+        },
+        "args": [],
+        "label": "OpenClaw #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "opus"
+        },
+        "args": [],
+        "label": "OpenClaw #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "OpenClaw #2"
+      },
+      {
+        "opts": {
+          "mode": "high"
+        },
+        "args": [],
+        "label": "OpenClaw #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "default"
+        },
+        "args": [],
+        "label": "OpenClaw #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "opus"
+        },
+        "args": [],
+        "label": "OpenClaw #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "OpenClaw #2"
+      }
+    ],
+    "opencode": [
+      {
+        "opts": {},
+        "args": [],
+        "label": "opencode #2"
+      },
+      {
+        "opts": {
+          "model": "default"
+        },
+        "args": [],
+        "label": "opencode #2"
+      },
+      {
+        "opts": {
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "opencode #2"
+      },
+      {
+        "opts": {
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "opencode #2"
+      },
+      {
+        "opts": {
+          "mode": "default"
+        },
+        "args": [],
+        "label": "opencode #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "default"
+        },
+        "args": [],
+        "label": "opencode #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "opencode #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "opencode #2"
+      },
+      {
+        "opts": {
+          "mode": "plan"
+        },
+        "args": [],
+        "label": "opencode #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "default"
+        },
+        "args": [],
+        "label": "opencode #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "opencode #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "opencode #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits"
+        },
+        "args": [],
+        "label": "opencode #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "default"
+        },
+        "args": [],
+        "label": "opencode #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "opencode #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "opencode #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions"
+        },
+        "args": [],
+        "label": "opencode #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "default"
+        },
+        "args": [],
+        "label": "opencode #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "opencode #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "opencode #2"
+      },
+      {
+        "opts": {
+          "mode": "ask"
+        },
+        "args": [],
+        "label": "opencode #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "default"
+        },
+        "args": [],
+        "label": "opencode #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "opencode #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "opencode #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo"
+        },
+        "args": [],
+        "label": "opencode #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "default"
+        },
+        "args": [],
+        "label": "opencode #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "opencode #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "opencode #2"
+      },
+      {
+        "opts": {
+          "mode": "high"
+        },
+        "args": [],
+        "label": "opencode #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "default"
+        },
+        "args": [],
+        "label": "opencode #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "opencode #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "opencode #2"
+      }
+    ],
+    "openhands": [
+      {
+        "opts": {},
+        "args": [],
+        "label": "OpenHands #2"
+      },
+      {
+        "opts": {
+          "model": "default"
+        },
+        "args": [],
+        "label": "OpenHands #2"
+      },
+      {
+        "opts": {
+          "model": "opus"
+        },
+        "args": [],
+        "label": "OpenHands #2"
+      },
+      {
+        "opts": {
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "OpenHands #2"
+      },
+      {
+        "opts": {
+          "mode": "default"
+        },
+        "args": [],
+        "label": "OpenHands #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "default"
+        },
+        "args": [],
+        "label": "OpenHands #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "opus"
+        },
+        "args": [],
+        "label": "OpenHands #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "OpenHands #2"
+      },
+      {
+        "opts": {
+          "mode": "plan"
+        },
+        "args": [],
+        "label": "OpenHands #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "default"
+        },
+        "args": [],
+        "label": "OpenHands #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "opus"
+        },
+        "args": [],
+        "label": "OpenHands #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "OpenHands #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits"
+        },
+        "args": [],
+        "label": "OpenHands #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "default"
+        },
+        "args": [],
+        "label": "OpenHands #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "opus"
+        },
+        "args": [],
+        "label": "OpenHands #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "OpenHands #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions"
+        },
+        "args": [],
+        "label": "OpenHands #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "default"
+        },
+        "args": [],
+        "label": "OpenHands #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "opus"
+        },
+        "args": [],
+        "label": "OpenHands #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "OpenHands #2"
+      },
+      {
+        "opts": {
+          "mode": "ask"
+        },
+        "args": [],
+        "label": "OpenHands #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "default"
+        },
+        "args": [],
+        "label": "OpenHands #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "opus"
+        },
+        "args": [],
+        "label": "OpenHands #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "OpenHands #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo"
+        },
+        "args": [],
+        "label": "OpenHands #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "default"
+        },
+        "args": [],
+        "label": "OpenHands #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "opus"
+        },
+        "args": [],
+        "label": "OpenHands #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "OpenHands #2"
+      },
+      {
+        "opts": {
+          "mode": "high"
+        },
+        "args": [],
+        "label": "OpenHands #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "default"
+        },
+        "args": [],
+        "label": "OpenHands #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "opus"
+        },
+        "args": [],
+        "label": "OpenHands #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "gpt-5"
+        },
+        "args": [],
+        "label": "OpenHands #2"
+      }
+    ],
+    "pi": [
+      {
+        "opts": {},
+        "args": [],
+        "label": "Pi #2"
+      },
+      {
+        "opts": {
+          "model": "default"
+        },
+        "args": [],
+        "label": "Pi #2"
+      },
+      {
+        "opts": {
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Pi #2"
+      },
+      {
+        "opts": {
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Pi #2"
+      },
+      {
+        "opts": {
+          "mode": "default"
+        },
+        "args": [],
+        "label": "Pi #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Pi #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Pi #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Pi #2"
+      },
+      {
+        "opts": {
+          "mode": "plan"
+        },
+        "args": [],
+        "label": "Pi #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Pi #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Pi #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Pi #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits"
+        },
+        "args": [],
+        "label": "Pi #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Pi #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Pi #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Pi #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions"
+        },
+        "args": [],
+        "label": "Pi #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Pi #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Pi #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Pi #2"
+      },
+      {
+        "opts": {
+          "mode": "ask"
+        },
+        "args": [],
+        "label": "Pi #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Pi #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Pi #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Pi #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo"
+        },
+        "args": [],
+        "label": "Pi #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Pi #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Pi #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Pi #2"
+      },
+      {
+        "opts": {
+          "mode": "high"
+        },
+        "args": [],
+        "label": "Pi #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Pi #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Pi #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Pi #2"
+      }
+    ],
+    "qwen-code": [
+      {
+        "opts": {},
+        "args": [],
+        "label": "Qwen Code #2"
+      },
+      {
+        "opts": {
+          "model": "default"
+        },
+        "args": [],
+        "label": "Qwen Code #2"
+      },
+      {
+        "opts": {
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Qwen Code #2"
+      },
+      {
+        "opts": {
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Qwen Code #2"
+      },
+      {
+        "opts": {
+          "mode": "default"
+        },
+        "args": [],
+        "label": "Qwen Code #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "default"
+        },
+        "args": [],
+        "label": "Qwen Code #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus"
+        ],
+        "label": "Qwen Code #2"
+      },
+      {
+        "opts": {
+          "mode": "default",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
+        "label": "Qwen Code #2"
+      },
+      {
+        "opts": {
+          "mode": "plan"
+        },
+        "args": [
+          "--approval-mode",
+          "plan"
+        ],
+        "label": "Qwen Code #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "default"
+        },
+        "args": [
+          "--approval-mode",
+          "plan"
+        ],
+        "label": "Qwen Code #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus",
+          "--approval-mode",
+          "plan"
+        ],
+        "label": "Qwen Code #2"
+      },
+      {
+        "opts": {
+          "mode": "plan",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5",
+          "--approval-mode",
+          "plan"
+        ],
+        "label": "Qwen Code #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits"
+        },
+        "args": [
+          "--approval-mode",
+          "acceptEdits"
+        ],
+        "label": "Qwen Code #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "default"
+        },
+        "args": [
+          "--approval-mode",
+          "acceptEdits"
+        ],
+        "label": "Qwen Code #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus",
+          "--approval-mode",
+          "acceptEdits"
+        ],
+        "label": "Qwen Code #2"
+      },
+      {
+        "opts": {
+          "mode": "acceptEdits",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5",
+          "--approval-mode",
+          "acceptEdits"
+        ],
+        "label": "Qwen Code #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions"
+        },
+        "args": [
+          "--approval-mode",
+          "bypassPermissions"
+        ],
+        "label": "Qwen Code #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "default"
+        },
+        "args": [
+          "--approval-mode",
+          "bypassPermissions"
+        ],
+        "label": "Qwen Code #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus",
+          "--approval-mode",
+          "bypassPermissions"
+        ],
+        "label": "Qwen Code #2"
+      },
+      {
+        "opts": {
+          "mode": "bypassPermissions",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5",
+          "--approval-mode",
+          "bypassPermissions"
+        ],
+        "label": "Qwen Code #2"
+      },
+      {
+        "opts": {
+          "mode": "ask"
+        },
+        "args": [
+          "--approval-mode",
+          "ask"
+        ],
+        "label": "Qwen Code #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "default"
+        },
+        "args": [
+          "--approval-mode",
+          "ask"
+        ],
+        "label": "Qwen Code #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus",
+          "--approval-mode",
+          "ask"
+        ],
+        "label": "Qwen Code #2"
+      },
+      {
+        "opts": {
+          "mode": "ask",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5",
+          "--approval-mode",
+          "ask"
+        ],
+        "label": "Qwen Code #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo"
+        },
+        "args": [
+          "--approval-mode",
+          "yolo"
+        ],
+        "label": "Qwen Code #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "default"
+        },
+        "args": [
+          "--approval-mode",
+          "yolo"
+        ],
+        "label": "Qwen Code #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus",
+          "--approval-mode",
+          "yolo"
+        ],
+        "label": "Qwen Code #2"
+      },
+      {
+        "opts": {
+          "mode": "yolo",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5",
+          "--approval-mode",
+          "yolo"
+        ],
+        "label": "Qwen Code #2"
+      },
+      {
+        "opts": {
+          "mode": "high"
+        },
+        "args": [
+          "--approval-mode",
+          "high"
+        ],
+        "label": "Qwen Code #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "default"
+        },
+        "args": [
+          "--approval-mode",
+          "high"
+        ],
+        "label": "Qwen Code #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "opus"
+        },
+        "args": [
+          "--model",
+          "opus",
+          "--approval-mode",
+          "high"
+        ],
+        "label": "Qwen Code #2"
+      },
+      {
+        "opts": {
+          "mode": "high",
+          "model": "gpt-5"
+        },
+        "args": [
+          "--model",
+          "gpt-5",
+          "--approval-mode",
+          "high"
+        ],
+        "label": "Qwen Code #2"
+      }
+    ]
+  }
+}

@@ -16,12 +16,9 @@ import os from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { composeResume, composeResumeFrom, providers as registry } from "@hivemind/agents/node";
+import { BUNDLED_ASSETS, composeResume, composeResumeFrom, providers as registry, renderHookDocument } from "@hivemind/agents/node";
+import { bundledAgent } from "@hivemind/agents";
 import type { SpawnSpec } from "../../src/main/pty-session-manager.ts";
-import { droidHooksSettings } from "@hivemind/agents/providers/droid/node";
-import { kiroAgentConfig } from "@hivemind/agents/providers/kiro/node";
-import { piExtSource } from "@hivemind/agents/providers/pi/ext-source";
-import { kiroApprovalHookSource } from "@hivemind/agents/providers/kiro/approval-hook-source";
 import { deliversPromptViaArgv, applyInitialPrompt, INITIAL_PROMPT_ENV } from "../../src/shared/agent-io.ts";
 import { identifyAgent, detectTileStatus, type Agent } from "../../src/renderer/src/agent-state.ts";
 import { makeDispatch } from "../../src/main/hcp/methods.ts";
@@ -49,10 +46,12 @@ const CTX = {
   hcpSock: "/x/ud/hcp.sock",
   hcpToken: "golden-token",
   // Provider-private paths, as each provider's prepare() would return them.
+  // What the daemon hands each agent after it has prepared: its own directory, and for an
+  // agent with a private configuration home, that the overlay was seeded.
   providers: {
-    pi: { piExtPath: "/x/ud/hive-pi-ext.mjs" },
-    droid: { droidHome: "/x/ud/droid-home" },
-    kiro: { kiroHome: "/x/ud/kiro-home", kiroApprovalHookPath: "/x/ud/hcp-kiro-approval-hook.cjs" },
+    pi: { privateDir: "/x/ud/agents/pi" },
+    droid: { privateDir: "/x/ud/agents/droid", homeReady: "1" },
+    kiro: { privateDir: "/x/ud/agents/kiro", homeReady: "1", kiroApprovalHookPath: "/x/ud/hcp-kiro-approval-hook.cjs" },
   },
 };
 
@@ -140,12 +139,35 @@ async function capture(resume = composeResume(CTX)) {
       };
     }
     out.files = {
-      "droid-home/.factory/hooks.json": droidHooksSettings({ execPath: CTX.execPath, stopHookPath: CTX.stopHookPath, userpromptHookPath: CTX.userpromptHookPath, notificationHookPath: CTX.notificationHookPath, hcpSock: CTX.hcpSock }),
-      "kiro-home/.kiro/agents/hivemind.json": kiroAgentConfig({ execPath: CTX.execPath, stopHookPath: CTX.stopHookPath, userpromptHookPath: CTX.userpromptHookPath, kiroApprovalHookPath: CTX.providers.kiro.kiroApprovalHookPath, trackerPath: CTX.trackerPath, tileSessionsDir: CTX.tileSessionsDir, hcpSock: CTX.hcpSock }),
+      "droid-home/.factory/hooks.json": JSON.parse(renderHookDocument(bundledAgent("droid"), {
+        tileId: "", cwd: "", args: [], env: {}, phase: "spawn",
+        paths: {
+          private: "/x/ud/agents/droid", execPath: CTX.execPath, tileSessionsDir: CTX.tileSessionsDir, home: "/home/u",
+          hcpSock: CTX.hcpSock,
+          hooks: {
+            stop: { path: CTX.stopHookPath, arg: CTX.hcpSock },
+            userPrompt: { path: CTX.userpromptHookPath, arg: CTX.hcpSock },
+            notification: { path: CTX.notificationHookPath, arg: CTX.hcpSock },
+          },
+        },
+      })!),
+      "kiro-home/.kiro/agents/hivemind.json": JSON.parse(renderHookDocument(bundledAgent("kiro"), {
+        tileId: "", cwd: "", args: [], env: {}, phase: "spawn",
+        paths: {
+          private: "/x/ud/agents/kiro", execPath: CTX.execPath, tileSessionsDir: CTX.tileSessionsDir, home: "/home/u",
+          hcpSock: CTX.hcpSock,
+          hooks: {
+            tracker: { path: CTX.trackerPath, arg: CTX.tileSessionsDir },
+            stop: { path: CTX.stopHookPath, arg: CTX.hcpSock },
+            userPrompt: { path: CTX.userpromptHookPath, arg: CTX.hcpSock },
+            kiroApproval: { path: CTX.providers.kiro.kiroApprovalHookPath, arg: CTX.hcpSock },
+          },
+        },
+      })!),
     };
     out.assets = {
-      "hive-pi-ext.mjs": sha(piExtSource()),
-      "hcp-kiro-approval-hook.cjs": sha(kiroApprovalHookSource()),
+      "hive-pi-ext.mjs": sha(BUNDLED_ASSETS.pi!["hive-pi-ext.mjs"]!),
+      "hcp-kiro-approval-hook.cjs": sha(BUNDLED_ASSETS.kiro!["hcp-kiro-approval-hook.cjs"]!),
     };
     return out;
   } finally {

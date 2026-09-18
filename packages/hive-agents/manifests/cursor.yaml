@@ -70,3 +70,18 @@ detect:
     then: working
   default: idle
 note: no turn reporting, so other agents cannot collect its replies.
+session:
+  resume:
+    args:
+    - --resume
+    - '{id}'
+    find:
+      strategy: dir-meta
+      root: '{home}/.cursor/chats'
+      dirKey: md5-cwd
+      meta: meta.json
+      newestBy:
+      - updatedAtMs
+      - createdAtMs
+      skipWhen:
+        hasConversation: false

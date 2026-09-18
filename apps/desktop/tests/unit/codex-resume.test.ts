@@ -5,9 +5,14 @@ import { mkdtempSync, mkdirSync, writeFileSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const { isCodex, newestCodexSessionForCwd, makeCodexResumeTransforms } = await import(
-  "@hivemind/agents/providers/codex/node"
-);
+// codex resumes because its manifest says where its sessions live — no code of its own.
+const { findSession, resumeFromManifest, specIsAgent } = await import("@hivemind/agents/node");
+const { bundledAgent } = await import("@hivemind/agents");
+const codexDef = bundledAgent("codex");
+const find = codexDef.session!.resume!.find!;
+const isCodex = (spec: { cmd: string }) => specIsAgent(codexDef, spec);
+const newestCodexSessionForCwd = (cwd: string, root?: string) => findSession(find, cwd, root);
+const makeCodexResumeTransforms = (root?: string) => resumeFromManifest(codexDef, root)!;
 
 function sessionFile(root: string, rel: string, id: string, cwd: string, mtime: number): void {
   const p = join(root, rel);

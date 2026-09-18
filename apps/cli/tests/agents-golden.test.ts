@@ -13,8 +13,12 @@ const IDS = ["claude", "codex", "droid", "kiro", "kiro-cli", "pi", "opencode", "
 
 describe("agents golden", () => {
   test("parseAssignee: which ids resolve as agents", () => {
+    // Before anything is loaded, only the agents inside the app are names this knows.
+    // `gemini` and `opencode` ship from the catalog now, so on a machine that has not
+    // installed them they are a person's name — which is what they are. Every command that
+    // takes an assignee loads the machine's agents first (`ensureAgentCatalog`).
     expect(Object.fromEntries(IDS.map((id) => [id, parseAssignee(id)?.type]))).toEqual({
-      claude: "agent", codex: "agent", droid: "agent", kiro: "agent", "kiro-cli": "member", pi: "agent", opencode: "agent", gemini: "agent", sarah: "member",
+      claude: "agent", codex: "agent", droid: "agent", kiro: "agent", "kiro-cli": "member", pi: "agent", opencode: "member", gemini: "member", sarah: "member",
     });
   });
 
@@ -23,6 +27,14 @@ describe("agents golden", () => {
     const bin = fs.mkdtempSync(path.join(os.tmpdir(), "hive-agents-bin-"));
     fs.mkdirSync(path.join(ws, ".hivemind", "issues"), { recursive: true });
     fs.writeFileSync(path.join(ws, ".hivemind", "config.yaml"), "prefix: AG\nnext_id: 1\nagents: {}\n");
+    // The agents that ship from the catalog, installed as a machine that found their CLI
+    // would have them — so this proves a catalog agent is probed exactly like a bundled one.
+    const examples = path.join(__dirname, "..", "..", "..", "examples", "agents");
+    for (const id of ["gemini", "opencode", "amp", "hermes"]) {
+      const dest = path.join(ws, "xdg", "hivemind", "agents", id);
+      fs.mkdirSync(dest, { recursive: true });
+      fs.copyFileSync(path.join(examples, id, "agent.yaml"), path.join(dest, "agent.yaml"));
+    }
     for (const b of ["claude", "codex", "droid", "kiro-cli", "kiro", "pi", "opencode", "gemini", "amp", "cursor-agent", "cursor", "hermes", "openclaw", "vim"]) {
       fs.writeFileSync(path.join(bin, b), "#!/bin/sh\n"); fs.chmodSync(path.join(bin, b), 0o755);
     }

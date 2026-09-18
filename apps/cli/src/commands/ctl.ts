@@ -28,7 +28,6 @@ import {
 import { EXIT, HcpCliError, exitCodeFor, hcpCall, hcpStream, ownTile } from "../hcp.js";
 import { UnsupportedError, UsageError, boolFlag, intFlag, parseKeys, readSchedule, resolveAgent, workflowParams } from "../ctl-args.js";
 import { ensureAgentCatalog } from "../agent-catalog.js";
-import { spawnableAgents, workerAgents } from "@hivemind/agents";
 import { detectWho } from "../who.js";
 
 const ISSUE_STATES = ["backlog", "todo", "in_progress", "in_review", "done", "cancelled"] as const;
@@ -101,7 +100,10 @@ const openTool = sub("open-tool", "Open an enabled tool plugin", {
 }, (a) => hcpCall("tool.open", { tool: a.tool, frame: a.frame, url: a.url }));
 
 const spawn = sub("spawn", "Spawn an agent tile; prints { tileId, … }", {
-  agent: { type: "string", description: `agent id: ${spawnableAgents().map((d) => d.id).join(" | ")} (default: your default agent, or the first one installed)` },
+  // Named, not listed: help is built before the agents on this machine are loaded, so a
+  // list here would silently omit every agent you installed. An `--agent` that is wrong is
+  // answered with the real list, which is the moment it matters.
+  agent: { type: "string", description: "agent id — `hive agents list` (default: your default agent, or the first one installed)" },
   prompt: { type: "string", description: "initial task" },
   name: { type: "string", description: "tile title" },
   frame: { type: "string", description: "frame to spawn into (id, repo/worktree name, or title); default: the caller's frame" },
@@ -161,7 +163,7 @@ const workflow = sub("workflow", "Run a multi-agent workflow (fanout | pipeline 
   stages: { type: "string", description: "pipeline: '||'-separated stage prompts; each may use {input}" },
   input: { type: "string", description: "pipeline: seed value for the first stage's {input}" },
   "reduce-prompt": { type: "string", description: "mapreduce: reducer prompt; use {results}" },
-  agent: { type: "string", description: `runtime per worker: ${workerAgents().map((d) => d.id).join(" | ")} (default: your default agent, or the first one installed)` },
+  agent: { type: "string", description: "runtime per worker: an agent that reports back — `hive agents list` (default: your default agent, or the first one installed)" },
   model: { type: "string", description: "model override for every worker" },
   frame: { type: "string", description: "frame to spawn workers into (id, repo name, or title)" },
   supervise: { type: "string", description: "broker workers' tool perms to this CLI: 'all' or a comma-list of tools" },

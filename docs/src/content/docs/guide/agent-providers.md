@@ -51,6 +51,7 @@ spawn:
   args: ["--no-color"]           # always passed
   label: "acme #{n}"             # tile name; {n} is the tile number
   labelMode: " · {mode}"         # appended when a mode is set
+  titles: ["acme — {task}", "acme"]  # window titles: {task} names the tile, a match without it is ignored
 
 options:                         # what Settings lets you choose for this agent
   - id: model                    # `model` and `mode` are what `hive ctl spawn --model/--mode` set
@@ -99,7 +100,7 @@ The folder name must match the `id` inside the file.
 
 ## Agents added for you
 
-The [plugin catalog](https://github.com/dip497/hivemind/tree/main/plugins) also lists agents
+The plugin catalog on [HiveHub](https://hivehub.griiken.workers.dev) also lists agents
 that are not built in. When one's CLI is on your PATH, Hivemind adds it at startup and says
 so — no questions. It only does this when the files match their checksums, the manifest
 names the CLI that was found, and that CLI answers `--version` like one; and it can never

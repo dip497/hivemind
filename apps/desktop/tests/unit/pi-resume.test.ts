@@ -5,9 +5,19 @@ import { mkdtempSync, mkdirSync, writeFileSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const { isPi, newestPiSessionForCwd, makePiResumeTransforms } = await import(
-  "@hivemind/agents/providers/pi/node"
-);
+// pi has no code of its own: its manifest says where its sessions are, which file it
+// needs written, and what that adds to the command line.
+const { findSession, manifestRuntime, transformsFor, specIsAgent } = await import("@hivemind/agents/node");
+const { bundledAgent } = await import("@hivemind/agents");
+const piDef = bundledAgent("pi");
+const isPi = (spec: { cmd: string }) => specIsAgent(piDef, spec);
+const newestPiSessionForCwd = (cwd: string, root?: string) =>
+  findSession(piDef.session!.resume!.find!, cwd, root);
+const makePiResumeTransforms = ({ sessionsRoot }: { sessionsRoot?: string } = {}) =>
+  transformsFor(piDef, manifestRuntime(piDef, () => "")!, {
+    private: "/x/ud/agents/pi", hooks: {}, execPath: "/x/electron",
+    hcpSock: "/x/ud/hcp.sock", hcpToken: "t", tileSessionsDir: "/x/ud/sessions", home: "/home/u",
+  }, { sessionRoot: sessionsRoot });
 
 /** Write a pi session JSONL: a `session` header (type/id/cwd top-level) + a
  *  message line, with the given mtime. */
@@ -54,8 +64,9 @@ test("transformSpecOnRestore appends `--session <id>` for pi with a matching ses
     { cwd: "/w", cmd: "pi", args: ["--model", "sonnet"] },
     "tile-1",
   );
-  // existing top-level flags stay BEFORE the appended --session
-  assert.deepEqual(out.args, ["--model", "sonnet", "--session", "sid-1"]);
+  // existing top-level flags stay BEFORE what a launch adds: the bridge extension, then
+  // the session to resume.
+  assert.deepEqual(out.args, ["--model", "sonnet", "-e", "/x/ud/agents/pi/hive-pi-ext.mjs", "--session", "sid-1"]);
 });
 
 test("transformSpecOnRestore is a no-op for non-pi and for unknown cwd", () => {
@@ -63,8 +74,9 @@ test("transformSpecOnRestore is a no-op for non-pi and for unknown cwd", () => {
   const { transformSpecOnRestore } = makePiResumeTransforms({ sessionsRoot: root });
   const claude = { cwd: "/w", cmd: "claude", args: ["--resume", "u"] };
   assert.deepEqual(transformSpecOnRestore(claude, "t"), claude);
+  // nothing to resume, but the bridge extension still goes on: that is the launch, not the resume
   const piNoSession = { cwd: "/w", cmd: "pi", args: ["--thinking", "high"] };
-  assert.deepEqual(transformSpecOnRestore(piNoSession, "t").args, ["--thinking", "high"]);
+  assert.deepEqual(transformSpecOnRestore(piNoSession, "t").args, ["--thinking", "high", "-e", "/x/ud/agents/pi/hive-pi-ext.mjs"]);
 });
 
 test("transformSpecOnRestore does not double-append when already resuming", () => {
@@ -72,7 +84,7 @@ test("transformSpecOnRestore does not double-append when already resuming", () =
   sessionFile(root, "--w--/x.jsonl", "sid-1", "/w", 1_000_000);
   const { transformSpecOnRestore } = makePiResumeTransforms({ sessionsRoot: root });
   const already = transformSpecOnRestore({ cwd: "/w", cmd: "pi", args: ["--session", "old"] }, "t");
-  assert.deepEqual(already.args, ["--session", "old"]);
+  assert.deepEqual(already.args, ["--session", "old", "-e", "/x/ud/agents/pi/hive-pi-ext.mjs"]);
 });
 
 test("restoreRetryTransform strips --session AND its value so a stale id respawns fresh", () => {

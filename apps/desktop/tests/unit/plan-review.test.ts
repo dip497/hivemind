@@ -14,7 +14,24 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import { trackerSettings } from "@hivemind/agents/providers/claude/node";
+import { bundledAgent } from "@hivemind/agents";
+import { renderHookDocument } from "@hivemind/agents/node";
+
+// claude's hooks are declared in its manifest now; this renders the same document the
+// daemon hands it, for a tile with and without the plan bridge wired.
+const trackerSettings = (deps: {
+  trackerPath: string; tileSessionsDir: string; execPath: string;
+  planHookPath?: string; planBridgeSock?: string;
+}, tileId: string): string => renderHookDocument(bundledAgent("claude"), {
+  tileId, cwd: "/w", args: [], env: {}, phase: "spawn",
+  paths: {
+    private: "/x/agents/claude", execPath: deps.execPath, tileSessionsDir: deps.tileSessionsDir, home: "/home/u",
+    hooks: {
+      tracker: { path: deps.trackerPath, arg: deps.tileSessionsDir },
+      ...(deps.planHookPath && deps.planBridgeSock ? { plan: { path: deps.planHookPath, arg: deps.planBridgeSock } } : {}),
+    },
+  },
+})!;
 import { startPlanBridge } from "../../src/main/plan-bridge.ts";
 import { planHookSource } from "../../src/main/plan-review-hook-source.ts";
 

@@ -1,0 +1,4 @@
+{
+  "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "{hookCmd:userPrompt}", "timeout": 10 }] }],
+  "Stop": [{ "hooks": [{ "type": "command", "command": "{hookCmd:stop}", "timeout": 10 }] }]
+}

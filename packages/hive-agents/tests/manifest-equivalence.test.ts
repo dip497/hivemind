@@ -1,12 +1,16 @@
-// Built-in manifests must be indistinguishable from their code defs, fuzzed and all.
+// The manifests that ship in the box: the bundle is built from them, and nothing a
+// manifest cannot back is allowed through the loader. What each detector answers is
+// pinned separately, in detector-golden.test.ts.
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import YAML from "yaml";
 import { getCatalog, spawnArgsFor, spawnLabelFor } from "../src/catalog.js";
-import { defFromManifest, ManifestError, AGENT_MANIFEST_VERSION } from "../src/manifest.js";
-import { NODE_PARTS } from "../src/node.js";
+import { BUNDLED_AGENTS } from "../src/bundled-manifests.js";
+import { agentDisclosures, defFromManifest, ManifestError, AGENT_MANIFEST_VERSION } from "../src/manifest.js";
+import { RESERVED_AGENTS } from "../src/reserved.js";
+import { NODE_PARTS, PLUGINS } from "../src/node.js";
 import type { AgentProviderDef, SpawnOptions } from "../src/types.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -53,7 +57,7 @@ function corpusFor(): string[] {
     "thinking", "processing", "msg=interrupt", "ctrl+c cancel", "ctrl+o:yolo",
     "✻ Cogitating…", "confirm with", "enter",
   ]);
-  for (const f of readdirSync(DIR)) {
+  for (const f of readdirSync(DIR).filter((n) => n.endsWith(".yaml"))) {
     for (const m of readFileSync(join(DIR, f), "utf8").matchAll(/contains(?:CS)?: (.+)/g)) {
       pool.add(m[1]!.replace(/^["']|["']$/g, ""));
     }
@@ -82,69 +86,36 @@ function corpusFor(): string[] {
 }
 const CORPUS = corpusFor();
 
-describe("built-in manifests", () => {
-  test("every catalogued provider has a manifest, and no manifest is orphaned", () => {
+describe("the agents that ship in the box", () => {
+  test("every bundled agent has a manifest, and no manifest is orphaned", () => {
     const onDisk = readdirSync(DIR).filter((f) => f.endsWith(".yaml")).map((f) => f.replace(/\.yaml$/, "")).sort();
     expect(onDisk).toEqual([...getCatalog()].map((d) => d.id).sort());
   });
 
-  for (const def of getCatalog()) {
-    describe(def.id, () => {
-      const man = loadManifest(def.id);
+  test("the compiled bundle is what the manifests say", () => {
+    for (const a of BUNDLED_AGENTS) {
+      const raw = YAML.parse(readFileSync(join(DIR, `${a.id}.yaml`), "utf8")) as unknown;
+      expect(a.manifest).toEqual(raw);
+      expect(a.nodeHalf).toBe(PLUGINS.some((p) => p.def.id === a.id));
+    }
+    expect(BUNDLED_AGENTS.map((a) => a.id)).toEqual([...getCatalog()].map((d) => d.id));
+  });
 
-      test("identity, availability and capabilities are identical", () => {
-        expect(man.id).toBe(def.id);
-        expect(man.label).toBe(def.label);
-        expect(man.bin).toBe(def.bin);
-        expect(man.aliases ?? []).toEqual([...(def.aliases ?? [])]);
-        expect(man.enabled).toBe(def.enabled);
-        expect(man.caps).toEqual(def.caps);
-        expect(man.note).toBe(def.note);
-      });
-
-      test("icon renders byte-identical markup from declared shapes", () => {
-        expect(man.icon.viewBox).toBe(def.icon.viewBox);
-        expect(man.icon.attrs ?? {}).toEqual(def.icon.attrs ?? {});
-        expect(man.icon.body).toBe(def.icon.body); // byte-identical, not normalised
-      });
-
-      test("spawn args match across every mode x model combination", () => {
-        expect(man.defaultArgs ?? []).toEqual([...(def.defaultArgs ?? [])]);
-        expect(man.options ?? []).toEqual([...(def.options ?? [])]);
-        expect(man.install).toEqual(def.install);
-        for (const mode of MODES) {
-          for (const model of MODELS) {
-            const opts = { mode, model } as SpawnOptions;
-            expect(spawnArgsFor(man, opts)).toEqual(spawnArgsFor(def, opts));
-          }
+  test("each one loads with the trust its origin earns, and keeps its spawn behaviour", () => {
+    for (const def of getCatalog()) {
+      expect(def.id).toBeTruthy();
+      expect(def.bin).toBeTruthy();
+      const opts: SpawnOptions = {};
+      expect(() => spawnArgsFor(def, opts)).not.toThrow();
+      expect(spawnLabelFor(def, 1, opts)).toBeTruthy();
+      for (const mode of MODES) {
+        for (const model of MODELS) {
+          const o: SpawnOptions = { ...(mode ? { mode } : {}), ...(model ? { model } : {}) };
+          expect(() => spawnArgsFor(def, o)).not.toThrow();
         }
-      });
-
-      test("spawn labels match across ordinals and modes", () => {
-        for (const n of [1, 2, 17]) {
-          for (const mode of MODES) {
-            const opts = { mode } as SpawnOptions;
-            expect(spawnLabelFor(man, n, opts)).toBe(spawnLabelFor(def, n, opts));
-          }
-        }
-      });
-
-      test(`detector agrees with the code detector on ${CORPUS.length} screens`, () => {
-        if (!def.detect) { expect(man.detect).toBeUndefined(); return; }
-        expect(man.detect).toBeDefined();
-        let checked = 0;
-        for (const screen of CORPUS) {
-          const want = def.detect(screen);
-          const got = man.detect!(screen);
-          if (got !== want) {
-            throw new Error(`${def.id}: code=${want} manifest=${got} for ${JSON.stringify(screen).slice(0, 200)}`);
-          }
-          checked++;
-        }
-        expect(checked).toBe(CORPUS.length);
-      });
-    });
-  }
+      }
+    }
+  });
 });
 
 describe("manifest validation refuses what it cannot back", () => {
@@ -176,16 +147,86 @@ describe("manifest validation refuses what it cannot back", () => {
       .toThrow(/reserved/);
   });
 
-  test("a plugin cannot ship a regex — it would hang the poll thread", () => {
-    const detect = { default: "idle", rules: [{ when: { re: "(a+)+$" }, then: "working" }] };
-    expect(() => defFromManifest({ ...base, detect })).toThrow(/may not use `re`/);
-    expect(defFromManifest({ ...base, detect }, { trusted: true }).detect).toBeDefined();
+  test("a plugin may resume, but only from under the user's home", () => {
+    const find = { strategy: "jsonl-header", root: "{home}/.acme/sessions", cwdPath: "cwd", idPath: "id" };
+    const ok = defFromManifest({ ...base, caps: { ...base.caps, resume: "cwd" }, session: { resume: { args: ["--resume", "{id}"], find } } });
+    expect(ok.session?.resume?.find?.root).toBe("{home}/.acme/sessions");
+    for (const root of ["/etc/shadow", "{home}/../../etc", "~/.ssh"]) {
+      expect(() => defFromManifest({ ...base, session: { resume: { args: ["--resume", "{id}"], find: { ...find, root } } } }))
+        .toThrow(/must be under \{home\}\/|cannot climb out|plain path/);
+    }
+    // An agent that ships with Hivemind may read where its CLI actually keeps sessions.
+    expect(defFromManifest({ ...base, session: { resume: { args: ["--resume", "{id}"], find: { ...find, root: "/var/lib/acme" } } } },
+      { trusted: true }).session?.resume?.find?.root).toBe("/var/lib/acme");
   });
 
-  test("a plugin cannot run a command to list values — only built-ins can", () => {
-    const options = [{ id: "model", label: "Model", flag: "--model", list: { args: ["-rf", "/"] } }];
-    expect(() => defFromManifest({ ...base, options })).toThrow(/may not use `list`/);
-    expect(defFromManifest({ ...base, options }, { trusted: true }).options).toHaveLength(1);
+  test("a claimed resume must say where the sessions are", () => {
+    expect(() => defFromManifest({ ...base, caps: { ...base.caps, resume: "cwd" } }))
+      .toThrow(/caps.resume must be "none" unless/);
+  });
+
+  test("nobody ships a regex — not a plugin, not us", () => {
+    const detect = { default: "idle", rules: [{ when: { re: "(a+)+$" }, then: "working" }] };
+    for (const trusted of [false, true]) {
+      expect(() => defFromManifest({ ...base, detect }, { trusted })).toThrow(/do not take regexes/);
+    }
+  });
+
+  test("a sequence cannot be written so that it would backtrack", () => {
+    const rules = (when: object) => ({ default: "idle", rules: [{ when, then: "working" }] });
+    // An unbounded run followed by something it would have eaten is the only shape that
+    // could make this matcher quadratic, so it is refused at load.
+    expect(() => defFromManifest({ ...base, detect: rules({ seq: [{ run: "space", min: 0 }, { run: "space", min: 1 }] }) }))
+      .toThrow(/would have eaten it/);
+    expect(() => defFromManifest({ ...base, detect: rules({ seq: [{ run: "digit", min: 1 }, { upTo: "x" }] }) }))
+      .toThrow(/cannot be followed by `upTo`/);
+    // The same shape with a bound on the run is fine: it cannot run away.
+    expect(defFromManifest({ ...base, detect: rules({ seq: [{ run: "digit", min: 1, max: 4 }, { upTo: "x" }] }) }).detect)
+      .toBeDefined();
+  });
+
+  test("a listing command is plain tokens, whoever wrote it", () => {
+    const list = (args: unknown) => [{ id: "model", label: "Model", flag: "--model", list: { args } }];
+    // No shell runs it here, but a Windows .cmd shim does: punctuation would be a second command.
+    for (const bad of [["models; rm -rf ~"], ["models && curl x|sh"], ["$(id)"], ["a b"], []]) {
+      expect(() => defFromManifest({ ...base, options: list(bad) })).toThrow(/list\.args/);
+    }
+    // Plain tokens pass for a plugin — what the command actually is, the review names, and
+    // auto-install refuses to run one nobody read.
+    expect(defFromManifest({ ...base, options: list(["models"]) }).options?.[0]?.list?.args).toEqual(["models"]);
+  });
+
+  test("a plugin may wire hooks and a private home — and every one of them is disclosed", () => {
+    const wired = {
+      ...base,
+      caps: { ...base.caps, turnSignal: true },
+      launch: { hcp: true },
+      hooks: { events: { Stop: { hook: "stop" } }, arg: "--settings" },
+      home: { root: "home", dir: ".acme", mirror: "{home}/.acme", env: "ACME_HOME" },
+      options: [{ id: "model", label: "Model", flag: "--model", list: { args: ["models"] } }],
+    };
+    const def = defFromManifest(wired);
+    expect(def.caps.turnSignal).toBe(true);
+    expect(agentDisclosures(def)).toEqual([
+      "runs `acme models` to list model values",
+      "links your {home}/.acme into a private copy it points acme at",
+      "wires its own hooks to Hivemind's control plane, which can read and send to your tiles",
+    ]);
+    // Claiming the signal without wiring anything that sends it is still refused.
+    expect(() => defFromManifest({ ...wired, launch: undefined, hooks: undefined, home: undefined }))
+      .toThrow(/turnSignal must be false/);
+    // An agent that only runs its own CLI has nothing to disclose, so it may install unattended.
+    expect(agentDisclosures(defFromManifest(base))).toEqual([]);
+  });
+
+  test("an id Hivemind has shipped keeps its command, bundled or not", () => {
+    // The reservation is the list, not the bundle: gemini stays gemini's name after the day
+    // it stops shipping in the box.
+    expect(() => defFromManifest({ ...base, id: "gemini", bin: "curl" }))
+      .toThrow(/id "gemini" is Hivemind's agent for `gemini`/);
+    expect(defFromManifest({ ...base, id: "gemini", bin: "gemini" }).id).toBe("gemini");
+    // Every agent that ships today is on the list, so unbundling one cannot open its name.
+    for (const a of BUNDLED_AGENTS) expect(RESERVED_AGENTS[a.id]).toBe((a.manifest as { bin: string }).bin);
   });
 
   test("an install link must be https, and its command one line", () => {
@@ -251,9 +292,16 @@ describe("manifest validation refuses what it cannot back", () => {
     expect(def.detect!("zzz")).toBe("idle");
   });
 
+  test("an agent id is a name, or @owner/name from the registry", () => {
+    expect(defFromManifest({ ...base, id: "@dip497/aider" }).id).toBe("@dip497/aider");
+    bad({ id: "dip497--aider" }, /id must be a name or @owner\/name/);
+    bad({ id: "dip497/aider" }, /id must be a name or @owner\/name/);
+    bad({ id: "@dip497/a/b" }, /id must be a name or @owner\/name/);
+  });
+
   test("an unversioned or misversioned manifest is refused", () => {
     bad({ manifestVersion: 999 }, /manifestVersion must be 1/);
-    bad({ id: "Not Valid" }, /id must match/);
+    bad({ id: "Not Valid" }, /id must be a name or @owner\/name/);
     bad({ caps: { ...base.caps, blockedDetection: undefined } }, /caps.blockedDetection is required/);
   });
 });

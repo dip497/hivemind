@@ -89,6 +89,149 @@ export interface AgentInstall {
 /** Option id → value for one launch. Unset or "" = not chosen. */
 export type SpawnOptions = Partial<Record<string, string>>;
 
+/** An agent that ships in the box: its manifest, exactly as anyone else would write one. */
+export interface BundledAgent {
+  id: string;
+  /** A daemon half ships beside it (resume, generated assets). */
+  nodeHalf: boolean;
+  manifest: unknown;
+}
+
+/** How to find a session this CLI wrote. Two shapes cover every CLI we have met. */
+export interface SessionFind {
+  /** `jsonl-header`: one file per session, first line a JSON header.
+   *  `dir-meta`: a directory per session under a per-workspace directory. */
+  strategy: "jsonl-header" | "dir-meta";
+  /** Store root; `{home}` is the only placeholder. */
+  root: string;
+  /** jsonl-header: file extension to consider (default `.jsonl`). */
+  ext?: string;
+  /** jsonl-header: dotted paths into the header. */
+  cwdPath?: string;
+  idPath?: string;
+  /** jsonl-header: header fields that must equal these values for the line to count. */
+  require?: Record<string, string>;
+  /** dir-meta: how the per-workspace directory is named. */
+  dirKey?: "md5-cwd" | "cwd";
+  /** dir-meta: the metadata file in each session directory (default `meta.json`). */
+  meta?: string;
+  /** dir-meta: timestamp fields, newest wins; first one present is used. */
+  newestBy?: string[];
+  /** dir-meta: skip a session whose metadata has these values. */
+  skipWhen?: Record<string, unknown>;
+}
+
+export interface AgentSession {
+  /** Give a fresh session an id we choose, so a restore can ask for it by name. */
+  bind?: {
+    /** Tokens placed before the tile's own; `{newId}` is the generated id. */
+    args: string[];
+    /** Arguments that mean the user is steering the session themselves — leave it alone. */
+    unless?: string[];
+  };
+  resume?: {
+    /** Tokens appended on restore; `{id}` is the session to resume. */
+    args: string[];
+    /** Where the session store is, when the id has to be found on disk. */
+    find?: SessionFind;
+    /** Where else the id may come from, in order of preference. */
+    from?: {
+      /** The live session our tracker hook recorded for this tile. */
+      tracked?: boolean;
+      /** The id bound at spawn, whose flag is removed as the resume is added. */
+      bound?: string;
+    };
+    /** Nothing known: a best-effort argument rather than a fresh session. */
+    fallback?: string[];
+    /** Where the resume goes: `before` the tile's own arguments, `beforeLaunch` after them
+     *  but ahead of what the launch adds, or last of all (the default). */
+    position?: "before" | "beforeLaunch" | "after";
+  };
+}
+
+/** A file inside the overlay that Hivemind writes rather than links. */
+export interface AgentHomeFile {
+  name: string;
+  /** Start from the file of the same name in the real directory, if it exists. */
+  merge?: boolean;
+  /** JSON keys forced on top. */
+  set?: Record<string, unknown>;
+}
+
+/**
+ * A private home for an agent whose CLI reads its configuration from one. Every child of
+ * the real directory is linked in, so login, sessions and history stay shared; only the
+ * files named here are ours.
+ */
+export interface AgentHome {
+  /** Directory under the agent's private directory that the CLI is pointed at. */
+  root: string;
+  /** The configuration directory inside it. */
+  dir: string;
+  /** The real directory whose children are linked in. */
+  mirror: string;
+  /** The environment variable that points the CLI at the overlay. */
+  env: string;
+  /** Files Hivemind writes into the overlay instead of linking. */
+  own?: AgentHomeFile[];
+}
+
+/** One hook of ours, wired into an agent's own configuration format. */
+export interface AgentHookEntry {
+  /** Which of Hivemind's hook scripts (`tracker`, `stop`, `userPrompt`, …). */
+  hook: string;
+  /** Seconds, in the agent's own hook contract. */
+  timeout?: number;
+  /** Which tools it applies to; `supervise` derives it from the supervision policy. */
+  matcher?: string;
+  /** `supervised` includes this entry only for a tile that runs under supervision. */
+  when?: "supervised";
+}
+
+/** How an agent is told to call our hooks: which events, and where the config goes. */
+export interface AgentHooks {
+  /** Event name → the hooks it fires. An entry whose script is unavailable is dropped. */
+  events: Record<string, AgentHookEntry | AgentHookEntry[]>;
+  /** The document shape; `{events}` is where the rendered events go. */
+  template?: string;
+  /** One command, in this agent's shape. `{command}` is the command line; `{timeout}` and
+   *  any other placeholder is dropped when the event did not ask for it. */
+  entry?: Record<string, unknown>;
+  /** How one event's commands are wrapped — `{entries}` is the list. `false` for an agent
+   *  whose events are simply a list of commands. */
+  group?: Record<string, unknown> | false;
+  /** Delivered as this argument, with the document inline. */
+  arg?: string;
+  /** Or written to this asset name instead. */
+  file?: string;
+}
+
+/** A file an agent needs on disk before it runs: a bridge extension, a hook script, a
+ *  config its CLI reads. Written into that agent's private directory, never anywhere else. */
+export interface AgentAsset {
+  /** File name inside the agent's private directory. */
+  name: string;
+  /** The file beside the manifest whose contents are written. */
+  file: string;
+}
+
+/** What a launch needs beyond the command itself. */
+export interface AgentLaunch {
+  /** Give it the control plane: socket, token, tile id, agent id, depth. Only when the
+   *  daemon actually has a socket and token — otherwise the agent runs without them. */
+  hcp?: boolean;
+  /** Appended at spawn unless already there. `{asset:name}` resolves to a written file. */
+  args?: string[];
+  /** A subcommand this agent is always launched through, added when the command line does
+   *  not already have it (`kiro chat …`). */
+  subcommand?: string;
+  /** These arguments select something that lives in the private home — skip them when the
+   *  home is not there, so a failed overlay degrades the agent instead of breaking it. */
+  requiresHome?: boolean;
+  /** Extra environment; values take the same placeholders. */
+  env?: Record<string, string>;
+}
+
 export interface AgentProviderDef {
   /** Stable id — the tile/detector/CLI key ("claude", "codex", …). */
   id: string;
@@ -118,9 +261,25 @@ export interface AgentProviderDef {
   options?: readonly AgentOption[];
   /** Where to get the CLI when this machine does not have it. Shown, never run. */
   install?: AgentInstall;
+  /** Where this CLI keeps its sessions, so a restore can find the one for a cwd. */
+  session?: AgentSession;
+  /** How this CLI is told to call our hooks. */
+  hooks?: AgentHooks;
+  /** A private configuration home this agent runs with. */
+  home?: AgentHome;
+  /** Files this agent needs written before it can run. */
+  assets?: readonly AgentAsset[];
+  /** Arguments and environment every launch of this agent gets. */
+  launch?: AgentLaunch;
   /** The repo whose `.hivemind/agents/` this came from. Set by the loader, never read
    *  from a manifest: it is what keeps a repo's agent to that repo's own tiles. */
   sourceRoot?: string;
+  /** The folder this manifest was read from, so the daemon can find the files it ships
+   *  beside it. Set by the loader, never read from a manifest. Absent for the agents
+   *  compiled into the binary — their files are compiled in too. */
+  dir?: string;
+  /** Window-title templates (see ManifestSpawn.titles). */
+  titles?: readonly string[];
   /** The tile label for the n-th spawn (default `"<label> #<n>"`). */
   spawnLabel?: (n: number, opts: SpawnOptions) => string;
   /** Declares that this provider needs NO node half even though its capabilities

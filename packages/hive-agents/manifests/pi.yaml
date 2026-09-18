@@ -31,6 +31,10 @@ options:
     - --list-models
     skip: 1
     format: "{1}/{2}"
+spawn:
+  titles:
+  - "π - {task} - {any}"
+  - "π - {any}"
 install:
   url: https://github.com/earendil-works/pi/blob/main/packages/coding-agent/README.md
   command: "npm install -g --ignore-scripts @earendil-works/pi-coding-agent"
@@ -41,3 +45,23 @@ detect:
     then: working
   default: idle
 note: 'pi has no permission system: it always runs autonomously and cannot be supervised.'
+session:
+  resume:
+    args:
+    - --session
+    - '{id}'
+    find:
+      strategy: jsonl-header
+      root: '{home}/.pi/agent/sessions'
+      cwdPath: cwd
+      idPath: id
+      require:
+        type: session
+assets:
+- name: hive-pi-ext.mjs
+  file: hive-pi-ext.mjs
+launch:
+  hcp: true
+  args:
+  - -e
+  - '{asset:hive-pi-ext.mjs}'

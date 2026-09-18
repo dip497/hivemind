@@ -41,14 +41,21 @@ export function repoAgentsDir(repoRoot: string): string {
 export interface ReadOptions {
   source: AgentSource;
   trusted?: boolean;
+  allowReserved?: boolean;
   nodeHalf?: (id: string) => boolean;
   reserved?: readonly string[];
   requireDirMatch?: boolean;
 }
 
+/** The id a folder is installed as: its name, or `@owner/name` when it sits inside `@owner/`. */
+export const idOfDir = (dir: string) => {
+  const owner = path.basename(path.dirname(dir));
+  return owner.startsWith("@") ? `${owner}/${path.basename(dir)}` : path.basename(dir);
+};
+
 /** Never throws: one broken plugin must not stop the others loading. */
 export async function readAgentManifest(file: string, opts: ReadOptions): Promise<LoadedAgent> {
-  const dirName = path.basename(path.dirname(file));
+  const dirName = idOfDir(path.dirname(file));
   const id = opts.requireDirMatch ? dirName : path.basename(file).replace(/\.ya?ml$/, "");
   const fail = (error: string): LoadedAgent =>
     ({ id, file, source: opts.source, def: null, manifest: null, error, disabled: false });
@@ -66,26 +73,37 @@ export async function readAgentManifest(file: string, opts: ReadOptions): Promis
   try {
     const def = defFromManifest(raw, {
       trusted: opts.trusted,
+      allowReserved: opts.allowReserved,
       reserved: opts.reserved,
       nodeHalf: opts.nodeHalf?.(String(declaredId)) ?? false,
     });
-    return { id: def.id, file, source: opts.source, def, manifest: raw, error: null, disabled: false };
+    // Where its files are, so the daemon can read what it ships beside the manifest.
+    return { id: def.id, file, source: opts.source, def: { ...def, dir: path.dirname(file) }, manifest: raw, error: null, disabled: false };
   } catch (e) {
     return fail((e as Error).message);
   }
 }
 
+/** Plugin folders under a root: `name/`, and `@owner/name/` for what came from HiveHub. */
+export async function pluginDirs(root: string): Promise<string[]> {
+  const dirs = async (d: string) => {
+    try {
+      return (await fs.readdir(d, { withFileTypes: true }))
+        .filter((e) => e.isDirectory() && !e.name.startsWith("."))
+        .map((e) => e.name)
+        .sort();
+    } catch { return []; }
+  };
+  const out: string[] = [];
+  for (const n of await dirs(root)) {
+    if (n.startsWith("@")) for (const m of await dirs(path.join(root, n))) out.push(path.join(root, n, m));
+    else out.push(path.join(root, n));
+  }
+  return out;
+}
+
 async function scanDir(root: string, opts: ReadOptions): Promise<LoadedAgent[]> {
-  let names: string[];
-  try {
-    names = (await fs.readdir(root, { withFileTypes: true }))
-      .filter((d) => d.isDirectory() && !d.name.startsWith("."))
-      .map((d) => d.name)
-      .sort();
-  } catch { return []; }
-  return Promise.all(
-    names.map((n) => readAgentManifest(path.join(root, n, AGENT_MANIFEST_FILE), opts)),
-  );
+  return Promise.all((await pluginDirs(root)).map((d) => readAgentManifest(path.join(d, AGENT_MANIFEST_FILE), opts)));
 }
 
 export async function loadBuiltinAgents(dir: string, nodeHalf?: (id: string) => boolean): Promise<LoadedAgent[]> {
@@ -167,11 +185,12 @@ export async function loadAgents(opts: LoadAgentsOptions): Promise<{
 }
 
 /** Validates before copying, so a broken package never lands on disk. */
-export async function installAgent(srcDir: string): Promise<LoadedAgent> {
+export async function installAgent(srcDir: string, opts: { allowReserved?: boolean } = {}): Promise<LoadedAgent> {
   const read = await readAgentManifest(path.join(srcDir, AGENT_MANIFEST_FILE), {
     source: "user",
     requireDirMatch: false,
     nodeHalf: () => false,
+    allowReserved: opts.allowReserved,
   });
   if (read.error || !read.def) throw new Error(read.error ?? "invalid manifest");
 
@@ -183,11 +202,14 @@ export async function installAgent(srcDir: string): Promise<LoadedAgent> {
 }
 
 export async function removeAgent(id: string): Promise<{ id: string; dir: string }> {
-  // The id becomes an `rm -rf` path: "..", "" or "a/b" must never reach it.
+  // The id becomes an `rm -rf` path: "..", "" or "a/b" must never reach it; `@owner/name` is
+  // the one nested form, and the regex allows nothing else.
   if (!AGENT_ID_RE.test(id)) throw new Error(`"${id}" is not an agent id`);
   const dir = path.join(userAgentsDir(), id);
   try { await fs.stat(dir); }
   catch { throw new Error(`no user-installed agent "${id}" (built-in and repo agents cannot be removed — switch them off instead)`); }
   await fs.rm(dir, { recursive: true, force: true });
+  // The owner's folder goes with its last agent; rmdir refuses one that still holds another.
+  if (id.startsWith("@")) await fs.rmdir(path.dirname(dir)).catch(() => {});
   return { id, dir };
 }

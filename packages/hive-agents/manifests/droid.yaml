@@ -75,3 +75,40 @@ detect:
       contains: esc to stop
     then: working
   default: idle
+session:
+  resume:
+    args:
+    - --resume
+    - '{id}'
+    find:
+      strategy: jsonl-header
+      root: '{home}/.factory/sessions'
+      cwdPath: cwd
+      idPath: id
+      require:
+        type: session_start
+home:
+  root: droid-home
+  dir: .factory
+  mirror: '{home}/.factory'
+  env: FACTORY_HOME_OVERRIDE
+  own:
+  - name: settings.local.json
+    merge: true
+    set:
+      disableAutoUpdate: true
+hooks:
+  file: hooks.json
+  template: '{events}'
+  events:
+    UserPromptSubmit:
+      hook: userPrompt
+      timeout: 10
+    Stop:
+      hook: stop
+      timeout: 10
+    Notification:
+      hook: notification
+      timeout: 10
+launch:
+  hcp: true

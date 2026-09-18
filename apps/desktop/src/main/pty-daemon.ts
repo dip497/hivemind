@@ -25,7 +25,7 @@ import {
 } from "./session-snapshot-store.js";
 import { applyInitialPrompt, stripInitialPrompt } from "../shared/agent-io.js";
 import { sanitizeShellEnv } from "./shell-env.js";
-import { composeResume, evictTrackedSession, prepareProviders, trackerSource } from "@hivemind/agents/node";
+import { NODE_PARTS, composeResume, evictTrackedSession, prepareProviders, trackerSource } from "@hivemind/agents/node";
 import { planHookSource } from "./plan-review-hook-source.js";
 import { stopHookSource } from "./hcp/stop-hook-source.js";
 import { approvalHookSource } from "./hcp/approval-hook-source.js";
@@ -154,6 +154,20 @@ const hcpToken = readOrCreateToken(userDataDir);
 // ctx.providers[id]. Best-effort per provider — a failure only disables that
 // provider's deterministic signals (the screen-scrape detector still drives
 // status). Nothing here names a provider.
+// The agents this machine has, not only the ones compiled in: an agent someone installed
+// asks for its files and its hooks in exactly the same way, and this is the process that
+// does that work. Best-effort — if the scan fails the compiled-in list stands, which is a
+// daemon missing one agent's signals rather than a daemon that will not start.
+// An agent installed while this is running is wired on the next start.
+try {
+  const [{ loadAgents }, { BUILTIN_CATALOG, setCatalog }] = await Promise.all([
+    import("@hivemind/agents/load"),
+    import("@hivemind/agents"),
+  ]);
+  const { defs } = await loadAgents({ builtins: BUILTIN_CATALOG, nodeHalf: (id) => !!NODE_PARTS[id] });
+  setCatalog(defs);
+} catch (e) { console.error("[pty-daemon] agent scan skipped:", (e as Error).message); }
+
 const providerPaths = prepareProviders({
   userDataDir,
   execPath: hookExecPath,

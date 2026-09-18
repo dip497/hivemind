@@ -66,3 +66,15 @@ detect:
   default: idle
 note: scrape-only status and no turn signal — drive it by hand on the canvas; `hive ctl read` / `hive
   ctl workflow` cannot gather from it.
+session:
+  resume:
+    args:
+    - resume
+    - '{id}'
+    find:
+      strategy: jsonl-header
+      root: '{home}/.codex/sessions'
+      cwdPath: payload.cwd
+      idPath: payload.id
+      require:
+        type: session_meta

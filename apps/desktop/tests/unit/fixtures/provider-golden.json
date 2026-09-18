@@ -654,11 +654,11 @@
       "args": [],
       "env": {
         "HIVE_AGENT_DEPTH": "1",
-        "FACTORY_HOME_OVERRIDE": "/x/ud/droid-home",
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
         "HCP_TOKEN": "golden-token",
         "HIVEMIND_TILE": "tile-g",
-        "HIVE_AGENT_ID": "droid"
+        "HIVE_AGENT_ID": "droid",
+        "FACTORY_HOME_OVERRIDE": "/x/ud/agents/droid/droid-home"
       }
     },
     "spawnSupervised": {
@@ -667,11 +667,11 @@
       "env": {
         "HIVE_AGENT_DEPTH": "1",
         "HIVE_SUPERVISE": "all",
-        "FACTORY_HOME_OVERRIDE": "/x/ud/droid-home",
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
         "HCP_TOKEN": "golden-token",
         "HIVEMIND_TILE": "tile-g",
-        "HIVE_AGENT_ID": "droid"
+        "HIVE_AGENT_ID": "droid",
+        "FACTORY_HOME_OVERRIDE": "/x/ud/agents/droid/droid-home"
       }
     },
     "spawnWithPrompt": {
@@ -685,11 +685,11 @@
       "args": [],
       "env": {
         "HIVE_AGENT_DEPTH": "1",
-        "FACTORY_HOME_OVERRIDE": "/x/ud/droid-home",
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
         "HCP_TOKEN": "golden-token",
         "HIVEMIND_TILE": "tile-g",
-        "HIVE_AGENT_ID": "droid"
+        "HIVE_AGENT_ID": "droid",
+        "FACTORY_HOME_OVERRIDE": "/x/ud/agents/droid/droid-home"
       }
     },
     "restoreAlreadyResuming": {
@@ -700,11 +700,11 @@
       ],
       "env": {
         "HIVE_AGENT_DEPTH": "1",
-        "FACTORY_HOME_OVERRIDE": "/x/ud/droid-home",
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
         "HCP_TOKEN": "golden-token",
         "HIVEMIND_TILE": "tile-g",
-        "HIVE_AGENT_ID": "droid"
+        "HIVE_AGENT_ID": "droid",
+        "FACTORY_HOME_OVERRIDE": "/x/ud/agents/droid/droid-home"
       }
     },
     "retry": {
@@ -712,11 +712,11 @@
       "args": [],
       "env": {
         "HIVE_AGENT_DEPTH": "1",
-        "FACTORY_HOME_OVERRIDE": "/x/ud/droid-home",
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
         "HCP_TOKEN": "golden-token",
         "HIVEMIND_TILE": "tile-g",
-        "HIVE_AGENT_ID": "droid"
+        "HIVE_AGENT_ID": "droid",
+        "FACTORY_HOME_OVERRIDE": "/x/ud/agents/droid/droid-home"
       }
     },
     "superviseSpawn": {
@@ -756,11 +756,11 @@
       ],
       "env": {
         "HIVE_AGENT_DEPTH": "1",
-        "KIRO_HOME": "/x/ud/kiro-home",
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
         "HCP_TOKEN": "golden-token",
         "HIVEMIND_TILE": "tile-g",
-        "HIVE_AGENT_ID": "kiro"
+        "HIVE_AGENT_ID": "kiro",
+        "KIRO_HOME": "/x/ud/agents/kiro/kiro-home"
       }
     },
     "spawnSupervised": {
@@ -773,11 +773,11 @@
       "env": {
         "HIVE_AGENT_DEPTH": "1",
         "HIVE_SUPERVISE": "all",
-        "KIRO_HOME": "/x/ud/kiro-home",
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
         "HCP_TOKEN": "golden-token",
         "HIVEMIND_TILE": "tile-g",
-        "HIVE_AGENT_ID": "kiro"
+        "HIVE_AGENT_ID": "kiro",
+        "KIRO_HOME": "/x/ud/agents/kiro/kiro-home"
       }
     },
     "spawnWithPrompt": {
@@ -799,11 +799,11 @@
       ],
       "env": {
         "HIVE_AGENT_DEPTH": "1",
-        "KIRO_HOME": "/x/ud/kiro-home",
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
         "HCP_TOKEN": "golden-token",
         "HIVEMIND_TILE": "tile-g",
-        "HIVE_AGENT_ID": "kiro"
+        "HIVE_AGENT_ID": "kiro",
+        "KIRO_HOME": "/x/ud/agents/kiro/kiro-home"
       }
     },
     "restoreAlreadyResuming": {
@@ -817,11 +817,11 @@
       ],
       "env": {
         "HIVE_AGENT_DEPTH": "1",
-        "KIRO_HOME": "/x/ud/kiro-home",
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
         "HCP_TOKEN": "golden-token",
         "HIVEMIND_TILE": "tile-g",
-        "HIVE_AGENT_ID": "kiro"
+        "HIVE_AGENT_ID": "kiro",
+        "KIRO_HOME": "/x/ud/agents/kiro/kiro-home"
       }
     },
     "retry": {
@@ -833,11 +833,11 @@
       ],
       "env": {
         "HIVE_AGENT_DEPTH": "1",
-        "KIRO_HOME": "/x/ud/kiro-home",
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
         "HCP_TOKEN": "golden-token",
         "HIVEMIND_TILE": "tile-g",
-        "HIVE_AGENT_ID": "kiro"
+        "HIVE_AGENT_ID": "kiro",
+        "KIRO_HOME": "/x/ud/agents/kiro/kiro-home"
       }
     },
     "superviseSpawn": {
@@ -876,7 +876,7 @@
       "cmd": "pi",
       "args": [
         "-e",
-        "/x/ud/hive-pi-ext.mjs"
+        "/x/ud/agents/pi/hive-pi-ext.mjs"
       ],
       "env": {
         "HIVE_AGENT_DEPTH": "1",
@@ -890,7 +890,7 @@
       "cmd": "pi",
       "args": [
         "-e",
-        "/x/ud/hive-pi-ext.mjs"
+        "/x/ud/agents/pi/hive-pi-ext.mjs"
       ],
       "env": {
         "HIVE_AGENT_DEPTH": "1",
@@ -904,7 +904,7 @@
     "spawnWithPrompt": {
       "args": [
         "-e",
-        "/x/ud/hive-pi-ext.mjs",
+        "/x/ud/agents/pi/hive-pi-ext.mjs",
         "do the thing"
       ],
       "envHasPrompt": false
@@ -913,7 +913,7 @@
       "cmd": "pi",
       "args": [
         "-e",
-        "/x/ud/hive-pi-ext.mjs"
+        "/x/ud/agents/pi/hive-pi-ext.mjs"
       ],
       "env": {
         "HIVE_AGENT_DEPTH": "1",
@@ -929,7 +929,7 @@
         "--session",
         "sess-1",
         "-e",
-        "/x/ud/hive-pi-ext.mjs"
+        "/x/ud/agents/pi/hive-pi-ext.mjs"
       ],
       "env": {
         "HIVE_AGENT_DEPTH": "1",
@@ -943,7 +943,7 @@
       "cmd": "pi",
       "args": [
         "-e",
-        "/x/ud/hive-pi-ext.mjs"
+        "/x/ud/agents/pi/hive-pi-ext.mjs"
       ],
       "env": {
         "HIVE_AGENT_DEPTH": "1",
@@ -1031,15 +1031,15 @@
         ],
         "preToolUse": [
           {
-            "matcher": "*",
-            "command": "ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-kiro-approval-hook.cjs' '/x/ud/hcp.sock'"
+            "command": "ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-kiro-approval-hook.cjs' '/x/ud/hcp.sock'",
+            "matcher": "*"
           }
         ]
       }
     }
   },
   "assets": {
-    "hive-pi-ext.mjs": "a133bce4d7a59dc32ae5a176e392474cbb3a94bc5402b737f7353f579da40182",
-    "hcp-kiro-approval-hook.cjs": "12f2f3f27c1b060bd94f9c35f0986be8d6379d8d9e246e48050f395b75c2ed41"
+    "hive-pi-ext.mjs": "e9c58649bb30601cdbc950a080ea93a78980a2eef8ccdd6ed086f3eae2036165",
+    "hcp-kiro-approval-hook.cjs": "81e4d1a321932ff2d7ae30bec70b20d4c666c3b19fdf130a4f03cd68e1c2ae53"
   }
 }

@@ -60,3 +60,46 @@ detect:
             - ●
     then: working
   default: idle
+home:
+  root: kiro-home
+  dir: .kiro
+  mirror: '{home}/.kiro'
+  env: KIRO_HOME
+assets:
+- name: hcp-kiro-approval-hook.cjs
+  file: hcp-kiro-approval-hook.cjs
+hooks:
+  file: agents/hivemind.json
+  template: '{"name":"hivemind","description":"hivemind control-plane wiring (auto-generated — do not edit by hand)","hooks":{events}}'
+  entry:
+    command: '{command}'
+    matcher: '{matcher}'
+  group: false
+  events:
+    agentSpawn:
+      hook: tracker
+    userPromptSubmit:
+    - hook: tracker
+    - hook: userPrompt
+    stop:
+      hook: stop
+    preToolUse:
+      hook: kiroApproval
+      matcher: '*'
+session:
+  resume:
+    args:
+    - --resume-id
+    - '{id}'
+    fallback:
+    - --resume
+    position: beforeLaunch
+    from:
+      tracked: true
+launch:
+  hcp: true
+  requiresHome: true
+  subcommand: chat
+  args:
+  - --agent
+  - hivemind

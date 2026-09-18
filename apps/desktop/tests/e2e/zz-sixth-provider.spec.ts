@@ -1,13 +1,11 @@
-// Acceptance for the provider catalog: a THROWAWAY sixth provider added by
-// dropping one directory (a def + its plugin object) into packages/hive-agents
-// and adding one line to catalog.ts (+ one to node.ts's PLUGINS) must appear in the UI's agent list,
-// the CLI's --agent choices and HCP spawn, and pass the lifecycle proof from
-// the adding-an-agent-provider checklist through the fake-agent fixture.
+// Acceptance for the whole claim: a THROWAWAY agent installed the way a stranger's would
+// be — a manifest and one file, dropped into the user's agents folder, with nothing
+// compiled in and no source of ours touched — must appear in the UI's agent list and the
+// CLI's --agent choices, and pass the full lifecycle from the adding-an-agent-provider
+// checklist: spawn, working/idle, send, read, report, workflow, close.
 //
-// The spec edits the source tree for real (that IS the claim under test),
-// rebuilds the desktop bundle, runs, then restores the tree and rebuilds again
-// so the on-disk bundle matches the checkout. It refuses to run if the files it
-// touches are already dirty. Named zz- so it runs last.
+// It is a worker (`turnSignal`) wired to the control plane, which is exactly what only
+// agents in the box could be until the trust gates came off. Named zz- so it runs last.
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
 import { execSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -20,12 +18,8 @@ const APP_DIR = path.resolve(__dirname, "../..");
 const ROOT = path.resolve(APP_DIR, "../..");
 const CLI = path.join(ROOT, "apps/cli/src/index.ts");
 const FIXTURE = path.join(__dirname, "fixtures", "fake-agent.cjs");
-const PKG = path.join(ROOT, "packages/hive-agents/src");
-const CATALOG = path.join(PKG, "catalog.ts");
-const NODE = path.join(PKG, "node.ts");
-const DIR = path.join(PKG, "providers/faux");
-const DEF = path.join(DIR, "index.ts");
-const DEF_NODE = path.join(DIR, "node.ts");
+/** Where a user-installed agent lives; the harness gives every run its own XDG_CONFIG_HOME. */
+const AGENT_DIR = path.join(process.env.XDG_CONFIG_HOME ?? os.homedir(), "hivemind", "agents", "faux");
 
 let app: ElectronApplication | undefined;
 let page: Page;
@@ -50,48 +44,18 @@ function hive(args: string[], env: Record<string, string> = {}) {
   try { json = JSON.parse(r.stdout.trim()); } catch { try { json = JSON.parse(r.stdout.trim().split("\n").pop() || ""); } catch { /* not json */ } }
   return { code: r.status, stdout: r.stdout, stderr: r.stderr, json };
 }
-function build(): void {
-  const r = spawnSync("pnpm", ["build"], { cwd: APP_DIR, encoding: "utf8", timeout: 300_000 });
-  if (r.status !== 0) throw new Error(`desktop build failed:\n${r.stdout}\n${r.stderr}`);
-}
-
-/** Restored byte-for-byte on cleanup, never `git checkout`: that discards unrelated uncommitted work. */
-let original: { catalog: string; node: string } | null = null;
-
-/** Drop the provider in: one directory (def + plugin), one line in each list. */
-function installSixthProvider(): void {
-  // Cleanup deletes DIR, so never adopt one that was already there.
-  if (fs.existsSync(DIR)) throw new Error(`refusing to install: ${DIR} already exists and cleanup would delete it`);
-  const cat = fs.readFileSync(CATALOG, "utf8");
-  const node = fs.readFileSync(NODE, "utf8");
-  original = { catalog: cat, node };
-  fs.mkdirSync(DIR, { recursive: true });
-  fs.copyFileSync(path.join(__dirname, "fixtures/sixth-provider/faux/index.ts"), DEF);
-  fs.copyFileSync(path.join(__dirname, "fixtures/sixth-provider/faux/node.ts"), DEF_NODE);
-  fs.writeFileSync(CATALOG, cat
-    .replace('import { openclaw } from "./providers/openclaw/index.js";', 'import { openclaw } from "./providers/openclaw/index.js";\nimport { faux } from "./providers/faux/index.js";')
-    .replace("  claude, codex, opencode, droid, pi, kiro,", "  claude, codex, opencode, droid, pi, kiro, faux,"));
-  fs.writeFileSync(NODE, node
-    .replace('import { plugin as piPlugin } from "./providers/pi/node.js";', 'import { plugin as piPlugin } from "./providers/pi/node.js";\nimport { plugin as fauxPlugin } from "./providers/faux/node.js";')
-    .replace("[claudePlugin, codexPlugin, cursorPlugin, droidPlugin, kiroPlugin, piPlugin]", "[claudePlugin, codexPlugin, cursorPlugin, droidPlugin, kiroPlugin, piPlugin, fauxPlugin]"));
-  for (const [file, needle] of [[CATALOG, "kiro, faux,"], [NODE, "piPlugin, fauxPlugin]"]] as const) {
-    if (!fs.readFileSync(file, "utf8").includes(needle)) throw new Error(`could not add the sixth provider to ${path.basename(file)} — anchor moved`);
-  }
-}
-/** Returns whether anything was undone. */
-function removeSixthProvider(): boolean {
-  if (!original) return false; // setup never touched a file
-  fs.writeFileSync(CATALOG, original.catalog);
-  fs.writeFileSync(NODE, original.node);
-  original = null;
-  fs.rmSync(DIR, { recursive: true, force: true });
-  return true;
+/** Drop the agent in the way anyone would: a manifest and the file it needs, in the user's
+ *  own agents folder. Nothing compiled in, nothing of ours edited, no rebuild. */
+function installFauxAgent(): void {
+  if (fs.existsSync(AGENT_DIR)) throw new Error(`refusing to install: ${AGENT_DIR} already exists`);
+  fs.mkdirSync(AGENT_DIR, { recursive: true });
+  fs.copyFileSync(path.join(__dirname, "fixtures/sixth-provider/faux/agent.yaml"), path.join(AGENT_DIR, "agent.yaml"));
+  fs.copyFileSync(path.join(__dirname, "fixtures/sixth-provider/assets/faux-hooks.json"), path.join(AGENT_DIR, "faux-hooks.json"));
 }
 
 test.beforeAll(async () => {
   test.setTimeout(420_000);
-  installSixthProvider();
-  build();
+  installFauxAgent();
 
   repo = fs.mkdtempSync(path.join(os.tmpdir(), "hm-sixth-"));
   execSync("git init -q", { cwd: repo });
@@ -128,7 +92,7 @@ test.afterAll(async () => {
   // Stand-in agents this spec's tiles spawned (pattern anchored on the fixture
   // path + provider argv so it can never match an unrelated shell).
   try { execSync(`pkill -f "fixtures/fake-agent\\.cjs (claude|droid|codex|faux) "`, { stdio: "ignore" }); } catch { /* none */ }
-  if (removeSixthProvider()) build(); // the on-disk bundle matches the source again
+  fs.rmSync(AGENT_DIR, { recursive: true, force: true });
   fs.rmSync(repo, { recursive: true, force: true });
   fs.rmSync(fakeBin, { recursive: true, force: true });
 });
@@ -140,10 +104,16 @@ test("the sixth provider appears in the UI's agent switcher", async () => {
 });
 
 test("the CLI offers and validates it; `hive agent detect` probes its binary", async () => {
-  const help = spawnSync(onPath("bun"), [CLI, "ctl", "spawn", "--help"], { encoding: "utf8" }).stdout;
-  expect(help).toContain("faux");
+  // The list the CLI actually spawns from is the one it loads, not one compiled into its
+  // help text — so ask the thing that knows: a wrong --agent is answered with the real set.
+  const wrong = hive(["ctl", "spawn", "--agent", "nope", "--json"]);
+  expect(`${wrong.stdout}${wrong.stderr}`).toContain("faux");
+  expect(hive(["agents", "list"]).stdout).toContain("faux");
   // `hive agent detect` needs a workspace: a throwaway one, with the stand-in on PATH.
   const ws = fs.mkdtempSync(path.join(os.tmpdir(), "hm-sixth-ws-"));
+  // Its own profile, so `init` cannot touch the running app's settings — which means the
+  // agent has to be installed there too. That is the point: it is not compiled into anything.
+  fs.cpSync(AGENT_DIR, path.join(ws, "xdg", "hivemind", "agents", "faux"), { recursive: true });
   spawnSync(onPath("bun"), [CLI, "init", "--prefix", "SX", "--no-agentic"], { cwd: ws, encoding: "utf8", env: { ...process.env, XDG_CONFIG_HOME: path.join(ws, "xdg") } });
   const r = spawnSync(onPath("bun"), [CLI, "agent", "detect", "--json"], { cwd: ws, encoding: "utf8", env: { ...process.env, PATH: `${fakeBin}:${path.dirname(process.execPath)}:/usr/bin:/bin`, XDG_CONFIG_HOME: path.join(ws, "xdg") } });
   expect(JSON.parse(r.stdout).data["faux-agent"]).toBeTruthy();

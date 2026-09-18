@@ -1,12 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { agentAllowedIn, loadAgents, readAgentManifest, removeAgent, toWire, AGENT_MANIFEST_FILE } from "../src/load.js";
-import { BUILTIN_CATALOG, spawnArgsFor } from "../src/catalog.js";
+import { BUILTIN_CATALOG, setCatalog, spawnArgsFor } from "../src/catalog.js";
+import { BUNDLED_AGENTS } from "../src/bundled-manifests.js";
 import { defFromManifest, defsFromWire } from "../src/manifest.js";
-import { NODE_PARTS } from "../src/node.js";
+import { NODE_PARTS, prepareProviders, providers } from "../src/node.js";
 
 const BUILTIN = join(dirname(fileURLToPath(import.meta.url)), "..", "manifests");
 const nodeHalf = (id: string): boolean => !!NODE_PARTS[id];
@@ -72,7 +73,28 @@ describe("loading agents from disk", () => {
     expect(acme!.detect!("APPROVE THIS?")).toBe("blocked");
     expect(acme!.detect!("⠋ Reading files…")).toBe("working");
     // every built-in still loaded alongside it
-    expect(loaded.filter((a) => a.source === "builtin" && !a.error).length).toBe(16);
+    expect(loaded.filter((a) => a.source === "builtin" && !a.error).length).toBe(BUNDLED_AGENTS.length);
+  });
+
+  test("an agent from the registry loads as @owner/name, beside a bare one of the same name", async () => {
+    const root = userRoot();
+    install(root, "acme", ACME);
+    install(root, "@dip497/acme", ACME.replace("id: acme", "id: \"@dip497/acme\""));
+    const { defs, loaded } = await loadAgents({ builtinDir: BUILTIN, nodeHalf });
+    expect(defs.filter((d) => d.id.endsWith("acme")).map((d) => d.id).sort()).toEqual(["@dip497/acme", "acme"]);
+    expect(loaded.find((a) => a.id === "@dip497/acme")?.error).toBeNull();
+
+    await removeAgent("@dip497/acme");
+    expect(existsSync(join(root, "@dip497", "acme"))).toBe(false);
+    expect(existsSync(join(root, "acme"))).toBe(true);
+    for (const bad of ["dip497/acme", "@dip497/../acme", "@dip497/acme/x"]) await expect(removeAgent(bad)).rejects.toThrow(/not an agent id/);
+  });
+
+  test("a scoped folder whose manifest names someone else is refused", async () => {
+    const root = userRoot();
+    install(root, "@dip497/acme", ACME.replace("id: acme", "id: \"@alice/acme\""));
+    const { loaded } = await loadAgents({ builtinDir: BUILTIN, nodeHalf });
+    expect(loaded.find((a) => a.id === "@dip497/acme")?.error).toMatch(/does not match manifest id "@alice\/acme"/);
   });
 
   test("any provider can be switched off, built-ins included", async () => {
@@ -145,15 +167,15 @@ describe("loading agents from disk", () => {
     expect(loaded.find((a) => a.id === "broken")!.error).toBeTruthy();
     expect(loaded.find((a) => a.id === "liar")!.error).toMatch(/turnSignal must be false/);
     expect(loaded.find((a) => a.id === "mismatch")!.error).toMatch(/does not match manifest id/);
-    // 16 built-ins still fine
-    expect(loaded.filter((a) => a.source === "builtin" && !a.error).length).toBe(16);
+    // every built-in still fine
+    expect(loaded.filter((a) => a.source === "builtin" && !a.error).length).toBe(BUNDLED_AGENTS.length);
   });
 
   test("a missing plugin root is not an error", async () => {
     process.env.XDG_CONFIG_HOME = join(tmpdir(), "hm-does-not-exist-" + Date.now());
     const { defs, loaded } = await loadAgents({ builtinDir: BUILTIN, nodeHalf });
     expect(loaded.every((a) => !a.error)).toBe(true);
-    expect(defs.length).toBe(16);
+    expect(defs.length).toBe(BUNDLED_AGENTS.length);
   });
 
   test("built-ins keep the capabilities their node halves back", async () => {
@@ -164,7 +186,7 @@ describe("loading agents from disk", () => {
     expect(claude.caps.resume).toBe("tile");
     expect(claude.caps.supervise).toBe("broker");
     // …and one with no node half does not
-    expect(defs.find((d) => d.id === "amp")!.caps.turnSignal).toBe(false);
+    expect(defs.find((d) => d.id === "openclaw")!.caps.turnSignal).toBe(false);
   });
 
   test("a plugin cannot smuggle a built-in's privileges by reusing its id", async () => {
@@ -172,8 +194,10 @@ describe("loading agents from disk", () => {
     // claude HAS a node half, but a user manifest is never trusted with it
     install(root, "claude", ACME.replace("id: acme", "id: claude").replace("turnSignal: false", "turnSignal: true"));
     const { loaded, defs } = await loadAgents({ builtinDir: BUILTIN, nodeHalf });
+    // Refused on the name, before anything it claims is even read: the id is Hivemind's
+    // and it points at a different command.
     expect(loaded.find((a) => a.source === "user" && a.id === "claude")!.error)
-      .toMatch(/turnSignal must be false/);
+      .toMatch(/Hivemind's agent for `claude`/);
     // the real built-in claude survives untouched
     expect(defs.find((d) => d.id === "claude")!.caps.turnSignal).toBe(true);
   });
@@ -273,5 +297,51 @@ describe("main → IPC → renderer round trip", () => {
     expect(defs.find((d) => d.id === "claude")).toBeUndefined();
     expect(rebuilt.find((d) => d.id === "claude")).toBeUndefined();
     expect(rebuilt.length).toBe(defs.length);
+  });
+});
+
+describe("an agent you install gets the same daemon half ours get", () => {
+  // The gap this closes: validation accepting `hooks`, `home` and `assets` from anyone
+  // means nothing if the daemon only ever builds the halves of the agents in the box —
+  // an installed agent would declare them and have them silently never happen.
+  const WORKER = `manifestVersion: 1
+id: acme
+label: Acme
+bin: acme
+caps:
+  promptDelivery: typed
+  turnSignal: true
+  resume: none
+  supervise: human
+  blockedDetection: false
+launch:
+  hcp: true
+  args: ["--settings", "{asset:settings.json}"]
+assets:
+  - { name: settings.json, file: settings.json }
+`;
+
+  test("its assets are written from the folder it was installed into, and it resumes", async () => {
+    const root = userRoot();
+    install(root, "acme", WORKER);
+    // Constant for every tile, so it is written once when the daemon starts.
+    writeFileSync(join(root, "acme", "settings.json"), '{"acme":true}');
+
+    const { defs } = await loadAgents({ builtins: [], nodeHalf });
+    setCatalog(defs);
+    expect(providers().map((p) => p.id)).toContain("acme");
+
+    const userData = mkdtempSync(join(tmpdir(), "hm-ud-"));
+    const out = prepareProviders({
+      userDataDir: userData,
+      execPath: process.execPath,
+      trackerPath: join(userData, "tracker.cjs"),
+      tileSessionsDir: join(userData, "tile-sessions"),
+      hcpSock: join(userData, "hcp.sock"),
+    });
+    const written = join(out.acme!.privateDir!, "settings.json");
+    expect(existsSync(written), `${written} was never written`).toBe(true);
+    expect(readFileSync(written, "utf8")).toBe('{"acme":true}');
+    setCatalog(BUILTIN_CATALOG);
   });
 });

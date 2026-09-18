@@ -4,37 +4,31 @@
  * capabilities, icons and scrape detectors only. Daemon-side plugin objects
  * are listed in node.ts (PLUGINS).
  *
- * To add a provider: create providers/<id>/index.ts (and providers/<id>/node.ts
- * if it resumes or injects signals), then add the def here (and the plugin in
- * node.ts). `enabled` decides whether it is offered for spawning; a disabled
- * def is still recognised for status when the user runs it themselves.
+ * To add an agent that ships in the box: write manifests/<id>.yaml — the same format a
+ * user or a repository writes — place it in the picker order in
+ * scripts/build-bundled-agents.mjs, and run `bun run agents:bundle`. It needs
+ * providers/<id>/node.ts only if it resumes a session or injects signals.
+ * `enabled` decides whether it is offered for spawning; a disabled def is still
+ * recognised for status when the user runs it themselves.
  */
+import { BUNDLED_AGENTS } from "./bundled-manifests.js";
+import { defFromManifest } from "./manifest.js";
 import type { AgentProviderDef, SpawnOptions, TileStatus } from "./types.js";
 import { optionArgs } from "./options.js";
-import { claude } from "./providers/claude/index.js";
-import { codex } from "./providers/codex/index.js";
-import { opencode } from "./providers/opencode/index.js";
-import { droid } from "./providers/droid/index.js";
-import { pi } from "./providers/pi/index.js";
-import { kiro } from "./providers/kiro/index.js";
-import { gemini } from "./providers/gemini/index.js";
-import { cursor } from "./providers/cursor/index.js";
-import { antigravity } from "./providers/antigravity/index.js";
-import { cline } from "./providers/cline/index.js";
-import { copilot } from "./providers/copilot/index.js";
-import { kimi } from "./providers/kimi/index.js";
-import { amp } from "./providers/amp/index.js";
-import { grok } from "./providers/grok/index.js";
-import { hermes } from "./providers/hermes/index.js";
-import { openclaw } from "./providers/openclaw/index.js";
 
-/** The floor; `setCatalog` replaces the live set once manifests load. */
-export const BUILTIN_CATALOG: readonly AgentProviderDef[] = [
-  // spawnable, in picker order
-  claude, codex, opencode, droid, pi, kiro,
-  // recognised for status only
-  gemini, cursor, antigravity, cline, copilot, kimi, amp, grok, hermes, openclaw,
-];
+/** The floor; `setCatalog` replaces the live set once manifests load.
+ *  Built from the manifests that ship in the box — the same format a user or a repository
+ *  writes, so "built-in" means where it comes from, never what it is allowed to be. */
+export const BUILTIN_CATALOG: readonly AgentProviderDef[] = BUNDLED_AGENTS.map((a) =>
+  defFromManifest(a.manifest, { trusted: true, nodeHalf: a.nodeHalf }));
+
+/** The def an agent that ships in the box was built from. A daemon half asks for its own
+ *  by id, so there is one object per agent and nothing to drift. */
+export function bundledAgent(id: string): AgentProviderDef {
+  const def = BUILTIN_CATALOG.find((d) => d.id === id);
+  if (!def) throw new Error(`no bundled agent "${id}"`);
+  return def;
+}
 
 let active: readonly AgentProviderDef[] = BUILTIN_CATALOG;
 let BY_ID = new Map<string, AgentProviderDef>();
@@ -132,6 +126,18 @@ export function detectStatus(id: string, screen: string): TileStatus {
 export function spawnArgsFor(def: AgentProviderDef, opts: SpawnOptions): string[] {
   return optionArgs(def, opts);
 }
+/** The part of a window title worth naming a tile by: `{task}` from the first matching
+ *  template, "" when a template says the title carries none, else the title itself. */
+export function taskFromTitle(def: AgentProviderDef | undefined, title: string): string {
+  for (const tpl of def?.titles ?? []) {
+    const parts = tpl.split(/(\{task\}|\{any\})/);
+    const re = new RegExp(`^${parts.map((p) => (p === "{task}" ? "(.+?)" : p === "{any}" ? ".*?" : p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))).join("")}$`, "s");
+    const m = re.exec(title);
+    if (m) return (m[1] ?? "").trim();
+  }
+  return title;
+}
+
 export function spawnLabelFor(def: AgentProviderDef, n: number, opts: SpawnOptions): string {
   return def.spawnLabel ? def.spawnLabel(n, opts) : `${def.label} #${n}`;
 }

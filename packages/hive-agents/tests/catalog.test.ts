@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { getCatalog, agentById, agentForCmd, identifyProvider, spawnableAgents, workerAgents, detectStatus } from "../src/index.js";
+import { getCatalog, agentById, agentForCmd, identifyProvider, spawnableAgents, workerAgents, detectStatus, taskFromTitle } from "../src/index.js";
 import { PLUGINS, providers, providerFor, NODE_PARTS, composeResume } from "../src/node.js";
 
 describe("agent catalog", () => {
@@ -39,11 +39,14 @@ describe("agent catalog", () => {
     // (or says explicitly that it needs none).
     for (const d of getCatalog()) {
       const needs = d.caps.resume !== "none" || d.caps.turnSignal;
-      const has = !!NODE_PARTS[d.id]?.resume;
-      if (needs && !d.noNodeHalf) expect(has, `${d.id} declares resume/turnSignal but has no node half`).toBe(true);
-      if (!needs) expect(has, `${d.id} has a node half but declares neither resume nor a turn signal`).toBe(false);
+      // Something has to deliver a claimed capability: a daemon half, or a manifest that
+      // says where the sessions are. Claiming one with neither is the drift being guarded.
+      const delivered = !!NODE_PARTS[d.id]?.resume || !!d.session?.resume;
+      if (needs && !d.noNodeHalf) expect(delivered, `${d.id} declares resume/turnSignal but nothing delivers it`).toBe(true);
+      if (!needs) expect(delivered, `${d.id} delivers resume but declares neither resume nor a turn signal`).toBe(false);
     }
-    expect(providers().map((p) => p.id)).toEqual(getCatalog().filter((d) => NODE_PARTS[d.id]).map((d) => d.id));
+    expect(providers().map((p) => p.id)).toEqual(
+      getCatalog().filter((d) => NODE_PARTS[d.id] || d.session?.resume).map((d) => d.id));
     expect(providerFor("/opt/pi")?.id).toBe("pi");
     const r = composeResume({ execPath: "/x", trackerPath: "/x/t", tileSessionsDir: "/x/s" });
     expect(r.transformSpecOnSpawn({ cwd: "/", cmd: "bash", args: [], cols: 1, rows: 1 }, "t").args).toEqual([]);
@@ -53,5 +56,13 @@ describe("agent catalog", () => {
     expect(detectStatus("claude", "x\n  1. No\n  2. Yes, allow")).toBe("permission");
     expect(detectStatus("nope", "anything")).toBe("idle");
     expect(agentById("droid")?.caps.turnSignal).toBe(true);
+  });
+  test("a window title names a tile only by the task its agent's templates find in it", () => {
+    const pi = agentById("pi");
+    expect(taskFromTitle(pi, "π - hivemind")).toBe("");
+    expect(taskFromTitle(pi, "π - fix the login bug - hivemind")).toBe("fix the login bug");
+    expect(taskFromTitle(agentById("claude"), "Claude Code")).toBe("");
+    expect(taskFromTitle(agentById("claude"), "Fix the flaky test")).toBe("Fix the flaky test");
+    expect(taskFromTitle(undefined, "a (b) [c] $d")).toBe("a (b) [c] $d");
   });
 });
