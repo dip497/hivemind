@@ -365,7 +365,7 @@ test("forgetTile (pty-exit teardown) wakes a blocked hive_read instead of hangin
   const read = dispatch("agent.read", { tileId: "tile-x", timeoutMs: 60_000 });
   forgetTile("tile-x"); // worker's pty exits (crash) → teardown must resolve the read now
   const r = (await read) as { finalStatus: string };
-  assert.equal(r.finalStatus, "timeout", "a crashed worker resolves the read immediately, doesn't hang 60s");
+  assert.equal(r.finalStatus, "closed", "a crashed worker resolves the read immediately (and says it closed, not that it is still working)");
 });
 
 test("forgetTile resolves a supervised worker's pending approval (deny), not leak it", async () => {

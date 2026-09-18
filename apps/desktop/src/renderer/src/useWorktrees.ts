@@ -7,6 +7,7 @@
  * in-flight-create guard, and the destructive-detach confirm. Canvas passes its
  * state refs + setters as context and wires the returned handlers into FrameNode.
  */
+import { mintId } from "../../shared/tile-id";
 import { useCallback, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import { frameColorFor } from "./frame-color";
 import { remoteBasename } from "../../shared/remote-uri";
@@ -76,7 +77,7 @@ export function useWorktrees(ctx: WorktreesCtx) {
         { w: FRAME_EMPTY_W, h: FRAME_EMPTY_H },
         { padX: FRAME_PAD, padTop: FRAME_HEADER + FRAME_PAD, gap: FRAME_GAP, maxRowWidth: FRAME_ROW_MAX },
       );
-      const id = `frame-wt-${Date.now()}`;
+      const id = mintId("frame-wt");
       const maxZ = framesRef.current.reduce((m, f) => (f.z > m ? f.z : m), 0);
       const child: FrameState = {
         id, x: slot.x, y: slot.y, w: FRAME_EMPTY_W, h: FRAME_EMPTY_H,

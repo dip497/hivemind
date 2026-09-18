@@ -26,6 +26,9 @@ import {
 
 export interface HcpServerDeps {
   token: string;
+  /** The socket could not be opened (e.g. a userData path too long for a unix socket),
+   *  so the app can say so instead of looking like it is simply not running. */
+  onListenError?: (err: Error) => void;
   rendererUp: () => boolean;
   dispatch: (method: string, params: unknown) => Promise<unknown>;
   onEvent: (topic: string, data: unknown) => void;
@@ -147,7 +150,12 @@ export function startHcpServer(sockPath: string, deps: HcpServerDeps): HcpServer
     }
   });
 
-  server.on("error", (err) => console.error("[hcp] listen error:", err));
+  // A control plane that never came up is invisible otherwise: `hive ctl` just reports
+  // "app not running". The usual cause is a userData path too long for a unix socket.
+  server.on("error", (err) => {
+    console.error("[hcp] listen error:", err);
+    deps.onListenError?.(err as Error);
+  });
   server.listen(sockPath, () => {
     try { fs.chmodSync(sockPath, 0o600); } catch { /* best-effort */ }
   });

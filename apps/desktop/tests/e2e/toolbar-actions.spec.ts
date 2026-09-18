@@ -19,7 +19,15 @@ const settings = async () => {
   await page.getByText("Customize actions", { exact: true }).click();
 };
 const close = () => page.getByRole("button", { name: "Close", exact: true }).click();
-const hive = (...args: string[]) => JSON.parse(execFileSync("bun", [cli, ...args, "--json"], { env, cwd: root, encoding: "utf8" })).data;
+const hive = (...args: string[]) => {
+  // Carry the CLI's own words into the failure: "Command failed" alone says nothing.
+  try {
+    return JSON.parse(execFileSync("bun", [cli, ...args, "--json"], { env, cwd: root, encoding: "utf8" })).data;
+  } catch (e) {
+    const { stdout = "", stderr = "" } = e as { stdout?: string; stderr?: string };
+    throw new Error(`hive ${args.join(" ")} failed\n${stdout}\n${stderr}`);
+  }
+};
 
 async function launch() {
   app = await electron.launch({ args: [path.join(appDir, "out/main/index.js"), "--no-sandbox"], cwd: root, env });

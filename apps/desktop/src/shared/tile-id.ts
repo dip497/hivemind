@@ -14,6 +14,13 @@
  */
 export const HM_PREFIX = "hm:";
 
+let lastMinted = 0;
+/** A fresh `<prefix>-<n>` id. The clock alone repeats within a millisecond, which a fanout of workers hits. */
+export function mintId(prefix: string): string {
+  lastMinted = Math.max(Date.now(), lastMinted + 1);
+  return `${prefix}-${lastMinted}`;
+}
+
 /** Bare id → pty id (idempotent). */
 export const toPtyId = (id: string): string => (id.startsWith(HM_PREFIX) ? id : HM_PREFIX + id);
 

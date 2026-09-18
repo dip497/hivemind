@@ -5,6 +5,7 @@
  * Lifted from Canvas.tsx; takes Canvas's state refs + setters + the state
  * values the auto-fit effect depends on.
  */
+import { mintId } from "../../shared/tile-id";
 import { useCallback, useEffect, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import { frameColorFor } from "./frame-color";
 import { computeFrameLayout, arrangeBoxes, FRAME_ROW_MAX, FRAME_GAP, type ArrangeMode, type ArrangeBox } from "./frame-layout";
@@ -40,7 +41,7 @@ export function useFrameOps(ctx: FrameOpsCtx) {
   } = ctx;
 
   const addFrame = useCallback(() => {
-    const id = `frame-${Date.now()}`;
+    const id = mintId("frame");
     setFrames((fs) => {
       const n = fs.length + 1;
       const maxZ = fs.reduce((m, f) => (f.z > m ? f.z : m), 0);

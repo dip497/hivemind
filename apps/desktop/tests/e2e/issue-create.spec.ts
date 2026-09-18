@@ -87,8 +87,11 @@ test("creates an issue via the modal and persists it to disk", async () => {
   // (App: onCreated → setPeekId), so "no dialog at all" never holds. Wait for
   // the CREATE dialog's heading to go, then dismiss the peek.
   await expect(page.getByRole("heading", { name: "New issue" })).toBeHidden({ timeout: 3_000 });
-  await page.keyboard.press("Escape");
-  await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 3_000 });
+  // The peek can mount after the create dialog goes, so an Escape can land between the two.
+  await expect.poll(async () => {
+    await page.keyboard.press("Escape");
+    return page.getByRole("dialog").count();
+  }, { timeout: 5_000 }).toBe(0);
 
   // Assert the on-disk file. Prefix XX, next_id starts at 1 → first id is XX-1.
   const issuePath = path.join(workspace, ".hivemind", "issues", "XX-1.md");

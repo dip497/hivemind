@@ -216,6 +216,18 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     sendMark.set(pid, deps.recorder.mark(pid));
   };
 
+  // A message the mailbox is still HOLDING (the agent is mid-turn). Its read epoch
+  // can only be armed once it is actually typed — armed at enqueue time, the next
+  // agent.read returns the turn already in flight, i.e. the PREVIOUS prompt's reply.
+  // A read that arrives while one is pending waits for the delivery first.
+  const pendingSend = new Map<string, Promise<void>>();
+  const holdUntilSent = (pid: string): (() => void) => {
+    let done!: () => void;
+    const p = new Promise<void>((r) => { done = r; });
+    pendingSend.set(pid, p);
+    return () => { if (pendingSend.get(pid) === p) pendingSend.delete(pid); done(); };
+  };
+
   // Spawn one child tile and wire up its bookkeeping (depth, parent, auto-report,
   // supervision, read epoch). Shared by `tile.spawn_agent` and `workflow.run` so
   // both enforce the same depth/rate gates. Throws HcpError on depth/rate/spawn
@@ -240,6 +252,11 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       throw new HcpError("UNSUPPORTED", `${def.label} is not installed on this machine (no ${def.bin} on PATH)${def.install ? ` — get it at ${def.install.url}` : ""}`);
     }
     const sup = normalizeSupervise(opts.supervise);
+    // Supervision is brokered TO the caller's tile. Without one there is nobody to ask,
+    // and the policy would be dropped silently while the caller believes it has a gate.
+    if (sup && !opts.callerTile) {
+      throw new HcpError("BAD_REQUEST", "supervise needs a supervising agent: run this from an agent tile, or spawn without --supervise");
+    }
     // pi cannot be supervised. It has NO permission system, so the only gate would be
     // one we inject — which must fail CLOSED (no human prompt to fall back to) and
     // therefore bricks the worker on any hiccup. Refuse LOUDLY rather than spawning
@@ -306,6 +323,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     deps.spawnEdge(bare, null, false); // drop spawn wires where this tile is parent OR child
     sendSeq.delete(pid);
     sendMark.delete(pid);
+    pendingSend.delete(pid);
     parentOf.delete(bare);
     for (const [child, parent] of parentOf) if (parent === bare) parentOf.delete(child);
     depthOf.delete(bare);
@@ -350,16 +368,22 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         const text = String(p.text ?? "");
         if (!tileId) throw new HcpError("BAD_REQUEST", "tileId required");
         const submit = p.submit !== false; // default: press Enter
-        armRead(tileId);
+        const pid = ptyId(tileId);
         // With submit (the default) this is a MESSAGE: deliver via the mailbox, which
         // types text-then-Enter as separate writes (a bundled newline is dropped by
         // claude's TUI) and, crucially, HOLDS it if the target agent is mid-turn —
         // otherwise it strands in the composer, unsubmitted and unread.
         // submit:false is a raw paste into the composer, which is only meaningful
         // right now, so it stays an immediate write.
-        const ok = submit
-          ? deps.deliverToTile(ptyId(tileId), text)
-          : deps.writeToTile(ptyId(tileId), text);
+        let ok: boolean;
+        if (submit) {
+          const sent = holdUntilSent(pid);
+          ok = deps.deliverToTile(pid, text, () => { armRead(tileId); sent(); });
+          if (!ok) sent();
+        } else {
+          armRead(tileId); // a raw paste is written immediately, so now IS delivery
+          ok = deps.writeToTile(pid, text);
+        }
         if (!ok) throw new HcpError("TILE_NOT_FOUND", `no live agent for tile ${tileId}`);
         return { ok: true };
       }
@@ -375,6 +399,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         const keys = Array.isArray(raw) ? raw.map(String) : raw != null ? [String(raw)] : [];
         if (!keys.length) throw new HcpError("BAD_REQUEST", "keys required");
         const pid = ptyId(tileId);
+        armRead(tileId); // keys can submit a prompt; a following read wants the turn they cause
         const bytesOf = (k: string) => KEYMAP[k.toLowerCase()] ?? k;
         const ok = deps.writeToTile(pid, bytesOf(keys[0]!));
         if (!ok) throw new HcpError("TILE_NOT_FOUND", `no live agent for tile ${tileId}`);
@@ -398,7 +423,9 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         const banner = `\n[hive] report from ${labelOf(child)}:\n${message}\n`;
         // Held if the parent is mid-turn — a report typed into a busy TUI never
         // gets read, and the worker thinks it delivered.
-        deps.deliverToTile(ptyId(parent), banner);
+        if (!deps.deliverToTile(ptyId(parent), banner)) {
+          throw new HcpError("TILE_NOT_FOUND", `parent agent ${parent} is gone — report not delivered`);
+        }
         // Single-delivery ladder: the worker authored its own summary this turn, so
         // when its turn ends, DON'T also auto-forward the raw turn (that would be a
         // second message the parent re-processes). recordTurn reads + clears this.
@@ -495,8 +522,23 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         requireTurnSignal(tileId, "agent.read");
         const timeoutMs = typeof p.timeoutMs === "number" ? p.timeoutMs : DEFAULT_READ_TIMEOUT;
         const pid = ptyId(tileId);
+        // A send may still be queued behind the turn in flight; its epoch is armed when
+        // it is typed, so wait for that before deciding which turn this read wants.
+        // One budget for the whole read: waiting for a held send to be typed must not
+        // extend the call past the ceiling the caller (and the CLI) is waiting on.
+        const deadline = Date.now() + timeoutMs;
+        const pending = pendingSend.get(pid);
+        if (pending) await Promise.race([pending, new Promise<void>((r) => { const t = setTimeout(r, timeoutMs); t.unref?.(); })]);
         const afterSeq = sendSeq.get(pid) ?? deps.turns.currentSeq(pid);
-        const rec = await deps.turns.waitForTurn(pid, afterSeq, timeoutMs);
+        const rec = await deps.turns.waitForTurn(pid, afterSeq, Math.max(0, deadline - Date.now()));
+        // A tile that died under us is not "still working" — say so, and keep the read's
+        // shape so a caller parsing finalStatus does not have to special-case an error.
+        if (rec && rec.seq === -1) {
+          return { text: null, finalStatus: "closed", truncated: false, note: "tile closed while waiting" };
+        }
+        // Consume this turn: without advancing the epoch the NEXT read returns the same
+        // turn instantly, so a poll loop can never tell a new answer from the old one.
+        if (rec) sendSeq.set(pid, rec.seq);
         if (rec && typeof rec.text === "string" && rec.text.length > 0) {
           // pi inline-reply path: pi has no transcript file — its lifecycle-bridge
           // extension carries the finished reply on the turn event itself.
@@ -516,6 +558,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
           if (text != null) return { text, finalStatus: "turn", truncated: false };
           return { text: null, finalStatus: "turn", truncated: false, note: "turn completed but its transcript was unreadable" };
         }
+        if (rec) return { text: null, finalStatus: "turn", truncated: false, note: "turn completed but carried no readable reply" };
         // No completed turn within the timeout. Report status honestly instead of
         // scraping the raw ANSI terminal buffer (which returned garbled bytes, not
         // the agent's words). The agent is still working; if it was spawned with
@@ -556,15 +599,19 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         const runWorker = async (label: string, prompt: string): Promise<WR> => {
           let tileId: string;
           try {
-            tileId = await spawnRetry({ agent, prompt, frame, model, callerTile: caller, report: false, supervise });
+            tileId = await spawnRetry({ agent, prompt, frame, model, callerTile: caller, report: false, supervise, name: label });
           } catch (e) {
             return { item: label, tileId: null, status: "error", text: (e as Error).message };
           }
           const pid = ptyId(tileId);
           const afterSeq = sendSeq.get(pid) ?? deps.turns.currentSeq(pid);
           const rec = await deps.turns.waitForTurn(pid, afterSeq, perTurnMs);
-          const text = rec?.transcriptPath ? readLastAssistantMessage(rec.transcriptPath) : null;
-          const status: WR["status"] = rec?.transcriptPath ? "turn" : "timeout";
+          // Same two carriers agent.read handles: an inline reply (pi's bridge sends the
+          // text on the turn event) or a transcript path (claude/droid).
+          const text = rec?.text && rec.text.length > 0
+            ? rec.text
+            : rec?.transcriptPath ? readLastAssistantMessage(rec.transcriptPath) : null;
+          const status: WR["status"] = !rec ? "timeout" : rec.seq === -1 ? "error" : "turn";
           if (closeWhenDone && status === "turn") { try { await closeTile(tileId); } catch { /* best-effort */ } }
           return { item: label, tileId, status, text };
         };
