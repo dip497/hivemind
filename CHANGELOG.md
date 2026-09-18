@@ -11,7 +11,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 - The app shows its interface in Geist, as designed. The font never loaded before, so text fell back to the system font. It now ships inside the app and works offline. The editor and Markdown code use the same mono font as the terminal.
 - `hive views new <name>` starts a view outside this repository, ready to build, install and publish. The app now serves `@hivemind/view-sdk` to every view, so a view no longer bundles its own copy and always speaks the app's version. The example views moved to the published plugins repository.
-- Plugins come from HiveHub and are named `@owner/name`, after the GitHub account that published them, so two people's `board` never collide. `hive views install @owner/name` and `hive agents install @owner/name` install one by name, checking every file against the hash HiveHub recorded. A bare name is only ever built in or installed from a folder.
+- Plugins come from HiveHub. A view is named `@owner/name`, after the GitHub account that published it, so two people's `board` never collide. An agent has one name for one CLI (`gemini`), and agents are added by pull request to the plugins repository. `hive views install @owner/name` and `hive agents install gemini` install one by name, checking every file against the hash HiveHub recorded.
 - Dragging and resizing a tile follows the pointer again. The tile used to stay put for the whole drag and then slide across on release. It no longer blinks out on every frame of the drag either.
 - The terminal render-debug panel is gone, and Ctrl+Shift+D reaches the program in the terminal again.
 - In the windows view, an editor tab no longer draws over the tab you are on.

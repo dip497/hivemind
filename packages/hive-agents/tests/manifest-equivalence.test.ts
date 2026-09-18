@@ -292,16 +292,14 @@ describe("manifest validation refuses what it cannot back", () => {
     expect(def.detect!("zzz")).toBe("idle");
   });
 
-  test("an agent id is a name, or @owner/name from the registry", () => {
-    expect(defFromManifest({ ...base, id: "@dip497/aider" }).id).toBe("@dip497/aider");
-    bad({ id: "dip497--aider" }, /id must be a name or @owner\/name/);
-    bad({ id: "dip497/aider" }, /id must be a name or @owner\/name/);
-    bad({ id: "@dip497/a/b" }, /id must be a name or @owner\/name/);
+  test("an agent id is one name — an agent stands for one CLI, so there is no scope", () => {
+    expect(defFromManifest({ ...base, id: "acme-two" }).id).toBe("acme-two");
+    for (const id of ["@dip497/aider", "dip497/aider", "../aider", "Aider"]) bad({ id }, /id must be lowercase/);
   });
 
   test("an unversioned or misversioned manifest is refused", () => {
     bad({ manifestVersion: 999 }, /manifestVersion must be 1/);
-    bad({ id: "Not Valid" }, /id must be a name or @owner\/name/);
+    bad({ id: "Not Valid" }, /id must be lowercase/);
     bad({ caps: { ...base.caps, blockedDetection: undefined } }, /caps.blockedDetection is required/);
   });
 });

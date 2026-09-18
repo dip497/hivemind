@@ -79,12 +79,13 @@ hive agents validate ./my-agent
 
 # install it from anywhere
 hive agents install ./my-agent
-hive agents install @owner/name`}</code></pre>
+hive agents install gemini          # a listed agent, by its name`}</code></pre>
     <p class="sub">
-      To be listed here, publish it on HiveHub: set its id to <code>@your-github-login/name</code>,
-      push, and run <code>hivehub publish</code> in its folder. HiveHub keeps a pointer, never your
-      code: your plugin stays in your repository, and every file is pinned by checksum, so a file
-      that changes after it is listed fails the install rather than being trusted.
+      An agent is one name for one CLI, so to list one, open a pull request adding it to
+      <a href="https://github.com/dip497/hivemind-plugins">dip497/hivemind-plugins</a>; once merged it is
+      published from there. A view is yours to publish: set its id to <code>@your-github-login/name</code>,
+      push, and run <code>hivehub publish</code>. HiveHub keeps a pointer, never your code, and every
+      file is pinned by checksum, so a file that changes after it is listed fails the install.
     </p>
   </section>
 

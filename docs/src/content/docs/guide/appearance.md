@@ -66,8 +66,8 @@ hive config set views.toolbars.canvas.labels true
 ## Plugins
 
 **Browse** lists the agents and views published on
-[HiveHub](https://hivehub.griiken.workers.dev), each named `@owner/name` after the GitHub
-account that published it, with a checksum for every file. Installing downloads the files, checks every checksum, and shows
+[HiveHub](https://hivehub.griiken.workers.dev), with a checksum for every file. A view is named
+`@owner/name` after the GitHub account that published it; an agent has one name, like `gemini`. Installing downloads the files, checks every checksum, and shows
 what the plugin can do before anything is written; a file that changed after it was
 listed is refused. **Installed** adds a view from a folder (with the same review), and
 lists the views and agents you added, with their load problems.

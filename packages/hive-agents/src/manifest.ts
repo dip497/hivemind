@@ -99,9 +99,9 @@ function safeDef(manifest: unknown): AgentProviderDef | undefined {
   try { return defFromManifest(manifest); } catch { return undefined; }
 }
 
-/** `name` for an agent that ships in the app or was installed from a folder, `@owner/name` for
- *  one published on HiveHub. `--` is refused so no bare id can pass for a scoped one. */
-export const AGENT_ID_RE = /^(?!.*--)(?:@[a-z0-9][a-z0-9-]{0,38}\/)?[a-z0-9][a-z0-9-]{0,31}$/;
+/** One name per agent, wherever it comes from: an agent stands for one CLI, so there is no
+ *  scope. Published agents come from the plugins repository, where the name is settled. */
+export const AGENT_ID_RE = /^[a-z0-9][a-z0-9-]{0,31}$/;
 const STATUSES: readonly TileStatus[] = ["idle", "working", "blocked", "permission", "question"];
 const CAP_KEYS = [
   "promptDelivery", "turnSignal", "resume", "supervise",
@@ -428,7 +428,7 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
 
   req(m.manifestVersion === AGENT_MANIFEST_VERSION,
     `manifestVersion must be ${AGENT_MANIFEST_VERSION} (got ${String(m.manifestVersion)})`);
-  req(typeof m.id === "string" && AGENT_ID_RE.test(m.id), `id must be a name or @owner/name, lowercase letters, digits and single dashes (got ${String(m.id)})`);
+  req(typeof m.id === "string" && AGENT_ID_RE.test(m.id), `id must be lowercase letters, digits and dashes (got ${String(m.id)})`);
   req(typeof m.label === "string" && m.label.length > 0, "label is required");
   req(typeof m.bin === "string" && m.bin.length > 0, "bin is required");
   // A path would put the agent's label on an arbitrary executable.

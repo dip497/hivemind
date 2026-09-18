@@ -505,7 +505,7 @@ export function mergeSettings(raw: unknown, base: Settings = DEFAULT_SETTINGS): 
 }
 
 /** An agent's id, which may carry a HiveHub scope — unlike the option ids inside it. */
-const AGENT_KEY_RE = /^(?!.*--)(?:@[a-z0-9][a-z0-9-]{0,38}\/)?[a-z0-9][a-z0-9-]{0,31}$/;
+const AGENT_KEY_RE = /^[a-z0-9][a-z0-9-]{0,31}$/;
 const OPTION_KEY_RE = /^[a-z0-9][a-z0-9-]{0,31}$/;
 
 function agentOptions(raw: Record<string, unknown>): Record<string, Record<string, string>> {

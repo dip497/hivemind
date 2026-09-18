@@ -1,6 +1,6 @@
 /** `hive agents list|install|remove` — same loader as the app, so list shows what it loads. */
 import { defineCommand } from "citty";
-import { REGISTRY_NAME, stageFromRegistry } from "../registry.js";
+import { AGENT_NAME, stageFromRegistry } from "../registry.js";
 import { findRoot, patchSettingsFile, readSettings } from "@hivemind/core";
 import { BUILTIN_CATALOG } from "@hivemind/agents";
 import { loadAgents, installAgent, removeAgent, AGENT_MANIFEST_FILE } from "@hivemind/agents/load";
@@ -15,7 +15,7 @@ import { hcpCall } from "../hcp.js";
 /** The id a package claims, read before anything is copied. Null when it is unreadable —
  *  installAgent reports the real reason. */
 async function readAgentId(dir: string): Promise<string | null> {
-  try { return /^id:\s*"?(@?[A-Za-z0-9][\w-]*(?:\/[A-Za-z0-9][\w-]*)?)"?\s*$/m.exec(await readFile(path.join(dir, AGENT_MANIFEST_FILE), "utf8"))?.[1] ?? null; }
+  try { return /^id:\s*"?([A-Za-z0-9][\w-]*)"?\s*$/m.exec(await readFile(path.join(dir, AGENT_MANIFEST_FILE), "utf8"))?.[1] ?? null; }
   catch { return null; }
 }
 
@@ -104,7 +104,7 @@ async function stageFromRepo(spec: string, ref: string): Promise<{ dir: string; 
 const installCmd = defineCommand({
   meta: { name: "install", description: "Validate an agent package and copy it into the user agents dir" },
   args: {
-    dir: { type: "positional", required: true, description: "a folder holding agent.yaml, @owner/name from HiveHub, or owner/repo[/dir] on GitHub" },
+    dir: { type: "positional", required: true, description: "a folder holding agent.yaml, an agent's name on HiveHub (gemini), or owner/repo[/dir] on GitHub" },
     replace: { type: "boolean", description: "allow it to take a built-in agent's id" },
     ref: { type: "string", description: "branch or tag to take it from (default: the default branch)" },
     yes: { type: "boolean", description: "install from a repository without reading what it does first" },
@@ -117,10 +117,10 @@ const installCmd = defineCommand({
     const discard = async () => { if (staged) await rm(staged, { recursive: true, force: true }).catch(() => {}); };
     const stop = async (code: string, message: string) => { await discard(); return err(ctx, code, message); };
     try {
-      // A folder is a folder; @owner/name is HiveHub; anything else is a repository someone named.
+      // A folder is a folder; a bare name is HiveHub; anything else is a repository someone named.
       let source = String(args.dir);
       let from: { where: string; pinned: boolean } | null = null;
-      if (REGISTRY_NAME.test(source)) {
+      if (AGENT_NAME.test(source) && !existsSync(source)) {
         const got = await stageFromRegistry(source, "agent");
         staged = source = got.dir;
         from = { where: `HiveHub, published from ${got.entry.source ?? "its repository"}`, pinned: true };

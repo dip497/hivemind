@@ -263,7 +263,7 @@ export function BrowsePlugins() {
         </article>;
       })}
     </div>
-    <p className="settings-note">Plugins come from HiveHub, each named <code>@owner/name</code> after the account that published it, with a checksum for every file. To add one from your own folder, see{" "}
+    <p className="settings-note">Plugins come from HiveHub, with a checksum for every file. A view is named <code>@owner/name</code> after the account that published it; an agent has one name, like <code>gemini</code>. To add one from your own folder, see{" "}
       <button className="settings-link" onClick={() => go("installed")}>Installed plugins</button>.</p>
   </div>;
 }

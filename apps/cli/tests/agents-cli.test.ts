@@ -170,3 +170,28 @@ describe("validating an agent package before you publish it", () => {
     expect(`${r.stdout}${r.stderr}`).toContain("Hivemind's agent for `gemini`");
   });
 });
+
+describe("hive agents install <name>", () => {
+  test("a bare name comes from the registry: shown first, installed with --yes, every file checked", () => {
+    const reg = fs.mkdtempSync(path.join(os.tmpdir(), "hm-cli-registry-"));
+    tmp.push(reg);
+    fs.mkdirSync(path.join(reg, "agents", "acme"), { recursive: true });
+    fs.writeFileSync(path.join(reg, "agents", "acme", "agent.yaml"), ACME);
+    const sha = new Bun.CryptoHasher("sha256").update(ACME).digest("hex");
+    fs.writeFileSync(path.join(reg, "index.json"), JSON.stringify({ version: 1, plugins: [{
+      id: "acme", type: "agent", name: "Acme Coder", description: "d", author: "a", version: "1.0.0",
+      path: "agents/acme", bin: "acme-coder", files: [{ path: "agent.yaml", sha256: sha }],
+    }] }));
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "hm-cli-cwd-"));
+    tmp.push(cwd);
+    const env = { ...profile(), HIVEMIND_PLUGIN_INDEX: `file://${path.join(reg, "index.json")}` };
+    let r = hive(["agents", "install", "acme", "--json"], { cwd, env });
+    expect(r.json).toMatchObject({ ok: false, code: "install_unconfirmed" });
+    expect((r.json as { error: string }).error).toContain("matches the hash HiveHub recorded");
+    r = hive(["agents", "install", "acme", "--yes", "--json"], { cwd, env });
+    expect(r.json).toMatchObject({ ok: true, data: { id: "acme" } });
+    // A scope is a view's, never an agent's.
+    r = hive(["agents", "install", "@dip497/acme", "--yes", "--json"], { cwd, env });
+    expect(r.code).not.toBe(0);
+  });
+});

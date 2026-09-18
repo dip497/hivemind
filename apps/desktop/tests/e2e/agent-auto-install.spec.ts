@@ -5,7 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { buildRegistry, SCOPE } from "./helpers/registry";
+import { buildRegistry } from "./helpers/registry";
 
 let app: ElectronApplication | undefined;
 let page: Page;
@@ -13,7 +13,7 @@ const root = fs.mkdtempSync(path.join(os.tmpdir(), "hm-auto-"));
 const bin = path.join(root, "bin");
 let xdg = "";
 const settingsFile = () => path.join(xdg, "hivemind", "settings.json");
-const CONTINUE = `${SCOPE}/continue`;
+const CONTINUE = "continue";
 const installed = () => fs.existsSync(path.join(xdg, "hivemind", "agents", CONTINUE, "agent.yaml"));
 let indexUrl = "";
 // Boot, a shell-env read and a --version probe all come first; a loaded machine needs the room.

@@ -35,9 +35,9 @@ export interface CatalogEntry {
   icon?: unknown;
 }
 
-// Everything listed was published by someone, so every id carries its publisher's scope; a bare
-// name is only ever something that ships inside the app.
-const ID_RE = /^(?!.*--)@[a-z0-9][a-z0-9-]{0,38}\/[a-z0-9][a-z0-9-]{0,63}$/;
+// A view carries its publisher's scope; an agent is one name for one CLI, settled in the plugins
+// repository — the same split the registry enforces when it lists them.
+const ID_RE = { view: /^(?!.*--)@[a-z0-9][a-z0-9-]{0,38}\/[a-z0-9][a-z0-9-]{0,63}$/, agent: /^[a-z0-9][a-z0-9-]{0,31}$/ };
 const SEGMENT_RE = /^[A-Za-z0-9_][A-Za-z0-9_.-]*$/;
 const SHA_RE = /^[0-9a-f]{64}$/;
 export const MAX_FILE = 20 << 20;
@@ -59,8 +59,10 @@ export function parseCatalog(raw: unknown): CatalogEntry[] {
   return doc.plugins.slice(0, 500).map((p: Record<string, unknown>, i) => {
     const at = `plugins[${i}]`;
     if (!p || typeof p !== "object") throw new Error(`${at} is not an object`);
-    if (typeof p.id !== "string" || !ID_RE.test(p.id)) throw new Error(`${at}.id is not a plugin id — it must be @owner/name`);
     if (p.type !== "agent" && p.type !== "view") throw new Error(`${at}.type must be agent or view`);
+    if (typeof p.id !== "string" || !ID_RE[p.type].test(p.id)) {
+      throw new Error(`${at}.id is not ${p.type === "view" ? "a view id — it must be @owner/name" : "an agent id — it must be one name"}`);
+    }
     const key = `${p.type}:${p.id}`;
     if (seen.has(key)) throw new Error(`${at} lists ${key} twice`);
     seen.add(key);

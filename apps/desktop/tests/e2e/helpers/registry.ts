@@ -1,5 +1,5 @@
-// A HiveHub-shaped catalog built from the e2e fixtures, every id scoped the way a published
-// plugin's is, so an e2e run installs the same kind of id the app gets from HiveHub.
+// A HiveHub-shaped catalog built from the e2e fixtures, with ids shaped the way HiveHub's are —
+// views scoped `@owner/name`, agents one bare name — so an e2e run installs what the app gets.
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -34,12 +34,12 @@ export function buildRegistry(dir: string): Registry {
     });
   }
   for (const a of fs.readdirSync(path.join(FIXTURES, "agents"))) {
-    const yaml = fs.readFileSync(path.join(FIXTURES, "agents", a, "agent.yaml"), "utf8").replace(/^id:.*$/m, `id: "${SCOPE}/${a}"`);
+    const yaml = fs.readFileSync(path.join(FIXTURES, "agents", a, "agent.yaml"), "utf8").replace(/^id:.*$/m, `id: ${a}`);
     fs.mkdirSync(path.join(dir, "agents", a), { recursive: true });
     fs.writeFileSync(path.join(dir, "agents", a, "agent.yaml"), yaml);
     const label = field(yaml, "label") || a;
     plugins.push({
-      id: `${SCOPE}/${a}`, type: "agent", name: label, description: label, author: "e2e", version: "1.0.0",
+      id: a, type: "agent", name: label, description: label, author: "e2e", version: "1.0.0",
       path: `agents/${a}`, bin: field(yaml, "bin"), files: [{ path: "agent.yaml", sha256: sha(yaml) }],
     });
   }

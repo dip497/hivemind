@@ -13,7 +13,7 @@ let root: string;
 let registry: string;
 let xdg: string;
 
-const CODER = `${SCOPE}/catalog-coder`;
+const CODER = "catalog-coder";
 const QUEUE = `${SCOPE}/queue`, TILED = `${SCOPE}/tiled`;
 const AGENT = `manifestVersion: 1
 id: "${CODER}"

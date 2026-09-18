@@ -30,10 +30,12 @@ describe("reading the index", () => {
   test("entries that could reach outside their folder or skip integrity are refused", () => {
     const base = { id: "@a/x", type: "view", name: "X", description: "d", author: "a", version: "1", path: "views/x", files: [{ path: "a.js", sha256: "0".repeat(64) }] };
     const bad = (patch: object) => () => parseCatalog({ version: 1, plugins: [{ ...base, ...patch }] });
-    // Everything listed was published, so it carries a scope; a bare name is only built in.
+    // A view carries its publisher's scope; an agent is one name, never scoped.
     expect(bad({ id: "x" })).toThrow(/must be @owner\/name/);
     expect(bad({ id: "a/x" })).toThrow(/must be @owner\/name/);
     expect(bad({ id: "@a/x--y" })).toThrow(/must be @owner\/name/);
+    expect(bad({ type: "agent", id: "@a/x" })).toThrow(/must be one name/);
+    expect(() => parseCatalog({ version: 1, plugins: [{ ...base, type: "agent", id: "gemini" }] })).not.toThrow();
     expect(bad({ path: "../etc" })).toThrow(/relative folder/);
     expect(bad({ path: "/abs" })).toThrow(/relative folder/);
     expect(bad({ files: [{ path: "../../x", sha256: "0".repeat(64) }] })).toThrow(/relative path/);
@@ -41,8 +43,8 @@ describe("reading the index", () => {
     expect(bad({ files: [{ path: "NUL.js", sha256: "0".repeat(64) }] })).toThrow(/relative path/);
     expect(bad({ type: "tool" })).toThrow(/agent or view/);
     expect(bad({ bin: "x" })).toThrow(/bare name of an agent/); // views have no CLI
-    expect(bad({ type: "agent", bin: "../bin/sh" })).toThrow(/bare name/);
-    expect(bad({ id: "Bad Id" })).toThrow(/plugin id/);
+    expect(bad({ type: "agent", id: "x", bin: "../bin/sh" })).toThrow(/bare name/);
+    expect(bad({ id: "Bad Id" })).toThrow(/view id/);
     expect(() => parseCatalog({ version: 2, plugins: [] })).toThrow(/version 1/);
   });
 });
@@ -71,7 +73,7 @@ describe("staging a download", () => {
 });
 
 test("a plugin may live in its own repository, and a source that is not an https base is refused", async () => {
-  const entry = { id: "@a/far", type: "agent", name: "Far", description: "d", author: "a", version: "1.0.0",
+  const entry = { id: "far", type: "agent", name: "Far", description: "d", author: "a", version: "1.0.0",
     path: "agents/far", source: "https://example.test/repo/", files: [{ path: "agent.yaml", sha256: "0".repeat(64) }] };
   const [parsed] = parseCatalog({ version: 1, plugins: [entry] });
   expect(parsed!.source).toBe("https://example.test/repo/");
@@ -95,7 +97,7 @@ test("a plugin can name the oldest Hivemind it runs on", () => {
 });
 
 test("an agent may carry its own mark, bounded but not understood here", () => {
-  const base = { id: "@a/acme", type: "agent", name: "Acme", description: "d", author: "a", version: "1.0.0",
+  const base = { id: "acme", type: "agent", name: "Acme", description: "d", author: "a", version: "1.0.0",
     path: "agents/acme", files: [{ path: "agent.yaml", sha256: "0".repeat(64) }] };
   const icon = { viewBox: "0 0 16 16", shapes: [{ rect: { x: "2", y: "2", width: "12", height: "12" } }] };
   // Carried through as written: what an icon may contain is decided where it is drawn.

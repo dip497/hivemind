@@ -1,10 +1,12 @@
-/** Installing by name from HiveHub: `hive views install @owner/name`. The catalog and the
+/** Installing by name from HiveHub: `hive views install @owner/name`, `hive agents install gemini`. The catalog and the
  *  download are the app's own (`@hivemind/core/plugin-catalog`), so every file is checked
  *  against the hash HiveHub recorded when it was published — the same check the app makes. */
 import pkg from "../package.json" with { type: "json" };
 
-/** A name only the registry can answer; anything else is a folder or a repository. */
+/** A view's name on the registry; anything else is a folder or a repository. */
 export const REGISTRY_NAME = /^@[a-z0-9][a-z0-9-]{0,38}\/[a-z0-9][a-z0-9-]{0,63}$/;
+/** An agent's name on the registry: one word, no scope — the same rule as an agent id. */
+export const AGENT_NAME = /^[a-z0-9][a-z0-9-]{0,31}$/;
 
 export async function stageFromRegistry(id: string, type: "agent" | "view") {
   const { appMeetsMinVersion, catalogIndexUrl, fetchCatalog, stageEntry } = await import("@hivemind/core/plugin-catalog");

@@ -76,25 +76,12 @@ describe("loading agents from disk", () => {
     expect(loaded.filter((a) => a.source === "builtin" && !a.error).length).toBe(BUNDLED_AGENTS.length);
   });
 
-  test("an agent from the registry loads as @owner/name, beside a bare one of the same name", async () => {
+  test("a scoped folder is not an agent, and a scoped id cannot be removed", async () => {
     const root = userRoot();
-    install(root, "acme", ACME);
     install(root, "@dip497/acme", ACME.replace("id: acme", "id: \"@dip497/acme\""));
-    const { defs, loaded } = await loadAgents({ builtinDir: BUILTIN, nodeHalf });
-    expect(defs.filter((d) => d.id.endsWith("acme")).map((d) => d.id).sort()).toEqual(["@dip497/acme", "acme"]);
-    expect(loaded.find((a) => a.id === "@dip497/acme")?.error).toBeNull();
-
-    await removeAgent("@dip497/acme");
-    expect(existsSync(join(root, "@dip497", "acme"))).toBe(false);
-    expect(existsSync(join(root, "acme"))).toBe(true);
-    for (const bad of ["dip497/acme", "@dip497/../acme", "@dip497/acme/x"]) await expect(removeAgent(bad)).rejects.toThrow(/not an agent id/);
-  });
-
-  test("a scoped folder whose manifest names someone else is refused", async () => {
-    const root = userRoot();
-    install(root, "@dip497/acme", ACME.replace("id: acme", "id: \"@alice/acme\""));
     const { loaded } = await loadAgents({ builtinDir: BUILTIN, nodeHalf });
-    expect(loaded.find((a) => a.id === "@dip497/acme")?.error).toMatch(/does not match manifest id "@alice\/acme"/);
+    expect(loaded.find((a) => a.id.includes("acme"))?.def ?? null).toBeNull();
+    for (const bad of ["@dip497/acme", "dip497/acme", "../acme"]) await expect(removeAgent(bad)).rejects.toThrow(/not an agent id/);
   });
 
   test("any provider can be switched off, built-ins included", async () => {

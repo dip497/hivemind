@@ -277,28 +277,28 @@ describe("settings schema", () => {
   });
 });
 
-describe("scoped plugin ids in settings", () => {
+describe("plugin ids in settings", () => {
   // Dropping one of these is silent, which is why each is pinned: a declined agent that is
   // dropped gets installed again at the next start, and per-view choices vanish on reload.
-  test("an @owner/name id survives a save and reload wherever an agent or view id is a key", () => {
+  test("an @owner/name view and a bare agent survive a save and reload wherever they are keys", () => {
     const cur = mergeSettings({}, DEFAULT_SETTINGS);
-    let next = setPath(cur, "agents.declined", ["@dip497/aider", "gemini"]);
-    next = setPath(next, "agents.fromCatalog", ["@dip497/amp"]);
-    next = setPath(next, "agents.options", { "@dip497/aider": { model: "big" } });
+    let next = setPath(cur, "agents.declined", ["aider", "gemini"]);
+    next = setPath(next, "agents.fromCatalog", ["amp"]);
+    next = setPath(next, "agents.options", { aider: { model: "big" } });
     next = setPath(next, "views.chrome", { "@dip497/board": { island: "top" } });
     const back = mergeSettings(JSON.parse(JSON.stringify(next)), cur);
-    expect(back.agents.declined).toEqual(["@dip497/aider", "gemini"]);
-    expect(back.agents.fromCatalog).toEqual(["@dip497/amp"]);
-    expect(back.agents.options["@dip497/aider"]).toEqual({ model: "big" });
+    expect(back.agents.declined).toEqual(["aider", "gemini"]);
+    expect(back.agents.fromCatalog).toEqual(["amp"]);
+    expect(back.agents.options.aider).toEqual({ model: "big" });
     expect(Object.keys(back.views.chrome)).toContain("@dip497/board");
   });
 
-  test("what is not an id is still dropped, and option names stay plain", () => {
+  test("what is not an agent id is dropped — a scope included — and option names stay plain", () => {
     const cur = mergeSettings({}, DEFAULT_SETTINGS);
-    const next = setPath(setPath(cur, "agents.declined", ["dip497/aider", "a--b", "../x"]), "agents.options", { "@dip497/aider": { "@evil/opt": "x", model: "ok" } });
+    const next = setPath(setPath(cur, "agents.declined", ["dip497/aider", "@dip497/aider", "../x"]), "agents.options", { aider: { "@evil/opt": "x", model: "ok" } });
     const back = mergeSettings(JSON.parse(JSON.stringify(next)), cur);
     expect(back.agents.declined).toEqual([]);
-    expect(back.agents.options["@dip497/aider"]).toEqual({ model: "ok" });
+    expect(back.agents.options.aider).toEqual({ model: "ok" });
   });
 });
 
