@@ -40,7 +40,6 @@ export function repoAgentsDir(repoRoot: string): string {
 
 export interface ReadOptions {
   source: AgentSource;
-  trusted?: boolean;
   allowReserved?: boolean;
   reserved?: readonly string[];
   requireDirMatch?: boolean;
@@ -65,7 +64,6 @@ export async function readAgentManifest(file: string, opts: ReadOptions): Promis
   }
   try {
     const def = defFromManifest(raw, {
-      trusted: opts.trusted,
       allowReserved: opts.allowReserved,
       reserved: opts.reserved,
     });
@@ -112,7 +110,6 @@ export async function loadAgents(opts: LoadAgentsOptions = {}): Promise<{
 }> {
   const plugin: ReadOptions = {
     source: "user",
-    trusted: false,
     requireDirMatch: true,
   };
   const user = await scanDir(userAgentsDir(), plugin);

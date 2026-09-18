@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { getCatalog, agentById, agentForCmd, identifyProvider, spawnableAgents, workerAgents, detectStatus, taskFromTitle, setCatalog } from "../src/index.js";
-import { PLUGINS, providers, providerFor, nodePartsFor, composeResume } from "../src/node.js";
+import { providers, providerFor, nodePartsFor, composeResume } from "../src/node.js";
 import { authoredDefs } from "./authored.js";
 
 // The published fixtures stand in for a machine that has installed every agent.
@@ -34,8 +34,6 @@ describe("agent catalog", () => {
     for (const d of getCatalog()) if (!d.caps.turnSignal) expect(d.note).toBeTruthy();
   });
   test("drift guard: what the daemon builds agrees with what each def declares", () => {
-    // No hand-written plugin remains; a manifest's own parts are the whole daemon half.
-    expect(PLUGINS).toEqual([]);
     for (const d of getCatalog()) {
       const needs = d.caps.resume !== "none" || d.caps.turnSignal;
       // Something has to deliver a claimed capability: the parts the manifest builds, or

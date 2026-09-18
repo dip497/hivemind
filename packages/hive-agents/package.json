@@ -1,6 +1,7 @@
 {
   "name": "@hivemind/agents",
   "version": "1.17.0",
+  "private": true,
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -15,9 +16,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "bun test",
-    "agents:freeze": "bun scripts/freeze-detectors.mjs",
-    "build": "tsc -p tsconfig.json --declaration",
-    "prepublishOnly": "tsc -p tsconfig.json --declaration"
+    "agents:freeze": "bun scripts/freeze-detectors.mjs"
   },
   "devDependencies": {
     "@hivemind/tsconfig": "workspace:*",

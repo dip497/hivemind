@@ -1,7 +1,7 @@
 /**
- * Daemon-side entry: the provider PLUGINS (def + node half, one object each) and
- * the composition the PTY daemon consumes. Not for the renderer. Nothing here
- * knows any provider by name beyond listing its plugin once.
+ * Daemon-side entry: every agent's node half, built from its manifest, and the
+ * composition the PTY daemon consumes. Not for the renderer. Nothing here
+ * knows any provider by name.
  */
 import { getCatalog, agentForCmd } from "./catalog.js";
 import { manifestRuntime, transformsFor } from "./runtime-manifest.js";
@@ -10,7 +10,7 @@ import type { RuntimePaths } from "./runtime.js";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import nodePath from "node:path";
-import type { AgentNodeParts, AgentPlugin, AgentProviderDef, DaemonPaths, ProviderResumeTransforms, ProviderSpawnContext, SpawnSpec } from "./types.js";
+import type { AgentNodeParts, AgentProviderDef, DaemonPaths, ProviderResumeTransforms, ProviderSpawnContext, SpawnSpec } from "./types.js";
 
 export * from "./types.js";
 export * from "./catalog.js";
@@ -21,11 +21,6 @@ export * from "./runtime.js";
 export * from "./runtime-manifest.js";
 export * from "./hooks.js";
 export * from "./home-overlay.js";
-
-/** Agents that still need a module of ours. Empty: every agent is its manifest, and what
- *  a manifest cannot yet say is the list of things left to build, not a list of agents. */
-export const PLUGINS: readonly AgentPlugin[] = [];
-// PLUGINS is empty today; the parts a runtime needs come from its manifest (partsFromManifest).
 
 /** Where an agent's own files live: one directory each, handed out by the daemon so a
  *  manifest never names a place to write. */
@@ -102,16 +97,13 @@ function assetBody(def: AgentProviderDef, file: string): string | undefined {
   } catch { return undefined; }
 }
 
-/** The daemon half of one agent, whoever wrote it: a hand-written module if there is one,
- *  otherwise whatever its manifest describes. Memoised per def — a rescan makes new def
- *  objects, and a stale runtime would keep writing the previous manifest's files. */
+/** The daemon half of one agent: whatever its manifest describes. Memoised per def —
+ *  a rescan makes new def objects, and a stale runtime would keep writing the previous
+ *  manifest's files. */
 const partsCache = new WeakMap<AgentProviderDef, AgentNodeParts | undefined>();
 export function nodePartsFor(def: AgentProviderDef): AgentNodeParts | undefined {
   if (partsCache.has(def)) return partsCache.get(def);
-  const hand = PLUGINS.find((p) => p.def.id === def.id);
-  const parts = hand
-    ? { resume: hand.resume, prepare: hand.prepare, assets: hand.assets }
-    : partsFromManifest(def);
+  const parts = partsFromManifest(def);
   partsCache.set(def, parts);
   return parts;
 }

@@ -16,8 +16,7 @@ describe("the published agents load with the trust their install earns", () => {
     expect(AUTHORED.length).toBeGreaterThan(0);
     const ids = new Set<string>();
     for (const a of AUTHORED) {
-      // Read as an untrusted plugin would be: nothing here may lean on trust the app no longer grants.
-      const def = defFromManifest(YAML.parse(authoredYaml(a)) as unknown, { trusted: false });
+      const def = defFromManifest(YAML.parse(authoredYaml(a)) as unknown);
       expect(def.id).toBe(a.id);
       expect(ids.has(def.id), `duplicate id ${def.id}`).toBe(false);
       ids.add(def.id);
@@ -72,9 +71,6 @@ describe("manifest validation refuses what it cannot back", () => {
       expect(() => defFromManifest({ ...base, session: { resume: { args: ["--resume", "{id}"], find: { ...find, root } } } }))
         .toThrow(/must be under \{home\}\/|cannot climb out|plain path/);
     }
-    // An agent that ships with Hivemind may read where its CLI actually keeps sessions.
-    expect(defFromManifest({ ...base, session: { resume: { args: ["--resume", "{id}"], find: { ...find, root: "/var/lib/acme" } } } },
-      { trusted: true }).session?.resume?.find?.root).toBe("/var/lib/acme");
   });
 
   test("a claimed resume must say where the sessions are", () => {
@@ -84,9 +80,7 @@ describe("manifest validation refuses what it cannot back", () => {
 
   test("nobody ships a regex — not a plugin, not us", () => {
     const detect = { default: "idle", rules: [{ when: { re: "(a+)+$" }, then: "working" }] };
-    for (const trusted of [false, true]) {
-      expect(() => defFromManifest({ ...base, detect }, { trusted })).toThrow(/do not take regexes/);
-    }
+    expect(() => defFromManifest({ ...base, detect })).toThrow(/do not take regexes/);
   });
 
   test("a sequence cannot be written so that it would backtrack", () => {

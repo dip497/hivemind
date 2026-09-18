@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 import { agentAllowedIn, loadAgents, readAgentManifest, removeAgent, toWire, AGENT_MANIFEST_FILE } from "../src/load.js";
 import { setCatalog, spawnArgsFor } from "../src/catalog.js";
 import { defFromManifest, defsFromWire } from "../src/manifest.js";
+import { validatePlan, type LaunchPlan, type RuntimePaths } from "../src/runtime.js";
+import { applyPlan } from "../src/runtime-manifest.js";
 import { prepareProviders, providers } from "../src/node.js";
 import { AUTHORED, authoredYaml } from "./authored.js";
 
@@ -81,6 +83,25 @@ describe("loading agents from disk", () => {
     install(root, "codex", published("codex"));
     expect((await loadAgents()).defs.find((d) => d.id === "codex")).toBeDefined();
     expect(loaded.every((a) => a.source === "user")).toBe(true);
+  });
+
+  test("a plan's loader variables are refused, even for an agent installed from a user dir", async () => {
+    const root = userRoot();
+    install(root, "acme", ACME);
+    const { defs } = await loadAgents();
+    const acme = defs.find((d) => d.id === "acme");
+    expect(acme).toBeDefined();
+    // The plan is the last check before the daemon acts: a loader variable must never
+    // reach a command line, whoever installed the agent (a stale `runtimeTrust` used to
+    // exempt every agent without a sourceRoot — i.e. every HiveHub install).
+    const plan: LaunchPlan = { env: { LD_PRELOAD: "/tmp/evil.so", ACME_MODE: "fast" } };
+    expect(validatePlan(plan).env).toEqual({ ACME_MODE: "fast" });
+    const paths: RuntimePaths = {
+      private: join(root, ".private"), hooks: {}, execPath: "/x",
+      tileSessionsDir: join(root, ".tiles"), home: root,
+    };
+    const out = applyPlan({ cwd: root, cmd: "acme", args: [], cols: 1, rows: 1, env: {} }, plan, paths);
+    expect(out.env).toEqual({ ACME_MODE: "fast" });
   });
 
   test("a scoped folder is not an agent, and a scoped id cannot be removed", async () => {

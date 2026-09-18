@@ -338,14 +338,6 @@ export interface DaemonPaths {
   hcpSock: string;
 }
 
-/** A complete provider plugin as the daemon sees it: the def plus its node
- *  half. One object per provider, listed ONCE in node.ts's PLUGINS. Manifest-
- *  described agents need no plugin object — the daemon builds their node half
- *  from the manifest (node.ts partsFromManifest). */
-export interface AgentPlugin extends AgentNodeParts {
-  def: AgentProviderDef;
-}
-
 export interface AgentNodeParts {
   /** Build this provider's spawn-time transforms from the daemon's context. */
   resume?: (ctx: ProviderSpawnContext) => ProviderResumeTransforms;

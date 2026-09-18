@@ -24,7 +24,7 @@ test("validating every published agent stays off the first frame's critical path
   // The YAML read is the disk's cost, paid once in the async scan; what must stay cheap
   // is turning a manifest into a def.
   const raw = AUTHORED.map((a) => YAML.parse(authoredYaml(a)) as unknown);
-  const build = () => raw.map((m) => defFromManifest(m, { trusted: false }));
+  const build = () => raw.map((m) => defFromManifest(m));
   build(); // JIT warm-up: the first call of anything is not what a running app pays
   const ms = median(15, build);
   expect(ms, `catalog build took ${ms.toFixed(2)}ms for ${AUTHORED.length} agents`).toBeLessThan(12);

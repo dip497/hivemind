@@ -1,8 +1,7 @@
 /**
  * THE agent catalog — the single list of provider defs every surface reads
  * (desktop UI, `hive` CLI, HCP, the status detectors). Browser-safe: identity,
- * capabilities, icons and scrape detectors only. Daemon-side plugin objects
- * are listed in node.ts (PLUGINS).
+ * capabilities, icons and scrape detectors only.
  *
  * Nothing is compiled in: every agent arrives as a manifest — installed from the
  * HiveHub catalog, a folder, or a repository — and `setCatalog` is called with

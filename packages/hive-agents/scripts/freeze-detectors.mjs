@@ -11,7 +11,6 @@ import { fileURLToPath } from "node:url";
 import YAML from "yaml";
 import { spawnArgsFor, spawnLabelFor } from "../src/catalog.js";
 import { defFromManifest } from "../src/manifest.js";
-import { NODE_PARTS } from "../src/node.js";
 import { AUTHORED, authoredYaml } from "../tests/authored.js";
 import { CORPUS } from "../tests/corpus.js";
 
@@ -26,7 +25,7 @@ const golden = {
   detectors: {}, spawn: {},
 };
 for (const agent of AUTHORED) {
-  const def = defFromManifest(YAML.parse(authoredYaml(agent)), { trusted: false, nodeHalf: !!NODE_PARTS[agent.id] });
+  const def = defFromManifest(YAML.parse(authoredYaml(agent)));
   if (def.detect) {
     const states = CORPUS.map((screen) => def.detect(screen)).join(",");
     golden.detectors[def.id] = createHash("sha256").update(states).digest("hex");

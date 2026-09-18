@@ -28,5 +28,5 @@ export const authoredYaml = (a: AuthoredAgent): string => readFileSync(a.file, "
 
 /** The published agents as defs — what a machine that installed them all would have. */
 export function authoredDefs(): AgentProviderDef[] {
-  return AUTHORED.map((a) => defFromManifest(YAML.parse(authoredYaml(a)) as unknown, { trusted: false }));
+  return AUTHORED.map((a) => defFromManifest(YAML.parse(authoredYaml(a)) as unknown));
 }

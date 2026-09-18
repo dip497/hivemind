@@ -188,7 +188,7 @@ function validateAssets(raw: unknown): AgentAsset[] {
   });
 }
 
-function validateLaunch(raw: unknown, trusted: boolean): AgentLaunch {
+function validateLaunch(raw: unknown): AgentLaunch {
   req(isObj(raw), "launch must be a map");
   const m = raw as Record<string, unknown>;
   const out: AgentLaunch = {};
@@ -211,7 +211,8 @@ function validateLaunch(raw: unknown, trusted: boolean): AgentLaunch {
     const env: Record<string, string> = {};
     for (const [k, v] of Object.entries(m.env as Record<string, unknown>)) {
       req(ENV_KEY_RE.test(k), `launch.env: "${k}" is not an environment variable name`);
-      req(trusted || !ENV_DENY.has(k), `launch.env: a plugin may not set ${k}`);
+      // Loader variables are how code gets run under another name; no manifest may set them.
+      req(!ENV_DENY.has(k), `launch.env: a plugin may not set ${k}`);
       req(typeof v === "string" && plainWithPlaceholders(v, 1000), `launch.env.${k} is not a plain value`);
       env[k] = v;
     }
@@ -297,7 +298,7 @@ function validateHooks(raw: unknown): AgentHooks {
   return out;
 }
 
-function validateSession(raw: unknown, trusted: boolean): AgentSession {
+function validateSession(raw: unknown): AgentSession {
   req(isObj(raw), "session must be a map");
   const m = raw as Record<string, unknown>;
   const out: AgentSession = {};
@@ -324,10 +325,9 @@ function validateSession(raw: unknown, trusted: boolean): AgentSession {
     const f = r.find as Record<string, unknown>;
     req(f.strategy === "jsonl-header" || f.strategy === "dir-meta", "session.resume.find.strategy must be jsonl-header or dir-meta");
     req(typeof f.root === "string" && SESSION_ROOT_RE.test(f.root), "session.resume.find.root must be a plain path");
-    // An agent reviewed with a person may read where its CLI actually keeps sessions;
-    // anyone else's reads under the home directory, and the review says which one.
-    req(trusted || (f.root as string).startsWith("{home}/"), "session.resume.find.root must be under {home}/");
-    req(trusted || !(f.root as string).includes(".."), "session.resume.find.root cannot climb out of {home}");
+    // The root is untrusted input: inside the user's home, with no way out of it.
+    req((f.root as string).startsWith("{home}/"), "session.resume.find.root must be under {home}/");
+    req(!(f.root as string).includes(".."), "session.resume.find.root cannot climb out of {home}");
     const find = { strategy: f.strategy, root: f.root } as SessionFind;
     if (f.strategy === "jsonl-header") {
       for (const key of ["cwdPath", "idPath"] as const) {
@@ -413,8 +413,6 @@ function req(cond: unknown, msg: string): asserts cond {
 }
 
 export interface ManifestLoadOptions {
-  /** Exempt from the untrusted-plugin restrictions (used by tests to prove them). */
-  trusted?: boolean;
   /** A person asked for this one by name, so a reserved id is theirs to take. */
   allowReserved?: boolean;
   reserved?: readonly string[];
@@ -434,7 +432,7 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
   req(!opts.reserved?.includes(m.id), `id "${m.id}" is reserved: it would replace an agent you already have`);
   // A name Hivemind has shipped stays attached to the command it has always launched.
   const ours = RESERVED_AGENTS[m.id];
-  req(!!opts.trusted || !!opts.allowReserved || !ours || ours === m.bin,
+  req(!!opts.allowReserved || !ours || ours === m.bin,
     `id "${m.id}" is Hivemind's agent for \`${ours}\`, but this manifest launches \`${m.bin}\``);
 
   req(m.caps && typeof m.caps === "object", "caps is required");
@@ -510,11 +508,11 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
     ...(m.note ? { note: m.note } : {}),
     ...(options ? { options } : {}),
     ...(m.install ? { install: m.install } : {}),
-    ...(m.session ? { session: validateSession(m.session, !!opts.trusted) } : {}),
+    ...(m.session ? { session: validateSession(m.session) } : {}),
     ...(m.assets ? { assets: validateAssets(m.assets) } : {}),
     ...(m.hooks ? { hooks: validateHooks(m.hooks) } : {}),
     ...(m.home ? { home: validateHome(m.home) } : {}),
-    ...(m.launch ? { launch: validateLaunch(m.launch, !!opts.trusted) } : {}),
+    ...(m.launch ? { launch: validateLaunch(m.launch) } : {}),
   };
 
   if (m.spawn) {
