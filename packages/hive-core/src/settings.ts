@@ -82,13 +82,24 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  *  nothing was written, and no other writer's lock was disturbed. */
 export class SettingsLockError extends Error {
   readonly code = "settings_locked";
-  constructor(readonly lockFile: string) {
+  constructor(readonly lockFile: string, holder?: { pid: number; heldForMs: number }) {
+    // Name the holder: "locked by another writer" sends someone hunting for a writer that,
+    // more often than not, is a file a crashed one left behind.
+    const who = holder
+      ? `held by pid ${holder.pid} for ${Math.round(holder.heldForMs / 1000)}s` +
+        (isAlive(holder.pid) ? "" : " — that process is gone, so the lock is stale")
+      : "the holder could not be read";
     super(
-      `settings.json is locked by another writer (${lockFile}). Nothing was written. ` +
+      `settings.json is locked by another writer (${lockFile}; ${who}). Nothing was written. ` +
       `If no app or hive command is running, delete that file to recover.`,
     );
     this.name = "SettingsLockError";
   }
+}
+
+/** Is that process still there? Signal 0 checks without touching it. */
+function isAlive(pid: number): boolean {
+  try { process.kill(pid, 0); return true; } catch (e) { return (e as NodeJS.ErrnoException).code === "EPERM"; }
 }
 
 /** In-process queue: same-process writers never race each other, and they hold
@@ -102,15 +113,21 @@ let queue: Promise<unknown> = Promise.resolve();
 const owner = () => `${process.pid}:${Date.now()}:${Math.random().toString(36).slice(2, 10)}`;
 
 /**
- * Take the lock, or fail. We never delete a lock we did not create: a lock file
- * that exists means SOMEONE may be mid-write, and there is no way to tell a
- * stuck holder from a busy one. A holder that crashed leaves the file behind —
- * that is recovered explicitly (`breakSettingsLock`, or deleting the file the
- * error names), never silently by a competing writer.
+ * Take the lock, or fail. A lock we did not create is never deleted on age: a slow-but-live
+ * holder looks exactly like a dead one, and deleting on age lets two writers edit the file
+ * at once — the thing the lock exists to prevent.
+ *
+ * A holder that is *gone*, though, is not a judgement call. The lock records the pid that
+ * took it, and a process that no longer exists cannot be mid-write, so its lock is cleared
+ * after a grace period (long enough that a pid freshly reused by an unrelated process is
+ * not mistaken for the holder) and the acquisition retried once. Without this, an app that
+ * was killed mid-write leaves a file that every later `hive` command refuses to write past
+ * until someone deletes it by hand.
  */
 async function acquire(lock: string): Promise<string> {
   const deadline = Date.now() + LOCK_WAIT_MS;
   const token = owner();
+  let broke = false;
   for (;;) {
     try {
       const fh = await fs.open(lock, "wx");
@@ -119,10 +136,43 @@ async function acquire(lock: string): Promise<string> {
       return token;
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
-      if (Date.now() >= deadline) throw new SettingsLockError(lock);
+      if (!broke && await isStale(lock)) { broke = await clearStale(lock); continue; }
+      if (Date.now() >= deadline) {
+        let holder: { pid: number; heldForMs: number } | undefined;
+        try {
+          const [pid, at] = (await fs.readFile(lock, "utf8")).trim().split(":");
+          if (pid && at) holder = { pid: Number(pid), heldForMs: Date.now() - Number(at) };
+        } catch { /* gone or unreadable: the message says so */ }
+        throw new SettingsLockError(lock, holder);
+      }
       await sleep(LOCK_POLL_MS);
     }
   }
+}
+
+/** How long a dead holder's lock is left alone, so a reused pid cannot be mistaken for it. */
+const STALE_AFTER_MS = 2_000;
+
+/** Was this lock taken by a process that no longer exists, a while ago? */
+async function isStale(lock: string): Promise<boolean> {
+  try {
+    const [pid, at] = (await fs.readFile(lock, "utf8")).trim().split(":");
+    const taken = Number(at);
+    if (!pid || !Number.isFinite(taken)) return false;
+    return Date.now() - taken > STALE_AFTER_MS && !isAlive(Number(pid));
+  } catch { return false; }
+}
+
+/** Remove exactly the stale file we read, and say whether we did. */
+async function clearStale(lock: string): Promise<boolean> {
+  try {
+    const before = (await fs.readFile(lock, "utf8")).trim();
+    if (!(await isStale(lock))) return false; // it changed hands while we looked
+    const now = (await fs.readFile(lock, "utf8")).trim();
+    if (now !== before) return false;
+    await fs.rm(lock, { force: true });
+    return true;
+  } catch { return false; }
 }
 
 /** Release only OUR lock. If the file holds someone else's token (ours was

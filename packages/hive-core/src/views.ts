@@ -13,7 +13,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { MANIFEST_FILE, validateViewManifest, type ViewManifest } from "@hivemind/view-sdk/manifest";
+import { isViewId, MANIFEST_FILE, validateViewManifest, type ViewManifest } from "@hivemind/view-sdk/manifest";
 import { HiveError } from "./storage.js";
 
 export type ViewSource = "user" | "repo";
@@ -41,7 +41,7 @@ export function repoViewsDir(repoRoot: string): string {
  *  `error`. `installed` = the dir is inside a views root, so its name must be
  *  the manifest id (a source dir being installed can be called anything). */
 export async function readViewPackage(dir: string, source: ViewSource, installed = true): Promise<InstalledView> {
-  const id = path.basename(dir);
+  const id = idOfDir(dir);
   const fail = (error: string): InstalledView => ({ id, dir, source, manifest: null, error });
   let raw: unknown;
   try {
@@ -61,11 +61,28 @@ export async function readViewPackage(dir: string, source: ViewSource, installed
   return { id: v.manifest.id, dir, source, manifest: v.manifest, error: null };
 }
 
+/** The id a folder is installed as: its name, or `@owner/name` when it sits inside `@owner/`. */
+const idOfDir = (dir: string) => {
+  const owner = path.basename(path.dirname(dir));
+  return owner.startsWith("@") ? `${owner}/${path.basename(dir)}` : path.basename(dir);
+};
+
+/** Package folders under a root: `name/`, and `@owner/name/` for what came from HiveHub. */
+async function packageDirs(root: string): Promise<string[]> {
+  const dirs = async (d: string) => {
+    try { return (await fs.readdir(d, { withFileTypes: true })).filter((e) => e.isDirectory() && !e.name.startsWith(".")).map((e) => e.name).sort(); }
+    catch { return []; }
+  };
+  const out: string[] = [];
+  for (const n of await dirs(root)) {
+    if (n.startsWith("@")) for (const m of await dirs(path.join(root, n))) out.push(path.join(root, n, m));
+    else out.push(path.join(root, n));
+  }
+  return out;
+}
+
 async function scan(root: string, source: ViewSource): Promise<InstalledView[]> {
-  let names: string[];
-  try { names = (await fs.readdir(root, { withFileTypes: true })).filter((d) => d.isDirectory() && !d.name.startsWith(".")).map((d) => d.name).sort(); }
-  catch { return []; }
-  return Promise.all(names.map((n) => readViewPackage(path.join(root, n), source)));
+  return Promise.all((await packageDirs(root)).map((d) => readViewPackage(d, source)));
 }
 
 /** Every package in both roots, user dir first. A repo package whose id a user
@@ -85,7 +102,7 @@ export async function installView(srcDir: string): Promise<InstalledView> {
   if (pkg.error) throw new HiveError("invalid_view", pkg.error);
   const dest = path.join(userViewsDir(), pkg.id);
   if (path.resolve(dest) === src) throw new HiveError("invalid_view", `"${src}" is already the installed copy`);
-  await fs.mkdir(userViewsDir(), { recursive: true });
+  await fs.mkdir(path.dirname(dest), { recursive: true });
   // Copy and validate before moving the installed version: a missing asset or
   // failed copy must not destroy a working extension (desktop and CLI share this).
   const staging = await fs.mkdtemp(path.join(userViewsDir(), ".install-"));
@@ -117,8 +134,11 @@ export async function installView(srcDir: string): Promise<InstalledView> {
 
 /** Remove a user-installed view. Its layout blobs in the app are left alone (inert). */
 export async function removeView(id: string): Promise<void> {
-  if (!/^[a-z0-9][a-z0-9-]{1,63}$/.test(id)) throw new HiveError("invalid_view", `"${id}" is not a view id`);
+  // The id becomes an `rm -rf` path; `@owner/name` is the only nested form it may take.
+  if (!isViewId(id)) throw new HiveError("invalid_view", `"${id}" is not a view id`);
   const dir = path.join(userViewsDir(), id);
   try { await fs.access(dir); } catch { throw new HiveError("not_found", `no user-installed view "${id}" (${dir})`); }
   await fs.rm(dir, { recursive: true, force: true });
+  // The owner's folder goes with its last plugin; rmdir refuses one that still holds another.
+  if (id.startsWith("@")) await fs.rmdir(path.dirname(dir)).catch(() => {});
 }

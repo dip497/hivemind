@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
-  ACCENTS, DEFAULT_APPEARANCE, DEFAULT_SETTINGS, ISLAND_PLACEMENTS, PRESETS, UBUNTU, applyPreset, flattenAppearance, getPath, mergeSettings, migrateLegacy, nestAppearance, setPath, terminalThemeFor,
+  ACCENTS, DEFAULT_APPEARANCE, DEFAULT_SETTINGS, ISLAND_PLACEMENTS, PRESETS, UBUNTU, SIGNAL, applyPreset, flattenAppearance, getPath, mergeSettings, migrateLegacy, nestAppearance, setPath, terminalThemeFor,
 } from "./settings-schema.js";
 import { BUILTIN_TOOLBAR_ACTIONS, resolveToolbar } from "./toolbar.js";
 import { SettingsLockError, breakSettingsLock, patchSettingsExtras, patchSettingsFile, readSettings, settingsPath, updateSettings, writeSettings } from "./settings.js";
@@ -18,11 +18,15 @@ const TERM_THEME_LEGACY = {
 };
 
 describe("settings schema", () => {
-  test("golden: the ubuntu preset derives the pre-2.0 terminal theme exactly, and is the default", () => {
+  test("golden: the ubuntu preset still derives the pre-2.0 terminal theme exactly", () => {
     expect(terminalThemeFor(UBUNTU.terminal)).toEqual(TERM_THEME_LEGACY);
-    expect(terminalThemeFor(DEFAULT_APPEARANCE.terminal)).toEqual(TERM_THEME_LEGACY);
-    expect(DEFAULT_APPEARANCE.preset).toBe("ubuntu");
-    expect(DEFAULT_APPEARANCE.accent).toBe("indigo");
+  });
+
+  test("a fresh install is on signal: the default appearance is that preset, whole", () => {
+    expect(DEFAULT_APPEARANCE.preset).toBe("signal");
+    expect(DEFAULT_APPEARANCE.accent).toBe("graphite");
+    expect(DEFAULT_APPEARANCE.palette).toEqual(SIGNAL.palette);
+    expect(terminalThemeFor(DEFAULT_APPEARANCE.terminal)).toEqual(terminalThemeFor(SIGNAL.terminal));
   });
 
   test("every preset is complete: 13 palette tokens, 16 ansi colours, a known accent", () => {
@@ -216,12 +220,12 @@ describe("settings schema", () => {
       plugins: { disabled: ["a", 3, "b"] }, agents: { defaultAgent: "" }, extra: true,
     });
     expect(s.v).toBe(1);
-    expect(s.appearance.preset).toBe("ubuntu");
+    expect(s.appearance.preset).toBe("signal");
     expect(s.appearance.glass).toEqual({ ...DEFAULT_APPEARANCE.glass, opacity: 0.95 });
-    expect(s.appearance.wallpaper).toEqual({ kind: "aurora", videoSrc: undefined, imageSrc: undefined, brightness: 0.85 });
+    expect(s.appearance.wallpaper).toEqual({ kind: DEFAULT_APPEARANCE.wallpaper.kind, videoSrc: undefined, imageSrc: undefined, brightness: 0.85 });
     expect(s.appearance.terminal.ansi[0]).toBe("#000");
-    expect(s.appearance.terminal.ansi[1]).toBe(UBUNTU.terminal.ansi[1]);
-    expect(s.appearance.palette.bg).toBe(UBUNTU.palette.bg);
+    expect(s.appearance.terminal.ansi[1]).toBe(SIGNAL.terminal.ansi[1]);
+    expect(s.appearance.palette.bg).toBe(SIGNAL.palette.bg);
     expect(s.appearance.pluginSurfaces).toBe("theme");
     expect(s.views).toEqual({ defaultView: "orbit", chrome: { world: { island: "hidden" } }, toolbars: {} });
     expect(s.plugins.disabled).toEqual(["a", "b"]);
@@ -246,9 +250,9 @@ describe("settings schema", () => {
     expect(s.appearance.wallpaper.videoSrc).toBeUndefined(); // dead blob dropped
     expect(s.appearance.accent).toBe("rose");
     expect(s.appearance.overlayMedia).toHaveLength(1);
-    expect(s.appearance.preset).toBe("ubuntu"); // a legacy user IS on the ubuntu look
+    expect(s.appearance.preset).toBe("signal");
     expect(s.views.defaultView).toBe("windows");
-    expect(s.agents).toEqual({ disabled: [], defaultAgent: "codex", options: { claude: { model: "opus", mode: "plan" } }, autoInstall: true, declined: [] });
+    expect(s.agents).toEqual({ disabled: [], defaultAgent: "codex", options: { claude: { model: "opus", mode: "plan" } }, autoInstall: true, declined: [], fromCatalog: [] });
     expect(migrateLegacy({}).migrated).toBe(true);
   });
 
@@ -256,7 +260,7 @@ describe("settings schema", () => {
     const s = mergeSettings({ v: 1, agents: { options: { claude: { model: "opus", mode: "", "Bad Key": "x" }, "../x": { model: "y" }, codex: "nope" } } });
     expect(s.agents.options).toEqual({ claude: { model: "opus" } });
     const old = mergeSettings({ v: 1, agents: { defaultAgent: "codex", model: "sonnet", permissionMode: "default" } });
-    expect(old.agents).toEqual({ disabled: [], defaultAgent: "codex", options: { claude: { model: "sonnet" } }, autoInstall: true, declined: [] });
+    expect(old.agents).toEqual({ disabled: [], defaultAgent: "codex", options: { claude: { model: "sonnet" } }, autoInstall: true, declined: [], fromCatalog: [] });
     const off = mergeSettings({ v: 1, agents: { autoInstall: false, declined: ["aider", "../x", 3] } });
     expect(off.agents.autoInstall).toBe(false);
     expect(off.agents.declined).toEqual(["aider"]);
@@ -270,6 +274,31 @@ describe("settings schema", () => {
     expect(getPath(n, "appearance.glass.blur")).toBe(8);
     expect(s.appearance.glass.blur).toBe(18);
     expect(() => setPath(s, "__proto__.polluted", 1)).toThrow();
+  });
+});
+
+describe("scoped plugin ids in settings", () => {
+  // Dropping one of these is silent, which is why each is pinned: a declined agent that is
+  // dropped gets installed again at the next start, and per-view choices vanish on reload.
+  test("an @owner/name id survives a save and reload wherever an agent or view id is a key", () => {
+    const cur = mergeSettings({}, DEFAULT_SETTINGS);
+    let next = setPath(cur, "agents.declined", ["@dip497/aider", "gemini"]);
+    next = setPath(next, "agents.fromCatalog", ["@dip497/amp"]);
+    next = setPath(next, "agents.options", { "@dip497/aider": { model: "big" } });
+    next = setPath(next, "views.chrome", { "@dip497/board": { island: "top" } });
+    const back = mergeSettings(JSON.parse(JSON.stringify(next)), cur);
+    expect(back.agents.declined).toEqual(["@dip497/aider", "gemini"]);
+    expect(back.agents.fromCatalog).toEqual(["@dip497/amp"]);
+    expect(back.agents.options["@dip497/aider"]).toEqual({ model: "big" });
+    expect(Object.keys(back.views.chrome)).toContain("@dip497/board");
+  });
+
+  test("what is not an id is still dropped, and option names stay plain", () => {
+    const cur = mergeSettings({}, DEFAULT_SETTINGS);
+    const next = setPath(setPath(cur, "agents.declined", ["dip497/aider", "a--b", "../x"]), "agents.options", { "@dip497/aider": { "@evil/opt": "x", model: "ok" } });
+    const back = mergeSettings(JSON.parse(JSON.stringify(next)), cur);
+    expect(back.agents.declined).toEqual([]);
+    expect(back.agents.options["@dip497/aider"]).toEqual({ model: "ok" });
   });
 });
 
@@ -289,7 +318,7 @@ describe("settings file", () => {
     expect(fs.readdirSync(tmp).filter((f) => f.endsWith(".tmp"))).toEqual([]); // no temp file left behind
     expect(await readSettings()).toEqual(next);
     fs.writeFileSync(settingsPath(), "{ not json");
-    expect((await readSettings()).appearance.preset).toBe("ubuntu");
+    expect((await readSettings()).appearance.preset).toBe("signal");
   });
 
   test("a write keeps top-level keys the schema does not own (the app's browserCdp flag)", async () => {
@@ -315,7 +344,7 @@ describe("settings concurrency", () => {
     const stale = await readSettings();
     await writeSettings({ ...stale, appearance: applyPreset(stale.appearance, PRESETS.nord!) }); // the CLI
     await writeSettings({ ...stale, views: { ...stale.views, defaultView: "world" } });          // the debounce
-    expect((await readSettings()).appearance.preset).toBe("ubuntu"); // ← the bug: nord reverted
+    expect((await readSettings()).appearance.preset).toBe("signal"); // ← the bug: nord reverted
 
     // The same two writers through updateSettings: both edits survive.
     fs.rmSync(settingsPath(), { force: true });
@@ -446,4 +475,34 @@ describe("settings concurrency", () => {
     expect(fs.readFileSync(lock, "utf8")).toBe("new-holder"); // NOT deleted by us
     fs.rmSync(lock, { force: true });
   });
+});
+
+describe("a lock left by a process that is gone", () => {
+  test("is cleared after its grace period, and a live holder's lock never is", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hm-lock-"));
+    const file = path.join(dir, "settings.json");
+    const lock = `${file}.lock`;
+
+    // A pid that cannot exist, taken long enough ago to rule out a reused one.
+    fs.writeFileSync(lock, `999999999:${Date.now() - 10_000}:deadbeef`);
+    await patchSettingsFile([{ path: "agents.defaultAgent", value: "codex" }], file);
+    expect(fs.existsSync(lock)).toBe(false);
+    expect((await readSettings(file)).agents.defaultAgent).toBe("codex");
+
+    // This process is alive, so its lock is somebody's business but ours to wait for.
+    fs.writeFileSync(lock, `${process.pid}:${Date.now() - 10_000}:stillhere`);
+    await expect(patchSettingsFile([{ path: "agents.defaultAgent", value: "droid" }], file))
+      .rejects.toThrow(/locked by another writer/);
+    expect(fs.existsSync(lock)).toBe(true);
+
+    // Gone, but only just: the grace period is waited out first, so a pid that was reused
+    // moments ago is not mistaken for the holder. It is cleared after that, not before.
+    fs.rmSync(lock, { force: true });
+    fs.writeFileSync(lock, `999999999:${Date.now()}:fresh`);
+    const started = Date.now();
+    await patchSettingsFile([{ path: "agents.defaultAgent", value: "pi" }], file);
+    expect(Date.now() - started).toBeGreaterThanOrEqual(2_000);
+    expect((await readSettings(file)).agents.defaultAgent).toBe("pi");
+    fs.rmSync(dir, { recursive: true, force: true });
+  }, 20_000);
 });

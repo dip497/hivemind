@@ -9,7 +9,8 @@ import { HiveError } from "./storage.js";
 
 export const PACKAGE_MANIFEST = "hivemind-package.json";
 export const PACKAGE_LIMITS = { files: 4096, bytes: 128 * 1024 * 1024, fileBytes: 16 * 1024 * 1024, jsonBytes: 64 * 1024, depth: 16 } as const;
-const id = z.string().regex(/^[a-z0-9][a-z0-9-]{1,63}$/);
+// An agent or view a bundle names: built in, or `@owner/name` from HiveHub.
+const id = z.string().regex(/^(?!.*--)(?:@[a-z0-9][a-z0-9-]{0,38}\/)?[a-z0-9][a-z0-9-]{1,63}$/);
 const label = z.string().min(1).max(120).refine((s) => !/[\x00-\x1f\x7f]/.test(s), "control characters are not allowed");
 const relative = z.string().refine((s) => isSafeRelativePath(s) && !/[\x00-\x1f\x7f]/.test(s), "expected a relative path inside the package");
 const schema = z.object({

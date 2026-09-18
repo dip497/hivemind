@@ -45,6 +45,28 @@ describe("view packages", () => {
     await expect(removeView("../etc")).rejects.toMatchObject({ code: "invalid_view" });
   });
 
+  test("a view from the registry installs as @owner/name, beside a bare one of the same name", async () => {
+    pkg(path.join(tmp, "src", "board"), good("board"));
+    pkg(path.join(tmp, "src", "hub-board"), good("@dip497/board"));
+    await installView(path.join(tmp, "src", "board"));
+    const scoped = await installView(path.join(tmp, "src", "hub-board"));
+    expect(scoped.dir).toBe(path.join(userViewsDir(), "@dip497", "board"));
+    expect((await listInstalledViews()).map((x) => [x.id, x.error])).toEqual([["@dip497/board", null], ["board", null]]);
+    await removeView("@dip497/board");
+    expect((await listInstalledViews()).map((x) => x.id)).toEqual(["board"]);
+    // The nested form is the only one: no other path may reach `rm -rf`.
+    for (const bad of ["dip497/board", "@dip497/../board", "@dip497/board/x"]) {
+      await expect(removeView(bad)).rejects.toMatchObject({ code: "invalid_view" });
+    }
+  });
+
+  test("a scoped folder whose manifest names someone else is refused", async () => {
+    pkg(path.join(userViewsDir(), "@dip497", "board"), good("@alice/board"));
+    const [v] = await listInstalledViews();
+    expect(v.id).toBe("@dip497/board");
+    expect(v.error).toMatch(/does not match manifest id "@alice\/board"/);
+  });
+
   test("install refuses an invalid package", async () => {
     pkg(path.join(tmp, "src", "bad"), { ...good("bad"), permissions: ["net:fetch"] });
     await expect(installView(path.join(tmp, "src", "bad"))).rejects.toMatchObject({ code: "invalid_view" });

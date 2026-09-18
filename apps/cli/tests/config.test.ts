@@ -29,7 +29,7 @@ describe("hive config / hive theme", () => {
     expect(r.json).toMatchObject({ ok: false, code: "not_found" });
 
     r = hive(["theme", "list"], { cwd: tmp, env });
-    expect(r.stdout).toMatch(/^\* ubuntu/m);
+    expect(r.stdout).toMatch(/^\* signal/m);   // the default preset is marked
     expect(r.stdout).toMatch(/nord/);
     r = hive(["theme", "use", "nord", "--json"], { cwd: tmp, env });
     expect(r.json).toEqual({ ok: true, data: { preset: "nord", rescanned: false } });

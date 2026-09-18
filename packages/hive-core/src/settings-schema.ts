@@ -19,7 +19,7 @@ import { isToolbarActionId, type ToolbarActionId, type ToolbarPreferences } from
 export type WallpaperId =
   | "none" | "aurora" | "ember" | "ice" | "mesh" | "sunset" | "forest" | "nebula" | "mono" | "image" | "video";
 export type AccentId =
-  | "indigo" | "volt" | "ember" | "ice" | "pulse" | "rose" | "emerald" | "amber" | "violet";
+  | "graphite" | "indigo" | "volt" | "ember" | "ice" | "pulse" | "rose" | "emerald" | "amber" | "violet";
 export type MediaFit = "cover" | "contain" | "tile";
 export type MediaAnchor =
   | "top-left" | "top-center" | "top-right"
@@ -42,8 +42,11 @@ export interface MediaLayer {
   anchor: MediaAnchor;
 }
 
-/** Accent → brand/accent hex. `indigo` is the historical default. */
-export const ACCENTS: Record<AccentId, { label: string; brand: string; accent: string; swatch: string }> = {
+/** Accent → brand/accent hex. `graphite` is the default; `indigo` was, before it.
+ *  `working` is the colour of an agent at work, when it should not be the brand: brand also fills
+ *  buttons under white text, and a working agent is not a call to action. */
+export const ACCENTS: Record<AccentId, { label: string; brand: string; accent: string; swatch: string; working?: string }> = {
+  graphite: { label: "Graphite", brand: "#5f6b7a", accent: "#a3b1c2", swatch: "#8b96a3", working: "#e2e5e9" },
   indigo:  { label: "Indigo",  brand: "#5b6cff", accent: "#38bdf8", swatch: "#5b6cff" },
   volt:    { label: "Volt",    brand: "#b6f23f", accent: "#a3e635", swatch: "#b6f23f" },
   ember:   { label: "Ember",   brand: "#ff7849", accent: "#fb923c", swatch: "#ff7849" },
@@ -153,7 +156,29 @@ export const UBUNTU: ThemePreset = {
   },
 };
 
+/** The default. Neutral graphite, with colour kept for what needs you: an agent waiting on you is
+ *  the one warm thing on screen, working is near-white, and nothing decorative borrows either. */
+export const SIGNAL: ThemePreset = {
+  id: "signal",
+  label: "Signal",
+  mode: "dark",
+  palette: {
+    bg: "oklch(0.165 0.004 250)", bg2: "oklch(0.195 0.004 250)", bg3: "oklch(0.23 0.005 250)", bg4: "oklch(0.27 0.005 250)",
+    line: "oklch(0.27 0.005 250)", line2: "oklch(0.34 0.006 250)",
+    fg: "oklch(0.93 0.004 250)", fg2: "oklch(0.80 0.005 250)", fg3: "oklch(0.62 0.006 250)",
+    select: "oklch(0.80 0.005 250)",
+    ok: "oklch(0.74 0.07 155)", warn: "oklch(0.80 0.13 72)", err: "oklch(0.66 0.11 32)",
+  },
+  accent: "graphite",
+  terminal: {
+    background: "#1A1C1F", foreground: "#E6E7E9", cursor: "#E6E7E9", selection: "rgba(230,231,233,0.22)",
+    ansi: ["#2A2D32", "#C8756A", "#8FB39A", "#D9B26B", "#7D9BC4", "#A894C4", "#7FB3B8", "#D5D8DC",
+           "#5A5F66", "#DC8B80", "#A6C8AF", "#E6C688", "#98B2D6", "#BDABD6", "#98C8CC", "#F0F1F3"],
+  },
+};
+
 export const PRESETS: Record<string, ThemePreset> = {
+  signal: SIGNAL,
   ubuntu: UBUNTU,
   dracula: {
     id: "dracula", label: "Dracula", mode: "dark", accent: "violet",
@@ -182,16 +207,16 @@ export const PRESETS: Record<string, ThemePreset> = {
 };
 
 export const DEFAULT_APPEARANCE: Appearance = {
-  preset: "ubuntu",
+  preset: "signal",
   mode: "dark",
-  palette: { ...UBUNTU.palette },
-  accent: "indigo",
+  palette: { ...SIGNAL.palette },
+  accent: "graphite",
   radius: 12,
   uiFont: "system-ui, sans-serif",
   monoFont: "\"JetBrains Mono\", monospace",
   glass: { enabled: true, contentGlass: false, opacity: 0.72, blur: 18, contentOpacity: 0.25, animate: true },
-  wallpaper: { kind: "aurora", brightness: 0.85 },
-  terminal: { ...UBUNTU.terminal, ansi: [...UBUNTU.terminal.ansi] },
+  wallpaper: { kind: "mono", brightness: 0.85 },
+  terminal: { ...SIGNAL.terminal, ansi: [...SIGNAL.terminal.ansi] },
   pluginSurfaces: "theme",
   overlayMedia: [],
 };
@@ -266,6 +291,8 @@ export interface AgentsSettings {
   autoInstall: boolean;
   /** Catalog agents the user removed: never added automatically again. */
   declined: string[];
+  /** Agents that came from the plugin catalog, so their page can say where they are from. */
+  fromCatalog: string[];
 }
 export interface Settings {
   v: 1;
@@ -288,7 +315,7 @@ export const DEFAULT_SETTINGS: Settings = {
   tools: { enabledPlugins: [], disabledTools: [] },
   // Empty = "the agent catalog's default" — hive-core does not depend on
   // @hivemind/agents, and the renderer resolves an unknown id to defaultAgent().
-  agents: { disabled: [], defaultAgent: "", options: {}, autoInstall: true, declined: [] },
+  agents: { disabled: [], defaultAgent: "", options: {}, autoInstall: true, declined: [], fromCatalog: [] },
   migrated: false,
 };
 
@@ -365,8 +392,8 @@ export function mergeAppearance(raw: unknown, base: Appearance = DEFAULT_APPEARA
   };
 }
 
-/** A registered view id (canvas, windows, world, a community plugin id). */
-const VIEW_ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
+/** A registered view id: a built-in or folder-installed name, or `@owner/name` from HiveHub. */
+const VIEW_ID_RE = /^(?!.*--)(?:@[a-z0-9][a-z0-9-]{0,38}\/)?[a-z0-9][a-z0-9-]{0,63}$/;
 /** No toolbar can name more actions than the catalog holds. */
 const TOOLBAR_MAX_ACTIONS = 32;
 
@@ -469,18 +496,22 @@ export function mergeSettings(raw: unknown, base: Settings = DEFAULT_SETTINGS): 
         : base.agents.options,
       autoInstall: bool(agents.autoInstall, base.agents.autoInstall),
       declined: (Array.isArray(agents.declined) ? agents.declined : base.agents.declined)
-        .filter((x): x is string => typeof x === "string" && OPTION_KEY_RE.test(x)).slice(0, 200),
+        .filter((x): x is string => typeof x === "string" && AGENT_KEY_RE.test(x)).slice(0, 200),
+      fromCatalog: (Array.isArray(agents.fromCatalog) ? agents.fromCatalog : base.agents.fromCatalog)
+        .filter((x): x is string => typeof x === "string" && AGENT_KEY_RE.test(x)).slice(0, 200),
     },
     migrated: bool(p.migrated, base.migrated),
   };
 }
 
+/** An agent's id, which may carry a HiveHub scope — unlike the option ids inside it. */
+const AGENT_KEY_RE = /^(?!.*--)(?:@[a-z0-9][a-z0-9-]{0,38}\/)?[a-z0-9][a-z0-9-]{0,31}$/;
 const OPTION_KEY_RE = /^[a-z0-9][a-z0-9-]{0,31}$/;
 
 function agentOptions(raw: Record<string, unknown>): Record<string, Record<string, string>> {
   const out: Record<string, Record<string, string>> = {};
   for (const [agent, opts] of Object.entries(raw).slice(0, 64)) {
-    if (!OPTION_KEY_RE.test(agent) || !isObj(opts)) continue;
+    if (!AGENT_KEY_RE.test(agent) || !isObj(opts)) continue;
     const kept = Object.entries(opts).slice(0, 16)
       .filter((e): e is [string, string] => OPTION_KEY_RE.test(e[0]) && typeof e[1] === "string" && e[1].length > 0 && e[1].length <= 200);
     if (kept.length) out[agent] = Object.fromEntries(kept);
@@ -526,6 +557,7 @@ export function migrateLegacy(legacy: LegacyRendererState, base: Settings = DEFA
       options: legacyClaudeOptions(legacy.claudeModel, legacy.claudeMode),
       autoInstall: base.agents.autoInstall,
       declined: base.agents.declined,
+      fromCatalog: base.agents.fromCatalog,
     },
     migrated: true,
   }, base);

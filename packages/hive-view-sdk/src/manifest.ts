@@ -8,7 +8,8 @@ import { PROTOCOL_VERSION, VIEW_PERMISSIONS, type ViewPermission } from "./proto
 export const MANIFEST_FILE = "hivemind-view.json";
 
 export interface ViewManifest {
-  /** Stable id: directory name, registry id, layout-blob key. `[a-z0-9-]`, 2–64 chars. */
+  /** Stable id: install path, registry id, layout-blob key. `name`, or `@owner/name` when it
+   *  was published on HiveHub — `owner` is the GitHub account that published it. */
   id: string;
   name: string;
   /** semver-ish `x.y.z` (shown in `hive views list`; not compared by the host). */
@@ -24,9 +25,29 @@ export interface ViewManifest {
   permissions: ViewPermission[];
   /** Optional relative dir served alongside the entry (default: the whole package dir). */
   assets?: string;
+  /** Who wrote it, where it came from, and under what terms — shown wherever the user is
+   *  asked to trust it. These are the PACKAGE'S OWN CLAIMS: nothing here is verified, and a
+   *  host must never present them as if they were. A registry's verified owner is separate. */
+  author?: string;
+  homepage?: string;
+  license?: string;
+  /** The user's wallpaper is mounted behind the view unless this says otherwise. A view that
+   *  paints an opaque scene of its own sets it to false: nothing would show through, and the
+   *  wallpaper's animation and blur would still cost every frame. */
+  wallpaper?: boolean;
 }
 
-const ID_RE = /^[a-z0-9][a-z0-9-]{1,63}$/;
+// A bare name is built in or installed from a folder; `@owner/name` came from HiveHub. `--` is
+// refused because the scoped form becomes a hostname by turning `@owner/name` into `owner--name`,
+// and a bare id must never be able to pass for one.
+const ID_RE = /^(?!.*--)(?:@[a-z0-9][a-z0-9-]{0,38}\/)?[a-z0-9][a-z0-9-]{1,63}$/;
+
+/** The sandbox origin's hostname for a view: the id itself, or `owner--name` for a scoped one.
+ *  A hostname cannot hold `@` or `/`, and a label is at most 63 characters. */
+export const viewHost = (id: string) => (id.startsWith("@") ? id.slice(1).replace("/", "--") : id);
+
+/** Whether a string is a usable view id — the one check everything that takes an id uses. */
+export const isViewId = (id: string) => ID_RE.test(id) && viewHost(id).length <= 63;
 const VERSION_RE = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
 
 /** A relative path that cannot leave the package dir. */
@@ -49,8 +70,9 @@ export function validateViewManifest(raw: unknown): ManifestResult {
     if (v.length > max) { errors.push(`"${k}" is longer than ${max} characters`); return null; }
     return v;
   };
-  const id = str("id", 64);
-  if (id !== null && !ID_RE.test(id)) errors.push(`"id" must match ${ID_RE} (got ${JSON.stringify(id)})`);
+  const id = str("id", 105);
+  if (id !== null && !ID_RE.test(id)) errors.push(`"id" must be a name or @owner/name, lowercase letters, digits and single dashes (got ${JSON.stringify(id)})`);
+  else if (id !== null && viewHost(id).length > 63) errors.push(`"id" is too long: owner and name together must fit in 61 characters`);
   const name = str("name", 64);
   const version = str("version", 64);
   if (version !== null && !VERSION_RE.test(version)) errors.push(`"version" must look like 1.2.3 (got ${JSON.stringify(version)})`);
@@ -72,12 +94,34 @@ export function validateViewManifest(raw: unknown): ManifestResult {
       else if (!permissions.includes(p as ViewPermission)) permissions.push(p as ViewPermission);
     }
   }
+  let author: string | undefined;
+  if (m.author !== undefined) {
+    if (typeof m.author !== "string" || m.author.trim().length === 0 || m.author.length > 80) errors.push(`"author" must be a non-empty string of at most 80 characters`);
+    else author = m.author;
+  }
+  let homepage: string | undefined;
+  if (m.homepage !== undefined) {
+    // https only: a plugin's own link is opened in the user's browser.
+    if (typeof m.homepage !== "string" || !/^https:\/\/\S{1,200}$/.test(m.homepage)) errors.push(`"homepage" must be an https:// URL`);
+    else homepage = m.homepage;
+  }
+  let license: string | undefined;
+  if (m.license !== undefined) {
+    if (typeof m.license !== "string" || !/^[A-Za-z0-9.+-]{1,40}$/.test(m.license)) errors.push(`"license" must be a short identifier like MIT or Apache-2.0`);
+    else license = m.license;
+  }
+  let wallpaper: boolean | undefined;
+  if (m.wallpaper !== undefined) {
+    if (typeof m.wallpaper !== "boolean") errors.push(`"wallpaper" must be true or false`);
+    else wallpaper = m.wallpaper;
+  }
   let assets: string | undefined;
   if (m.assets !== undefined) {
     if (typeof m.assets !== "string" || !isSafeRelativePath(m.assets)) errors.push(`"assets" must be a relative path inside the package`);
     else assets = m.assets;
   }
-  for (const k of Object.keys(m)) if (!["id", "name", "version", "entry", "protocol", "permissions", "assets"].includes(k)) errors.push(`unknown field "${k}"`);
+  for (const k of Object.keys(m)) if (!["id", "name", "version", "entry", "protocol", "permissions", "assets", "wallpaper", "author", "homepage", "license"].includes(k)) errors.push(`unknown field "${k}"`);
   if (errors.length > 0) return { ok: false, errors };
-  return { ok: true, manifest: { id: id!, name: name!, version: version!, entry: entry!, protocol, permissions, ...(assets ? { assets } : {}) } };
+  return { ok: true, manifest: { id: id!, name: name!, version: version!, entry: entry!, protocol, permissions, ...(assets ? { assets } : {}), ...(wallpaper === undefined ? {} : { wallpaper }),
+    ...(author ? { author } : {}), ...(homepage ? { homepage } : {}), ...(license ? { license } : {}) } };
 }
