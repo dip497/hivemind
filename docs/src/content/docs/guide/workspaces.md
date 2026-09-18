@@ -27,8 +27,36 @@ remote without per-tile changes (`docs/design/remote-frames.md`).
 └── .agent.md        regenerated summary of active issues (gitignored)
 ```
 
-States: `backlog → todo → in_progress → in_review → done`, plus `cancelled`. Activity
-rows are signed by the human or the agent that wrote them.
+An issue moves along one track, and `cancelled` is the way off it. Activity rows are signed by
+the human or the agent that wrote them.
+
+<figure>
+<svg viewBox="0 0 700 118" role="img" aria-label="An issue moves backlog to todo to in_progress to in_review to done; cancelled leaves the track from any state.">
+  <defs>
+    <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="currentColor"/>
+    </marker>
+  </defs>
+  <g font-family="var(--sl-font-mono)" font-size="11.5" fill="currentColor" stroke="currentColor">
+    <rect x="1" y="16" width="104" height="30" rx="5" fill="none" stroke-opacity=".4"/>
+    <text x="53" y="35" text-anchor="middle" stroke="none" opacity=".7">backlog</text>
+    <rect x="149" y="16" width="104" height="30" rx="5" fill="none" stroke-opacity=".4"/>
+    <text x="201" y="35" text-anchor="middle" stroke="none" opacity=".7">todo</text>
+    <rect x="297" y="16" width="104" height="30" rx="5" fill="none" stroke="var(--hm-working)" stroke-opacity=".8"/>
+    <text x="349" y="35" text-anchor="middle" stroke="none">in_progress</text>
+    <rect x="445" y="16" width="104" height="30" rx="5" fill="none" stroke="var(--hm-attention)" stroke-opacity=".8"/>
+    <text x="497" y="35" text-anchor="middle" stroke="none">in_review</text>
+    <rect x="593" y="16" width="104" height="30" rx="5" fill="none" stroke="var(--hm-done)" stroke-opacity=".8"/>
+    <text x="645" y="35" text-anchor="middle" stroke="none">done</text>
+    <g fill="none" stroke-opacity=".55" marker-end="url(#ar2)">
+      <path d="M107 31 H145"/><path d="M255 31 H293"/><path d="M403 31 H441"/><path d="M551 31 H589"/>
+      <path d="M349 50 V78 H641" stroke-dasharray="4 4"/>
+    </g>
+    <text x="645" y="96" text-anchor="middle" stroke="none" opacity=".7">cancelled</text>
+  </g>
+</svg>
+<figcaption>One track forward; cancelled is the only way off it, from any state</figcaption>
+</figure>
 
 ## Cross-repo work
 

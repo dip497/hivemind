@@ -15,7 +15,7 @@ packages/hive-core      .hivemind/ storage + parsing (gray-matter + zod), skills
 packages/hive-agents    the agent-provider catalog (one directory per runtime)
 packages/hive-view-sdk  community-view protocol + client
 templates/              hive-browser skill source
-examples/views/         orbit, office, solar view examples
+examples/views/         queue, tiled and board view examples
 docs/design/            architecture notes (historical; do not rewrite)
 ```
 
@@ -73,6 +73,6 @@ and pushes; GitHub Actions publishes. Run it only when asked.
 
 - New agent runtime → `packages/hive-agents/src/providers/<id>/`
   (`docs/design/agent-providers.md`).
-- New view → `examples/views/orbit` + `@hivemind/view-sdk`.
+- New view → start from `examples/views/tiled` + `@hivemind/view-sdk`.
 - CLI changes → `apps/cli/src/commands/`; pure arg shaping stays in testable helpers.
 - File formats → zod schemas in `packages/hive-core`.

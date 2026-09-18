@@ -1,0 +1,437 @@
+---
+/**
+ * The design system, as a page you can read top to bottom. Every colour, curve and duration
+ * on it is read from the app's own stylesheet at build time (src/lib/tokens.ts) — the app is
+ * canonical, this page vendors it, so the two cannot drift apart without a build noticing.
+ */
+import Shell from "../../layouts/Shell.astro";
+import { groups, resolve, source, tokenCount } from "../../lib/tokens";
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+const link = (p: string) => `${base}/${p}`;
+const title = "Design system — Hivemind";
+const description =
+  "The tokens, type, status colours and motion Hivemind is built from — generated from the app's own stylesheet.";
+
+const sections = [
+  { n: "01", id: "foundations", name: "Foundations" },
+  { n: "02", id: "mark", name: "The mark" },
+  { n: "03", id: "type", name: "Typography" },
+  { n: "04", id: "colour", name: "Colour" },
+  { n: "05", id: "status", name: "Status" },
+  { n: "06", id: "surfaces", name: "Surfaces" },
+  { n: "07", id: "motion", name: "Motion" },
+  { n: "08", id: "imagery", name: "Imagery" },
+  { n: "09", id: "tokens", name: "Tokens" },
+];
+
+const spec = [
+  ["STATUS", "Active"],
+  ["VERSION", "v0.1"],
+  ["SURFACES", "app · site"],
+  ["THEMES", "dark · light"],
+  ["SOURCE", "renderer styles.css"],
+  ["TOKENS", `${tokenCount}`],
+];
+
+/** What each status means, in the app's own words, next to the token that paints it. */
+const meanings: Record<string, string> = {
+  "color-status-working": "The agent is running. Near-white, because work in progress is not a call to action.",
+  "color-status-attention": "It stopped and asked you something. The one warm colour on screen.",
+  "color-status-done": "It finished what it was asked to do.",
+  "color-status-idle": "Alive, waiting, nothing owed.",
+  "color-status-exited": "The process ended. Nothing is running.",
+  "color-status-failed": "It ended badly, and the exit code says so.",
+};
+---
+<Shell title={title} description={description} nav="brand">
+  <div class="bp">
+    <!-- The contents: numbered, sticky, and the only navigation this page needs. -->
+    <nav class="toc" aria-label="Sections">
+      <p class="toc-h">Contents</p>
+      <ol>
+        {sections.map((s) => (
+          <li><a href={`#${s.id}`}><span class="toc-n">{s.n}</span>{s.name}</a></li>
+        ))}
+      </ol>
+    </nav>
+
+    <main class="bp-main">
+      <header class="bp-hero">
+        <div>
+          <p class="pill">v0.1 <span>·</span> DESIGN SYSTEM</p>
+          <h1>Built from the app, not beside it.</h1>
+          <p class="lede">Hivemind's colours, type, status meanings and motion live in the
+            renderer's stylesheet. This page reads that file at build time, so what you see here
+            is what the app paints — not a picture of it.</p>
+          <div class="cta">
+            <a class="btn primary" href="#foundations">Start reading</a>
+            <a class="btn ghost" href="#tokens">Jump to tokens</a>
+          </div>
+        </div>
+        <aside class="spec" aria-label="At a glance">
+          {spec.map(([k, v]) => (<div class="spec-row"><span>{k}</span><b>{v}</b></div>))}
+        </aside>
+      </header>
+
+      <!-- 01 ─────────────────────────────────────────────────────────────── -->
+      <section class="sec" id="foundations">
+        <p class="eyebrow"><b>01</b><span>Foundations</span></p>
+        <h2>Two surfaces. One of them is canonical.</h2>
+        <p class="intro">The app is where the system lives: <code>{source}</code> holds the palette,
+          the status meanings, the curves and the tracking. The website vendors those values at build
+          time. When the two disagree, the app is right and this page is stale — which is why it is
+          generated rather than written.</p>
+
+        <div class="sub">
+          <h3>Where a rule belongs</h3><span class="tag">TWO SURFACES</span>
+        </div>
+        <div class="grid2">
+          <article class="card">
+            <h4>The app</h4>
+            <p>Tokens, status buckets, glass, the view SDK's <code>--hm-*</code> variables. Anything
+              a plugin can read is defined here.</p>
+          </article>
+          <article class="card">
+            <h4>The site</h4>
+            <p>Page rhythm, the classical plates, the catalog. It borrows the app's colour and motion
+              and adds nothing to them.</p>
+          </article>
+        </div>
+      </section>
+
+      <!-- 02 ─────────────────────────────────────────────────────────────── -->
+      <section class="sec" id="mark">
+        <p class="eyebrow"><b>02</b><span>The mark</span></p>
+        <h2>Three cells. One of them is lit.</h2>
+        <p class="intro">A hive of three rounded cells, with the top one at full strength and the
+          others at 40%. It is the product's whole argument in one glyph: several agents, one of
+          them wanting you.</p>
+
+        <div class="sub"><h3>Lockups</h3><span class="tag">THREE FILES</span></div>
+        <div class="marks">
+          <figure><div class="mark-tile"><img src={`${base}/mark.svg`} alt="The Hivemind mark on a dark ground" width="44" height="44" /></div><figcaption>mark.svg · on dark</figcaption></figure>
+          <figure><div class="mark-tile light"><img src={`${base}/mark-dark.svg`} alt="The Hivemind mark on a light ground" width="44" height="44" /></div><figcaption>mark-dark.svg · on light</figcaption></figure>
+          <figure><div class="mark-tile"><img src={`${base}/favicon.svg`} alt="The favicon" width="28" height="28" /></div><figcaption>favicon.svg · 28px and below</figcaption></figure>
+        </div>
+        <p class="anno">Clearspace: one cell on every side. Never redraw the cells, never recolour
+          the lit one to a status colour — amber means an agent needs you, and the mark must not
+          claim that.</p>
+      </section>
+
+      <!-- 03 ─────────────────────────────────────────────────────────────── -->
+      <section class="sec" id="type">
+        <p class="eyebrow"><b>03</b><span>Typography</span></p>
+        <h2>Two faces. Each with one job.</h2>
+        <p class="intro">Geist sets everything a person reads. JetBrains Mono carries anything the
+          machine produced — commands, paths, status lines, ids, counts. The split is the point: mono
+          is a signal that something is real output, so it is never used for atmosphere.</p>
+
+        <div class="sub"><h3>The ramp</h3><span class="tag">SIX ROLES</span></div>
+        <p class="rule">Use the role, not the size. Display roles are Geist at 600; anything a
+          machine produced is JetBrains Mono.</p>
+        <div class="spec-table">
+          <div class="st-head"><span>ROLE</span><span>SAMPLE</span><span>SPEC</span></div>
+          <div class="st-row"><code>display</code><p class="t-display">Bring your own agents.</p><code class="st-spec">clamp(40, 6vw, 80) · 600 · -0.035em</code></div>
+          <div class="st-row"><code>heading</code><p class="t-heading">The workspace is a plugin too</p><code class="st-spec">clamp(28, 3.6vw, 48) · 600 · -0.03em</code></div>
+          <div class="st-row"><code>lede</code><p class="t-lede">An agent here is a file you can read.</p><code class="st-spec">clamp(17, 1.3vw, 20) · 400 · 52ch</code></div>
+          <div class="st-row"><code>body</code><p class="t-body">It names the command to run and how to read that command's screen.</p><code class="st-spec">15 / 1.65 · 400</code></div>
+          <div class="st-row"><code>mono</code><p class="t-mono">hive ctl spawn --agent claude --frame api</p><code class="st-spec">12.5 / 1.6 · tabular-nums</code></div>
+          <div class="st-row"><code>caption</code><p class="t-caption">NEEDS YOU · 2 WORKING</p><code class="st-spec">11 · +0.04em · uppercase</code></div>
+        </div>
+
+        <div class="dd">
+          <article class="do"><p class="dd-tag ok">DO</p><p>Put a session id, an exit code or a
+            file path in mono. It tells the reader a machine produced it.</p></article>
+          <article class="do"><p class="dd-tag no">DON'T</p><p>Set a paragraph in mono because it
+            looks technical. Mono stops meaning anything the moment it is decoration.</p></article>
+        </div>
+      </section>
+
+      <!-- 04 ─────────────────────────────────────────────────────────────── -->
+      <section class="sec" id="colour">
+        <p class="eyebrow"><b>04</b><span>Colour</span></p>
+        <h2>Graphite everywhere, colour only where it means something.</h2>
+        <p class="intro">Signal is the default palette: neutral surfaces in one hue family, and the
+          few colours that remain are meanings. Every swatch below is read from the app's stylesheet,
+          with the app's own note beside it.</p>
+
+        {[["Surfaces", groups.surfaces, "DARKEST TO LIGHTEST"], ["Text", groups.text, "THREE TIERS"],
+          ["Brand", groups.brand, "QUIET ON PURPOSE"], ["Semantic", groups.semantic, "FOUR MEANINGS"]].map(([name, list, tag]) => (
+          <>
+            <div class="sub"><h3>{name as string}</h3><span class="tag">{tag as string}</span></div>
+            <div class="swatches">
+              {(list as typeof groups.surfaces).map((t) => (
+                <figure class="sw">
+                  <div class="sw-chip" style={`background:${resolve(t.value)}`}></div>
+                  <figcaption>
+                    <b>--{t.name}</b>
+                    <span class="sw-val">{t.value}</span>
+                    {t.note && <span class="sw-note">{t.note}</span>}
+                  </figcaption>
+                </figure>
+              ))}
+            </div>
+          </>
+        ))}
+      </section>
+
+      <!-- 05 ─────────────────────────────────────────────────────────────── -->
+      <section class="sec" id="status">
+        <p class="eyebrow"><b>05</b><span>Status</span></p>
+        <h2>One state is one colour, everywhere.</h2>
+        <p class="intro">Layers rows, tile headers, the canvas, and every installed view through the
+          SDK's <code>--hm-status-*</code> variables paint from the same six tokens. A preset changes
+          the palette; the meanings follow it.</p>
+
+        <div class="sub"><h3>The six</h3><span class="tag">MEANING · TOKEN</span></div>
+        <div class="states">
+          {groups.status.map((t) => (
+            <article class="state">
+              <span class="state-dot" style={`background:${resolve(t.value)}`}></span>
+              <div>
+                <b>{t.name.replace("color-status-", "")}</b>
+                <p>{meanings[t.name] ?? t.note ?? ""}</p>
+                <code>--{t.name}</code>
+              </div>
+            </article>
+          ))}
+        </div>
+
+        <div class="dd">
+          <article class="do"><p class="dd-tag ok">DO</p><p>Keep amber for the agent that stopped
+            and asked. It is the only warm colour on screen, so it can be seen across a room.</p></article>
+          <article class="do"><p class="dd-tag no">DON'T</p><p>Borrow amber for a highlight, a hover
+            or a brand flourish. Every decorative use spends the signal.</p></article>
+        </div>
+      </section>
+
+      <!-- 06 ─────────────────────────────────────────────────────────────── -->
+      <section class="sec" id="surfaces">
+        <p class="eyebrow"><b>06</b><span>Surfaces</span></p>
+        <h2>Hairlines, not shadows.</h2>
+        <p class="intro">Panels separate by a one-pixel rule and a step in surface colour, not by
+          elevation. A dark app full of drop shadows reads as a dashboard; a dark app full of
+          hairlines reads as an instrument.</p>
+
+        <div class="sub"><h3>Glass</h3><span class="tag">ONE RULE</span></div>
+        <p class="body">Glass is translucency over a wallpaper. With no wallpaper set there is
+          nothing behind the panel, so glass turns itself off rather than washing the theme's own
+          colour out — <code>effectiveGlass()</code> checks both.</p>
+        <div class="grid2">
+          <article class="card demo-solid"><h4>No wallpaper</h4><p>Solid surface. The theme's colour
+            is the colour.</p></article>
+          <article class="card demo-glass"><h4>Wallpaper set</h4><p>Tinted surface over the picture,
+            with a blur behind it.</p></article>
+        </div>
+      </section>
+
+      <!-- 07 ─────────────────────────────────────────────────────────────── -->
+      <section class="sec" id="motion">
+        <p class="eyebrow"><b>07</b><span>Motion</span></p>
+        <h2>Motion is a state, not a flourish.</h2>
+        <p class="intro">Two curves and three durations, all from the app. Something moves because it
+          is telling you it is running; when nothing is happening, nothing moves.</p>
+
+        <div class="sub"><h3>The vocabulary</h3><span class="tag">TWO CURVES · THREE DURATIONS</span></div>
+        <div class="motion">
+          {groups.motion.map((t) => (
+            <div class="mo-row"><b>--{t.name}</b><code>{t.value}</code>{t.note && <span>{t.note}</span>}</div>
+          ))}
+        </div>
+        <p class="anno">A working agent pulses. An idle one is still. Reduced motion stops the pulse
+          and keeps the colour, because the colour is the information.</p>
+      </section>
+
+      <!-- 08 ─────────────────────────────────────────────────────────────── -->
+      <section class="sec" id="imagery">
+        <p class="eyebrow"><b>08</b><span>Imagery</span></p>
+        <h2>Marble on the page, the product in the frame.</h2>
+        <p class="intro">Five public-domain museum photographs (Met Open Access, CC0) sit behind the
+          site's sections, each chosen for the claim beside it. They never appear inside the product,
+          and they never carry text.</p>
+
+        <div class="sub"><h3>How a photograph joins a dark page</h3><span class="tag">GRAIN THE ART</span></div>
+        <p class="body">Screen-blend it so the museum's black ground drops out, mask it away before
+          it reaches any text, and lay the noise <em>inside</em> the art rather than over the page.
+          Grain on the ground is what makes an image look pasted on.</p>
+        <p class="anno">Screenshots get the opposite treatment: one hairline, 8px radius, the width
+          of the section, no shadow and no perspective — so a dark screenshot stays continuous with
+          a dark page.</p>
+      </section>
+
+      <!-- 09 ─────────────────────────────────────────────────────────────── -->
+      <section class="sec" id="tokens">
+        <p class="eyebrow"><b>09</b><span>Tokens</span></p>
+        <h2>The file this page was built from.</h2>
+        <p class="intro">Generated from <code>{source}</code> at build time. Copy a line and it is
+          the same string the renderer uses.</p>
+        <div class="spec-table dump">
+          <div class="st-head dump-head"><span>TOKEN</span><span>VALUE</span><span>USAGE</span><span></span></div>
+          {[...groups.surfaces, ...groups.text, ...groups.brand, ...groups.semantic, ...groups.status].map((t) => (
+            <div class="st-row dump-row">
+              <code><span class="dump-chip" style={`background:${resolve(t.value)}`}></span>--{t.name}</code>
+              <code class="dump-val">{t.value}</code>
+              <span class="dump-use">{t.note ?? meanings[t.name] ?? ""}</span>
+              <button type="button" class="copy" data-copy={`--${t.name}: ${t.value};`}>Copy</button>
+            </div>
+          ))}
+        </div>
+        <p class="anno">{tokenCount} custom properties are defined in the renderer; this page shows
+          the ones a designer needs. The rest are structural.</p>
+      </section>
+    </main>
+  </div>
+</Shell>
+
+<style>
+  .bp { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 56px; max-width: var(--w);
+    margin: 0 auto; padding: 0 28px 80px; }
+  @media (max-width: 1000px) { .bp { grid-template-columns: 1fr; gap: 0 } .toc { display: none } }
+
+  .toc { position: sticky; top: 84px; align-self: start; padding-top: 48px; }
+  .toc-h { font-family: var(--f-m); font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--fg3); margin: 0 0 10px; }
+  .toc ol { list-style: none; margin: 0; padding: 0; }
+  .toc li { border-top: 1px solid var(--line); }
+  .toc a { display: flex; gap: 10px; padding: 9px 0; font-size: 13.5px; color: var(--fg3);
+    text-decoration: none; transition: color var(--d2) ease, padding-left var(--d2) ease; }
+  .toc a:hover { color: var(--fg); padding-left: 4px; }
+  .toc-n { font-family: var(--f-m); font-size: 11px; color: var(--fg3); }
+
+  .bp-hero { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 56px; align-items: start;
+    padding: 72px 0 80px; }
+  @media (max-width: 900px) { .bp-hero { grid-template-columns: 1fr } }
+  .pill { display: inline-flex; gap: 8px; font-family: var(--f-m); font-size: 11px; letter-spacing: .08em;
+    color: var(--fg3); border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; margin: 0 0 18px; }
+  .bp h1 { font-size: var(--t-display); line-height: 1.0; letter-spacing: var(--tr-display); font-weight: 600;
+    color: var(--fg); margin: 0; text-wrap: balance; }
+  .lede { margin-top: 20px; font-size: 20px; line-height: 1.45; color: var(--fg2); max-width: 56ch; text-wrap: pretty; }
+  .cta { display: flex; gap: 12px; margin-top: 24px; }
+
+  .spec { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .spec-row { display: flex; justify-content: space-between; gap: 16px; padding: 11px 14px;
+    border-bottom: 1px solid var(--line); font-family: var(--f-m); }
+  .spec-row:last-child { border-bottom: 0 }
+  .spec-row span { font-size: 10.5px; letter-spacing: .08em; color: var(--fg3); }
+  .spec-row b { font-size: 12px; font-weight: 400; color: var(--fg2); }
+
+  .sec { padding: 96px 0; border-top: 1px solid var(--line); }
+  .eyebrow { display: inline-flex; align-items: stretch; gap: 0; margin: 0 0 26px;
+    border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+  .eyebrow b, .eyebrow span { font-family: var(--f-m); font-size: 11px; letter-spacing: .08em;
+    padding: 6px 13px; font-weight: 400; }
+  .eyebrow b { background: var(--bg2); color: var(--fg3); }
+  .eyebrow span { color: var(--fg2); text-transform: uppercase; }
+  .sec h2 { font-size: var(--t-heading); line-height: 1.06; letter-spacing: var(--tr-heading); font-weight: 600;
+    color: var(--fg); margin: 0; text-wrap: balance; }
+  .intro, .body { margin-top: 18px; font-size: 16px; line-height: 1.6; color: var(--fg3); max-width: 64ch; text-wrap: pretty; }
+  .sec code { font-family: var(--f-m); font-size: .92em; color: var(--fg2); }
+
+  .sub { display: flex; align-items: baseline; justify-content: space-between; gap: 16px;
+    margin: 48px 0 20px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+  .sub h3 { margin: 0; font-size: var(--t-sub); font-weight: 600; letter-spacing: var(--tr-sub); color: var(--fg); }
+  .tag { font-family: var(--f-m); font-size: 10.5px; letter-spacing: .08em; color: var(--fg3); }
+
+  .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px;
+    background: var(--line); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  @media (max-width: 700px) { .grid2 { grid-template-columns: 1fr } }
+  .card { background: var(--bg); padding: 18px; }
+  .card h4 { margin: 0 0 6px; font-size: 14px; font-weight: 600; color: var(--fg); }
+  .card p { margin: 0; font-size: 14px; line-height: 1.6; color: var(--fg3); }
+
+  .marks { display: flex; flex-wrap: wrap; gap: 20px; }
+  .marks figure { margin: 0 }
+  .mark-tile { display: grid; place-items: center; width: 132px; height: 96px; border: 1px solid var(--line);
+    border-radius: 8px; background: var(--bg2); }
+  .mark-tile.light { background: #f4f5f6 }
+  .marks figcaption { margin-top: 8px; font-family: var(--f-m); font-size: 11px; color: var(--fg3); }
+
+  .ramp-row { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 20px; align-items: baseline;
+    padding: 14px 0; border-bottom: 1px solid var(--line); }
+  @media (max-width: 760px) { .ramp-row { grid-template-columns: 1fr; gap: 6px } }
+  .ramp-spec { font-family: var(--f-m); font-size: 11px; color: var(--fg3); }
+  .t-display { margin: 0; font-size: 44px; line-height: 1.06; letter-spacing: -.035em; font-weight: 600; color: var(--fg) }
+  .t-heading { margin: 0; font-size: 26px; line-height: 1.2; letter-spacing: -.022em; font-weight: 600; color: var(--fg) }
+  .t-lede { margin: 0; font-size: 19px; line-height: 1.55; color: var(--fg2) }
+  .t-body { margin: 0; font-size: 15px; line-height: 1.65; color: var(--fg3) }
+  .t-mono { margin: 0; font-family: var(--f-m); font-size: 12.5px; color: var(--fg2); font-variant-numeric: tabular-nums }
+  .t-caption { margin: 0; font-family: var(--f-m); font-size: 11px; letter-spacing: .04em; color: var(--fg3) }
+
+  .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 1px;
+    background: var(--line); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .sw { margin: 0; background: var(--bg); padding: 14px; }
+  .sw-chip { height: 56px; border-radius: 6px; box-shadow: inset 0 0 0 1px rgb(255 255 255 / .06); }
+  .sw figcaption { margin-top: 10px; display: flex; flex-direction: column; gap: 3px; }
+  .sw b { font-family: var(--f-m); font-size: 12px; font-weight: 500; color: var(--fg2); }
+  .sw-val { font-family: var(--f-m); font-size: 10.5px; color: var(--fg3); }
+  .sw-note { font-size: 12px; line-height: 1.45; color: var(--fg3); }
+
+  .states { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line);
+    border-radius: 8px; overflow: hidden; }
+  .state { display: flex; gap: 14px; background: var(--bg); padding: 14px 16px; }
+  .state-dot { flex: none; width: 10px; height: 10px; border-radius: 6px; margin-top: 5px; }
+  .state b { font-size: 14px; color: var(--fg); text-transform: capitalize }
+  .state p { margin: 4px 0 6px; font-size: 14px; line-height: 1.55; color: var(--fg3); max-width: 62ch }
+  .state code { font-family: var(--f-m); font-size: 11px; color: var(--fg3) }
+
+  .dd { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; margin-top: 28px;
+    background: var(--line); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  @media (max-width: 700px) { .dd { grid-template-columns: 1fr } }
+  .do { background: var(--bg); padding: 16px }
+  .do p { margin: 0; font-size: 14px; line-height: 1.6; color: var(--fg3) }
+  .dd-tag { font-family: var(--f-m); font-size: 10.5px; letter-spacing: .08em; margin-bottom: 8px !important; }
+  .dd-tag.ok { color: var(--ok) } .dd-tag.no { color: var(--blocked) }
+
+  .demo-solid { background: var(--bg2) }
+  .demo-glass { background: color-mix(in srgb, var(--bg2) 72%, transparent);
+    backdrop-filter: blur(10px); }
+
+  .mo-row { display: grid; grid-template-columns: 150px 210px minmax(0, 1fr); gap: 16px; align-items: baseline;
+    padding: 11px 0; border-bottom: 1px solid var(--line); font-size: 13px; color: var(--fg3); }
+  @media (max-width: 760px) { .mo-row { grid-template-columns: 1fr; gap: 4px } }
+  .mo-row b { font-family: var(--f-m); font-size: 12px; font-weight: 500; color: var(--fg2) }
+  .mo-row code { font-family: var(--f-m); font-size: 11.5px; color: var(--fg3) }
+
+  .dump { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .dump-row { display: grid; grid-template-columns: 16px 210px minmax(0, 1fr) auto; gap: 12px;
+    align-items: center; padding: 8px 14px; border-bottom: 1px solid var(--line); }
+  .dump-row:last-child { border-bottom: 0 }
+  .dump-chip { width: 14px; height: 14px; border-radius: 4px; box-shadow: inset 0 0 0 1px rgb(255 255 255 / .08) }
+  .dump code { font-family: var(--f-m); font-size: 11.5px; color: var(--fg2) }
+  .dump-val { color: var(--fg3) !important }
+  .copy { font: inherit; font-family: var(--f-m); font-size: 10.5px; color: var(--fg3); cursor: pointer;
+    background: none; border: 1px solid var(--line2); border-radius: 5px; padding: 3px 9px; }
+  .copy:hover { color: var(--fg) }
+
+  /* A specimen table: the thing itself in the middle, its name and its spec beside it. */
+  .rule { margin: 0 0 18px; font-size: 15px; line-height: 1.6; color: var(--fg3); max-width: 64ch; }
+  .spec-table { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .st-head, .st-row { display: grid; grid-template-columns: 120px minmax(0, 1fr) 260px; gap: 20px;
+    align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+  .st-row:last-child { border-bottom: 0 }
+  .st-head { background: var(--bg2); padding-top: 10px; padding-bottom: 10px; }
+  .st-head span { font-family: var(--f-m); font-size: 10.5px; letter-spacing: .08em; color: var(--fg3); }
+  .st-row > code:first-child { font-family: var(--f-m); font-size: 12px; color: var(--fg3); }
+  .st-spec { font-family: var(--f-m); font-size: 11px; color: var(--fg3); text-align: right; }
+  .dump-head, .dump-row { grid-template-columns: 230px 200px minmax(0, 1fr) auto; gap: 16px; padding: 9px 16px; }
+  .dump-row > code:first-child { display: flex; align-items: center; gap: 9px; color: var(--fg2); }
+  .dump-use { font-size: 12.5px; line-height: 1.5; color: var(--fg3); }
+  @media (max-width: 900px) {
+    .st-head, .st-row, .dump-head, .dump-row { grid-template-columns: 1fr; gap: 8px }
+    .st-spec { text-align: left }
+  }
+
+  .anno { margin-top: 14px; font-family: var(--f-m); font-size: 11.5px; line-height: 1.6; color: var(--fg3);
+    max-width: 70ch; }
+</style>
+
+<script is:inline>
+  for (const b of document.querySelectorAll(".copy")) {
+    b.addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = "Copied"; }
+      catch { b.textContent = "Press ⌘C"; }
+      setTimeout(() => { b.textContent = "Copy"; }, 1400);
+    });
+  }
+</script>

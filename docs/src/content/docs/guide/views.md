@@ -3,8 +3,8 @@ title: Views
 description: Workspace views and their current limitations.
 ---
 
-**Development preview** — views-as-plugins, World, and community views are on the
-unreleased development line (post-1.16.0). The canvas is released behaviour.
+**Development preview** — views-as-plugins and community views are on the unreleased
+development line (post-1.16.0). The canvas is released behaviour.
 
 ⌘E or the Settings ▸ Views overview switches how the workspace is shown. The workspace runtime owns
 frames, tiles, and sessions; a view only arranges them.
@@ -15,10 +15,37 @@ frames, tiles, and sessions; a view only arranges them.
   Columns / Rows / Grid arrange.
 - **Windows** — one tab per tile; minimized tabs; the active tab follows tile selection
   from any source (click, spawn, `hive ctl focus`).
-- **World** — a Three.js scene: one island per frame, one block per tile coloured by
-  agent status. Clicking a block docks that tile's live terminal beside the scene (real
-  input, not a texture); Esc or Shift+Esc undocks; clicking an island flies to it.
-  Camera and placements persist per repo.
+
+Everything else is a plugin you install or write. Nothing beyond these two ships in the
+box, and neither of them is privileged: they speak the same protocol yours will.
+
+<figure>
+  <img src="../../shots/view-canvas.webp" alt="Canvas: frames as coloured zones on an infinite board, tiles placed inside them." />
+  <figcaption>Canvas — frames as zones, tiles placed where you put them</figcaption>
+</figure>
+
+## The three example views
+
+Same workspace, same three agents, three arrangements. Each one was built for a different
+kind of day.
+
+<figure>
+  <img src="../../shots/view-queue.webp" alt="Queue: agents in a list grouped by status, the selected agent's terminal docked beside it." />
+  <figcaption>Queue — for running many agents: sorted by who needs you</figcaption>
+</figure>
+
+<figure>
+  <img src="../../shots/view-tiled.webp" alt="Tiled: every terminal in a frame laid out as live panes with frame tabs above." />
+  <figcaption>Tiled — for the terminal native: every session visible at once</figcaption>
+</figure>
+
+<figure>
+  <img src="../../shots/view-board.webp" alt="Board: sessions as cards in doing, needs you, review and done columns." />
+  <figcaption>Board — for the lead: cards moving doing → review → done</figcaption>
+</figure>
+
+The terminals in those shots are live: a view asks the host for a rectangle, and the host
+places the real tile there. Nothing is re-rendered or mirrored.
 
 ## Switch behaviour and limits
 
@@ -43,9 +70,10 @@ or remove a view.
 A view is a package — `hivemind-view.json` plus one bundled entry:
 
 ```bash
-hive views install examples/views/orbit/dist
+hive views install @dip497/queue          # from HiveHub, every file checked against its hash
+hive views install examples/views/queue/dist   # or from a folder
 hive views list        # what will load, and why not
-hive views remove orbit
+hive views remove queue
 ```
 
 Install/remove ask a running app to rescan. Plugins run in a sandboxed iframe on their
@@ -53,9 +81,15 @@ own origin: no filesystem, network, node, or app API. They read workspace struct
 names, per-tile status, and selection through the versioned `@hivemind/view-sdk`
 protocol, and can request a surface rect where the host places a real tile (that is how
 a live terminal appears inside a plugin scene). Traffic that is malformed, flooded, or
-CPU-heavy disables the plugin for the session. Examples in `examples/views/`: orbit
-(2D canvas), office (isometric), solar (three.js). Authoring:
-[Extension authoring](../extension-authoring/).
+CPU-heavy disables the plugin for the session. Examples in `examples/views/`, each built for one kind of person:
+
+- `queue` — for running many agents at once: agents ordered by who needs you, the selected
+  one's live terminal docked beside the list.
+- `tiled` — for the terminal native: every terminal in a frame laid out as live panes, with
+  frame tabs that light when another task needs you.
+- `board` — for the lead: sessions as cards moving from doing, to review, to done.
+
+ Authoring: [Extension authoring](../extension-authoring/).
 
 ## Chrome in every view
 
@@ -66,7 +100,7 @@ controls. Settings remains accessible in the app header. A docked tile gets a ho
 
 ## Appearance inside views
 
-A terminal docked in World or a community view renders per the `pluginSurfaces` setting:
+A terminal docked in a community view renders per the `pluginSurfaces` setting:
 `theme` (as on canvas, wallpaper clipped to the slot) or `opaque` (solid terminal
 background). Set it in Settings ▸ Appearance or
 `hive config set appearance.pluginSurfaces '"opaque"'`.

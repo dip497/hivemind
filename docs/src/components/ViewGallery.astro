@@ -1,0 +1,125 @@
+---
+/**
+ * The views, shown as what they are: real screenshots of the same workspace drawn four ways,
+ * and a fifth panel for the one that matters most — the view you write yourself.
+ *
+ * Nothing loops. You pick a tab and it stays where you put it.
+ */
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+const views = [
+  { id: "canvas", name: "Canvas", note: "An infinite board. Frames are zones you drag, zoom and arrange.", ships: true },
+  { id: "tiled", name: "Tiled", note: "One pane per agent, tabbed by frame — for people who live in a terminal.", ships: false },
+  { id: "queue", name: "Queue", note: "Ordered by who needs you, with that agent's live terminal docked beside the list.", ships: false },
+  { id: "board", name: "Board", note: "Doing, needs you, review, done — a session moves across when you say so.", ships: false },
+];
+---
+<div class="gal" data-view="canvas">
+  <div class="gal-tabs" role="tablist" aria-label="Workspace views">
+    {views.map((v) => (
+      <button type="button" role="tab" data-tab={v.id} aria-selected={v.id === "canvas" ? "true" : "false"}>
+        {v.name}<em>{v.ships ? "ships" : "a plugin"}</em>
+      </button>
+    ))}
+    <button type="button" role="tab" data-tab="yours" aria-selected="false" class="gal-yours">Write your own<em>a folder</em></button>
+  </div>
+
+  <div class="gal-body">
+    {views.map((v) => (
+      <figure class="gal-panel" data-panel={v.id}>
+        <img src={`${base}/shots/view-${v.id}.webp`} width="1200" height="750" loading="lazy" decoding="async"
+          alt={`The ${v.name} view: ${v.note}`} />
+        <figcaption>{v.note}</figcaption>
+      </figure>
+    ))}
+
+    <div class="gal-panel gal-write" data-panel="yours">
+      <div>
+        <p>A view is a folder with a manifest and one page. The host hands it the frames, the
+          tiles and their status; it draws the workspace however it likes, sandboxed, and asks
+          for a live terminal when it wants one.</p>
+        <pre class="cmd"><span class="w">$</span> hive views install ./my-view/dist
+<span class="w">$</span> hive agents install ./my-agent</pre>
+        <p class="gal-links"><a href={`${base}/guide/views/`}>Write a view →</a>
+          <a href={`${base}/guide/agent-providers/`}>Write an agent →</a></p>
+      </div>
+      <pre class="gal-file"><code>{`{
+  "id": "my-view",
+  "name": "My view",
+  "entry": "index.html",
+  "permissions": [],
+  "author": "you",
+  "license": "MIT"
+}`}</code></pre>
+    </div>
+  </div>
+</div>
+
+<style>
+  .gal { margin-top: 26px; }
+  .gal-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  .gal-tabs button {
+    display: flex; align-items: baseline; gap: 8px; font: inherit; font-size: 14px; cursor: pointer;
+    padding: 8px 14px; border-radius: 9px; border: 1px solid var(--line); background: transparent;
+    color: var(--fg3); transition: color var(--d2) ease, border-color var(--d2) ease, background-color var(--d2) ease;
+  }
+  .gal-tabs button em { font-style: normal; font-family: var(--f-m); font-size: 11px; color: var(--fg3); opacity: .8; }
+  .gal-tabs button[aria-selected="true"] { color: var(--fg); border-color: var(--line2); background: var(--bg2); }
+  @media (hover: hover) { .gal-tabs button:hover { color: var(--fg2); } }
+  /* The tab that is the point of the section reads as an invitation, not a fifth screenshot. */
+  .gal-yours { border-style: dashed !important; }
+
+  .gal-body { position: relative; }
+  .gal-panel { display: none; margin: 0; }
+  .gal-panel img {
+    width: 100%; height: auto; display: block;
+    border: 1px solid var(--line2); border-radius: 10px; background: var(--bg3, #1b1f23);
+  }
+  /* The caption is a log line, not a sentence of marketing. */
+  .gal-panel figcaption {
+    margin-top: 12px; font-family: var(--f-m); font-size: 11.5px; letter-spacing: .04em;
+    text-transform: uppercase; color: var(--fg3);
+  }
+  .gal[data-view="canvas"] [data-panel="canvas"],
+  .gal[data-view="tiled"] [data-panel="tiled"],
+  .gal[data-view="queue"] [data-panel="queue"],
+  .gal[data-view="board"] [data-panel="board"] { display: block; }
+  .gal[data-view="yours"] [data-panel="yours"] { display: grid; }
+
+  .gal-write {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px; align-items: center;
+    border: 1px dashed var(--line2); border-radius: 10px; padding: 32px;
+    min-height: min(56vw, 560px);
+  }
+  .gal-write p { font-size: 15px; line-height: 1.65; color: var(--fg2); max-width: 52ch; }
+  .gal-write .cmd { margin-top: 16px; font-size: 12.5px; }
+  .gal-links { display: flex; gap: 18px; margin-top: 16px; font-size: 14px; }
+  .gal-links a { color: var(--idle); text-decoration: none; }
+  .gal-links a:hover { text-decoration: underline; }
+  .gal-file {
+    margin: 0; padding: 16px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg);
+    font-family: var(--f-m); font-size: 12.5px; line-height: 1.7; color: var(--fg2); overflow-x: auto;
+  }
+  @media (max-width: 760px) { .gal-write { grid-template-columns: 1fr; gap: 18px; } }
+</style>
+
+<script is:inline>
+  {
+    const gal = document.querySelector(".gal");
+    if (gal) {
+      const tabs = [...gal.querySelectorAll("[data-tab]")];
+      const show = (id) => {
+        gal.dataset.view = id;
+        for (const t of tabs) t.setAttribute("aria-selected", String(t.dataset.tab === id));
+      };
+      for (const tab of tabs) tab.addEventListener("click", () => show(tab.dataset.tab));
+      // Arrow keys move along the strip, as a tablist should.
+      gal.querySelector(".gal-tabs").addEventListener("keydown", (e) => {
+        const i = tabs.indexOf(document.activeElement);
+        if (i < 0 || (e.key !== "ArrowRight" && e.key !== "ArrowLeft")) return;
+        e.preventDefault();
+        const next = tabs[(i + (e.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length];
+        next.focus(); show(next.dataset.tab);
+      });
+    }
+  }
+</script>

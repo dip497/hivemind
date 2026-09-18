@@ -48,7 +48,7 @@ hm.on("structure", ({ tiles }) => {
 ```
 
 Bundle this module as your entry. For a complete view with live docking, name updates,
-status subscriptions, and saved layout, start from `examples/views/orbit`.
+status subscriptions, and saved layout, start from `examples/views/tiled` — the smallest of the three examples.
 
 `setSurfaceRects` places host-owned tools in your view; `onReveal` answers focus
 requests; `setLayout` saves up to 64 KB per repository. Canvas/WebGL views can use
@@ -73,5 +73,6 @@ Declared in the manifest, refused at install if unknown:
 - Store camera/placements via `setLayout`; version your blob yourself.
 - A disabled plugin recovers from its layout blob on next mount.
 
-Reference implementations: `examples/views/orbit` (smallest complete view), `office`,
-`solar`. Protocol types: `packages/hive-view-sdk/src/protocol.ts`.
+Reference implementations: `examples/views/tiled` (surfaces and layout), `queue` (a list, a docked
+terminal and a WebGL empty state) and `board` (drag, keyboard moves, persisted layout) — copy
+the one closest to what you are building. Protocol types: `packages/hive-view-sdk/src/protocol.ts`.

@@ -1,0 +1,181 @@
+---
+/**
+ * The catalog. Built from the same data the app installs from, so this page cannot
+ * advertise something the app would refuse — and a plugin added to the catalog appears
+ * here without anyone writing HTML for it.
+
+ */
+import Shell from "../../layouts/Shell.astro";
+import { mark, type Icon } from "../../lib/mark";
+import catalog from "../../data/plugins.json";
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+type Entry = (typeof catalog.plugins)[number] & { icon?: Icon; bin?: string; does?: string[] };
+
+const all = (catalog.plugins as Entry[]).map((p) => ({ ...p, svg: mark(p.icon) }));
+const agents = all.filter((p) => p.type === "agent");
+const views = all.filter((p) => p.type === "view");
+const title = "Plugins — Hivemind";
+const description = `Every agent and view you can add to Hivemind — ${agents.length} agents, ${views.length} views. Each one is a manifest you can read before you install it.`;
+---
+<Shell title={title} description={description} nav="plugins">
+  <section class="top plate" data-side="left">
+    <div class="wrap full">
+      <p class="eyebrow">Catalog</p>
+      <h1>Everything you can add</h1>
+      <p class="lede">
+        An agent here is a <strong>manifest</strong>, not a program — a file naming the command it
+        runs and how to read its status. Open one and you can read the whole thing before you
+        install it, and Hivemind tells you what it does in the same words on the way in.
+      </p>
+    </div>
+  </section>
+
+  <section class="wrap full">
+    <div class="filters">
+      <label class="search">
+        <span class="vh">Search plugins</span>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" />
+        </svg>
+        <input id="q" type="search" placeholder="Search by name or what it runs" autocomplete="off" />
+      </label>
+      <div class="tabs" role="group" aria-label="Filter by kind">
+        <button type="button" data-kind="all" aria-pressed="true">All <span class="n">{all.length}</span></button>
+        <button type="button" data-kind="agent" aria-pressed="false">Agents <span class="n">{agents.length}</span></button>
+        <button type="button" data-kind="view" aria-pressed="false">Views <span class="n">{views.length}</span></button>
+      </div>
+    </div>
+
+    <ul class="grid" id="grid">
+      {all.map((p) => (
+        <li class="cell" data-kind={p.type} data-q={`${p.name} ${p.id} ${p.bin ?? ""} ${p.description}`.toLowerCase()}>
+          <a class="card" href={`${base}/plugins/${p.id}/`}>
+            <span class="card-top">
+              <span class="mark">{p.svg ? <Fragment set:html={p.svg} /> : p.name[0]}</span>
+              <h3>{p.name}</h3>
+              <span class="kind">{p.type}</span>
+            </span>
+            <span class="desc">{p.description}</span>
+            <span class="card-foot">
+              {p.bin ? <span class="runs">runs <code>{p.bin}</code></span> : <span class="runs">sandboxed view</span>}
+              {p.does && p.does.length > 0 && <span class="asks">asks permission</span>}
+            </span>
+          </a>
+        </li>
+      ))}
+    </ul>
+    <p class="empty" id="empty" hidden>No plugins match that. <button type="button" id="clear">Clear search</button></p>
+  </section>
+
+  <section class="wrap narrow publish">
+    <h2 id="publish">Publish your own</h2>
+    <p class="sub">
+      An agent is one file. Write it, check it the way a user's machine will, and share the
+      folder — or a repository, which anyone can install from directly.
+    </p>
+    <pre class="code"><code>{`# see exactly what a user will be told about it
+hive agents validate ./my-agent
+
+# install it from anywhere
+hive agents install ./my-agent
+hive agents install @owner/name`}</code></pre>
+    <p class="sub">
+      To be listed here, publish it on HiveHub: set its id to <code>@your-github-login/name</code>,
+      push, and run <code>hivehub publish</code> in its folder. HiveHub keeps a pointer, never your
+      code: your plugin stays in your repository, and every file is pinned by checksum, so a file
+      that changes after it is listed fails the install rather than being trusted.
+    </p>
+  </section>
+
+  <script is:inline>
+    // Filtering is a high-frequency interaction: it happens in place, on the cells already
+    // rendered, with a count that says what is showing. No spinner, no route change.
+    (function () {
+      const q = document.getElementById("q");
+      const grid = document.getElementById("grid");
+      const empty = document.getElementById("empty");
+      const cells = [...grid.querySelectorAll(".cell")];
+      const tabs = [...document.querySelectorAll(".tabs button")];
+      let kind = "all";
+
+      function apply() {
+        const term = q.value.trim().toLowerCase();
+        let shown = 0;
+        for (const cell of cells) {
+          const ok = (kind === "all" || cell.dataset.kind === kind) &&
+            (!term || cell.dataset.q.includes(term));
+          cell.hidden = !ok;
+          if (ok) shown++;
+        }
+        empty.hidden = shown > 0;
+      }
+      q.addEventListener("input", apply);
+      document.getElementById("clear").addEventListener("click", () => { q.value = ""; apply(); q.focus(); });
+      for (const t of tabs) {
+        t.addEventListener("click", () => {
+          kind = t.dataset.kind;
+          for (const o of tabs) o.setAttribute("aria-pressed", String(o === t));
+          apply();
+        });
+      }
+    })();
+  </script>
+
+  <style define:vars={{ artCatalog: `url(${base}/shots/marble-6.webp)` }}>
+    .top{padding:64px 0 34px}
+    .vh{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+
+    .filters{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:18px}
+    .search{flex:1 1 240px;display:flex;align-items:center;gap:8px;min-width:0;
+      background:var(--bg2);border:1px solid var(--line);border-radius:7px;padding:0 11px;color:var(--fg3);
+      transition:border-color var(--d2) ease}
+    .search:focus-within{border-color:var(--fg3)}
+    .search input{flex:1;min-width:0;background:none;border:0;outline:none;color:var(--fg);
+      font:inherit;font-size:14.5px;padding:9px 0}
+    .search input::placeholder{color:var(--fg3)}
+    .tabs{display:flex;gap:0;border:1px solid var(--line);border-radius:7px;overflow:hidden;background:var(--bg2)}
+    .tabs button{font:inherit;font-size:13.5px;cursor:pointer;color:var(--fg3);background:transparent;
+      border:0;border-right:1px solid var(--line);padding:8px 14px;
+      transition-property:color,background-color;transition-duration:var(--d2);transition-timing-function:ease}
+    .tabs button:last-child{border-right:0}
+    .tabs button[aria-pressed="true"]{color:var(--fg);background:var(--bg3)}
+    .tabs .n{font-family:var(--f-m);font-size:12px;color:var(--fg3);margin-left:5px}
+    @media (hover:hover) and (pointer:fine){ .tabs button:hover{color:var(--fg)} }
+
+    /* One hairline grid, like the canvas. No card has a radius of its own: the grid has one
+       and the cells divide it — which is what tiles in a frame look like. */
+    /* The catalog is a directory, not an article: it takes the window, and the cards
+       keep their own width so a wider screen shows more of them, not bigger ones. */
+    .wrap.full{max-width:min(1720px, 94vw)}
+    /* A carved capital: the piece you add to a structure that was built to take it. */
+    .top{--plate-art:var(--artCatalog);--plate-w:min(20vw,300px);--plate-o:.2;--plate-pos:left center}
+    .top .lede{max-width:64ch}
+    .grid{list-style:none;margin:0;padding:0;display:grid;gap:0;
+      grid-template-columns:repeat(auto-fill,minmax(272px,1fr));
+      border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--bg2)}
+    .cell{border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+    .card{display:flex;flex-direction:column;gap:9px;height:100%;padding:18px;text-decoration:none;
+      transition:background-color var(--d2) ease}
+    @media (hover:hover) and (pointer:fine){ .card:hover{background:var(--bg3)} }
+    .card-top{display:flex;align-items:center;gap:10px}
+    /* Inner radius 5 = the grid's 8 minus the 18px cell padding. */
+    .mark{width:30px;height:30px;flex-shrink:0;display:grid;place-items:center;border-radius:5px;
+      background:var(--bg);border:1px solid var(--line);color:var(--fg2);font-weight:600;font-size:13px}
+    .mark svg{display:block}
+    .kind{margin-left:auto;font-family:var(--f-m);font-size:11px;color:var(--fg3)}
+    .desc{font-size:14.5px;line-height:1.55;color:var(--fg3)}
+    .card-foot{margin-top:auto;padding-top:10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+    .runs{font-family:var(--f-m);font-size:12.5px;color:var(--fg3)}
+    .runs code{color:var(--fg2)}
+    .asks{font-family:var(--f-m);font-size:11.5px;color:var(--working)}
+    .empty{margin-top:22px;font-size:15px;color:var(--fg3)}
+    .empty button{font:inherit;font-size:15px;color:var(--fg);background:none;border:0;padding:0;
+      cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+
+    .publish{margin-top:72px;padding-top:44px;border-top:1px solid var(--line)}
+    .code{background:var(--bg2);color:var(--fg2);font-family:var(--f-m);font-size:13px;line-height:1.7;
+      padding:16px 18px;border:1px solid var(--line);border-radius:7px;margin:18px 0;
+      white-space:pre-wrap;overflow-wrap:normal;word-break:keep-all}
+  </style>
+</Shell>

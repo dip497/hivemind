@@ -31,8 +31,8 @@ Closing Settings resumes them without changing your saved preferences.
 Additional settings such as fonts and corner radius are available through the CLI or
 settings file.
 
-Wallpaper and glass apply under the canvas and Windows views; World and community
-scenes paint their own background.
+Wallpaper and glass apply under the canvas and Windows views; a community view paints
+its own background.
 
 ## How Settings is organised
 
@@ -65,9 +65,9 @@ hive config set views.toolbars.canvas.labels true
 
 ## Plugins
 
-**Browse** lists the agents and views published in the Hivemind repository's
-[`plugins/index.json`](https://github.com/dip497/hivemind/tree/main/plugins), each with a
-checksum for every file. Installing downloads the files, checks every checksum, and shows
+**Browse** lists the agents and views published on
+[HiveHub](https://hivehub.griiken.workers.dev), each named `@owner/name` after the GitHub
+account that published it, with a checksum for every file. Installing downloads the files, checks every checksum, and shows
 what the plugin can do before anything is written; a file that changed after it was
 listed is refused. **Installed** adds a view from a folder (with the same review), and
 lists the views and agents you added, with their load problems.

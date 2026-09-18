@@ -5,10 +5,11 @@ description: Install Hivemind and start an agent.
 
 ## Install
 
-Linux x86_64. The installer downloads prebuilt binaries from the latest GitHub release:
+Linux x86_64 and macOS Apple Silicon have prebuilt binaries; Intel macs and Linux arm64
+build from source with `--dev`. The installer downloads the latest GitHub release:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/dip497/hivemind/main/install.sh)
+bash <(curl -fsSL https://hivemind.griiken.com/install.sh)
 ```
 
 It installs the `hive` CLI and the `hivemind` app into `~/.hivemind-app/`, symlinks both

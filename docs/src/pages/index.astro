@@ -1,16 +1,28 @@
 ---
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+import ViewGallery from '../components/ViewGallery.astro';
 const link = (path: string) => `${base}/${path}`;
 const title = 'Hivemind — a workspace for your coding agents';
 const description =
   'Run coding-agent CLIs on one canvas, next to the terminals, editor and diffs they are working on. Local, open source, driven from your shell.';
 const repo = 'https://github.com/dip497/hivemind';
-const install = 'bash <(curl -fsSL https://raw.githubusercontent.com/dip497/hivemind/main/install.sh)';
+const install = 'bash <(curl -fsSL https://hivemind.griiken.com/install.sh)';
+// The counts come from the catalog the app installs from, so they cannot drift from it.
+import catalog from '../data/plugins.json';
+// Icons and the bundled/catalog split both come from the provider manifests, vendored at build
+// time — the page cannot claim an agent ships that does not, or miscount what is left.
+import icons from '../generated/agent-icons.json';
+const bundled = icons.agents.filter((a) => a.bundled);
+const catalogOnly = icons.agents.filter((a) => !a.bundled);
+const agentCount = catalog.plugins.filter((p) => p.type === 'agent').length;
 ---
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
+  <!-- One theme, everywhere, set before paint. There is no picker to disagree with. -->
+  <script is:inline>document.documentElement.dataset.theme = "dark";</script>
+
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{title}</title>
   <meta name="description" content={description} />
@@ -22,7 +34,7 @@ const install = 'bash <(curl -fsSL https://raw.githubusercontent.com/dip497/hive
   <meta property="og:type" content="website" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" />
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -31,16 +43,16 @@ const install = 'bash <(curl -fsSL https://raw.githubusercontent.com/dip497/hive
   <div class="nav-in">
     <a class="brand" href={link('')} aria-label="Hivemind home">
       <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true">
-        <rect x="1.4" y="1.4" width="9.2" height="9.2" fill="currentColor" />
-        <rect x="13.4" y="1.4" width="9.2" height="9.2" fill="none" stroke="currentColor" stroke-width="2.2" />
-        <rect x="1.4" y="13.4" width="9.2" height="9.2" fill="none" stroke="currentColor" stroke-width="2.2" />
-        <rect x="13.4" y="13.4" width="9.2" height="9.2" fill="none" stroke="currentColor" stroke-width="2.2" />
+        <path d="M11.14 1.70 Q12 1.20 12.86 1.70 L16.51 3.80 Q17.37 4.30 17.37 5.29 L17.37 9.51 Q17.37 10.50 16.51 11 L12.86 13.10 Q12 13.60 11.14 13.10 L7.49 11 Q6.63 10.50 6.63 9.51 L6.63 5.29 Q6.63 4.30 7.49 3.80 Z" fill="currentColor" />
+        <path d="M5.60 11.30 Q6.46 10.80 7.32 11.30 L10.97 13.40 Q11.83 13.90 11.83 14.89 L11.83 19.11 Q11.83 20.10 10.97 20.60 L7.32 22.70 Q6.46 23.20 5.60 22.70 L1.95 20.60 Q1.09 20.10 1.09 19.11 L1.09 14.89 Q1.09 13.90 1.95 13.40 Z" fill="currentColor" opacity=".4" />
+        <path d="M16.68 11.30 Q17.54 10.80 18.40 11.30 L22.05 13.40 Q22.91 13.90 22.91 14.89 L22.91 19.11 Q22.91 20.10 22.05 20.60 L18.40 22.70 Q17.54 23.20 16.68 22.70 L13.03 20.60 Q12.17 20.10 12.17 19.11 L12.17 14.89 Q12.17 13.90 13.03 13.40 Z" fill="currentColor" opacity=".4" />
       </svg>
       Hivemind
     </a>
     <nav class="links" aria-label="Main">
       <a href="#how">How it works</a>
       <a href="#views">Views</a>
+      <a href={link('plugins')}>Plugins</a>
       <a href={link('guide/')}>Docs</a>
       <a href={repo}>GitHub</a>
     </nav>
@@ -48,19 +60,20 @@ const install = 'bash <(curl -fsSL https://raw.githubusercontent.com/dip497/hive
   </div>
 </header>
 
+
 <main id="main">
 
   <!-- ─────────── HERO: what it is, then how to get it ─────────── -->
-  <section class="hero">
+  <section class="hero plate">
     <div class="wrap hero-in">
       <div class="hero-copy">
-        <p class="eyebrow"><span class="tag">Free &amp; open source</span> Linux · MIT</p>
-        <h1>Run a swarm of coding agents on one canvas.</h1>
-        <p class="lede">Hivemind puts agent CLIs next to the terminals, editor and diffs they are
-          working on — on your own machine, driven from your shell.</p>
+        <p class="eyebrow"><span class="tag">Free &amp; open source</span> Linux &amp; macOS · MIT</p>
+        <h1>Bring your own agents. Draw your own workspace.</h1>
+        <p class="lede">Coding-agent CLIs, next to the terminals, editors and diffs they work on.
+          Adding your own is a file, not a fork.</p>
 
         <div class="cta">
-          <a class="btn primary" href={`${repo}/releases`}>Download for Linux</a>
+          <a class="btn primary" href={`${repo}/releases`}>Download</a>
           <a class="btn ghost" href={link('guide/getting-started/')}>Read the quickstart</a>
         </div>
 
@@ -74,179 +87,157 @@ const install = 'bash <(curl -fsSL https://raw.githubusercontent.com/dip497/hive
         </ul>
       </div>
 
-      <figure class="shot">
-        <figcaption class="shot-cap">A workspace with two agents, a diff and a shell</figcaption>
-        <svg viewBox="0 0 640 420" role="img" aria-label="The Hivemind workspace: a rail of frames and tiles on the left, with an agent terminal, a diff and a shell arranged on the canvas">
-          <rect x="1" y="1" width="638" height="418" rx="6" class="app"/>
-          <rect x="1" y="1" width="638" height="26" rx="6" class="chrome"/>
-          <rect x="1" y="20" width="638" height="8" class="chrome"/>
-          <g class="dot"><circle cx="17" cy="14" r="4"/><circle cx="31" cy="14" r="4"/><circle cx="45" cy="14" r="4"/></g>
-          <text x="320" y="18" class="t-chrome">hivemind — api</text>
-
-          <rect x="1" y="27" width="132" height="392" class="rail"/>
-          <text x="14" y="48" class="t-lab">LAYERS</text>
-          <g class="rail-row"><rect x="10" y="56" width="114" height="20"/></g>
-          <text x="20" y="70" class="t-row on">api</text>
-          <text x="28" y="96" class="t-row on">claude · scout</text>
-          <text x="28" y="118" class="t-row on">claude · builder</text>
-          <text x="28" y="140" class="t-row">diff</text>
-          <text x="28" y="162" class="t-row">shell</text>
-          <g class="rail-row"><rect x="10" y="178" width="114" height="20"/></g>
-          <text x="20" y="192" class="t-row on">web</text>
-          <text x="28" y="218" class="t-row">codex · nurse</text>
-
-          <g class="tile">
-            <rect x="150" y="44" width="292" height="168" rx="4"/>
-            <rect x="150" y="44" width="292" height="20" rx="4" class="bar"/><rect x="150" y="58" width="292" height="6" class="bar"/>
-            <text x="160" y="58" class="t-bar">claude · scout</text><circle cx="430" cy="54" r="4" class="ok"/>
-          </g>
-          <g class="code">
-            <text x="160" y="84">$ hive ctl read tile-scout</text>
-            <text x="160" y="102" class="d">limits.ts:14 — the window is pruned</text>
-            <text x="160" y="118" class="d">after the push, so the Nth call passes</text>
-            <text x="160" y="140">$ pytest -q tests/test_limits.py</text>
-            <text x="160" y="158" class="g">1 failed, 23 passed in 0.44s</text>
-            <text x="160" y="182">$ <tspan class="cur">▊</tspan></text>
-          </g>
-
-          <g class="tile">
-            <rect x="330" y="176" width="298" height="150" rx="4"/>
-            <rect x="330" y="176" width="298" height="20" rx="4" class="bar"/><rect x="330" y="190" width="298" height="6" class="bar"/>
-            <text x="340" y="190" class="t-bar">diff · src/limits.ts</text>
-          </g>
-          <g class="code sm">
-            <text x="340" y="214"><tspan class="g">+</tspan> if (hits.length &gt;= perMinute) return false;</text>
-            <text x="340" y="230"><tspan class="g">+</tspan> hits.push(now);</text>
-            <text x="340" y="246"><tspan class="r">-</tspan> buckets.set(key, hits);</text>
-            <text x="340" y="262" class="d">  return true;</text>
-            <text x="340" y="280"><tspan class="g">+</tspan> export function reset(key) {'{'}</text>
-            <text x="340" y="296" class="d">  buckets.delete(key);</text>
-          </g>
-
-          <g class="tile">
-            <rect x="150" y="238" width="168" height="118" rx="4"/>
-            <rect x="150" y="238" width="168" height="20" rx="4" class="bar"/><rect x="150" y="252" width="168" height="6" class="bar"/>
-            <text x="160" y="252" class="t-bar">shell</text>
-          </g>
-          <g class="code sm">
-            <text x="160" y="278">$ git status -sb</text>
-            <text x="160" y="294" class="d">## feat/limits</text>
-            <text x="160" y="310" class="d"> M src/limits.ts</text>
-          </g>
-        </svg>
+      <!-- The product, not a drawing of it: four real captures of one workspace — nine agents
+           across four repositories — cycling on the wallpaper the app is wearing in them. -->
+      <figure class="hero-shot" style={`--hero-bg:url(${link('shots/hero-bg.webp')})`}>
+        <div class="stage">
+          {[
+            ['queue', 'Queue — sorted by who needs you'],
+            ['canvas', 'Canvas — frames you drag and arrange'],
+            ['tiled', 'Tiled — every session at once'],
+            ['board', 'Board — doing, review, done'],
+          ].map(([id, caption], i) => (
+            <img class="slide" style={`--i:${i}`} src={link(`shots/view-${id}.webp`)}
+              width="1600" height="1000" loading={i === 0 ? 'eager' : 'lazy'}
+              fetchpriority={i === 0 ? 'high' : 'auto'} alt={caption} />
+          ))}
+        </div>
+        <figcaption>
+          <span>Agents across five frames — nothing lands until you answer</span>
+          <a href="#walkthrough">Watch the walkthrough →</a>
+        </figcaption>
       </figure>
     </div>
   </section>
 
-  <!-- ─────────── TRUST STRIP ─────────── -->
+
+  <!-- The recording of the real app: asked for, not autoplayed, and with controls. -->
+  <dialog id="walkthrough" class="walk">
+    <form method="dialog"><button class="walk-close" aria-label="Close">Esc</button></form>
+    <video controls preload="none" playsinline poster={`${base}/shots/poster.webp`} width="1280" height="720">
+      <source src={`${base}/shots/clip.webm`} type="video/webm" />
+      <source src={`${base}/shots/clip.mp4`} type="video/mp4" />
+    </video>
+    <p>Recorded in the app: three agents in two repositories, drawn by three different views.</p>
+  </dialog>
+
+  <!-- ─────────── TRUST STRIP ───────────
+       Each agent draws its own mark: the icons come from the same provider manifests the app
+       loads, so an agent added there appears here without anyone retyping a list. -->
   <section class="strip">
-    <div class="wrap strip-in">
-      <p class="strip-lab">Brings your own agents</p>
-      <ul class="agents">
-        <li>claude</li><li>codex</li><li>droid</li><li>kiro</li><li>pi</li>
-        <li class="more">…the catalog is a directory, not a fork</li>
+   <div class="strip-row">
+    <div class="marquee" role="img" aria-label={`Agents Hivemind runs: ${icons.agents.map((a) => a.label).join(', ')}`}>
+      <ul class="track">
+        {[0, 1].map((pass) => icons.agents.map((a) => (
+          <li class={a.bundled ? 'is-bundled' : ''} aria-hidden={pass === 1 ? 'true' : undefined}>
+            <svg viewBox={a.icon.viewBox} width="22" height="22" fill="currentColor"
+              fill-rule={a.icon.fillRule} aria-hidden="true">
+              {a.icon.paths.map((d) => <path d={d} />)}
+            </svg>
+            <span>{a.label}</span>
+          </li>
+        )))}
       </ul>
     </div>
+    <a class="strip-link" href={link('plugins')}>See the catalog <span aria-hidden="true">→</span></a>
+   </div>
   </section>
 
   <!-- ─────────── HOW IT WORKS ─────────── -->
-  <section class="band" id="how">
+  <section class="band plate" id="how" data-side="left">
     <div class="wrap">
       <header class="head">
         <h2>How it works</h2>
-        <p class="sub">Three commands, and the agents do the rest of the talking.</p>
+        <p class="sub">From a repository you already have to an agent working in it, in three commands.</p>
       </header>
 
       <ol class="steps">
         <li>
           <span class="step-n">1</span>
-          <h3>Put an agent in a repo</h3>
-          <p>Each one gets its own tile inside a frame — a repository, a git worktree, or an SSH host.
-            It cannot wander into a sibling's.</p>
-          <pre class="cmd"><span class="w">$</span> hive ctl spawn <span class="g">--agent</span> claude <span class="g">--frame</span> api</pre>
+          <h3>Initialise the repository</h3>
+          <p>One directory, <code>.hivemind/</code>, holds the workspace and its issues as Markdown
+            beside your code. Nothing else on your machine changes.</p>
+          <pre class="cmd"><span class="w">$</span> hive init <span class="g">--prefix</span> API</pre>
         </li>
         <li>
           <span class="step-n">2</span>
-          <h3>Let them hand work over</h3>
-          <p>One agent finds the bug and tells another where it is. Fan out, pipeline, map-reduce or
-            supervise — through the same CLI, with no MCP server to babysit.</p>
-          <pre class="cmd"><span class="w">$</span> hive ctl send tile-builder <span class="s">"limits.ts:14"</span></pre>
+          <h3>Start an agent in a frame</h3>
+          <p>A frame is one repository, worktree or SSH host. The agent gets a real terminal inside
+            it, with the CLI and the keys you already installed.</p>
+          <pre class="cmd"><span class="w">$</span> hive ctl spawn <span class="g">--agent</span> claude <span class="g">--frame</span> api</pre>
         </li>
         <li>
           <span class="step-n">3</span>
-          <h3>Approve before anything lands</h3>
-          <p>Read the whole transcript, then approve or refuse the plan. Nothing merges because a
-            model sounded confident.</p>
-          <pre class="cmd"><span class="w">$</span> hive ctl read tile-builder --timeout 60000</pre>
+          <h3>Read it, and answer it</h3>
+          <p>Its screen comes back as text you can pipe. The same verb sends the next instruction —
+            to you, or from one agent to another.</p>
+          <pre class="cmd"><span class="w">$</span> hive ctl read tile-scout <span class="g">--json</span></pre>
         </li>
       </ol>
     </div>
   </section>
 
-  <!-- ─────────── VIEWS ─────────── -->
-  <section class="band alt" id="views">
+  <!-- ─────────── BRING YOUR OWN ─────────── -->
+  <section class="band alt plate" id="yours">
     <div class="wrap">
       <header class="head">
-        <h2>Look at the same workspace three ways</h2>
-        <p class="sub">Your terminals, editor buffers and browser tabs survive the switch — tile bodies
-          are mounted once and lent to whichever view is on screen.</p>
+        <h2>Nothing we ship is privileged</h2>
+        <p class="sub">Every agent in the box is a manifest, and every one of them passes exactly
+          the checks yours does. There is no tier you cannot reach and no fork to maintain.</p>
       </header>
 
-      <div class="views">
-        <figure class="view">
-          <svg viewBox="0 0 320 200" role="img" aria-label="Canvas view: two frames as zones on an infinite board, each holding tiles">
-            <g class="vw-zone"><rect x="16" y="28" width="136" height="156"/><rect x="168" y="28" width="136" height="156"/></g>
-            <g class="vw-tab"><rect x="16" y="14" width="44" height="16"/><rect x="168" y="14" width="48" height="16"/></g>
-            <text x="22" y="26" class="vw-tab-t on">api</text><text x="174" y="26" class="vw-tab-t on">web</text>
-            <g class="vw-win">
-              <rect x="28" y="44" width="112" height="58"/><rect x="28" y="44" width="112" height="12" class="f"/>
-              <rect x="28" y="114" width="112" height="56"/><rect x="28" y="114" width="112" height="12" class="f"/>
-              <rect x="180" y="44" width="112" height="72"/><rect x="180" y="44" width="112" height="12" class="f"/>
-              <rect x="180" y="128" width="112" height="42"/><rect x="180" y="128" width="112" height="12" class="f"/>
-            </g>
-            <g class="vw-line">
-              <rect x="34" y="64" width="84" height="4"/><rect x="34" y="74" width="60" height="4" class="o"/><rect x="34" y="84" width="72" height="4"/>
-              <rect x="34" y="134" width="70" height="4"/><rect x="34" y="144" width="86" height="4" class="o"/>
-              <rect x="186" y="64" width="90" height="4"/><rect x="186" y="74" width="56" height="4" class="o"/><rect x="186" y="84" width="78" height="4"/>
-              <rect x="186" y="148" width="64" height="4"/>
-            </g>
-          </svg>
-          <figcaption><b>Canvas</b> — an infinite board. Frames are zones you drag, zoom and arrange.</figcaption>
-        </figure>
+      <div class="byo">
+        <div class="byo-copy">
+          <h3>An agent is a file</h3>
+          <p>It names the command to run and how to read that command's screen. Write it, check it
+            the way a stranger's machine will, and install it from a folder or straight from a
+            repository.</p>
+          <pre class="cmd"><span class="w">$</span> hive agents validate ./my-agent
+<span class="w">$</span> hive agents install ./my-agent
+<span class="w">$</span> hive agents install <span class="s">owner/repo</span></pre>
+          <p class="after"><a href={link('guide/agent-providers/')}>Read how to write an agent manifest →</a></p>
+          <p class="sub byo-note">Before it installs, Hivemind says what it will do in plain words —
+            the command it runs, any directory it reads, whether it can talk to your other agents.
+            An agent added automatically, with nobody reading it, may do none of those.</p>
+        </div>
 
-        <figure class="view">
-          <svg viewBox="0 0 320 200" role="img" aria-label="Windows view: a tab strip with one active tile filling the pane">
-            <g class="vw-win">
-              <rect x="14" y="14" width="76" height="24" class="f"/><rect x="94" y="14" width="70" height="24"/>
-              <rect x="168" y="14" width="64" height="24"/><rect x="236" y="14" width="70" height="24"/>
-            </g>
-            <text x="24" y="30" class="vw-tab-t on">claude</text>
-            <text x="104" y="30" class="vw-tab-t">diff</text><text x="178" y="30" class="vw-tab-t">tree</text><text x="246" y="30" class="vw-tab-t">shell</text>
-            <g class="vw-win"><rect x="14" y="48" width="292" height="138"/><rect x="14" y="48" width="292" height="14" class="f"/></g>
-            <g class="vw-line">
-              <rect x="26" y="78" width="180" height="5"/><rect x="26" y="92" width="128" height="5" class="o"/>
-              <rect x="26" y="106" width="216" height="5"/><rect x="26" y="120" width="96" height="5" class="o"/>
-              <rect x="26" y="134" width="164" height="5"/><rect x="26" y="148" width="118" height="5" class="o"/>
-            </g>
-          </svg>
-          <figcaption><b>Windows</b> — one tab per tile, for when you want the whole screen.</figcaption>
-        </figure>
+        <figure class="byo-file">
+          <figcaption>my-agent/agent.yaml</figcaption>
+          <pre><code>{`id: my-agent
+label: My Agent
+bin: my-agent
 
-        <figure class="view">
-          <svg viewBox="0 0 320 200" role="img" aria-label="World view: isometric islands, one per frame, with blocks for tiles and a terminal docked beside them">
-            <g class="vw-iso">
-              <path d="M92 114 L160 148 L92 182 L24 148 Z"/>
-              <path d="M204 82 L262 112 L204 142 L146 112 Z"/>
-              <path d="M70 124 L92 135 L92 113 L70 102 Z" class="s"/><path d="M92 135 L114 124 L114 102 L92 113 Z" class="m"/><path d="M70 102 L92 91 L114 102 L92 113 Z" class="f"/>
-              <path d="M110 148 L128 157 L128 142 L110 133 Z" class="s"/><path d="M128 157 L146 148 L146 133 L128 142 Z" class="m"/><path d="M110 133 L128 124 L146 133 L128 142 Z" class="f"/>
-              <path d="M190 100 L208 109 L208 92 L190 83 Z" class="s"/><path d="M208 109 L226 100 L226 83 L208 92 Z" class="m"/><path d="M190 83 L208 74 L226 83 L208 92 Z" class="f"/>
-            </g>
-            <g class="vw-win"><rect x="218" y="122" width="86" height="60"/><rect x="218" y="122" width="86" height="13" class="f"/></g>
-            <g class="vw-line"><rect x="226" y="144" width="62" height="4"/><rect x="226" y="154" width="44" height="4" class="o"/><rect x="226" y="164" width="52" height="4"/></g>
-          </svg>
-          <figcaption><b>World</b> — a Three.js scene. Click a block and its live terminal docks beside it.</figcaption>
+caps:
+  promptDelivery: typed
+  turnSignal: false
+  resume: none
+  supervise: human
+  blockedDetection: true
+
+detect:
+  default: idle
+  rules:
+    - when: { contains: "esc to interrupt" }
+      then: working
+    - when: { contains: "[y/n]" }
+      then: blocked`}</code></pre>
         </figure>
       </div>
+    </div>
+  </section>
+
+  <!-- ─────────── VIEWS ─────────── -->
+  <section class="band alt plate" id="views" data-side="left">
+    <div class="wrap">
+      <header class="head">
+        <h2>The workspace is a plugin too</h2>
+        <p class="sub">Canvas and Windows ship; the rest are plugins, and so is the one you write.
+          Your terminals, editor buffers and browser tabs survive the switch — tile bodies are
+          mounted once and lent to whichever view is on screen.</p>
+      </header>
+
+      <ViewGallery />
+
       <p class="after"><a href={link('guide/views/')}>Views are a sandboxed plugin API — write your own →</a></p>
     </div>
   </section>
@@ -265,22 +256,24 @@ const install = 'bash <(curl -fsSL https://raw.githubusercontent.com/dip497/hive
   </section>
 
   <!-- ─────────── FAQ ─────────── -->
-  <section class="band alt">
-    <div class="wrap narrow">
+  <section class="band alt plate" id="faq">
+    <div class="wrap">
       <header class="head"><h2>Questions people actually ask</h2></header>
       <dl class="faq">
         <dt>Does my code go anywhere?</dt>
         <dd>No. Hivemind runs on your machine and shells out to agent CLIs you installed yourself, with
           your own keys. There is no Hivemind account and no server of ours in the path.</dd>
         <dt>Which agents work with it?</dt>
-        <dd>claude, codex, droid, kiro and pi today. Adding another is a directory in the provider
-          catalog, not a fork.</dd>
+        <dd>Five ship in the box — claude, codex, droid, kiro, pi — and {agentCount} more are a click
+          away in the catalog. The list is not the point: an agent is a manifest naming the command it runs
+          and how to read its status. Yours is a file you write, not a fork of ours — and Hivemind adds
+          one from the catalog the moment its CLI turns up on your machine.</dd>
         <dt>Do I have to learn a new tool?</dt>
         <dd>The CLIs are the ones you already use. Hivemind arranges them, keeps their sessions alive,
           and gives them one command to talk to each other.</dd>
         <dt>How finished is it?</dt>
-        <dd>The canvas is released behaviour. Views-as-plugins, the World view and the new settings
-          commands are development previews — the docs mark which is which.</dd>
+        <dd>The canvas is released behaviour. Views-as-plugins and the plugin catalog are development
+          previews — the docs mark which is which.</dd>
       </dl>
     </div>
   </section>
@@ -290,10 +283,10 @@ const install = 'bash <(curl -fsSL https://raw.githubusercontent.com/dip497/hive
     <div class="wrap close-in">
       <div>
         <h2>Start with one repo.</h2>
-        <p class="sub">One binary, Linux x86_64, MIT licensed.</p>
+        <p class="sub">One binary. Linux x86_64 and macOS Apple Silicon, MIT licensed.</p>
       </div>
       <div class="cta">
-        <a class="btn primary" href={`${repo}/releases`}>Download for Linux</a>
+        <a class="btn primary" href={`${repo}/releases`}>Download</a>
         <a class="btn ghost" href={repo}>Read the source</a>
       </div>
     </div>
@@ -325,192 +318,313 @@ const install = 'bash <(curl -fsSL https://raw.githubusercontent.com/dip497/hive
   });
 </script>
 
-<style is:global>
-  /* ───────────────────────────────────────────────────────────────────────
-     Readability first. The rules this follows, and why:
-       · sentence case — all-caps forces letter-by-letter reading and slows
-         dyslexic readers 13–18%, so nothing you have to *read* is uppercase
-       · 60–70 characters per line of prose (66 optimal, WCAG caps at 80)
-       · line-height ≥ 1.5 on body text (WCAG 1.4.12)
-       · body text ≥ 4.5:1 against its own background, large text ≥ 3:1
-       · mono is for code and short labels only, never running prose
-     The comic voice survives in the details — the offset shadows, the hard
-     borders, the amber — not in the structure. A visitor should be able to
-     answer "what is this, do I need it, how do I get it" without decoding
-     a page.
-     ─────────────────────────────────────────────────────────────────────── */
-  :root{
-    --paper:#F7F4EE; --surface:#FFFFFF; --sunk:#F1EDE3;
-    --ink:#15130F; --body:#3A362E; --muted:#5E594F;
-    --line:#E1DBCC;
-    --accent:#8A5205; --accent-bg:#E8A33B; --accent-soft:#FBEBCD;
-    --code-bg:#15130F; --code-fg:#E9E5DA; --ok:#2E7D4F;
-    --f:"Archivo",ui-sans-serif,system-ui,-apple-system,sans-serif;
-    --f-m:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
-    --w:1180px;
-    color-scheme:light;
-  }
+<style is:global define:vars={{
+  artHero: `url(${base}/shots/marble.webp)`,
+  artHow: `url(${base}/shots/marble-4.webp)`,
+  artYours: `url(${base}/shots/marble-5.webp)`,
+  artViews: `url(${base}/shots/marble-2.webp)`,
+  artFaq: `url(${base}/shots/marble-3.webp)`,
+}}>
+  @import "../styles/workspace.css";
+
+  /* ── Base ─────────────────────────────────────────────────────────────── */
   *{box-sizing:border-box}
   html{scroll-behavior:smooth}
-  body{
-    margin:0;background:var(--paper);color:var(--body);
-    font-family:var(--f);font-size:17px;line-height:1.65;
-    -webkit-font-smoothing:antialiased;
-  }
+  body{margin:0;background:var(--bg);color:var(--fg2);font-family:var(--f);
+    font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
   a{color:inherit}
-  :focus-visible{outline:3px solid var(--accent);outline-offset:3px;border-radius:2px}
-  .skip{position:absolute;left:16px;top:-60px;background:var(--ink);color:var(--paper);padding:10px 14px;z-index:200;border-radius:4px}
+  ::selection{background:color-mix(in oklab,var(--brand) 40%,transparent)}
+  :focus-visible{outline:2px solid var(--idle);outline-offset:3px;border-radius:3px}
+  .skip{position:absolute;left:16px;top:-60px;background:var(--fg);color:var(--bg);padding:10px 14px;z-index:200;border-radius:5px}
   .skip:focus{top:12px}
-  .wrap{max-width:var(--w);margin:0 auto;padding:0 24px}
-  .wrap.narrow{max-width:820px}
+  .wrap{max-width:var(--w);margin:0 auto;padding:0 28px}
+  .wrap.narrow{max-width:760px}
 
-  h1,h2,h3{color:var(--ink);margin:0;text-wrap:balance;letter-spacing:-.02em}
-  h1{font-size:clamp(34px,4.4vw,54px);line-height:1.08;font-weight:800}
-  h2{font-size:clamp(26px,2.8vw,36px);line-height:1.16;font-weight:700}
-  h3{font-size:19px;line-height:1.3;font-weight:700}
+  h1,h2,h3{color:var(--fg);margin:0;text-wrap:balance;letter-spacing:-.022em;font-weight:600}
+  h1{font-size:var(--t-display);line-height:1.0;letter-spacing:var(--tr-display)}
+  h2{font-size:var(--t-heading);line-height:1.06;letter-spacing:var(--tr-heading)}
+  h3{font-size:16px;line-height:1.35}
   p{margin:0}
-  .lede{font-size:clamp(17px,1.25vw,20px);line-height:1.6;color:var(--body);max-width:56ch;margin-top:18px}
-  .sub{font-size:17px;line-height:1.6;color:var(--muted);max-width:64ch;margin-top:12px}
+  .lede{font-size:var(--t-lede);line-height:1.5;color:var(--fg2);max-width:52ch;margin-top:20px}
+  .sub{font-size:15px;line-height:1.6;color:var(--fg3);max-width:64ch;margin-top:10px}
+  code,.cmd,.m{font-family:var(--f-m)}
 
-  .nav{position:sticky;top:0;z-index:50;background:rgba(247,244,238,.93);
-    backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
-  .nav-in{max-width:var(--w);margin:0 auto;padding:0 24px;height:64px;display:flex;align-items:center;gap:26px}
-  .brand{display:flex;align-items:center;gap:9px;font-weight:700;font-size:18px;color:var(--ink);text-decoration:none;letter-spacing:-.02em}
-  .links{display:flex;gap:22px;margin-left:auto;font-size:15px}
-  .links a{color:var(--body);text-decoration:none}
-  .links a:hover{color:var(--ink)}
+  /* ── Chrome ───────────────────────────────────────────────────────────── */
+  /* A hairline, not a shadow: the app's own chrome is divided this way. */
+  .nav{position:sticky;top:0;z-index:50;background:color-mix(in oklab,var(--bg) 88%,transparent);
+    backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+  .nav-in{max-width:var(--w);margin:0 auto;padding:0 28px;height:58px;display:flex;align-items:center;gap:24px}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:600;font-size:16px;color:var(--fg);
+    text-decoration:none;letter-spacing:-.02em}
+  .links{display:flex;gap:20px;margin-left:auto;font-size:14px}
+  .links a{color:var(--fg3);text-decoration:none;transition:color var(--d2) ease}
+  @media (hover:hover) and (pointer:fine){ .links a:hover{color:var(--fg)} }
 
-  .btn{display:inline-flex;align-items:center;justify-content:center;font-weight:600;font-size:16px;
-    text-decoration:none;padding:12px 20px;border-radius:6px;border:2px solid var(--ink);
-    background:var(--surface);color:var(--ink);transition:transform .08s ease,box-shadow .08s ease}
-  .btn.primary{background:var(--accent-bg);box-shadow:4px 4px 0 var(--ink)}
-  .btn.primary:hover{transform:translate(2px,2px);box-shadow:2px 2px 0 var(--ink)}
-  .btn.ghost{background:transparent}
-  .btn.ghost:hover{background:var(--sunk)}
-  .btn.small{padding:8px 15px;font-size:15px;margin-left:4px}
-  .cta{display:flex;gap:12px;flex-wrap:wrap;margin-top:26px}
+  /* ── Sections: panes divided by hairlines, edge to edge ───────────────── */
+  .band{padding:44px 0;border-top:1px solid var(--line)}
+  .band.alt{background:var(--bg2)}
+  .head{margin-bottom:22px}
+  .eyebrow{font-family:var(--f-m);font-size:12px;letter-spacing:.04em;color:var(--fg3);
+    display:flex;align-items:center;gap:10px}
+  .tag{color:var(--fg2);border:1px solid var(--line2);
+    border-radius:4px;padding:2px 7px;letter-spacing:.04em;text-transform:none}
 
-  .hero{padding:clamp(40px,6vw,76px) 0 clamp(36px,5vw,60px)}
-  .hero-in{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);gap:clamp(28px,4vw,56px);align-items:center}
-  .eyebrow{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--muted);margin-bottom:18px}
-  .tag{background:var(--accent-soft);color:var(--accent);border:1px solid #E7CFA0;
-    padding:3px 9px;border-radius:999px;font-size:13px;font-weight:600}
-  .install{display:flex;align-items:stretch;margin-top:22px;border:2px solid var(--ink);border-radius:6px;overflow:hidden}
-  .install code{flex:1;min-width:0;overflow-x:auto;white-space:nowrap;background:var(--code-bg);color:var(--code-fg);
-    font-family:var(--f-m);font-size:13px;padding:12px 14px;border:0;border-radius:0}
-  .copy{border:0;border-left:2px solid var(--ink);background:var(--surface);color:var(--ink);
-    font-family:var(--f);font-weight:600;font-size:14px;padding:0 16px;cursor:pointer}
-  .copy:hover{background:var(--sunk)}
-  .copy.done{background:var(--ok);color:#fff}
-  .trust{list-style:none;display:flex;flex-wrap:wrap;gap:8px 20px;margin:20px 0 0;padding:0;font-size:14.5px;color:var(--muted)}
-  .trust li{position:relative;padding-left:17px}
-  .trust li::before{content:"";position:absolute;left:0;top:.55em;width:8px;height:8px;background:var(--accent-bg);border:1.5px solid var(--ink)}
+  /* ── Hero ─────────────────────────────────────────────────────────────── */
+  /* The hero holds what it holds: the copy, and the app beside it. */
+  /* Which piece sits where — the recipe itself lives in workspace.css (.plate).
+       hero  · a draped figure at rest — the workspace holding steady while agents run
+       how   · a handover painted on a vase — one figure passing work to the next
+       yours · a grave stele — one standard form, cut the same for everyone
+       views · a temple column — the structure you are free to rebuild
+       faq   · a face, where a reader decides whether to trust it                        */
+  .hero{padding:56px 0 48px;--plate-art:var(--artHero);--plate-w:min(44vw,720px);--plate-o:.42;--plate-pos:right top}
+  #how{--plate-art:var(--artHow);--plate-w:min(24vw,340px);--plate-o:.2;--plate-fit:cover}
+  #yours{--plate-art:var(--artYours);--plate-w:min(18vw,250px);--plate-o:.22;--plate-pos:right bottom}
+  #views{--plate-art:var(--artViews);--plate-w:min(20vw,300px);--plate-o:.2;--plate-pos:left bottom}
+  #faq{--plate-art:var(--artFaq);--plate-w:min(24vw,330px);--plate-o:.17}
 
+  @media (max-width:900px){ .hero::before{display:none} }
+  /* Wide enough for the copy and the app side by side; below that the app goes under it. */
+  .hero-in{display:grid;grid-template-columns:minmax(0,1fr);gap:44px;align-items:center}
+  @media (min-width:1080px){
+    .hero-in{grid-template-columns:minmax(420px,.85fr) minmax(0,1.15fr);gap:56px}
+    .hero-copy .lede{max-width:46ch}
+  }
+  main>section{position:relative;z-index:1}
+
+  /* ── Hero: real captures, cycling on the wallpaper they were shot against ── */
+  .hero-shot{margin:0;min-width:0}
+  .hero-shot .stage{position:relative;aspect-ratio:16/10;border:1px solid var(--line);
+    border-radius:12px;overflow:hidden;background:#0d0f11 center/cover no-repeat;
+    background-image:var(--hero-bg);box-shadow:0 18px 50px rgba(0,0,0,.45)}
+  .hero-shot .slide{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;padding:14px;
+    opacity:0;animation:cycle 26s infinite;animation-delay:calc(var(--i) * 6.5s)}
+  /* The first frame is what a thumbnail and a skim-reader get: it must be up at rest. */
+  .hero-shot .slide[style*="--i:0"]{opacity:1}
+  @keyframes cycle{0%{opacity:0}2%{opacity:1}23%{opacity:1}25%{opacity:0}100%{opacity:0}}
+  .hero-shot figcaption{display:flex;flex-wrap:wrap;gap:6px 18px;justify-content:space-between;
+    align-items:baseline;margin-top:12px;font-family:var(--f-m);font-size:12.5px;color:var(--fg3)}
+  .hero-shot figcaption a{color:var(--fg2)}
+  @media (prefers-reduced-motion:reduce){
+    .hero-shot .slide{animation:none;opacity:0}
+    .hero-shot .slide[style*="--i:0"]{opacity:1}
+  }
+
+  .hero .shot-cap{margin:12px 0 0}
+  .cta{display:flex;flex-wrap:wrap;gap:10px;margin-top:28px}
+  .btn{display:inline-flex;align-items:center;justify-content:center;height:38px;padding:0 18px;
+    border-radius:6px;font-size:14px;font-weight:500;text-decoration:none;border:1px solid transparent;
+    transition-property:background-color,border-color,color,scale;transition-duration:var(--d2);transition-timing-function:ease}
+  .btn:active{scale:.96;transition-duration:var(--d1);transition-timing-function:var(--ease)}
+  .btn.primary{background:var(--brand);color:#fff}
+  .btn.ghost{border-color:var(--line2);color:var(--fg)}
+  @media (hover:hover) and (pointer:fine){
+    .btn.primary:hover{background:color-mix(in oklab,var(--brand) 88%,#fff)}
+    .btn.ghost:hover{border-color:var(--fg3);background:var(--bg3)}
+  }
+  /* The install line is a terminal, so it is drawn as one. */
+  .install{display:flex;align-items:center;gap:12px;margin-top:16px;padding:10px 12px;
+    background:var(--bg2);border:1px solid var(--line);border-radius:7px;font-size:13.5px;overflow:hidden}
+  .install code{color:var(--fg2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .install code::before{content:"$ ";color:var(--fg3)}
+  /* Inner radius 4 = the frame's 7 minus its 10px padding, floored at the control's height. */
+  .copy{margin-left:auto;flex-shrink:0;font:inherit;font-family:var(--f-m);font-size:12px;cursor:pointer;
+    color:var(--fg3);background:transparent;border:1px solid var(--line2);border-radius:4px;padding:4px 10px;
+    transition-property:color,border-color,background-color,scale;transition-duration:var(--d2);transition-timing-function:ease}
+  .copy:active{scale:.96;transition-duration:var(--d1);transition-timing-function:var(--ease)}
+  .copy[data-done]{color:var(--ok);border-color:color-mix(in oklab,var(--ok) 45%,transparent)}
+  @media (hover:hover) and (pointer:fine){ .copy:hover{color:var(--fg);border-color:var(--fg3)} }
+  .trust{list-style:none;display:flex;flex-wrap:wrap;gap:18px;margin:22px 0 0;padding:0;
+    font-size:13px;color:var(--fg3);font-family:var(--f-m)}
+
+  /* ── The workspace illustration ───────────────────────────────────────── */
   .shot{margin:0}
-  .shot svg{display:block;width:100%;height:auto;border:2px solid var(--ink);border-radius:8px;box-shadow:8px 8px 0 var(--line)}
-  .shot-cap{font-size:13px;color:var(--muted);margin-bottom:9px}
-  .app{fill:#1A1814}
-  .chrome{fill:#25221C}
-  .dot circle{fill:#5E594E}
-  .rail{fill:#201E19}
-  .tile rect{fill:#141210;stroke:#37332A;stroke-width:1.5}
-  .tile rect.bar{fill:#26231C;stroke:none}
-  .rail-row rect{fill:#2E2A22;stroke:none}
-  .ok{fill:#57C07E}
-  .shot text{font-family:var(--f-m)}
-  .t-chrome{fill:#7C7669;font-size:9px;text-anchor:middle}
-  .t-lab{fill:#6E6858;font-size:8px;letter-spacing:.12em}
-  .t-row{fill:#9E988A;font-size:9px}
-  .t-row.on{fill:#DCD6C8}
-  .t-bar{fill:#ADA799;font-size:9px}
-  .code text{fill:#D3CDBF;font-size:10px}
+  /* A real screenshot of a dark app: a hairline and a soft shadow, so it sits on either ground. */
+  .walk{border:1px solid var(--line);border-radius:14px;background:var(--bg2);color:var(--fg2);
+    padding:14px;max-width:min(1100px,92vw);box-shadow:0 40px 120px -50px rgb(0 0 0 / .8)}
+  .walk::backdrop{background:rgb(0 0 0 / .6)}
+  .walk video{width:100%;height:auto;display:block;border-radius:9px;background:#0f1113}
+  .walk p{margin-top:10px;font-size:13px;color:var(--fg3)}
+  .walk-close{float:right;margin:-4px 0 6px;font:inherit;font-size:12px;font-family:var(--f-m);
+    color:var(--fg3);background:none;border:1px solid var(--line2);border-radius:6px;padding:2px 8px;cursor:pointer}
+  .shot-cap{font-size:12.5px;color:var(--fg3);margin-bottom:10px;font-family:var(--f-m)}
+  .app{fill:var(--bg);stroke:none}
+  .chrome{fill:var(--bg3)}
+  .dot circle{fill:var(--line2)}
+  .rail{fill:var(--bg2)}
+  .rail-row rect{fill:var(--bg3)}
+  .tile rect{fill:var(--bg);stroke:var(--line);stroke-width:1}
+  .tile .bar{fill:var(--bg3);stroke:none}
+  .t-chrome,.t-lab,.t-row,.t-bar{font-family:var(--f-m);fill:var(--fg3)}
+  .t-chrome{font-size:9px;text-anchor:middle}
+  .t-lab{font-size:8px;letter-spacing:.12em}
+  .t-row{font-size:9.5px}
+  .t-row.on{fill:var(--fg)}
+  .t-bar{font-size:9px;fill:var(--fg2)}
+  .code text{font-family:var(--f-m);font-size:10px;fill:var(--fg2)}
   .code.sm text{font-size:9px}
-  .code .d{fill:#948D7F}
-  .code .g,.code tspan.g{fill:#7ACB96}
-  .code .r,.code tspan.r{fill:#E08A72}
-  .cur{fill:#E8A33B}
+  .code .d{fill:var(--fg3)}
+  .code .g,.g{fill:var(--ok)}
+  .code .r,.r{fill:var(--blocked)}
+  .cur{fill:var(--idle)}
+  circle.ok{fill:var(--ok)}
+  /* The isometric scene is drawn with paths, not rects: three faces per block, lit the way
+     the app lights a tile — top brightest, then the two sides. */
 
-  .strip{border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--sunk)}
-  .strip-in{display:flex;align-items:center;gap:24px;flex-wrap:wrap;padding-top:18px;padding-bottom:18px}
-  .strip-lab{font-size:14px;color:var(--muted)}
-  .agents{list-style:none;display:flex;flex-wrap:wrap;gap:10px;margin:0;padding:0}
-  .agents li{font-family:var(--f-m);font-size:13.5px;color:var(--ink);background:var(--surface);
-    border:1px solid var(--line);border-radius:4px;padding:5px 11px}
-  .agents li.more{font-family:var(--f);border:0;background:none;color:var(--muted);padding-left:2px}
+  /* ── The view demo ───────────────────────────────────────────────────────────
+     A CSS animation, not a script: it is predetermined, so it belongs off the main
+     thread where it stays smooth while the rest of the page is still loading. Only
+     transform moves — six tiles travel between three sets of coordinates, which is
+     the same six tiles the whole time, on purpose. */
 
-  .band{padding:clamp(44px,5.5vw,80px) 0}
-  .band.alt{background:var(--sunk);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
-  .head{margin-bottom:clamp(26px,3vw,40px)}
+  /* The hero mockup gets two signs of life and no more: a cursor, and one agent
+     finishing a turn. A screenshot that loops a whole demo is an advert. */
+  .cur{animation:hm-blink 1.06s steps(1,end) infinite}
+  @keyframes hm-blink{0%,49%{opacity:1}50%,100%{opacity:0}}
+  .shot .st{animation:hm-turn 7s steps(1,end) infinite}
+  @keyframes hm-turn{0%,62%{fill:var(--working)}63%,100%{fill:var(--ok)}}
 
-  .steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
-  .steps li{background:var(--surface);border:2px solid var(--ink);border-radius:8px;padding:24px;
-    box-shadow:5px 5px 0 var(--line);display:grid;gap:12px;align-content:start}
-  .step-n{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:999px;
-    background:var(--accent-bg);border:2px solid var(--ink);font-weight:700;font-size:15px;color:var(--ink)}
-  .steps p{font-size:15.5px;line-height:1.6;color:var(--body)}
-  .cmd{margin:4px 0 0;background:var(--code-bg);color:var(--code-fg);border-radius:5px;
-    font-family:var(--f-m);font-size:12.5px;line-height:1.75;padding:11px 12px;white-space:pre-wrap;overflow-wrap:anywhere}
-  .cmd .w{color:#fff}.cmd .g{color:#8FD98A}.cmd .s{color:#E8C77B}
+  .after{margin-top:22px;font-size:14px}
+  .after a{color:var(--idle);text-decoration:none;border-bottom:1px solid color-mix(in oklab,var(--idle) 40%,transparent)}
 
-  .views{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
-  .view{margin:0;display:grid;gap:12px}
-  .view svg{display:block;width:100%;height:auto;background:var(--surface);
-    border:2px solid var(--ink);border-radius:6px;color:var(--ink)}
-  .vw-zone rect{fill:none;stroke:currentColor;stroke-width:2;stroke-dasharray:6 5;opacity:.5}
-  .vw-tab rect{fill:currentColor}
-  .vw-tab-t{font-family:var(--f-m);font-size:9px;font-weight:700;fill:currentColor}
-  .vw-tab-t.on{fill:var(--surface)}
-  .vw-win rect{fill:none;stroke:currentColor;stroke-width:2}
-  .vw-win rect.f{fill:currentColor;stroke:none}
-  .vw-line rect{fill:currentColor;opacity:.62}
-  .vw-line rect.o{opacity:.3}
-  .vw-iso path{fill:none;stroke:currentColor;stroke-width:2;stroke-linejoin:round}
-  .vw-iso path.f{fill:currentColor}
-  .vw-iso path.m{fill:currentColor;opacity:.55}
-  .vw-iso path.s{fill:currentColor;opacity:.28}
-  .view figcaption{font-size:15px;line-height:1.55;color:var(--muted)}
-  .view figcaption b{color:var(--ink);font-weight:700}
-  .after{margin-top:26px;font-size:16px}
-  .after a{color:var(--ink);font-weight:600;text-decoration-color:var(--accent-bg);text-decoration-thickness:2px;text-underline-offset:4px}
-
-  .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:22px}
-  .cards article{display:grid;gap:9px;align-content:start;padding-top:16px;border-top:3px solid var(--ink)}
-  .cards p{font-size:15.5px;line-height:1.6;color:var(--body)}
-  code{font-family:var(--f-m);font-size:.88em;background:var(--sunk);border:1px solid var(--line);
-    border-radius:3px;padding:1px 5px}
-
-  .faq{margin:0}
-  .faq dt{font-weight:700;color:var(--ink);font-size:18px;margin-top:26px}
-  .faq dt:first-of-type{margin-top:0}
-  .faq dd{margin:8px 0 0;font-size:16.5px;line-height:1.65;color:var(--body);max-width:68ch}
-
-  .close{background:var(--ink);color:var(--paper);padding:clamp(36px,4.5vw,60px) 0}
-  .close h2{color:var(--paper)}
-  .close .sub{color:#A9A395;margin-top:8px}
-  .close-in{display:flex;align-items:center;justify-content:space-between;gap:26px;flex-wrap:wrap}
-  .close .btn.ghost{border-color:var(--paper);color:var(--paper)}
-  .close .btn.ghost:hover{background:#2A2721}
-  .close .btn.primary{box-shadow:4px 4px 0 var(--paper)}
-  .close .btn.primary:hover{box-shadow:2px 2px 0 var(--paper)}
-
-  .foot{border-top:1px solid var(--line);padding:26px 0 40px;font-size:14.5px;color:var(--muted)}
-  .foot-in{display:flex;justify-content:space-between;gap:18px;flex-wrap:wrap}
-  .foot nav{display:flex;gap:20px}
-  .foot a{text-decoration:none}
-  .foot a:hover{color:var(--ink)}
-
-  @media(max-width:960px){
-    .hero-in{grid-template-columns:1fr}
-    .steps,.cards{grid-template-columns:1fr 1fr}
-    .views{grid-template-columns:1fr}
+  /* ── Ships-with strip: the agents' own marks, moving ──────────────────── */
+  .strip{border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--bg2);padding:18px 0;overflow:hidden}
+  /* The marquee takes the room; the link sits at the end of the rail, divided from it. */
+  .strip-row{display:flex;align-items:center;gap:0}
+  .strip-link{flex:0 0 auto;white-space:nowrap;padding:10px 24px 10px 26px;margin-left:10px;
+    border-left:1px solid var(--line);font-family:var(--f-m);font-size:13px;color:var(--fg2)}
+  .strip-link:hover{color:var(--fg)}
+  @media (max-width:760px){
+    .strip-row{flex-wrap:wrap;justify-content:center}
+    .strip-link{border-left:0;margin:12px 0 0;padding:0}
   }
-  @media(max-width:640px){
-    body{font-size:16px}
-    .links{display:none}
-    .steps,.cards{grid-template-columns:1fr}
-    .close-in{flex-direction:column;align-items:flex-start}
+  /* Two identical passes side by side: translating exactly half the track loops seamlessly. */
+  .marquee{position:relative;flex:1 1 auto;min-width:0;overflow:hidden;
+    -webkit-mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent);
+    mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent)}
+  .track{list-style:none;margin:0;padding:0;display:flex;width:max-content;gap:0;
+    animation:drift 48s linear infinite}
+  .marquee:hover .track,.marquee:focus-within .track{animation-play-state:paused}
+  .track li{display:flex;align-items:center;gap:9px;padding:0 26px;flex:0 0 auto;
+    font-family:var(--f-m);font-size:14px;color:var(--fg3);white-space:nowrap}
+  .track li svg{flex:0 0 auto;opacity:.75}
+  /* What ships in the box reads at full strength; the rest are what you can add. */
+  .track li.is-bundled{color:var(--fg)}
+  .track li.is-bundled svg{opacity:1}
+  @keyframes drift{from{transform:translate3d(0,0,0)}to{transform:translate3d(-50%,0,0)}}
+  @media (prefers-reduced-motion:reduce){
+    .track{animation:none;flex-wrap:wrap;width:auto;justify-content:center;gap:6px 0}
+    .marquee{-webkit-mask-image:none;mask-image:none}
+    .track li[aria-hidden="true"]{display:none}
   }
-  @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.btn{transition:none}}
+
+  /* ── Steps: a hairline grid, not three cards ──────────────────────────── */
+  .steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(3,1fr);gap:0;
+    border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--bg2)}
+  /* A grid item defaults to min-width:auto, so the long command below refuses to shrink
+     and pushes the column past the container. Naming zero lets it scroll instead. */
+  .steps > li{padding:26px 24px;border-right:1px solid var(--line);display:flex;flex-direction:column;gap:10px;min-width:0}
+  .steps .cmd{min-width:0}
+  .code{white-space:pre-wrap;overflow-wrap:break-word}
+  .steps > li:last-child{border-right:0}
+  .step-n{font-family:var(--f-m);font-size:12px;color:var(--fg3)}
+  .steps p{font-size:14.5px;color:var(--fg3);line-height:1.6}
+  /* Commands wrap at spaces and nowhere else. A browser will happily break after a hyphen,
+     which splits `--frame` into `--` and `frame` — a flag torn in half reads as a typo, and
+     is worse than either the scrollbar this replaced or a second line. */
+  .cmd{font-size:12px;line-height:1.75;color:var(--fg2);background:var(--bg);border:1px solid var(--line);
+    border-radius:5px;padding:9px 11px;margin:6px 0 0;
+    white-space:pre-wrap;overflow-wrap:normal;word-break:keep-all;
+    margin-top:auto} /* three cards, one baseline: the commands line up however long the copy is */
+  .cmd .w{color:var(--fg3)}
+  .cmd .g{fill:none;color:var(--idle)}
+  .cmd .s{color:var(--ok)}
+
+  /* ── Bring your own ───────────────────────────────────────────────────── */
+  .byo{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:32px;align-items:center}
+  .byo-copy p{font-size:15px;color:var(--fg3);line-height:1.65;margin-top:10px}
+  .byo-copy .cmd{margin-top:16px;font-size:12.5px}
+  .byo-file{margin:0;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--bg)}
+  .byo-file figcaption{font-family:var(--f-m);font-size:12px;color:var(--fg3);padding:9px 14px;
+    background:var(--bg3);border-bottom:1px solid var(--line)}
+  .byo-file pre{margin:0;padding:14px;overflow-x:auto}
+  .byo-file code{font-family:var(--f-m);font-size:12px;line-height:1.7;color:var(--fg2);white-space:pre}
+  .byo-note{margin-top:22px}
+
+  /* ── Views ────────────────────────────────────────────────────────────── */
+
+  /* ── Feature grid + FAQ: hairlines again, no cards ────────────────────── */
+  .cards{display:grid;grid-template-columns:repeat(2,1fr);gap:0;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .cards article{padding:22px 24px;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+  .cards article:nth-child(2n){border-right:0}
+  .cards article:nth-last-child(-n+2){border-bottom:0}
+  .cards p{margin-top:7px;font-size:14.5px;color:var(--fg3);line-height:1.6}
+  .cards code{font-size:13px;color:var(--fg2);background:var(--bg3);border-radius:4px;padding:1px 5px}
+  /* Columns, not a grid: a question and its answer stay together instead of being pulled
+     apart by the tallest row beside them. */
+  .faq{columns:2;column-gap:64px}
+  .faq dt{color:var(--fg);font-weight:500;margin-top:26px;padding-top:26px;border-top:1px solid var(--line);
+    break-inside:avoid;break-after:avoid}
+  .faq dt:first-of-type{margin-top:0;padding-top:0;border-top:0}
+  .faq dd{margin:8px 0 0;font-size:15px;color:var(--fg3);line-height:1.65;break-inside:avoid;break-before:avoid}
+  @media (max-width:820px){ .faq{columns:1} }
+
+  /* ── Close + footer ───────────────────────────────────────────────────── */
+  .close{padding-block:56px;padding:76px 0;border-top:1px solid var(--line);text-align:left}
+  .close-in{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:24px}
+  .foot{border-top:1px solid var(--line);padding:30px 0;font-size:14px;color:var(--fg3)}
+  .foot-in{display:flex;flex-wrap:wrap;gap:16px 28px;align-items:center}
+  .foot nav{display:flex;flex-wrap:wrap;gap:10px 22px}
+  .foot a{color:var(--fg2);text-decoration:none}
+  @media (hover:hover) and (pointer:fine){ .foot a:hover{color:var(--fg)} }
+
+  @media (max-width:900px){
+    .steps,.views,.byo{grid-template-columns:1fr}
+    .steps > li{border-right:0;border-bottom:1px solid var(--line)}
+    .steps > li:last-child{border-bottom:0}
+    .cards{grid-template-columns:1fr}
+    .cards article{border-right:0}
+    .cards article:nth-last-child(-n+2){border-bottom:1px solid var(--line)}
+    .cards article:last-child{border-bottom:0}
+  }
+  /* Phones: the nav becomes two rows with the links on a scrollable strip, and the
+     page gutter narrows so nothing is pushed off the side. */
+  @media (max-width:640px){
+    .wrap{padding:0 18px}
+    .nav-in{height:auto;min-height:54px;padding:9px 18px;flex-wrap:wrap;gap:10px 14px}
+    .links{order:3;width:100%;margin-left:0;overflow-x:auto;gap:18px;padding-bottom:2px;
+      scrollbar-width:none}
+    .links::-webkit-scrollbar{display:none}
+    .links a{white-space:nowrap}
+    .nav-in > .btn{margin-left:auto}
+    .hero{padding:40px 0 32px}
+    .install code{overflow-x:auto}
+  }
+  @media (prefers-reduced-motion:reduce){
+    html{scroll-behavior:auto}
+    *{transition-duration:1ms !important}
+    .btn:active,.copy:active{scale:1}
+    /* The demo still says what it has to say standing still: one workspace, and a
+       legend naming the three views. Nothing travels. */
+    .vt,.stage-key li,.cur,.shot .st{animation:none}
+    .stage-key li{border-top-color:var(--line2)}
+  }
 </style>
+<script is:inline>
+  // The walkthrough is a real dialog: the caption link opens it, Esc and the backdrop close it.
+  {
+    const dialog = document.getElementById("walkthrough");
+    const open = document.querySelector('a[href="#walkthrough"]');
+    if (dialog && open) {
+      open.addEventListener("click", (e) => { e.preventDefault(); dialog.showModal(); });
+      dialog.addEventListener("close", () => { dialog.querySelector("video")?.pause(); });
+      dialog.addEventListener("click", (e) => { if (e.target === dialog) dialog.close(); });
+    }
+  }
+  // Reduced motion: the hero keeps its poster instead of playing.
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    for (const v of document.querySelectorAll("video")) { v.removeAttribute("autoplay"); v.pause(); }
+  }
+</script>
 </body>
 </html>

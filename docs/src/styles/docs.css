@@ -18,21 +18,29 @@
 
 /* Dark is the default; the light block swaps only --hm-*, and --sl-* maps them once. */
 :root {
-  /* dark */
-  --hm-paper:   #0F0E0C;
-  --hm-surface: #1A1815;
-  --hm-sunk:    #151411;
-  --hm-ink:     #F3EFE6;
-  --hm-body:    #D2CCBF;
-  --hm-muted:   #A29C8F;
-  --hm-line:    #34312B;
-  --hm-accent:  #F0B659;   /* links and the current page — readable on dark */
-  --hm-accent-bg:   #E8A33B;
-  --hm-accent-soft: #33260F;
+  /* Dark is the default, and its values are the app's own: the docs sit on the
+     same canvas colour the workspace paints, so moving between them is one place. */
+  --hm-paper:   oklch(0.169 0.003 230.81);
+  --hm-surface: oklch(0.216 0.0025 230.82);
+  --hm-sunk:    oklch(0.193 0.002 230.81);
+  --hm-ink:     oklch(0.924 0.0017 230.69);
+  --hm-body:    oklch(0.846 0.0035 230.72);
+  --hm-muted:   oklch(0.684 0.0074 230.81);
+  --hm-line:    oklch(0.259 0.0033 230.84);
+  --hm-accent:  oklch(0.76 0.07 242);   /* a link, in the app's accent family */
+  --hm-accent-bg:   oklch(0.52 0.03 250);
+  --hm-accent-soft: oklch(0.26 0.012 245);
+  --hm-chip: oklch(0.243 0.003 230.82);  /* inline code, one step off the page */
 
-  --sl-font: "Archivo", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  /* The app's own status colours, so a chip here means what the same dot means there. */
+  --hm-working:   oklch(0.91 0.005 250);
+  --hm-attention: oklch(0.80 0.13 72);
+  --hm-done:      oklch(0.74 0.07 155);
+  --hm-idle:      oklch(0.62 0.006 250);
+
+  --sl-font: "Geist", ui-sans-serif, system-ui, -apple-system, sans-serif;
   --sl-font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  --sl-content-width: 46rem;       /* ≈ 66 characters at the body size */
+  --sl-content-width: 42rem;       /* ≈ 78 characters of Geist; narrower clipped the code blocks */
   --sl-nav-height: 3.75rem;
   --sl-text-code: 0.88rem;
   --sl-text-body: 1.0625rem;
@@ -60,22 +68,26 @@
   --sl-color-text-accent: var(--hm-accent);
 }
 
-/* light — exactly the landing page's palette */
+/* The light edition: the same cool hue as the workspace, lit the other way. Kept in step
+   with src/styles/workspace.css — one identity, two lightings. */
 :root[data-theme='light'] {
-  --hm-paper:   #F7F4EE;
-  --hm-surface: #FFFFFF;
-  --hm-sunk:    #F1EDE3;
-  --hm-ink:     #15130F;
-  --hm-body:    #3A362E;
-  --hm-muted:   #5E594F;
-  --hm-line:    #E1DBCC;
-  --hm-accent:  #8A5205;
-  --hm-accent-bg:   #E8A33B;
-  --hm-accent-soft: #FBEBCD;
+  --hm-paper:   oklch(0.985 0.002 230);
+  --hm-surface: oklch(0.966 0.002 230);
+  --hm-sunk:    oklch(0.945 0.003 230);
+  --hm-ink:     oklch(0.252 0.006 230);
+  --hm-body:    oklch(0.404 0.006 230);
+  --hm-muted:   oklch(0.548 0.008 230);
+  --hm-line:    oklch(0.902 0.004 230);
+  --hm-accent:  oklch(0.50 0.13 230);
+  --hm-accent-bg:   oklch(0.50 0.19 265);
+  --hm-accent-soft: oklch(0.93 0.03 265);
+  --hm-chip: oklch(0.935 0.004 230);
 }
 
 /* ── header ────────────────────────────────────────────────────────────── */
-.header {
+/* `header.header`, not `.header`: Starlight also puts that class on an inner wrapper, and a
+   bare selector drew a second, short rule across the middle of the bar. */
+header.header {
   border-bottom: 1px solid var(--hm-line) !important;
   box-shadow: none !important;
   background: var(--hm-paper);
@@ -119,12 +131,14 @@ summary .large {
   color: var(--hm-body);
 }
 .sidebar-content a:hover { color: var(--hm-ink); background: var(--hm-sunk); }
+/* One state, one shape. The old marker was an inset 3px bar inside a 6px radius, so the
+   bar's ends were clipped by the corner and the two fought; and a fill, a bar and bold is
+   three cues for one fact. A quiet fill and the accent colour say it once. */
 .sidebar-content a[aria-current='page'],
 .sidebar-content a[aria-current='page']:hover {
-  background: var(--hm-accent-soft);
-  color: var(--hm-ink);
+  background: var(--hm-sunk);
+  color: var(--hm-accent);
   font-weight: 600;
-  box-shadow: inset 3px 0 0 var(--hm-accent-bg);
 }
 
 /* ── the page ──────────────────────────────────────────────────────────── */
@@ -143,12 +157,12 @@ h1, .content-panel h1 {
   color: var(--hm-ink);
   text-wrap: balance;
 }
+/* Space separates sections here, not a rule under every heading. */
 .sl-markdown-content h2 {
   font-size: 1.4rem;
-  margin-top: 2.6rem;
-  margin-bottom: 0;
-  padding-bottom: .3rem;
-  border-bottom: 1px solid var(--hm-line);
+  /* A section break, not a chasm: this sits on top of the paragraph spacing below it. */
+  margin-top: 2rem;
+  margin-bottom: .2rem;
 }
 .sl-markdown-content h3 { font-size: 1.1rem; margin-top: 1.9rem; }
 
@@ -168,13 +182,23 @@ h1, .content-panel h1 {
 .sl-markdown-content h3 + * { margin-top: .6rem !important; }
 
 /* ── code ──────────────────────────────────────────────────────────────── */
+/* A chip is a fill, not a box: a border around every second word speckles the line. */
 .sl-markdown-content :not(pre) > code {
-  background: var(--hm-sunk);
-  border: 1px solid var(--hm-line);
+  background: var(--hm-chip);
   border-radius: 4px;
-  padding: .05rem .32rem;
+  padding: .08rem .34rem;
   font-weight: 500;
   color: var(--hm-ink);
+  /* stays under the prose line-height, so a line carrying a chip does not jump */
+  line-height: 1.2;
+}
+/* Inside a heading or a link, code is that thing's text — it keeps its size and colour. */
+.sl-markdown-content :is(h1, h2, h3, h4) code,
+.sl-markdown-content a code {
+  background: none;
+  padding: 0;
+  font-size: .92em;
+  color: inherit;
 }
 .expressive-code .frame,
 .expressive-code pre {
@@ -182,6 +206,9 @@ h1, .content-panel h1 {
   border: 1px solid var(--hm-line) !important;
   box-shadow: none !important;
 }
+/* The window dots are ornament, and an untitled terminal bar is then an empty strip. */
+.expressive-code .frame.is-terminal .header::before { display: none !important; }
+.expressive-code .frame.is-terminal:not(:has(.title:not(:empty))) .header { display: none !important; }
 .expressive-code .frame.is-terminal .header,
 .expressive-code figcaption {
   font-family: var(--sl-font-mono);
@@ -211,15 +238,29 @@ h1, .content-panel h1 {
 
 /* ── tables ────────────────────────────────────────────────────────────── */
 /* Wide tables scroll inside themselves; the page body never scrolls sideways. */
-.sl-markdown-content table { border-collapse: collapse; display: block; overflow-x: auto; }
-.sl-markdown-content :is(th, td) { border: 1px solid var(--hm-line); padding: .5rem .7rem; vertical-align: top; }
-.sl-markdown-content th {
-  background: var(--hm-sunk);
-  font-size: .9rem;
-  font-weight: 700;
-  text-align: left;
-  color: var(--hm-ink);
+.sl-markdown-content table {
+  border-collapse: collapse;
+  display: block;
+  overflow-x: auto;
+  font-size: .94rem;
+  line-height: 1.45;      /* a matrix is scanned, not read at prose leading */
 }
+/* Rows are told apart by one rule each; a box around every cell is a ledger, not a table. */
+.sl-markdown-content :is(th, td) {
+  border: 0;
+  border-bottom: 1px solid var(--hm-line);
+  padding: .55rem .9rem .55rem 0;
+  vertical-align: top;
+}
+.sl-markdown-content th {
+  border-bottom-color: var(--hm-muted);
+  font-size: .82rem;
+  font-weight: 600;
+  text-align: left;
+  color: var(--hm-muted);
+  padding-bottom: .4rem;
+}
+.sl-markdown-content tbody tr:last-child :is(th, td) { border-bottom: 0; }
 
 /* ── on this page ──────────────────────────────────────────────────────── */
 #starlight__on-this-page,
@@ -256,3 +297,141 @@ h1, .content-panel h1 {
 :focus-visible { outline: 2px solid var(--hm-accent); outline-offset: 2px; }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* ── header, after search was removed ──────────────────────────────────── */
+/* Starlight rules a line between the social icons and the theme picker, which earned its
+   place when a search field sat beside them. With search gone it divides two small controls
+   from each other, so it divides nothing. */
+.social-icons::after { display: none !important; }
+
+/* A social icon is not a link in prose: it takes the quiet colour and brightens on hover,
+   one SVG recoloured by state rather than shouting in the accent. */
+.social-icons a { color: var(--hm-muted); transition: color 150ms ease; }
+.social-icons a:hover { color: var(--hm-ink); }
+
+/* "On this page" listing one entry is a table of contents for nothing. Starlight always
+   generates the "Overview" link to #_top, so a lone one means the page has no headings. */
+/* The whole column, not just its contents: Starlight draws the divider on the sidebar
+   itself, so hiding only the panel leaves a rule standing beside nothing. */
+.right-sidebar-container:has(li:only-child a[href$="#_top"]) { display: none !important; }
+#starlight__mobile-toc:has(li:only-child a[href$="#_top"]) { display: none !important; }
+
+/* Starlight rules off the page title; the size already says it is the title, and its own panel
+   already spaces what follows — a second panel's padding on top of that is a chasm. */
+.main-frame .content-panel + .content-panel { border-top: 0; padding-top: 0; }
+.page-title, .content-panel:first-child { border-bottom: 0; }
+
+/* On a wide screen the pane that holds the prose stops at its own width and leaves the rest
+   of the window empty — up to 536px of nothing beside a 608px column. Let the pane take the
+   space and centre the reading column inside it, so the margins read as deliberate. */
+/* Starlight gives the reading column `margin-inline-start: auto`, which spends the whole
+   difference on one side: the prose ends up against the contents list with a quarter of the
+   pane empty beside it. Centred, both margins read as deliberate.
+   Only the reading column: the contents list shares the class but sits in a full-width fixed
+   band, where centring throws it off the side of the window. */
+.main-frame .content-panel > .sl-container { margin-inline: auto; }
+
+/* The contents list needs the width of its longest heading, not a third of the page: Starlight
+   reserves 560px for a 192px list, and the prose pays for it. Reserve what the list uses and the
+   reading column centres in what is left, with the list riding the right edge. */
+.right-sidebar-panel .sl-container { max-width: 12rem; }
+/* Only where the list is a column beside the prose; below this it is a drawer above it. */
+@media (min-width: 72rem) {
+  .right-sidebar-container { width: 15rem; }
+  body .main-frame .main-pane { width: calc(100% - 15rem); }
+}
+
+/* The first paragraph sat a full heading's height below the title. */
+.content-panel .sl-markdown-content > :first-child { margin-top: 0; }
+
+/* ── visual vocabulary ─────────────────────────────────────────────────────
+   Docs are read by people skimming for the shape of a thing. These are the parts
+   that carry shape: a real screenshot, a diagram, the app's own status colours. */
+
+/* A screenshot is evidence; the caption says what to look at, not what it is. */
+.sl-markdown-content figure { margin: 1.75rem 0; }
+.sl-markdown-content figure img {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--hm-line);
+  border-radius: 7px;
+}
+.sl-markdown-content figure figcaption {
+  margin-top: .55rem;
+  font-family: var(--sl-font-mono);
+  font-size: .72rem;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--hm-muted);
+}
+
+/* Diagrams inherit the page's ink through `currentColor`, so they cannot fall out of theme. */
+.sl-markdown-content figure svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  box-sizing: border-box;
+  padding: 1.25rem;
+  border: 1px solid var(--hm-line);
+  border-radius: 7px;
+  background: var(--hm-sunk);
+  color: var(--hm-body);
+}
+
+/* A status chip means here exactly what the same dot means in the workspace. */
+.st {
+  display: inline-flex;
+  align-items: baseline;
+  gap: .4em;
+  font-family: var(--sl-font-mono);
+  font-size: .82em;
+  white-space: nowrap;
+}
+.st::before {
+  content: "";
+  width: .5em;
+  height: .5em;
+  border-radius: 50%;
+  background: currentColor;
+  transform: translateY(-.05em);
+}
+.st-working   { color: var(--hm-working); }
+.st-attention { color: var(--hm-attention); }
+.st-done      { color: var(--hm-done); }
+.st-idle      { color: var(--hm-idle); }
+
+/* Where to go next, as a row of doors rather than a bullet list of links. */
+.doors {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: .75rem;
+  margin: 1.5rem 0;
+  padding: 0;
+  list-style: none;
+}
+.doors li { margin: 0; }
+.doors a {
+  display: block;
+  height: 100%;
+  padding: .85rem .95rem;
+  border: 1px solid var(--hm-line);
+  border-radius: 7px;
+  color: var(--hm-ink);
+  text-decoration: none;
+  transition: border-color .15s, background .15s;
+}
+.doors a:hover { border-color: var(--hm-accent-bg); background: var(--hm-sunk); }
+.doors b { display: block; font-weight: 650; }
+.doors span { display: block; margin-top: .2rem; font-size: .88rem; color: var(--hm-muted); }
+
+/* A key is a key: the docs should look like the keyboard, not like prose about it. */
+.sl-markdown-content kbd {
+  font-family: var(--sl-font-mono);
+  font-size: .8em;
+  padding: .1em .4em;
+  border: 1px solid var(--hm-line);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--hm-chip);
+  color: var(--hm-ink);
+}
