@@ -1,142 +1,132 @@
-# Tile plugins: letting someone bring their own editor, diff, or anything else
+# Tile plugins: tools that ship their own UI
 
-Status: proposal. 2026-09-16.
+Status: proposal. 2026-09-16. Branch `feat/tile-plugins`.
 
-## The gap
+## What already exists
 
-We have exactly one plugin surface for UI: a **workspace view** — a sandboxed
-`hm-view://` iframe that redraws the whole canvas from a projection of frames, tiles and
-status. Its defining rule is an asymmetry: *a view decides how the workspace looks; it does
-not decide what runs*. It gets no path, no file contents, no command line, and has no
-network (`default-src 'none'`).
+- **A tool-plugin registry** (`packages/hive-core/src/tool-plugins.ts`): a plugin id is
+  `ns/name`, contributes tile kinds, and is OFF until the user enables it. Today one entry:
+  `browser` ← `hivemind/web`. Editor and diff are still unmanaged legacy kinds.
+- **A sandboxed iframe surface**: view packages over `hm-view://`, manifest, install
+  review, permissions refused at install and load, theme vars.
+- **A control plane**: HCP methods (`tile.*`, `agent.*`, `workflow.run`, `tool.open`)
+  fronted by `hive ctl`, whose `--json` is "the same shape as the MCP tool".
+  `packages/hive-mcp` is scaffolded and empty.
 
-Everything else — terminal, diff, workbench (editor), browser, issues, planReview — is a
-hardcoded `case` in `workspace/tile-host.tsx`, rendered by our own React and talking to
-main over ~90 `ipcMain` handlers.
+## The correction: don't invent a protocol
 
-So a user who wants their own diff viewer has nowhere to put it. A workspace view can't:
-it draws the whole canvas, and it can't read a file. This proposal adds the missing
-surface, reusing the view machinery rather than inventing a second plugin system.
+MCP-UI and OpenAI's Apps SDK merged into an official MCP spec extension — **MCP Apps
+(SEP-1865), status Stable, 2026-01-26** (`modelcontextprotocol/ext-apps`). It defines
+exactly what we were about to design: a tool that returns a `ui://` HTML resource
+(`text/html;profile=mcp-app`), rendered in a sandboxed iframe, speaking JSON-RPC over
+postMessage (`ui/initialize`, `ui/notifications/tool-result`, `tools/call`, `ui/message`,
+`ui/open-link`, size-change), with CSP declared in `_meta.ui.csp`.
 
-## Two additions, one existing seam
+Our `hm-view://` machinery is most of an MCP Apps host already. Adopting it means **any
+third-party MCP server that ships a UI resource becomes a spawnable tile with no
+hivemind-specific code** — and our own tiles prove the API is honest.
 
-### 1. A tile can be a plugin
+Canvas views keep their own protocol (`hivemind-view.json`, protocol 1). A whole-canvas
+view is a genuinely different thing. Tool tiles speak MCP Apps.
 
-Same package format, same `hm-view://` scheme, same sandbox, same SDK, same
-`hive views install`. One new manifest field says where it mounts:
+## Two kinds of "tool", kept apart
+
+The word is overloaded. Split it and the design stops fighting itself.
+
+| | Host capabilities | Plugin tools |
+| --- | --- | --- |
+| Examples | `git.diff`, `files.read`, `review.list` | `browser_navigate`, a plugin's own actions |
+| Author | us | the plugin |
+| Declared in | one capability registry in `hive-core` | the plugin's own MCP server |
+| Reached by | plugin RPC, `hive ctl` | agents, as `mcp__hivemind_<plugin>__<tool>` |
+
+A plugin manifest gains one field, not a schema language:
 
 ```json
-{
-  "id": "acme-diff",
-  "name": "Acme diff",
-  "version": "0.1.0",
-  "entry": "index.html",
-  "protocol": 2,
-  "surface": "tile",
-  "tile": { "kinds": ["diff"], "title": "Acme diff" },
-  "permissions": ["git:read", "files:read"]
-}
+{ "id": "acme/diff",
+  "tools": [{ "key": "diff", "tileKind": "diff", "entry": "diff.html" }],
+  "mcp": { "command": "${PLUGIN_ROOT}/server" },
+  "permissions": ["git:read", "files:read"] }
 ```
 
-- `surface: "workspace"` (default, today's behaviour) or `"tile"`.
-- `tile.kinds` declares which built-in tile kinds this plugin can *replace*, so a user can
-  set "use Acme diff for diff tiles" in settings. An empty list means it only opens as its
-  own tile kind (`plugin:acme-diff`).
-- `tile-host.tsx` gains one `case "plugin"` that mounts the iframe at the tile rect. The
-  iframe is already an out-of-process frame, which is what we want per tile.
+That is Claude Code's plugin model, and the resulting tool namespace is one every agent we
+orchestrate already understands.
 
-What carries over unchanged: theme vars, `createInvalidator` and the draw-on-demand rule,
-the 64 KB `setLayout` blob, `reveal`, the install review, the CSP.
+**The rule for what agents get:** expose a capability to an agent only when it is
+**app-owned state a shell cannot reach** — comments, tile state, browser pages, plan
+reviews. Never duplicate `git diff` or `cat`; an agent already has a terminal in the repo.
 
-What does **not** apply to a tile plugin: surface rects (a tile plugin *is* inside a tile;
-hole-punching a terminal into it is out of scope for v1) and the frame/tile projection
-(it gets its own tile's context instead — see below).
+## Review comments: the store has to move first
 
-### 2. Data capabilities: the "tools"
+`ReviewComment` lives in renderer **localStorage** (`hivemind:comments:<repoPath>`,
+`code/review-store.ts`), and the only path to an agent is `deliverToClaude(text)` — a
+one-way dump. An agent cannot read localStorage, so no tool design fixes this. Move the
+store into main behind the capability registry, then expose:
 
-A view gets a projection. A tile plugin needs *content*, which means new request/response
-messages, each behind a permission that appears in the install review:
+`review_list({file?, status?})` · `review_get(id)` · `review_reply(id, body)` ·
+`review_resolve(id, summary?)` · `review_dismiss(id, reason)` · **`review_watch({timeoutSeconds})`**
 
-| Permission | Commands | Backed by |
-|---|---|---|
-| `files:read` | `readFile(path)`, `listDir(path)`, `watch(path)` | existing file IPC |
-| `files:write` | `writeFile(path, content)` | existing file IPC |
-| `git:read` | `status()`, `diff(scope)`, `show(sha, path)`, `log()`, `blame(path)` | `main/git-adapter.ts` |
-| `git:write` | `stageHunk(patch)`, `unstage`, `commit(msg)` | `main/git-adapter.ts` |
-| `review:comments` | `listComments`, `addComment`, `sendToAgent(text)` | `code/review-store.ts` |
-| `lsp` | `request(method, params)`, `onDiagnostics` | new: host-side LSP proxy |
+The last one blocks until a human leaves a comment. That is what turns the diff tile into
+a real review loop instead of a one-shot dispatch, and it is the shape the closest prior
+art (agentation.com's annotation MCP: acknowledge → reply → resolve/dismiss + watch) has
+already converged on.
 
-Three rules make this safe and keep it small:
+## Browser: use the names everyone else uses
 
-1. **The host does the work.** The plugin never touches a filesystem or spawns `git`. It
-   asks; main answers. That is also why remote machines come for free: a tile carries a
-   `workspacePath`, which may be an `ssh://` URI, and the host already routes by it. The
-   plugin sends the same `diff()` whether the repo is local or on another machine.
-2. **Scoped to the tile.** Every request is implicitly rooted at that tile's
-   `workspacePath`. Paths that escape it are refused, the same way a view package refuses a
-   symlink pointing out of itself.
-3. **No new powers.** Every command above maps onto an IPC handler that already exists
-   (except LSP). This is an exposure of what the app can already do, not new capability.
+Playwright MCP, Chrome DevTools MCP, browser-use and the agent browsers converged
+independently on an **accessibility-tree snapshot with opaque element refs, not pixels**:
+`browser_navigate`, `browser_snapshot`, `browser_click`, `browser_type`, `browser_find`,
+`browser_take_screenshot`, `browser_evaluate`, `browser_console_messages`,
+`browser_network_requests`, `browser_tabs`. Screenshots are a fallback capability for
+canvas/WebGL, not the default.
 
-`diff` scopes are our existing shapes: `{kind:"working",staged?}`, `{kind:"branch",base,head}`,
-`{kind:"unpushed",base}`, `{kind:"commit",sha}`.
+Use these names verbatim. A nonstandard name costs a failed tool call per session. Note
+that `tool-plugins.ts` already describes the browser as one "agents can drive when you
+allow it" — nothing in the control plane implements that yet.
 
-### Tile context
+## Permissions
 
-Where a workspace view gets `structure`, a tile plugin gets a `context` message:
+- Host-owned, never self-granted. A manifest declares what it wants; the user decides.
+- Annotate every tool `readOnlyHint` / `destructiveHint`. Read-only skips confirmation;
+  writes confirm once with "always allow for this plugin". That is the convergent rule.
+- Keep the existing second gate: installed ≠ enabled.
+- **`files:write` scoped to the repo is not a middling permission.** Writing `.git/hooks/*`
+  or `.git/config` (`core.fsmonitor`, `sshCommand`) executes arbitrary code on the user's
+  next git operation, and an in-repo symlink defeats a naive path check. Deny `.git/**`
+  and resolve symlinks before the scope check, or treat `files:write` as full trust.
+- Missing from the capability list on purpose: **exec**. Plugins never run commands. That
+  is what agent tiles are.
 
-```ts
-{ type: "context", tileId, frameId, workspacePath, repo: { branch, head, dirty }, file?: string }
-```
+## Events, not just requests
 
-Re-sent when the user changes file or scope, plus `visibility`, `resize`, `theme` as today.
-
-## Built-ins become the reference implementation
-
-The point of this is not third parties. It is that **our own diff and editor tiles get
-rewritten against the public API**, in-process and unsandboxed but using the same commands.
-That is the only way the API stays honest: if `stageHunk` is awkward, we feel it first.
-
-This depends on the piece-split done first (`DiffTile`'s ~1,070-line component broken into
-`FileTree`, `ChangesList`, `CommitBar`, `DiffView`, `ConflictView`). Those pieces become
-the reference plugin, and a third-party plugin can import the same npm-published pieces if
-it wants to look native.
-
-## Perf and limits
-
-- Data crosses as structured clone over `postMessage`. Strings of a few MB are fine; a
-  10k-line diff is ~1 MB. Cap responses (say 8 MB) and paginate `diff()` by file.
-- Editor writes debounce; never a message per keystroke. The plugin owns its buffer and
-  flushes.
-- Draw-on-demand still applies. The host already watches for views that paint while idle.
-- A tile plugin is an out-of-process frame: ~20-40 MB each. Fine for a few, not for fifty
-  tiles. Unmount when off-screen, as tiles already do.
-
-## Versioning
-
-`PROTOCOL_VERSION` is 1. Adding messages and permissions additively is a **minor** bump,
-per the semver table in CLAUDE.md — but `surface: "tile"` changes what a manifest means, so
-ship it as protocol 2 and keep loading protocol-1 workspace views unchanged. Unknown
-permission names are already refused at install and at load, which is what lets old hosts
-reject new plugins cleanly.
+Request/response alone leaves every plugin UI stale the moment an agent edits a file. The
+capability layer needs push: file-watch, git index/HEAD change, and comment change. Ship
+this with the first read capability, not after.
 
 ## Order of work
 
-1. Split the diff/editor tiles into pieces (no protocol work, pays for itself anyway).
-2. Publish those pieces as a package; rewrite our tiles on top.
-3. Protocol 2: `surface: "tile"`, `context`, `case "plugin"` in tile-host.
-4. `git:read` + `files:read` only. Ship a read-only third-party diff as the proof.
-5. Writes (`files:write`, `git:write`, `review:comments`) once one read-only plugin exists.
-6. LSP proxy last — it is the biggest piece and it benefits our own editor first.
+- [x] **Built-in kinds are tool plugins.** `hivemind/issues` (issues, planReview) and
+  `hivemind/code` (workbench, diff) contribute their kinds; the registry owns the
+  kind→tool map. Built-ins are marked so no preferences blob can hide them.
+- [x] **Plugins declare commands**, each read-only or not, each with the exact CLI line.
+  `.agent.md` is generated from that list, so a plugin's commands are how an agent
+  discovers them. `hive tools list` shows what every plugin contributes.
+- [x] **The review store moved** to `.hivemind/review.json` (config dir for a repo with no
+  workspace). Main owns it; the renderer asks; localStorage is imported once.
+- [x] **`hive review`** — list, show, reply, resolve, reopen, watch.
+- [ ] Split diff/editor tiles into pieces (`FileTree`, `ChangesList`, `CommitBar`,
+  `DiffView`, `ConflictView`).
+- [ ] Capability registry with change events (`git.*`, `files.*`), so a plugin UI does not
+  go stale when an agent edits a file.
+- [ ] `packages/hive-mcp`: the same commands as MCP tools, for agents that prefer tools to
+  a shell. The registry is already the list.
+- [ ] Browser tools, converged names, snapshot-first.
+- [ ] MCP Apps host: tool tiles rendered from `ui://` resources, CSP from `_meta.ui.csp`.
+  Third-party plugins land here.
 
-## The cheaper answers, if nobody actually asks
+Steps 1-4 stand on their own: they fix a real gap (comments an agent cannot see) and clean
+up code we own. Steps 5-7 open the ecosystem, and are worth doing only when someone wants
+to ship a plugin.
 
-Building a plugin API before anyone has asked for one is how a codebase gets a second
-plugin system nobody uses. Two options cover most of the demand for zero protocol work:
-
-- **"Open in your IDE"** on any file or diff. Most harnesses do exactly this and ship no
-  editor at all.
-- **A code-server tile**, which is the browser tile pointed at a local VS Code server: a
-  real IDE, real extensions, the user's own settings, and no API to design.
-
-Do steps 1-2 regardless. Do 3+ when a real user wants a real plugin.
+**Skipped on purpose:** `replaces` / `kindOverrides` until a competing tile exists, and the
+`lsp` capability — largest new surface, benefits nobody yet.

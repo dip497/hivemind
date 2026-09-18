@@ -6,7 +6,7 @@
  * composer → annotation; "Send to Claude" ships the batch). The editable path is
  * the editor's own inline CodeMirror merge (the "Edit" button hands off to it).
  */
-import { useState, type CSSProperties } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 import { PatchDiff, WorkerPoolContextProvider } from "@pierre/diffs/react";
 import { Columns2, Rows2, Pencil, UnfoldVertical, MessageSquarePlus, Play, X } from "lucide-react";
 import { Button } from "../components/ui/button";
@@ -37,6 +37,25 @@ export function PatchDiffSurface({
   const name = file.split("/").pop() ?? file;
   const dir = file.slice(0, file.length - name.length).replace(/\/$/, "");
   const review = useReviewComments(repoPath, file);
+
+  // Stable identity: a fresh options object every render re-applies the diff's
+  // layout, and the review callbacks below change only when the file does.
+  const options = useMemo(() => ({
+    theme: { dark: "pierre-dark", light: "pierre-light" },
+    themeType: "dark" as const,
+    diffStyle: (split ? "split" : "unified") as "split" | "unified",
+    overflow: "scroll" as const,
+    diffIndicators: "bars" as const,
+    expandUnchanged: expand,
+    collapsedContextThreshold: 3,
+    expansionLineCount: 60,
+    lineDiffType: "char" as const,
+    enableLineSelection: true,
+    enableGutterUtility: true,
+    lineHoverHighlight: "both" as const,
+    onGutterUtilityClick: review.onGutterUtilityClick,
+    onLineNumberClick: review.onLineNumberClick,
+  }), [split, expand, review.onGutterUtilityClick, review.onLineNumberClick]);
 
   return (
     <div
@@ -98,22 +117,7 @@ export function PatchDiffSurface({
               patch={patch}
               lineAnnotations={review.lineAnnotations}
               renderAnnotation={review.renderAnnotation}
-              options={{
-                theme: { dark: "pierre-dark", light: "pierre-light" },
-                themeType: "dark",
-                diffStyle: split ? "split" : "unified",
-                overflow: "scroll",
-                diffIndicators: "bars",
-                expandUnchanged: expand,
-                collapsedContextThreshold: 3,
-                expansionLineCount: 60,
-                lineDiffType: "char",
-                enableLineSelection: true,
-                enableGutterUtility: true,
-                lineHoverHighlight: "both",
-                onGutterUtilityClick: review.onGutterUtilityClick,
-                onLineNumberClick: review.onLineNumberClick,
-              }}
+              options={options}
             />
           </WorkerPoolContextProvider>
         )}

@@ -1,22 +1,37 @@
 /**
- * Review-comment persistence + delivery — the DOM/localStorage side of the diff
- * review model (kept out of the pure, unit-tested diff-comments.ts). Both the
- * standalone DiffTile and the Code Workbench's diff read/write the SAME key, so a
- * comment shows in either surface.
+ * Review-comment persistence + delivery.
+ *
+ * The comments live in the workspace (main owns the file), not in this
+ * renderer: an agent that cannot read localStorage cannot answer a comment,
+ * and `hive review` has to see the same list. Both the standalone DiffTile and
+ * the Code Workbench's diff read the SAME repo, so a comment shows in either.
  */
 import { normalizeComments, type ReviewComment } from "../diff-comments";
 
 export const COMMENTS_KEY_PREFIX = "hivemind:comments:";
 
-export function loadComments(repoPath: string): ReviewComment[] {
+/** Comments this renderer wrote before the store moved out of localStorage.
+ *  Imported once per repo, then the key is dropped. */
+function takeLegacy(repoPath: string): ReviewComment[] {
   try {
     const raw = localStorage.getItem(COMMENTS_KEY_PREFIX + repoPath);
-    return normalizeComments(raw ? JSON.parse(raw) : []);
+    if (!raw) return [];
+    localStorage.removeItem(COMMENTS_KEY_PREFIX + repoPath);
+    return normalizeComments(JSON.parse(raw));
   } catch { return []; }
 }
 
-export function saveComments(repoPath: string, list: ReviewComment[]): void {
-  try { localStorage.setItem(COMMENTS_KEY_PREFIX + repoPath, JSON.stringify(list)); } catch { /* quota */ }
+export async function loadComments(repoPath: string): Promise<ReviewComment[]> {
+  const stored = normalizeComments(await window.hive.reviewList(repoPath).catch(() => []));
+  const legacy = takeLegacy(repoPath).filter((c) => !stored.some((s) => s.id === c.id));
+  if (legacy.length === 0) return stored;
+  const merged = [...stored, ...legacy];
+  await saveComments(repoPath, merged);
+  return merged;
+}
+
+export async function saveComments(repoPath: string, list: ReviewComment[]): Promise<void> {
+  await window.hive.reviewSave(repoPath, list).catch(() => { /* keep the UI usable */ });
 }
 
 /** Send review text to claude via the target picker (Canvas routes the event). */

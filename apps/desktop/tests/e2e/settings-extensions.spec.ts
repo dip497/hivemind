@@ -117,3 +117,22 @@ test("Appearance contains the former drawer controls and mounts terminal colours
   await pane.getByRole("heading", { name: "Appearance", exact: true }).scrollIntoViewIfNeeded();
   await page.screenshot({ path: "/tmp/hivemind-settings-appearance.png" });
 });
+
+test("Tools separates what ships with the app from what you switch on", async () => {
+  await settings("tools");
+  const included = page.getByRole("region", { name: "Included tools" });
+  const code = included.locator('[data-tool-plugin="hivemind/code"]');
+  // The regression this guards: a built-in read as OFF because its switch asked
+  // enabledPlugins, which a built-in is never in.
+  await expect(code.getByRole("switch")).toHaveAttribute("aria-checked", "true");
+  await expect(included.locator('[data-tool-plugin="hivemind/issues"]').getByRole("switch")).toHaveAttribute("aria-checked", "true");
+  await expect(page.getByRole("region", { name: "Tools", exact: true }).locator('[data-tool-plugin="hivemind/web"]')).toHaveCount(1);
+
+  // Switching one off disables its own tools — there is nothing to un-enable.
+  await code.getByRole("switch").click();
+  await expect(code.getByRole("switch")).toHaveAttribute("aria-checked", "false");
+  await expect.poll(() => JSON.parse(fs.readFileSync(path.join(xdg, "hivemind/settings.json"), "utf8")).tools.disabledTools)
+    .toEqual(["hivemind/code/editor", "hivemind/code/diff"]);
+  await code.getByRole("switch").click();
+  await expect.poll(() => JSON.parse(fs.readFileSync(path.join(xdg, "hivemind/settings.json"), "utf8")).tools.disabledTools).toEqual([]);
+});

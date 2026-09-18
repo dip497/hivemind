@@ -26,6 +26,8 @@ import { ctlCmd } from "./commands/ctl.js";
 import { packagesCmd } from "./commands/packages.js";
 import { agentsCmd } from "./commands/agents.js";
 import { viewsCmd } from "./commands/views.js";
+import { reviewCmd } from "./commands/review.js";
+import { toolsCmd } from "./commands/tools.js";
 import { configCmd, themeCmd } from "./commands/config.js";
 import { daemonCmd } from "./commands/daemon.js";
 import { psCmd } from "./commands/ps.js";
@@ -73,6 +75,8 @@ const main = defineCommand({
     resolve: resolveCmd,
     ctl: ctlCmd,
     views: viewsCmd,
+    review: reviewCmd,
+    tools: toolsCmd,
     agents: agentsCmd,
     packages: packagesCmd,
     config: configCmd,

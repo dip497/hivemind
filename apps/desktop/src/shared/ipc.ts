@@ -2,6 +2,7 @@
 import type { Issue, IssueSummary, IssueState, AcceptanceItem, Assignee, LinkType, IssuePatch } from "@hivemind/core/types";
 import type { ViewManifest } from "@hivemind/view-sdk/manifest";
 import type { NotificationSettings } from "./notification-settings.js";
+import type { ReviewComment } from "@hivemind/core/review";
 export type { NotificationSettings };
 
 // IssuePatch is owned by @hivemind/core/types (node-free) — re-export so renderer
@@ -63,19 +64,22 @@ export interface GitStatusSnapshot {
   head: string;
 }
 
+/** Every scope may hide reindent-only changes (`git diff --ignore-all-space`). */
+interface DiffScopeBase { ignoreWhitespace?: boolean }
+
 export type DiffScope =
-  | { kind: "working"; staged?: boolean }
+  | ({ kind: "working"; staged?: boolean } & DiffScopeBase)
   // base...head merge-base (3-dot) diff — what `head` adds since it diverged
   // from `base`, the same semantics GitHub/Azure PRs show. `head` defaults to
   // HEAD (review another branch against the checkout); set it to review any two
   // arbitrary branches without a remote PR.
-  | { kind: "branch"; base?: string; head?: string }
+  | ({ kind: "branch"; base?: string; head?: string } & DiffScopeBase)
   // Committed-but-not-pushed: the net diff of local commits ahead of the
   // branch's remote tracking ref (`@{upstream}...HEAD`). Optional `base`
   // overrides the auto-resolved upstream so this same scope serves future
   // "ahead of <any ref>" reviews without a new variant.
-  | { kind: "unpushed"; base?: string }
-  | { kind: "commit"; sha: string };
+  | ({ kind: "unpushed"; base?: string } & DiffScopeBase)
+  | ({ kind: "commit"; sha: string } & DiffScopeBase);
 
 export interface DiffPayload {
   /** Unified-diff patch text (`git diff` output). */
@@ -355,6 +359,12 @@ export interface HiveIpc {
   ): Promise<{ from: string; to: string; type: LinkType; reciprocal: LinkType }>;
   /** Remove all links between two issues (both ends). */
   unlinkIssue(root: string, id: string, otherId: string): Promise<{ removed: number }>;
+
+  // ── review comments ───────────────────────────────────────
+  /** Every comment on this repo, resolved ones included. */
+  reviewList(repoPath: string): Promise<ReviewComment[]>;
+  /** Replace the whole list — what the diff tile does after an edit. */
+  reviewSave(repoPath: string, comments: ReviewComment[]): Promise<void>;
 
   // ── git ───────────────────────────────────────────────────
   gitStatus(repoPath: string): Promise<GitStatusSnapshot>;

@@ -201,6 +201,28 @@ test("Issues tile opens on the canvas", async () => {
   expect(txt).toContain("Issues"); // header renders (fixture has no .hivemind → shows empty/no-workspace body)
 });
 
+test("switching diff modes survives comments arriving after the first render", async () => {
+  // The crash this guards: review comments now load from the workspace a tick
+  // after mount, which replaced every CodeView item object mid-render and made
+  // VirtualizedFileDiff throw "rendered a different diff than its prepared
+  // layout". Switching modes re-renders the whole list, which is when it bit.
+  await openDiff();
+  const before = consoleErrors.length;
+  for (const mode of ["branch", "working"]) {
+    // Clicked in-page: the tile can sit outside the canvas viewport, and this
+    // test is about what re-rendering does, not about hit-testing.
+    const hit = await page.evaluate((label) => {
+      const node = document.querySelector(".react-flow__node-diff");
+      const b = [...(node?.querySelectorAll("button") ?? [])].find((x) => x.textContent?.trim() === label);
+      b?.click();
+      return !!b;
+    }, mode);
+    expect(hit, `no ${mode} button`).toBe(true);
+    await page.waitForTimeout(1500);
+  }
+  expect(consoleErrors.slice(before), consoleErrors.slice(before).join("\n")).toEqual([]);
+});
+
 test("no console errors across the session (incl. CommandDialog a11y)", async () => {
   await page.keyboard.press("Control+k");
   await page.waitForTimeout(300);
