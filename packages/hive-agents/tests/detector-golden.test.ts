@@ -9,8 +9,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import YAML from "yaml";
 import { defFromManifest } from "../src/manifest.js";
-import { NODE_PARTS } from "../src/node.js";
-import { spawnArgsFor, spawnLabelFor, getCatalog } from "../src/catalog.js";
+import { spawnArgsFor, spawnLabelFor } from "../src/catalog.js";
 import type { SpawnOptions } from "../src/types.js";
 import { CORPUS } from "./corpus.js";
 import { AUTHORED, authoredYaml } from "./authored.js";
@@ -42,8 +41,8 @@ describe("manifest detectors reproduce the frozen behaviour", () => {
     test(`${id} agrees on all ${golden.screens} screens`, () => {
       const agent = AUTHORED.find((a) => a.id === id);
       expect(agent, `${id} is no longer an agent this repository writes`).toBeDefined();
-      // Read as an untrusted plugin would be: the detectors may not lean on the bundle's trust.
-      const def = defFromManifest(YAML.parse(authoredYaml(agent!)) as unknown, { trusted: false, nodeHalf: !!NODE_PARTS[id] });
+      // Read as an untrusted plugin would be: the detectors may not lean on any bundle's trust.
+      const def = defFromManifest(YAML.parse(authoredYaml(agent!)) as unknown, { trusted: false });
       expect(def.detect).toBeDefined();
       const states = CORPUS.map((screen) => def.detect!(screen)).join(",");
       expect(createHash("sha256").update(states).digest("hex")).toBe(hash);
@@ -58,7 +57,7 @@ describe("every agent this repository writes still launches the same way", () =>
       // agent, and must keep producing the same command line.
       const agent = AUTHORED.find((a) => a.id === id);
       expect(agent, `${id} is no longer an agent this repository writes`).toBeDefined();
-      const def = defFromManifest(YAML.parse(authoredYaml(agent!)) as unknown, { trusted: false, nodeHalf: !!NODE_PARTS[id] });
+      const def = defFromManifest(YAML.parse(authoredYaml(agent!)) as unknown, { trusted: false });
       for (const row of rows) {
         expect(spawnArgsFor(def, row.opts)).toEqual(row.args);
         expect(spawnLabelFor(def, 2, row.opts)).toBe(row.label);

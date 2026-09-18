@@ -16,7 +16,7 @@ import type { OutputRecorder } from "./output-recorder.js";
 import { readLastAssistantMessage } from "./transcript.js";
 import { toPtyId as ptyId, toBareId as bareOf } from "../../shared/tile-id.js";
 import { setName, labelOf } from "./names.js";
-import { agentById, agentOption, defaultAgent, spawnableAgents, workerAgents, type AgentProviderDef } from "@hivemind/agents";
+import { agentById, agentOption, spawnableAgents, workerAgents, type AgentProviderDef } from "@hivemind/agents";
 import { BROWSER_TOOL_ID, tileKindAvailability } from "@hivemind/core/tool-plugins";
 import type { ToolsSettings } from "@hivemind/core/settings-schema";
 import { SUBMIT_DELAY_MS } from "../../shared/agent-io.js";
@@ -134,8 +134,9 @@ export interface MethodDeps {
   /** Sliding-window spawn gate (reuse the ptySpawn rate-limit). false → refuse. */
   spawnAllowed: () => boolean;
   /** The agent a spawn with no `agent` starts (the user's default, if installed).
-   *  May wait: at boot the PATH the answer depends on is still being read. */
-  defaultAgentId?: () => string | Promise<string>;
+   *  Undefined when no agent is installed. May wait: at boot the PATH the answer
+   *  depends on is still being read. */
+  defaultAgentId?: () => string | undefined | Promise<string | undefined>;
   /** The agent's CLI is where it would run (this machine, or the caller's remote host). Absent = assume it is. */
   agentInstalled?: (def: AgentProviderDef, callerTile?: string) => boolean | Promise<boolean>;
   /** Pipe src's finished-turn replies into dst's input. Returns false on a bad
@@ -243,7 +244,9 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       throw new HcpError("DEPTH_EXCEEDED", `agent spawn depth ${childDepth} exceeds max ${MAX_SPAWN_DEPTH}`);
     }
     if (!deps.spawnAllowed()) throw new HcpError("RATE_LIMITED", "spawn rate limit exceeded");
-    const agent = String(opts.agent ?? (await deps.defaultAgentId?.()) ?? defaultAgent().id);
+    const agent = opts.agent != null ? String(opts.agent) : await deps.defaultAgentId?.();
+    // Nothing compiled in to fall back to: an empty catalog means no agent can start.
+    if (!agent) throw new HcpError("BAD_REQUEST", "no agent installed — install one from Settings ▸ Plugins");
     const def = agentById(agent);
     if (!def || !def.enabled) {
       throw new HcpError("BAD_REQUEST", `unknown agent '${agent}' — spawnable: ${spawnableAgents().map((d) => d.id).join(", ")}`);
@@ -576,7 +579,8 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         // this returns (`hive ctl workflow` blocks with a matching client ceiling).
         const shape = String(p.shape ?? "fanout");
         const caller = p.callerTile != null ? String(p.callerTile) : undefined;
-        const agent = p.agent != null ? String(p.agent) : (await deps.defaultAgentId?.()) ?? defaultAgent().id;
+        const agent = p.agent != null ? String(p.agent) : await deps.defaultAgentId?.();
+        if (!agent) throw new HcpError("BAD_REQUEST", "no agent installed — install one from Settings ▸ Plugins");
         {
           const def = agentById(agent);
           if (!def || !def.enabled) throw new HcpError("BAD_REQUEST", `unknown agent '${agent}' — spawnable: ${spawnableAgents().map((d) => d.id).join(", ")}`);

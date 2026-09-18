@@ -11,4 +11,3 @@ export * from "./manifest.js";
 export { RESERVED_AGENTS } from "./reserved.js";
 export * from "./detect-rules.js";
 export * from "./options.js";
-export { detectClaudeState, type ClaudeState } from "./providers/claude/state.js";

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { setViewMode } from "./workspace/view-mode-store";
 import { Check, ChevronDown, ChevronRight, ExternalLink, FolderPlus, LayoutGrid, RefreshCw, Trash2 } from "lucide-react";
-import { BUILTIN_CATALOG, GENERIC_AGENT_ICON, defFromManifest, iconFromManifest } from "@hivemind/agents";
+import { GENERIC_AGENT_ICON, defFromManifest, iconFromManifest } from "@hivemind/agents";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { getSettings, patchSettings, useSettings } from "./settings-store";
@@ -19,7 +19,7 @@ const cleanError = (e: unknown): string =>
 export function InstalledPlugins() {
   const report = useCommunityReport();
   const settings = useSettings();
-  const agents = useAgentEntries().filter((e) => e.source !== "builtin");
+  const agents = useAgentEntries();
   const go = useSettingsNavigate();
   const [preview, setPreview] = useState<Preview | null>(null);
   const [busy, setBusy] = useState(false);
@@ -88,12 +88,11 @@ export function InstalledPlugins() {
         {agents.map((e) => {
           let def;
           try { def = e.error ? undefined : defFromManifest(e.manifest); } catch { def = undefined; }
-          const shadows = BUILTIN_CATALOG.some((b) => b.id === e.id);
           return <div key={`${e.source}:${e.id}`} className="settings-extension" data-agent-package={e.id}>
             <div className="settings-extension-row">
               <div className="settings-extension-icon"><SvgMark icon={def?.icon ?? GENERIC_AGENT_ICON} size={19} /></div>
               <div className="settings-extension-label"><h4>{def?.label ?? e.id}</h4>
-                <p>{e.source === "user" ? "You added this" : "From this repository"}<span>·</span>{e.error ? "Unavailable" : e.disabled ? "Off" : shadows ? "Replaces the built-in" : "On"}</p></div>
+                <p>{e.source === "user" ? "You added this" : "From this repository"}<span>·</span>{e.error ? "Unavailable" : e.disabled ? "Off" : "On"}</p></div>
               <Button variant="ghost" size="icon-sm" aria-label={`${def?.label ?? e.id} settings`} onClick={() => go(`agent:${e.id}`)}><ChevronRight /></Button>
             </div>
             {e.error && <p role="status" className="settings-note error">{e.error}</p>}

@@ -8,11 +8,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const { seedHome } = await import("@hivemind/agents/node");
-const { bundledAgent } = await import("@hivemind/agents");
+const { authoredDef } = await import("./authored-agents.ts");
 
 // kiro's overlay is declared in its manifest: mirror ~/.kiro, own agents/hivemind.json,
 // and keep the user's own custom agents linked beside it.
-const HOME = bundledAgent("kiro").home!;
+const HOME = authoredDef("kiro").home!;
 const seedKiroHome = (opts: { kiroHome: string; realKiro: string; agentConfig: unknown }) =>
   seedHome(HOME, opts.kiroHome, opts.realKiro, { "agents/hivemind.json": JSON.stringify(opts.agentConfig) });
 

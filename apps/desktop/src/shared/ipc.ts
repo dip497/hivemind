@@ -249,7 +249,7 @@ export interface HiveIpc {
   listViews(repoRoot: string | null): Promise<ViewPackageInfo[]>;
   /** Agent providers on disk. Only manifests cross — a def carries detect(). */
   listAgents(repoRoot: string | null): Promise<{
-    agents: Array<{ id: string; file: string; source: "builtin" | "user" | "repo"; manifest: unknown; error: string | null; disabled: boolean }>;
+    agents: Array<{ id: string; file: string; source: "user" | "repo"; manifest: unknown; error: string | null; disabled: boolean }>;
     shadowed: Array<{ id: string; by: string; over: string }>;
   }>;
   /** Where each agent's CLI was found on PATH (null = not installed). Runs nothing. */

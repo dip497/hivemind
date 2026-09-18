@@ -5,18 +5,18 @@ let loading: Promise<void> | null = null;
 let preferred: string | null = null;
 
 /** The agent `hive ctl spawn` starts with no --agent: the user's default if installed,
- *  else the first agent on this PATH. Valid after `ensureAgentCatalog()`. */
-export function cliDefaultAgent(): string {
-  return preferred ?? defaultAgent().id;
+ *  else the first agent on this PATH. Null when no agent is installed at all.
+ *  Valid after `ensureAgentCatalog()`. */
+export function cliDefaultAgent(): string | null {
+  return preferred ?? defaultAgent()?.id ?? null;
 }
 
 export function ensureAgentCatalog(): Promise<void> {
   loading ??= (async () => {
     try {
-      const [{ loadAgents }, { BUILTIN_CATALOG, setCatalog, preferredAgent }, { NODE_PARTS }, core, { findBin }] = await Promise.all([
+      const [{ loadAgents }, { setCatalog, preferredAgent }, core, { findBin }] = await Promise.all([
         import("@hivemind/agents/load"),
         import("@hivemind/agents"),
-        import("@hivemind/agents/node"),
         import("@hivemind/core"),
         import("@hivemind/agents/discover"),
       ]);
@@ -24,14 +24,12 @@ export function ensureAgentCatalog(): Promise<void> {
       const settings = await core.readSettings().catch(() => null);
       const disabled = settings?.agents.disabled ?? [];
       const { defs } = await loadAgents({
-        builtins: BUILTIN_CATALOG,
         repoRoot: repoRoot ?? undefined,
         disabled,
-        nodeHalf: (id) => !!NODE_PARTS[id],
       });
       setCatalog(defs);
-      preferred = preferredAgent(settings?.agents.defaultAgent, (d) => !!findBin(d.bin)).id;
-    } catch { /* the compiled-in list stands */ }
+      preferred = preferredAgent(settings?.agents.defaultAgent, (d) => !!findBin(d.bin))?.id ?? null;
+    } catch { /* nothing installed is a fine answer */ }
   })();
   return loading;
 }

@@ -25,13 +25,13 @@ import {
   type SpawnSpec,
   type SessionSnapshot,
 } from "../../src/main/pty-session-manager.ts";
-import { bundledAgent } from "@hivemind/agents";
+import { authoredDef } from "./authored-agents.ts";
 import { manifestRuntime, renderHookDocument, transformsFor, trackerSource, readTrackedSession,
   type ProviderResumeTransforms, type RuntimePaths } from "@hivemind/agents/node";
 
 // claude is a manifest now. These build the same two things its module used to expose: the
 // hooks document the daemon hands it, and the spawn/restore transforms.
-const claudeDef = bundledAgent("claude");
+const claudeDef = authoredDef("claude");
 const pathsFor = (deps: Record<string, string | undefined>): RuntimePaths => ({
   private: "/x/agents/claude",
   execPath: deps.execPath!,

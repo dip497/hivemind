@@ -32,10 +32,9 @@ import {
   type LinkType,
 } from "@hivemind/core";
 import os from "node:os";
-import { agentById, agentForCmd, getCatalog, preferredAgent, setCatalog, BUILTIN_CATALOG, type AgentProviderDef } from "@hivemind/agents";
+import { agentById, agentForCmd, getCatalog, preferredAgent, setCatalog, type AgentProviderDef } from "@hivemind/agents";
 import { agentPresence, discoverOptions, findBin, verifyAgent } from "@hivemind/agents/discover";
 import { agentAllowedIn, loadAgents, toWire } from "@hivemind/agents/load";
-import { NODE_PARTS } from "@hivemind/agents/node";
 import type { IssuePatch } from "@hivemind/core/types";
 import * as ptyHost from "./pty-host.js";
 import * as ptyDaemon from "./daemon-client.js";
@@ -1461,15 +1460,14 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
       }
       setCatalog(all);
     };
-    // Built-ins are compiled in (proven identical to the manifests); only plugins come from disk.
+    // Only manifests come from disk — nothing agent-specific is compiled in any more.
+    let lastLoaded: Awaited<ReturnType<typeof loadAgents>>["loaded"] = [];
     const scanAgents = async (repoRoot?: string) => {
       const disabled = (getAppSettings() as { agents?: { disabled?: string[] } }).agents?.disabled ?? [];
-      return loadAgents({
-        builtins: BUILTIN_CATALOG,
-        repoRoot,
-        disabled,
-        nodeHalf: (id) => !!NODE_PARTS[id],
-      });
+      const r = await loadAgents({ repoRoot, disabled });
+      // Defs of switched-off agents, so their settings pages still answer.
+      lastLoaded = r.loaded;
+      return r;
     };
     // Not awaited at startup: the first frame must not wait on optional disk I/O.
     agentsScanned = scanAgents().then(({ defs, loaded }) => {
@@ -1478,7 +1476,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
         if (a.error) console.warn(`[agents] ${a.id} (${a.source}) not loaded: ${a.error}`);
       }
     }).catch((e: unknown) => {
-      console.warn("[agents] manifest scan failed, using built-ins only:", e);
+      console.warn("[agents] manifest scan failed:", e);
     });
     ipcMain.handle("agents:list", wrap(async (_e, repoRoot: string | null) => {
       const { defs, loaded, shadowed } = await scanAgents(repoRoot ? String(repoRoot) : undefined);
@@ -1488,8 +1486,8 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
       publishCatalog(defs, repoRoot ? String(repoRoot) : undefined);
       return { agents: toWire(loaded), shadowed };
     }));
-    // Disabled built-ins are not in the catalog but still have a card.
-    const knownDef = (id: string) => agentById(id) ?? BUILTIN_CATALOG.find((d) => d.id === id);
+    // Switched-off agents are not in the catalog but still have a card.
+    const knownDef = (id: string) => agentById(id) ?? lastLoaded.find((a) => a.id === id && a.def)?.def;
     // Detection must see the PATH tiles launch with, which the login shell supplies.
     ipcMain.handle("agents:option-choices", wrap(async (_e, id: string) => {
       await applyShellEnvToProcess();
@@ -1498,8 +1496,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     }));
     ipcMain.handle("agents:presence", wrap(async () => {
       await applyShellEnvToProcess();
-      const defs = new Map([...BUILTIN_CATALOG, ...getCatalog()].map((d) => [d.id, d]));
-      return Object.fromEntries([...defs.values()].map((d) => [d.id, agentPresence(d)]));
+      return Object.fromEntries(getCatalog().map((d) => [d.id, agentPresence(d)]));
     }));
     ipcMain.handle("agents:verify", wrap(async (_e, id: string) => {
       await applyShellEnvToProcess();
@@ -1789,7 +1786,7 @@ function startHcpControlPlane(): void {
     // A worker of a remote agent runs on that host: this PATH says nothing about it.
     defaultAgentId: async () => {
       await shellEnvReady;
-      return preferredAgent((getAppSettings() as { agents?: { defaultAgent?: string } }).agents?.defaultAgent, (d) => !!findBin(d.bin)).id;
+      return preferredAgent((getAppSettings() as { agents?: { defaultAgent?: string } }).agents?.defaultAgent, (d) => !!findBin(d.bin))?.id;
     },
     agentInstalled: async (def, callerTile) => {
       if (callerTile && hasRemotePty(callerTile)) return true;

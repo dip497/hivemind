@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, ChevronRight, Copy, ExternalLink, Store, Trash2, TriangleAlert } from "lucide-react";
 import {
-  BUILTIN_CATALOG, GENERIC_AGENT_ICON, defFromManifest, optionChoices,
+  GENERIC_AGENT_ICON, defFromManifest, optionChoices,
   type AgentOption, type AgentProviderDef, type AgentWireEntry,
 } from "@hivemind/agents";
 import { patchSettings, useSettings } from "./settings-store";
@@ -11,7 +11,7 @@ import { MenuItem } from "./components/ui/menu-item";
 import { Switch } from "./components/ui/switch";
 import { notReady, useAgentEntries, useAgentPresence, setAgentDisabled, refreshAgentPresence, syncAgentPlugins } from "./agent-plugins";
 import { useSettingsNavigate } from "./settings-panels";
-import { SvgMark, useAgents } from "./agents";
+import { SvgMark } from "./agents";
 import { preferredAgent } from "@hivemind/agents";
 
 type Choices = Awaited<ReturnType<typeof window.hive.agentOptionChoices>>;
@@ -28,26 +28,21 @@ interface Card {
 // whether you can remove it or only switch it off. Shown on an agent's own page, not in the
 // list — there it would be the same fact repeated under a heading that already said it.
 const SOURCE_COPY: Record<string, string> = {
-  builtin: "Ships with Hivemind",
   user: "You added this",
   repo: "From this repository",
 };
 
 function defOf(e: AgentWireEntry): AgentProviderDef | undefined {
-  if (e.source === "builtin") return BUILTIN_CATALOG.find((d) => d.id === e.id);
   try { return defFromManifest(e.manifest); } catch { return undefined; }
 }
 
-/** One card per id; a later source shadows an earlier one, as the loader does. */
+/** One card per id; a later source shadows an earlier one, as the loader does.
+ *  Nothing is compiled in, so an empty scan renders an empty list. */
 function useCards(): Card[] {
   const entries = useAgentEntries();
-  const catalog = useAgents();
   // Memoised: a plugin's def is rebuilt from its manifest, and effects keyed on it
   // (option discovery, the install check) must not re-run on every settings edit.
   return useMemo(() => {
-    if (!entries.length) {
-      return catalog.map((a): Card => ({ id: a.id, def: a.def, source: "builtin", on: true, error: null }));
-    }
     const byId = new Map<string, Card>();
     for (const e of entries) {
       // A broken later entry (a repo refused for a taken id) does not hide the working one.
@@ -55,7 +50,7 @@ function useCards(): Card[] {
       byId.set(e.id, { id: e.id, def: defOf(e), source: e.source, on: !e.disabled && !e.error, error: e.error });
     }
     return [...byId.values()];
-  }, [entries, catalog]);
+  }, [entries]);
 }
 
 function useOptionChoices(def: AgentProviderDef): Choices | null {
@@ -76,7 +71,7 @@ export function AgentsOverview() {
   const go = useSettingsNavigate();
   const presence = useAgentPresence();
   const { defaultAgent: saved, autoInstall } = useSettings().agents;
-  const defaultId = preferredAgent(saved, (d) => !notReady(presence, d.id)).id;
+  const defaultId = preferredAgent(saved, (d) => !notReady(presence, d.id))?.id;
   const missing = (c: Card) => notReady(presence, c.id);
   const savedCard = saved && saved !== defaultId ? cards.find((c) => c.id === saved) : undefined;
   const ready = cards.filter((c) => c.on && !missing(c));
@@ -146,7 +141,7 @@ export function AgentPage({ id }: { id: string }) {
   const card = useCards().find((c) => c.id === id);
   const presence = useAgentPresence();
   const { defaultAgent, fromCatalog } = useSettings().agents;
-  const defaultId = preferredAgent(defaultAgent, (d) => !notReady(presence, d.id)).id;
+  const defaultId = preferredAgent(defaultAgent, (d) => !notReady(presence, d.id))?.id;
   if (!card) return <p className="settings-empty">There is no agent named {id}.</p>;
   const { def } = card;
   const label = def?.label ?? card.id;

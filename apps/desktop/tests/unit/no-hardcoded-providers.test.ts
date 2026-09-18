@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { getCatalog } from "@hivemind/agents";
+import { AUTHORED_DEFS } from "./authored-agents.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "../../..", "..");
@@ -38,7 +38,7 @@ function code(src: string): string {
 
 test("no provider id or binary is hard-coded outside @hivemind/agents", () => {
   const names = new Set<string>();
-  for (const d of getCatalog()) { names.add(d.id); names.add(d.bin); for (const a of d.aliases ?? []) names.add(a); }
+  for (const d of AUTHORED_DEFS) { names.add(d.id); names.add(d.bin); for (const a of d.aliases ?? []) names.add(a); }
   const re = new RegExp(`(["'\`])(${[...names].map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})\\1`, "g");
   const hits: string[] = [];
   for (const dir of SCAN) {

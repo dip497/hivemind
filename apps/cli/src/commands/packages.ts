@@ -1,6 +1,7 @@
 import { defineCommand } from "citty";
 import { agentOption, getCatalog } from "@hivemind/agents";
 import { inspectPackage } from "@hivemind/core/packages";
+import { ensureAgentCatalog } from "../agent-catalog.js";
 import { HiveError } from "@hivemind/core";
 import { err, ok } from "../format.js";
 
@@ -15,6 +16,8 @@ export const packagesCmd = defineCommand({
       async run({ args }) {
         const ctx = { json: !!args.json };
         try {
+          // The plan names agents by id; the machine's installed list decides what is valid.
+          await ensureAgentCatalog();
           const report = await inspectPackage(String(args.dir), getCatalog().map((p) => ({
             id: p.id, enabled: p.enabled, modelFlag: !!agentOption(p, "model"), supervision: p.caps.supervise,
           })));

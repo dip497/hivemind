@@ -7,8 +7,8 @@ import { join } from "node:path";
 
 // codex resumes because its manifest says where its sessions live — no code of its own.
 const { findSession, resumeFromManifest, specIsAgent } = await import("@hivemind/agents/node");
-const { bundledAgent } = await import("@hivemind/agents");
-const codexDef = bundledAgent("codex");
+const { authoredDef } = await import("./authored-agents.ts");
+const codexDef = authoredDef("codex");
 const find = codexDef.session!.resume!.find!;
 const isCodex = (spec: { cmd: string }) => specIsAgent(codexDef, spec);
 const newestCodexSessionForCwd = (cwd: string, root?: string) => findSession(find, cwd, root);

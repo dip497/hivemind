@@ -25,7 +25,7 @@ import {
 } from "./session-snapshot-store.js";
 import { applyInitialPrompt, stripInitialPrompt } from "../shared/agent-io.js";
 import { sanitizeShellEnv } from "./shell-env.js";
-import { NODE_PARTS, composeResume, evictTrackedSession, prepareProviders, trackerSource, setCatalog, BUILTIN_CATALOG } from "@hivemind/agents/node";
+import { composeResume, evictTrackedSession, prepareProviders, trackerSource, setCatalog } from "@hivemind/agents/node";
 import { planHookSource } from "./plan-review-hook-source.js";
 import { stopHookSource } from "./hcp/stop-hook-source.js";
 import { approvalHookSource } from "./hcp/approval-hook-source.js";
@@ -189,7 +189,7 @@ try {
   const reloadAgents = async (): Promise<void> => {
     // Stamped before the scan, so an install that lands during it still triggers the next one.
     agentsStamp = dirMtime(userAgentsDir());
-    const { defs } = await loadAgents({ builtins: BUILTIN_CATALOG, nodeHalf: (id) => !!NODE_PARTS[id] });
+    const { defs } = await loadAgents();
     setCatalog(defs);
     providerPaths = prepareProviders(providerCtx);
     resume = composeResume({ ...providerCtx, providers: providerPaths });

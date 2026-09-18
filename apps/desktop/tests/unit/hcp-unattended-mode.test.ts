@@ -3,6 +3,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeDispatch } from "../../src/main/hcp/methods.js";
+import { useAuthoredAgents } from "./authored-agents.ts";
+
+// Unattended modes are a catalog capability: load the published fixtures.
+useAuthoredAgents();
 import { TurnTracker } from "../../src/main/hcp/turn-tracker.js";
 import { OutputRecorder } from "../../src/main/hcp/output-recorder.js";
 

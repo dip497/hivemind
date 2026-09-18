@@ -4,33 +4,14 @@
  * capabilities, icons and scrape detectors only. Daemon-side plugin objects
  * are listed in node.ts (PLUGINS).
  *
- * To add an agent that ships in the box: write manifests/<id>.yaml — the same format a
- * user or a repository writes — place it in the picker order in
- * scripts/build-bundled-agents.mjs, and run `bun run agents:bundle`. It needs
- * providers/<id>/node.ts only if it resumes a session or injects signals.
- * `enabled` decides whether it is offered for spawning; a disabled def is still
- * recognised for status when the user runs it themselves.
+ * Nothing is compiled in: every agent arrives as a manifest — installed from the
+ * HiveHub catalog, a folder, or a repository — and `setCatalog` is called with
+ * what the disk scan found. An empty catalog (nothing installed) is legitimate.
  */
-import { BUNDLED_AGENTS } from "./bundled-manifests.js";
-import { defFromManifest } from "./manifest.js";
 import type { AgentProviderDef, SpawnOptions, TileStatus } from "./types.js";
 import { optionArgs } from "./options.js";
 
-/** The floor; `setCatalog` replaces the live set once manifests load.
- *  Built from the manifests that ship in the box — the same format a user or a repository
- *  writes, so "built-in" means where it comes from, never what it is allowed to be. */
-export const BUILTIN_CATALOG: readonly AgentProviderDef[] = BUNDLED_AGENTS.map((a) =>
-  defFromManifest(a.manifest, { trusted: true, nodeHalf: a.nodeHalf }));
-
-/** The def an agent that ships in the box was built from. A daemon half asks for its own
- *  by id, so there is one object per agent and nothing to drift. */
-export function bundledAgent(id: string): AgentProviderDef {
-  const def = BUILTIN_CATALOG.find((d) => d.id === id);
-  if (!def) throw new Error(`no bundled agent "${id}"`);
-  return def;
-}
-
-let active: readonly AgentProviderDef[] = BUILTIN_CATALOG;
+let active: readonly AgentProviderDef[] = [];
 let BY_ID = new Map<string, AgentProviderDef>();
 let BY_BIN = new Map<string, AgentProviderDef>();
 let BY_ALIAS = new Map<string, AgentProviderDef>();
@@ -87,19 +68,17 @@ export function identifyProvider(cmd: string | undefined | null): AgentProviderD
 }
 
 /** The provider spawned when none is named: the first spawnable entry. The UI's
- *  spawn button, `hive ctl spawn` and HCP all default to it, and legacy layouts
- *  identify agent tiles by it. */
-export function defaultAgent(): AgentProviderDef {
-  // Never throws: callers render in JSX, and a user can disable every provider.
-  return active.find((x) => x.enabled)
-    ?? active[0]
-    ?? BUILTIN_CATALOG.find((x) => x.enabled)
-    ?? BUILTIN_CATALOG[0]!;
+ *  spawn button, `hive ctl spawn` and HCP all default to it. Undefined when no
+ *  agent is installed — callers must offer installing one, not spawn nothing. */
+export function defaultAgent(): AgentProviderDef | undefined {
+  // Undefined, never a throw: callers render in JSX, and a user can disable every agent.
+  return active.find((x) => x.enabled) ?? active[0];
 }
 
 /** The agent a new tile starts when none is named: the user's choice if it can run
- *  here, else the first spawnable agent this machine has, else `defaultAgent()`. */
-export function preferredAgent(chosen: string | undefined, installed: (def: AgentProviderDef) => boolean): AgentProviderDef {
+ *  here, else the first spawnable agent this machine has, else `defaultAgent()`.
+ *  Undefined when no agent is installed. */
+export function preferredAgent(chosen: string | undefined, installed: (def: AgentProviderDef) => boolean): AgentProviderDef | undefined {
   const spawnable = active.filter((d) => d.enabled);
   const pick = chosen ? spawnable.find((d) => d.id === chosen) : undefined;
   if (pick && installed(pick)) return pick;

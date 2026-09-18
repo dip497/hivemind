@@ -12,9 +12,11 @@ export class UnsupportedError extends Error {
 
 /** Validate a `--agent` value against the catalog: unknown → USAGE listing the
  *  spawnable ids; `needsWorker` → UNSUPPORTED (exit 7) for a runtime with no
- *  turn signal, BEFORE any tile is spawned. */
+ *  turn signal, BEFORE any tile is spawned. No --agent and nothing installed →
+ *  USAGE that says how to get an agent. */
 export function resolveAgent(id: string | undefined, needsWorker = false): string {
   const agent = id ?? cliDefaultAgent();
+  if (!agent) throw new UsageError("no agent installed — install one with `hive agents install`, or from the app's Settings ▸ Plugins");
   const def = agentById(agent);
   if (!def || !def.enabled) throw new UsageError(`--agent must be one of ${spawnableAgents().map((d) => d.id).join(", ")} (got ${agent})`);
   if (needsWorker && !def.caps.turnSignal) {

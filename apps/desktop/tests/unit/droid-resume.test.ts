@@ -8,7 +8,7 @@ import { join } from "node:path";
 // droid is a manifest now: its hooks document and its transforms both come from there.
 const { findSession: _find, manifestRuntime, renderHookDocument, transformsFor, specIsAgent } =
   await import("@hivemind/agents/node");
-const { bundledAgent: _bundled } = await import("@hivemind/agents");
+const { authoredDef: _bundled } = await import("./authored-agents.ts");
 const droidDef = _bundled("droid");
 const isDroid = (spec: { cmd: string }) => specIsAgent(droidDef, spec);
 const pathsOf = (deps: Record<string, string | undefined>) => ({
@@ -31,9 +31,9 @@ const makeDroidResumeTransforms = (deps: Record<string, string | undefined>) =>
     { ...(deps.sessionsRoot ? { sessionRoot: deps.sessionsRoot } : {}) });
 // Where droid's sessions live is in its manifest now; the daemon does the reading.
 const findSession = _find;
-const bundledAgent = _bundled;
+const authoredDef2 = _bundled;
 const newestDroidSessionForCwd = (cwd: string, root?: string) =>
-  findSession(bundledAgent("droid").session!.resume!.find!, cwd, root);
+  findSession(authoredDef2("droid").session!.resume!.find!, cwd, root);
 
 // Mirrors ~/.factory/sessions/<cwd-slug>/<id>.jsonl: first line is a
 // `session_start` record carrying { id, cwd }.

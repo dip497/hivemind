@@ -73,7 +73,8 @@ export function useAgents(): AgentDef[] {
   return useSyncExternalStore(subscribeCatalog, getAgents, getAgents);
 }
 
-export function agentById(id: string): AgentDef | undefined {
+export function agentById(id: string | undefined): AgentDef | undefined {
+  if (!id) return undefined;
   getAgents();
   return cachedById!.get(id) ?? (catalogAgentById(id) ? toAgentDef(catalogAgentById(id)!) : undefined);
 }
@@ -85,8 +86,10 @@ export function agentForCmd(cmd: string | undefined): AgentDef | undefined {
   return d ? cachedById!.get(d.id) : undefined;
 }
 
-/** Convenience: render an agent's icon by id (falls back to the generic mark). */
-export function AgentIcon({ id, size, className }: { id: string; size?: number; className?: string }) {
+/** Convenience: render an agent's icon by id (falls back to the generic mark).
+ *  An absent id (a tile whose agent cannot be identified, or no default installed)
+ *  renders the generic mark. */
+export function AgentIcon({ id, size, className }: { id?: string; size?: number; className?: string }) {
   const a = agentById(id);
   return <SvgMark icon={a?.def.icon ?? GENERIC_AGENT_ICON} size={size} className={className} />;
 }

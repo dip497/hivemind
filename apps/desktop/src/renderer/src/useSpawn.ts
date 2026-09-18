@@ -10,14 +10,14 @@ import { frameColorFor } from "./frame-color";
 import { nextSlotInFrame, FRAME_ROW_MAX, FRAME_GAP } from "./frame-layout";
 import { defaultSizeForKind, defaultTileSize, FRAME_PAD, FRAME_HEADER } from "./canvas-sizing";
 import { agentById } from "./agents";
-import { agentById as catalogAgentById, defaultAgent, spawnArgsFor, spawnLabelFor, type SpawnOptions } from "@hivemind/agents";
+import { agentById as catalogAgentById, defaultAgent, spawnArgsFor, spawnLabelFor, type AgentProviderDef, type SpawnOptions } from "@hivemind/agents";
 import { AGENT_TILE_KIND } from "./tile-kinds";
 import { defaultShell, type FrameState, type TileInstance } from "./canvas-persistence";
 import { queueWork } from "./claude-bus";
 import { markBackgroundTile } from "./worker-tiles";
 import type { TileKind } from "./tile-kinds";
 import { checkToolCreation } from "./tool-availability";
-import { checkAgentInstalled } from "./agent-plugins";
+import { checkAgentInstalled, noAgentInstalled } from "./agent-plugins";
 import { isRemote } from "../../shared/remote-uri";
 import { mintId } from "../../shared/tile-id";
 import { getSettings } from "./settings-store";
@@ -258,7 +258,12 @@ export function useSpawn(ctx: SpawnCtx) {
       const target = (targetFrameId ? framesRef.current.find((f) => f.id === targetFrameId) : undefined) ?? pickFrame();
       // A remote frame runs the agent on its host, whose PATH this machine cannot see.
       const remote = !!target?.workspacePath && isRemote(target.workspacePath);
-      if (kind === AGENT_TILE_KIND && !remote && !checkAgentInstalled((opts?.agent ? catalogAgentById(opts.agent.id) : undefined) ?? defaultAgent())) return;
+      const def = kind === AGENT_TILE_KIND ? ((opts?.agent ? catalogAgentById(opts.agent.id) : undefined) ?? defaultAgent()) : undefined;
+      if (kind === AGENT_TILE_KIND) {
+        // Nothing compiled in to fall back to: with no agent installed there is nothing to spawn.
+        if (!def) { noAgentInstalled(); return; }
+        if (!remote && !checkAgentInstalled(def)) return;
+      }
       const frame = target ?? ensureFrame();
       const fid = frame.id;
       if (SINGLETON_KINDS.has(kind)) {
@@ -268,7 +273,6 @@ export function useSpawn(ctx: SpawnCtx) {
           setSelectedTileId(existing.id); focusTile(existing.id); return;
         }
       }
-      const def = kind === AGENT_TILE_KIND ? ((opts?.agent ? catalogAgentById(opts.agent.id) : undefined) ?? defaultAgent()) : undefined;
       const newId = mintId(`tile-${def?.id ?? kind}`);
       let cmd: string | undefined;
       let args: string[] | undefined;
@@ -312,8 +316,11 @@ export function useSpawn(ctx: SpawnCtx) {
     if (!checkToolCreation(kind)) return;
     // Refuse before creating a frame or asking which one: only a remote frame could still run it.
     const def = (opts?.agent ? catalogAgentById(opts.agent.id) : undefined) ?? defaultAgent();
-    const anyRemote = framesRef.current.some((f) => !!f.workspacePath && isRemote(f.workspacePath));
-    if (kind === AGENT_TILE_KIND && !anyRemote && !checkAgentInstalled(def)) return;
+    if (kind === AGENT_TILE_KIND) {
+      if (!def) { noAgentInstalled(); return; }
+      const anyRemote = framesRef.current.some((f) => !!f.workspacePath && isRemote(f.workspacePath));
+      if (!anyRemote && !checkAgentInstalled(def)) return;
+    }
     const selTile = selectedTileIdRef.current;
     const selFrame =
       selectedFrameIdRef.current ?? (selTile ? frameOfRef.current[selTile] ?? null : null);
@@ -427,6 +434,9 @@ export function useSpawn(ctx: SpawnCtx) {
       const callerFrame = callerFrameId ? framesRef.current.find((f) => f.id === callerFrameId) : undefined;
       const frame = resolved ?? callerFrame ?? ensureFrame();
       const def = catalogAgentById(opts.agent) ?? defaultAgent();
+      // The control plane only sends a bare agent when the catalog has one — but the
+      // default can still be missing (nothing installed), and there is nothing to spawn into.
+      if (!def) { noAgentInstalled(); return ""; }
       const newId = mintId(`tile-${def.id}`);
       const so = launchOptions(def.id, { mode: opts.mode, model: opts.model });
       const args = spawnArgsFor(def, so);

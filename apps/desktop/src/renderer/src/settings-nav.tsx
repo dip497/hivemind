@@ -4,7 +4,7 @@ import { useState, type ReactNode } from "react";
 import { Globe2 } from "lucide-react";
 import { BUNDLED_TOOL_PLUGINS } from "@hivemind/core/tool-plugins";
 import { SvgMark, useAgents } from "./agents";
-import { BUILTIN_CATALOG, GENERIC_AGENT_ICON, defFromManifest } from "@hivemind/agents";
+import { GENERIC_AGENT_ICON, defFromManifest } from "@hivemind/agents";
 import { getAgentEntries, notReady, useAgentPresence } from "./agent-plugins";
 import { useViews } from "./workspace/workspace-view";
 import { SETTINGS_GROUPS, SETTINGS_PAGES, pluginPage, type SettingsGroup } from "./settings-registry";
@@ -30,8 +30,6 @@ export function useExpandedGroups(): [Set<SettingsGroup>, (g: SettingsGroup) => 
 
 /** Name and mark for any agent Hivemind knows, including ones switched off. */
 function agentDef(id: string) {
-  const builtin = BUILTIN_CATALOG.find((d) => d.id === id);
-  if (builtin) return builtin;
   const entry = getAgentEntries().find((e) => e.id === id && !e.error);
   try { return entry ? defFromManifest(entry.manifest) : undefined; } catch { return undefined; }
 }

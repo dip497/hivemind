@@ -13,6 +13,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { stickyAllow, makeDispatch } from "../../src/main/hcp/methods.js";
+import { useAuthoredAgents } from "./authored-agents.ts";
+
+// Spawn/supervise policy reads the live catalog: load the published fixtures.
+useAuthoredAgents();
 import { Mailbox } from "../../src/main/hcp/mailbox.js";
 import { TurnTracker } from "../../src/main/hcp/turn-tracker.js";
 import { OutputRecorder } from "../../src/main/hcp/output-recorder.js";

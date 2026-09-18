@@ -3,6 +3,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { providerFor, composeResume, providers } from "@hivemind/agents/node";
 import type { SpawnSpec } from "../../src/main/pty-session-manager.ts";
+import { useAuthoredAgents } from "./authored-agents.ts";
+
+// The providers are published manifests now; load the fixtures as an installed machine sees them.
+useAuthoredAgents();
 
 const ctx = {
   execPath: "/x/node",

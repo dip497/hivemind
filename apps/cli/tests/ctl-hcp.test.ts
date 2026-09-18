@@ -10,6 +10,7 @@ import { startHcpServer, type HcpServer } from "../../desktop/src/main/hcp/hcp-s
 import { OutputRecorder } from "../../desktop/src/main/hcp/output-recorder.js";
 import { HcpError } from "../../desktop/src/main/hcp/protocol.js";
 import { hiveAsync as hive } from "./helpers.js";
+import { fixtureXDG } from "./agents-fixtures.js";
 
 let dir: string;
 let sock: string;
@@ -21,10 +22,14 @@ const rec = new OutputRecorder();
 let turnAfterReads = 0;
 let reads = 0;
 
-const env = () => ({ HIVE_HCP_SOCK: sock, HCP_TOKEN: TOKEN, HIVEMIND_TILE: "me-1" });
+// The CLI validates --agent against installed manifests; give the subprocess a machine
+// that has the fixture agents installed.
+let xdg: string;
+const env = () => ({ HIVE_HCP_SOCK: sock, HCP_TOKEN: TOKEN, HIVEMIND_TILE: "me-1", XDG_CONFIG_HOME: xdg });
 
 beforeAll(async () => {
   dir = await fs.mkdtemp(path.join(os.tmpdir(), "hive-ctl-hcp-"));
+  xdg = fixtureXDG(["claude", "codex"]);
   sock = path.join(dir, "hcp.sock");
   server = startHcpServer(sock, {
     token: TOKEN,

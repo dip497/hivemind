@@ -42,6 +42,15 @@ function profile(opts: { agents?: Record<string, string>; disabled?: string[] } 
 }
 
 const USAGE = 2;
+// The published fixtures stand in for what auto-install from HiveHub puts on disk.
+function installed(opts: { disabled?: string[] } = {}): { agents: Record<string, string>; disabled?: string[] } {
+  const examples = path.join(import.meta.dir, "..", "..", "..", "packages", "hive-agents", "tests", "fixtures", "published-agents");
+  const agents: Record<string, string> = {};
+  for (const id of ["claude", "codex"]) {
+    agents[id] = fs.readFileSync(path.join(examples, id, "agent.yaml"), "utf8");
+  }
+  return { agents, ...opts };
+}
 const spawnAgent = (agent: string, env: Record<string, string | undefined>) =>
   hive(["ctl", "spawn", "--agent", agent, "--json"], { env });
 
@@ -60,13 +69,13 @@ describe("the CLI reads the same agent list as the app", () => {
   });
 
   test("an agent switched off in Settings is refused by the CLI too", () => {
-    const r = spawnAgent("codex", profile({ disabled: ["codex"] }));
+    const r = spawnAgent("codex", profile(installed({ disabled: ["codex"] })));
     expect(r.code).toBe(USAGE);
     expect(`${r.stdout}${r.stderr}`).toContain("--agent must be one of");
   });
 
-  test("the rest of the built-ins are unaffected by one being switched off", () => {
-    const r = spawnAgent("claude", profile({ disabled: ["codex"] }));
+  test("another installed agent is unaffected by one being switched off", () => {
+    const r = spawnAgent("claude", profile(installed({ disabled: ["codex"] })));
     expect(r.code).not.toBe(USAGE);
   });
 });
@@ -85,7 +94,7 @@ describe("hive agents", () => {
     const list = hive(["agents", "list", "--json"], { env });
     const rows = (list.json as { data: Array<{ id: string; source: string; error: string | null }> }).data;
     expect(rows.find((a) => a.id === "acme")).toMatchObject({ source: "user", error: null });
-    expect(rows.find((a) => a.id === "claude")).toMatchObject({ source: "builtin" });
+    expect(rows.every((a) => a.source !== "builtin")).toBe(true); // nothing is compiled in
 
     const rm = hive(["agents", "remove", "acme", "--json"], { env });
     expect(rm.code).toBe(0);
@@ -104,14 +113,14 @@ describe("hive agents", () => {
     expect(fs.existsSync(path.join(env.XDG_CONFIG_HOME, "hivemind", "agents", "acme"))).toBe(false);
   });
 
-  test("built-in agents cannot be removed, only switched off", () => {
+  test("an agent you did not install cannot be removed", () => {
     const r = hive(["agents", "remove", "claude", "--json"], { env: profile() });
     expect(r.code).not.toBe(0);
-    expect(`${r.stdout}${r.stderr}`).toContain("switch them off instead");
+    expect(`${r.stdout}${r.stderr}`).toContain("no user-installed agent");
   });
 });
 
-describe("installing an agent that would replace a built-in", () => {
+describe("installing an agent that takes a reserved id", () => {
   const packageDir = (id: string): string => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hm-cli-pkg-"));
     tmp.push(dir);
@@ -119,11 +128,11 @@ describe("installing an agent that would replace a built-in", () => {
     return dir;
   };
 
-  test("is refused unless you say so, and the built-in is left alone", () => {
+  test("pointing a reserved id at another command is refused unless you say so", () => {
     const env = profile();
     const r = hive(["agents", "install", packageDir("claude"), "--json"], { env });
     expect(r.code).not.toBe(0);
-    expect(r.stdout + r.stderr).toContain("install_refused");
+    expect(r.stdout + r.stderr).toContain("Hivemind's agent for `claude`");
     expect(fs.existsSync(path.join(env.XDG_CONFIG_HOME, "hivemind", "agents", "claude"))).toBe(false);
   });
 

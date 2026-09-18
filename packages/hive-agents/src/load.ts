@@ -1,4 +1,4 @@
-/** Agent manifests on disk (node only). Precedence: built-in < user
+/** Agent manifests on disk (node only). Precedence: user
  *  ($XDG_CONFIG_HOME/hivemind/agents/<id>/agent.yaml) < repo (.hivemind/agents/<id>/). */
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -42,7 +42,6 @@ export interface ReadOptions {
   source: AgentSource;
   trusted?: boolean;
   allowReserved?: boolean;
-  nodeHalf?: (id: string) => boolean;
   reserved?: readonly string[];
   requireDirMatch?: boolean;
 }
@@ -69,7 +68,6 @@ export async function readAgentManifest(file: string, opts: ReadOptions): Promis
       trusted: opts.trusted,
       allowReserved: opts.allowReserved,
       reserved: opts.reserved,
-      nodeHalf: opts.nodeHalf?.(String(declaredId)) ?? false,
     });
     // Where its files are, so the daemon can read what it ships beside the manifest.
     return { id: def.id, file, source: opts.source, def: { ...def, dir: path.dirname(file) }, manifest: raw, error: null, disabled: false };
@@ -92,27 +90,13 @@ async function scanDir(root: string, opts: ReadOptions): Promise<LoadedAgent[]> 
   return Promise.all((await pluginDirs(root)).map((d) => readAgentManifest(path.join(d, AGENT_MANIFEST_FILE), opts)));
 }
 
-export async function loadBuiltinAgents(dir: string, nodeHalf?: (id: string) => boolean): Promise<LoadedAgent[]> {
-  let names: string[];
-  try {
-    names = (await fs.readdir(dir)).filter((n) => /\.ya?ml$/.test(n)).sort();
-  } catch { return []; }
-  return Promise.all(
-    names.map((n) => readAgentManifest(path.join(dir, n), { source: "builtin", trusted: true, nodeHalf })),
-  );
-}
-
 export interface LoadAgentsOptions {
-  builtinDir?: string;
-  /** Used when `builtinDir` is absent; tests/manifest-equivalence proves them identical. */
-  builtins?: readonly AgentProviderDef[];
   repoRoot?: string;
   disabled?: readonly string[];
-  nodeHalf?: (id: string) => boolean;
 }
 
 /** May this agent run in this directory? A repo's agents belong to that repo's tiles;
- *  built-in and user agents belong everywhere. */
+ *  user agents belong everywhere. */
 export function agentAllowedIn(def: { sourceRoot?: string }, cwd: string): boolean {
   if (!def.sourceRoot) return true;
   const root = path.resolve(def.sourceRoot);
@@ -121,27 +105,20 @@ export function agentAllowedIn(def: { sourceRoot?: string }, cwd: string): boole
 }
 
 /** Broken manifests are returned with their error, so `hive agents list` can say why. */
-export async function loadAgents(opts: LoadAgentsOptions): Promise<{
+export async function loadAgents(opts: LoadAgentsOptions = {}): Promise<{
   defs: AgentProviderDef[];
   loaded: LoadedAgent[];
   shadowed: Array<{ id: string; by: AgentSource; over: AgentSource }>;
 }> {
-  const builtin = opts.builtinDir
-    ? await loadBuiltinAgents(opts.builtinDir, opts.nodeHalf)
-    : (opts.builtins ?? []).map((def): LoadedAgent => ({
-        id: def.id, file: "<compiled-in>", source: "builtin", def,
-        manifest: null, error: null, disabled: false,
-      }));
   const plugin: ReadOptions = {
     source: "user",
     trusted: false,
     requireDirMatch: true,
-    nodeHalf: () => false,
   };
   const user = await scanDir(userAgentsDir(), plugin);
   // A cloned repository may add agents, never replace one you already have: a
   // manifest named `claude` would otherwise run its own command from the claude button.
-  const taken = [...builtin, ...user].filter((a) => !a.error).map((a) => a.id);
+  const taken = user.filter((a) => !a.error).map((a) => a.id);
   const repoRoot = opts.repoRoot;
   const repo = repoRoot
     ? (await scanDir(repoAgentsDir(repoRoot), { ...plugin, source: "repo", reserved: taken }))
@@ -155,7 +132,7 @@ export async function loadAgents(opts: LoadAgentsOptions): Promise<{
   const shadowed: Array<{ id: string; by: AgentSource; over: AgentSource }> = [];
   const loaded: LoadedAgent[] = [];
 
-  for (const a of [...builtin, ...user, ...repo]) {
+  for (const a of [...user, ...repo]) {
     a.disabled = disabled.has(a.id);
     loaded.push(a);
     if (a.error) continue;
@@ -175,7 +152,6 @@ export async function installAgent(srcDir: string, opts: { allowReserved?: boole
   const read = await readAgentManifest(path.join(srcDir, AGENT_MANIFEST_FILE), {
     source: "user",
     requireDirMatch: false,
-    nodeHalf: () => false,
     allowReserved: opts.allowReserved,
   });
   if (read.error || !read.def) throw new Error(read.error ?? "invalid manifest");
@@ -192,7 +168,7 @@ export async function removeAgent(id: string): Promise<{ id: string; dir: string
   if (!AGENT_ID_RE.test(id)) throw new Error(`"${id}" is not an agent id`);
   const dir = path.join(userAgentsDir(), id);
   try { await fs.stat(dir); }
-  catch { throw new Error(`no user-installed agent "${id}" (built-in and repo agents cannot be removed — switch them off instead)`); }
+  catch { throw new Error(`no user-installed agent "${id}" (repo agents cannot be removed — switch them off instead)`); }
   await fs.rm(dir, { recursive: true, force: true });
   return { id, dir };
 }
