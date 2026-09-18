@@ -2,6 +2,8 @@ node_modules
 .pnpm-store
 dist
 out
+# a second build for screenshot runs, so a running dev app keeps its own out/
+out-shots
 build
 .turbo
 .cache
@@ -27,13 +29,15 @@ linux-unpacked/
 # Per-developer / local dev artifacts — never committed.
 # Ignore .claude/ contents (settings.local.json, agents, local skills) but SHIP
 # the skills that are part of the product / the contribution process, not local cruft:
-# hive-browser backs the Browser tile; adding-an-agent-provider is the procedure a
-# contributor (or their agent) follows to wire a new CLI agent end to end.
+# hive-browser backs the Browser tile; adding-an-agent-provider and hivemind-custom-view
+# are the procedures a contributor (or their agent) follows to wire a new CLI agent, or to
+# write a view, end to end.
 .claude/*
 !.claude/skills/
 .claude/skills/*
 !.claude/skills/hive-browser/
 !.claude/skills/adding-an-agent-provider/
+!.claude/skills/hivemind-custom-view/
 .hyperresearch/
 research/
 # screenshots/ are the README demo images — they MUST be committed so GitHub
@@ -46,3 +50,13 @@ mockup.html
 
 # JetBrains IDE
 .idea/
+
+# Cloud credentials: a service-account key must never be committed.
+credentails.json
+credentials.json
+credential*.json
+*-service-account*.json
+gha-creds-*.json
+
+# Astro writes type stubs wherever it is run; the site keeps its own under docs/.
+/.astro/

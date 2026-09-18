@@ -1,6 +1,6 @@
 # Configurable workspace UI
 
-Status: registry and painted-controls proofs implemented; Browser opt-in, toolbar Off, and per-view action preferences wired. Remaining tool migrations pending. Performance remains a
+Status: registry and custom-controls proofs implemented; Browser opt-in, toolbar Off, and per-view action preferences wired. Remaining tool migrations pending. Performance remains a
 release gate; configurability must not remount live tools or add polling.
 
 ## What users should achieve
@@ -76,10 +76,10 @@ choices. Authors own rendering and hit testing; the host owns validated commands
 availability and permissions. Merely changing the controls must not change authority.
 
 The current SDK already supports workspace selection and live-surface docking from
-sandboxed views. `examples/views/painted-controls` proves that path without a new
-protocol: canvas-painted controls use accessible native hit regions and SDK commands,
-with no continuous animation loop. It requests no additional permissions. This is
-a coded example, not a visual toolbar authoring application.
+sandboxed views. `examples/views/queue` proves that path without a new protocol: its own
+list and keys (J/K, N, Enter, Esc) select and dock through SDK commands, and its only
+animation stops once it settles. It requests no additional permissions. This is a coded
+example, not a visual toolbar authoring application.
 
 The per-view Off preference unmounts the standard toolbar and its handle. Collapsed
 uses the existing `hidden` value and retains its handle. App-level Settings stays
@@ -115,17 +115,16 @@ does not load third-party tool code. No second package-manifest format is introd
 the eventual package manifest will contribute this metadata after installation and
 compatibility checks.
 
-## Painted-controls verification
+## Custom-controls verification
 
-The example typechecks and bundles. Three isolated Electron cases cover pointer and
-keyboard docking, preserving the same terminal, host-confirmed workspace navigation,
-and no additional frames during an idle interval. All three passed, then passed
-again in two fresh repeat runs. The rendered example was visually inspected.
+`tests/e2e/queue-view.spec.ts` runs Queue with the host toolbar off. Three isolated
+Electron cases cover pointer and keyboard docking, preserving the same terminal, the
+view's selection becoming the host's, and no additional frames during an idle interval.
 
-The test focuses its Electron window explicitly before sending input. Controls stay
-disabled until their first canvas layout, and navigation waits for the host selection
-event before changing its label. This demonstrates the custom-controls contract;
-it does not establish overall app FPS or complete the optional tool migration.
+A freshly mounted view frame can drop its first input, so the spec presses until the
+view's own cursor moves, then checks the host agrees. This demonstrates the
+custom-controls contract; it does not establish overall app FPS or complete the
+optional tool migration.
 
 ## Browser migration (first bundled tool)
 

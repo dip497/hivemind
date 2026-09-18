@@ -1,6 +1,6 @@
 // Community views end to end (design doc phase 4): `hive views install` of the
-// example Orbit plugin → it appears in the switcher and the ⌘E cycle → its
-// sandboxed iframe sees no privileged API → clicking a planet docks the LIVE
+// example Queue view → it appears in the switcher and the ⌘E cycle → its
+// sandboxed iframe sees no privileged API → clicking a tile's row docks the LIVE
 // terminal through the hole-punch and typed keys arrive → a flooding plugin
 // and a CPU-burning plugin are disabled and the canvas comes back with every
 // session intact → a package asking for an unknown permission is refused at
@@ -13,6 +13,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
+import { buildQueue, dockViaQueue, framesDrawn, queueReady, releaseViaQueue } from "./helpers/queue-view";
 
 test.use({ trace: "off" });
 
@@ -21,7 +22,6 @@ let page: Page;
 let repo: string;
 const APP_DIR = process.cwd();
 const CLI = path.resolve(APP_DIR, "../cli/src/index.ts");
-const ORBIT = path.resolve(APP_DIR, "../../examples/views/orbit");
 const FIXTURES = path.join(APP_DIR, "tests/e2e/fixtures/views");
 // Own profile (see host-chrome.spec.ts): the app resumes userData under XDG,
 // and the HCP socket the CLI reaches lives there too.
@@ -49,11 +49,9 @@ test.beforeAll(async () => {
   fs.writeFileSync(path.join(repo, "a.ts"), "export const a = 1;\n");
   const git = (...args: string[]) => execFileSync("git", args, { cwd: repo });
   git("init", "-q"); git("config", "user.email", "e2e@test.dev"); git("config", "user.name", "e2e"); git("add", "-A"); git("commit", "-q", "-m", "seed");
-  // Build the example plugin the way its README says, then install the RESULT.
-  execFileSync("node", [path.join(ORBIT, "build.mjs")], { stdio: "ignore" });
-  const installed = hive("views", "install", path.join(ORBIT, "dist"));
+  const installed = hive("views", "install", buildQueue());
   expect(installed.ok).toBe(true);
-  expect(installed.data.dir).toBe(path.join(viewsDir(), "orbit"));
+  expect(installed.data.dir).toBe(path.join(viewsDir(), "queue"));
   app = await electron.launch({
     // No --user-data-dir: the profile is isolated by this run's XDG_CONFIG_HOME
     // (playwright.config.ts), and that is where the app's HCP socket lands
@@ -87,19 +85,21 @@ test.afterAll(async () => {
   await fs.promises.rm(XDG, { recursive: true, force: true }).catch(() => {});
 });
 
-test("an installed view is registered after the built-ins: ⌘E cycles canvas → windows → world → orbit → canvas", async () => {
-  await expect.poll(async () => (await report()).registered).toEqual(["orbit"]);
+test("an installed view is registered after the built-ins: ⌘E cycles canvas → windows → queue → canvas", async () => {
+  await expect.poll(async () => (await report()).registered).toEqual(["queue"]);
   expect(await activeView()).toBe("canvas");
   const seen: string[] = [];
-  for (let i = 0; i < 4; i++) { await toggleView(); await page.waitForTimeout(150); seen.push((await activeView())!); }
-  expect(seen).toEqual(["windows", "world", "orbit", "canvas"]);
-  expect(hive("views", "list").data.map((v: { id: string; error: string | null }) => [v.id, v.error])).toEqual([["orbit", null]]);
+  // One toggle per registered view, so the cycle ends where it started — a lap too many
+  // leaves the next test on the wrong view.
+  for (let i = 0; i < 3; i++) { await toggleView(); await page.waitForTimeout(150); seen.push((await activeView())!); }
+  expect(seen).toEqual(["windows", "queue", "canvas"]);
+  expect(hive("views", "list").data.map((v: { id: string; error: string | null }) => [v.id, v.error])).toEqual([["queue", null]]);
 });
 
 test("the plugin runs sandboxed: its own origin, no window.hive, no node, no network", async () => {
-  await toView("orbit");
-  await page.waitForSelector('[data-community-view="orbit"][data-community-ready="1"]', { timeout: 15_000 });
-  const frame = page.frame({ name: "hm-view:orbit" });
+  await toView("queue");
+  await page.waitForSelector(queueReady, { timeout: 15_000 });
+  const frame = page.frame({ name: "hm-view:queue" });
   expect(frame).toBeTruthy();
   const seen = await frame!.evaluate(async () => ({
     origin: location.origin,
@@ -109,27 +109,16 @@ test("the plugin runs sandboxed: its own origin, no window.hive, no node, no net
     fetch: await fetch("https://example.com/").then(() => "ok", () => "blocked"),
     parent: (() => { try { return String(Object.keys(window.parent.document).length); } catch { return "blocked"; } })(),
   }));
-  expect(seen).toEqual({ origin: "hm-view://orbit", hive: "undefined", process: "undefined", require: "undefined", fetch: "blocked", parent: "blocked" });
+  expect(seen).toEqual({ origin: "hm-view://queue", hive: "undefined", process: "undefined", require: "undefined", fetch: "blocked", parent: "blocked" });
 });
 
-test("click a planet: the LIVE terminal docks through the hole-punch, typed keys arrive, click empty space undocks", async () => {
+test("click a tile's row: the LIVE terminal docks through the hole-punch, typed keys arrive, Escape releases it", async () => {
   const tileId = (await page.locator("[data-surface]").first().getAttribute("data-surface"))!;
-  const link = (id: string) => page.evaluate((tid) => (document.querySelector("[data-community-view]") as unknown as { __community: { reveal: (id: string) => Promise<{ x: number; y: number; w: number; h: number } | null>; stats: { framesDrawn: number; statusSubscriptions: number } } }).__community.reveal(tid), id);
-  // The plugin answers `reveal` with where it drew the tile (null until it has
+  const reveal = (id: string) => page.evaluate((tid) => (document.querySelector("[data-community-view]") as unknown as { __community: { reveal: (id: string) => Promise<{ x: number; y: number; w: number; h: number } | null> } }).__community.reveal(tid), id);
+  // The plugin answers `reveal` with where it shows the tile (null until it has
   // received `structure`, which follows `hello` by a message).
-  let rect: { x: number; y: number; w: number; h: number } | null = null;
-  await expect.poll(async () => (rect = await link(tileId)), { timeout: 10_000 }).toBeTruthy();
-  const host = (await page.locator("[data-community-view]").boundingBox())!;
-  // Hover → the plugin's own DOM label (inside the iframe) names the tile. The
-  // first pointer events into a fresh out-of-process frame can land before its
-  // hit-test data exists, so nudge until the frame reports the hover.
-  const frame = page.frame({ name: "hm-view:orbit" })!;
-  await expect.poll(async () => {
-    await page.mouse.move(host.x + rect.x + rect.w / 2, host.y + rect.y + rect.h / 2);
-    await page.mouse.move(host.x + rect.x + rect.w / 2 + 1, host.y + rect.y + rect.h / 2);
-    return frame.evaluate(() => (document.getElementById("label") as HTMLElement).style.display);
-  }, { timeout: 5_000 }).toBe("block");
-  await page.mouse.click(host.x + rect.x + rect.w / 2, host.y + rect.y + rect.h / 2);
+  await expect.poll(() => reveal(tileId), { timeout: 10_000 }).toBeTruthy();
+  await dockViaQueue(page, tileId);
   const slot = page.locator(`[data-community-surfaces] [data-tile-slot="${tileId}"]`);
   await expect(slot).toBeVisible({ timeout: 5_000 });
   // The SAME xterm instance, adopted into the overlay slot — never a copy.
@@ -139,18 +128,16 @@ test("click a planet: the LIVE terminal docks through the hole-punch, typed keys
   await page.keyboard.type("echo COMMUNITY_DOCK_OK");
   await page.keyboard.press("Enter");
   await expect(slot.locator(".xterm")).toContainText("COMMUNITY_DOCK_OK", { timeout: 5_000 });
-  // Undock: click empty space in the plugin (its rule), the surface parks again.
-  await page.mouse.click(host.x + 40, host.y + 40);
+  // Release from inside the view (its rule), and the surface parks again.
+  await releaseViaQueue(page);
   await expect(slot).toHaveCount(0);
   expect(await probe("#hm-tile-park .xterm")).toBe("kept");
-  // Render on demand: frames were drawn only for the changes above, and no
-  // frame is drawn while nothing changes.
-  const stats = () => page.evaluate(() => (document.querySelector("[data-community-view]") as unknown as { __community: { stats: { framesDrawn: number } } }).__community.stats.framesDrawn);
-  await page.waitForTimeout(1200);
-  const before = await stats();
+  // Render on demand: frames were drawn for the changes above, and none while nothing changes.
+  await page.waitForTimeout(2500);
+  const before = await framesDrawn(page);
   expect(before).toBeGreaterThan(0);
   await page.waitForTimeout(1500);
-  expect(await stats()).toBe(before);
+  expect(await framesDrawn(page)).toBe(before);
   await toView("canvas");
   await page.waitForSelector(".react-flow__node-terminal .xterm");
   expect(await probe(".react-flow__node-terminal .xterm")).toBe("kept");
@@ -165,15 +152,15 @@ test("`hive views install` while the app runs: the CLI asks the app to rescan an
     expect(r.data.rescanned).toBe(true);
   }
   // No reloadViews() here: the rescan came from the CLI's HCP call.
-  await expect.poll(async () => (await report()).registered).toEqual(["orbit", "hostile-flood", "hostile-loop"]);
+  await expect.poll(async () => (await report()).registered).toEqual(["queue", "hostile-flood", "hostile-loop"]);
   const seen: string[] = [];
   await toView("canvas");
-  for (let i = 0; i < 6; i++) { await toggleView(); await page.waitForTimeout(150); seen.push((await activeView())!); }
-  expect(seen).toEqual(["windows", "world", "orbit", "hostile-flood", "hostile-loop", "canvas"]);
+  for (let i = 0; i < 5; i++) { await toggleView(); await page.waitForTimeout(150); seen.push((await activeView())!); }
+  expect(seen).toEqual(["windows", "queue", "hostile-flood", "hostile-loop", "canvas"]);
 });
 
 test("a flooding plugin and a CPU-burning plugin are disabled; the canvas comes back with the session intact", async () => {
-  await expect.poll(async () => (await report()).registered).toEqual(["orbit", "hostile-flood", "hostile-loop"]);
+  await expect.poll(async () => (await report()).registered).toEqual(["queue", "hostile-flood", "hostile-loop"]);
 
   await toView("hostile-flood");
   await expect.poll(activeView, { timeout: 10_000 }).toBe("canvas");
@@ -196,7 +183,7 @@ test("a flooding plugin and a CPU-burning plugin are disabled; the canvas comes 
   expect((await report()).refused["hostile-loop"]).toMatch(/^disabled: runaway/);
   // Disabled for the session: gone from the cycle even after a rescan.
   await reloadViews();
-  await expect.poll(async () => (await report()).registered).toEqual(["orbit"]);
+  await expect.poll(async () => (await report()).registered).toEqual(["queue"]);
   await expect(page.locator(".xterm")).toHaveCount(1);
   await page.waitForSelector(".react-flow__node-terminal .xterm");
   expect(await probe(".react-flow__node-terminal .xterm")).toBe("kept");
@@ -211,14 +198,14 @@ test("a package asking for an unknown permission is refused by install AND by th
   fs.cpSync(path.join(FIXTURES, "greedy"), path.join(viewsDir(), "greedy"), { recursive: true });
   await reloadViews();
   await expect.poll(async () => (await report()).refused["greedy"]).toMatch(/unknown permission "fs:read"/);
-  expect((await report()).registered).toEqual(["orbit"]);
+  expect((await report()).registered).toEqual(["queue"]);
   expect(hive("views", "list").data.find((v: { id: string }) => v.id === "greedy").error).toMatch(/unknown permission/);
 });
 
 test("`hive views remove` of the ACTIVE view: the app rescans, the switcher drops it, the canvas is shown", async () => {
-  await toView("orbit");
-  await page.waitForSelector('[data-community-view="orbit"][data-community-ready="1"]', { timeout: 15_000 });
-  const r = hive("views", "remove", "orbit");
+  await toView("queue");
+  await page.waitForSelector(queueReady, { timeout: 15_000 });
+  const r = hive("views", "remove", "queue");
   expect(r.ok).toBe(true);
   expect(r.data.rescanned).toBe(true);
   // No reloadViews(): the CLI's rescan did it.

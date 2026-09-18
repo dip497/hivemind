@@ -1,12 +1,13 @@
 # Review room bundle (inspection prototype)
 
-One bundle contains the Orbit view and two agent presets. It references existing Pi
+One bundle contains the Board view — sessions moving from doing, to review, to done — and two
+reviewer agent presets. It references existing Pi
 and Claude integrations; it does not install their binaries or provide credentials.
 
 From the repository root:
 
 ```sh
-pnpm --filter @hivemind/example-view-orbit build
+pnpm --filter @hivemind/example-view-board build
 node examples/packages/review-room/build.mjs
 bun apps/cli/src/index.ts packages inspect examples/packages/review-room/dist --json
 ```

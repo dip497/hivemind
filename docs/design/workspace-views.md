@@ -1,5 +1,11 @@
 # Workspace Views — plugin architecture
 
+> **The World view was removed on 2026-09-15**, and `scripts/perf-views.mjs` /
+> `perf-views-compare.mjs` with it — that harness measured the World scene set. Everything
+> below is kept as written: it is a record of what was measured on the dates it names, and
+> the view seam, the docking contract and the community-view phases it describes are all
+> still in the product. three.js left the build with it; nothing else imported it.
+
 **Status:** all milestones done — 1: core/view split, TileHost, canvas + windows
 as built-in plugins, versioned per-view layouts, crash fallback (2026-09-05);
 phase 3: the built-in World view (2026-09-07); phase 4: isolated community

@@ -7,12 +7,10 @@
 import { registerView } from "../workspace-view";
 import { canvasViewPlugin } from "./CanvasView";
 import { windowsViewPlugin } from "./WindowsView";
-import { worldViewPlugin } from "./world";
 
 export function registerBuiltinViews(): void {
   registerView(canvasViewPlugin);
   registerView(windowsViewPlugin);
-  registerView(worldViewPlugin);
 }
 
 registerBuiltinViews();

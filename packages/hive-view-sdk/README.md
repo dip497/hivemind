@@ -3,7 +3,7 @@
 Write a hivemind workspace view as a sandboxed plugin. A view is a directory:
 
 ```
-hivemind-view.json   { "id": "orbit", "name": "Orbit", "version": "0.1.0", "entry": "index.html", "permissions": [] }
+hivemind-view.json   { "id": "queue", "name": "Queue", "version": "0.1.0", "entry": "index.html", "permissions": [] }
 index.html           your bundled page (or point `entry` at a .js module)
 ```
 
@@ -31,7 +31,8 @@ hm.setLayout({ camera });                         // ≤ 64 KB, persisted under 
 `closeTile` needs `"permissions": ["workspace:close"]`; `spawnTile` / `spawnVis` /
 `spawnClaude` / `addFrame` need `"workspace:spawn"`. Unknown permissions are refused
 at install. Protocol details: `src/protocol.ts`; a complete example:
-`examples/views/orbit` in the hivemind repo.
+`examples/views/` in the hivemind repo: `queue` (a list with a docked terminal), `tiled` (every
+terminal of a frame laid out as live panes) and `board` (drag, keyboard moves, a persisted layout).
 
 Status: consumed as TypeScript source inside the hivemind monorepo (workspace
 dependency). Publishing to npm is not set up yet — a `dist/` build and a `files`

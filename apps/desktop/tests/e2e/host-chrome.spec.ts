@@ -1,6 +1,6 @@
 // Host chrome over every view (design doc 6a): the tool island is drawn by the
-// workspace runtime, so Windows, World and community views can spawn; docked
-// surfaces in World/community get the host's slot bar (name, status, pop-out,
+// workspace runtime, so Windows and community views can spawn; docked
+// surfaces in a community view get the host's slot bar (name, status, pop-out,
 // undock, Shift+Esc); the wallpaper layer and glass are mounted only under
 // views that declare `wallpaper: true`.
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
@@ -8,6 +8,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
+import { buildQueue, dockViaQueue, queueReady } from "./helpers/queue-view";
 
 test.use({ trace: "off" });
 
@@ -16,7 +17,6 @@ let page: Page;
 let repo: string;
 const APP_DIR = process.cwd();
 const CLI = path.resolve(APP_DIR, "../cli/src/index.ts");
-const ORBIT = path.resolve(APP_DIR, "../../examples/views/orbit");
 // Own profile: specs in one run share XDG_CONFIG_HOME (playwright.config.ts),
 // and an app launched without --user-data-dir would resume the previous spec's
 // userData (view mode, layouts). The HCP socket must live under the profile
@@ -33,8 +33,7 @@ test.beforeAll(async () => {
   fs.writeFileSync(path.join(repo, "a.ts"), "export const a = 1;\n");
   const git = (...args: string[]) => execFileSync("git", args, { cwd: repo });
   git("init", "-q"); git("config", "user.email", "e2e@test.dev"); git("config", "user.name", "e2e"); git("add", "-A"); git("commit", "-q", "-m", "seed");
-  execFileSync("node", [path.join(ORBIT, "build.mjs")], { stdio: "ignore" });
-  execFileSync("bun", [CLI, "views", "install", path.join(ORBIT, "dist"), "--json"], { cwd: repo, env: ENV, stdio: "ignore" });
+  execFileSync("bun", [CLI, "views", "install", buildQueue(), "--json"], { cwd: repo, env: ENV, stdio: "ignore" });
   app = await electron.launch({ args: [path.join(APP_DIR, "out/main/index.js"), "--no-sandbox"], cwd: repo, env: ENV });
   page = await app.firstWindow();
   page.on("console", (m) => { if (m.type() === "error" && !/Content Security Policy/.test(m.text())) console.log("[r.error]", m.text()); });
@@ -56,10 +55,10 @@ test.afterAll(async () => {
   await fs.promises.rm(XDG, { recursive: true, force: true }).catch(() => {});
 });
 
-test("the island is host chrome: top on the canvas, a compact bottom island in windows / world / a community view, and it spawns from each", async () => {
+test("the island is host chrome: top on the canvas, a compact bottom island in windows / a community view, and it spawns from each", async () => {
   await expect(page.locator('[data-host-island="top"] [data-tool-island]')).toBeVisible();
   let n = await terminalNodes();
-  for (const [view, ready] of [["windows", "[data-windows-view]"], ["world", "[data-world-canvas]"], ["orbit", '[data-community-view="orbit"][data-community-ready="1"]']] as const) {
+  for (const [view, ready] of [["windows", "[data-windows-view]"], ["queue", queueReady]] as const) {
     await toView(view);
     await page.waitForSelector(ready, { timeout: 15_000 });
     const island = page.locator('[data-host-island="bottom"] [data-tool-island]');
@@ -84,7 +83,7 @@ test("the toolbar's Theme button opens the unified Appearance settings from a no
   await expect(theme).toBeFocused();
 });
 
-test("wallpaper policy: the full-window layer is mounted only under the canvas and windows; in a scene the theme still applies but nothing composites until a slot exists", async () => {
+test("wallpaper policy: an installed view gets the user's wallpaper behind it too, and a view that paints its own scene can refuse it", async () => {
   await toView("canvas");
   await page.waitForSelector(".react-flow__node-terminal");
   await expect(page.locator(".hm-wallpaper")).toHaveCount(1);
@@ -92,13 +91,13 @@ test("wallpaper policy: the full-window layer is mounted only under the canvas a
   await toView("windows");
   await page.waitForTimeout(300);
   await expect(page.locator(".hm-wallpaper")).toHaveCount(1);
-  for (const [view, ready] of [["world", "[data-world-canvas]"], ["orbit", '[data-community-view="orbit"][data-community-ready="1"]']] as const) {
+  for (const [view, ready] of [["queue", queueReady]] as const) {
     await toView(view);
     await page.waitForSelector(ready, { timeout: 15_000 });
-    // 6b: the user's theme wins everywhere (appearance.pluginSurfaces
-    // "theme"), so glass stays on — but nothing full-window is composited; a
-    // wallpaper element exists only inside a docked slot (settings-appearance.spec).
-    await expect(page.locator(".hm-wallpaper"), `${view}: no full-window wallpaper layer`).toHaveCount(0);
+    // The wallpaper is the user's, not the canvas's: a view paints over it, and its own
+    // surfaces are translucent, so the picture stays where they put it. A view that draws an
+    // opaque scene sets `"wallpaper": false` in its manifest and gets the old behaviour.
+    await expect(page.locator(".hm-wallpaper"), `${view}: the wallpaper layer is mounted`).toHaveCount(1);
     expect(await page.evaluate(() => document.documentElement.classList.contains("glass-on")), `${view}: the theme still applies`).toBe(true);
   }
   await toView("canvas");
@@ -107,50 +106,20 @@ test("wallpaper policy: the full-window layer is mounted only under the canvas a
   expect(await page.evaluate(() => document.documentElement.classList.contains("glass-on"))).toBe(true);
 });
 
-test("world dock bar: pop out lands on the canvas with the tile selected; Shift+Esc undocks while the terminal has focus", async () => {
-  await toView("canvas");
-  const tileId = (await page.locator(".react-flow__node-terminal").first().getAttribute("data-id"))!;
-  await toView("world");
-  await page.waitForSelector("[data-world-canvas]");
-  await page.waitForTimeout(400);
-  const dock = async () => {
-    const pt = await page.evaluate((id) => (document.querySelector("[data-world-view]") as unknown as { __world: { projectTile: (id: string) => { x: number; y: number } | null } }).__world.projectTile(id), tileId);
-    const host = (await page.locator("[data-world-view]").boundingBox())!;
-    await page.mouse.click(host.x + pt!.x, host.y + pt!.y);
-    await expect(page.locator(`[data-world-dock="${tileId}"] [data-slot-bar="${tileId}"]`)).toBeVisible({ timeout: 5_000 });
-  };
-  await dock();
-  await page.locator(`[data-slot-bar="${tileId}"]`).getByLabel("Pop out to canvas").click();
-  await expect.poll(activeView).toBe("canvas");
-  await expect(page.locator(`.react-flow__node-terminal[data-id="${tileId}"] .hm-node-selected`)).toHaveCount(1, { timeout: 5_000 });
-  await toView("world");
-  await page.waitForSelector("[data-world-canvas]");
-  await page.waitForTimeout(400);
-  await dock();
-  await page.locator("[data-world-dock] .xterm-screen").click();
-  expect(await page.evaluate(() => document.activeElement?.classList.contains("xterm-helper-textarea"))).toBe(true);
-  await page.keyboard.press("Escape"); // plain Esc belongs to the terminal
-  await expect(page.locator("[data-world-dock]")).toHaveCount(1);
-  await page.keyboard.press("Shift+Escape");
-  await expect(page.locator("[data-world-dock]")).toHaveCount(0);
-});
-
 test("community slot bar: the host's undock releases the tile and tells the plugin; Shift+Esc works there too", async () => {
   await toView("canvas");
   const tileId = (await page.locator(".react-flow__node-terminal").first().getAttribute("data-id"))!;
-  await toView("orbit");
-  await page.waitForSelector('[data-community-view="orbit"][data-community-ready="1"]', { timeout: 15_000 });
-  const dock = async () => {
-    let rect: { x: number; y: number; w: number; h: number } | null = null;
-    await expect.poll(async () => (rect = await page.evaluate((id) => (document.querySelector("[data-community-view]") as unknown as { __community: { reveal: (id: string) => Promise<{ x: number; y: number; w: number; h: number } | null> } }).__community.reveal(id), tileId)), { timeout: 10_000 }).toBeTruthy();
-    const host = (await page.locator("[data-community-view]").boundingBox())!;
-    for (let i = 0; i < 3 && (await page.locator(`[data-community-slot="${tileId}"]`).count()) === 0; i++) {
-      await page.mouse.click(host.x + rect!.x + rect!.w / 2, host.y + rect!.y + rect!.h / 2);
-      await page.waitForTimeout(500);
-    }
-    await expect(page.locator(`[data-community-slot="${tileId}"] [data-slot-bar="${tileId}"]`)).toBeVisible({ timeout: 5_000 });
-    await expect(page.locator(`[data-community-slot="${tileId}"] .xterm`)).toHaveCount(1);
-  };
+  await toView("queue");
+  await page.waitForSelector(queueReady, { timeout: 15_000 });
+  const dock = () => dockViaQueue(page, tileId);
+  await dock();
+  // Pop out: the tile lands on the canvas, selected. (Proved in the World view until it
+  // was removed; the slot bar is the host's, so any docking view proves it.)
+  await page.locator(`[data-slot-bar="${tileId}"]`).getByLabel("Pop out to canvas").click();
+  await expect.poll(activeView).toBe("canvas");
+  await expect(page.locator(`.react-flow__node-terminal[data-id="${tileId}"] .hm-node-selected`)).toHaveCount(1, { timeout: 5_000 });
+  await toView("queue");
+  await page.waitForSelector(queueReady, { timeout: 15_000 });
   await dock();
   await page.locator(`[data-slot-bar="${tileId}"]`).getByLabel("Undock").click();
   await expect(page.locator("[data-community-slot]")).toHaveCount(0);

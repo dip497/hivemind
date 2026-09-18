@@ -1,0 +1,17 @@
+{
+  "name": "@hivemind/example-view-tiled",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Every terminal in a frame, tiled and live, with frame tabs that light when another task needs you.",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@hivemind/tsconfig": "workspace:*",
+    "@hivemind/view-sdk": "workspace:*",
+    "esbuild": "0.28.0",
+    "typescript": "catalog:"
+  }
+}

@@ -75,9 +75,8 @@ test("minimize hides the tab but keeps it in the graph rail; restore brings it b
 });
 
 test("switching back to canvas restores react-flow", async () => {
-  // ⌘E cycles canvas → windows → world → canvas (three registered views), so
-  // "back to canvas" is an explicit switch here; the cycle itself is covered
-  // by world-view.spec.ts.
+  // ⌘E cycles canvas → windows → canvas, so "back to canvas" is an explicit
+  // switch here; the cycle itself is covered by community-view.spec.ts.
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "canvas" } })));
   await page.waitForSelector(".react-flow");
   expect(await page.locator('[role="tablist"]').count()).toBe(0);

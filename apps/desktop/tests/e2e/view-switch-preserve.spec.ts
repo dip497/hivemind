@@ -25,8 +25,8 @@ const MARK = "UNSAVED_VIEW_SWITCH_MARKER";
 const toggleView = async () => {
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:toggle-view-mode")));
 };
-// Three views are registered (canvas → windows → world → canvas on ⌘E), so a
-// round trip back to the canvas is an explicit switch, not a second toggle.
+// Two views are registered (canvas → windows → canvas on ⌘E), so a round trip
+// back to the canvas is an explicit switch, not a second toggle.
 const toView = async (mode: string) => {
   await page.evaluate((m) => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: m } })), mode);
 };

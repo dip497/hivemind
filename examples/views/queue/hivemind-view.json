@@ -1,0 +1,11 @@
+{
+  "id": "queue",
+  "name": "Queue",
+  "version": "0.1.0",
+  "entry": "index.html",
+  "protocol": 1,
+  "permissions": [],
+  "author": "Hivemind",
+  "homepage": "https://github.com/dip497/hivemind/tree/main/examples/views/queue",
+  "license": "MIT"
+}

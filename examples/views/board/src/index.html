@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Board</title>
+  <link rel="stylesheet" href="./board.css" />
+</head>
+<body>
+  <header class="b-head">
+    <h1>Board</h1>
+    <p class="b-summary" aria-live="polite"></p>
+    <p class="b-hint" aria-hidden="true"><kbd>Shift</kbd><kbd>←</kbd><kbd>→</kbd> move a card · <kbd>Enter</kbd> review</p>
+  </header>
+  <main class="b-board" aria-label="Agent sessions by stage"></main>
+  <aside class="b-panel" hidden aria-label="Review">
+    <header class="b-panel-head">
+      <div class="b-panel-title"></div>
+      <div class="b-panel-actions">
+        <button type="button" data-to="review">Review</button>
+        <button type="button" data-to="done">Done</button>
+        <button type="button" class="b-close" aria-label="Close review">
+          <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6"/></svg>
+        </button>
+      </div>
+    </header>
+  </aside>
+  <script type="module" src="./board.js"></script>
+</body>
+</html>
