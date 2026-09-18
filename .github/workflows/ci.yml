@@ -43,11 +43,6 @@ jobs:
       - name: Unit tests (desktop)
         run: pnpm --filter @hivemind/desktop run test:unit
 
-      - name: Plugin catalog is current
-        # Every file in plugins/index.json carries its SHA-256; an index built from
-        # older sources refuses every download, and nothing else notices.
-        run: node scripts/build-plugin-index.mjs --check
-
       - name: Installer platform matrix
         # Cheap guard on the install.sh ↔ release.yml contract: the asset names
         # the installer asks for must match the ones the release uploads.

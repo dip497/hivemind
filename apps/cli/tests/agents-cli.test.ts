@@ -140,3 +140,33 @@ describe("installing an agent that would replace a built-in", () => {
     expect(fs.existsSync(path.join(env.XDG_CONFIG_HOME, "hivemind", "agents", "acme2", "agent.yaml"))).toBe(true);
   });
 });
+
+describe("validating an agent package before you publish it", () => {
+  const pkg = (yaml: string, files: Record<string, string> = {}): string => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hm-cli-val-"));
+    tmp.push(dir);
+    fs.writeFileSync(path.join(dir, "agent.yaml"), yaml);
+    for (const [name, body] of Object.entries(files)) fs.writeFileSync(path.join(dir, name), body);
+    return dir;
+  };
+
+  test("it answers with what a user will be told, not just pass or fail", () => {
+    const r = hive(["agents", "validate", pkg(ACME), "--json"], { env: profile() });
+    expect(r.code).toBe(0);
+    expect(r.json.data).toMatchObject({ id: "acme", bin: "acme-coder", worker: false, does: [], warnings: [] });
+  });
+
+  test("an asset it names but does not ship is a warning, because it loads and then disappoints", () => {
+    const withAsset = `${ACME}assets:\n- { name: hooks.json, file: hooks.json }\nlaunch:\n  env: { ACME_HOOKS: "{asset:hooks.json}" }\n`;
+    expect(hive(["agents", "validate", pkg(withAsset), "--json"], { env: profile() }).json.data.warnings)
+      .toEqual([expect.stringContaining("hooks.json is declared but not in this folder")]);
+    expect(hive(["agents", "validate", pkg(withAsset, { "hooks.json": "{}" }), "--json"], { env: profile() }).json.data.warnings)
+      .toEqual([]);
+  });
+
+  test("a name that is Hivemind's own is refused here, not after someone installs it", () => {
+    const r = hive(["agents", "validate", pkg(ACME.replace("id: acme", "id: gemini")), "--json"], { env: profile() });
+    expect(r.code).not.toBe(0);
+    expect(`${r.stdout}${r.stderr}`).toContain("Hivemind's agent for `gemini`");
+  });
+});

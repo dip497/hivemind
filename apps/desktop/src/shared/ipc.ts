@@ -1,5 +1,6 @@
 /** Typed contract for IPC between main and renderer. */
 import type { Issue, IssueSummary, IssueState, AcceptanceItem, Assignee, LinkType, IssuePatch } from "@hivemind/core/types";
+import type { ViewManifest } from "@hivemind/view-sdk/manifest";
 import type { NotificationSettings } from "./notification-settings.js";
 export type { NotificationSettings };
 
@@ -213,7 +214,7 @@ export interface ViewPackageInfo {
   id: string;
   dir: string;
   source: "user" | "repo";
-  manifest: { id: string; name: string; version: string; entry: string; protocol: number; permissions: string[]; assets?: string } | null;
+  manifest: ViewManifest | null;
   error: string | null;
   url: string | null;
 }
@@ -256,11 +257,13 @@ export interface HiveIpc {
   previewViewInstall(): Promise<{ token: string; package: ViewPackageInfo; replacesVersion: string | null } | null>;
   /** The published plugin catalog (hash-pinned agents and views). */
   pluginCatalog(): Promise<CatalogEntry[]>;
+  /** Ids of installed agents whose manifest differs from the one the catalog lists. */
+  outdatedAgents(): Promise<string[]>;
   /** Download and verify a catalog plugin, then return it for review. A view installs with
    *  `installViewPackage(token)`, an agent with `installCatalogAgent(token)`. */
   reviewCatalogPlugin(type: CatalogEntry["type"], id: string): Promise<
     | ({ type: "view" } & { token: string; package: ViewPackageInfo; replacesVersion: string | null })
-    | { type: "agent"; token: string; id: string; label: string; bin: string; command: string; flags: string[]; worker: boolean; replaces: boolean; install?: { url: string; command?: string } }
+    | { type: "agent"; token: string; id: string; label: string; bin: string; command: string; flags: string[]; worker: boolean; replaces: boolean; does: string[]; reads?: string; install?: { url: string; command?: string } }
   >;
   installCatalogAgent(token: string): Promise<void>;
   /** Remove an agent you installed; a catalog one is then never added automatically again. */

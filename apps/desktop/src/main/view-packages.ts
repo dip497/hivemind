@@ -17,6 +17,7 @@ import { app, net, protocol, dialog, ipcMain, type BrowserWindow, type WebFrameM
 import { pathToFileURL } from "node:url";
 import { listInstalledViews, readViewPackage, installView, removeView, type InstalledView } from "@hivemind/core/views";
 import { ENTRY_PAGE, VIEW_SCHEME, entryPage, entryUrl, mimeFor, newNonce, pluginCsp, resolvePackageFile } from "./view-package-files.js";
+import { viewHost } from "@hivemind/view-sdk/manifest";
 
 export { VIEW_SCHEME, entryUrl } from "./view-package-files.js";
 
@@ -25,8 +26,9 @@ export interface ViewPackageInfo extends InstalledView {
   url: string | null;
 }
 
-/** id → package dir of every loadable package from the last scan. Only these are served. */
-const served = new Map<string, string>();
+/** Origin host → the package behind it, from the last scan. Only these are served. The host is
+ *  not always the id (`@owner/name` is served as `owner--name`), so the id travels with it. */
+const served = new Map<string, { id: string; dir: string }>();
 
 /** Scan both roots; remember the loadable ones for the protocol handler. */
 export async function listViewPackages(repoRoot: string | null): Promise<ViewPackageInfo[]> {
@@ -34,7 +36,7 @@ export async function listViewPackages(repoRoot: string | null): Promise<ViewPac
   served.clear();
   return Promise.all(views.map(async (v) => {
     if (v.error || !v.manifest) return { ...v, url: null };
-    served.set(v.id, v.dir);
+    served.set(viewHost(v.id), { id: v.id, dir: v.dir });
     const entry = await stat(path.join(v.dir, v.manifest.entry)).catch(() => null);
     const revision = entry ? `${entry.mtimeMs}-${entry.ctimeMs}-${entry.size}` : "missing";
     const url = new URL(entryUrl(v.id, v.manifest.entry));
@@ -56,7 +58,7 @@ export function handleViewProtocol(): void {
   protocol.handle(VIEW_SCHEME, async (request) => {
     try {
       const u = new URL(request.url);
-      const dir = served.get(u.host);
+      const dir = served.get(u.host)?.dir;
       if (!dir) return new Response("unknown view", { status: 404 });
       const rel = decodeURIComponent(u.pathname.replace(/^\/+/, ""));
       const nonce = newNonce();
@@ -105,7 +107,8 @@ export function startViewWatchdog(win: BrowserWindow): () => void {
     const seen = new Set<string>();
     for (const f of frames) {
       let id = "";
-      try { id = new URL(f.url).host; } catch { continue; }
+      // The frame knows its host; the registry knows ids. Report the id or nothing is disabled.
+      try { const host = new URL(f.url).host; id = served.get(host)?.id ?? host; } catch { continue; }
       seen.add(id);
       const cpu = byPid.get(f.osProcessId) ?? 0;
       const n = cpu >= RUNAWAY_CPU_PCT ? (strikes.get(id) ?? 0) + 1 : 0;
@@ -130,6 +133,8 @@ export async function reviewViewDir(dir: string, staged: boolean) {
   pending = null;
   const pkg = await readViewPackage(dir, "user", false);
   if (pkg.error) throw new Error(pkg.error);
+  // "world" is still reserved though that view is gone: a saved workspace may name it, and
+  // a name this app has shipped should not become available to whoever asks for it next.
   if (["canvas", "windows", "world"].includes(pkg.id)) throw new Error("This extension uses a built-in view ID");
   const existing = (await listInstalledViews()).find((view) => view.id === pkg.id);
   const token = newNonce();

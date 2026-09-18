@@ -51,6 +51,10 @@ test("the bootstrap page carries the response nonce and refuses odd entries; the
   assert.match(csp, /frame-src 'none'/);
   assert.equal(entryUrl("orbit", "index.html"), "hm-view://orbit/index.html");
   assert.equal(entryUrl("orbit", "dist/view.js"), "hm-view://orbit/__entry.html?js=dist%2Fview.js");
+  // A scoped view gets an origin of its own: `@` and `/` would make the owner the host.
+  assert.equal(entryUrl("@dip497/board", "index.html"), "hm-view://dip497--board/index.html");
+  assert.equal(new URL(entryUrl("@dip497/board", "index.html")).host, "dip497--board");
+  assert.notEqual(new URL(entryUrl("@dip497/board", "index.html")).host, new URL(entryUrl("@dip497/queue", "index.html")).host);
   assert.equal(mimeFor("/x/y.js"), "text/javascript; charset=utf-8");
   assert.equal(mimeFor("/x/y.bin"), "application/octet-stream");
 });

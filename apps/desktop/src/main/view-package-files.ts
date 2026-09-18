@@ -7,6 +7,7 @@
 import path from "node:path";
 import { randomBytes } from "node:crypto";
 import { existsSync, realpathSync, statSync } from "node:fs";
+import { viewHost } from "@hivemind/view-sdk/manifest";
 
 export const VIEW_SCHEME = "hm-view";
 
@@ -48,9 +49,11 @@ export function mimeFor(file: string): string {
   return MIME[path.extname(file).toLowerCase()] ?? "application/octet-stream";
 }
 
-/** A `.html` entry is loaded as-is; a `.js` entry through a generated page. */
+/** A `.html` entry is loaded as-is; a `.js` entry through a generated page. The host is the
+ *  view's own origin: its id, or `owner--name` for `@owner/name`, which a hostname cannot hold. */
 export function entryUrl(id: string, entry: string): string {
-  return entry.endsWith(".js") ? `${VIEW_SCHEME}://${id}/__entry.html?js=${encodeURIComponent(entry)}` : `${VIEW_SCHEME}://${id}/${entry}`;
+  const host = viewHost(id);
+  return entry.endsWith(".js") ? `${VIEW_SCHEME}://${host}/__entry.html?js=${encodeURIComponent(entry)}` : `${VIEW_SCHEME}://${host}/${entry}`;
 }
 
 export const ENTRY_PAGE = "__entry.html";

@@ -4,12 +4,15 @@
  *
  *   hive views list [--json]          user-installed + this repo's views, with load errors
  *   hive views install <dir>          validate hivemind-view.json, copy into $XDG_CONFIG_HOME/hivemind/views/<id>
+ *   hive views install @owner/name    the same, from HiveHub, every file checked against its hash
  *   hive views remove <id>            delete a user-installed view (its saved layout stays, inert)
  */
+import { rm } from "node:fs/promises";
 import { defineCommand } from "citty";
 import { HiveError, findRoot, installView, listInstalledViews, removeView } from "@hivemind/core";
 import { err, ok } from "../format.js";
 import { hcpCall } from "../hcp.js";
+import { REGISTRY_NAME, stageFromRegistry } from "../registry.js";
 
 /** Ask a running app to re-read the view packages. False when no app is
  *  reachable (the change is picked up on the next start or when Settings ▸
@@ -40,15 +43,21 @@ const listCmd = defineCommand({
 });
 
 const installCmd = defineCommand({
-  meta: { name: "install", description: "Validate a view package and copy it into the user views dir" },
-  args: { dir: { type: "positional", required: true, description: "package directory holding hivemind-view.json" }, json: { type: "boolean" } },
+  meta: { name: "install", description: "Install a view from a folder, or from HiveHub by @owner/name" },
+  args: { dir: { type: "positional", required: true, description: "a folder holding hivemind-view.json, or @owner/name" }, json: { type: "boolean" } },
   async run({ args }) {
     const ctx = { json: !!args.json };
+    const name = String(args.dir);
+    let staged: string | null = null;
+    // Errors exit the process (`err` does), so a `finally` would never run: discard by hand.
+    const discard = async () => { if (staged) await rm(staged, { recursive: true, force: true }).catch(() => {}); };
     try {
-      const v = await installView(String(args.dir));
+      if (REGISTRY_NAME.test(name)) staged = (await stageFromRegistry(name, "view")).dir;
+      const v = await installView(staged ?? name);
+      await discard();
       const rescanned = await rescanApp();
       return ok(ctx, { ...v, rescanned }, () => `installed ${v.id} ${v.manifest?.version} → ${v.dir}; ${afterNote(rescanned)}`);
-    } catch (e) { return fail(ctx, e, "install_failed"); }
+    } catch (e) { await discard(); return fail(ctx, e, "install_failed"); }
   },
 });
 

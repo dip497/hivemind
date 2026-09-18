@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { setViewMode } from "./workspace/view-mode-store";
 import { Check, ChevronDown, ChevronRight, ExternalLink, FolderPlus, LayoutGrid, RefreshCw, Trash2 } from "lucide-react";
-import { BUILTIN_CATALOG, GENERIC_AGENT_ICON, defFromManifest } from "@hivemind/agents";
+import { BUILTIN_CATALOG, GENERIC_AGENT_ICON, defFromManifest, iconFromManifest } from "@hivemind/agents";
+import { Button } from "./components/ui/button";
+import { Input } from "./components/ui/input";
 import { getSettings, patchSettings, useSettings } from "./settings-store";
 import { useCommunityReport } from "./workspace/views/community/registry";
 import { syncAgentPlugins, useAgentEntries } from "./agent-plugins";
@@ -34,8 +36,8 @@ export function InstalledPlugins() {
     <div className="settings-section-heading settings-extension-intro">
       <h3>Views</h3>
       <div className="settings-inline">
-        <button className="settings-icon-button" aria-label="Refresh plugins" onClick={rescan}><RefreshCw size={14} /></button>
-        <button className="settings-button" disabled={busy} onClick={() => void act(async () => setPreview(await window.hive.previewViewInstall()))}><FolderPlus size={15} />Install from folder</button>
+        <Button variant="ghost" size="icon-sm" aria-label="Refresh plugins" onClick={rescan}><RefreshCw /></Button>
+        <Button size="sm" variant="outline" disabled={busy} onClick={() => void act(async () => setPreview(await window.hive.previewViewInstall()))}><FolderPlus />Install from folder</Button>
       </div>
     </div>
     {error && <div role="alert" className="settings-message error">{error}</div>}
@@ -45,10 +47,10 @@ export function InstalledPlugins() {
       <p>This view can display workspace names and agent status, and open your existing tools.</p>
       <p>{preview.package.manifest?.permissions.length ? `Additional access: ${preview.package.manifest.permissions.join(", ")}` : "No additional access requested."}</p>
       {preview.replacesVersion && <p className="settings-note">Replaces installed version {preview.replacesVersion}. Your saved layout is kept.</p>}
-      <div className="settings-actions"><button className="settings-button" disabled={busy} onClick={() => setPreview(null)}>Cancel</button><button className="settings-button primary" disabled={busy} onClick={() => void act(async () => {
+      <div className="settings-actions"><Button size="sm" variant="outline" disabled={busy} onClick={() => setPreview(null)}>Cancel</Button><Button size="sm" disabled={busy} onClick={() => void act(async () => {
         await window.hive.installViewPackage(preview.token);
         setNotice(`${preview.package.manifest?.name} installed. Choose it under Views when you’re ready.`); setPreview(null); rescan();
-      })}>{busy ? "Installing…" : preview.replacesVersion ? "Replace extension" : "Install extension"}</button></div>
+      })}>{busy ? "Installing…" : preview.replacesVersion ? "Replace extension" : "Install extension"}</Button></div>
     </section>}
     <section aria-label="Installed views">
       {!report.packages.length && <p className="settings-empty">No views added yet.</p>}
@@ -72,7 +74,7 @@ export function InstalledPlugins() {
               {problem && <p role="status" className="settings-note error">{problem}</p>}
               <details><summary>Details <ChevronDown size={12} /></summary>
                 <dl><dt>Available to</dt><dd>{pkg.source === "user" ? "All your workspaces" : "This repository"}</dd><dt>Location</dt><dd className="settings-path">{pkg.dir}</dd><dt>Additional access</dt><dd>{pkg.manifest?.permissions.join(", ") || "None"}</dd></dl>
-                {pkg.source === "user" ? removing === pkg.id ? <div className="settings-remove-confirm"><p>Remove {pkg.manifest?.name ?? pkg.id}? Its saved layout will be kept.</p><div className="settings-actions"><button className="settings-button" disabled={busy} onClick={() => setRemoving(null)}>Keep extension</button><button className="settings-button danger" disabled={busy} onClick={() => void act(async () => { await window.hive.removeViewPackage(pkg.id); setRemoving(null); rescan(); setNotice("Extension removed. Your work is still running."); })}>Remove extension</button></div></div> : <button className="settings-text-button danger" disabled={busy} onClick={() => setRemoving(pkg.id)}><Trash2 size={13} />Remove extension</button> : <p className="settings-note">Included by this repository. Disable it here to stop using it.</p>}
+                {pkg.source === "user" ? removing === pkg.id ? <div className="settings-remove-confirm"><p>Remove {pkg.manifest?.name ?? pkg.id}? Its saved layout will be kept.</p><div className="settings-actions"><Button size="sm" variant="outline" disabled={busy} onClick={() => setRemoving(null)}>Keep extension</Button><Button size="sm" variant="destructive" disabled={busy} onClick={() => void act(async () => { await window.hive.removeViewPackage(pkg.id); setRemoving(null); rescan(); setNotice("Extension removed. Your work is still running."); })}>Remove extension</Button></div></div> : <Button variant="destructive" size="sm" className="mt-3" disabled={busy} onClick={() => setRemoving(pkg.id)}><Trash2 />Remove extension</Button> : <p className="settings-note">Included by this repository. Disable it here to stop using it.</p>}
               </details>
             </>}
           />;
@@ -91,8 +93,8 @@ export function InstalledPlugins() {
             <div className="settings-extension-row">
               <div className="settings-extension-icon"><SvgMark icon={def?.icon ?? GENERIC_AGENT_ICON} size={19} /></div>
               <div className="settings-extension-label"><h4>{def?.label ?? e.id}</h4>
-                <p>{e.source === "user" ? "Added on this machine" : "From this repository"}<span>·</span>{e.error ? "Unavailable" : e.disabled ? "Off" : shadows ? "Replaces the built-in" : "On"}</p></div>
-              <button className="settings-icon-button" aria-label={`${def?.label ?? e.id} settings`} onClick={() => go(`agent:${e.id}`)}><ChevronRight size={15} /></button>
+                <p>{e.source === "user" ? "You added this" : "From this repository"}<span>·</span>{e.error ? "Unavailable" : e.disabled ? "Off" : shadows ? "Replaces the built-in" : "On"}</p></div>
+              <Button variant="ghost" size="icon-sm" aria-label={`${def?.label ?? e.id} settings`} onClick={() => go(`agent:${e.id}`)}><ChevronRight /></Button>
             </div>
             {e.error && <p role="status" className="settings-note error">{e.error}</p>}
           </div>;
@@ -122,6 +124,22 @@ function newer(a: string, b: string): boolean {
   return false;
 }
 
+/**
+ * An agent's mark in the catalog list: its manifest's own icon when the entry carries one,
+ * sanitised here because this is where it is drawn. Otherwise a monogram — a column of
+ * identical glyphs tells you nothing, and drawing someone's logo for them is worse.
+ */
+function CatalogMark({ entry }: { entry: Entry }) {
+  const icon = useMemo(() => {
+    try { return entry.icon ? iconFromManifest(entry.icon as Parameters<typeof iconFromManifest>[0]) : null; }
+    catch { return null; } // a mark we cannot read is a mark we do not draw
+  }, [entry.icon]);
+  if (icon) return <SvgMark icon={icon} size={20} />;
+  let hue = 0;
+  for (const c of entry.id) hue = (hue * 31 + c.charCodeAt(0)) % 360;
+  return <span className="catalog-monogram" style={{ "--mark-hue": hue } as CSSProperties}>{entry.id[0]?.toUpperCase()}</span>;
+}
+
 export function BrowsePlugins() {
   const [entries, setEntries] = useState<Entry[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -131,13 +149,19 @@ export function BrowsePlugins() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<{ key: string; message: string } | null>(null);
   const [done, setDone] = useState<{ entry: Entry } | null>(null);
+  const [outdated, setOutdated] = useState<string[]>([]);
   const reviewRef = useRef<HTMLElement | null>(null);
   const views = useCommunityReport().packages;
   const agents = useAgentEntries();
   const go = useSettingsNavigate();
   const load = () => {
     setLoadError(null); setEntries(null);
-    window.hive.pluginCatalog().then(setEntries, (e) => setLoadError(cleanError(e)));
+    window.hive.pluginCatalog().then((list) => {
+      setEntries(list);
+      // Only meaningful once the catalog is loaded — it is what the installed copies are
+      // compared against.
+      window.hive.outdatedAgents().then(setOutdated, () => setOutdated([]));
+    }, (e) => setLoadError(cleanError(e)));
   };
   useEffect(load, []);
   useEffect(rescan, []);
@@ -172,23 +196,23 @@ export function BrowsePlugins() {
 
   return <div className="settings-stack">
     <div className="catalog-bar">
-      <input className="catalog-search" type="search" placeholder="Search plugins" aria-label="Search plugins" value={query} onChange={(e) => setQuery(e.target.value)} />
+      <Input type="search" placeholder="Search plugins" aria-label="Search plugins" value={query} onChange={(e) => setQuery(e.target.value)} className="flex-1 min-w-[180px]" />
       <div className="catalog-filters" role="group" aria-label="Plugin type">
         {(["all", "agent", "view"] as const).map((t) => (
-          <button key={t} aria-pressed={type === t} className="agent-pill" onClick={() => setType(t)}>{t === "all" ? "All" : t === "agent" ? "Agents" : "Views"}</button>
+          <Button key={t} size="sm" variant={type === t ? "secondary" : "outline"} aria-pressed={type === t} onClick={() => setType(t)}>{t === "all" ? "All" : t === "agent" ? "Agents" : "Views"}</Button>
         ))}
       </div>
-      <button className="settings-icon-button" aria-label="Refresh catalog" onClick={load}><RefreshCw size={14} /></button>
+      <Button variant="ghost" size="icon-sm" aria-label="Refresh catalog" onClick={load}><RefreshCw /></Button>
     </div>
     {done && <div role="status" className="settings-message catalog-done">
       <span>{done.entry.name} is installed.</span>
       {done.entry.type === "view"
-        ? <button className="settings-button primary" onClick={() => { setViewMode(done.entry.id); go(`view:${done.entry.id}`); }}>Use this view</button>
-        : <button className="settings-button primary" onClick={() => go(`agent:${done.entry.id}`)}>Open its settings</button>}
+        ? <Button size="sm" onClick={() => { setViewMode(done.entry.id); go(`view:${done.entry.id}`); }}>Use this view</Button>
+        : <Button size="sm" onClick={() => go(`agent:${done.entry.id}`)}>Open its settings</Button>}
     </div>}
     {loadError && <div role="alert" className="settings-message error">
       <p>Could not load the plugin catalog: {loadError}</p>
-      <div className="settings-actions"><button className="settings-button" onClick={load}>Try again</button></div>
+      <div className="settings-actions"><Button size="sm" variant="outline" onClick={load}>Try again</Button></div>
     </div>}
     {!entries && !loadError && <p role="status" className="settings-note">Loading the catalog…</p>}
     {entries && !shown.length && <p className="settings-empty">
@@ -198,11 +222,13 @@ export function BrowsePlugins() {
     <div className="catalog-list">
       {shown.map((e) => {
         const have = installed(e);
-        const update = have && have !== "installed" && newer(e.version, have);
+        // A view says which version it is; an agent does not, so what it has is compared by
+        // content instead — the same hash the catalog pins it by.
+        const update = e.type === "agent" ? outdated.includes(e.id) : !!have && newer(e.version, have);
         const open = review?.key === key(e) ? review.data : null;
         return <article key={key(e)} className="catalog-entry" data-catalog-plugin={key(e)}>
           <div className="catalog-entry-row">
-            <div className="catalog-entry-icon" aria-hidden="true">{e.type === "agent" ? <SvgMark icon={GENERIC_AGENT_ICON} size={20} /> : <LayoutGrid size={20} strokeWidth={1.6} />}</div>
+            <div className="catalog-entry-icon" aria-hidden="true">{e.type === "agent" ? <CatalogMark entry={e} /> : <LayoutGrid size={20} strokeWidth={1.6} />}</div>
             <div className="catalog-entry-text">
               <h4>{e.name} <span className="catalog-type">{e.type === "agent" ? "Agent" : "View"}</span></h4>
               <p className="catalog-meta">{e.author}<span>·</span>{e.version}{e.homepage && <><span>·</span><a href={e.homepage} target="_blank" rel="noreferrer">Source<ExternalLink size={11} /></a></>}</p>
@@ -211,8 +237,8 @@ export function BrowsePlugins() {
             </div>
             {have && !update
               ? <span className="catalog-installed"><Check size={13} />Installed</span>
-              : !open && <button className="settings-button primary" disabled={busy === key(e)} onClick={() => void startReview(e)}>
-                  {busy === key(e) && !open ? "Checking…" : update ? "Update" : "Install"}</button>}
+              : !open && <Button size="sm" disabled={busy === key(e)} onClick={() => void startReview(e)}>
+                  {busy === key(e) && !open ? "Checking…" : update ? "Update" : "Install"}</Button>}
           </div>
           {error?.key === key(e) && <p role="alert" className="settings-note error">{error.message}</p>}
           {open && <section ref={reviewRef} tabIndex={-1} className="settings-install-review" aria-label={`Review ${e.name}`}>
@@ -224,19 +250,20 @@ export function BrowsePlugins() {
               <p>Adds {open.label}. Each launch runs this in a terminal tile{open.worker ? "" : "; other agents cannot collect its replies"}:</p>
               <pre className="catalog-command"><code>{open.command}</code></pre>
               {open.flags.length > 0 && <p>Its launch options can add: {open.flags.map((f) => <code key={f} className="catalog-flag">{f}</code>)}</p>}
+              {open.does.length > 0 && <ul className="catalog-does">{open.does.map((d) => <li key={d}>{d}</li>)}</ul>}
               <p>No code is installed — it runs the <code>{open.bin}</code> you install yourself.{open.install && <> Get it from <a href={open.install.url} target="_blank" rel="noreferrer">its install page</a>.</>}</p>
               {open.replaces && <p className="settings-note">Replaces the {open.label} you installed before.</p>}
             </>}
             <p className="settings-note">Every file matches the checksum in the catalog index. The index itself is not signed, so install only what you trust.</p>
             <div className="settings-actions">
-              <button className="settings-button" disabled={busy === key(e)} onClick={() => setReview(null)}>Cancel</button>
-              <button className="settings-button primary" disabled={busy === key(e)} onClick={() => void install(e, open)}>{busy === key(e) ? "Installing…" : update ? "Update" : "Install"}</button>
+              <Button size="sm" variant="outline" disabled={busy === key(e)} onClick={() => setReview(null)}>Cancel</Button>
+              <Button size="sm" disabled={busy === key(e)} onClick={() => void install(e, open)}>{busy === key(e) ? "Installing…" : update ? "Update" : "Install"}</Button>
             </div>
           </section>}
         </article>;
       })}
     </div>
-    <p className="settings-note">Plugins are listed in <code>plugins/index.json</code> of the Hivemind repository, with a checksum for every file. To add one from your own folder, see{" "}
+    <p className="settings-note">Plugins come from HiveHub, each named <code>@owner/name</code> after the account that published it, with a checksum for every file. To add one from your own folder, see{" "}
       <button className="settings-link" onClick={() => go("installed")}>Installed plugins</button>.</p>
   </div>;
 }

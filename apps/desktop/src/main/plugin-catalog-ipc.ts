@@ -1,14 +1,15 @@
 /** Browse and install from the plugin catalog. Every download is hash-verified into a
  *  staging folder, then goes through the same review as a folder the user picked. */
-import { rm } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import path from "node:path";
-import { ipcMain, type BrowserWindow } from "electron";
-import { fetchCatalog, stageEntry, type CatalogEntry } from "@hivemind/core/plugin-catalog";
+import { app, ipcMain, type BrowserWindow } from "electron";
+import { appMeetsMinVersion, fetchCatalog, stageEntry, type CatalogEntry } from "@hivemind/core/plugin-catalog";
 import { installAgent, readAgentManifest, removeAgent, userAgentsDir, AGENT_MANIFEST_FILE } from "@hivemind/agents/load";
 import { findBin, verifyAgent } from "@hivemind/agents/discover";
 import { getSettings, patchSettingsPath } from "./settings-store.js";
 import { existsSync } from "node:fs";
-import { BUILTIN_CATALOG, isGenericRuntime } from "@hivemind/agents";
+import { BUILTIN_CATALOG, agentDisclosures, isGenericRuntime } from "@hivemind/agents";
 import { newNonce } from "./view-package-files.js";
 import { reviewViewDir } from "./view-packages.js";
 import { applyShellEnvToProcess } from "./shell-env.js";
@@ -23,6 +24,10 @@ export interface AgentReview {
   flags: string[];
   worker: boolean;
   replaces: boolean;
+  /** Everything it does that reaches past its own folder, in the user's words. */
+  does: string[];
+  /** The directory it would read to find a session to resume, if it resumes. */
+  reads?: string;
   install?: { url: string; command?: string };
 }
 
@@ -40,10 +45,34 @@ export function installPluginCatalogIpc(getWindow: () => BrowserWindow | null): 
     return catalog;
   });
 
+  // Which installed agents are no longer what the catalog lists. Agents carry no version of
+  // their own, so "is there an update" was unanswerable for them and the button never
+  // appeared — but every file is pinned by hash, which answers it exactly: a manifest whose
+  // bytes differ from the listed hash is a copy of something that has since changed.
+  ipcMain.handle("plugins:outdated", async (event) => {
+    assertSender(event);
+    const out: string[] = [];
+    for (const entry of catalog) {
+      if (entry.type !== "agent") continue;
+      const listed = entry.files.find((f) => f.path === AGENT_MANIFEST_FILE);
+      if (!listed) continue;
+      try {
+        const body = await readFile(path.join(userAgentsDir(), entry.id, AGENT_MANIFEST_FILE));
+        if (createHash("sha256").update(body).digest("hex") !== listed.sha256) out.push(entry.id);
+      } catch { /* not installed, or unreadable: nothing to update */ }
+    }
+    return out;
+  });
+
   ipcMain.handle("plugins:review", async (event, type: string, id: string) => {
     assertSender(event);
     const entry = catalog.find((e) => e.type === type && e.id === id);
     if (!entry) throw new Error("That plugin is not in the catalog. Refresh and try again.");
+    // Refuse before downloading: a plugin that needs a newer Hivemind fails at use, and by
+    // then the user has already reviewed and installed it.
+    if (!appMeetsMinVersion(app.getVersion(), entry.minAppVersion)) {
+      throw new Error(`${entry.name} needs Hivemind ${entry.minAppVersion} or newer; this is ${app.getVersion()}.`);
+    }
     const dir = await stageEntry(entry);
     if (entry.type === "view") {
       try { return { type: "view", ...(await reviewViewDir(dir, true)) }; }
@@ -66,6 +95,8 @@ export function installPluginCatalogIpc(getWindow: () => BrowserWindow | null): 
       token: pendingAgent.token, id: def.id, label: def.label, bin: def.bin,
       command: [def.bin, ...(def.defaultArgs ?? [])].join(" "), flags,
       worker: def.caps.turnSignal, replaces: existsSync(path.join(userAgentsDir(), def.id)),
+      does: agentDisclosures(def),
+      ...(def.session?.resume?.find ? { reads: def.session.resume.find.root } : {}),
       ...(def.install ? { install: def.install } : {}),
     };
     return { type: "agent", ...review };
@@ -96,7 +127,7 @@ export function installPluginCatalogIpc(getWindow: () => BrowserWindow | null): 
     if (!pendingAgent || pendingAgent.token !== token) throw new Error("Review the agent again before installing it.");
     const { dir } = pendingAgent;
     pendingAgent = null;
-    try { await installAgent(dir); }
+    try { await noteCatalogAgent((await installAgent(dir)).id); }
     finally { await rm(dir, { recursive: true, force: true }).catch(() => {}); }
   });
 }
@@ -114,6 +145,7 @@ export async function autoInstallDetectedAgents(): Promise<string[]> {
     && !existsSync(path.join(userAgentsDir(), e.id))
     // The index names the command; a runtime that runs anything proves nothing about the agent.
     && !isGenericRuntime(e.bin!)
+    && appMeetsMinVersion(app.getVersion(), e.minAppVersion)
     && findBin(e.bin));
   const added: string[] = [];
   for (const entry of entries) {
@@ -124,7 +156,13 @@ export async function autoInstallDetectedAgents(): Promise<string[]> {
       dir = await stageEntry(entry);
       const read = await readAgentManifest(path.join(dir, AGENT_MANIFEST_FILE), { source: "user", nodeHalf: () => false });
       if (read.error || !read.def || read.def.bin !== entry.bin || read.def.id !== entry.id) continue;
+      // Nobody is reading this one: it was added because the CLI is here, not because a
+      // person said yes. An agent that runs a command or reaches outside its own folder
+      // needs that yes, so it waits in the catalog instead.
+      const does = agentDisclosures(read.def);
+      if (does.length) { console.warn(`[agents] ${entry.id} needs a review: ${does[0]}`); continue; }
       await installAgent(dir);
+      await noteCatalogAgent(entry.id);
       added.push(read.def.label);
     } catch (e) {
       console.warn(`[agents] could not add ${entry.id} from the catalog:`, (e as Error).message);
@@ -135,9 +173,16 @@ export async function autoInstallDetectedAgents(): Promise<string[]> {
   return added;
 }
 
+/** Where an agent came from, so its page can say so. */
+async function noteCatalogAgent(id: string): Promise<void> {
+  const from = getSettings().agents.fromCatalog;
+  if (!from.includes(id)) await patchSettingsPath("agents.fromCatalog", [...from, id]);
+}
+
 /** Remove an agent you installed; a catalog agent removed this way is never re-added. */
 export async function removeInstalledAgent(id: string): Promise<void> {
   await removeAgent(id);
-  const declined = getSettings().agents.declined;
+  const { declined, fromCatalog } = getSettings().agents;
   if (!declined.includes(id)) await patchSettingsPath("agents.declined", [...declined, id]);
+  if (fromCatalog.includes(id)) await patchSettingsPath("agents.fromCatalog", fromCatalog.filter((x) => x !== id));
 }
