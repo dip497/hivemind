@@ -1,7 +1,9 @@
 # Changelog
 
 All notable changes are documented here, in [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
-This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+Versions are calendar dates, `YYYY.M.N`: the Nth release of that month. Anything that breaks a
+file format, the CLI or the plugin protocol is marked **Breaking:**. Releases up to 1.17.0 used
+semantic versioning.
 
 Each release is published to [GitHub Releases](https://github.com/dip497/hivemind/releases) with prebuilt artifacts (`hive-linux-x86_64`, `hivemind-<version>-x86_64.AppImage`, `hive-darwin-arm64`, `hivemind-<version>-arm64-mac.zip`).
 

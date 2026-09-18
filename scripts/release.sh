@@ -3,7 +3,7 @@
 #
 # What it does (in order):
 #   1. Verifies a clean working tree and that you're on main.
-#   2. Computes the next version (semver bump or explicit).
+#   2. Computes the next version: YYYY.M.N, the Nth release of that month (from 0).
 #   3. Updates `version` in apps/*/package.json + packages/*/package.json
 #      + root package.json. Keeps them in lockstep.
 #   4. Adds a CHANGELOG.md skeleton entry for the new version (if missing).
@@ -12,11 +12,9 @@
 #      Actions, which builds the CLI + AppImage and publishes the Release.
 #
 # Usage:
-#   ./scripts/release.sh patch          # 0.0.1 → 0.0.2
-#   ./scripts/release.sh minor          # 0.0.1 → 0.1.0
-#   ./scripts/release.sh major          # 0.0.1 → 1.0.0
-#   ./scripts/release.sh 0.4.2          # explicit
-#   ./scripts/release.sh --dry-run patch  # show the plan, don't write anything
+#   ./scripts/release.sh                # 2026.9.0, then 2026.9.1 …; 2026.10.0 next month
+#   ./scripts/release.sh 2026.9.4       # explicit
+#   ./scripts/release.sh --dry-run      # show the plan, don't write anything
 #
 # Pre-flight is intentionally strict — releases are visible to users.
 #
@@ -33,12 +31,11 @@ ARG=""
 for a in "$@"; do
   case "$a" in
     --dry-run) DRY=1 ;;
-    patch|minor|major|*.*.*) ARG="$a" ;;
+    *.*.*) ARG="$a" ;;
     -h|--help) sed -n '2,22p' "$0"; exit 0 ;;
     *) die "unknown arg: $a" ;;
   esac
 done
-[ -n "$ARG" ] || die "usage: ./scripts/release.sh <patch|minor|major|X.Y.Z> [--dry-run]"
 
 # Resolve repo root + cd to it.
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || die "not in a git repo"
@@ -60,19 +57,18 @@ ok "tree clean, on main, in sync with origin"
 # 2. Compute next version.
 CUR=$(node -p "require('./package.json').version")
 say "current version: $CUR"
-case "$ARG" in
-  patch|minor|major)
-    NEXT=$(node -e "
-      const [maj, min, pat] = process.argv[1].split('.').map(Number);
-      const bump = process.argv[2];
-      if (bump === 'patch') console.log(\`\${maj}.\${min}.\${pat + 1}\`);
-      else if (bump === 'minor') console.log(\`\${maj}.\${min + 1}.0\`);
-      else console.log(\`\${maj + 1}.0.0\`);
-    " "$CUR" "$ARG")
-    ;;
-  *) NEXT="$ARG" ;;
-esac
+# Calendar versions: YYYY.M.N. No leading zeros, so it stays a valid semver for npm and
+# electron-builder, and it sorts above every 1.x the updater has seen.
+NEXT="${ARG:-$(node -e "
+  const d = new Date(), month = \`\${d.getUTCFullYear()}.\${d.getUTCMonth() + 1}\`;
+  const [y, m, n] = process.argv[1].split('.');
+  console.log(\`\${month}.\${\`\${y}.\${m}\` === month ? Number(n) + 1 : 0}\`);
+" "$CUR")}"
 [[ "$NEXT" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "invalid next version: $NEXT"
+node -e "
+  const a = process.argv[1].split('.').map(Number), b = process.argv[2].split('.').map(Number);
+  process.exit((a[0] - b[0] || a[1] - b[1] || a[2] - b[2]) > 0 ? 0 : 1);
+" "$NEXT" "$CUR" || die "$NEXT is not newer than $CUR"
 TAG="v$NEXT"
 say "next version:    $NEXT  (tag: $TAG)"
 

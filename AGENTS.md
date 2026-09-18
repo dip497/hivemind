@@ -61,7 +61,7 @@ Run the relevant e2e when you touch canvas/frame/tile/issue behavior.
 
 ## Releases
 
-Never build/release locally. `./scripts/release.sh <patch|minor|major>` from a
+Never build/release locally. `./scripts/release.sh` (calendar version, computed) from a
 clean `main` bumps versions, writes the changelog section, tags, and pushes —
 GitHub Actions builds + publishes. **Do not run it unless explicitly asked.**
 

@@ -65,7 +65,7 @@ frames, approvals). Cite them; write new state in new sections or documents.
 ## Releases
 
 Release artifacts are built by GitHub Actions. From clean `main`,
-`./scripts/release.sh <patch|minor|major>` bumps versions, writes the changelog, tags,
+`./scripts/release.sh` sets the calendar version (`YYYY.M.N`), writes the changelog, tags,
 and pushes; GitHub Actions publishes. Run it only when asked.
 
 ## Common entry points

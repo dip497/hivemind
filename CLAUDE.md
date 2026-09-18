@@ -119,11 +119,9 @@ This project ships prebuilt binaries via [GitHub Releases](https://github.com/di
 
 ```bash
 # from a clean main branch, in sync with origin/main:
-./scripts/release.sh patch       # 0.0.1 → 0.0.2
-./scripts/release.sh minor       # 0.0.1 → 0.1.0
-./scripts/release.sh major       # 0.0.1 → 1.0.0
-./scripts/release.sh 0.4.2       # explicit version
-./scripts/release.sh patch --dry-run   # preview without writing
+./scripts/release.sh             # 2026.9.0, 2026.9.1 … then 2026.10.0 — computed, nothing to choose
+./scripts/release.sh 2026.9.4    # explicit version
+./scripts/release.sh --dry-run   # preview without writing
 ```
 
 What it does (`scripts/release.sh`):
@@ -170,22 +168,20 @@ Common failure modes seen so far:
 
 If the release workflow fails but the tag is pushed: delete the tag (`git tag -d vX.Y.Z && git push origin :refs/tags/vX.Y.Z`), fix the workflow, re-tag.
 
-### Semver guidance
+### Versions
 
-| Change | Bump |
-|---|---|
-| New tile type, new `hive ctl` verb, new agent integration, new install path, new release platform | minor |
-| New built-in view plugin, a new host→plugin message or SDK method (additive) | minor |
-| POSIX assumption removed / platform seam added (`apps/desktop/src/main/platform.ts`) | patch |
-| Breaking change to the view protocol (`@hivemind/view-sdk` `PROTOCOL_VERSION`), the manifest, or the package roots | major |
-| Bug fix in PTY daemon, CSS tweak, tile spawn-position fix | patch |
-| Breaking change to `hive` CLI (incl. a `hive ctl --json` shape), breaking change to `.hivemind/` schema | major |
-| New `settings.json` section, field or theme preset (old files keep working) | minor |
-| Breaking change to the `settings.json` schema (`v` bump, a field that no longer merges) | major |
+Calendar versions: `YYYY.M.N`, the Nth release of that month, counting from 0 (`2026.9.0`,
+`2026.9.1`, then `2026.10.0`). The script computes it, so there's no bump to decide. It is still a
+valid semver (no leading zeros), which npm, electron-builder and the update check need, and it
+sorts above every `1.x` release.
 
-`0.x.x` versions: minor can break things; document loudly in CHANGELOG.
+The version number says **when**, not **what broke**. Compatibility lives in the contracts that
+have their own version — the view protocol (`PROTOCOL_VERSION`), agent manifests
+(`manifestVersion`), package bundles (`apiVersion`), `settings.json` (`v`) — and a plugin that needs
+a newer app says so with `minAppVersion`. A change that breaks any of them, the `hive` CLI or a
+`hive ctl --json` shape starts its CHANGELOG line with **Breaking:**.
 
 ### Hand-off rule
 
-If you (Claude) made any change that ships to users — code, dependency, install behavior, `hive ctl` surface — append a one-line entry to `CHANGELOG.md` under `## [Unreleased]` BEFORE handing the session back. The maintainer can then cut a release with `./scripts/release.sh <bump>` and the changelog is ready.
+If you (Claude) made any change that ships to users — code, dependency, install behavior, `hive ctl` surface — append a one-line entry to `CHANGELOG.md` under `## [Unreleased]` BEFORE handing the session back. The maintainer can then cut a release with `./scripts/release.sh` and the changelog is ready.
 <!-- release:end -->
