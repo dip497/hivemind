@@ -87,7 +87,7 @@ import { startPlanBridge, type PlanRequest } from "./plan-bridge.js";
 import { randomUUID } from "node:crypto";
 import { startHcpServer } from "./hcp/hcp-server.js";
 import { makeSpawnPacer } from "./spawn-pacer.js";
-import { makeDispatch } from "./hcp/methods.js";
+import { makeDispatch, type Dispatcher } from "./hcp/methods.js";
 import { labelOf as hcpLabelOf } from "./hcp/names.js";
 import { Mailbox } from "./hcp/mailbox.js";
 import { TurnTracker } from "./hcp/turn-tracker.js";
@@ -1209,6 +1209,11 @@ function setPtyPaused(tileId: string, paused: boolean): void {
  *  provider's capabilities before reading from / gathering it. */
 const hcpAgentOf = new Map<string, string>();
 
+// The boot agent scan, kept as a promise: the first frame must not wait on it,
+// but an HCP spawn/bind must not race it — a just-installed agent only resolves
+// by id once the scan has set the catalog.
+let agentsScanned: Promise<void> = Promise.resolve();
+
 ipcMain.handle("ptySpawn", wrap(async (e, opts: Parameters<typeof spawnPty>[0]) => {
   const spawning = agentForCmd(opts.cmd);
   // An agent a repository ships runs in that repository, not wherever a tile happens to be.
@@ -1466,8 +1471,8 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
         nodeHalf: (id) => !!NODE_PARTS[id],
       });
     };
-    // Not awaited: the first frame must not wait on optional disk I/O.
-    void scanAgents().then(({ defs, loaded }) => {
+    // Not awaited at startup: the first frame must not wait on optional disk I/O.
+    agentsScanned = scanAgents().then(({ defs, loaded }) => {
       publishCatalog(defs); // main resolves providers for spawn + HCP binding too
       for (const a of loaded) {
         if (a.error) console.warn(`[agents] ${a.id} (${a.source}) not loaded: ${a.error}`);
@@ -1800,7 +1805,9 @@ function startHcpControlPlane(): void {
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("hcp:wait", { tileId, status });
     },
   });
-  const dispatch = _hcp.dispatch;
+  // Every verb routes through the boot scan first: spawn resolves the agent by id
+  // and other verbs read its capabilities, so none may run against a half-set catalog.
+  const dispatch: Dispatcher["dispatch"] = (method, params) => agentsScanned.then(() => _hcp.dispatch(method, params));
   hcpForgetTile = _hcp.forgetTile; // wire the pty-exit teardown to the dispatch's per-tile cleanup
   const server = startHcpServer(hcpSockPath(userData), {
     token,

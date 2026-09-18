@@ -133,10 +133,11 @@ export function installPluginCatalogIpc(getWindow: () => BrowserWindow | null): 
 }
 
 /** Add catalog agents whose CLI this machine has. No prompt — the user chose "just
- *  detect" — but each must pass the same checks as a reviewed install: files match
- *  their hashes, the manifest validates as untrusted, it names the CLI that was found,
- *  that CLI answers `--version` like one, and it cannot take a built-in's id. */
-export async function autoInstallDetectedAgents(): Promise<string[]> {
+ *  detect". Each still passes the same checks as a reviewed install: files match their
+ *  hashes, the manifest validates as untrusted, it names the CLI that was found, that CLI
+ *  answers `--version` like one, and it cannot take a built-in's id. Disclosures don't block:
+ *  catalog agents are reviewed by pull request before they are listed, and the notice tells the user what each can do. */
+export async function autoInstallDetectedAgents(): Promise<Array<{ id: string; label: string; does: string[] }>> {
   const settings = getSettings().agents;
   if (!settings.autoInstall) return [];
   const entries = (await fetchCatalog()).filter((e) => e.type === "agent" && e.bin
@@ -147,7 +148,7 @@ export async function autoInstallDetectedAgents(): Promise<string[]> {
     && !isGenericRuntime(e.bin!)
     && appMeetsMinVersion(app.getVersion(), e.minAppVersion)
     && findBin(e.bin));
-  const added: string[] = [];
+  const added: Array<{ id: string; label: string; does: string[] }> = [];
   for (const entry of entries) {
     const probe = await verifyAgent({ id: entry.id, bin: entry.bin! } as Parameters<typeof verifyAgent>[0]);
     if (!probe.version) continue;
@@ -156,14 +157,9 @@ export async function autoInstallDetectedAgents(): Promise<string[]> {
       dir = await stageEntry(entry);
       const read = await readAgentManifest(path.join(dir, AGENT_MANIFEST_FILE), { source: "user", nodeHalf: () => false });
       if (read.error || !read.def || read.def.bin !== entry.bin || read.def.id !== entry.id) continue;
-      // Nobody is reading this one: it was added because the CLI is here, not because a
-      // person said yes. An agent that runs a command or reaches outside its own folder
-      // needs that yes, so it waits in the catalog instead.
-      const does = agentDisclosures(read.def);
-      if (does.length) { console.warn(`[agents] ${entry.id} needs a review: ${does[0]}`); continue; }
       await installAgent(dir);
       await noteCatalogAgent(entry.id);
-      added.push(read.def.label);
+      added.push({ id: entry.id, label: read.def.label, does: agentDisclosures(read.def) });
     } catch (e) {
       console.warn(`[agents] could not add ${entry.id} from the catalog:`, (e as Error).message);
     } finally {

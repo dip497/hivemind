@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Agents whose command line tool is already on this machine are added on their own, even when they do more than launch — the notice tells you what each one can do, with a Remove right there. An agent added while Hivemind is running is wired up on its next tile too, without a restart.
 - The app shows its interface in Geist, as designed. The font never loaded before, so text fell back to the system font. It now ships inside the app and works offline. The editor and Markdown code use the same mono font as the terminal.
 - `hive views new <name>` starts a view outside this repository, ready to build, install and publish. The app now serves `@hivemind/view-sdk` to every view, so a view no longer bundles its own copy and always speaks the app's version. The example views moved to the published plugins repository.
 - Plugins come from HiveHub. A view is named `@owner/name`, after the GitHub account that published it, so two people's `board` never collide. An agent has one name for one CLI (`gemini`), and agents are added by pull request to the plugins repository. `hive views install @owner/name` and `hive agents install gemini` install one by name, checking every file against the hash HiveHub recorded.

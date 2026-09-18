@@ -491,10 +491,30 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   // Catalog agents whose CLI this machine has are added once the workspace is up; the
   // delay keeps the network off the first frames.
   useEffect(() => {
-    const timer = setTimeout(() => void window.hive.autoInstallAgents().then((labels) => {
-      if (!labels.length) return;
+    const timer = setTimeout(() => void window.hive.autoInstallAgents().then((added) => {
+      if (!added.length) return;
       void syncAgentPlugins();
-      toast.success(`Added ${labels.join(", ")} — found on this machine.`, {
+      const toastId = toast.success(`Added ${added.map((a) => a.label).join(", ")} — found on this machine.`, {
+        // The registry review (by pull request) stands in for a per-user one, so what each
+        // agent can do is disclosed here instead of gating the install. Remove reuses the
+        // Settings ▸ Agents path: uninstall + decline, so it is never re-added.
+        description: (
+          <div>{added.map((a) => (
+            <div key={a.id} className="agent-added">
+              <div className="agent-added-head">
+                <span className="agent-added-label">{a.label}</span>
+                <Button size="sm" variant="outline" aria-label={`Remove ${a.label}`} className="agent-added-remove"
+                  onClick={() => void window.hive.removeAgent(a.id)
+                    .then(() => { void syncAgentPlugins(); toast.dismiss(toastId); })
+                    .catch(() => toast.error(`Could not remove ${a.label}.`))}>
+                  Remove
+                </Button>
+              </div>
+              {a.does.map((d) => <div key={d} className="agent-added-does">{d}</div>)}
+            </div>
+          ))}</div>
+        ),
+        duration: 15000,
         action: { label: "Agents", onClick: () => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "agents" } })) },
       });
     }).catch(() => {}), 4000);

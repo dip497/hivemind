@@ -5,7 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { buildRegistry } from "./helpers/registry";
+import { buildRegistry, type Registry } from "./helpers/registry";
 
 let app: ElectronApplication | undefined;
 let page: Page;
@@ -16,6 +16,29 @@ const settingsFile = () => path.join(xdg, "hivemind", "settings.json");
 const CONTINUE = "continue";
 const installed = () => fs.existsSync(path.join(xdg, "hivemind", "agents", CONTINUE, "agent.yaml"));
 let indexUrl = "";
+let registry: Registry;
+// A second catalog agent whose manifest carries a disclosure: it reads a folder under the
+// user's home to find sessions to resume. It must be auto-installed too, with the notice
+// telling the user what it can do.
+const DISCLOSED = "recall";
+const DISCLOSED_YAML = `manifestVersion: 1
+id: ${DISCLOSED}
+label: "Recall"
+bin: rc
+enabled: true
+caps:
+  promptDelivery: typed
+  turnSignal: false
+  resume: auto
+  supervise: human
+  blockedDetection: false
+session:
+  resume:
+    args: ["--resume"]
+    find:
+      strategy: dir-meta
+      root: "{home}/.recall"
+`;
 // Boot, a shell-env read and a --version probe all come first; a loaded machine needs the room.
 const INSTALL_WAIT = 45_000;
 
@@ -33,7 +56,8 @@ async function launch(): Promise<void> {
 }
 
 test.beforeAll(() => {
-  indexUrl = buildRegistry(path.join(root, "registry")).indexUrl;
+  registry = buildRegistry(path.join(root, "registry"));
+  indexUrl = registry.indexUrl;
   fs.mkdirSync(bin);
   // Continue's CLI is `cn`; this stub answers --version the way a CLI does.
   fs.writeFileSync(path.join(bin, "cn"), "#!/bin/sh\n[ \"$1\" = --version ] && echo '1.4.2'\nexit 0\n", { mode: 0o755 });
@@ -53,6 +77,26 @@ test("a catalog agent whose CLI is on this machine is added, and says so", async
   await page.locator('[aria-label="settings"]').click();
   await page.locator('[data-settings-page="agents"]').click();
   await expect(page.locator(`[data-agent-card="${CONTINUE}"]`)).toHaveAttribute("data-state", "on");
+});
+
+test("an agent with a disclosure is added too, and the notice says what it can do", async () => {
+  test.setTimeout(90_000);
+  // Added only for this case (the index is refetched per launch), so the earlier tests
+  // keep their single-agent expectations.
+  registry.add({ id: DISCLOSED, type: "agent", name: "Recall", files: { "agent.yaml": DISCLOSED_YAML }, bin: "rc" });
+  fs.writeFileSync(path.join(bin, "rc"), "#!/bin/sh\n[ \"$1\" = --version ] && echo '0.9.0'\nexit 0\n", { mode: 0o755 });
+  await launch();
+  await expect(page.getByText(/Added .*Recall — found on this machine/)).toBeVisible({ timeout: INSTALL_WAIT });
+  await expect(page.getByText(/reads \S+ to find a session to resume/)).toBeVisible();
+  expect(fs.existsSync(path.join(xdg, "hivemind", "agents", DISCLOSED, "agent.yaml"))).toBe(true);
+  // Removing straight from the notice: same uninstall + decline path as Settings ▸ Agents.
+  // Declined is recorded AFTER the dir is gone, so poll the settings for it, not the dir.
+  await page.getByRole("button", { name: "Remove Recall" }).click();
+  await expect.poll(() => {
+    try { return JSON.parse(fs.readFileSync(settingsFile(), "utf8")).agents.declined ?? []; }
+    catch { return []; }
+  }, { timeout: 10_000 }).toContain(DISCLOSED);
+  expect(fs.existsSync(path.join(xdg, "hivemind", "agents", DISCLOSED, "agent.yaml"))).toBe(false);
 });
 
 test("an agent you remove is not added back on the next start", async () => {
