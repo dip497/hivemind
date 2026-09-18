@@ -3,11 +3,13 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { seedAgents } from "./helpers/agents";
 
 let app: ElectronApplication;
 let page: Page;
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "hm-browser-plugin-"));
 const xdg = path.join(root, "config");
+seedAgents(xdg);
 const env = { ...process.env, XDG_CONFIG_HOME: xdg } as Record<string, string>;
 const cli = path.resolve(process.cwd(), "../cli/src/index.ts");
 let hcp: Record<string, string> = {};

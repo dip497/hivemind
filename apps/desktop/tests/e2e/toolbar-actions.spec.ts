@@ -3,11 +3,14 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
+import { seedAgents } from "./helpers/agents";
 
 let app: ElectronApplication;
 let page: Page;
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "hm-toolbar-actions-"));
 const xdg = path.join(root, "config");
+// The agent toolbar action renders only when an agent could spawn, so the usual six.
+seedAgents(xdg);
 const env = { ...process.env, XDG_CONFIG_HOME: xdg } as Record<string, string>;
 const appDir = process.cwd();
 const cli = path.resolve(appDir, "../cli/src/index.ts");
@@ -33,7 +36,17 @@ async function launch() {
   app = await electron.launch({ args: [path.join(appDir, "out/main/index.js"), "--no-sandbox"], cwd: root, env });
   page = await app.firstWindow();
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.focus());
-  await page.waitForSelector(".react-flow");
+  // A cold boot behind every other launch needs real headroom on a loaded machine; if it
+  // still fails, say what the window showed instead of just naming the selector.
+  try {
+    await page.waitForSelector(".react-flow", { timeout: 60_000 });
+  } catch (e) {
+    const seen = await page.evaluate(() => ({
+      readyState: document.readyState,
+      body: document.body?.innerText?.slice(0, 200) ?? null,
+    })).catch((probeError) => ({ probeFailed: String(probeError) }));
+    throw new Error(`the app never rendered .react-flow — window showed ${JSON.stringify(seen)}`, { cause: e });
+  }
 }
 test.beforeAll(launch);
 test.afterAll(async () => { await app?.close(); fs.rmSync(root, { recursive: true, force: true }); });

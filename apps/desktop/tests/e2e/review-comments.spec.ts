@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
+import { seedAgents } from "./helpers/agents";
 
 // The seam this covers: review comments live in the workspace, not in this
 // renderer, so an agent can answer one. If the store ever moves back behind
@@ -12,6 +13,7 @@ let page: Page;
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "hm-review-e2e-"));
 const repo = path.join(root, "repo");
 const xdg = path.join(root, "config");
+seedAgents(xdg);
 const env = { ...process.env, XDG_CONFIG_HOME: xdg } as Record<string, string>;
 const cli = path.resolve(process.cwd(), "../cli/src/index.ts");
 const hive = (...args: string[]) =>

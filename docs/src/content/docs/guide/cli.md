@@ -124,7 +124,7 @@ hive views remove <id>
 hive agents list                        # every agent, its source, on/off, and why any failed
 hive agents list --found                # only agents whose CLI is on this machine
 hive agents install <dir>               # dir with agent.yaml; checked before it is copied
-hive agents remove <id>                 # agents you installed; switch built-ins off instead
+hive agents remove <id>                 # removes the agent from this machine; a catalog agent stays removed
 
 hive config path
 hive config get [dotted.path]

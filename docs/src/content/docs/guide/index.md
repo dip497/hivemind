@@ -92,7 +92,7 @@ and loses nothing.
 
 <ul class="doors">
   <li><a href="getting-started/"><b>Install and start</b><span>One command, then your first frame.</span></a></li>
-  <li><a href="agents/"><b>Run agents</b><span>What ships in the box and how it is detected.</span></a></li>
+  <li><a href="agents/"><b>Run agents</b><span>Which agents there are, and how they are detected.</span></a></li>
   <li><a href="agent-workflows/"><b>Drive them from the CLI</b><span>Spawn, read, approve, without the mouse.</span></a></li>
   <li><a href="extension-authoring/"><b>Write a view</b><span>The same protocol the built-ins use.</span></a></li>
 </ul>

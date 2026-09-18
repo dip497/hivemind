@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
+import { seedAgents } from "./helpers/agents";
 
 let app: ElectronApplication;
 let page: Page;
@@ -25,6 +26,7 @@ const choose = async (dir: string) => {
 test.beforeAll(async () => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), "hm-extension-settings-"));
   xdg = path.join(root, "config");
+  seedAgents(xdg);
   source = path.join(root, "extension");
   fs.mkdirSync(source);
   fs.writeFileSync(path.join(source, "hivemind-view.json"), JSON.stringify({ id: "settings-demo", name: "Settings demo", version: "1.0.0", entry: "main.js", protocol: 1, permissions: [] }));

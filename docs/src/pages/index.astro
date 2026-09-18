@@ -7,14 +7,10 @@ const description =
   'Run coding-agent CLIs on one canvas, next to the terminals, editor and diffs they are working on. Local, open source, driven from your shell.';
 const repo = 'https://github.com/dip497/hivemind';
 const install = 'bash <(curl -fsSL https://hivemind.griiken.com/install.sh)';
-// The counts come from the catalog the app installs from, so they cannot drift from it.
-import catalog from '../data/plugins.json';
-// Icons and the bundled/catalog split both come from the provider manifests, vendored at build
-// time — the page cannot claim an agent ships that does not, or miscount what is left.
+// The strip comes from the published agent manifests, vendored at build time — the page
+// cannot show an agent the registry does not list, or miscount what it carries.
 import icons from '../generated/agent-icons.json';
-const bundled = icons.agents.filter((a) => a.bundled);
-const catalogOnly = icons.agents.filter((a) => !a.bundled);
-const agentCount = catalog.plugins.filter((p) => p.type === 'agent').length;
+const agentCount = icons.total;
 ---
 <!doctype html>
 <html lang="en">
@@ -129,7 +125,7 @@ const agentCount = catalog.plugins.filter((p) => p.type === 'agent').length;
     <div class="marquee" role="img" aria-label={`Agents Hivemind runs: ${icons.agents.map((a) => a.label).join(', ')}`}>
       <ul class="track">
         {[0, 1].map((pass) => icons.agents.map((a) => (
-          <li class={a.bundled ? 'is-bundled' : ''} aria-hidden={pass === 1 ? 'true' : undefined}>
+          <li class="is-published" aria-hidden={pass === 1 ? 'true' : undefined}>
             <svg viewBox={a.icon.viewBox} width="22" height="22" fill="currentColor"
               fill-rule={a.icon.fillRule} aria-hidden="true">
               {a.icon.paths.map((d) => <path d={d} />)}
@@ -181,9 +177,9 @@ const agentCount = catalog.plugins.filter((p) => p.type === 'agent').length;
   <section class="band alt plate" id="yours">
     <div class="wrap">
       <header class="head">
-        <h2>Nothing we ship is privileged</h2>
-        <p class="sub">Every agent in the box is a manifest, and every one of them passes exactly
-          the checks yours does. There is no tier you cannot reach and no fork to maintain.</p>
+        <h2>Nothing is privileged</h2>
+        <p class="sub">Every agent on the HiveHub catalog is a manifest, and every one of them passes
+          exactly the checks yours does. There is no tier you cannot reach and no fork to maintain.</p>
       </header>
 
       <div class="byo">
@@ -264,10 +260,10 @@ detect:
         <dd>No. Hivemind runs on your machine and shells out to agent CLIs you installed yourself, with
           your own keys. There is no Hivemind account and no server of ours in the path.</dd>
         <dt>Which agents work with it?</dt>
-        <dd>Five ship in the box — claude, codex, droid, kiro, pi — and {agentCount} more are a click
-          away in the catalog. The list is not the point: an agent is a manifest naming the command it runs
-          and how to read its status. Yours is a file you write, not a fork of ours — and Hivemind adds
-          one from the catalog the moment its CLI turns up on your machine.</dd>
+        <dd>None ship in the box. Hivemind adds every agent on the HiveHub catalog — {agentCount}
+          of them, claude and codex among them — the moment its CLI turns up on your machine. The
+          list is not the point: an agent is a manifest naming the command it runs and how to read
+          its status. Yours is a file you write, not a fork of ours.</dd>
         <dt>Do I have to learn a new tool?</dt>
         <dd>The CLIs are the ones you already use. Hivemind arranges them, keeps their sessions alive,
           and gives them one command to talk to each other.</dd>
@@ -508,9 +504,9 @@ detect:
   .track li{display:flex;align-items:center;gap:9px;padding:0 26px;flex:0 0 auto;
     font-family:var(--f-m);font-size:14px;color:var(--fg3);white-space:nowrap}
   .track li svg{flex:0 0 auto;opacity:.75}
-  /* What ships in the box reads at full strength; the rest are what you can add. */
-  .track li.is-bundled{color:var(--fg)}
-  .track li.is-bundled svg{opacity:1}
+  /* Every listed agent is published; the strip reads at full strength. */
+  .track li.is-published{color:var(--fg)}
+  .track li.is-published svg{opacity:1}
   @keyframes drift{from{transform:translate3d(0,0,0)}to{transform:translate3d(-50%,0,0)}}
   @media (prefers-reduced-motion:reduce){
     .track{animation:none;flex-wrap:wrap;width:auto;justify-content:center;gap:6px 0}

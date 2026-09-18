@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
+import { seedAgents } from "./helpers/agents";
 
 test.use({ trace: "off" });
 
@@ -12,6 +13,8 @@ let page: Page;
 let repo: string;
 const APP_DIR = process.cwd();
 const XDG = fs.mkdtempSync(path.join(os.tmpdir(), "hm-agent-plugin-xdg-"));
+// claude/codex/kiro below come from the published manifests, like a HiveHub install.
+seedAgents(XDG);
 // A stub acme CLI on PATH, so acme counts as installed; `ghost` has none.
 const BIN = fs.mkdtempSync(path.join(os.tmpdir(), "hm-agent-plugin-bin-"));
 fs.writeFileSync(path.join(BIN, "acme-coder"), "#!/bin/sh\n[ \"$1\" = --version ] && echo 'acme 1.0.0'\nexit 0\n", { mode: 0o755 });
@@ -143,7 +146,9 @@ test("⌘\\ with a default whose CLI is gone starts the first installed agent in
   const nodes = () => page.locator(".react-flow__node").count();
   const before = await nodes();
   await page.evaluate(() => window.hive.settingsSet("agents.defaultAgent", "ghost"));
-  await expect(page.getByRole("group", { name: "Workspace tools" }).getByRole("button", { name: "Claude", exact: true })).toBeVisible();
+  // Manifest folders load alphabetically, so acme is the first installed agent the
+  // fallback selects now that ghost (the default) has no CLI.
+  await expect(page.getByRole("group", { name: "Workspace tools" }).getByRole("button", { name: "Acme Coder", exact: true })).toBeVisible();
   await page.locator(".react-flow__pane").click({ position: { x: 5, y: 5 } });
   await page.keyboard.press("Control+Backslash");
   await expect.poll(nodes).toBeGreaterThan(before);
@@ -214,7 +219,7 @@ test("switching an agent off in Settings removes it everywhere, and back on rest
   expect(await switcherHas("acme")).toBe(true);
 });
 
-test("a built-in can be switched off too, and any launchable agent can be the default", async () => {
+test("a catalog agent can be switched off too, and any launchable agent can be the default", async () => {
   await openAgent("codex");
   await detail().getByRole("button", { name: "Make default" }).click();
   await expect(detail().locator(".agent-badge")).toHaveText("Default");

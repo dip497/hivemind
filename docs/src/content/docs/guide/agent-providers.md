@@ -3,9 +3,10 @@ title: Add your own agent
 description: Describe a CLI coding agent in one YAML file, and turn any agent on or off.
 ---
 
-An agent is configuration. Hivemind ships sixteen of them, and you can add another by
-writing one file — no rebuild, no code. You can also switch any agent off, including
-the ones that ship with Hivemind.
+An agent is configuration. Nothing agent-specific ships in the app: every agent — claude,
+codex, pi and the rest — comes from the HiveHub registry and is added automatically when
+its CLI is found on your machine. You can add another by writing one file — no rebuild, no
+code — and switch any agent off, including the ones HiveHub added for you.
 
 ## What an agent file can and cannot do
 
@@ -13,19 +14,17 @@ A manifest describes everything Hivemind *reads* about an agent: its name and bi
 what it can do, its icon, how to start it, and how to tell from its screen whether it
 is working, idle, or waiting for you.
 
-It cannot describe what needs code: **resuming a session after a restart**, and
-**reporting when a turn ends**. Those read or write the agent's own files, and a file
-in your config directory is not allowed to do that.
+Most of what needs code — resuming a session, reporting that a turn ended — a manifest
+can *declare*, if it also says how it is done:
 
-So an agent you add yourself can be launched and its status read, but:
+- **resuming** needs a `session.resume` block naming where the CLI keeps its sessions;
+  the daemon does the reading
+- **a turn signal** and **brokering permission prompts** need the manifest to wire the
+  agent to the control plane: `launch.hcp` plus the hook file it ships beside it
 
-- it starts fresh after a restart instead of resuming
-- `hive ctl read` and `hive ctl workflow` cannot collect its replies
-- its permission prompts stay with you rather than going to a supervising agent
-
-If your manifest claims any of those, Hivemind refuses to load it and says why. A
-capability that is claimed but never delivered is worse than one that is missing:
-the control plane would wait forever for a signal nothing sends.
+A manifest that claims one of those without saying how is refused when Hivemind reads it.
+A capability that is claimed but never delivered is worse than one that is missing: the
+control plane would wait forever for a signal nothing sends.
 
 ## Write one
 
@@ -42,9 +41,9 @@ enabled: true            # false = recognised for status, not offered to spawn
 
 caps:
   promptDelivery: typed  # typed: keyed into its TUI · argv: passed as an argument
-  turnSignal: false      # must be false for a file you write yourself
-  resume: none           # must be none for a file you write yourself
-  supervise: human       # human or none — never broker for a file you write
+  turnSignal: false      # true only with `launch.hcp` + the hook file that reports turns
+  resume: none           # or "cwd"/"tile" once `session.resume` says where sessions live
+  supervise: human       # human or none — "broker" needs the `launch.hcp` pre-tool hook
   blockedDetection: true
 
 spawn:
@@ -90,22 +89,24 @@ until you choose it, so by default the agent decides.
 | `~/.config/hivemind/agents/<id>/agent.yaml` | Agents you installed, for all your workspaces |
 | `<repo>/.hivemind/agents/<id>/agent.yaml` | Agents a repository ships for everyone who works in it |
 
-An agent you install replaces a built-in of the same id — deliberately, and at the cost of
-what its code provides: a manifest named `claude` is a plain agent without resume or turn
-reporting. A repository can only **add** agents. Its manifest for an id you already have
-(built-in or yours) is refused and listed with the reason, so cloning a repository can never
-change what the Claude button runs.
+A manifest named `claude` stays attached to the command claude has always launched: an id
+Hivemind has shipped is reserved, and a manifest that takes the name but points it at a
+different program is refused when the manifest is read. A repository can only **add**
+agents. Its manifest for an id you already have is refused and listed with the reason, so
+cloning a repository can never change what the Claude button runs.
 
 The folder name must match the `id` inside the file.
 
 ## Agents added for you
 
-The plugin catalog on [HiveHub](https://hivehub.griiken.workers.dev) also lists agents
-that are not built in. When one's CLI is on your PATH, Hivemind adds it at startup and says
-so — no questions. It only does this when the files match their checksums, the manifest
+The app ships with no agents. They come from the plugin catalog on
+[HiveHub](https://hivehub.griiken.workers.dev): when a listed agent's CLI is on your PATH,
+Hivemind adds it at startup and says so — no questions. The notice says what the agent can
+do, with a Remove button. It only adds when the files match their checksums, the manifest
 names the CLI that was found, and that CLI answers `--version` like one; and it can never
 replace an agent you already have. Remove one and it stays removed. Switch this off under
-**Settings ▸ Agents ▸ Add agents found on this machine**.
+**Settings ▸ Agents ▸ Add agents found on this machine**. Adding the listing itself is a
+pull request to [dip497/hivemind-plugins](https://github.com/dip497/hivemind-plugins).
 
 ## Install, list and remove
 
@@ -126,8 +127,8 @@ next start.
 machine has, the ones it does not (each saying which command it needs), and the ones you
 switched off. The control on a row makes that agent the default; open a row for its
 launch options, or to switch it off. Turning one off removes it from
-every picker and from `hive ctl spawn`; turning it back on restores it. Built-in agents
-can be turned off too.
+every picker and from `hive ctl spawn`; turning it back on restores it. Agents HiveHub
+added can be turned off too, or removed for good.
 
 Anything that failed to load stays in the list with the reason, so you can see why it
 did not appear rather than wondering.

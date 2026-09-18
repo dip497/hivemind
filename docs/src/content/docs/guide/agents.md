@@ -5,18 +5,20 @@ description: Supported agents and their capabilities.
 
 ## The catalog
 
-Every runtime is one entry in `packages/hive-agents` — identity, icon, screen status
+Nothing agent-specific is compiled in. Every runtime is one agent manifest, published on
+HiveHub and added to your machine when its CLI is found — identity, icon, screen status
 detector, and a typed capability set — read by the desktop UI, the `hive` CLI, and the
 control plane (`docs/design/agent-providers.md`). A runtime's limits are declared, so
 unsupported requests are refused up front with an exit code instead of timing out.
 
 ## Spawnable runtimes
 
+The agents on HiveHub that can drive as workers — their manifests report when a turn
+ends:
+
 | | Prompt delivery | Turn signal | Resume | Supervision | Model / modes |
 |---|---|---|---|---|---|
 | **claude** | argv | yes | own session id | brokered to supervisor | yes / yes |
-| **codex** | typed | no | newest for cwd | stays with human | no / no |
-| **opencode** | typed | no | none | stays with human | no / no |
 | **droid** | typed | yes | newest for cwd | stays with human | no / no |
 | **pi** | argv | yes | newest for cwd | none (no permission system) | no / no |
 | **kiro** | typed | yes | own session id | brokered to supervisor | no / no |
@@ -31,11 +33,9 @@ unsupported requests are refused up front with an exit code instead of timing ou
 
 codex spawns with `--sandbox workspace-write --ask-for-approval on-request`.
 
-## Recognised for status only
-
-gemini, cursor, antigravity, cline, copilot, kimi, amp, grok, hermes, openclaw — hivemind
-scrapes their screen for status when you run them yourself; they are not offered for
-spawning.
+Everything else listed on HiveHub — codex, cursor, gemini, aider and the rest — spawns
+the same way once its CLI is found, but is driven by hand: its manifest declares no turn
+signal, so replies cannot be gathered and workflows refuse it up front.
 
 cursor is recognised by its agent binary, `cursor-agent` — a bare `cursor` is the Cursor
 editor, not the agent. A cursor tile you start yourself resumes its last chat for that
@@ -43,9 +43,10 @@ folder after a restart.
 
 ## Add your own, or turn one off
 
-Any agent can be switched off in **Settings ▸ Agents**, including these built-in ones.
-To add an agent that is not listed here, describe it in one file — see
-[Add your own agent](../agent-providers/).
+Any agent can be switched off in **Settings ▸ Agents**, including the ones HiveHub added
+for you. To add an agent that is not listed on HiveHub yet, describe it in one file — see
+[Add your own agent](../agent-providers/); listing it for everyone is a pull request to
+[dip497/hivemind-plugins](https://github.com/dip497/hivemind-plugins).
 
 ## Live status
 
