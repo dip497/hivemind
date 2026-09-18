@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 - Plugins come from HiveHub and are named `@owner/name`, after the GitHub account that published them, so two people's `board` never collide. `hive views install @owner/name` and `hive agents install @owner/name` install one by name, checking every file against the hash HiveHub recorded. A bare name is only ever built in or installed from a folder.
 - Dragging and resizing a tile follows the pointer again. The tile used to stay put for the whole drag and then slide across on release. It no longer blinks out on every frame of the drag either.
+- The terminal render-debug panel is gone, and Ctrl+Shift+D reaches the program in the terminal again.
 - In the windows view, an editor tab no longer draws over the tab you are on.
 - Browser tiles keep back, forward, find and zoom working after you change the zoom. The zoom change used to disconnect every tab until its next navigation.
 - Less work behind the scenes. Changing a setting no longer re-renders every tile, a drag re-renders only the tile you are dragging, a diff tile re-parses only the file that changed, and one file save no longer runs git twice. The full-window video wallpaper also stops decoding while a tile is fullscreen.

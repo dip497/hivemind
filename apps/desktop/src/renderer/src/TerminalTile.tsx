@@ -5,7 +5,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { registerFileLinks } from "./terminal-file-links";
-import { installCrispDpr, effectiveDpr } from "./terminal-dpr";
+import { installCrispDpr } from "./terminal-dpr";
 import { patchTerminalMouseWithRetry } from "./terminal-mouse-patch";
 import { wantsDomRenderer, STREAM_QUIET_MS } from "./terminal-renderer-policy";
 import { registerWebglSlotClient, unregisterWebglSlotClient, reconcileWebglSlots } from "./webgl-slots";
@@ -107,27 +107,6 @@ function withScrollbar(theme: Record<string, string>): Record<string, string> {
 const termBgFor = (t: ThemeState): string =>
   effectiveGlass(t) && t.contentGlass ? "rgba(0,0,0,0)" : t.terminal.background;
 
-// ── render-quality diagnostics ───────────────────────────────────────────────
-// A toggleable HUD (Ctrl/Cmd+Shift+D, shared across tiles) that surfaces the
-// live values that govern terminal crispness, so a blurry-text report becomes a
-// concrete reading instead of a guess: canvas zoom (text is only pixel-perfect
-// at exactly 1.000), devicePixelRatio, the rendered font px + grid, and the
-// computed styles that quietly degrade text — `will-change`/`transform` on the
-// .xterm (GPU-layer promotion kills crisp text) and whether `.canvas-moving` is
-// stuck on. Read imperatively (no React subscription) so it costs nothing off.
-const TERM_DEBUG_KEY = "hm:termDebug";
-function loadTermDebug(): boolean {
-  try { return localStorage.getItem(TERM_DEBUG_KEY) === "1"; } catch { return false; }
-}
-function setTermDebug(on: boolean): void {
-  try { localStorage.setItem(TERM_DEBUG_KEY, on ? "1" : "0"); } catch { /* ignore */ }
-  window.dispatchEvent(new CustomEvent("hivemind:term-debug", { detail: on }));
-}
-function readCanvasZoom(): number {
-  const vp = document.querySelector(".react-flow__viewport") as HTMLElement | null;
-  if (!vp) return 1;
-  try { return new DOMMatrixReadOnly(getComputedStyle(vp).transform).a; } catch { return 1; }
-}
 /**
  * WebGL slots are shared across live terminals. Low-DPI terminals can opt into
  * DOM text rendering; both renderers use the display's native pixel ratio.
@@ -170,9 +149,6 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
   // Persists via onRename → Canvas tileNames → LAYOUT_KEY localStorage.
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(name ?? "");
-  // Render-quality HUD (Ctrl/Cmd+Shift+D). `diag` holds the live readings.
-  const [debug, setDebug] = useState<boolean>(loadTermDebug);
-  const [diag, setDiag] = useState<Record<string, string>>({});
   // Crisp fit-to-screen overlay. When on, the LIVE .xterm DOM node is re-parented
   // into a fullscreen portal at document.body (see the reparent effect) — the
   // canvas layout + every other node stay untouched, and the bigger viewport
@@ -816,12 +792,6 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
         return false;
       }
       if (!(e.ctrlKey || e.metaKey)) return true;
-      // Diagnostics HUD toggle (Ctrl/Cmd+Shift+D), broadcast to every tile.
-      if (e.shiftKey && e.key.toLowerCase() === "d") {
-        e.preventDefault();
-        setTermDebug(!loadTermDebug());
-        return false;
-      }
       // Font zoom: Ctrl/Cmd +/−/0 adjusts THIS tile's font (per-tile). The apply
       // effect below pushes the new size into xterm.
       if (handleFontKey(e, fontCtlRef.current)) {
@@ -1199,72 +1169,6 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
     };
   }, []);
 
-  // Sync the HUD toggle across tiles.
-  useEffect(() => {
-    const onDbg = (e: Event) => setDebug((e as CustomEvent<boolean>).detail);
-    window.addEventListener("hivemind:term-debug", onDbg as EventListener);
-    return () => window.removeEventListener("hivemind:term-debug", onDbg as EventListener);
-  }, []);
-
-  // Poll the live render state while the HUD is open. Reads computed styles
-  // imperatively (no React subscription) so it's free when off.
-  useEffect(() => {
-    if (!debug) return;
-    const read = () => {
-      const host = hostRef.current;
-      const term = termRef.current;
-      if (!host) return;
-      const xterm = host.querySelector(".xterm") as HTMLElement | null;
-      const rows = host.querySelector(".xterm-rows") as HTMLElement | null;
-      const csX = xterm ? getComputedStyle(xterm) : null;
-      const csR = rows ? getComputedStyle(rows) : null;
-      const zoom = readCanvasZoom();
-      setDiag({
-        zoom: zoom.toFixed(3) + (Math.abs(zoom - 1) < 0.001 ? " ✓1:1" : " ✗blur"),
-        dpr: `${window.devicePixelRatio || 1} → atlas@${effectiveDpr(window.devicePixelRatio || 1)}x`,
-        font: term ? `${term.options.fontSize}px` : "?",
-        grid: term ? `${term.cols}×${term.rows}` : "?",
-        "will-change": csX?.willChange || "?",
-        transform: csX && csX.transform !== "none" ? "LAYER ✗" : "none ✓",
-        smoothing: csR?.getPropertyValue("-webkit-font-smoothing").trim() || "?",
-        moving: document.querySelector(".canvas-moving") ? "STUCK ✗" : "no ✓",
-        selected: selected ? "yes" : "no",
-      });
-    };
-    read();
-    const id = setInterval(read, 250);
-    return () => clearInterval(id);
-  }, [debug, selected]);
-
-  // Log the render state across a FOCUS to render-diag.log, while the render HUD
-  // (⌃⇧D) is on. Sample during the zoom animation and after it settles — the
-  // will-change/zoom transients live in that window. Not always-on: each sample
-  // forces a style read and a synchronous log write in main, on every selection.
-  useEffect(() => {
-    if (!selected || !debug) return;
-    const host = hostRef.current;
-    if (!host) return;
-    const snap = (phase: string) => {
-      const xterm = host.querySelector(".xterm") as HTMLElement | null;
-      const rows = host.querySelector(".xterm-rows") as HTMLElement | null;
-      const csX = xterm ? getComputedStyle(xterm) : null;
-      const csR = rows ? getComputedStyle(rows) : null;
-      const term = termRef.current;
-      const zoom = readCanvasZoom();
-      const line =
-        `[focus:${phase}] tile=${effLabel} zoom=${zoom.toFixed(3)} dpr=${window.devicePixelRatio || 1} ` +
-        `font=${term?.options.fontSize ?? "?"} grid=${term ? `${term.cols}x${term.rows}` : "?"} ` +
-        `will-change=${csX?.willChange ?? "?"} transform=${csX && csX.transform !== "none" ? "LAYER" : "none"} ` +
-        `smoothing=${csR?.getPropertyValue("-webkit-font-smoothing").trim() || "?"} ` +
-        `moving=${document.querySelector(".canvas-moving") ? "yes" : "no"}`;
-      void window.hive.diagLog?.(line);
-    };
-    snap("t0");
-    const t1 = setTimeout(() => snap("t200"), 200);
-    const t2 = setTimeout(() => snap("settled"), 700);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
-  }, [selected, effLabel, debug]);
-
   return (
     <div className="hm-term-root flex h-full flex-col rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] overflow-hidden shadow-[0_8px_22px_rgba(0,0,0,0.45)]" data-term-bg={termBg}>
       {/* Entire header is the drag handle. Previously only the ⋮⋮ icon (~5px
@@ -1417,16 +1321,6 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
             <span className="mt-auto text-[11px] text-[var(--color-fg3)]">
               Starting soon{bootWait > 0 ? ` · ${bootWait} ahead` : ""}
             </span>
-          </div>
-        )}
-        {debug && (
-          <div className="nodrag pointer-events-none absolute top-1 right-1 z-50 rounded bg-black/85 px-2 py-1 font-mono text-[10px] leading-tight text-[#9fe6a0] ring-1 ring-white/15">
-            <div className="mb-0.5 font-semibold text-white/70">render diag · ⌃⇧D</div>
-            {Object.entries(diag).map(([k, v]) => (
-              <div key={k}>
-                <span className="text-white/45">{k}:</span> {v}
-              </div>
-            ))}
           </div>
         )}
       </div>
