@@ -84,8 +84,7 @@ const cmTheme = EditorView.theme(
       fontSize: "inherit",
     },
     ".cm-scroller": {
-      fontFamily:
-        "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace",
+      fontFamily: "var(--font-mono)",
       lineHeight: "1.55",
       overflow: "auto",
       // Mouse cursor: text I-beam over the editor body. react-flow nodes carry

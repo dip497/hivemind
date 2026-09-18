@@ -187,6 +187,9 @@ importers:
       '@codemirror/view':
         specifier: ^6.43.11
         version: 6.43.11
+      '@fontsource/geist-sans':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@fontsource/jetbrains-mono':
         specifier: ^5.3.0
         version: 5.3.0
@@ -1153,6 +1156,9 @@ packages:
 
   '@floating-ui/utils@0.2.12':
     resolution: {integrity: sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==}
+
+  '@fontsource/geist-sans@5.3.0':
+    resolution: {integrity: sha512-AmG7cE1AvE4NHROPaOl1sN+a02cB5xy6pA/ZV76HXqWTCsJTV2SCBc9DTFHfJqnVOODm7HhXIYtUIb75NP5QXQ==}
 
   '@fontsource/jetbrains-mono@5.3.0':
     resolution: {integrity: sha512-fqDfB5I9f1p1TV486aUgB9t8zP84P0O1FtQR5Ol9vjwPy+S+EIGlVYm1cvj2W5shcZMTg2nZFdVMoH5wFu8a1A==}
@@ -6369,6 +6375,8 @@ snapshots:
       react-dom: 19.3.0(react@19.3.0)
 
   '@floating-ui/utils@0.2.12': {}
+
+  '@fontsource/geist-sans@5.3.0': {}
 
   '@fontsource/jetbrains-mono@5.3.0': {}
 

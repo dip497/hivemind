@@ -6,9 +6,13 @@ import { Toaster } from "sonner";
 import { TooltipProvider } from "./components/ui/tooltip";
 import { workerFactory } from "./pierre-worker";
 import { App } from "./App";
-// Self-host JetBrains Mono (terminal/code/IDs) so glyphs are available
+// Self-host Geist (UI) and JetBrains Mono (terminal/code/IDs) so glyphs are available
 // immediately and offline — no CDN round-trip, no flash-of-fallback that would
 // leave xterm's glyph atlas built on the wrong metrics. Weights match --font-mono.
+import "@fontsource/geist-sans/400.css";
+import "@fontsource/geist-sans/500.css";
+import "@fontsource/geist-sans/600.css";
+import "@fontsource/geist-sans/700.css";
 import "@fontsource/jetbrains-mono/400.css";
 import "@fontsource/jetbrains-mono/500.css";
 import "@fontsource/jetbrains-mono/600.css";
