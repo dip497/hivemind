@@ -91,9 +91,9 @@ test.afterAll(async () => {
 test("add a machine: probe, install hive over ssh, save", async () => {
   test.setTimeout(180_000);
   await page.getByRole("button", { name: "add machine" }).click();
-  await page.getByPlaceholder(/gpu-box/).fill(`ssh://${os.userInfo().username}@127.0.0.1:${port}`);
-  await page.getByPlaceholder("the host name").fill("build-box");
-  await page.getByRole("button", { name: "Add machine" }).click();
+  await page.getByLabel("Host").fill(`ssh://${os.userInfo().username}@127.0.0.1:${port}`);
+  await page.getByLabel("Name").fill("build-box");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
   const row = page.locator('ul[aria-label="machines"] li', { hasText: "build-box" });
   await expect(row).toContainText("online", { timeout: 150_000 });
   expect(fs.existsSync(rhive())).toBe(true);

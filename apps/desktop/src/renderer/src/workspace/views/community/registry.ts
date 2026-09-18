@@ -87,7 +87,7 @@ export async function loadCommunityViews(repoRoot: string | null): Promise<Commu
     if (why) { refused[p.id] = why; continue; }
     keep.add(p.id);
     if (registeredUrl.get(p.id) !== p.url) {
-      registerView({ id: p.id, label: p.manifest!.name, hint: `Community view ${p.manifest!.version} (${p.source}) — runs sandboxed.`, icon: Puzzle, component: makeCommunityView(p), source: "community" });
+      registerView({ id: p.id, label: p.manifest!.name, hint: `Community view ${p.manifest!.version} (${p.source}) — runs sandboxed.`, icon: Puzzle, component: makeCommunityView(p), source: "community", chrome: { wallpaper: p.manifest!.wallpaper ?? true } });
       registeredUrl.set(p.id, p.url!);
     }
   }

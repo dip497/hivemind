@@ -9,12 +9,13 @@ import { useWorkspaceOccluded } from "./workspace-occlusion";
  * layer — used by the terminal fit-to-screen overlay so the fullscreen terminal
  * sits over a clean copy of the live wallpaper (not the canvas + other tiles).
  */
-export function Wallpaper({ embedded = false }: { embedded?: boolean } = {}): React.ReactElement | null {
+export function Wallpaper({ embedded = false, covering = false }: { embedded?: boolean; covering?: boolean } = {}): React.ReactElement | null {
   const { glass, wallpaper, videoSrc, imageSrc } = useTheme();
   const cls = embedded ? " embedded" : "";
   const [inactive, setInactive] = useState(false);
   const occluded = useWorkspaceOccluded();
-  const paused = inactive || occluded;
+  // `covering`: this copy is what covers the workspace, so occlusion is not about it.
+  const paused = inactive || (occluded && !covering);
   // A clip that can't decode (e.g. HEVC/H.265, which Chromium doesn't bundle)
   // fires <video> onError → we fall back to a gradient instead of a black void.
   const [videoFailed, setVideoFailed] = useState(false);

@@ -74,6 +74,11 @@ test("Settings stays opaque, pauses decoration, preserves a terminal and fits a 
     await expect.poll(() => wallpaperVideo.evaluate((el: HTMLVideoElement) => el.paused)).toBe(true);
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog")).toHaveCount(0);
+    // FLAKY, and the test is right to complain: measured 1 failure in 6 runs on an idle
+    // machine, and widening the window to 20s did not change the rate — so this is not a
+    // slow resume, it is a resume that sometimes never happens. See Wallpaper.tsx: `paused`
+    // is recomputed on a 1Hz tick, and the play() that should follow the un-occlude can be
+    // lost. Fix the race, not this timeout.
     await expect.poll(() => video.evaluate((el: HTMLVideoElement) => !el.paused)).toBe(true);
     await expect.poll(() => wallpaperVideo.evaluate((el: HTMLVideoElement) => !el.paused)).toBe(true);
     expect(await terminal.evaluate((el, before) => el === before, original)).toBe(true);

@@ -14,6 +14,8 @@ import { Check, MessageSquare, X, MessagesSquare } from "lucide-react";
 import { parsePlanToBlocks, exportAnnotations } from "./blocks";
 import { type Annotation, type PlanBlock } from "./types";
 import { ReviewPopover, CommentBox, ActionToolbar } from "../review-ui";
+import { Button } from "../components/ui/button";
+import { Textarea } from "../components/ui/textarea";
 
 const MarkdownPreview = lazy(() =>
   import("../markdown-preview").then((m) => ({ default: m.MarkdownPreview })),
@@ -129,13 +131,15 @@ export function PlanReviewBody({
         <div className="px-3 py-2 border-b border-[var(--color-line)] flex items-center gap-2">
           <span className="text-[11px] font-semibold text-[var(--color-fg)]">Annotations</span>
           <span className="text-[11px] text-[var(--color-fg3)] tabular-nums">{count}</span>
-          <button
+          <Button
+            variant="link"
+            size="xs"
             onClick={() => openForGlobal()}
-            className="nodrag ml-auto inline-flex items-center gap-1 text-[10.5px] text-[var(--color-fg2)] hover:text-[var(--color-fg)] cursor-pointer"
+            className="nodrag ml-auto"
             title="general comment about the whole plan"
           >
-            <MessagesSquare size={12} /> General
-          </button>
+            <MessagesSquare /> General
+          </Button>
         </div>
 
         <div className="flex-1 overflow-auto p-2 flex flex-col gap-1.5">
@@ -149,20 +153,21 @@ export function PlanReviewBody({
         </div>
 
         <div className="p-2 border-t border-[var(--color-line)] flex flex-col gap-1.5">
-          <button
+          <Button
+            variant="outline"
             disabled={sent}
             onClick={requestChanges}
-            className="nodrag inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-[var(--color-fg)] bg-[var(--color-bg)] border border-[var(--color-line2)] rounded hover:border-[var(--color-fg3)] disabled:opacity-40 transition-colors cursor-pointer"
+            className="nodrag"
           >
-            <MessageSquare size={13} /> Request changes{count > 0 ? ` (${count})` : ""}
-          </button>
-          <button
+            <MessageSquare /> Request changes{count > 0 ? ` (${count})` : ""}
+          </Button>
+          <Button
             disabled={sent}
             onClick={() => onDecide("allow")}
-            className="nodrag inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-white bg-[var(--color-brand)] rounded hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity cursor-pointer"
+            className="nodrag"
           >
-            <Check size={13} /> Approve plan
-          </button>
+            <Check /> Approve plan
+          </Button>
         </div>
       </aside>
 
@@ -171,18 +176,18 @@ export function PlanReviewBody({
         <div className="absolute inset-0 z-50 bg-black/40 grid place-items-center p-6" onMouseDown={() => setFreeText(null)}>
           <div className="w-[440px] max-w-full bg-[var(--color-bg2)] border border-[var(--color-line)] rounded-xl p-3 flex flex-col gap-2" onMouseDown={(e) => e.stopPropagation()}>
             <span className="text-[12px] font-semibold text-[var(--color-fg)]">Request changes</span>
-            <textarea
+            <Textarea
               autoFocus value={freeText} onChange={(e) => setFreeText(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && freeText.trim()) onDecide("deny", freeText.trim()); if (e.key === "Escape") setFreeText(null); }}
               rows={5} placeholder="What should change? Goes back to the agent (⌘/Ctrl+Enter to send)."
-              className="nodrag w-full resize-y bg-[var(--color-bg)] border border-[var(--color-line2)] rounded-md px-2.5 py-2 text-[12.5px] text-[var(--color-fg)] outline-none focus:border-[var(--color-brand)] placeholder:text-[var(--color-fg3)]"
+              className="nodrag w-full resize-y"
             />
             <div className="flex items-center gap-2">
-              <button onClick={() => setFreeText(null)} className="nodrag px-3 py-1.5 text-[12px] text-[var(--color-fg2)] hover:text-[var(--color-fg)] cursor-pointer">Cancel</button>
-              <button disabled={!freeText.trim() || sent} onClick={() => onDecide("deny", freeText.trim())}
-                className="nodrag ml-auto px-3 py-1.5 text-[12px] font-medium text-white bg-[var(--color-brand)] rounded hover:opacity-90 disabled:opacity-40 cursor-pointer">
+              <Button variant="ghost" onClick={() => setFreeText(null)} className="nodrag">Cancel</Button>
+              <Button disabled={!freeText.trim() || sent} onClick={() => onDecide("deny", freeText.trim())}
+                className="nodrag ml-auto">
                 Send feedback
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -221,13 +226,15 @@ function BlockView({
         <MarkdownPreview source={block.raw} className="md-preview" />
       </Suspense>
       <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity flex gap-0.5">
-        <button
+        <Button
+          variant="outline"
+          size="icon-2xs"
           title="comment on this block"
           onClick={(e) => onPinpoint(block.id, block.text, e.clientX, e.clientY)}
-          className="nodrag size-5 grid place-items-center rounded bg-[var(--color-bg2)] border border-[var(--color-line2)] text-[var(--color-fg3)] hover:text-[var(--color-fg)] cursor-pointer"
+          className="nodrag"
         >
-          <MessageSquare size={11} />
-        </button>
+          <MessageSquare />
+        </Button>
       </div>
     </div>
   );
@@ -241,9 +248,9 @@ function AnnotationCard({ a, onRemove }: { a: Annotation; onRemove: () => void }
     <div className="rounded-md border border-[var(--color-line2)] bg-[var(--color-bg)] p-1.5 text-[11px]" style={{ borderLeft: `2px solid ${tint}` }}>
       <div className="flex items-center gap-1.5">
         <span className="font-medium text-[var(--color-fg)]">{label}</span>
-        <button onClick={onRemove} className="nodrag ml-auto size-4 grid place-items-center rounded text-[var(--color-fg3)] hover:text-[var(--color-fg)] cursor-pointer" title="remove">
-          <X size={11} />
-        </button>
+        <Button variant="ghost" size="icon-micro" onClick={onRemove} className="nodrag ml-auto" title="remove">
+          <X />
+        </Button>
       </div>
       {a.originalText && (
         <div className="mt-0.5 text-[10.5px] text-[var(--color-fg3)] line-clamp-2 italic">“{a.originalText}”</div>

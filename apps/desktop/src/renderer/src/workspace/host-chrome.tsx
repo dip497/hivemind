@@ -16,6 +16,7 @@
 import { useMemo, useState } from "react";
 import { Wrench } from "lucide-react";
 import { resolveToolbar, type ToolbarPreferences } from "@hivemind/core/toolbar";
+import { Button } from "../components/ui/button";
 import { StandardToolbar } from "./standard-toolbar";
 import { useToolEnabled } from "../tool-availability";
 import { openAppearanceSettings, useChromeState } from "./chrome-store";
@@ -57,16 +58,18 @@ export function HostChrome({ chrome, toolbar, ...island }: HostChromeProps) {
         </div>
       )}
       {hasActions && !suppressed && chrome.island === "hidden" && (
-        <button
+        <Button
+          variant="secondary"
+          size="icon-sm"
           onClick={() => setExpanded((e) => !e)}
           aria-label={expanded ? "hide tools" : "show tools"}
           aria-expanded={expanded}
           title={expanded ? "Hide tools" : "Tools (spawn, frame, appearance)"}
-          className={`hm-island absolute left-1/2 z-30 grid size-7 -translate-x-1/2 place-items-center rounded-lg text-[var(--color-fg2)] hover:text-[var(--color-fg)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)] ${expanded ? "bottom-[3.75rem]" : "bottom-3"}`}
+          className={`absolute left-1/2 z-30 -translate-x-1/2 ${expanded ? "bottom-[3.75rem]" : "bottom-3"}`}
           data-host-island-handle
         >
-          <Wrench size={13} />
-        </button>
+          <Wrench />
+        </Button>
       )}
     </>
   );

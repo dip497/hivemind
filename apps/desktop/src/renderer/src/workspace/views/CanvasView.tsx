@@ -18,10 +18,15 @@ import {
   MiniMap,
   Panel,
   ReactFlow,
+  applyNodeChanges,
   type Node,
+  type NodeMouseHandler,
+  type OnSelectionChangeFunc,
+  type NodeChange,
   type Edge,
 } from "@xyflow/react";
 import { Eye, EyeOff, LayoutGrid } from "lucide-react";
+import { Button } from "../../components/ui/button";
 import { LayersPanel } from "../../LayersPanel";
 import { ZoomIsland } from "../../canvas-islands";
 import { setChromeSuppressed } from "../chrome-store";
@@ -30,7 +35,7 @@ import { nodeTypes, PinnedLayerContext } from "../../canvas-nodes";
 import { pipeEdgeTypes } from "../../canvas-pipe-edge";
 import { useOnViewportChange } from "@xyflow/react";
 import { snapViewportCrisp, FocusMode, FocusOnTile, PanMomentum, ViewportSnap } from "../../canvas-camera";
-import { buildBaseNodes } from "../../canvas-node-build";
+import { buildBaseNodes, reuseNodes } from "../../canvas-node-build";
 import type { WorkspaceViewPlugin, WorkspaceViewProps } from "../workspace-view";
 import { useCanvasRuntime } from "./canvas-runtime";
 import { AGENT_TILE_KIND } from "../../tile-kinds";
@@ -54,10 +59,9 @@ const PRO_OPTIONS = { hideAttribution: true };
  *  NO read-back on unmount: react-flow resets its store in its own (parent,
  *  earlier) cleanup, so a read there yields the identity viewport. */
 function ViewportMirror({ target }: { target: { current: { x: number; y: number; zoom: number } } }) {
-  useOnViewportChange({
-    onChange: (vp) => { target.current = vp; },
-    onEnd: (vp) => { target.current = vp; },
-  });
+  // Stable: the hook writes these into react-flow's store whenever they change.
+  const mirror = useCallback((vp: { x: number; y: number; zoom: number }) => { target.current = vp; }, [target]);
+  useOnViewportChange({ onChange: mirror, onEnd: mirror });
   return null;
 }
 
@@ -120,7 +124,9 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
   // frame / size / position state changes; the selection-derived `nodes` memo
   // below shallow-clones only the selected node so a click doesn't churn
   // React.memo on the heavy wrappers. Pure — see canvas-node-build.ts.
-  const baseNodes: Node[] = useMemo(() => buildBaseNodes({
+  const lastBuiltRef = useRef<ReadonlyMap<string, Node>>(new Map());
+  const baseNodes: Node[] = useMemo(() => {
+    const built = reuseNodes(lastBuiltRef.current, buildBaseNodes({
     repoPath, tiles, frames, frameOf, pinnedIds: rt.pinnedIds, sizes: rt.sizes, positions: rt.positions,
     frameTiles: rt.frameTiles, framesChipNames: rt.framesChipNames,
     updateFrameTitle: rt.updateFrameTitle, updateFrameColor: rt.updateFrameColor, deleteFrame: rt.deleteFrame,
@@ -128,7 +134,10 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
     onAttachWorktree: rt.onAttachWorktree, onCreateWorktree: rt.onCreateWorktree, unbindBranch: rt.unbindBranch,
     bindWorkspace: rt.bindWorkspace, unbindWorkspace: rt.unbindWorkspace,
     closeTile, onNodeResizeCommit: rt.onNodeResizeCommit, onTogglePin: rt.togglePin, onPinChange: rt.onPinChange,
-  }), [
+    }));
+    lastBuiltRef.current = new Map(built.map((n) => [n.id, n]));
+    return built;
+  }, [
     repoPath, tiles, frames, frameOf, rt.pinnedIds, rt.sizes, rt.positions, rt.frameTiles, rt.framesChipNames,
     rt.updateFrameTitle, rt.updateFrameColor, rt.deleteFrame, rt.arrangeFrame, rt.bringFrameToFront,
     rt.onAttachWorktree, rt.onCreateWorktree, rt.unbindBranch, rt.bindWorkspace, rt.unbindWorkspace,
@@ -150,6 +159,38 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
       return { ...n, selected: true, style: { ...(n.style ?? {}), zIndex: 1000 } };
     });
   }, [baseNodes, selectedTileId]);
+  // The committed layout is `nodes`. While a tile is dragged or resized, xyflow's
+  // per-move changes land in this local copy, so the tile follows the pointer and
+  // only that node re-renders; the drop / resize-end commit rebuilds `nodes`, which
+  // replaces the copy (the snap to grid is then the only travel left to animate).
+  // Selection and every other change stay with the app.
+  // xyflow hides a node object that carries no `measured` size until it re-measures
+  // it, so the sizes it reports are stamped onto every node handed back — otherwise
+  // each move frame's fresh object blinks the tile out for a frame.
+  const sizesRef = useRef(new Map<string, { src: Node; out: Node }>());
+  const withSizes = useCallback((list: Node[]) => {
+    const cache = sizesRef.current;
+    return list.map((n) => {
+      const hit = cache.get(n.id);
+      if (n.measured || !hit?.out.measured) return n;
+      if (hit.src === n) return hit.out;
+      const out = { ...n, measured: hit.out.measured };
+      cache.set(n.id, { src: n, out });
+      return out;
+    });
+  }, []);
+  const [live, setLive] = useState(() => ({ from: nodes, list: withSizes(nodes) }));
+  if (live.from !== nodes) setLive({ from: nodes, list: withSizes(nodes) });
+  const liveNodes = live.from === nodes ? live.list : withSizes(nodes);
+  const onNodesChange = useCallback((changes: NodeChange[]) => {
+    const moving = changes.filter((c) => c.type === "position" || c.type === "dimensions");
+    if (!moving.length) return;
+    setLive((cur) => {
+      const list = applyNodeChanges(moving, cur.list);
+      for (const n of list) if (n.measured) sizesRef.current.set(n.id, { src: n, out: n });
+      return { from: cur.from, list };
+    });
+  }, []);
   // Agent pipes (hive_connect) → animated "data flow" edges; spawn wires →
   // dashed parentage edges. Only between endpoints that still exist as tiles.
   const edges = useMemo<Edge[]>(() => {
@@ -291,6 +332,60 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
   // the crisp snap, and the exact 1:1 focus on a NEW selection — and the
   // context-menu suppression that the React handler can't see either. Clicks
   // that travelled >4px (a header drag) are ignored, like nodeClickDistance.
+  // Stable handlers: CanvasView re-renders on every drag frame, and a new handler
+  // re-renders every node wrapper and re-runs react-flow's selection effect.
+  const onNodeClick = useCallback<NodeMouseHandler>((_e, node) => {
+    if (node.type === "frame") {
+      selectTile(null);
+    } else {
+      // Re-frame only when selecting a DIFFERENT tile — re-clicking the
+      // already-selected tile (e.g. to type) must NOT yank the viewport.
+      const isNewSelection = !rt.selectedTileIdsRef.current.has(node.id);
+      selectTile(node.id);
+      rt.selectedTileIdsRef.current = new Set([node.id]);
+      rt.markSeen([node.id]);
+      // Selecting promotes the tile to its own compositing layer; snap
+      // the viewport so that layer lands on whole pixels (sharp, not
+      // blurry). See ViewportSnap.
+      bumpSnap();
+      if (isNewSelection) {
+        // Terminals, diff (Pierre) and editor (CodeMirror) all need
+        // EXACTLY 100% zoom when focused. xterm maps the mouse to a cell
+        // using the UNSCALED cell size, so a drag-selection at any zoom ≠ 1
+        // lands on the wrong row; diff/editor render DOM text the browser
+        // only rasterizes crisply at 1:1. Snap all of them to 100% AND
+        // frame the tile in one move (exact focus recentres on the tile,
+        // anchoring the content corner when it's bigger than the viewport).
+        if (
+          node.type === "terminal" ||
+          node.type === "diff" ||
+          node.type === "editor" ||
+          node.type === "workbench"
+        ) {
+          focusTile(node.id, { exact: true });
+        }
+      }
+    }
+  }, [selectTile, focusTile, rt, bumpSnap]);
+  const onPaneClick = useCallback(() => {
+    selectTile(null);
+    rt.selectedTileIdsRef.current = new Set();
+  }, [selectTile, rt]);
+  const onSelectionChange = useCallback<OnSelectionChangeFunc>(({ nodes: sel }) => {
+    // Track which frame (if any) is the user's current single
+    // selection. Drives F2-rename + future bulk frame ops. We only
+    // care about single-frame selection; multi-select clears.
+    if (sel.length === 1 && sel[0]!.type === "frame") {
+      commands.selectFrame(sel[0]!.id);
+    } else {
+      commands.selectFrame(null);
+    }
+    // Track selected tiles for agent-awareness: selecting a tile counts
+    // as "seeing" it, so a done-unseen tile clears + its toast dismisses.
+    const tileIds = sel.filter((n) => n.type !== "frame").map((n) => n.id);
+    rt.selectedTileIdsRef.current = new Set(tileIds);
+    rt.markSeen(tileIds);
+  }, [commands, rt]);
   const selectTileRef = useRef(selectTile); selectTileRef.current = selectTile;
   const focusTileRef = useRef(focusTile); focusTileRef.current = focusTile;
   useEffect(() => {
@@ -401,7 +496,8 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
             aborts the drag — native, so it also covers portaled tile bodies. */}
         <div ref={flowWrapRef} className="relative flex-1 min-h-0">
         <ReactFlow
-          nodes={nodes}
+          nodes={liveNodes}
+          onNodesChange={onNodesChange}
           edges={edges}
           nodeTypes={nodeTypes}
           edgeTypes={pipeEdgeTypes}
@@ -436,58 +532,9 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
           // Manual selection (react-flow's click-select is dead in our config).
           // Clicking a tile selects it → highlight + handles + front. Clicking a
           // frame or the empty pane clears tile selection.
-          onNodeClick={(_e, node) => {
-            if (node.type === "frame") {
-              selectTile(null);
-            } else {
-              // Re-frame only when selecting a DIFFERENT tile — re-clicking the
-              // already-selected tile (e.g. to type) must NOT yank the viewport.
-              const isNewSelection = !rt.selectedTileIdsRef.current.has(node.id);
-              selectTile(node.id);
-              rt.selectedTileIdsRef.current = new Set([node.id]);
-              rt.markSeen([node.id]);
-              // Selecting promotes the tile to its own compositing layer; snap
-              // the viewport so that layer lands on whole pixels (sharp, not
-              // blurry). See ViewportSnap.
-              bumpSnap();
-              if (isNewSelection) {
-                // Terminals, diff (Pierre) and editor (CodeMirror) all need
-                // EXACTLY 100% zoom when focused. xterm maps the mouse to a cell
-                // using the UNSCALED cell size, so a drag-selection at any zoom ≠ 1
-                // lands on the wrong row; diff/editor render DOM text the browser
-                // only rasterizes crisply at 1:1. Snap all of them to 100% AND
-                // frame the tile in one move (exact focus recentres on the tile,
-                // anchoring the content corner when it's bigger than the viewport).
-                if (
-                  node.type === "terminal" ||
-                  node.type === "diff" ||
-                  node.type === "editor" ||
-                  node.type === "workbench"
-                ) {
-                  focusTile(node.id, { exact: true });
-                }
-              }
-            }
-          }}
-          onPaneClick={() => {
-            selectTile(null);
-            rt.selectedTileIdsRef.current = new Set();
-          }}
-          onSelectionChange={({ nodes: sel }) => {
-            // Track which frame (if any) is the user's current single
-            // selection. Drives F2-rename + future bulk frame ops. We only
-            // care about single-frame selection; multi-select clears.
-            if (sel.length === 1 && sel[0]!.type === "frame") {
-              commands.selectFrame(sel[0]!.id);
-            } else {
-              commands.selectFrame(null);
-            }
-            // Track selected tiles for agent-awareness: selecting a tile counts
-            // as "seeing" it, so a done-unseen tile clears + its toast dismisses.
-            const tileIds = sel.filter((n) => n.type !== "frame").map((n) => n.id);
-            rt.selectedTileIdsRef.current = new Set(tileIds);
-            rt.markSeen(tileIds);
-          }}
+          onNodeClick={onNodeClick}
+          onPaneClick={onPaneClick}
+          onSelectionChange={onSelectionChange}
           onNodeDragStop={onNodeDragStop}
           // NEVER cull off-viewport tiles. Culling unmounts a node — harmless
           // for the body now (the TileHost owns it, the slot just parks it), but
@@ -526,14 +573,15 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
               is always visible (it restores zen); the zoom island hides in zen. */}
           <Panel position="bottom-left" className="!m-0 !ml-3 !mb-3">
             <div className="flex items-center gap-2 pointer-events-auto">
-              <button
+              <Button
+                variant="secondary"
+                size="icon"
                 onClick={() => setZen((z) => !z)}
-                className="hm-island size-8 grid place-items-center rounded-lg text-[var(--color-fg2)] hover:text-[var(--color-fg)]"
                 title={zen ? "Show UI" : "Hide UI (zen mode)"}
                 aria-label={zen ? "show UI" : "hide UI"}
               >
-                {zen ? <EyeOff size={15} /> : <Eye size={15} />}
-              </button>
+                {zen ? <EyeOff /> : <Eye />}
+              </Button>
               {!zen && (
                 <ZoomIsland
                   tileCount={nodes.length}

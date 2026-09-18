@@ -23,6 +23,7 @@ import {
 import { createPortal } from "react-dom";
 import { NodeResizer, useReactFlow, type NodeTypes } from "@xyflow/react";
 import { Pin, X } from "lucide-react";
+import { Button } from "./components/ui/button";
 import { clampAnchor } from "./pin-anchor";
 import { FrameNode, type FrameNodeData } from "./FrameNode";
 import { TileSlot } from "./workspace/tile-host";
@@ -104,19 +105,9 @@ export type ShellPin = {
  *  concerns only — the body comes from the TileHost via `<TileSlot>`. */
 export type CanvasTileNodeData = {
   tileId: string;
-  onClose?: () => void;
+  onClose?: (id: string) => void;
   onResize: (id: string, w: number, h: number, x?: number, y?: number) => void;
 } & ShellPin;
-
-// Shared chip-button styling for the pin/unpin/close controls — ONE look, used
-// by both the inline pin chip and the floating panel's chip so the affordance is
-// identical whether a tile is on the canvas or pinned. 26px hit target, frosted
-// pill, brand on hover.
-const PIN_CHIP_BTN =
-  "size-[26px] grid place-items-center rounded-md border border-[var(--color-line)] " +
-  "bg-[color-mix(in_srgb,var(--color-bg2)_92%,transparent)] backdrop-blur shadow-md " +
-  "text-[var(--color-fg2)] hover:text-[var(--color-brand)] hover:border-[var(--color-brand)] " +
-  "cursor-pointer transition-colors";
 
 /** Capture a tile's on-screen rect (top-left + size) for pinning. Clamps the
  *  size to a usable floor/ceiling so pinning a zoomed-out tile doesn't open a
@@ -150,15 +141,17 @@ function PinToggle({ id, onToggle }: {
   };
   return (
     <div className="nodrag absolute -top-3.5 right-1 z-30 opacity-0 group-hover/tile:opacity-100 focus-within:opacity-100 transition-opacity">
-      <button
+      <Button
+        variant="secondary"
+        size="icon-xs"
         onClick={handle}
         onPointerDown={(e) => e.stopPropagation()}
-        className={PIN_CHIP_BTN}
+        className="nodrag"
         title="Pin — float fixed on screen"
         aria-label="Pin tile"
       >
-        <Pin size={13} />
-      </button>
+        <Pin />
+      </Button>
     </div>
   );
 }
@@ -177,7 +170,7 @@ export function HeaderPinButton({ tileId, pinned, onToggle }: {
 }) {
   if (!onToggle) return null;
   return (
-    <button
+    <Button
       onClick={(e) => {
         e.stopPropagation();
         const nodeEl = (e.currentTarget as HTMLElement).closest(".react-flow__node") as HTMLElement | null;
@@ -185,17 +178,16 @@ export function HeaderPinButton({ tileId, pinned, onToggle }: {
         if (!id) return;
         onToggle(id, captureRect(nodeEl));
       }}
-      className={`nodrag size-4 grid place-items-center rounded transition-colors cursor-pointer ${
-        pinned
-          ? "text-[var(--color-brand)]"
-          : "text-[var(--color-fg3)] hover:bg-[var(--color-line2)] hover:text-[var(--color-fg)]"
-      }`}
+      variant="ghost"
+      size="icon-micro"
+      className="nodrag"
       title={pinned ? "Unpin — return to canvas" : "Pin — float fixed on screen"}
       aria-label={pinned ? "Unpin tile" : "Pin tile"}
       aria-pressed={!!pinned}
     >
-      <Pin size={11} className={pinned ? "fill-current" : ""} />
-    </button>
+      {/* Brand on the filled glyph is the pinned STATE (an aria-pressed twin), not decoration. */}
+      <Pin className={pinned ? "fill-current text-[var(--color-brand)]" : ""} />
+    </Button>
   );
 }
 
@@ -220,7 +212,7 @@ function FloatingPinnedPanel({ id, anchor, size, onUnpin, onChange, onClose, hea
   size?: { w: number; h: number };
   onUnpin?: (id: string, rect: PinRect) => void;
   onChange?: (id: string, patch: { anchor?: { sx: number; sy: number }; size?: { w: number; h: number } }) => void;
-  onClose?: () => void;
+  onClose?: (id: string) => void;
   /** When the pinned tile has its OWN header pin+close (terminals/agents), the
    *  panel skips its floating chip — unpin/close come from the tile's chrome. */
   headerPin?: boolean;
@@ -327,25 +319,29 @@ function FloatingPinnedPanel({ id, anchor, size, onUnpin, onChange, onClose, hea
         data-pin-ctl
         className="absolute -top-3.5 right-1 z-30 flex items-center gap-1 opacity-0 group-hover/pin:opacity-100 focus-within:opacity-100 transition-opacity"
       >
-        <button
+        <Button
+          variant="secondary"
+          size="icon-xs"
           onClick={(e) => { e.stopPropagation(); onUnpin?.(id, { sx: pos.sx, sy: pos.sy, w: dim.w, h: dim.h }); }}
           onPointerDown={(e) => e.stopPropagation()}
-          className={`${PIN_CHIP_BTN} text-[var(--color-brand)] border-[var(--color-brand)]`}
+          className="nodrag"
           title="Unpin — return to canvas"
           aria-label="Unpin tile"
         >
-          <Pin size={13} className="fill-current" />
-        </button>
+          <Pin className="fill-current text-[var(--color-brand)]" />
+        </Button>
         {onClose && (
-          <button
-            onClick={(e) => { e.stopPropagation(); onClose(); }}
+          <Button
+            variant="secondary"
+            size="icon-xs"
+            onClick={(e) => { e.stopPropagation(); onClose(id); }}
             onPointerDown={(e) => e.stopPropagation()}
-            className={`${PIN_CHIP_BTN} hover:text-[var(--color-danger,#ef4444)] hover:border-[var(--color-danger,#ef4444)]`}
+            className="nodrag"
             title="Close tile"
             aria-label="Close tile"
           >
-            <X size={13} />
-          </button>
+            <X />
+          </Button>
         )}
       </div>
       )}
@@ -363,7 +359,7 @@ function TileShell({
   id: string;
   selected: boolean;
   pin: ShellPin;
-  onClose?: () => void;
+  onClose?: (id: string) => void;
   onResize: (id: string, w: number, h: number, x?: number, y?: number) => void;
   minWidth?: number;
   minHeight?: number;

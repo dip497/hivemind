@@ -11,6 +11,7 @@
  * the daemon, not this component.
  */
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { Button } from "./components/ui/button";
 
 interface Props {
   /** Tile name for the fallback header (e.g. "Diff", "claude #2"). */
@@ -64,30 +65,36 @@ export class TileErrorBoundary extends Component<Props, State> {
           <span>⚠ {this.props.label ?? "tile"} {stale ? "needs a reload (stale build)" : "crashed"}</span>
           <div className="ml-auto flex items-center gap-1">
             {stale ? (
-              <button
+              <Button
+                variant="secondary"
+                size="xs"
                 onClick={() => window.location.reload()}
-                className="nodrag h-6 px-2 rounded text-[var(--color-fg)] bg-[var(--color-bg)] hover:bg-[var(--color-bg3)]"
+                className="nodrag"
                 title="Reload the window to pick up the new build (PTY sessions survive)"
               >
                 Reload
-              </button>
+              </Button>
             ) : (
-              <button
+              <Button
+                variant="ghost"
+                size="xs"
                 onClick={this.retry}
-                className="nodrag h-6 px-2 rounded text-[var(--color-fg2)] hover:bg-[var(--color-bg)] hover:text-[var(--color-fg)]"
+                className="nodrag"
                 title="Re-render this tile"
               >
                 Retry
-              </button>
+              </Button>
             )}
             {this.props.onClose && (
-              <button
+              <Button
+                variant="ghost-destructive"
+                size="xs"
                 onClick={this.props.onClose}
-                className="nodrag h-6 px-2 rounded text-[var(--color-fg3)] hover:bg-[var(--color-bg)] hover:text-[var(--color-err)]"
+                className="nodrag"
                 title="Remove this tile"
               >
                 Close
-              </button>
+              </Button>
             )}
           </div>
         </div>

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { WebviewTag } from "electron";
 import { ArrowLeft, ArrowRight, RotateCw, X as XIcon, Plus, Search, Wrench, Bot, GripVertical } from "lucide-react";
 import { HeaderPinButton, type PinRect } from "./canvas-nodes";
+import { Button } from "./components/ui/button";
+import { Input } from "./components/ui/input";
 
 interface Props {
   tileId: string;
@@ -59,20 +61,24 @@ function TabView({
   onUpdate: (id: string, patch: Partial<TabMeta>) => void;
 }) {
   const ref = useRef<WebviewTag | null>(null);
+  // Latest handlers via a ref: re-running the effect would drop the tab from the
+  // parent's map, and dom-ready does not fire again to put it back.
+  const cbs = useRef({ onReady, onGone, onUpdate });
+  cbs.current = { onReady, onGone, onUpdate };
   useEffect(() => {
     const wv = ref.current;
     if (!wv) return;
     const sync = () => {
       try {
-        onUpdate(tabId, { url: wv.getURL(), canBack: wv.canGoBack(), canFwd: wv.canGoForward() });
+        cbs.current.onUpdate(tabId, { url: wv.getURL(), canBack: wv.canGoBack(), canFwd: wv.canGoForward() });
       } catch { /* guest not ready */ }
     };
-    const onDom = () => { onReady(tabId, wv); sync(); };
-    const onStart = () => onUpdate(tabId, { loading: true });
-    const onStop = () => { onUpdate(tabId, { loading: false }); sync(); };
+    const onDom = () => { cbs.current.onReady(tabId, wv); sync(); };
+    const onStart = () => cbs.current.onUpdate(tabId, { loading: true });
+    const onStop = () => { cbs.current.onUpdate(tabId, { loading: false }); sync(); };
     const onNav = () => sync();
-    const onTitle = (e: Electron.PageTitleUpdatedEvent) => onUpdate(tabId, { title: e.title || "New tab" });
-    const onFav = (e: Electron.PageFaviconUpdatedEvent) => onUpdate(tabId, { favicon: e.favicons?.[0] });
+    const onTitle = (e: Electron.PageTitleUpdatedEvent) => cbs.current.onUpdate(tabId, { title: e.title || "New tab" });
+    const onFav = (e: Electron.PageFaviconUpdatedEvent) => cbs.current.onUpdate(tabId, { favicon: e.favicons?.[0] });
 
     wv.addEventListener("dom-ready", onDom);
     wv.addEventListener("did-start-loading", onStart);
@@ -89,9 +95,9 @@ function TabView({
       wv.removeEventListener("did-navigate-in-page", onNav);
       wv.removeEventListener("page-title-updated", onTitle as EventListener);
       wv.removeEventListener("page-favicon-updated", onFav as EventListener);
-      onGone(tabId);
+      cbs.current.onGone(tabId);
     };
-  }, [tabId, onReady, onGone, onUpdate]);
+  }, [tabId]);
 
   return (
     <webview
@@ -153,9 +159,12 @@ export function BrowserTile({ tileId, frameId, url, selected, openReq, onClose, 
   // Keep the address bar mirroring the active tab unless the user is editing it,
   // and re-publish the active URL to main so the discovery file stays current.
   useEffect(() => {
-    if (!addrFocused.current && active) setAddress(active.url);
+    const url = active?.url;
+    if (!addrFocused.current && url !== undefined) setAddress(url);
     registerActive();
-  }, [activeId, active?.url, active, registerActive]);
+    // Keyed on the URL alone: title and favicon updates must not re-register.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeId, active?.url, registerActive]);
 
   // Re-register CDP + sync zoom on tab switch.
   useEffect(() => {
@@ -302,31 +311,35 @@ export function BrowserTile({ tileId, frameId, url, selected, openReq, onClose, 
               </span>
             </button>
           ))}
-          <button
+          <Button
+            variant="ghost"
+            size="icon-xs"
             onClick={() => newTab()}
-            className="nodrag size-6 grid place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--color-bg2)] hover:text-[var(--color-fg)] shrink-0 self-center"
+            className="nodrag shrink-0 self-center"
             aria-label="new tab"
             title="New tab (⌘T)"
           >
-            <Plus size={14} />
-          </button>
+            <Plus />
+          </Button>
         </div>
-        <button
-          className="nodrag size-5 grid place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--color-line2)] hover:text-[var(--color-fg)] self-center shrink-0"
+        <Button
+          variant="ghost"
+          size="icon-2xs"
+          className="nodrag self-center shrink-0"
           aria-label="close browser"
           onClick={() => onClose?.()}
           title="Close browser tile"
         >
-          <XIcon size={13} />
-        </button>
+          <XIcon />
+        </Button>
       </div>
 
       {/* Address + nav toolbar. */}
       <div className="h-8 flex items-center gap-1 px-2 bg-[var(--color-bg3)] border-b border-[var(--color-line)]">
-        <button className="nodrag size-5 grid place-items-center rounded text-[var(--color-fg3)] enabled:hover:bg-[var(--color-line2)] enabled:hover:text-[var(--color-fg)] disabled:opacity-30" onClick={() => activeWv()?.goBack()} disabled={!active?.canBack} aria-label="back" title="Back"><ArrowLeft size={13} /></button>
-        <button className="nodrag size-5 grid place-items-center rounded text-[var(--color-fg3)] enabled:hover:bg-[var(--color-line2)] enabled:hover:text-[var(--color-fg)] disabled:opacity-30" onClick={() => activeWv()?.goForward()} disabled={!active?.canFwd} aria-label="forward" title="Forward"><ArrowRight size={13} /></button>
-        <button className="nodrag size-5 grid place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--color-line2)] hover:text-[var(--color-fg)]" onClick={() => (active?.loading ? activeWv()?.stop() : activeWv()?.reload())} aria-label="reload" title="Reload (⌘R)"><RotateCw size={12} className={active?.loading ? "animate-spin" : ""} /></button>
-        <input
+        <Button variant="ghost" size="icon-2xs" className="nodrag" onClick={() => activeWv()?.goBack()} disabled={!active?.canBack} aria-label="back" title="Back"><ArrowLeft /></Button>
+        <Button variant="ghost" size="icon-2xs" className="nodrag" onClick={() => activeWv()?.goForward()} disabled={!active?.canFwd} aria-label="forward" title="Forward"><ArrowRight /></Button>
+        <Button variant="ghost" size="icon-2xs" className="nodrag" onClick={() => (active?.loading ? activeWv()?.stop() : activeWv()?.reload())} aria-label="reload" title="Reload (⌘R)"><RotateCw className={active?.loading ? "animate-spin" : ""} /></Button>
+        <Input font="mono"
           value={address}
           onChange={(e) => setAddress(e.target.value)}
           onFocus={() => { addrFocused.current = true; }}
@@ -336,42 +349,44 @@ export function BrowserTile({ tileId, frameId, url, selected, openReq, onClose, 
             if (e.key === "Escape") { (e.target as HTMLInputElement).blur(); }
           }}
           spellCheck={false}
-          className="nodrag flex-1 min-w-0 bg-[var(--color-bg)] border border-[var(--color-line2)] rounded px-2 py-0.5 text-[11px] font-mono text-[var(--color-fg)] outline-none focus:border-[var(--color-brand)]"
+          className="nodrag flex-1 min-w-0"
           placeholder="Search or enter address"
           title={active?.title}
         />
-        <button className="nodrag size-5 grid place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--color-line2)] hover:text-[var(--color-fg)]" onClick={() => setFindOpen((v) => !v)} aria-label="find" title="Find in page (⌘F)"><Search size={12} /></button>
-        <button className="nodrag size-5 grid place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--color-line2)] hover:text-[var(--color-fg)]" onClick={toggleDevtools} aria-label="devtools" title="Toggle DevTools"><Wrench size={12} /></button>
+        <Button variant="ghost" size="icon-2xs" className="nodrag" onClick={() => setFindOpen((v) => !v)} aria-label="find" title="Find in page (⌘F)"><Search /></Button>
+        <Button variant="ghost" size="icon-2xs" className="nodrag" onClick={toggleDevtools} aria-label="devtools" title="Toggle DevTools"><Wrench /></Button>
         {/* Visible CDP proof — runs the same bridge an agent uses against the visible tab. */}
-        <button className="nodrag size-5 grid place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--color-line2)] hover:text-[var(--color-fg)]" onClick={cdpSelfTest} aria-label="cdp test" title="CDP self-test (drive this tab like an agent)"><Bot size={12} /></button>
+        <Button variant="ghost" size="icon-2xs" className="nodrag" onClick={cdpSelfTest} aria-label="cdp test" title="CDP self-test (drive this tab like an agent)"><Bot /></Button>
         <span aria-hidden className="w-px h-4 bg-[var(--color-line2)] mx-0.5" />
         {/* Pin toggle — docked in the toolbar (not a floating chip). Filled = pinned. */}
         <HeaderPinButton tileId={tileId} pinned={pinned} onToggle={onTogglePin} />
         {/* Tile close — the browser has no per-tile × elsewhere, so pinning it
             still leaves a way to close it from its own chrome. */}
         {onClose && (
-          <button
-            className="nodrag size-5 grid place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--color-line2)] hover:text-[var(--color-fg)]"
+          <Button
+            variant="ghost"
+            size="icon-2xs"
+            className="nodrag"
             onClick={onClose}
             aria-label="close tile"
             title="Close tile"
           >
-            <XIcon size={13} />
-          </button>
+            <XIcon />
+          </Button>
         )}
       </div>
 
       {findOpen && (
         <div className="h-8 flex items-center gap-2 px-2 bg-[var(--color-bg4)] border-b border-[var(--color-line)]">
-          <input
+          <Input
             autoFocus
             value={findText}
             onChange={(e) => runFind(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") activeWv()?.findInPage(findText, { findNext: true }); if (e.key === "Escape") closeFind(); }}
             placeholder="Find in page"
-            className="nodrag flex-1 min-w-0 bg-[var(--color-bg)] border border-[var(--color-line2)] rounded px-2 py-0.5 text-[11px] font-mono text-[var(--color-fg)] outline-none focus:border-[var(--color-brand)]"
+            className="nodrag flex-1 min-w-0"
           />
-          <button className="nodrag text-[11px] text-[var(--color-fg3)] hover:text-[var(--color-fg)]" onClick={closeFind}>Done</button>
+          <Button variant="ghost" size="xs" className="nodrag" onClick={closeFind}>Done</Button>
         </div>
       )}
 

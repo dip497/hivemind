@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { Check, Copy } from "lucide-react";
 import type { MachineStatus } from "../../../shared/ipc";
+import { Button } from "../components/ui/button";
 
 const COLOR: Record<MachineStatus["state"], string> = {
   online: "var(--color-ok)",
@@ -50,14 +51,15 @@ export function CopyCommand({ cmd }: { cmd: string }) {
   return (
     <span className="flex min-w-0 items-center gap-1 rounded-md bg-[var(--color-bg)] border border-[var(--color-line2)] pl-2 pr-1 py-1 font-mono text-[11.5px] text-[var(--color-fg)]">
       <span className="min-w-0 flex-1 truncate select-all" title={cmd}>{cmd}</span>
-      <button
+      <Button
+        variant="ghost"
+        size="icon-2xs"
         onClick={() => { void navigator.clipboard.writeText(cmd).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1200); }); }}
-        className="size-5 grid place-items-center rounded text-[var(--color-fg3)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg3)] cursor-pointer"
         title="Copy"
         aria-label="copy command"
       >
-        {copied ? <Check size={12} /> : <Copy size={12} />}
-      </button>
+        {copied ? <Check /> : <Copy />}
+      </Button>
     </span>
   );
 }
@@ -79,9 +81,9 @@ export function AttentionNote({ target, detail, needsPassword, onSetPassword }: 
           : "Run this once in a terminal to accept the host key or set up your key, then check again:"}
       </span>
       {needsPassword && onSetPassword && (
-        <button onClick={onSetPassword} className="w-fit px-2.5 py-1 rounded-md text-[12px] font-medium text-white bg-[var(--color-brand)] hover:opacity-90 cursor-pointer">
+        <Button size="sm" onClick={onSetPassword} className="justify-self-start">
           Set password…
-        </button>
+        </Button>
       )}
       <CopyCommand cmd={needsPassword ? `ssh-copy-id ${target}` : `ssh ${target}`} />
     </div>

@@ -3,6 +3,8 @@ import { ChevronRight, Globe2 } from "lucide-react";
 import { toast } from "sonner";
 import { BUNDLED_TOOL_PLUGINS, BROWSER_PLUGIN_ID } from "@hivemind/core/tool-plugins";
 import { getSettings, patchSettings, useSettings } from "./settings-store";
+import { Button } from "./components/ui/button";
+import { Switch } from "./components/ui/switch";
 import { useSettingsNavigate } from "./settings-panels";
 import { toolLabel } from "./settings-nav";
 
@@ -29,8 +31,8 @@ function ToolRow({ pluginId }: { pluginId: string }) {
     <div className="settings-extension-row">
       <div className="settings-extension-icon"><Globe2 size={19} /></div>
       <div className="settings-extension-label"><h4>{title}</h4>{about && <p>{about}</p>}</div>
-      <button className="settings-icon-button" aria-label={`${title} settings`} onClick={() => go(`tool:${pluginId}`)}><ChevronRight size={15} /></button>
-      <button className="settings-switch" role="switch" aria-label={`Enable ${title}`} aria-checked={enabled} onClick={toggle}><span /></button>
+      <Button variant="ghost" size="icon-sm" aria-label={`${title} settings`} onClick={() => go(`tool:${pluginId}`)}><ChevronRight /></Button>
+      <Switch aria-label={`Enable ${title}`} checked={enabled} onCheckedChange={toggle} />
     </div>
   </div>;
 }
@@ -53,7 +55,7 @@ export function ToolPage({ id }: { id: string }) {
     <header className="plugin-head">
       <span className="plugin-mark"><Globe2 size={22} /></span>
       <div className="plugin-title"><p>Built in · {enabled ? "On" : "Off"}</p></div>
-      <button className="settings-switch" role="switch" aria-label={`Enable ${title}`} aria-checked={enabled} onClick={toggle}><span /></button>
+      <Switch aria-label={`Enable ${title}`} checked={enabled} onCheckedChange={toggle} />
     </header>
     {id === BROWSER_PLUGIN_ID && <BrowserControl toolOn={enabled} />}
   </div>;
@@ -73,14 +75,14 @@ function BrowserControl({ toolOn }: { toolOn: boolean }) {
   return <section className="plugin-section" aria-label="Browser control">
     <h3>Agent control</h3>
     <div className="settings-row">
-      <div><label>Agent browser control</label><p>Let agents interact with Browser panels.</p></div>
-      <button className="settings-switch" role="switch" aria-label="Enable agent browser control" aria-checked={state.enabled} disabled={busy || (!toolOn && !state.enabled)} onClick={() => void toggle()}><span /></button>
+      <div className="flex-1"><label>Agent browser control</label><p>Let agents interact with Browser panels.</p></div>
+      <Switch aria-label="Enable agent browser control" checked={state.enabled} disabled={busy || (!toolOn && !state.enabled)} onCheckedChange={() => void toggle()} />
     </div>
     {!toolOn && !state.enabled && <p className="settings-note">Switch Browser on to use this.</p>}
     <p className="settings-note warn">Opens 127.0.0.1:{state.port}. Local processes can also control the app window. Only enable this for agents you trust.</p>
     <div className="settings-row">
       <span className="settings-note">Right now: {state.active ? "active" : "off"}</span>
-      {state.enabled !== state.active && <button onClick={() => void window.hive.relaunchApp()} className="settings-button">Relaunch to apply</button>}
+      {state.enabled !== state.active && <Button size="sm" variant="outline" onClick={() => void window.hive.relaunchApp()}>Relaunch to apply</Button>}
     </div>
   </section>;
 }

@@ -82,6 +82,7 @@ import type { AppErrorEvent, MachineAddRequest } from "../shared/ipc.js";
 import { startPlanBridge, type PlanRequest } from "./plan-bridge.js";
 import { randomUUID } from "node:crypto";
 import { startHcpServer } from "./hcp/hcp-server.js";
+import { makeSpawnPacer } from "./spawn-pacer.js";
 import { makeDispatch } from "./hcp/methods.js";
 import { labelOf as hcpLabelOf } from "./hcp/names.js";
 import { Mailbox } from "./hcp/mailbox.js";
@@ -1045,18 +1046,9 @@ ipcMain.handle("worktreeRemove", wrap((_e, repoPath: string, wtPath: string, for
 ipcMain.handle("worktreePrune", wrap((_e, repoPath: string) => worktreePrune(repoPath)));
 
 // PTY
-// Sliding-window spawn rate-limit (see ptySpawn handler).
-const PTY_SPAWN_WINDOW_MS = 10_000;
-const PTY_SPAWN_MAX = 24;
-let ptySpawnTimes: number[] = [];
-function recordPtySpawn(): void {
-  const now = Date.now();
-  ptySpawnTimes = ptySpawnTimes.filter((t) => now - t < PTY_SPAWN_WINDOW_MS);
-  if (ptySpawnTimes.length >= PTY_SPAWN_MAX) {
-    throw new Error("pty spawn rate limit exceeded — too many terminals spawned at once");
-  }
-  ptySpawnTimes.push(now);
-}
+// Sliding-window spawn rate-limit (see ptySpawn handler): over the limit a spawn waits
+// for room rather than failing, so restoring a large workspace no longer kills tiles.
+const recordPtySpawn = makeSpawnPacer({ windowMs: 10_000, max: 24, queueMax: 128 });
 
 // HCP (control plane) shared state — the output recorder + turn tracker are fed
 // from the SAME pty data main relays to the renderer (tee'd in the onData
@@ -1218,7 +1210,8 @@ ipcMain.handle("ptySpawn", wrap(async (e, opts: Parameters<typeof spawnPty>[0]) 
   // window — the dev-bridge already guards the identical call; the IPC path
   // must too. And reject a non-directory cwd up front (otherwise it surfaces as
   // an opaque node-pty throw later).
-  recordPtySpawn();
+  // Showing an existing session starts no process, so it cannot fork-bomb anything.
+  if (!("attachOnly" in opts && opts.attachOnly)) await recordPtySpawn();
   // Supervised worker? Inject HIVE_SUPERVISE into its spawn env so the daemon
   // installs the PreToolUse permission-broker hook (HCP Phase 6). opts.tileId is
   // the pty id; the policy is keyed by the bare id.
@@ -1800,6 +1793,7 @@ function startHcpControlPlane(): void {
   hcpForgetTile = _hcp.forgetTile; // wire the pty-exit teardown to the dispatch's per-tile cleanup
   const server = startHcpServer(hcpSockPath(userData), {
     token,
+    onListenError: (err: Error) => pushAppError(`Agent control plane is off: ${err.message}. \`hive ctl\` cannot reach this app.`, "hcp"),
     rendererUp: () => !!mainWindow && !mainWindow.isDestroyed(),
     dispatch,
     // Stream replay/resume for `hive ctl stream --lines/--since`: the recorder
@@ -1892,7 +1886,8 @@ function startHcpControlPlane(): void {
       // subagent edge arrives within the grace window, those are lost SubagentStops
       // (interrupt / error / compaction) — reap them so the tile doesn't read
       // "working" forever. A real background subagent will keep emitting edges.
-      if (hcpSubagents.busy(d.tileId)) hcpSubagentReaper.arm(d.tileId);
+      // Both are keyed by the BARE id (see the subagent branch above); d.tileId is the pty id.
+      if (hcpSubagents.busy(toBareId(d.tileId))) hcpSubagentReaper.arm(toBareId(d.tileId));
       // Pipe forwarding: feed this agent's reply into any piped destinations.
       // Skip if a blocking reader already took it — agent.read is the delivery
       // channel this turn; the auto-report is only the fallback for when nobody's

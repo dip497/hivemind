@@ -4,6 +4,7 @@
  * still added in the peek after create (kept out to keep this form quick).
  */
 import { useEffect, useMemo, useState } from "react";
+import { Button } from "./ui/button";
 import {
   Dialog,
   DialogContent,
@@ -12,6 +13,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./ui/dialog";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+import { Textarea } from "./ui/textarea";
 import { useCreateIssue, useIssues } from "../queries";
 import type { Assignee, IssueState } from "@hivemind/core/types";
 import { AssigneePicker, LabelPicker, ParentPicker } from "../issues/pickers";
@@ -35,7 +39,7 @@ const STATES: { value: IssueState; label: string }[] = [
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="grid gap-1.5">
-      <span className="u-eyebrow">{label}</span>
+      <Label>{label}</Label>
       {children}
     </div>
   );
@@ -99,29 +103,29 @@ export function NewIssueModal({ root, open, onOpenChange, onCreated }: Props) {
     );
   }
 
+  // Only the native <select> still uses this — the shadcn primitives own the text fields.
   const inputCls =
-    "w-full bg-[var(--color-bg)] border border-[var(--color-line2)] rounded-lg px-3 py-2 text-[13px] text-[var(--color-fg)] placeholder:text-[var(--color-fg3)] focus:outline-none focus:border-[var(--color-brand)] focus:ring-2 focus:ring-[var(--color-brand)]/30 hm-soft";
+    "w-full bg-[var(--color-bg)] border border-[var(--color-line2)] rounded-lg px-3 py-2 text-[13px] text-[var(--color-fg)] focus:outline-none focus:border-[var(--color-brand)]";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[480px]">
         <form onSubmit={submit}>
           <DialogHeader>
-            <DialogTitle className="text-[16px] font-semibold text-[var(--color-fg)]">New issue</DialogTitle>
-            <DialogDescription className="text-[var(--color-fg3)] text-[12px]">
+            <DialogTitle>New issue</DialogTitle>
+            <DialogDescription>
               Lives at <code className="font-mono text-[10.5px]">.hivemind/issues/&lt;id&gt;.md</code>
             </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-3.5 py-4">
             <Field label="Title">
-              <input
+              <Input
                 autoFocus
                 required
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="e.g. Fix flaky CDN cookie tests"
-                className={inputCls}
               />
             </Field>
 
@@ -154,31 +158,24 @@ export function NewIssueModal({ root, open, onOpenChange, onCreated }: Props) {
             </div>
 
             <Field label="Description">
-              <textarea
+              <Textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Markdown. Acceptance criteria can be added after create."
                 rows={5}
-                className={`${inputCls} font-mono resize-y`}
+                font="mono"
+                className="resize-y"
               />
             </Field>
           </div>
 
-          <DialogFooter className="gap-2">
-            <button
-              type="button"
-              onClick={() => onOpenChange(false)}
-              className="px-3.5 py-2 text-[12px] font-medium text-[var(--color-fg2)] hover:text-[var(--color-fg)] rounded-lg hover:bg-[var(--color-bg3)] hm-soft"
-            >
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
               Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={!title.trim() || create.isPending}
-              className="px-3.5 py-2 text-[12px] font-semibold text-white bg-[var(--color-brand)] rounded-lg hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed hm-soft"
-            >
+            </Button>
+            <Button type="submit" disabled={!title.trim() || create.isPending}>
               {create.isPending ? "Creating…" : "Create issue"}
-            </button>
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

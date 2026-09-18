@@ -19,6 +19,8 @@ import type { TileKind } from "./tile-kinds";
 import { checkToolCreation } from "./tool-availability";
 import { checkAgentInstalled } from "./agent-plugins";
 import { isRemote } from "../../shared/remote-uri";
+import { mintId } from "../../shared/tile-id";
+import { getSettings } from "./settings-store";
 
 /** Kinds that are one-per-frame (spawn → focus existing). claude/shell are not. */
 const SINGLETON_KINDS: ReadonlySet<TileKind> = new Set(["editor", "diff", "issues"]);
@@ -35,7 +37,6 @@ type SpawnPick = ({ kind: TileKind } & SpawnOpts) | null;
 export interface SpawnCtx {
   repoPath: string | null;
   /** settings.agents.options: agent id → option id → value. */
-  agentOptions: Record<string, Record<string, string>>;
   positionsRef: MutableRefObject<Record<string, { x: number; y: number }>>;
   sizesRef: MutableRefObject<Record<string, { width: number; height: number }>>;
   tilesRef: MutableRefObject<TileInstance[]>;
@@ -46,7 +47,6 @@ export interface SpawnCtx {
   repoPathRef: MutableRefObject<string | null>;
   rootRef: MutableRefObject<string | null>;
   lastActiveFrameRef: MutableRefObject<string | null>;
-  claudeSeqRef: MutableRefObject<number>;
   setFrameOf: Dispatch<SetStateAction<Record<string, string>>>;
   setPositions: Dispatch<SetStateAction<Record<string, { x: number; y: number }>>>;
   setSelectedTileId: Dispatch<SetStateAction<string | null>>;
@@ -61,21 +61,39 @@ export interface SpawnCtx {
    *  `opts.file` and this delivers it (the same shape as `queueWork` for a
    *  fresh agent tile). */
   openFileInTile: (tileId: string, file: string) => void;
+  /** Give a tile an explicit name, which outranks the title its program sets. */
+  renameTile: (tileId: string, name: string) => void;
 }
 
-/** The user's saved options for this agent, with this launch's own choices on top. */
-function launchOptions(saved: SpawnCtx["agentOptions"], id: string, over: SpawnOptions): SpawnOptions {
+/** One past the highest ordinal already on the canvas for this label, so numbers neither repeat nor restart after a relaunch. */
+function nextOrdinal(tiles: readonly TileInstance[], labelFor: (n: number) => string): number {
+  const probe = 987654321;
+  const prefix = labelFor(probe).split(String(probe))[0]!;
+  let max = 0;
+  for (const t of tiles) {
+    if (!t.label.startsWith(prefix)) continue;
+    const n = parseInt(t.label.slice(prefix.length), 10);
+    if (n > max) max = n;
+  }
+  return max + 1;
+}
+
+/** The user's saved options for this agent, with this launch's own choices on top.
+ *  Read at spawn time: settings are rebuilt on every write, and as a hook dependency
+ *  they rebuilt every spawn callback and every tile surface with it. */
+function launchOptions(id: string, over: SpawnOptions): SpawnOptions {
+  const saved = getSettings().agents.options;
   const picked = Object.fromEntries(Object.entries(over).filter(([, v]) => v));
   return { ...saved[id], ...picked };
 }
 
 export function useSpawn(ctx: SpawnCtx) {
   const {
-    repoPath, agentOptions,
+    repoPath,
     positionsRef, sizesRef, tilesRef, frameOfRef, framesRef, selectedFrameIdRef,
-    selectedTileIdRef, repoPathRef, rootRef, lastActiveFrameRef, claudeSeqRef,
+    selectedTileIdRef, repoPathRef, rootRef, lastActiveFrameRef,
     setFrameOf, setPositions, setSelectedTileId, setFocusReq, setFrames,
-    setSelectedFrameId, setTiles, setSpawnPick, focusTile, openFileInTile,
+    setSelectedFrameId, setTiles, setSpawnPick, focusTile, openFileInTile, renameTile,
   } = ctx;
 
   const placeInFrame = useCallback((id: string, frame: FrameState, opts?: { background?: boolean }) => {
@@ -165,7 +183,7 @@ export function useSpawn(ctx: SpawnCtx) {
   const ensureFrame = useCallback((): FrameState => {
     const existing = pickFrame();
     if (existing) return existing;
-    const id = `frame-${Date.now()}`;
+    const id = mintId("frame");
     const rp = repoPathRef.current;
     // If old tiles already exist on the canvas (persisted from before
     // frame=workspace landed), size the base frame to WRAP them so they
@@ -250,26 +268,25 @@ export function useSpawn(ctx: SpawnCtx) {
           setSelectedTileId(existing.id); focusTile(existing.id); return;
         }
       }
-      const n = ++claudeSeqRef.current;
-      const newId = `tile-${kind}-${Date.now()}`;
+      const def = kind === AGENT_TILE_KIND ? ((opts?.agent ? catalogAgentById(opts.agent.id) : undefined) ?? defaultAgent()) : undefined;
+      const newId = mintId(`tile-${def?.id ?? kind}`);
       let cmd: string | undefined;
       let args: string[] | undefined;
       let label: string;
-      if (kind === AGENT_TILE_KIND) {
-        const def = (opts?.agent ? catalogAgentById(opts.agent.id) : undefined) ?? defaultAgent();
-        const so = launchOptions(agentOptions, def.id, { mode: opts?.mode });
+      if (def) {
+        const so = launchOptions(def.id, { mode: opts?.mode });
         args = spawnArgsFor(def, so);
         cmd = def.bin;
-        label = spawnLabelFor(def, n, so);
+        label = spawnLabelFor(def, nextOrdinal(tilesRef.current, (n) => spawnLabelFor(def, n, {})), so);
       } else if (kind === "shell" && opts?.session) {
         cmd = opts.session.cmd; args = opts.session.args;
         label = opts.session.label;
       } else if (kind === "shell") {
         const sh = defaultShell();
         cmd = sh.cmd; args = sh.args;
-        label = `shell #${n}`;
+        label = `shell #${nextOrdinal(tilesRef.current, (n) => `shell #${n}`)}`;
       } else if (kind === "browser") {
-        label = `Browser #${n}`;
+        label = `Browser #${nextOrdinal(tilesRef.current, (n) => `Browser #${n}`)}`;
       } else {
         label = kind === "editor" ? "Editor" : kind === "diff" ? "Diff" : "Issues";
       }
@@ -284,7 +301,7 @@ export function useSpawn(ctx: SpawnCtx) {
       if (opts?.file) openFileInTile(newId, opts.file);
       return newId;
     },
-    [agentOptions, placeInFrame, ensureFrame, focusTile, openFileInTile],
+    [placeInFrame, ensureFrame, focusTile, openFileInTile, tilesRef],
   );
 
   // Spawn from a global surface (ToolIsland / palette / hotkey). A current
@@ -361,7 +378,7 @@ export function useSpawn(ctx: SpawnCtx) {
       const agentFrameId = callerTile ? frameOfRef.current[callerTile] : undefined;
       const frame =
         (agentFrameId ? framesRef.current.find((f) => f.id === agentFrameId) : undefined) ?? ensureFrame();
-      const newId = `tile-planReview-${Date.now()}`;
+      const newId = mintId("tile-planReview");
       placeInFrame(newId, frame);
       setTiles((cur) => [
         ...cur,
@@ -409,16 +426,15 @@ export function useSpawn(ctx: SpawnCtx) {
       const resolved = opts.frame ? resolveFrame(opts.frame) : undefined;
       const callerFrame = callerFrameId ? framesRef.current.find((f) => f.id === callerFrameId) : undefined;
       const frame = resolved ?? callerFrame ?? ensureFrame();
-      const n = ++claudeSeqRef.current;
-      const newId = `tile-claude-${Date.now()}`;
       const def = catalogAgentById(opts.agent) ?? defaultAgent();
-      const so = launchOptions(agentOptions, def.id, { mode: opts.mode, model: opts.model });
+      const newId = mintId(`tile-${def.id}`);
+      const so = launchOptions(def.id, { mode: opts.mode, model: opts.model });
       const args = spawnArgsFor(def, so);
       const cmd = def.bin;
-      let label = spawnLabelFor(def, n, so);
-      // A spawner-chosen name wins over the generated "Pi #3" label — on a canvas
-      // of a dozen workers, "reviewer" is what tells them apart. Main sanitizes it.
-      if (opts.name) label = opts.name;
+      const label = spawnLabelFor(def, nextOrdinal(tilesRef.current, (n) => spawnLabelFor(def, n, {})), so);
+      // A spawner-chosen name ("reviewer") is what tells a dozen workers apart, so it
+      // ranks like a rename, above the title the agent sets itself. Main sanitizes it.
+      if (opts.name) renameTile(newId, opts.name);
       // Background (workflow / report:false) workers: place WITHOUT stealing
       // focus or centering the viewport, and mark them so useAgentAwareness skips
       // their "finished" notification — they're gathered in bulk, not driven.
@@ -428,7 +444,7 @@ export function useSpawn(ctx: SpawnCtx) {
       if (opts.prompt) queueWork(newId, opts.prompt);
       return newId;
     },
-    [agentOptions, ensureFrame, placeInFrame],
+    [ensureFrame, placeInFrame, renameTile, tilesRef],
   );
 
   return { placeInFrame, ensureFrame, spawnTile, spawnInto, spawnClaude, spawnAgent, spawnVis, frameOpen, openPlanReview, hcpSpawnAgent };

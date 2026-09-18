@@ -1,10 +1,13 @@
 import * as SettingsDialog from "@radix-ui/react-dialog";
-import "./settings.css";
 import { setWorkspaceOccluded } from "./workspace-occlusion";
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Bell, ChevronRight, ExternalLink, Loader2, Plus, Settings, X, Palette, PanelsTopLeft, Puzzle, Bot, Keyboard, Info } from "lucide-react";
+import { Button } from "./components/ui/button";
+import { Input } from "./components/ui/input";
+import { Label } from "./components/ui/label";
+import { Switch } from "./components/ui/switch";
 import path from "path-browserify";
 import type { UpdateStatus } from "../../shared/ipc";
 import {
@@ -179,6 +182,7 @@ export function App() {
   const [newOpen, setNewOpen] = useState(false);
   const [initing, setIniting] = useState(false);
   const [initOpen, setInitOpen] = useState(false);
+  const openInit = useCallback(() => setInitOpen(true), []);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const update = useUpdateCheck();
@@ -352,34 +356,38 @@ export function App() {
           cwd={cwd}
           repoPath={repoPath}
           root={root}
-          onInitWorkspace={!root ? () => setInitOpen(true) : undefined}
+          onInitWorkspace={!root ? openInit : undefined}
           updateAvailable={update.status?.updateAvailable === true}
           onUpgrade={update.upgrade}
           upgrading={update.upgrading}
         />
         <div className="absolute top-0 right-0 z-40 flex items-start gap-2 px-3 py-2.5 pointer-events-none">
           {root && (
-            <button
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => setNewOpen(true)}
-              className="pointer-events-auto inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hm-island text-[12px] font-medium text-[var(--color-fg)] hover:bg-[var(--color-bg3)] transition-colors"
+              className="pointer-events-auto"
               title="New issue (⌘N)"
             >
-              <Plus aria-hidden className="size-3.5 text-[var(--color-fg2)]" />
+              <Plus aria-hidden />
               <span>New issue</span>
-              <kbd className="font-mono text-[9.5px] text-[var(--color-fg3)] ml-0.5">⌘N</kbd>
-            </button>
+              <kbd className="font-mono text-[9.5px] ml-0.5">⌘N</kbd>
+            </Button>
           )}
-          <button
+          <Button
+            variant="secondary"
+            size="icon"
             onClick={() => setSettingsOpen(true)}
-            className="pointer-events-auto relative inline-flex items-center justify-center size-8 rounded-lg hm-island text-[var(--color-fg2)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)]"
+            className="pointer-events-auto relative"
             title={update.status?.updateAvailable ? "Settings — update available" : "Settings"}
             aria-label="settings"
           >
-            <Settings aria-hidden className="size-4" />
+            <Settings aria-hidden />
             {update.status?.updateAvailable && (
               <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-[var(--color-warn)] ring-2 ring-[var(--color-bg2)]" aria-hidden />
             )}
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -415,28 +423,6 @@ export function App() {
 const REPO_URL = "https://github.com/dip497/hivemind";
 
 
-/** Small accessible switch — matches the existing agent-browser toggle's
- *  track/knob styling so every preference in Settings reads as one family. */
-function Switch({
-  checked,
-  onChange,
-  label,
-  disabled,
-}: {
-  checked: boolean;
-  onChange: (next: boolean) => void;
-  label: string;
-  disabled?: boolean;
-}) {
-  return (
-    <button type="button" role="switch" aria-checked={checked} aria-label={label}
-      disabled={disabled} onClick={() => onChange(!checked)} className="settings-switch">
-      <span />
-    </button>
-  );
-}
-
-
 function NotificationPrefs() {
   const [s, setS] = useState<NotificationSettings>(() => getNotificationSettings());
   useEffect(() => subscribeNotificationSettings(setS), []);
@@ -461,7 +447,7 @@ function NotificationPrefs() {
           <Bell size={14} className="text-[var(--color-fg2)]" />
           <span className="text-[13px] font-medium text-[var(--color-fg)]">Notifications</span>
         </div>
-        <Switch checked={s.enabled} onChange={(v) => update({ enabled: v })} label="Enable notifications" />
+        <Switch checked={s.enabled} onCheckedChange={(v) => update({ enabled: v })} aria-label="Enable notifications" />
       </div>
 
       {/* Per-kind mute — which agent transitions reach you. */}
@@ -476,8 +462,8 @@ function NotificationPrefs() {
             <Switch
               disabled={dim}
               checked={s.kinds[k.key]}
-              onChange={(v) => update({ kinds: { ...s.kinds, [k.key]: v } })}
-              label={`Notify on ${k.label}`}
+              onCheckedChange={(v) => update({ kinds: { ...s.kinds, [k.key]: v } })}
+              aria-label={`Notify on ${k.label}`}
             />
           </div>
         ))}
@@ -488,11 +474,11 @@ function NotificationPrefs() {
         <div className="settings-subheading">Delivery</div>
         <div className="settings-row">
           <div className="text-[12px] text-[var(--color-fg)]">In-app toasts</div>
-          <Switch disabled={dim} checked={s.inApp} onChange={(v) => update({ inApp: v })} label="In-app toasts" />
+          <Switch disabled={dim} checked={s.inApp} onCheckedChange={(v) => update({ inApp: v })} aria-label="In-app toasts" />
         </div>
         <div className="settings-row">
           <div className="text-[12px] text-[var(--color-fg)]">Native OS popups</div>
-          <Switch disabled={dim} checked={s.osPopups} onChange={(v) => update({ osPopups: v })} label="Native OS popups" />
+          <Switch disabled={dim} checked={s.osPopups} onCheckedChange={(v) => update({ osPopups: v })} aria-label="Native OS popups" />
         </div>
       </div>
 
@@ -503,25 +489,25 @@ function NotificationPrefs() {
             <div className="text-[12px] text-[var(--color-fg)]">Do Not Disturb</div>
             <div className="settings-note">Mutes finished/failed; needs-you still fires</div>
           </div>
-          <Switch disabled={dim} checked={s.dnd.enabled} onChange={(v) => update({ dnd: { ...s.dnd, enabled: v } })} label="Do Not Disturb" />
+          <Switch disabled={dim} checked={s.dnd.enabled} onCheckedChange={(v) => update({ dnd: { ...s.dnd, enabled: v } })} aria-label="Do Not Disturb" />
         </div>
         {s.dnd.enabled && (
           <div className="mt-2 flex items-center gap-2">
-            <input
+            <Input
               type="time"
               disabled={dim}
               value={s.dnd.start}
               onChange={(e) => update({ dnd: { ...s.dnd, start: e.target.value } })}
-              className="font-mono text-[11px] bg-[var(--color-bg2)] border border-[var(--color-line2)] rounded px-2 py-1 text-[var(--color-fg)] focus-visible:outline-none"
+              className="w-auto"
               aria-label="DND start"
             />
             <span className="text-[11px] text-[var(--color-fg2)]">to</span>
-            <input
+            <Input
               type="time"
               disabled={dim}
               value={s.dnd.end}
               onChange={(e) => update({ dnd: { ...s.dnd, end: e.target.value } })}
-              className="font-mono text-[11px] bg-[var(--color-bg2)] border border-[var(--color-line2)] rounded px-2 py-1 text-[var(--color-fg)] focus-visible:outline-none"
+              className="w-auto"
               aria-label="DND end"
             />
             <span className="text-[10px] text-[var(--color-fg2)] ml-auto">local time</span>
@@ -610,7 +596,7 @@ function SettingsModal({
                   ? <button aria-expanded={open} onClick={() => toggleGroup(group)}><ChevronRight size={12} aria-hidden="true" /><span>{group}</span></button>
                   : <span className="settings-nav-heading-text">{group}</span>}</h3>
                 {shown.map((item) => <button key={item.id} onClick={() => setPage(item.id)} aria-current={page === item.id ? "page" : undefined}
-                  title={item.label} data-settings-page={item.id}>
+                  title={item.label} data-settings-page={item.id} data-plugin={item.plugin ? "" : undefined}>
                   <span className="settings-nav-icon" aria-hidden="true">{item.icon}</span><span>{item.label}</span>
                 </button>)}
               </div>;
@@ -650,22 +636,22 @@ function SettingsModal({
                   <span className="size-2 rounded-full bg-[var(--color-warn)]" aria-hidden />
                   Update available{update.latest ? ` — v${update.latest}` : ""}
                 </span>
-                <button
+                <Button
                   onClick={onUpgrade}
                   disabled={upgrading}
                   aria-busy={upgrading}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-medium text-white bg-[var(--color-brand)] rounded hover:opacity-90 disabled:opacity-70 disabled:cursor-default"
+                  size="xs"
                   title={upgrading ? "Downloading and installing the update…" : "Download the latest release and restart"}
                 >
                   {upgrading ? (
                     <>
-                      <Loader2 className="size-3 animate-spin" aria-hidden />
+                      <Loader2 className="animate-spin" aria-hidden />
                       Updating…
                     </>
                   ) : (
                     "Update & restart"
                   )}
-                </button>
+                </Button>
               </>
             ) : (
               <>
@@ -673,13 +659,13 @@ function SettingsModal({
                   <span className="size-2 rounded-full" style={{ background: checking ? "var(--color-fg3)" : "var(--color-ok)" }} aria-hidden />
                   {checking ? "Checking…" : "Up to date"}
                 </span>
-                <button
+                <Button
+                  variant="outline"
                   onClick={() => onCheck({ force: true })}
                   disabled={checking}
-                  className="settings-button"
                 >
                   {checking ? "Checking…" : "Check now"}
-                </button>
+                </Button>
               </>
             )}
           </div>
@@ -747,34 +733,26 @@ function InitWorkspacePrompt({
             if (valid && !pending) onConfirm(prefix);
           }}
         >
-          <label className="grid gap-1">
-            <span className="text-[11px] text-[var(--color-fg3)] uppercase tracking-wider">Issue prefix</span>
-            <input
+          <div className="grid gap-1">
+            <Label htmlFor="init-prefix">Issue prefix</Label>
+            <Input font="mono"
+              id="init-prefix"
               autoFocus
               value={prefix}
               onChange={(e) => setPrefix(e.target.value.toUpperCase())}
               placeholder="e.g. PAY"
-              className="w-full bg-[var(--color-bg)] border border-[var(--color-line2)] rounded-md px-2.5 py-1.5 text-[13px] font-mono text-[var(--color-fg)] focus:outline-none focus:border-[var(--color-brand)]"
             />
             {!valid && prefix.length > 0 && (
               <span className="text-[10.5px] text-[var(--color-err)]">UPPERCASE, 2–10 chars, starts with a letter</span>
             )}
-          </label>
+          </div>
           <div className="mt-4 flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => onOpenChange(false)}
-              className="px-3 py-1.5 text-[12px] text-[var(--color-fg2)] hover:text-[var(--color-fg)] rounded"
-            >
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
               Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={!valid || pending}
-              className="px-3 py-1.5 text-[12px] font-medium text-white bg-[var(--color-brand)] rounded hover:opacity-90 disabled:opacity-40"
-            >
+            </Button>
+            <Button type="submit" disabled={!valid || pending}>
               {pending ? "Initializing…" : "Initialize"}
-            </button>
+            </Button>
           </div>
         </form>
       </div>

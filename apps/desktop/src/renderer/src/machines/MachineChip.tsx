@@ -2,6 +2,8 @@
  * The machine a remote frame runs on, in its header: live dot, name, folder, round trip.
  * Clicking opens its status, the sessions already running there, and the frame's actions.
  */
+import { MenuItem } from "../components/ui/menu-item";
+import { Button } from "../components/ui/button";
 import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { FolderOpen, Loader2, RefreshCw, Server, Settings2, SquareTerminal, Unplug } from "lucide-react";
@@ -72,7 +74,6 @@ function MachinePanel({ anchor, uri, frameId, onUnbind, onClose }: { anchor: DOM
   }
   // Frozen ones would re-run their command on attach; only a running job can be adopted.
   const shown = (sessions ?? []).filter((s) => s.state === "live" && !openSessionIds().has(s.id));
-  const item = "flex items-center gap-2 w-full text-left px-2 py-1.5 rounded text-[12px] text-[var(--color-fg)] hover:bg-[var(--color-bg4)] cursor-pointer";
 
   return (
     <div
@@ -103,7 +104,7 @@ function MachinePanel({ anchor, uri, frameId, onUnbind, onClose }: { anchor: DOM
       {(status.state === "reconnecting" || status.state === "offline") && (
         <div className="mx-1 flex items-center gap-2 rounded-md bg-[var(--color-bg)] px-2 py-1.5 text-[11px] text-[var(--color-fg2)]">
           <span className="flex-1 truncate" title={status.detail}>{status.detail ?? "Waiting for the network…"}</span>
-          {hostId && <button onClick={() => void window.hive.machineReconnect(hostId)} className="shrink-0 text-[var(--color-brand)] hover:underline cursor-pointer">Retry now</button>}
+          {hostId && <Button variant="link" size="xs" onClick={() => void window.hive.machineReconnect(hostId)} className="shrink-0">Retry now</Button>}
         </div>
       )}
       {status.state === "no-hive" && (
@@ -113,22 +114,22 @@ function MachinePanel({ anchor, uri, frameId, onUnbind, onClose }: { anchor: DOM
       )}
       <div className="h-px bg-[var(--color-line2)] my-0.5" />
       {sessions === null ? (
-        <button onClick={() => void loadSessions()} className={item} disabled={loading}>
+        <MenuItem onClick={() => void loadSessions()} disabled={loading}>
           {loading ? <Loader2 size={13} className="animate-spin" /> : <SquareTerminal size={13} />} Sessions running there…
-        </button>
+        </MenuItem>
       ) : (
         <div className="grid gap-0.5">
           <span className="flex items-center px-2 pt-1 u-eyebrow">
             Running there
-            <button onClick={() => void loadSessions()} aria-label="refresh sessions" className="ml-auto text-[var(--color-fg3)] hover:text-[var(--color-fg)] cursor-pointer"><RefreshCw size={11} className={loading ? "animate-spin" : ""} /></button>
+            <Button variant="ghost" size="icon-xs" onClick={() => void loadSessions()} aria-label="refresh sessions" className="ml-auto"><RefreshCw className={loading ? "animate-spin" : ""} /></Button>
           </span>
           {shown.length === 0 && <span className="px-2 py-1 text-[11.5px] text-[var(--color-fg3)]">Nothing that isn't already on the canvas.</span>}
           <div className="max-h-[220px] overflow-y-auto overflow-x-hidden grid grid-cols-[minmax(0,1fr)] gap-0.5">
             {shown.map((s) => (
-              <button
+              <MenuItem
                 key={s.id}
                 onClick={() => { window.dispatchEvent(new CustomEvent("hivemind:open-session", { detail: { frameId, session: s } })); onClose(); }}
-                className={`${item} items-start`}
+                className="items-start"
                 title={`Open ${s.id} in this frame`}
               >
                 <span className="mt-1 size-1.5 shrink-0 rounded-full" style={{ background: s.state === "live" ? "var(--color-ok)" : "var(--color-fg3)" }} />
@@ -136,7 +137,7 @@ function MachinePanel({ anchor, uri, frameId, onUnbind, onClose }: { anchor: DOM
                   <span className="block truncate">{s.title || [s.cmd, ...s.args].join(" ")}</span>
                   <span className="block truncate text-[10.5px] font-mono text-[var(--color-fg3)]">{s.id} · {s.cwd}{s.viewers ? ` · ${s.viewers} watching` : ""}</span>
                 </span>
-              </button>
+              </MenuItem>
             ))}
           </div>
         </div>
@@ -144,16 +145,16 @@ function MachinePanel({ anchor, uri, frameId, onUnbind, onClose }: { anchor: DOM
       {error && <p className="px-2 text-[11px] text-[var(--color-err)] break-words">{error}</p>}
       <div className="h-px bg-[var(--color-line2)] my-0.5" />
       {machine && (
-        <button onClick={() => { onClose(); openMachines({ kind: "pick", frameId, machineId: machine.id }); }} className={item}>
+        <MenuItem onClick={() => { onClose(); openMachines({ kind: "pick", frameId, machineId: machine.id }); }}>
           <FolderOpen size={13} /> Change folder…
-        </button>
+        </MenuItem>
       )}
-      <button onClick={() => { onClose(); openMachines(machine ? { kind: "manage" } : { kind: "add", target }); }} className={item}>
+      <MenuItem onClick={() => { onClose(); openMachines(machine ? { kind: "manage" } : { kind: "add", target }); }}>
         {machine ? <Settings2 size={13} /> : <Server size={13} />} {machine ? "Machines…" : "Save as a machine…"}
-      </button>
-      <button onClick={onUnbind} className={`${item} text-[var(--color-err)]`}>
+      </MenuItem>
+      <MenuItem onClick={onUnbind} variant="destructive">
         <Unplug size={13} /> Disconnect this frame
-      </button>
+      </MenuItem>
     </div>
   );
 }

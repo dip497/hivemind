@@ -133,17 +133,17 @@ export interface ViewChrome {
    *  handle. App-level Settings remains available independently. */
   island: IslandPlacement;
   /** Mount the animated wallpaper layer (and frost tile content) under this
-   *  view. Off for views that paint their own world (World, community): the
-   *  wallpaper would be invisible under an opaque scene and its animation and
-   *  glass blur would still cost every frame. */
+   *  view. A view that paints an opaque scene of its own turns it off: the
+   *  wallpaper would be invisible under it and its animation and glass blur
+   *  would still cost every frame. */
   wallpaper: boolean;
 }
 
-/** A view's chrome with the defaults filled in: a compact bottom island and
- *  no wallpaper — the safe choice for a view that draws its own scene. The
- *  built-ins opt into their own placement + wallpaper explicitly. */
+/** A view's chrome with the defaults filled in: a compact bottom island, and the
+ *  user's wallpaper behind it. A view that paints its own opaque scene opts out
+ *  (`"wallpaper": false` in its manifest); the built-ins declare theirs. */
 export function resolveChrome(plugin: Pick<WorkspaceViewPlugin, "chrome"> | null | undefined): ViewChrome {
-  return { island: plugin?.chrome?.island ?? "bottom", wallpaper: plugin?.chrome?.wallpaper ?? false };
+  return { island: plugin?.chrome?.island ?? "bottom", wallpaper: plugin?.chrome?.wallpaper ?? true };
 }
 
 // ── registry ─────────────────────────────────────────────────────────────────

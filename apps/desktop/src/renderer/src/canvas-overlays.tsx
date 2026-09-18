@@ -5,6 +5,7 @@
  */
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { AlertCircle, CheckCircle2, AlertTriangle, Sparkles, X } from "lucide-react";
+import { Button } from "./components/ui/button";
 import { useTileFocus } from "./canvas-camera";
 import { openMachines } from "./machines/store";
 import { toastKindOf, toastTtlMs, type Toast, type NoticeKind } from "./useAgentAwareness";
@@ -131,29 +132,28 @@ function ToastCard({
           {t.actions && t.actions.length > 0 && (
             <div className="flex gap-1.5 mt-2">
               {t.actions.map((a) => (
-                <button
+                <Button
                   key={a.label}
+                  size="xs"
+                  variant={a.primary ? "default" : "ghost"}
                   onClick={(ev) => { ev.stopPropagation(); a.run(); onExpire(t.id); }}
-                  className={`px-2 py-1 rounded text-[11px] font-medium hm-soft ${
-                    a.primary
-                      ? "bg-[var(--color-brand)] text-white hover:opacity-90"
-                      : "text-[var(--color-fg2)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg4)]"
-                  }`}
                 >
                   {a.label}
-                </button>
+                </Button>
               ))}
             </div>
           )}
         </div>
-        <button
+        <Button reveal="hidden"
+          variant="ghost"
+          size="icon-2xs"
           onClick={(ev) => { ev.stopPropagation(); onExpire(t.id); }}
-          className="shrink-0 -mr-1 -mt-1 size-5 grid place-items-center rounded text-[var(--color-fg3)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg4)] opacity-0 group-hover:opacity-100 hm-soft"
+          className="-mr-1 -mt-1"
           aria-label="Dismiss notification"
           title="dismiss"
         >
-          <X size={12} />
-        </button>
+          <X />
+        </Button>
       </div>
       {/* Auto-dismiss progress line — shrinks over --ttl and pauses with .paused. */}
       <span aria-hidden className="hm-toast-bar" />
@@ -172,10 +172,13 @@ export function Toasts({
 }) {
   // Live relative timestamps. One interval for the whole stack (cheap: 1-3 cards).
   const [now, setNow] = useState(() => Date.now());
+  const anyToast = toasts.length > 0;
   useEffect(() => {
+    if (!anyToast) return;
+    setNow(Date.now());
     const i = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(i);
-  }, []);
+  }, [anyToast]);
 
   // Exit animations need the node mounted while they play, so a dismissal marks
   // the card `leaving` first and drops it once the animation ends — rather than
@@ -284,20 +287,17 @@ export function CanvasEmptyState({
         {/* Secondary: quiet horizontal rule of links */}
         <div className="mt-3 flex items-center gap-1">
           {secondary.map((s) => (
-            <button
+            <Button
               key={s.label}
+              variant="ghost"
+              size="xs"
               onClick={s.action}
               disabled={s.disabled}
               title={s.disabled ? "needs an open repo" : s.label}
-              className={`flex items-center gap-1.5 rounded-md px-2 py-1.5 text-[11.5px] transition-colors ${
-                s.disabled
-                  ? "text-[var(--color-fg3)] opacity-40 cursor-not-allowed"
-                  : "text-[var(--color-fg2)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)]"
-              }`}
             >
               {s.label}
-              <kbd className="font-mono text-[9.5px] text-[var(--color-fg3)]">{s.hint}</kbd>
-            </button>
+              <kbd className="font-mono text-[9.5px]">{s.hint}</kbd>
+            </Button>
           ))}
         </div>
       </div>

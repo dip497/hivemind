@@ -15,6 +15,8 @@ import type { WorktreeEntry } from "../../shared/ipc";
 import { effectiveRepoOf, type PinRect, type TileSurfaceType } from "./workspace/tile-surfaces";
 import type { CanvasTileNodeData } from "./canvas-nodes";
 
+const NO_TILES: string[] = [];
+
 export interface NodeBuildCtx {
   repoPath: string | null;
   tiles: TileInstance[];
@@ -158,7 +160,7 @@ export function buildBaseNodes(ctx: NodeBuildCtx): Node[] {
         onUnbindBranch: unbindBranch,
         onBindWorkspace: bindWorkspace,
         onUnbindWorkspace: unbindWorkspace,
-        tileIds: frameTiles.get(f.id) ?? [],
+        tileIds: frameTiles.get(f.id) ?? NO_TILES,
         tileNames: framesChipNames,
       },
       dragHandle: ".tile-drag-handle",
@@ -171,9 +173,31 @@ export function buildBaseNodes(ctx: NodeBuildCtx): Node[] {
   for (const t of tiles) {
     if ((t.kind === "editor" || t.kind === "diff") && !effectiveRepoOf(t.id, frameOf, frames, repoPath)) continue;
     const { width: w, height: h } = defaultSizeForKind(t.kind);
-    const data: CanvasTileNodeData = { tileId: t.id, onClose: () => closeTile(t.id), onResize: onNodeResizeCommit };
+    const data: CanvasTileNodeData = { tileId: t.id, onClose: closeTile, onResize: onNodeResizeCommit };
     out.push(mkTile({ id: t.id, type: NODE_TYPE[t.kind], style: sized(t.id, w, h), data, dragHandle: ".tile-drag-handle" }, x, y));
     x += (sizes[t.id]?.width ?? w) + gap;
   }
   return out;
+}
+
+const shallowEqual = (a: unknown, b: unknown): boolean => {
+  if (Object.is(a, b)) return true;
+  if (!a || !b || typeof a !== "object" || typeof b !== "object") return false;
+  const ka = Object.keys(a), kb = Object.keys(b);
+  return ka.length === kb.length && ka.every((k) => Object.is((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]));
+};
+
+/** Hands back last build's object for every node whose content did not change, so
+ *  react-flow keeps its adopted node and the memoized tile skips the render. */
+export function reuseNodes(prev: ReadonlyMap<string, Node>, next: Node[]): Node[] {
+  return next.map((n) => {
+    const p = prev.get(n.id);
+    if (!p) return n;
+    const ks = Object.keys(n);
+    const same = ks.length === Object.keys(p).length && ks.every((k) => {
+      const a = (n as Record<string, unknown>)[k], b = (p as Record<string, unknown>)[k];
+      return k === "position" || k === "style" || k === "data" ? shallowEqual(a, b) : Object.is(a, b);
+    });
+    return same ? p : n;
+  });
 }

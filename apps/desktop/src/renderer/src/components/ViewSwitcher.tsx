@@ -1,3 +1,5 @@
+import { Button } from "./ui/button";
+
 export type ViewKind = "board" | "list" | "canvas";
 
 const VIEWS: { key: ViewKind; label: string; icon: React.ReactNode }[] = [
@@ -50,18 +52,10 @@ export function ViewSwitcher({
       {shown.map((v) => {
         const active = v.key === value;
         return (
-          <button
-            key={v.key}
-            onClick={() => onChange(v.key)}
-            className={`inline-flex items-center gap-1.5 px-2 py-1 rounded text-[11.5px] font-medium transition-colors ${
-              active
-                ? "bg-[var(--color-bg4)] text-[var(--color-fg)]"
-                : "text-[var(--color-fg2)] hover:text-[var(--color-fg)]"
-            }`}
-          >
+          <Button key={v.key} variant={active ? "secondary" : "ghost"} size="xs" onClick={() => onChange(v.key)}>
             {v.icon}
             {v.label}
-          </button>
+          </Button>
         );
       })}
     </div>

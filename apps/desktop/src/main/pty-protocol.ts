@@ -88,12 +88,16 @@ export function makeLineDecoder(onLine: (line: string) => void, onOverflow?: () 
   // partial bytes until the rest arrives.
   const utf8 = new StringDecoder("utf8");
   return (chunk) => {
+    // What is already buffered holds no newline (it was scanned last time), so resume the
+    // search where the new text begins — rescanning from 0 made a message that arrives in
+    // k reads cost O(k·n).
+    let from = buf.length;
     buf += typeof chunk === "string" ? chunk : utf8.write(chunk);
     let start = 0;
     let nl: number;
-    while ((nl = buf.indexOf("\n", start)) !== -1) {
+    while ((nl = buf.indexOf("\n", from)) !== -1) {
       const line = buf.slice(start, nl);
-      start = nl + 1;
+      start = from = nl + 1;
       if (line.trim()) onLine(line);
     }
     buf = start === 0 ? buf : buf.slice(start);

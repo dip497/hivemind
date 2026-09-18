@@ -13,12 +13,14 @@
  * dependencies. The expensive editors (terminal palette, per-overlay
  * placement) mount only when their disclosure is open.
  *
- * Styling uses the Settings shell's own classes (settings-section,
- * settings-row, settings-stack, settings-switch, settings-button, …); the
- * shell owns focus rings, so nothing here paints its own.
+ * Layout uses the Settings shell's own classes (settings-section,
+ * settings-row, settings-stack, …); the controls themselves are the shared
+ * shadcn primitives (Button/Switch), which own their look and focus rings.
  */
 import { useState } from "react";
 import { Film, Image as ImageIcon, Plus, Trash2, ChevronDown } from "lucide-react";
+import { Button } from "./components/ui/button";
+import { Switch as SwitchPrimitive } from "./components/ui/switch";
 import { PRESETS, type TerminalPalette } from "@hivemind/core/settings-schema";
 import {
   ACCENTS, ANCHORS, CINEMATIC, WALLPAPERS, addOverlay, removeOverlay, setTheme, updateOverlay,
@@ -28,11 +30,7 @@ import {
 // ── primitives ──────────────────────────────────────────────────────────────
 
 export function Switch({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label: string }) {
-  return (
-    <button type="button" role="switch" aria-checked={on} aria-label={label} className="settings-switch" onClick={() => onChange(!on)}>
-      <span />
-    </button>
-  );
+  return <SwitchPrimitive checked={on} onCheckedChange={onChange} aria-label={label} />;
 }
 
 export function Slider({ label, value, min, max, suffix, onChange }: {
@@ -200,8 +198,8 @@ export function BackgroundControls({ t }: { t: ThemeState }) {
             <p className="settings-path">{name ?? "No file chosen yet."}</p>
           </div>
           <div className="settings-inline">
-            <button type="button" className="settings-button" onClick={() => void pick()}>{name ? "Change…" : "Choose file…"}</button>
-            <button type="button" className="settings-button" title="Dim the media and thicken the panel tint so text stays readable" onClick={() => setTheme(CINEMATIC)}>Cinematic</button>
+            <Button variant="outline" size="sm" onClick={() => void pick()}>{name ? "Change…" : "Choose file…"}</Button>
+            <Button variant="outline" size="sm" title="Dim the media and thicken the panel tint so text stays readable" onClick={() => setTheme(CINEMATIC)}>Cinematic</Button>
           </div>
         </div>
       )}
@@ -272,23 +270,23 @@ function OverlayRow({ layer, index }: { layer: MediaLayer; index: number }) {
           <h4>{layer.name ?? `Overlay ${index + 1}`}</h4>
           <p>{Math.round(layer.opacity * 100)}% opacity<span>·</span>{FITS.find((f) => f.id === layer.fit)?.label ?? "Cover"}</p>
         </div>
-        <button
-          type="button"
-          className="settings-icon-button danger"
+        <Button
+          variant="destructive"
+          size="icon-sm"
           aria-label={`Remove overlay ${index + 1}`}
           onClick={() => removeOverlay(layer.id)}
         >
-          <Trash2 size={14} />
-        </button>
+          <Trash2 />
+        </Button>
       </div>
       <Slider label="Opacity" value={Math.round(layer.opacity * 100)} min={0} max={100} suffix="%" onChange={(v) => updateOverlay(layer.id, { opacity: v / 100 })} />
       <div className="settings-row">
         <div><label>Fit</label></div>
         <div className="settings-inline" role="radiogroup" aria-label={`Overlay ${index + 1} fit`}>
           {FITS.map((f) => (
-            <button key={f.id} type="button" role="radio" aria-checked={layer.fit === f.id} className="settings-button" data-selected={layer.fit === f.id ? "" : undefined} onClick={() => updateOverlay(layer.id, { fit: f.id })}>
+            <Button key={f.id} role="radio" aria-checked={layer.fit === f.id} variant={layer.fit === f.id ? "secondary" : "outline"} size="sm" data-selected={layer.fit === f.id ? "" : undefined} onClick={() => updateOverlay(layer.id, { fit: f.id })}>
               {f.label}
-            </button>
+            </Button>
           ))}
         </div>
       </div>
@@ -334,7 +332,7 @@ export function OverlayControls({ t }: { t: ThemeState }) {
   };
   const n = t.overlayMedia.length;
   return (
-    <details className="settings-disclosure settings-overlays">
+    <details className="settings-disclosure">
       <summary>Overlays<span className="settings-summary-value">{n === 0 ? "None" : `${n}`}</span><ChevronDown size={14} /></summary>
       {n === 0 && (
         <p className="settings-note">
@@ -344,7 +342,7 @@ export function OverlayControls({ t }: { t: ThemeState }) {
       <div className="settings-extension-list">
         {t.overlayMedia.map((layer, i) => <OverlayRow key={layer.id} layer={layer} index={i} />)}
       </div>
-      <button type="button" className="settings-text-button" onClick={() => void add()}><Plus size={14} />Add overlay</button>
+      <Button variant="link" size="sm" className="mt-3" onClick={() => void add()}><Plus />Add overlay</Button>
     </details>
   );
 }
@@ -387,9 +385,9 @@ export function TerminalColors({ t }: { t: ThemeState }) {
         ))}
       </div>
       <div className="settings-actions">
-        <button type="button" className="settings-button" disabled={!dirty} onClick={() => setTerm({ ...preset.terminal, ansi: [...preset.terminal.ansi] })}>
+        <Button variant="outline" size="sm" disabled={!dirty} onClick={() => setTerm({ ...preset.terminal, ansi: [...preset.terminal.ansi] })}>
           Reset to {preset.label}
-        </button>
+        </Button>
       </div>
     </>
   );

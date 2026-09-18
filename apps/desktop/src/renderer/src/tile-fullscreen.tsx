@@ -17,6 +17,7 @@ import { useEffect, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { Wallpaper } from "./Wallpaper";
 import type { TileFont } from "./tile-font";
+import { setWorkspaceOccluded } from "./workspace-occlusion";
 
 /** Font A−/A+ for the (dark, on-wallpaper) fullscreen header. Font density only —
  *  in fullscreen the tile already fills the screen, so tile SCALE is moot. */
@@ -73,9 +74,15 @@ export function FullscreenShell({
     return () => window.removeEventListener("keydown", onKey, true);
   }, [onClose]);
 
+  // Covers the workspace: its full-window wallpaper stops decoding underneath.
+  useEffect(() => {
+    setWorkspaceOccluded(true, "fullscreen");
+    return () => setWorkspaceOccluded(false, "fullscreen");
+  }, []);
+
   return createPortal(
     <div className="fixed inset-0 z-[9999] overflow-hidden">
-      <Wallpaper embedded />
+      <Wallpaper embedded covering />
       <div className="relative z-10 flex h-full w-full flex-col gap-2 p-3">
         <div className="h-7 flex items-center gap-2 px-1 text-[11px] font-mono text-white/85 shrink-0">
           <span className="font-semibold text-white/95">{title}</span>

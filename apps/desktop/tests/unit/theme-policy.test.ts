@@ -5,9 +5,11 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { effectiveGlass, getTheme, getSurfacePolicy, setTheme, setWallpaperActive, slotWallpaper } from "../../src/renderer/src/theme-store";
+import { effectiveGlass, getTheme, getSurfacePolicy, setPluginScene, setTheme, setWallpaperActive, slotWallpaper } from "../../src/renderer/src/theme-store";
 
-const reset = () => { setWallpaperActive(true); setTheme({ glass: true, wallpaper: "aurora", pluginSurfaces: "theme" }); };
+// Two gates, not one: whether the view paints the full-window wallpaper, and whether a plugin
+// draws it. A plugin view gets the wallpaper too, so "opaque" keys off the second.
+const reset = () => { setWallpaperActive(true); setPluginScene(false); setTheme({ glass: true, wallpaper: "aurora", pluginSurfaces: "theme" }); };
 
 test("surface snapshot changes with the view gate even when the theme identity is unchanged", () => {
   reset();
@@ -15,11 +17,11 @@ test("surface snapshot changes with the view gate even when the theme identity i
   const theme = getTheme();
   const canvas = getSurfacePolicy();
   assert.equal(getSurfacePolicy(), canvas);
-  setWallpaperActive(false);
+  setPluginScene(true);
   assert.equal(getTheme(), theme);
   assert.notEqual(getSurfacePolicy(), canvas);
   assert.deepEqual(getSurfacePolicy(), { glass: false, slotWallpaper: false });
-  setWallpaperActive(true);
+  setPluginScene(false);
   assert.equal(getSurfacePolicy(), canvas);
   reset();
 });
@@ -40,6 +42,7 @@ test('in a plugin scene, "theme" keeps glass and paints the wallpaper per slot',
 test('"opaque" restores the cheap behaviour: no glass, no wallpaper in a scene', () => {
   reset();
   setWallpaperActive(false);
+  setPluginScene(true);
   setTheme({ pluginSurfaces: "opaque" });
   assert.equal(effectiveGlass(getTheme()), false);
   assert.equal(slotWallpaper(getTheme()), false);

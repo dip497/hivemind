@@ -10,6 +10,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { CodeView } from "@pierre/diffs/react";
 import type { CodeViewItem } from "@pierre/diffs";
+import { Button } from "../components/ui/button";
 
 const MAX_PREVIEW_BYTES = 10 * 1024 * 1024;
 
@@ -49,7 +50,7 @@ export function DiffSurface({
         <span className="text-[var(--color-fg)] truncate" title={file}>{file}</span>
         <span className="text-[var(--color-fg3)]">· working copy</span>
         {onClose && (
-          <button className="ml-auto text-[10px] text-[var(--color-fg3)]" onClick={onClose}>close</button>
+          <Button variant="ghost" size="xs" className="ml-auto" onClick={onClose}>close</Button>
         )}
       </div>
       <div className="flex-1 overflow-auto">

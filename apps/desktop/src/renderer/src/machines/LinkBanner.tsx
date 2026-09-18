@@ -1,4 +1,5 @@
 /** Over a remote terminal while its machine's link is down: the screen is stale, and why. */
+import { Button } from "../components/ui/button";
 import { useEffect, useState } from "react";
 import { hostIdOfUri, machineByHost, openMachines, statusOf, useMachines } from "./store";
 import { MachineDot } from "./status";
@@ -30,8 +31,8 @@ export function LinkBanner({ cwd }: { cwd: string }) {
         {s.detail && <span className="text-[var(--color-fg3)]"> {s.detail}</span>}
       </span>
       {s.state === "attention"
-        ? <button onClick={() => openMachines({ kind: "manage" })} className="shrink-0 text-[var(--color-brand)] hover:underline cursor-pointer">Fix</button>
-        : <button onClick={() => void window.hive.machineReconnect(hostId)} className="shrink-0 text-[var(--color-brand)] hover:underline cursor-pointer">Retry now</button>}
+        ? <Button variant="link" size="xs" onClick={() => openMachines({ kind: "manage" })} className="shrink-0">Fix</Button>
+        : <Button variant="link" size="xs" onClick={() => void window.hive.machineReconnect(hostId)} className="shrink-0">Retry now</Button>}
     </div>
   );
 }

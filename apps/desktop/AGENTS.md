@@ -97,7 +97,23 @@ tile bodies live in the TileHost and are never remounted by a view.
   UI (the created issue opens in the peek; in-diff search is collapsed to its
   icon; the sonner toast stack covers the bottom-right corner; tree rows expose
   the file name only as their accessible name) — wait on state, never on time.
-- Perf: `scripts/perf-views.mjs` (+ `perf-views-compare.mjs`) is the reproducible
-  multi-agent workload for view/canvas changes — see docs/design/workspace-views.md.
+- Perf: `scripts/perf-canvas-effects.mjs` is the reproducible workload for canvas
+  changes. The view harness (`perf-views.mjs`) went with the World view it measured;
+  a scene-view gate would have to be rewritten against a community view.
 - After editing a file the linter may touch it; re-Read before Edit if an edit
   fails with "modified since read".
+- UI primitives are shadcn components in `src/renderer/src/components/ui`
+  (`components.json`; add more with `npx shadcn@latest add <name>`, then point the
+  `cn` import at `../../lib/cn`). Use them instead of hand-rolled buttons/inputs,
+  and change a look in the component, not at the call site. They read the palette
+  through the shadcn tokens bound in `styles.css`; the brand rules are `/brand` on the site.
+- After making changes, run `pnpm lint` (oxlint + `@shadcn/lint`) and fix all errors.
+  Enabled: `no-restyle` (a primitive owns its look — add a variant instead of classes
+  at the call site; only layout classes are allowed on one), `no-unknown-classes`
+  and `no-raw-colors`. `nodrag`/`nopan`/`nowheel` are allowed: react-flow behaviour, not style.
+- A menu/list row is `MenuItem`, a static chip is `Badge`, and tile/canvas chrome uses the small
+  Button sizes (`2xs` 20px, `micro` 16px, and their `icon-` twins) so a converted control keeps
+  its box. Popovers stay as they are — do not restructure one into a Radix menu.
+- Surface tokens derive in CSS: `--color-bg2/3/4` come from `--surface-2/3/4`, which is what
+  `html.glass-on` recolours. Never write `--color-bg2/3/4` inline from JS — an inline custom
+  property outranks every stylesheet rule and freezes glass mode opaque.

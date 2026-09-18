@@ -110,7 +110,8 @@ async function switcherHas(id: string): Promise<boolean> {
 test("a manifest dropped on disk becomes a real provider in the running app", async () => {
   await openSettings("agents");
   await expect(card("acme")).toContainText("Acme Coder");
-  await expect(card("acme")).toContainText("Added on this machine");
+  // The row says what it runs, not where it came from.
+  await expect(card("acme")).toContainText("acme");
   await expect(card("claude")).toHaveCount(1);
   // The Agents group folds to its overview; opening it lists installed agents.
   await expect(page.locator('[data-settings-page="agent:acme"]')).toHaveCount(0);

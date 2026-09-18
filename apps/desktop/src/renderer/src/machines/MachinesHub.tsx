@@ -2,9 +2,14 @@
  * Machines — every saved ssh machine with its live state, adding one, and choosing where a
  * frame runs (machine → folder). The list is the same one `hive machine` edits.
  */
+import { MenuItem } from "../components/ui/menu-item";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ChevronRight, Folder, Loader2, MoreHorizontal, Plus, RefreshCw, Server } from "lucide-react";
+import { Button } from "../components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "../components/ui/dialog";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
+import { Switch } from "../components/ui/switch";
 import type { MachineInfo, RemoteDirEntry } from "../../../shared/ipc";
 import { machineUri, posixJoin } from "../../../shared/remote-uri";
 import { errText, statusOf, useMachines, type MachinesRequest } from "./store";
@@ -14,9 +19,6 @@ type View = { kind: "list" } | { kind: "add" } | { kind: "browse"; machine: Mach
 
 const CHECK_AFTER_MS = 60_000;
 const CHECK_PARALLEL = 4;
-const input = "w-full bg-[var(--color-bg)] border border-[var(--color-line2)] rounded-md px-2.5 py-1.5 text-[13px] text-[var(--color-fg)] focus:outline-none focus:border-[var(--color-brand)] focus:ring-1 focus:ring-[var(--color-brand)]";
-const primary = "inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-white bg-[var(--color-brand)] rounded-md hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer";
-const quiet = "px-3 py-1.5 text-[12px] text-[var(--color-fg2)] hover:text-[var(--color-fg)] rounded-md cursor-pointer";
 
 export function MachinesHub({ request, onClose, onPick }: {
   request: MachinesRequest | null;
@@ -64,16 +66,16 @@ export function MachinesHub({ request, onClose, onPick }: {
   return (
     <Dialog open={!!request} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent
-        className="sm:max-w-[560px] p-0 gap-0 overflow-hidden grid-cols-[minmax(0,1fr)]"
+        padding="none"
+        className="sm:max-w-[560px] overflow-hidden grid-cols-[minmax(0,1fr)]"
         // Escape in an inline field cancels that field, not the dialog.
         onEscapeKeyDown={(e) => { if ((e.target as HTMLElement | null)?.dataset?.escapeLocal !== undefined) e.preventDefault(); }}
       >
-        <header className="flex items-center gap-2 px-4 h-12 border-b border-[var(--color-line)]">
+        <header className="flex items-center gap-1.5 pl-4 pr-14 pt-4 pb-2">
           {view.kind !== "list" && !(picking?.machineId && view.kind === "browse") && (
-            <button onClick={() => setView({ kind: "list" })} aria-label="back" className="size-6 grid place-items-center rounded text-[var(--color-fg3)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg3)] cursor-pointer"><ArrowLeft size={14} /></button>
+            <Button variant="ghost" size="icon-sm" onClick={() => setView({ kind: "list" })} aria-label="back" className="-ml-1"><ArrowLeft /></Button>
           )}
-          <Server size={15} className="text-[var(--color-brand)]" />
-          <DialogTitle className="text-[13.5px] font-semibold text-[var(--color-fg)]">{title}</DialogTitle>
+          <DialogTitle className="h-7 flex items-center">{title}</DialogTitle>
         </header>
         {view.kind === "list" && (
           <MachineList
@@ -130,7 +132,7 @@ function MachineList({ picking, onChoose, onAdd }: { picking: boolean; onChoose:
             Add a computer you can reach with <span className="font-mono">ssh</span>. Your keys, agent and <span className="font-mono">~/.ssh/config</span> are used as they are;
             terminals there keep running when the connection drops or this app closes.
           </p>
-          <button onClick={onAdd} className={primary}><Plus size={13} /> Add a machine</button>
+          <Button onClick={onAdd}><Plus /> Add a machine</Button>
         </div>
       ) : (
         <ul className="max-h-[420px] overflow-y-auto overflow-x-hidden p-2 grid grid-cols-[minmax(0,1fr)] gap-1" aria-label="machines">
@@ -142,7 +144,7 @@ function MachineList({ picking, onChoose, onAdd }: { picking: boolean; onChoose:
                 <div className="flex items-center gap-2.5 px-2.5 py-2">
                   <MachineDot status={s} enabled={m.enabled} size={8} />
                   {renaming?.id === m.id ? (
-                    <input
+                    <Input
                       autoFocus
                       data-escape-local=""
                       aria-label={`rename ${m.label}`}
@@ -153,7 +155,7 @@ function MachineList({ picking, onChoose, onAdd }: { picking: boolean; onChoose:
                         if (e.key === "Enter") { const d = renaming.draft; setRenaming(null); void run(m, "renaming", () => window.hive.machineUpdate(m.id, { label: d })); }
                       }}
                       onBlur={() => setRenaming(null)}
-                      className={`${input} flex-1 min-w-0`}
+                      className="h-7 flex-1"
                     />
                   ) : (
                     <button
@@ -173,11 +175,12 @@ function MachineList({ picking, onChoose, onAdd }: { picking: boolean; onChoose:
                   </span>
                   {picking && m.enabled && <ChevronRight size={14} className="shrink-0 text-[var(--color-fg3)]" />}
                   <div className="relative">
-                    <button
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
                       onClick={() => setMenu(menu === m.id ? null : m.id)}
-                      className="size-6 grid place-items-center rounded text-[var(--color-fg3)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg4)] cursor-pointer"
                       aria-label={`${m.label} actions`}
-                    ><MoreHorizontal size={14} /></button>
+                    ><MoreHorizontal /></Button>
                     {menu === m.id && (
                       <>
                         <div className="fixed inset-0 z-10" onClick={() => setMenu(null)} />
@@ -190,11 +193,11 @@ function MachineList({ picking, onChoose, onAdd }: { picking: boolean; onChoose:
                             [m.enabled ? "Turn off" : "Turn on", () => run(m, "saving", () => window.hive.machineUpdate(m.id, { enabled: !m.enabled }))],
                             ["Remove", () => run(m, "removing", () => window.hive.machineRemove(m.id))],
                           ].map(([label, fn]) => (
-                            <button
+                            <MenuItem
                               key={label as string}
                               onClick={fn as () => void}
-                              className={`text-left px-2 py-1.5 rounded hover:bg-[var(--color-bg4)] cursor-pointer ${label === "Remove" ? "text-[var(--color-err)]" : "text-[var(--color-fg)]"}`}
-                            >{label as string}</button>
+                              variant={label === "Remove" ? "destructive" : "default"}
+                            >{label as string}</MenuItem>
                           ))}
                         </div>
                       </>
@@ -215,8 +218,8 @@ function MachineList({ picking, onChoose, onAdd }: { picking: boolean; onChoose:
                       });
                     }}
                   >
-                    <input name="pw" type="password" autoFocus data-escape-local="" aria-label={`password for ${m.label}`} placeholder={`password for ${m.target}`} className={input} onKeyDown={(e) => { if (e.key === "Escape") setAskPassword(null); }} />
-                    <button type="submit" className={primary}>Save</button>
+                    <Input name="pw" type="password" autoFocus data-escape-local="" aria-label={`password for ${m.label}`} placeholder={`password for ${m.target}`} className="h-7" onKeyDown={(e) => { if (e.key === "Escape") setAskPassword(null); }} />
+                    <Button type="submit" size="sm">Save</Button>
                   </form>
                 )}
                 {notes[m.id] && <p className="px-2.5 pb-2 text-[11px] text-[var(--color-fg2)]">{notes[m.id]}</p>}
@@ -241,7 +244,7 @@ function MachineList({ picking, onChoose, onAdd }: { picking: boolean; onChoose:
       {snap.machines.length > 0 && (
         <footer className="flex items-center gap-2 px-4 py-2.5 border-t border-[var(--color-line)]">
           <span className="text-[11px] text-[var(--color-fg3)]">Same list as <span className="font-mono">hive machine</span> in a terminal.</span>
-          <button onClick={onAdd} className={`ml-auto ${primary}`}><Plus size={13} /> Add</button>
+          <Button size="sm" onClick={onAdd} className="ml-auto"><Plus /> Add</Button>
         </footer>
       )}
     </div>
@@ -283,42 +286,40 @@ function AddMachine({ initialTarget, onCancel, onAdded }: { initialTarget?: stri
           <span className="text-[var(--color-fg)]">{warn.label} is saved and connected</span>, but this computer has no OS keychain available,
           so its password is kept only until the app closes. Next time, open Machines and use “Set password…”, or set up an ssh key instead.
         </p>
-        <div className="flex justify-end"><button onClick={() => onAdded(warn)} className={primary}>Got it</button></div>
+        <div className="flex justify-end"><Button onClick={() => onAdded(warn)}>Got it</Button></div>
       </div>
     );
   }
   return (
-    <form className="p-4 grid gap-3" onSubmit={(e) => { e.preventDefault(); void add(); }}>
-      <label className="grid gap-1">
-        <span className="u-eyebrow">SSH target</span>
-        <input ref={first} value={target} onChange={(e) => setTarget(e.target.value)} placeholder="gpu-box   ·   me@10.0.0.5   ·   ssh://me@host:2222" className={`${input} font-mono`} spellCheck={false} />
-        <span className="text-[11px] text-[var(--color-fg3)]">Anything plain <span className="font-mono">ssh</span> accepts, including aliases from <span className="font-mono">~/.ssh/config</span>.</span>
-      </label>
-      <label className="grid gap-1">
-        <span className="u-eyebrow">Name <span className="lowercase tracking-normal text-[var(--color-fg3)]">(optional)</span></span>
-        <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="the host name" className={input} />
-      </label>
-      <label className="flex items-center gap-2 text-[12px] text-[var(--color-fg2)] cursor-pointer select-none">
-        <input type="checkbox" checked={install} onChange={(e) => setInstall(e.target.checked)} className="accent-[var(--color-brand)]" />
-        Install <span className="font-mono">hive</span> there if it is missing, so terminals survive drops
-      </label>
+    <form className="px-4 pb-4 pt-2 grid gap-4" onSubmit={(e) => { e.preventDefault(); void add(); }}>
+      <div className="grid gap-2">
+        <Label htmlFor="machine-target">Host</Label>
+        <Input id="machine-target" ref={first} value={target} onChange={(e) => setTarget(e.target.value)} placeholder="user@host or ~/.ssh/config alias" font="mono" spellCheck={false} />
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor="machine-label">Name</Label>
+        <Input id="machine-label" value={label} onChange={(e) => setLabel(e.target.value)} placeholder={target.trim() || "Optional"} />
+      </div>
       {usePassword ? (
-        <label className="grid gap-1">
-          <span className="u-eyebrow">Password <span className="lowercase tracking-normal text-[var(--color-fg3)]">(kept in your OS keychain)</span></span>
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="off" className={input} />
-        </label>
+        <div className="grid gap-2">
+          <Label htmlFor="machine-password">Password</Label>
+          <Input id="machine-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="off" />
+          <p className="text-[11px] text-muted-foreground">Stored in your OS keychain.</p>
+        </div>
       ) : (
-        <button type="button" onClick={() => setUsePassword(true)} className="w-fit text-[11.5px] text-[var(--color-fg3)] hover:text-[var(--color-fg)] cursor-pointer">This host has no key set up — use a password</button>
+        <Button type="button" variant="link" size="xs" onClick={() => setUsePassword(true)} className="-mt-2 justify-self-start ">Use a password instead</Button>
       )}
+      <div className="flex items-center justify-between gap-4">
+        <Label htmlFor="machine-install" className="cursor-pointer">Install <span className="font-mono">hive</span> if missing</Label>
+        <Switch id="machine-install" checked={install} onCheckedChange={setInstall} />
+      </div>
       {error && (error.attention
         ? <AttentionNote target={target.trim()} detail={error.text} />
-        : <p className="text-[11.5px] text-[var(--color-err)] break-words">{error.text}</p>)}
-      <div className="flex items-center justify-end gap-2 pt-1">
-        {busy && <span className="mr-auto flex items-center gap-1.5 text-[11.5px] text-[var(--color-fg2)]"><Loader2 size={12} className="animate-spin" />{install ? "Connecting, installing hive if needed…" : "Connecting…"}</span>}
-        <button type="button" onClick={onCancel} className={quiet}>Cancel</button>
-        <button type="submit" disabled={busy || !target.trim()} className={primary}>
-          {busy ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />} Add machine
-        </button>
+        : <p className="text-[11.5px] text-destructive break-words">{error.text}</p>)}
+      <div className="flex items-center justify-end gap-2">
+        {busy && <span className="mr-auto flex items-center gap-1.5 text-[11.5px] text-muted-foreground"><Loader2 size={12} className="animate-spin" />Connecting…</span>}
+        <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>
+        <Button type="submit" disabled={busy || !target.trim()}>Add</Button>
       </div>
     </form>
   );
@@ -349,9 +350,9 @@ function FolderPicker({ machine, onPick, actionLabel }: { machine: MachineInfo; 
   return (
     <div className="flex flex-col">
       <div className="flex items-center gap-2 px-3 h-9 border-b border-[var(--color-line2)] text-[11.5px]">
-        <button onClick={() => list(posixJoin(dir, ".."))} disabled={!dir || dir === "/"} className="px-1 text-[var(--color-fg2)] hover:text-[var(--color-fg)] disabled:opacity-30 cursor-pointer">..</button>
+        <Button variant="ghost" size="2xs" onClick={() => list(posixJoin(dir, ".."))} disabled={!dir || dir === "/"}>..</Button>
         <span className="font-mono text-[var(--color-fg2)] truncate flex-1" title={dir}>{dir || "…"}</span>
-        <button onClick={() => list(dir)} aria-label="refresh" className="text-[var(--color-fg3)] hover:text-[var(--color-fg)] cursor-pointer"><RefreshCw size={12} className={busy ? "animate-spin" : ""} /></button>
+        <Button variant="ghost" size="icon-2xs" onClick={() => list(dir)} aria-label="refresh"><RefreshCw className={busy ? "animate-spin" : ""} /></Button>
       </div>
       <div className="h-[280px] overflow-y-auto p-1">
         {error ? (
@@ -370,7 +371,7 @@ function FolderPicker({ machine, onPick, actionLabel }: { machine: MachineInfo; 
       </div>
       <footer className="flex items-center gap-2 px-3 py-2.5 border-t border-[var(--color-line2)]">
         <span className="flex-1 min-w-0 text-[11px] text-[var(--color-fg3)] font-mono truncate" title={dir}>{machine.label}:{dir}</span>
-        <button onClick={() => onPick(machineUri(machine.target, dir))} disabled={!dir || busy} className={`${primary} shrink-0 whitespace-nowrap`}>{actionLabel}</button>
+        <Button onClick={() => onPick(machineUri(machine.target, dir))} disabled={!dir || busy} size="sm">{actionLabel}</Button>
       </footer>
     </div>
   );

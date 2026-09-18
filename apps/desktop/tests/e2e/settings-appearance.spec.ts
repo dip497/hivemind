@@ -8,6 +8,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
+import { buildQueue, dockViaQueue, queueReady } from "./helpers/queue-view";
 
 test.use({ trace: "off" });
 
@@ -16,7 +17,6 @@ let page: Page;
 let repo: string;
 const APP_DIR = process.cwd();
 const CLI = path.resolve(APP_DIR, "../cli/src/index.ts");
-const ORBIT = path.resolve(APP_DIR, "../../examples/views/orbit");
 // Own profile (see host-chrome.spec.ts). settings.json lives at
 // <XDG>/hivemind/settings.json for BOTH the app and the CLI.
 const XDG = fs.mkdtempSync(path.join(os.tmpdir(), "hm-settings-xdg-"));
@@ -44,8 +44,7 @@ test.beforeAll(async () => {
   fs.writeFileSync(path.join(repo, "a.ts"), "export const a = 1;\n");
   const git = (...args: string[]) => execFileSync("git", args, { cwd: repo });
   git("init", "-q"); git("config", "user.email", "e2e@test.dev"); git("config", "user.name", "e2e"); git("add", "-A"); git("commit", "-q", "-m", "seed");
-  execFileSync("node", [path.join(ORBIT, "build.mjs")], { stdio: "ignore" });
-  execFileSync("bun", [CLI, "views", "install", path.join(ORBIT, "dist"), "--json"], { cwd: repo, env: ENV, stdio: "ignore" });
+  execFileSync("bun", [CLI, "views", "install", buildQueue(), "--json"], { cwd: repo, env: ENV, stdio: "ignore" });
   app = await electron.launch({ args: [path.join(APP_DIR, "out/main/index.js"), "--no-sandbox"], cwd: repo, env: ENV });
   page = await app.firstWindow();
   page.on("console", (m) => { if (m.type() === "error" && !/Content Security Policy/.test(m.text())) console.log("[r.error]", m.text()); });
@@ -68,7 +67,7 @@ test.afterAll(async () => {
 
 test("a preset picked in Settings repaints the shell and every terminal, and lands in settings.json", async () => {
   await toView("canvas");
-  expect(await preset()).toBe("ubuntu");
+  expect(await preset()).toBe("signal");
   await openSettings("appearance");
   await page.locator('[data-preset-select]').selectOption('dracula');
   expect(await preset()).toBe("dracula");
@@ -87,43 +86,28 @@ test("`hive theme use` repaints the running app — no restart, no reopened wind
   await expect.poll(() => page.getAttribute(".react-flow__node-terminal [data-term-bg]", "data-term-bg")).toBe("#2e3440");
 });
 
-test("pluginSurfaces: a slot docked in a community view paints the wallpaper behind ITSELF, and 'opaque' paints none", async () => {
+test("pluginSurfaces: an installed view shows the wallpaper behind it, and 'opaque' takes the glass off the tools docked into it", async () => {
   await toView("canvas");
   const tileId = (await page.locator(".react-flow__node-terminal").first().getAttribute("data-id"))!;
-  await toView("orbit");
-  await page.waitForSelector('[data-community-view="orbit"][data-community-ready="1"]', { timeout: 15_000 });
-  const dock = async () => {
-    let rect: { x: number; y: number; w: number; h: number } | null = null;
-    await expect.poll(async () => (rect = await page.evaluate((id) => (document.querySelector("[data-community-view]") as unknown as { __community: { reveal: (id: string) => Promise<{ x: number; y: number; w: number; h: number } | null> } }).__community.reveal(id), tileId)), { timeout: 10_000 }).toBeTruthy();
-    const host = (await page.locator("[data-community-view]").boundingBox())!;
-    // Wait for the out-of-process iframe's hit-test data, as in
-    // community-view.spec.ts; repeated clicks can otherwise all be lost.
-    const frame = page.frame({ name: "hm-view:orbit" })!;
-    await expect.poll(async () => {
-      await page.mouse.move(host.x + rect!.x + rect!.w / 2, host.y + rect!.y + rect!.h / 2);
-      await page.mouse.move(host.x + rect!.x + rect!.w / 2 + 1, host.y + rect!.y + rect!.h / 2);
-      return frame.evaluate(() => document.getElementById("label")!.style.display);
-    }, { timeout: 5_000 }).toBe("block");
-    await page.mouse.click(host.x + rect!.x + rect!.w / 2, host.y + rect!.y + rect!.h / 2);
-    await expect(page.locator(`[data-community-slot="${tileId}"] .xterm`)).toHaveCount(1);
-  };
+  await toView("queue");
+  await page.waitForSelector(queueReady, { timeout: 15_000 });
+  const dock = () => dockViaQueue(page, tileId);
   await dock();
-  // Exactly one wallpaper element, and it is INSIDE the slot (clipped to it) —
-  // never a full-window layer under the plugin's scene.
-  await expect(page.locator(`[data-community-slot="${tileId}"] .hm-wallpaper`)).toHaveCount(1);
+  // One layer, full-window, behind the view; a slot needs no copy of its own because the
+  // view's surfaces are translucent and the wallpaper already sits behind them.
+  await expect(page.locator(`[data-community-slot="${tileId}"] .hm-wallpaper`)).toHaveCount(0);
   await expect(page.locator(".hm-wallpaper")).toHaveCount(1);
   expect(await page.evaluate(() => document.documentElement.classList.contains("glass-on"))).toBe(true);
 
   await page.locator(`[data-slot-bar="${tileId}"]`).getByLabel("Undock").click();
   await expect(page.locator("[data-community-slot]")).toHaveCount(0);
-  await expect(page.locator(".hm-wallpaper"), "nothing docked → nothing decoding").toHaveCount(0);
+  await expect(page.locator(".hm-wallpaper"), "the view keeps the wallpaper it was given").toHaveCount(1);
 
   // "opaque" is the opt-out: the same dock has no wallpaper and no glass.
   await openSettings("appearance");
   await page.getByLabel("Tools in scene views").selectOption("opaque");
   await closeSettings();
   await dock();
-  await expect(page.locator(".hm-wallpaper")).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.classList.contains("glass-on"))).toBe(false);
   await page.locator(`[data-slot-bar="${tileId}"]`).getByLabel("Undock").click();
   await toView("canvas");
@@ -141,7 +125,7 @@ test("a preserved terminal follows the view's opacity without another theme chan
   await expect(terminal).toHaveAttribute("data-term-bg", "rgba(0,0,0,0)");
   const original = await terminal.elementHandle();
   const background = onDisk().appearance.terminal.background;
-  await toView("world");
+  await toView("queue");
   await expect(terminal).toHaveAttribute("data-term-bg", background);
   await toView("canvas");
   await expect(terminal).toHaveAttribute("data-term-bg", "rgba(0,0,0,0)");

@@ -27,12 +27,14 @@
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { Button } from "./components/ui/button";
+import { MenuItem } from "./components/ui/menu-item";
 import type { LayerTile, LayerFrame } from "./LayersPanel";
 import { statusOf, setWaitStatus, setSubagentBusy, setNotify, setTurnState, type TileStatusKind, subscribeTileStatus } from "./agent-status-bus";
 import { frameAtPoint } from "./frame-layout";
 import { Wallpaper } from "./Wallpaper";
 import { CanvasOverlay } from "./CanvasOverlay";
-import { applyTheme, setWallpaperActive } from "./theme-store";
+import { applyTheme, setPluginScene, setWallpaperActive } from "./theme-store";
 import { patchSettings, useSettings } from "./settings-store";
 import { BROWSER_TOOL_ID } from "@hivemind/core/tool-plugins";
 import { toolCreationAllowed } from "./tool-availability";
@@ -47,6 +49,7 @@ import {
   type FrameState,
 } from "./canvas-persistence";
 import { useStateWithRef } from "./use-state-with-ref";
+import { markRestored } from "./boot-queue";
 import { defaultTileSize } from "./canvas-sizing";
 import { useWorktrees } from "./useWorktrees";
 // Loaded when it is first opened: the dialog (add form, machine list, folder picker) is not startup work.
@@ -122,7 +125,12 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   // initializer so we never flash an empty canvas before hydrating). Reloaded
   // when the persistence key changes — see the effect below. The canvas view's
   // geometry is its own versioned blob (imported from the pre-v2 core blob once).
-  const initial = useMemo(() => loadLayout(persistKey), [persistKey]);
+  const initial = useMemo(() => {
+    const layout = loadLayout(persistKey);
+    // What is on the canvas at load is a RESTORE: its agents take turns starting.
+    markRestored((layout.tiles ?? []).map((t) => t.id));
+    return layout;
+  }, [persistKey]);
   const canvasInitial = useMemo(() => loadCanvasLayout(persistKey), [persistKey]);
 
   // All open tiles, every kind, as instances. Mirror to a ref so callbacks
@@ -141,8 +149,8 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   // corner we capture the committed size here; without it the memo-rebuilt node
   // spec re-applies the old style.width/height and the resize visually no-ops.
   const [sizes, setSizes, sizesRef] = useStateWithRef<Record<string, { width: number; height: number }>>(canvasInitial.sizes);
-  // User-renamed tile labels (per tile id). Persisted with layout. Holds USER
-  // renames ONLY — an absent entry means "use the auto/agent name".
+  // Explicit tile names (per tile id): a user rename, or the name a spawner chose.
+  // Persisted with layout. An absent entry means "use the agent title, else the label".
   const [tileNames, setTileNames] = useState<Record<string, string>>(initial.tileNames ?? {});
   const renameTile = useCallback((id: string, name: string) => {
     const trimmed = name.trim();
@@ -460,6 +468,10 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     }
     return out;
   }, [tiles, repoPath, frameOf, frames, tileNames, agentTitles]);
+  const tileNamesRef = useRef(tileNames);
+  tileNamesRef.current = tileNames;
+  const agentTitlesRef = useRef(agentTitles);
+  agentTitlesRef.current = agentTitles;
 
   // ── active view (plugin) ───────────────────────────────────────────────────
   // The stored id (view-mode-store, shared with Settings ▸ View and ⌘E) is a
@@ -497,6 +509,8 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     return over?.island ? { ...base, island: over.island } : base;
   }, [activeViewId, settings.views.chrome]);
   useEffect(() => { setWallpaperActive(chrome.wallpaper); }, [chrome.wallpaper]);
+  const pluginScene = activeViewId ? getView(activeViewId)?.source === "community" : false;
+  useEffect(() => { setPluginScene(pluginScene); }, [pluginScene]);
   // Crash bookkeeping: which view failed (+ why) and a retry counter that
   // remounts the boundary. A failure in a non-fallback view auto-switches to the
   // fallback with a toast; a failure IN the fallback shows the failure panel.
@@ -517,7 +531,6 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     }
   }, []);
 
-  const agentOptions = settings.agents.options;
   // Which agent the tool island's spawn button creates (claude / codex / …):
   // settings.agents.defaultAgent, validated against the catalog.
   const presence = useAgentPresence();
@@ -526,9 +539,6 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   const agentSelRef = useRef(agentSel);
   useEffect(() => { agentSelRef.current = agentSel; }, [agentSel]);
 
-  // Monotonic session counter — `xs.length + 1` produced DUPLICATE labels
-  // (#3, #3) after kill+respawn. This only ever increases.
-  const claudeSeqRef = useRef(0);
   // Spawn-target picker: when 2+ workspaces (base + workspace-zone frames) live
   // on the canvas, ask WHERE a new claude should run instead of guessing.
   const [spawnPick, setSpawnPick] = useState<({ kind: TileKind } & SpawnOpts) | null>(null);
@@ -572,11 +582,11 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
 
   // Tile spawning + in-frame placement. See useSpawn.
   const { spawnTile, spawnClaude, spawnAgent, spawnVis, spawnInto, frameOpen, openPlanReview, hcpSpawnAgent } = useSpawn({
-    repoPath, agentOptions,
+    repoPath,
     positionsRef, sizesRef, tilesRef, frameOfRef, framesRef, selectedFrameIdRef,
-    selectedTileIdRef, repoPathRef, rootRef, lastActiveFrameRef, claudeSeqRef,
+    selectedTileIdRef, repoPathRef, rootRef, lastActiveFrameRef,
     setFrameOf, setPositions, setSelectedTileId, setFocusReq, setFrames,
-    setSelectedFrameId, setTiles, setSpawnPick, focusTile, openFileInTile,
+    setSelectedFrameId, setTiles, setSpawnPick, focusTile, openFileInTile, renameTile,
   });
   // A session already running on a machine (the frame's machine chip) opens as a terminal in that frame.
   useEffect(() => {
@@ -704,6 +714,8 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
             const filterId = p.frame ? resolveFrameId(String(p.frame)) : undefined;
             const mapTile = (t: typeof tilesRef.current[number]) => ({
               tileId: t.id, kind: t.kind, label: t.label, status: statusOf(t.id),
+              name: tileNamesRef.current[t.id] ?? agentTitlesRef.current[t.id] ?? t.label,
+              ...(t.kind === AGENT_TILE_KIND ? { agent: agentForCmd(t.cmd)?.id ?? defaultAgent().id } : {}),
             });
             const groupOf = (f: FrameState) => ({
               frameId: f.id,
@@ -1062,13 +1074,11 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
                 const isSel = f.id === selectedFrameId;
                 const isWt = !!f.parentFrameId;
                 return (
-                  <button
+                  <MenuItem
                     key={f.id}
                     autoFocus={isSel}
+                    selected={isSel}
                     onClick={() => { spawnTile(spawnPick.kind, f.id, { mode: spawnPick.mode, work: spawnPick.work, url: spawnPick.url, agent: spawnPick.agent }); setSpawnPick(null); }}
-                    className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[12px] text-[var(--color-fg)] hover:bg-[var(--color-bg3)] transition-colors ${
-                      isSel ? "bg-[var(--color-bg3)] ring-1 ring-[var(--color-select)]" : ""
-                    }`}
                     style={isWt ? { paddingLeft: 20 } : undefined}
                   >
                     <span aria-hidden className="size-2 rounded-full shrink-0" style={{ background: f.color }} />
@@ -1076,15 +1086,17 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
                     <span className="ml-auto text-[10px] text-[var(--color-fg3)]">
                       {isSel ? "selected" : isWt ? "worktree" : "workspace"}
                     </span>
-                  </button>
+                  </MenuItem>
                 );
               })}
-            <button
+            <Button
+              variant="ghost"
+              size="xs"
+              className="w-full justify-start"
               onClick={() => setSpawnPick(null)}
-              className="w-full text-left px-2 py-1 mt-0.5 rounded-md text-[11px] text-[var(--color-fg3)] hover:bg-[var(--color-bg3)] transition-colors"
             >
               cancel
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -1108,44 +1120,47 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
               <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-fg3)]">
                 Send to claude
               </span>
-              <button
+              <Button
+                variant="ghost"
+                size="icon-micro"
+                className="ml-auto"
                 onClick={() => setClaudePick(null)}
-                className="ml-auto size-4 grid place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--color-bg4)] hover:text-[var(--color-fg)] transition-colors text-[12px] leading-none"
                 aria-label="cancel"
                 title="cancel (Esc)"
               >
                 ×
-              </button>
+              </Button>
             </div>
             {tiles.filter((t) => t.kind === AGENT_TILE_KIND).map((t) => {
               const name = tileNames[t.id] ?? agentTitles[t.id] ?? t.label;
               const frame = frames.find((f) => f.id === frameOf[t.id]);
               return (
-                <button
+                <MenuItem
                   key={t.id}
+                  variant="muted"
                   onClick={() => { deliverToClaude(claudePick.text, t.id); setClaudePick(null); }}
-                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[12px] text-left text-[var(--color-fg2)] hover:bg-[var(--color-bg4)] hover:text-[var(--color-fg)] cursor-pointer"
                 >
-                  <AgentIcon id={agentForCmd(t.cmd)?.id ?? defaultAgent().id} size={13} className="shrink-0 text-[var(--color-fg3)]" />
+                  <AgentIcon id={agentForCmd(t.cmd)?.id ?? defaultAgent().id} size={13} className="text-[var(--color-fg3)]" />
                   <span className="truncate flex-1">{name}</span>
                   {frame && <span className="shrink-0 text-[10px] text-[var(--color-fg3)]">{frame.title}</span>}
-                </button>
+                </MenuItem>
               );
             })}
             <div className="my-1 border-t border-[var(--color-line2)]" />
-            <button
+            <MenuItem
               onClick={() => { deliverToClaude(claudePick.text, "new"); setClaudePick(null); }}
-              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[12px] text-left text-[var(--color-fg)] hover:bg-[var(--color-bg4)] cursor-pointer"
             >
               <span className="shrink-0 grid place-items-center size-3.5 text-[var(--color-fg3)]">+</span>
               <span className="flex-1">New claude</span>
-            </button>
-            <button
+            </MenuItem>
+            <Button
+              variant="ghost"
+              size="xs"
+              className="w-full justify-start"
               onClick={() => setClaudePick(null)}
-              className="w-full text-left px-2 py-1 mt-0.5 rounded-md text-[11px] text-[var(--color-fg3)] hover:bg-[var(--color-bg3)] transition-colors"
             >
               cancel
-            </button>
+            </Button>
           </div>
         </div>
       )}

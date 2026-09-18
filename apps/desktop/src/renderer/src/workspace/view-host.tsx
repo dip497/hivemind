@@ -11,6 +11,7 @@
  */
 import { Component, Suspense, type ErrorInfo, type ReactNode } from "react";
 import { AlertTriangle } from "lucide-react";
+import { Button } from "../components/ui/button";
 import { getView, useViews, type WorkspaceViewProps } from "./workspace-view";
 
 class ViewErrorBoundary extends Component<
@@ -46,14 +47,10 @@ export function ViewFailure({ viewId, error, onSwitch, onRetry }: {
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
           {viewId && (
-            <button onClick={onRetry} className="px-2.5 py-1.5 rounded-lg text-[12px] hm-island text-[var(--color-fg)] hover:bg-[var(--color-bg3)]">
-              Retry
-            </button>
+            <Button variant="ghost" size="sm" onClick={onRetry}>Retry</Button>
           )}
           {others.map((v) => (
-            <button key={v.id} onClick={() => onSwitch(v.id)} className="px-2.5 py-1.5 rounded-lg text-[12px] hm-island text-[var(--color-fg)] hover:bg-[var(--color-bg3)]">
-              Switch to {v.label}
-            </button>
+            <Button key={v.id} variant="ghost" size="sm" onClick={() => onSwitch(v.id)}>Switch to {v.label}</Button>
           ))}
         </div>
       </div>

@@ -1,5 +1,9 @@
 {
   "files": [],
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": { "@/*": ["src/renderer/src/*"] }
+  },
   "references": [
     { "path": "./tsconfig.web.json" },
     { "path": "./tsconfig.node.json" }

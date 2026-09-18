@@ -32,6 +32,10 @@ const listeners = new Set<() => void>();
 subscribeSettings(() => {
   const next = flattenAppearance(getSettings().appearance);
   if (JSON.stringify(next) === JSON.stringify(state)) return;
+  // Unchanged fields keep their object, so field subscribers skip the render.
+  for (const k of Object.keys(next) as (keyof ThemeState)[]) {
+    if (JSON.stringify(next[k]) === JSON.stringify(state[k])) (next as Record<keyof ThemeState, unknown>)[k] = state[k];
+  }
   state = next;
   applyTheme(state);
   for (const l of listeners) l();
@@ -39,6 +43,7 @@ subscribeSettings(() => {
 
 // ── the runtime gate ────────────────────────────────────────────────────────
 let fullWallpaper = true;
+let pluginScene = false;
 /** Workspace: whether the ACTIVE VIEW mounts the full-window wallpaper. */
 export function setWallpaperActive(on: boolean): void {
   if (on === fullWallpaper) return;
@@ -46,10 +51,20 @@ export function setWallpaperActive(on: boolean): void {
   applyTheme(state);
   for (const l of listeners) l();
 }
+/** Workspace: whether a plugin draws the ACTIVE VIEW. Separate from the wallpaper, which a
+ *  plugin view gets too — "tools in scene views" is about the tools the host docks into it. */
+export function setPluginScene(on: boolean): void {
+  if (on === pluginScene) return;
+  pluginScene = on;
+  applyTheme(state);
+  for (const l of listeners) l();
+}
 export function isWallpaperActive(): boolean { return fullWallpaper; }
 /** Glass as it applies right now. */
 export function effectiveGlass(t: ThemeState = state): boolean {
-  return t.glass && (fullWallpaper || t.pluginSurfaces === "theme");
+  // Nothing behind the glass means nothing to see through it: a translucent panel over the
+  // page's own background only washes out the colour the theme picked.
+  return t.glass && t.wallpaper !== "none" && (!pluginScene || t.pluginSurfaces === "theme");
 }
 /** A host-placed slot in a scene paints the wallpaper behind itself (clipped
  *  to the slot) when the theme wants it there and nothing full-window does. */
@@ -57,8 +72,44 @@ export function slotWallpaper(t: ThemeState = state): boolean {
   return !fullWallpaper && t.pluginSurfaces === "theme" && t.glass && t.wallpaper !== "none";
 }
 
+/** What a colour change looks like, so only a real one pays for the suppression below. */
+let lastColours = "";
+
+/**
+ * Repaint with every transition switched off for one frame.
+ *
+ * A preset or accent change rewrites every colour token at once. Anything with a colour
+ * transition then animates together and the switch smears across a couple of hundred
+ * milliseconds instead of snapping. Killing transitions, forcing the style flush, and
+ * restoring on the next frame makes it instant — which is what a theme switch should be.
+ */
+function snapColours(paint: () => void): void {
+  const off = document.createElement("style");
+  off.append(document.createTextNode("*,*::before,*::after{transition:none !important}"));
+  document.head.append(off);
+  paint();
+  void document.documentElement.offsetHeight; // flush, or the rule never applied
+  // Two frames, not one: the override has to outlive the paint that commits the new
+  // colours, or a single frame can drop it early and the tail of the change still animates.
+  requestAnimationFrame(() => requestAnimationFrame(() => off.remove()));
+}
+
 export function applyTheme(t: ThemeState = state): void {
   if (typeof document === "undefined") return;
+  // Sliders (blur, opacity, brightness) change no colour and must stay live under the
+  // pointer; a preset, accent or mode change is the one that has to snap. Read defensively:
+  // deciding how to paint must never be able to stop the painting.
+  let colours = "";
+  try {
+    colours = `${t.preset}\u0000${t.accent}\u0000${t.mode}\u0000${PALETTE_KEYS.map((k) => t.palette?.[k]).join(",")}`;
+  } catch { /* an incomplete theme still paints, it just does not snap */ }
+  const snap = colours !== "" && lastColours !== "" && colours !== lastColours;
+  lastColours = colours;
+  if (snap) snapColours(() => paintTheme(t));
+  else paintTheme(t);
+}
+
+function paintTheme(t: ThemeState): void {
   const root = document.documentElement;
   const glass = effectiveGlass(t);
   root.classList.toggle("glass-on", glass);
@@ -71,22 +122,28 @@ export function applyTheme(t: ThemeState = state): void {
   root.style.setProperty("--wp-brightness", String(t.videoBrightness ?? 0.85));
   root.style.setProperty("--content-opacity", `${Math.round(t.contentOpacity * 100)}%`);
   root.dataset.wallpaper = t.wallpaper;
-  // Palette tokens. The CSS carries the ubuntu values as its fallbacks, so the
+  // Palette tokens. The CSS carries the signal values as its fallbacks, so the
   // default preset is a no-op; another preset recolours every surface at once.
-  for (const k of PALETTE_KEYS) root.style.setProperty(`--color-${k}`, t.palette[k]);
+  // bg2/3/4 are NOT written here: they derive from --surface-* in CSS, so glass mode can
+  // recolour them. An inline custom property beats every stylesheet rule, including html.glass-on.
+  for (const k of PALETTE_KEYS) {
+    if (k === "bg2" || k === "bg3" || k === "bg4") continue;
+    root.style.setProperty(`--color-${k}`, t.palette[k]);
+  }
   // Glass derives its translucent panels from these (see styles.css).
   root.style.setProperty("--surface-2", t.palette.bg2);
   root.style.setProperty("--surface-3", t.palette.bg3);
   root.style.setProperty("--surface-4", t.palette.bg4);
+  // The band around a terminal is the terminal: it takes the preset's background, not a fixed one.
+  root.style.setProperty("--color-terminal-bg", t.terminal.background);
   root.style.setProperty("--radius-panel", `${t.radius}px`);
   root.style.setProperty("--font-ui-user", t.uiFont);
   root.style.setProperty("--font-mono-user", t.monoFont);
   const a = ACCENTS[t.accent];
   root.style.setProperty("--color-brand", a.brand);
+  root.style.setProperty("--color-status-working", a.working ?? a.brand);
   root.style.setProperty("--color-accent", a.accent);
   root.style.setProperty("--color-info", a.accent);
-  root.style.setProperty("--primary", a.brand);
-  root.style.setProperty("--ring", a.brand);
 }
 
 export function getTheme(): ThemeState { return state; }
@@ -127,6 +184,11 @@ export function removeOverlay(id: string): void {
 
 function subscribe(cb: () => void): () => void { listeners.add(cb); return () => { listeners.delete(cb); }; }
 export function useTheme(): ThemeState { return useSyncExternalStore(subscribe, getTheme, getTheme); }
+/** One field of the theme; the component re-renders only when that field changes. */
+export function useThemeField<K extends keyof ThemeState>(key: K): ThemeState[K] {
+  const get = () => state[key];
+  return useSyncExternalStore(subscribe, get, get);
+}
 /** A stable snapshot must include the runtime view gate as well as preferences.
  * Notifying useTheme alone cannot update a cached tile when its theme is unchanged. */
 export function getSurfacePolicy(): { glass: boolean; slotWallpaper: boolean } {

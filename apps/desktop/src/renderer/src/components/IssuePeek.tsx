@@ -1,11 +1,16 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Play, FileQuestion, X } from "lucide-react";
 import type { AcceptanceItem, Issue, IssueState, LinkType } from "@hivemind/core/types";
+import { Button } from "./ui/button";
 import {
   Dialog,
   DialogContent,
   DialogTitle,
 } from "./ui/dialog";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+import { MenuItem } from "./ui/menu-item";
+import { Textarea } from "./ui/textarea";
 import {
   useCommentOnIssue,
   useDeleteIssue,
@@ -55,8 +60,8 @@ export function IssuePeek({ root, id, onClose }: Props) {
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent
-        className="sm:max-w-[900px] p-0 gap-0 overflow-hidden"
+      <DialogContent padding="none"
+        className="sm:max-w-[900px] overflow-hidden"
         // The peek is a dense two-column layout, not a form — override the
         // default DialogContent centering paddings so the header/columns fill.
       >
@@ -77,12 +82,9 @@ export function IssuePeek({ root, id, onClose }: Props) {
                   ? (error instanceof Error ? error.message : String(error))
                   : `"${id}" isn't in this workspace — it may belong to a different frame or have been deleted.`}
               </p>
-              <button
-                onClick={onClose}
-                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-[11.5px] text-[var(--color-fg2)] hover:text-[var(--color-fg)] border border-[var(--color-line2)] hover:bg-[var(--color-bg3)] cursor-pointer"
-              >
-                <X size={13} /> Close
-              </button>
+              <Button variant="outline" onClick={onClose}>
+                <X /> Close
+              </Button>
             </div>
           </div>
         ) : (
@@ -93,7 +95,7 @@ export function IssuePeek({ root, id, onClose }: Props) {
                 <span className="font-mono text-[11px] text-[var(--color-info)]">#{issue.github}</span>
               )}
               <div className="ml-auto flex items-center gap-1">
-                <button
+                <Button
                   onClick={async () => {
                     const repoDir = root ? root.replace(/\/\.hivemind\/?$/, "") : null;
                     if (repoDir) {
@@ -105,14 +107,13 @@ export function IssuePeek({ root, id, onClose }: Props) {
                     );
                     onClose();
                   }}
-                  className="inline-flex items-center gap-1 h-8 px-2.5 rounded-md text-[11.5px] font-semibold text-white bg-[var(--color-brand)] hover:opacity-90 cursor-pointer hm-soft"
                   title="Set up agents (if needed), spawn claude, and tell it to work on this issue"
                 >
-                  <Play size={11} fill="currentColor" strokeWidth={0} aria-hidden />
+                  <Play fill="currentColor" strokeWidth={0} aria-hidden />
                   Work on this
-                </button>
+                </Button>
                 <span aria-hidden className="mx-0.5 h-5 w-px bg-[var(--color-line2)]" />
-                <button
+                <Button
                   onClick={() => {
                     if (!root) return;
                     if (!confirm(`Delete ${issue.id}? This removes the markdown file.`)) return;
@@ -121,13 +122,14 @@ export function IssuePeek({ root, id, onClose }: Props) {
                       { onSuccess: onClose },
                     );
                   }}
-                  className="size-7 grid place-items-center rounded-md text-[var(--color-fg3)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-err)] cursor-pointer hm-soft"
+                  variant="ghost"
+                  size="icon-sm"
                   title="Delete issue"
                   aria-label="Delete issue"
                   disabled={del.isPending}
                 >
                   <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden><path d="M3 4h8M5 4V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1M4 4l1 8a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1l1-8" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                </button>
+                </Button>
               </div>
             </header>
             <div className="flex-1 min-h-0 grid grid-cols-[1fr_280px]">
@@ -247,7 +249,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function PropRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="u-eyebrow mb-1">{label}</div>
+      <Label className="mb-1">{label}</Label>
       {children}
     </div>
   );
@@ -278,15 +280,15 @@ function StateSelect({ value, onChange }: { value: IssueState; onChange: (s: Iss
       {open && (
         <div className="hm-popover absolute z-30 mt-1 w-full">
           {STATE_ORDER.map((s) => (
-            <button
+            <MenuItem
               key={s}
+              size="sm"
               onClick={() => { onChange(s); setOpen(false); }}
-              className="w-full flex items-center gap-1.5 px-1.5 py-1 rounded-md text-[11.5px] text-left cursor-pointer hover:bg-[var(--color-bg4)] hm-soft"
               style={{ color: STATE_COLOR[s] }}
             >
               <StateIcon state={s} size={12} />
               <span>{STATE_LABEL[s]}</span>
-            </button>
+            </MenuItem>
           ))}
         </div>
       )}
@@ -349,37 +351,32 @@ function EditableDescription({ value, onSave }: { value: string; onSave: (v: str
         ) : (
           <p className="text-[12px] text-[var(--color-fg2)] italic">No description.</p>
         )}
-        <button
+        <Button reveal="hidden"
+          variant="outline"
+          size="xs"
           onClick={() => setEditing(true)}
-          className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity text-[10.5px] text-[var(--color-fg3)] hover:text-[var(--color-fg)] px-1.5 py-0.5 bg-[var(--color-bg3)] rounded border border-[var(--color-line2)]"
+          className="absolute top-0 right-0"
         >
           edit
-        </button>
+        </Button>
       </div>
     );
   }
   return (
     <div className="space-y-2">
-      <textarea
+      <Textarea font="mono"
         autoFocus
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         rows={Math.max(4, draft.split("\n").length + 1)}
-        className="w-full font-mono text-[12px] bg-[var(--color-bg)] border border-[var(--color-line2)] rounded p-2 text-[var(--color-fg)] focus:outline-none focus:border-[var(--color-brand)] focus:ring-1 focus:ring-[var(--color-brand)]"
       />
       <div className="flex gap-2 justify-end">
-        <button
-          onClick={() => { setDraft(value); setEditing(false); }}
-          className="text-[11px] text-[var(--color-fg2)] hover:text-[var(--color-fg)] px-2 py-0.5"
-        >
+        <Button variant="ghost" size="xs" onClick={() => { setDraft(value); setEditing(false); }}>
           Cancel
-        </button>
-        <button
-          onClick={() => { if (draft !== value) onSave(draft); setEditing(false); }}
-          className="text-[11px] font-medium text-white bg-[var(--color-brand)] hover:opacity-90 px-2 py-0.5 rounded"
-        >
+        </Button>
+        <Button size="xs" onClick={() => { if (draft !== value) onSave(draft); setEditing(false); }}>
           Save
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -416,40 +413,38 @@ function AcEditor({
               onClick={() => toggle(i)}
               className="mt-0.5 size-3.5 shrink-0 rounded-sm border grid place-items-center cursor-pointer"
               style={{
+                color: "var(--color-fg)",
                 background: c.done ? "var(--color-state-done)" : "transparent",
                 borderColor: c.done ? "var(--color-state-done)" : "var(--color-line2)",
               }}
               title={c.done ? "Mark incomplete" : "Mark done"}
             >
               {c.done && (
-                <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden><path d="M2 5L4 7L8 3" stroke="#ffffff" strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden><path d="M2 5L4 7L8 3" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
               )}
             </button>
             <span className={`flex-1 ${c.done ? "text-[var(--color-fg3)] line-through" : ""}`}>{c.text}</span>
-            <button
+            <Button reveal="dim"
+              variant="ghost"
+              size="icon-xs"
               onClick={() => remove(i)}
               aria-label={`Remove "${c.text}"`}
-              className="opacity-40 group-hover:opacity-100 focus-visible:opacity-100 text-[var(--color-fg3)] hover:text-[var(--color-err)] text-[14px] leading-none cursor-pointer"
               title="Remove"
-            >×</button>
+            >×</Button>
           </li>
         ))}
       </ul>
       <div className="mt-2 flex gap-2">
-        <input
+        <Input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }}
           placeholder="+ Add criterion"
-          className="flex-1 bg-[var(--color-bg)] border border-[var(--color-line2)] rounded px-2 py-1 text-[12px] text-[var(--color-fg)] focus:outline-none focus:border-[var(--color-brand)] focus:ring-1 focus:ring-[var(--color-brand)]"
+          className="flex-1"
         />
-        <button
-          onClick={add}
-          disabled={!draft.trim()}
-          className="text-[11px] px-2 py-1 rounded bg-[var(--color-bg3)] text-[var(--color-fg2)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg4)] disabled:opacity-40"
-        >
+        <Button variant="secondary" size="xs" onClick={add} disabled={!draft.trim()}>
           Add
-        </button>
+        </Button>
       </div>
     </>
   );
@@ -470,7 +465,7 @@ function CommentComposer({
   }
   return (
     <div className="space-y-1">
-      <textarea
+      <Textarea
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={(e) => {
@@ -481,16 +476,13 @@ function CommentComposer({
         }}
         placeholder="Add a comment…  (⌘↵ to post)"
         rows={2}
-        className="w-full font-mono text-[12px] bg-[var(--color-bg)] border border-[var(--color-line2)] rounded p-2 text-[var(--color-fg)] focus:outline-none focus:border-[var(--color-brand)] resize-y"
+        font="mono"
+        className="resize-y"
       />
       <div className="flex justify-end">
-        <button
-          onClick={send}
-          disabled={!draft.trim() || pending}
-          className="text-[11px] font-medium px-2 py-1 rounded bg-[var(--color-brand)] text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
-        >
+        <Button size="xs" onClick={send} disabled={!draft.trim() || pending}>
           {pending ? "Posting…" : "Comment"}
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -539,12 +531,15 @@ function RelationsSection({ root, issue, onClose }: { root: string | null; issue
               >
                 {l.id}
               </button>
-              <button
+              <Button
+                variant="ghost"
+                size="icon-xs"
                 onClick={() => root && unlink.mutate({ root, id: issue.id, otherId: l.id })}
                 aria-label={`Remove link to ${l.id}`}
-                className="ml-auto opacity-40 group-hover:opacity-100 focus-visible:opacity-100 text-[var(--color-fg3)] hover:text-[var(--color-err)] text-[14px] leading-none cursor-pointer"
+                reveal="dim"
+                className="ml-auto"
                 title="Remove link"
-              >×</button>
+              >×</Button>
             </li>
           ))}
         </ul>
@@ -554,13 +549,14 @@ function RelationsSection({ root, issue, onClose }: { root: string | null; issue
 
       {linking ? (
         <div className="flex items-center gap-1.5">
-          <input
+          <Input
             autoFocus
             value={linkId}
             onChange={(e) => setLinkId(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") submitLink(); if (e.key === "Escape") setLinking(false); }}
             placeholder="OTHER-ID"
-            className="flex-1 min-w-0 bg-[var(--color-bg)] border border-[var(--color-line2)] rounded px-2 py-1 text-[12px] font-mono text-[var(--color-fg)] focus:outline-none focus:border-[var(--color-brand)] focus:ring-1 focus:ring-[var(--color-brand)]"
+            font="mono"
+            className="flex-1"
           />
           <select
             value={linkType}
@@ -569,17 +565,10 @@ function RelationsSection({ root, issue, onClose }: { root: string | null; issue
           >
             {LINK_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
-          <button
-            onClick={submitLink}
-            disabled={link.isPending}
-            className="text-[11px] px-2 py-1 rounded bg-[var(--color-brand)] text-white hover:opacity-90 disabled:opacity-40"
-          >Add</button>
+          <Button size="xs" onClick={submitLink} disabled={link.isPending}>Add</Button>
         </div>
       ) : (
-        <button
-          onClick={() => setLinking(true)}
-          className="text-[11px] text-[var(--color-fg2)] hover:text-[var(--color-fg)] px-1.5 py-0.5 rounded border border-[var(--color-line2)] hover:bg-[var(--color-bg3)]"
-        >+ Link issue</button>
+        <Button variant="outline" size="xs" onClick={() => setLinking(true)}>+ Link issue</Button>
       )}
 
       {otherWorkspaces.length > 0 && (
@@ -593,13 +582,16 @@ function RelationsSection({ root, issue, onClose }: { root: string | null; issue
             <option value="">workspace…</option>
             {otherWorkspaces.map((w) => <option key={w.prefix} value={w.prefix}>{w.title} ({w.prefix})</option>)}
           </select>
-          <button
+          <Button
+            variant="secondary"
+            size="xs"
             disabled={!root || !dest || move.isPending}
             onClick={() => root && dest && move.mutate({ root, id: issue.id, destPrefix: dest, mode: "copy" })}
-            className="text-[10.5px] px-1.5 py-1 rounded bg-[var(--color-bg3)] text-[var(--color-fg2)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg4)] disabled:opacity-40"
             title="Copy this issue into the selected workspace (source kept, linked)"
-          >Copy</button>
-          <button
+          >Copy</Button>
+          <Button
+            variant="secondary"
+            size="xs"
             disabled={!root || !dest || move.isPending}
             onClick={() =>
               root && dest && move.mutate(
@@ -614,9 +606,8 @@ function RelationsSection({ root, issue, onClose }: { root: string | null; issue
                 },
               )
             }
-            className="text-[10.5px] px-1.5 py-1 rounded bg-[var(--color-bg3)] text-[var(--color-fg2)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg4)] disabled:opacity-40"
             title="Move this issue into the selected workspace (source deleted)"
-          >Move</button>
+          >Move</Button>
         </div>
       )}
     </div>

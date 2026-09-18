@@ -12,8 +12,8 @@
  * right after the iframe loads; `connect()` resolves once `hello` arrives.
  */
 import {
-  COMMAND_PERMISSION, PORT_HANDSHAKE, PROTOCOL_VERSION, parseHostMessage,
-  type CommandName, type HostMessage, type PluginMessage, type SurfaceRect, type ViewCommands, type ViewPermission, type ViewRect, type ViewStatus, type ViewTheme,
+  COMMAND_PERMISSION, PORT_HANDSHAKE, PROTOCOL_VERSION, STATUS_TONES, parseHostMessage,
+  type CommandName, type HostMessage, type PluginMessage, type StatusTone, type SurfaceRect, type ViewCommands, type ViewPermission, type ViewRect, type ViewStatus, type ViewTheme,
 } from "./protocol.js";
 
 type Hello = Extract<HostMessage, { type: "hello" }>;
@@ -226,6 +226,7 @@ export function createInvalidator(client: ViewClient, draw: () => void): { inval
  *   --hm-color-<token>   every `colors` entry (bg, bg2, fg, brand, ok, …)
  *   --hm-accent          --hm-radius (px)   --hm-font-ui   --hm-font-mono
  *   --hm-surface         --hm-terminal-bg   --hm-glass (0 | 1)   --hm-mode
+ *   --hm-color-scheme    (dark | light — put it on panels that scroll, never on the root)
  *
  * So a plugin's CSS can say `background: var(--hm-color-bg2)` and follow the
  * user's appearance without reading messages itself. Returns the unsubscribe.
@@ -233,13 +234,35 @@ export function createInvalidator(client: ViewClient, draw: () => void): { inval
 export function applyThemeVars(client: ViewClient, root: HTMLElement = document.documentElement): () => void {
   const apply = (t: ViewTheme) => {
     for (const [k, v] of Object.entries(t.colors)) root.style.setProperty(`--hm-color-${k}`, v);
+    // Status tones: the host's, or — from a host that predates them — the same meanings derived
+    // from its palette, so `--hm-status-*` always exists and a view never maps statuses itself.
+    const derived: Record<StatusTone, string | undefined> = {
+      working: t.colors.brand, attention: t.colors.warn, done: t.colors.ok,
+      idle: t.colors.fg3, exited: t.colors.fg3, failed: t.colors.err,
+    };
+    const isHex = (v: unknown): v is string => typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v);
+    for (const tone of STATUS_TONES) {
+      // A value that is not a colour falls through to the derived one: a tone is never left unset.
+      const v = [t.status?.[tone], derived[tone]].find(isHex);
+      if (v) root.style.setProperty(`--hm-status-${tone}`, v);
+    }
     if (t.accent) root.style.setProperty("--hm-accent", t.accent);
     if (t.radius !== undefined) root.style.setProperty("--hm-radius", `${t.radius}px`);
     if (t.fonts) { root.style.setProperty("--hm-font-ui", t.fonts.ui); root.style.setProperty("--hm-font-mono", t.fonts.mono); }
     if (t.surface) root.style.setProperty("--hm-surface", t.surface);
     if (t.terminalBackground) root.style.setProperty("--hm-terminal-bg", t.terminalBackground);
     if (t.glass !== undefined) root.style.setProperty("--hm-glass", t.glass ? "1" : "0");
-    if (t.mode) { root.style.setProperty("--hm-mode", t.mode); root.dataset.hmMode = t.mode; }
+    if (t.mode) {
+      root.style.setProperty("--hm-mode", t.mode);
+      root.dataset.hmMode = t.mode;
+      // The user's wallpaper is painted BEHIND the view, so the view's frame has to stay
+      // see-through. A `color-scheme` on the ROOT makes the browser paint the frame's base
+      // canvas opaque even when the background is transparent, which hides it — so the root
+      // keeps `normal`, and the scheme rides on a token for the panels that scroll.
+      root.style.setProperty("--hm-color-scheme", t.mode);
+      root.style.colorScheme = "normal";
+      root.style.background = "transparent";
+    }
   };
   apply(client.hello.theme);
   return client.on("theme", apply);

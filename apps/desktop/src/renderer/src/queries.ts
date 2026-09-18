@@ -460,9 +460,11 @@ export function useFsChangedInvalidation(
         projectPending = false;
       }
       if (gitPending) {
-        qc.invalidateQueries({ queryKey: ["git:status", repoPath] });
-        qc.invalidateQueries({ queryKey: ["git:diff", repoPath] });
-        qc.invalidateQueries({ queryKey: ["git:list-files", repoPath] });
+        // A diff tile on this repo invalidates the same keys: share its fetch.
+        const join = { cancelRefetch: false };
+        qc.invalidateQueries({ queryKey: ["git:status", repoPath] }, join);
+        qc.invalidateQueries({ queryKey: ["git:diff", repoPath] }, join);
+        qc.invalidateQueries({ queryKey: ["git:list-files", repoPath] }, join);
         qc.invalidateQueries({ queryKey: ["worktrees", repoPath] });
         gitPending = false;
       }

@@ -1,6 +1,9 @@
 import { useMemo, useState } from "react";
 import type { IssueState, IssueSummary } from "@hivemind/core/types";
 import { STATE_LABEL, STATE_ORDER, StateIcon, LabelChip, Avatar } from "./StateMeta";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { MenuItem } from "./ui/menu-item";
 import { Popover } from "./ui/popover";
 
 export interface Filters {
@@ -115,40 +118,36 @@ export function FilterBar({
             }))}
           />
         )}
-        <button
+        <Button
+          variant={filters.showCancelled ? "secondary" : "ghost"}
+          size="xs"
           onClick={() => setField("showCancelled", !filters.showCancelled)}
           title={filters.showCancelled ? "Hide cancelled" : "Show cancelled"}
-          className={`text-[11px] px-1.5 py-1 rounded-md border transition-colors cursor-pointer ${
-            filters.showCancelled
-              ? "bg-[var(--color-bg4)] border-[var(--color-line2)] text-[var(--color-fg)]"
-              : "border-transparent text-[var(--color-fg3)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg3)]"
-          }`}
         >
           {filters.showCancelled ? "Hide cancelled" : "Show cancelled"}
-        </button>
+        </Button>
         {(filters.states.size + filters.labels.size + filters.assignees.size > 0 || filters.q || filters.showCancelled) && (
-          <button
-            onClick={() => onChange(emptyFilters())}
-            className="text-[11px] text-[var(--color-fg2)] hover:text-[var(--color-fg)] px-1.5 py-1 rounded-md cursor-pointer"
-          >
+          <Button variant="ghost" size="xs" onClick={() => onChange(emptyFilters())}>
             Clear
-          </button>
+          </Button>
         )}
         <div className="ml-auto flex items-center gap-2">{rightSlot}</div>
       </div>
       {activeChips.length > 0 && (
         <div className="flex items-center gap-1.5 flex-wrap">
           {activeChips.map((c, i) => (
-            <button
+            <Button
               key={c.kind + c.value + i}
+              variant="secondary"
+              size="2xs"
+              className="group"
               onClick={c.remove}
               aria-label={`Remove ${c.kind} filter ${c.value}`}
-              className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-md text-[10.5px] bg-[var(--color-bg4)] border border-[var(--color-line2)] text-[var(--color-fg)] hover:border-[var(--color-fg3)] cursor-pointer group hm-soft"
             >
               <span className="text-[var(--color-fg2)]">{c.kind}:</span>
               <span>{c.value}</span>
               <span className="text-[var(--color-fg3)] group-hover:text-[var(--color-err)]">×</span>
-            </button>
+            </Button>
           ))}
         </div>
       )}
@@ -166,21 +165,24 @@ function SearchInput({ value, onChange }: { value: string; onChange: (v: string)
         <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.2" />
         <path d="M9.5 9.5l3 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
       </svg>
-      <input
+      <Input
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder="Search…"
         aria-label="Search issues"
-        className="pl-7 pr-7 py-1 w-52 text-[12px] bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-md outline-none focus:border-[var(--color-brand)] focus:ring-2 focus:ring-[var(--color-brand)]/30 text-[var(--color-fg)] placeholder:text-[var(--color-fg3)] hm-soft"
+        // Horizontal padding only clears the absolutely-positioned search/clear icons.
+        className="pl-7 pr-7 w-52"
       />
       {value && (
-        <button
+        <Button
+          variant="ghost"
+          size="icon-xs"
           onClick={() => onChange("")}
           aria-label="Clear search"
-          className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[var(--color-fg3)] hover:text-[var(--color-fg)] cursor-pointer hm-soft"
+          className="absolute right-1.5 top-1/2 -translate-y-1/2"
         >
           <svg width="12" height="12" viewBox="0 0 14 14"><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
-        </button>
+        </Button>
       )}
     </div>
   );
@@ -223,24 +225,25 @@ function Dropdown({ label, count, options }: { label: string; count: number; opt
             <div className="px-2 py-1.5 text-[11px] text-[var(--color-fg3)]">No options</div>
           ) : (
             options.map((o) => (
-              <button
+              <MenuItem
                 key={o.key}
+                size="sm"
+                variant={o.selected ? "default" : "muted"}
+                selected={o.selected}
                 onClick={o.toggle}
-                className={`w-full flex items-center gap-2 px-2 py-1 rounded-md text-[12px] text-left cursor-pointer hover:bg-[var(--color-bg4)] hm-soft ${
-                  o.selected ? "text-[var(--color-fg)]" : "text-[var(--color-fg2)]"
-                }`}
               >
-                <span className="size-3 rounded-sm border flex items-center justify-center"
+                <span className="size-3 rounded-sm border flex items-center justify-center shrink-0"
                   style={{
+                    color: "var(--color-fg)",
                     background: o.selected ? "var(--color-brand)" : "transparent",
                     borderColor: o.selected ? "var(--color-brand)" : "var(--color-line2)",
                   }}>
                   {o.selected && (
-                    <svg width="9" height="9" viewBox="0 0 10 10"><path d="M2 5.2L4.2 7.2L8 3" stroke="#ffffff" strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                    <svg width="9" height="9" viewBox="0 0 10 10"><path d="M2 5.2L4.2 7.2L8 3" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
                   )}
                 </span>
                 {o.raw ? o.icon : (<>{o.icon}<span>{o.label}</span></>)}
-              </button>
+              </MenuItem>
             ))
           )}
         </div>

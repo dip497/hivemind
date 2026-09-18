@@ -6,6 +6,7 @@
  * Real data only: paths from `git ls-files`, status from `git status` (both via
  * IPC `window.hive.*`). No mocks.
  */
+import { RowsSkeleton } from "./workspace/tile-skeletons";
 import { useEffect, useMemo } from "react";
 import { FileTree, useFileTree, useFileTreeSearch } from "@pierre/trees/react";
 import type {
@@ -16,6 +17,7 @@ import type {
   GitStatus,
 } from "@pierre/trees";
 import { toast } from "sonner";
+import { MenuItem } from "./components/ui/menu-item";
 import { useGitListFiles, useGitStatus } from "./queries";
 import type { GitFileStatus } from "../../shared/ipc";
 
@@ -192,10 +194,7 @@ export function FileTreeTile({ repoPath, onSelectFile, embedded = false }: Props
       }
     >
       {isLoading ? (
-        <div className="px-3 py-4 flex items-center gap-2 text-[11.5px] text-[var(--color-fg3)]">
-          <span className="hm-spinner" aria-hidden />
-          <span>Loading files…</span>
-        </div>
+        <RowsSkeleton rows={7} />
       ) : listError ? (
         // Surface the error from `git ls-files` (most often: not a repo, or
         // the .git dir was unmounted/removed under us). Without this the
@@ -300,12 +299,9 @@ function CtxMenu({
 
 function Item({ label, hint, onClick }: { label: string; hint?: string; onClick: () => void }) {
   return (
-    <button
-      onClick={onClick}
-      className="w-full flex items-center px-2 py-1 rounded text-left text-[var(--color-fg)] hover:bg-[var(--color-bg4)]"
-    >
-      <span className="flex-1">{label}</span>
+    <MenuItem variant="default" size="sm" onClick={onClick}>
+      <span className="flex-1 text-left">{label}</span>
       {hint && <span className="font-mono text-[9.5px] text-[var(--color-fg3)]">{hint}</span>}
-    </button>
+    </MenuItem>
   );
 }

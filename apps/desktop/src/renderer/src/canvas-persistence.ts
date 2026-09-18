@@ -18,7 +18,7 @@
  * after v2 ships.
  */
 import type { TileKind } from "./tile-kinds";
-import { frameColorFor, LEGACY_FRAME_COLOR } from "./frame-color";
+import { frameColorFor, isGeneratedFrameColor } from "./frame-color";
 import { identifyAgent } from "./agent-state";
 import { defaultAgent } from "@hivemind/agents";
 import { AGENT_TILE_KIND } from "./tile-kinds";
@@ -170,7 +170,8 @@ export function loadLayout(repoPath: string | null): PersistedLayout {
       ? p.frames.map((f, i) => ({
           ...f,
           z: typeof f.z === "number" ? f.z : i,
-          color: f.color === LEGACY_FRAME_COLOR ? frameColorFor(f.id) : f.color,
+          // Colours the app generated re-derive from the current palette; a chosen one is kept.
+          color: isGeneratedFrameColor(f.color) ? frameColorFor(f.id) : f.color,
         })) as FrameState[]
       : [];
     const positions = p.positions ?? {};

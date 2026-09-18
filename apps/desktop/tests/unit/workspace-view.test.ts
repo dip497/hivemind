@@ -53,10 +53,11 @@ test("re-registering an id replaces the plugin in place", () => {
   assert.equal(listViews().length, 1);
 });
 
-test("resolveChrome: a view that says nothing gets a bottom island and no wallpaper; explicit prefs win; hidden is a valid placement", () => {
-  assert.deepEqual(resolveChrome(undefined), { island: "bottom", wallpaper: false });
-  assert.deepEqual(resolveChrome({ chrome: {} }), { island: "bottom", wallpaper: false });
-  assert.deepEqual(resolveChrome({ chrome: { island: "top", wallpaper: true } }), { island: "top", wallpaper: true });
-  assert.deepEqual(resolveChrome({ chrome: { wallpaper: true } }), { island: "bottom", wallpaper: true });
-  assert.deepEqual(resolveChrome({ chrome: { island: "hidden" } }), { island: "hidden", wallpaper: false });
+test("resolveChrome: a view that says nothing gets a bottom island and the wallpaper; explicit prefs win; hidden is a valid placement", () => {
+  assert.deepEqual(resolveChrome(undefined), { island: "bottom", wallpaper: true });
+  assert.deepEqual(resolveChrome({ chrome: {} }), { island: "bottom", wallpaper: true });
+  // A view that paints an opaque scene of its own opts out.
+  assert.deepEqual(resolveChrome({ chrome: { wallpaper: false } }), { island: "bottom", wallpaper: false });
+  assert.deepEqual(resolveChrome({ chrome: { island: "top", wallpaper: false } }), { island: "top", wallpaper: false });
+  assert.deepEqual(resolveChrome({ chrome: { island: "hidden" } }), { island: "hidden", wallpaper: true });
 });

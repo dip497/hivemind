@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
-import { ArrowDown, ArrowUp, Check, ChevronDown, ChevronRight, Puzzle, Store, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, ExternalLink, Puzzle, Store, Trash2 } from "lucide-react";
+import { Button } from "./components/ui/button";
+import { MenuItem } from "./components/ui/menu-item";
+import { Switch } from "./components/ui/switch";
 import { getSettings, patchSettings, useSettings } from "./settings-store";
 import { getView, resolveChrome, resolveViewId, useViews } from "./workspace/workspace-view";
 import { setViewMode, useViewMode } from "./workspace/view-mode-store";
@@ -29,14 +32,12 @@ export function PackageRow({ icon, title, subtitle, enabled, onToggle, toggleDis
       <div className="settings-extension-icon">{icon ?? <Puzzle size={19} />}</div>
       <div className="settings-extension-label"><h4>{title}</h4><p>{subtitle}</p></div>
       {children}
-      <button
-        className="settings-switch"
-        role="switch"
+      <Switch
+        checked={enabled}
+        onCheckedChange={onToggle}
         aria-label={`Enable ${title}`}
-        aria-checked={enabled}
         disabled={toggleDisabled}
-        onClick={onToggle}
-      ><span /></button>
+      />
     </div>
     {footer}
   </div>;
@@ -45,25 +46,40 @@ export function ViewsOverview() {
   const views = useViews();
   const go = useSettingsNavigate();
   const mode = resolveViewId(useViewMode()) ?? "canvas";
+  const disabled = useSettings().plugins.disabled;
   useEffect(rescan, []);
+  const on = views.filter((v) => !disabled.includes(v.id));
+  const off = views.filter((v) => disabled.includes(v.id));
+  const row = (view: ReturnType<typeof useViews>[number], choosable: boolean) => (
+    <div key={view.id} className="plugin-row" data-view-row={view.id} data-state={choosable ? (mode === view.id ? "on" : "ready") : "off"}>
+      <MenuItem className="flex-1 min-w-0" onClick={() => go(`view:${view.id}`)}>
+        <span className="plugin-row-mark" aria-hidden="true"><view.icon /></span>
+        <span className="plugin-row-text">
+          <span className="plugin-row-name">{view.label}</span>
+          <span className="plugin-row-detail">{view.hint}</span>
+        </span>
+      </MenuItem>
+      {choosable && (
+        <Button size="xs" variant={mode === view.id ? "secondary" : "outline"} data-view-choice={view.id} role="radio" aria-checked={mode === view.id}
+          aria-label={mode === view.id ? `${view.label} is in use` : `Use ${view.label}`} title="Workspace view"
+          onClick={() => setViewMode(view.id)}>{mode === view.id ? "In use" : <span className="plugin-choice-dot" aria-hidden="true" />}</Button>
+      )}
+      <ChevronRight className="plugin-row-go" size={15} aria-hidden="true" />
+    </div>
+  );
   return <div className="settings-stack">
     <section aria-label="Workspace view">
-      <div className="settings-section-heading"><h3>Workspace view</h3><span>⌘E cycles through them</span></div>
-      <div className="settings-view-list">
-        {views.map((view) => <div key={view.id} className="settings-view-row">
-          <button className="settings-view-choice" aria-pressed={mode === view.id} onClick={() => setViewMode(view.id)}>
-            <span className="settings-view-icon" aria-hidden="true"><view.icon size={19} /></span>
-            <span className="settings-view-copy"><span className="settings-view-name">{view.label}</span><span className="settings-view-description">{view.hint}</span></span>
-            <span className="settings-selection" aria-hidden="true">{mode === view.id && <Check size={15} />}</span>
-          </button>
-          <button className="settings-icon-button" aria-label={`${view.label} settings`} onClick={() => go(`view:${view.id}`)}><ChevronRight size={15} /></button>
-        </div>)}
-      </div>
-      <div className="settings-inline settings-actions-left">
-        <button className="settings-button" onClick={() => go("plugins")}><Store size={14} />Browse views</button>
-        <button className="settings-text-button" onClick={() => go("installed")}><Puzzle size={14} />Add one from a folder</button>
-      </div>
+      <div className="settings-section-heading"><h3>Workspace view · {on.length}</h3><span>⌘E cycles through them</span></div>
+      <div className="plugin-rows" role="radiogroup" aria-label="Workspace view">{on.map((v) => row(v, true))}</div>
     </section>
+    {off.length > 0 && <section aria-label="Off">
+      <div className="settings-section-heading"><h3>Off · {off.length}</h3><span>Open one to switch it back on</span></div>
+      <div className="plugin-rows">{off.map((v) => row(v, false))}</div>
+    </section>}
+    <div className="settings-inline">
+      <Button size="sm" variant="outline" onClick={() => go("plugins")}><Store />Browse views</Button>
+      <Button size="sm" variant="link" onClick={() => go("installed")}><Puzzle />Add one from a folder</Button>
+    </div>
   </div>;
 }
 
@@ -83,9 +99,9 @@ export function ViewPage({ id }: { id: string }) {
     <header className="plugin-head">
       <span className="plugin-mark"><view.icon size={22} /></span>
       <div className="plugin-title"><p>{view.hint}<span>·</span>{view.source === "community" ? `Community${pkg?.manifest?.version ? ` · ${pkg.manifest.version}` : ""}` : "Included with Hivemind"}</p></div>
-      {mode === id ? <span className="agent-badge">In use</span> : <button className="settings-button" onClick={() => setViewMode(id)}>Use this view</button>}
-      {view.source === "community" && <button className="settings-switch" role="switch" aria-label={`Enable ${view.label}`} aria-checked={on}
-        onClick={() => { const d = getSettings().plugins.disabled; patchSettings("plugins.disabled", on ? [...new Set([...d, id])] : d.filter((x) => x !== id)); rescan(); }}><span /></button>}
+      {mode === id ? <span className="agent-badge">In use</span> : <Button size="sm" variant="outline" onClick={() => setViewMode(id)}>Use this view</Button>}
+      {view.source === "community" && <Switch aria-label={`Enable ${view.label}`} checked={on}
+        onCheckedChange={() => { const d = getSettings().plugins.disabled; patchSettings("plugins.disabled", on ? [...new Set([...d, id])] : d.filter((x) => x !== id)); rescan(); }} />}
     </header>
     <section className="plugin-section" aria-label="Toolbar">
       <h3>Toolbar</h3>
@@ -107,7 +123,15 @@ export function ViewPage({ id }: { id: string }) {
     </section>
     {pkg && <section className="plugin-section" aria-label="Details">
       <h3>Details</h3>
-      <dl><dt>Available to</dt><dd>{pkg.source === "user" ? "All your workspaces" : "This repository"}</dd><dt>Location</dt><dd className="settings-path">{pkg.dir}</dd><dt>Additional access</dt><dd>{pkg.manifest?.permissions.join(", ") || "None"}</dd></dl>
+      <dl>
+        {/* The package's own claim about who wrote it — nobody has checked it, and the wording
+            says so, so it is never mistaken for a registry's verified owner. */}
+        <dt>Says it is by</dt>
+        <dd>{pkg.manifest?.author ?? "Not stated"}{pkg.manifest?.license ? ` · ${pkg.manifest.license}` : ""}{pkg.manifest?.homepage && <> · <a href={pkg.manifest.homepage} target="_blank" rel="noreferrer">Source<ExternalLink size={11} /></a></>}</dd>
+        <dt>Available to</dt><dd>{pkg.source === "user" ? "All your workspaces" : "This repository"}</dd>
+        <dt>Location</dt><dd className="settings-path">{pkg.dir}</dd>
+        <dt>Additional access</dt><dd>{pkg.manifest?.permissions.join(", ") || "None"}</dd>
+      </dl>
       {pkg.source === "user" && <RemoveView id={id} name={view.label} onRemoved={() => go("views")} />}
     </section>}
   </div>;
@@ -116,13 +140,13 @@ export function ViewPage({ id }: { id: string }) {
 function RemoveView({ id, name, onRemoved }: { id: string; name: string; onRemoved: () => void }) {
   const [confirm, setConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  if (!confirm) return <button className="settings-text-button danger" onClick={() => setConfirm(true)}><Trash2 size={13} />Remove {name}</button>;
+  if (!confirm) return <Button variant="destructive" size="sm" className="mt-3" onClick={() => setConfirm(true)}><Trash2 />Remove {name}</Button>;
   return <div className="settings-remove-confirm">
     <p>Remove {name}? Its saved layout is kept, and your work keeps running.</p>
     {error && <p role="alert" className="settings-note error">{error}</p>}
     <div className="settings-actions">
-      <button className="settings-button" onClick={() => setConfirm(false)}>Keep it</button>
-      <button className="settings-button danger" onClick={() => void window.hive.removeViewPackage(id).then(() => { rescan(); onRemoved(); }, (e: Error) => setError(e.message))}>Remove</button>
+      <Button size="sm" variant="outline" onClick={() => setConfirm(false)}>Keep it</Button>
+      <Button size="sm" variant="destructive" onClick={() => void window.hive.removeViewPackage(id).then(() => { rescan(); onRemoved(); }, (e: Error) => setError(e.message))}>Remove</Button>
     </div>
   </div>;
 }
@@ -150,19 +174,19 @@ function ToolbarSettings({ mode }: { mode: string }) {
     <p className="settings-note">Choose the buttons and their order. Enable tools under Tools.</p>
     <div className="settings-row">
       <label><input type="checkbox" checked={preference?.labels ?? false} onChange={(event) => update({ labels: event.target.checked })} /> Show labels</label>
-      <button className="settings-button" onClick={() => {
+      <Button size="sm" variant="outline" onClick={() => {
         const current = { ...getSettings().views.toolbars };
         delete current[mode];
         patchSettings("views.toolbars", current);
-      }}>Reset actions</button>
+      }}>Reset actions</Button>
     </div>
     <ol className="settings-toolbar-actions" aria-label="Toolbar actions">
       {rows.map((action) => {
         const index = selected.indexOf(action.id);
         return <li key={action.id} data-toolbar-setting={action.id}>
           <label><input type="checkbox" checked={index >= 0} onChange={(event) => update({ actions: event.target.checked ? [...selected, action.id] : selected.filter((id) => id !== action.id) })} />{action.label}</label>
-          <button className="settings-icon-button" aria-label={`Move ${action.label} up`} disabled={index <= 0} onClick={() => move(action.id, -1)}><ArrowUp size={14} /></button>
-          <button className="settings-icon-button" aria-label={`Move ${action.label} down`} disabled={index < 0 || index === selected.length - 1} onClick={() => move(action.id, 1)}><ArrowDown size={14} /></button>
+          <Button variant="ghost" size="icon-sm" aria-label={`Move ${action.label} up`} disabled={index <= 0} onClick={() => move(action.id, -1)}><ArrowUp /></Button>
+          <Button variant="ghost" size="icon-sm" aria-label={`Move ${action.label} down`} disabled={index < 0 || index === selected.length - 1} onClick={() => move(action.id, 1)}><ArrowDown /></Button>
         </li>;
       })}
     </ol>

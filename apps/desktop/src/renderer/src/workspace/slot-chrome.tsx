@@ -11,13 +11,15 @@
  */
 import { useEffect, useState } from "react";
 import { ArrowUpRight, X } from "lucide-react";
+import { Button } from "../components/ui/button";
 import type { TileStatusKind } from "../agent-status-bus";
 import { bucketTileStatus, type TileStatusBucket } from "./tile-status-bucket";
 import { setViewMode } from "./view-mode-store";
 import type { WorkspaceCommands } from "./workspace-view";
 
 const DOT: Record<TileStatusBucket, string> = {
-  working: "bg-[var(--color-ok)]", idle: "bg-[var(--color-info)]", blocked: "bg-[var(--color-warn)]", exited: "bg-[var(--color-err)]", unknown: "bg-[var(--color-fg3)]",
+  working: "bg-[var(--color-status-working)]", idle: "bg-[var(--color-status-idle)]", blocked: "bg-[var(--color-status-attention)]",
+  exited: "bg-[var(--color-status-exited)]", unknown: "bg-[var(--color-status-idle)]",
 };
 
 export const SLOT_BAR_HEIGHT = 28;
@@ -60,12 +62,12 @@ export function SlotBar({ tileId, name, commands, onUndock, popOutView = "canvas
       <span className={`size-2 shrink-0 rounded-full ${DOT[bucket]}`} title={status ?? "idle"} data-slot-status={bucket} aria-hidden />
       <span className="min-w-0 flex-1 truncate">{name}</span>
       <kbd className="font-mono text-[9.5px] text-[var(--color-fg3)]">⇧Esc</kbd>
-      <button onClick={popOut} aria-label="Pop out to canvas" title="Pop out: show this tile on the canvas" className="grid size-6 place-items-center rounded hover:bg-[var(--color-bg3)]">
-        <ArrowUpRight size={13} />
-      </button>
-      <button onClick={onUndock} aria-label="Undock" title="Undock (Shift+Esc)" className="grid size-6 place-items-center rounded hover:bg-[var(--color-bg3)]">
-        <X size={13} />
-      </button>
+      <Button variant="ghost" size="icon-xs" onClick={popOut} aria-label="Pop out to canvas" title="Pop out: show this tile on the canvas">
+        <ArrowUpRight />
+      </Button>
+      <Button variant="ghost" size="icon-xs" onClick={onUndock} aria-label="Undock" title="Undock (Shift+Esc)">
+        <X />
+      </Button>
     </div>
   );
 }

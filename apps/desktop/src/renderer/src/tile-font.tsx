@@ -7,6 +7,7 @@
  * controls; each tile reads `size` and applies it however it renders.
  */
 import { useCallback, useEffect, useState } from "react";
+import { Button } from "./components/ui/button";
 import { MIN_FONT as MIN, MAX_FONT as MAX, clampFont, optimalFontForScreen } from "./tile-font-calc";
 
 export { optimalFontForScreen } from "./tile-font-calc";
@@ -59,30 +60,34 @@ export function handleFontKey(
 /** A−/A+ header control. `nodrag` so clicks don't start a tile drag. */
 export function FontStepper({ size, inc, dec, reset }: TileFont) {
   return (
-    <span className="nodrag inline-flex items-center rounded bg-[var(--color-bg)] border border-[var(--color-line2)] overflow-hidden">
-      <button
+    <span className="nodrag inline-flex items-center rounded bg-[var(--color-bg)] border border-[var(--color-line2)] divide-x divide-[var(--color-line2)] overflow-hidden">
+      <Button
+        variant="ghost"
+        size="micro"
         onClick={dec}
-        className="px-1 text-[10px] leading-none text-[var(--color-fg3)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg4)] transition-colors h-4 grid place-items-center"
         title="Smaller font (Ctrl/Cmd −)"
         aria-label="decrease font size"
       >
         A−
-      </button>
-      <button
+      </Button>
+      <Button
+        variant="ghost"
+        size="micro"
+        font="mono"
         onClick={reset}
-        className="px-1 text-[9px] leading-none tabular-nums text-[var(--color-fg3)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg4)] transition-colors h-4 grid place-items-center border-x border-[var(--color-line2)]"
         title="Reset font size (Ctrl/Cmd 0)"
       >
         {size}
-      </button>
-      <button
+      </Button>
+      <Button
+        variant="ghost"
+        size="micro"
         onClick={inc}
-        className="px-1 text-[11px] leading-none text-[var(--color-fg3)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg4)] transition-colors h-4 grid place-items-center"
         title="Larger font (Ctrl/Cmd +)"
         aria-label="increase font size"
       >
         A+
-      </button>
+      </Button>
     </span>
   );
 }
@@ -107,31 +112,35 @@ export function FontScaleControl({
     set(next);
   };
   return (
-    <span className="nodrag inline-flex items-center rounded bg-[var(--color-bg)] border border-[var(--color-line2)] overflow-hidden">
-      <button
+    <span className="nodrag inline-flex items-center rounded bg-[var(--color-bg)] border border-[var(--color-line2)] divide-x divide-[var(--color-line2)] overflow-hidden">
+      <Button
+        variant="ghost"
+        size="micro"
         onClick={() => step(-1)}
-        className="px-1 text-[11px] leading-none text-[var(--color-fg3)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg4)] transition-colors h-4 grid place-items-center"
         title="Scale the whole terminal down"
         aria-label="scale terminal down"
       >
         −
-      </button>
-      <button
+      </Button>
+      <Button
+        variant="ghost"
+        size="micro"
+        font="mono"
         onClick={best}
         onDoubleClick={reset}
-        className="px-1 text-[9px] leading-none tabular-nums text-[var(--color-fg3)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg4)] transition-colors h-4 grid place-items-center border-x border-[var(--color-line2)]"
         title="Best size for this screen · double-click = default"
       >
         {size}
-      </button>
-      <button
+      </Button>
+      <Button
+        variant="ghost"
+        size="micro"
         onClick={() => step(1)}
-        className="px-1 text-[11px] leading-none text-[var(--color-fg3)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg4)] transition-colors h-4 grid place-items-center"
         title="Scale the whole terminal up"
         aria-label="scale terminal up"
       >
         +
-      </button>
+      </Button>
     </span>
   );
 }

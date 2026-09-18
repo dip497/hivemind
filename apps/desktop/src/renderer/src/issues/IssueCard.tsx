@@ -2,6 +2,7 @@ import type { DragEvent, KeyboardEvent } from "react";
 import { Play } from "lucide-react";
 import type { IssueSummary } from "@hivemind/core/types";
 import { StateIcon, LabelChip, Avatar } from "../components/StateMeta";
+import { Button } from "../components/ui/button";
 
 /** Open the full detail peek for an issue (App.tsx listens). Carry `root` — it's
  *  authoritative, so the peek doesn't re-guess via the registry. */
@@ -52,8 +53,9 @@ export function IssueCard({
       <div className="flex items-center gap-1.5">
         <StateIcon state={issue.state} size={11} />
         <span className="font-mono text-[11px] text-[var(--color-fg2)] tabular-nums">{issue.id}</span>
-        <button
-          className="nodrag ml-auto inline-flex items-center gap-1 opacity-0 group-hover:opacity-100 text-[11px] px-1.5 py-0.5 rounded-md text-white bg-[var(--color-brand)] hover:opacity-90 cursor-pointer hm-soft"
+        <Button reveal="hidden"
+          size="xs"
+          className="nodrag ml-auto"
           aria-label={`Spawn claude to work on ${issue.id}`}
           title="spawn claude + work on this"
           onClick={(e) => {
@@ -61,9 +63,9 @@ export function IssueCard({
             onWork();
           }}
         >
-          <Play size={8} fill="currentColor" strokeWidth={0} aria-hidden />
+          <Play fill="currentColor" strokeWidth={0} aria-hidden />
           work
-        </button>
+        </Button>
       </div>
       <div className="mt-1.5 text-[12px] text-[var(--color-fg)] leading-snug line-clamp-3">{issue.title}</div>
       {(issue.labels.length > 0 || issue.assignee) && (
@@ -104,8 +106,9 @@ export function IssueRow({ issue, root, onWork }: { issue: IssueSummary; root: s
         <LabelChip key={l} label={l} />
       ))}
       {issue.assignee && <Avatar id={issue.assignee.id} size={16} />}
-      <button
-        className="nodrag inline-flex items-center gap-1 opacity-0 group-hover:opacity-100 text-[10.5px] px-1.5 py-0.5 rounded-md text-white bg-[var(--color-brand)] hover:opacity-90 cursor-pointer shrink-0 hm-soft"
+      <Button reveal="hidden"
+        size="xs"
+        className="nodrag"
         aria-label={`Spawn claude to work on ${issue.id}`}
         title="spawn claude + work on this"
         onClick={(e) => {
@@ -113,9 +116,9 @@ export function IssueRow({ issue, root, onWork }: { issue: IssueSummary; root: s
           onWork();
         }}
       >
-        <Play size={8} fill="currentColor" strokeWidth={0} aria-hidden />
+        <Play fill="currentColor" strokeWidth={0} aria-hidden />
         work
-      </button>
+      </Button>
     </div>
   );
 }

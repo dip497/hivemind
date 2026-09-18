@@ -24,6 +24,7 @@
  */
 import { useCallback, useEffect, useMemo, type CSSProperties, type ReactNode } from "react";
 import { X, Minus, Globe, PanelsTopLeft } from "lucide-react";
+import { Button } from "../../components/ui/button";
 import { LayersPanel, type LayerTile } from "../../LayersPanel";
 import { AgentIcon } from "../../agents";
 import { nextActiveTab } from "../../windows-view-state";
@@ -178,23 +179,27 @@ export function WindowsView({ model, commands }: WorkspaceViewProps) {
                 <span className="shrink-0 grid place-items-center w-4"><TabGlyph tile={t} /></span>
                 <span className="truncate text-[12px] font-medium">{t.name}</span>
                 {/* Minimize — hide from the strip, keep in the graph rail. */}
-                <button
+                <Button
+                  variant="ghost"
+                  size="icon-2xs"
+                  reveal="hidden"
                   onClick={(e) => { e.stopPropagation(); minimizeTab(t.id); }}
-                  className="shrink-0 size-5 grid place-items-center rounded text-[var(--color-fg3)] opacity-0 group-hover:opacity-100 hover:text-[var(--color-fg)] hover:bg-[var(--color-bg3)] transition-opacity"
                   title="Minimize (still in the graph rail)"
                   aria-label={`Minimize ${t.name}`}
                 >
-                  <Minus size={13} />
-                </button>
+                  <Minus />
+                </Button>
                 {/* Close — kill the tile (same as the canvas close). */}
-                <button
+                <Button
+                  variant="ghost"
+                  size="icon-2xs"
+                  reveal="hidden"
                   onClick={(e) => { e.stopPropagation(); commands.closeTile(t.id); }}
-                  className="shrink-0 size-5 grid place-items-center rounded text-[var(--color-fg3)] opacity-0 group-hover:opacity-100 hover:text-[var(--color-err)] hover:bg-[var(--color-bg3)] transition-opacity"
                   title="Close tile"
                   aria-label={`Close ${t.name}`}
                 >
-                  <X size={13} />
-                </button>
+                  <X />
+                </Button>
               </div>
             );
           })}

@@ -15,6 +15,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { GripVertical, Files, GitCompare } from "lucide-react";
+import { Button } from "./components/ui/button";
 import { HeaderPinButton, type PinRect } from "./canvas-nodes";
 import { FileTreeTile } from "./FileTreeTile";
 import { EditorTile } from "./EditorTile";
@@ -97,19 +98,17 @@ export function WorkbenchTile({ repoPath, tabs, onOpenFile, onOpenInBrowser, onC
   };
 
   const railBtn = (p: Panel, label: string, Icon: typeof Files) => (
-    <button
+    <Button
+      variant={panel === p && !collapsed ? "secondary" : "ghost"}
+      size="icon"
       onClick={() => pick(p)}
-      className={`nodrag size-8 grid place-items-center rounded-md transition-colors ${
-        panel === p && !collapsed
-          ? "text-[var(--color-accent)] bg-[var(--color-bg4)]"
-          : "text-[var(--color-fg3)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg3)]"
-      }`}
+      className="nodrag"
       aria-label={label}
       title={label}
       aria-pressed={panel === p && !collapsed}
     >
-      <Icon size={16} aria-hidden />
-    </button>
+      <Icon aria-hidden />
+    </Button>
   );
 
   return (
@@ -121,12 +120,14 @@ export function WorkbenchTile({ repoPath, tabs, onOpenFile, onOpenInBrowser, onC
         <span className="text-[var(--color-fg3)] truncate">· {repoName}</span>
         <span className="ml-auto flex items-center gap-1.5">
           <HeaderPinButton pinned={pinned} onToggle={onTogglePin} />
-          <button
+          <Button
+            variant="ghost"
+            size="icon-micro"
             onClick={onClose}
-            className="nodrag size-4 grid place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--color-line2)] hover:text-[var(--color-fg)]"
+            className="nodrag"
             aria-label="close tile"
             title="close"
-          >×</button>
+          >×</Button>
         </span>
       </header>
 

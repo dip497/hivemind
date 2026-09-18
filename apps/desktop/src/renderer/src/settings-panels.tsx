@@ -15,7 +15,8 @@ import { BrowsePlugins, InstalledPlugins } from "./settings-plugins";
 import { useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { toast } from "sonner";
-import { getSettings, patchSettings, useSettings } from "./settings-store";
+import { Button } from "./components/ui/button";
+import { getSettings, patchSettings } from "./settings-store";
 import { setTheme, useTheme } from "./theme-store";
 import {
   AccentPicker, BackgroundControls, GlassControls, OverlayControls, PresetRow, Section, TerminalColors,
@@ -66,7 +67,7 @@ function AppearancePrefs() {
         <div className="settings-row">
           <div>
             <label htmlFor="plugin-surfaces">Tools in scene views</label>
-            <p>How terminals and editors look inside World and community views.</p>
+            <p>How terminals and editors look inside a view you installed.</p>
           </div>
           <select
             id="plugin-surfaces"
@@ -88,8 +89,8 @@ function AppearancePrefs() {
         <div className="settings-row">
           <div><label>Theme file</label></div>
           <div className="settings-inline">
-            <button type="button" className="settings-button" onClick={() => void exportTheme()}>Copy JSON</button>
-            <button type="button" className="settings-button" onClick={() => fileRef.current?.click()}>Import…</button>
+            <Button type="button" size="sm" variant="outline" onClick={() => void exportTheme()}>Copy JSON</Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => fileRef.current?.click()}>Import…</Button>
             <input ref={fileRef} type="file" accept="application/json,.json" hidden onChange={(e) => void importTheme(e)} />
           </div>
         </div>

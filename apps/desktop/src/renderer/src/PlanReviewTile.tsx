@@ -13,6 +13,7 @@
  */
 import { useState } from "react";
 import { GripVertical } from "lucide-react";
+import { Button } from "./components/ui/button";
 import { useTileFont, FontStepper, handleFontKey } from "./tile-font";
 import { PlanReviewBody } from "./plan-review/PlanReviewBody";
 
@@ -60,14 +61,16 @@ export function PlanReviewTile({ requestId, hcpCmdId, plan, cwd, onClose }: Prop
         <span className="ml-auto">
           <FontStepper {...font} />
         </span>
-        <button
-          className="nodrag size-5 grid place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--color-line2)] hover:text-[var(--color-fg)] cursor-pointer"
+        <Button
+          variant="ghost"
+          size="icon-2xs"
+          className="nodrag"
           aria-label="dismiss plan review (approves the plan)"
           title="dismiss (approves)"
           onClick={() => decide("allow")}
         >
-          <svg width="12" height="12" viewBox="0 0 14 14" aria-hidden><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
-        </button>
+          <svg viewBox="0 0 14 14" aria-hidden><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
+        </Button>
       </div>
 
       <PlanReviewBody plan={plan} fontScale={font.size / 13} sent={sent} onDecide={decide} />

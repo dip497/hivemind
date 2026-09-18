@@ -5,7 +5,7 @@
 // Repo SCOPING of tile bodies moved to tile-surfaces.test.ts.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildBaseNodes, type NodeBuildCtx } from "../../src/renderer/src/canvas-node-build.ts";
+import { buildBaseNodes, reuseNodes, type NodeBuildCtx } from "../../src/renderer/src/canvas-node-build.ts";
 import type { FrameState, TileInstance } from "../../src/renderer/src/canvas-persistence.ts";
 
 const noop = () => {};
@@ -87,4 +87,16 @@ test("editor/diff tiles are skipped when there's no repo — but a zone repo cou
     frameOf: { ed: "ws" }, positions: { ed: { x: 0, y: 0 } },
   }));
   assert.ok(zoned.find((n) => n.id === "ed"), "editor inside a workspace-zone frame renders with no global repo");
+});
+
+test("a rebuild keeps the object of every node that did not change", () => {
+  const f = frame({ id: "f" });
+  const c = ctx({ tiles: [tile({ id: "a" }), tile({ id: "b" })], frames: [f], frameOf: { a: "f" } });
+  const first = buildBaseNodes(c);
+  const prev = new Map(first.map((n) => [n.id, n]));
+  const again = reuseNodes(prev, buildBaseNodes({ ...c, positions: { ...c.positions } }));
+  for (const n of again) assert.equal(n, prev.get(n.id), n.id);
+  const moved = reuseNodes(prev, buildBaseNodes({ ...c, sizes: { b: { width: 900, height: 700 } } }));
+  assert.equal(byId(moved, "a"), prev.get("a"));
+  assert.notEqual(byId(moved, "b"), prev.get("b"));
 });

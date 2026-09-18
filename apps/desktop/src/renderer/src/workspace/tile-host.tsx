@@ -39,6 +39,7 @@ import { PlanReviewTile } from "../PlanReviewTile";
 import { TileErrorBoundary } from "../TileErrorBoundary";
 import type { TerminalTileData, TileSurface, TileSurfaceSpec } from "./tile-surfaces";
 import { LinkBanner } from "../machines/LinkBanner";
+import { BrowserSkeleton, DiffSkeleton, EditorSkeleton } from "./tile-skeletons";
 import { isRemote } from "../../../shared/remote-uri";
 
 const BrowserTile = lazy(() => import("../BrowserTile").then((m) => ({ default: m.BrowserTile })));
@@ -46,15 +47,6 @@ const DiffTile = lazy(() => import("../DiffTile").then((m) => ({ default: m.Diff
 const WorkbenchTile = lazy(() => import("../WorkbenchTile").then((m) => ({ default: m.WorkbenchTile })));
 
 export type TileBodyProps = TileSurfaceSpec & { selected: boolean };
-
-// Fallback shown while a lazy-loaded heavy tile (diff/editor) fetches its chunk.
-function TileLoading({ label }: { label: string }) {
-  return (
-    <div className="w-full h-full grid place-items-center rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] text-[12px] text-[var(--color-fg3)]">
-      {label}
-    </div>
-  );
-}
 
 /** A terminal plus its machine's link banner. */
 function TerminalBody({ data, selected }: { data: TerminalTileData; selected: boolean }) {
@@ -86,7 +78,7 @@ export function TileBody(props: TileBodyProps): ReactNode {
       const { data } = props;
       return (
         <TileErrorBoundary label="Diff" onClose={data.onClose}>
-          <Suspense fallback={<TileLoading label="Loading diff…" />}>
+          <Suspense fallback={<DiffSkeleton />}>
             <DiffTile {...data} />
           </Suspense>
         </TileErrorBoundary>
@@ -96,7 +88,7 @@ export function TileBody(props: TileBodyProps): ReactNode {
       const { data } = props;
       return (
         <TileErrorBoundary label="Editor" onClose={data.onClose}>
-          <Suspense fallback={<TileLoading label="Loading editor…" />}>
+          <Suspense fallback={<EditorSkeleton />}>
             <WorkbenchTile
               repoPath={data.repoPath}
               tabs={data.tabs}
@@ -115,7 +107,7 @@ export function TileBody(props: TileBodyProps): ReactNode {
       const { data, selected } = props;
       return (
         <TileErrorBoundary label="Browser" onClose={data.onClose}>
-          <Suspense fallback={<TileLoading label="Loading browser…" />}>
+          <Suspense fallback={<BrowserSkeleton />}>
           <BrowserTile
             tileId={data.tileId}
             frameId={data.frameId}

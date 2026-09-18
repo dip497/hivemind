@@ -17,6 +17,7 @@
  *   • worktree create/attach → the WorktreePicker + onCreate/onAttach callbacks;
  *   • bind workspace / arrange / rename / color / delete → callbacks.
  */
+import { FRAME_SWATCHES } from "./frame-color";
 import { useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -25,6 +26,7 @@ import {
 } from "lucide-react";
 import { useAgents } from "./agents";
 import { WorktreePicker } from "./WorktreePicker";
+import { MenuItem } from "./components/ui/menu-item";
 import type { LayerFrame } from "./LayersPanel";
 
 /** Everything the rail needs to drive a frame — supplied by Canvas. */
@@ -50,30 +52,15 @@ export interface FrameActions {
   repoPathForFrame: (frameId: string) => string | null;
 }
 
-// Same theme-token swatches as the frame header (FrameNode COLORS).
-const COLORS = [
-  { name: "Indigo", value: "#5b6cff" },
-  { name: "Sky", value: "#38bdf8" },
-  { name: "Green", value: "#22c55e" },
-  { name: "Violet", value: "#a855f7" },
-  { name: "Amber", value: "#f59e0b" },
-  { name: "Red", value: "#f43f5e" },
-  { name: "Slate", value: "#6b7280" },
-];
+// Identity colours, shared with the rail menu and the default generator (frame-color.ts).
+const COLORS = FRAME_SWATCHES;
 
 function Item({ icon, label, onClick, danger }: { icon: ReactNode; label: string; onClick: () => void; danger?: boolean }) {
   return (
-    <button
-      onClick={onClick}
-      className={`flex items-center gap-2 w-full text-left px-2 py-1.5 rounded text-[12px] transition-colors ${
-        danger
-          ? "text-[var(--color-fg2)] hover:bg-[var(--color-bg4)] hover:text-[var(--color-err)]"
-          : "text-[var(--color-fg)] hover:bg-[var(--color-bg4)]"
-      }`}
-    >
+    <MenuItem onClick={onClick} variant={danger ? "destructive" : "default"}>
       <span className="shrink-0 grid place-items-center size-4 text-[var(--color-fg3)]">{icon}</span>
       <span className="truncate">{label}</span>
-    </button>
+    </MenuItem>
   );
 }
 
@@ -93,18 +80,11 @@ function SubmenuRow({
 }) {
   return (
     <div className="relative" onMouseEnter={onOpen} onFocus={onOpen}>
-      <button
-        onClick={onOpen}
-        className={`flex items-center gap-2 w-full text-left px-2 py-1.5 rounded text-[12px] transition-colors ${
-          open ? "bg-[var(--color-bg4)] text-[var(--color-fg)]" : "text-[var(--color-fg)] hover:bg-[var(--color-bg4)]"
-        }`}
-        aria-haspopup="menu"
-        aria-expanded={open}
-      >
+      <MenuItem onClick={onOpen} selected={open} aria-haspopup="menu" aria-expanded={open}>
         <span className="shrink-0 grid place-items-center size-4 text-[var(--color-fg3)]">{icon}</span>
         <span className="truncate flex-1">{label}</span>
-        <ChevronRight size={13} className="shrink-0 text-[var(--color-fg3)]" />
-      </button>
+        <ChevronRight className="shrink-0 text-[var(--color-fg3)]" />
+      </MenuItem>
       {open && (
         // Nested panel — sits to the right, overlapping slightly so the mouse can
         // travel into it without crossing a gap that would close it.

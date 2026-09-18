@@ -2,6 +2,7 @@
  *  in workspace/standard-toolbar so scene views do not depend on xyflow here. */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useReactFlow, useStore } from "@xyflow/react";
+import { Button } from "./components/ui/button";
 
 /** Bottom-left zoom + nav island (Excalidraw footer). Uses react-flow's
  *  imperative camera API; lives inside <ReactFlow> so the hooks resolve. */
@@ -17,11 +18,12 @@ export function ZoomIsland({ tileCount, onReset, minimapOn, onToggleMinimap, onF
         <IslandBtn title="Zoom out (Ctrl -)" onClick={() => zoomOut({ duration: 150 })}>
           <svg width="13" height="13" viewBox="0 0 14 14"><path d="M3 7h8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
         </IslandBtn>
-        <button
+        <Button font="mono"
+          variant="ghost"
           onClick={() => zoomTo(1, { duration: 150 })}
           title="Reset to 100% (Ctrl 1)"
-          className="px-2 h-8 text-[11px] font-mono tabular-nums text-[var(--color-fg2)] hover:text-[var(--color-fg)] min-w-[3.2rem]"
-        >{pct}%</button>
+          className="min-w-[3.2rem]"
+        >{pct}%</Button>
         <IslandBtn title="Zoom in (Ctrl +)" onClick={() => zoomIn({ duration: 150 })}>
           <svg width="13" height="13" viewBox="0 0 14 14"><path d="M7 3v8M3 7h8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
         </IslandBtn>
@@ -110,10 +112,6 @@ function FpsMeter() {
 
 function IslandBtn({ title, onClick, children }: { title: string; onClick: () => void; children: React.ReactNode }) {
   return (
-    <button
-      onClick={onClick}
-      title={title}
-      className="grid place-items-center size-8 text-[var(--color-fg2)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)] transition-colors"
-    >{children}</button>
+    <Button variant="ghost" size="icon" onClick={onClick} title={title}>{children}</Button>
   );
 }

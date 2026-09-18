@@ -9,14 +9,17 @@
  * tile's status here stays in sync with everywhere else. Pure presentational +
  * its own status subscription; Canvas owns the data + focus actions.
  */
+import { statusColor } from "./workspace/tile-status-bucket";
 import { MachinesStrip } from "./machines/MachinesStrip";
 import { MachineDot } from "./machines/status";
 import { hostIdOfUri, machineByHost, statusOf, useMachines } from "./machines/store";
-import { useEffect, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
+import { memo, useEffect, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
 import { Layers, ChevronRight, ChevronDown, GitBranch, Server, Folder, FolderOpen, PanelLeftClose, Globe } from "lucide-react";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { AgentIcon } from "./agents";
 import { FrameRailMenu, type FrameActions } from "./FrameRailMenu";
+import { Button } from "./components/ui/button";
+import { Input } from "./components/ui/input";
 import { defaultAgent } from "@hivemind/agents";
 import { AGENT_TILE_KIND } from "./tile-kinds";
 
@@ -60,16 +63,11 @@ interface Props {
   frameActions?: FrameActions;
 }
 
-const STATUS_COLOR: Record<TileStatusKind, string> = {
-  working: "var(--color-brand)",
-  idle: "var(--color-fg3)",
-  blocked: "var(--color-warn)",
-  permission: "var(--color-warn)",
-  question: "var(--color-warn)",
-  exited: "var(--color-err)",
-  plan_review: "var(--color-warn)",
-  awaiting_approval: "var(--color-warn)",
-};
+// One status, one colour, shared with every other surface (workspace/tile-status-bucket).
+const STATUS_COLOR = Object.fromEntries(
+  (["working", "idle", "blocked", "permission", "question", "exited", "plan_review", "awaiting_approval"] as const)
+    .map((k) => [k, statusColor(k)]),
+) as Record<TileStatusKind, string>;
 
 /** Short pill label per status. */
 const STATUS_LABEL: Record<TileStatusKind, string> = {
@@ -158,7 +156,8 @@ function WorkspaceIcon({ color, remote, remoteUri, worktree, collapsed }: { colo
   );
 }
 
-export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocusFrame, frameActions }: Props) {
+// Memo: a child of the canvas view, which re-renders on every drag frame.
+export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocusFrame, frameActions }: Props) {
   // Persisted: panel hidden + which frame groups are collapsed. Now that the
   // panel is DOCKED (a flex sibling, not an overlay) it no longer occludes any
   // tile, so it defaults to SHOWN; collapsing leaves a narrow icon rail. The
@@ -237,9 +236,11 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
   if (hidden) {
     const badge = needsYou > 0 ? "var(--color-warn)" : working > 0 ? "var(--color-brand)" : null;
     return (
-      <button
+      <Button
+        variant="secondary"
+        size="icon"
         onClick={() => setHidden(false)}
-        className="pointer-events-auto absolute left-2.5 top-2.5 z-30 size-8 grid place-items-center rounded-lg hm-island text-[var(--color-fg2)] hover:text-[var(--color-fg)]"
+        className="pointer-events-auto absolute left-2.5 top-2.5 z-30"
         title={
           needsYou > 0 ? `Show layers (⌘L) — ${needsYou} agent(s) need you`
           : working > 0 ? `Show layers (⌘L) — ${working} working`
@@ -247,7 +248,7 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
         }
         aria-label="show layers"
       >
-        <Layers size={16} />
+        <Layers />
         {badge && (
           <span
             aria-hidden
@@ -255,7 +256,7 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
             style={{ background: badge }}
           />
         )}
-      </button>
+      </Button>
     );
   }
 
@@ -375,17 +376,18 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
           style={{ paddingLeft: depth * 14 }}
           onContextMenu={frameActions ? (e) => { e.preventDefault(); setMenu({ frame, x: e.clientX, y: e.clientY }); } : undefined}
         >
-          <button
+          <Button
+            variant="ghost"
+            size="icon-2xs"
             onClick={() => toggleGroup(gid)}
-            className="size-5 grid place-items-center rounded text-[var(--color-fg3)] hover:text-[var(--color-fg)]"
             aria-label={isCollapsed ? "expand" : "collapse"}
           >
             {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-          </button>
+          </Button>
           {renaming?.id === gid ? (
             <div className="flex-1 flex items-center gap-2 min-w-0">
               <WorkspaceIcon color={frame.color} remote={frame.remote} remoteUri={frame.remoteUri} worktree={isWt} collapsed={isCollapsed} />
-              <input
+              <Input
                 autoFocus
                 value={renaming.draft}
                 onChange={(e) => setRenaming({ id: gid, draft: e.target.value })}
@@ -405,7 +407,7 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
                   // Don't let the panel's key handlers see rename typing.
                   e.stopPropagation();
                 }}
-                className="flex-1 min-w-0 bg-[var(--color-bg)] border border-[var(--color-brand)] rounded px-1.5 py-0.5 text-[13px] font-semibold text-[var(--color-fg)] outline-none"
+                className="flex-1 min-w-0"
                 aria-label="Rename frame"
               />
             </div>
@@ -501,12 +503,13 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
           title="Toggle the Layers panel"
           className="grid place-items-center h-[15px] px-1 rounded bg-[var(--color-bg)] border border-[var(--color-line2)] text-[9px] font-mono text-[var(--color-fg3)] tracking-tight"
         >⌘L</kbd>
-        <button
+        <Button
+          variant="ghost"
+          size="icon-2xs"
           onClick={() => setHidden(true)}
-          className="size-5 grid place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)]"
           title="Collapse layers (⌘L)"
           aria-label="collapse layers"
-        ><PanelLeftClose size={14} /></button>
+        ><PanelLeftClose size={14} /></Button>
       </header>
 
       <div className="flex-1 overflow-y-auto overscroll-contain pb-2 text-[14px]">
@@ -550,4 +553,4 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
       )}
     </aside>
   );
-}
+});
