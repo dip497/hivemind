@@ -386,6 +386,9 @@ importers:
       vite:
         specifier: 'catalog:'
         version: 5.4.21(@types/node@22.19.19)(lightningcss@1.32.0)
+      yaml:
+        specifier: 'catalog:'
+        version: 2.9.0
 
   packages/hive-agents:
     dependencies:

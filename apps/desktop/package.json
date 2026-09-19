@@ -150,6 +150,7 @@
     "tsx": "^4.23.13",
     "typebox": "1.1.38",
     "typescript": "catalog:",
-    "vite": "catalog:"
+    "vite": "catalog:",
+    "yaml": "catalog:"
   }
 }
