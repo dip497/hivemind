@@ -11,19 +11,19 @@ canvas) that is mission-control for AI coding agents. Every tile is a live
 terminal / diff / file-tree / editor / issues board; tiles live in **frames**
 (workspaces) bound to a real repo on disk — local, a git worktree, or a remote
 SSH host. Issues are plain markdown under `.hivemind/`; agents read/update them
-through an MCP server. Local-first, no cloud, no telemetry.
+with the `hive` CLI (`hive ctl` is the control plane). Local-first, no cloud, no telemetry.
 
 ## Monorepo layout
 
 ```
 apps/
   desktop/   Electron main + preload + React renderer (the canvas app)   → apps/desktop/AGENTS.md
-  cli/       `hive` CLI (citty + bun-compile); hosts the MCP server
+  cli/       `hive` CLI (citty + bun-compile); `hive ctl` = agent control plane (HCP client)
 packages/
-  hive-core/ storage + parsing for .hivemind/ (gray-matter + zod)         → packages/hive-core/AGENTS.md
-  hive-mcp/  stdio MCP server (tools wrapping hive-core)
+  hive-core/ storage + parsing for .hivemind/ (gray-matter + zod), skill templates + agentic installer → packages/hive-core/AGENTS.md
+  hive-agents/ the agent-provider catalog: one def (+ node half) per CLI agent, read by UI/CLI/HCP
   tsconfig/  shared TS config
-templates/   per-workspace agentic templates (`hive init --agentic`)
+templates/   source of the hive-browser skill (embedded into hive-core)
 docs/design/ architecture design docs (e.g. remote-frames.md)
 scripts/     release.sh + helpers
 ```
@@ -61,7 +61,7 @@ Run the relevant e2e when you touch canvas/frame/tile/issue behavior.
 
 ## Releases
 
-Never build/release locally. `./scripts/release.sh <patch|minor|major>` from a
+Never build/release locally. `./scripts/release.sh` (calendar version, computed) from a
 clean `main` bumps versions, writes the changelog section, tags, and pushes —
 GitHub Actions builds + publishes. **Do not run it unless explicitly asked.**
 
@@ -78,7 +78,11 @@ GitHub Actions builds + publishes. **Do not run it unless explicitly asked.**
 <claude-mem-context>
 # Memory Context
 
-# [hivemind] recent context, 2026-06-19 2:43pm GMT+5:30
+# [hivemind] recent context, 2026-09-08 12:41pm GMT+5:30
 
 No previous sessions found.
 </claude-mem-context>
+## Website hosting
+
+The website and docs live in `docs/` and use the GitHub Pages workflow. Do not create
+or deploy ChatGPT Sites for this project.

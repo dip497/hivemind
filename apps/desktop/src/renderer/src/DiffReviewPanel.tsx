@@ -6,7 +6,10 @@
  * + actions.
  */
 import { useState } from "react";
+import { X } from "lucide-react";
 import type { ReviewComment } from "./diff-comments";
+import { Button } from "./components/ui/button";
+import { Input } from "./components/ui/input";
 
 interface Props {
   comments: ReviewComment[];
@@ -38,19 +41,19 @@ export function DiffReviewPanel({ comments, onJump, onReply, onResolve, onDelete
         <span className="font-mono text-[10px] text-[var(--color-fg3)] tabular-nums">
           {unresolved} open{comments.length > unresolved ? ` · ${comments.length - unresolved} resolved` : ""}
         </span>
-        <button
+        <Button
+          variant="outline"
+          size="2xs"
+          className="ml-auto"
           onClick={onSendAll}
           disabled={unresolved === 0}
-          className="ml-auto px-1.5 py-0.5 rounded text-[10px] border border-[var(--color-line2)] text-[var(--color-fg2)] hover:text-[var(--color-fg)] disabled:opacity-30"
           title="Send all unresolved comments to claude"
         >
           send all
-        </button>
-        <button
-          onClick={onClose}
-          className="size-4 grid place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)]"
-          aria-label="close review"
-        >×</button>
+        </Button>
+        <Button variant="ghost" size="icon-micro" onClick={onClose} aria-label="close review">
+          <X />
+        </Button>
       </header>
 
       <div className="flex-1 overflow-y-auto p-2 space-y-3 text-[12px]">
@@ -104,9 +107,9 @@ function CommentThread({
       }`}
     >
       <div className="flex items-center gap-1.5 text-[10px] text-[var(--color-fg3)]">
-        <button onClick={onJump} className="font-mono hover:text-[var(--color-accent)]" title="Jump to lines">
+        <Button variant="link" size="micro" font="mono" onClick={onJump} title="Jump to lines">
           {fmtRange(c)}
-        </button>
+        </Button>
         <span className="text-[var(--color-fg2)]">{c.author}</span>
         {c.resolved && <span className="text-[var(--color-ok)]">✓ resolved</span>}
         <span className="ml-auto">{c.at}</span>
@@ -119,24 +122,24 @@ function CommentThread({
         </div>
       ))}
       <div className="mt-1.5 flex items-center gap-1">
-        <input
+        <Input
           value={reply}
           onChange={(e) => setReply(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && reply.trim()) { onReply(reply.trim()); setReply(""); } }}
           placeholder="reply…"
-          className="flex-1 min-w-0 bg-[var(--color-bg)] border border-[var(--color-line2)] rounded px-1.5 py-0.5 text-[11px] text-[var(--color-fg)] outline-none placeholder:text-[var(--color-fg3)]"
+          className="flex-1 min-w-0"
         />
       </div>
       <div className="mt-1.5 flex items-center gap-1.5 text-[10px]">
-        <button onClick={onResolve} className="px-1.5 py-0.5 rounded border border-[var(--color-line2)] text-[var(--color-fg2)] hover:text-[var(--color-fg)]">
+        <Button variant="outline" size="2xs" onClick={onResolve}>
           {c.resolved ? "reopen" : "resolve"}
-        </button>
-        <button onClick={onSend} className="px-1.5 py-0.5 rounded border border-[var(--color-line2)] text-[var(--color-fg2)] hover:text-[var(--color-brand)]" title="Send this comment to claude">
+        </Button>
+        <Button variant="outline" size="2xs" onClick={onSend} title="Send this comment to claude">
           → claude
-        </button>
-        <button onClick={onDelete} className="ml-auto px-1.5 py-0.5 rounded text-[var(--color-fg3)] hover:text-[var(--color-err)]" title="Delete comment">
+        </Button>
+        <Button variant="destructive" size="2xs" className="ml-auto" onClick={onDelete} title="Delete comment">
           delete
-        </button>
+        </Button>
       </div>
     </div>
   );

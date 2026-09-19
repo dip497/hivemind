@@ -10,7 +10,7 @@ import {
   writeAgentContext,
 } from "@hivemind/core";
 import { err, ok } from "../format.js";
-import { installAgenticFiles } from "../agentic-install.js";
+import { installAgenticStack } from "../agentic-install.js";
 
 export const initCmd = defineCommand({
   meta: {
@@ -27,8 +27,8 @@ export const initCmd = defineCommand({
       type: "boolean",
       default: true,
       description:
-        "Install the agentic stack: .mcp.json (hive MCP server) + claude " +
-        "SKILL.md + agentic section in CLAUDE.md. ON by default; pass " +
+        "Install the agentic stack: the hive skills (.claude/skills/) + the " +
+        "agentic section in CLAUDE.md. ON by default; pass " +
         "--no-agentic to skip. Idempotent.",
     },
     json: { type: "boolean", description: "Emit JSON" },
@@ -51,7 +51,7 @@ export const initCmd = defineCommand({
           "no .hivemind/ found — run `hive init --prefix XX` first (it installs the agentic stack by default)",
         );
       }
-      return installAgentic(ctx, cwd, existing);
+      return installAgentic(ctx, cwd);
     }
 
     if (!args.prefix) {
@@ -123,7 +123,7 @@ export const initCmd = defineCommand({
 
       // Optionally chain the agentic install in one shot.
       if (args.agentic) {
-        const ag = await installAgenticFiles(cwd, root);
+        const ag = await installAgenticStack(cwd);
         return ok(
           ctx,
           {
@@ -141,8 +141,7 @@ export const initCmd = defineCommand({
               `  next ID:   ${prefix}-1`,
               `  AGENTS.md  written`,
               `  CLAUDE.md  ${claudeAction} + agentic section ${ag.claudeAgentic}`,
-              `  .mcp.json  ${ag.mcp}`,
-              `  skill      ${ag.skill}`,
+              `  skills     ${ag.skills.length ? ag.skills.join(", ") : "up to date"}  (.claude/skills/)`,
               ``,
               `next: hive new "first issue title"`,
             ].join("\n"),
@@ -162,7 +161,7 @@ export const initCmd = defineCommand({
             `  .agent.md  auto-generated`,
             ``,
             `next: hive new "first issue title"`,
-            `      hive add mcp / hive add skill   # add the claude MCP + skill (skipped via --no-agentic)`,
+            `      hive add skill   # add the hive skills (skipped via --no-agentic)`,
           ].join("\n")
       );
     } catch (e) {
@@ -176,13 +175,9 @@ export const initCmd = defineCommand({
 // ── agentic install ──────────────────────────────────────────────────────
 // The installers live in ../agentic-install.js (shared with `hive add`).
 
-async function installAgentic(
-  ctx: { json: boolean },
-  cwd: string,
-  hiveRoot: string,
-): Promise<unknown> {
+async function installAgentic(ctx: { json: boolean }, cwd: string): Promise<unknown> {
   try {
-    const r = await installAgenticFiles(cwd, hiveRoot);
+    const r = await installAgenticStack(cwd);
     return ok(
       ctx,
       r,
@@ -190,10 +185,10 @@ async function installAgentic(
         [
           `✓ agentic stack installed`,
           `  CLAUDE.md  agentic section ${r.claudeAgentic}`,
-          `  .mcp.json  ${r.mcp}`,
-          `  skill      ${r.skill}  (.claude/skills/hive-work/SKILL.md)`,
+          `  skills     ${r.skills.length ? r.skills.join(", ") : "up to date"}  (.claude/skills/)`,
+          ...(r.mcpRetired ? [`  .mcp.json  removed the retired hive MCP server entry`] : []),
           ``,
-          `start claude in this dir — it auto-loads the MCP server + skill.`,
+          `start an agent in this dir — the skills teach it the hive workflow.`,
         ].join("\n"),
     );
   } catch (e) {

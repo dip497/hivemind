@@ -16,6 +16,9 @@
  */
 import { useEffect, useState } from "react";
 import { GitCommitHorizontal, ArrowUp, ArrowDown, Loader2, X } from "lucide-react";
+import { Button } from "./components/ui/button";
+import { Input } from "./components/ui/input";
+import { Textarea } from "./components/ui/textarea";
 import { useGitStatus, useGitCommit, useGitPush, useGitPull, useStageFiles } from "./queries";
 
 export function GitCommitModal({
@@ -113,13 +116,15 @@ export function GitCommitModal({
         <div className="flex items-center gap-2">
           <GitCommitHorizontal size={16} className="text-[var(--color-fg2)]" />
           <h2 className="text-[15px] font-semibold text-[var(--color-fg)]">Commit</h2>
-          <button
+          <Button
+            variant="ghost"
+            size="icon-xs"
             onClick={() => onOpenChange(false)}
-            className="ml-auto size-6 grid place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)]"
             aria-label="close"
+            className="ml-auto"
           >
-            <X size={14} />
-          </button>
+            <X />
+          </Button>
         </div>
 
         {/* Status summary — branch, staged/changed counts, ahead/behind. */}
@@ -136,21 +141,20 @@ export function GitCommitModal({
 
         {/* Summary + description. */}
         <div className="mt-3 grid gap-2">
-          <input
+          <Input
             autoFocus
             value={summary}
             onChange={(e) => setSummary(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) onCommit(); }}
             placeholder="Summary (required)"
-            className="w-full bg-[var(--color-bg)] border border-[var(--color-line2)] rounded-md px-2.5 py-1.5 text-[13px] text-[var(--color-fg)] outline-none focus:border-[var(--color-brand)]"
             aria-label="Commit summary"
           />
-          <textarea
+          <Textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Description (optional)"
             rows={4}
-            className="w-full resize-y bg-[var(--color-bg)] border border-[var(--color-line2)] rounded-md px-2.5 py-1.5 text-[12px] text-[var(--color-fg)] outline-none focus:border-[var(--color-brand)] leading-relaxed"
+            className="resize-y"
             aria-label="Commit description"
           />
         </div>
@@ -172,44 +176,47 @@ export function GitCommitModal({
             four are always shown; push/pull disable only when there's nothing to
             sync (the counts + tooltip say why). */}
         <div className="mt-4 flex items-center gap-2">
-          <button
+          <Button
+            variant="outline"
+            size="sm"
             onClick={onPull}
             disabled={!canPull}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] rounded border border-[var(--color-line2)] text-[var(--color-fg2)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg3)] disabled:opacity-50 disabled:cursor-not-allowed"
             title="Update this branch from upstream (fast-forward only)"
           >
-            {pullMut.isPending ? <Loader2 size={13} className="animate-spin" /> : <ArrowDown size={13} />}
+            {pullMut.isPending ? <Loader2 className="animate-spin" /> : <ArrowDown />}
             Pull{behind > 0 ? ` ↓${behind}` : ""}
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
             onClick={onPush}
             disabled={!canPush}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] rounded border border-[var(--color-line2)] text-[var(--color-fg2)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg3)] disabled:opacity-50 disabled:cursor-not-allowed"
             title={ahead > 0 ? `Push ${ahead} commit(s)` : "Nothing to push yet"}
           >
-            {pushMut.isPending ? <Loader2 size={13} className="animate-spin" /> : <ArrowUp size={13} />}
+            {pushMut.isPending ? <Loader2 className="animate-spin" /> : <ArrowUp />}
             Push{ahead > 0 ? ` ↑${ahead}` : ""}
-          </button>
+          </Button>
 
           <div className="ml-auto flex items-center gap-2">
-            <button
+            <Button
+              variant="outline"
+              size="sm"
               onClick={onCommit}
               disabled={!canCommit}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded border border-[var(--color-line2)] text-[var(--color-fg)] hover:bg-[var(--color-bg3)] disabled:opacity-50 disabled:cursor-not-allowed"
               title="Commit staged changes (⌘↵)"
             >
-              {commitMut.isPending ? <Loader2 size={13} className="animate-spin" /> : null}
+              {commitMut.isPending ? <Loader2 className="animate-spin" /> : null}
               Commit
-            </button>
-            <button
+            </Button>
+            <Button
+              size="sm"
               onClick={onCommitPush}
               disabled={!canCommit}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded text-white bg-[var(--color-brand)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
               title="Commit, then push"
             >
-              {(commitMut.isPending || pushMut.isPending) ? <Loader2 size={13} className="animate-spin" /> : null}
+              {(commitMut.isPending || pushMut.isPending) ? <Loader2 className="animate-spin" /> : null}
               Commit &amp; Push
-            </button>
+            </Button>
           </div>
         </div>
       </div>

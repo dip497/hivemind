@@ -1,4 +1,5 @@
 import { defineCommand } from "citty";
+import { ensureAgentCatalog } from "../agent-catalog.js";
 import {
   HiveError,
   readIssue,
@@ -44,6 +45,8 @@ export const updateCmd = defineCommand({
       }
       if (args.title !== undefined) patch.title = String(args.title);
       if (args.assignee !== undefined) {
+        // an assignee id is classified as agent vs member against the agent list
+        await ensureAgentCatalog();
         patch.assignee =
           args.assignee === "none" || args.assignee === ""
             ? null

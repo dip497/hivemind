@@ -1,0 +1,8 @@
+// A flooding view: after ready, posts thousands of (well-formed) messages per second.
+window.addEventListener("message", (e) => {
+  const port = e.ports && e.ports[0];
+  if (!port || !e.data || e.data.type !== "hivemind-view:port") return;
+  port.start();
+  port.postMessage({ type: "ready", v: 1 });
+  setTimeout(() => { setInterval(() => { for (let i = 0; i < 500; i++) port.postMessage({ type: "framesDrawn", count: i }); }, 50); }, 300);
+});

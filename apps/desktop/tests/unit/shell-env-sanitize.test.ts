@@ -18,12 +18,29 @@ test("strips other Electron-internal runtime vars", () => {
   assert.equal(env.HOME, "/home/x");
 });
 
-test("is a no-op when nothing to strip", () => {
-  assert.deepEqual(sanitizeShellEnv({ A: "1", B: "2" }), { A: "1", B: "2" });
+test("defaults CLAUDE_CODE_FORCE_SESSION_PERSISTENCE=1 for claude tiles", () => {
+  const env = sanitizeShellEnv({ A: "1", B: "2" });
+  assert.equal(env.CLAUDE_CODE_FORCE_SESSION_PERSISTENCE, "1");
+  assert.equal(env.A, "1");
+});
+
+test("strips the inherited CLAUDE_CODE_CHILD_SESSION marker (the transcript-saving-off trigger)", () => {
+  // hivemind launched from inside a Claude Code session poisons every tile
+  // PTY with the child marker; claude tiles then write no transcript and
+  // --resume after a restart silently fails.
+  const env = sanitizeShellEnv({ CLAUDE_CODE_CHILD_SESSION: "1", HOME: "/home/x" });
+  assert.equal(env.CLAUDE_CODE_CHILD_SESSION, undefined);
+  assert.equal(env.HOME, "/home/x");
+  assert.equal(env.CLAUDE_CODE_FORCE_SESSION_PERSISTENCE, "1");
+});
+
+test("an explicit CLAUDE_CODE_FORCE_SESSION_PERSISTENCE wins over the default", () => {
+  assert.equal(sanitizeShellEnv({ CLAUDE_CODE_FORCE_SESSION_PERSISTENCE: "0" }).CLAUDE_CODE_FORCE_SESSION_PERSISTENCE, "0");
 });
 
 test("mutates and returns the same object (chaining)", () => {
-  const env = { ELECTRON_RUN_AS_NODE: "1", X: "y" };
+  const env = { ELECTRON_RUN_AS_NODE: "1", CLAUDE_CODE_CHILD_SESSION: "1", X: "y" };
   assert.equal(sanitizeShellEnv(env), env);
   assert.equal(env.ELECTRON_RUN_AS_NODE, undefined);
+  assert.equal(env.CLAUDE_CODE_CHILD_SESSION, undefined);
 });

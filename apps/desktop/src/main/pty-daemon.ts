@@ -5,35 +5,47 @@
  * Unix domain socket. See research/persistence-plan.md.
  *
  * Spawned as: electron <this> <socketPath>  with ELECTRON_RUN_AS_NODE=1.
+ * Without the desktop app: `hive daemon start` runs this same file inside `hive`.
  */
 import net from "node:net";
 import fs from "node:fs";
 import path from "node:path";
-import { homedir } from "node:os";
-import * as pty from "@lydell/node-pty";
-import { SessionManager, type ManagedPty, type SpawnSpec, type SessionSnapshot } from "./pty-session-manager.js";
+import { homedir, hostname } from "node:os";
+import { createRequire } from "node:module";
+import type * as NodePty from "@lydell/node-pty";
+import * as bunPty from "./bun-pty.js";
+import { listenExclusive } from "./socket-claim.js";
+import { SessionManager, type ManagedPty, type SpawnSpec, type SessionSnapshot, type SessionClient } from "./pty-session-manager.js";
 import { type ClientMsg, type ServerMsg, frame, makeLineDecoder } from "./pty-protocol.js";
 import { PtyOutputBuffer } from "./pty-output-buffer.js";
-import { hiveBinCandidates, ipcPath, repairShellSpec } from "./platform.js";
+import { ipcPath, repairShellSpec } from "./platform.js";
+import {
+  fileNameForId, listSnapshotFiles, readSnapshot, redactSnapshot, rehydrateSnapshot, secureDir,
+  staleSnapshotIds, type SnapshotEntry,
+} from "./session-snapshot-store.js";
 import { applyInitialPrompt, stripInitialPrompt } from "../shared/agent-io.js";
-import { evictTrackedSession, trackerSource } from "./tile-session-store.js";
 import { sanitizeShellEnv } from "./shell-env.js";
-import { composeResume } from "./providers/registry.js";
+import { composeResume, evictTrackedSession, prepareProviders, trackerSource, setCatalog } from "@hivemind/agents/node";
 import { planHookSource } from "./plan-review-hook-source.js";
 import { stopHookSource } from "./hcp/stop-hook-source.js";
-import { piExtSource } from "./hcp/pi-ext-source.js";
 import { approvalHookSource } from "./hcp/approval-hook-source.js";
 import { subagentHookSource } from "./hcp/subagent-hook-source.js";
 import { notificationHookSource } from "./hcp/notification-hook-source.js";
 import { userpromptHookSource } from "./hcp/userprompt-hook-source.js";
-import { seedDroidHome } from "./hcp/droid-home.js";
-import { droidHooksSettings } from "./droid-resume.js";
-import { seedKiroHome } from "./hcp/kiro-home.js";
-import { kiroAgentConfig } from "./kiro-resume.js";
-import { kiroApprovalHookSource } from "./hcp/kiro-approval-hook-source.js";
 import { readOrCreateToken, hcpSockPath } from "./hcp/token.js";
 
+// Lazy: node-pty must never be evaluated inside the compiled `hive` (see bun-pty.ts).
+const spawnPty: (file: string, args: string[], opts: { cwd: string; cols: number; rows: number; name: string; env: Record<string, string> }) => {
+  readonly pid: number; write(d: string): void; resize(c: number, r: number): void; kill(sig?: string): void;
+  pause(): void; resume(): void; onData(cb: (d: string) => void): unknown; onExit(cb: (e: { exitCode: number; signal?: number }) => void): unknown;
+} = process.versions.bun
+  ? bunPty.spawn
+  : (createRequire(import.meta.url)("@lydell/node-pty") as typeof NodePty).spawn;
+
 const socketPath = process.argv[2] || process.env.HIVEMIND_PTY_SOCK;
+// Set by `hive daemon` (no desktop on this machine); removed so sessions don't inherit it.
+const STANDALONE = process.env.HIVEMIND_DAEMON_STANDALONE === "1";
+delete process.env.HIVEMIND_DAEMON_STANDALONE;
 // Captured ONCE at startup: the mtime of the daemon script this process is
 // running. Reported on `ping` so the app can detect a rebuild (the on-disk
 // script is newer than what we loaded) and replace us with a fresh daemon.
@@ -53,6 +65,15 @@ if (!socketPath) {
   console.error("[pty-daemon] no socket path given");
   process.exit(1);
 }
+// Every file this daemon emits (hook scripts, the pi extension, session
+// snapshots, the HCP socket + token) lives NEXT TO the socket. A relative
+// socket path would make all of that land in whatever the launcher's cwd is —
+// a stray `undefined/hive-pi-ext.mjs` in a repo root was exactly that — so
+// refuse anything but an absolute path instead of writing into the cwd.
+if (!path.isAbsolute(socketPath)) {
+  console.error(`[pty-daemon] socket path must be absolute (got ${JSON.stringify(socketPath)})`);
+  process.exit(1);
+}
 
 // Disk snapshots — survive daemon death + OS reboot. Stored next to the socket
 // under <userData>/sessions/<base64url-id>.json. The PTY itself can't be
@@ -60,7 +81,7 @@ if (!socketPath) {
 // the daemon replays the snapshot AND spawns a fresh PTY with the stored spec
 // so the user sees their last screen + a working shell taking over.
 const sessionsDir = path.join(path.dirname(socketPath), "sessions");
-try { fs.mkdirSync(sessionsDir, { recursive: true }); } catch { /* ignore */ }
+secureDir(sessionsDir);
 
 // ── live claude session tracking ───────────────────────────────────────────
 // hivemind spawns `claude --session-id <uuid>`, but the user can switch the
@@ -80,6 +101,20 @@ const tileSessionsPath = path.join(userDataDir, "tile-sessions.json");
 const tileSessionsDir = path.join(userDataDir, "tile-sessions");
 const trackerPath = path.join(userDataDir, "tile-session-tracker.cjs");
 try { fs.writeFileSync(trackerPath, trackerSource()); } catch { /* best-effort */ }
+
+// Hooks run as `<execPath> hook.cjs`; a compiled `hive` needs BUN_BE_BUN for that, set only
+// in this wrapper — in the agent's env it would turn every `hive ctl` into bun.
+const hookExecPath = (() => {
+  const compiledHive = !!process.versions.bun && !/(^|[/\\])bun(\.exe)?$/.test(process.execPath);
+  if (!compiledHive) return process.execPath;
+  const wrapper = path.join(userDataDir, "hive-hook-runtime");
+  const quoted = `'${process.execPath.replace(/'/g, `'\\''`)}'`;
+  try {
+    fs.writeFileSync(wrapper, `#!/bin/sh\nBUN_BE_BUN=1 exec ${quoted} "$@"\n`);
+    fs.chmodSync(wrapper, 0o755);
+  } catch { /* best-effort: status falls back to the screen scrape */ }
+  return wrapper;
+})();
 
 // Plan review: the daemon writes the PreToolUse(ExitPlanMode) hook script; the
 // SOCKET is owned by Electron main (it alone can drive the canvas). Both sides
@@ -109,102 +144,75 @@ try { fs.writeFileSync(notificationHookPath, notificationHookSource()); } catch 
 // UserPromptSubmit hook — turn START → working (hook-driven status; pairs with Stop).
 const userpromptHookPath = path.join(userDataDir, "hcp-userprompt-hook.cjs");
 try { fs.writeFileSync(userpromptHookPath, userpromptHookSource()); } catch { /* best-effort */ }
-// pi lifecycle-bridge extension — pi has no hook system but loads an ESM
-// extension via `pi -e`; this bridges pi's agent_start/message_end/agent_end to
-// HCP so a pi tile reports turn/status/reply like claude's Stop hook. Injected
-// into spawned pi tiles via pi-resume (env + `-e` arg). Best-effort write.
-const piExtPath = path.join(userDataDir, "hive-pi-ext.mjs");
-try { fs.writeFileSync(piExtPath, piExtSource()); } catch { /* best-effort */ }
 const hcpSock = hcpSockPath(userDataDir);
 const hcpToken = readOrCreateToken(userDataDir);
 
-// Droid (Factory) deterministic hooks: droid has no inline `--settings`, so we
-// point it at an EPHEMERAL FACTORY_HOME_OVERRIDE home (seeded with symlinks to
-// the real ~/.factory + our hooks.json) — never touching the user's ~/.factory.
-// The hooks.json reuses the SAME HCP hook scripts (droid's Stop carries
-// transcript_path like claude). Best-effort: a seed failure just disables droid
-// hooks (the screen-scrape detector still drives status).
-const droidHome = path.join(userDataDir, "droid-home");
-try {
-  seedDroidHome({
-    droidHome,
-    hooks: droidHooksSettings({ execPath: process.execPath, stopHookPath, userpromptHookPath, notificationHookPath, hcpSock }),
-  });
-} catch { /* best-effort */ }
-
-// kiro (kiro-cli) deterministic hooks + MCP: kiro has no inline hook flag
-// either, so we point it at an EPHEMERAL KIRO_HOME (seeded with symlinks to the
-// real ~/.kiro + our own `agents/hivemind.json` — hooks + mcpServers.hive),
-// selected at spawn with `--agent hivemind` (kiro-resume.ts). kiro's own
-// PreToolUse broker script differs from claude/droid's (exit-code contract,
-// not stdout JSON) — see kiro-approval-hook-source.ts.
-const kiroApprovalHookPath = path.join(userDataDir, "hcp-kiro-approval-hook.cjs");
-try { fs.writeFileSync(kiroApprovalHookPath, kiroApprovalHookSource()); } catch { /* best-effort */ }
-// Best-effort resolve of the `hive` CLI so the generated agent config's
-// mcpServers.hive can spawn it (mirrors main/index.ts's resolveHiveCliPath,
-// duplicated sync here since the daemon is a separate electron-as-node process
-// that doesn't share main's async installer helpers). Falls back to bare
-// "hive" (PATH lookup at kiro's own spawn time) if nothing is found now.
-function resolveHiveCliPathSync(): string {
-  const exe = process.platform === "win32" ? "hive.exe" : "hive";
-  const candidates = [
-    ...hiveBinCandidates(homedir()),
-    // path.delimiter, not ":" — PATH is ";"-separated on Windows.
-    ...((process.env.PATH ?? "").split(path.delimiter).filter(Boolean).map((d) => path.join(d, exe))),
-  ];
-  for (const p of candidates) {
-    try { if (fs.statSync(p).isFile()) return p; } catch { /* not here */ }
-  }
-  return "hive";
-}
-const kiroHome = path.join(userDataDir, "kiro-home");
-try {
-  seedKiroHome({
-    kiroHome,
-    agentConfig: kiroAgentConfig({
-      execPath: process.execPath,
-      stopHookPath,
-      userpromptHookPath,
-      kiroApprovalHookPath,
-      trackerPath,
-      tileSessionsDir,
-      hcpSock,
-      hiveCliPath: resolveHiveCliPathSync(),
-    }),
-  });
-} catch { /* best-effort */ }
-
-// Provider spawn transforms (resume + deterministic-signal hook injection),
-// composed across every registered agent provider (claude, codex, …). Each
-// provider no-ops for specs it doesn't own, so the composition is order-safe.
-// To add a provider: implement it under providers/ and register it — no change
-// here. The transforms are electron-free (in claude-resume.ts / codex-resume.ts),
-// so they stay unit-testable with a fake agent; the daemon just supplies paths.
-const resume = composeResume({
+// Provider-owned assets + config-home overlays (the pi bridge extension, the
+// droid FACTORY_HOME_OVERRIDE overlay, the kiro KIRO_HOME overlay + its own
+// approval hook, …): every catalogued provider's `prepare()` runs here and
+// hands back ITS private paths, which the spawn transforms read under
+// ctx.providers[id]. Best-effort per provider — a failure only disables that
+// provider's deterministic signals (the screen-scrape detector still drives
+// status). Nothing here names a provider.
+// The agents this machine has, not only the ones compiled in: an agent someone installed
+// asks for its files and its hooks in exactly the same way, and this is the process that
+// does that work. Best-effort — if the scan fails the compiled-in list stands, which is a
+// daemon missing one agent's signals rather than a daemon that will not start.
+// The daemon outlives installs: a changed agents dir (install and remove both rename entries in it) triggers a rescan before a spawn.
+const dirMtime = (dir: string): number | undefined => {
+  try { return fs.statSync(dir).mtimeMs; } catch { return undefined; }
+};
+const providerCtx = {
+  userDataDir,
+  execPath: hookExecPath,
   trackerPath,
   tileSessionsDir,
   legacyMapFile: tileSessionsPath,
-  execPath: process.execPath,
+  stopHookPath,
   planHookPath,
   planBridgeSock,
-  stopHookPath,
   approvalHookPath,
   subagentHookPath,
-  notificationHookPath,
   userpromptHookPath,
+  notificationHookPath,
   hcpSock,
   hcpToken,
-  piExtPath,
-  droidHome,
-  kiroHome,
-  kiroApprovalHookPath,
-});
-
-const snapshotPath = (id: string): string => {
-  // URL-safe base64 of the id so any character (including ':') is path-safe.
-  const safe = Buffer.from(id).toString("base64url");
-  return path.join(sessionsDir, `${safe}.json`);
 };
+let providerPaths: Record<string, Record<string, string>> = {};
+// Rebound by a rescan; the manager reads them through these variables.
+let resume = composeResume({ ...providerCtx, providers: providerPaths });
+let ensureAgentsCurrent: () => Promise<void> = async () => {};
+try {
+  const [{ loadAgents, userAgentsDir }] = await Promise.all([import("@hivemind/agents/load")]);
+  let agentsStamp: number | undefined;
+  let rescan: Promise<void> | undefined;
+  const reloadAgents = async (): Promise<void> => {
+    // Stamped before the scan, so an install that lands during it still triggers the next one.
+    agentsStamp = dirMtime(userAgentsDir());
+    const { defs } = await loadAgents();
+    setCatalog(defs);
+    providerPaths = prepareProviders(providerCtx);
+    resume = composeResume({ ...providerCtx, providers: providerPaths });
+  };
+  ensureAgentsCurrent = () => {
+    if (dirMtime(userAgentsDir()) === agentsStamp) return Promise.resolve();
+    // Best-effort like the boot scan: a failed rescan spawns with the catalog we have.
+    return (rescan ??= reloadAgents().catch((e: unknown) => {
+      console.error("[pty-daemon] agent rescan failed:", (e as Error).message);
+    }).finally(() => { rescan = undefined; }));
+  };
+  await reloadAgents();
+} catch (e) {
+  console.error("[pty-daemon] agent scan skipped:", (e as Error).message);
+  providerPaths = prepareProviders(providerCtx);
+  resume = composeResume({ ...providerCtx, providers: providerPaths });
+}
+
+// Provider spawn transforms (resume + deterministic-signal hook injection):
+// composed across every catalogued provider (@hivemind/agents) in reloadAgents
+// above, and recomposed there on a rescan.
+
+const snapshotPath = (id: string): string => path.join(sessionsDir, fileNameForId(id));
 // One write chain per session id so a later snapshot can never land on disk
 // before an earlier one (the writes are async now — see persistSnapshot).
 const snapshotWrites = new Map<string, Promise<void>>();
@@ -221,7 +229,7 @@ function persistSnapshot(id: string, snap: SessionSnapshot): Promise<void> {
   // as all terminals stuttering together whenever one tile went quiet for 2s
   // on a busy disk). The serialize itself is still CPU, but the disk wait no
   // longer stalls the socket.
-  snapshotLatest.set(id, JSON.stringify(snap));
+  snapshotLatest.set(id, JSON.stringify(redactSnapshot(snap)));
   const prev = snapshotWrites.get(id) ?? Promise.resolve();
   const next = prev
     .then(async () => {
@@ -232,7 +240,7 @@ function persistSnapshot(id: string, snap: SessionSnapshot): Promise<void> {
       // process is killed mid-write — partial file would fail JSON.parse on
       // next boot and the session would be lost otherwise).
       const tmp = `${p}.tmp`;
-      await fs.promises.writeFile(tmp, body, "utf8");
+      await fs.promises.writeFile(tmp, body, { encoding: "utf8", mode: 0o600 });
       await fs.promises.rename(tmp, p);
     })
     .catch(() => {
@@ -274,35 +282,21 @@ function evictSnapshot(id: string): void {
     }
   } catch { /* no map yet / unreadable — nothing to clean */ }
 }
-function loadAllSnapshots(): SessionSnapshot[] {
-  const out: SessionSnapshot[] = [];
-  let names: string[] = [];
-  try { names = fs.readdirSync(sessionsDir); } catch { return out; }
-  for (const name of names) {
-    if (!name.endsWith(".json")) continue;
-    const filePath = path.join(sessionsDir, name);
-    try {
-      const raw = fs.readFileSync(filePath, "utf8");
-      const snap = JSON.parse(raw) as SessionSnapshot;
-      // Basic shape sanity — old/corrupt snapshots are silently dropped.
-      if (!snap || typeof snap.id !== "string" || typeof snap.replay !== "string" || !snap.spec) {
-        continue;
-      }
-      // Legacy key shape (`hm:<absolute-path>:<tileId>` — 3+ colon-segments
-      // after `hm:`). The new key is `hm:<tileId>` (single segment). No
-      // renderer asks for the legacy id anymore — they'd be loaded into the
-      // frozen map every daemon boot and never attached, leaking memory
-      // forever. Drop both the in-memory load AND the on-disk file.
-      if (snap.id.startsWith("hm:") && snap.id.slice(3).split(":").length > 1) {
-        try { fs.unlinkSync(filePath); } catch { /* already gone */ }
-        continue;
-      }
-      out.push(snap);
-    } catch {
-      /* corrupt — skip */
+function registerSnapshots(): SnapshotEntry[] {
+  const entries: SnapshotEntry[] = [];
+  for (const entry of listSnapshotFiles(sessionsDir)) {
+    // Legacy `hm:<path>:<tileId>` ids are never asked for again.
+    if (entry.id.startsWith("hm:") && entry.id.slice(3).split(":").length > 1) {
+      try { fs.unlinkSync(entry.file); } catch { /* already gone */ }
+      continue;
     }
+    manager.restoreLazySnapshot(entry.id, () => {
+      const snap = readSnapshot(entry.file, entry.id);
+      return snap ? rehydrateSnapshot(snap, hcpToken) : undefined;
+    });
+    entries.push(entry);
   }
-  return out;
+  return entries;
 }
 
 // Real node-pty factory. Mirrors pty-host.doSpawn's env defaults so colors,
@@ -323,7 +317,7 @@ const factory = (spec: SpawnSpec): ManagedPty => {
   // A canvas written on another OS can name a shell this one doesn't have.
   const runSpec = repairShellSpec({ cmd: spec.cmd, args: spec.args });
   const { args: execArgs, env: execEnv } = applyInitialPrompt(runSpec.args ?? [], env);
-  const p = pty.spawn(runSpec.cmd, execArgs, {
+  const p = spawnPty(runSpec.cmd, execArgs, {
     cwd: spec.cwd,
     cols: spec.cols,
     rows: spec.rows,
@@ -370,14 +364,14 @@ const manager = new SessionManager(factory, {
   // session. Limitations inherited from claude itself (can't fix from the PTY
   // layer): killed mid-tool-call (#18880), post-`cd` mid-session (#22566),
   // version-upgrade across resume (#53417).
-  transformSpecOnSpawn: resume.transformSpecOnSpawn,
+  transformSpecOnSpawn: (spec, id) => resume.transformSpecOnSpawn(spec, id),
   // Strip the one-time HIVE_INITIAL_PROMPT before ANY provider sees the spec. A
   // restore re-execs from the persisted spec, so an un-stripped prompt is re-appended
   // as positional argv and the task RUNS AGAIN — for every agent that takes an argv
   // prompt (claude, pi). Agent-agnostic on purpose: this is a property of restore.
   transformSpecOnRestore: (spec, id) => resume.transformSpecOnRestore(stripInitialPrompt(spec), id),
   restoreRetryMs: resume.restoreRetryMs,
-  restoreRetryTransform: resume.restoreRetryTransform,
+  restoreRetryTransform: (spec) => resume.restoreRetryTransform(spec),
 });
 
 // Reboot-restore: hydrate any snapshots written by a previous daemon. They
@@ -385,7 +379,14 @@ const manager = new SessionManager(factory, {
 // PTY spawned with the stored spec. Idle-exit is held off because frozen
 // sessions count as "available" (size > 0 is not enough — frozen.size is
 // tracked separately by the manager).
-for (const snap of loadAllSnapshots()) manager.restoreSnapshot(snap);
+const bootSnapshots = registerSnapshots();
+
+// Open canvases attach within seconds, so anything unclaimed after this is a candidate.
+const RETENTION_GRACE_MS = 5 * 60 * 1000;
+const retentionTimer = setTimeout(() => {
+  for (const id of staleSnapshotIds(bootSnapshots, manager.frozenIds(), Date.now())) manager.kill(id);
+}, RETENTION_GRACE_MS);
+retentionTimer.unref?.();
 
 // Graceful shutdown — flush any unwritten snapshots before exit so the last
 // ~2s of activity (the debounce window) survives an orderly daemon termination.
@@ -410,13 +411,6 @@ process.on("unhandledRejection", (reason) => {
   console.error("[pty-daemon] unhandledRejection:", reason);
 });
 
-// Clean up a stale socket from a previous (crashed) daemon before binding.
-try {
-  fs.unlinkSync(socketPath);
-} catch {
-  /* not present — fine */
-}
-
 // Outgoing `data` frames are coalesced per connection (the same PtyOutputBuffer
 // main uses toward the renderer): a streaming TUI emits hundreds of tiny pty
 // reads a second, and each one used to be its own JSON.stringify + socket write
@@ -425,20 +419,82 @@ try {
 // felt, and the per-frame overhead on both event loops drops by an order of
 // magnitude during bursts. Size-capped so a starved timer can't grow memory;
 // `exit` / `attached` flush their tile first to keep ordering.
+/** Connections that asked for agent hook events (desktops viewing this machine). */
+const eventViewers = new Set<(m: ServerMsg) => void>();
+
+// Pushes to the user's phone: ntfy or any endpoint that takes a plain-text POST (`hive push set`).
+const pushFile = path.join(userDataDir, "push.json");
+const lastPush = new Map<string, number>();
+async function notifyPush(topic: string, data: unknown): Promise<void> {
+  let cfg: { url?: unknown; events?: unknown };
+  try { cfg = JSON.parse(fs.readFileSync(pushFile, "utf8")); } catch { return; }
+  if (typeof cfg.url !== "string" || !/^https?:\/\//.test(cfg.url)) return;
+  const events = Array.isArray(cfg.events) ? cfg.events : ["notification"];
+  if (!events.includes(topic)) return;
+  const tileId = (data as { tileId?: unknown } | null)?.tileId;
+  const key = `${String(tileId)}:${topic}`;
+  const now = Date.now();
+  if ((lastPush.get(key) ?? 0) > now - 15_000) return;
+  lastPush.set(key, now);
+  const info = manager.info().find((x) => x.id === tileId);
+  const what = (info?.title || info?.cmd || "an agent").replace(/[\x00-\x1f\x7f]/g, " ").slice(0, 80);
+  const body = topic === "notification" ? `${what} needs your input` : topic === "turn" ? `${what} finished its turn` : `${what}: ${topic}`;
+  try {
+    await fetch(cfg.url, { method: "POST", body, headers: { Title: `hivemind - ${hostname()}` }, signal: AbortSignal.timeout(10_000) });
+  } catch (e) {
+    console.error("[pty-daemon] push failed:", e instanceof Error ? e.message : e);
+  }
+}
+
 const DATA_FLUSH_MS = 4;
 const DATA_FLUSH_BYTES = 256 * 1024;
+/** Unsent bytes a resync-capable viewer may queue before it is sent a fresh screen instead. */
+const BEHIND_BYTES = 1024 * 1024;
 
 const server = net.createServer((sock) => {
   const send = (msg: ServerMsg) => {
     if (!sock.destroyed) sock.write(frame(msg));
   };
+  // A slow link must never stall the process: a viewer that can resync drops what it cannot
+  // take and is sent the current screen once the socket drains.
+  let canResync = false;
+  const behind = new Set<string>();
+  const resyncing = new Set<string>();
+  // Bytes of resync screens still queued: they alone must not push live output behind again.
+  let floor = 0;
+  const lastSeq = new Map<string, number>();
   const outBuf = new PtyOutputBuffer(
-    (id, data) => send({ t: "data", id, data }),
+    (id, data) => {
+      if (behind.has(id)) return;
+      if (canResync && sock.writableLength > floor + BEHIND_BYTES) { behind.add(id); return; }
+      send({ t: "data", id, data, seq: lastSeq.get(id) });
+    },
     { delayMs: DATA_FLUSH_MS, maxBytes: DATA_FLUSH_BYTES },
   );
-  // Sessions this connection attached — detached (NOT killed) when it drops,
-  // so closing the window leaves the processes running.
-  const attached = new Set<string>();
+  sock.on("drain", () => {
+    floor = 0;
+    for (const id of behind) {
+      if (resyncing.has(id)) continue;
+      resyncing.add(id);
+      void manager.snapshot(id).then((snap) => {
+        // Sent in the serialize callback's turn: nothing emitted after it is lost or doubled.
+        resyncing.delete(id);
+        behind.delete(id);
+        outBuf.forget(id);
+        if (snap && viewers.has(id)) { send({ t: "resync", id, ...snap }); floor = sock.writableLength; }
+      });
+    }
+  });
+  // This connection's viewer per session; dropping it detaches only this viewer, never kills.
+  const viewers = new Map<string, SessionClient>();
+  const leave = (id: string) => {
+    const v = viewers.get(id);
+    viewers.delete(id);
+    outBuf.forget(id);
+    behind.delete(id);
+    lastSeq.delete(id);
+    if (v) manager.detach(id, v);
+  };
 
   const onLine = makeLineDecoder((line) => {
     let msg: ClientMsg;
@@ -449,66 +505,88 @@ const server = net.createServer((sock) => {
     }
     switch (msg.t) {
       case "attach": {
-        attached.add(msg.id);
-        void manager
-          .createOrAttach(msg.id, msg.spec, {
-            onData: (data) => outBuf.push(msg.id, data),
-            // Final bytes must land before the exit banner.
-            onExit: (code, signal) => {
-              outBuf.flush(msg.id);
-              send({ t: "exit", id: msg.id, code, signal: signal ?? null });
-            },
-          })
-          .then((r) => {
-            // Anything queued for this id is already inside the replay
-            // (serialized after drain) — ship the queue first so the client
-            // sees the same order it always did.
+        if (msg.noSpawn && !(msg.liveOnly ? manager.hasLive(msg.id) : manager.has(msg.id))) {
+          send({ t: "attached", reqId: msg.reqId, id: msg.id, pid: -1, isNew: false, replay: "", error: `no session '${msg.id}'` });
+          break;
+        }
+        // Re-attaching from the same connection replaces its viewer instead of doubling output.
+        if (viewers.has(msg.id)) leave(msg.id);
+        // Output before `attached` is inside its replay.
+        let ready = false;
+        const viewer: SessionClient = {
+          onData: (data, seq) => { if (seq !== undefined) lastSeq.set(msg.id, seq); if (ready) outBuf.push(msg.id, data); },
+          // Final bytes must land before the exit banner.
+          onExit: (code, signal) => {
             outBuf.flush(msg.id);
-            send({ t: "attached", reqId: msg.reqId, id: msg.id, pid: r.pid, isNew: r.isNew, replay: r.replay });
+            send({ t: "exit", id: msg.id, code, signal: signal ?? null });
+            if (viewers.get(msg.id) === viewer) viewers.delete(msg.id);
+          },
+        };
+        viewers.set(msg.id, viewer);
+        const delta = msg.since ? manager.attachDelta(msg.id, viewer, msg.since, msg.spec.cols, msg.spec.rows) : null;
+        if (delta) {
+          ready = true;
+          lastSeq.set(msg.id, delta.seq);
+          send({ t: "attached", reqId: msg.reqId, id: msg.id, pid: delta.pid, isNew: false, replay: delta.replay, seq: delta.seq, epoch: delta.epoch, delta: true });
+          break;
+        }
+        // The spawn/restore checkpoint: an agent installed after boot is wired here,
+        // before its spec is transformed.
+        void ensureAgentsCurrent()
+          .then(() => manager.createOrAttach(msg.id, msg.spec, viewer))
+          .then((r) => {
+            ready = true;
+            send({ t: "attached", reqId: msg.reqId, id: msg.id, pid: r.pid, isNew: r.isNew, replay: r.replay, seq: r.seq, epoch: r.epoch });
           })
           .catch((e: unknown) => {
             // Bad cwd / node-pty ABI / ENOENT cmd. Without this catch the
             // promise rejects, no "attached" is ever sent, and the client's
             // pendingAttach hangs until its 6s timeout — with nothing logged.
             // Reply with a failure pid so spawnPty resolves immediately.
-            attached.delete(msg.id);
+            if (viewers.get(msg.id) === viewer) viewers.delete(msg.id);
             console.error(`[pty-daemon] attach ${msg.id} failed:`, e);
-            send({ t: "attached", reqId: msg.reqId, id: msg.id, pid: -1, isNew: false, replay: "" });
+            send({ t: "attached", reqId: msg.reqId, id: msg.id, pid: -1, isNew: false, replay: "", error: e instanceof Error ? e.message : String(e) });
           });
         break;
       }
       case "write":
-        manager.write(msg.id, msg.data);
+        // Only the writing connection's outBuf fast-paths its echo; other
+        // viewers of the tile keep normal batching.
+        outBuf.markInput(msg.id);
+        manager.write(msg.id, msg.data, viewers.get(msg.id));
         break;
       case "resize":
-        manager.resize(msg.id, msg.cols, msg.rows);
+        manager.resize(msg.id, msg.cols, msg.rows, viewers.get(msg.id));
         break;
       case "detach":
-        attached.delete(msg.id);
-        outBuf.forget(msg.id);
-        manager.detach(msg.id);
+        leave(msg.id);
         break;
-      case "kill":
-        attached.delete(msg.id);
+      case "kill": {
+        const killer = viewers.get(msg.id);
+        viewers.delete(msg.id);
         outBuf.forget(msg.id);
-        manager.kill(msg.id);
+        manager.kill(msg.id, killer);
         break;
+      }
       case "pause":
-        manager.pause(msg.id);
+        manager.pause(msg.id, viewers.get(msg.id));
         break;
       case "resume":
-        manager.resume(msg.id);
+        manager.resume(msg.id, viewers.get(msg.id));
         break;
       case "list":
-        send({ t: "sessions", reqId: msg.reqId, ids: manager.list() });
+        send({ t: "sessions", reqId: msg.reqId, ids: manager.list(), ...(msg.detail ? { detail: manager.info() } : {}) });
         break;
       case "ping":
         send({ t: "pong", reqId: msg.reqId, buildStamp: BUILD_STAMP });
         break;
+      case "hello":
+        canResync = Array.isArray(msg.caps) && msg.caps.includes("resync");
+        if (Array.isArray(msg.caps) && msg.caps.includes("events")) eventViewers.add(send);
+        break;
       case "shutdown":
-        // The app detected a rebuild and is replacing us. Sessions persist via
-        // their on-disk snapshots; the fresh daemon replays + respawns them —
-        // so land every pending snapshot write first.
+        // Stop listening first so the replacement can bind while we flush snapshots.
+        try { server.close(); } catch { /* already closed */ }
         void flushOnExit().then(() => process.exit(0));
         break;
     }
@@ -519,22 +597,50 @@ const server = net.createServer((sock) => {
     /* client vanished mid-write — ignore */
   });
   sock.on("close", () => {
+    eventViewers.delete(send);
     outBuf.clear();
-    // Window closed: detach (keep processes alive). Never kill on disconnect.
-    for (const id of attached) manager.detach(id);
-    attached.clear();
+    // Never kill on disconnect.
+    for (const id of Array.from(viewers.keys())) leave(id);
   });
 });
 
+const claim = await listenExclusive(server, socketPath).catch((e: unknown) => {
+  console.error("[pty-daemon] cannot listen:", e);
+  process.exit(1);
+});
+if (claim === "taken") {
+  console.error(`[pty-daemon] another daemon is already listening on ${socketPath}; exiting`);
+  process.exit(0);
+}
+// Owner-only whatever the umask: this socket is a shell as this user.
+try { fs.chmodSync(socketPath, 0o600); } catch { /* named pipe on Windows */ }
+
+if (STANDALONE) {
+  // No desktop here owns the control-plane socket, so hook events come to us and go on to viewers and push.
+  const hcp = net.createServer((c) => {
+    c.on("error", () => { /* hook gone */ });
+    c.on("data", makeLineDecoder((line) => {
+      let m: { t?: unknown; id?: unknown; topic?: unknown; data?: unknown };
+      try { m = JSON.parse(line); } catch { return; }
+      if (m.t === "event" && typeof m.topic === "string") {
+        for (const push of eventViewers) push({ t: "event", topic: m.topic, data: m.data });
+        void notifyPush(m.topic, m.data);
+      } else if (m.t === "req") {
+        // Only a desktop can decide (e.g. approvals): answer at once so the agent falls back to its own prompt.
+        c.end(`${JSON.stringify({ t: "res", id: m.id, ok: false, error: { code: "UNAVAILABLE", message: "no desktop on this machine" } })}\n`);
+      }
+    }));
+  });
+  void listenExclusive(hcp, hcpSock)
+    .then((r) => { if (r === "listening") fs.chmodSync(hcpSock, 0o600); })
+    .catch((e: unknown) => console.error("[pty-daemon] control-plane socket unavailable:", e));
+}
 server.on("error", (e) => {
   console.error("[pty-daemon] server error:", e);
   process.exit(1);
 });
-
-server.listen(socketPath, () => {
-  // stdout is ignored by the parent, but useful when run manually for debugging.
-  console.error(`[pty-daemon] listening on ${socketPath} (pid ${process.pid})`);
-});
+// stdout is ignored by the parent, but useful when run manually for debugging.
+console.error(`[pty-daemon] listening on ${socketPath} (pid ${process.pid})`);
 
 // If nothing ever connects (parent died right after spawn), don't linger.
 // Frozen sessions (loaded from disk) DON'T keep the daemon alive on boot —

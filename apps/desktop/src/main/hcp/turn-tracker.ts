@@ -19,7 +19,7 @@ type Waiter = { afterSeq: number; resolve: (r: TurnRecord) => void; timer: NodeJ
 export class TurnTracker {
   private state = new Map<string, TurnRecord>();
   private waiters = new Map<string, Waiter[]>();
-  /** Tiles that called hive_report (agent.report) during their CURRENT turn. Part
+  /** Tiles that called agent.report (`hive ctl report`) during their CURRENT turn. Part
    *  of the single-delivery ladder: a worker that authored its own summary this
    *  turn must not ALSO have its raw turn auto-forwarded. Cleared at turn-end. */
   private reportedThisTurn = new Set<string>();
@@ -46,7 +46,7 @@ export class TurnTracker {
    *
    *  Returns whether this reply was ALREADY DELIVERED by a more specific channel, so
    *  the caller suppresses the fallback auto-report (the single-delivery ladder:
-   *  read > explicit hive_report > auto-report). True when EITHER a blocking reader
+   *  read > explicit agent.report > auto-report). True when EITHER a blocking reader
    *  (agent.read) took it OR the worker authored an explicit report this turn —
    *  in both cases an auto-report banner would be a duplicate that spawns a spurious
    *  extra turn on the parent. */

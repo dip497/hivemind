@@ -2,44 +2,35 @@
 @import "tw-animate-css";
 @import "@xterm/xterm/css/xterm.css";
 @import "@xyflow/react/dist/style.css";
-
-/* Geist (sans body+display). JetBrains Mono (code/paths/IDs + terminals) is
-   SELF-HOSTED via @fontsource (imported in main.tsx) so it's offline-safe and
-   loads before xterm measures it — no flash-of-fallback. Geist stays on the CDN. */
-@import url("https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&display=swap");
+/* Geist (sans body+display) and JetBrains Mono (code/paths/IDs + terminals) are bundled
+   via @fontsource (imported in main.tsx): the CSP allows no font CDN, and xterm must measure
+   the real face, not a fallback. */
+/* The settings page's own sheet, LAST: an @import may not follow a rule, and inlining a
+   whole stylesheet above would push the font @import past one (dropping the font). */
+@import "./settings.css";
 
 @custom-variant dark (&:is(.dark *));
 
-/* Dark palette — Huly/Plane-inspired: deep cool-navy backgrounds, neutral
-   slate grays, indigo primary accent. Cool-tinted neutrals (blue hue baked
-   into the grays) so the whole surface reads calm + dense like Huly's tracker
-   and Plane's revamped sidebar, rather than the previous warm-orange theme. */
+/* shadcn's token names, bound to the palette below so primitives follow the active preset. */
 :root {
-  --background: oklch(0.169 0.003 230.81);
-  --foreground: oklch(0.924 0.0017 230.69);
-  --card: oklch(0.216 0.0025 230.82);
-  --card-foreground: oklch(0.924 0.0017 230.69);
-  --popover: oklch(0.216 0.0025 230.82);
-  --popover-foreground: oklch(0.924 0.0017 230.69);
-  --primary: oklch(0.55 0.18 265);
-  --primary-foreground: #ffffff;
-  --secondary: oklch(0.259 0.0033 230.84);
-  --secondary-foreground: oklch(0.924 0.0017 230.69);
-  --muted: oklch(0.216 0.0025 230.82);
-  --muted-foreground: oklch(0.846 0.0035 230.72);
-  --accent: oklch(0.259 0.0033 230.84);
-  --accent-foreground: oklch(0.924 0.0017 230.69);
-  --destructive: oklch(0.58 0.24 28);
-  --destructive-foreground: #ffffff;
-  --border: oklch(0.342 0.0049 230.86);
-  --input: oklch(0.342 0.0049 230.86);
-  --ring: oklch(0.55 0.18 265);
+  --background: var(--color-bg);
+  --foreground: var(--color-fg);
+  --card: var(--color-bg3);
+  --card-foreground: var(--color-fg);
+  --popover: var(--color-bg2);
+  --popover-foreground: var(--color-fg);
+  --primary: var(--color-fg);
+  --primary-foreground: var(--color-bg);
+  --secondary: var(--color-bg3);
+  --secondary-foreground: var(--color-fg);
+  --muted: var(--color-bg3);
+  --muted-foreground: var(--color-fg2);
+  --destructive: var(--color-err);
+  --destructive-foreground: var(--color-bg);
+  --border: var(--color-line2);
+  --input: var(--color-line2);
+  --ring: var(--color-fg3);
   --radius: 0.5rem;
-  --chart-1: oklch(0.55 0.18 265);
-  --chart-2: oklch(0.70 0.13 230);
-  --chart-3: oklch(0.70 0.19 152);
-  --chart-4: oklch(0.77 0.17 65);
-  --chart-5: oklch(0.58 0.24 28);
 
   /* ── Motion + tracking. Deliberately in :root, NOT in @theme: Tailwind v4
      treats `--ease-*` as a theme namespace, so defining `--ease-out` there
@@ -79,64 +70,63 @@
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
 }
 
 @theme {
-  /* ── hivemind palette — aligned to Plane's oklch dark theme + Linear's
-     lavender-blue accent. Plane uses a cool blue-grey neutral ramp (hue ~230)
-     with a 4-layer surface ladder and a vivid blue-purple brand; Linear uses
-     lavender-blue #5e6ad2 as primary on near-black surfaces. We merge both:
-     Plane's neutral/surface/border structure + Linear's brand hue.
+  /* ── Signal: the default palette ─────────────────────────────────────────────
+     Neutral graphite, and colour kept for meaning. The one warm colour on screen is an agent
+     waiting on you; nothing decorative borrows it, so it can be seen from across the room.
+     These are the preset's own values (settings-schema SIGNAL), so the default preset is a
+     no-op here and any other preset recolours every surface at once. oklch throughout, so
+     color-mix() and alpha blends stay perceptually even.                                    */
 
-     All values in oklch so color-mix() and alpha blends are perceptually
-     correct (Plane's entire system is oklch for this reason).              */
+  /* Surfaces, darkest to lightest: canvas, panels, cards, hover. */
+  --color-bg:     oklch(0.165 0.004 250);
+  --color-bg2:    var(--surface-2);
+  --color-bg3:    var(--surface-3);
+  --color-bg4:    var(--surface-4);
 
-  /* Surface ladder — Plane dark neutrals (hue 230, low chroma = cool grey).
-     bg < bg2 < bg3 < bg4 reads as a clean depth stack. Linear uses the same
-     4-step idea (canvas → surface-1..4). */
-  --color-bg:     oklch(0.169 0.003 230.81);  /* canvas — Plane neutral-black */
-  --color-bg2:    oklch(0.193 0.002 230.81);  /* sidebar / titlebar — neutral-100 */
-  --color-bg3:    oklch(0.216 0.0025 230.82); /* cards / popovers — neutral-200 */
-  --color-bg4:    oklch(0.259 0.0033 230.84); /* hover / focus — neutral-400 */
+  /* Hairlines and control borders. */
+  --color-line:   oklch(0.27 0.005 250);
+  --color-line2:  oklch(0.34 0.006 250);
 
-  /* Borders — Plane's subtle/strong border pair. Linear's hairline #23252a
-     sits between these two. */
-  --color-line:   oklch(0.259 0.0033 230.84); /* hairline = same as bg4 (Plane subtle) */
-  --color-line2:  oklch(0.342 0.0049 230.86); /* control borders — Plane neutral-600 */
+  /* Text: primary, secondary, tertiary. */
+  --color-fg:     oklch(0.93 0.004 250);
+  --color-fg2:    oklch(0.80 0.005 250);
+  --color-fg3:    oklch(0.62 0.006 250);
 
-  /* Text — Plane neutral ramp top end. Linear: ink #f7f8f8, muted #d0d6e0,
-     subtle #8a8f98, tertiary #62666d. We map to the same perceptual steps. */
-  --color-fg:     oklch(0.924 0.0017 230.69);  /* primary — Plane neutral-1200 / Linear ink */
-  --color-fg2:    oklch(0.846 0.0035 230.72);  /* secondary — neutral-1100 / Linear muted */
-  --color-fg3:    oklch(0.684 0.0074 230.81);  /* tertiary — neutral-900 / Linear subtle */
+  /* Brand fills buttons under white text, so it is a quiet steel, not a signal. */
+  --color-brand:  oklch(0.52 0.03 250);
+  --color-brand-hover: oklch(0.57 0.03 250);
+  --color-select: oklch(0.80 0.005 250);
+  --color-accent: oklch(0.74 0.035 245);
 
-  /* Brand — Linear's lavender-blue #5e6ad2 (the canonical task-mgmt accent).
-     Plane's brand-default is a similar blue-purple at oklch(0.63 0.13 238). */
-  --color-brand:  oklch(0.55 0.18 265);        /* Linear lavender-blue primary */
-  --color-brand-hover: oklch(0.62 0.17 263);   /* hover — Linear's #828ffa vibe */
-  --color-select: oklch(0.846 0.0035 230.72);  /* selection = neutral grey (non-blue) */
-  --color-accent: oklch(0.70 0.13 230);        /* link accent — Plane brand-700 */
+  /* Semantic: muted enough to live with all day, distinct enough never to be confused. */
+  --color-ok:     oklch(0.74 0.07 155);
+  --color-warn:   oklch(0.80 0.13 72);
+  --color-err:    oklch(0.66 0.11 32);
+  --color-info:   oklch(0.74 0.035 245);
 
-  /* Semantic — Plane green/amber/red ramps (dark-mode endpoints). */
-  --color-ok:     oklch(0.70 0.19 152);   /* green-700 */
-  --color-warn:   oklch(0.77 0.17 65);    /* amber-600 */
-  --color-err:    oklch(0.58 0.24 28);    /* red-500 */
-  --color-info:   oklch(0.70 0.13 230);   /* = accent */
+  /* Behind a terminal, before the theme store has painted the preset's own. */
+  --color-terminal-bg: #1A1C1F;
+
+  /* Status is a meaning, not a palette slot. Every surface that shows an agent's state —
+     layers, surface bars, tile headers, views through the SDK — paints with these, so one
+     state is one colour everywhere. A preset changes the palette; the meanings follow. */
+  --color-status-working:   oklch(0.91 0.005 250);  /* near-white: at work is not a call to action */
+  --color-status-attention: var(--color-warn);
+  --color-status-done:      var(--color-ok);
+  --color-status-idle:      var(--color-fg3);
+  --color-status-exited:    var(--color-fg3);
+  --color-status-failed:    var(--color-err);
 
   /* State palette — Plane's 5-group workflow states (backlog/unstarted/
      started/completed/cancelled), with hivemind's in_progress/in_review split.
@@ -148,7 +138,7 @@
   --color-state-done:      oklch(0.70 0.19 152);       /* green-700 */
   --color-state-cancelled: oklch(0.52 0.01 230);       /* neutral grey */
 
-  --font-sans: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-sans: "Geist Sans", "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
   --font-mono: "JetBrains Mono", "SFMono-Regular", ui-monospace, Menlo, Monaco, Consolas, monospace;
 
   /* Elevation tokens — Plane uses layered translucent shadows; Linear uses a
@@ -176,7 +166,7 @@ body,
      document at the scroll boundary, shifting the whole panel ("scroll leak"). */
   overflow: hidden;
   overscroll-behavior: none;
-  font-feature-settings: "ss01", "cv01";  /* IBM Plex stylistic set + JetBrains alts */
+  font-feature-settings: "ss01", "cv01";  /* Geist and JetBrains Mono alternates */
 }
 
 body {
@@ -240,17 +230,19 @@ small, .u-caption { letter-spacing: var(--hm-track-caption); }
   max-width: 324px;
   border: none;
   border-radius: 12px;
-  background: color-mix(in srgb, var(--color-bg3) 78%, transparent);
+  /* Solid without glass: a blur behind an opaque theme costs a re-blur on every frame the
+     canvas streams and shows nothing. html.glass-on below brings the frost back. */
+  background: var(--color-bg3);
   /* liquid-glass: inset top highlight (lit from above) + a deep drop so the
      borderless card still reads as a floating slab against the canvas. */
   box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.10), 0 12px 40px rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(14px) saturate(140%);
-  -webkit-backdrop-filter: blur(14px) saturate(140%);
 }
 /* Under glass, lean into the live wallpaper frost (matches .hm-island's glass
    rule). The translucent bg lets the blurred wallpaper bleed through. */
 html.glass-on .hm-toast {
-  background: color-mix(in srgb, var(--color-bg2) var(--glass-opacity), transparent);
+  /* The SOURCE surface: --color-bg2 is already mixed at --glass-opacity under glass,
+     and mixing it again squared the transparency (55% read as 30%). */
+  background: color-mix(in srgb, var(--surface-2) var(--glass-opacity), transparent);
   backdrop-filter: blur(var(--glass-blur)) saturate(145%);
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(145%);
 }
@@ -305,6 +297,13 @@ html.glass-on .hm-toast {
   from { opacity: 1; transform: translateX(0) scale(1); }
   to   { opacity: 0; transform: translateX(16px) scale(0.97); }
 }
+/* Sonner body of the auto-added-agents notice: one row per agent — its name,
+   what it can do (informational text), and the Remove action. */
+.agent-added { margin-top: 6px; }
+.agent-added-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.agent-added-label { font-weight: 600; }
+.agent-added-does { color: var(--color-fg2); margin-top: 2px; }
+.agent-added-remove { flex: none; }
 @media (prefers-reduced-motion: reduce) {
   /* Reduced motion is a gentler equivalent, NOT the absence of feedback: keep an
      opacity cross-fade (non-vestibular) and drop the slide/scale/blur. */
@@ -340,6 +339,9 @@ html.glass-on .hm-toast {
   box-shadow: var(--hm-shadow-2), var(--hm-highlight);
 }
 .hm-surface-3 {
+  /* A modal is a destination, not a panel in the scene: it stays opaque in glass mode, the same
+     rule the settings page follows, so the canvas never reads through the text on top of it. */
+  --color-bg2: var(--surface-2);
   background: var(--color-bg2);
   border: 1px solid var(--color-line2);
   border-radius: 14px;
@@ -359,9 +361,9 @@ html.glass-on .hm-toast {
 /* Modal overlay + panel — used by IssuePeek AND NewIssueModal so the two
    popups that sit next to each other in the same flow finally match. */
 .hm-modal-overlay {
+  /* No blur: the scrim already hides the detail, and a blur over the whole viewport is
+     recomputed on every frame a terminal streams behind an open dialog. */
   background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
 }
 
 /* Interactive soft card — gentle hover lift + border brighten + smooth ease.
@@ -486,14 +488,25 @@ a {
   cursor: pointer;
 }
 
-/* xterm.js scrollbar inside terminal — narrower */
-.xterm-viewport::-webkit-scrollbar {
-  width: 6px;
+/* xterm 6 sizes its scrollbar inline, hence !important. */
+.xterm .xterm-scrollable-element > .scrollbar.vertical,
+.xterm .xterm-scrollable-element > .scrollbar.vertical > .slider {
+  width: 6px !important;
+}
+/* A hard-coded black inset that smudges light and glass themes. */
+.xterm .xterm-scrollable-element > .shadow {
+  display: none;
+}
+/* xterm.css paints the viewport black; xterm 6 puts the theme background on the
+   scrollable element instead, so this black showed through glass terminals. */
+.xterm .xterm-viewport {
+  background-color: transparent;
 }
 
 /* Keep terminal scroll from chaining into the canvas/page at its boundary —
    the wheel scrolls the scrollback and stops there. */
-.xterm-viewport {
+.xterm-viewport,
+.xterm-scrollable-element {
   overscroll-behavior: contain;
 }
 
@@ -616,13 +629,16 @@ body.canvas-resizing .react-flow__node {
    box-shadow and backdrop-filter on tiles are re-rasterised on every move /
    resize / pan / zoom frame — the dominant source of jank. Drop them (and any
    transition that would animate the change) for the duration of the motion;
-   restored the instant it settles, so it's imperceptible. */
+   restored the instant it settles, so it's imperceptible.
+   Name the elements that carry them, never `*`: a universal descendant makes
+   every toggle of these classes restyle every element in every tile (~80 ms on
+   grab and again on release); a class selector restyles only those elements. */
 .canvas-moving .react-flow__node,
-.canvas-moving .react-flow__node *,
+.canvas-moving .react-flow__node .hm-term-root,
 .canvas-dragging .react-flow__node,
-.canvas-dragging .react-flow__node *,
+.canvas-dragging .react-flow__node .hm-term-root,
 body.canvas-resizing .react-flow__node,
-body.canvas-resizing .react-flow__node * {
+body.canvas-resizing .react-flow__node .hm-term-root {
   box-shadow: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
@@ -734,7 +750,7 @@ body.canvas-resizing .react-flow__node .react-flow__resize-control {
 .md-preview hr { border: none; border-top: 1px solid var(--color-line2); margin: 1.5em 0; }
 .md-preview img { max-width: 100%; border-radius: 6px; }
 .md-preview code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 0.88em;
   background: var(--color-bg);
   border: 1px solid var(--color-line2);
@@ -778,9 +794,9 @@ body.canvas-resizing .react-flow__node .react-flow__resize-control {
      tokens (--color-bg2/3/4) mirror these; glass mode derives translucent
      variants from the SAME values so there's no duplicated magic hex. Change a
      surface color here and both the opaque + glass themes track it. */
-  --surface-2: oklch(0.193 0.002 230.81);   /* sidebar / titlebar / panel */
-  --surface-3: oklch(0.216 0.0025 230.82);  /* cards / tile chrome / popovers */
-  --surface-4: oklch(0.259 0.0033 230.84);  /* hover / active */
+  --surface-2: oklch(0.195 0.004 250);   /* sidebar / titlebar / panel */
+  --surface-3: oklch(0.23 0.005 250);    /* cards / tile chrome / popovers */
+  --surface-4: oklch(0.27 0.005 250);    /* hover / active */
   --frame-fill: 7%;       /* frame-zone tint strength (FrameNode reads this) */
 }
 
@@ -795,7 +811,24 @@ html.glass-on {
   /* Frames: a fainter zone tint so the wallpaper reads through them cleanly. */
   --frame-fill: 3%;
 }
-html.glass-on .react-flow {
+/* The panel tokens stop at a tile: inside one, glass opacity would stack on whatever the
+   tile draws and wash text out over a busy wallpaper. How see-through a tile's content
+   is belongs to "Frost tool content" alone — html.content-glass sets those backgrounds
+   explicitly, from the surface source at --content-opacity. Scoped to the tile surface,
+   so a pinned or docked tile gets it too. */
+html.glass-on .hm-tile-surface {
+  --color-bg2: var(--surface-2);
+  --color-bg3: var(--surface-3);
+  --color-bg4: var(--surface-4);
+  /* The shadcn aliases resolve where they are declared (:root, already mixed for glass):
+     declare them again here so the tile's primitives pick up the tile's tokens. */
+  --secondary: var(--color-bg3);
+  --muted: var(--color-bg3);
+  --card: var(--color-bg3);
+  --popover: var(--color-bg2);
+}
+html.glass-on .react-flow,
+html.glass-on [data-windows-view] {
   background-color: transparent !important;
 }
 /* Kill the dotted grid under glass — it reads as noise over a live wallpaper. */
@@ -818,12 +851,14 @@ html.glass-on body {
    was really about) while remaining part of the same scene: a faint wash of the
    backdrop's color survives, and the trailing edge catches light instead of
    guillotining the image.
-   Blur stays off — over a video wallpaper backdrop-filter re-blurs every frame
-   (see the perf rule below), and behind a 92% surface there's nothing to frost. */
-html.glass-on .hm-layers {
-  background: color-mix(in srgb, var(--surface-2) 92%, transparent);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+   How heavy is the user's call, not a constant: the panel follows the glass-opacity
+   slider, floored so a list of names stays legible over a busy wallpaper and capped
+   so it never goes fully solid. Blur returns with it, except over video, where the
+   rule below drops it — re-blurring every frame is the one cost worth refusing. */
+html.glass-on:not([data-wallpaper="none"]) .hm-layers {
+  background: color-mix(in srgb, var(--surface-2) clamp(68%, var(--glass-opacity), 92%), transparent);
+  backdrop-filter: blur(var(--glass-blur)) saturate(130%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(130%);
   /* The lit edge of a real material, in place of a 1px hard divider — so the
      component's own `border-r` is retired here rather than drawn on top of it. */
   border-right-color: transparent;
@@ -834,7 +869,9 @@ html.glass-on .hm-layers {
 /* Frost the floating islands (blur was removed for perf in the opaque theme; it
    returns only under glass, and there are only a handful of islands). */
 html.glass-on .hm-island {
-  background: color-mix(in srgb, var(--color-bg2) var(--glass-opacity), transparent);
+  /* The SOURCE surface: --color-bg2 is already mixed at --glass-opacity under glass,
+     and mixing it again squared the transparency (55% read as 30%). */
+  background: color-mix(in srgb, var(--surface-2) var(--glass-opacity), transparent);
   backdrop-filter: blur(var(--glass-blur)) saturate(140%);
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
 }
@@ -865,7 +902,8 @@ html.glass-on[data-wallpaper="video"] .react-flow__node-diff,
 html.glass-on[data-wallpaper="video"] .react-flow__node-editor,
 html.glass-on[data-wallpaper="video"] .react-flow__node-workbench,
 html.glass-on[data-wallpaper="video"] .react-flow__node-issues,
-html.glass-on[data-wallpaper="video"] .react-flow__node-browser {
+html.glass-on[data-wallpaper="video"] .react-flow__node-browser,
+html[data-wallpaper="video"] .hm-term-fs-panel {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
@@ -895,7 +933,7 @@ html.content-glass [data-pierre-tile] {
   --diffs-bg-separator-override: transparent;
 }
 /* Terminal: the xterm theme bg (rgba, contentOpacity) is the ONLY content tint —
-   strip the opaque #300A24 host wrapper AND the tile-surface bg behind it so the
+   strip the opaque host wrapper (--color-terminal-bg) AND the tile-surface bg behind it so the
    wallpaper bleeds through. The header keeps its own bg-bg3, so it stays legible. */
 /* Terminal: the tile ROOT carries the single content tint (uniform across the
    whole body incl. the host's padding band — no "gap" frame); the host wrapper
@@ -1192,7 +1230,8 @@ html.glass-on .react-flow__node-browser {
   /* Blur costs GPU and buys nothing behind an opaque panel. */
   html.glass-on .hm-island,
   html.glass-on .react-flow__node,
-  html.glass-on .hm-layers {
+  html.glass-on .hm-layers,
+  .hm-term-fs-panel {
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
   }

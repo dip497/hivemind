@@ -1,22 +1,20 @@
 /**
- * Deterministic per-frame accent color.
+ * A frame's colour: identity, never status.
  *
- * Every frame (repo, ad-hoc group, or worktree sub-frame) gets its OWN distinct
- * hue, hashed from its id — so workspaces and branches are visually separable on
- * the canvas, in the frame header, and in the Layers panel. OKLCH at a fixed
- * lightness/chroma keeps every hue equally vivid and legible on the dark
- * background; the hue ramp is spaced to avoid neighbour collisions and steers
- * clear of the issue STATE colors. Hashing by id makes the color STABLE across
- * reloads (no flicker) while still feeling "random" per frame.
+ * Every frame gets its own hue, hashed from its id so it is stable across reloads. The hues
+ * come only from the cool half of the wheel and sit at low chroma: warm hues are how the app
+ * says "needs you" and "failed", green is "done", and a frame born amber would read as an agent
+ * waiting on you. A frame colour should be recognisable as a label and never mistaken for a signal.
  *
- * The frame header's color picker (`updateFrameColor`) still overrides this.
+ * The frame header's picker (`updateFrameColor`) overrides this, from the same swatches.
  */
 
-// Distinct, dark-bg-legible hues (deg). Indigo · blue · cyan · teal · green ·
-// lime · amber · orange · red · pink · violet — 11 well-separated stops.
-const FRAME_HUES = [264, 222, 196, 172, 146, 110, 70, 40, 14, 338, 300];
+// Teal · sky · blue · periwinkle · violet · plum · rose — clear of the warm and green bands.
+const FRAME_HUES = [188, 214, 240, 264, 288, 312, 336];
+const LIGHTNESS = 0.72;
+const CHROMA = 0.075;
 
-/** FNV-1a → an index into FRAME_HUES. Stable for a given seed. */
+/** FNV-1a → an index. Stable for a given seed. */
 function hashIndex(seed: string, mod: number): number {
   let h = 2166136261;
   for (let i = 0; i < seed.length; i++) {
@@ -26,11 +24,24 @@ function hashIndex(seed: string, mod: number): number {
   return (h >>> 0) % mod;
 }
 
-/** Stable distinct accent color for a frame id (CSS oklch string). */
+const identity = (hue: number) => `oklch(${LIGHTNESS} ${CHROMA} ${hue})`;
+
+/** Stable, distinct identity colour for a frame id (CSS oklch string). */
 export function frameColorFor(seed: string): string {
-  const hue = FRAME_HUES[hashIndex(seed, FRAME_HUES.length)];
-  return `oklch(0.7 0.14 ${hue})`;
+  return identity(FRAME_HUES[hashIndex(seed, FRAME_HUES.length)]!);
 }
+
+/** What the frame header and the rail menu offer: the same identity hues, and a neutral. */
+export const FRAME_SWATCHES: readonly { name: string; value: string }[] = [
+  { name: "Teal", value: identity(188) },
+  { name: "Sky", value: identity(214) },
+  { name: "Blue", value: identity(240) },
+  { name: "Periwinkle", value: identity(264) },
+  { name: "Violet", value: identity(288) },
+  { name: "Plum", value: identity(312) },
+  { name: "Rose", value: identity(336) },
+  { name: "Slate", value: "oklch(0.66 0.012 250)" },
+];
 
 /**
  * The pre-randomization default every frame used to be stamped with. Persisted
@@ -38,3 +49,8 @@ export function frameColorFor(seed: string): string {
  * user who picked their own color via the header swatch keeps it).
  */
 export const LEGACY_FRAME_COLOR = "var(--color-brand)";
+
+/** A colour this app generated automatically in an earlier version — not one a person chose. */
+export function isGeneratedFrameColor(color: string): boolean {
+  return color === LEGACY_FRAME_COLOR || /^oklch\(0\.7 0\.14 \d+(\.\d+)?\)$/.test(color);
+}

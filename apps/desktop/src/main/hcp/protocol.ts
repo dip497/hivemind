@@ -4,7 +4,7 @@
  * daemon (pty-protocol.ts) and plan-bridge.
  *
  * Two kinds of client:
- *   - DRIVERS (the MCP server, a CLI) open a connection and issue `req`s, each
+ *   - DRIVERS (`hive ctl`, the pi extension) open a connection and issue `req`s, each
  *     correlated by `id`, getting one `res` back. They may `sub`scribe to event
  *     topics (Phase 2: agent.stream) and get `evt`s.
  *   - HOOKS (the injected Stop hook) fire one `event` and disconnect — no reply.
@@ -49,6 +49,9 @@ export type HcpErrorCode =
   | "DEPTH_EXCEEDED"
   | "TILE_NOT_FOUND"
   | "TIMEOUT"
+  /** The target provider lacks the capability the verb needs (no turn signal →
+   *  nothing to read/gather; no permission system → nothing to supervise). */
+  | "UNSUPPORTED"
   | "INTERNAL";
 
 export class HcpError extends Error {

@@ -13,6 +13,11 @@
  * Existing `process.env` values always win — Electron-managed vars are not
  * clobbered. PATH is the deliberate exception (always replaced with the
  * resolved-and-merged value).
+ *
+ * `HIVEMIND_SHELL_ENV=0` skips the whole thing: the environment hivemind was
+ * launched with is used as-is (PATH included). For CI / the e2e suite, where
+ * the launcher controls PATH deliberately (stand-in agent binaries), and for
+ * anyone who starts the app from a terminal and wants exactly that shell's env.
  */
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -41,6 +46,10 @@ let processPatched = false;
  *  AND inside an ENOENT retry — second call is a no-op when patched.
  *  Returns the env map for tests; production callers can ignore the return. */
 export async function applyShellEnvToProcess(): Promise<Record<string, string>> {
+  if (process.env.HIVEMIND_SHELL_ENV === "0") {
+    processPatched = true;
+    return { ...process.env } as Record<string, string>;
+  }
   const result = await resolveShellEnv();
   if (!processPatched) {
     processPatched = true;
@@ -195,7 +204,22 @@ function mergeIntoProcessEnv(env: Record<string, string>): void {
  */
 const ELECTRON_INTERNAL_ENV = ["ELECTRON_RUN_AS_NODE", "ELECTRON_NO_ATTACH_CONSOLE"] as const;
 
+/** Claude Code marks the processes it spawns with CLAUDE_CODE_CHILD_SESSION;
+ *  a `claude` that inherits the marker assumes it is a nested child session and
+ *  turns transcript saving off. When hivemind itself is launched from inside a
+ *  Claude Code session, every tile PTY inherits the marker — claude tiles then
+ *  print "⚠ Transcript saving is off" and write no transcript, which silently
+ *  breaks the --session-id/--resume persistence contract (a session with no
+ *  transcript cannot be resumed after a restart). A tile is a user shell, not
+ *  claude's child: strip the marker, and default the persistence override on —
+ *  inert for every non-claude process, and an explicit user value (including 0)
+ *  still wins. */
+const CLAUDE_CHILD_SESSION_MARKER = "CLAUDE_CODE_CHILD_SESSION";
+const CLAUDE_FORCE_PERSISTENCE = "CLAUDE_CODE_FORCE_SESSION_PERSISTENCE";
+
 export function sanitizeShellEnv(env: Record<string, string>): Record<string, string> {
   for (const k of ELECTRON_INTERNAL_ENV) delete env[k];
+  delete env[CLAUDE_CHILD_SESSION_MARKER];
+  if (!env[CLAUDE_FORCE_PERSISTENCE]) env[CLAUDE_FORCE_PERSISTENCE] = "1";
   return env;
 }

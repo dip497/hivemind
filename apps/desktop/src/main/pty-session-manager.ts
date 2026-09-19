@@ -26,16 +26,19 @@
  *                (cwd/cmd/env). PTY itself can't survive reboot — but the
  *                user sees their last visible state + a working fresh shell.
  */
-// @xterm/headless + @xterm/addon-serialize ship as CommonJS bundles. ESM
-// named-import interop is fragile across Node versions (tsx-loader fails the
-// static analysis), so we go through the default export and destructure at
-// runtime — that path is stable in both ESM and CJS.
-import HeadlessXterm from "@xterm/headless";
-import SerializeAddonNS from "@xterm/addon-serialize";
-const HeadlessTerminal = (HeadlessXterm as unknown as { Terminal: typeof import("@xterm/headless").Terminal }).Terminal
-  ?? (HeadlessXterm as unknown as typeof import("@xterm/headless").Terminal);
-const SerializeAddon = (SerializeAddonNS as unknown as { SerializeAddon: typeof import("@xterm/addon-serialize").SerializeAddon }).SerializeAddon
-  ?? (SerializeAddonNS as unknown as typeof import("@xterm/addon-serialize").SerializeAddon);
+// Namespace import: bundlers disagree on whether these expose `.default` or named ESM exports.
+import * as HeadlessXtermNS from "@xterm/headless";
+import * as SerializeAddonNS from "@xterm/addon-serialize";
+import type { SessionInfo } from "./pty-protocol.js";
+import { randomUUID } from "node:crypto";
+type HeadlessCtor = typeof import("@xterm/headless").Terminal;
+type SerializeCtor = typeof import("@xterm/addon-serialize").SerializeAddon;
+const pick = <T>(ns: unknown, name: string): T => {
+  const m = ns as Record<string, unknown> & { default?: Record<string, unknown> };
+  return (m[name] ?? m.default?.[name] ?? m.default) as T;
+};
+const HeadlessTerminal = pick<HeadlessCtor>(HeadlessXtermNS, "Terminal");
+const SerializeAddon = pick<SerializeCtor>(SerializeAddonNS, "SerializeAddon");
 type HeadlessTerminalInstance = InstanceType<typeof HeadlessTerminal>;
 type SerializeAddonInstance = InstanceType<typeof SerializeAddon>;
 
@@ -65,7 +68,8 @@ export interface SpawnSpec {
 export type PtyFactory = (spec: SpawnSpec) => ManagedPty;
 
 export interface SessionClient {
-  onData: (data: string) => void;
+  /** `seq`: the session's output position after `data` (for resuming a viewer from where it left off). */
+  onData: (data: string, seq?: number) => void;
   onExit: (code: number, signal: number | undefined) => void;
 }
 
@@ -74,7 +78,15 @@ export interface AttachResult {
   isNew: boolean;
   /** Buffered output to replay into xterm so the screen looks continuous. */
   replay: string;
+  /** Output position the replay covers, within this session instance (`epoch`). */
+  seq: number;
+  epoch: string;
 }
+
+/** Output kept per session so a returning viewer gets only what it missed. */
+const RING_CHARS = 256 * 1024;
+
+export type { SessionInfo };
 
 interface Session {
   id: string;
@@ -85,7 +97,12 @@ interface Session {
   serializer: SerializeAddonInstance;
   spec: SpawnSpec;
   exited: boolean;
-  client: SessionClient | null;
+  /** Output and exit fan out to every viewer. */
+  clients: Set<SessionClient>;
+  /** In interaction order: the last entry owns the PTY size and inherits it when the owner leaves. */
+  sizes: Map<SessionClient, { cols: number; rows: number }>;
+  /** Paused while any viewer is (`null` = a caller that didn't say which viewer it is). */
+  pausedBy: Set<SessionClient | null>;
   /** Bytes written to the term since last snapshot — drives the debounced disk
    *  write (skipped while inactive to avoid wasting fs writes on idle sessions). */
   dirty: boolean;
@@ -115,10 +132,16 @@ interface Session {
    *  so a reattach's replay would otherwise lose it — we re-emit it (see
    *  `withTitle`) so the client's xterm re-fires onTitleChange on reattach. */
   lastTitle?: string;
-  /** Flow-control state: true while the pty is paused on the client's behalf.
-   *  Always cleared on detach/kill/reattach so a paused session can never be
-   *  handed to a new client (or left to rot) in a stopped state. */
+  /** Derived from `pausedBy`; a leaving viewer's pause goes with it. */
   paused?: boolean;
+  /** Set by kill: a snapshot serialized after this must not be written. */
+  killed?: boolean;
+  /** Output emitted so far; positions only mean something within one `epoch`. */
+  seq: number;
+  epoch: string;
+  /** Recent output as chunks ending at `end`, capped at RING_CHARS. */
+  ring: { end: number; data: string }[];
+  ringChars: number;
 }
 
 // claude's resume-failure message (stable across recent versions). Matched
@@ -198,7 +221,7 @@ export class SessionManager {
    *  fresh PTY is spawned with the stored spec; the headless term already
    *  carries the pre-reboot screen so the user sees their last state plus a
    *  working new shell. Evicted when attach actually happens or on explicit kill. */
-  private frozen = new Map<string, SessionSnapshot>();
+  private frozen = new Map<string, () => SessionSnapshot | undefined>();
   private idleTimer: ReturnType<typeof setTimeout> | undefined;
   private snapshotTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly scrollback: number;
@@ -228,10 +251,18 @@ export class SessionManager {
     this.restoreRetryMs = opts.restoreRetryMs ?? 5000;
   }
 
-  /** Pre-load a snapshot (called during daemon boot for each *.json on disk).
-   *  The frozen session is materialized as a live one on the next `createOrAttach`. */
+  /** Materialized as a live session on the next `createOrAttach`. */
   restoreSnapshot(snap: SessionSnapshot): void {
-    this.frozen.set(snap.id, snap);
+    this.frozen.set(snap.id, () => snap);
+  }
+
+  /** `load` runs when the tile attaches, and must be synchronous (see createOrAttach). */
+  restoreLazySnapshot(id: string, load: () => SessionSnapshot | undefined): void {
+    this.frozen.set(id, load);
+  }
+
+  frozenIds(): string[] {
+    return Array.from(this.frozen.keys());
   }
 
   /** Spawn a new session, or attach to an existing one and replay its buffer.
@@ -251,27 +282,26 @@ export class SessionManager {
   async createOrAttach(id: string, spec: SpawnSpec, client: SessionClient): Promise<AttachResult> {
     const existing = this.sessions.get(id);
     if (existing && !existing.exited) {
-      existing.client = client;
-      // A pause belongs to the PREVIOUS client's back-pressure; the new one
-      // starts from a clean slate (and will re-pause itself if it must).
-      this.setPaused(existing, false);
-      existing.spec = { ...existing.spec, cols: spec.cols, rows: spec.rows };
-      try {
-        existing.pty.resize(spec.cols, spec.rows);
-      } catch {
-        /* resize on a dying pty — ignore */
-      }
+      existing.clients.add(client);
+      // A viewer that paused and then lost its link may never resume, so a fresh attach clears every pause.
+      existing.pausedBy.clear();
+      this.applyPause(existing);
+      // Attaching is interacting: the new viewer's size wins.
+      this.touch(existing, client, { cols: spec.cols, rows: spec.rows });
+      this.applySize(existing, spec.cols, spec.rows);
       this.cancelIdle();
-      const replay = await this.serializeDrained(existing);
-      return { pid: existing.pty.pid, isNew: false, replay: this.withTitle(existing, replay) };
+      const snap = await this.serializeDrained(existing);
+      return { pid: existing.pty.pid, isNew: false, replay: this.withTitle(existing, snap.replay), seq: snap.seq, epoch: existing.epoch };
     }
 
     // Reboot-restore path: snapshot on disk but no live PTY → spawn a fresh
     // PTY with the stored spec, then prime the headless term with the saved
     // VT-escape replay so the client sees its last screen before the new shell
     // emits its first byte. The user's session feels continuous.
-    const frozenSnap = this.frozen.get(id);
-    if (frozenSnap) this.frozen.delete(id);
+    // No await between take and spawn, or a second attach would spawn fresh.
+    const loadFrozen = this.frozen.get(id);
+    if (loadFrozen) this.frozen.delete(id);
+    const frozenSnap = loadFrozen ? loadFrozen() : undefined;
     // Spec from the snapshot wins over the caller's (cwd/cmd/env are what the
     // user had); only cols/rows from the live attach apply (window dims).
     // For RESTORE paths, also run the optional transform so the daemon can
@@ -309,7 +339,13 @@ export class SessionManager {
       serializer,
       spec: effectiveSpec,
       exited: false,
-      client,
+      clients: new Set([client]),
+      sizes: new Map([[client, { cols: effectiveSpec.cols, rows: effectiveSpec.rows }]]),
+      pausedBy: new Set(),
+      seq: 0,
+      epoch: randomUUID(),
+      ring: [],
+      ringChars: 0,
       dirty: !!frozenSnap, // restored sessions should re-persist with their new PTY's first activity
       frozen: !!frozenSnap,
       frozenSpec: frozenSnap ? frozenSnap.spec : undefined,
@@ -337,7 +373,7 @@ export class SessionManager {
       session.term.write(d);
       session.dirty = true;
       this.scheduleSnapshot(session);
-      session.client?.onData(d);
+      this.emit(session, d);
       // Output-driven resume retry: scan a small rolling buffer for claude's
       // "No conversation found" error. Firing here (not on PTY exit) is robust
       // to a slow SessionEnd hook that delays the exit past restoreRetryMs.
@@ -369,7 +405,7 @@ export class SessionManager {
       // certainly hit `--resume` with a missing JSONL. Retry once.
       const sinceSpawn = Date.now() - session.spawnedAt;
       if (code !== 0 && sinceSpawn < this.restoreRetryMs && this.tryRestoreRetry(session)) return;
-      session.client?.onExit(code, signal);
+      for (const c of session.clients) c.onExit(code, signal);
       this.flushSnapshot(session); // last write before drop
       this.sessions.delete(id);
       this.scheduleIdle();
@@ -379,13 +415,13 @@ export class SessionManager {
     // already wrote it into the headless term above, so re-serializing would
     // duplicate it). For brand-new sessions there's nothing to replay yet —
     // serialize() returns the empty initial buffer cheaply.
-    const replay = frozenSnap?.replay
-      ? frozenSnap.replay
+    const snap = frozenSnap?.replay
+      ? { replay: frozenSnap.replay, seq: session.seq }
       : await this.serializeDrained(session);
     // `isNew` = a fresh PTY was just spawned (vs attached to a live one). Both
     // brand-new sessions AND reboot-restored ones produce a new PTY — the only
     // !isNew path is the early-return up top for a still-live existing session.
-    return { pid: p.pid, isNew: true, replay: this.withTitle(session, replay) };
+    return { pid: p.pid, isNew: true, replay: this.withTitle(session, snap.replay), seq: snap.seq, epoch: session.epoch };
   }
   /** Fire the one-shot restore retry for a session whose `--resume` failed.
    *  Returns true if a retry was launched (caller should NOT proceed to the
@@ -409,7 +445,7 @@ export class SessionManager {
     const banner =
       "\r\n\x1b[33m[hivemind] previous claude session not found — starting fresh with same id\x1b[0m\r\n";
     session.term.write(banner);
-    session.client?.onData(banner);
+    this.emit(session, banner);
     this.respawnInPlace(session, retrySpec);
     return true;
   }
@@ -423,6 +459,7 @@ export class SessionManager {
     const p = this.factory(retrySpec);
     session.pty = p;
     session.paused = false; // fresh pty starts flowing
+    session.pausedBy.clear();
     session.spec = retrySpec;
     session.exited = false;
     session.spawnedAt = Date.now();
@@ -432,14 +469,14 @@ export class SessionManager {
       session.term.write(d);
       session.dirty = true;
       this.scheduleSnapshot(session);
-      session.client?.onData(d);
+      this.emit(session, d);
     });
     p.onExit((code, signal) => {
       // Stale-pty guard (see the spawn path) — a replaced pty's late exit must
       // not tear down the live session.
       if (session.pty !== p) return;
       session.exited = true;
-      session.client?.onExit(code, signal);
+      for (const c of session.clients) c.onExit(code, signal);
       this.flushSnapshot(session);
       this.sessions.delete(session.id);
       this.scheduleIdle();
@@ -448,28 +485,99 @@ export class SessionManager {
 
   /** Wait for the xterm.js write queue to drain, then serialize. xterm batches
    *  writes via setTimeout(0); calling serialize() before drain returns "". */
-  private serializeDrained(s: Session): Promise<string> {
+  private serializeDrained(s: Session, tries = 3): Promise<{ replay: string; seq: number }> {
     return new Promise((resolve) => {
-      // Empty write's callback fires after the queue is processed.
-      s.term.write("", () => resolve(s.serializer.serialize({ scrollback: this.scrollback })));
+      // The screen covers output up to `at`; output that arrived while it drained follows it raw.
+      const at = s.seq;
+      s.term.write("", () => {
+        const screen = s.serializer.serialize({ scrollback: this.scrollback });
+        const tail = this.ringSince(s, at);
+        if (tail !== null) resolve({ replay: screen + tail, seq: s.seq });
+        // ponytail: a flood that outruns the ring between drains ends with a gap after three tries.
+        else if (tries > 1) void this.serializeDrained(s, tries - 1).then(resolve);
+        else resolve({ replay: screen, seq: s.seq });
+      });
     });
   }
 
-  write(id: string, data: string): void {
-    this.sessions.get(id)?.pty.write(data);
+  /** Output after `seq`, or null when the ring no longer holds all of it. */
+  private ringSince(s: Session, seq: number): string | null {
+    if (seq < s.seq - s.ringChars) return null;
+    let out = "";
+    for (const chunk of s.ring) {
+      if (chunk.end <= seq) continue;
+      const begin = chunk.end - chunk.data.length;
+      out += seq > begin ? chunk.data.slice(seq - begin) : chunk.data;
+    }
+    return out;
   }
 
-  /** Renderer back-pressure: stop reading the child's output. Idempotent. */
-  pause(id: string): void {
-    const s = this.sessions.get(id);
-    if (s && !s.exited) this.setPaused(s, true);
+  private emit(s: Session, d: string): void {
+    s.seq += d.length;
+    s.ring.push({ end: s.seq, data: d });
+    s.ringChars += d.length;
+    while (s.ringChars > RING_CHARS && s.ring.length > 1) s.ringChars -= s.ring.shift()!.data.length;
+    for (const c of s.clients) c.onData(d, s.seq);
   }
-  /** Undo `pause`. Idempotent. */
-  resume(id: string): void {
+
+  /** Re-attach a returning viewer with only the output it missed; null when that can't be exact
+   *  (other session instance, or the gap is older than the ring) — then attach normally. */
+  attachDelta(id: string, client: SessionClient, since: { seq: number; epoch: string }, cols: number, rows: number): AttachResult | null {
     const s = this.sessions.get(id);
-    if (s) this.setPaused(s, false);
+    if (!s || s.exited || s.epoch !== since.epoch || since.seq > s.seq) return null;
+    const replay = this.ringSince(s, since.seq);
+    if (replay === null) return null;
+    s.clients.add(client);
+    s.pausedBy.clear();
+    this.applyPause(s);
+    this.touch(s, client, { cols, rows });
+    this.applySize(s, cols, rows);
+    this.cancelIdle();
+    return { pid: s.pty.pid, isNew: false, replay, seq: s.seq, epoch: s.epoch };
   }
-  private setPaused(s: Session, paused: boolean): void {
+
+  /** The current screen, for a viewer that fell too far behind to be sent every byte. */
+  async snapshot(id: string): Promise<{ replay: string; seq: number; epoch: string } | null> {
+    const s = this.sessions.get(id);
+    if (!s || s.exited) return null;
+    const snap = await this.serializeDrained(s);
+    return { replay: this.withTitle(s, snap.replay), seq: snap.seq, epoch: s.epoch };
+  }
+
+  /** Typing is interacting: the typing viewer takes the size back. */
+  write(id: string, data: string, client?: SessionClient): void {
+    const s = this.sessions.get(id);
+    if (!s) return;
+    const own = client && s.sizes.get(client);
+    if (own) {
+      this.touch(s, client!, own);
+      if (own.cols !== s.spec.cols || own.rows !== s.spec.rows) this.applySize(s, own.cols, own.rows);
+    }
+    s.pty.write(data);
+  }
+
+  /** Record a viewer's size and make it the most recent interactor. */
+  private touch(s: Session, client: SessionClient, size: { cols: number; rows: number }): void {
+    s.sizes.delete(client);
+    s.sizes.set(client, size);
+  }
+
+  /** Stop reading the child's output while any viewer is paused. */
+  pause(id: string, client?: SessionClient): void {
+    const s = this.sessions.get(id);
+    if (!s || s.exited) return;
+    s.pausedBy.add(client ?? null);
+    this.applyPause(s);
+  }
+  /** Undo that viewer's `pause`. */
+  resume(id: string, client?: SessionClient): void {
+    const s = this.sessions.get(id);
+    if (!s) return;
+    s.pausedBy.delete(client ?? null);
+    this.applyPause(s);
+  }
+  private applyPause(s: Session): void {
+    const paused = s.pausedBy.size > 0;
     if (!!s.paused === paused) return;
     s.paused = paused;
     try {
@@ -480,14 +588,19 @@ export class SessionManager {
     }
   }
 
-  resize(id: string, cols: number, rows: number): void {
+  /** Resizing is interacting: that viewer's size wins. */
+  resize(id: string, cols: number, rows: number, client?: SessionClient): void {
     const s = this.sessions.get(id);
     if (!s) return;
+    if (client && s.clients.has(client)) this.touch(s, client, { cols, rows });
+    this.applySize(s, cols, rows);
+  }
+  private applySize(s: Session, cols: number, rows: number): void {
     s.spec = { ...s.spec, cols, rows };
     try {
       s.pty.resize(cols, rows);
     } catch {
-      /* ignore */
+      /* resize on a dying pty — ignore */
     }
     try {
       s.term.resize(cols, rows);
@@ -496,15 +609,24 @@ export class SessionManager {
     }
   }
 
-  /** Window closed / tile unmounted: stop streaming but KEEP the process alive.
-   *  Flush any pending snapshot so closing the window persists the last screen. */
-  detach(id: string): void {
+  /** Stop streaming to a viewer but keep the process alive; no `client` drops every viewer. */
+  detach(id: string, client?: SessionClient): void {
     const s = this.sessions.get(id);
     if (s) {
-      s.client = null;
-      // Nobody is reading now, so nothing is applying back-pressure: let the
-      // process run on (the headless term keeps the screen for the replay).
-      this.setPaused(s, false);
+      if (client) {
+        s.clients.delete(client);
+        s.sizes.delete(client);
+        s.pausedBy.delete(client);
+        // A departing size owner hands the size to the most recent remaining viewer.
+        const heir = Array.from(s.sizes.values()).pop();
+        if (heir && (heir.cols !== s.spec.cols || heir.rows !== s.spec.rows)) this.applySize(s, heir.cols, heir.rows);
+      } else {
+        s.clients.clear();
+        s.sizes.clear();
+        s.pausedBy.clear();
+      }
+      if (s.clients.size === 0) s.pausedBy.clear();
+      this.applyPause(s);
       this.flushSnapshot(s);
     }
     this.scheduleIdle();
@@ -516,11 +638,15 @@ export class SessionManager {
    *  doesn't (a) call write() on a disposed term — would throw — and (b)
    *  resurrect the just-evicted snapshot file via flushSnapshot's persist
    *  callback. Both bugs were live before this guard. */
-  kill(id: string): void {
+  kill(id: string, killer?: SessionClient): void {
     const s = this.sessions.get(id);
     if (s) {
       s.dirty = false;     // makes any subsequent flushSnapshot a no-op
-      s.client = null;     // suppresses onExit emission to a dead client
+      s.killed = true;
+      // Other viewers must learn it's gone (reported like a SIGHUP exit); the killer already knows.
+      const others = Array.from(s.clients).filter((c) => c !== killer);
+      s.clients.clear();   // suppresses the pty's late onExit to anyone
+      for (const c of others) { try { c.onExit(0, 1); } catch { /* viewer gone */ } }
       this.cancelSnapshotTimer(id);
       try {
         s.pty.kill();
@@ -547,10 +673,40 @@ export class SessionManager {
     return Array.from(ids);
   }
 
+  /** Live and frozen sessions, for `hive ps`. */
+  info(): SessionInfo[] {
+    const out: SessionInfo[] = [];
+    for (const s of this.sessions.values()) {
+      if (s.exited) continue;
+      out.push({
+        id: s.id, state: "live", cmd: s.spec.cmd, args: s.spec.args ?? [], cwd: s.spec.cwd,
+        pid: s.pty.pid, viewers: s.clients.size, cols: s.spec.cols, rows: s.spec.rows,
+        ...(s.lastTitle ? { title: s.lastTitle } : {}),
+      });
+    }
+    // Frozen snapshots are read on demand (startup no longer loads them all), so this costs
+    // a read per frozen session — only when something actually asks for the list.
+    for (const [id, load] of this.frozen) {
+      if (this.sessions.has(id)) continue;
+      const f = load();
+      if (!f) continue;
+      out.push({
+        id: f.id, state: "frozen", cmd: f.spec.cmd, args: f.spec.args ?? [], cwd: f.spec.cwd,
+        pid: null, viewers: 0, cols: f.spec.cols, rows: f.spec.rows,
+        ...(f.title ? { title: f.title } : {}),
+      });
+    }
+    return out;
+  }
+
   has(id: string): boolean {
+    return this.hasLive(id) || this.frozen.has(id);
+  }
+
+  /** Running now, as opposed to saved before a reboot and restored on attach. */
+  hasLive(id: string): boolean {
     const s = this.sessions.get(id);
-    if (s && !s.exited) return true;
-    return this.frozen.has(id);
+    return !!s && !s.exited;
   }
 
   size(): number {
@@ -595,6 +751,8 @@ export class SessionManager {
       // Drain the xterm write queue before serializing — without this, the
       // snapshot misses output emitted in the same tick as the flush trigger.
       s.term.write("", () => {
+        // Killed while the queue drained: writing now would resurrect it on the next boot.
+        if (s.killed) { resolve(); return; }
         let r: void | Promise<void>;
         try {
           r = this.onSnapshot?.(s.id, {

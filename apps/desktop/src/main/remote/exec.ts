@@ -1,52 +1,5 @@
-/**
- * Remote command execution over an ssh2 Client `exec` channel, plus a safe
- * git-command builder. Local git shells out via spawn(argv) (no shell, no
- * injection); over SSH `exec` runs a SHELL STRING, so every interpolated path/
- * arg MUST be POSIX-escaped with shq() (reused from claude-resume).
- */
-import type { Client } from "ssh2";
-import { shq } from "../claude-resume.js";
-
-export interface ExecResult {
-  stdout: string;
-  stderr: string;
-  /** Exit code, or null if the channel closed on a signal. */
-  code: number | null;
-}
-
-/**
- * Run one command over ssh, capturing stdout/stderr/exit. No PTY (clean capture
- * for parsing). The SSH 'close' event is guaranteed (unlike the optional 'exit')
- * and carries the exit code, so completion binds to 'close'.
- */
-export function execCapture(
-  conn: Client,
-  cmd: string,
-  timeoutMs = 30_000,
-): Promise<ExecResult> {
-  return new Promise((resolve, reject) => {
-    conn.exec(cmd, (err, stream) => {
-      if (err) return reject(err);
-      const out: Buffer[] = [];
-      const errb: Buffer[] = [];
-      const timer = setTimeout(() => {
-        try { stream.signal("KILL"); } catch { stream.close(); }
-        reject(new Error(`remote exec timed out (${timeoutMs}ms): ${cmd}`));
-      }, timeoutMs);
-      stream.on("data", (d: Buffer) => out.push(d));
-      stream.stderr.on("data", (d: Buffer) => errb.push(d));
-      stream.on("close", (code: number | null) => {
-        clearTimeout(timer);
-        resolve({
-          stdout: Buffer.concat(out).toString("utf8"),
-          stderr: Buffer.concat(errb).toString("utf8"),
-          code,
-        });
-      });
-      stream.on("error", (e: Error) => { clearTimeout(timer); reject(e); });
-    });
-  });
-}
+/** Safe remote command builders; every interpolated path/arg is POSIX-quoted because ssh runs a shell string. */
+import { shq } from "@hivemind/agents/node";
 
 /**
  * Build a safe remote `git -C <path> <args…>` command string. Mirrors the

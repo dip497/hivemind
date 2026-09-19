@@ -1,6 +1,3 @@
-// Unit tests for the multi-agent state detector ported from herdr (detect.rs).
-// Run: pnpm test:unit (node --test via tsx). Covers identifyAgent + each agent's
-// blocked/working/idle heuristics — the real risk surface is the string matching.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -11,6 +8,10 @@ import {
   CLAUDE_WORKING_HOLD_MS,
   normalizeAgentTitle,
 } from "../../src/renderer/src/agent-state.ts";
+import { useAuthoredAgents } from "./authored-agents.ts";
+
+// gemini, amp, grok, opencode and cline ship from the catalog, not inside the app.
+useAuthoredAgents();
 
 test("normalizeAgentTitle: trims, strips control chars, collapses whitespace, caps length", () => {
   assert.equal(normalizeAgentTitle("  Refactor auth  "), "Refactor auth");

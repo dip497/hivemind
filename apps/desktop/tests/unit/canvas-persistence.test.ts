@@ -15,7 +15,7 @@ const store = new Map<string, string>();
   },
 };
 
-const { loadLayout, saveLayout, LAYOUT_KEY, WORKBENCH_TILE_ID } = await import(
+const { loadLayout, saveLayout, LAYOUT_KEY, LAYOUT_VERSION, WORKBENCH_TILE_ID } = await import(
   "../../src/renderer/src/canvas-persistence.ts"
 );
 
@@ -27,27 +27,55 @@ test("no repo → empty layout, never reads/writes storage", () => {
   assert.deepEqual(l.tiles ?? [], []);
 });
 
-test("saveLayout → loadLayout round-trips frames + tiles + viewport", () => {
+test("saveLayout → loadLayout round-trips the core (frames + tiles + membership), stamped v2", () => {
   const repo = "/tmp/repo";
   saveLayout(repo, {
-    sizes: { a: { width: 100, height: 80 } },
-    positions: { a: { x: 1, y: 2 } },
     frames: [{ id: "f1", x: 0, y: 0, w: 460, h: 200, title: "F", color: "#fff", z: 3, parentFrameId: "p" }],
     tileNames: { a: "term" },
     tiles: [{ id: "a", kind: "shell", label: "shell" }],
     editorTabs: {},
     frameOf: { a: "f1" },
-    viewport: { x: 5, y: 6, zoom: 1.5 },
   });
   const l = loadLayout(repo);
+  assert.equal(l.version, LAYOUT_VERSION);
   assert.equal(l.frames[0]!.id, "f1");
   assert.equal(l.frames[0]!.parentFrameId, "p"); // worktree nesting persists
   assert.equal(l.tiles![0]!.kind, "shell");
   assert.deepEqual(l.frameOf, { a: "f1" });
+  assert.deepEqual(l.tileNames, { a: "term" });
+  // Canvas geometry is owned by the canvas view's own layout store — a v2 blob
+  // saved without the downgrade mirror loads with empty geometry.
+  assert.deepEqual(l.sizes, {});
+  assert.deepEqual(l.positions, {});
+  assert.equal(l.viewport, undefined);
+});
+
+test("v2 saveLayout mirrors canvas geometry when given `legacy`, so a pre-v2 build still reads it", () => {
+  const repo = "/tmp/repo-mirror";
+  saveLayout(repo, {
+    frames: [], tileNames: {}, tiles: [], editorTabs: {}, frameOf: {},
+    legacy: { positions: { a: { x: 1, y: 2 } }, sizes: { a: { width: 100, height: 80 } }, viewport: { x: 5, y: 6, zoom: 1.5 } },
+  });
+  const raw = JSON.parse(store.get(LAYOUT_KEY(repo))!);
+  assert.equal(raw.version, LAYOUT_VERSION);
+  assert.equal("legacy" in raw, false, "the mirror is inlined, not nested");
+  assert.deepEqual(raw.positions, { a: { x: 1, y: 2 } });
+  const l = loadLayout(repo);
+  assert.deepEqual(l.sizes, { a: { width: 100, height: 80 } });
   assert.deepEqual(l.viewport, { x: 5, y: 6, zoom: 1.5 });
-  // Tile sizes persist across reload (replaces the tile-size-persist e2e).
+});
+
+test("a pre-v2 blob still exposes its inline geometry (migration source for the canvas store)", () => {
+  const repo = "/tmp/repo-v1";
+  store.set(LAYOUT_KEY(repo), JSON.stringify({
+    frames: [], tiles: [{ id: "a", kind: "shell", label: "shell" }],
+    sizes: { a: { width: 100, height: 80 } }, positions: { a: { x: 1, y: 2 } }, viewport: { x: 5, y: 6, zoom: 1.5 },
+  }));
+  const l = loadLayout(repo);
+  assert.equal(l.version, 1);
   assert.deepEqual(l.sizes, { a: { width: 100, height: 80 } });
   assert.deepEqual(l.positions, { a: { x: 1, y: 2 } });
+  assert.deepEqual(l.viewport, { x: 5, y: 6, zoom: 1.5 });
 });
 
 test("migration: backfills missing frame z by index order", () => {

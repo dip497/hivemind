@@ -77,7 +77,12 @@ test("Initialize workspace writes config + reveals New button", async () => {
   await expect(page.getByRole("heading", { name: "New issue" })).toBeVisible();
   await page.keyboard.type("First issue after init", { delay: 4 });
   await page.getByRole("button", { name: "Create issue" }).click();
-  await page.waitForSelector('[role="dialog"]', { state: "hidden", timeout: 3_000 });
+  // The create dialog closes and the new issue opens in the peek dialog
+  // (App: onCreated → setPeekId), so "no dialog at all" never holds. Wait for
+  // the CREATE dialog's heading to go, then dismiss the peek.
+  await expect(page.getByRole("heading", { name: "New issue" })).toBeHidden({ timeout: 3_000 });
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 3_000 });
 
   const md = await fs.readFile(path.join(workspace, ".hivemind", "issues", "TST-1.md"), "utf8");
   expect(md).toMatch(/id:\s*TST-1/);

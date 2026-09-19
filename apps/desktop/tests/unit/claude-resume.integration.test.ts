@@ -25,8 +25,36 @@ import {
   type SpawnSpec,
   type SessionSnapshot,
 } from "../../src/main/pty-session-manager.ts";
-import { makeClaudeResumeTransforms, trackerSettings, type ClaudeResumeTransforms } from "../../src/main/claude-resume.ts";
-import { trackerSource, readTrackedSession } from "../../src/main/tile-session-store.ts";
+import { authoredDef } from "./authored-agents.ts";
+import { manifestRuntime, renderHookDocument, transformsFor, trackerSource, readTrackedSession,
+  type ProviderResumeTransforms, type RuntimePaths } from "@hivemind/agents/node";
+
+// claude is a manifest now. These build the same two things its module used to expose: the
+// hooks document the daemon hands it, and the spawn/restore transforms.
+const claudeDef = authoredDef("claude");
+const pathsFor = (deps: Record<string, string | undefined>): RuntimePaths => ({
+  private: "/x/agents/claude",
+  execPath: deps.execPath!,
+  tileSessionsDir: deps.tileSessionsDir!,
+  home: "/home/u",
+  ...(deps.hcpSock ? { hcpSock: deps.hcpSock, hcpToken: "tok" } : {}),
+  hooks: {
+    ...(deps.trackerPath ? { tracker: { path: deps.trackerPath, arg: deps.tileSessionsDir! } } : {}),
+    ...(deps.planHookPath && deps.planBridgeSock ? { plan: { path: deps.planHookPath, arg: deps.planBridgeSock } } : {}),
+    ...(deps.approvalHookPath && deps.hcpSock ? { approval: { path: deps.approvalHookPath, arg: deps.hcpSock } } : {}),
+    ...(deps.stopHookPath && deps.hcpSock ? { stop: { path: deps.stopHookPath, arg: deps.hcpSock } } : {}),
+    ...(deps.subagentHookPath && deps.hcpSock ? { subagent: { path: deps.subagentHookPath, arg: deps.hcpSock } } : {}),
+    ...(deps.notificationHookPath && deps.hcpSock ? { notification: { path: deps.notificationHookPath, arg: deps.hcpSock } } : {}),
+    ...(deps.userpromptHookPath && deps.hcpSock ? { userPrompt: { path: deps.userpromptHookPath, arg: deps.hcpSock } } : {}),
+  },
+});
+const trackerSettings = (deps: Record<string, string | undefined>, tileId: string, supervise?: string): string =>
+  renderHookDocument(claudeDef, {
+    tileId, cwd: "/w", args: [], env: {}, phase: "spawn", ...(supervise ? { supervise } : {}), paths: pathsFor(deps),
+  })!;
+const makeClaudeResumeTransforms = (deps: Record<string, string | undefined>): ProviderResumeTransforms =>
+  transformsFor(claudeDef, manifestRuntime(claudeDef, () => undefined)!, pathsFor(deps),
+    { ...(deps.legacyMapFile ? { legacyMapFile: deps.legacyMapFile } : {}) });
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -209,7 +237,7 @@ function setup() {
   return { dir, tileSessionsDir, markerDir, snaps, makeMgr };
 }
 
-function transformsToOpts(t: ClaudeResumeTransforms) {
+function transformsToOpts(t: ProviderResumeTransforms) {
   return {
     transformSpecOnSpawn: t.transformSpecOnSpawn,
     transformSpecOnRestore: t.transformSpecOnRestore,
@@ -306,3 +334,16 @@ test("restore of a session whose JSONL vanished retries with --session-id (no ti
 function setupDirOf(tileSessionsDir: string): string {
   return path.dirname(tileSessionsDir);
 }
+
+test("a saved spec that repeats its resume restores with it once", () => {
+  const t = makeClaudeResumeTransforms({ tileSessionsDir: "/x/none", execPath: "/x/node" });
+  const id = "30e61ded-dc21-4f87-97e6-a9553fdf9930";
+  const out = t.transformSpecOnRestore!(
+    { cwd: "/w", cmd: "claude", args: ["--resume", id, "--resume", id, "--resume", id, "--permission-mode", "auto"], cols: 80, rows: 24 },
+    "hm:tile-x",
+  );
+  const args = out.args ?? [];
+  assert.equal(args.filter((a) => a === "--resume").length, 1);
+  assert.equal(args[args.indexOf("--resume") + 1], id);
+  assert.ok(args.includes("--permission-mode"));
+});

@@ -1,18 +1,7 @@
-/**
- * Animated wallpaper layer — the live background that bleeds through the frosted
- * tiles when glass mode is on (Clonk's show-stealer). Code-generated scenes
- * (drifting multi-radial gradients), NOT art files: zero asset sourcing, GPU-cheap,
- * no WebGL context to lose on big boards.
- *
- * "Better for the canvas": ONE fixed full-bleed layer behind the react-flow pane
- * (not per-tile), so it never participates in the per-node re-raster during pan/
- * zoom. It pauses its animation on window blur / tab-hidden (Lively's trick) so an
- * idle, backgrounded app spends zero GPU on it, and honors prefers-reduced-motion
- * via styles.css. Only mounts when glass is on AND a scene is chosen — otherwise
- * the opaque pane would hide it and the animation would be wasted work.
- */
+/** Workspace decoration. Its media and CSS motion pause when covered by Settings. */
 import { useEffect, useRef, useState } from "react";
 import { useTheme } from "./theme-store";
+import { useWorkspaceOccluded } from "./workspace-occlusion";
 
 /**
  * `embedded` renders the SAME scene as an absolute fill (position:absolute,
@@ -20,22 +9,36 @@ import { useTheme } from "./theme-store";
  * layer — used by the terminal fit-to-screen overlay so the fullscreen terminal
  * sits over a clean copy of the live wallpaper (not the canvas + other tiles).
  */
-export function Wallpaper({ embedded = false }: { embedded?: boolean } = {}): React.ReactElement | null {
+export function Wallpaper({ embedded = false, covering = false }: { embedded?: boolean; covering?: boolean } = {}): React.ReactElement | null {
   const { glass, wallpaper, videoSrc, imageSrc } = useTheme();
   const cls = embedded ? " embedded" : "";
-  const [paused, setPaused] = useState(false);
+  const [inactive, setInactive] = useState(false);
+  const occluded = useWorkspaceOccluded();
+  // `covering`: this copy is what covers the workspace, so occlusion is not about it.
+  const paused = inactive || (occluded && !covering);
   // A clip that can't decode (e.g. HEVC/H.265, which Chromium doesn't bundle)
   // fires <video> onError → we fall back to a gradient instead of a black void.
   const [videoFailed, setVideoFailed] = useState(false);
   useEffect(() => { setVideoFailed(false); }, [videoSrc]);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const reloadedRef = useRef(false);
+  useEffect(() => { reloadedRef.current = false; }, [videoSrc]);
+  // Re-arm after a successful playback: a source that has already played and errors again
+  // is hitting a transient decode fault, not a bad file — worth reloading again.
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const ok = () => { reloadedRef.current = false; };
+    v.addEventListener("playing", ok);
+    return () => v.removeEventListener("playing", ok);
+  }, [videoSrc]);
 
   // Pause the wallpaper (video decoder + bloom animations) when the window is
   // hidden/blurred OR the user has been idle for a while — a live wallpaper
   // composites every frame, so this reclaims continuous GPU + video-decode CPU
   // whenever you're not actively interacting. Resumes within ~1s of any input.
   // `bump` only writes a number (no React, no per-event timer churn); a 1Hz tick
-  // computes the paused state, and setPaused no-ops when unchanged.
+  // computes the paused state, and setInactive no-ops when unchanged.
   useEffect(() => {
     let last = Date.now();
     const IDLE_MS = 30_000;
@@ -44,7 +47,7 @@ export function Wallpaper({ embedded = false }: { embedded?: boolean } = {}): Re
     for (const e of evs) window.addEventListener(e, bump, { passive: true });
     const tick = setInterval(() => {
       const idle = Date.now() - last > IDLE_MS;
-      setPaused(document.hidden || !document.hasFocus() || idle);
+      setInactive(document.hidden || !document.hasFocus() || idle);
     }, 1000);
     return () => {
       clearInterval(tick);
@@ -56,8 +59,16 @@ export function Wallpaper({ embedded = false }: { embedded?: boolean } = {}): Re
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
-    if (paused) v.pause();
-    else void v.play().catch(() => {});
+    if (paused) { v.pause(); return; }
+    // Same lost-play race as CanvasOverlay: a rejected play() must retry while this
+    // effect still wants playback, or the wallpaper stays frozen forever.
+    let stale = false;
+    const start = (): void => {
+      if (stale) return;
+      void v.play().catch((e: DOMException) => { if (e?.name === "AbortError") setTimeout(start, 250); });
+    };
+    start();
+    return () => { stale = true; };
   }, [paused, videoSrc, wallpaper]);
 
   // The built-in animated/photo/video wallpaper scene (or null when glass is off,
@@ -71,7 +82,7 @@ export function Wallpaper({ embedded = false }: { embedded?: boolean } = {}): Re
     if (wallpaper === "image") {
       if (!imageSrc) return null; // no photo picked yet
       return (
-        <div className={`hm-wallpaper${cls}`} data-scene="image" aria-hidden="true">
+        <div className={`hm-wallpaper${cls}${paused ? " paused" : ""}`} data-scene="image" aria-hidden="true">
           <img className="hm-wp-image" src={imageSrc} alt="" />
           <div className="hm-wp-vignette" />
         </div>
@@ -88,11 +99,18 @@ export function Wallpaper({ embedded = false }: { embedded?: boolean } = {}): Re
               ref={videoRef}
               className="hm-wp-video"
               src={videoSrc}
-              autoPlay
+              autoPlay={!paused}
               loop
               muted
               playsInline
-              onError={() => setVideoFailed(true)}
+              onError={() => {
+                // The first load can hit a transient decode error (PIPELINE_ERROR_DECODE on
+                // a busy machine); one reload clears it. A second failure falls back to the
+                // gradient below instead of retrying forever.
+                const v = videoRef.current;
+                if (v && !reloadedRef.current) { reloadedRef.current = true; v.load(); return; }
+                setVideoFailed(true);
+              }}
             />
             <div className="hm-wp-vignette" />
           </div>

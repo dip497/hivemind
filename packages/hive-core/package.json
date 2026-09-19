@@ -13,13 +13,22 @@
     "./agent-context": "./src/agent-context.ts",
     "./registry": "./src/registry.ts",
     "./cross-repo": "./src/cross-repo.ts",
-    "./templates": "./src/templates.ts"
+    "./templates": "./src/templates.ts",
+    "./views": "./src/views.ts",
+    "./review": "./src/review.ts",
+    "./settings-schema": "./src/settings-schema.ts",
+    "./settings": "./src/settings.ts",
+    "./packages": "./src/packages.ts",
+    "./tool-plugins": "./src/tool-plugins.ts",
+    "./toolbar": "./src/toolbar.ts",
+    "./plugin-catalog": "./src/plugin-catalog.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "bun test"
   },
   "dependencies": {
+    "@hivemind/view-sdk": "workspace:*",
     "gray-matter": "catalog:",
     "yaml": "catalog:",
     "zod": "catalog:"

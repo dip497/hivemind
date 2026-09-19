@@ -2,13 +2,14 @@ import { defineConfig, externalizeDepsPlugin } from "electron-vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "node:path";
+import { build as viteBuild, type Plugin } from "vite";
 
 // @hivemind/* workspace packages ship .ts source via package.json `main`
 // (zero build step in dev). For production Electron, we must BUNDLE them
 // into main/preload because node has no .ts loader at runtime. Their
-// transitive npm deps (gray-matter, yaml, zod, @modelcontextprotocol/sdk)
+// transitive npm deps (gray-matter, yaml, zod)
 // stay externalized — they're plain JS and load fine from app.asar.
-const BUNDLE_INTERNAL = ["@hivemind/core", "@hivemind/core/storage", "@hivemind/mcp"];
+const BUNDLE_INTERNAL = ["@hivemind/core", "@hivemind/core/storage", "@hivemind/core/settings", "@hivemind/core/settings-schema", "@hivemind/core/views", "@hivemind/agents", "@hivemind/agents/node", "@hivemind/view-sdk", "@hivemind/view-sdk/manifest", "@hivemind/view-sdk/protocol"];
 
 // ---------------------------------------------------------------------------
 // shiki language / theme allowlist
@@ -68,9 +69,24 @@ const SHIKI_LANGS_ALLOWLIST: readonly string[] = [
 // (SHIKI_LANGS_ALLOWLIST kept above for documentation — the source of truth
 //  lives in src/renderer/src/shiki-slim.ts which gets aliased over `shiki`.)
 
+// Views import `@hivemind/view-sdk` without bundling it; the app serves this build to them.
+function viewSdkPlugin(): Plugin {
+  return {
+    name: "hivemind-view-sdk",
+    async generateBundle() {
+      const out = await viteBuild({
+        configFile: false, logLevel: "warn",
+        build: { write: false, minify: true, lib: { entry: path.resolve("../../packages/hive-view-sdk/src/index.ts"), formats: ["es"], fileName: () => "view-sdk.js" } },
+      });
+      const [chunk] = (Array.isArray(out) ? out[0]! : out as Exclude<typeof out, unknown[]> & { output: [{ code: string }] }).output;
+      this.emitFile({ type: "asset", fileName: "view-sdk.js", source: chunk.code });
+    },
+  };
+}
+
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin({ exclude: BUNDLE_INTERNAL })],
+    plugins: [externalizeDepsPlugin({ exclude: BUNDLE_INTERNAL }), viewSdkPlugin()],
     build: {
       outDir: "out/main",
       rollupOptions: {

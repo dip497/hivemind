@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Queue</title>
+  <link rel="stylesheet" href="./queue.css" />
+</head>
+<body>
+  <main class="q" aria-label="Agents by who needs you">
+    <header class="q-head">
+      <h1>Queue</h1>
+      <p class="q-summary" aria-live="polite"></p>
+    </header>
+    <div class="q-list" role="listbox" tabindex="0" aria-label="Agents"></div>
+    <footer class="q-keys" aria-hidden="true">
+      <span><kbd>J</kbd><kbd>K</kbd> move</span>
+      <span><kbd>N</kbd> next that needs you</span>
+      <span><kbd>Esc</kbd> release</span>
+    </footer>
+  </main>
+  <section class="q-dock" aria-label="Docked terminal">
+    <canvas class="q-field" aria-hidden="true"></canvas>
+    <div class="q-empty">
+      <p class="q-empty-title"></p>
+      <p class="q-empty-sub"></p>
+    </div>
+    <div class="q-offer" hidden></div>
+  </section>
+  <script type="module" src="./queue.js"></script>
+</body>
+</html>

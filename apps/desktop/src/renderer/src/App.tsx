@@ -1,7 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import * as SettingsDialog from "@radix-ui/react-dialog";
+import { setWorkspaceOccluded } from "./workspace-occlusion";
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Bell, ExternalLink, LayoutGrid, Loader2, PanelsTopLeft, Plus, Settings } from "lucide-react";
+import { Bell, ChevronRight, ExternalLink, Loader2, Plus, Settings, X, Palette, PanelsTopLeft, Puzzle, Bot, Keyboard, Info } from "lucide-react";
+import { Button } from "./components/ui/button";
+import { Input } from "./components/ui/input";
+import { Label } from "./components/ui/label";
+import { Switch } from "./components/ui/switch";
 import path from "path-browserify";
 import type { UpdateStatus } from "../../shared/ipc";
 import {
@@ -10,12 +16,14 @@ import {
   useIssues,
   useProject,
 } from "./queries";
-import { Canvas } from "./Canvas";
+import { Workspace } from "./Workspace";
 import { IssuePeek } from "./components/IssuePeek";
 import { NewIssueModal } from "./components/NewIssueModal";
+import { resolveSettingsPage } from "./settings-registry";
+import { useExpandedGroups, useSettingsNav } from "./settings-nav";
 import { getNotificationSettings, setNotificationSettingsCache, subscribeNotificationSettings, saveNotificationSettings } from "./notification-settings";
-import { loadViewMode, saveViewMode, type ViewMode } from "./windows-view-state";
 import type { NotificationSettings } from "../../shared/ipc";
+const SettingsPages = lazy(() => import("./settings-panels"));
 
 // Last 8 opened folders, most recent first. Persisted via localStorage —
 // mirrors VSCode's "Open Recent" (Ctrl+R) behavior at workspace granularity.
@@ -174,7 +182,9 @@ export function App() {
   const [newOpen, setNewOpen] = useState(false);
   const [initing, setIniting] = useState(false);
   const [initOpen, setInitOpen] = useState(false);
+  const openInit = useCallback(() => setInitOpen(true), []);
   const [settingsOpen, setSettingsOpen] = useState(false);
+
   const update = useUpdateCheck();
   const qc = useQueryClient();
 
@@ -342,38 +352,42 @@ export function App() {
           on top — frame = workspace, so the per-Frame "+ workspace" bind is the
           canonical add-a-workspace action; Open/Init/Recents live in the sidebar. */}
       <div className="fixed inset-0 z-30 bg-[var(--color-bg)]">
-        <Canvas
+        <Workspace
           cwd={cwd}
           repoPath={repoPath}
           root={root}
-          onInitWorkspace={!root ? () => setInitOpen(true) : undefined}
+          onInitWorkspace={!root ? openInit : undefined}
           updateAvailable={update.status?.updateAvailable === true}
           onUpgrade={update.upgrade}
           upgrading={update.upgrading}
         />
         <div className="absolute top-0 right-0 z-40 flex items-start gap-2 px-3 py-2.5 pointer-events-none">
           {root && (
-            <button
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => setNewOpen(true)}
-              className="pointer-events-auto inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hm-island text-[12px] font-medium text-[var(--color-fg)] hover:bg-[var(--color-bg3)] transition-colors"
+              className="pointer-events-auto"
               title="New issue (⌘N)"
             >
-              <Plus aria-hidden className="size-3.5 text-[var(--color-fg2)]" />
+              <Plus aria-hidden />
               <span>New issue</span>
-              <kbd className="font-mono text-[9.5px] text-[var(--color-fg3)] ml-0.5">⌘N</kbd>
-            </button>
+              <kbd className="font-mono text-[9.5px] ml-0.5">⌘N</kbd>
+            </Button>
           )}
-          <button
+          <Button
+            variant="secondary"
+            size="icon"
             onClick={() => setSettingsOpen(true)}
-            className="pointer-events-auto relative inline-flex items-center justify-center size-8 rounded-lg hm-island text-[var(--color-fg2)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)] transition-colors"
+            className="pointer-events-auto relative"
             title={update.status?.updateAvailable ? "Settings — update available" : "Settings"}
             aria-label="settings"
           >
-            <Settings aria-hidden className="size-4" />
+            <Settings aria-hidden />
             {update.status?.updateAvailable && (
               <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-[var(--color-warn)] ring-2 ring-[var(--color-bg2)]" aria-hidden />
             )}
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -408,98 +422,7 @@ export function App() {
 
 const REPO_URL = "https://github.com/dip497/hivemind";
 
-/** Small accessible switch — matches the existing agent-browser toggle's
- *  track/knob styling so every preference in Settings reads as one family. */
-function Switch({
-  checked,
-  onChange,
-  label,
-  disabled,
-}: {
-  checked: boolean;
-  onChange: (next: boolean) => void;
-  label: string;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      disabled={disabled}
-      onClick={() => onChange(!checked)}
-      className={`relative w-9 h-5 rounded-full transition-colors shrink-0 disabled:opacity-40 ${
-        checked ? "bg-[var(--color-brand)]" : "bg-[var(--color-line2)]"
-      }`}
-    >
-      <span className={`absolute top-0.5 size-4 rounded-full bg-white transition-all ${checked ? "left-[18px]" : "left-0.5"}`} />
-    </button>
-  );
-}
 
-/** View preference — canvas (infinite board) vs. windows ("editor-like": a tab
- *  strip + one active tile, graph rail on the left). The mode itself lives in
- *  Canvas state; Settings writes localStorage AND dispatches a set event so the
- *  live canvas switches immediately (no relaunch). ⌘E toggles the same. */
-function ViewPrefs() {
-  const [mode, setMode] = useState<ViewMode>(() => loadViewMode());
-  // Reflect an external change (⌘E) while Settings is open.
-  useEffect(() => {
-    const onToggle = () => setMode(loadViewMode());
-    window.addEventListener("hivemind:toggle-view-mode", onToggle);
-    return () => window.removeEventListener("hivemind:toggle-view-mode", onToggle);
-  }, []);
-  const set = (m: ViewMode) => {
-    setMode(m);
-    saveViewMode(m);
-    window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: m } }));
-  };
-  const opts: { id: ViewMode; label: string; hint: string; icon: typeof LayoutGrid }[] = [
-    { id: "canvas", label: "Canvas", hint: "Infinite board of tiles", icon: LayoutGrid },
-    { id: "windows", label: "Windows", hint: "Tabs + one active tile", icon: PanelsTopLeft },
-  ];
-  return (
-    <div className="mt-4 rounded-lg border border-[var(--color-line2)] bg-[var(--color-bg3)] p-3">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <LayoutGrid size={14} className="text-[var(--color-fg2)]" />
-          <span className="text-[13px] font-medium text-[var(--color-fg)]">View</span>
-        </div>
-        <kbd className="font-mono text-[9.5px] text-[var(--color-fg3)]">⌘E</kbd>
-      </div>
-      {/* Segmented control — one active mode. */}
-      <div className="mt-3 grid grid-cols-2 gap-2">
-        {opts.map((o) => {
-          const active = mode === o.id;
-          return (
-            <button
-              key={o.id}
-              onClick={() => set(o.id)}
-              aria-pressed={active}
-              className={`flex flex-col items-start gap-1 rounded-lg border p-2.5 text-left transition-colors ${
-                active
-                  ? "border-[var(--color-brand)] bg-[color-mix(in_srgb,var(--color-brand)_12%,transparent)]"
-                  : "border-[var(--color-line2)] hover:bg-[var(--color-bg4)]"
-              }`}
-            >
-              <span className="flex items-center gap-1.5 text-[12px] font-medium text-[var(--color-fg)]">
-                <o.icon size={14} className={active ? "text-[var(--color-brand)]" : "text-[var(--color-fg3)]"} />
-                {o.label}
-              </span>
-              <span className="text-[10.5px] text-[var(--color-fg3)] leading-snug">{o.hint}</span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-/** Notifications preference card — master switch, per-kind mute, surface choice
- *  (in-app toast vs. native OS popup), and a Do-Not-Disturb window. Reads the
- *  renderer cache live; writes through `save` (persist + refresh) so a toggle
- *  takes effect immediately on both surfaces with no relaunch. */
 function NotificationPrefs() {
   const [s, setS] = useState<NotificationSettings>(() => getNotificationSettings());
   useEffect(() => subscribeNotificationSettings(setS), []);
@@ -518,73 +441,76 @@ function NotificationPrefs() {
   ];
 
   return (
-    <div className="mt-4 rounded-lg border border-[var(--color-line2)] bg-[var(--color-bg3)] p-3">
-      <div className="flex items-center justify-between gap-2">
+    <div className="settings-section">
+      <div className="settings-row">
         <div className="flex items-center gap-2">
           <Bell size={14} className="text-[var(--color-fg2)]" />
           <span className="text-[13px] font-medium text-[var(--color-fg)]">Notifications</span>
         </div>
-        <Switch checked={s.enabled} onChange={(v) => update({ enabled: v })} label="Enable notifications" />
+        <Switch checked={s.enabled} onCheckedChange={(v) => update({ enabled: v })} aria-label="Enable notifications" />
       </div>
 
       {/* Per-kind mute — which agent transitions reach you. */}
-      <div className={`mt-3 space-y-1.5 ${dim ? "opacity-40 pointer-events-none" : ""}`}>
-        <div className="u-eyebrow">Notify me about</div>
+      <div className="settings-section">
+        <div className="settings-subheading">Notify me about</div>
         {kinds.map((k) => (
-          <div key={k.key} className="flex items-center justify-between gap-3">
+          <div key={k.key} className="settings-row">
             <div className="min-w-0">
               <div className="text-[12px] text-[var(--color-fg)]">{k.label}</div>
-              <div className="text-[10.5px] text-[var(--color-fg3)] leading-snug">{k.hint}</div>
+              <div className="settings-note">{k.hint}</div>
             </div>
             <Switch
+              disabled={dim}
               checked={s.kinds[k.key]}
-              onChange={(v) => update({ kinds: { ...s.kinds, [k.key]: v } })}
-              label={`Notify on ${k.label}`}
+              onCheckedChange={(v) => update({ kinds: { ...s.kinds, [k.key]: v } })}
+              aria-label={`Notify on ${k.label}`}
             />
           </div>
         ))}
       </div>
 
       {/* Surface choice — in-app toast vs. native OS popup, independent. */}
-      <div className={`mt-3 space-y-1.5 ${dim ? "opacity-40 pointer-events-none" : ""}`}>
-        <div className="u-eyebrow">Where</div>
-        <div className="flex items-center justify-between gap-3">
+      <div className="settings-section">
+        <div className="settings-subheading">Delivery</div>
+        <div className="settings-row">
           <div className="text-[12px] text-[var(--color-fg)]">In-app toasts</div>
-          <Switch checked={s.inApp} onChange={(v) => update({ inApp: v })} label="In-app toasts" />
+          <Switch disabled={dim} checked={s.inApp} onCheckedChange={(v) => update({ inApp: v })} aria-label="In-app toasts" />
         </div>
-        <div className="flex items-center justify-between gap-3">
+        <div className="settings-row">
           <div className="text-[12px] text-[var(--color-fg)]">Native OS popups</div>
-          <Switch checked={s.osPopups} onChange={(v) => update({ osPopups: v })} label="Native OS popups" />
+          <Switch disabled={dim} checked={s.osPopups} onCheckedChange={(v) => update({ osPopups: v })} aria-label="Native OS popups" />
         </div>
       </div>
 
       {/* Do-Not-Disturb — mutes finished/failed (NOT needs-you) during a window. */}
-      <div className={`mt-3 ${dim ? "opacity-40 pointer-events-none" : ""}`}>
-        <div className="flex items-center justify-between gap-3">
+      <div className="settings-section">
+        <div className="settings-row">
           <div className="min-w-0">
             <div className="text-[12px] text-[var(--color-fg)]">Do Not Disturb</div>
-            <div className="text-[10.5px] text-[var(--color-fg3)] leading-snug">Mutes finished/failed; needs-you still fires</div>
+            <div className="settings-note">Mutes finished/failed; needs-you still fires</div>
           </div>
-          <Switch checked={s.dnd.enabled} onChange={(v) => update({ dnd: { ...s.dnd, enabled: v } })} label="Do Not Disturb" />
+          <Switch disabled={dim} checked={s.dnd.enabled} onCheckedChange={(v) => update({ dnd: { ...s.dnd, enabled: v } })} aria-label="Do Not Disturb" />
         </div>
         {s.dnd.enabled && (
           <div className="mt-2 flex items-center gap-2">
-            <input
+            <Input
               type="time"
+              disabled={dim}
               value={s.dnd.start}
               onChange={(e) => update({ dnd: { ...s.dnd, start: e.target.value } })}
-              className="font-mono text-[11px] bg-[var(--color-bg2)] border border-[var(--color-line2)] rounded px-2 py-1 text-[var(--color-fg)] focus-visible:outline-none"
+              className="w-auto"
               aria-label="DND start"
             />
-            <span className="text-[11px] text-[var(--color-fg3)]">to</span>
-            <input
+            <span className="text-[11px] text-[var(--color-fg2)]">to</span>
+            <Input
               type="time"
+              disabled={dim}
               value={s.dnd.end}
               onChange={(e) => update({ dnd: { ...s.dnd, end: e.target.value } })}
-              className="font-mono text-[11px] bg-[var(--color-bg2)] border border-[var(--color-line2)] rounded px-2 py-1 text-[var(--color-fg)] focus-visible:outline-none"
+              className="w-auto"
               aria-label="DND end"
             />
-            <span className="text-[10px] text-[var(--color-fg3)] ml-auto">local time</span>
+            <span className="text-[10px] text-[var(--color-fg2)] ml-auto">local time</span>
           </div>
         )}
       </div>
@@ -621,49 +547,78 @@ function SettingsModal({
   /** An upgrade is in flight — disable the button + show a spinner. */
   upgrading: boolean;
 }) {
-  const [active, setActive] = useState(false);   // live this session
-  const [enabled, setEnabled] = useState(false); // persisted choice
-  const [port, setPort] = useState("9333");
-  const [busy, setBusy] = useState(false);
-
+  const [page, setPage] = useState("appearance");
+  const nav = useSettingsNav(page);
+  const [expanded, toggleGroup] = useExpandedGroups();
+  const settingsReturnFocus = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    setWorkspaceOccluded(open);
+    return () => setWorkspaceOccluded(false);
+  }, [open]);
+  useEffect(() => {
+    const openPage = (event: Event) => {
+      const target = resolveSettingsPage((event as CustomEvent<{ page?: string }>).detail?.page ?? "");
+      if (target) setPage(target);
+      onOpenChange(true);
+    };
+    window.addEventListener("hivemind:open-settings", openPage);
+    return () => window.removeEventListener("hivemind:open-settings", openPage);
+  }, [onOpenChange]);
   useEffect(() => {
     if (!open) return;
     // Every time Settings opens, re-check for updates so the panel reflects the
     // latest release — not a cached result from the last mount / 4h interval.
     onCheck();
-    void window.hive.getBrowserSettings().then((s) => {
-      setActive(s.active);
-      setEnabled(s.enabled);
-      setPort(s.port);
-    }).catch(() => {});
   }, [open, onCheck]);
 
-  if (!open) return null;
-  // The toggle is "dirty" when the persisted choice no longer matches what's
-  // actually running — that's exactly when a relaunch is needed.
-  const needsRelaunch = enabled !== active;
-
-  const onToggle = async () => {
-    const next = !enabled;
-    setBusy(true);
-    try { await window.hive.setBrowserCdpEnabled(next); setEnabled(next); }
-    finally { setBusy(false); }
-  };
-
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/50" onClick={() => onOpenChange(false)}>
-      <div
-        className="w-[480px] bg-[var(--color-bg2)] border border-[var(--color-line2)] rounded-lg shadow-2xl p-4"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="text-[15px] font-semibold text-[var(--color-fg)]">Settings</h2>
-
+    <SettingsDialog.Root open={open} onOpenChange={onOpenChange}>
+      <SettingsDialog.Portal>
+        <SettingsDialog.Overlay className="settings-overlay" />
+        <SettingsDialog.Content className="settings-dialog" aria-describedby="settings-description"
+          onOpenAutoFocus={() => { settingsReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; }}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            const target = settingsReturnFocus.current;
+            (target?.isConnected ? target : document.querySelector<HTMLElement>('[aria-label="settings"]'))?.focus({ preventScroll: true });
+          }}
+        >
+          <aside className="settings-sidebar">
+            <SettingsDialog.Title className="settings-title">Settings</SettingsDialog.Title>
+            <nav aria-label="Settings sections">
+              {nav.groups.map(({ group, items }) => {
+                const foldable = items.some((item) => item.plugin);
+                const open = expanded.has(group);
+                // Folded shows the overview only; the page you are on always stays in view.
+                const shown = items.filter((item) => !item.plugin || open || item.id === page);
+                return <div key={group} className="settings-nav-group" role="group" aria-label={group}>
+                <h3 className="settings-nav-heading">{foldable
+                  ? <button aria-expanded={open} onClick={() => toggleGroup(group)}><ChevronRight size={12} aria-hidden="true" /><span>{group}</span></button>
+                  : <span className="settings-nav-heading-text">{group}</span>}</h3>
+                {shown.map((item) => <button key={item.id} onClick={() => setPage(item.id)} aria-current={page === item.id ? "page" : undefined}
+                  title={item.label} data-settings-page={item.id} data-plugin={item.plugin ? "" : undefined}>
+                  <span className="settings-nav-icon" aria-hidden="true">{item.icon}</span><span>{item.label}</span>
+                </button>)}
+              </div>;
+              })}
+            </nav>
+            <span className="settings-sidebar-foot">Hivemind {version ? `v${version}` : ""}</span>
+          </aside>
+          <div className="settings-main">
+            <header className="settings-page-header">
+              <div><h2>{nav.titleOf(page)}</h2>
+                <SettingsDialog.Description className="sr-only" id="settings-description">{nav.describe(page)}</SettingsDialog.Description>
+              </div>
+              <SettingsDialog.Close className="settings-icon-button" aria-label="Close"><X size={18} /></SettingsDialog.Close>
+            </header>
+            <div key={page} className="settings-page-content" data-settings-body>
+        {page === "about" && (<>
         {/* About + update status */}
-        <div className="mt-4 rounded-lg border border-[var(--color-line2)] bg-[var(--color-bg3)] p-3">
+        <div className="settings-section">
           <div className="flex items-baseline justify-between gap-2">
             <div className="flex items-baseline gap-2">
               <span className="text-[14px] font-semibold text-[var(--color-fg)]">hivemind</span>
-              <span className="text-[11px] font-mono text-[var(--color-fg3)]">{version ? `v${version}` : "version…"}</span>
+              <span className="text-[11px] font-mono text-[var(--color-fg2)]">{version ? `v${version}` : "version…"}</span>
             </div>
             <a
               href={REPO_URL}
@@ -671,32 +626,32 @@ function SettingsModal({
               rel="noreferrer"
               className="inline-flex items-center gap-1 text-[11px] text-[var(--color-fg2)] hover:text-[var(--color-fg)]"
             >
-              GitHub <ExternalLink className="size-3 text-[var(--color-fg3)]" />
+              GitHub <ExternalLink className="size-3 text-[var(--color-fg2)]" />
             </a>
           </div>
-          <div className="mt-2 flex items-center justify-between gap-2">
+          <div className="settings-row">
             {update?.updateAvailable ? (
               <>
                 <span className="inline-flex items-center gap-1.5 text-[12px] text-[var(--color-fg)]">
                   <span className="size-2 rounded-full bg-[var(--color-warn)]" aria-hidden />
                   Update available{update.latest ? ` — v${update.latest}` : ""}
                 </span>
-                <button
+                <Button
                   onClick={onUpgrade}
                   disabled={upgrading}
                   aria-busy={upgrading}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-medium text-white bg-[var(--color-brand)] rounded hover:opacity-90 disabled:opacity-70 disabled:cursor-default"
+                  size="xs"
                   title={upgrading ? "Downloading and installing the update…" : "Download the latest release and restart"}
                 >
                   {upgrading ? (
                     <>
-                      <Loader2 className="size-3 animate-spin" aria-hidden />
+                      <Loader2 className="animate-spin" aria-hidden />
                       Updating…
                     </>
                   ) : (
                     "Update & restart"
                   )}
-                </button>
+                </Button>
               </>
             ) : (
               <>
@@ -704,77 +659,35 @@ function SettingsModal({
                   <span className="size-2 rounded-full" style={{ background: checking ? "var(--color-fg3)" : "var(--color-ok)" }} aria-hidden />
                   {checking ? "Checking…" : "Up to date"}
                 </span>
-                <button
+                <Button
+                  variant="outline"
                   onClick={() => onCheck({ force: true })}
                   disabled={checking}
-                  className="px-2 py-1 text-[11px] border border-[var(--color-line2)] text-[var(--color-fg2)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg4)] rounded disabled:opacity-40"
                 >
                   {checking ? "Checking…" : "Check now"}
-                </button>
+                </Button>
               </>
             )}
           </div>
-          <div className="mt-2 flex items-center justify-between text-[11px]">
-            <span className="text-[var(--color-fg3)]">License</span>
+          <div className="settings-row">
+            <span className="text-[var(--color-fg2)]">License</span>
             <span className="font-mono text-[var(--color-fg2)]">MIT</span>
           </div>
         </div>
 
-        <NotificationPrefs />
+        </>)}
 
-        <ViewPrefs />
+        {page === "notifications" && <NotificationPrefs />}
 
-        <div className="mt-4 flex items-start gap-3">
-          <button
-            role="switch"
-            aria-checked={enabled}
-            disabled={busy}
-            onClick={onToggle}
-            className={`mt-0.5 shrink-0 relative w-9 h-5 rounded-full transition-colors disabled:opacity-50 ${
-              enabled ? "bg-[var(--color-brand)]" : "bg-[var(--color-line2)]"
-            }`}
-            title="Enable agent browser control"
-          >
-            <span className={`absolute top-0.5 size-4 rounded-full bg-white transition-all ${enabled ? "left-[18px]" : "left-0.5"}`} />
-          </button>
-          <div className="min-w-0">
-            <div className="text-[13px] font-medium text-[var(--color-fg)]">Enable agent browser control</div>
-            <p className="mt-1 text-[11.5px] text-[var(--color-fg2)] leading-relaxed">
-              Lets a spawned agent drive a Browser tile (navigate, click, read, screenshot)
-              over the Chrome DevTools Protocol via the <code className="font-mono text-[10.5px] bg-[var(--color-bg3)] px-1 rounded">hive-browser</code> skill.
-            </p>
-            <p className="mt-1.5 text-[11px] text-[var(--color-warn)] leading-relaxed">
-              ⚠ Opens a loopback debug port (127.0.0.1:{port}) that also exposes this app's
-              window to local processes. Only enable it for agents you trust.
-            </p>
+
+        <Suspense fallback={<p role="status" className="settings-note">Loading preferences…</p>}><SettingsPages page={page} navigate={setPage} /></Suspense>
+
           </div>
         </div>
 
-        <div className="mt-4 flex items-center justify-between gap-2">
-          <span className="text-[11px] text-[var(--color-fg3)]">
-            {active ? <>Bridge is <b className="text-[var(--color-fg2)]">active</b> this session.</>
-                    : <>Bridge is <b className="text-[var(--color-fg2)]">off</b> this session.</>}
-          </span>
-          <div className="flex gap-2">
-            {needsRelaunch && (
-              <button
-                onClick={() => void window.hive.relaunchApp()}
-                className="px-3 py-1.5 text-[12px] font-medium text-white bg-[var(--color-brand)] rounded hover:opacity-90"
-                title="Restart hivemind to apply"
-              >
-                Relaunch to apply
-              </button>
-            )}
-            <button
-              onClick={() => onOpenChange(false)}
-              className="px-3 py-1.5 text-[12px] text-[var(--color-fg2)] hover:text-[var(--color-fg)] rounded"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+      </SettingsDialog.Content>
+    </SettingsDialog.Portal>
+  </SettingsDialog.Root>
   );
 }
 
@@ -820,34 +733,26 @@ function InitWorkspacePrompt({
             if (valid && !pending) onConfirm(prefix);
           }}
         >
-          <label className="grid gap-1">
-            <span className="text-[11px] text-[var(--color-fg3)] uppercase tracking-wider">Issue prefix</span>
-            <input
+          <div className="grid gap-1">
+            <Label htmlFor="init-prefix">Issue prefix</Label>
+            <Input font="mono"
+              id="init-prefix"
               autoFocus
               value={prefix}
               onChange={(e) => setPrefix(e.target.value.toUpperCase())}
               placeholder="e.g. PAY"
-              className="w-full bg-[var(--color-bg)] border border-[var(--color-line2)] rounded-md px-2.5 py-1.5 text-[13px] font-mono text-[var(--color-fg)] focus:outline-none focus:border-[var(--color-brand)]"
             />
             {!valid && prefix.length > 0 && (
               <span className="text-[10.5px] text-[var(--color-err)]">UPPERCASE, 2–10 chars, starts with a letter</span>
             )}
-          </label>
+          </div>
           <div className="mt-4 flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => onOpenChange(false)}
-              className="px-3 py-1.5 text-[12px] text-[var(--color-fg2)] hover:text-[var(--color-fg)] rounded"
-            >
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
               Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={!valid || pending}
-              className="px-3 py-1.5 text-[12px] font-medium text-white bg-[var(--color-brand)] rounded hover:opacity-90 disabled:opacity-40"
-            >
+            </Button>
+            <Button type="submit" disabled={!valid || pending}>
               {pending ? "Initializing…" : "Initialize"}
-            </button>
+            </Button>
           </div>
         </form>
       </div>

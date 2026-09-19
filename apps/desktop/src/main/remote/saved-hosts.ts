@@ -8,7 +8,7 @@
  */
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, readFileSync, writeFileSync } from "node:fs";
 import { safeStorage } from "electron";
 import { hostIdOf } from "../../shared/remote-uri.js";
 import type { HostAuth } from "./conn.js";
@@ -47,6 +47,8 @@ function load(): SavedRow[] {
 function persist(rows: SavedRow[]): void {
   try {
     writeFileSync(STORE, JSON.stringify(rows, null, 2), { mode: 0o600 });
+    chmodSync(STORE, 0o600); // mode on writeFileSync only applies when it creates the file
+
   } catch {
     /* best-effort */
   }
@@ -63,8 +65,8 @@ export function listSavedHosts(): SavedHostPublic[] {
   }));
 }
 
-/** Upsert a saved host. Encrypts the password via safeStorage when available. */
-export function saveHost(host: string, port: number, user: string, auth: HostAuth): void {
+/** Upsert a saved host; false when a password was given but no keychain could hold it. */
+export function saveHost(host: string, port: number, user: string, auth: HostAuth): boolean {
   const hostId = hostIdOf(user || null, host, port);
   const rows = load().filter((r) => r.hostId !== hostId);
   const row: SavedRow = { hostId, host, port, user, privateKeyPath: auth.privateKeyPath };
@@ -73,6 +75,15 @@ export function saveHost(host: string, port: number, user: string, auth: HostAut
   }
   rows.push(row);
   persist(rows);
+  return !auth.password || !!row.encPassword;
+}
+
+/** Whether we hold a password this app can actually use for a host. */
+export function passwordState(hostId: string): "none" | "ready" | "unreadable" {
+  const saved = savedAuth(hostId);
+  if (!saved) return "none";
+  if (saved.passwordDecryptFailed) return "unreadable";
+  return saved.auth.password ? "ready" : "none";
 }
 
 /**

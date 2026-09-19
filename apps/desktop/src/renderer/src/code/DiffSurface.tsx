@@ -7,9 +7,11 @@
  * highlighter/diff workers come from that context) — DiffTile already provides it;
  * the Code Workbench provides its own around the editor area.
  */
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { CodeView } from "@pierre/diffs/react";
 import type { CodeViewItem } from "@pierre/diffs";
+import { Button } from "../components/ui/button";
 
 const MAX_PREVIEW_BYTES = 10 * 1024 * 1024;
 
@@ -29,10 +31,14 @@ export function DiffSurface({
     queryFn: () => window.hive.gitFileContents(repoPath, file, "WORKING"),
   });
   const data = q.data;
-  const oversized = data != null && new Blob([data]).size > MAX_PREVIEW_BYTES;
+  // Measured once per fetch, not per render: a Blob copies the whole file.
+  const bytes = useMemo(() => (data == null ? 0 : new Blob([data]).size), [data]);
+  const oversized = data != null && bytes > MAX_PREVIEW_BYTES;
   const binary = data != null && data.slice(0, 8192).indexOf("\0") !== -1;
-  const item: CodeViewItem | null =
-    data != null && !oversized && !binary
+  // Stable identity: CodeView compares the diff it prepared against the one it
+  // renders, so a fresh object on an unrelated re-render can make it throw.
+  const item: CodeViewItem<undefined> | null = useMemo(
+    () => (data != null && !oversized && !binary
       ? {
           id: `file:${file}`,
           type: "file",
@@ -42,14 +48,17 @@ export function DiffSurface({
             cacheKey: `${repoPath}:WORKING:${file}:${q.dataUpdatedAt}`,
           },
         }
-      : null;
+      : null),
+    [data, oversized, binary, file, repoPath, q.dataUpdatedAt],
+  );
+  const items = useMemo(() => (item ? [item] : []), [item]);
   return (
     <div className="h-full flex flex-col border-b border-[var(--color-line)]">
       <div className="flex items-center gap-2 px-3 py-1.5 bg-[var(--color-bg3)] text-[11px] font-mono shrink-0">
         <span className="text-[var(--color-fg)] truncate" title={file}>{file}</span>
         <span className="text-[var(--color-fg3)]">· working copy</span>
         {onClose && (
-          <button className="ml-auto text-[10px] text-[var(--color-fg3)]" onClick={onClose}>close</button>
+          <Button variant="ghost" size="xs" className="ml-auto" onClick={onClose}>close</Button>
         )}
       </div>
       <div className="flex-1 overflow-auto">
@@ -59,7 +68,7 @@ export function DiffSurface({
         )}
         {data != null && oversized && (
           <div className="p-3 text-[11px] text-[var(--color-warn)] font-mono">
-            file too large to preview ({(new Blob([data]).size / (1024 * 1024)).toFixed(1)} MB)
+            file too large to preview ({(bytes / (1024 * 1024)).toFixed(1)} MB)
           </div>
         )}
         {data != null && !oversized && binary && (
@@ -68,7 +77,7 @@ export function DiffSurface({
         {item && (
           <CodeView
             className="h-full w-full overflow-y-auto"
-            items={[item]}
+            items={items}
             options={{ theme: { dark: "pierre-dark", light: "pierre-light" }, themeType: "dark", overflow: "scroll" }}
           />
         )}

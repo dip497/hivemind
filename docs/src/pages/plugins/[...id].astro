@@ -1,0 +1,187 @@
+---
+/**
+ * One plugin, in full. The page exists so the decision to install is made here and not in a
+ * dialog: the disclosures are the ones the app computes, and the manifest below them is the
+ * whole file the app will read. Nothing is summarised into a claim the manifest does not make.
+ */
+import Shell from "../../layouts/Shell.astro";
+import { mark, type Icon } from "../../lib/mark";
+import catalog from "../../data/plugins.json";
+
+type Entry = (typeof catalog.plugins)[number] & {
+  icon?: Icon; bin?: string; does?: string[]; note?: string; manifest?: string;
+  worker?: boolean; resumes?: boolean; supervises?: boolean;
+  options?: { id: string; label: string; flag: string | null }[];
+  install?: { url?: string; command?: string };
+};
+
+export function getStaticPaths() {
+  return (catalog.plugins as { id: string }[]).map((p) => ({ params: { id: p.id } }));
+}
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+const p = (catalog.plugins as Entry[]).find((x) => x.id === Astro.params.id)!;
+const svg = mark(p.icon, 30);
+const isAgent = p.type === "agent";
+const cmd = `hive ${isAgent ? "agents" : "views"} install ${p.id}`;
+const does = p.does ?? [];
+
+/** What the manifest says it can do, in the app's own words. `false` is not a gap to fill —
+ *  it is the honest answer, and the note below says what it costs. */
+const traits = isAgent ? [
+  { label: "Resumes a session", on: !!p.resumes },
+  { label: "Reports when a turn ends", on: !!p.worker },
+  { label: "Can be supervised by another agent", on: !!p.supervises },
+] : [];
+---
+<Shell title={`${p.name} — Hivemind plugins`} description={p.description} nav="plugins">
+  <section class="wrap narrow head">
+    <a class="back" href={`${base}/plugins/`}>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>
+      All plugins
+    </a>
+
+    <div class="title">
+      <span class="mark">{svg ? <Fragment set:html={svg} /> : p.name[0]}</span>
+      <div>
+        <h1>{p.name}</h1>
+        <p class="meta">
+          <span>{isAgent ? "Agent" : "View"}</span>
+          {p.bin && <><span class="dot">·</span><span>runs <code>{p.bin}</code></span></>}
+          <span class="dot">·</span><span>by {p.author}</span>
+        </p>
+      </div>
+    </div>
+
+    <p class="lede">{p.description}</p>
+
+    <div class="install">
+      <code>{cmd}</code>
+      <button class="copy" type="button" data-copy={cmd}><span class="copy-label">Copy</span></button>
+    </div>
+    {p.homepage && <p class="sub"><a class="ext" href={p.homepage} rel="noreferrer">Source and documentation →</a></p>}
+  </section>
+
+  {does.length > 0 && (
+    <section class="wrap narrow block asks">
+      <h2>What it asks for</h2>
+      <p class="sub">Hivemind shows you this same list before it installs, and will not add this
+        plugin automatically because of it.</p>
+      <ul class="does">{does.map((d) => <li set:html={d.replace(/`([^`]+)`/g, "<code>$1</code>")} />)}</ul>
+    </section>
+  )}
+
+  {isAgent && (
+    <section class="wrap narrow block">
+      <h2>What it can do on the canvas</h2>
+      <ul class="traits">
+        {traits.map((t) => (
+          <li data-on={t.on ? "1" : undefined}>
+            <span class="tick">{t.on ? "✓" : "—"}</span>{t.label}
+          </li>
+        ))}
+      </ul>
+      {p.note && <p class="note">{p.note}</p>}
+    </section>
+  )}
+
+  {p.options && p.options.length > 0 && (
+    <section class="wrap narrow block">
+      <h2>Options</h2>
+      <p class="sub">Set per tile, before the agent starts.</p>
+      <ul class="opts">
+        {p.options.map((o) => (
+          <li><span class="opt-label">{o.label}</span>{o.flag && <code>{o.flag}</code>}</li>
+        ))}
+      </ul>
+    </section>
+  )}
+
+  {p.install?.command && (
+    <section class="wrap narrow block">
+      <h2>Installing the CLI itself</h2>
+      <p class="sub">Hivemind runs a command that is already on your machine — it never installs
+        one for you. This is the publisher's own instruction.</p>
+      <pre class="code"><code>{p.install.command}</code></pre>
+    </section>
+  )}
+
+  {p.manifest && (
+    <section class="wrap narrow block">
+      <h2>The manifest</h2>
+      <p class="sub">The whole file, as the app reads it. Everything above is derived from it.</p>
+      <details class="src">
+        <summary>Read <code>agent.yaml</code></summary>
+        <pre class="code"><code>{p.manifest}</code></pre>
+      </details>
+    </section>
+  )}
+
+  <script is:inline>
+    // Copy confirms in place and says so in words, never in motion alone.
+    document.querySelectorAll("[data-copy]").forEach((btn) => {
+      const label = btn.querySelector(".copy-label");
+      const original = label.textContent;
+      let timer;
+      btn.addEventListener("click", async () => {
+        try { await navigator.clipboard.writeText(btn.dataset.copy); } catch { return; }
+        label.textContent = "Copied";
+        btn.dataset.done = "1";
+        clearTimeout(timer);
+        timer = setTimeout(() => { label.textContent = original; delete btn.dataset.done; }, 1600);
+      });
+    });
+  </script>
+
+  <style>
+    .head{padding-top:40px}
+    .back{display:inline-flex;align-items:center;gap:6px;font-size:13.5px;color:var(--fg3);
+      text-decoration:none;font-family:var(--f-m);transition:color var(--d2) ease}
+    @media (hover:hover) and (pointer:fine){ .back:hover{color:var(--fg)} }
+    .title{display:flex;align-items:center;gap:14px;margin-top:22px}
+    .mark{width:46px;height:46px;flex-shrink:0;display:grid;place-items:center;border-radius:9px;
+      background:var(--bg2);border:1px solid var(--line);color:var(--fg2);font-weight:600;font-size:18px}
+    .mark svg{display:block}
+    .meta{margin-top:5px;font-family:var(--f-m);font-size:12.5px;color:var(--fg3);display:flex;gap:7px;flex-wrap:wrap}
+    .meta code{color:var(--fg2)}
+    .dot{opacity:.5}
+    .lede{margin-top:20px}
+
+    .install{margin-top:24px;display:flex;align-items:center;gap:10px;
+      background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:11px 11px 11px 15px}
+    .install code{flex:1;min-width:0;font-size:13.5px;color:var(--fg);overflow-x:auto;white-space:nowrap}
+    .copy{font:inherit;font-family:var(--f-m);font-size:12px;cursor:pointer;color:var(--fg3);
+      background:var(--bg);border:1px solid var(--line2);border-radius:5px;padding:5px 11px;flex-shrink:0;
+      transition-property:color,border-color,scale;transition-duration:var(--d2);transition-timing-function:ease}
+    .copy:active{scale:.96;transition-duration:var(--d1);transition-timing-function:var(--ease)}
+    .copy[data-done]{color:var(--ok);border-color:color-mix(in oklab,var(--ok) 45%,transparent)}
+    @media (hover:hover) and (pointer:fine){ .copy:hover{color:var(--fg);border-color:var(--fg3)} }
+    .ext{color:var(--fg2);text-decoration:none;border-bottom:1px solid var(--line2);padding-bottom:1px}
+    @media (hover:hover) and (pointer:fine){ .ext:hover{color:var(--fg);border-color:var(--fg3)} }
+
+    .block{margin-top:44px}
+    .block h2{font-size:17px}
+    ul{list-style:none;margin:14px 0 0;padding:0}
+    .does li, .traits li, .opts li{border-bottom:1px solid var(--line);padding:11px 0;font-size:14.5px;color:var(--fg2)}
+    .does li:first-child, .traits li:first-child, .opts li:first-child{border-top:1px solid var(--line)}
+    .does code, .opts code{font-size:13px;color:var(--fg)}
+    /* The asks block is the one thing on the page that must not be skimmed past. */
+    .asks .does li{padding-left:13px;border-left:2px solid var(--working)}
+    .traits li{display:flex;align-items:center;gap:10px;color:var(--fg3)}
+    .traits li[data-on]{color:var(--fg2)}
+    .tick{font-family:var(--f-m);width:14px;color:var(--fg3)}
+    .traits li[data-on] .tick{color:var(--ok)}
+    .opts li{display:flex;align-items:center;gap:10px}
+    .opt-label{color:var(--fg2)}
+    .note{margin-top:14px;font-size:14px;line-height:1.55;color:var(--fg3);
+      border-left:2px solid var(--line2);padding-left:13px}
+
+    .code{background:var(--bg2);color:var(--fg2);font-family:var(--f-m);font-size:12.5px;line-height:1.65;
+      padding:15px 17px;border:1px solid var(--line);border-radius:7px;margin:14px 0 0;
+      overflow-x:auto;white-space:pre}
+    .src summary{cursor:pointer;font-size:14px;color:var(--fg3);padding:11px 0;border-top:1px solid var(--line);
+      border-bottom:1px solid var(--line);margin-top:14px;transition:color var(--d2) ease}
+    @media (hover:hover) and (pointer:fine){ .src summary:hover{color:var(--fg)} }
+    .src[open] summary{border-bottom:0}
+  </style>
+</Shell>

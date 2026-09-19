@@ -2,7 +2,7 @@
  * Turn-aware delivery for agent-to-agent messages.
  *
  * THE BUG THIS EXISTS FOR: every HCP message to an agent (a worker's report, an
- * approval request, a hive_send) is DELIVERED BY TYPING INTO ITS TUI — text, then
+ * approval request, an agent.send) is DELIVERED BY TYPING INTO ITS TUI — text, then
  * Enter. That only works if the agent is sitting at its prompt. Fire it while the
  * agent is mid-turn (running a tool, streaming a reply) and the text lands in the
  * composer unsubmitted: the Enter is swallowed, the message is never read, and

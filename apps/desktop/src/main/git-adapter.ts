@@ -448,6 +448,8 @@ export async function gitDiff(
   file?: string
 ): Promise<DiffPayload> {
   const args = ["diff", "--no-color", "--no-ext-diff"];
+  // Reindent-only changes drown a review; every IDE offers this switch.
+  if (scope.ignoreWhitespace) args.push("--ignore-all-space", "--ignore-blank-lines");
   let branchBase: string | null = null;
   if (scope.kind === "working") {
     if (scope.staged) args.push("--staged");
@@ -498,7 +500,9 @@ export async function gitDiff(
         : scope.kind === "unpushed"
           ? `unpushed-${branchBase ?? scope.base ?? "upstream"}`
           : `commit-${scope.sha}`;
-  const cacheKey = `${repoPath}:${head}:${scopeKey}${file ? `:${file}` : ""}`;
+  // The flag changes the patch, so it has to change the key Pierre caches on.
+  const ws = scope.ignoreWhitespace ? ":nows" : "";
+  const cacheKey = `${repoPath}:${head}:${scopeKey}${ws}${file ? `:${file}` : ""}`;
   return { patch, cacheKey };
 }
 

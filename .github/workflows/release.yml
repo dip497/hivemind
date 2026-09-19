@@ -54,7 +54,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: "1.1"
+          bun-version: "1.3"
 
       - name: pnpm install (workspace)
         run: pnpm install --frozen-lockfile
@@ -64,8 +64,12 @@ jobs:
       # DO NOT `strip` the CLI binary. `bun build --compile` appends the JS bundle
       # to the executable with a trailer; `strip` corrupts that trailer and the
       # binary silently degrades to raw Bun (hive --version → bun's version, hive
-      # init → "Start an empty Bun project"). It broke EVERY hive subcommand +
-      # the hive MCP server in v1.10.6/1.10.7 for ~1MB of savings. Never re-add it.
+      # init → "Start an empty Bun project"). It broke EVERY hive subcommand
+      # in v1.10.6/1.10.7 for ~1MB of savings. Never re-add it.
+
+      - name: Smoke-test the compiled daemon
+        working-directory: apps/cli
+        run: HIVE_BIN="$PWD/dist/hive" bun test tests/sessions.test.ts
 
       - name: Build renderer + main
         run: pnpm --filter @hivemind/desktop run build
@@ -88,21 +92,6 @@ jobs:
           cp -r apps/desktop/out desktop-deploy/
           # electron-builder reads linux.icon (icons/icon.png) from the deploy dir.
           cp -r apps/desktop/icons desktop-deploy/
-
-      - name: Drop optional native dep cpu-features
-        # ssh2 (remote SSH frames) lists `cpu-features` as an OPTIONAL dep — it
-        # only picks a faster cipher when present, and falls back to pure JS
-        # otherwise. electron-builder's native rebuild still tries to node-gyp
-        # it and dies on the runner ("buildcheck.gypi not found"). It resolves
-        # cpu-features from BOTH the deploy dir and the hoisted workspace-root
-        # pnpm store, so nuke every copy in the tree; ssh2 works without it.
-        # Remove the package dirs, the `cpu-features@<ver>` pnpm-store wrappers,
-        # AND the dangling symlinks pnpm leaves in each `.pnpm/node_modules`
-        # (a leftover symlink makes electron-builder ENOENT on stat). After
-        # this, cpu-features is simply an unresolved OPTIONAL dep — non-fatal.
-        run: |
-          find "$GITHUB_WORKSPACE" \( -name 'cpu-features' -o -name 'cpu-features@*' \) -prune -exec rm -rf {} + 2>/dev/null || true
-          echo "remaining cpu-features entries:"; find "$GITHUB_WORKSPACE" -name 'cpu-features*' 2>/dev/null || true
 
       - name: Package AppImage
         # Run electron-builder INSIDE the deployed copy so node_modules are
@@ -135,6 +124,59 @@ jobs:
           name: linux-x86_64
           path: release-assets/
 
+  # CLI only: an arm64 Linux box is a remote machine (`hive daemon`), not a desktop.
+  # Not yet proven on a release, so a failure here ships the release without it.
+  build-linux-arm64:
+    name: build linux arm64 cli
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    continue-on-error: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3"
+
+      - name: pnpm install (workspace)
+        run: pnpm install --frozen-lockfile
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+
+      - name: Build CLI single-binary
+        run: pnpm --filter @hivemind/cli run build
+
+      - name: Smoke-test the compiled daemon
+        working-directory: apps/cli
+        run: |
+          file dist/hive | grep -q aarch64
+          HIVE_BIN="$PWD/dist/hive" bun test tests/sessions.test.ts
+
+      - name: Stage release artifacts
+        run: |
+          mkdir -p release-assets
+          cp apps/cli/dist/hive release-assets/hive-linux-arm64
+          chmod +x release-assets/hive-linux-arm64
+
+      - name: Upload artifacts (workflow result)
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-arm64
+          path: release-assets/
+
   build-macos:
     name: build macos arm64
     runs-on: macos-14  # Apple Silicon runner
@@ -157,7 +199,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: "1.1"
+          bun-version: "1.3"
 
       - name: pnpm install (workspace)
         run: pnpm install --frozen-lockfile
@@ -178,12 +220,6 @@ jobs:
         run: |
           cp -r apps/desktop/out desktop-deploy/
           cp -r apps/desktop/icons desktop-deploy/
-
-      - name: Drop optional native dep cpu-features
-        # Same reason as the linux job: ssh2's OPTIONAL cpu-features dep breaks
-        # electron-builder's native rebuild; ssh2 works fine without it.
-        run: |
-          find "$GITHUB_WORKSPACE" \( -name 'cpu-features' -o -name 'cpu-features@*' \) -prune -exec rm -rf {} + 2>/dev/null || true
 
       - name: Package .app + ad-hoc sign + zip
         # electron-builder is told to emit a bare `dir` (the .app) and to SKIP
@@ -271,7 +307,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: "1.1"
+          bun-version: "1.3"
 
       - name: pnpm install (workspace)
         run: pnpm install --frozen-lockfile
@@ -373,7 +409,7 @@ jobs:
 
   publish:
     name: publish github release
-    needs: [build-linux, build-macos]
+    needs: [build-linux, build-linux-arm64, build-macos]
     # A tag push always publishes. A MANUAL run only publishes when it explicitly
     # asks to — the default is build-only, so dispatching to smoke-test a build
     # can never cut an accidental release.
@@ -410,6 +446,7 @@ jobs:
           # Windows assets are built but NOT listed here — see build-windows.
           files: |
             release-assets/hive-linux-x86_64
+            release-assets/hive-linux-arm64
             release-assets/hive-darwin-arm64
             release-assets/*.AppImage
             release-assets/*-mac.zip

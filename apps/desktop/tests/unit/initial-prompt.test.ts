@@ -1,6 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { applyInitialPrompt, INITIAL_PROMPT_ENV, stripInitialPrompt, deliversPromptViaArgv } from "../../src/shared/agent-io.ts";
+import { useAuthoredAgents } from "./authored-agents.ts";
+
+// promptDelivery is a catalog capability: load the published fixtures.
+useAuthoredAgents();
 
 test("applyInitialPrompt: appends the prompt as claude's trailing positional argv", () => {
   const { args } = applyInitialPrompt(

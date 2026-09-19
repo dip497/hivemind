@@ -1,0 +1,48 @@
+# Gemini — built-in provider manifest.
+# Authoring format for the def half. See packages/hive-agents/src/manifest.ts.
+manifestVersion: 1
+id: gemini
+label: Gemini
+bin: gemini
+enabled: true
+caps:
+  promptDelivery: typed
+  turnSignal: false
+  resume: none
+  supervise: human
+  blockedDetection: true
+icon:
+  viewBox: 0 0 24 24
+  attrs:
+    fill: currentColor
+  shapes:
+  - path:
+      d: "M11.04 19.32Q12 21.51 12 24q0-2.49.93-4.68.96-2.19 2.58-3.81t3.81-2.55Q21.51 12 24 12q-2.49 0-4.68-.93a12.3 12.3 0 0 1-3.81-2.58 12.3 12.3 0 0 1-2.58-3.81Q12 2.49 12 0q0 2.49-.96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93 3.81 2.55t2.55 3.81"
+options:
+- id: model
+  label: Model
+  flag: --model
+- id: mode
+  label: Approval
+  flag: --approval-mode
+  unattended: yolo
+install:
+  url: https://geminicli.com/docs/get-started/installation/
+  command: "npm install -g @google/gemini-cli"
+detect:
+  rules:
+  - when:
+      contains: waiting for user confirmation
+    then: blocked
+  - when:
+      any:
+      - containsCS: │ Apply this change
+      - containsCS: │ Allow execution
+      - containsCS: │ Do you want to proceed
+      - helper: hasConfirmationPrompt
+    then: blocked
+  - when:
+      contains: esc to cancel
+    then: working
+  default: idle
+note: launches and reads status; other agents cannot collect its replies.

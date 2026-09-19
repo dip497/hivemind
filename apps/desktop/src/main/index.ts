@@ -1,3 +1,5 @@
+import { installViewManagementIpc } from "./view-packages.js";
+import { installPluginCatalogIpc } from "./plugin-catalog-ipc.js";
 /** Electron main process — owns the BrowserWindow + IPC + PtyHost + git/worktree. */
 import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, screen, session, shell, webContents, type WebContents } from "electron";
 import path from "node:path";
@@ -10,6 +12,10 @@ import {
   createIssue,
   deleteIssue as deleteIssueCore,
   findRoot,
+  normalizeComments,
+  readComments,
+  reviewRoot,
+  writeComments,
   linkIssues,
   listIssues,
   listWorkspaces,
@@ -21,23 +27,27 @@ import {
   updateIssue,
   writeAgentContext,
   writeConfig,
-  templates,
+  installAgenticStack as coreInstallAgenticStack,
   type IssueState,
   type LinkType,
 } from "@hivemind/core";
 import os from "node:os";
+import { agentById, agentForCmd, getCatalog, preferredAgent, setCatalog, type AgentProviderDef } from "@hivemind/agents";
+import { agentPresence, discoverOptions, findBin, verifyAgent } from "@hivemind/agents/discover";
+import { agentAllowedIn, loadAgents, toWire } from "@hivemind/agents/load";
 import type { IssuePatch } from "@hivemind/core/types";
 import * as ptyHost from "./pty-host.js";
 import * as ptyDaemon from "./daemon-client.js";
 import { PtyOutputBuffer } from "./pty-output-buffer.js";
-import { isRemote, parseRemote, formatRemote } from "../shared/remote-uri.js";
-import { listSavedHosts, saveHost, savedAuth, forgetSavedHost } from "./remote/saved-hosts.js";
+import { isRemote, parseRemote } from "../shared/remote-uri.js";
+import { savedAuth } from "./remote/saved-hosts.js";
+import { addMachine, checkMachine, initMachines, installOnMachine, machineSessions, reconnectMachineHost, removeMachine, setMachinePassword, snapshot as machinesSnapshot, updateMachine } from "./remote/machines.js";
 import {
   spawnRemotePty, writeRemotePty, resizeRemotePty, killRemotePty, hasRemotePty,
-  pauseRemotePty, resumeRemotePty,
+  pauseRemotePty, resumeRemotePty, detachRemotePty, setRemoteEventSink,
 } from "./remote/pty.js";
 import { readRemoteFile, writeRemoteFile } from "./remote/git.js";
-import { remoteConns, type HostAuth } from "./remote/conn.js";
+import { remoteConns } from "./remote/conn.js";
 // tmux-style persistence is ON by default — terminal sessions live in a
 // detached daemon and survive the window closing. No user-facing flag.
 // `HIVEMIND_PTY_DAEMON=0` is an internal escape hatch (debugging / a hostile
@@ -71,21 +81,25 @@ import { unwatchAll, watchRepo } from "./fs-watcher.js";
 import { registerAgentNotifications } from "./agent-notify.js";
 import { getNotificationSettings, setNotificationSettings } from "./notification-settings-store.js";
 import { normalizeNotificationSettings } from "../shared/notification-settings.js";
-import type { AppErrorEvent } from "../shared/ipc.js";
+import type { AppErrorEvent, MachineAddRequest } from "../shared/ipc.js";
 import { startPlanBridge, type PlanRequest } from "./plan-bridge.js";
 import { randomUUID } from "node:crypto";
 import { startHcpServer } from "./hcp/hcp-server.js";
-import { makeDispatch } from "./hcp/methods.js";
+import { makeSpawnPacer } from "./spawn-pacer.js";
+import { makeDispatch, type Dispatcher } from "./hcp/methods.js";
 import { labelOf as hcpLabelOf } from "./hcp/names.js";
 import { Mailbox } from "./hcp/mailbox.js";
 import { TurnTracker } from "./hcp/turn-tracker.js";
 import { SubagentTracker } from "./hcp/subagent-tracker.js";
-import { hiveBinCandidates, ipcPath, upgradeCommand } from "./platform.js";
+import { ipcPath, upgradeCommand } from "./platform.js";
 import { SubagentReaper } from "./hcp/subagent-reaper.js";
 import { notifyStatusFor } from "./hcp/notification-map.js";
 import { OutputRecorder } from "./hcp/output-recorder.js";
 import { readOrCreateToken, hcpSockPath } from "./hcp/token.js";
 import { HcpError } from "./hcp/protocol.js";
+import { handleViewProtocol, listViewPackages, registerViewScheme, startViewWatchdog } from "./view-packages.js";
+import { installSettingsIpc, reloadSettings, getSettings as getAppSettings } from "./settings-store.js";
+import { patchSettingsExtras } from "@hivemind/core/settings";
 import { PipeManager } from "./hcp/pipes.js";
 import { readLastAssistantMessage } from "./hcp/transcript.js";
 import { toBareId, toPtyId } from "../shared/tile-id.js";
@@ -259,8 +273,8 @@ async function createWindow(): Promise<void> {
     height: state.height,
     ...(typeof state.x === "number" ? { x: state.x } : {}),
     ...(typeof state.y === "number" ? { y: state.y } : {}),
-    minWidth: 1100,
-    minHeight: 700,
+    minWidth: 720,
+    minHeight: 560,
     backgroundColor: "#0d0e12",
     // Window / taskbar icon (Linux). The AppImage's desktop icon comes from
     // electron-builder's linux.icon; this sets the live window icon too.
@@ -386,15 +400,18 @@ async function createWindow(): Promise<void> {
     }
   });
 
+  const stopViewWatchdog = startViewWatchdog(mainWindow);
   mainWindow.on("closed", () => {
     // Use the pre-captured wc — mainWindow.webContents getter throws after
     // the window is destroyed. unwatchAll just needs the reference to clean
     // up watchers keyed off it; it doesn't call methods on a dead object.
     try { unwatchAll(wc); } catch { /* watcher map already cleaned */ }
+    stopViewWatchdog();
     mainWindow = null;
   });
   wc.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    // Only web links reach the OS: plugin manifests supply some of these URLs.
+    if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
     return { action: "deny" };
   });
 
@@ -477,7 +494,7 @@ ipcMain.handle("resolveProject", wrap(async (e, rootHint?: string) => {
 
 // ── BrowserTile CDP bridge ────────────────────────────────────
 // Each BrowserTile registers its <webview> guest's webContents id here, keyed
-// by tileId. An agent (or in-app automation / MCP tool) then drives the VISIBLE
+// by tileId. An agent (or in-app automation / `hive ctl`) then drives the VISIBLE
 // tile by sending raw Chrome DevTools Protocol commands through `browserCdp` —
 // Page.navigate, Input.dispatchMouseEvent (click), DOM.getDocument,
 // Page.captureScreenshot, Runtime.evaluate, etc. This is the whole reason to
@@ -557,7 +574,7 @@ ipcMain.handle("getBrowserSettings", () => ({
   port: process.env.HIVEMIND_BROWSER_CDP_PORT ?? "9333",
 }));
 ipcMain.handle("setBrowserCdpEnabled", wrap(async (_e, enabled: boolean) => {
-  writeSettings({ browserCdp: !!enabled });
+  await writeSettings({ browserCdp: !!enabled });
   return { ok: true as const };
 }));
 
@@ -567,7 +584,7 @@ ipcMain.handle("setBrowserCdpEnabled", wrap(async (_e, enabled: boolean) => {
 // own snapshot on load + on every change here (pushed back via the setter).
 ipcMain.handle("getNotificationSettings", () => getNotificationSettings());
 ipcMain.handle("setNotificationSettings", wrap(async (_e, s: unknown) => {
-  setNotificationSettings(normalizeNotificationSettings(s));
+  await setNotificationSettings(normalizeNotificationSettings(s));
   return { ok: true as const };
 }));
 // The install.sh launcher (`~/.local/bin/hivemind`). Relaunching THROUGH it is
@@ -729,95 +746,21 @@ ipcMain.handle(
     await writeConfig(root, { prefix, next_id: 1, agents: {} });
     await writeAgentContext(root);
     // Install the agentic stack by default — a brand-new workspace should be
-    // agent-ready so "Work on this" actually works (claude gets the hive MCP +
-    // hive-work skill). Idempotent.
-    await installAgenticStack(dir, root);
+    // agent-ready so "Work on this" actually works (the agent gets the hive
+    // skills + CLAUDE.md section). Idempotent.
+    await installAgenticStack(dir);
     return { root };
   })
 );
 
-// Resolve the installed `hive` CLI for .mcp.json (claude's MCP spawns it).
-async function resolveHiveCliPath(): Promise<string> {
-  const exe = process.platform === "win32" ? "hive.exe" : "hive";
-  const candidates = [
-    ...hiveBinCandidates(os.homedir()),
-    ...(process.env.PATH ?? "").split(path.delimiter).filter(Boolean).map((d) => path.join(d, exe)),
-  ];
-  for (const p of candidates) {
-    try {
-      const st = await fsp.stat(p);
-      if (st.isFile()) return p;
-    } catch {
-      /* not here */
-    }
-  }
-  return "hive";
-}
-
-// Idempotent installer for the agentic stack (mirrors `hive init --agentic`):
-// CLAUDE.md agentic section + .mcp.json (merged) + .claude/skills/hive-work.
-// Without this, a spawned claude has no hive MCP tools / skill, so working an
-// issue silently does nothing — the gap the user hit.
-async function installAgenticStack(dir: string, root: string): Promise<void> {
-  const hiveCli = await resolveHiveCliPath();
-
-  const claudePath = path.join(dir, "CLAUDE.md");
-  const MARK = /<!--\s*hivemind:agentic:start\s*-->[\s\S]*?<!--\s*hivemind:agentic:end\s*-->\n?/;
-  try {
-    const existing = await fsp.readFile(claudePath, "utf8");
-    const next = MARK.test(existing)
-      ? existing.replace(MARK, templates.agenticClaudeAppend().trim() + "\n")
-      : existing + templates.agenticClaudeAppend();
-    await fsp.writeFile(claudePath, next, "utf8");
-  } catch {
-    await fsp.writeFile(
-      claudePath,
-      `# CLAUDE.md\n\n(Project rules go here.)\n${templates.agenticClaudeAppend()}`,
-      "utf8",
-    );
-  }
-
-  const mcpPath = path.join(dir, ".mcp.json");
-  const ours = JSON.parse(templates.mcpJson(hiveCli, root)) as { mcpServers: Record<string, unknown> };
-  let merged: { mcpServers?: Record<string, unknown> } = {};
-  try {
-    merged = JSON.parse(await fsp.readFile(mcpPath, "utf8")) as typeof merged;
-  } catch {
-    /* fresh */
-  }
-  merged.mcpServers = { ...(merged.mcpServers ?? {}), ...ours.mcpServers };
-  await fsp.writeFile(mcpPath, JSON.stringify(merged, null, 2) + "\n", "utf8");
-
-  const skillPath = path.join(dir, ".claude", "skills", "hive-work", "SKILL.md");
-  try {
-    await fsp.stat(skillPath);
-  } catch {
-    await fsp.mkdir(path.dirname(skillPath), { recursive: true });
-    await fsp.writeFile(skillPath, templates.HIVE_WORK_SKILL, "utf8");
-  }
-
-  // hive-browser skill — lets a spawned agent drive a Browser tile over CDP.
-  // Just a markdown file (zero runtime deps): the agent-browser CLI is fetched
-  // on demand via npx, and the CDP bridge stays opt-in. Write-if-absent so we
-  // never clobber a user's edits.
-  const browserSkillPath = path.join(dir, ".claude", "skills", "hive-browser", "SKILL.md");
-  try {
-    await fsp.stat(browserSkillPath);
-  } catch {
-    await fsp.mkdir(path.dirname(browserSkillPath), { recursive: true });
-    await fsp.writeFile(browserSkillPath, templates.hiveBrowserSkill(), "utf8");
-  }
-
-  // hive-workflow skill — teaches an agent to fan work out via hive_workflow.
-  // This one is hivemind-managed: unlike the write-if-absent skills above, it is
-  // REGENERATED on every init so it tracks the app version across upgrades.
-  try {
-    const workflowSkillPath = path.join(dir, ".claude", "skills", "hive-workflow", "SKILL.md");
-    await fsp.mkdir(path.dirname(workflowSkillPath), { recursive: true });
-    await fsp.writeFile(workflowSkillPath, templates.hiveWorkflowSkill(), "utf8");
-  } catch {
-    /* best-effort — a skill write failure must not block init */
-  }
+// Idempotent installer for the agentic stack (the same code path as `hive init`
+// — @hivemind/core's installAgenticStack): CLAUDE.md agentic section + the
+// hive skills (hive-work / hive-workflow / hivemind / hive-browser) + retirement
+// of a stale `.mcp.json` hive entry. Without this, a spawned agent has no skill
+// telling it how to work an issue with `hive`, so "Work on this" would silently
+// do nothing — the gap the user hit.
+async function installAgenticStack(dir: string): Promise<void> {
+  await coreInstallAgenticStack(dir);
 }
 
 // Ensure the agentic stack exists for an already-initialized workspace (called
@@ -831,7 +774,7 @@ ipcMain.handle(
     // has nothing to install, and throwing here surfaced a noisy main-process
     // "Error occurred in handler for 'installAgentic'" for an expected state.
     if (!root) return { ok: false, reason: "no-workspace" as const };
-    await installAgenticStack(dir, root);
+    await installAgenticStack(dir);
     return { ok: true as const };
   }),
 );
@@ -900,6 +843,13 @@ ipcMain.handle("deleteIssue", wrap(async (_e, root: string, id: string) => {
   await deleteIssueCore(root, id);
   await writeAgentContext(root);
 }));
+
+// review comments — the workspace owns them, so the CLI and an agent see the
+// same list the diff tile is showing.
+ipcMain.handle("reviewList", wrap(async (_e, repoPath: string) =>
+  readComments(await reviewRoot(repoPath))));
+ipcMain.handle("reviewSave", wrap(async (_e, repoPath: string, comments: unknown) =>
+  writeComments(await reviewRoot(repoPath), normalizeComments(comments))));
 
 // git
 ipcMain.handle("gitStatus", wrap((_e, repoPath: string) => gitStatus(repoPath)));
@@ -1075,37 +1025,16 @@ remoteConns.setAuthResolver((hostId) => {
   if (!saved || saved.passwordDecryptFailed) return null;
   return saved.auth;
 });
-ipcMain.handle("sshConnect", wrap(async (_e, uri: string, auth: HostAuth, remember?: boolean) => {
-  const { home, hostId } = await remoteConns.probe(uri, auth ?? {});
-  if (remember) {
-    const t = parseRemote(uri);
-    saveHost(t.host, t.port, t.user ?? auth?.username ?? "", auth ?? {});
-  }
-  return { home, hostId };
-}));
-// Saved connections (host/user/port + keychain-encrypted password).
-ipcMain.handle("sshSavedHosts", wrap(async () => listSavedHosts()));
-ipcMain.handle("sshForgetHost", wrap(async (_e, hostId: string) => { forgetSavedHost(hostId); }));
-// Connect using a saved host's stored credentials; returns the bits the picker
-// needs to rebuild the uri + browse. The connection is then pooled by hostId,
-// so sshListDir reuses it with no further auth.
-ipcMain.handle("sshConnectSaved", wrap(async (_e, hostId: string) => {
-  const saved = savedAuth(hostId);
-  if (!saved) throw new Error("saved host not found");
-  // A stored password we can't decrypt (keychain key changed — e.g. the app was
-  // renamed) would otherwise fall through to a credential-less connect and a
-  // cryptic "All configured authentication methods failed". Fail loud + clear so
-  // the UI can prompt re-entry. (Connecting anyway with an empty password is
-  // never what the user wants here.)
-  if (saved.passwordDecryptFailed) {
-    throw new Error(
-      "SAVED_PASSWORD_UNREADABLE: the saved password can't be decrypted (the app keychain changed) — re-enter it",
-    );
-  }
-  const uri = formatRemote({ host: saved.host, port: saved.port, user: saved.user || null, path: "/" });
-  const { home } = await remoteConns.probe(uri, saved.auth);
-  return { home, host: saved.host, port: saved.port, user: saved.user };
-}));
+// Machines: the catalog `hive machine` edits, plus each host's live state.
+ipcMain.handle("machines:get", wrap(async () => machinesSnapshot()));
+ipcMain.handle("machines:add", wrap(async (_e, req: MachineAddRequest) => addMachine(req)));
+ipcMain.handle("machines:check", wrap(async (_e, id: string) => checkMachine(String(id))));
+ipcMain.handle("machines:install", wrap(async (_e, id: string) => installOnMachine(String(id))));
+ipcMain.handle("machines:update", wrap(async (_e, id: string, patch: { label?: string; enabled?: boolean }) => updateMachine(String(id), patch ?? {})));
+ipcMain.handle("machines:remove", wrap(async (_e, id: string) => removeMachine(String(id))));
+ipcMain.handle("machines:set-password", wrap(async (_e, id: string, password: string) => setMachinePassword(String(id), String(password))));
+ipcMain.handle("machines:sessions", wrap(async (_e, uri: string | null) => machineSessions(uri ? String(uri) : null)));
+ipcMain.handle("machines:reconnect", wrap(async (_e, hostId: string) => { reconnectMachineHost(String(hostId)); }));
 // List a remote directory for the folder picker. `dir` empty → the host's home.
 ipcMain.handle("sshListDir", wrap(async (_e, uri: string, dir: string) => {
   const target = parseRemote(uri);
@@ -1127,18 +1056,9 @@ ipcMain.handle("worktreeRemove", wrap((_e, repoPath: string, wtPath: string, for
 ipcMain.handle("worktreePrune", wrap((_e, repoPath: string) => worktreePrune(repoPath)));
 
 // PTY
-// Sliding-window spawn rate-limit (see ptySpawn handler).
-const PTY_SPAWN_WINDOW_MS = 10_000;
-const PTY_SPAWN_MAX = 24;
-let ptySpawnTimes: number[] = [];
-function recordPtySpawn(): void {
-  const now = Date.now();
-  ptySpawnTimes = ptySpawnTimes.filter((t) => now - t < PTY_SPAWN_WINDOW_MS);
-  if (ptySpawnTimes.length >= PTY_SPAWN_MAX) {
-    throw new Error("pty spawn rate limit exceeded — too many terminals spawned at once");
-  }
-  ptySpawnTimes.push(now);
-}
+// Sliding-window spawn rate-limit (see ptySpawn handler): over the limit a spawn waits
+// for room rather than failing, so restoring a large workspace no longer kills tiles.
+const recordPtySpawn = makeSpawnPacer({ windowMs: 10_000, max: 24, queueMax: 128 });
 
 // HCP (control plane) shared state — the output recorder + turn tracker are fed
 // from the SAME pty data main relays to the renderer (tee'd in the onData
@@ -1200,7 +1120,7 @@ const hcpWriteToTile = (tileId: string, data: string): boolean => {
   return false; // dead/unknown tile → agent.send surfaces TILE_NOT_FOUND
 };
 // Turn-aware delivery for every agent-to-agent message (reports, approval
-// requests, hive_send). Typing into a MID-TURN TUI drops the text in the composer
+// requests, agent.send). Typing into a MID-TURN TUI drops the text in the composer
 // unsubmitted — the message is never read and whoever waits on it hangs. The
 // mailbox holds it until the tile is back at its prompt. See hcp/mailbox.ts.
 const hcpMailbox = new Mailbox(hcpWriteToTile, SUBMIT_DELAY_MS);
@@ -1213,7 +1133,7 @@ let hcpForgetTile: (tileId: string) => void = () => {};
 // tile.close that killed it). Both the local and remote onExit handlers funnel
 // through here so no teardown path leaks HCP state — previously only the
 // `tile.close` VERB cleaned the methods.ts maps, so a crashed/user-closed worker
-// leaked every per-tile map and left a blocked hive_read/approval hanging.
+// leaked every per-tile map and left a blocked agent.read/approval hanging.
 const onPtyExit = (tileId: string): void => {
   const bare = toBareId(tileId);
   hcpSubagentReaper.cancel(bare);
@@ -1284,13 +1204,29 @@ function setPtyPaused(tileId: string, paused: boolean): void {
   else resumePty(tileId);
 }
 
+/** bare tileId → provider id, recorded at every agent spawn so HCP can check a
+ *  provider's capabilities before reading from / gathering it. */
+const hcpAgentOf = new Map<string, string>();
+
+// The boot agent scan, kept as a promise: the first frame must not wait on it,
+// but an HCP spawn/bind must not race it — a just-installed agent only resolves
+// by id once the scan has set the catalog.
+let agentsScanned: Promise<void> = Promise.resolve();
+
 ipcMain.handle("ptySpawn", wrap(async (e, opts: Parameters<typeof spawnPty>[0]) => {
+  const spawning = agentForCmd(opts.cmd);
+  // An agent a repository ships runs in that repository, not wherever a tile happens to be.
+  if (spawning && !agentAllowedIn(spawning, opts.cwd)) {
+    throw new Error(`${spawning.label} comes from ${spawning.sourceRoot} and only runs in tiles there`);
+  }
+  { const d = spawning; if (d) hcpAgentOf.set(toBareId(opts.tileId), d.id); else hcpAgentOf.delete(toBareId(opts.tileId)); }
   // Spawn rate-limit: a compromised renderer (XSS via rendered diff/issue
   // content) could fork-bomb the host through ptySpawn. Cap spawns per sliding
   // window — the dev-bridge already guards the identical call; the IPC path
   // must too. And reject a non-directory cwd up front (otherwise it surfaces as
   // an opaque node-pty throw later).
-  recordPtySpawn();
+  // Showing an existing session starts no process, so it cannot fork-bomb anything.
+  if (!("attachOnly" in opts && opts.attachOnly)) await recordPtySpawn();
   // Supervised worker? Inject HIVE_SUPERVISE into its spawn env so the daemon
   // installs the PreToolUse permission-broker hook (HCP Phase 6). opts.tileId is
   // the pty id; the policy is keyed by the bare id.
@@ -1343,9 +1279,13 @@ ipcMain.on("ptyFlow", (_e, tileId: string, paused: boolean) => {
     }, PTY_PAUSE_MAX_MS));
   }
 });
-ipcMain.on("ptyWrite", (_e, tileId: string, data: string) =>
-  hasRemotePty(tileId) ? writeRemotePty(tileId, data) : writePty(tileId, data)
-);
+ipcMain.on("ptyWrite", (_e, tileId: string, data: string) => {
+  // Remote ptys relay elsewhere; programmatic writes never take this handler,
+  // so the mark says "a human keystroke on a local pty" — echo skips batching.
+  if (hasRemotePty(tileId)) { writeRemotePty(tileId, data); return; }
+  ptyOut.markInput(tileId);
+  writePty(tileId, data);
+});
 ipcMain.on("ptyResize", (_e, tileId: string, cols: number, rows: number) =>
   hasRemotePty(tileId) ? resizeRemotePty(tileId, cols, rows) : resizePty(tileId, cols, rows)
 );
@@ -1353,12 +1293,11 @@ ipcMain.on("ptyKill", (_e, tileId: string) => {
   dropPtyRelay(tileId);
   if (hasRemotePty(tileId)) killRemotePty(tileId); else killPty(tileId);
 });
-// Detach (window closed / tile unmounted): daemon keeps the session alive;
-// in-process path treats it as a kill. Remote PTYs can't survive an ssh drop,
-// so detach == kill there too.
+// Detach (window closed / tile unmounted): daemons keep the session alive,
+// local or remote; in-process PTYs treat it as a kill.
 ipcMain.on("ptyDetach", (_e, tileId: string) => {
   dropPtyRelay(tileId);
-  if (hasRemotePty(tileId)) killRemotePty(tileId); else detachPty(tileId);
+  if (hasRemotePty(tileId)) detachRemotePty(tileId); else detachPty(tileId);
 });
 
 // ── lifecycle ─────────────────────────────────────────────────
@@ -1367,7 +1306,9 @@ ipcMain.on("ptyDetach", (_e, tileId: string) => {
 // happens. Fire-and-forget — pty.spawn() and child_process.spawn() pick up the
 // patched env on next tick. (superset.sh pattern; we hand-rolled equivalent
 // of sindresorhus/shell-env in ./shell-env.ts so we don't add a runtime dep.)
-void applyShellEnvToProcess();
+// Anything that reads PATH to find an agent waits on this, so a call in the first
+// seconds is answered against the user's shell, not the one Electron inherited.
+const shellEnvReady = applyShellEnvToProcess().catch(() => ({}));
 
 // Safety net for unhandled rejections from libraries we don't control
 // (chokidar's internal `add` throws EACCES/ELOOP from inside async code,
@@ -1424,10 +1365,12 @@ function readSettings(): { browserCdp?: boolean } {
   try { return JSON.parse(readFileSync(settingsFile(), "utf8")) as { browserCdp?: boolean }; }
   catch { return {}; }
 }
-function writeSettings(patch: Record<string, unknown>): void {
-  let cur: Record<string, unknown> = {};
-  try { cur = JSON.parse(readFileSync(settingsFile(), "utf8")) as Record<string, unknown>; } catch { /* fresh */ }
-  writeFileSync(settingsFile(), JSON.stringify({ ...cur, ...patch }, null, 2));
+// The theme lives in this same file (identical path in a packaged app), so the
+// write goes through the shared lock in @hivemind/core/settings instead of a
+// read-then-write that would erase a concurrent theme edit. The READ above stays
+// synchronous: it runs before app-ready, and reads lose nothing.
+async function writeSettings(patch: Record<string, unknown>): Promise<void> {
+  await patchSettingsExtras(patch, settingsFile());
 }
 // Enable the agent-browser CDP bridge when the env var OR the persisted setting
 // asks for it. The env var stays an escape hatch; the Settings toggle is the
@@ -1493,7 +1436,77 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     // range-requests (seek/loop) work.
     { scheme: "hivemedia", privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
   ]);
+  // Community view packages: hm-view://<id>/… served to sandboxed iframes.
+  registerViewScheme();
   app.whenReady().then(async () => {
+    handleViewProtocol();
+    installSettingsIpc(() => mainWindow);
+    void initMachines({
+      send: (snap) => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("machines:changed", snap); },
+      listLocalSessions: () => (PERSIST_PTY ? ptyDaemon.listSessions() : Promise.resolve([])),
+      version: app.getVersion(),
+      stateDir: app.getPath("userData"),
+    }).catch((e: unknown) => console.warn("[machines] init failed:", e));
+    installViewManagementIpc(() => mainWindow);
+    installPluginCatalogIpc(() => mainWindow);
+    ipcMain.handle("views:list", wrap(async (_e, repoRoot: string | null) => listViewPackages(repoRoot ? String(repoRoot) : null)));
+
+    // A repo's agents belong to that repo. Opening a second workspace must not take the
+    // first one's agents out of the catalog (its tiles still spawn through it), and a
+    // repo's agent must not become spawnable everywhere — ptySpawn enforces the second.
+    const repoAgents = new Map<string, AgentProviderDef[]>();
+    const publishCatalog = (defs: AgentProviderDef[], repoRoot?: string): void => {
+      if (repoRoot) repoAgents.set(path.resolve(repoRoot), defs.filter((d) => d.sourceRoot));
+      const all = defs.filter((d) => !d.sourceRoot);
+      const taken = new Set(all.map((d) => d.id));
+      for (const list of repoAgents.values()) {
+        for (const d of list) if (!taken.has(d.id)) { taken.add(d.id); all.push(d); }
+      }
+      setCatalog(all);
+    };
+    // Only manifests come from disk — nothing agent-specific is compiled in any more.
+    let lastLoaded: Awaited<ReturnType<typeof loadAgents>>["loaded"] = [];
+    const scanAgents = async (repoRoot?: string) => {
+      const disabled = (getAppSettings() as { agents?: { disabled?: string[] } }).agents?.disabled ?? [];
+      const r = await loadAgents({ repoRoot, disabled });
+      // Defs of switched-off agents, so their settings pages still answer.
+      lastLoaded = r.loaded;
+      return r;
+    };
+    // Not awaited at startup: the first frame must not wait on optional disk I/O.
+    agentsScanned = scanAgents().then(({ defs, loaded }) => {
+      publishCatalog(defs); // main resolves providers for spawn + HCP binding too
+      for (const a of loaded) {
+        if (a.error) console.warn(`[agents] ${a.id} (${a.source}) not loaded: ${a.error}`);
+      }
+    }).catch((e: unknown) => {
+      console.warn("[agents] manifest scan failed:", e);
+    });
+    ipcMain.handle("agents:list", wrap(async (_e, repoRoot: string | null) => {
+      const { defs, loaded, shadowed } = await scanAgents(repoRoot ? String(repoRoot) : undefined);
+      // Main resolves providers too (spawn, HCP), so a rescan refreshes this process as well.
+      // The reply stays scoped to the workspace that asked: other repos' agents are in
+      // main's catalog for their own tiles, not in this one's pickers.
+      publishCatalog(defs, repoRoot ? String(repoRoot) : undefined);
+      return { agents: toWire(loaded), shadowed };
+    }));
+    // Switched-off agents are not in the catalog but still have a card.
+    const knownDef = (id: string) => agentById(id) ?? lastLoaded.find((a) => a.id === id && a.def)?.def;
+    // Detection must see the PATH tiles launch with, which the login shell supplies.
+    ipcMain.handle("agents:option-choices", wrap(async (_e, id: string) => {
+      await applyShellEnvToProcess();
+      const def = knownDef(String(id));
+      return def ? discoverOptions(def) : {};
+    }));
+    ipcMain.handle("agents:presence", wrap(async () => {
+      await applyShellEnvToProcess();
+      return Object.fromEntries(getCatalog().map((d) => [d.id, agentPresence(d)]));
+    }));
+    ipcMain.handle("agents:verify", wrap(async (_e, id: string) => {
+      await applyShellEnvToProcess();
+      const def = knownDef(String(id));
+      return def ? verifyAgent(def) : { path: null };
+    }));
     // Browser-tile extensions (prototype): load every UNPACKED extension in
     // <userData>/browser-extensions/<name>/ into the SAME session the <webview>
     // tiles use (partition "persist:browser"). Drop an unpacked extension dir
@@ -1716,7 +1729,7 @@ ipcMain.handle(
 );
 
 // ── HCP: the control plane ───────────────────────────────────────────────────
-// A 0600 unix socket where the hive MCP (and CLIs) drive the running app: spawn
+// A 0600 unix socket where `hive ctl` (and any driver) drives the running app: spawn
 // agents on the canvas, send them input, read their replies. Renderer verbs
 // (tile.*) cross the request-id-correlated "hcp:command"/"hcp:result" channel
 // (twin of plan-review). Main verbs (agent.send/read) run here against the
@@ -1765,12 +1778,25 @@ function startHcpControlPlane(): void {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("hcp:spawn", { child, parent, connected });
   };
   const _hcp = makeDispatch({
+    agentOf: (bare) => hcpAgentOf.get(bare),
     callRenderer: hcpCallRenderer,
+    toolsSettings: () => getAppSettings().tools,
+    reloadSettings: () => reloadSettings().then((s) => ({ ok: true, preset: s.appearance.preset })),
     writeToTile: hcpWriteToTile,
     deliverToTile: (ptyId, text, onSent) => hcpMailbox.deliver(ptyId, text, onSent),
     turns: hcpTurns,
     recorder: hcpRecorder,
     spawnAllowed: hcpSpawnAllowed,
+    // A worker of a remote agent runs on that host: this PATH says nothing about it.
+    defaultAgentId: async () => {
+      await shellEnvReady;
+      return preferredAgent((getAppSettings() as { agents?: { defaultAgent?: string } }).agents?.defaultAgent, (d) => !!findBin(d.bin))?.id;
+    },
+    agentInstalled: async (def, callerTile) => {
+      if (callerTile && hasRemotePty(callerTile)) return true;
+      await shellEnvReady;
+      return !!findBin(def.bin);
+    },
     connect: (src, dst) => { const ok = hcpPipes.connect(src, dst); if (ok) pushPipe(src, dst, true); return ok; },
     disconnect: (src, dst) => { hcpPipes.disconnect(src, dst); pushPipe(src, dst ?? null, false); },
     forgetPipes: (id) => { hcpPipes.forget(id); pushPipe(id, null, false); },
@@ -1780,12 +1806,20 @@ function startHcpControlPlane(): void {
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("hcp:wait", { tileId, status });
     },
   });
-  const dispatch = _hcp.dispatch;
+  // Every verb routes through the boot scan first: spawn resolves the agent by id
+  // and other verbs read its capabilities, so none may run against a half-set catalog.
+  const dispatch: Dispatcher["dispatch"] = (method, params) => agentsScanned.then(() => _hcp.dispatch(method, params));
   hcpForgetTile = _hcp.forgetTile; // wire the pty-exit teardown to the dispatch's per-tile cleanup
   const server = startHcpServer(hcpSockPath(userData), {
     token,
+    onListenError: (err: Error) => pushAppError(`Agent control plane is off: ${err.message}. \`hive ctl\` cannot reach this app.`, "hcp"),
     rendererUp: () => !!mainWindow && !mainWindow.isDestroyed(),
     dispatch,
+    // Stream replay/resume for `hive ctl stream --lines/--since`: the recorder
+    // is keyed by pty id, subscriptions by bare tile id.
+    replay: (tileId, opts) =>
+      typeof opts.lines === "number" ? hcpRecorder.tail(toPtyId(tileId), opts.lines) : hcpRecorder.since(toPtyId(tileId), opts.since ?? 0),
+    offsetOf: (tileId) => hcpRecorder.mark(toPtyId(tileId)),
     onEvent: (topic, data) => {
       if (topic === "subagent") {
         // SubagentStart/Stop hook: a tile gained/lost an in-flight Task subagent.
@@ -1853,8 +1887,8 @@ function startHcpControlPlane(): void {
       // pi carries its reply inline on the turn event (no transcript path); pass
       // it through so agent.read returns it directly. claude/droid send no text.
       // Single-delivery ladder: true if this reply was already delivered by a more
-      // specific channel — a blocking hive_read took it, OR the worker authored an
-      // explicit hive_report this turn. Either way the auto-report banner below
+      // specific channel — a blocking agent.read (hive ctl read) took it, OR the
+      // worker authored an explicit agent.report (hive ctl report) this turn. Either way the auto-report banner below
       // stands down, so the parent isn't handed the same reply twice (the duplicate
       // would arrive as an unsolicited banner that spawns a spurious extra turn).
       const deliveredElsewhere = hcpTurns.recordTurn(d.tileId, safeTp, typeof d.text === "string" ? d.text : null);
@@ -1871,9 +1905,10 @@ function startHcpControlPlane(): void {
       // subagent edge arrives within the grace window, those are lost SubagentStops
       // (interrupt / error / compaction) — reap them so the tile doesn't read
       // "working" forever. A real background subagent will keep emitting edges.
-      if (hcpSubagents.busy(d.tileId)) hcpSubagentReaper.arm(d.tileId);
+      // Both are keyed by the BARE id (see the subagent branch above); d.tileId is the pty id.
+      if (hcpSubagents.busy(toBareId(d.tileId))) hcpSubagentReaper.arm(toBareId(d.tileId));
       // Pipe forwarding: feed this agent's reply into any piped destinations.
-      // Skip if a blocking reader already took it — hive_read is the delivery
+      // Skip if a blocking reader already took it — agent.read is the delivery
       // channel this turn; the auto-report is only the fallback for when nobody's
       // reading. (Exotic: a worker fan-piped to several tiles where only one reads
       // would skip the others too — acceptable; the common auto-report pipe is the
@@ -1900,6 +1935,7 @@ function startHcpControlPlane(): void {
       for (const dst of dests) hcpMailbox.deliver(toPtyId(dst), banner);
     },
   });
+  setRemoteEventSink(server.injectEvent);
   hcpBroadcast = server.broadcast;
 }
 

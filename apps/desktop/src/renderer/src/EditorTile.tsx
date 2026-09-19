@@ -13,6 +13,7 @@
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ExternalLink, GripVertical } from "lucide-react";
+import { Button } from "./components/ui/button";
 import { useTileFont, FontStepper, handleFontKey } from "./tile-font";
 import { FullscreenShell, useReparentFullscreen } from "./tile-fullscreen";
 import { EditorState, type Extension, Compartment } from "@codemirror/state";
@@ -83,8 +84,7 @@ const cmTheme = EditorView.theme(
       fontSize: "inherit",
     },
     ".cm-scroller": {
-      fontFamily:
-        "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace",
+      fontFamily: "var(--font-mono)",
       lineHeight: "1.55",
       overflow: "auto",
       // Mouse cursor: text I-beam over the editor body. react-flow nodes carry
@@ -582,38 +582,40 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, onO
             {active && (
               <>
               {activeHtml && activeHtmlUrl && onOpenInBrowser && (
-                <button
+                <Button
+                  variant="ghost"
+                  size="icon-2xs"
                   onClick={() => onOpenInBrowser(activeHtmlUrl)}
-                  className="nodrag size-5 grid place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--color-line2)] hover:text-[var(--color-fg)]"
+                  className="nodrag"
                   title="Open HTML in browser tile"
                   aria-label="open HTML in browser"
                 >
-                  <ExternalLink size={12} />
-                </button>
+                  <ExternalLink />
+                </Button>
               )}
-              <button
+              <Button
+                variant={activeDiff ? "secondary" : "outline"}
+                size="2xs"
                 onClick={() => setDiffMode((m) => ({ ...m, [active]: !m[active] }))}
-                className={`nodrag text-[9.5px] px-1.5 py-0.5 rounded border ${
-                  activeDiff
-                    ? "border-[var(--color-brand)] text-[var(--color-brand)]"
-                    : "border-[var(--color-line2)] text-[var(--color-fg3)] hover:text-[var(--color-fg)]"
-                }`}
+                className="nodrag"
                 title="Toggle diff vs HEAD (⇄)"
                 aria-label="toggle diff"
               >
                 ⇄ {activeDiff ? "diff" : "edit"}
-              </button>
+              </Button>
               </>
             )}
             <span className="text-[9.5px] text-[var(--color-fg3)]">⌘S to save</span>
             <FontStepper {...font} />
           </span>
-          <button
+          <Button
+            variant="ghost"
+            size="icon-micro"
             onClick={onClose}
-            className="nodrag size-4 grid place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--color-line2)] hover:text-[var(--color-fg)]"
+            className="nodrag"
             aria-label="close tile"
             title="close"
-          >×</button>
+          >×</Button>
         </header>
       )}
 
@@ -641,48 +643,43 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, onO
               >
                 <span className="truncate font-mono">{name}</span>
                 {isActive && isMarkdownPath(path) && (
-                  <button
+                  <Button
+                    variant={previewMode[path] ? "default" : "ghost"}
+                    size="micro"
                     onClick={(e) => {
                       e.stopPropagation();
                       setPreviewMode((m) => ({ ...m, [path]: !m[path] }));
                     }}
-                    className={`text-[9px] leading-none px-1 rounded ${
-                      previewMode[path]
-                        ? "bg-[var(--color-brand)] text-white"
-                        : "text-[var(--color-fg3)] hover:text-[var(--color-fg)]"
-                    }`}
                     title={previewMode[path] ? "edit (show source)" : "preview rendered markdown"}
                     aria-label="toggle markdown preview"
-                  >◉</button>
+                  >◉</Button>
                 )}
                 {isActive && isHtmlPath(path) && htmlFileUrl(repoPath, path) && onOpenInBrowser && (
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="icon-micro"
                     onClick={(e) => {
                       e.stopPropagation();
                       const url = htmlFileUrl(repoPath, path);
                       if (url) onOpenInBrowser(url);
                     }}
-                    className="text-[var(--color-fg3)] hover:text-[var(--color-fg)]"
                     title="open HTML in browser tile"
                     aria-label="open HTML in browser"
                   >
-                    <ExternalLink size={10} />
-                  </button>
+                    <ExternalLink />
+                  </Button>
                 )}
                 {isActive && (
-                  <button
+                  <Button
+                    variant={diffMode[path] ? "default" : "ghost"}
+                    size="micro"
                     onClick={(e) => {
                       e.stopPropagation();
                       setDiffMode((m) => ({ ...m, [path]: !m[path] }));
                     }}
-                    className={`text-[9px] leading-none px-1 rounded ${
-                      diffMode[path]
-                        ? "bg-[var(--color-brand)] text-white"
-                        : "text-[var(--color-fg3)] hover:text-[var(--color-fg)]"
-                    }`}
                     title={diffMode[path] ? "exit diff (show as editor)" : "show diff vs HEAD"}
                     aria-label="toggle diff"
-                  >⇄</button>
+                  >⇄</Button>
                 )}
                 <span className="grid place-items-center w-3.5 h-3.5">
                   {dirty ? (
@@ -692,16 +689,18 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, onO
                       title="unsaved"
                     />
                   ) : null}
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="icon-micro"
                     onClick={(e) => {
                       e.stopPropagation();
                       buffers.current.delete(path);
                       onCloseTab(path);
                     }}
-                    className={`text-[var(--color-fg3)] hover:text-[var(--color-fg)] leading-none ${dirty ? "hidden group-hover:block" : ""}`}
+                    className={dirty ? "hidden group-hover:block" : undefined}
                     aria-label={`close ${name}`}
                     title="close tab"
-                  >×</button>
+                  >×</Button>
                 </span>
               </div>
             );
@@ -726,16 +725,19 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, onO
         <div className="nodrag flex items-center gap-2 px-3 py-1.5 bg-[var(--color-bg4)] border-b border-[var(--color-warn)] text-[11px] text-[var(--color-fg)]">
           <span className="text-[var(--color-warn)]">●</span>
           <span>This file changed on disk and you have unsaved edits.</span>
-          <button
+          <Button
+            variant="outline"
+            size="xs"
             onClick={() => void reloadFromDisk()}
-            className="ml-auto px-2 py-0.5 rounded border border-[var(--color-line2)] hover:bg-[var(--color-bg2)]"
+            className="ml-auto"
             title="discard your edits and load the version on disk"
-          >Reload</button>
-          <button
+          >Reload</Button>
+          <Button
+            variant="outline"
+            size="xs"
             onClick={keepMine}
-            className="px-2 py-0.5 rounded border border-[var(--color-line2)] hover:bg-[var(--color-bg2)]"
             title="keep your edits (saving will overwrite the disk version)"
-          >Keep mine</button>
+          >Keep mine</Button>
         </div>
       )}
       {/* editor body — nowheel so scrolling doesn't pan the canvas */}
@@ -756,7 +758,9 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, onO
           style={{
             visibility:
               tabs.length > 0 && !activeMeta?.error && !(activeMarkdown && activePreview)
-                ? "visible"
+                // inherit, not visible: an explicit `visible` shows through a hidden
+                // ancestor (an inactive window tab, a parked surface).
+                ? "inherit"
                 : "hidden",
           }}
         />

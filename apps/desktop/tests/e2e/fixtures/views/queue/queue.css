@@ -1,0 +1,115 @@
+/* Every colour, font and radius is the host's (--hm-*), so the view changes with the user's
+   appearance and never disagrees with the rest of the app about what a colour means. */
+html, body {
+  margin: 0; height: 100%; overflow: hidden; background: transparent;
+  font-family: var(--hm-font-ui, system-ui, sans-serif); font-size: 13px;
+  color: var(--hm-color-fg, #e6e6e6);
+  -webkit-font-smoothing: antialiased; color-scheme: normal;
+}
+/* The scheme rides on the scrolling panels: on the root it would make the frame
+   opaque and hide the wallpaper the host paints behind this view. */
+:where(.q, .q-list, .t-pane, .t-stack, .b-col, .b-body, pre, textarea) { color-scheme: var(--hm-color-scheme, dark); }
+body { display: grid; grid-template-columns: var(--list-w, 340px) minmax(0, 1fr); }
+
+/* ── the list ─────────────────────────────────────────────────────────────── */
+/* With glass on, the panel is tinted rather than solid so the wallpaper still reads through. */
+.q {
+  display: flex; flex-direction: column; min-height: 0;
+  /* With glass on the panel is a tint over the user's wallpaper, not a slab on top of it:
+     enough of the picture survives to place the view in their workspace. */
+  background: color-mix(in srgb, var(--hm-color-bg2) calc(100% - var(--hm-glass, 0) * 26%), transparent);
+  backdrop-filter: blur(calc(var(--hm-glass, 0) * 10px));
+  border-right: 1px solid var(--hm-color-line);
+}
+.q-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 14px 16px 8px; }
+.q-head h1 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: -0.01em; }
+.q-summary { margin: 0; font-size: 12px; color: var(--hm-color-fg3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.q-summary b { color: var(--hm-status-attention); font-weight: 600; }
+
+.q-list { flex: 1; min-height: 0; overflow-y: auto; padding: 2px 8px 12px; outline: none; scrollbar-width: thin; }
+.q-group + .q-group { margin-top: 8px; }
+.q-group > h2 {
+  display: flex; align-items: center; gap: 6px; margin: 0; padding: 6px 8px 4px;
+  font-size: 11px; font-weight: 500; color: var(--hm-color-fg3); cursor: pointer; user-select: none;
+}
+.q-group > h2 .n { font-variant-numeric: tabular-nums; opacity: 0.75; }
+.q-group > h2 .chev { transition: rotate 150ms ease; }
+.q-group[data-collapsed] > h2 .chev { rotate: -90deg; }
+.q-group[data-collapsed] .q-rows { display: none; }
+@media (hover: hover) and (pointer: fine) { .q-group > h2:hover { color: var(--hm-color-fg2); } }
+
+/* A row: the mark spans both lines, name and time on the first, frame on the second. */
+.q-row {
+  display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; grid-template-rows: auto auto;
+  column-gap: 10px; row-gap: 1px; align-items: center;
+  padding: 7px 10px; border-radius: max(4px, calc(var(--hm-radius, 8px) - 2px));
+  transition: background-color 150ms ease;
+}
+.q-mark { grid-row: 1 / 3; width: 12px; height: 12px; display: block; }
+.q-name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.q-time { font-family: var(--hm-font-mono, ui-monospace, monospace); font-size: 11px; color: var(--hm-color-fg3); font-variant-numeric: tabular-nums; }
+.q-frame { grid-column: 2 / 4; display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 11.5px; color: var(--hm-color-fg3); }
+.q-frame > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A frame's colour identifies it; muted, so it never competes with a status mark for attention. */
+.q-frame i { flex: none; width: 6px; height: 6px; border-radius: 2px; background: color-mix(in oklab, var(--c) 55%, var(--hm-color-fg3)); }
+
+.q-row[data-group="needs"] .q-time { color: var(--hm-status-attention); }
+.q-row[aria-selected="true"] { background: color-mix(in srgb, var(--hm-color-fg) 9%, transparent); }
+.q-row[data-released] .q-name::after { content: "  released"; font-weight: 400; font-size: 11px; color: var(--hm-color-fg3); }
+.q-list:focus-visible .q-row[aria-selected="true"] { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--hm-accent) 55%, transparent); }
+@media (hover: hover) and (pointer: fine) {
+  .q-row:not([aria-selected="true"]):hover { background: color-mix(in srgb, var(--hm-color-fg) 5%, transparent); }
+}
+
+.q-keys { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 10px 16px; border-top: 1px solid var(--hm-color-line); font-size: 11px; color: var(--hm-color-fg3); }
+kbd {
+  font-family: var(--hm-font-mono, ui-monospace, monospace); font-size: 10px; line-height: 1;
+  display: inline-block; min-width: 8px; padding: 2px 4px; margin-right: 2px; text-align: center;
+  border: 1px solid var(--hm-color-line2); border-bottom-width: 2px; border-radius: 4px; color: var(--hm-color-fg2);
+}
+
+/* ── the dock ─────────────────────────────────────────────────────────────── */
+/* The docked terminal is a hole the host fills, so nothing is painted where it will be. */
+.q-dock { position: relative; min-width: 0; min-height: 0; }
+.q-field { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; transition: opacity 500ms ease; }
+.q-field[data-on] { opacity: 1; }
+.q-dock.no-gl::before {
+  content: ""; position: absolute; inset: 0; opacity: 0.35;
+  background-image: radial-gradient(circle, var(--hm-color-fg3) 1px, transparent 1.6px); background-size: 15px 15px;
+  mask-image: radial-gradient(closest-side, #000, transparent);
+}
+.q-empty { position: absolute; inset: 0; display: grid; place-content: center; gap: 6px; text-align: center; padding: 24px; pointer-events: none; }
+.q-empty-title { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; text-wrap: balance; }
+.q-empty-sub { margin: 0; font-size: 12.5px; color: var(--hm-color-fg3); font-variant-numeric: tabular-nums; }
+.q-dock[data-docked] .q-empty, .q-dock[data-docked] .q-field, .q-dock[data-docked].no-gl::before { display: none; }
+
+.q-offer {
+  position: absolute; left: 12px; right: 12px; top: 52px; height: 34px;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 6px 0 12px;
+  border-radius: max(4px, calc(var(--hm-radius, 8px) - 2px));
+  background: color-mix(in srgb, var(--hm-status-attention) 12%, var(--hm-color-bg2));
+  border: 1px solid color-mix(in srgb, var(--hm-status-attention) 35%, transparent);
+  font-size: 12px; color: var(--hm-color-fg2);
+  animation: offer-in 180ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.q-offer[hidden] { display: none; }
+.q-offer span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.q-offer button {
+  flex: none; font: inherit; font-weight: 500; color: var(--hm-color-fg); cursor: pointer;
+  background: color-mix(in srgb, var(--hm-color-fg) 8%, transparent); border: 0; border-radius: 5px; padding: 5px 8px;
+  transition: background-color 150ms ease, scale 100ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.q-offer button:active { scale: 0.96; }
+@media (hover: hover) and (pointer: fine) { .q-offer button:hover { background: color-mix(in srgb, var(--hm-color-fg) 14%, transparent); } }
+@keyframes offer-in { from { opacity: 0; translate: 0 -4px; } }
+
+/* ── narrow: list over dock ───────────────────────────────────────────────── */
+@media (max-width: 719px) {
+  body { grid-template-columns: 1fr; grid-template-rows: 42% minmax(0, 1fr); }
+  .q { border-right: 0; border-bottom: 1px solid var(--hm-color-line); }
+  .q-keys { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: 1ms !important; animation: none !important; }
+}

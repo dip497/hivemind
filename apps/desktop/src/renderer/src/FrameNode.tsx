@@ -6,14 +6,18 @@
  * remain clickable. Pure visual grouping in v1 — moving the frame does NOT
  * move tiles inside (use react-flow `parentId` later for strong containment).
  */
+import { FRAME_SWATCHES } from "./frame-color";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { GitBranch, FolderGit2, Plus, LayoutGrid, Server, GitCommitHorizontal } from "lucide-react";
+import { Button } from "./components/ui/button";
+import { MenuItem } from "./components/ui/menu-item";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { WorktreePicker } from "./WorktreePicker";
 import { useGitBranch } from "./queries";
 import { isRemote, parseRemote, remoteBasename, remoteDisplay } from "../../shared/remote-uri";
-import { AGENTS } from "./agents";
+import { MachineChip } from "./machines/MachineChip";
+import { useAgents } from "./agents";
 import type { ArrangeMode } from "./frame-layout";
 import type { WorktreeEntry } from "../../shared/ipc";
 
@@ -91,20 +95,11 @@ export interface FrameNodeData {
   tileNames?: Record<string, string>;
 }
 
-// Frame swatches belong to the same family as the rest of the app — drawn from
-// the theme tokens, not a stock orange/blue/gray picker. Indigo brand, sky
-// accent, ok green, review violet, warn amber, err red, neutral slate.
-const COLORS = [
-  { name: "Indigo", value: "#5b6cff" }, // --color-brand
-  { name: "Sky", value: "#38bdf8" }, // --color-accent
-  { name: "Green", value: "#22c55e" }, // --color-ok
-  { name: "Violet", value: "#a855f7" }, // --color-state-review
-  { name: "Amber", value: "#f59e0b" }, // --color-warn
-  { name: "Red", value: "#f43f5e" }, // --color-err
-  { name: "Slate", value: "#6b7280" }, // --color-fg3
-];
+// Identity colours, shared with the rail menu and the default generator (frame-color.ts).
+const COLORS = FRAME_SWATCHES;
 
 export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeData; selected: boolean }) {
+  const agents = useAgents();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(data.title);
   const [showPicker, setShowPicker] = useState(false);
@@ -260,15 +255,18 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
             <GitBranch size={11} className="shrink-0" style={{ color: data.color }} />
             <span className="truncate font-semibold">{data.branch}</span>
             {data.head && <span className="shrink-0 text-[var(--color-fg3)]">{data.head.slice(0, 7)}</span>}
-            <button
+            <Button
+              variant="ghost-destructive"
+              size="micro"
               onClick={() => data.onUnbindBranch(data.id)}
-              className="shrink-0 text-[var(--color-fg2)] hover:text-[var(--color-err)] leading-none"
               title="Detach worktree (destructive)"
               aria-label="detach worktree"
             >
               ×
-            </button>
+            </Button>
           </span>
+        ) : isRemoteWs ? (
+          <MachineChip uri={data.workspacePath!} frameId={data.id} onUnbind={() => data.onUnbindWorkspace(data.id)} />
         ) : wsBound ? (
           <span
             className="flex items-center gap-1 max-w-[60%] rounded px-1.5 py-0.5 text-[10px] font-mono"
@@ -287,28 +285,30 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
             {(isRemoteWs || wsName?.toLowerCase() !== data.title.trim().toLowerCase()) && (
               <span className="truncate">{isRemoteWs ? remoteHostLabel : wsName}</span>
             )}
-            <button
+            <Button
+              variant="ghost-destructive"
+              size="micro"
               onClick={() => data.onUnbindWorkspace(data.id)}
-              className="shrink-0 text-[var(--color-fg2)] hover:text-[var(--color-err)] leading-none cursor-pointer"
               title={isRemoteWs ? "Disconnect remote" : "Unbind workspace"}
               aria-label={isRemoteWs ? "disconnect remote" : "unbind workspace"}
             >
               ×
-            </button>
+            </Button>
           </span>
         ) : null}
         {!isWorktreeChild && (
-          <button
+          <Button
             ref={wtBtnRef}
             onClick={() => setShowWt((x) => !x)}
             disabled={!data.canBind && !data.repoPath}
-            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-[var(--color-fg2)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)] disabled:opacity-30 disabled:cursor-not-allowed"
+            variant="ghost"
+            size="micro"
             title="Attach a git worktree — opens a nested sub-frame scoped to that branch"
             aria-label="attach worktree"
           >
-            <GitBranch size={11} />
+            <GitBranch />
             worktree
-          </button>
+          </Button>
         )}
         <AnchoredMenu anchor={wtBtnRef.current} open={showWt} onClose={() => setShowWt(false)}>
           {data.repoPath ? (
@@ -328,26 +328,28 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
           )}
         </AnchoredMenu>
         {!isWorktreeChild && !wsBound && (
-          <button
+          <Button
             onClick={() => data.onBindWorkspace(data.id)}
-            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-[var(--color-fg2)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)] cursor-pointer"
+            variant="ghost"
+            size="micro"
             title="Bind this frame to a repo folder — tiles inside run in that workspace"
             aria-label="bind workspace"
           >
-            <FolderGit2 size={11} />
+            <FolderGit2 />
             workspace
-          </button>
+          </Button>
         )}
         {!isWorktreeChild && !wsBound && (
-          <button
+          <Button
             onClick={() => window.dispatchEvent(new CustomEvent("hivemind:attach-remote", { detail: { frameId: data.id } }))}
-            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-[var(--color-fg2)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)] cursor-pointer"
-            title="Attach an SSH host — tiles inside run on the remote (terminal, editor, diff)"
+            variant="ghost"
+            size="micro"
+            title="Run this frame on a machine — its terminals, editor and diff run there"
             aria-label="attach remote"
           >
-            <Server size={11} />
-            remote
-          </button>
+            <Server />
+            machine
+          </Button>
         )}
         {/* ── frame attention dot ───────────────────────────────────────
             This used to be a strip of up to three name pills plus a "+N".
@@ -381,39 +383,41 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
             the frame has a repo: a worktree sub-frame (always), a bound
             workspace, or the base repo. */}
         {(isWorktreeChild || data.workspacePath || data.repoPath) && (
-          <button
+          <Button
             onClick={() => window.dispatchEvent(new CustomEvent("hivemind:frame-git", { detail: { frameId: data.id } }))}
-            className="size-4 grid place-items-center rounded text-[var(--color-fg2)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)]"
+            variant="ghost"
+            size="icon-micro"
             title="Git — commit, push, pull"
             aria-label="git"
           >
-            <GitCommitHorizontal size={12} />
-          </button>
+            <GitCommitHorizontal />
+          </Button>
         )}
-        <button
+        <Button
           ref={addBtnRef}
           onClick={() => setShowAdd((x) => !x)}
-          className="size-4 grid place-items-center rounded text-[var(--color-fg2)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)]"
+          variant="ghost"
+          size="icon-micro"
           title="Open a tile in this zone (terminal / Claude / editor / diff / issues)"
           aria-label="add tile"
         >
-          <Plus size={12} />
-        </button>
+          <Plus />
+        </Button>
         <AnchoredMenu anchor={addBtnRef.current} open={showAdd} onClose={() => setShowAdd(false)}>
           <div className="px-2 py-1 text-[9px] uppercase tracking-[0.12em] text-[var(--color-fg3)] font-semibold">open in zone</div>
           {/* Agents come from the registry — adding one there adds it here. */}
-          {AGENTS.filter((a) => a.enabled).map((a) => (
-            <button
+          {agents.filter((a) => a.enabled).map((a) => (
+            <MenuItem
               key={a.id}
+              size="sm"
               onClick={() => {
                 window.dispatchEvent(new CustomEvent("hivemind:frame-open", { detail: { frameId: data.id, kind: a.id } }));
                 setShowAdd(false);
               }}
-              className="flex items-center gap-2 text-left px-2 py-1 rounded text-[11px] text-[var(--color-fg)] hover:bg-[var(--color-bg4)] w-full"
             >
-              <a.icon size={13} />
+              <a.icon />
               {a.label}
-            </button>
+            </MenuItem>
           ))}
           {([
             ["shell", "Terminal"],
@@ -422,27 +426,28 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
             ["issues", "Issues"],
             ["browser", "Browser"],
           ] as const).map(([kind, label]) => (
-            <button
+            <MenuItem
               key={kind}
+              size="sm"
               onClick={() => {
                 window.dispatchEvent(new CustomEvent("hivemind:frame-open", { detail: { frameId: data.id, kind } }));
                 setShowAdd(false);
               }}
-              className="text-left px-2 py-1 rounded text-[11px] text-[var(--color-fg)] hover:bg-[var(--color-bg4)] w-full"
             >
               {label}
-            </button>
+            </MenuItem>
           ))}
         </AnchoredMenu>
-        <button
+        <Button
           ref={arrangeBtnRef}
           onClick={() => setShowArrange((x) => !x)}
-          className="size-4 grid place-items-center rounded text-[var(--color-fg2)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)]"
+          variant="ghost"
+          size="icon-micro"
           title="Arrange tiles + worktrees (Columns / Rows / Grid)"
           aria-label="arrange"
         >
-          <LayoutGrid size={11} />
-        </button>
+          <LayoutGrid />
+        </Button>
         <AnchoredMenu anchor={arrangeBtnRef.current} open={showArrange} onClose={() => setShowArrange(false)}>
           <div className="px-2 py-1 text-[9px] uppercase tracking-[0.12em] text-[var(--color-fg3)] font-semibold">arrange</div>
           {([
@@ -450,16 +455,16 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
             ["rows", "Rows"],
             ["grid", "Grid"],
           ] as const).map(([mode, label]) => (
-            <button
+            <MenuItem
               key={mode}
+              size="sm"
               onClick={() => {
                 data.onArrange(data.id, mode);
                 setShowArrange(false);
               }}
-              className="text-left px-2 py-1 rounded text-[11px] text-[var(--color-fg)] hover:bg-[var(--color-bg4)]"
             >
               {label}
-            </button>
+            </MenuItem>
           ))}
         </AnchoredMenu>
         <button
@@ -470,14 +475,15 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
           title="Change color"
           aria-label="color"
         />
-        <button
+        <Button
           onClick={() => data.onDelete(data.id)}
-          className="size-4 grid place-items-center rounded text-[var(--color-fg2)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-err)] text-[12px] leading-none"
+          variant="ghost-destructive"
+          size="icon-micro"
           title="Delete frame"
           aria-label="delete"
         >
           ×
-        </button>
+        </Button>
       </div>
       <AnchoredMenu anchor={colorBtnRef.current} open={showPicker} onClose={() => setShowPicker(false)}>
         <div className="flex gap-1">

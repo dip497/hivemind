@@ -4,8 +4,32 @@
  * TanStack Query keys without flooding.
  */
 import chokidar, { type FSWatcher } from "chokidar";
+import { execFile } from "node:child_process";
 import path from "node:path";
 import type { WebContents } from "electron";
+
+/** What git ignores in `repoPath` (build output, venvs, caches), as repo-relative paths;
+ *  an ignored directory is one entry. Null when git cannot say (not a repo). */
+function gitIgnored(repoPath: string): Promise<Set<string> | null> {
+  return new Promise((resolve) => {
+    execFile("git", ["-C", repoPath, "ls-files", "--others", "--ignored", "--exclude-standard", "--directory", "-z"],
+      { timeout: 10_000, maxBuffer: 32 << 20 }, (err, out) => {
+        if (err) return resolve(null);
+        resolve(new Set(out.split("\0").filter(Boolean).map((e) => e.replace(/\/$/, ""))));
+      });
+  });
+}
+
+/** True when `p`, or a folder above it inside the repo, is in `ignored`. */
+export function underIgnored(repoPath: string, p: string, ignored: Set<string>): boolean {
+  let rel = path.relative(repoPath, p);
+  while (rel && !rel.startsWith("..")) {
+    if (ignored.has(rel)) return true;
+    const up = path.dirname(rel);
+    rel = up === "." ? "" : up;
+  }
+  return false;
+}
 
 interface Active {
   watcher: FSWatcher;
@@ -22,6 +46,9 @@ export function watchRepo(repoPath: string, wc: WebContents): void {
     entry.webContents.add(wc);
     return;
   }
+  // The tree itself is added once git has said what it ignores: a Rust `target/` or a
+  // venv is tens of thousands of files, each an lstat at startup and an inotify watch.
+  let ignoredByGit: Set<string> | null = null;
   const watcher = chokidar.watch(
     [
       path.join(repoPath, ".git", "HEAD"),
@@ -29,10 +56,11 @@ export function watchRepo(repoPath: string, wc: WebContents): void {
       path.join(repoPath, ".git", "MERGE_HEAD"),
       path.join(repoPath, ".git", "ORIG_HEAD"),
       path.join(repoPath, ".hivemind"),
-      repoPath,
     ],
     {
       ignored: (p: string) => {
+        // .hivemind/ may be gitignored, but issue changes arrive through it.
+        if (ignoredByGit && !p.includes("/.hivemind") && !p.includes("/.git/") && underIgnored(repoPath, p, ignoredByGit)) return true;
         // Inside .git/ keep only the four HEAD-ish files above; everything
         // else (objects, logs, hooks, lfs) is huge and irrelevant.
         if (p.includes("/.git/") && !/\/\.git\/(HEAD|index|MERGE_HEAD|ORIG_HEAD)$/.test(p)) return true;
@@ -92,6 +120,11 @@ export function watchRepo(repoPath: string, wc: WebContents): void {
     }, 300);
   };
   watcher.on("add", trigger).on("change", trigger).on("unlink", trigger);
+  void gitIgnored(repoPath).then((ignored) => {
+    if (active.get(repoPath) !== entry) return; // unwatched while git was answering
+    ignoredByGit = ignored;
+    watcher.add(repoPath);
+  });
 }
 
 export function unwatch(repoPath: string, wc: WebContents): void {

@@ -1,4 +1,5 @@
 import { defineCommand } from "citty";
+import { ensureAgentCatalog } from "../agent-catalog.js";
 import {
   HiveError,
   createIssue,
@@ -25,6 +26,7 @@ export const newCmd = defineCommand({
     state: { type: "string", description: "Initial state (default: backlog)" },
     github: { type: "string", description: "Linked GitHub issue/PR number" },
     description: { type: "string", description: "Initial description body" },
+    ac: { type: "string", description: "Acceptance criteria, '||'-separated (each becomes a checklist item)" },
     json: { type: "boolean" },
   },
   async run({ args }) {
@@ -48,6 +50,7 @@ export const newCmd = defineCommand({
       if (!state) {
         return err(ctx, "bad_state", `invalid state: ${args.state}`);
       }
+      if (args.assignee) await ensureAgentCatalog(); // agent vs member is decided by the agent list
       const assignee = parseAssignee(
         args.assignee ? String(args.assignee) : undefined,
         args["assignee-type"] as "agent" | "member" | undefined,
@@ -68,6 +71,9 @@ export const newCmd = defineCommand({
         assignee,
         github: githubNum && githubNum > 0 ? githubNum : null,
         description: args.description ? String(args.description) : "",
+        acceptanceCriteria: args.ac
+          ? String(args.ac).split("||").map((t) => t.trim()).filter(Boolean).map((text) => ({ done: false, text }))
+          : undefined,
         who: detectWho(),
       });
       await writeAgentContext(root);

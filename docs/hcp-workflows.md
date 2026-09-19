@@ -1,8 +1,10 @@
 # HCP Workflows — multi-agent orchestration, hivemind-native
 
-> Status: design. Target: a `hive_workflow` MCP tool + a `hive-workflow` skill that
-> let an agent run multi-agent workflows on the canvas, using hive's own control
-> plane instead of Claude Code's built-in `Workflow` tool.
+> Status: shipped. The agent-facing surface is now **`hive ctl workflow`** (the MCP
+> server this doc originally targeted was retired; every `hive_workflow(...)` /
+> `mcp__hive__*` reference below reads as the matching `hive ctl` verb — see the
+> `hive-workflow` skill in packages/hive-core/src/templates.ts for the current
+> vocabulary). The HCP `workflow.run` design here is unchanged.
 
 ## Goal
 

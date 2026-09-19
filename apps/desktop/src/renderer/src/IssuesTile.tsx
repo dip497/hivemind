@@ -8,10 +8,12 @@
  * left out). Cards open the full IssuePeek; "work" spawns claude + delivers the
  * work prompt. Per-tile view + group-by persist in localStorage.
  */
+import { RowsSkeleton } from "./workspace/tile-skeletons";
 import { useMemo, useState } from "react";
 import { GripVertical, Inbox, FolderGit2 } from "lucide-react";
 import { HeaderPinButton, type PinRect } from "./canvas-nodes";
 import { useTileFont, FontStepper, handleFontKey } from "./tile-font";
+import { Button } from "./components/ui/button";
 import type { IssueSummary } from "@hivemind/core/types";
 import { useIssues } from "./queries";
 import { FilterBar, emptyFilters, applyFilters, type Filters } from "./components/FilterBar";
@@ -39,12 +41,9 @@ function TileEmpty({
         <div className="text-[12.5px] font-medium text-[var(--color-fg)]">{title}</div>
         <p className="text-[11.5px] text-[var(--color-fg2)] leading-relaxed">{hint}</p>
         {action && (
-          <button
-            onClick={action.onClick}
-            className="mt-1 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11.5px] font-medium text-white bg-[var(--color-brand)] hover:opacity-90 cursor-pointer hm-soft"
-          >
+          <Button size="sm" className="mt-1" onClick={action.onClick}>
             {action.label}
-          </button>
+          </Button>
         )}
       </div>
     </div>
@@ -110,13 +109,13 @@ export function IssuesTile({ root, onClose, selected = false, pinned, onTogglePi
   const filtered = useMemo(() => applyFilters(issues, filters), [issues, filters]);
 
   const workOn = async (issue: IssueSummary) => {
-    // Ensure the repo has the hive MCP + work skill (idempotent), then spawn claude
+    // Ensure the repo has the hive skills + CLAUDE.md section (idempotent), then spawn claude
     // with the work prompt attached (delivered once it's ready — see claude-bus).
     const repoDir = root ? root.replace(/\/\.hivemind\/?$/, "") : null;
     if (repoDir) {
       try { await window.hive.installAgentic(repoDir); } catch { /* best-effort */ }
     }
-    const work = `Work on ${issue.id}: load it via hive_get_issue, complete the acceptance criteria, and end with hive_set_state. Title: "${issue.title}".`;
+    const work = `Work on ${issue.id}: load it with \`hive show ${issue.id} --json\`, complete the acceptance criteria, and end with \`hive ctl set-state\`. Title: "${issue.title}".`;
     window.dispatchEvent(new CustomEvent("hivemind:deliver-to-claude", { detail: { text: work } }));
   };
 
@@ -133,14 +132,16 @@ export function IssuesTile({ root, onClose, selected = false, pinned, onTogglePi
           <FontStepper {...font} />
         </span>
         <HeaderPinButton pinned={pinned} onToggle={onTogglePin} />
-        <button
-          className="nodrag size-5 grid place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--color-line2)] hover:text-[var(--color-fg)] cursor-pointer"
+        <Button
+          variant="ghost"
+          size="icon-2xs"
+          className="nodrag"
           aria-label="close tile"
           title="close"
           onClick={onClose}
         >
           <svg width="12" height="12" viewBox="0 0 14 14" aria-hidden><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
-        </button>
+        </Button>
       </div>
 
       {!root ? (
@@ -150,9 +151,7 @@ export function IssuesTile({ root, onClose, selected = false, pinned, onTogglePi
           hint="Open a project with a .hivemind/ folder to start tracking issues."
         />
       ) : isLoading ? (
-        <div className="flex-1 grid place-items-center text-[11.5px] text-[var(--color-fg2)]">
-          <span className="flex items-center gap-2"><span className="hm-spinner" aria-hidden />Loading issues…</span>
-        </div>
+        <RowsSkeleton rows={6} className="flex-1" />
       ) : (
         <>
           <FilterBar
@@ -163,12 +162,13 @@ export function IssuesTile({ root, onClose, selected = false, pinned, onTogglePi
               <>
                 <GroupByMenu value={groupBy} onChange={setGroupP} />
                 <ViewSwitcher value={view} onChange={setViewP} views={["board", "list"]} />
-                <button
+                <Button
+                  size="sm"
+                  className="nodrag"
                   onClick={() => window.dispatchEvent(new CustomEvent("hivemind:new-issue"))}
-                  className="nodrag inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11.5px] font-semibold text-white bg-[var(--color-brand)] hover:opacity-90 cursor-pointer hm-soft"
                 >
                   + New
-                </button>
+                </Button>
               </>
             }
           />

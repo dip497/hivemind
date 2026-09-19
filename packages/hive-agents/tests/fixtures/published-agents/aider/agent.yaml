@@ -1,0 +1,25 @@
+# Aider — a catalog agent. Launch only: no status reading, resume or turn reports.
+manifestVersion: 1
+id: aider
+label: "Aider"
+bin: aider
+enabled: true
+caps:
+  promptDelivery: typed
+  turnSignal: false
+  resume: none
+  supervise: human
+  blockedDetection: false
+options:
+  - id: model
+    label: "Model"
+    flag: --model
+  - id: mode
+    label: "Approval"
+    values:
+      yes-always: ["--yes-always"]
+    unattended: yes-always
+install:
+  url: https://aider.chat/docs/install.html
+  command: "python -m pip install aider-install && aider-install"
+note: "launches only: Hivemind does not read its status yet, and other agents cannot collect its replies."

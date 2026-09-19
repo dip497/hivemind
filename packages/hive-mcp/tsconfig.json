@@ -1,4 +1,0 @@
-{
-  "extends": "@hivemind/tsconfig/base.json",
-  "include": ["src/**/*"]
-}

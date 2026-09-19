@@ -1,0 +1,44 @@
+# THROWAWAY sixth agent — dropped in by tests/e2e/zz-sixth-provider.spec.ts to prove that
+# a new agent is a manifest plus, only when it needs one, a daemon half. Never shipped.
+manifestVersion: 1
+id: faux
+label: Faux
+bin: faux-agent
+enabled: true
+caps:
+  promptDelivery: argv
+  turnSignal: true
+  resume: none
+  supervise: human
+  blockedDetection: true
+icon:
+  viewBox: 0 0 24 24
+  attrs:
+    fill: none
+    stroke: currentColor
+    stroke-width: '1.6'
+  shapes:
+  - rect:
+      x: '3'
+      y: '5'
+      width: '18'
+      height: '14'
+      rx: '2'
+detect:
+  default: idle
+  rules:
+  - when:
+      all:
+      - contains: 'allow?'
+      - contains: '[y/n]'
+    then: blocked
+  - when:
+      contains: faux is thinking
+    then: working
+assets:
+- name: faux-hooks.json
+  file: faux-hooks.json
+launch:
+  hcp: true
+  env:
+    FAUX_HOOKS: '{asset:faux-hooks.json}'

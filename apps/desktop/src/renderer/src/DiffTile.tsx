@@ -18,58 +18,50 @@
  */
 import {
   useCallback,
+  useDeferredValue,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
-import { GripVertical, Play, RefreshCw, Search, SlidersHorizontal, ChevronUp, ChevronDown } from "lucide-react";
+import { GripVertical, Play, RefreshCw, Search, SlidersHorizontal, ChevronUp, ChevronDown, ChevronRight, ArrowUp, ArrowDown, Maximize2, X } from "lucide-react";
 import { ReviewPopover, CommentBox, ActionToolbar, ReviewAnnotation, composerAnchor } from "./review-ui";
+import { Button } from "./components/ui/button";
+import { MenuItem } from "./components/ui/menu-item";
 import { useTileFont, FontStepper, handleFontKey } from "./tile-font";
 import { FullscreenShell } from "./tile-fullscreen";
 import { DiffSurface } from "./code/DiffSurface";
 import {
   CodeView,
-  UnresolvedFile,
   WorkerPoolContextProvider,
   type CodeViewHandle,
 } from "@pierre/diffs/react";
 import {
-  parseDiffFromFile,
-  parsePatchFiles,
   type AnnotationSide,
-  type CodeViewDiffItem,
   type CodeViewItem,
   type CodeViewOptions,
   type DiffLineAnnotation,
-  type FileContents,
 } from "@pierre/diffs";
-import {
-  useQueries,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
-import type { DiffScope, GitBranchList, GitFileEntry } from "../../shared/ipc";
-import { OVERSIZE_SENTINEL } from "../../shared/ipc";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import type { DiffScope, GitBranchList } from "../../shared/ipc";
 import {
   useDiscardFiles,
-  useGitDiff,
   useGitStatus,
   useStageFiles,
   useUnstageFiles,
 } from "./queries";
 import { CommitBar } from "./code/CommitBar";
+import { useWorkingItems, useBranchItems } from "./code/diff-items";
+import { ConflictView } from "./code/ConflictView";
+import { DiffHeader } from "./code/DiffHeader";
+import { FileTree, clampFilesW, type FileRow } from "./code/FileTree";
+import { BranchPicker } from "./code/BranchPicker";
+import { collectChanges, collectMatches, hashNum } from "./code/diff-search";
 import {
   PIERRE_CSS_VARS,
   workerHighlighterOptions,
   workerPoolOptions,
 } from "./pierre-codeview";
-import { FileTree as PierreFileTree, useFileTree } from "@pierre/trees/react";
-import type {
-  ContextMenuItem,
-  ContextMenuOpenContext,
-  FileTreeRowDecoration,
-} from "@pierre/trees";
 import { DiffReviewPanel } from "./DiffReviewPanel";
 import { newCid, formatCommentMessage, formatReviewMessage, type ReviewComment } from "./diff-comments";
 import { HeaderPinButton, type PinRect } from "./canvas-nodes";
@@ -92,15 +84,6 @@ type Overflow = "scroll" | "wrap";
 const VIEWED_KEY_PREFIX = "hivemind:viewed:";
 
 
-/** main returns `${OVERSIZE_SENTINEL}${bytes}` for a file too big to diff. */
-function oversizeBytes(s: string | undefined): number | null {
-  if (!s || !s.startsWith(OVERSIZE_SENTINEL)) return null;
-  const n = Number(s.slice(OVERSIZE_SENTINEL.length));
-  return Number.isFinite(n) ? n : 0;
-}
-function oversizePlaceholder(bytes: number): string {
-  return `⚠ file too large to diff (${(bytes / 1_000_000).toFixed(1)} MB) — open it directly to view\n`;
-}
 
 function loadJson<T>(key: string, fallback: T): T {
   try {
@@ -151,6 +134,8 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
   const [staged, setStaged] = useState(false);
   const [layout, setLayout] = useState<Layout>("split");
   const [overflow, setOverflow] = useState<Overflow>("scroll");
+  // Reindent-only changes drown a review; every IDE offers this switch.
+  const [ignoreWhitespace, setIgnoreWhitespace] = useState(false);
   // false (default) ⇒ collapse unchanged runs, show only changed hunks + context;
   // true ⇒ expand the whole file. Toggled from the header ("diff"/"full").
   const [expandUnchanged, setExpandUnchanged] = useState(false);
@@ -183,7 +168,13 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
     };
   }, [viewMenuOpen]);
 
-  const [comments, setComments] = useState<ReviewComment[]>(() => loadComments(repoPath));
+  const [comments, setComments] = useState<ReviewComment[]>([]);
+  // The store is a file main owns, so the first list arrives a tick late.
+  useEffect(() => {
+    let live = true;
+    void loadComments(repoPath).then((list) => { if (live) setComments(list); });
+    return () => { live = false; };
+  }, [repoPath]);
   // Review panel (Figma/GitHub-style) open state — persisted.
   const [reviewOpen, setReviewOpen] = useState<boolean>(
     () => localStorage.getItem("hivemind:review-open") === "1",
@@ -212,7 +203,8 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
   // Clear the draft whenever the composer closes, so a fresh "+" starts empty.
   useEffect(() => { if (!composer) setComposerDraft(""); }, [composer]);
 
-  const codeViewRef = useRef<CodeViewHandle<ReviewComment>>(null);
+  // Second type arg is the caret payload (collab carets) — we render none.
+  const codeViewRef = useRef<CodeViewHandle<ReviewComment, undefined>>(null);
   // The CodeView wrapper — for popover anchor coords + scoping the file lookup.
   const cvHostRef = useRef<HTMLDivElement>(null);
   // The line element the pointer is currently over (from onLineEnter). The gutter
@@ -228,6 +220,15 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
   const stageMut = useStageFiles();
   const unstageMut = useUnstageFiles();
   const discardMut = useDiscardFiles();
+  // Pulled out because the mutation OBJECTS are new every render; these are not.
+  const { mutate: stage } = stageMut;
+  const { mutate: unstage } = unstageMut;
+  const { mutate: discard } = discardMut;
+  // One lookup table instead of a 540-entry scan per rendered file header.
+  const statusByPath = useMemo(
+    () => new Map((status?.files ?? []).map((f) => [f.path, f])),
+    [status?.files],
+  );
 
   const conflicted = status?.conflictedFiles ?? [];
   const hasConflicts = conflicted.length > 0;
@@ -268,13 +269,18 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
     });
   }, []);
 
-  function commentsForFile(file: string): DiffLineAnnotation<ReviewComment>[] {
-    // Anchor the annotation at the range's END line (where the comment "lands");
-    // the annotation body shows the full L{start}–{end} range.
-    return comments
-      .filter((c) => c.file === file)
-      .map((c) => ({ side: c.side, lineNumber: c.endLine, metadata: c }));
-  }
+  // Anchored at the range's END line (where the comment "lands"); the body
+  // shows the full L{start}–{end} range. Grouped once — the items memo below
+  // asks per file, and scanning every comment per file is O(files x comments).
+  const annotationsByFile = useMemo(() => {
+    const m = new Map<string, DiffLineAnnotation<ReviewComment>[]>();
+    for (const c of comments) {
+      const list = m.get(c.file);
+      const a = { side: c.side, lineNumber: c.endLine, metadata: c };
+      if (list) list.push(a); else m.set(c.file, [a]);
+    }
+    return m;
+  }, [comments]);
 
   // ── git invalidation on fs change (owned here, scoped to THIS tile's repo) ──
   // App's central useFsChangedInvalidation only covers the top-level repoPath. A
@@ -300,10 +306,13 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
       timer = undefined;
       const paths = pending;
       pending = [];
-      qc.invalidateQueries({ queryKey: ["git:status", repoPath] });
-      qc.invalidateQueries({ queryKey: ["git:diff", repoPath] });
-      qc.invalidateQueries({ queryKey: ["git:list-files", repoPath] });
-      qc.invalidateQueries({ queryKey: ["git:branches", repoPath] });
+      // The app-wide watcher invalidates the same keys for its repo a moment
+      // apart: join a fetch already in flight instead of cancelling it.
+      const join = { cancelRefetch: false };
+      qc.invalidateQueries({ queryKey: ["git:status", repoPath] }, join);
+      qc.invalidateQueries({ queryKey: ["git:diff", repoPath] }, join);
+      qc.invalidateQueries({ queryKey: ["git:list-files", repoPath] }, join);
+      qc.invalidateQueries({ queryKey: ["git:branches", repoPath] }, join);
       qc.invalidateQueries({
         predicate: (q) =>
           q.queryKey[0] === "git:file" &&
@@ -314,7 +323,9 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
       });
     };
     const unsub = window.hive.onFsChanged(repoPath, ({ paths }) => {
-      pending.push(...paths);
+      const tree = paths.filter((p) => !p.includes("/.hivemind/"));
+      if (!tree.length) return;
+      pending.push(...tree);
       if (timer) clearTimeout(timer);
       timer = setTimeout(flush, 150);
     });
@@ -327,8 +338,8 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
   // ── build CodeView items per mode ───────────────────────────────────────
   const workingItems = useWorkingItems(repoPath, mode === "working" ? status?.files ?? [] : [], staged);
   const branchScope: DiffScope = useMemo(
-    () => ({ kind: "branch", base: branchBase ?? initialBase, head: branchHead }),
-    [branchBase, branchHead, initialBase],
+    () => ({ kind: "branch", base: branchBase ?? initialBase, head: branchHead, ignoreWhitespace }),
+    [branchBase, branchHead, initialBase, ignoreWhitespace],
   );
   const branch = useBranchItems(repoPath, branchScope, mode === "branch");
   // Branch inventory for the base/head pickers — only fetched in branch mode.
@@ -338,7 +349,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
     enabled: mode === "branch",
   });
   // Committed-but-not-pushed: net diff of local commits ahead of @{upstream}.
-  const unpushedScope: DiffScope = useMemo(() => ({ kind: "unpushed" }), []);
+  const unpushedScope: DiffScope = useMemo(() => ({ kind: "unpushed", ignoreWhitespace }), [ignoreWhitespace]);
   const unpushed = useBranchItems(repoPath, unpushedScope, mode === "unpushed");
 
   const revItems = mode === "unpushed" ? unpushed : branch;
@@ -363,6 +374,8 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
     return out;
   }, [rawBaseItems]);
 
+  const itemCache = useRef(new Map<string, { sig: string; base: unknown; item: CodeViewItem<ReviewComment> }>());
+
   // Decorate base items with collapse/viewed/annotations.
   //
   // CodeView reconciles by id + `version`: `syncItemRecord` re-applies an
@@ -371,20 +384,30 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
   // So the final version MUST fold in collapsed + the annotations digest, or
   // toggling collapse/viewed and adding comments would not re-render.
   const items: CodeViewItem<ReviewComment>[] = useMemo(() => {
-    return baseItems.map((it) => {
+    const next = new Map<string, { sig: string; base: unknown; item: CodeViewItem<ReviewComment> }>();
+    const out = baseItems.map((it) => {
       const file = it.fileDiff.name;
       const isCollapsed = collapsed.has(file) || viewed.has(file);
-      const anns = commentsForFile(file);
+      const anns = annotationsByFile.get(file);
       const annsDigest = anns?.map((a) => `${a.lineNumber}.${a.side}.${a.metadata?.at}`).join(",") ?? "";
-      return {
-        ...it,
-        collapsed: isCollapsed,
-        annotations: anns,
-        version: hashNum(`${it.version ?? 0}:${isCollapsed ? 1 : 0}:${annsDigest}`),
-      };
+      const version = hashNum(`${it.version ?? 0}:${isCollapsed ? 1 : 0}:${annsDigest}`);
+      const sig = `${version}:${isCollapsed ? 1 : 0}:${annsDigest}`;
+      // Hand back the SAME object when nothing about this file changed.
+      // VirtualizedFileDiff compares diff identity between preparing a layout
+      // and rendering it; a fresh object for an unchanged file swaps the diff
+      // mid-flight and it throws. Comments arriving from the workspace a tick
+      // after mount used to replace all of them at once.
+      const prev = itemCache.current.get(it.id);
+      const item = prev && prev.sig === sig && prev.base === it
+        ? prev.item
+        : { ...it, collapsed: isCollapsed, annotations: anns, version };
+      next.set(it.id, { sig, base: it, item });
+      return item;
     });
+    itemCache.current = next;
+    return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [baseItems, collapsed, viewed, comments, mode]);
+  }, [baseItems, collapsed, viewed, annotationsByFile]);
 
   // Changed-files list for the sidebar tree — path + add/del counts per file.
   const fileRows = useMemo(
@@ -414,7 +437,10 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
   // ── in-diff search (codiff's hunk-walk algorithm) ──────────────────────
   // Walks each fileDiff's hunks → hunkContent blocks, mapping array indices
   // back to real line numbers + side, so we can scrollTo + highlight each hit.
-  const matches = useMemo(() => collectMatches(baseItems, search), [baseItems, search]);
+  // Deferred: collectMatches walks every line of every file, so running it on
+  // each keystroke stalls typing once a branch has a few hundred files.
+  const deferredSearch = useDeferredValue(search);
+  const matches = useMemo(() => collectMatches(baseItems, deferredSearch), [baseItems, deferredSearch]);
   const [matchIdx, setMatchIdx] = useState(0);
 
   const gotoMatch = useCallback(
@@ -444,7 +470,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
     if (matches.length > 0) gotoMatch(0);
     else codeViewRef.current?.clearSelectedLines();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, matches.length]);
+  }, [deferredSearch, matches.length]);
 
   // ── next/prev-change navigation ────────────────────────────────────────────
   // One anchor per hunk; the ▲/▼ header buttons + n/p keys step through them,
@@ -478,7 +504,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
   useEffect(() => { setChangeIdx(-1); }, [changes.length]);
 
   // ── CodeView options ────────────────────────────────────────────────────
-  const options: CodeViewOptions<ReviewComment> = useMemo(
+  const options: CodeViewOptions<ReviewComment, undefined> = useMemo(
     () => ({
       theme: { dark: "pierre-dark", light: "pierre-light" },
       themeType: "dark",
@@ -550,7 +576,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
       const file = fd.name;
       const adds = fd.hunks.reduce((n, h) => n + h.additionLines, 0);
       const dels = fd.hunks.reduce((n, h) => n + h.deletionLines, 0);
-      const entry = status?.files.find((f) => f.path === file);
+      const entry = statusByPath.get(file);
       const isCollapsed = collapsed.has(file) || viewed.has(file);
       const isViewed = viewed.has(file);
       return (
@@ -567,18 +593,21 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
           onToggleCollapsed={() => toggleCollapsed(file)}
           onToggleViewed={() => toggleViewed(file)}
           onToggleStage={() => {
-            if (entry?.staged) unstageMut.mutate({ repoPath, files: [file] });
-            else stageMut.mutate({ repoPath, files: [file] });
+            if (entry?.staged) unstage({ repoPath, files: [file] });
+            else stage({ repoPath, files: [file] });
           }}
           onOpen={() => setActiveFile(file)}
           onDiscard={() => {
             if (mode === "working" && confirm(`discard changes to ${file}?`))
-              discardMut.mutate({ repoPath, files: [file] });
+              discard({ repoPath, files: [file] });
           }}
         />
       );
     },
-    [status, collapsed, viewed, mode, repoPath, toggleCollapsed, toggleViewed, stageMut, unstageMut, discardMut, headerH, chromePx],
+    // `stageMut` & co are a NEW object every render (react-query returns a fresh
+    // result); depending on them rebuilt this callback constantly, and Pierre
+    // re-rendered every sticky header. `.mutate` is stable.
+    [statusByPath, collapsed, viewed, mode, repoPath, toggleCollapsed, toggleViewed, stage, unstage, discard, headerH, chromePx],
   );
 
   const renderAnnotation = useCallback(
@@ -702,13 +731,10 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
 
         <div className="nodrag ml-2.5 inline-flex rounded-md overflow-hidden bg-[var(--color-bg)] border border-[var(--color-line2)]">
           {modeTabs.map((t) => (
-            <button
+            <Button
               key={t.id}
-              className={`px-2.5 py-0.5 text-[10.5px] font-mono transition-colors inline-flex items-center gap-1 ${
-                mode === t.id
-                  ? "bg-[var(--color-bg4)] text-[var(--color-accent)] font-semibold"
-                  : "text-[var(--color-fg3)] hover:text-[var(--color-fg2)]"
-              } ${t.disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}
+              variant={mode === t.id ? "secondary" : "ghost"}
+              size="2xs"
               onClick={() => { if (!t.disabled) setMode(t.id); }}
               disabled={t.disabled}
               title={t.title}
@@ -719,7 +745,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
                   {t.badge}
                 </span>
               )}
-            </button>
+            </Button>
           ))}
         </div>
 
@@ -746,18 +772,32 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
         )}
 
         {mode === "working" && (
-          <button
-            className={`nodrag inline-flex items-center gap-1 px-2 py-0.5 rounded border text-[10px] font-mono transition-colors ${
-              staged
-                ? "border-[var(--color-ok)] text-[var(--color-ok)] bg-[color-mix(in_srgb,var(--color-ok)_10%,transparent)]"
-                : "border-[var(--color-line2)] text-[var(--color-fg3)] hover:text-[var(--color-fg2)]"
-            }`}
+          <Button
+            variant={staged ? "secondary" : "outline"}
+            size="2xs"
+            className="nodrag"
             onClick={() => setStaged((s) => !s)}
             title="compare against the index (staged)"
           >
             <span aria-hidden className="size-1.5 rounded-full" style={{ background: staged ? "var(--color-ok)" : "var(--color-fg3)" }} />
             staged
-          </button>
+          </Button>
+        )}
+
+        {/* Reindent-only noise, hidden by git itself. Working mode diffs file
+            contents in the renderer, so there is no git flag to pass there. */}
+        {mode !== "working" && (
+          <Button
+            variant={ignoreWhitespace ? "secondary" : "outline"}
+            size="2xs"
+            font="mono"
+            className="nodrag"
+            onClick={() => setIgnoreWhitespace((w) => !w)}
+            title={ignoreWhitespace ? "showing every change" : "hide whitespace-only changes"}
+            aria-pressed={ignoreWhitespace}
+          >
+            ws
+          </Button>
         )}
 
         {/* next/prev-change nav — step through the actual changed hunks (▲/▼ or
@@ -765,25 +805,15 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
             position/total; only shown when there's more than one change. */}
         {changes.length > 1 && (
           <div className="nodrag ml-1.5 inline-flex items-center gap-0.5 bg-[var(--color-bg)] border border-[var(--color-line2)] rounded px-1 py-0.5" title="jump between changes (n / p)">
-            <button
-              className="text-[var(--color-fg3)] hover:text-[var(--color-fg)] grid place-items-center size-4"
-              onClick={() => gotoChange(changeIdx - 1)}
-              title="previous change (p)"
-              aria-label="previous change"
-            >
-              <ChevronUp size={12} />
-            </button>
+            <Button variant="ghost" size="icon-micro" onClick={() => gotoChange(changeIdx - 1)} title="previous change (p)" aria-label="previous change">
+              <ChevronUp />
+            </Button>
             <span className="text-[9.5px] font-mono tabular-nums text-[var(--color-fg3)] min-w-[30px] text-center">
               {changeIdx >= 0 ? `${changeIdx + 1}/${changes.length}` : `${changes.length}`}
             </span>
-            <button
-              className="text-[var(--color-fg3)] hover:text-[var(--color-fg)] grid place-items-center size-4"
-              onClick={() => gotoChange(changeIdx + 1)}
-              title="next change (n)"
-              aria-label="next change"
-            >
-              <ChevronDown size={12} />
-            </button>
+            <Button variant="ghost" size="icon-micro" onClick={() => gotoChange(changeIdx + 1)} title="next change (n)" aria-label="next change">
+              <ChevronDown />
+            </Button>
           </div>
         )}
 
@@ -811,113 +841,127 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
                 {matches.length ? `${matchIdx + 1}/${matches.length}` : "0/0"}
               </span>
             )}
-            <button
-              className="text-[var(--color-fg3)] hover:text-[var(--color-fg)] disabled:opacity-30 text-[10px] leading-none"
+            <Button
+              variant="ghost"
+              size="icon-micro"
               disabled={matches.length === 0}
               onClick={() => gotoMatch(matchIdx - 1)}
               title="previous match (shift+enter)"
             >
-              ↑
-            </button>
-            <button
-              className="text-[var(--color-fg3)] hover:text-[var(--color-fg)] disabled:opacity-30 text-[10px] leading-none"
+              <ArrowUp />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-micro"
               disabled={matches.length === 0}
               onClick={() => gotoMatch(matchIdx + 1)}
               title="next match (enter)"
             >
-              ↓
-            </button>
-            <button
-              className="cursor-pointer text-[var(--color-fg3)] hover:text-[var(--color-fg)] text-[11px] leading-none ml-0.5"
+              <ArrowDown />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-micro"
+              className="ml-0.5"
               onClick={() => { setSearch(""); setSearchOpen(false); }}
               title="close search"
             >
-              ×
-            </button>
+              <X />
+            </Button>
           </div>
         ) : (
-          <button
-            className="nodrag cursor-pointer ml-1.5 size-6 grid place-items-center rounded text-[var(--color-fg3)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg4)] transition-colors"
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            className="nodrag ml-1.5"
             onClick={() => setSearchOpen(true)}
             aria-label="search diff"
             title="Search diff"
           >
-            <Search size={12} aria-hidden />
-          </button>
+            <Search aria-hidden />
+          </Button>
         )}
 
         {/* view⋯ — secondary view options (layout / wrap / full / font /
             refresh) collapsed into one popover so the header stays uncluttered. */}
         <div className="relative" ref={viewMenuRef}>
-          <button
-            className={`nodrag cursor-pointer ml-1.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] font-mono transition-colors ${
-              viewMenuOpen
-                ? "border-[var(--color-line2)] bg-[var(--color-bg4)] text-[var(--color-fg)]"
-                : "border-[var(--color-line2)] text-[var(--color-fg3)] hover:text-[var(--color-fg2)]"
-            }`}
+          <Button
+            variant={viewMenuOpen ? "secondary" : "outline"}
+            size="2xs"
+            className="nodrag ml-1.5"
             onClick={() => setViewMenuOpen((o) => !o)}
             title="View options"
           >
-            <SlidersHorizontal size={11} aria-hidden />
+            <SlidersHorizontal aria-hidden />
             view
-          </button>
+          </Button>
           {viewMenuOpen && (
             <div className="nodrag absolute z-50 right-0 top-full mt-1 w-44 flex flex-col gap-2 bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-lg shadow-xl p-2 text-[10px] font-mono">
               {/* header — label + explicit close (outside-click & Esc also close) */}
               <div className="flex items-center justify-between -mb-0.5">
                 <span className="uppercase tracking-wider text-[9px] font-semibold text-[var(--color-fg3)]">View</span>
-                <button
-                  className="cursor-pointer size-4 grid place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--color-line2)] hover:text-[var(--color-fg)] transition-colors"
+                <Button
+                  variant="ghost"
+                  size="icon-micro"
                   onClick={() => setViewMenuOpen(false)}
                   aria-label="close view options"
                   title="close"
                 >
-                  ×
-                </button>
+                  <X />
+                </Button>
               </div>
               {/* layout */}
               <div className="inline-flex rounded overflow-hidden border border-[var(--color-line2)]">
-                <button
-                  className={`flex-1 cursor-pointer px-2 py-1 transition-colors ${layout === "split" ? "bg-[var(--color-bg4)] text-[var(--color-accent)]" : "text-[var(--color-fg3)] hover:text-[var(--color-fg2)]"}`}
+                <Button
+                  variant={layout === "split" ? "secondary" : "ghost"}
+                  size="xs"
+                  className="flex-1"
                   onClick={() => setLayout("split")}
                 >
                   split
-                </button>
-                <button
-                  className={`flex-1 cursor-pointer px-2 py-1 transition-colors ${layout === "unified" ? "bg-[var(--color-bg4)] text-[var(--color-accent)]" : "text-[var(--color-fg3)] hover:text-[var(--color-fg2)]"}`}
+                </Button>
+                <Button
+                  variant={layout === "unified" ? "secondary" : "ghost"}
+                  size="xs"
+                  className="flex-1"
                   onClick={() => setLayout("unified")}
                 >
                   unified
-                </button>
+                </Button>
               </div>
               {/* toggles */}
               <div className="flex items-center gap-1.5">
-                <button
-                  className={`flex-1 cursor-pointer px-2 py-1 rounded border transition-colors ${overflow === "wrap" ? "border-[var(--color-accent)] text-[var(--color-accent)] bg-[var(--color-bg4)]" : "border-[var(--color-line2)] text-[var(--color-fg3)] hover:text-[var(--color-fg2)]"}`}
+                <Button
+                  variant={overflow === "wrap" ? "secondary" : "outline"}
+                  size="xs"
+                  className="flex-1"
                   onClick={() => setOverflow((o) => (o === "scroll" ? "wrap" : "scroll"))}
                   title="toggle long-line wrap"
                 >
                   wrap
-                </button>
-                <button
-                  className={`flex-1 cursor-pointer px-2 py-1 rounded border transition-colors ${expandUnchanged ? "border-[var(--color-accent)] text-[var(--color-accent)] bg-[var(--color-bg4)]" : "border-[var(--color-line2)] text-[var(--color-fg3)] hover:text-[var(--color-fg2)]"}`}
+                </Button>
+                <Button
+                  variant={expandUnchanged ? "secondary" : "outline"}
+                  size="xs"
+                  className="flex-1"
                   onClick={() => setExpandUnchanged((v) => !v)}
                   title={expandUnchanged ? "showing full file — click for changes only" : "showing changes only — click for full file"}
                 >
                   {expandUnchanged ? "full" : "diff"}
-                </button>
+                </Button>
               </div>
               {/* font + refresh */}
               <div className="flex items-center justify-between gap-1.5 pt-1 border-t border-[var(--color-line2)]">
                 <FontStepper {...font} />
-                <button
-                  className="size-6 cursor-pointer grid place-items-center rounded text-[var(--color-fg3)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg4)] transition-colors"
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
                   onClick={refresh}
                   aria-label="refresh diff"
                   title="Refresh diff (re-read files + diffs)"
                 >
-                  <RefreshCw size={12} aria-hidden />
-                </button>
+                  <RefreshCw aria-hidden />
+                </Button>
               </div>
             </div>
           )}
@@ -929,23 +973,19 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
               {items.length}f · {viewed.size}✓
             </span>
           )}
-          <button
-            className={`nodrag inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] transition-colors ${
-              filesOpen
-                ? "border-[var(--color-line2)] bg-[var(--color-bg4)] text-[var(--color-fg)]"
-                : "border-[var(--color-line2)] text-[var(--color-fg3)] hover:text-[var(--color-fg2)]"
-            }`}
+          <Button
+            variant={filesOpen ? "secondary" : "outline"}
+            size="2xs"
+            className="nodrag"
             onClick={() => setFilesOpen((o) => !o)}
             title="Toggle the changed-files list"
           >
             files
-          </button>
-          <button
-            className={`nodrag inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] transition-colors ${
-              reviewOpen
-                ? "border-[var(--color-line2)] bg-[var(--color-bg4)] text-[var(--color-fg)]"
-                : "border-[var(--color-line2)] text-[var(--color-fg3)] hover:text-[var(--color-fg2)]"
-            }`}
+          </Button>
+          <Button
+            variant={reviewOpen ? "secondary" : "outline"}
+            size="2xs"
+            className="nodrag"
             onClick={() => setReviewOpen((o) => !o)}
             title="Toggle the review panel"
           >
@@ -955,24 +995,28 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
                 {comments.filter((c) => !c.resolved).length}
               </span>
             )}
-          </button>
-          <button
-            className="nodrag size-4 grid place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--color-line2)] hover:text-[var(--color-fg)] transition-colors cursor-pointer text-[11px] leading-none"
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-micro"
+            className="nodrag"
             onClick={() => setOverlay((v) => !v)}
             aria-label="fullscreen diff"
             title="Fullscreen · Esc to exit"
           >
-            ⤢
-          </button>
+            <Maximize2 />
+          </Button>
           <HeaderPinButton pinned={pinned} onToggle={onTogglePin} />
-          <button
-            className="nodrag size-4 grid place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--color-line2)] hover:text-[var(--color-fg)] transition-colors cursor-pointer"
+          <Button
+            variant="ghost"
+            size="icon-micro"
+            className="nodrag"
             aria-label="close tile"
             title="close"
             onClick={onClose}
           >
-            ×
-          </button>
+            <X />
+          </Button>
         </div>
       </div>
 
@@ -1076,7 +1120,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
 
           {activeFile && (
             <div className="flex-1 min-h-0">
-              <FileView repoPath={repoPath} file={activeFile} onClose={() => setActiveFile(null)} />
+              <DiffSurface repoPath={repoPath} file={activeFile} onClose={() => setActiveFile(null)} />
             </div>
           )}
 
@@ -1157,21 +1201,23 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
             <span className="text-[var(--color-warn)] font-medium">
               {comments.length} review comment{comments.length > 1 ? "s" : ""}
             </span>
-            <button
+            <Button
+              size="xs"
+              className="ml-auto"
               onClick={sendReview}
-              className="ml-auto inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-white bg-[var(--color-brand)] hover:opacity-90 text-[11.5px] font-medium"
               title="Send all review comments to claude (spawns one if none is running)"
             >
-              <Play size={12} fill="currentColor" strokeWidth={0} aria-hidden />
+              <Play fill="currentColor" strokeWidth={0} aria-hidden />
               Send review to Claude
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="destructive"
+              size="xs"
               onClick={() => persistComments([])}
-              className="text-[var(--color-fg3)] hover:text-[var(--color-err)] text-[10px]"
               title="discard all review comments"
             >
               clear
-            </button>
+            </Button>
           </div>
         )}
 
@@ -1201,507 +1247,3 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
 // CommitBar moved to code/CommitBar.tsx (shared with the Code Workbench).
 
 // ── items: working tree (HEAD ↔ WORKING|INDEX, full-content diff) ─────────
-
-interface ItemsResult {
-  items: CodeViewDiffItem<ReviewComment>[];
-  isLoading: boolean;
-  error: Error | null;
-}
-
-// ── changed-files TREE ──────────────────────────────────────────────────
-// @pierre/diffs ships no file-navigation component, but @pierre/trees DOES —
-// the same <FileTree> the editor's FileTreeTile uses. We reuse it here (fed the
-// changed-file paths) so the diff sidebar gets compact folders, file icons,
-// virtualization, and ⌘P search for free instead of a bespoke tree. `viewed` is
-// surfaced via the main pane (reviewed files collapse) + the sidebar header
-// count; the per-file toggle lives in the row context menu (Pierre owns row
-// rendering, so we can't inject a checkbox — its decoration slot is text-only).
-const clampFilesW = (w: number) => Math.max(180, Math.min(560, Math.round(w)));
-
-interface FileRow { id: string; file: string; adds: number; dels: number }
-
-function FileTree({
-  rows, onJump, onToggleViewed,
-}: {
-  rows: FileRow[];
-  viewed: Set<string>;
-  onJump: (id: string) => void;
-  onToggleViewed: (file: string) => void;
-}) {
-  const norm = (p: string) => p.replace(/\/+$/, "");
-  const paths = useMemo(() => rows.map((r) => norm(r.file)), [rows]);
-  // path → row, for jump-on-select + the +adds/−dels decoration.
-  const byPath = useMemo(() => {
-    const m = new Map<string, FileRow>();
-    for (const r of rows) m.set(norm(r.file), r);
-    return m;
-  }, [rows]);
-  // The model is built once; its callbacks must read the latest maps/handlers.
-  const byPathRef = useRef(byPath); byPathRef.current = byPath;
-  const onJumpRef = useRef(onJump); onJumpRef.current = onJump;
-  const onToggleRef = useRef(onToggleViewed); onToggleRef.current = onToggleViewed;
-
-  const { model } = useFileTree({
-    paths,
-    flattenEmptyDirectories: true,   // VS Code-style compact folders
-    initialExpansion: "open",        // only the changed files — show them all
-    search: true,
-    fileTreeSearchMode: "expand-matches",
-    density: "compact",              // tighter rows + indent for deep change-sets
-    itemHeight: 22,
-    onSelectionChange: (sel) => {
-      const p = sel[0];
-      const r = p ? byPathRef.current.get(p.replace(/\/+$/, "")) : undefined;
-      if (r) onJumpRef.current(r.id); // directory selections resolve to no row
-    },
-    renderRowDecoration: ({ item }): FileTreeRowDecoration | null => {
-      if (item.kind === "directory") return null;
-      const r = byPathRef.current.get(item.path.replace(/\/+$/, ""));
-      return r ? { text: `+${r.adds} −${r.dels}`, title: `+${r.adds} −${r.dels}` } : null;
-    },
-  });
-
-  useEffect(() => { model.resetPaths(paths); }, [model, paths]);
-
-  return (
-    <PierreFileTree
-      model={model}
-      className="h-full w-full nowheel"
-      renderContextMenu={(item: ContextMenuItem, ctx: ContextMenuOpenContext) => {
-        const r = byPathRef.current.get(item.path.replace(/\/+$/, ""));
-        if (!r) return <></>;
-        const btn = "w-full text-left px-2 py-1 rounded text-[var(--color-fg)] hover:bg-[var(--color-bg4)]";
-        return (
-          <div className="min-w-[180px] bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-md shadow-2xl p-1 text-[12px]">
-            <button className={btn} onClick={() => { onJumpRef.current(r.id); ctx.close(); }}>Jump to file</button>
-            <button className={btn} onClick={() => { onToggleRef.current(r.file); ctx.close(); }}>Toggle reviewed</button>
-          </div>
-        );
-      }}
-    />
-  );
-}
-
-function useWorkingItems(repoPath: string, files: GitFileEntry[], staged: boolean): ItemsResult {
-  const newRev: "WORKING" | "INDEX" = staged ? "INDEX" : "WORKING";
-  const changed = useMemo(
-    () => files.filter((f) => f.status !== "ignored" && f.status !== "conflicted"),
-    [files],
-  );
-
-  const results = useQueries({
-    queries: changed.flatMap((f) => {
-      // Added/untracked files have no HEAD blob — fetching it throws. Treat
-      // the old side as empty so the file renders as all-additions.
-      const noHead = f.status === "added" || f.status === "untracked";
-      // Deleted files have no working/index blob — old side only.
-      const noNew = f.status === "deleted";
-      return [
-        {
-          queryKey: ["git:file", repoPath, f.path, noHead ? "EMPTY" : "HEAD"],
-          queryFn: () =>
-            noHead ? Promise.resolve("") : window.hive.gitFileContents(repoPath, f.path, "HEAD"),
-          retry: false,
-        },
-        {
-          queryKey: ["git:file", repoPath, f.path, noNew ? "EMPTY" : newRev],
-          queryFn: () =>
-            noNew ? Promise.resolve("") : window.hive.gitFileContents(repoPath, f.path, newRev),
-          retry: false,
-        },
-      ];
-    }),
-  });
-
-  // Signature gates the parse: only re-parse when a file's content actually
-  // refetched (dataUpdatedAt bumps) or the file set changed.
-  const sig = changed
-    .map((f, i) => `${f.path}:${results[i * 2]?.dataUpdatedAt ?? 0}:${results[i * 2 + 1]?.dataUpdatedAt ?? 0}`)
-    .join("|");
-
-  const items = useMemo(() => {
-    const out: CodeViewDiffItem<ReviewComment>[] = [];
-    changed.forEach((f, i) => {
-      const oldR = results[i * 2];
-      const newR = results[i * 2 + 1];
-      if (oldR?.isLoading || newR?.isLoading) return;
-      const oldUpdated = oldR?.dataUpdatedAt ?? 0;
-      const newUpdated = newR?.dataUpdatedAt ?? 0;
-      // A file the main process refused to load (over DIFF_MAX_FILE_BYTES) comes
-      // back as `${OVERSIZE_SENTINEL}${bytes}`. Diff a one-line placeholder on
-      // BOTH sides instead of the real content so parse/highlight stay trivial —
-      // the raw blob never entered the renderer, and the LCS can't blow up.
-      // Empty old + placeholder new so the file still SHOWS (as a one-line note)
-      // rather than vanishing (identical sides = no diff = dropped from the list).
-      const oversize = oversizeBytes(oldR?.data) ?? oversizeBytes(newR?.data);
-      const oldContents = oversize != null ? "" : (oldR?.data ?? "");
-      const newContents = oversize != null ? oversizePlaceholder(oversize) : (newR?.data ?? "");
-      const oldFile: FileContents = {
-        name: f.path,
-        contents: oldContents,
-        cacheKey: `${repoPath}:HEAD:${f.path}:${oldUpdated}`,
-      };
-      const newFile: FileContents = {
-        name: f.path,
-        contents: newContents,
-        cacheKey: `${repoPath}:${newRev}:${f.path}:${newUpdated}`,
-      };
-      const fileDiff = parseDiffFromFile(oldFile, newFile);
-      out.push({ id: `diff:${f.path}`, type: "diff", fileDiff, version: oldUpdated + newUpdated });
-    });
-    return out;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sig, repoPath, newRev]);
-
-  const isLoading = results.some((r) => r.isLoading) && items.length === 0;
-  // Per-file content errors degrade gracefully (file renders with empty side),
-  // so they're NOT fatal — only report an error when nothing rendered at all.
-  const error =
-    items.length === 0 && !isLoading ? ((results.find((r) => r.error)?.error as Error) ?? null) : null;
-  return { items, isLoading, error };
-}
-
-// ── items: branch (`git diff base...HEAD`, partial patch) ─────────────────
-
-/** A base/head ref dropdown for branch-compare. Native <select> so the menu is
- *  immune to the tile drag-handle and z-stacking. Empty value ⇒ auto (caller's
- *  default). Local + remote branches in separate optgroups. */
-/** Searchable branch combobox — a trigger button + a filterable popover list.
- *  A plain <select> is unusable on repos with hundreds of branches; this filters
- *  local + remote refs as you type. Closes on pick / outside-click / Escape. */
-function BranchPicker({
-  label,
-  value,
-  onChange,
-  branches,
-  autoLabel,
-}: {
-  label: string;
-  value: string | undefined;
-  onChange: (v: string | undefined) => void;
-  branches: GitBranchList | undefined;
-  autoLabel: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
-    document.addEventListener("mousedown", onDown, true);
-    document.addEventListener("keydown", onKey, true);
-    return () => {
-      document.removeEventListener("mousedown", onDown, true);
-      document.removeEventListener("keydown", onKey, true);
-    };
-  }, [open]);
-
-  const q = query.trim().toLowerCase();
-  const local = (branches?.local ?? []).filter((b) => b.toLowerCase().includes(q));
-  const remote = (branches?.remote ?? []).filter((b) => b.toLowerCase().includes(q));
-
-  const pick = (v: string | undefined) => { onChange(v); setOpen(false); setQuery(""); };
-
-  return (
-    <div className="nodrag relative inline-flex items-center gap-1 text-[10px] font-mono" ref={ref}>
-      <span className="text-[var(--color-fg3)]">{label}</span>
-      <button
-        className="nodrag cursor-pointer max-w-[150px] inline-flex items-center gap-1 bg-[var(--color-bg)] border border-[var(--color-line2)] rounded px-1.5 py-0.5 text-[var(--color-fg)] outline-none hover:border-[var(--color-fg3)] transition-colors"
-        onClick={() => setOpen((o) => !o)}
-        title={value ?? autoLabel}
-      >
-        <span className="truncate">{value ?? autoLabel}</span>
-        <span aria-hidden className="text-[var(--color-fg3)] shrink-0">▾</span>
-      </button>
-      {open && (
-        <div className="nodrag absolute z-50 left-0 top-full mt-1 w-60 flex flex-col bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-lg shadow-xl overflow-hidden">
-          <div className="flex items-center gap-1 px-2 py-1.5 border-b border-[var(--color-line2)]">
-            <Search size={11} aria-hidden className="text-[var(--color-fg3)] shrink-0" />
-            <input
-              autoFocus
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="filter branches…"
-              className="w-full bg-transparent text-[10px] font-mono text-[var(--color-fg)] outline-none placeholder:text-[var(--color-fg3)]"
-            />
-          </div>
-          <div className="max-h-64 overflow-y-auto py-1">
-            <button
-              className={`w-full cursor-pointer text-left px-2 py-1 transition-colors ${value == null ? "text-[var(--color-accent)] bg-[var(--color-bg4)]" : "text-[var(--color-fg2)] hover:bg-[var(--color-bg4)]"}`}
-              onClick={() => pick(undefined)}
-            >
-              {autoLabel}
-            </button>
-            {local.length > 0 && (
-              <div className="px-2 pt-1.5 pb-0.5 text-[8.5px] uppercase tracking-wider text-[var(--color-fg3)]">local</div>
-            )}
-            {local.map((b) => (
-              <button
-                key={`l:${b}`}
-                className={`w-full cursor-pointer text-left truncate px-2 py-1 transition-colors ${value === b ? "text-[var(--color-accent)] bg-[var(--color-bg4)]" : "text-[var(--color-fg)] hover:bg-[var(--color-bg4)]"}`}
-                onClick={() => pick(b)}
-                title={b}
-              >
-                {b}
-              </button>
-            ))}
-            {remote.length > 0 && (
-              <div className="px-2 pt-1.5 pb-0.5 text-[8.5px] uppercase tracking-wider text-[var(--color-fg3)]">remote</div>
-            )}
-            {remote.map((b) => (
-              <button
-                key={`r:${b}`}
-                className={`w-full cursor-pointer text-left truncate px-2 py-1 transition-colors ${value === b ? "text-[var(--color-accent)] bg-[var(--color-bg4)]" : "text-[var(--color-fg)] hover:bg-[var(--color-bg4)]"}`}
-                onClick={() => pick(b)}
-                title={b}
-              >
-                {b}
-              </button>
-            ))}
-            {local.length === 0 && remote.length === 0 && (
-              <div className="px-2 py-2 text-[var(--color-fg3)]">{branches ? "no match" : "loading…"}</div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function useBranchItems(repoPath: string, scope: DiffScope, enabled: boolean): ItemsResult {
-  const q = useGitDiff(enabled ? repoPath : null, scope);
-  const items = useMemo(() => {
-    const patch = q.data?.patch;
-    if (!patch || !patch.trim()) return [];
-    const out: CodeViewDiffItem<ReviewComment>[] = [];
-    const base = q.dataUpdatedAt;
-    for (const parsed of parsePatchFiles(patch, q.data?.cacheKey)) {
-      for (const fileDiff of parsed.files) {
-        out.push({ id: `diff:${fileDiff.name}`, type: "diff", fileDiff, version: base });
-      }
-    }
-    return out;
-  }, [q.data, q.dataUpdatedAt]);
-  return { items, isLoading: q.isLoading, error: (q.error as Error) ?? null };
-}
-
-/** Cheap stable 32-bit hash → numeric `version` for CodeView reconciliation. */
-function hashNum(s: string): number {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (Math.imul(h, 31) + s.charCodeAt(i)) | 0;
-  return h;
-}
-
-interface SearchMatch {
-  id: string;
-  file: string;
-  line: number;
-  side: AnnotationSide;
-}
-
-/** Collect every line-level match across all diff items, mapping hunkContent
- *  block indices back to real line numbers + side (port of codiff's
- *  getDiffSearchResult). Lets us scrollTo + highlight each hit precisely. */
-/** One anchor per HUNK (its first changed line) across every diff item, in file
- *  order — the jump targets for next/prev-change navigation. Prefers the addition
- *  side (the new code); a pure-deletion hunk anchors on its first deleted line.
- *  Same hunk-walk as collectMatches, but keyed on "is a change" rather than a query. */
-function collectChanges(items: CodeViewDiffItem<ReviewComment>[]): SearchMatch[] {
-  const out: SearchMatch[] = [];
-  for (const it of items) {
-    const fd = it.fileDiff;
-    for (const hunk of fd.hunks) {
-      let del = hunk.deletionStart;
-      let add = hunk.additionStart;
-      for (const c of hunk.hunkContent) {
-        if (c.type === "context") { del += c.lines; add += c.lines; continue; }
-        // First non-context block = the hunk's anchor. Then stop (one per hunk).
-        if (c.additions > 0) out.push({ id: it.id, file: fd.name, line: add, side: "additions" });
-        else out.push({ id: it.id, file: fd.name, line: del, side: "deletions" });
-        break;
-      }
-    }
-  }
-  return out;
-}
-
-function collectMatches(items: CodeViewDiffItem<ReviewComment>[], query: string): SearchMatch[] {
-  const q = query.trim().toLowerCase();
-  if (!q) return [];
-  const out: SearchMatch[] = [];
-  for (const it of items) {
-    const fd = it.fileDiff;
-    for (const hunk of fd.hunks) {
-      let del = hunk.deletionStart;
-      let add = hunk.additionStart;
-      for (const c of hunk.hunkContent) {
-        if (c.type === "context") {
-          for (let i = 0; i < c.lines; i++) {
-            if ((fd.additionLines[c.additionLineIndex + i] ?? "").toLowerCase().includes(q))
-              out.push({ id: it.id, file: fd.name, line: add + i, side: "additions" });
-          }
-          del += c.lines;
-          add += c.lines;
-        } else {
-          for (let i = 0; i < c.deletions; i++) {
-            if ((fd.deletionLines[c.deletionLineIndex + i] ?? "").toLowerCase().includes(q))
-              out.push({ id: it.id, file: fd.name, line: del + i, side: "deletions" });
-          }
-          for (let i = 0; i < c.additions; i++) {
-            if ((fd.additionLines[c.additionLineIndex + i] ?? "").toLowerCase().includes(q))
-              out.push({ id: it.id, file: fd.name, line: add + i, side: "additions" });
-          }
-          del += c.deletions;
-          add += c.additions;
-        }
-      }
-    }
-  }
-  return out;
-}
-
-// ── per-file header ───────────────────────────────────────────────────────
-
-function DiffHeader(props: {
-  h: number;
-  fontPx: number;
-  file: string;
-  adds: number;
-  dels: number;
-  staged: boolean;
-  collapsed: boolean;
-  viewed: boolean;
-  showStage: boolean;
-  onToggleCollapsed: () => void;
-  onToggleViewed: () => void;
-  onToggleStage: () => void;
-  onOpen: () => void;
-  onDiscard: () => void;
-}) {
-  return (
-    <div
-      // The comment gutter resolves which file a clicked line belongs to by
-      // finding the nearest preceding header in document order — this attribute is
-      // that anchor (robust to Pierre's gutter API not carrying the file id).
-      data-diff-file={props.file}
-      className={`flex items-center gap-2 px-2.5 w-full font-mono bg-[var(--color-bg3)] border-b border-[var(--color-line)] ${
-        props.viewed ? "opacity-55" : ""
-      }`}
-      style={{ height: props.h, fontSize: props.fontPx }}
-    >
-      <button
-        title={props.collapsed ? "expand" : "collapse"}
-        onClick={(e) => {
-          e.stopPropagation();
-          props.onToggleCollapsed();
-        }}
-        className="text-[var(--color-fg3)] hover:text-[var(--color-fg)] w-3 text-[0.82em]"
-      >
-        {props.collapsed ? "▸" : "▾"}
-      </button>
-
-      {props.showStage && (
-        <button
-          title={props.staged ? "unstage" : "stage"}
-          onClick={(e) => {
-            e.stopPropagation();
-            props.onToggleStage();
-          }}
-          style={{
-            width: 14,
-            height: 14,
-            borderRadius: 3,
-            border: props.staged ? "1px solid var(--color-ok)" : "1px solid var(--color-line2)",
-            background: props.staged ? "var(--color-ok)" : "transparent",
-            color: props.staged ? "var(--color-bg)" : "transparent",
-            fontSize: "0.82em",
-            lineHeight: "12px",
-          }}
-        >
-          ✓
-        </button>
-      )}
-
-      <span className="text-[var(--color-fg)] truncate" title={props.file}>{props.file}</span>
-      <span style={{ color: "var(--color-ok)" }}>+{props.adds}</span>
-      <span style={{ color: "var(--color-err)" }}>−{props.dels}</span>
-
-      <span className="ml-auto inline-flex items-center gap-2">
-        <button
-          title="mark viewed"
-          onClick={(e) => {
-            e.stopPropagation();
-            props.onToggleViewed();
-          }}
-          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[0.92em] transition-colors ${
-            props.viewed
-              ? "border-[var(--color-ok)] text-[var(--color-ok)]"
-              : "border-[var(--color-line2)] text-[var(--color-fg3)] hover:text-[var(--color-fg2)]"
-          }`}
-        >
-          {props.viewed ? "✓ viewed" : "viewed"}
-        </button>
-        <button
-          title="open file in viewer"
-          onClick={(e) => {
-            e.stopPropagation();
-            props.onOpen();
-          }}
-          className="px-1.5 py-0.5 rounded border border-[var(--color-line2)] text-[var(--color-fg2)] text-[0.92em]"
-        >
-          ↗ open
-        </button>
-        {props.showStage && (
-          <button
-            title="discard changes"
-            onClick={(e) => {
-              e.stopPropagation();
-              props.onDiscard();
-            }}
-            className="px-1.5 py-0.5 rounded border border-[var(--color-line2)] text-[var(--color-err)] text-[0.92em]"
-          >
-            ⌫
-          </button>
-        )}
-      </span>
-    </div>
-  );
-}
-
-// ── single-file CodeView popup (header "↗ open") ──────────────────────────
-
-// Single-file diff surface now lives in code/DiffSurface.tsx (shared with the
-// Code Workbench). DiffTile aliases it so the existing <FileView .../> call site
-// (and its onClose) stays unchanged.
-const FileView = DiffSurface;
-
-// ── conflict view (UnresolvedFile — outside CodeView) ─────────────────────
-
-function ConflictView(props: { repoPath: string; file: string }) {
-  const conflict = useQuery<{ raw: string; conflicts: number }>({
-    queryKey: ["git:conflict", props.repoPath, props.file],
-    queryFn: () => window.hive.gitConflictedFile(props.repoPath, props.file),
-  });
-  if (conflict.isLoading) return <div className="px-3 py-2 text-[10px]">loading {props.file}…</div>;
-  if (!conflict.data) return null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const UF = UnresolvedFile as any;
-  return (
-    <UF
-      file={{
-        name: props.file,
-        contents: conflict.data.raw,
-        cacheKey: `${props.repoPath}:CONFLICT:${props.file}:${conflict.data.conflicts}`,
-      }}
-      options={{ theme: { dark: "pierre-dark", light: "pierre-light" }, diffStyle: "split" }}
-      onResolved={(resolved: string) => {
-        void window.hive.gitWriteResolved(props.repoPath, props.file, resolved);
-      }}
-    />
-  );
-}
-

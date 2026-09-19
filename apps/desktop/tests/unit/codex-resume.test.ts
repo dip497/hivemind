@@ -5,9 +5,14 @@ import { mkdtempSync, mkdirSync, writeFileSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const { isCodex, newestCodexSessionForCwd, makeCodexResumeTransforms } = await import(
-  "../../src/main/codex-resume.ts"
-);
+// codex resumes because its manifest says where its sessions live — no code of its own.
+const { findSession, resumeFromManifest, specIsAgent } = await import("@hivemind/agents/node");
+const { authoredDef } = await import("./authored-agents.ts");
+const codexDef = authoredDef("codex");
+const find = codexDef.session!.resume!.find!;
+const isCodex = (spec: { cmd: string }) => specIsAgent(codexDef, spec);
+const newestCodexSessionForCwd = (cwd: string, root?: string) => findSession(find, cwd, root);
+const makeCodexResumeTransforms = (root?: string) => resumeFromManifest(codexDef, root)!;
 
 function sessionFile(root: string, rel: string, id: string, cwd: string, mtime: number): void {
   const p = join(root, rel);
@@ -33,6 +38,27 @@ test("newestCodexSessionForCwd picks the newest session matching the cwd", () =>
   assert.equal(newestCodexSessionForCwd("/proj/app", root), "id-new");
   assert.equal(newestCodexSessionForCwd("/proj/other", root), "id-other");
   assert.equal(newestCodexSessionForCwd("/proj/missing", root), undefined);
+});
+
+// Regression: a REAL session_meta line is ~22 KB — codex embeds its whole system
+// prompt in payload.base_instructions.text. A fixed-size first-line read truncated
+// it, JSON.parse threw, the catch swallowed it, and resume silently never fired
+// for any codex tile. Fixtures must be realistically sized or they prove nothing.
+test("newestCodexSessionForCwd reads a session_meta line far larger than one read buffer", () => {
+  const root = mkdtempSync(join(tmpdir(), "codex-sess-"));
+  const p = join(root, "big.jsonl");
+  const meta = JSON.stringify({
+    type: "session_meta",
+    payload: {
+      id: "id-big",
+      cwd: "/proj/app",
+      // non-ASCII on purpose: the decode must survive a chunk boundary too
+      base_instructions: { text: "You are Codex — ".repeat(20_000) },
+    },
+  });
+  assert.ok(meta.length > 300_000, "fixture must exceed the chunk size");
+  writeFileSync(p, meta + "\n" + JSON.stringify({ type: "message" }) + "\n");
+  assert.equal(newestCodexSessionForCwd("/proj/app", root), "id-big");
 });
 
 test("transformSpecOnRestore appends `resume <id>` for codex with a matching session", () => {

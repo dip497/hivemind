@@ -11,6 +11,11 @@ import { readLastAssistantMessage } from "../../src/main/hcp/transcript.ts";
 import { TurnTracker } from "../../src/main/hcp/turn-tracker.ts";
 import { OutputRecorder, stripAnsi } from "../../src/main/hcp/output-recorder.ts";
 import { makeDispatch } from "../../src/main/hcp/methods.ts";
+import { useAuthoredAgents } from "./authored-agents.ts";
+
+// Spawn policy, supervise policy and prompt delivery read the live catalog: load the
+// published fixtures the way an installed machine has them.
+useAuthoredAgents();
 import { startHcpServer } from "../../src/main/hcp/hcp-server.ts";
 import { PipeManager } from "../../src/main/hcp/pipes.ts";
 import { Mailbox } from "../../src/main/hcp/mailbox.ts";
@@ -98,9 +103,12 @@ function fakeDeps(over: Partial<Parameters<typeof makeDispatch>[0]> = {}) {
     turns,
     recorder,
     callRenderer: async (_m: string, _p: unknown) => ({ tileId: "tile-x" }),
+    reloadSettings: async () => ({ ok: true }),
     writeToTile: write,
     deliverToTile: (id: string, data: string, onSent?: () => void) => mailbox.deliver(id, data, onSent),
     spawnAllowed: () => true,
+    // What main resolves from settings + PATH; the fixtures have claude.
+    defaultAgentId: async () => "claude",
     connect: () => true,
     disconnect: () => {},
     forgetPipes: () => {},
@@ -170,9 +178,9 @@ test("approval: worker awaits, parent approves 'always' → allow + cached (no s
   const pending = dispatch("agent.await_approval", { callerTile: "tile-x", tool_name: "Bash", tool_input: { command: "rm -rf /tmp/x" } });
   await new Promise((r) => setTimeout(r, 10));
   // The approval prompt is delivered into the PARENT's pty; pull the reqId out.
-  const banner = writes.find(([id, data]) => id === "hm:parent" && data.includes("hive_approve"));
+  const banner = writes.find(([id, data]) => id === "hm:parent" && data.includes("hive ctl approve"));
   assert.ok(banner, "approval banner delivered to parent");
-  const reqId = banner![1].match(/hive_approve\("([^"]+)"/)![1];
+  const reqId = banner![1].match(/hive ctl approve (\S+) /)![1];
   const ar = await dispatch("agent.approve", { reqId, decision: "always" });
   assert.deepEqual(ar, { ok: true, decision: "allow" });
   assert.equal((await pending as { decision: string }).decision, "allow");
@@ -189,7 +197,7 @@ test("approval: deny carries a reason back to the worker", async () => {
   await dispatch("tile.spawn_agent", { agent: "claude", callerTile: "parent", report: false });
   const pending = dispatch("agent.await_approval", { callerTile: "tile-x", tool_name: "Write", tool_input: { file_path: "/etc/passwd" } });
   await new Promise((r) => setTimeout(r, 10));
-  const reqId = writes.find(([id, d]) => id === "hm:parent" && d.includes("hive_approve"))![1].match(/hive_approve\("([^"]+)"/)![1];
+  const reqId = writes.find(([id, d]) => id === "hm:parent" && d.includes("hive ctl approve"))![1].match(/hive ctl approve (\S+) /)![1];
   await dispatch("agent.approve", { reqId, decision: "deny", reason: "not that file" });
   assert.deepEqual(await pending, { decision: "deny", reason: "not that file" });
 });
@@ -364,7 +372,7 @@ test("forgetTile (pty-exit teardown) wakes a blocked hive_read instead of hangin
   const read = dispatch("agent.read", { tileId: "tile-x", timeoutMs: 60_000 });
   forgetTile("tile-x"); // worker's pty exits (crash) → teardown must resolve the read now
   const r = (await read) as { finalStatus: string };
-  assert.equal(r.finalStatus, "timeout", "a crashed worker resolves the read immediately, doesn't hang 60s");
+  assert.equal(r.finalStatus, "closed", "a crashed worker resolves the read immediately (and says it closed, not that it is still working)");
 });
 
 test("forgetTile resolves a supervised worker's pending approval (deny), not leak it", async () => {
@@ -387,4 +395,90 @@ test("OutputRecorder: lazy trim still never returns more than the ring cap, and 
   assert.equal(rec.since("t", m), "TAIL");
   assert.equal(rec.since("t", 0).length, CAP, "reads are bounded by the cap");
   assert.ok(rec.since("t", 0).endsWith("TAIL"));
+});
+
+test("OutputRecorder.tail: last N ANSI-stripped lines, trailing newline not a line", () => {
+  const rec = new OutputRecorder();
+  rec.record("t", "one\n\x1b[31mtwo\x1b[0m\nthree\n");
+  assert.equal(rec.tail("t", 2), "two\nthree\n");
+  assert.equal(rec.tail("t", 10), "one\ntwo\nthree\n");
+  assert.equal(rec.tail("t", 0), "");
+  assert.equal(rec.tail("none", 3), "");
+  rec.record("t", "four"); // partial line counts once
+  assert.equal(rec.tail("t", 1), "four");
+});
+
+test("hcp-server: agent.stream sub with lines/since replays first and stamps offsets", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hcp-replay-"));
+  const sock = path.join(dir, "s.sock");
+  const rec = new OutputRecorder();
+  rec.record("t", "a\nb\n");
+  const srv = startHcpServer(sock, {
+    token: "k", rendererUp: () => true, onEvent() {}, dispatch: async () => ({}),
+    replay: (id, o) => (typeof o.lines === "number" ? rec.tail(id, o.lines) : rec.since(id, o.since ?? 0)),
+    offsetOf: (id) => rec.mark(id),
+  });
+  const got: unknown[] = [];
+  await new Promise<void>((resolve) => {
+    const c = net.connect(sock, () => c.write(JSON.stringify({ t: "sub", id: "s1", topic: "agent.stream", params: { tileId: "t", lines: 1 }, token: "k" }) + "\n"));
+    let buf = "";
+    c.setEncoding("utf8");
+    c.on("data", (d: string) => {
+      buf += d;
+      for (const line of buf.split("\n").slice(0, -1)) got.push(JSON.parse(line));
+      buf = buf.slice(buf.lastIndexOf("\n") + 1);
+      if (got.length >= 3) { srv.broadcast("t", "c\n"); }
+      if (got.length >= 4) { c.end(); resolve(); }
+    });
+  });
+  const [, res, replay, live] = got as Array<Record<string, unknown>>;
+  assert.deepEqual(res, { t: "res", id: "s1", ok: true, result: { subscriptionId: "s1", offset: 4 } });
+  assert.deepEqual(replay, { t: "evt", subId: "s1", topic: "agent.stream", data: { seq: 0, chunk: "b\n", offset: 4, replay: true } });
+  assert.equal((live.data as { chunk: string }).chunk, "c\n");
+  srv.close();
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test("dispatch views.rescan: asks the renderer to re-read the view packages and returns its registry", async () => {
+  const calls: string[] = [];
+  const { deps } = fakeDeps({ callRenderer: async (m: string) => { calls.push(m); return { registered: ["orbit"], refused: { greedy: "unknown permission" } }; } });
+  const { dispatch } = makeDispatch(deps);
+  assert.deepEqual(await dispatch("views.rescan", {}), { registered: ["orbit"], refused: { greedy: "unknown permission" } });
+  assert.deepEqual(calls, ["views.rescan"]);
+});
+
+test("tool.open: optional tools default off and recheck activation for every request", async () => {
+  let enabled = false;
+  let calls = 0;
+  const { deps } = fakeDeps({
+    toolsSettings: () => ({ enabledPlugins: enabled ? ["hivemind/web"] : [], disabledTools: [] }),
+    callRenderer: async (method, params) => { calls++; assert.equal(method, "tool.open"); assert.deepEqual(params, { tool: "hivemind/web/browser", frame: undefined, url: "about:blank" }); return { tileId: "browser-1" }; },
+  });
+  const { dispatch } = makeDispatch(deps);
+  const request = { tool: "hivemind/web/browser", url: "about:blank" };
+  await assert.rejects(dispatch("tool.open", request), { code: "UNAUTHORIZED" });
+  enabled = true;
+  assert.deepEqual(await dispatch("tool.open", request), { tileId: "browser-1" });
+  enabled = false;
+  await assert.rejects(dispatch("tool.open", request), { code: "UNAUTHORIZED" });
+  assert.equal(calls, 1);
+});
+
+test("tool.open: unknown tools, disabled contributions, invalid URLs and spawn floods are refused", async () => {
+  let disabledTools: string[] = [];
+  let spawn = true;
+  const { deps } = fakeDeps({
+    toolsSettings: () => ({ enabledPlugins: ["hivemind/web"], disabledTools }),
+    spawnAllowed: () => spawn,
+    callRenderer: async () => { assert.fail("denied request reached renderer"); },
+  });
+  const { dispatch } = makeDispatch(deps);
+  await assert.rejects(dispatch("tool.open", { tool: "unknown/browser" }), { code: "UNSUPPORTED" });
+  for (const url of ["javascript:alert(1)", "file:///etc/passwd", "broken", 123]) {
+    await assert.rejects(dispatch("tool.open", { tool: "hivemind/web/browser", url }), { code: "BAD_REQUEST" });
+  }
+  disabledTools = ["hivemind/web/browser"];
+  await assert.rejects(dispatch("tool.open", { tool: "hivemind/web/browser" }), { code: "UNAUTHORIZED" });
+  disabledTools = []; spawn = false;
+  await assert.rejects(dispatch("tool.open", { tool: "hivemind/web/browser" }), { code: "RATE_LIMITED" });
 });

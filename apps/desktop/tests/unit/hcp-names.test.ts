@@ -13,6 +13,10 @@ import { setName, labelOf } from "../../src/main/hcp/names.js";
 import { makeDispatch } from "../../src/main/hcp/methods.js";
 import { TurnTracker } from "../../src/main/hcp/turn-tracker.js";
 import { OutputRecorder } from "../../src/main/hcp/output-recorder.js";
+import { useAuthoredAgents } from "./authored-agents.ts";
+
+// The spawn path reads the live catalog: load the published fixtures.
+useAuthoredAgents();
 
 /** MIRROR of index.ts: transcript wins, else pi's inline turn text. */
 function pickReply(

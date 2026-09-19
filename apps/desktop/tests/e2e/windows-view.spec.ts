@@ -36,6 +36,11 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
+    // Later specs share settings.json; the view switch's own save is debounced.
+  await page?.evaluate(async () => {
+    window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "canvas" } }));
+    await window.hive.settingsSet("views.defaultView", "canvas");
+  }).catch(() => {});
   await app?.close();
 });
 
@@ -69,8 +74,10 @@ test("minimize hides the tab but keeps it in the graph rail; restore brings it b
   await expect(page.locator('[role="tab"]').first()).toHaveAttribute("aria-selected", "true");
 });
 
-test("toggle back to canvas restores react-flow", async () => {
-  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:toggle-view-mode")));
+test("switching back to canvas restores react-flow", async () => {
+  // ⌘E cycles canvas → windows → canvas, so "back to canvas" is an explicit
+  // switch here; the cycle itself is covered by community-view.spec.ts.
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "canvas" } })));
   await page.waitForSelector(".react-flow");
   expect(await page.locator('[role="tablist"]').count()).toBe(0);
 });
@@ -90,7 +97,9 @@ test("right-click a frame in the rail opens the actions menu and spawns into it"
   // Menu appears; hover the "Open" submenu, then click "Terminal".
   await expect(page.getByText("Spawn agent")).toBeVisible();
   await page.getByRole("menu").getByRole("button", { name: "Open" }).click();
-  const terminalItem = page.getByRole("button", { name: "Terminal", exact: true });
+  // Scope to the menu: the workspace toolbar now renders its own "Terminal"
+  // button, so a page-wide query matches two elements (strict-mode violation).
+  const terminalItem = page.getByRole("menu").getByRole("button", { name: "Terminal", exact: true });
   await expect(terminalItem).toBeVisible();
   const beforeTerms = await page.locator(".react-flow__node-terminal").count();
   await terminalItem.click();
@@ -176,7 +185,12 @@ test("every open tab's body stays mounted; switching tabs never remounts the ina
 
   // The inactive tab's container is hidden via `visibility` (not display:none
   // — a 0×0 box breaks xterm's fit addon) while still occupying full size.
-  const inactiveContainer = bodies.nth(1);
+  //
+  // Pick it by the attribute the view sets, not by index: the active tab now
+  // follows `selectedTileId`, and a freshly spawned shell is selected, so the
+  // active body is the LAST one — nth(1) used to be inactive and no longer is.
+  const inactiveContainer = page.locator('[data-tile-id][aria-hidden="true"]').first();
+  await expect(page.locator('[data-tile-id][aria-hidden="true"]')).toHaveCount(tabCount - 1);
   await expect(inactiveContainer).toHaveCSS("visibility", "hidden");
   const inactiveBox = await inactiveContainer.boundingBox();
   expect(inactiveBox?.width ?? 0).toBeGreaterThan(100);
@@ -197,6 +211,11 @@ test("every open tab's body stays mounted; switching tabs never remounts the ina
 });
 
 test("no pty exit fires for a tile while switching tabs away from and back to it", async () => {
+  // Own setup: this used to inherit windows mode from the test above, so a
+  // failure there left it querying an empty canvas and reporting a cascade.
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "windows" } })));
+  await page.waitForSelector('[role="tablist"]');
+  await expect.poll(() => page.locator("[data-tile-id]").count()).toBeGreaterThanOrEqual(2);
   const ids = await page.locator("[data-tile-id]").evaluateAll((els) =>
     els.map((el) => el.getAttribute("data-tile-id")).filter((id): id is string => !!id),
   );

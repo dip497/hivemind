@@ -6,9 +6,37 @@ import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const { isKiro, kiroHooksSettings, kiroAgentConfig, makeKiroResumeTransforms, KIRO_HIVEMIND_AGENT } =
-  await import("../../src/main/kiro-resume.ts");
-const { tileSessionFile } = await import("../../src/main/tile-session-store.ts");
+// kiro is a manifest now: its agent config, its hooks and its transforms all come from it.
+const { manifestRuntime, renderHookDocument, renderHookEvents, transformsFor, specIsAgent } =
+  await import("@hivemind/agents/node");
+const { authoredDef } = await import("./authored-agents.ts");
+const kiroDef = authoredDef("kiro");
+const KIRO_HIVEMIND_AGENT = "hivemind";
+const isKiro = (spec: { cmd: string }) => specIsAgent(kiroDef, spec);
+const reqFor = (deps: Record<string, string | undefined>, tileId = "") => ({
+  tileId, cwd: "/w", args: [] as string[], env: {}, phase: "spawn" as const,
+  paths: {
+    private: "/x", execPath: deps.execPath ?? "", tileSessionsDir: deps.tileSessionsDir ?? "/x/sessions",
+    home: "/home/u", ...(deps.kiroHome ? { homeReady: true } : {}),
+    ...(deps.hcpSock ? { hcpSock: deps.hcpSock, hcpToken: deps.hcpToken ?? "tok" } : {}),
+    hooks: {
+      ...(deps.trackerPath && deps.tileSessionsDir ? { tracker: { path: deps.trackerPath, arg: deps.tileSessionsDir } } : {}),
+      ...(deps.stopHookPath && deps.hcpSock ? { stop: { path: deps.stopHookPath, arg: deps.hcpSock } } : {}),
+      ...(deps.userpromptHookPath && deps.hcpSock ? { userPrompt: { path: deps.userpromptHookPath, arg: deps.hcpSock } } : {}),
+      ...(deps.kiroApprovalHookPath && deps.hcpSock ? { kiroApproval: { path: deps.kiroApprovalHookPath, arg: deps.hcpSock } } : {}),
+    },
+  },
+});
+const kiroHooksSettings = (deps: Record<string, string | undefined>) =>
+  renderHookEvents(kiroDef.hooks!, reqFor(deps)) ?? {};
+const kiroAgentConfig = (deps: Record<string, string | undefined>) => {
+  const doc = renderHookDocument(kiroDef, reqFor(deps));
+  return doc ? JSON.parse(doc) : { name: KIRO_HIVEMIND_AGENT, description: "hivemind control-plane wiring (auto-generated — do not edit by hand)" };
+};
+const makeKiroResumeTransforms = (deps: Record<string, string | undefined> = {}) =>
+  transformsFor(kiroDef, manifestRuntime(kiroDef, () => undefined)!, reqFor(deps).paths,
+    { ...(deps.legacyMapFile ? { legacyMapFile: deps.legacyMapFile } : {}) });
+const { tileSessionFile } = await import("@hivemind/agents/node");
 
 const HOOK_DEPS = {
   execPath: "/x/electron",
@@ -56,20 +84,17 @@ test("kiroHooksSettings is empty without execPath/hcpSock (no injection)", () =>
   assert.deepEqual(kiroHooksSettings({ execPath: "/x" }), {}, "needs the socket too");
 });
 
-test("kiroAgentConfig nests hooks under a `hooks` key and wires mcpServers.hive", () => {
-  const cfg = kiroAgentConfig({ ...HOOK_DEPS, hiveCliPath: "/x/hive" }) as any;
+test("kiroAgentConfig nests hooks under a `hooks` key and wires NO MCP server (workers use `hive ctl`)", () => {
+  const cfg = kiroAgentConfig(HOOK_DEPS) as any;
   assert.equal(cfg.name, KIRO_HIVEMIND_AGENT);
   assert.ok(cfg.hooks && cfg.hooks.stop, "hooks nested under `hooks`");
-  assert.equal(cfg.mcpServers.hive.command, "/x/hive");
-  assert.deepEqual(cfg.mcpServers.hive.args, ["mcp-stdio"]);
-  assert.equal(cfg.mcpServers.hive.env.HIVE_AGENT_ID, "kiro");
+  assert.equal(cfg.mcpServers, undefined, "the hive MCP server is retired; kiro drives HCP via the hive CLI on PATH");
   // No default-on trust flag — matches the skill's anti-pattern list.
   assert.equal(cfg.allowedTools, undefined);
 });
 
-test("kiroAgentConfig omits mcpServers without a hiveCliPath, and hooks without execPath/hcpSock", () => {
+test("kiroAgentConfig omits hooks without execPath/hcpSock", () => {
   const cfg = kiroAgentConfig({}) as any;
-  assert.equal(cfg.mcpServers, undefined);
   assert.equal(cfg.hooks, undefined);
 });
 

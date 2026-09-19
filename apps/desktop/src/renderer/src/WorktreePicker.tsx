@@ -13,6 +13,9 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { GitBranch, Plus, Check, Loader2 } from "lucide-react";
+import { Button } from "./components/ui/button";
+import { Input } from "./components/ui/input";
+import { MenuItem } from "./components/ui/menu-item";
 import type { WorktreeEntry } from "../../shared/ipc";
 
 /** Last path segment — the worktree's directory name (the bold first line). */
@@ -85,18 +88,18 @@ export function WorktreePicker({ repoPath, activePath, onAttach, onCreate }: Wor
   return (
     <div className="flex flex-col min-w-[320px] max-w-[420px]">
       {/* search */}
-      <input
+      <Input size="sm"
         autoFocus
         value={q}
         onChange={(e) => setQ(e.target.value)}
         placeholder="Select a worktree…"
-        className="m-1 bg-[var(--color-bg)] border border-[var(--color-line2)] rounded px-2 py-1 text-[12px] text-[var(--color-fg)] outline-none focus:border-[var(--color-brand)]"
+        className="m-1"
       />
 
       {/* create */}
       {creating ? (
         <div className="flex items-center gap-1 px-1 pb-1">
-          <input
+          <Input size="sm"
             ref={createRef}
             autoFocus
             value={branchDraft}
@@ -109,25 +112,23 @@ export function WorktreePicker({ repoPath, activePath, onAttach, onCreate }: Wor
               }
             }}
             placeholder={baseBranch ? `new branch (from ${baseBranch})…` : "new branch name…"}
-            className="flex-1 bg-[var(--color-bg)] border border-[var(--color-line2)] rounded px-2 py-1 text-[12px] font-mono text-[var(--color-fg)] outline-none focus:border-[var(--color-brand)]"
+            font="mono"
+            className="flex-1"
           />
-          <button
-            onClick={submitCreate}
-            className="px-2 py-1 rounded text-[11px] text-[var(--color-brand)] hover:bg-[var(--color-bg3)]"
-          >
+          <Button variant="ghost" size="sm" onClick={submitCreate}>
             create
-          </button>
+          </Button>
         </div>
       ) : (
-        <button
+        <MenuItem
           onClick={() => setCreating(true)}
-          className="flex items-center gap-2 mx-1 mb-1 px-2 py-1.5 rounded text-[12px] text-[var(--color-fg)] hover:bg-[var(--color-bg3)]"
+          className="mx-1 mb-1"
         >
-          <Plus size={13} className="text-[var(--color-brand)]" />
+          <Plus />
           <span>
             Create new worktree{baseBranch ? <span className="text-[var(--color-fg2)]"> based on {baseBranch}</span> : ""}
           </span>
-        </button>
+        </MenuItem>
       )}
 
       <div className="h-px bg-[var(--color-line2)] mx-1" />
@@ -146,24 +147,23 @@ export function WorktreePicker({ repoPath, activePath, onAttach, onCreate }: Wor
           filtered.map((w) => {
             const active = !!activePath && w.path === activePath;
             return (
-              <button
+              <MenuItem
                 key={w.path}
                 onClick={() => onAttach(w)}
-                className={`w-full flex items-start gap-2 px-2.5 py-1.5 text-left hover:bg-[var(--color-bg3)] ${
-                  active ? "bg-[var(--color-bg3)]" : ""
-                }`}
+                selected={active}
+                className="items-start"
               >
-                <GitBranch size={12} className="mt-0.5 shrink-0 text-[var(--color-fg2)]" />
+                <GitBranch className="mt-0.5 text-[var(--color-fg2)]" />
                 <span className="flex flex-col min-w-0 flex-1">
                   <span className="flex items-center gap-1.5 text-[12px] text-[var(--color-fg)]">
                     <span className="truncate font-medium">{baseName(w.path)}</span>
-                    {active && <Check size={11} className="shrink-0 text-[var(--color-brand)]" />}
+                    {active && <Check className="shrink-0 text-[var(--color-brand)]" />}
                   </span>
                   <span className="truncate text-[10px] font-mono text-[var(--color-fg3)]">
                     {w.branch ?? "detached"} · {w.head.slice(0, 7)} · {truncPath(w.path)}
                   </span>
                 </span>
-              </button>
+              </MenuItem>
             );
           })
         )}

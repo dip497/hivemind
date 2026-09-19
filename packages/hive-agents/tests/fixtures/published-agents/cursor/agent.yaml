@@ -1,0 +1,87 @@
+# Cursor — built-in provider manifest.
+# Authoring format for the def half. See packages/hive-agents/src/manifest.ts.
+manifestVersion: 1
+id: cursor
+label: Cursor
+bin: cursor-agent
+aliases:
+- cursor
+enabled: true
+caps:
+  promptDelivery: typed
+  turnSignal: false
+  resume: cwd
+  supervise: human
+  blockedDetection: true
+icon:
+  viewBox: 0 0 24 24
+  attrs:
+    fill: currentColor
+  shapes:
+  - path:
+      d: "M11.503.131 1.891 5.678a.84.84 0 0 0-.42.726v11.188c0 .3.162.575.42.724l9.609 5.55a1 1 0 0 0 .998 0l9.61-5.55a.84.84 0 0 0 .42-.724V6.404a.84.84 0 0 0-.42-.726L12.497.131a1.01 1.01 0 0 0-.996 0M2.657 6.338h18.55c.263 0 .43.287.297.515L12.23 22.918c-.062.107-.229.064-.229-.06V12.335a.59.59 0 0 0-.295-.51l-9.11-5.257c-.109-.063-.064-.23.061-.23"
+options:
+- id: mode
+  label: Mode
+  flag: --mode
+  values:
+    auto-review:
+    - --auto-review
+    force:
+    - --force
+  unattended: force
+- id: model
+  label: Model
+  flag: --model
+  list:
+    args:
+    - models
+install:
+  url: https://cursor.com/docs/cli/installation
+  command: "curl https://cursor.com/install -fsS | bash"
+detect:
+  rules:
+  - when:
+      any:
+      - contains: waiting for approval
+      - contains: run this command?
+      - contains: (y) (enter)
+      - contains: keep (n)
+      - contains: skip (esc or n)
+    then: blocked
+  - when:
+      line:
+      - contains: (y)
+      - anyOf:
+        - contains: allow
+        - contains: run (once)
+        - contains: → run
+        - startsWith: "run "
+    then: blocked
+  - when:
+      contains: ctrl+c to stop
+    then: working
+  - when:
+      line:
+      - gerundAfterPrefix:
+        - ⬡
+        - ⬢
+        - braille
+    then: working
+  default: idle
+note: no turn reporting, so other agents cannot collect its replies.
+session:
+  resume:
+    args:
+    - --resume
+    - '{id}'
+    find:
+      strategy: dir-meta
+      root: '{home}/.cursor/chats'
+      dirKey: md5-cwd
+      meta: meta.json
+      newestBy:
+      - updatedAtMs
+      - createdAtMs
+      skipWhen:
+        hasConversation: false

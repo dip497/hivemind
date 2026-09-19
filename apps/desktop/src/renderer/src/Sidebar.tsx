@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { IssueSummary } from "@hivemind/core/types";
+import { MenuItem } from "./components/ui/menu-item";
 import { StateIcon } from "./components/StateMeta";
 
 export type SidebarScope = { kind: "all" };
@@ -72,26 +73,24 @@ export function Sidebar({
           <>
             <div className="fixed inset-0 z-30" onClick={() => setSwitcherOpen(false)} />
             <div className="absolute left-2 right-2 top-full z-40 mt-1 bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-md shadow-xl py-1">
-              <button
+              <MenuItem
                 onClick={() => { setSwitcherOpen(false); onOpenFolder(); }}
-                className="w-full text-left flex items-center gap-2 px-2.5 py-1.5 text-[12px] text-[var(--color-fg)] hover:bg-[var(--color-bg4)] transition-colors cursor-pointer"
               >
-                <svg aria-hidden width="13" height="13" viewBox="0 0 14 14" className="text-[var(--color-fg3)] shrink-0">
+                <svg aria-hidden width="13" height="13" viewBox="0 0 14 14" className="text-[var(--color-fg3)]">
                   <path d="M1.5 3.5a1 1 0 0 1 1-1h3l1.2 1.2h4.8a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-10a1 1 0 0 1-1-1z" stroke="currentColor" strokeWidth="1.1" fill="none" strokeLinejoin="round" />
                 </svg>
                 <span className="flex-1">Open folder…</span>
                 <kbd className="font-mono text-[10.5px] text-[var(--color-fg2)]">⌃O</kbd>
-              </button>
+              </MenuItem>
               {!hasWorkspace && (
-                <button
+                <MenuItem
                   onClick={() => { setSwitcherOpen(false); onInitWorkspace(); }}
-                  className="w-full text-left flex items-center gap-2 px-2.5 py-1.5 text-[12px] text-[var(--color-brand)] hover:bg-[var(--color-bg4)] transition-colors cursor-pointer"
                 >
-                  <svg aria-hidden width="13" height="13" viewBox="0 0 14 14" className="shrink-0">
+                  <svg aria-hidden width="13" height="13" viewBox="0 0 14 14">
                     <path d="M7 1.5l1.4 3.6L12 6.5l-3.6 1.4L7 11.5 5.6 7.9 2 6.5l3.6-1.4z" fill="currentColor" />
                   </svg>
                   <span className="flex-1">Initialize workspace here</span>
-                </button>
+                </MenuItem>
               )}
               {otherRecents.length > 0 && (
                 <>
@@ -100,14 +99,15 @@ export function Sidebar({
                     Recent
                   </div>
                   {otherRecents.map((p) => (
-                    <button
+                    <MenuItem
                       key={p}
+                      size="sm"
+                      className="flex-col items-stretch"
                       onClick={() => { setSwitcherOpen(false); onOpenRecent(p); }}
-                      className="w-full text-left flex flex-col px-2.5 py-1 hover:bg-[var(--color-bg4)] transition-colors cursor-pointer"
                     >
                       <span className="text-[12px] text-[var(--color-fg)] truncate">{p.split("/").slice(-1)[0]}</span>
                       <span className="text-[11px] text-[var(--color-fg2)] truncate font-mono">{p}</span>
-                    </button>
+                    </MenuItem>
                   ))}
                 </>
               )}
@@ -177,20 +177,13 @@ function NavItem({
   icon?: React.ReactNode;
 }) {
   return (
-    <button
-      onClick={onClick}
-      className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-[12px] transition-colors cursor-pointer ${
-        active
-          ? "bg-[var(--color-bg4)] text-[var(--color-fg)]"
-          : "text-[var(--color-fg2)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)]"
-      }`}
-    >
+    <MenuItem selected={active} onClick={onClick}>
       {icon && <span className="text-[var(--color-fg3)] shrink-0">{icon}</span>}
       <span className="truncate flex-1 text-left">{label}</span>
       {count != null && (
         <span className="font-mono text-[10.5px] text-[var(--color-fg3)] tabular-nums">{count}</span>
       )}
-    </button>
+    </MenuItem>
   );
 }
 
@@ -204,15 +197,10 @@ function IssueQuick({
   onClick: () => void;
 }) {
   return (
-    <button
-      onClick={onClick}
-      className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-left transition-colors cursor-pointer ${
-        selected ? "bg-[var(--color-bg4)]" : "hover:bg-[var(--color-bg3)]"
-      }`}
-    >
+    <MenuItem selected={selected} variant="muted" onClick={onClick}>
       <StateIcon state={i.state} size={11} />
       <span className="font-mono text-[10.5px] text-[var(--color-fg2)] tabular-nums shrink-0">{i.id}</span>
       <span className="text-[12px] text-[var(--color-fg)] truncate flex-1">{i.title}</span>
-    </button>
+    </MenuItem>
   );
 }

@@ -108,8 +108,10 @@ test("re-clicking an already-open file switches back to its tab", async () => {
   // list dedupes, so re-clicking an open file produced no state change and the
   // editor stayed on B. Selecting a file must always activate it.
   const wb = page.locator(".react-flow__node-workbench");
-  const treeFile = (name: string) =>
-    wb.locator("button[role='treeitem']").filter({ hasText: name }).first();
+  // Rows render the name split around an ellipsis-truncation span (visually
+  // "tabs-a.ts", textually "tabs-a.tabs-a.……tsts"), so text matching can never
+  // hit — the accessible name is the exact file name.
+  const treeFile = (name: string) => wb.getByRole("treeitem", { name }).first();
   const showsContent = (marker: string) =>
     expect
       .poll(async () => wb.locator(".cm-content").textContent(), { timeout: 6_000, intervals: [300] })

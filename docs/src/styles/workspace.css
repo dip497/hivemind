@@ -1,0 +1,124 @@
+/* ───────────────────────────────────────────────────────────────────────────
+   The workspace, on the page.
+
+   Every value here is lifted from the app, not chosen for the site: the ground is
+   the canvas colour, the text ladder is the app's three steps, the type is the type
+   the app renders in. A visitor who installs it should recognise what they saw.
+
+   The accent is not a colour, it is the four agent states. Green, amber, red and
+   cyan appear only where they mean idle, working, blocked and waiting — which is
+   what they mean inside the product. Nothing decorative is allowed to borrow them,
+   because then they would stop reading as status.
+
+   Structure follows the same logic: the workspace is panes divided by hairlines, so
+   the page is too. No rounded cards, no accent rails, no gradient — a radius appears
+   only on things that are drawn as app chrome.
+   ─────────────────────────────────────────────────────────────────────────── */
+:root {
+  --bg:    oklch(0.169 0.003 230.81);   /* canvas */
+  --bg2:   oklch(0.193 0.002 230.81);   /* sunk panel */
+  --bg3:   oklch(0.216 0.0025 230.82);  /* raised panel */
+  --line:  oklch(0.259 0.0033 230.84);  /* hairline */
+  --line2: oklch(0.342 0.0049 230.86);  /* control border */
+  --fg:    oklch(0.924 0.0017 230.69);  /* primary */
+  --fg2:   oklch(0.846 0.0035 230.72);  /* secondary */
+  --fg3:   oklch(0.684 0.0074 230.81);  /* tertiary */
+
+  --brand:  oklch(0.55 0.18 265);
+  --idle:   oklch(0.70 0.13 230);   /* cyan  — waiting for you */
+  --working:oklch(0.77 0.17 65);    /* amber — running */
+  --ok:     oklch(0.70 0.19 152);   /* green — finished */
+  --blocked:oklch(0.58 0.24 28);    /* red   — needs a decision */
+
+  --f:   "Geist", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --f-m: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* The app's motion language, so the site moves the way the product does. */
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --d1: 100ms;  /* press */
+  --d2: 150ms;  /* hover, colour */
+  --d3: 220ms;  /* panels */
+  /* Movement across the screen wants a curve with a slow middle, not the drawer's.
+     Used only where something travels from one place to another. */
+  --ease-move: cubic-bezier(0.77, 0, 0.175, 1);
+
+  /* ── The type ramp, defined once ──────────────────────────────────────────
+     Every page on this site uses these; /brand documents them. A page that
+     invents its own size is the drift the design system exists to prevent. */
+  --t-display: clamp(40px, 6vw, 80px);   /* page headline            */
+  --t-heading: clamp(28px, 3.6vw, 48px); /* section headline         */
+  --t-sub:     22px;                     /* subsection               */
+  --t-lede:    clamp(17px, 1.3vw, 20px); /* the sentence under a headline */
+  --t-body:    15px;
+  --t-mono:    12.5px;
+  --t-caption: 11px;
+  --tr-display: -0.035em;
+  --tr-heading: -0.03em;
+  --tr-sub:     -0.02em;
+
+  --w: 1240px;
+  color-scheme: dark;
+}
+
+/* The light edition. Not a different identity — the same hue axis with the lightness
+   ladder inverted, so a reader who prefers light gets the same product, lit differently.
+   Status hues are darkened just enough to hold their contrast on a pale ground. */
+:root[data-theme='light'] {
+  --bg:    oklch(0.985 0.002 230);
+  --bg2:   oklch(0.966 0.002 230);
+  --bg3:   oklch(0.945 0.003 230);
+  --line:  oklch(0.902 0.004 230);
+  --line2: oklch(0.842 0.006 230);
+  --fg:    oklch(0.252 0.006 230);
+  --fg2:   oklch(0.404 0.006 230);
+  --fg3:   oklch(0.548 0.008 230);
+
+  --brand:   oklch(0.50 0.19 265);
+  --idle:    oklch(0.52 0.13 230);
+  --working: oklch(0.58 0.15 65);
+  --ok:      oklch(0.52 0.16 152);
+  --blocked: oklch(0.52 0.22 28);
+  color-scheme: light;
+}
+
+/* ── The classical plates ──────────────────────────────────────────────────────
+   One recipe, used by every marketing surface: a public-domain museum photograph
+   (Met Open Access, CC0), screened so the black studio ground drops out, masked
+   away before it reaches any text, and grained INSIDE the art — grain on the page
+   ground is what makes an image look pasted on.
+
+   Put `plate` on a section and name the piece:
+     <section class="band plate" data-art="column" data-side="left">
+   Each piece is used ONCE across the site, on the section whose claim it carries.
+   Reading surfaces — the docs, a plugin's detail page — carry none: nothing sits
+   behind text that someone has to read carefully. */
+:root {
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='2.95' numOctaves='5' seed='9' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='256' height='256' filter='url(%23n)' opacity='.5'/%3E%3C/svg%3E");
+}
+.plate { position: relative; isolation: isolate; overflow: hidden }
+.plate::before {
+  content: ""; position: absolute; z-index: -1; top: 0; bottom: 0; right: 0;
+  width: var(--plate-w, min(24vw, 340px));
+  opacity: var(--plate-o, .22);
+  mix-blend-mode: screen;
+  background-image: var(--grain), var(--plate-art);
+  background-blend-mode: overlay, normal;
+  background-repeat: repeat, no-repeat;
+  background-size: 200px 200px, var(--plate-fit, contain);
+  background-position: 0 0, var(--plate-pos, right center);
+  -webkit-mask-image: linear-gradient(100deg, transparent 8%, #000 58%), linear-gradient(#000 64%, transparent 98%);
+  mask-image: linear-gradient(100deg, transparent 8%, #000 58%), linear-gradient(#000 64%, transparent 98%);
+  -webkit-mask-composite: source-in; mask-composite: intersect;
+}
+.plate[data-side="left"]::before {
+  right: auto; left: 0;
+  --plate-pos: left center;
+  -webkit-mask-image: linear-gradient(260deg, transparent 8%, #000 58%), linear-gradient(#000 64%, transparent 98%);
+  mask-image: linear-gradient(260deg, transparent 8%, #000 58%), linear-gradient(#000 64%, transparent 98%);
+}
+/* On a pale ground the same photograph is inverted and multiplied, so it reads as
+   shadow rather than a bright cut-out. */
+:root[data-theme="light"] .plate::before {
+  opacity: calc(var(--plate-o, .22) * .45); filter: invert(1) contrast(.9); mix-blend-mode: multiply;
+}
+@media (max-width: 1100px) { .plate::before { display: none } }

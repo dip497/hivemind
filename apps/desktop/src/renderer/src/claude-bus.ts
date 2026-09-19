@@ -40,7 +40,7 @@ export interface SendToClaudeDetail {
 // ── pending "work on this" prompts ──────────────────────────────────────────
 // "Work on this" spawns a FRESH claude tile and must hand it a prompt — but the
 // tile doesn't exist yet (and with 2+ workspaces a frame-picker sits in between),
-// and claude+MCP take a variable few seconds to reach an input prompt. The old
+// and claude takes a variable few seconds to reach an input prompt. The old
 // code fired a blind setTimeout(2500) at the "latest" claude, which raced
 // readiness and, once a picker intervened, delivered to the WRONG (old) tile or
 // nothing. Instead we queue the prompt against the NEW tile's id at spawn time;

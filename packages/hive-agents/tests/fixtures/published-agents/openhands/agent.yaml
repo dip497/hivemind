@@ -1,0 +1,39 @@
+# OpenHands — a catalog agent. Launch only: no status reading, resume or turn reports.
+manifestVersion: 1
+id: openhands
+label: "OpenHands"
+bin: openhands
+enabled: true
+caps:
+  promptDelivery: typed
+  turnSignal: false
+  resume: none
+  supervise: human
+  blockedDetection: false
+options:
+  - id: mode
+    label: "Approval"
+    values:
+      always-approve: [ "--always-approve" ]
+    unattended: always-approve
+install:
+  url: https://docs.openhands.dev/openhands/usage/cli
+  command: "uv tool install openhands --python 3.12"
+note: "launches only: Hivemind does not read its status yet, and other agents
+  cannot collect its replies."
+icon:
+  viewBox: 0 0 24 24
+  attrs:
+    fill: currentColor
+  shapes:
+    - path:
+        d: M9.06145 23.1079C5.26816 22.3769 -3.39077 20.6274 1.4173 5.06384C9.6344
+          6.09939 16.9728 14.0644 9.06145 23.1079Z
+    - path:
+        d: M8.91928 23.0939C5.27642 21.2223 0.78371 4.20891 17.0071 0C20.7569 7.19341
+          19.6212 16.5452 8.91928 23.0939Z
+        opacity: "0.72"
+    - path:
+        d: M8.91388 23.0788C8.73534 19.8817 10.1585 9.08525 23.5699 13.1107C23.1812
+          20.1229 18.984 26.4182 8.91388 23.0788Z
+        opacity: "0.43999999999999995"

@@ -7,7 +7,14 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, lstatSync, readlin
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const { seedKiroHome } = await import("../../src/main/hcp/kiro-home.ts");
+const { seedHome } = await import("@hivemind/agents/node");
+const { authoredDef } = await import("./authored-agents.ts");
+
+// kiro's overlay is declared in its manifest: mirror ~/.kiro, own agents/hivemind.json,
+// and keep the user's own custom agents linked beside it.
+const HOME = authoredDef("kiro").home!;
+const seedKiroHome = (opts: { kiroHome: string; realKiro: string; agentConfig: unknown }) =>
+  seedHome(HOME, opts.kiroHome, opts.realKiro, { "agents/hivemind.json": JSON.stringify(opts.agentConfig) });
 
 function fakeKiro(): string {
   const real = mkdtempSync(join(tmpdir(), "real-kiro-"));
@@ -24,7 +31,7 @@ test("symlinks every real top-level child (except agents/) + writes agents/hivem
   const home = mkdtempSync(join(tmpdir(), "kiro-home-"));
   seedKiroHome({ kiroHome: home, realKiro: real, agentConfig: { name: "hivemind", hooks: { stop: [] } } });
 
-  const dot = join(home, ".kiro");
+  const dot = join(home, "kiro-home", ".kiro");
   assert.equal(lstatSync(join(dot, "auth.json")).isSymbolicLink(), true);
   assert.equal(readlinkSync(join(dot, "auth.json")), join(real, "auth.json"));
   assert.equal(realpathSync(join(dot, "sessions")), realpathSync(join(real, "sessions")));
@@ -41,7 +48,7 @@ test("preserves the user's own custom agents alongside hivemind.json", () => {
   const home = mkdtempSync(join(tmpdir(), "kiro-home-"));
   seedKiroHome({ kiroHome: home, realKiro: real, agentConfig: { name: "hivemind" } });
 
-  const agentsDir = join(home, ".kiro", "agents");
+  const agentsDir = join(home, "kiro-home", ".kiro", "agents");
   assert.equal(lstatSync(join(agentsDir, "my-custom-agent.json")).isSymbolicLink(), true);
   assert.equal(readlinkSync(join(agentsDir, "my-custom-agent.json")), join(real, "agents", "my-custom-agent.json"));
   assert.equal(lstatSync(join(agentsDir, "hivemind.json")).isSymbolicLink(), false);
@@ -52,7 +59,7 @@ test("idempotent: re-seeding leaves links intact and refreshes hivemind.json", (
   const home = mkdtempSync(join(tmpdir(), "kiro-home-"));
   seedKiroHome({ kiroHome: home, realKiro: real, agentConfig: { name: "hivemind", v: 1 } });
   seedKiroHome({ kiroHome: home, realKiro: real, agentConfig: { name: "hivemind", v: 2 } });
-  const dot = join(home, ".kiro");
+  const dot = join(home, "kiro-home", ".kiro");
   assert.equal(readlinkSync(join(dot, "settings.json")), join(real, "settings.json"));
   assert.equal(JSON.parse(readFileSync(join(dot, "agents", "hivemind.json"), "utf8")).v, 2);
 });
@@ -62,7 +69,7 @@ test("never symlinks a real agents/hivemind.json (hivemind owns that name)", () 
   writeFileSync(join(real, "agents", "hivemind.json"), JSON.stringify({ name: "not-ours" }));
   const home = mkdtempSync(join(tmpdir(), "kiro-home-"));
   seedKiroHome({ kiroHome: home, realKiro: real, agentConfig: { name: "hivemind", ours: true } });
-  const p = join(home, ".kiro", "agents", "hivemind.json");
+  const p = join(home, "kiro-home", ".kiro", "agents", "hivemind.json");
   assert.equal(lstatSync(p).isSymbolicLink(), false);
   assert.deepEqual(JSON.parse(readFileSync(p, "utf8")), { name: "hivemind", ours: true });
 });
@@ -71,7 +78,7 @@ test("tolerates a missing real ~/.kiro (fresh install) — still writes the agen
   const home = mkdtempSync(join(tmpdir(), "kiro-home-"));
   seedKiroHome({ kiroHome: home, realKiro: join(tmpdir(), "does-not-exist-xyz"), agentConfig: { name: "hivemind" } });
   assert.deepEqual(
-    JSON.parse(readFileSync(join(home, ".kiro", "agents", "hivemind.json"), "utf8")),
+    JSON.parse(readFileSync(join(home, "kiro-home", ".kiro", "agents", "hivemind.json"), "utf8")),
     { name: "hivemind" },
   );
 });

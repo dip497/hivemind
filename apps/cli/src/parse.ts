@@ -1,4 +1,5 @@
 import { type Assignee, type IssueState } from "@hivemind/core";
+import { getCatalog } from "@hivemind/agents";
 
 const STATES: IssueState[] = [
   "backlog",
@@ -15,18 +16,8 @@ export function parseState(s: string): IssueState | null {
   return (STATES as string[]).includes(norm) ? (norm as IssueState) : null;
 }
 
-const KNOWN_AGENTS = new Set([
-  "claude",
-  "codex",
-  "gemini",
-  "opencode",
-  "openclaw",
-  "hermes",
-  "amp",
-  "cursor",
-  "pi",
-  "kiro",
-]);
+/** Per call: a module-scope copy of the catalog goes stale. */
+const knownAgents = (): Set<string> => new Set(getCatalog().map((d) => d.id));
 
 /**
  * Heuristic: if the id matches a known agent CLI, assignee.type = agent.
@@ -39,7 +30,7 @@ export function parseAssignee(
 ): Assignee | null {
   if (!id) return null;
   const lower = id.toLowerCase();
-  const type = typeOverride ?? (KNOWN_AGENTS.has(lower) ? "agent" : "member");
+  const type = typeOverride ?? (knownAgents().has(lower) ? "agent" : "member");
   const a: Assignee = { type, id: lower };
   if (model) a.model = model;
   return a;

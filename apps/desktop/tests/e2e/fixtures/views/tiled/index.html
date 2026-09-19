@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Tiled</title>
+  <link rel="stylesheet" href="./tiled.css" />
+</head>
+<body>
+  <header class="t-bar">
+    <nav class="t-tabs" role="tablist" aria-label="Frames" tabindex="0">
+      <span class="t-indicator" aria-hidden="true"></span>
+    </nav>
+    <div class="t-tools">
+      <button type="button" class="t-restore" hidden></button>
+      <div class="t-mode" role="radiogroup" aria-label="Layout">
+        <button type="button" role="radio" data-mode="main" title="Main and stack (M)">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2.5" width="7.5" height="11" rx="1.5"/><rect x="10.5" y="2.5" width="4" height="5" rx="1"/><rect x="10.5" y="8.5" width="4" height="5" rx="1"/></svg>
+        </button>
+        <button type="button" role="radio" data-mode="grid" title="Grid (M)">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2.5" width="5.75" height="5" rx="1"/><rect x="8.75" y="2.5" width="5.75" height="5" rx="1"/><rect x="1.5" y="8.5" width="5.75" height="5" rx="1"/><rect x="8.75" y="8.5" width="5.75" height="5" rx="1"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+  <main class="t-stage" aria-label="Terminals">
+    <div class="t-rings" aria-hidden="true"></div>
+    <div class="t-empty" hidden>
+      <p class="t-empty-title"></p>
+      <p class="t-empty-sub"></p>
+    </div>
+  </main>
+  <script type="module" src="./tiled.js"></script>
+</body>
+</html>

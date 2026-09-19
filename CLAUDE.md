@@ -1,102 +1,4 @@
 # CLAUDE
-<!-- hyperresearch:start -->
-## Research Base (hyperresearch) — Today is 2026-05-17
-
-**CLI path: `/home/dipendra-sharma/projects/hivemind/.venv/bin/hyperresearch`** — use this exact path for every hyperresearch command. It may not be on your system PATH.
-
-**Paths in this document are relative to your current working directory**, not to the CLI binary's location. Use `research/notes/final_report_<vault_tag>.md` (not a prefix with the binary path) when you save files.
-
-This project uses hyperresearch as an agent-driven research knowledge base. The `research/` directory contains markdown notes collected from web sources and original research. Append `--json` to any command for structured output.
-
-### How to do research
-
-**Run a research session with `/hyperresearch <query>`.** This invokes the V8 16-step pipeline. The entry skill at `.claude/skills/hyperresearch/SKILL.md` is a thin ROUTER. The 16 step procedures live in their own skills (`hyperresearch-1-decompose` through `hyperresearch-16-readability-audit`) and are loaded fresh into context via the `Skill` tool when each step runs. This solves V7's context-compaction problem: each step's procedure lands in context only when needed. Read the entry skill before you start a research session; it explains the chain mechanics.
-
-Step 1 classifies the query into one of two tiers (`light` or `full`) and the rest of the pipeline scales accordingly — short bounded queries skip the depth investigations, critics, and patcher (~30-40 min); argumentative deep-research queries run all 16 steps with adversarial review (~1.5-2.5 hours).
-
-**Do NOT use WebFetch for source pages** — use `/home/dipendra-sharma/projects/hivemind/.venv/bin/hyperresearch fetch` instead. The skill files explain when to fetch vs. search.
-
-### What the skill files own
-
-The skill files own everything about how to research. That includes:
-- The pipeline phases and what each phase does
-- Which subagents exist and what each one is for (fetcher, loci-analyst, depth-investigator, 4 critics, patcher, polish-auditor)
-- The tool-lock invariant (patcher and polish-auditor can only Read + Edit, never Write)
-- The subagent spawn contract (every Task call passes the verbatim research_query + pipeline position + inputs)
-- Artifact locations (`research/scaffold.md`, `research/prompt-decomposition.json`, `research/loci.json`, `research/comparisons.md`, interim notes, patch / polish logs)
-- The curation pass after every research session
-
-If you need to know how hyperresearch works, read the skill file. This document does NOT duplicate that content — when the skill file and this file disagree, the skill file wins.
-
-### Canonical research query
-
-In a normal run, the canonical research query is the user's verbatim prompt. In wrapped runs, if `research/prompt.txt` exists, that file is gospel and overrides any wrapping instructions. The pipeline persists the query as `research/query-<vault_tag>.md` with YAML frontmatter — this is the canonical query reference for all downstream layers. Wrapper requirements (save path, citation format, terminal sections) are a separate contract, captured in the scaffold — not pasted into the `## User Prompt (VERBATIM — gospel)` section.
-
-### Academic APIs before web search
-
-For any topic with a research literature, hit academic APIs BEFORE running web searches. They return citation-ranked canonical papers; web search returns derivative commentary.
-
-- **Semantic Scholar:** `https://api.semanticscholar.org/graph/v1/paper/search?query=<q>&fields=title,year,citationCount,externalIds&limit=10` — then citation-chain the top papers forward + backward.
-- **arXiv:** `https://export.arxiv.org/api/query?search_query=cat:cs.LG+AND+all:<q>&sortBy=relevance&max_results=25`
-- **OpenAlex:** `https://api.openalex.org/works?search=<q>&sort=cited_by_count:desc&per-page=15&mailto=research@example.com`
-- **PubMed:** `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=<q>&retmode=json&retmax=20`
-
-After the academic sweep, run web searches for context, news, non-academic angles, and at least one adversarial search ("criticism of X", "limitations of X").
-
-### PDFs fetch directly
-
-`/home/dipendra-sharma/projects/hivemind/.venv/bin/hyperresearch fetch` auto-detects PDF URLs (arXiv, NBER, SSRN, direct `.pdf` links) and extracts full text via pymupdf. Fetch them aggressively. Raw PDFs land in `research/raw/<note-id>.pdf` and the note's frontmatter links back via `raw_file:`.
-
-### Searching the vault
-
-```bash
-/home/dipendra-sharma/projects/hivemind/.venv/bin/hyperresearch search "query" --json                # Full-text search
-/home/dipendra-sharma/projects/hivemind/.venv/bin/hyperresearch search "query" --tag ml --json       # Filter by tag / status / date / parent
-/home/dipendra-sharma/projects/hivemind/.venv/bin/hyperresearch search "query" --include-body --json # Full-body search, not just titles
-/home/dipendra-sharma/projects/hivemind/.venv/bin/hyperresearch note show <id> --json                # Read one note
-/home/dipendra-sharma/projects/hivemind/.venv/bin/hyperresearch note show <id1> <id2> <id3> --json   # Batch-read notes in one call
-/home/dipendra-sharma/projects/hivemind/.venv/bin/hyperresearch note list --json                     # List all notes with summaries
-/home/dipendra-sharma/projects/hivemind/.venv/bin/hyperresearch tags --json                          # Existing tag vocabulary
-```
-
-### Images, screenshots, and assets
-
-```bash
-/home/dipendra-sharma/projects/hivemind/.venv/bin/hyperresearch fetch "<url>" --tag <topic> --save-assets -j   # Saves screenshot + top images
-/home/dipendra-sharma/projects/hivemind/.venv/bin/hyperresearch assets list --note <note-id> --json            # Assets for a specific note
-/home/dipendra-sharma/projects/hivemind/.venv/bin/hyperresearch assets path <note-id> --type screenshot -j     # Get screenshot path (viewable with Read)
-```
-
-### Authenticated crawling
-
-Login-gated content (LinkedIn, Twitter, paywalled news) needs a browser profile. Set up once via `/home/dipendra-sharma/projects/hivemind/.venv/bin/hyperresearch setup` or `crwl profiles`. Config in `.hyperresearch/config.toml` under `[web]`: `profile = "research"`, `magic = true`. LinkedIn / Twitter / Facebook / Instagram / TikTok auto-use a visible browser to avoid session kills.
-
-If a fetch returns a login wall, tell the user to run `/home/dipendra-sharma/projects/hivemind/.venv/bin/hyperresearch setup` and create a login profile.
-
-### Curate after every session
-
-Every research session must end with a curation pass:
-
-```bash
-/home/dipendra-sharma/projects/hivemind/.venv/bin/hyperresearch note list --status draft -j                                        # Find unprocessed notes
-/home/dipendra-sharma/projects/hivemind/.venv/bin/hyperresearch note show <id> -j                                                  # Read the content
-/home/dipendra-sharma/projects/hivemind/.venv/bin/hyperresearch note update <id> --summary "<specific summary>" --add-tag <t> -j   # Add summary + tags
-/home/dipendra-sharma/projects/hivemind/.venv/bin/hyperresearch lint -j                                                            # Find missing tags / summaries / broken links
-/home/dipendra-sharma/projects/hivemind/.venv/bin/hyperresearch repair -j                                                          # Auto-fix broken links, rebuild indexes
-/home/dipendra-sharma/projects/hivemind/.venv/bin/hyperresearch status -j                                                          # Overall vault health
-```
-
-Lifecycle: `draft` → `review` → `evergreen` (or `stale` → `deprecated` → `archive` for outdated material).
-
-Summaries must be specific — "Mamba achieves linear-time sequence modeling via selective state spaces" beats "Paper about Mamba". Reuse the existing tag vocabulary (`/home/dipendra-sharma/projects/hivemind/.venv/bin/hyperresearch tags -j`) rather than inventing new tags.
-
-### Key conventions
-
-- Notes live in `research/notes/` as markdown with YAML frontmatter
-- Link notes with `[[note-id]]` syntax
-- After editing `.md` files directly, run `/home/dipendra-sharma/projects/hivemind/.venv/bin/hyperresearch sync` to update the index
-- Run `/home/dipendra-sharma/projects/hivemind/.venv/bin/hyperresearch --help` for the full command list
-<!-- hyperresearch:end -->
 
 ## Adding or completing an agent integration
 
@@ -106,8 +8,8 @@ Read it before touching `providers/`, `agents.tsx`, or `agent-state.ts`.
 
 The part people skip: **probe the real binary before deciding what it supports.** A
 provider PR that assumes "no hooks / no session ids" without running `--help` ships an
-agent the control plane cannot drive — `hive_read` times out, `hive_workflow` gathers
-nothing, and a tile waiting on approval notifies "Finished". `checklist.md` next to the
+agent the control plane cannot drive — `hive ctl read` times out, `hive ctl workflow`
+gathers nothing, and a tile waiting on approval notifies "Finished". `checklist.md` next to the
 skill is the definition of done; it goes in the PR description.
 
 <!-- release:start -->
@@ -119,11 +21,9 @@ This project ships prebuilt binaries via [GitHub Releases](https://github.com/di
 
 ```bash
 # from a clean main branch, in sync with origin/main:
-./scripts/release.sh patch       # 0.0.1 → 0.0.2
-./scripts/release.sh minor       # 0.0.1 → 0.1.0
-./scripts/release.sh major       # 0.0.1 → 1.0.0
-./scripts/release.sh 0.4.2       # explicit version
-./scripts/release.sh patch --dry-run   # preview without writing
+./scripts/release.sh             # 2026.9.0, 2026.9.1 … then 2026.10.0 — computed, nothing to choose
+./scripts/release.sh 2026.9.4    # explicit version
+./scripts/release.sh --dry-run   # preview without writing
 ```
 
 What it does (`scripts/release.sh`):
@@ -137,7 +37,7 @@ What it does (`scripts/release.sh`):
 ### What the workflows do
 
 - **`.github/workflows/ci.yml`** runs on every push to `main` and PR: typecheck + build + unit tests (`pnpm test:unit`). Heavy Playwright e2e is intentionally NOT run here — release builds validate the full build path.
-- **`.github/workflows/release.yml`** runs on `v*.*.*` tags (and manual `workflow_dispatch`). Three jobs: `build-linux` (ubuntu) → `hive-linux-x86_64` + `hivemind-<version>-x86_64.AppImage`; `build-macos` (macos-14, Apple Silicon) → `hive-darwin-arm64` + `hivemind-<version>-arm64-mac.zip`; `publish` downloads both jobs' artifacts and creates the GitHub Release. A manual `workflow_dispatch` is BUILD-ONLY unless you pass `-f publish=true` — use `gh workflow run release.yml --ref <branch> -f tag=vX.Y.Z-test` to smoke-test a platform's build without cutting a release; the assets land as run artifacts. Each build job compiles the CLI with `bun build --compile` (no `--target` — host arch), builds the renderer + main with `electron-vite`, then packages via `pnpm deploy` + `electron-builder`.
+- **`.github/workflows/release.yml`** runs on `v*.*.*` tags (and manual `workflow_dispatch`). Four jobs: `build-linux` (ubuntu) → `hive-linux-x86_64` + `hivemind-<version>-x86_64.AppImage`; `build-linux-arm64` (ubuntu-24.04-arm) → `hive-linux-arm64` only (a remote-machine CLI, no desktop); `build-macos` (macos-14, Apple Silicon) → `hive-darwin-arm64` + `hivemind-<version>-arm64-mac.zip`; `publish` downloads their artifacts and creates the GitHub Release. A manual `workflow_dispatch` is BUILD-ONLY unless you pass `-f publish=true` — use `gh workflow run release.yml --ref <branch> -f tag=vX.Y.Z-test` to smoke-test a platform's build without cutting a release; the assets land as run artifacts. Each build job compiles the CLI with `bun build --compile` (no `--target` — host arch; the Linux jobs then run `apps/cli/tests/sessions.test.ts` against the binary via `HIVE_BIN`, so a broken embedded pty addon fails the release), builds the renderer + main with `electron-vite`, then packages via `pnpm deploy` + `electron-builder`.
 
   Windows specifics: `build-windows` (windows-latest) produces `hive-windows-x64.exe` + `hivemind-<version>-x64-win.zip`, but it is `continue-on-error: true`, is NOT in `publish`'s `needs`, and its assets are deliberately absent from the release `files:` list — the platform builds but has never been launched, and an unvalidated platform must not be able to break a Linux/macOS release. Shipping it is one edit: add those two names to `files:`. The job also parse-checks `install.ps1` (the only Windows host the project has) and asserts the unpacked `win32-x64` `conpty.node` + `conpty.dll` made it into the bundle (Windows drives ConPTY — there is no `pty.node`, and a `.dll` is not covered by electron-builder's implicit native-module unpacking), because nothing else fails when the native module is missing or wrong-arch.
 
@@ -147,7 +47,8 @@ What it does (`scripts/release.sh`):
 
 Before running `./scripts/release.sh`:
 
-- [ ] All e2e tests green locally: `cd apps/desktop && pnpm test:e2e` (30 + known resize flake).
+- [ ] All e2e tests green locally: `cd apps/desktop && unset ELECTRON_RUN_AS_NODE && xvfb-run -a --server-args="-screen 0 1600x1000x24" pnpm test:e2e --retries=0` (99 tests across 29 specs, all must pass; the profile is isolated per run — see apps/desktop/AGENTS.md). **Run this on a quiet machine.** The suite takes 13-16 minutes and launches Electron ~30 times; at system load 25-30 on 16 CPUs a rotating handful of specs fails on cold-boot and timing, every one of which passes in isolation. Check `uptime` first — a red run on a loaded box is not evidence of a regression.
+- [ ] Canvas perf unchanged within noise vs the previous release: `apps/desktop/scripts/perf-canvas-effects.mjs`. Measure on a real display with the backend recorded — **absolute FPS, frame-time and latency gates are not valid under xvfb**, which renders on the llvmpipe CPU rasterizer; see `docs/design/performance-native-2026-09-09.md`. On a live desktop a capped run can read ~1 FPS for anything that moves while the page's main thread sits idle — each present waiting on a vsync that does not arrive. Run the A/B uncapped (`PERF_EXTRA_ARGS="--disable-gpu-vsync --disable-frame-rate-limit"`) and check the recorded `session.type` — after a reboot the desktop may be Wayland, not the X display you expect (`docs/design/perf-streaming-2026-09-11.md`).
 - [ ] Unit tests green: `pnpm test:unit` from `apps/desktop`.
 - [ ] Installer tests green: `bash scripts/install-plan-test.sh` + `bash scripts/install-macos-test.sh` (the second drives the real Darwin helpers with `ditto`/`xattr` shimmed, so the mac path is covered without a mac). The first asserts the release-asset names install.sh asks for match what release.yml uploads — a rename on either side breaks every install.
 - [ ] CHANGELOG `[Unreleased]` section has at least one entry describing the user-visible change.
@@ -169,18 +70,20 @@ Common failure modes seen so far:
 
 If the release workflow fails but the tag is pushed: delete the tag (`git tag -d vX.Y.Z && git push origin :refs/tags/vX.Y.Z`), fix the workflow, re-tag.
 
-### Semver guidance
+### Versions
 
-| Change | Bump |
-|---|---|
-| New tile type, new MCP tool, new agent integration, new install path, new release platform | minor |
-| POSIX assumption removed / platform seam added (`apps/desktop/src/main/platform.ts`) | patch |
-| Bug fix in PTY daemon, CSS tweak, tile spawn-position fix | patch |
-| Breaking change to `hive` CLI, breaking change to `.hivemind/` schema, breaking change to MCP tool shape | major |
+Calendar versions: `YYYY.M.N`, the Nth release of that month, counting from 0 (`2026.9.0`,
+`2026.9.1`, then `2026.10.0`). The script computes it, so there's no bump to decide. It is still a
+valid semver (no leading zeros), which npm, electron-builder and the update check need, and it
+sorts above every `1.x` release.
 
-`0.x.x` versions: minor can break things; document loudly in CHANGELOG.
+The version number says **when**, not **what broke**. Compatibility lives in the contracts that
+have their own version — the view protocol (`PROTOCOL_VERSION`), agent manifests
+(`manifestVersion`), package bundles (`apiVersion`), `settings.json` (`v`) — and a plugin that needs
+a newer app says so with `minAppVersion`. A change that breaks any of them, the `hive` CLI or a
+`hive ctl --json` shape starts its CHANGELOG line with **Breaking:**.
 
 ### Hand-off rule
 
-If you (Claude) made any change that ships to users — code, dependency, install behavior, MCP tool surface — append a one-line entry to `CHANGELOG.md` under `## [Unreleased]` BEFORE handing the session back. The maintainer can then cut a release with `./scripts/release.sh <bump>` and the changelog is ready.
+If you (Claude) made any change that ships to users — code, dependency, install behavior, `hive ctl` surface — append a one-line entry to `CHANGELOG.md` under `## [Unreleased]` BEFORE handing the session back. The maintainer can then cut a release with `./scripts/release.sh` and the changelog is ready.
 <!-- release:end -->

@@ -20,6 +20,10 @@
  *   - when the window is hidden/minimized the flush interval stretches — the
  *     renderer can't paint anyway (backgroundThrottling is off, so it would
  *     otherwise keep parsing every chunk at full rate while you're not looking).
+ *
+ * The batching delay is still real latency on a keystroke echo, so after
+ * `markInput` a tile's small pending output fast-paths out at once — streaming
+ * bursts keep the full batching.
  */
 export interface PtyOutputBufferOptions {
   /** Flush delay while the window is visible. */
@@ -28,8 +32,14 @@ export interface PtyOutputBufferOptions {
   hiddenDelayMs?: number;
   /** Per-tile pending cap — flushes at once when exceeded. */
   maxBytes?: number;
+  /** How long after `markInput` a tile's small output skips the timer. */
+  interactiveWindowMs?: number;
+  /** Largest pending+new size the interactive fast path still ships. */
+  interactiveMaxBytes?: number;
   /** Live probe: is the target window hidden/minimized right now? */
   hidden?: () => boolean;
+  /** Clock hook, injectable for tests. */
+  now?: () => number;
   /** Timer hooks, injectable for tests. */
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (t: unknown) => void;
@@ -37,11 +47,15 @@ export interface PtyOutputBufferOptions {
 
 export class PtyOutputBuffer {
   private pending = new Map<string, string>();
+  private inputAt = new Map<string, number>();
   private timer: unknown = null;
   private readonly delayMs: number;
   private readonly hiddenDelayMs: number;
   private readonly maxBytes: number;
+  private readonly interactiveWindowMs: number;
+  private readonly interactiveMaxBytes: number;
   private readonly hidden: () => boolean;
+  private readonly now: () => number;
   private readonly setTimer: (fn: () => void, ms: number) => unknown;
   private readonly clearTimer: (t: unknown) => void;
 
@@ -52,18 +66,37 @@ export class PtyOutputBuffer {
     this.delayMs = opts.delayMs ?? 8;
     this.hiddenDelayMs = opts.hiddenDelayMs ?? 200;
     this.maxBytes = opts.maxBytes ?? 256 * 1024;
+    this.interactiveWindowMs = opts.interactiveWindowMs ?? 100;
+    this.interactiveMaxBytes = opts.interactiveMaxBytes ?? 16 * 1024;
     this.hidden = opts.hidden ?? (() => false);
+    this.now = opts.now ?? Date.now;
     this.setTimer = opts.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
     this.clearTimer = opts.clearTimer ?? ((t) => clearTimeout(t as ReturnType<typeof setTimeout>));
   }
 
-  /** Queue a chunk. Ships immediately only when the tile's pending output
-   *  crosses the size cap; otherwise the next timer tick sends it. */
+  /** Record that user input for this tile just passed through this layer, so
+   *  its echo can ship without waiting for the batch timer. */
+  markInput(tileId: string): void {
+    this.inputAt.set(tileId, this.now());
+  }
+
+  /** Queue a chunk. Ships immediately when the tile's pending output crosses
+   *  the size cap or its input was just marked (small echo only); otherwise
+   *  the next timer tick sends it. */
   push(tileId: string, data: string): void {
     if (!data) return;
     const cur = this.pending.get(tileId);
     const next = cur ? cur + data : data;
     if (next.length >= this.maxBytes) {
+      this.pending.delete(tileId);
+      this.send(tileId, next);
+      return;
+    }
+    const markedAt = this.inputAt.get(tileId);
+    const fresh = markedAt !== undefined && this.now() - markedAt <= this.interactiveWindowMs;
+    if (markedAt !== undefined && !fresh) this.inputAt.delete(tileId);
+    // Keystroke echo goes out in one synchronous send; pending still leads new.
+    if (fresh && next.length <= this.interactiveMaxBytes && !this.hidden()) {
       this.pending.delete(tileId);
       this.send(tileId, next);
       return;
@@ -97,12 +130,14 @@ export class PtyOutputBuffer {
   /** Drop a tile's pending output without sending (renderer gone). */
   forget(tileId: string): void {
     this.pending.delete(tileId);
+    this.inputAt.delete(tileId);
     if (this.pending.size === 0) this.cancelTimer();
   }
 
   /** Drop everything without sending (the connection is gone). */
   clear(): void {
     this.pending.clear();
+    this.inputAt.clear();
     this.cancelTimer();
   }
 

@@ -1,14 +1,13 @@
 import { useState } from "react";
 import type { Assignee, IssueSummary } from "@hivemind/core/types";
 import { Avatar, LabelChip } from "../components/StateMeta";
+import { Input } from "../components/ui/input";
+import { MenuItem } from "../components/ui/menu-item";
 import { Popover } from "../components/ui/popover";
-
-const INPUT =
-  "w-full px-2 py-1 text-[12px] bg-[var(--color-bg)] border border-[var(--color-line2)] rounded-md outline-none focus:border-[var(--color-brand)] text-[var(--color-fg)] placeholder:text-[var(--color-fg3)]";
 
 const Check = () => (
   <svg width="9" height="9" viewBox="0 0 10 10">
-    <path d="M2 5.2L4.2 7.2L8 3" stroke="#fff" strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M2 5.2L4.2 7.2L8 3" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 );
 
@@ -38,27 +37,20 @@ export function AssigneePicker({
     >
       {(close) => (
         <div className="flex flex-col gap-1">
-          <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="assign to…" className={INPUT} />
+          <Input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="assign to…" />
           <div className="max-h-40 overflow-y-auto">
             {value && (
-              <button
-                onClick={() => { onChange(null); close(); }}
-                className="w-full text-left px-2 py-1 text-[11.5px] text-[var(--color-fg2)] hover:bg-[var(--color-bg4)] rounded cursor-pointer"
-              >
+              <MenuItem variant="muted" size="sm" onClick={() => { onChange(null); close(); }}>
                 Unassign
-              </button>
+              </MenuItem>
             )}
             {allAssignees
               .filter((a) => a.toLowerCase().includes(q.toLowerCase()))
               .map((a) => (
-                <button
-                  key={a}
-                  onClick={() => { onChange({ type: "member", id: a }); close(); }}
-                  className="w-full flex items-center gap-1.5 px-2 py-1 text-[12px] text-left hover:bg-[var(--color-bg4)] rounded text-[var(--color-fg)] cursor-pointer"
-                >
+                <MenuItem key={a} size="sm" onClick={() => { onChange({ type: "member", id: a }); close(); }}>
                   <Avatar id={a} size={16} />
                   {a}
-                </button>
+                </MenuItem>
               ))}
             {q.trim() && !allAssignees.includes(q.trim()) && (
               <button
@@ -103,12 +95,11 @@ export function LabelPicker({
     >
       {() => (
         <div className="flex flex-col gap-1">
-          <input
+          <Input
             autoFocus
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="filter / add…"
-            className={INPUT}
             onKeyDown={(e) => {
               if (e.key === "Enter" && q.trim()) {
                 if (!value.includes(q.trim())) onChange([...value, q.trim()]);
@@ -120,14 +111,11 @@ export function LabelPicker({
             {allLabels
               .filter((l) => l.toLowerCase().includes(q.toLowerCase()))
               .map((l) => (
-                <button
-                  key={l}
-                  onClick={() => toggle(l)}
-                  className="w-full flex items-center gap-2 px-2 py-1 text-left hover:bg-[var(--color-bg4)] rounded cursor-pointer"
-                >
+                <MenuItem key={l} size="sm" onClick={() => toggle(l)}>
                   <span
                     className="size-3 rounded-sm border flex items-center justify-center shrink-0"
                     style={{
+                      color: "var(--color-fg)",
                       background: value.includes(l) ? "var(--color-brand)" : "transparent",
                       borderColor: value.includes(l) ? "var(--color-brand)" : "var(--color-line2)",
                     }}
@@ -135,7 +123,7 @@ export function LabelPicker({
                     {value.includes(l) && <Check />}
                   </span>
                   <LabelChip label={l} />
-                </button>
+                </MenuItem>
               ))}
             {q.trim() && !allLabels.includes(q.trim()) && (
               <button
@@ -178,25 +166,18 @@ export function ParentPicker({
     >
       {(close) => (
         <div className="flex flex-col gap-1">
-          <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="search issues…" className={INPUT} />
+          <Input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="search issues…" />
           <div className="max-h-48 overflow-y-auto">
             {value && (
-              <button
-                onClick={() => { onChange(null); close(); }}
-                className="w-full text-left px-2 py-1 text-[11.5px] text-[var(--color-fg2)] hover:bg-[var(--color-bg4)] rounded cursor-pointer"
-              >
+              <MenuItem variant="muted" size="sm" onClick={() => { onChange(null); close(); }}>
                 Clear parent
-              </button>
+              </MenuItem>
             )}
             {matches.map((i) => (
-              <button
-                key={i.id}
-                onClick={() => { onChange(i.id); close(); }}
-                className="w-full flex items-center gap-2 px-2 py-1 text-left hover:bg-[var(--color-bg4)] rounded cursor-pointer"
-              >
+              <MenuItem key={i.id} size="sm" onClick={() => { onChange(i.id); close(); }}>
                 <span className="font-mono text-[10.5px] text-[var(--color-fg3)] tabular-nums shrink-0">{i.id}</span>
                 <span className="text-[12px] text-[var(--color-fg)] truncate">{i.title}</span>
-              </button>
+              </MenuItem>
             ))}
           </div>
         </div>

@@ -37,7 +37,7 @@ export const PIERRE_CSS_VARS: CSSProperties = {
     "--diffs-line-height": "1.6",
     "--diffs-tab-size": "2",
     "--diffs-min-number-column-width": "3ch",
-    "--diffs-header-font-family": '"Geist", sans-serif',
+    "--diffs-header-font-family": '"Geist Sans", "Geist", sans-serif',
 
     // ── Diff change colors ───────────────────────────────────────────────
     // These `*-color-override` vars feed Pierre's `--diffs-*-base`, which is a

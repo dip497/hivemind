@@ -1,0 +1,67 @@
+# Pi — built-in provider manifest.
+# Authoring format for the def half. See packages/hive-agents/src/manifest.ts.
+manifestVersion: 1
+id: pi
+label: Pi
+bin: pi
+enabled: true
+caps:
+  promptDelivery: argv
+  turnSignal: true
+  resume: cwd
+  supervise: none
+  blockedDetection: false
+icon:
+  viewBox: 0 0 800 800
+  attrs:
+    fill: currentColor
+    fillRule: evenodd
+  shapes:
+  - path:
+      d: M165.29 165.29 H517.36 V400 H400 V517.36 H282.65 V634.72 H165.29 Z M282.65 282.65 V400 H400 V282.65
+        Z
+  - path:
+      d: M517.36 400 H634.72 V634.72 H517.36 Z
+options:
+- id: model
+  label: Model
+  flag: --model
+  list:
+    args:
+    - --list-models
+    skip: 1
+    format: "{1}/{2}"
+spawn:
+  titles:
+  - "π - {task} - {any}"
+  - "π - {any}"
+install:
+  url: https://github.com/earendil-works/pi/blob/main/packages/coding-agent/README.md
+  command: "npm install -g --ignore-scripts @earendil-works/pi-coding-agent"
+detect:
+  rules:
+  - when:
+      containsCS: Working...
+    then: working
+  default: idle
+note: 'pi has no permission system: it always runs autonomously and cannot be supervised.'
+session:
+  resume:
+    args:
+    - --session
+    - '{id}'
+    find:
+      strategy: jsonl-header
+      root: '{home}/.pi/agent/sessions'
+      cwdPath: cwd
+      idPath: id
+      require:
+        type: session
+assets:
+- name: hive-pi-ext.mjs
+  file: hive-pi-ext.mjs
+launch:
+  hcp: true
+  args:
+  - -e
+  - '{asset:hive-pi-ext.mjs}'

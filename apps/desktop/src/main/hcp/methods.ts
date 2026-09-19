@@ -16,6 +16,9 @@ import type { OutputRecorder } from "./output-recorder.js";
 import { readLastAssistantMessage } from "./transcript.js";
 import { toPtyId as ptyId, toBareId as bareOf } from "../../shared/tile-id.js";
 import { setName, labelOf } from "./names.js";
+import { agentById, agentOption, spawnableAgents, workerAgents, type AgentProviderDef } from "@hivemind/agents";
+import { BROWSER_TOOL_ID, tileKindAvailability } from "@hivemind/core/tool-plugins";
+import type { ToolsSettings } from "@hivemind/core/settings-schema";
 import { SUBMIT_DELAY_MS } from "../../shared/agent-io.js";
 
 /** Max agent-spawn depth (user = 0). Bounds recursive agent-spawns-agent fan-out
@@ -75,14 +78,16 @@ export function stickyAllow(cacheKey: string): boolean {
   return STICKY_ALLOW.has((cacheKey.split(":").pop() ?? "").toLowerCase());
 }
 
-/** Agents with NO permission system of their own, which therefore cannot be
- *  supervised: there is no native prompt for a broker to intercept or to fail back
- *  to, so any gate we inject must fail closed and bricks the worker on the first
- *  hiccup. A `supervise` request for these is refused at spawn, not silently
- *  downgraded — a caller that thinks it has a gate but doesn't is worse off than one
- *  that knows it has none. Verified for pi 0.55.3 (its core has no approval path).
- *  claude/droid are NOT here: their brokers fail open to a real human prompt. */
-const SUPERVISE_UNSUPPORTED = new Set(["pi"]);
+/** Whether a provider can be supervised is declared in its catalog def
+ *  (`caps.supervise`). A runtime with no permission system of its own has
+ *  nothing to broker: there is no native prompt for a broker to intercept or to
+ *  fail back to, so any gate we injected must fail closed and would brick the
+ *  worker on the first hiccup. A `supervise` request for it is refused at
+ *  spawn, not silently downgraded — a caller that thinks it has a gate but
+ *  doesn't is worse off than one that knows it has none. */
+function superviseUnsupported(agent: string): boolean {
+  return agentById(agent)?.caps.supervise === "none";
+}
 
 /** Normalize a `supervise` arg into the HIVE_SUPERVISE env string (a tool list or
  *  "all"), or null to disable. */
@@ -103,9 +108,17 @@ function summarizeTool(tool: string, inp: Record<string, unknown>): string {
 }
 
 export interface MethodDeps {
+  /** Settled main-process tool preferences; absent means no optional tools enabled. */
+  toolsSettings?: () => ToolsSettings;
+  /** Provider id of a (user-spawned) tile, from its command — for the
+   *  capability checks on read/workflow. Optional: HCP-spawned tiles are
+   *  tracked internally. */
+  agentOf?: (bareTileId: string) => string | undefined;
   /** Run a renderer verb (returns its result); rejects/throws HcpError on
    *  no-renderer / timeout. */
   callRenderer: (method: string, params: unknown, timeoutMs: number) => Promise<unknown>;
+  /** Re-read settings.json (edited by the CLI) and broadcast it. */
+  reloadSettings: () => Promise<unknown>;
   /** Write to a tile's pty RIGHT NOW. Returns false if the tile has no live pty.
    *  Raw bytes only (key sequences) — for anything the agent must READ, use
    *  `deliverToTile`, which waits for it to be at its prompt. */
@@ -120,6 +133,12 @@ export interface MethodDeps {
   recorder: OutputRecorder;
   /** Sliding-window spawn gate (reuse the ptySpawn rate-limit). false → refuse. */
   spawnAllowed: () => boolean;
+  /** The agent a spawn with no `agent` starts (the user's default, if installed).
+   *  Undefined when no agent is installed. May wait: at boot the PATH the answer
+   *  depends on is still being read. */
+  defaultAgentId?: () => string | undefined | Promise<string | undefined>;
+  /** The agent's CLI is where it would run (this machine, or the caller's remote host). Absent = assume it is. */
+  agentInstalled?: (def: AgentProviderDef, callerTile?: string) => boolean | Promise<boolean>;
   /** Pipe src's finished-turn replies into dst's input. Returns false on a bad
    *  pair (e.g. src === dst). */
   connect: (srcTileId: string, dstTileId: string) => boolean;
@@ -150,7 +169,7 @@ export interface Dispatcher {
   /** Drop ALL per-tile HCP state for a tile that has gone away, WITHOUT the
    *  renderer round-trip `tile.close` does. MUST be called on every pty-exit and
    *  user-close path — otherwise the maps (parentOf/depthOf/sendSeq/approveCache/
-   *  pendingApprovals) leak, a blocked hive_read/approval on the dead worker hangs
+   *  pendingApprovals) leak, a blocked agent.read/approval on the dead worker hangs
    *  its full timeout instead of resolving, and its UI "awaiting" status lingers.
    *  Idempotent — safe to call twice (e.g. tile.close then the resulting pty-exit). */
   forgetTile: (tileId: string) => void;
@@ -173,6 +192,19 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
   // bare tileId → spawn depth (HCP-spawned children only; user-spawned agents
   // are absent → treated as depth 0). Enforced against MAX_SPAWN_DEPTH.
   const depthOf = new Map<string, number>();
+  /** bare tileId → provider id, for tiles spawned through HCP (user-spawned
+   *  tiles are resolved by deps.agentOf from their command). */
+  const agentOfTile = new Map<string, string>();
+  const providerOf = (tileId: string): string | undefined => agentOfTile.get(bareOf(tileId)) ?? deps.agentOf?.(bareOf(tileId));
+  /** Refuse a verb that needs a deterministic turn signal from a provider that
+   *  has none — an honest UNSUPPORTED instead of a read that times out. */
+  const requireTurnSignal = (tileId: string, verb: string): void => {
+    const id = providerOf(tileId);
+    const def = id ? agentById(id) : undefined;
+    if (def && !def.caps.turnSignal) {
+      throw new HcpError("UNSUPPORTED", `${verb}: ${def.id} has no turn signal (${def.note ?? "scrape-only status"}) — drive it by hand or use a worker runtime: ${workerAgents().map((d) => d.id).join(", ")}`);
+    }
+  };
   // Agent-supervised approvals (HCP Phase 6). A supervised worker's PreToolUse
   // broker hook calls `agent.await_approval` (held here until the parent answers
   // via `agent.approve`). `approveCache` remembers always/never per worker+tool.
@@ -183,6 +215,18 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     const pid = ptyId(tileId);
     sendSeq.set(pid, deps.turns.currentSeq(pid));
     sendMark.set(pid, deps.recorder.mark(pid));
+  };
+
+  // A message the mailbox is still HOLDING (the agent is mid-turn). Its read epoch
+  // can only be armed once it is actually typed — armed at enqueue time, the next
+  // agent.read returns the turn already in flight, i.e. the PREVIOUS prompt's reply.
+  // A read that arrives while one is pending waits for the delivery first.
+  const pendingSend = new Map<string, Promise<void>>();
+  const holdUntilSent = (pid: string): (() => void) => {
+    let done!: () => void;
+    const p = new Promise<void>((r) => { done = r; });
+    pendingSend.set(pid, p);
+    return () => { if (pendingSend.get(pid) === p) pendingSend.delete(pid); done(); };
   };
 
   // Spawn one child tile and wire up its bookkeeping (depth, parent, auto-report,
@@ -200,15 +244,29 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       throw new HcpError("DEPTH_EXCEEDED", `agent spawn depth ${childDepth} exceeds max ${MAX_SPAWN_DEPTH}`);
     }
     if (!deps.spawnAllowed()) throw new HcpError("RATE_LIMITED", "spawn rate limit exceeded");
-    const agent = String(opts.agent ?? "claude");
+    const agent = opts.agent != null ? String(opts.agent) : await deps.defaultAgentId?.();
+    // Nothing compiled in to fall back to: an empty catalog means no agent can start.
+    if (!agent) throw new HcpError("BAD_REQUEST", "no agent installed — install one from Settings ▸ Plugins");
+    const def = agentById(agent);
+    if (!def || !def.enabled) {
+      throw new HcpError("BAD_REQUEST", `unknown agent '${agent}' — spawnable: ${spawnableAgents().map((d) => d.id).join(", ")}`);
+    }
+    if (deps.agentInstalled && !(await deps.agentInstalled(def, opts.callerTile ? String(opts.callerTile) : undefined))) {
+      throw new HcpError("UNSUPPORTED", `${def.label} is not installed on this machine (no ${def.bin} on PATH)${def.install ? ` — get it at ${def.install.url}` : ""}`);
+    }
     const sup = normalizeSupervise(opts.supervise);
+    // Supervision is brokered TO the caller's tile. Without one there is nobody to ask,
+    // and the policy would be dropped silently while the caller believes it has a gate.
+    if (sup && !opts.callerTile) {
+      throw new HcpError("BAD_REQUEST", "supervise needs a supervising agent: run this from an agent tile, or spawn without --supervise");
+    }
     // pi cannot be supervised. It has NO permission system, so the only gate would be
     // one we inject — which must fail CLOSED (no human prompt to fall back to) and
     // therefore bricks the worker on any hiccup. Refuse LOUDLY rather than spawning
     // an ungated worker the caller believes it is supervising: a false gate is worse
     // than no gate. (A user-opened pi tile is fully autonomous too — this changes
     // nothing about pi's actual authority.)
-    if (sup && SUPERVISE_UNSUPPORTED.has(agent)) {
+    if (sup && superviseUnsupported(agent)) {
       throw new HcpError(
         "BAD_REQUEST",
         `${agent} workers cannot be supervised — ${agent} has no permission system, so there is nothing to broker. ` +
@@ -216,13 +274,10 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
           `or spawn a claude worker with supervise if you need to gate its tools.`,
       );
     }
-    // Default an AGENT-SPAWNED worker to AUTO (bypassPermissions): a delegated
-    // worker has no human at its tile, so inheriting the UI's "default" mode would
-    // hang it on the first permission prompt. Two cases keep the human/broker in
-    // the loop and must NOT auto-skip: an explicit `mode` from the caller wins, and
-    // a `supervise`d worker routes its prompts to the parent (its PreToolUse broker
-    // only fires if permissions aren't skipped).
-    const mode = opts.mode != null ? opts.mode : sup ? undefined : "bypassPermissions";
+    // No human at a delegated worker's tile, so it runs in the agent's unattended
+    // mode — unless the caller chose one, or it is supervised (its broker hook
+    // only fires while permissions are not skipped).
+    const mode = opts.mode != null ? opts.mode : sup ? undefined : agentOption(def, "mode")?.unattended;
     // A spawner-chosen display name ("reviewer", "test-writer") — becomes the tile
     // label and tags every message this worker sends back. Bounded so a worker
     // can't smuggle a whole paragraph (or ANSI) into the parent's terminal banner.
@@ -237,6 +292,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     )) as { tileId?: string };
     if (!res?.tileId) throw new HcpError("INTERNAL", "spawn returned no tileId");
     depthOf.set(res.tileId, childDepth);
+    agentOfTile.set(res.tileId, agent);
     if (name) setName(res.tileId, name);
     if (opts.callerTile) {
       const parentBare = bareOf(String(opts.callerTile));
@@ -270,6 +326,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     deps.spawnEdge(bare, null, false); // drop spawn wires where this tile is parent OR child
     sendSeq.delete(pid);
     sendMark.delete(pid);
+    pendingSend.delete(pid);
     parentOf.delete(bare);
     for (const [child, parent] of parentOf) if (parent === bare) parentOf.delete(child);
     depthOf.delete(bare);
@@ -314,16 +371,22 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         const text = String(p.text ?? "");
         if (!tileId) throw new HcpError("BAD_REQUEST", "tileId required");
         const submit = p.submit !== false; // default: press Enter
-        armRead(tileId);
+        const pid = ptyId(tileId);
         // With submit (the default) this is a MESSAGE: deliver via the mailbox, which
         // types text-then-Enter as separate writes (a bundled newline is dropped by
         // claude's TUI) and, crucially, HOLDS it if the target agent is mid-turn —
         // otherwise it strands in the composer, unsubmitted and unread.
         // submit:false is a raw paste into the composer, which is only meaningful
         // right now, so it stays an immediate write.
-        const ok = submit
-          ? deps.deliverToTile(ptyId(tileId), text)
-          : deps.writeToTile(ptyId(tileId), text);
+        let ok: boolean;
+        if (submit) {
+          const sent = holdUntilSent(pid);
+          ok = deps.deliverToTile(pid, text, () => { armRead(tileId); sent(); });
+          if (!ok) sent();
+        } else {
+          armRead(tileId); // a raw paste is written immediately, so now IS delivery
+          ok = deps.writeToTile(pid, text);
+        }
         if (!ok) throw new HcpError("TILE_NOT_FOUND", `no live agent for tile ${tileId}`);
         return { ok: true };
       }
@@ -339,6 +402,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         const keys = Array.isArray(raw) ? raw.map(String) : raw != null ? [String(raw)] : [];
         if (!keys.length) throw new HcpError("BAD_REQUEST", "keys required");
         const pid = ptyId(tileId);
+        armRead(tileId); // keys can submit a prompt; a following read wants the turn they cause
         const bytesOf = (k: string) => KEYMAP[k.toLowerCase()] ?? k;
         const ok = deps.writeToTile(pid, bytesOf(keys[0]!));
         if (!ok) throw new HcpError("TILE_NOT_FOUND", `no live agent for tile ${tileId}`);
@@ -362,7 +426,9 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         const banner = `\n[hive] report from ${labelOf(child)}:\n${message}\n`;
         // Held if the parent is mid-turn — a report typed into a busy TUI never
         // gets read, and the worker thinks it delivered.
-        deps.deliverToTile(ptyId(parent), banner);
+        if (!deps.deliverToTile(ptyId(parent), banner)) {
+          throw new HcpError("TILE_NOT_FOUND", `parent agent ${parent} is gone — report not delivered`);
+        }
         // Single-delivery ladder: the worker authored its own summary this turn, so
         // when its turn ends, DON'T also auto-forward the raw turn (that would be a
         // second message the parent re-processes). recordTurn reads + clears this.
@@ -387,7 +453,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         const summary = summarizeTool(tool, inp);
         const banner =
           `\n[hive] APPROVAL — worker ${labelOf(worker)} wants to run ${tool}: ${summary}\n` +
-          `Reply: hive_approve("${reqId}", "allow" | "deny" | "always" | "never")\n`;
+          `Reply: hive ctl approve ${reqId} allow|deny|always|never\n`;
         // Surface the pause in the UI: this worker is now waiting on its parent.
         deps.pushWait(worker, "awaiting_approval");
         return await new Promise((resolve) => {
@@ -456,10 +522,26 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       case "agent.read": {
         const tileId = String(p.tileId ?? "");
         if (!tileId) throw new HcpError("BAD_REQUEST", "tileId required");
+        requireTurnSignal(tileId, "agent.read");
         const timeoutMs = typeof p.timeoutMs === "number" ? p.timeoutMs : DEFAULT_READ_TIMEOUT;
         const pid = ptyId(tileId);
+        // A send may still be queued behind the turn in flight; its epoch is armed when
+        // it is typed, so wait for that before deciding which turn this read wants.
+        // One budget for the whole read: waiting for a held send to be typed must not
+        // extend the call past the ceiling the caller (and the CLI) is waiting on.
+        const deadline = Date.now() + timeoutMs;
+        const pending = pendingSend.get(pid);
+        if (pending) await Promise.race([pending, new Promise<void>((r) => { const t = setTimeout(r, timeoutMs); t.unref?.(); })]);
         const afterSeq = sendSeq.get(pid) ?? deps.turns.currentSeq(pid);
-        const rec = await deps.turns.waitForTurn(pid, afterSeq, timeoutMs);
+        const rec = await deps.turns.waitForTurn(pid, afterSeq, Math.max(0, deadline - Date.now()));
+        // A tile that died under us is not "still working" — say so, and keep the read's
+        // shape so a caller parsing finalStatus does not have to special-case an error.
+        if (rec && rec.seq === -1) {
+          return { text: null, finalStatus: "closed", truncated: false, note: "tile closed while waiting" };
+        }
+        // Consume this turn: without advancing the epoch the NEXT read returns the same
+        // turn instantly, so a poll loop can never tell a new answer from the old one.
+        if (rec) sendSeq.set(pid, rec.seq);
         if (rec && typeof rec.text === "string" && rec.text.length > 0) {
           // pi inline-reply path: pi has no transcript file — its lifecycle-bridge
           // extension carries the finished reply on the turn event itself.
@@ -479,6 +561,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
           if (text != null) return { text, finalStatus: "turn", truncated: false };
           return { text: null, finalStatus: "turn", truncated: false, note: "turn completed but its transcript was unreadable" };
         }
+        if (rec) return { text: null, finalStatus: "turn", truncated: false, note: "turn completed but carried no readable reply" };
         // No completed turn within the timeout. Report status honestly instead of
         // scraping the raw ANSI terminal buffer (which returned garbled bytes, not
         // the agent's words). The agent is still working; if it was spawned with
@@ -492,11 +575,17 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         // deterministically via the turn-tracker (NOT screen-scrape), and return
         // the aggregated transcript replies. Workers are spawned report:false —
         // the workflow gathers them itself, so their replies don't also spam the
-        // orchestrator's terminal. The orchestrator's MCP tool call blocks until
-        // this returns (long client-side ceiling, like agent.read/review.open).
+        // orchestrator's terminal. The orchestrator's `hive ctl workflow` call blocks until
+        // this returns (`hive ctl workflow` blocks with a matching client ceiling).
         const shape = String(p.shape ?? "fanout");
         const caller = p.callerTile != null ? String(p.callerTile) : undefined;
-        const agent = p.agent != null ? String(p.agent) : "claude";
+        const agent = p.agent != null ? String(p.agent) : await deps.defaultAgentId?.();
+        if (!agent) throw new HcpError("BAD_REQUEST", "no agent installed — install one from Settings ▸ Plugins");
+        {
+          const def = agentById(agent);
+          if (!def || !def.enabled) throw new HcpError("BAD_REQUEST", `unknown agent '${agent}' — spawnable: ${spawnableAgents().map((d) => d.id).join(", ")}`);
+          if (!def.caps.turnSignal) throw new HcpError("UNSUPPORTED", `workflow.run: ${def.id} has no turn signal, so its workers' replies cannot be gathered (${def.note ?? "scrape-only status"}) — use a worker runtime: ${workerAgents().map((d) => d.id).join(", ")}`);
+        }
         const frame = p.frame != null ? String(p.frame) : undefined;
         // claude-only model alias applied to every worker in the fleet.
         const model = p.model != null ? String(p.model) : undefined;
@@ -514,15 +603,19 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         const runWorker = async (label: string, prompt: string): Promise<WR> => {
           let tileId: string;
           try {
-            tileId = await spawnRetry({ agent, prompt, frame, model, callerTile: caller, report: false, supervise });
+            tileId = await spawnRetry({ agent, prompt, frame, model, callerTile: caller, report: false, supervise, name: label });
           } catch (e) {
             return { item: label, tileId: null, status: "error", text: (e as Error).message };
           }
           const pid = ptyId(tileId);
           const afterSeq = sendSeq.get(pid) ?? deps.turns.currentSeq(pid);
           const rec = await deps.turns.waitForTurn(pid, afterSeq, perTurnMs);
-          const text = rec?.transcriptPath ? readLastAssistantMessage(rec.transcriptPath) : null;
-          const status: WR["status"] = rec?.transcriptPath ? "turn" : "timeout";
+          // Same two carriers agent.read handles: an inline reply (pi's bridge sends the
+          // text on the turn event) or a transcript path (claude/droid).
+          const text = rec?.text && rec.text.length > 0
+            ? rec.text
+            : rec?.transcriptPath ? readLastAssistantMessage(rec.transcriptPath) : null;
+          const status: WR["status"] = !rec ? "timeout" : rec.seq === -1 ? "error" : "turn";
           if (closeWhenDone && status === "turn") { try { await closeTile(tileId); } catch { /* best-effort */ } }
           return { item: label, tileId, status, text };
         };
@@ -585,10 +678,40 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       }
 
       // ── canvas verbs (renderer) ──────────────────────────────────────────
+      case "tool.open": {
+        if (p.tool !== BROWSER_TOOL_ID) throw new HcpError("UNSUPPORTED", "Unknown tool id");
+        const availability = tileKindAvailability("browser", deps.toolsSettings?.() ?? { enabledPlugins: [], disabledTools: [] });
+        if (!availability?.available) throw new HcpError("UNAUTHORIZED", "Browser is disabled; enable it in Settings under Tools");
+        if (p.frame !== undefined && (typeof p.frame !== "string" || !p.frame || p.frame.length > 256)) throw new HcpError("BAD_REQUEST", "frame must be an id");
+        if (p.url !== undefined) {
+          if (typeof p.url !== "string" || p.url.length > 8192) throw new HcpError("BAD_REQUEST", "Invalid URL");
+          let url: URL;
+          try { url = new URL(p.url); } catch { throw new HcpError("BAD_REQUEST", "Invalid URL"); }
+          if (!["http:", "https:"].includes(url.protocol) && p.url !== "about:blank") throw new HcpError("BAD_REQUEST", "URL must use http or https, or be about:blank");
+        }
+        if (!deps.spawnAllowed()) throw new HcpError("RATE_LIMITED", "spawn rate limit exceeded");
+        return await deps.callRenderer("tool.open", { tool: p.tool, frame: p.frame, url: p.url }, RENDERER_TIMEOUT);
+      }
       case "tile.list":
         return await deps.callRenderer("tile.list", { frame: p.frame }, RENDERER_TIMEOUT);
       case "tile.list_frames":
         return await deps.callRenderer("tile.list_frames", {}, RENDERER_TIMEOUT);
+      // Community view packages are scanned when the registry loads; `hive
+      // views install|remove` calls this so a running app picks the change
+      // up without a restart (the renderer re-reads both roots and updates
+      // its registry — the switcher and ⌘E order follow, an active view that
+      // vanished falls back to the canvas).
+      case "views.rescan":
+        return await deps.callRenderer("views.rescan", {}, RENDERER_TIMEOUT);
+      // `hive agents install|remove` calls this so a running app picks the change
+      // up without a restart. The renderer owns the workspace root, so it runs
+      // the scan (through main, which refreshes its own catalog on the way).
+      case "agents.rescan":
+        return await deps.callRenderer("agents.rescan", {}, RENDERER_TIMEOUT);
+      // `hive config set` / `hive theme use` edited settings.json: re-read it
+      // and push the result to the renderer (main owns the file while running).
+      case "settings.reload":
+        return await deps.reloadSettings();
       case "tile.focus": {
         if (!p.tileId) throw new HcpError("BAD_REQUEST", "tileId required");
         return await deps.callRenderer("tile.focus", { tileId: p.tileId }, RENDERER_TIMEOUT);

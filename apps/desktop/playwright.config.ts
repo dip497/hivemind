@@ -1,4 +1,8 @@
 import { defineConfig } from "@playwright/test";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { seedAgents } from "./tests/e2e/helpers/agents";
 
 // Persistence is default-ON in the real app, but the detached pty-daemon
 // intentionally outlives the window — and Playwright's electronApp.close()
@@ -8,15 +12,24 @@ import { defineConfig } from "@playwright/test";
 // electron.launch inherits this process's env, so setting it here propagates.
 process.env.HIVEMIND_PTY_DAEMON = "0";
 
+// Per run, not per spec: specs share settings.json, so isolate or restore what you persist.
+process.env.XDG_CONFIG_HOME = fs.mkdtempSync(path.join(os.tmpdir(), "hivemind-e2e-xdg-"));
+// Nothing is compiled in, so the shared profile installs the usual six from the published
+// fixtures — the same manifests a HiveHub auto-install would drop there.
+seedAgents(process.env.XDG_CONFIG_HOME);
+// No spec may touch the network: the catalog lives on HiveHub, and an unreachable index
+// fails auto-install closed. Specs that build their own registry set their own value.
+process.env.HIVEMIND_PLUGIN_INDEX = "file:///hivemind-e2e-unreachable/index.json";
+
 export default defineConfig({
   testDir: "./tests/e2e",
   timeout: 60_000,
   fullyParallel: false,
   workers: 1,
-  // One retry: the canvas drag/resize tests are timing-sensitive under load
-  // (xvfb + heavy build). A genuine regression fails twice; a flake passes on
-  // retry — so the suite stops red-flagging on the known resize flake.
-  retries: 1,
+  // No retries: the suite is a gate, and a flaky gate is not a gate. Every
+  // spec must pass first time (they run under xvfb in CI-like conditions); a
+  // test that needs a retry has a real ordering/timing bug to fix.
+  retries: 0,
   reporter: [["list"]],
   // Reap detached pty-daemons spawned during the run (persistence is default-on).
   globalTeardown: "./tests/e2e/global-teardown.ts",

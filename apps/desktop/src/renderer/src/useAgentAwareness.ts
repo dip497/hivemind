@@ -1,11 +1,5 @@
-/**
- * useAgentAwareness — the herdr-style agent status → toast / OS-notification
- * state machine, lifted from Canvas.tsx. Subscribes to the agent-status bus,
- * tracks per-tile status + done-unseen, raises an in-app toast (suppressed when
- * the tile is selected) and a native notification (suppressed by main when the
- * window is focused) on the SAME transitions. Returns the toast list + the
- * markSeen action + the selected-tiles ref the render wires into selection.
- */
+/** Agent status transitions → in-app toast (not for a selected tile) and OS
+ *  notification (main suppresses it while the window is focused). */
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { isBackgroundTile } from "./worker-tiles";
@@ -42,8 +36,8 @@ export interface Toast {
   /** Inline actions rendered as a button row under the context line. FUTURE SEAM
    *  (nothing sets this yet): the first real use is a supervised-worker approval —
    *  push a `needs` toast with actions `[{label:"Approve", primary:true, run: () =>
-   *  hive_approve(reqId,"allow")}, {label:"Deny", run: () => hive_approve(reqId,
-   *  "deny")}]` so the human answers from the toast instead of tabbing to the tile.
+   *  approve(reqId,"allow")}, {label:"Deny", run: () => approve(reqId,
+   *  "deny")}]` (agent.approve over HCP) so the human answers from the toast instead of tabbing to the tile.
    *  `run` returns the toast id to dismiss (or void to keep it open, e.g. pending). */
   actions?: ToastAction[];
 }

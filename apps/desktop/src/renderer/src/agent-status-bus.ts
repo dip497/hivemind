@@ -1,7 +1,7 @@
 /**
  * Agent status bus — a tiny pub/sub so terminal tiles can broadcast their
  * detected state (working / idle / blocked / …) to the Canvas without prop
- * drilling. The Canvas uses it for herdr-style features: live-colored session
+ * drilling. The Canvas uses it for live-colored session
  * chips (the "sidebar"), toast notifications when an OFF-SCREEN agent needs you
  * or finishes, and the done-unseen highlight.
  *
@@ -50,6 +50,9 @@ export interface StatusEvent {
 type Listener = (e: StatusEvent) => void;
 
 const listeners = new Set<Listener>();
+/** Per-tile listeners (a view colouring one object per tile subscribes here —
+ *  a status change reaches only that tile's subscribers, never every panel). */
+const tileListeners = new Map<string, Set<Listener>>();
 const base = new Map<string, StatusEvent>();          // scrape-driven
 const overrides = new Map<string, TileStatusKind>();  // control-plane wait states
 const subagentBusy = new Set<string>();                // tiles with in-flight subagents
@@ -118,6 +121,8 @@ function flush(tileId: string): void {
   if (prev && prev.status === eff.status && prev.label === eff.label) return;
   emitted.set(tileId, eff);
   for (const l of listeners) l(eff);
+  const tl = tileListeners.get(tileId);
+  if (tl) for (const l of tl) l(eff);
 }
 
 /** Publish a SCRAPED status. Suppressed while a control-plane override is active
@@ -201,6 +206,24 @@ export function subscribeStatus(l: Listener): () => void {
   for (const e of emitted.values()) l(e);
   return () => {
     listeners.delete(l);
+  };
+}
+
+/** Subscribe to ONE tile's effective status. Replays the last emitted status
+ *  synchronously (if any), then fires on every transition of that tile only.
+ *  This is what a view uses to colour a per-tile object: it is independent of
+ *  the workspace model, so a ~1 Hz status change never re-renders a body. */
+export function subscribeTileStatus(tileId: string, l: Listener): () => void {
+  let set = tileListeners.get(tileId);
+  if (!set) { set = new Set(); tileListeners.set(tileId, set); }
+  set.add(l);
+  const last = emitted.get(tileId);
+  if (last) l(last);
+  return () => {
+    const cur = tileListeners.get(tileId);
+    if (!cur) return;
+    cur.delete(l);
+    if (cur.size === 0) tileListeners.delete(tileId);
   };
 }
 

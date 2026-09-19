@@ -9,13 +9,20 @@
  * tile's status here stays in sync with everywhere else. Pure presentational +
  * its own status subscription; Canvas owns the data + focus actions.
  */
-import { useEffect, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
+import { statusColor } from "./workspace/tile-status-bucket";
+import { MachinesStrip } from "./machines/MachinesStrip";
+import { MachineDot } from "./machines/status";
+import { hostIdOfUri, machineByHost, statusOf, useMachines } from "./machines/store";
+import { memo, useEffect, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
 import { Layers, ChevronRight, ChevronDown, GitBranch, Server, Folder, FolderOpen, PanelLeftClose, Globe } from "lucide-react";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { AgentIcon } from "./agents";
 import { FrameRailMenu, type FrameActions } from "./FrameRailMenu";
+import { Button } from "./components/ui/button";
+import { Input } from "./components/ui/input";
+import { AGENT_TILE_KIND } from "./tile-kinds";
 
-export type LayerKind = "claude" | "terminal" | "editor" | "diff" | "issues" | "browser" | "planReview" | "workbench";
+export type LayerKind = typeof AGENT_TILE_KIND | "terminal" | "editor" | "diff" | "issues" | "browser" | "planReview" | "workbench";
 
 export interface LayerTile {
   id: string;
@@ -23,7 +30,7 @@ export interface LayerTile {
   name: string;
   /** Frame id this tile belongs to, or null when loose on the canvas. */
   frameId: string | null;
-  /** For agent tiles (kind "claude"): the registry agent id (claude/codex/…)
+  /** For agent tiles (kind AGENT_TILE_KIND): the registry agent id (claude/codex/…)
    *  so the right logo shows even though they share the agent-terminal kind. */
   agent?: string;
 }
@@ -38,6 +45,8 @@ export interface LayerFrame {
   branch?: string;
   /** True => bound to a remote SSH host (shown with a Server glyph). */
   remote?: boolean;
+  /** Its ssh:// uri, so the glyph can show the machine's link state. */
+  remoteUri?: string;
 }
 
 interface Props {
@@ -53,16 +62,11 @@ interface Props {
   frameActions?: FrameActions;
 }
 
-const STATUS_COLOR: Record<TileStatusKind, string> = {
-  working: "var(--color-brand)",
-  idle: "var(--color-fg3)",
-  blocked: "var(--color-warn)",
-  permission: "var(--color-warn)",
-  question: "var(--color-warn)",
-  exited: "var(--color-err)",
-  plan_review: "var(--color-warn)",
-  awaiting_approval: "var(--color-warn)",
-};
+// One status, one colour, shared with every other surface (workspace/tile-status-bucket).
+const STATUS_COLOR = Object.fromEntries(
+  (["working", "idle", "blocked", "permission", "question", "exited", "plan_review", "awaiting_approval"] as const)
+    .map((k) => [k, statusColor(k)]),
+) as Record<TileStatusKind, string>;
 
 /** Short pill label per status. */
 const STATUS_LABEL: Record<TileStatusKind, string> = {
@@ -121,9 +125,21 @@ const KIND_GLYPH: Record<LayerKind, string> = {
  */
 const muted = (color: string) => `color-mix(in oklab, ${color} 62%, var(--color-fg3))`;
 
-function WorkspaceIcon({ color, remote, worktree, collapsed }: { color: string; remote?: boolean; worktree: boolean; collapsed: boolean }) {
+function RemoteIcon({ color, uri }: { color: string; uri?: string }) {
+  const snap = useMachines();
+  const hostId = hostIdOfUri(uri);
+  const s = statusOf(snap, hostId);
+  return (
+    <span className="relative shrink-0 grid place-items-center" title={machineByHost(snap, hostId)?.label ?? hostId ?? undefined}>
+      <Server size={15} style={{ color: muted(color) }} />
+      {s.state !== "idle" && <span className="absolute -right-0.5 -bottom-0.5 rounded-full ring-2 ring-[var(--color-bg2)] leading-[0]"><MachineDot status={s} size={6} /></span>}
+    </span>
+  );
+}
+
+function WorkspaceIcon({ color, remote, remoteUri, worktree, collapsed }: { color: string; remote?: boolean; remoteUri?: string; worktree: boolean; collapsed: boolean }) {
   const c = muted(color);
-  if (remote) return <Server size={15} className="shrink-0" style={{ color: c }} />;
+  if (remote) return <RemoteIcon color={color} uri={remoteUri} />;
   if (worktree) return <GitBranch size={15} className="shrink-0" style={{ color: c }} />;
   const Icon = collapsed ? Folder : FolderOpen;
   // Outline + a wash of fill, rather than a solid slug of color: the shape still
@@ -139,7 +155,8 @@ function WorkspaceIcon({ color, remote, worktree, collapsed }: { color: string; 
   );
 }
 
-export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocusFrame, frameActions }: Props) {
+// Memo: a child of the canvas view, which re-renders on every drag frame.
+export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocusFrame, frameActions }: Props) {
   // Persisted: panel hidden + which frame groups are collapsed. Now that the
   // panel is DOCKED (a flex sibling, not an overlay) it no longer occludes any
   // tile, so it defaults to SHOWN; collapsing leaves a narrow icon rail. The
@@ -218,9 +235,11 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
   if (hidden) {
     const badge = needsYou > 0 ? "var(--color-warn)" : working > 0 ? "var(--color-brand)" : null;
     return (
-      <button
+      <Button
+        variant="secondary"
+        size="icon"
         onClick={() => setHidden(false)}
-        className="pointer-events-auto absolute left-2.5 top-2.5 z-30 size-8 grid place-items-center rounded-lg hm-island text-[var(--color-fg2)] hover:text-[var(--color-fg)]"
+        className="pointer-events-auto absolute left-2.5 top-2.5 z-30"
         title={
           needsYou > 0 ? `Show layers (⌘L) — ${needsYou} agent(s) need you`
           : working > 0 ? `Show layers (⌘L) — ${working} working`
@@ -228,7 +247,7 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
         }
         aria-label="show layers"
       >
-        <Layers size={16} />
+        <Layers />
         {badge && (
           <span
             aria-hidden
@@ -236,7 +255,7 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
             style={{ background: badge }}
           />
         )}
-      </button>
+      </Button>
     );
   }
 
@@ -304,8 +323,8 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
         title={`${t.name} · ${st}`}
       >
         <span aria-hidden className="w-4 shrink-0 grid place-items-center font-mono text-[11px] text-[var(--color-fg3)]">
-          {t.kind === "claude"
-            ? <AgentIcon id={t.agent ?? "claude"} size={14} />
+          {t.kind === AGENT_TILE_KIND
+            ? <AgentIcon id={t.agent} size={14} />
             : t.kind === "browser"
               ? <Globe size={12} aria-hidden />
               : KIND_GLYPH[t.kind]}
@@ -356,17 +375,18 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
           style={{ paddingLeft: depth * 14 }}
           onContextMenu={frameActions ? (e) => { e.preventDefault(); setMenu({ frame, x: e.clientX, y: e.clientY }); } : undefined}
         >
-          <button
+          <Button
+            variant="ghost"
+            size="icon-2xs"
             onClick={() => toggleGroup(gid)}
-            className="size-5 grid place-items-center rounded text-[var(--color-fg3)] hover:text-[var(--color-fg)]"
             aria-label={isCollapsed ? "expand" : "collapse"}
           >
             {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-          </button>
+          </Button>
           {renaming?.id === gid ? (
             <div className="flex-1 flex items-center gap-2 min-w-0">
-              <WorkspaceIcon color={frame.color} remote={frame.remote} worktree={isWt} collapsed={isCollapsed} />
-              <input
+              <WorkspaceIcon color={frame.color} remote={frame.remote} remoteUri={frame.remoteUri} worktree={isWt} collapsed={isCollapsed} />
+              <Input
                 autoFocus
                 value={renaming.draft}
                 onChange={(e) => setRenaming({ id: gid, draft: e.target.value })}
@@ -386,7 +406,7 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
                   // Don't let the panel's key handlers see rename typing.
                   e.stopPropagation();
                 }}
-                className="flex-1 min-w-0 bg-[var(--color-bg)] border border-[var(--color-brand)] rounded px-1.5 py-0.5 text-[13px] font-semibold text-[var(--color-fg)] outline-none"
+                className="flex-1 min-w-0"
                 aria-label="Rename frame"
               />
             </div>
@@ -397,7 +417,7 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
             className="flex-1 flex items-center gap-2 min-w-0 text-left text-[14px] font-semibold tracking-[-0.014em] text-[var(--color-fg)]"
             title={isWt ? `Focus worktree ${frame.branch ?? frame.title}` : `Focus ${frame.title}${frameActions ? " · double-click to rename" : ""}`}
           >
-            <WorkspaceIcon color={frame.color} remote={frame.remote} worktree={isWt} collapsed={isCollapsed} />
+            <WorkspaceIcon color={frame.color} remote={frame.remote} remoteUri={frame.remoteUri} worktree={isWt} collapsed={isCollapsed} />
             <span className="truncate">{frame.title}</span>
             <span className="ml-auto flex items-center gap-1.5 min-w-0">
               {/* The frame's aggregate is a SUMMARY of its children. While the group
@@ -482,12 +502,13 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
           title="Toggle the Layers panel"
           className="grid place-items-center h-[15px] px-1 rounded bg-[var(--color-bg)] border border-[var(--color-line2)] text-[9px] font-mono text-[var(--color-fg3)] tracking-tight"
         >⌘L</kbd>
-        <button
+        <Button
+          variant="ghost"
+          size="icon-2xs"
           onClick={() => setHidden(true)}
-          className="size-5 grid place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)]"
           title="Collapse layers (⌘L)"
           aria-label="collapse layers"
-        ><PanelLeftClose size={14} /></button>
+        ><PanelLeftClose size={14} /></Button>
       </header>
 
       <div className="flex-1 overflow-y-auto overscroll-contain pb-2 text-[14px]">
@@ -508,6 +529,7 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
           </div>
         )}
       </div>
+      <MachinesStrip />
       {/* Right-edge resize grip (t3code-style) — drag to set the panel width. */}
       <div
         onPointerDown={startResize}
@@ -530,4 +552,4 @@ export function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocu
       )}
     </aside>
   );
-}
+});

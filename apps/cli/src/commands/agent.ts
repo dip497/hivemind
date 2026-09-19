@@ -3,6 +3,7 @@
  * `hive agent detect`     → probe PATH for known agent CLIs, write to config.yaml
  */
 import { defineCommand } from "citty";
+import { ensureAgentCatalog } from "../agent-catalog.js";
 import { spawnSync } from "node:child_process";
 import {
   HiveError,
@@ -12,21 +13,10 @@ import {
   writeConfig,
 } from "@hivemind/core";
 import { err, ok } from "../format.js";
+import { getCatalog } from "@hivemind/agents";
 
-const KNOWN_AGENTS = [
-  "claude",
-  "codex",
-  "gemini",
-  "opencode",
-  "openclaw",
-  "hermes",
-  "amp",
-  "cursor",
-  "pi",
-  // The actual binary (`which kiro-cli`) — NOT bare `kiro`, which is the Kiro
-  // IDE, a different product.
-  "kiro-cli",
-];
+/** Per call: a module-scope copy of the catalog goes stale. */
+const knownAgents = (): string[] => getCatalog().map((d) => d.bin);
 
 const contextCmd = defineCommand({
   meta: { name: "context", description: "Regenerate .hivemind/.agent.md" },
@@ -66,7 +56,8 @@ const detectCmd = defineCommand({
       const root = await requireRoot();
       const cfg = await readConfig(root);
       const detected: Record<string, { bin: string; model?: string }> = {};
-      for (const name of KNOWN_AGENTS) {
+      await ensureAgentCatalog(); // probe for agents added from manifests too
+      for (const name of knownAgents()) {
         const which = spawnSync("which", [name], { encoding: "utf8" });
         const bin = which.stdout.trim();
         if (which.status === 0 && bin) {

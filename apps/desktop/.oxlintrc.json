@@ -1,0 +1,49 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "jsPlugins": [
+    "@shadcn/lint"
+  ],
+  "rules": {
+    "shadcn/no-restyle": [
+      "error",
+      {
+        "allow": [
+          "layout",
+          "nodrag",
+          "nopan",
+          "nowheel"
+        ],
+        "contracts": [
+          {
+            "pattern": "^Input$",
+            "allow": [
+              "layout",
+              "nodrag",
+              "pl-*",
+              "pr-*"
+            ]
+          },
+          {
+            "pattern": "^MenuItem$",
+            "allow": [
+              "layout",
+              "nodrag",
+              "truncate"
+            ]
+          }
+        ]
+      }
+    ],
+    "shadcn/no-unknown-classes": [
+      "error",
+      {
+        "allow": [
+          "nodrag",
+          "nopan",
+          "nowheel"
+        ]
+      }
+    ],
+    "shadcn/no-raw-colors": "error"
+  }
+}

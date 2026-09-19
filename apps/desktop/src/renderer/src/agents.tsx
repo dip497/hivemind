@@ -1,15 +1,16 @@
 /**
- * Agent registry — the single source of truth for every AI coding agent the app
- * can spawn (claude today; codex / gemini / opencode / … tomorrow). The UI
- * renders agents FROM this list, so adding a new one is a single entry here:
- * give it an id, label, the CLI `cmd` (+ any default args), and an icon. Every
- * surface (tool island, Layers panel, tile chrome, command surfaces) then shows
- * it with the right icon automatically.
- *
- * Icons are inline SVGs that inherit `currentColor`, so they theme correctly.
- * The Claude mark is Anthropic's official logo (from simple-icons).
+ * The UI's view of the agent catalog (@hivemind/agents). Every surface — tool
+ * island, frame launcher, Layers rail, tile chrome, pickers — renders agents
+ * FROM the catalog: adding a provider there adds it here. No provider is named
+ * in this file; the icon is the provider def's own SVG mark, rendered
+ * generically (inner markup is an app-owned constant, never user input).
  */
-import type { ReactNode } from "react";
+import { useSyncExternalStore, type ReactNode } from "react";
+import {
+  getCatalog, subscribeCatalog, GENERIC_AGENT_ICON,
+  agentById as catalogAgentById, agentForCmd as catalogAgentForCmd,
+  type AgentIcon as AgentIconDef, type AgentProviderDef,
+} from "@hivemind/agents";
 
 export interface AgentDef {
   /** Stable id (also the LayerKind / detection key). */
@@ -24,139 +25,71 @@ export interface AgentDef {
   icon: (props: { size?: number; className?: string }) => ReactNode;
   /** Whether this agent is wired up / spawnable today. */
   enabled: boolean;
+  /** The catalog def — capabilities, detector, note. */
+  def: AgentProviderDef;
 }
 
-function ClaudeIcon({ size = 16, className }: { size?: number; className?: string }) {
+/** Render a catalog icon: viewBox + root attrs + inner markup, theming via currentColor. */
+export function SvgMark({ icon, size = 16, className }: { icon: AgentIconDef; size?: number; className?: string }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden>
-      <path d="m4.7144 15.9555 4.7174-2.6471.079-.2307-.079-.1275h-.2307l-.7893-.0486-2.6956-.0729-2.3375-.0971-2.2646-.1214-.5707-.1215-.5343-.7042.0546-.3522.4797-.3218.686.0608 1.5179.1032 2.2767.1578 1.6514.0972 2.4468.255h.3886l.0546-.1579-.1336-.0971-.1032-.0972L6.973 9.8356l-2.55-1.6879-1.3356-.9714-.7225-.4918-.3643-.4614-.1578-1.0078.6557-.7225.8803.0607.2246.0607.8925.686 1.9064 1.4754 2.4893 1.8336.3643.3035.1457-.1032.0182-.0728-.164-.2733-1.3539-2.4467-1.445-2.4893-.6435-1.032-.17-.6194c-.0607-.255-.1032-.4674-.1032-.7285L6.287.1335 6.6997 0l.9957.1336.419.3642.6192 1.4147 1.0018 2.2282 1.5543 3.0296.4553.8985.2429.8318.091.255h.1579v-.1457l.1275-1.706.2368-2.0947.2307-2.6957.0789-.7589.3764-.9107.7468-.4918.5828.2793.4797.686-.0668.4433-.2853 1.8517-.5586 2.9021-.3643 1.9429h.2125l.2429-.2429.9835-1.3053 1.6514-2.0643.7286-.8196.85-.9046.5464-.4311h1.0321l.759 1.1293-.34 1.1657-1.0625 1.3478-.8804 1.1414-1.2628 1.7-.7893 1.36.0729.1093.1882-.0183 2.8535-.607 1.5421-.2794 1.8396-.3157.8318.3886.091.3946-.3278.8075-1.967.4857-2.3072.4614-3.4364.8136-.0425.0304.0486.0607 1.5482.1457.6618.0364h1.621l3.0175.2247.7892.522.4736.6376-.079.4857-1.2142.6193-1.6393-.3886-3.825-.9107-1.3113-.3279h-.1822v.1093l1.0929 1.0686 2.0035 1.8092 2.5075 2.3314.1275.5768-.3218.4554-.34-.0486-2.2039-1.6575-.85-.7468-1.9246-1.621h-.1275v.17l.4432.6496 2.3436 3.5214.1214 1.0807-.17.3521-.6071.2125-.6679-.1214-1.3721-1.9246L14.38 17.959l-1.1414-1.9428-.1397.079-.674 7.2552-.3156.3703-.7286.2793-.6071-.4614-.3218-.7468.3218-1.4753.3886-1.9246.3157-1.53.2853-1.9004.17-.6314-.0121-.0425-.1397.0182-1.4328 1.9672-2.1796 2.9446-1.7243 1.8456-.4128.164-.7164-.3704.0667-.6618.4008-.5889 2.386-3.0357 1.4389-1.882.929-1.0868-.0062-.1579h-.0546l-6.3385 4.1164-1.1293.1457-.4857-.4554.0608-.7467.2307-.2429 1.9064-1.3114Z" />
-    </svg>
+    <svg
+      width={size}
+      height={size}
+      viewBox={icon.viewBox}
+      className={className}
+      aria-hidden
+      {...(icon.attrs ?? {})}
+      dangerouslySetInnerHTML={{ __html: icon.body }}
+    />
   );
 }
 
-/** Codex — OpenAI Codex mark (downloaded), monochrome via currentColor. */
-function CodexIcon({ size = 16, className }: { size?: number; className?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" fillRule="evenodd" className={className} aria-hidden>
-      <path d="M8.086.457a6.105 6.105 0 013.046-.415c1.333.153 2.521.72 3.564 1.7a.117.117 0 00.107.029c1.408-.346 2.762-.224 4.061.366l.063.03.154.076c1.357.703 2.33 1.77 2.918 3.198.278.679.418 1.388.421 2.126a5.655 5.655 0 01-.18 1.631.167.167 0 00.04.155 5.982 5.982 0 011.578 2.891c.385 1.901-.01 3.615-1.183 5.14l-.182.22a6.063 6.063 0 01-2.934 1.851.162.162 0 00-.108.102c-.255.736-.511 1.364-.987 1.992-1.199 1.582-2.962 2.462-4.948 2.451-1.583-.008-2.986-.587-4.21-1.736a.145.145 0 00-.14-.032c-.518.167-1.04.191-1.604.185a5.924 5.924 0 01-2.595-.622 6.058 6.058 0 01-2.146-1.781c-.203-.269-.404-.522-.551-.821a7.74 7.74 0 01-.495-1.283 6.11 6.11 0 01-.017-3.064.166.166 0 00.008-.074.115.115 0 00-.037-.064 5.958 5.958 0 01-1.38-2.202 5.196 5.196 0 01-.333-1.589 6.915 6.915 0 01.188-2.132c.45-1.484 1.309-2.648 2.577-3.493.282-.188.55-.334.802-.438.286-.12.573-.22.861-.304a.129.129 0 00.087-.087A6.016 6.016 0 015.635 2.31C6.315 1.464 7.132.846 8.086.457zm-.804 7.85a.848.848 0 00-1.473.842l1.694 2.965-1.688 2.848a.849.849 0 001.46.864l1.94-3.272a.849.849 0 00.007-.854l-1.94-3.393zm5.446 6.24a.849.849 0 000 1.695h4.848a.849.849 0 000-1.696h-4.848z" />
-    </svg>
-  );
+function toAgentDef(def: AgentProviderDef): AgentDef {
+  return {
+    id: def.id,
+    label: def.label,
+    cmd: def.bin,
+    defaultArgs: def.defaultArgs,
+    icon: ({ size, className }) => <SvgMark icon={def.icon} size={size} className={className} />,
+    enabled: def.enabled,
+    def,
+  };
 }
 
-/** opencode — its official logo's leading block glyph (downloaded), monochrome. */
-function OpencodeIcon({ size = 16, className }: { size?: number; className?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="-3 6 30 30" fill="currentColor" className={className} aria-hidden>
-      <path d="M18 30H6V18H18V30Z" opacity="0.65" />
-      <path d="M18 12H6V30H18V12ZM24 36H0V6H24V36Z" />
-    </svg>
-  );
+/** Memoised: useSyncExternalStore loops on a fresh array per call. */
+let cached: AgentDef[] | null = null;
+let cachedById: Map<string, AgentDef> | null = null;
+subscribeCatalog(() => { cached = null; cachedById = null; });
+
+export function getAgents(): AgentDef[] {
+  if (!cached) {
+    cached = getCatalog().map(toAgentDef);
+    cachedById = new Map(cached.map((a) => [a.id, a]));
+  }
+  return cached;
 }
 
-/** Droid (Factory) — a geometric rendering of Factory's looped-petal star mark
- *  (four overlapping loops on 8-fold symmetry), stroked with currentColor so it
- *  themes. Factory ships no simple-icons logo; this is a clean approximation. */
-function DroidIcon({ size = 16, className }: { size?: number; className?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" className={className} aria-hidden>
-      <ellipse cx="12" cy="12" rx="10" ry="2.6" />
-      <ellipse cx="12" cy="12" rx="10" ry="2.6" transform="rotate(45 12 12)" />
-      <ellipse cx="12" cy="12" rx="10" ry="2.6" transform="rotate(90 12 12)" />
-      <ellipse cx="12" cy="12" rx="10" ry="2.6" transform="rotate(135 12 12)" />
-    </svg>
-  );
+export function useAgents(): AgentDef[] {
+  return useSyncExternalStore(subscribeCatalog, getAgents, getAgents);
 }
 
-/** Pi (pi.dev — Earendil) — its official stepped-glyph logo (from pi-logo-on-dark.svg),
- *  recolored to `currentColor` so it themes with the tile chrome like the other
- *  brand marks. fillRule=evenodd keeps the inner hole in the staircase path. */
-function PiIcon({ size = 16, className }: { size?: number; className?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 800 800" fill="currentColor" fillRule="evenodd" className={className} aria-hidden>
-      <path d="M165.29 165.29 H517.36 V400 H400 V517.36 H282.65 V634.72 H165.29 Z M282.65 282.65 V400 H400 V282.65 Z" />
-      <path d="M517.36 400 H634.72 V634.72 H517.36 Z" />
-    </svg>
-  );
+export function agentById(id: string | undefined): AgentDef | undefined {
+  if (!id) return undefined;
+  getAgents();
+  return cachedById!.get(id) ?? (catalogAgentById(id) ? toAgentDef(catalogAgentById(id)!) : undefined);
 }
 
-/** Kiro (kiro.dev) — the official brand mark (owl-face silhouette with two eyes),
- *  monochrome via currentColor so it themes with the tile chrome. Source: the
- *  official Kiro SVG from kiro.dev (MIT via lobe-icons). */
-function KiroIcon({ size = 16, className }: { size?: number; className?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" fillRule="evenodd" className={className} aria-hidden>
-      <path d="M4.594 6.677C6.67-2.226 18.746-2.211 21.16 6.632c.353 1.297 1.725 7.582-1.673 13.747-1.545 2.797-5.841 5.49-6.99 1.883C8.6 25.477 3.315 24.1 5.789 18.609l-.318.143c-3.57 1.305-3.863-1.208-3.173-2.513.45-.84.727-1.335.937-1.897.353-.975.458-1.568.593-2.498.27-1.837.277-3.607.765-5.167zm8.37.01a.92.92 0 00-.81.428c-.217.323-.33.825-.33 1.462 0 .705.15 1.89 1.14 1.89h.008c.757 0 1.214-.705 1.214-1.89 0-.622-.127-1.125-.367-1.455a1.014 1.014 0 00-.855-.435zm4.08 0a.92.92 0 00-.81.428c-.217.323-.33.825-.33 1.462 0 .705.15 1.89 1.14 1.89h.008c.757 0 1.215-.705 1.215-1.89 0-.622-.128-1.125-.368-1.455a1.014 1.014 0 00-.855-.435z" />
-    </svg>
-  );
-}
-
-/** A generic agent mark for tools without a bundled logo yet (gemini/…). */
-function GenericAgentIcon({ size = 16, className }: { size?: number; className?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" className={className} aria-hidden>
-      <rect x="2.5" y="4" width="11" height="8.5" rx="2" stroke="currentColor" strokeWidth="1.2" />
-      <circle cx="6" cy="8" r="1" fill="currentColor" />
-      <circle cx="10" cy="8" r="1" fill="currentColor" />
-      <path d="M8 4V2M5.5 12.5v1M10.5 12.5v1" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-/**
- * The registry. ADD A NEW AGENT HERE — that's the only change needed; every UI
- * surface reads from this list. (codex / gemini / opencode are scaffolded but
- * `enabled: false` until their spawn flow + logo are wired.)
- */
-export const AGENTS: AgentDef[] = [
-  { id: "claude", label: "Claude", cmd: "claude", icon: ClaudeIcon, enabled: true },
-  // Codex: safe interactive default — works in the workspace, asks before risky
-  // / out-of-sandbox actions (status detection handles the approval prompts).
-  { id: "codex", label: "Codex", cmd: "codex", defaultArgs: ["--sandbox", "workspace-write", "--ask-for-approval", "on-request"], icon: CodexIcon, enabled: true },
-  // opencode: permission model is config-driven (opencode.json), so no default
-  // flags. Note: its TUI has no CLI resume — reopen sessions via its in-app list.
-  { id: "opencode", label: "opencode", cmd: "opencode", icon: OpencodeIcon, enabled: true },
-  // droid (Factory): its interactive TUI gates approvals in-app (Ctrl+L cycles
-  // autonomy; `--auto` is exec-only), so no permission flags on the CLI —
-  // detectDroid reads the in-TUI prompts. Session resume across a daemon restart
-  // is handled by the droid provider (`droid --resume <id>`); status is scrape-only.
-  { id: "droid", label: "Droid", cmd: "droid", icon: DroidIcon, enabled: true },
-  // pi (pi.dev — Earendil): a minimal terminal coding harness. It ships NO hook
-  // system (no Stop/UserPromptSubmit/Notification), so no default flags and
-  // status is screen-scrape only (detectPi). Session resume across a daemon
-  // restart is handled by the pi provider (`pi --session <id>`, resolved from
-  // ~/.pi/agent/sessions for the tile cwd). It reads AGENTS.md natively.
-  { id: "pi", label: "Pi", cmd: "pi", icon: PiIcon, enabled: true },
-  // kiro (kiro.dev — Kiro CLI): ships claude's hook vocabulary (agentSpawn /
-  // userPromptSubmit / preToolUse / postToolUse / stop) via a named custom
-  // agent config selected with `--agent`. hivemind injects one
-  // (`agents/hivemind.json`, in an ephemeral KIRO_HOME overlay — see
-  // hcp/kiro-home.ts) wiring those hooks + `mcpServers.hive`, so a kiro tile is
-  // a real HCP worker: working/idle is hook-driven, a captured `session_id`
-  // gives PER-TILE resume (`--resume-id`, falling back to cwd-scoped
-  // `--resume` if none was captured yet), and `supervise` brokers tool
-  // permission via a kiro-specific PreToolUse hook. "blocked" status is still
-  // screen-scrape only (detectKiro) — kiro has no notification-style event to
-  // hook, and its approval-prompt chrome is unverified without the binary
-  // (see agent-state.ts's ASSUMPTION comment on detectKiro).
-  { id: "kiro", label: "Kiro", cmd: "kiro-cli", icon: KiroIcon, enabled: true },
-  { id: "gemini", label: "Gemini", cmd: "gemini", icon: GenericAgentIcon, enabled: false },
-];
-
-const BY_ID = new Map(AGENTS.map((a) => [a.id, a]));
-
-export function agentById(id: string): AgentDef | undefined {
-  return BY_ID.get(id);
-}
-
-/** Resolve the agent that a PTY command line belongs to (first token match). */
+/** Resolve the agent that a PTY command line belongs to (exact binary match). */
 export function agentForCmd(cmd: string | undefined): AgentDef | undefined {
-  if (!cmd) return undefined;
-  const bin = cmd.trim().split(/\s+/)[0]?.split("/").pop();
-  return AGENTS.find((a) => a.cmd === bin);
+  const d = catalogAgentForCmd(cmd);
+  getAgents();
+  return d ? cachedById!.get(d.id) : undefined;
 }
 
-/** Convenience: render an agent's icon by id (falls back to the generic mark). */
-export function AgentIcon({ id, size, className }: { id: string; size?: number; className?: string }) {
+/** Convenience: render an agent's icon by id (falls back to the generic mark).
+ *  An absent id (a tile whose agent cannot be identified, or no default installed)
+ *  renders the generic mark. */
+export function AgentIcon({ id, size, className }: { id?: string; size?: number; className?: string }) {
   const a = agentById(id);
-  return (a?.icon ?? GenericAgentIcon)({ size, className });
+  return <SvgMark icon={a?.def.icon ?? GENERIC_AGENT_ICON} size={size} className={className} />;
 }

@@ -1,0 +1,78 @@
+{
+  "name": "@hivemind/agents",
+  "version": "1.17.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./node": "./src/node.ts",
+    "./manifest": "./src/manifest.ts",
+    "./detect-rules": "./src/detect-rules.ts",
+    "./load": "./src/load.ts",
+    "./discover": "./src/discover.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "agents:freeze": "bun scripts/freeze-detectors.mjs"
+  },
+  "devDependencies": {
+    "@hivemind/tsconfig": "workspace:*",
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  },
+  "dependencies": {
+    "yaml": "catalog:"
+  },
+  "description": "Agent provider manifests for Hivemind — the declarative format and its validator.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dip497/hivemind.git",
+    "directory": "packages/hive-agents"
+  },
+  "homepage": "https://hivemind.griiken.com/plugins/",
+  "keywords": [
+    "hivemind",
+    "agent",
+    "manifest",
+    "cli"
+  ],
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./node": {
+        "types": "./dist/node.d.ts",
+        "default": "./dist/node.js"
+      },
+      "./manifest": {
+        "types": "./dist/manifest.d.ts",
+        "default": "./dist/manifest.js"
+      },
+      "./detect-rules": {
+        "types": "./dist/detect-rules.d.ts",
+        "default": "./dist/detect-rules.js"
+      },
+      "./load": {
+        "types": "./dist/load.d.ts",
+        "default": "./dist/load.js"
+      },
+      "./discover": {
+        "types": "./dist/discover.d.ts",
+        "default": "./dist/discover.js"
+      }
+    }
+  }
+}

@@ -2,13 +2,6 @@ packages:
   - apps/*
   - packages/*
 
-# cpu-features is an OPTIONAL native dep of ssh2 (remote SSH frames) — it only
-# selects a faster cipher when present, and ssh2 falls back to pure JS without
-# it. Its node-gyp build breaks electron-builder's rebuild on CI and source
-# installs ("buildcheck.gypi not found"), so skip installing it entirely.
-ignoredOptionalDependencies:
-  - cpu-features
-
 catalog:
   typescript: 5.9.3
   '@types/node': 22.19.19
@@ -16,39 +9,42 @@ catalog:
   yaml: 2.9.0
   gray-matter: 4.0.3
   citty: ^0.1.6
-  chokidar: ^4.0.1
-  simple-git: ^3.27.0
-  react: ^19.0.0
-  react-dom: ^19.0.0
-  '@types/react': ^19.0.0
-  '@types/react-dom': ^19.0.0
-  zustand: ^5.0.2
-  '@tanstack/react-query': ^5.62.7
-  '@xyflow/react': ^12.3.6
-  '@xterm/xterm': ^5.5.0
-  '@xterm/headless': 5.5.0
-  '@xterm/addon-webgl': ^0.18.0
-  '@xterm/addon-fit': ^0.10.0
-  '@xterm/addon-search': ^0.15.0
-  '@pierre/diffs': 1.2.0-beta.6
-  sonner: ^1.7.0
+  chokidar: ^4.0.3
+  simple-git: ^3.36.0
+  react: ^19.3.0
+  react-dom: ^19.3.0
+  '@types/react': ^19.3.0
+  '@types/react-dom': ^19.3.0
+  zustand: ^5.0.15
+  '@tanstack/react-query': ^5.102.8
+  '@xyflow/react': ^12.11.6
+  '@xterm/xterm': ^6.0.0
+  '@xterm/headless': 6.0.0
+  '@xterm/addon-webgl': ^0.19.0
+  '@xterm/addon-fit': ^0.11.0
+  '@xterm/addon-search': ^0.16.0
+  '@pierre/diffs': 1.4.2
+  sonner: ^1.7.4
   cmdk: ^1.1.1
-  '@radix-ui/react-tooltip': ^1.2.6
-  '@radix-ui/react-dropdown-menu': ^2.1.4
-  '@radix-ui/react-dialog': ^1.1.4
+  '@radix-ui/react-tooltip': ^1.2.16
+  '@radix-ui/react-dropdown-menu': ^2.1.24
+  '@radix-ui/react-dialog': ^1.1.23
   class-variance-authority: ^0.7.1
   clsx: ^2.1.1
-  tailwind-merge: ^2.5.4
+  tailwind-merge: ^2.6.1
   lucide-react: ^0.461.0
-  '@lydell/node-pty': ^1.2.0-beta.12
+  '@lydell/node-pty': 1.2.0-beta.15
   '@modelcontextprotocol/sdk': ^1.0.4
   better-sqlite3: ^11.7.0
   drizzle-orm: ^0.36.4
   drizzle-kit: ^0.30.0
-  tailwindcss: ^4.0.0
-  '@tailwindcss/vite': ^4.0.0
-  vite: ^5.4.11
-  electron: ^33.2.1
+  tailwindcss: ^4.3.3
+  '@tailwindcss/vite': ^4.3.3
+  vite: ^5.4.21
+  electron: ^33.4.11
   electron-vite: ^2.3.0
-  '@electron/rebuild': ^3.7.1
+  '@electron/rebuild': ^3.7.2
   electron-builder: ^25.1.8
+
+ignoredOptionalDependencies:
+  - cpu-features

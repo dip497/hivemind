@@ -65,20 +65,33 @@ test("frame header-drag moves it", async () => {
 
   await page.mouse.move(sx, sy);
   await page.mouse.down();
-  const steps = 14;
+  // Many small moves with a pause each: xyflow's drag handler samples pointer
+  // events per animation frame, and under load (xvfb + a heavy build) a slow
+  // frame can swallow a coarse move — a 14-step drag once moved the frame 11px.
+  const steps = 40;
   const dx = 80;
   const dy = 60;
   for (let i = 1; i <= steps; i++) {
     await page.mouse.move(sx + (dx * i) / steps, sy + (dy * i) / steps, { steps: 1 });
-    await page.waitForTimeout(14);
+    await page.waitForTimeout(20);
   }
   await page.mouse.up();
-  await page.waitForTimeout(300);
 
-  const after = await frame.boundingBox();
-  expect(after).toBeTruthy();
-  const dxObserved = after!.x - before!.x;
-  const dyObserved = after!.y - before!.y;
+  // Poll until the frame's position settles (two consecutive identical reads)
+  // instead of one read after a fixed sleep — the drop is applied on a frame.
+  const settled = await (async () => {
+    let last: { x: number; y: number } | null = null;
+    for (let i = 0; i < 40; i++) {
+      const b = await frame.boundingBox();
+      if (b && last && Math.abs(b.x - last.x) < 0.5 && Math.abs(b.y - last.y) < 0.5 && b.x !== before!.x) return b;
+      last = b ? { x: b.x, y: b.y } : null;
+      await page.waitForTimeout(50);
+    }
+    return frame.boundingBox();
+  })();
+  expect(settled).toBeTruthy();
+  const dxObserved = settled!.x - before!.x;
+  const dyObserved = settled!.y - before!.y;
   console.log("frame move delta", { dx: dxObserved, dy: dyObserved });
   expect(Math.abs(dxObserved)).toBeGreaterThan(40);
   expect(Math.abs(dyObserved)).toBeGreaterThan(30);

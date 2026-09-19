@@ -8,11 +8,14 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import os from "node:os";
+import { seedAgents } from "./helpers/agents";
 
 let app: ElectronApplication;
 let page: Page;
 let repoA: string;
 let repoB: string;
+let xdg: string;
+let bin: string;
 
 async function seedRepo(prefix: string, issueTitle: string): Promise<string> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), `hm-ws-${prefix}-`));
@@ -40,14 +43,40 @@ async function seedRepo(prefix: string, issueTitle: string): Promise<string> {
 test.beforeAll(async () => {
   repoA = await seedRepo("AAA", "alpha-task");
   repoB = await seedRepo("BBB", "beta-task");
+    // Own config dir: a view another spec persisted must not become this spec's startup view.
+  xdg = await fs.mkdtemp(path.join(os.tmpdir(), "hm-ws-xdg-"));
+  // spawn-claude must clear the installed check and start SOMETHING harmless: a stub claude,
+  // kept first on PATH by skipping the login-shell env that would bury it.
+  seedAgents(xdg);
+  bin = await fs.mkdtemp(path.join(os.tmpdir(), "hm-ws-bin-"));
+  await fs.writeFile(path.join(bin, "claude"), "#!/bin/sh\n[ \"$1\" = --version ] && echo '2.0.0 (Claude Code)'\nexec sleep 60\n", { mode: 0o755 });
   app = await electron.launch({
     args: [path.join(process.cwd(), "out/main/index.js"), "--no-sandbox", `--user-data-dir=/tmp/hm-ws-ud-${Date.now()}`],
     cwd: repoA,
-    env: { ...process.env, HIVEMIND_PTY_DAEMON: "0", HIVEMIND_TEST_PICK_DIR: repoB },
+    env: {
+      ...process.env, XDG_CONFIG_HOME: xdg, HIVEMIND_PTY_DAEMON: "0", HIVEMIND_TEST_PICK_DIR: repoB,
+      PATH: `${bin}${path.delimiter}${process.env.PATH}`, HIVEMIND_SHELL_ENV: "0",
+    },
   });
   page = await app.firstWindow();
   await page.waitForLoadState("domcontentloaded");
-  await page.waitForSelector(".react-flow", { timeout: 15_000 });
+  // A COLD Electron boot — bundle parse, GPU init, first paint — behind every
+  // other spec's launches. 15s was a bet on a quiet machine: when it lost, the
+  // whole spec was reported as failing "at 0ms" with nothing to look at. Give
+  // the boot real headroom and, if it still loses, say what the window actually
+  // showed instead of just naming the selector.
+  try {
+    await page.waitForSelector(".react-flow", { timeout: 60_000 });
+  } catch (e) {
+    const seen = await page.evaluate(() => ({
+      url: location.href,
+      readyState: document.readyState,
+      title: document.title,
+      body: document.body?.innerText?.slice(0, 400) ?? null,
+      roots: [...document.body?.children ?? []].map((el) => `${el.tagName}.${el.className}`).slice(0, 8),
+    })).catch((probeError) => ({ probeFailed: String(probeError) }));
+    throw new Error(`workspace-zones: the app never rendered .react-flow — window showed ${JSON.stringify(seen)}`, { cause: e });
+  }
   await page.waitForTimeout(500);
 });
 
@@ -55,6 +84,8 @@ test.afterAll(async () => {
   await app?.close();
   await fs.rm(repoA, { recursive: true, force: true }).catch(() => {});
   await fs.rm(repoB, { recursive: true, force: true }).catch(() => {});
+  if (xdg) await fs.rm(xdg, { recursive: true, force: true }).catch(() => {});
+  if (bin) await fs.rm(bin, { recursive: true, force: true }).catch(() => {});
 });
 
 test("bind a frame to workspace B and the in-zone Issues tile shows B's issues", async () => {

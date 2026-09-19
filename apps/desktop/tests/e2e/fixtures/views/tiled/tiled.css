@@ -1,0 +1,90 @@
+/* The host's theme throughout (--hm-*). The panes themselves are holes the host fills with
+   real terminals, so this sheet styles only what is around them: the tabs, the gutters, the rings. */
+html, body {
+  margin: 0; height: 100%; overflow: hidden; background: transparent;
+  font-family: var(--hm-font-ui, system-ui, sans-serif); font-size: 13px;
+  color: var(--hm-color-fg, #e6e6e6); -webkit-font-smoothing: antialiased; color-scheme: normal;
+}
+/* The scheme rides on the scrolling panels: on the root it would make the frame
+   opaque and hide the wallpaper the host paints behind this view. */
+:where(.q, .q-list, .t-pane, .t-stack, .b-col, .b-body, pre, textarea) { color-scheme: var(--hm-color-scheme, dark); }
+body { display: grid; grid-template-rows: 44px minmax(0, 1fr); }
+
+/* ── the bar ─────────────────────────────────────────────────────────────── */
+/* The app's settings button floats over every view's top-right corner; the bar leaves it room. */
+.t-bar {
+  display: flex; align-items: center; gap: 12px; padding: 0 60px 0 10px;
+  /* With glass on the panel is a tint over the user's wallpaper, not a slab on top of it:
+     enough of the picture survives to place the view in their workspace. */
+  background: color-mix(in srgb, var(--hm-color-bg2) calc(100% - var(--hm-glass, 0) * 26%), transparent);
+  backdrop-filter: blur(calc(var(--hm-glass, 0) * 10px));
+  border-bottom: 1px solid var(--hm-color-line);
+}
+.t-tabs { position: relative; display: flex; align-items: center; gap: 2px; min-width: 0; overflow-x: auto; scrollbar-width: none; outline: none; }
+.t-tabs::-webkit-scrollbar { display: none; }
+
+/* The active tab's pill is one element that springs between tabs, not a background per tab. */
+.t-indicator {
+  position: absolute; left: 0; top: 4px; bottom: 4px; width: 0; z-index: 0; pointer-events: none;
+  border-radius: max(4px, calc(var(--hm-radius, 8px) - 2px));
+  background: color-mix(in srgb, var(--hm-color-fg) 10%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--hm-color-fg) 6%, transparent);
+}
+.t-tab {
+  position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 7px; flex: none;
+  height: 32px; padding: 0 11px; border: 0; background: none; font: inherit; color: var(--hm-color-fg3);
+  border-radius: max(4px, calc(var(--hm-radius, 8px) - 2px)); cursor: pointer;
+  transition: color 150ms ease, scale 100ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.t-tab:active { scale: 0.97; }
+.t-tab[aria-selected="true"] { color: var(--hm-color-fg); }
+@media (hover: hover) and (pointer: fine) { .t-tab:not([aria-selected="true"]):hover { color: var(--hm-color-fg2); } }
+.t-tab:focus-visible { outline: 2px solid color-mix(in srgb, var(--hm-accent) 70%, transparent); outline-offset: -2px; }
+/* A frame's colour identifies it; muted, so it never competes with the needs-you badge. */
+.t-dot { width: 7px; height: 7px; border-radius: 2px; background: color-mix(in oklab, var(--c) 55%, var(--hm-color-fg3)); flex: none; }
+.t-title { font-weight: 500; max-width: 18ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.t-count { font-size: 11px; font-variant-numeric: tabular-nums; opacity: 0.6; }
+.t-needs {
+  min-width: 16px; height: 16px; padding: 0 5px; box-sizing: border-box; border-radius: 8px;
+  display: inline-grid; place-items: center; font-size: 10.5px; font-weight: 600; font-variant-numeric: tabular-nums;
+  background: var(--hm-status-attention); color: var(--hm-color-bg);
+}
+.t-needs[hidden] { display: none; }
+
+.t-tools { margin-left: auto; display: flex; align-items: center; gap: 8px; flex: none; }
+.t-restore {
+  font: inherit; font-size: 12px; color: var(--hm-color-fg2); cursor: pointer;
+  background: color-mix(in srgb, var(--hm-color-fg) 7%, transparent); border: 0; border-radius: 6px; padding: 5px 9px;
+  transition: background-color 150ms ease;
+}
+.t-restore[hidden] { display: none; }
+@media (hover: hover) and (pointer: fine) { .t-restore:hover { background: color-mix(in srgb, var(--hm-color-fg) 12%, transparent); } }
+.t-mode { display: flex; padding: 2px; gap: 2px; border-radius: 7px; background: color-mix(in srgb, var(--hm-color-fg) 6%, transparent); }
+.t-mode button {
+  width: 28px; height: 24px; display: grid; place-items: center; border: 0; border-radius: 5px; cursor: pointer;
+  background: none; color: var(--hm-color-fg3); transition: color 150ms ease, background-color 150ms ease;
+}
+.t-mode button[aria-checked="true"] { background: color-mix(in srgb, var(--hm-color-fg) 12%, transparent); color: var(--hm-color-fg); }
+.t-mode svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.3; }
+
+/* ── the stage ────────────────────────────────────────────────────────────── */
+.t-stage { position: relative; min-height: 0; }
+/* Positioned in viewport coordinates, the same ones the surface rects use. */
+.t-rings { position: fixed; inset: 0; pointer-events: none; }
+.t-ring {
+  position: absolute; box-sizing: border-box; pointer-events: none;
+  border: 2px solid var(--hm-status-attention);
+  border-radius: calc(var(--hm-radius, 8px) + 3px);
+  box-shadow: 0 0 18px -4px color-mix(in srgb, var(--hm-status-attention) 60%, transparent);
+  animation: ring-in 220ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+@keyframes ring-in { from { opacity: 0; scale: 1.015; } }
+
+.t-empty { position: absolute; inset: 0; display: grid; place-content: center; gap: 6px; text-align: center; padding: 24px; }
+.t-empty[hidden] { display: none; }
+.t-empty-title { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+.t-empty-sub { margin: 0; font-size: 12.5px; color: var(--hm-color-fg3); max-width: 42ch; text-wrap: balance; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: 1ms !important; animation: none !important; }
+}

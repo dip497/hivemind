@@ -6,6 +6,8 @@
  */
 import { useState } from "react";
 import type { GitStatusSnapshot } from "../../../shared/ipc";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
 import { useGitCommit, useGitPush, useStageFiles } from "../queries";
 
 export function CommitBar({ repoPath, status }: { repoPath: string; status: GitStatusSnapshot }) {
@@ -31,46 +33,43 @@ export function CommitBar({ repoPath, status }: { repoPath: string; status: GitS
         </span>
       )}
       {unstaged.length > 0 && (
-        <button
-          className="shrink-0 px-1.5 py-0.5 rounded border border-[var(--color-line2)] text-[var(--color-fg3)] hover:text-[var(--color-fg)] text-[10px]"
+        <Button
+          variant="outline"
+          size="xs"
           title="stage all changes"
           onClick={() => stageMut.mutate({ repoPath, files: unstaged.map((f) => f.path) })}
         >
           stage all
-        </button>
+        </Button>
       )}
       {status.files.length === 0 ? (
         <span className="flex-1 text-[var(--color-fg3)]">
           {status.ahead > 0 ? `✓ clean · ${status.ahead} commit${status.ahead > 1 ? "s" : ""} to push` : "✓ working tree clean"}
         </span>
       ) : (
-        <input
+        <Input
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) doCommit(); }}
           placeholder={staged.length ? "commit message · ⌘↵" : "stage files to commit"}
           disabled={staged.length === 0}
-          className="nodrag flex-1 bg-[var(--color-bg)] border border-[var(--color-line2)] rounded px-2 py-0.5 text-[var(--color-fg)] outline-none focus:border-[var(--color-accent)] disabled:opacity-50"
+          className="nodrag flex-1"
         />
       )}
       {status.files.length > 0 && (
-        <button
-          className="shrink-0 px-2 py-0.5 rounded text-[10px] font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          style={{ background: canCommit ? "var(--color-accent)" : "var(--color-bg4)", color: canCommit ? "var(--color-bg)" : "var(--color-fg3)" }}
-          disabled={!canCommit}
-          onClick={doCommit}
-        >
+        <Button size="xs" disabled={!canCommit} onClick={doCommit}>
           {commitMut.isPending ? "…" : "commit"}
-        </button>
+        </Button>
       )}
-      <button
-        className="shrink-0 px-2 py-0.5 rounded border border-[var(--color-line2)] text-[var(--color-fg2)] hover:text-[var(--color-fg)] text-[10px] disabled:opacity-40 inline-flex items-center gap-1"
+      <Button
+        variant="outline"
+        size="xs"
         title={`push${status.ahead ? ` (${status.ahead} ahead)` : ""}`}
         disabled={pushMut.isPending}
         onClick={() => pushMut.mutate({ repoPath, setUpstream: !status.upstream })}
       >
         push{status.ahead ? ` ↑${status.ahead}` : ""}
-      </button>
+      </Button>
     </div>
   );
 }

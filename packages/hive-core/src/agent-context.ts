@@ -7,6 +7,8 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { listIssues, readConfig } from "./storage.js";
 import { filterIssues } from "./query.js";
+import { availableCommands } from "./tool-plugins.js";
+import type { ToolsSettings } from "./settings-schema.js";
 
 const HEADER = `# .agent.md — auto-generated context
 
@@ -21,6 +23,9 @@ export interface AgentContextOptions {
   includeStates?: Array<
     "backlog" | "todo" | "in_progress" | "in_review" | "done" | "cancelled"
   >;
+  /** The user's tool settings, so an enabled plugin's commands are listed too.
+   *  Without them only the built-ins are, which is every command that ships. */
+  tools?: ToolsSettings;
 }
 
 export async function buildAgentContext(
@@ -62,18 +67,14 @@ export async function buildAgentContext(
     lines.push("");
   }
 
+  // Generated from the plugin registry: a plugin that contributes commands is
+  // discoverable here, which is the only way an agent learns it has them.
   lines.push(`## Commands`);
   lines.push("");
   lines.push("```");
-  lines.push("hive new \"title\" [--label X] [--parent ID] [--assignee NAME]");
-  lines.push("hive list [--state in_progress] [--json]");
-  lines.push("hive show <ID>");
-  lines.push("hive update <ID> --state in_review --note \"...\"");
-  lines.push("hive task add <ID> \"title\"     # subtask");
-  lines.push("hive task done <ID> <SUBID>");
-  lines.push("hive link <ID> --parent <ID>");
-  lines.push("hive close <ID>    /    hive reopen <ID>");
-  lines.push("hive @<ID>         # resolve a mention (= show)");
+  for (const command of availableCommands(opts.tools ?? { enabledPlugins: [], disabledTools: [] })) {
+    if (command.cli) lines.push(command.cli);
+  }
   lines.push("```");
 
   return lines.join("\n") + "\n";

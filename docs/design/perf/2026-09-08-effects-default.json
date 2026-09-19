@@ -1,0 +1,133 @@
+{
+  "label": "effects-default",
+  "tiles": 4,
+  "at": "2026-09-08T08:43:19.932Z",
+  "idle_after_spawn": {
+    "total_cpu_pct": 39.8,
+    "renderer_rss_mb": 222,
+    "procs": [
+      {
+        "type": "Browser",
+        "cpu": 0.1,
+        "rssMB": 226
+      },
+      {
+        "type": "GPU",
+        "cpu": 38.6,
+        "rssMB": 400
+      },
+      {
+        "type": "Tab",
+        "cpu": 1.1,
+        "rssMB": 222
+      }
+    ]
+  },
+  "canvas_quiet": {
+    "seconds": 2.85,
+    "frames": 88,
+    "fps": 30.8,
+    "frame_p50_ms": 16.8,
+    "frame_p95_ms": 159.3,
+    "frame_max_ms": 170,
+    "frames_over_50ms": 11,
+    "frames_over_100ms": 11,
+    "longtasks": 0,
+    "longtask_total_ms": 0,
+    "longtask_max_ms": 0,
+    "lag_p50_ms": 0,
+    "lag_p95_ms": 1.8,
+    "lag_max_ms": 3
+  },
+  "canvas_quiet_cpu": {
+    "total_cpu_pct": 30.6,
+    "renderer_rss_mb": 228,
+    "procs": [
+      {
+        "type": "Browser",
+        "cpu": 0,
+        "rssMB": 227
+      },
+      {
+        "type": "GPU",
+        "cpu": 30.4,
+        "rssMB": 362
+      },
+      {
+        "type": "Tab",
+        "cpu": 0.2,
+        "rssMB": 228
+      }
+    ]
+  },
+  "typed_into": 4,
+  "node_count": 5,
+  "xterm_count_streaming": 4,
+  "canvas_streaming_idle": {
+    "seconds": 4.62,
+    "frames": 21,
+    "fps": 4.5,
+    "frame_p50_ms": 224.3,
+    "frame_p95_ms": 270.1,
+    "frame_max_ms": 270.3,
+    "frames_over_50ms": 20,
+    "frames_over_100ms": 20,
+    "longtasks": 0,
+    "longtask_total_ms": 0,
+    "longtask_max_ms": 0,
+    "lag_p50_ms": 0,
+    "lag_p95_ms": 8.6,
+    "lag_max_ms": 24.6
+  },
+  "streaming_cpu": {
+    "total_cpu_pct": 48.4,
+    "renderer_rss_mb": 251,
+    "procs": [
+      {
+        "type": "Browser",
+        "cpu": 0.9,
+        "rssMB": 228
+      },
+      {
+        "type": "GPU",
+        "cpu": 46.2,
+        "rssMB": 484
+      },
+      {
+        "type": "Tab",
+        "cpu": 1.3,
+        "rssMB": 251
+      }
+    ]
+  },
+  "canvas_streaming_typing": {
+    "seconds": 2.66,
+    "frames": 6,
+    "fps": 2.3,
+    "frame_p50_ms": 440.7,
+    "frame_p95_ms": 690.3,
+    "frame_max_ms": 690.3,
+    "frames_over_50ms": 6,
+    "frames_over_100ms": 6,
+    "longtasks": 1,
+    "longtask_total_ms": 58,
+    "longtask_max_ms": 58,
+    "lag_p50_ms": 0,
+    "lag_p95_ms": 14.4,
+    "lag_max_ms": 298.4
+  },
+  "appearance": {
+    "glass": {
+      "enabled": true,
+      "contentGlass": false,
+      "opacity": 0.72,
+      "blur": 18,
+      "contentOpacity": 0.25,
+      "animate": true
+    },
+    "wallpaper": {
+      "kind": "aurora",
+      "brightness": 0.85
+    }
+  }
+}

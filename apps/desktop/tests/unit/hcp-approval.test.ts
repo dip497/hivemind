@@ -13,6 +13,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { stickyAllow, makeDispatch } from "../../src/main/hcp/methods.js";
+import { useAuthoredAgents } from "./authored-agents.ts";
+
+// Spawn/supervise policy reads the live catalog: load the published fixtures.
+useAuthoredAgents();
 import { Mailbox } from "../../src/main/hcp/mailbox.js";
 import { TurnTracker } from "../../src/main/hcp/turn-tracker.js";
 import { OutputRecorder } from "../../src/main/hcp/output-recorder.js";
@@ -52,7 +56,7 @@ test("an approval for a BUSY supervisor is held, then delivered when it hits its
   assert.match(writes.join(""), /APPROVAL — worker .*wants to run write/, "now it can actually be read");
 
   // The reqId the parent was told to answer with must be the one that resolves it.
-  const reqId = /hive_approve\("([^"]+)"/.exec(writes.join(""))?.[1];
+  const reqId = /hive ctl approve (\S+) allow/.exec(writes.join(""))?.[1];
   assert.ok(reqId, "banner carries a reqId");
   await dispatch("agent.approve", { reqId, decision: "allow" });
   assert.deepEqual(await asked, { decision: "allow", reason: undefined });

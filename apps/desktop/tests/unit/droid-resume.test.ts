@@ -5,8 +5,35 @@ import { mkdtempSync, mkdirSync, writeFileSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const { isDroid, newestDroidSessionForCwd, makeDroidResumeTransforms, droidHooksSettings } =
-  await import("../../src/main/droid-resume.ts");
+// droid is a manifest now: its hooks document and its transforms both come from there.
+const { findSession: _find, manifestRuntime, renderHookDocument, transformsFor, specIsAgent } =
+  await import("@hivemind/agents/node");
+const { authoredDef: _bundled } = await import("./authored-agents.ts");
+const droidDef = _bundled("droid");
+const isDroid = (spec: { cmd: string }) => specIsAgent(droidDef, spec);
+const pathsOf = (deps: Record<string, string | undefined>) => ({
+  private: "/x", execPath: deps.execPath ?? "", tileSessionsDir: "/x/sessions", home: "/home/u",
+  ...(deps.hcpSock ? { hcpSock: deps.hcpSock, hcpToken: deps.hcpToken ?? "tok" } : {}),
+  hooks: {
+    ...(deps.stopHookPath && deps.hcpSock ? { stop: { path: deps.stopHookPath, arg: deps.hcpSock } } : {}),
+    ...(deps.userpromptHookPath && deps.hcpSock ? { userPrompt: { path: deps.userpromptHookPath, arg: deps.hcpSock } } : {}),
+    ...(deps.notificationHookPath && deps.hcpSock ? { notification: { path: deps.notificationHookPath, arg: deps.hcpSock } } : {}),
+  },
+});
+const droidHooksSettings = (deps: Record<string, string | undefined>) => {
+  const doc = renderHookDocument(droidDef, {
+    tileId: "", cwd: "", args: [], env: {}, phase: "spawn", paths: pathsOf(deps),
+  });
+  return doc ? JSON.parse(doc) : {};
+};
+const makeDroidResumeTransforms = (deps: Record<string, string | undefined>) =>
+  transformsFor(droidDef, manifestRuntime(droidDef, () => undefined)!, pathsOf(deps),
+    { ...(deps.sessionsRoot ? { sessionRoot: deps.sessionsRoot } : {}) });
+// Where droid's sessions live is in its manifest now; the daemon does the reading.
+const findSession = _find;
+const authoredDef2 = _bundled;
+const newestDroidSessionForCwd = (cwd: string, root?: string) =>
+  findSession(authoredDef2("droid").session!.resume!.find!, cwd, root);
 
 // Mirrors ~/.factory/sessions/<cwd-slug>/<id>.jsonl: first line is a
 // `session_start` record carrying { id, cwd }.

@@ -1,12 +1,296 @@
 # Changelog
 
 All notable changes are documented here, in [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
-This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+Versions are calendar dates, `YYYY.M.N`: the Nth release of that month. Anything that breaks a
+file format, the CLI or the plugin protocol is marked **Breaking:**. Releases up to 1.17.0 used
+semantic versioning.
 
 Each release is published to [GitHub Releases](https://github.com/dip497/hivemind/releases) with prebuilt artifacts (`hive-linux-x86_64`, `hivemind-<version>-x86_64.AppImage`, `hive-darwin-arm64`, `hivemind-<version>-arm64-mac.zip`).
 
 ## [Unreleased]
 
+- Supervised Kiro agents ask for approval again before running a tool. The approval hook Kiro ships was not being wired in.
+- A new app icon in the family style: the Hivemind mark on a dark tile, matching HiveHub and hivelock.
+- Agent tiles restored at startup keep their session name, status and icon. They used to come up as plain terminals when they restored before the installed agents had been read.
+- Every agent now gets the untrusted checks, with no exception to undo them: a plan's loader variables (`LD_PRELOAD`, `NODE_OPTIONS`, …) are always stripped, a manifest may never set them, and a session root must always stay under the home directory. A stale internal flag used to exempt agents without a source root — which is every agent installed from HiveHub — from the runtime loader-variable check.
+- **Breaking:** Nothing agent-specific ships in the app any more. Every agent — claude, codex, cursor, droid, pi, kiro — is added automatically from HiveHub when its CLI is found on the machine, which needs the network on first start; openclaw is gone. With no agent installed, starting one opens Settings ▸ Plugins.
+- Agents whose command line tool is already on this machine are added on their own, even when they do more than launch — the notice tells you what each one can do, with a Remove right there. An agent added while Hivemind is running is wired up on its next tile too, without a restart.
+- The app shows its interface in Geist, as designed. The font never loaded before, so text fell back to the system font. It now ships inside the app and works offline. The editor and Markdown code use the same mono font as the terminal.
+- `hive views new <name>` starts a view outside this repository, ready to build, install and publish. The app now serves `@hivemind/view-sdk` to every view, so a view no longer bundles its own copy and always speaks the app's version. The example views moved to the published plugins repository.
+- Plugins come from HiveHub. A view is named `@owner/name`, after the GitHub account that published it, so two people's `board` never collide. An agent has one name for one CLI (`gemini`), and agents are added by pull request to the plugins repository. `hive views install @owner/name` and `hive agents install gemini` install one by name, checking every file against the hash HiveHub recorded.
+- Dragging and resizing a tile follows the pointer again. The tile used to stay put for the whole drag and then slide across on release. It no longer blinks out on every frame of the drag either.
+- Typing into a terminal is faster. What you type appears in about 2–3 ms instead of about 15, because the echo of a keystroke no longer waits in the output batching. The focused terminal now draws on the GPU like every other visible one, so typing into an agent costs about 9 ms of work per key instead of 15–60.
+- Starting Hivemind no longer pins every core. Agents restored after a reboot now really start two at a time: the check for a still-running session used to count one saved before the reboot and restore it on the spot, so every agent started in the same second. Each keeps its turn until its MCP servers are up.
+- The file watcher skips everything git ignores. A Rust `target/` or a Python venv in a workspace meant tens of thousands of files scanned and watched at every start.
+- Adding agents found on this machine waits until the restore is done, and no longer starts an agent's CLI just to learn it needs your review.
+- A restored agent no longer carries `--resume` many times over: repeats saved by older versions are dropped, and a resume that fails no longer leaves one behind.
+- The terminal render-debug panel is gone, and Ctrl+Shift+D reaches the program in the terminal again.
+- In the windows view, an editor tab no longer draws over the tab you are on.
+- Browser tiles keep back, forward, find and zoom working after you change the zoom. The zoom change used to disconnect every tab until its next navigation.
+- Less work behind the scenes. Changing a setting no longer re-renders every tile, a drag re-renders only the tile you are dragging, a diff tile re-parses only the file that changed, and one file save no longer runs git twice. The full-window video wallpaper also stops decoding while a tile is fullscreen.
+- Grabbing, dropping, resizing and panning no longer stall for a moment at the start and end: the styles that switch on during motion restyled every element in every tile, about 80 ms each time, and now touch only the few elements they are for.
+- Terminals resize together once per frame instead of forcing a restyle each; the full-screen blur behind dialogs is gone, the full-screen terminal and toasts stop blurring where it shows nothing, and a shell's status no longer rewrites itself on every line of output.
+- Opening a large workspace no longer pins every core: restored agent tiles start a few at a time instead of all in the same second, and the ones still waiting show a placeholder saying how many are ahead of them. After an app restart they re-attach to their running sessions at once, without waiting; a tile you spawn yourself always starts immediately.
+- Restored terminals no longer die with "too many terminals spawned at once": past the spawn rate limit a terminal now waits for room instead of failing.
+- Loading tiles and lists show the shape of what is coming instead of a "Loading…" line.
+- Claude tiles keep writing transcripts when hivemind itself is launched from inside a Claude Code session: tile shells drop the inherited `CLAUDE_CODE_CHILD_SESSION` marker and claude runs with `CLAUDE_CODE_FORCE_SESSION_PERSISTENCE=1`, so agent sessions stay resumable after a restart instead of dying with "Transcript saving is off".
+- A workflow's pi workers report what they said: their replies arrive inline rather than in a transcript, and the workflow only read transcripts — so every pi worker came back as a timeout with no text, pipelines stopped at the first stage, and `--close` never closed a worker.
+- `hive ctl read` answers the message you just sent: a message held while the agent was mid-turn used to hand back the previous turn's reply. A second read no longer repeats the turn it already returned, keys arm a read the same way a message does, and a read on a tile that has closed says so instead of claiming the agent is still working.
+- `hive ctl report` fails loudly when the agent it reports to is gone, instead of claiming delivery and dropping the worker's summary on both channels.
+- A supervised kiro worker is denied a brokered tool when its supervisor cannot answer; it used to be allowed. `--supervise` is refused when there is no supervising agent to broker to, instead of spawning an unsupervised worker and reporting success.
+- The app says so when the agent control plane cannot open its socket, instead of leaving `hive ctl` to report that the app is not running.
+- A tile whose agent is running a background subagent keeps reading as working: the turn-end watchdog was armed with the wrong id, so it never re-armed.
+- Panel opacity works again: with glass on, the islands, toasts, layers and other panels follow the opacity you set (they were rendering at roughly half of it). A tile's content stays opaque so its text stays readable; "Frost tool content" is still the switch that lets the wallpaper through it.
+- The renderer is built from one set of components (button, input, label, switch, textarea, badge, menu row), and `pnpm lint` now enforces it: a component's look is changed in the component, not at the call site, and no colour is hardcoded.
+- A workflow's workers all start: tiles spawned in the same millisecond no longer share an id, and a pi worker gets its task at launch instead of sitting idle.
+- Tiles keep the name they were spawned with (`hive ctl spawn --name`, workflow items) instead of the agent's own title, and pi's "π - <folder>" or claude's "Claude Code" no longer replace a tile's name. Agent manifests can say which titles to ignore with `spawn.titles`.
+- Tile numbers count per agent and carry on after a restart, so two tiles no longer both read "claude #5". `hive ctl list` adds each tile's shown `name` and its `agent`.
+- Adding a machine is a plain form: host, name, an optional password and one switch. Buttons, inputs and switches come from one shared set, and primary buttons no longer take the accent colour.
+- The site carries a classical motif: four public-domain museum pieces (Met Open Access, CC0), each used once and chosen for the claim it sits beside — a figure at rest behind the hero, a temple column behind the views, a face behind the questions, and the Acropolis as the wallpaper inside the app itself.
+- The landing page lost about 1200px of dead space: tighter bands, the questions in two columns, and a written panel that no longer collapses when you switch tabs.
+- `scripts/site-clip.mjs` takes `--image` as well as `--video`, so a capture can run against a still wallpaper.
+- The guide shows the workspace instead of only describing it: real screenshots of each view, a diagram of what a frame binds, the issue track as a picture, and status chips in the app's own colours.
+- Docs pages centre their reading column and the contents list takes the width it needs — previously 560px was reserved for a 192px list, and the prose paid for it.
+- The plugin catalog takes the width of the window — five cards a row on a wide screen — and the site header works on a phone on every page, not just the landing one.
+- The docked Layers panel follows your glass opacity instead of a fixed 92%, so the wallpaper reads through it; it stays legible at the low end and keeps its blur off over video.
+- The landing page's hero is the app rebuilt in the page's own markup: three beats that run once and stop, ending on a permission prompt you can actually answer. The recording moved behind a "Watch the walkthrough" dialog.
+- The views section shows the real views as screenshots you switch between, with a panel for writing your own, instead of an abstract animation.
+- An installed view now gets your wallpaper behind it, like the canvas does. A view that paints its own opaque scene opts out with `"wallpaper": false` in its manifest.
+- A view package can state its `author`, `homepage` and `license`; Settings shows them as the claim they are, next to the permissions it is asking for.
+- `applyThemeVars()` keeps a view's frame transparent (`color-scheme` on the root paints it opaque) and exposes `--hm-color-scheme` for the panels that scroll.
+- The landing page drops the scroll-driven hive scene; the hero, the manifest section and the footer use the space instead, and the nav works on a phone.
+- The landing page shows a real screenshot of the app, the steps are the three commands you actually run, and the agent counts come from the catalog.
+- Docs headings no longer carry a rule under them.
+- Marketing screenshots use the Mono wallpaper, so the app in them matches the palette it ships with.
+- The landing page's hero is a recording of the app — three agents, three views — cut and captioned in `video/` and recorded by `scripts/site-clip.mjs`, with a still poster for reduced motion.
+- Three views in the plugin catalog, each built for one kind of person, replace Orbit and Painted controls, which answered no question anyone had. **Queue** orders your agents by who needs you and docks the selected one's live terminal beside the list, so answering an approval is typing into it. **Tiled** lays out every terminal in a frame as live panes, with frame tabs that light when another task needs you. **Board** moves each session from doing, to review, to done, keeps work in progress to five, and never marks anything done on your behalf.
+- `@hivemind/agents` is published to npm, so a plugin registry or any other tool can validate a manifest with the same code the app runs rather than a copy of the rules that drifts. The workspace still builds from TypeScript source; only what npm receives is compiled.
+
+- The site wears the app's own palette, type and motion: the same canvas colour, the same text ladder, Geist, and the four status colours used only where they mean an agent's state. It has a plugins page, built from the catalog the app reads, so it cannot list something the app would refuse to install.
+- Settings feels like the rest of the app. It was built without the motion language the workspace already uses: ten hover states changed instantly, nothing acknowledged a press, and depth came from borders that a wallpaper or glass shows straight through. Changing your theme or accent no longer smears every colour on screen — the switch is instant, the way a switch should be.
+- The World view is gone, and the Office and Solar system example views with it. ⌘E now cycles canvas → windows → your installed views. A workspace saved in the World view opens on the canvas instead of a blank window. three.js left the build with it — nothing else imported it — so the app downloads and installs smaller.
+- The agent list says what each agent runs and whether other agents can hand it work, instead of repeating where its file came from. Every agent is a manifest now, and they were all sitting under a heading that already said "Installed" — which folder one arrived in only matters on its own page, where you can remove it.
+- An agent installed from the catalog can be updated. It never could: agents carry no version of their own, so the check that decides whether an update exists had nothing to compare and the button never appeared — an agent installed once stayed as it was forever. Every file in the catalog is pinned by a checksum, and that answers the question exactly, so Browse now offers Update on an installed agent whose manifest is no longer the one the catalog lists.
+- Agents in the plugin catalog now show their own mark instead of a row of identical glyphs. The two that have no symbol of their own — only a wordmark — show a letter rather than a logo invented for them.
+- Hivemind no longer carries every agent inside it. Seven ship in the app — the ones that need it to work at all, because they inject hooks, keep a private configuration home, or resume a session — and ten now come from the plugin catalog, added automatically the moment their CLI is found on your machine. Nothing about them changed: they were already manifests, and each one still produces the same command line and the same status, proved over the same 8,041 screens. Which agents ship inside the app is now a product decision rather than an architectural one.
+- `hive agents validate <dir>` checks an agent package the way an install does and then tells you what a user will be told about it: the command it runs, whether other agents can delegate to it, everything it will disclose, and the things that pass but disappoint — an asset it names but does not ship, or a name that is already Hivemind's.
+- An agent you install now works as a worker: the process that runs your terminals reads the agents on your machine, not only the ones built into Hivemind, so an installed agent's files are written and its turn signal reaches the control plane. It is wired on the next start after you install it.
+- `hive ctl spawn --help` no longer prints a list of agents that leaves out the ones you installed. Naming an agent that does not exist answers with the real list, which is where it matters.
+- An agent you install now gets the same treatment from the daemon as the ones in the box: the files it ships beside its manifest are written for it, its private configuration home is built, and its session and hook wiring is applied. Until now only agents compiled into Hivemind were wired up, so an installed agent could ask for all of that and silently get none of it.
+- The last thing only Hivemind's own agents could do is gone: all sixteen now pass exactly the checks an agent you install passes. Wiring hooks and keeping a private configuration home are open to any agent, and an agent that reads a directory of yours, runs a command to list its models, or talks to Hivemind's control plane says so in the review before you install it. An agent added automatically because its CLI is on your machine can no longer do any of those — nobody read it, so it waits for you.
+- Status rules no longer take regular expressions — from anyone, including us. They are written as a sequence of plain steps instead, which cannot backtrack and so cannot hang the window, and every rule that changed was proved to answer identically over 16,070 screens first.
+- An agent name Hivemind has shipped keeps pointing at the command it has always meant, even for agents that stop shipping in the box: a repository or a plugin index cannot hand you a "gemini" that runs something else. Installing one by name yourself still works — `hive agents install --replace`.
+- A settings file whose writer was killed mid-write no longer blocks every later change. The lock records which process took it; one whose process is gone is cleared after a grace period instead of refusing your next `hive` command until you delete a file by hand — and when a lock really is held, the error now names the holder and says whether it is still running.
+- No agent in Hivemind has code any more — every one of the sixteen, including the four that inject hooks and keep private configuration homes, is a manifest anyone could have written. What it takes to be a first-class agent here (a turn signal other agents can gather, a session that survives a restart, a configuration home that leaves your login and history alone) is now something an agent you add can ask for, in the same file format, with the app doing the work.
+- An agent can now bring the whole of itself: not just a command and a status detector, but the file its CLI reads, the launch options it needs, and a turn signal — so an agent you add can be a worker that other agents delegate to, which until now only the ones we shipped could be. pi already runs this way and has no code of its own left.
+- Every agent Hivemind ships is now a manifest, the same kind anyone else writes — the sixteen hand-written provider files are gone, and "built-in" means where an agent comes from rather than what it is allowed to be. Resuming a session is part of that format: an agent says where its CLI keeps sessions and Hivemind reads them, so an agent you add can pick up where you left off, which until now only ours could do. It must keep them under your home directory, and the review says which directory before you install it.
+- A comment you leave on a diff is now something an agent can answer. Comments live with the workspace instead of inside one window, so `hive review` lists them, replies to them and resolves them — and `hive review watch` waits for your next comment, which is what lets an agent finish a review instead of asking to be re-prompted. Comments you already had are carried over the first time each repository is opened.
+- Editor, diff, issues and plan review are plugins now, like the Browser tile already was. `hive tools list` shows what each one contributes: the tiles it can spawn and the commands it offers you and your agents. The tiles that ship with the app stay available without switching anything on.
+- The diff and file tree are on current upstream releases again, which brings faster rendering of large diffs and the newer Pierre palette.
+- An agent a repository ships now stays with that repository: it runs in tiles opened there and is refused anywhere else, and opening a second workspace no longer takes the first one's agents away from the tiles still running in it.
+- Installing an agent that would take a built-in's id — and with it every ⌘\\, toolbar click and `hive ctl spawn` — now has to say so: `hive agents install --replace`. Agents are never added on their own when the command they name is a general-purpose runtime, because such a command says nothing about which agent it is.
+- The canvas controls are one stop on the way to your work, not eight: Tab reaches the cluster, arrow keys move inside it, and the catalog says which command an agent will run before you add it.
+- Settings reads as one list, not three layouts. Every agent is a single row — what it is, whether this machine has it and what to install if not, and one control that makes it the default — and views, tools and plugins now share that row. Descriptions sit under the name instead of across the pane, the launch options line up in one column, and the window can be as narrow as 720px.
+- Hivemind now works with whatever agents you have. The default agent is your choice if it is installed, otherwise the first agent this machine has — for the toolbar, ⌘\\, the empty canvas and `hive ctl spawn` alike; the empty canvas offers to get an agent when none is installed. The installer reports every agent CLI it finds instead of checking only for `claude`, and `hive agents list` shows where each CLI was found (`--found` lists only those).
+- Agents from the plugin catalog are added automatically when their CLI is on your machine — Aider, Mistral Vibe, Qwen Code, Auggie, Crush, Continue and OpenHands to start. Each download is checksum-verified and must name the CLI that was found, which must answer `--version` like one. You see a notice when one is added; removing it keeps it removed, and Settings ▸ Agents can switch this off.
+- Security: a repository's `.hivemind/agents/` can no longer replace an agent you already have — a built-in or one you installed. Before, a cloned repository could ship an agent named `claude` that ran its own command from the Claude button; now it is refused and shown with the reason. The catalog review also shows the exact command an agent runs and every flag its options can add.
+- ⌘\ now starts your default agent, like the toolbar button, instead of always Claude.
+- Settings is organised around plugins: General, then Agents, Views and Tools — each an overview plus a page for every agent, view and tool — and Plugins. The default agent and active view sit on their overviews; a view's toolbar lives on its own page; Browser's agent control lives on the Browser page. The separate Views and Extensions pages are gone.
+- A plugin catalog: Settings ▸ Plugins ▸ Browse lists the agents and views published on HiveHub, with search and type filters. Installing downloads the files, checks each one's checksum, and shows what the plugin can do before anything is written; a file that changed after it was listed is refused. The four example views are the first entries.
+- Hivemind now checks whether each agent's CLI is installed. Settings shows its version and location, or "Not installed" with a link to get it and the install command; the toolbar lists missing agents separately, launching one explains instead of opening a dead tile, and `hive ctl spawn` refuses it with the link. A different program with the same name is flagged instead of being run.
+- Gemini, Cursor, Cline, Copilot, Kimi, Amp, Grok, Hermes and Antigravity can now be launched from Hivemind (they start and show status; other agents cannot collect their replies). Gemini, Cursor, Cline, Copilot and Kimi show their own icons.
+- With glass on, the Windows view now shows the wallpaper behind its tiles like the canvas does, instead of a solid background.
+- Fix terminals that could stay blank after a tile was re-shown: a surface handed back to the same slot was then parked out of sight.
+- Settings ▸ Agents is rebuilt as cards with each agent's own icon. Select one to make it the default, switch it off, or set its launch options. Options are now per agent instead of one model and permission mode shared by all, and their values come from the agent's CLI (`claude --help`, `opencode models`…), so new modes and models appear without a Hivemind update. Codex gains model, approval and sandbox choices; opencode, pi, droid and Cursor gain theirs. Your previous model and permission mode move to Claude, the only agent they applied to.
+- Saved terminal sessions no longer store the control-plane token and are readable only by you. Startup no longer reads them all (266 ms and 58 MB on a machine with 445); each loads when its tile opens, and ones unopened for 30 days are removed.
+- The docs now look and read like the website: the same palette in light and dark, sentence-case labels instead of all-caps, and plain rules and notes instead of heavy comic panels. A new guide, "Add your own agent", covers the agent file format, where Hivemind looks for it, and switching agents on and off.
+- Streaming terminals no longer slow the window: xterm.js 6 stops forcing a page layout every frame (649 ms → 2 ms per 4 s with three streaming shells; slowest frame 38 → 12 ms). Alt+Left/Right still move by word.
+- `hive agents remove` refuses anything that is not an agent id, so it cannot delete outside the agents folder. Switching off every agent now takes effect instead of being ignored.
+- `hive agents install` and `hive agents remove` now update a running app straight away instead of waiting for a restart. `hive ctl spawn --agent` and `hive ctl workflow` accept agents added from a file and refuse any agent switched off in Settings, matching what the app offers. Agents a repository ships in `.hivemind/agents/` now load.
+- Settings now lists the agents you have installed, with where each came from and why any of them is unavailable, and lets you switch any of them off — the ones that ship with Hivemind included. Choosing defaults for new agents moved under its own heading on the same page.
+- Agents added this way now appear in a running app: Hivemind reads the agent folders at startup, offers what loaded, and says in the log why anything did not.
+- Describe an agent in a YAML file instead of code: identity, capabilities, icon, spawn flags for each permission mode and model, and the rules that read its status from the screen. Drop one into `~/.config/hivemind/agents/<id>/agent.yaml` or a repo's `.hivemind/agents/`, and switch any agent off — including the ones that ship with Hivemind. All sixteen built-in agents are now described this way. An agent added this way is launched and its status is read, but it cannot resume a session or report turns, and saying otherwise is refused rather than believed.
+- Fix Codex session resume, which never worked: Codex embeds its whole system prompt in the session record, so the record is far larger than the fixed buffer used to read it, every session was silently skipped and every restored Codex tile started fresh.
+- Recognise the Cursor agent by its real binary (`cursor-agent`) instead of `cursor`, which is the Cursor IDE, and restore Cursor tiles into their previous chat for that workspace. Cursor now also accepts a model and maps plan, auto-review and force modes.
+- Add `hive daemon`, `hive run`, `hive ps`, `hive attach` and `hive kill` for persistent terminal sessions without the desktop app.
+- Remote terminals on a host with `hive` now run in its PTY daemon, so they survive ssh drops and app restarts; other hosts keep the in-app session.
+- Remote frames use your system `ssh` for terminals, files and git, so `~/.ssh/config`, jump hosts and hardware keys work; host keys are recorded in the app's own known_hosts.
+- Add `hive machine` saved ssh machines and `--machine` on `ps`/`run`/`attach`; `machine add --install` puts the matching `hive` on any published platform.
+- Machines can be given a password when a host has no ssh key; the app says so when the OS keychain cannot keep it, and a machine's password can be set again later.
+- Add Machines: saved ssh machines with live status, round trip and one-click setup in the app, a machine chip on remote frames, a reconnect banner on remote terminals, and opening sessions already running on a machine; shares its list with `hive machine` and brings in previously saved hosts.
+- Publish `hive-linux-arm64`; `install.sh` on arm64 Linux installs the CLI alone, for use as a remote machine.
+- A terminal session can have several viewers at once; the one typing owns the size.
+- Reconnecting to a terminal sends only the output you missed, and a viewer on a slow link is sent a fresh screen instead of every byte.
+- Agents in remote terminals now show their status and notifications in the app; add `hive push` to notify a phone when an agent needs input.
+- Fix a second PTY daemon stealing the socket from a running one, and a killed session reappearing after a daemon restart; the daemon socket and snapshots are now owner-only.
+- Build `hive` with bun 1.3.
+- Simplify fullscreen Settings into consistent rows and compact view choices; pause covered wallpapers and overlay videos without changing preferences or agent sessions.
+- Let each view choose toolbar actions, order, and labels through Settings or the CLI, with empty toolbars supported and tool activation kept separate.
+- Add per-view toolbar Off alongside Collapsed, preserving custom controls and Settings recovery without remounting live tools.
+- Make Browser an opt-in bundled tool plugin for fresh profiles, preserve existing settings, load its UI on demand, and add `hive ctl open-tool` with shared activation checks.
+- Add a canvas-painted controls example that navigates workspaces and docks existing tools through the sandboxed view SDK.
+- Batch terminal renderer checks during view switches and keep preserved terminals in sync with each view’s transparency policy.
+- Preserve unchanged tile surfaces when another tile changes, avoiding unnecessary terminal and editor renders.
+- Add read-only `hive packages inspect` for bundles of workspace views and agent presets, including permissions, startup plans, file digests, and strict validation.
+- Add a static website and task-focused guides with Markdown exports for coding agents.
+- Shorten website and Settings copy, removing repeated taglines and filler.
+- Redesign Settings with separate Views and Extensions pages, in-app extension installation and removal, automatic per-view toolbar placement, keyboard navigation, and safer extension replacement.
+
+One release: agents drive hivemind through the `hive` CLI (the MCP server is gone), agent
+providers are a catalog, the workspace is viewable through plugins (canvas, windows, a Three.js
+World, and sandboxed community views), and the e2e/perf harnesses gate every change. **Major bump**
+— see BREAKING items and the migration at the end of this section.
+
+### Added
+
+- **`hive ctl` is a full control plane — every verb the MCP server had, from the shell.** New
+  subcommands `report`, `open-review`, `set-state`, `add-comment`, `mark-acceptance`,
+  `delete-issue`, `list-workspaces`; `spawn` gains `--name`, `--model`, `--report/--no-report`;
+  `workflow` gains `--model`. Every subcommand takes `--json` and prints the same shape the
+  matching MCP tool returned, on one line; failures print `{ok:false,code,message}` with a
+  meaningful exit status (2 usage · 3 app not running · 4 timeout · 5 not found · 6 unauthorized ·
+  7 refused/unsupported · 1 other). Issue verbs resolve ids from other registered repos.
+  `hive ctl stream --lines N` / `--since <offset>` replay the recorded tail before going live,
+  `--snapshot` prints and exits, `--json` emits NDJSON with the byte `offset` for exact resume.
+- **`hivemind` skill** (`hive add skill` / `hive init`): the `hive ctl` vocabulary for agents with
+  copy-pasteable examples — spawn a worker into a frame, send, read with a timeout,
+  fanout/pipeline/mapreduce, supervise + approve, connect two agents, report back, issue verbs.
+- `hive new --ac "criterion one || criterion two"` creates an issue with its acceptance checklist.
+- Spawned agents carry `HIVE_AGENT_ID` (claude / pi / droid / kiro) so Activity rows written via
+  `hive ctl` are signed by the runtime, as the MCP server used to do.
+- **Views are plugins (⌘E / Settings ▸ View cycles them).** The workspace runtime owns frames,
+  tiles, sessions and commands; Canvas and Windows are built-in plugins behind a registry with a
+  react-flow-free contract (`docs/design/workspace-views.md`). Every tile body is mounted once by
+  a shared tile host and lent to whichever view is active, so switching keeps local **and remote**
+  PTYs, unsaved editor buffers and browser tabs exactly as they were. A view that crashes or is
+  no longer installed falls back to the canvas without touching a session. Each view keeps its
+  own versioned layout; existing saved layouts migrate on first launch. The view contract exposes
+  live agent status per tile (`commands.subscribeTileStatus` / `tileStatus`).
+- **World view — a Three.js map of the workspace.** One island per frame, one block per tile
+  coloured by live agent status, hover names, orbit/pan/zoom; click a block and its LIVE
+  terminal docks in a pane beside the scene (a real tile slot, keys go straight to the shell,
+  never a texture), Esc or × undocks, click an island to fly to it. Camera and placements persist
+  per repo. three.js ships in its own lazy chunk (a build guard pins the entry-chunk size); the
+  scene renders on demand only and is retained across switches.
+- **Community views — sandboxed view plugins loaded at runtime.** Ship a view as a package
+  (`hivemind-view.json` + one bundled entry), `hive views install <dir>` (`list` / `remove`
+  too — both ask a running app to rescan, so the switcher updates without a restart), and it
+  joins the switcher after the built-ins. The plugin runs in a sandboxed
+  out-of-process iframe on its own `hm-view://<id>` origin with a strict CSP (no `window.hive`,
+  no node, no network, no inline scripts) and talks to the app over one validated MessagePort
+  (`@hivemind/view-sdk`: projection with pre-resolved colours, per-tile status, selection,
+  reveal, a hole-punch that places a real tile slot where the plugin asks). Malformed traffic,
+  floods and runaway CPU disable a plugin for the session and drop you back on the canvas with
+  every session intact. Example plugin: `examples/views/orbit`.
+- **Host chrome in every view.** The tool island (spawn, frame, browser, appearance, update) is
+  drawn by the workspace over whichever view is active — the canvas keeps it top-centre, Windows,
+  World and community views get a compact bottom island — so you can spawn from anywhere. A tile
+  docked in the World or a community view gets a host bar: name, live status, pop out to the
+  canvas, undock; **Shift+Esc undocks even while the terminal has the keyboard**. The animated
+  wallpaper and glass apply only under the canvas and Windows; scenes paint their own world.
+- **One user-owned configuration file: `settings.json`.** Appearance, default view + per-view
+  chrome, disabled community views and agent defaults live in
+  `$XDG_CONFIG_HOME/hivemind/settings.json` (override with `$HIVE_SETTINGS`), owned by the app
+  and validated on every read and write. Your pre-2.0 theme and preferences are imported once
+  from the renderer's localStorage. Appearance is now the ONE theme object — palette tokens,
+  accent, radius, fonts, glass, wallpaper **and the terminal palette** — with presets
+  (Ubuntu, Dracula, Nord, Solarized Dark, One Dark); Ubuntu is byte-identical to the pre-2.0
+  look. Settings is paged (Appearance / Views / Agents / Notifications / Shortcuts / About):
+  pick a preset, edit the terminal colours, enable or disable an installed community view, set
+  the default agent/model/permission mode, or read the shortcut list.
+- **`hive config get|set|path` and `hive theme list|use|export|import`.** Edit the same file from
+  the shell; a running app picks the change up over the control plane (`settings.reload`) with no
+  restart, and says so.
+- **Your theme applies inside plugin views (`appearance.pluginSurfaces`).** A terminal docked in
+  the World or a community view renders exactly as on the canvas — glass, and the wallpaper
+  painted behind that slot only, never full-window, so nothing is composited when nothing is
+  docked. Set it to `opaque` (Settings ▸ Appearance) for a solid terminal background instead.
+  Community views receive the whole palette (`applyThemeVars` in `@hivemind/view-sdk`), so a
+  plugin's chrome can follow your theme; the Orbit, Office and Solar examples do.
+- `HIVEMIND_SHELL_ENV=0` uses the launch environment as-is (PATH included) instead of the login
+  shell's — for CI/e2e and for launching from a terminal whose exact env you want inside tiles.
+- **Test + perf harnesses.** The Playwright e2e suite runs headless under xvfb with `retries=0`
+  as a real gate; it includes a cross-provider acceptance test that drives two scripted
+  stand-in providers through `hive ctl spawn / workflow / send / read / report / stream`, a
+  throwaway sixth provider's whole lifecycle, view-switch preservation, World and community-view
+  specs (docking, sandbox facts, hostile plugins). `apps/desktop/scripts/perf-views.mjs`
+  (+ `perf-views-compare.mjs`) measures every view — canvas, windows, World, community, a
+  CPU-burning plugin — and the design doc records the numbers per milestone.
+
+### Changed
+
+- **Agent providers are one catalog entry each** (`packages/hive-agents`,
+  `docs/design/agent-providers.md`): a browser-safe def — identity, inline SVG mark, status
+  detector, explicit typed capabilities (prompt delivery, turn signal, resume granularity,
+  supervise, model flag, permission modes, blocked detection) — plus, where needed, a node half
+  with its provider-owned assets beside it. The desktop UI, status detection, prompt delivery,
+  the PTY daemon, HCP, `hive ctl --agent`, `hive agent detect` and `--assignee` all read that
+  catalog; a unit test greps that no provider is named anywhere else. Adding a runtime is one
+  directory. Behaviour for claude, codex, droid, kiro and pi is unchanged and pinned by golden
+  tests captured before the move.
+- **What a runtime cannot do is refused, not timed out.** `hive ctl workflow --agent codex` (no
+  turn signal) exits 7 `UNSUPPORTED` before spawning; `hive ctl read` on such a tile answers
+  `UNSUPPORTED`; an unknown `--agent` is a usage error listing the spawnable ids.
+- `hive agent detect` probes `droid` and `--assignee droid` resolves as an agent.
+- **BREAKING: `hive ctl read --timeout` is honoured end-to-end.** The wait is a loop of short
+  HCP requests (≤ 10 s each) instead of one long request that died at the caller's tool timeout;
+  the default total wait is 100 s. A read that runs out of time prints
+  `{text:null, finalStatus:"timeout"}` and **exits 4**. `hive ctl read --poll` returns the
+  current turn state immediately.
+- **BREAKING: `hive ctl` error output** is structured (`{ok:false,code,message}` under `--json`)
+  with distinct exit codes; scripts that only checked `exit != 0` keep working.
+- The approval banner a supervising agent sees says `hive ctl approve <reqId> …`.
+- `issueToJson` / `rootForId` moved into `@hivemind/core` so the CLI and the desktop share one
+  JSON projection of an issue.
+- Docking a tile (World or a community view) and coming back to the canvas no longer refits the
+  terminal: a dock slot hands the tile back at its canvas size.
+- Known limit: a browser tile's page reloads once per view switch (Chromium re-attaches a moved
+  `<webview>`); its tabs and address survive.
+
+### Removed
+
+- **BREAKING: the hive MCP server is gone.** `packages/hive-mcp`, `hive mcp-stdio`, `hive add mcp`
+  and the `.mcp.json` hivemind wrote into workspaces are removed. Agents use the `hive` CLI
+  (`hive show --json`, `hive ctl …`) — one vocabulary for every runtime, not just the ones with
+  MCP support. Kiro's generated agent config no longer wires `mcpServers.hive`.
+- `templates/agentic/{CLAUDE.md,.mcp.json,hive-work,hive-workflow}` — the skill sources live in
+  `packages/hive-core/src/templates.ts` and the installer in `packages/hive-core/src/agentic.ts`
+  (shared by the CLI and the desktop).
+
+### Fixed
+
+- **Settings edits no longer overwrite each other.** The app persisted the whole settings object a
+  moment after you changed something, so anything written in between — `hive theme use`, another
+  window — was silently reverted. Every writer now applies dotted-path patches inside a lock held
+  across the read and the write (`<settings>.json.lock`; a writer that cannot take it fails with a
+  clear error rather than removing someone else's lock, and a lock left by a crashed writer is
+  cleared explicitly), the app sends only the paths you actually changed, one write at a time, and
+  an edit you are still making is kept on screen when someone else's change arrives. If a write
+  fails (a read-only file, a lock it could not take) the edit is kept and goes out with your next
+  change rather than being retried in a loop.
+- **Opening a file from a terminal no longer loses the file.** Clicking a path in a terminal opened
+  an empty editor when the frame had no editor tile yet — the editor spawned, the path was dropped.
+  The path now travels with the spawn (`SpawnOpts.file`), including when the spawn reuses the
+  frame's existing editor, so every caller that opens a file into a fresh editor gets the tab.
+- **Closing a tile no longer leaves its geometry behind.** `positions`, `sizes` and `frameOf`
+  entries keyed by a closed tile's id stayed in the persisted layout for the life of the
+  workspace (and `frameOf` kept claiming a tile that no longer existed). They are dropped with
+  the tile.
+
+- The PTY daemon refuses to start on a non-absolute socket path (it used to write its hook
+  scripts, the pi bridge extension and the HCP socket into the launcher's current directory —
+  the stray `undefined/` at the repo root). The stray directory is deleted.
+
+### Migration
+
+1. Run `hive init` (or `hive add skill`) in each workspace: it installs the rewritten `hive-work`,
+   `hive-workflow` and `hivemind` skills, refreshes any generated skill that still says
+   `mcp__hive__*`, and **removes the stale `hive` entry from an existing `.mcp.json`** so claude
+   stops reporting a failed MCP server. Delete any hand-written `hive` MCP config elsewhere.
+2. `hive add mcp` and `hive mcp-stdio` no longer exist; nothing replaces them — the CLI is the API.
+3. Scripts parsing `hive ctl` output: read `--json` (`{ok, data}` / `{ok:false,code,message}`)
+   and the exit codes above; a `read` that times out now exits 4.
+4. Nothing in `.hivemind/` changed shape; saved canvas layouts migrate automatically.
 ## [1.17.1] — 2026-09-10
 
 ### Added
@@ -164,7 +448,6 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
   unchanged context to find the actual edits. (The existing view popover's `diff`/`full`
   toggle still controls whether unchanged context collapses.)
 
-
 ## [1.14.3] — 2026-07-15
 
 ## [1.14.2] — 2026-07-15
@@ -176,7 +459,6 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
   did **not** actually recover the frame rate — profiling points the FPS cost at Chromium
   compositing (translucent/blurred tiles over an animated wallpaper), not terminal glyph
   rendering. Agent tiles go back to the DOM crispness path pending a compositing-side fix.
-
 
 ## [1.14.1] — 2026-07-15
 
@@ -190,7 +472,6 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
   reason; the crispness boost had quietly overridden it. Agent tiles now stay on WebGL
   (already supersampled to a ≥2× atlas, so still crisp at dpr=1). Plain shell tiles keep
   the DOM crispness boost.
-
 
 ## [1.14.0] — 2026-07-15
 

@@ -1,6 +1,8 @@
 /** Typed contract for IPC between main and renderer. */
 import type { Issue, IssueSummary, IssueState, AcceptanceItem, Assignee, LinkType, IssuePatch } from "@hivemind/core/types";
+import type { ViewManifest } from "@hivemind/view-sdk/manifest";
 import type { NotificationSettings } from "./notification-settings.js";
+import type { ReviewComment } from "@hivemind/core/review";
 export type { NotificationSettings };
 
 // IssuePatch is owned by @hivemind/core/types (node-free) — re-export so renderer
@@ -62,19 +64,22 @@ export interface GitStatusSnapshot {
   head: string;
 }
 
+/** Every scope may hide reindent-only changes (`git diff --ignore-all-space`). */
+interface DiffScopeBase { ignoreWhitespace?: boolean }
+
 export type DiffScope =
-  | { kind: "working"; staged?: boolean }
+  | ({ kind: "working"; staged?: boolean } & DiffScopeBase)
   // base...head merge-base (3-dot) diff — what `head` adds since it diverged
   // from `base`, the same semantics GitHub/Azure PRs show. `head` defaults to
   // HEAD (review another branch against the checkout); set it to review any two
   // arbitrary branches without a remote PR.
-  | { kind: "branch"; base?: string; head?: string }
+  | ({ kind: "branch"; base?: string; head?: string } & DiffScopeBase)
   // Committed-but-not-pushed: the net diff of local commits ahead of the
   // branch's remote tracking ref (`@{upstream}...HEAD`). Optional `base`
   // overrides the auto-resolved upstream so this same scope serves future
   // "ahead of <any ref>" reviews without a new variant.
-  | { kind: "unpushed"; base?: string }
-  | { kind: "commit"; sha: string };
+  | ({ kind: "unpushed"; base?: string } & DiffScopeBase)
+  | ({ kind: "commit"; sha: string } & DiffScopeBase);
 
 export interface DiffPayload {
   /** Unified-diff patch text (`git diff` output). */
@@ -117,36 +122,74 @@ export interface WorktreeCreateOpts {
   includeFiles?: string[];
 }
 
-// ── remote (SSH) frames ───────────────────────────────────────────────────
-/** Auth for a remote host. SSH agent is always tried first; these are the
- *  explicit fallbacks. */
-export interface RemoteAuth {
-  /** Path to a private key file. */
-  privateKeyPath?: string;
-  /** Passphrase for an encrypted private key. */
-  passphrase?: string;
-  /** Password (for hosts without key auth). Held in memory only, never persisted. */
-  password?: string;
-  /** Username override (else parsed from the uri, else $USER). */
-  username?: string;
-}
-/** One remote directory entry (SFTP) for the folder picker / tree. */
+// ── machines (saved ssh hosts, shared with `hive machine`) ────────────────
+/** One remote directory entry for the folder picker / tree. */
 export interface RemoteDirEntry {
   name: string;
   isDir: boolean;
   isSymlink: boolean;
-  size: number;
-  mtime: number;
 }
-/** A saved remote connection (password lives encrypted in the OS keychain — the
- *  renderer only learns whether one exists). */
-export interface SavedHost {
+/** `attention` needs a person (host key, auth); `no-hive` works without surviving drops. */
+export type MachineState = "idle" | "connecting" | "online" | "reconnecting" | "offline" | "attention" | "no-hive";
+export interface MachineStatus {
+  state: MachineState;
+  /** ssh's own words for the last failure. */
+  detail?: string;
+  /** Daemon round trip, measured while connected. */
+  rttMs?: number;
+  /** The host offered password auth and we have none it can use — asking for one is the fix. */
+  needsPassword?: boolean;
+  at: number;
+}
+export interface MachineInfo {
+  id: string;
+  label: string;
+  /** `alias`, `user@host` or `ssh://user@host:port`. */
+  target: string;
+  enabled: boolean;
+  platform?: string;
+  hivePath?: string;
+  /** What its frames' ssh:// uris resolve to. */
   hostId: string;
-  host: string;
-  port: number;
-  user: string;
-  hasPassword: boolean;
-  hasKey: boolean;
+}
+export interface MachinesSnapshot {
+  machines: MachineInfo[];
+  /** By host id, including hosts of frames that are not saved machines. */
+  status: Record<string, MachineStatus>;
+  catalogError?: string;
+}
+export interface MachineProbe {
+  platform: string;
+  hivePath?: string;
+  hiveVersion?: string;
+  daemon?: boolean;
+}
+export interface MachineAddRequest {
+  target: string;
+  label?: string;
+  /** Put this version's `hive` there when it has none (or one too old). */
+  install?: boolean;
+  /** For hosts without key auth; kept in the OS keychain, never in the catalog. */
+  password?: string;
+}
+export interface MachineAddResult {
+  machine: MachineInfo;
+  probe: MachineProbe;
+  installed: boolean;
+  /** Absent unless a password was given and no OS keychain could hold it (it lasts this session only). */
+  passwordSaved?: false;
+}
+/** A terminal session in a machine's daemon. */
+export interface SessionSummary {
+  id: string;
+  state: "live" | "frozen";
+  cmd: string;
+  args: string[];
+  cwd: string;
+  viewers: number;
+  cols: number;
+  rows: number;
+  title?: string;
 }
 
 // ── app version + self-update ─────────────────────────────────────────────
@@ -167,9 +210,74 @@ export interface UpdateStatus {
   ok: boolean;
 }
 
+import type { LegacyRendererState, Settings } from "@hivemind/core/settings-schema";
+import type { CatalogEntry } from "@hivemind/core/plugin-catalog";
+
+/** One community view package as the main process sees it (see main/view-packages.ts). */
+export interface ViewPackageInfo {
+  id: string;
+  dir: string;
+  source: "user" | "repo";
+  manifest: ViewManifest | null;
+  error: string | null;
+  url: string | null;
+}
+
 // ── full IPC surface ──────────────────────────────────────────────────────
 
 export interface HiveIpc {
+  // ── settings.json (main owns it; see main/settings-store.ts) ──
+  /** The whole settings object, synchronously (boot: no theme flash). */
+  settingsSync(): Settings;
+  settingsGet(): Promise<Settings>;
+  /** Set one dotted path and persist; resolves with the new settings. */
+  settingsSet(path: string, value: unknown): Promise<Settings>;
+  /** Apply several dotted-path patches in one locked read/modify/write. The
+   *  renderer sends THIS rather than a whole object: a full replace built from a
+   *  debounced UI snapshot reverts whatever the CLI (or another window) wrote in
+   *  the meantime. Resolves with the settings as written. */
+  settingsPatch(patches: readonly { path: string; value: unknown }[]): Promise<Settings>;
+  /** Whole-object write (a theme import). Merged onto the file under the same lock. */
+  settingsReplace(next: Settings): Promise<Settings>;
+  /** One-time import of the renderer's pre-2.0 localStorage keys. */
+  settingsMigrate(legacy: LegacyRendererState): Promise<Settings>;
+  settingsPath(): Promise<string>;
+  onSettingsChanged(cb: (s: Settings) => void): () => void;
+  // ── community views ───────────────────────────────────────
+  /** Installed view packages (user dir + this repo's .hivemind/views), each
+   *  with its load URL or the reason it will not load. Rescans on every call. */
+  listViews(repoRoot: string | null): Promise<ViewPackageInfo[]>;
+  /** Agent providers on disk. Only manifests cross — a def carries detect(). */
+  listAgents(repoRoot: string | null): Promise<{
+    agents: Array<{ id: string; file: string; source: "user" | "repo"; manifest: unknown; error: string | null; disabled: boolean }>;
+    shadowed: Array<{ id: string; by: string; over: string }>;
+  }>;
+  /** Where each agent's CLI was found on PATH (null = not installed). Runs nothing. */
+  agentPresence(): Promise<Record<string, { path: string | null }>>;
+  /** Found, and answering `--version` like a CLI (not a same-named program). */
+  verifyAgent(id: string): Promise<{ path: string | null; version?: string; mismatch?: string }>;
+  /** The values each of an agent's options takes, read from its CLI. Cached per binary version. */
+  agentOptionChoices(id: string): Promise<Record<string, { values: string[]; from: "help" | "list" | null; error?: string }>>;
+  previewViewInstall(): Promise<{ token: string; package: ViewPackageInfo; replacesVersion: string | null } | null>;
+  /** The published plugin catalog (hash-pinned agents and views). */
+  pluginCatalog(): Promise<CatalogEntry[]>;
+  /** Ids of installed agents whose manifest differs from the one the catalog lists. */
+  outdatedAgents(): Promise<string[]>;
+  /** Download and verify a catalog plugin, then return it for review. A view installs with
+   *  `installViewPackage(token)`, an agent with `installCatalogAgent(token)`. */
+  reviewCatalogPlugin(type: CatalogEntry["type"], id: string): Promise<
+    | ({ type: "view" } & { token: string; package: ViewPackageInfo; replacesVersion: string | null })
+    | { type: "agent"; token: string; id: string; label: string; bin: string; command: string; flags: string[]; worker: boolean; replaces: boolean; does: string[]; reads?: string; install?: { url: string; command?: string } }
+  >;
+  installCatalogAgent(token: string): Promise<void>;
+  /** Remove an agent you installed; a catalog one is then never added automatically again. */
+  removeAgent(id: string): Promise<void>;
+  /** Add catalog agents whose CLI was found; what was added and what each can do. Runs once per launch. */
+  autoInstallAgents(): Promise<Array<{ id: string; label: string; does: string[] }>>;
+  installViewPackage(token: string): Promise<void>;
+  removeViewPackage(id: string): Promise<void>;
+  /** Main's watchdog saw a plugin frame peg a core for several samples. */
+  onViewRunaway(cb: (e: { id: string; cpuPct: number }) => void): () => void;
   // ── app version + self-update ─────────────────────────────
   /** This app's version string (from apps/desktop/package.json). */
   getAppVersion(): Promise<string>;
@@ -252,6 +360,12 @@ export interface HiveIpc {
   /** Remove all links between two issues (both ends). */
   unlinkIssue(root: string, id: string, otherId: string): Promise<{ removed: number }>;
 
+  // ── review comments ───────────────────────────────────────
+  /** Every comment on this repo, resolved ones included. */
+  reviewList(repoPath: string): Promise<ReviewComment[]>;
+  /** Replace the whole list — what the diff tile does after an edit. */
+  reviewSave(repoPath: string, comments: ReviewComment[]): Promise<void>;
+
   // ── git ───────────────────────────────────────────────────
   gitStatus(repoPath: string): Promise<GitStatusSnapshot>;
   /** Tracked + untracked paths (respecting .gitignore). Used by the file-tree tile. */
@@ -291,19 +405,22 @@ export interface HiveIpc {
    *  read off disk (incl. over SSH) instead of only on-screen. */
   diagLog(line: string): Promise<void>;
 
-  // ── remote (SSH) frames ───────────────────────────────────
-  /** Probe + register auth for an ssh://[user@]host[:port]/ target; returns the
-   *  remote home dir + the connection-pool host id. Throws on connect failure.
-   *  `remember` saves the host (password encrypted in the OS keychain). */
-  sshConnect(uri: string, auth: RemoteAuth, remember?: boolean): Promise<{ home: string; hostId: string }>;
+  // ── machines ──────────────────────────────────────────────
+  machinesGet(): Promise<MachinesSnapshot>;
+  onMachines(cb: (s: MachinesSnapshot) => void): () => void;
+  /** Probe, optionally install hive, then save. Errors starting `[attention]` need the user to run `ssh <target>` once. */
+  machineAdd(req: MachineAddRequest): Promise<MachineAddResult>;
+  machineCheck(id: string): Promise<MachineProbe>;
+  machineInstall(id: string): Promise<MachineProbe>;
+  machineUpdate(id: string, patch: { label?: string; enabled?: boolean }): Promise<void>;
+  machineRemove(id: string): Promise<void>;
+  /** Store a password for a machine; false when the OS keychain is unavailable (kept in memory only). */
+  machineSetPassword(id: string, password: string): Promise<boolean>;
+  /** Sessions in the daemon behind `uri`'s host; null = this computer. */
+  machineSessions(uri: string | null): Promise<SessionSummary[]>;
+  machineReconnect(hostId: string): Promise<void>;
   /** List a remote directory (for the folder picker). Empty dir → remote home. */
   sshListDir(uri: string, dir: string): Promise<{ dir: string; entries: RemoteDirEntry[] }>;
-  /** Saved connections (host/user/port + whether a password/key is stored). */
-  sshSavedHosts(): Promise<SavedHost[]>;
-  /** Connect using a saved host's stored credentials. Returns its home + parts. */
-  sshConnectSaved(hostId: string): Promise<{ home: string; host: string; port: number; user: string }>;
-  /** Delete a saved connection. */
-  sshForgetHost(hostId: string): Promise<void>;
 
   // ── worktree ──────────────────────────────────────────────
   worktreeList(repoPath: string): Promise<WorktreeEntry[]>;
@@ -327,9 +444,13 @@ export interface HiveIpc {
      *  claude's positional argv (which auto-submits), NOT typed into the booting
      *  TUI — see applyInitialPrompt / HIVE_INITIAL_PROMPT. */
     initialPrompt?: string;
+    /** `tileId` names an existing daemon session to show; never start one. */
+    attachOnly?: boolean;
+    /** With attachOnly: a running session only, not one saved before a reboot. */
+    liveOnly?: boolean;
   }): Promise<{ pid: number }>;
-  /** Install the agentic stack (hive MCP + hive-work skill + CLAUDE.md) into a
-   *  repo so a spawned claude can actually work issues. Idempotent. */
+  /** Install the agentic stack (hive skills + CLAUDE.md section) into a repo so
+   *  a spawned agent can actually work issues with `hive`. Idempotent. */
   installAgentic(dir: string): Promise<{ ok: boolean }>;
   ptyWrite(tileId: string, data: string): void;
   ptyResize(tileId: string, cols: number, rows: number): void;

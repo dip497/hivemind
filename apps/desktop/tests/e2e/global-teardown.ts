@@ -11,10 +11,16 @@
 // daemon's argv), while the real daemon's socket is under `$HOME/.config/`.
 // Match the temp-dir socket path, which the production daemon can never have.
 import { execSync } from "node:child_process";
+import fs from "node:fs";
 import os from "node:os";
 
 export default function globalTeardown(): void {
   const tmp = os.tmpdir(); // e.g. /tmp — the prefix of every test socket path
+  // The isolated Electron profile playwright.config created for this run.
+  const xdg = process.env.XDG_CONFIG_HOME;
+  if (xdg && xdg.startsWith(tmp) && xdg.includes("hivemind-e2e-xdg-")) {
+    try { fs.rmSync(xdg, { recursive: true, force: true }); } catch { /* best-effort */ }
+  }
   try {
     // `-f` matches the full command line: `electron …/pty-daemon.js <socketPath>`.
     // Anchoring on the script + the tmp-dir socket prefix excludes the real

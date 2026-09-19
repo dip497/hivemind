@@ -44,8 +44,10 @@ test("an unselected terminal is locked + blurred (no keyboard); selecting re-ena
   await page.waitForTimeout(300);
   expect(await termFocused(), "selected terminal is focused").toBe(true);
 
-  // 2) deselect via the pane → locked + blurred (keys can't reach it).
-  await page.mouse.click(5, 200);
+  // 2) deselect via the pane → locked + blurred (keys can't reach it). Click
+  //    the pane itself (a screen coordinate lands on the Layers rail in a
+  //    fresh profile), well away from the tile.
+  await page.locator(".react-flow__pane").click({ position: { x: 1200, y: 40 }, force: true });
   await page.waitForTimeout(400);
   expect(await wrapperLocked(), "unselected tile is locked").toBe(true);
   expect(await termFocused(), "unselected terminal is blurred").toBe(false);

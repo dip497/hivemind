@@ -3,7 +3,7 @@
  *
  * Two namespaces flow through the control plane:
  *   - BARE id  — `tile-claude-<ts>`: what the renderer's tiles array + tile.list
- *     expose, and what every MCP/CLI driver passes back in.
+ *     expose, and what every driver (`hive ctl`, the pi extension) passes back in.
  *   - PTY id   — `hm:<bareId>` (a persistent daemon pty, see TerminalTile): the
  *     key for the pty itself, the OutputRecorder, the TurnTracker, and the
  *     injected `HIVEMIND_TILE` env (so the Stop hook reports under it).
@@ -13,6 +13,13 @@
  * (values crossing the namespace boundary without conversion).
  */
 export const HM_PREFIX = "hm:";
+
+let lastMinted = 0;
+/** A fresh `<prefix>-<n>` id. The clock alone repeats within a millisecond, which a fanout of workers hits. */
+export function mintId(prefix: string): string {
+  lastMinted = Math.max(Date.now(), lastMinted + 1);
+  return `${prefix}-${lastMinted}`;
+}
 
 /** Bare id → pty id (idempotent). */
 export const toPtyId = (id: string): string => (id.startsWith(HM_PREFIX) ? id : HM_PREFIX + id);

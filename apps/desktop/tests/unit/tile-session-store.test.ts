@@ -16,7 +16,7 @@ import {
   tileSessionFile,
   trackerSource,
   writeTrackedSession,
-} from "../../src/main/tile-session-store.ts";
+} from "@hivemind/agents/node";
 
 function freshDir(): string {
   return mkdtempSync(path.join(tmpdir(), "hm-tss-"));

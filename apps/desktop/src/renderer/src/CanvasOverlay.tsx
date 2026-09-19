@@ -12,6 +12,7 @@
  * Videos are always muted + loop + playsInline (autoplay requires muted).
  */
 import { useEffect, useRef } from "react";
+import { useWorkspaceOccluded } from "./workspace-occlusion";
 import { useTheme, type MediaLayer, type MediaAnchor } from "./theme-store";
 
 const clampSize = (n: number) => Math.min(1, Math.max(0.15, n));
@@ -63,16 +64,38 @@ export function MediaLayerView({
   scene: string;
 }): React.ReactElement | null {
   const reduceMotion = usePrefersReducedMotion();
+  const occluded = useWorkspaceOccluded();
+  const paused = reduceMotion || occluded;
   const videoRef = useRef<HTMLVideoElement>(null);
+  const reloadedRef = useRef(false);
+  useEffect(() => { reloadedRef.current = false; }, [layer.url]);
+  // Re-arm after a successful playback: a source that has already played and errors again
+  // is hitting a transient decode fault, not a bad file — worth reloading again.
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const ok = () => { reloadedRef.current = false; };
+    v.addEventListener("playing", ok);
+    return () => v.removeEventListener("playing", ok);
+  }, [layer.url]);
 
   // Honor prefers-reduced-motion: pause the clip so the layer is still shown
   // (a frozen frame) but adds no motion. Live otherwise.
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
-    if (reduceMotion) v.pause();
-    else void v.play().catch(() => {});
-  }, [reduceMotion, layer.url]);
+    if (paused) { v.pause(); return; }
+    // A play() that loses an interleaved pause() rejects with AbortError and, since
+    // only a `paused` change re-runs this, would never be retried — the layer stays
+    // frozen after Settings closes. Retry until this effect's state changes.
+    let stale = false;
+    const start = (): void => {
+      if (stale) return;
+      void v.play().catch((e: DOMException) => { if (e?.name === "AbortError") setTimeout(start, 250); });
+    };
+    start();
+    return () => { stale = true; };
+  }, [paused, layer.url]);
 
   if (!layer.url) return null;
 
@@ -87,6 +110,7 @@ export function MediaLayerView({
     position: "fixed",
     zIndex: z,
     opacity: layer.opacity,
+    visibility: occluded ? "hidden" : "visible",
     pointerEvents: "none",
     ...box,
   };
@@ -100,11 +124,18 @@ export function MediaLayerView({
         src={layer.url}
         // tiling isn't meaningful for <video> — fall back to cover.
         style={{ ...base, objectFit }}
-        autoPlay={!reduceMotion}
+        autoPlay={!paused}
         loop
         muted
         playsInline
         aria-hidden="true"
+        onError={() => {
+          // The first load can hit a transient decode error (PIPELINE_ERROR_DECODE on a
+          // busy machine); one reload clears it. A second failure leaves the frozen frame.
+          const v = videoRef.current;
+          if (v && !reloadedRef.current) { reloadedRef.current = true; v.load(); return; }
+          v?.pause();
+        }}
       />
     );
   }

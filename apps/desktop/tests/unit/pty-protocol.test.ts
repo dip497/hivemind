@@ -38,3 +38,15 @@ test("hundreds of small frames in one chunk decode in order (linear-time path)",
   assert.equal(lines.length, n);
   assert.equal((JSON.parse(lines[n - 1]!) as { data: string }).data, `c${n - 1}`);
 });
+
+test("a line split across many reads is found once, whole — and scanning stays linear", async () => {
+  const { makeLineDecoder } = await import("../../src/main/pty-protocol.js");
+  const lines: string[] = [];
+  const feed = makeLineDecoder((l) => lines.push(l));
+  const payload = "x".repeat(200_000);
+  for (let i = 0; i < payload.length; i += 1000) feed(payload.slice(i, i + 1000)); // 200 reads, no newline yet
+  feed("\nnext\npartial");
+  feed("-end\n");
+  assert.deepEqual(lines.map((l) => l.length), [200_000, 4, 11]);
+  assert.equal(lines[2], "partial-end");
+});
