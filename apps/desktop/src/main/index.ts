@@ -1,4 +1,5 @@
 import { installViewManagementIpc } from "./view-packages.js";
+import desktopPkg from "../../package.json" with { type: "json" };
 import { installPluginCatalogIpc } from "./plugin-catalog-ipc.js";
 /** Electron main process — owns the BrowserWindow + IPC + PtyHost + git/worktree. */
 import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, screen, session, shell, webContents, type WebContents } from "electron";
@@ -91,7 +92,7 @@ import { labelOf as hcpLabelOf } from "./hcp/names.js";
 import { Mailbox } from "./hcp/mailbox.js";
 import { TurnTracker } from "./hcp/turn-tracker.js";
 import { SubagentTracker } from "./hcp/subagent-tracker.js";
-import { ipcPath, upgradeCommand } from "./platform.js";
+import { ipcPath, upgradeCommand, windowsStartMenuShortcut } from "./platform.js";
 import { SubagentReaper } from "./hcp/subagent-reaper.js";
 import { notifyStatusFor } from "./hcp/notification-map.js";
 import { OutputRecorder } from "./hcp/output-recorder.js";
@@ -120,6 +121,12 @@ app.setName("hivemind");
 // Dev runs on a SEPARATE profile (~/.config/hivemind-dev) so `pnpm start`/`pnpm
 // dev` never touch the installed AppImage's canvas, and both can run at once.
 if (!app.isPackaged) app.setName("hivemind-dev");
+
+// Windows drops every toast from an app whose AUMID doesn't match a Start Menu shortcut
+// carrying the same id, so claim it before anything can notify. Inlined at build time:
+// electron-builder strips `build` from the package.json it packages.
+const windowsAppId: string = desktopPkg.build.appId;
+if (process.platform === "win32") app.setAppUserModelId(windowsAppId);
 
 // Renaming the app (above) moves the userData dir to ~/.config/hivemind. Without
 // this, EVERY existing user loses their canvas (frames/tiles/layout live in the
@@ -171,6 +178,27 @@ function migrateLegacyProfile(): void {
   }
 }
 migrateLegacyProfile();
+
+// Rewrite the Start Menu shortcut with our AUMID: install.ps1 can only write an
+// AUMID-less fallback (its COM API cannot set one), and without the id Windows drops
+// toasts. Same file install.ps1 used, so there is exactly one shortcut; runs once at
+// ready, packaged only, best-effort — a locked or missing Start Menu must never block
+// the app.
+function refreshWindowsStartMenuShortcut(): void {
+  if (process.platform !== "win32" || !app.isPackaged || !windowsAppId) return;
+  const lnk = windowsStartMenuShortcut();
+  if (!lnk) return;
+  try {
+    shell.writeShortcutLink(lnk.file, existsSync(lnk.file) ? "replace" : "create", {
+      target: process.execPath,
+      cwd: path.dirname(process.execPath),
+      appUserModelId: windowsAppId,
+      description: "Hivemind",
+    });
+  } catch (e) {
+    console.warn("hivemind: could not refresh the Start Menu shortcut:", (e as Error).message);
+  }
+}
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -1439,6 +1467,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
   // Community view packages: hm-view://<id>/… served to sandboxed iframes.
   registerViewScheme();
   app.whenReady().then(async () => {
+    refreshWindowsStartMenuShortcut();
     handleViewProtocol();
     installSettingsIpc(() => mainWindow);
     void initMachines({

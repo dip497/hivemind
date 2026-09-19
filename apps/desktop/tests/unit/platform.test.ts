@@ -12,6 +12,7 @@ import {
   ipcPath,
   repairShellSpec,
   upgradeCommand,
+  windowsStartMenuShortcut,
 } from "../../src/main/platform.js";
 
 test("ipcPath: posix keeps the socket file inside userData", () => {
@@ -79,4 +80,16 @@ test("upgradeCommand: powershell on windows, bash elsewhere", () => {
   const nix = upgradeCommand("dip497/hivemind", "linux");
   assert.equal(nix.file, "bash");
   assert.ok(nix.args.at(-1)?.includes("install.sh"));
+});
+
+test("windowsStartMenuShortcut: the exact file install.ps1 writes, same name", () => {
+  const win = windowsStartMenuShortcut({ APPDATA: "C:\\Users\\u\\AppData\\Roaming" }, "win32");
+  assert.equal(win?.name, "hivemind.lnk");
+  assert.equal(win?.file, path.join("C:\\Users\\u\\AppData\\Roaming", "Microsoft", "Windows", "Start Menu", "Programs", "hivemind.lnk"));
+});
+
+test("windowsStartMenuShortcut: survives a missing APPDATA, and is null off Windows", () => {
+  const win = windowsStartMenuShortcut({ USERPROFILE: "C:\\Users\\u" }, "win32");
+  assert.ok(win?.file.endsWith(path.join("AppData", "Roaming", "Microsoft", "Windows", "Start Menu", "Programs", "hivemind.lnk")));
+  assert.equal(windowsStartMenuShortcut({}, "linux"), null);
 });

@@ -9,6 +9,7 @@
     "outDir": "out/.tsc-node"
   },
   "include": [
+    "package.json",
     "src/main/**/*",
     "src/preload/**/*",
     "src/shared/**/*",

@@ -86,3 +86,20 @@ export function upgradeCommand(
   const url = `https://raw.githubusercontent.com/${repo}/main/install.sh`;
   return { file: "bash", args: ["-c", `curl -fsSL ${url} | bash`] };
 }
+
+/**
+ * The Start Menu shortcut the app keeps on Windows, and its file name.
+ *
+ * The exact file install.ps1 writes as a first-run fallback: Windows only shows toasts
+ * for an app whose AUMID matches a Start Menu shortcut, and the fallback cannot carry
+ * one — so the app rewrites this same file (never adds a second) at launch.
+ */
+export function windowsStartMenuShortcut(
+  env: NodeJS.ProcessEnv = process.env,
+  platform: Platform = process.platform,
+): { file: string; name: string } | null {
+  if (platform !== "win32") return null;
+  const roaming = env.APPDATA || path.join(env.USERPROFILE ?? "", "AppData", "Roaming");
+  const name = "hivemind.lnk";
+  return { name, file: path.join(roaming, "Microsoft", "Windows", "Start Menu", "Programs", name) };
+}

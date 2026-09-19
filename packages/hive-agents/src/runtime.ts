@@ -54,6 +54,9 @@ export interface LaunchRequest {
   session?: string;
   /** Set when this tile runs unattended under supervision. */
   supervise?: string;
+  /** Platform the command line is rendered for — the running host by default, so a
+   *  test on any OS can render the Windows form. */
+  platform?: NodeJS.Platform;
   paths: RuntimePaths;
 }
 

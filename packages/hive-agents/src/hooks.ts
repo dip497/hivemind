@@ -22,11 +22,41 @@ const ENV_PREFIX: Record<string, (req: LaunchRequest) => Record<string, string>>
   approval: (req): Record<string, string> => (req.supervise ? { HIVE_SUPERVISE: req.supervise } : {}),
 };
 
-/** The command line the daemon runs for one of its own hooks, attributed to a tile. */
-export function hookCommand(name: string, hook: HookScript, req: LaunchRequest): string {
+/** The variables one of our hooks runs with, attributed to a tile. */
+function hookEnv(name: string, req: LaunchRequest): Record<string, string> {
   // A document written once for every tile of an agent cannot name one of them; those hooks
   // are attributed by the spawn environment instead, which carries the same tile id.
-  const env = { ...(req.tileId ? { HIVEMIND_TILE: req.tileId } : {}), ...(ENV_PREFIX[name]?.(req) ?? {}) };
+  return { ...(req.tileId ? { HIVEMIND_TILE: req.tileId } : {}), ...(ENV_PREFIX[name]?.(req) ?? {}) };
+}
+
+/** Single-quote for a PowerShell literal — the only escape inside one is a doubled quote. */
+function pshq(s: string): string {
+  return `'${s.replace(/'/g, "''")}'`;
+}
+
+/** Used when the render context names no Windows root. Forward slashes, never backslashes:
+ *  a backslash would be eaten by the POSIX-style shells that can end up running this line. */
+const DEFAULT_SYSTEM_ROOT = "C:/Windows";
+
+/** The command line for one of our hooks on Windows, where no POSIX shell stands in front
+ *  of it. The script travels base64-encoded (UTF-16LE) so the rendered string is only a
+ *  forward-slash path plus bare base64 — no quotes, `$` or backslashes — and survives any
+ *  interpreter unchanged; the call operator runs the hook as a native child that inherits
+ *  stdin, which is where the agent hands the hook its JSON payload. */
+function win32HookCommand(env: Record<string, string>, hook: HookScript, req: LaunchRequest): string {
+  const root = (req.env.SystemRoot ?? DEFAULT_SYSTEM_ROOT).replace(/\\/g, "/");
+  const exe = `${root}/System32/WindowsPowerShell/v1.0/powershell.exe`;
+  const pairs: Array<[string, string]> = [...Object.entries(env), ["ELECTRON_RUN_AS_NODE", "1"]];
+  const sets = pairs.map(([k, v]) => `$env:${k}=${pshq(v)}`).join("; ");
+  const argv = [pshq(req.paths.execPath), pshq(hook.path), ...(hook.arg ? [pshq(hook.arg)] : [])].join(" ");
+  const script = `$ProgressPreference='SilentlyContinue'${sets ? `; ${sets}` : ""}; & ${argv}; exit $LASTEXITCODE`;
+  return `${exe} -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand ${Buffer.from(script, "utf16le").toString("base64")}`;
+}
+
+/** The command line the daemon runs for one of its own hooks, attributed to a tile. */
+export function hookCommand(name: string, hook: HookScript, req: LaunchRequest): string {
+  const env = hookEnv(name, req);
+  if ((req.platform ?? process.platform) === "win32") return win32HookCommand(env, hook, req);
   const parts = Object.entries(env).map(([k, v]) => `${k}=${shq(v)}`);
   parts.push("ELECTRON_RUN_AS_NODE=1", shq(req.paths.execPath), shq(hook.path));
   if (hook.arg) parts.push(shq(hook.arg));

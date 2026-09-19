@@ -503,6 +503,70 @@ jobs:
             throw "no \\\\.\pipe\hivemind-* appeared within 60s (app: $code)"
           }
 
+      - name: "Smoke: hook commands render and run through cmd.exe"
+        # The hooks wiring renders a PowerShell -EncodedCommand on win32; driven through
+        # cmd.exe exactly as an agent's own shell would, this proves the encoded script,
+        # the env vars and the stdin hand-off all reach the hook process.
+        shell: pwsh
+        run: |
+          bun build packages/hive-agents/src/hooks.ts --outfile "$env:RUNNER_TEMP/hooks.cjs" --format=cjs --target=node
+          $hook = @'
+          const fs = require("fs");
+          let input = "";
+          process.stdin.on("data", (d) => { input += d; });
+          process.stdin.on("end", () => {
+            fs.writeFileSync(process.env.HOOK_OUT, JSON.stringify({ env: process.env.HIVEMIND_TILE, stdin: input.trim() }));
+          });
+          '@
+          Set-Content -Path "$env:RUNNER_TEMP\hook-smoke.cjs" -Value $hook -Encoding UTF8
+          $js = @'
+          const { hookCommand } = require(process.env.HOOKS_CJS);
+          const env = { ...(process.env.SystemRoot ? { SystemRoot: process.env.SystemRoot } : {}) };
+          const cmd = hookCommand("stop", { path: process.env.HOOK_SCRIPT }, {
+            tileId: "tile-smoke", cwd: process.env.RUNNER_TEMP, args: [], env, phase: "spawn", platform: "win32",
+            paths: {
+              private: process.env.RUNNER_TEMP, execPath: process.execPath, hooks: {},
+              tileSessionsDir: process.env.RUNNER_TEMP, home: process.env.RUNNER_TEMP,
+            },
+          });
+          console.log(cmd);
+          '@
+          Set-Content -Path "$env:RUNNER_TEMP\render-smoke.js" -Value $js -Encoding UTF8
+          $electron = Get-ChildItem desktop-deploy/dist-electron -Recurse -Filter hivemind.exe | Select-Object -First 1
+          if (-not $electron) { throw "no unpacked hivemind.exe" }
+          $env:HOOKS_CJS = "$env:RUNNER_TEMP\hooks.cjs"
+          $env:HOOK_SCRIPT = "$env:RUNNER_TEMP\hook-smoke.cjs"
+          $env:HOOK_OUT = "$env:RUNNER_TEMP\hook-out.json"
+          $env:ELECTRON_RUN_AS_NODE = "1"
+          $p = Start-Process -FilePath $electron.FullName -ArgumentList "`"$env:RUNNER_TEMP\render-smoke.js`"" -Wait -PassThru -NoNewWindow `
+            -RedirectStandardOutput "$env:RUNNER_TEMP\render-out.txt" -RedirectStandardError "$env:RUNNER_TEMP\render-err.txt"
+          Get-Content "$env:RUNNER_TEMP\render-out.txt"; Get-Content "$env:RUNNER_TEMP\render-err.txt"
+          Remove-Item Env:\ELECTRON_RUN_AS_NODE
+          if ($p.ExitCode -ne 0) { throw "rendering the hook command failed" }
+          $cmd = (Get-Content "$env:RUNNER_TEMP\render-out.txt" -Raw).Trim()
+          if ($cmd -notmatch '-EncodedCommand [A-Za-z0-9+/=]+$') { throw "not an encoded hook command: $cmd" }
+          if ($cmd -match '["''$]') { throw "hook command carries quoting metacharacters" }
+          if ($cmd -match '\\') { throw "hook command carries a backslash" }
+
+          Remove-Item "$env:RUNNER_TEMP\hook-out.json" -ErrorAction SilentlyContinue
+          $psi = New-Object System.Diagnostics.ProcessStartInfo
+          $psi.FileName = $env:ComSpec
+          $psi.Arguments = "/c $cmd"
+          $psi.UseShellExecute = $false
+          $psi.RedirectStandardInput = $true
+          $psi.RedirectStandardOutput = $true
+          $psi.RedirectStandardError = $true
+          $c = [System.Diagnostics.Process]::Start($psi)
+          $c.StandardInput.Write('{"ok":1}')
+          $c.StandardInput.Close()
+          $null = $c.StandardOutput.ReadToEndAsync(); $null = $c.StandardError.ReadToEndAsync()
+          if (-not $c.WaitForExit(60000)) { throw "hook command timed out" }
+          if ($c.ExitCode -ne 0) { throw "hook command exited $($c.ExitCode)" }
+          $got = Get-Content "$env:RUNNER_TEMP\hook-out.json" -Raw | ConvertFrom-Json
+          if ($got.env -ne 'tile-smoke') { throw "HIVEMIND_TILE did not reach the hook: '$($got.env)'" }
+          if ($got.stdin -ne '{"ok":1}') { throw "stdin did not reach the hook: '$($got.stdin)'" }
+          Write-Host "hook saw HIVEMIND_TILE=$($got.env) and stdin=$($got.stdin)"
+
       - name: Stage release artifacts
         shell: pwsh
         run: |

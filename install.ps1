@@ -116,6 +116,7 @@ function Add-ToUserPath {
 }
 
 function Add-StartMenuShortcut {
+  # Fallback only: WScript.Shell cannot set an AppUserModelID, so the app rewrites this same .lnk (AUMID-bearing) on first launch.
   $lnk = Join-Path ([Environment]::GetFolderPath("Programs")) "hivemind.lnk"
   $shell = New-Object -ComObject WScript.Shell
   $s = $shell.CreateShortcut($lnk)
