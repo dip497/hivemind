@@ -41,15 +41,22 @@ const DEFAULT_SYSTEM_ROOT = "C:/Windows";
 /** The command line for one of our hooks on Windows, where no POSIX shell stands in front
  *  of it. The script travels base64-encoded (UTF-16LE) so the rendered string is only a
  *  forward-slash path plus bare base64 — no quotes, `$` or backslashes — and survives any
- *  interpreter unchanged; the call operator runs the hook as a native child that inherits
- *  stdin, which is where the agent hands the hook its JSON payload. */
+ *  interpreter unchanged. The hook inherits stdin, where the agent hands it its JSON payload. */
 function win32HookCommand(env: Record<string, string>, hook: HookScript, req: LaunchRequest): string {
   const root = (req.env.SystemRoot ?? DEFAULT_SYSTEM_ROOT).replace(/\\/g, "/");
   const exe = `${root}/System32/WindowsPowerShell/v1.0/powershell.exe`;
   const pairs: Array<[string, string]> = [...Object.entries(env), ["ELECTRON_RUN_AS_NODE", "1"]];
   const sets = pairs.map(([k, v]) => `$env:${k}=${pshq(v)}`).join("; ");
-  const argv = [pshq(req.paths.execPath), pshq(hook.path), ...(hook.arg ? [pshq(hook.arg)] : [])].join(" ");
-  const script = `$ProgressPreference='SilentlyContinue'${sets ? `; ${sets}` : ""}; & ${argv}; exit $LASTEXITCODE`;
+  // The call operator returns at once for a GUI-subsystem exe (ours is one), so start it through
+  // .NET: no shell and no redirection means it inherits stdin/stdout and can be waited on.
+  const winArg = (v: string): string => `"${v}"`; // a Windows path cannot contain a double quote
+  const args = [hook.path, ...(hook.arg ? [hook.arg] : [])].map(winArg).join(" ");
+  const script = [
+    "$ProgressPreference='SilentlyContinue'", ...(sets ? [sets] : []),
+    "$s=New-Object System.Diagnostics.ProcessStartInfo",
+    `$s.FileName=${pshq(req.paths.execPath)}`, `$s.Arguments=${pshq(args)}`, "$s.UseShellExecute=$false",
+    "$p=[System.Diagnostics.Process]::Start($s)", "$p.WaitForExit()", "exit $p.ExitCode",
+  ].join("; ");
   return `${exe} -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand ${Buffer.from(script, "utf16le").toString("base64")}`;
 }
 

@@ -31,20 +31,24 @@ test("win32: the command decodes back to the script, with env vars and quoted pa
   expect(script).toBe(
     "$ProgressPreference='SilentlyContinue'"
     + "; $env:HIVEMIND_TILE='tile-1'; $env:HIVE_SUPERVISE='all'; $env:ELECTRON_RUN_AS_NODE='1'"
-    + "; & 'C:\\app\\hivemind.exe' 'C:\\ud\\hcp-stop-hook.cjs'; exit $LASTEXITCODE",
+    + "; $s=New-Object System.Diagnostics.ProcessStartInfo; $s.FileName='C:\\app\\hivemind.exe'"
+    + "; $s.Arguments='\"C:\\ud\\hcp-stop-hook.cjs\"'; $s.UseShellExecute=$false"
+    + "; $p=[System.Diagnostics.Process]::Start($s); $p.WaitForExit(); exit $p.ExitCode",
   );
   // A hook argument lands quoted after the script path, in the same escaping.
   const withArg = decode(hookCommand("stop", { path: hook.path, arg: "C:\\ud\\hcp.sock" }, req()));
   expect(withArg.script).toBe(
     "$ProgressPreference='SilentlyContinue'"
     + "; $env:HIVEMIND_TILE='tile-1'; $env:ELECTRON_RUN_AS_NODE='1'"
-    + "; & 'C:\\app\\hivemind.exe' 'C:\\ud\\hcp-stop-hook.cjs' 'C:\\ud\\hcp.sock'; exit $LASTEXITCODE",
+    + "; $s=New-Object System.Diagnostics.ProcessStartInfo; $s.FileName='C:\\app\\hivemind.exe'"
+    + "; $s.Arguments='\"C:\\ud\\hcp-stop-hook.cjs\" \"C:\\ud\\hcp.sock\"'; $s.UseShellExecute=$false"
+    + "; $p=[System.Diagnostics.Process]::Start($s); $p.WaitForExit(); exit $p.ExitCode",
   );
 });
 
 test("win32: a single quote in a path is doubled, not broken out of", () => {
   const { script } = decode(hookCommand("stop", hook, req({ paths: { ...req().paths, execPath: "C:\\app\\o'brien.exe" } })));
-  expect(script).toContain("; & 'C:\\app\\o''brien.exe'");
+  expect(script).toContain("$s.FileName='C:\\app\\o''brien.exe'");
 });
 
 test("win32: the rendered line is bare of quoting metacharacters outside the powershell path", () => {
