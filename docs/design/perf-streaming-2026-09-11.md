@@ -51,6 +51,11 @@ own streaming path (IPC, status polling, the agent registry) was the problem.
 
 ## The renderer policy was not the cause — measured twice now
 
+> **Superseded 2026-09-19:** these runs measured frame *rate* while streaming —
+> both columns far above a 60 Hz display, i.e. headroom nobody sees. The
+> per-keystroke measurement in the next section reversed the conclusion; the
+> DOM-when-focused rule is gone.
+
 The selected terminal stays on the DOM renderer below 2x DPR while it streams. That
 looks like the obvious culprit, and moving it to WebGL was tried on 2026-07-15 and
 reverted because it "did not recover the frame rate". It was tried again during this
@@ -61,8 +66,34 @@ investigation, and on xterm 6 it is **slower** where it matters:
 | idle | **956 fps**, p95 1.4 ms | 506 fps, p95 8.7 ms |
 | pan | **573 fps**, p95 5.9 ms | 429 fps, p95 9.8 ms |
 
-The rule now lives in `terminal-renderer-policy.ts` as a pure function with tests that
-cite these numbers, so the next attempt to "optimise" it fails a test first.
+The rule then lived in `terminal-renderer-policy.ts` as a pure function with tests
+that cited these numbers, so the next attempt to "optimise" it failed a test first.
+
+## 2026-09-19 — every visible terminal draws on the GPU
+
+The table above measured frame rate while streaming. What users feel is the
+per-keystroke cost of typing into a focused agent tile, which it never measured.
+Per keystroke on the renderer main thread (A/B, same session, interleaved
+DOM/WebGL/DOM/WebGL/DOM):
+
+| typing into a focused Claude Code tile | renderer main thread |
+|---|---:|
+| DOM (the old rule below 2x DPR) | 14.4, 16.3, 15.8 ms |
+| DOM once the input wraps over lines | 40–60 ms |
+| WebGL | 6.1, 6.5 ms |
+
+Claude redraws ~42 rows per keystroke; the DOM renderer rebuilds each row as spans
+→ ~2–12 ms style + ~3–14 ms layout. Other Electron terminal apps default every
+visible terminal to WebGL and use DOM only as a fallback; one measured DOM at
+1.2x–13.7x more renderer CPU.
+
+**Policy** (`terminal-renderer-policy.ts`): a terminal that holds a WebGL slot
+renders with WebGL. DOM is only a fallback — (a) during a WebGL context-loss
+cooldown, (b) when the slot manager has no slot for the tile (budget /
+off-screen; off-screen tiles don't paint anyway). The "selected tile below 2x
+DPR uses DOM" and "quiet tile switches to DOM" rules are removed: each
+quiet↔streaming transition paid a full redraw plus a GL context create/destroy,
+and the sharpness they bought is a loss exactly where typing happens.
 
 ## Method, and three traps
 

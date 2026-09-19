@@ -33,11 +33,9 @@ export interface WebglSlotClient {
   /** Drop WebGL → fall back to the DOM renderer (idempotent). */
   release: () => void;
   /**
-   * Live opt-IN to the crisp DOM renderer (native font hinting — sharper than
-   * WebGL on low-DPI displays). True only for the FOCUSED terminal on a non-HiDPI
-   * screen: it's the one tile you're reading, so the heavier DOM renderer is worth
-   * it AND bounded to one terminal (the DOM renderer is CPU-costly per output
-   * frame; many at once is what crashed). Such a client never holds a WebGL slot.
+   * Live opt-OUT of WebGL. Only fallback: a WebGL context-loss cooldown —
+   * re-acquiring just lost the context again, so the client pins to the DOM
+   * renderer until the cooldown expires and never holds a WebGL slot.
    */
   wantsDom?: () => boolean;
   /** Internal: whether this client currently holds a slot. */
@@ -59,10 +57,9 @@ let reconcilePending = false;
 function reconcile(): void {
   const all = [...clients.values()];
 
-  // Crisp-DOM boost first: tiles that explicitly want the DOM renderer (the
-  // focused tile on a low-DPI screen) are pinned to DOM — they never hold a
-  // WebGL slot and are excluded from the WebGL budget below. Bounded by how many
-  // tiles can be focused (one), so DOM's per-frame cost can't pile up.
+  // Cooldown pins first: clients in a WebGL context-loss cooldown are pinned
+  // to DOM — they never hold a WebGL slot and are excluded from the budget
+  // below (re-acquiring right after a loss just loses the context again).
   const domForced = new Set<string>();
   for (const c of all) {
     if (c.wantsDom?.()) domForced.add(c.id);

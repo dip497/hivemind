@@ -538,6 +538,9 @@ const server = net.createServer((sock) => {
         break;
       }
       case "write":
+        // Only the writing connection's outBuf fast-paths its echo; other
+        // viewers of the tile keep normal batching.
+        outBuf.markInput(msg.id);
         manager.write(msg.id, msg.data, viewers.get(msg.id));
         break;
       case "resize":

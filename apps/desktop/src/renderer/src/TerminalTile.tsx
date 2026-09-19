@@ -7,7 +7,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { registerFileLinks } from "./terminal-file-links";
 import { installCrispDpr } from "./terminal-dpr";
 import { patchTerminalMouseWithRetry } from "./terminal-mouse-patch";
-import { wantsDomRenderer, STREAM_QUIET_MS } from "./terminal-renderer-policy";
+import { wantsDomRenderer } from "./terminal-renderer-policy";
 import { registerWebglSlotClient, unregisterWebglSlotClient, reconcileWebglSlots } from "./webgl-slots";
 import { useTileFont, FontScaleControl, handleFontKey } from "./tile-font";
 import { identifyAgent, detectTileStatus, stabilizeClaudeStatus, normalizeAgentTitle, type TileStatus } from "./agent-state";
@@ -446,23 +446,6 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
     // renderer handles output fine — just slightly softer until the cooldown ends.
     let webglCooldownUntil = 0;
     const WEBGL_COOLDOWN_MS = 30_000;
-    // Crisp-when-idle: background terminals use the sharp DOM renderer too, EXCEPT
-    // while actively streaming (then WebGL, so a multi-agent fan-out doesn't spike
-    // the renderer). lastStreamTs tracks recent output; renderer swaps happen only
-    // on UNSELECTED tiles (invisible — the selected tile is always DOM).
-    let lastStreamTs = 0;
-    let streamQuietTimer: ReturnType<typeof setTimeout> | undefined;
-    // One armed timer that re-checks quietness when it fires, instead of a
-    // clearTimeout+setTimeout pair on EVERY pty chunk (hundreds a second while
-    // an agent streams — timer-heap churn that showed up under load).
-    const armQuietTimer = (ms: number) => {
-      streamQuietTimer = setTimeout(() => {
-        streamQuietTimer = undefined;
-        const since = Date.now() - lastStreamTs;
-        if (since < STREAM_QUIET_MS) { armQuietTimer(STREAM_QUIET_MS - since + 120); return; }
-        if (!selectedRef.current) reconcileWebglSlots(); // the selected tile is always DOM
-      }, ms);
-    };
     // ── Flow control ────────────────────────────────────────────────────────
     // xterm parses writes on its own frame budget, so when output arrives faster
     // than it can parse (a `cat` of a big file, a runaway build log, a whole
@@ -589,14 +572,6 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
       // second fit here doubled the cost of every switch — a WebGL fit is an
       // atlas rebuild, and ResizeObserver notifications land AFTER rAF in the
       // same frame, so the two never coalesced.
-      //
-      // Count the adoption as stream activity. A view switch stalls PTY delivery
-      // for a moment; if that gap crossed STREAM_QUIET_MS the crisp-when-idle
-      // logic released every background terminal to the DOM renderer and then
-      // re-acquired WebGL on the next chunk (a GL context + shader compile per
-      // tile) — a snowball of long tasks that turned a 300 ms switch into 2 s.
-      lastStreamTs = Date.now();
-      if (!streamQuietTimer) armQuietTimer(STREAM_QUIET_MS + 120);
       reconcileWebglSlots();
     };
     const onParked = (e: Event) => {
@@ -604,9 +579,8 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
       reconcileWebglSlots();
       // Parked at a size other than the slot we just left (a dock pane hands
       // the tile back at its arranging view's size): fit NOW, hidden, so the
-      // switch back finds it at size. The tile was the selected one in that
-      // slot, i.e. on the DOM renderer where a fit is cheap (a WebGL fit here
-      // would be the same flush the switch used to pay — moved, not saved).
+      // switch back finds it at size — paid while nothing is painting, not
+      // during the switch back.
       if ((e as CustomEvent<{ resized?: boolean }>).detail?.resized) scheduleFitRef.current?.();
     };
     surfaceEl?.addEventListener(SURFACE_ADOPTED, onAdopted);
@@ -621,28 +595,10 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
       priority: () => (parked || !hostShown() ? 0 : selectedRef.current ? 2 : inViewport ? 1 : 0),
       acquire: acquireWebgl,
       release: releaseWebgl,
-      // Crisp boost: the FOCUSED tile on a low-DPI screen renders via DOM (native
-      // font hinting → sharp, like the system terminal). WebGL's GPU atlas is soft
-      // at devicePixelRatio=1; on HiDPI it's already crisp, so no boost there. Only
-      // the selected tile boosts, so the heavier DOM renderer is bounded to one
-      // terminal — the one you're actually reading.
-      //
-      // EXCEPT agent tiles: a full-screen agent TUI (codex especially) repaints the
-      // whole screen many times per second, and xterm's DOM renderer mutates a DOM
-      // node per cell per frame → at that frame rate it's layout/paint storms that
-      // make the WHOLE window blink + lag. Agents stay on the GPU (WebGL) renderer,
-      // which eats high-frame-rate redraws for free. The DOM boost is for reading
-      // static shell output, not driving a live TUI.
-      // During a WebGL context-loss cooldown, force DOM regardless of agent/DPI —
-      // re-acquiring WebGL would just lose the context again and thrash the canvas.
-      wantsDom: () =>
-        wantsDomRenderer({
-          dpr: window.devicePixelRatio || 1,
-          now: Date.now(),
-          lastStreamTs,
-          selected: selectedRef.current === true,
-          webglCooldownUntil,
-        }),
+      // Fallback pin: after a WebGL context loss this tile stays on the DOM
+      // renderer for the cooldown and never holds a slot — re-acquiring would
+      // just lose the context again and thrash the canvas.
+      wantsDom: () => wantsDomRenderer({ now: Date.now(), webglCooldownUntil }),
     });
 
     // Agents set the terminal window title (OSC 0/2) to a live task summary —
@@ -728,15 +684,6 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
         if (flowPaused && flowPending <= FLOW_LOW_CHARS) releaseFlowPause();
       });
       if (flowPending >= FLOW_HIGH_CHARS) requestFlowPause();
-      // Crisp-when-idle renderer choice: note the stream, and reconcile only on
-      // TRANSITIONS (quiet→streaming now, streaming→quiet later) and only for an
-      // UNSELECTED tile — the selected tile is always DOM, so it never swaps.
-      // Edge-triggered: a reconcile per chunk would be hundreds a second.
-      const now = Date.now();
-      const wasQuiet = now - lastStreamTs > STREAM_QUIET_MS;
-      lastStreamTs = now;
-      if (wasQuiet && !selectedRef.current) reconcileWebglSlots();
-      if (!streamQuietTimer) armQuietTimer(STREAM_QUIET_MS + 120);
       // Agent tiles get authoritative state from the screen poll (mark dirty so
       // the next poll tick actually scans); plain shells use the cheap heuristic.
       if (agent) {
@@ -1003,9 +950,8 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
     // made the switch a 0.5-1 s long task. A tile that is NOT SHOWN (an inactive
     // Windows tab is laid out but visibility:hidden; a parked surface likewise)
     // doesn't need its new size until it is shown: defer the fit, and let the
-    // shown tile — which is the selected one, on the cheap DOM renderer — be the
-    // only one that resizes. On the way back the deferred tiles are at their old
-    // size again, so their fit is a no-op.
+    // shown tile be the only one that resizes. On the way back the deferred
+    // tiles are at their old size again, so their fit is a no-op.
     const fitKey = {};
     const ro = new ResizeObserver(() => {
       if (parked) return; // a parked surface holds its size; adoption refits
@@ -1041,7 +987,6 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
       if (fitRaf) cancelAnimationFrame(fitRaf);
       if (idleTimer.current) clearTimeout(idleTimer.current);
       if (agentPoll) clearInterval(agentPoll);
-      if (streamQuietTimer) clearTimeout(streamQuietTimer);
       unsubData?.();
       unsubExit?.();
       unsubClaude?.();
@@ -1098,9 +1043,9 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
   // you deselect the tile. disableStdin makes xterm ignore input entirely when
   // unselected; selecting re-enables + focuses so one click puts you in.
   useEffect(() => {
-    // Focus changed → re-rank renderers. The focused tile boosts to the CRISP
-    // renderer: DOM (native hinting) on a low-DPI screen, WebGL on HiDPI. Others
-    // hold WebGL within budget. (selectedRef is already current from render.)
+    // Focus changed → re-rank slots. Every tile that holds a slot renders WebGL;
+    // focus ranks a tile above its neighbours for the budget. (selectedRef is
+    // already current from render.)
     reconcileWebglSlots();
     const term = termRef.current;
     if (!term) return;

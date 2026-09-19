@@ -1275,9 +1275,13 @@ ipcMain.on("ptyFlow", (_e, tileId: string, paused: boolean) => {
     }, PTY_PAUSE_MAX_MS));
   }
 });
-ipcMain.on("ptyWrite", (_e, tileId: string, data: string) =>
-  hasRemotePty(tileId) ? writeRemotePty(tileId, data) : writePty(tileId, data)
-);
+ipcMain.on("ptyWrite", (_e, tileId: string, data: string) => {
+  // Remote ptys relay elsewhere; programmatic writes never take this handler,
+  // so the mark says "a human keystroke on a local pty" — echo skips batching.
+  if (hasRemotePty(tileId)) { writeRemotePty(tileId, data); return; }
+  ptyOut.markInput(tileId);
+  writePty(tileId, data);
+});
 ipcMain.on("ptyResize", (_e, tileId: string, cols: number, rows: number) =>
   hasRemotePty(tileId) ? resizeRemotePty(tileId, cols, rows) : resizePty(tileId, cols, rows)
 );
