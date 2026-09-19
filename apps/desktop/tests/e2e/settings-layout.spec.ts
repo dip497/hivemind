@@ -2,9 +2,11 @@ import { test, expect, _electron as electron } from "@playwright/test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { seedAgents } from "./helpers/agents";
 
 test("Settings stays opaque, pauses decoration, preserves a terminal and fits a narrow window", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "hm-settings-layout-"));
+  seedAgents(path.join(root, "config")); // the Agents page has the usual rows to lay out
   const env = { ...process.env, XDG_CONFIG_HOME: path.join(root, "config"), HIVE_SETTINGS: path.join(root, "settings.json") } as Record<string, string>;
   delete env.ELECTRON_RUN_AS_NODE;
   const app = await electron.launch({ args: [path.resolve("out/main/index.js"), "--no-sandbox"], cwd: root, env });

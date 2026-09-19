@@ -32,7 +32,6 @@ import { TileSlot } from "../tile-host";
 import { useViewLayout } from "../view-layout-store";
 import type { WorkspaceViewPlugin, WorkspaceViewProps } from "../workspace-view";
 import { WINDOWS_LAYOUT } from "./windows-layout";
-import { defaultAgent } from "@hivemind/agents";
 import { AGENT_TILE_KIND } from "../../tile-kinds";
 
 // Inactive tab bodies stay laid out at FULL SIZE — visibility:hidden (not
@@ -55,7 +54,7 @@ const KIND_GLYPH: Record<LayerTile["kind"], string> = {
 };
 
 function TabGlyph({ tile }: { tile: LayerTile }): ReactNode {
-  if (tile.kind === AGENT_TILE_KIND) return <AgentIcon id={tile.agent ?? defaultAgent().id} size={13} />;
+  if (tile.kind === AGENT_TILE_KIND) return <AgentIcon id={tile.agent} size={13} />;
   if (tile.kind === "browser") return <Globe size={12} aria-hidden />;
   return (
     <span aria-hidden className="font-mono text-[11px] text-[var(--color-fg3)]">

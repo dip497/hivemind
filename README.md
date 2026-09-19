@@ -63,8 +63,12 @@ view.
 ## Bring your own agent
 
 An agent is a manifest: a file naming the command to run and how to read that command's
-screen. The ones in the box are written in that format and pass exactly the checks yours
-does, so there is no privileged tier and nothing to fork.
+screen. No agent ships in the app — they come from the HiveHub registry and are added
+automatically when their CLI is found on your machine (a notice says what each one can
+do, with a Remove button). Adding a new agent for everyone is a pull request to
+[dip497/hivemind-plugins](https://github.com/dip497/hivemind-plugins); locally it is one
+file, and it passes exactly the checks a listed one does, so there is no privileged tier
+and nothing to fork.
 
 ```bash
 hive agents validate ./my-agent    # what a user will be told about it
@@ -117,7 +121,7 @@ apps/
 
 packages/
 ├── hive-core/     storage, parsing, skill templates
-├── hive-agents/   the agent catalog — one manifest per agent
+├── hive-agents/   the agent loader — one manifest per agent, from HiveHub
 └── hive-view-sdk/ the API a view plugin is written against
 ```
 

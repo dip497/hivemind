@@ -18,10 +18,11 @@ version with `HIVEMIND_VERSION=v1.0.0`.
 
 ## Install an agent CLI
 
-hivemind runs agent CLIs you install yourself. Spawnable today: `claude`, `codex`,
-`opencode`, `droid`, `pi`, `kiro`. After installing one, check detection from an
-initialised workspace with `hive agent detect`. Capability differences are in
-[Agents](../agents/).
+hivemind runs agent CLIs you install yourself. It ships with none: when it starts, it adds
+every agent listed on HiveHub whose CLI is on your `PATH` — install `claude`, `codex`,
+`gemini` or any other, start hivemind, and it appears. After installing one, check
+detection from an initialised workspace with `hive agent detect`. Capability differences
+are in [Agents](../agents/).
 
 ## Initialise the workspace
 

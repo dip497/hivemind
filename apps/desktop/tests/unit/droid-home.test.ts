@@ -9,9 +9,9 @@ import { join } from "node:path";
 
 const { seedHome } = await import("@hivemind/agents/node");
 
-const { bundledAgent } = await import("@hivemind/agents");
+const { authoredDef } = await import("./authored-agents.ts");
 // The block droid actually ships, so this tests what runs rather than a copy of it.
-const HOME = bundledAgent("droid").home!;
+const HOME = authoredDef("droid").home!;
 /** The shape droid's manifest asks for, with the private directory the daemon hands out. */
 const seedDroidHome = (opts: { droidHome: string; realFactory: string; hooks: unknown }) =>
   seedHome(HOME, opts.droidHome, opts.realFactory, { "hooks.json": JSON.stringify(opts.hooks) });

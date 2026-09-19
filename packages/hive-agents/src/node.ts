@@ -1,18 +1,16 @@
 /**
- * Daemon-side entry: the provider PLUGINS (def + node half, one object each,
- * exported by providers/<id>/node.ts) and the composition the PTY daemon
- * consumes. Not for the renderer. Nothing here knows any provider by name
- * beyond listing its plugin once.
+ * Daemon-side entry: every agent's node half, built from its manifest, and the
+ * composition the PTY daemon consumes. Not for the renderer. Nothing here
+ * knows any provider by name.
  */
-import { getCatalog, agentForCmd, BUILTIN_CATALOG } from "./catalog.js";
+import { getCatalog, agentForCmd } from "./catalog.js";
 import { manifestRuntime, transformsFor } from "./runtime-manifest.js";
 import { homePaths } from "./home-overlay.js";
 import type { RuntimePaths } from "./runtime.js";
-import { BUNDLED_ASSETS } from "./bundled-assets.js";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import nodePath from "node:path";
-import type { AgentNodeParts, AgentPlugin, AgentProviderDef, DaemonPaths, ProviderResumeTransforms, ProviderSpawnContext, SpawnSpec } from "./types.js";
+import type { AgentNodeParts, AgentProviderDef, DaemonPaths, ProviderResumeTransforms, ProviderSpawnContext, SpawnSpec } from "./types.js";
 
 export * from "./types.js";
 export * from "./catalog.js";
@@ -23,11 +21,6 @@ export * from "./runtime.js";
 export * from "./runtime-manifest.js";
 export * from "./hooks.js";
 export * from "./home-overlay.js";
-export * from "./bundled-assets.js";
-
-/** Agents that still need a module of ours. Empty: every agent is its manifest, and what
- *  a manifest cannot yet say is the list of things left to build, not a list of agents. */
-export const PLUGINS: readonly AgentPlugin[] = [];
 
 /** Where an agent's own files live: one directory each, handed out by the daemon so a
  *  manifest never names a place to write. */
@@ -89,15 +82,13 @@ function partsFromManifest(def: AgentProviderDef): AgentNodeParts | undefined {
 }
 
 /**
- * A file an agent ships beside its manifest. The agents compiled into the binary carry
- * theirs compiled in too; anyone else's are read from the folder they were installed into
- * — without this an installed agent could declare `assets` and have them silently never
- * written, which is not a plugin architecture, it is a validation one.
+ * A file an agent ships beside its manifest, read from the folder it was installed
+ * into. Without this an installed agent could declare `assets` and have them
+ * silently never written, which is not a plugin architecture, it is a validation one.
  */
 const MAX_ASSET = 256 * 1024;
 function assetBody(def: AgentProviderDef, file: string): string | undefined {
-  const compiled = BUNDLED_ASSETS[def.id]?.[file];
-  if (compiled !== undefined || !def.dir) return compiled;
+  if (!def.dir) return undefined;
   // `file` is validated as a plain name with no separators, so it cannot leave the folder.
   try {
     const full = nodePath.join(def.dir, file);
@@ -106,31 +97,16 @@ function assetBody(def: AgentProviderDef, file: string): string | undefined {
   } catch { return undefined; }
 }
 
-/** The daemon half of one agent, whoever wrote it: a hand-written module if there is one,
- *  otherwise whatever its manifest describes. Memoised per def — a rescan makes new def
- *  objects, and a stale runtime would keep writing the previous manifest's files. */
+/** The daemon half of one agent: whatever its manifest describes. Memoised per def —
+ *  a rescan makes new def objects, and a stale runtime would keep writing the previous
+ *  manifest's files. */
 const partsCache = new WeakMap<AgentProviderDef, AgentNodeParts | undefined>();
 export function nodePartsFor(def: AgentProviderDef): AgentNodeParts | undefined {
   if (partsCache.has(def)) return partsCache.get(def);
-  const hand = PLUGINS.find((p) => p.def.id === def.id);
-  const parts = hand
-    ? { resume: hand.resume, prepare: hand.prepare, assets: hand.assets }
-    : partsFromManifest(def);
+  const parts = partsFromManifest(def);
   partsCache.set(def, parts);
   return parts;
 }
-
-/** The daemon halves of the agents that ship in the box, by id. The drift tests ask this
- *  what a bundled agent backs its capabilities with; live wiring goes through
- *  `nodePartsFor`, which serves installed agents too. */
-export const NODE_PARTS: Readonly<Record<string, AgentNodeParts>> = (() => {
-  const parts: Record<string, AgentNodeParts> = {};
-  for (const def of BUILTIN_CATALOG) {
-    const p = nodePartsFor(def);
-    if (p) parts[def.id] = p;
-  }
-  return parts;
-})();
 
 /** Legacy adapter shape (id + matcher + resume) kept for the registry tests. */
 export interface AgentProvider {
@@ -202,9 +178,8 @@ export function composeResumeFrom(providers: readonly AgentProvider[], ctx: Prov
  *  (its transforms then see their paths unset). */
 export function prepareProviders(paths: DaemonPaths): Record<string, Record<string, string>> {
   const out: Record<string, Record<string, string>> = {};
-  // Every agent in the live catalog, not only the ones that ship in the box: an installed
-  // agent whose manifest asks for a file or a private home needs that done before its
-  // first spawn too.
+  // Every agent in the live catalog: an installed agent whose manifest asks for a file or
+  // a private home needs that done before its first spawn.
   for (const def of getCatalog()) {
     const parts = nodePartsFor(def);
     if (!parts?.prepare) continue;

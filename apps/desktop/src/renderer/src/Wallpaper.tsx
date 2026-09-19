@@ -21,6 +21,17 @@ export function Wallpaper({ embedded = false, covering = false }: { embedded?: b
   const [videoFailed, setVideoFailed] = useState(false);
   useEffect(() => { setVideoFailed(false); }, [videoSrc]);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const reloadedRef = useRef(false);
+  useEffect(() => { reloadedRef.current = false; }, [videoSrc]);
+  // Re-arm after a successful playback: a source that has already played and errors again
+  // is hitting a transient decode fault, not a bad file — worth reloading again.
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const ok = () => { reloadedRef.current = false; };
+    v.addEventListener("playing", ok);
+    return () => v.removeEventListener("playing", ok);
+  }, [videoSrc]);
 
   // Pause the wallpaper (video decoder + bloom animations) when the window is
   // hidden/blurred OR the user has been idle for a while — a live wallpaper
@@ -48,8 +59,16 @@ export function Wallpaper({ embedded = false, covering = false }: { embedded?: b
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
-    if (paused) v.pause();
-    else void v.play().catch(() => {});
+    if (paused) { v.pause(); return; }
+    // Same lost-play race as CanvasOverlay: a rejected play() must retry while this
+    // effect still wants playback, or the wallpaper stays frozen forever.
+    let stale = false;
+    const start = (): void => {
+      if (stale) return;
+      void v.play().catch((e: DOMException) => { if (e?.name === "AbortError") setTimeout(start, 250); });
+    };
+    start();
+    return () => { stale = true; };
   }, [paused, videoSrc, wallpaper]);
 
   // The built-in animated/photo/video wallpaper scene (or null when glass is off,
@@ -84,7 +103,14 @@ export function Wallpaper({ embedded = false, covering = false }: { embedded?: b
               loop
               muted
               playsInline
-              onError={() => setVideoFailed(true)}
+              onError={() => {
+                // The first load can hit a transient decode error (PIPELINE_ERROR_DECODE on
+                // a busy machine); one reload clears it. A second failure falls back to the
+                // gradient below instead of retrying forever.
+                const v = videoRef.current;
+                if (v && !reloadedRef.current) { reloadedRef.current = true; v.load(); return; }
+                setVideoFailed(true);
+              }}
             />
             <div className="hm-wp-vignette" />
           </div>

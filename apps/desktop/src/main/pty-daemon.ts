@@ -25,7 +25,7 @@ import {
 } from "./session-snapshot-store.js";
 import { applyInitialPrompt, stripInitialPrompt } from "../shared/agent-io.js";
 import { sanitizeShellEnv } from "./shell-env.js";
-import { NODE_PARTS, composeResume, evictTrackedSession, prepareProviders, trackerSource } from "@hivemind/agents/node";
+import { composeResume, evictTrackedSession, prepareProviders, trackerSource, setCatalog } from "@hivemind/agents/node";
 import { planHookSource } from "./plan-review-hook-source.js";
 import { stopHookSource } from "./hcp/stop-hook-source.js";
 import { approvalHookSource } from "./hcp/approval-hook-source.js";
@@ -158,49 +158,59 @@ const hcpToken = readOrCreateToken(userDataDir);
 // asks for its files and its hooks in exactly the same way, and this is the process that
 // does that work. Best-effort — if the scan fails the compiled-in list stands, which is a
 // daemon missing one agent's signals rather than a daemon that will not start.
-// An agent installed while this is running is wired on the next start.
-try {
-  const [{ loadAgents }, { BUILTIN_CATALOG, setCatalog }] = await Promise.all([
-    import("@hivemind/agents/load"),
-    import("@hivemind/agents"),
-  ]);
-  const { defs } = await loadAgents({ builtins: BUILTIN_CATALOG, nodeHalf: (id) => !!NODE_PARTS[id] });
-  setCatalog(defs);
-} catch (e) { console.error("[pty-daemon] agent scan skipped:", (e as Error).message); }
-
-const providerPaths = prepareProviders({
+// The daemon outlives installs: a changed agents dir (install and remove both rename entries in it) triggers a rescan before a spawn.
+const dirMtime = (dir: string): number | undefined => {
+  try { return fs.statSync(dir).mtimeMs; } catch { return undefined; }
+};
+const providerCtx = {
   userDataDir,
   execPath: hookExecPath,
   trackerPath,
   tileSessionsDir,
-  stopHookPath,
-  userpromptHookPath,
-  notificationHookPath,
-  hcpSock,
-});
-
-// Provider spawn transforms (resume + deterministic-signal hook injection),
-// composed across every catalogued provider (@hivemind/agents). Each provider
-// no-ops for specs it doesn't own, so the composition is order-safe. To add a
-// provider: one def (+ node half) in the catalog — no change here. The
-// transforms are electron-free, so they stay unit-testable with a fake agent;
-// the daemon just supplies paths.
-const resume = composeResume({
-  trackerPath,
-  tileSessionsDir,
   legacyMapFile: tileSessionsPath,
-  execPath: hookExecPath,
+  stopHookPath,
   planHookPath,
   planBridgeSock,
-  stopHookPath,
   approvalHookPath,
   subagentHookPath,
-  notificationHookPath,
   userpromptHookPath,
+  notificationHookPath,
   hcpSock,
   hcpToken,
-  providers: providerPaths,
-});
+};
+let providerPaths: Record<string, Record<string, string>> = {};
+// Rebound by a rescan; the manager reads them through these variables.
+let resume = composeResume({ ...providerCtx, providers: providerPaths });
+let ensureAgentsCurrent: () => Promise<void> = async () => {};
+try {
+  const [{ loadAgents, userAgentsDir }] = await Promise.all([import("@hivemind/agents/load")]);
+  let agentsStamp: number | undefined;
+  let rescan: Promise<void> | undefined;
+  const reloadAgents = async (): Promise<void> => {
+    // Stamped before the scan, so an install that lands during it still triggers the next one.
+    agentsStamp = dirMtime(userAgentsDir());
+    const { defs } = await loadAgents();
+    setCatalog(defs);
+    providerPaths = prepareProviders(providerCtx);
+    resume = composeResume({ ...providerCtx, providers: providerPaths });
+  };
+  ensureAgentsCurrent = () => {
+    if (dirMtime(userAgentsDir()) === agentsStamp) return Promise.resolve();
+    // Best-effort like the boot scan: a failed rescan spawns with the catalog we have.
+    return (rescan ??= reloadAgents().catch((e: unknown) => {
+      console.error("[pty-daemon] agent rescan failed:", (e as Error).message);
+    }).finally(() => { rescan = undefined; }));
+  };
+  await reloadAgents();
+} catch (e) {
+  console.error("[pty-daemon] agent scan skipped:", (e as Error).message);
+  providerPaths = prepareProviders(providerCtx);
+  resume = composeResume({ ...providerCtx, providers: providerPaths });
+}
+
+// Provider spawn transforms (resume + deterministic-signal hook injection):
+// composed across every catalogued provider (@hivemind/agents) in reloadAgents
+// above, and recomposed there on a rescan.
 
 const snapshotPath = (id: string): string => path.join(sessionsDir, fileNameForId(id));
 // One write chain per session id so a later snapshot can never land on disk
@@ -354,14 +364,14 @@ const manager = new SessionManager(factory, {
   // session. Limitations inherited from claude itself (can't fix from the PTY
   // layer): killed mid-tool-call (#18880), post-`cd` mid-session (#22566),
   // version-upgrade across resume (#53417).
-  transformSpecOnSpawn: resume.transformSpecOnSpawn,
+  transformSpecOnSpawn: (spec, id) => resume.transformSpecOnSpawn(spec, id),
   // Strip the one-time HIVE_INITIAL_PROMPT before ANY provider sees the spec. A
   // restore re-execs from the persisted spec, so an un-stripped prompt is re-appended
   // as positional argv and the task RUNS AGAIN — for every agent that takes an argv
   // prompt (claude, pi). Agent-agnostic on purpose: this is a property of restore.
   transformSpecOnRestore: (spec, id) => resume.transformSpecOnRestore(stripInitialPrompt(spec), id),
   restoreRetryMs: resume.restoreRetryMs,
-  restoreRetryTransform: resume.restoreRetryTransform,
+  restoreRetryTransform: (spec) => resume.restoreRetryTransform(spec),
 });
 
 // Reboot-restore: hydrate any snapshots written by a previous daemon. They
@@ -520,8 +530,10 @@ const server = net.createServer((sock) => {
           send({ t: "attached", reqId: msg.reqId, id: msg.id, pid: delta.pid, isNew: false, replay: delta.replay, seq: delta.seq, epoch: delta.epoch, delta: true });
           break;
         }
-        void manager
-          .createOrAttach(msg.id, msg.spec, viewer)
+        // The spawn/restore checkpoint: an agent installed after boot is wired here,
+        // before its spec is transformed.
+        void ensureAgentsCurrent()
+          .then(() => manager.createOrAttach(msg.id, msg.spec, viewer))
           .then((r) => {
             ready = true;
             send({ t: "attached", reqId: msg.reqId, id: msg.id, pid: r.pid, isNew: r.isNew, replay: r.replay, seq: r.seq, epoch: r.epoch });

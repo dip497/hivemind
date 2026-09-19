@@ -32,10 +32,9 @@ import {
   type LinkType,
 } from "@hivemind/core";
 import os from "node:os";
-import { agentById, agentForCmd, getCatalog, preferredAgent, setCatalog, BUILTIN_CATALOG, type AgentProviderDef } from "@hivemind/agents";
+import { agentById, agentForCmd, getCatalog, preferredAgent, setCatalog, type AgentProviderDef } from "@hivemind/agents";
 import { agentPresence, discoverOptions, findBin, verifyAgent } from "@hivemind/agents/discover";
 import { agentAllowedIn, loadAgents, toWire } from "@hivemind/agents/load";
-import { NODE_PARTS } from "@hivemind/agents/node";
 import type { IssuePatch } from "@hivemind/core/types";
 import * as ptyHost from "./pty-host.js";
 import * as ptyDaemon from "./daemon-client.js";
@@ -87,7 +86,7 @@ import { startPlanBridge, type PlanRequest } from "./plan-bridge.js";
 import { randomUUID } from "node:crypto";
 import { startHcpServer } from "./hcp/hcp-server.js";
 import { makeSpawnPacer } from "./spawn-pacer.js";
-import { makeDispatch } from "./hcp/methods.js";
+import { makeDispatch, type Dispatcher } from "./hcp/methods.js";
 import { labelOf as hcpLabelOf } from "./hcp/names.js";
 import { Mailbox } from "./hcp/mailbox.js";
 import { TurnTracker } from "./hcp/turn-tracker.js";
@@ -1209,6 +1208,11 @@ function setPtyPaused(tileId: string, paused: boolean): void {
  *  provider's capabilities before reading from / gathering it. */
 const hcpAgentOf = new Map<string, string>();
 
+// The boot agent scan, kept as a promise: the first frame must not wait on it,
+// but an HCP spawn/bind must not race it — a just-installed agent only resolves
+// by id once the scan has set the catalog.
+let agentsScanned: Promise<void> = Promise.resolve();
+
 ipcMain.handle("ptySpawn", wrap(async (e, opts: Parameters<typeof spawnPty>[0]) => {
   const spawning = agentForCmd(opts.cmd);
   // An agent a repository ships runs in that repository, not wherever a tile happens to be.
@@ -1460,24 +1464,23 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
       }
       setCatalog(all);
     };
-    // Built-ins are compiled in (proven identical to the manifests); only plugins come from disk.
+    // Only manifests come from disk — nothing agent-specific is compiled in any more.
+    let lastLoaded: Awaited<ReturnType<typeof loadAgents>>["loaded"] = [];
     const scanAgents = async (repoRoot?: string) => {
       const disabled = (getAppSettings() as { agents?: { disabled?: string[] } }).agents?.disabled ?? [];
-      return loadAgents({
-        builtins: BUILTIN_CATALOG,
-        repoRoot,
-        disabled,
-        nodeHalf: (id) => !!NODE_PARTS[id],
-      });
+      const r = await loadAgents({ repoRoot, disabled });
+      // Defs of switched-off agents, so their settings pages still answer.
+      lastLoaded = r.loaded;
+      return r;
     };
-    // Not awaited: the first frame must not wait on optional disk I/O.
-    void scanAgents().then(({ defs, loaded }) => {
+    // Not awaited at startup: the first frame must not wait on optional disk I/O.
+    agentsScanned = scanAgents().then(({ defs, loaded }) => {
       publishCatalog(defs); // main resolves providers for spawn + HCP binding too
       for (const a of loaded) {
         if (a.error) console.warn(`[agents] ${a.id} (${a.source}) not loaded: ${a.error}`);
       }
     }).catch((e: unknown) => {
-      console.warn("[agents] manifest scan failed, using built-ins only:", e);
+      console.warn("[agents] manifest scan failed:", e);
     });
     ipcMain.handle("agents:list", wrap(async (_e, repoRoot: string | null) => {
       const { defs, loaded, shadowed } = await scanAgents(repoRoot ? String(repoRoot) : undefined);
@@ -1487,8 +1490,8 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
       publishCatalog(defs, repoRoot ? String(repoRoot) : undefined);
       return { agents: toWire(loaded), shadowed };
     }));
-    // Disabled built-ins are not in the catalog but still have a card.
-    const knownDef = (id: string) => agentById(id) ?? BUILTIN_CATALOG.find((d) => d.id === id);
+    // Switched-off agents are not in the catalog but still have a card.
+    const knownDef = (id: string) => agentById(id) ?? lastLoaded.find((a) => a.id === id && a.def)?.def;
     // Detection must see the PATH tiles launch with, which the login shell supplies.
     ipcMain.handle("agents:option-choices", wrap(async (_e, id: string) => {
       await applyShellEnvToProcess();
@@ -1497,8 +1500,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     }));
     ipcMain.handle("agents:presence", wrap(async () => {
       await applyShellEnvToProcess();
-      const defs = new Map([...BUILTIN_CATALOG, ...getCatalog()].map((d) => [d.id, d]));
-      return Object.fromEntries([...defs.values()].map((d) => [d.id, agentPresence(d)]));
+      return Object.fromEntries(getCatalog().map((d) => [d.id, agentPresence(d)]));
     }));
     ipcMain.handle("agents:verify", wrap(async (_e, id: string) => {
       await applyShellEnvToProcess();
@@ -1788,7 +1790,7 @@ function startHcpControlPlane(): void {
     // A worker of a remote agent runs on that host: this PATH says nothing about it.
     defaultAgentId: async () => {
       await shellEnvReady;
-      return preferredAgent((getAppSettings() as { agents?: { defaultAgent?: string } }).agents?.defaultAgent, (d) => !!findBin(d.bin)).id;
+      return preferredAgent((getAppSettings() as { agents?: { defaultAgent?: string } }).agents?.defaultAgent, (d) => !!findBin(d.bin))?.id;
     },
     agentInstalled: async (def, callerTile) => {
       if (callerTile && hasRemotePty(callerTile)) return true;
@@ -1804,7 +1806,9 @@ function startHcpControlPlane(): void {
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("hcp:wait", { tileId, status });
     },
   });
-  const dispatch = _hcp.dispatch;
+  // Every verb routes through the boot scan first: spawn resolves the agent by id
+  // and other verbs read its capabilities, so none may run against a half-set catalog.
+  const dispatch: Dispatcher["dispatch"] = (method, params) => agentsScanned.then(() => _hcp.dispatch(method, params));
   hcpForgetTile = _hcp.forgetTile; // wire the pty-exit teardown to the dispatch's per-tile cleanup
   const server = startHcpServer(hcpSockPath(userData), {
     token,

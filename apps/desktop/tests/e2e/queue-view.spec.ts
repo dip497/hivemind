@@ -7,10 +7,12 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { QUEUE_DIR, dockViaQueue, expandOtherTiles, framesDrawn, queueFrame, queueReady, releaseViaQueue } from "./helpers/queue-view";
+import { seedAgents } from "./helpers/agents";
 
 let app: ElectronApplication;
 let page: Page;
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "hm-queue-"));
+seedAgents(path.join(root, "config"));
 const env = { ...process.env, XDG_CONFIG_HOME: path.join(root, "config") } as Record<string, string>;
 const appDir = process.cwd();
 const toView = (mode: string) => page.evaluate((m) => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: m } })), mode);
@@ -107,10 +109,12 @@ test("the view stops drawing when idle", async () => {
   await toView("queue");
   await page.waitForSelector(queueReady);
   await expect.poll(() => framesDrawn(page)).toBeGreaterThan(0);
-  // Frame reports are throttled by the SDK and the quiet state settles in under two seconds;
-  // let both finish before sampling a quiet interval. This checks render activity, not FPS.
-  await page.waitForTimeout(2500);
-  const before = await framesDrawn(page);
-  await page.waitForTimeout(1500);
-  expect(await framesDrawn(page)).toBe(before);
+  // The view may wake briefly (relative-time refresh, late settle frames), so a fixed
+  // window races those. Require a fully quiet window instead: an idle view has one, and
+  // a view whose render loop kept running could never produce one. Render activity, not FPS.
+  await expect.poll(async () => {
+    const quiet = await framesDrawn(page);
+    await page.waitForTimeout(1500);
+    return quiet === (await framesDrawn(page));
+  }, { timeout: 30_000 }).toBe(true);
 });

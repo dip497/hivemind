@@ -9,6 +9,7 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import { QUEUE_DIR, dockViaQueue, queueReady } from "./helpers/queue-view";
+import { seedAgents } from "./helpers/agents";
 
 test.use({ trace: "off" });
 
@@ -20,6 +21,7 @@ const CLI = path.resolve(APP_DIR, "../cli/src/index.ts");
 // Own profile (see host-chrome.spec.ts). settings.json lives at
 // <XDG>/hivemind/settings.json for BOTH the app and the CLI.
 const XDG = fs.mkdtempSync(path.join(os.tmpdir(), "hm-settings-xdg-"));
+seedAgents(XDG);
 const ENV = { ...process.env, XDG_CONFIG_HOME: XDG } as Record<string, string>;
 const settingsFile = () => path.join(XDG, "hivemind", "settings.json");
 const onDisk = () => JSON.parse(fs.readFileSync(settingsFile(), "utf8"));

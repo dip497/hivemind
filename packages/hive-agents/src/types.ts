@@ -3,19 +3,15 @@
  * the desktop UI, the `hive` CLI and the HCP control plane from a single
  * catalog (catalog.ts). Two halves, split by where the code can run:
  *
- *   - `AgentProviderDef` (this file + providers/<id>.ts) is BROWSER-SAFE: the
- *     identity (id / label / binary / aliases / default args), the explicit
- *     capability set, and the screen-scrape status detector. The renderer,
- *     the CLI and HCP read only this.
- *   - `AgentNodeParts` (providers/<id>.node.ts, wired in node.ts) is the
- *     daemon-side half: spawn-time spec transforms (session resume + signal
- *     hook injection), daemon-start preparation (writing provider assets,
- *     seeding a config-home overlay) and the provider-owned asset sources.
+ *   - `AgentProviderDef` is BROWSER-SAFE: the identity (id / label / binary /
+ *     aliases / default args), the explicit capability set, and the
+ *     screen-scrape status detector — all read from the agent's manifest.
+ *   - `AgentNodeParts` (wired in node.ts) is the daemon-side half: spawn-time
+ *     spec transforms (session resume + signal hook injection), daemon-start
+ *     preparation (writing provider assets, seeding a config-home overlay) and
+ *     the provider-owned asset sources. Built from the same manifest.
  *
- * A provider is a directory, providers/<id>/: `index.ts` (the def), `node.ts`
- * (the plugin object, if it has resume/hooks) and its assets beside them. It
- * is registered ONCE per half: the def in catalog.ts, the plugin in node.ts's
- * PLUGINS. Nothing else names it.
+ * An agent is one directory: its `agent.yaml` and the files that manifest names.
  */
 
 /** "blocked" = needs the human (approval or question). */
@@ -73,7 +69,7 @@ export interface AgentOption {
   values?: Record<string, string[]>;
   /** Hivemind's posture when nothing is chosen; unset passes nothing. */
   default?: string;
-  /** A subcommand listing the values, one per line (built-ins only: it runs a command). */
+  /** A subcommand listing the values, one per line (it runs a command, so the review names it). */
   list?: { args: string[]; skip?: number; format?: string };
   /** What a worker with no human at its tile runs with. */
   unattended?: string;
@@ -88,14 +84,6 @@ export interface AgentInstall {
 
 /** Option id → value for one launch. Unset or "" = not chosen. */
 export type SpawnOptions = Partial<Record<string, string>>;
-
-/** An agent that ships in the box: its manifest, exactly as anyone else would write one. */
-export interface BundledAgent {
-  id: string;
-  /** A daemon half ships beside it (resume, generated assets). */
-  nodeHalf: boolean;
-  manifest: unknown;
-}
 
 /** How to find a session this CLI wrote. Two shapes cover every CLI we have met. */
 export interface SessionFind {
@@ -282,11 +270,6 @@ export interface AgentProviderDef {
   titles?: readonly string[];
   /** The tile label for the n-th spawn (default `"<label> #<n>"`). */
   spawnLabel?: (n: number, opts: SpawnOptions) => string;
-  /** Declares that this provider needs NO node half even though its capabilities
-   *  (resume / turn signal) would normally require one — e.g. a runtime whose own
-   *  CLI resumes and reports without any injection. The drift test accepts the
-   *  flag in place of a NODE_PARTS entry. */
-  noNodeHalf?: true;
 }
 
 // ── daemon-side ──────────────────────────────────────────────────────────────
@@ -353,14 +336,6 @@ export interface DaemonPaths {
   userpromptHookPath: string;
   notificationHookPath: string;
   hcpSock: string;
-}
-
-/** A complete provider plugin as the daemon sees it: the def plus its node
- *  half. One object per provider, exported by `providers/<id>/node.ts` and
- *  listed ONCE in node.ts's PLUGINS. Scrape-only providers have no plugin
- *  object — their def alone (listed in catalog.ts) is the whole registration. */
-export interface AgentPlugin extends AgentNodeParts {
-  def: AgentProviderDef;
 }
 
 export interface AgentNodeParts {

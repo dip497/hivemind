@@ -297,6 +297,13 @@ html.glass-on .hm-toast {
   from { opacity: 1; transform: translateX(0) scale(1); }
   to   { opacity: 0; transform: translateX(16px) scale(0.97); }
 }
+/* Sonner body of the auto-added-agents notice: one row per agent — its name,
+   what it can do (informational text), and the Remove action. */
+.agent-added { margin-top: 6px; }
+.agent-added-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.agent-added-label { font-weight: 600; }
+.agent-added-does { color: var(--color-fg2); margin-top: 2px; }
+.agent-added-remove { flex: none; }
 @media (prefers-reduced-motion: reduce) {
   /* Reduced motion is a gentler equivalent, NOT the absence of feedback: keep an
      opacity cross-fade (non-vestibular) and drop the slide/scale/blur. */

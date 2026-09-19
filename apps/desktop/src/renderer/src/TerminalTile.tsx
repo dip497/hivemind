@@ -239,9 +239,10 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
   const statusWrapRef = useRef<HTMLSpanElement>(null);
 
   // null = plain shell. `isClaude` keeps a bare/`latest` send-to-agent on the
-  // default provider's tiles, never another runtime's.
+  // default provider's tiles, never another runtime's. The default may not exist
+  // (nothing installed), in which case no tile is the default one.
   const agent = identifyAgent(cmd);
-  const isClaude = agent === defaultAgent().id;
+  const isClaude = agent === defaultAgent()?.id;
   // NOTE: we deliberately DON'T seed claude's hook-driven turn state on mount.
   // liveTurn is authoritative ONLY once a real UserPromptSubmit/Stop hook fires.
   // An earlier version seeded "idle" here to suppress the stale-replayed-buffer

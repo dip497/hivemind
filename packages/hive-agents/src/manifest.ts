@@ -1,6 +1,7 @@
 /** A provider's browser-safe half as data. Takes parsed YAML; never sees YAML,
  *  so this package stays browser-safe. What a manifest cannot express (resume,
- *  hooks) needs a compiled node half, and claiming it without one is refused. */
+ *  hooks) it must wire itself (`launch.hcp`, `session.resume`), and claiming a
+ *  capability nothing here delivers is refused. */
 import type { AgentAsset, AgentCapabilities, AgentHome, AgentHomeFile, AgentHookEntry, AgentHooks, AgentIcon, AgentInstall, AgentLaunch, AgentOption, AgentProviderDef, AgentSession, SessionFind, TileStatus } from "./types.js";
 import { compileDetect, validateExpr, validateScope, type DetectRules } from "./detect-rules.js";
 import { GENERIC_AGENT_ICON } from "./icon.js";
@@ -66,7 +67,7 @@ export interface AgentManifest {
 export class ManifestError extends Error {}
 
 /** Later sources shadow earlier ones. */
-export type AgentSource = "builtin" | "user" | "repo";
+export type AgentSource = "user" | "repo";
 
 /** What crosses IPC: a def's `detect()` function cannot be structured-cloned. */
 export interface AgentWireEntry {
@@ -81,14 +82,12 @@ export interface AgentWireEntry {
 /** The renderer's copy of the loader's precedence (it cannot import the loader). */
 export function defsFromWire(
   entries: readonly AgentWireEntry[],
-  builtins: readonly AgentProviderDef[],
 ): AgentProviderDef[] {
-  const compiled = new Map(builtins.map((d) => [d.id, d]));
   const byId = new Map<string, AgentProviderDef>();
   for (const e of entries) {
     if (e.disabled) { byId.delete(e.id); continue; }
     if (e.error) continue; // a broken later entry does not remove a working earlier one
-    const def = e.source === "builtin" ? compiled.get(e.id) : safeDef(e.manifest);
+    const def = safeDef(e.manifest);
     if (def) byId.set(e.id, def);
   }
   return [...byId.values()];
@@ -168,8 +167,9 @@ const DOT_PATH_RE = /^[A-Za-z_][\w]*(\.[A-Za-z_][\w]*){0,5}$/;
  *  review names it before anything is installed. */
 const ASSET_NAME_RE = /^[A-Za-z0-9][\w.-]{0,63}$/;
 const ENV_KEY_RE = /^[A-Z][A-Z0-9_]{0,63}$/;
-/** Variables that change how a process loads code, not what it does. An agent that ships
- *  in the box may need one; a plugin setting them would be running code by another name. */
+/** Variables that change how a process loads code, not what it does. An agent
+ *  installed with a person's review may need one; setting them unattended would
+ *  be running code by another name. */
 const ENV_DENY = new Set(["LD_PRELOAD", "LD_LIBRARY_PATH", "DYLD_INSERT_LIBRARIES", "DYLD_LIBRARY_PATH",
   "NODE_OPTIONS", "PATH", "PYTHONPATH", "PYTHONSTARTUP", "BASH_ENV", "ENV", "SHELL", "IFS", "ELECTRON_RUN_AS_NODE"]);
 const PLACEHOLDER_RE = /\{(asset:[A-Za-z0-9][\w.-]{0,63}|hcpSock|hcpToken|tileId|agentId|cwd|private)\}/g;
@@ -188,7 +188,7 @@ function validateAssets(raw: unknown): AgentAsset[] {
   });
 }
 
-function validateLaunch(raw: unknown, trusted: boolean): AgentLaunch {
+function validateLaunch(raw: unknown): AgentLaunch {
   req(isObj(raw), "launch must be a map");
   const m = raw as Record<string, unknown>;
   const out: AgentLaunch = {};
@@ -211,7 +211,8 @@ function validateLaunch(raw: unknown, trusted: boolean): AgentLaunch {
     const env: Record<string, string> = {};
     for (const [k, v] of Object.entries(m.env as Record<string, unknown>)) {
       req(ENV_KEY_RE.test(k), `launch.env: "${k}" is not an environment variable name`);
-      req(trusted || !ENV_DENY.has(k), `launch.env: a plugin may not set ${k}`);
+      // Loader variables are how code gets run under another name; no manifest may set them.
+      req(!ENV_DENY.has(k), `launch.env: a plugin may not set ${k}`);
       req(typeof v === "string" && plainWithPlaceholders(v, 1000), `launch.env.${k} is not a plain value`);
       env[k] = v;
     }
@@ -297,7 +298,7 @@ function validateHooks(raw: unknown): AgentHooks {
   return out;
 }
 
-function validateSession(raw: unknown, trusted: boolean): AgentSession {
+function validateSession(raw: unknown): AgentSession {
   req(isObj(raw), "session must be a map");
   const m = raw as Record<string, unknown>;
   const out: AgentSession = {};
@@ -324,10 +325,9 @@ function validateSession(raw: unknown, trusted: boolean): AgentSession {
     const f = r.find as Record<string, unknown>;
     req(f.strategy === "jsonl-header" || f.strategy === "dir-meta", "session.resume.find.strategy must be jsonl-header or dir-meta");
     req(typeof f.root === "string" && SESSION_ROOT_RE.test(f.root), "session.resume.find.root must be a plain path");
-    // An agent Hivemind ships may read anywhere it needs; anyone else's reads under your
-    // home directory, and the review says which directory before you install it.
-    req(trusted || (f.root as string).startsWith("{home}/"), "session.resume.find.root must be under {home}/");
-    req(trusted || !(f.root as string).includes(".."), "session.resume.find.root cannot climb out of {home}");
+    // The root is untrusted input: inside the user's home, with no way out of it.
+    req((f.root as string).startsWith("{home}/"), "session.resume.find.root must be under {home}/");
+    req(!(f.root as string).includes(".."), "session.resume.find.root cannot climb out of {home}");
     const find = { strategy: f.strategy, root: f.root } as SessionFind;
     if (f.strategy === "jsonl-header") {
       for (const key of ["cwdPath", "idPath"] as const) {
@@ -413,13 +413,9 @@ function req(cond: unknown, msg: string): asserts cond {
 }
 
 export interface ManifestLoadOptions {
-  /** Shipped in the app, so it may use `re` rules. */
-  trusted?: boolean;
   /** A person asked for this one by name, so a reserved id is theirs to take. */
   allowReserved?: boolean;
   reserved?: readonly string[];
-  /** A compiled node half (node.ts `PLUGINS`) backs resume, turn signal and broker. */
-  nodeHalf?: boolean;
 }
 
 export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): AgentProviderDef {
@@ -434,10 +430,9 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
   // A path would put the agent's label on an arbitrary executable.
   req(!/[\\/]/.test(m.bin), `bin must be a bare basename, not a path (got ${m.bin})`);
   req(!opts.reserved?.includes(m.id), `id "${m.id}" is reserved: it would replace an agent you already have`);
-  // A name Hivemind has shipped stays attached to the command it has always launched, even
-  // after that agent stops shipping in the box.
+  // A name Hivemind has shipped stays attached to the command it has always launched.
   const ours = RESERVED_AGENTS[m.id];
-  req(!!opts.trusted || !!opts.allowReserved || !ours || ours === m.bin,
+  req(!!opts.allowReserved || !ours || ours === m.bin,
     `id "${m.id}" is Hivemind's agent for \`${ours}\`, but this manifest launches \`${m.bin}\``);
 
   req(m.caps && typeof m.caps === "object", "caps is required");
@@ -445,12 +440,12 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
     req(m.caps[k] !== undefined, `caps.${k} is required — an absence must be a decision`);
   }
 
-  // A claimed signal nothing sends would leave the control plane waiting forever. What
-  // sends it can be a module of ours — or the manifest itself, when it wires the agent to
-  // the control plane and ships the file that does the talking.
+  // A claimed signal nothing sends would leave the control plane waiting forever. It must
+  // be the manifest itself that wires the agent to the control plane and ships the file
+  // that does the talking.
   const wiredToControlPlane = !!(m.launch as { hcp?: unknown } | undefined)?.hcp
     && ((Array.isArray(m.assets) && m.assets.length > 0) || !!m.hooks || !!m.home);
-  if (!opts.nodeHalf && !wiredToControlPlane) {
+  if (!wiredToControlPlane) {
     req(m.caps.turnSignal === false,
       "caps.turnSignal must be false: nothing here sends it — a daemon half, or `launch.hcp` with the asset that talks to it");
     req(m.caps.supervise !== "broker",
@@ -513,11 +508,11 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
     ...(m.note ? { note: m.note } : {}),
     ...(options ? { options } : {}),
     ...(m.install ? { install: m.install } : {}),
-    ...(m.session ? { session: validateSession(m.session, !!opts.trusted) } : {}),
+    ...(m.session ? { session: validateSession(m.session) } : {}),
     ...(m.assets ? { assets: validateAssets(m.assets) } : {}),
     ...(m.hooks ? { hooks: validateHooks(m.hooks) } : {}),
     ...(m.home ? { home: validateHome(m.home) } : {}),
-    ...(m.launch ? { launch: validateLaunch(m.launch, !!opts.trusted) } : {}),
+    ...(m.launch ? { launch: validateLaunch(m.launch) } : {}),
   };
 
   if (m.spawn) {

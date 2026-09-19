@@ -204,8 +204,8 @@ export function sessionFor(
 }
 
 /** Carry out a plan: write what it asks for, then shape the command line. */
-export function applyPlan(spec: SpawnSpec, plan: LaunchPlan, paths: RuntimePaths, trusted: boolean): SpawnSpec {
-  const safe = validatePlan(plan, { trusted });
+export function applyPlan(spec: SpawnSpec, plan: LaunchPlan, paths: RuntimePaths): SpawnSpec {
+  const safe = validatePlan(plan);
   if (safe.files && Object.keys(safe.files).length) {
     mkdirSync(paths.private, { recursive: true });
     for (const [name, body] of Object.entries(safe.files)) writeFileSync(path.join(paths.private, name), body);
@@ -250,7 +250,7 @@ export function transformsFor(
       tileId, cwd: spec.cwd, args: spec.args ?? [], env: spec.env ?? {}, phase, session,
       supervise: spec.env?.HIVE_SUPERVISE, paths,
     });
-    return applyPlan(spec, plan, paths, !def.sourceRoot);
+    return applyPlan(spec, plan, paths);
   };
   const marker = def.session?.resume?.args[0];
   const fallbackMarker = def.session?.resume?.fallback?.[0];

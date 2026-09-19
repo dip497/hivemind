@@ -13,7 +13,6 @@
  * function, a path outside its own directory, or a command to run would not have that
  * property — and would quietly make "everything is a plugin" untrue again.
  */
-import type { AgentProviderDef } from "./types.js";
 
 /** A hook script and the single argument it takes. Both are the daemon's to decide. */
 export interface HookScript {
@@ -91,7 +90,7 @@ export const NO_PLAN: LaunchPlan = Object.freeze({});
  * disk and what reaches a command line. Anything outside the contract is dropped rather
  * than corrected, so a mistake shows up as a missing argument, never as a surprising one.
  */
-export function validatePlan(plan: LaunchPlan, opts: { trusted?: boolean } = {}): LaunchPlan {
+export function validatePlan(plan: LaunchPlan): LaunchPlan {
   const out: LaunchPlan = {};
   const files = Object.entries(plan.files ?? {}).filter(([name, body]) =>
     /^[A-Za-z0-9][\w.-]{0,127}$/.test(name) && typeof body === "string" && body.length <= 2 << 20);
@@ -105,7 +104,7 @@ export function validatePlan(plan: LaunchPlan, opts: { trusted?: boolean } = {})
   if (typeof plan.subcommand === "string" && /^[\w-]{1,32}$/.test(plan.subcommand)) out.subcommand = plan.subcommand;
   const env = Object.entries(plan.env ?? {}).filter(([k, v]) =>
     /^[A-Z][A-Z0-9_]{0,63}$/.test(k) && typeof v === "string" && !v.includes("\0")
-    && (opts.trusted || !LOADER_VARS.has(k)));
+    && !LOADER_VARS.has(k));
   if (env.length) out.env = Object.fromEntries(env);
   return out;
 }
@@ -113,6 +112,3 @@ export function validatePlan(plan: LaunchPlan, opts: { trusted?: boolean } = {})
 /** Variables that change how a process loads code rather than what it does. */
 const LOADER_VARS = new Set(["LD_PRELOAD", "LD_LIBRARY_PATH", "DYLD_INSERT_LIBRARIES", "DYLD_LIBRARY_PATH",
   "NODE_OPTIONS", "PATH", "PYTHONPATH", "PYTHONSTARTUP", "BASH_ENV", "ENV", "SHELL", "IFS", "ELECTRON_RUN_AS_NODE"]);
-
-/** An agent that ships in the box is trusted with its own plan; a plugin is not. */
-export const runtimeTrust = (def: AgentProviderDef): { trusted: boolean } => ({ trusted: !def.sourceRoot });

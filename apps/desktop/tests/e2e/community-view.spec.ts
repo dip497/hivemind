@@ -14,6 +14,7 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import { QUEUE_DIR, dockViaQueue, framesDrawn, queueReady, releaseViaQueue } from "./helpers/queue-view";
+import { seedAgents } from "./helpers/agents";
 
 test.use({ trace: "off" });
 
@@ -26,6 +27,7 @@ const FIXTURES = path.join(APP_DIR, "tests/e2e/fixtures/views");
 // Own profile (see host-chrome.spec.ts): the app resumes userData under XDG,
 // and the HCP socket the CLI reaches lives there too.
 const XDG = fs.mkdtempSync(path.join(os.tmpdir(), "hm-community-xdg-"));
+seedAgents(XDG);
 const ENV = { ...process.env, XDG_CONFIG_HOME: XDG } as Record<string, string>;
 const viewsDir = () => path.join(XDG, "hivemind", "views");
 

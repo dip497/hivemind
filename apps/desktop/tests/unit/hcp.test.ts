@@ -11,6 +11,11 @@ import { readLastAssistantMessage } from "../../src/main/hcp/transcript.ts";
 import { TurnTracker } from "../../src/main/hcp/turn-tracker.ts";
 import { OutputRecorder, stripAnsi } from "../../src/main/hcp/output-recorder.ts";
 import { makeDispatch } from "../../src/main/hcp/methods.ts";
+import { useAuthoredAgents } from "./authored-agents.ts";
+
+// Spawn policy, supervise policy and prompt delivery read the live catalog: load the
+// published fixtures the way an installed machine has them.
+useAuthoredAgents();
 import { startHcpServer } from "../../src/main/hcp/hcp-server.ts";
 import { PipeManager } from "../../src/main/hcp/pipes.ts";
 import { Mailbox } from "../../src/main/hcp/mailbox.ts";
@@ -102,6 +107,8 @@ function fakeDeps(over: Partial<Parameters<typeof makeDispatch>[0]> = {}) {
     writeToTile: write,
     deliverToTile: (id: string, data: string, onSent?: () => void) => mailbox.deliver(id, data, onSent),
     spawnAllowed: () => true,
+    // What main resolves from settings + PATH; the fixtures have claude.
+    defaultAgentId: async () => "claude",
     connect: () => true,
     disconnect: () => {},
     forgetPipes: () => {},

@@ -20,7 +20,6 @@ import { AgentIcon } from "./agents";
 import { FrameRailMenu, type FrameActions } from "./FrameRailMenu";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
-import { defaultAgent } from "@hivemind/agents";
 import { AGENT_TILE_KIND } from "./tile-kinds";
 
 export type LayerKind = typeof AGENT_TILE_KIND | "terminal" | "editor" | "diff" | "issues" | "browser" | "planReview" | "workbench";
@@ -325,7 +324,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
       >
         <span aria-hidden className="w-4 shrink-0 grid place-items-center font-mono text-[11px] text-[var(--color-fg3)]">
           {t.kind === AGENT_TILE_KIND
-            ? <AgentIcon id={t.agent ?? defaultAgent().id} size={14} />
+            ? <AgentIcon id={t.agent} size={14} />
             : t.kind === "browser"
               ? <Globe size={12} aria-hidden />
               : KIND_GLYPH[t.kind]}

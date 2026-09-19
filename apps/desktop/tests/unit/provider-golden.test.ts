@@ -16,8 +16,8 @@ import os from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { BUNDLED_ASSETS, composeResume, composeResumeFrom, providers as registry, renderHookDocument } from "@hivemind/agents/node";
-import { bundledAgent } from "@hivemind/agents";
+import { composeResume, composeResumeFrom, providers as registry, renderHookDocument } from "@hivemind/agents/node";
+import { authoredDef, authoredAsset, useAuthoredAgents } from "./authored-agents.ts";
 import type { SpawnSpec } from "../../src/main/pty-session-manager.ts";
 import { deliversPromptViaArgv, applyInitialPrompt, INITIAL_PROMPT_ENV } from "../../src/shared/agent-io.ts";
 import { identifyAgent, detectTileStatus, type Agent } from "../../src/renderer/src/agent-state.ts";
@@ -29,6 +29,11 @@ import { SUBMIT_DELAY_MS } from "../../src/shared/agent-io.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURE = path.join(__dirname, "fixtures", "provider-golden.json");
+
+// The providers under test are published manifests now, not compiled-in code: load them
+// the way a machine that has installed them would, so the registry, the detectors and
+// the HCP spawn path all see the same catalog.
+useAuthoredAgents();
 
 /** The daemon-side context, with every path set so every injection fires. */
 const CTX = {
@@ -139,7 +144,7 @@ async function capture(resume = composeResume(CTX)) {
       };
     }
     out.files = {
-      "droid-home/.factory/hooks.json": JSON.parse(renderHookDocument(bundledAgent("droid"), {
+      "droid-home/.factory/hooks.json": JSON.parse(renderHookDocument(authoredDef("droid"), {
         tileId: "", cwd: "", args: [], env: {}, phase: "spawn",
         paths: {
           private: "/x/ud/agents/droid", execPath: CTX.execPath, tileSessionsDir: CTX.tileSessionsDir, home: "/home/u",
@@ -151,7 +156,7 @@ async function capture(resume = composeResume(CTX)) {
           },
         },
       })!),
-      "kiro-home/.kiro/agents/hivemind.json": JSON.parse(renderHookDocument(bundledAgent("kiro"), {
+      "kiro-home/.kiro/agents/hivemind.json": JSON.parse(renderHookDocument(authoredDef("kiro"), {
         tileId: "", cwd: "", args: [], env: {}, phase: "spawn",
         paths: {
           private: "/x/ud/agents/kiro", execPath: CTX.execPath, tileSessionsDir: CTX.tileSessionsDir, home: "/home/u",
@@ -166,8 +171,9 @@ async function capture(resume = composeResume(CTX)) {
       })!),
     };
     out.assets = {
-      "hive-pi-ext.mjs": sha(BUNDLED_ASSETS.pi!["hive-pi-ext.mjs"]!),
-      "hcp-kiro-approval-hook.cjs": sha(BUNDLED_ASSETS.kiro!["hcp-kiro-approval-hook.cjs"]!),
+      // The same files the daemon reads from an installed agent's dir — here, the fixtures.
+      "hive-pi-ext.mjs": sha(authoredAsset("pi", "hive-pi-ext.mjs")),
+      "hcp-kiro-approval-hook.cjs": sha(authoredAsset("kiro", "hcp-kiro-approval-hook.cjs")),
     };
     return out;
   } finally {

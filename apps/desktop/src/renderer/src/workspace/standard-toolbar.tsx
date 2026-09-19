@@ -12,7 +12,7 @@ export interface StandardToolbarProps {
   compact: boolean;
   repoPath: string | null;
   onToggle: (kind: "tree" | "shell" | "diff" | "issues") => void;
-  agentSel: string;
+  agentSel: string | undefined;
   onAgentChange: (id: string) => void;
   onSpawnAgent: (agent: { id: string; cmd: string; defaultArgs?: string[]; label: string }) => void;
   onFrame: () => void;

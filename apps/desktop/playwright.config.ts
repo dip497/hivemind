@@ -2,6 +2,7 @@ import { defineConfig } from "@playwright/test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { seedAgents } from "./tests/e2e/helpers/agents";
 
 // Persistence is default-ON in the real app, but the detached pty-daemon
 // intentionally outlives the window — and Playwright's electronApp.close()
@@ -13,6 +14,12 @@ process.env.HIVEMIND_PTY_DAEMON = "0";
 
 // Per run, not per spec: specs share settings.json, so isolate or restore what you persist.
 process.env.XDG_CONFIG_HOME = fs.mkdtempSync(path.join(os.tmpdir(), "hivemind-e2e-xdg-"));
+// Nothing is compiled in, so the shared profile installs the usual six from the published
+// fixtures — the same manifests a HiveHub auto-install would drop there.
+seedAgents(process.env.XDG_CONFIG_HOME);
+// No spec may touch the network: the catalog lives on HiveHub, and an unreachable index
+// fails auto-install closed. Specs that build their own registry set their own value.
+process.env.HIVEMIND_PLUGIN_INDEX = "file:///hivemind-e2e-unreachable/index.json";
 
 export default defineConfig({
   testDir: "./tests/e2e",

@@ -14,7 +14,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import { bundledAgent } from "@hivemind/agents";
+import { authoredDef } from "./authored-agents.ts";
 import { renderHookDocument } from "@hivemind/agents/node";
 
 // claude's hooks are declared in its manifest now; this renders the same document the
@@ -22,7 +22,7 @@ import { renderHookDocument } from "@hivemind/agents/node";
 const trackerSettings = (deps: {
   trackerPath: string; tileSessionsDir: string; execPath: string;
   planHookPath?: string; planBridgeSock?: string;
-}, tileId: string): string => renderHookDocument(bundledAgent("claude"), {
+}, tileId: string): string => renderHookDocument(authoredDef("claude"), {
   tileId, cwd: "/w", args: [], env: {}, phase: "spawn",
   paths: {
     private: "/x/agents/claude", execPath: deps.execPath, tileSessionsDir: deps.tileSessionsDir, home: "/home/u",

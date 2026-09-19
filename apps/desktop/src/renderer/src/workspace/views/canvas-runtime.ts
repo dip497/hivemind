@@ -70,7 +70,7 @@ export interface CanvasRuntime {
   togglePin: (id: string, rect: PinRect) => void;
   onPinChange: (id: string, patch: { anchor?: { sx: number; sy: number }; size?: { w: number; h: number } }) => void;
   // ── tool island ──
-  agentSel: string;
+  agentSel: string | undefined;
   setAgentSel: (id: string) => void;
   spawnAgent: (a: { id: string; cmd: string; defaultArgs?: string[]; label: string }) => void;
   spawnBrowser: () => void;

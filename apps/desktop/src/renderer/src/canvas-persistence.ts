@@ -19,8 +19,7 @@
  */
 import type { TileKind } from "./tile-kinds";
 import { frameColorFor, isGeneratedFrameColor } from "./frame-color";
-import { identifyAgent } from "./agent-state";
-import { defaultAgent } from "@hivemind/agents";
+import { binOf } from "@hivemind/agents";
 import { AGENT_TILE_KIND } from "./tile-kinds";
 
 /** On POSIX: `-i` keeps the shell interactive so it doesn't exit, `-l` sources
@@ -207,8 +206,11 @@ export function loadLayout(repoPath: string | null): PersistedLayout {
       tiles = [];
       editorTabs = {};
       for (const e of Array.isArray(p.extras) ? p.extras : []) {
-        // Legacy (v1) extras: only the default provider's command was an agent tile.
-        const kind: TileKind = identifyAgent(e.cmd) === defaultAgent().id ? AGENT_TILE_KIND : "shell";
+        // Legacy (v1) extras: only the original default agent's command was an agent tile.
+        // The literal, not the catalog: those layouts predate the catalog, and whichever
+        // agent is the default today — or whether any is installed — must not reinterpret
+        // what the old file meant.
+        const kind: TileKind = binOf(e.cmd) === AGENT_TILE_KIND ? AGENT_TILE_KIND : "shell";
         tiles.push({ id: e.id, kind, label: e.label, cmd: e.cmd, args: e.args });
       }
       const v = p.vis;

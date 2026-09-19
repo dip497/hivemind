@@ -1,8 +1,9 @@
 /** Main scans the disk and sends manifests; the renderer rebuilds defs from them.
- *  A failed scan leaves the compiled-in catalog in place. */
+ *  An empty scan is a legitimate result: nothing is compiled in, so an empty result
+ *  IS the catalog. */
 import { useSyncExternalStore } from "react";
 import { toast } from "sonner";
-import { BUILTIN_CATALOG, setCatalog, defsFromWire, type AgentWireEntry } from "@hivemind/agents";
+import { setCatalog, defsFromWire, type AgentWireEntry } from "@hivemind/agents";
 import { getSettings, patchSettings, saveSettingsNow } from "./settings-store";
 
 export interface AgentScanProblem {
@@ -54,6 +55,18 @@ export function openAgentSettings(id: string): void {
   window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: `agent:${id}` } }));
 }
 
+/** Open Settings ▸ Plugins — the browse/install page, where an agent is gotten. */
+export function openPluginSettings(): void {
+  window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "plugins" } }));
+}
+
+/** A spawn was asked for but no agent is installed: say so and point at the installer,
+ *  instead of doing nothing silently. */
+export function noAgentInstalled(): void {
+  toast.error("No agent installed — install one from Settings ▸ Plugins.");
+  openPluginSettings();
+}
+
 /** Re-check PATH (cheap, runs nothing): after a scan, or when the user asks. */
 export async function refreshAgentPresence(): Promise<void> {
   const ask = window.hive.agentPresence;
@@ -95,9 +108,9 @@ export async function syncAgentPlugins(repoRoot: string | null = lastRoot): Prom
     const { agents } = await window.hive.listAgents(repoRoot);
     if (seq !== scanSeq) return lastProblems;
     entries = agents as AgentWireEntry[];
-    const defs = defsFromWire(entries, BUILTIN_CATALOG);
-    // An empty scan is a failure; an empty catalog is the user disabling everything.
-    if (entries.length > 0) setCatalog(defs);
+    // An empty result is a real state now: with nothing compiled in, the user simply
+    // has no agents installed yet (Settings ▸ Plugins is the way out).
+    setCatalog(defsFromWire(entries));
     lastProblems = entries
       .filter((a) => a.error)
       .map((a) => ({ id: a.id, source: a.source, error: a.error! }));

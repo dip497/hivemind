@@ -249,7 +249,7 @@ export interface HiveIpc {
   listViews(repoRoot: string | null): Promise<ViewPackageInfo[]>;
   /** Agent providers on disk. Only manifests cross — a def carries detect(). */
   listAgents(repoRoot: string | null): Promise<{
-    agents: Array<{ id: string; file: string; source: "builtin" | "user" | "repo"; manifest: unknown; error: string | null; disabled: boolean }>;
+    agents: Array<{ id: string; file: string; source: "user" | "repo"; manifest: unknown; error: string | null; disabled: boolean }>;
     shadowed: Array<{ id: string; by: string; over: string }>;
   }>;
   /** Where each agent's CLI was found on PATH (null = not installed). Runs nothing. */
@@ -272,8 +272,8 @@ export interface HiveIpc {
   installCatalogAgent(token: string): Promise<void>;
   /** Remove an agent you installed; a catalog one is then never added automatically again. */
   removeAgent(id: string): Promise<void>;
-  /** Add catalog agents whose CLI was found; the labels of those added. Runs once per launch. */
-  autoInstallAgents(): Promise<string[]>;
+  /** Add catalog agents whose CLI was found; what was added and what each can do. Runs once per launch. */
+  autoInstallAgents(): Promise<Array<{ id: string; label: string; does: string[] }>>;
   installViewPackage(token: string): Promise<void>;
   removeViewPackage(id: string): Promise<void>;
   /** Main's watchdog saw a plugin frame peg a core for several samples. */

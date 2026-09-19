@@ -9,8 +9,8 @@ import { join } from "node:path";
 // kiro is a manifest now: its agent config, its hooks and its transforms all come from it.
 const { manifestRuntime, renderHookDocument, renderHookEvents, transformsFor, specIsAgent } =
   await import("@hivemind/agents/node");
-const { bundledAgent } = await import("@hivemind/agents");
-const kiroDef = bundledAgent("kiro");
+const { authoredDef } = await import("./authored-agents.ts");
+const kiroDef = authoredDef("kiro");
 const KIRO_HIVEMIND_AGENT = "hivemind";
 const isKiro = (spec: { cmd: string }) => specIsAgent(kiroDef, spec);
 const reqFor = (deps: Record<string, string | undefined>, tileId = "") => ({

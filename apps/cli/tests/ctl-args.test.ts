@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { READ_SLICE_MS, UsageError, boolFlag, intFlag, parseKeys, readSchedule, splitDouble, tailLines, workflowParams } from "../src/ctl-args.js";
 import { EXIT, exitCodeFor } from "../src/hcp.js";
+import { useFixtureAgents } from "./agents-fixtures.js";
+
+// workflowParams resolves the default agent from the catalog; a worker must be first,
+// the way a machine whose default is claude looks.
+useFixtureAgents(["claude"]);
 
 describe("readSchedule", () => {
   test("--poll is one zero-length slice", () => expect(readSchedule(0)).toEqual([0]));

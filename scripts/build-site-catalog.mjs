@@ -30,7 +30,7 @@ const entries = catalog.plugins.map((p) => {
   const source = p.manifest;
   if (!source) return { ...base, does: [], reads: [] };
   // Exactly as a stranger's machine reads it: untrusted, no daemon half.
-  const def = defFromManifest(YAML.parse(source), { trusted: false, nodeHalf: false });
+  const def = defFromManifest(YAML.parse(source), {});
   return {
     ...base,
     manifest: source,

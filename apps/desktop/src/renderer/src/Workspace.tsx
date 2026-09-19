@@ -82,8 +82,8 @@ import { CANVAS_LAYOUT, loadCanvasLayout } from "./workspace/views/canvas-layout
 import { CanvasRuntimeContext, type CanvasRuntime, type FocusModeReq, type FocusReq, type Viewport } from "./workspace/views/canvas-runtime";
 // Registers the built-in view plugins (side effect) before the first render.
 import "./workspace/views";
-import { defaultAgent, preferredAgent } from "@hivemind/agents";
-import { notReady, useAgentPresence } from "./agent-plugins";
+import { preferredAgent } from "@hivemind/agents";
+import { notReady, noAgentInstalled, useAgentPresence } from "./agent-plugins";
 import { AGENT_TILE_KIND } from "./tile-kinds";
 
 // Snap on drop to an 8px grid (Figma's standard). The drop xyflow hands us is
@@ -463,7 +463,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
       const effRepo = owner?.worktreePath ?? owner?.workspacePath ?? repoPath ?? null;
       if ((t.kind === "editor" || t.kind === "diff") && !effRepo) continue;
       const kind: LayerTile["kind"] = t.kind === "shell" ? "terminal" : t.kind;
-      const agent = t.kind === AGENT_TILE_KIND ? (agentForCmd(t.cmd)?.id ?? defaultAgent().id) : undefined;
+      const agent = t.kind === AGENT_TILE_KIND ? agentForCmd(t.cmd)?.id : undefined;
       out.push({ id: t.id, kind, name: tileNames[t.id] ?? agentTitles[t.id] ?? t.label, frameId: fo[t.id] ?? null, agent });
     }
     return out;
@@ -492,10 +492,30 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   // restored tiles have started, so the network and each CLI's `--version` stay off both.
   useEffect(() => {
     let live = true;
-    const timer = setTimeout(() => void whenBootIdle().then(() => live ? window.hive.autoInstallAgents() : []).then((labels) => {
-      if (!labels.length) return;
+    const timer = setTimeout(() => void whenBootIdle().then(() => live ? window.hive.autoInstallAgents() : []).then((added) => {
+      if (!added.length) return;
       void syncAgentPlugins();
-      toast.success(`Added ${labels.join(", ")} — found on this machine.`, {
+      const toastId = toast.success(`Added ${added.map((a) => a.label).join(", ")} — found on this machine.`, {
+        // The registry review (by pull request) stands in for a per-user one, so what each
+        // agent can do is disclosed here instead of gating the install. Remove reuses the
+        // Settings ▸ Agents path: uninstall + decline, so it is never re-added.
+        description: (
+          <div>{added.map((a) => (
+            <div key={a.id} className="agent-added">
+              <div className="agent-added-head">
+                <span className="agent-added-label">{a.label}</span>
+                <Button size="sm" variant="outline" aria-label={`Remove ${a.label}`} className="agent-added-remove"
+                  onClick={() => void window.hive.removeAgent(a.id)
+                    .then(() => { void syncAgentPlugins(); toast.dismiss(toastId); })
+                    .catch(() => toast.error(`Could not remove ${a.label}.`))}>
+                  Remove
+                </Button>
+              </div>
+              {a.does.map((d) => <div key={d} className="agent-added-does">{d}</div>)}
+            </div>
+          ))}</div>
+        ),
+        duration: 15000,
         action: { label: "Agents", onClick: () => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "agents" } })) },
       });
     }).catch(() => {}), 4000);
@@ -533,9 +553,10 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   }, []);
 
   // Which agent the tool island's spawn button creates (claude / codex / …):
-  // settings.agents.defaultAgent, validated against the catalog.
+  // settings.agents.defaultAgent, validated against the catalog. Undefined when
+  // no agent is installed — the spawn paths route that to Settings ▸ Plugins.
   const presence = useAgentPresence();
-  const agentSel = preferredAgent(settings.agents.defaultAgent, (d) => !notReady(presence, d.id)).id;
+  const agentSel = preferredAgent(settings.agents.defaultAgent, (d) => !notReady(presence, d.id))?.id;
   const setAgentSel = useCallback((id: string) => patchSettings("agents.defaultAgent", id), []);
   const agentSelRef = useRef(agentSel);
   useEffect(() => { agentSelRef.current = agentSel; }, [agentSel]);
@@ -716,7 +737,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
             const mapTile = (t: typeof tilesRef.current[number]) => ({
               tileId: t.id, kind: t.kind, label: t.label, status: statusOf(t.id),
               name: tileNamesRef.current[t.id] ?? agentTitlesRef.current[t.id] ?? t.label,
-              ...(t.kind === AGENT_TILE_KIND ? { agent: agentForCmd(t.cmd)?.id ?? defaultAgent().id } : {}),
+              ...(t.kind === AGENT_TILE_KIND ? { agent: agentForCmd(t.cmd)?.id } : {}),
             });
             const groupOf = (f: FrameState) => ({
               frameId: f.id,
@@ -867,7 +888,8 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
 
   // Spawn the island's CURRENTLY-selected agent (key "2").
   const spawnSelectedAgent = useCallback(() => {
-    const a = agentById(agentSelRef.current) ?? getAgents()[0]!;
+    const a = agentById(agentSelRef.current) ?? getAgents()[0];
+    if (!a) { noAgentInstalled(); return; }
     spawnAgent(a);
   }, [spawnAgent]);
   const spawnBrowser = useCallback(() => spawnInto("browser"), [spawnInto]);
@@ -1141,7 +1163,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
                   variant="muted"
                   onClick={() => { deliverToClaude(claudePick.text, t.id); setClaudePick(null); }}
                 >
-                  <AgentIcon id={agentForCmd(t.cmd)?.id ?? defaultAgent().id} size={13} className="text-[var(--color-fg3)]" />
+                  <AgentIcon id={agentForCmd(t.cmd)?.id} size={13} className="text-[var(--color-fg3)]" />
                   <span className="truncate flex-1">{name}</span>
                   {frame && <span className="shrink-0 text-[10px] text-[var(--color-fg3)]">{frame.title}</span>}
                 </MenuItem>

@@ -11,8 +11,8 @@ import { createHash } from "node:crypto";
 
 // cursor resumes because its manifest says where its chats live — no code of its own.
 const { findSession, resumeFromManifest, specIsAgent } = await import("@hivemind/agents/node");
-const { bundledAgent } = await import("@hivemind/agents");
-const cursorDef = bundledAgent("cursor");
+const { authoredDef } = await import("./authored-agents.ts");
+const cursorDef = authoredDef("cursor");
 const find = cursorDef.session!.resume!.find!;
 const isCursor = (spec: { cmd: string }) => specIsAgent(cursorDef, spec);
 const workspaceKey = (cwd: string) => createHash("md5").update(cwd).digest("hex");

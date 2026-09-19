@@ -9,6 +9,7 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { QUEUE_DIR, dockViaQueue, queueReady } from "./helpers/queue-view";
+import { seedAgents } from "./helpers/agents";
 
 test.use({ trace: "off" });
 
@@ -22,6 +23,7 @@ const CLI = path.resolve(APP_DIR, "../cli/src/index.ts");
 // userData (view mode, layouts). The HCP socket must live under the profile
 // the CLI sees, so the isolation is the env, not --user-data-dir.
 const XDG = fs.mkdtempSync(path.join(os.tmpdir(), "hm-chrome-xdg-"));
+seedAgents(XDG);
 const ENV = { ...process.env, XDG_CONFIG_HOME: XDG } as Record<string, string>;
 
 const toView = (mode: string) => page.evaluate((m) => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: m } })), mode);

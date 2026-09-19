@@ -2,22 +2,13 @@
 import { defineCommand } from "citty";
 import { AGENT_NAME, stageFromRegistry } from "../registry.js";
 import { findRoot, patchSettingsFile, readSettings } from "@hivemind/core";
-import { BUILTIN_CATALOG } from "@hivemind/agents";
 import { loadAgents, installAgent, removeAgent, AGENT_MANIFEST_FILE } from "@hivemind/agents/load";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { NODE_PARTS } from "@hivemind/agents/node";
 import { err, ok } from "../format.js";
 import { hcpCall } from "../hcp.js";
-
-/** The id a package claims, read before anything is copied. Null when it is unreadable —
- *  installAgent reports the real reason. */
-async function readAgentId(dir: string): Promise<string | null> {
-  try { return /^id:\s*"?([A-Za-z0-9][\w-]*)"?\s*$/m.exec(await readFile(path.join(dir, AGENT_MANIFEST_FILE), "utf8"))?.[1] ?? null; }
-  catch { return null; }
-}
 
 /** Ask a running app to re-read its providers. False when none is reachable. */
 async function rescanApp(): Promise<boolean> {
@@ -32,12 +23,7 @@ const fail = (ctx: { json: boolean }, e: unknown, code: string): never =>
 async function scan(): Promise<Awaited<ReturnType<typeof loadAgents>>> {
   const repoRoot = await findRoot().catch(() => null);
   const disabled = await readSettings().then((s) => s.agents.disabled).catch(() => [] as string[]);
-  return loadAgents({
-    builtins: BUILTIN_CATALOG,
-    repoRoot: repoRoot ?? undefined,
-    disabled,
-    nodeHalf: (id) => !!NODE_PARTS[id],
-  });
+  return loadAgents({ repoRoot: repoRoot ?? undefined, disabled });
 }
 
 const listCmd = defineCommand({
@@ -95,8 +81,7 @@ async function stageFromRepo(spec: string, ref: string): Promise<{ dir: string; 
   // names to plain ones, so this cannot be talked into fetching a path of someone's choosing.
   const { readAgentManifest } = await import("@hivemind/agents/load");
   const read = await readAgentManifest(path.join(dir, AGENT_MANIFEST_FILE), {
-    source: "user", requireDirMatch: false, nodeHalf: () => false,
-  });
+    source: "user", requireDirMatch: false,   });
   for (const asset of read.def?.assets ?? []) await grab(asset.file);
   return { dir, from: base.href };
 }
@@ -105,7 +90,7 @@ const installCmd = defineCommand({
   meta: { name: "install", description: "Validate an agent package and copy it into the user agents dir" },
   args: {
     dir: { type: "positional", required: true, description: "a folder holding agent.yaml, an agent's name on HiveHub (gemini), or owner/repo[/dir] on GitHub" },
-    replace: { type: "boolean", description: "allow it to take a built-in agent's id" },
+    replace: { type: "boolean", description: "allow it to take a reserved agent id and point it at another command" },
     ref: { type: "string", description: "branch or tag to take it from (default: the default branch)" },
     yes: { type: "boolean", description: "install from a repository without reading what it does first" },
     json: { type: "boolean" },
@@ -135,8 +120,7 @@ const installCmd = defineCommand({
         const { agentDisclosures } = await import("@hivemind/agents");
         const { readAgentManifest } = await import("@hivemind/agents/load");
         const read = await readAgentManifest(path.join(source, AGENT_MANIFEST_FILE), {
-          source: "user", requireDirMatch: false, nodeHalf: () => false,
-        });
+          source: "user", requireDirMatch: false,         });
         if (read.error || !read.def) return stop("invalid", read.error ?? "invalid agent manifest");
         return stop("install_unconfirmed", [
           `${read.def.label} (${read.def.id}) from ${from.where}`,
@@ -147,13 +131,9 @@ const installCmd = defineCommand({
             : "Nothing is pinned: a repository can change after you read this. Re-run with --yes to install it.",
         ].join("\n"));
       }
-      // Taking a built-in's id means every ⌘\, toolbar click and `ctl spawn` runs this
-      // instead. Legitimate, but never as a side effect of a command someone pasted.
-      const id = await readAgentId(source);
-      const builtin = id ? BUILTIN_CATALOG.find((d) => d.id === id) : undefined;
-      if (builtin && !args.replace) {
-        return stop("install_refused", `${id} is the id of the built-in ${builtin.label}; installing it would replace that agent everywhere. Re-run with --replace if that is what you want.`);
-      }
+      // A reserved id (claude, codex, …) stays pinned to the command it has always
+      // launched; --replace is a person saying they want exactly this other command
+      // under a name they know. Never a side effect of a command someone pasted.
       const a = await installAgent(source, { allowReserved: !!args.replace });
       await discard();
       const rescanned = await rescanApp();
@@ -176,8 +156,7 @@ const validateCmd = defineCommand({
       const { readAgentManifest } = await import("@hivemind/agents/load");
       // Exactly the checks a user's machine runs: nothing here is trusted because you wrote it.
       const read = await readAgentManifest(path.join(dir, AGENT_MANIFEST_FILE), {
-        source: "user", requireDirMatch: false, nodeHalf: () => false,
-      });
+        source: "user", requireDirMatch: false,       });
       if (read.error || !read.def) return err(ctx, "invalid", read.error ?? "invalid agent manifest");
       const def = read.def;
 

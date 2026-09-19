@@ -8,8 +8,8 @@ import { join } from "node:path";
 // pi has no code of its own: its manifest says where its sessions are, which file it
 // needs written, and what that adds to the command line.
 const { findSession, manifestRuntime, transformsFor, specIsAgent } = await import("@hivemind/agents/node");
-const { bundledAgent } = await import("@hivemind/agents");
-const piDef = bundledAgent("pi");
+const { authoredDef } = await import("./authored-agents.ts");
+const piDef = authoredDef("pi");
 const isPi = (spec: { cmd: string }) => specIsAgent(piDef, spec);
 const newestPiSessionForCwd = (cwd: string, root?: string) =>
   findSession(piDef.session!.resume!.find!, cwd, root);

@@ -9,7 +9,7 @@ import { installAgent, readAgentManifest, removeAgent, userAgentsDir, AGENT_MANI
 import { findBin, verifyAgent } from "@hivemind/agents/discover";
 import { getSettings, patchSettingsPath } from "./settings-store.js";
 import { existsSync } from "node:fs";
-import { BUILTIN_CATALOG, agentDisclosures, isGenericRuntime } from "@hivemind/agents";
+import { agentDisclosures, isGenericRuntime } from "@hivemind/agents";
 import { newNonce } from "./view-package-files.js";
 import { reviewViewDir } from "./view-packages.js";
 import { applyShellEnvToProcess } from "./shell-env.js";
@@ -78,11 +78,10 @@ export function installPluginCatalogIpc(getWindow: () => BrowserWindow | null): 
       try { return { type: "view", ...(await reviewViewDir(dir, true)) }; }
       catch (e) { await rm(dir, { recursive: true, force: true }); throw e; }
     }
-    const read = await readAgentManifest(path.join(dir, AGENT_MANIFEST_FILE), { source: "user", nodeHalf: () => false });
-    const builtin = read.def && BUILTIN_CATALOG.find((d) => d.id === read.def!.id);
-    if (read.error || !read.def || builtin) {
+    const read = await readAgentManifest(path.join(dir, AGENT_MANIFEST_FILE), { source: "user" });
+    if (read.error || !read.def) {
       await rm(dir, { recursive: true, force: true });
-      throw new Error(builtin ? `It uses the id "${builtin.id}", which belongs to the built-in ${builtin.label}.` : read.error ?? "invalid agent manifest");
+      throw new Error(read.error ?? "invalid agent manifest");
     }
     const def = read.def;
     const flags = [...new Set((def.options ?? []).flatMap((o) => [
@@ -133,38 +132,33 @@ export function installPluginCatalogIpc(getWindow: () => BrowserWindow | null): 
 }
 
 /** Add catalog agents whose CLI this machine has. No prompt — the user chose "just
- *  detect" — but each must pass the same checks as a reviewed install: files match
- *  their hashes, the manifest validates as untrusted, it names the CLI that was found,
- *  that CLI answers `--version` like one, and it cannot take a built-in's id. */
-export async function autoInstallDetectedAgents(): Promise<string[]> {
+ *  detect". Each still passes the same checks as a reviewed install: files match their
+ *  hashes, the manifest validates as untrusted, it names the CLI that was found, and that CLI
+ *  answers `--version` like one. Disclosures don't block:
+ *  catalog agents are reviewed by pull request before they are listed, and the notice tells the user what each can do. */
+export async function autoInstallDetectedAgents(): Promise<Array<{ id: string; label: string; does: string[] }>> {
   const settings = getSettings().agents;
   if (!settings.autoInstall) return [];
   const entries = (await fetchCatalog()).filter((e) => e.type === "agent" && e.bin
-    && !BUILTIN_CATALOG.some((d) => d.id === e.id)
     && !settings.declined.includes(e.id)
     && !existsSync(path.join(userAgentsDir(), e.id))
     // The index names the command; a runtime that runs anything proves nothing about the agent.
     && !isGenericRuntime(e.bin!)
     && appMeetsMinVersion(app.getVersion(), e.minAppVersion)
     && findBin(e.bin));
-  const added: string[] = [];
+  const added: Array<{ id: string; label: string; does: string[] }> = [];
   for (const entry of entries) {
     let dir: string | null = null;
     try {
       dir = await stageEntry(entry);
-      const read = await readAgentManifest(path.join(dir, AGENT_MANIFEST_FILE), { source: "user", nodeHalf: () => false });
+      const read = await readAgentManifest(path.join(dir, AGENT_MANIFEST_FILE), { source: "user" });
       if (read.error || !read.def || read.def.bin !== entry.bin || read.def.id !== entry.id) continue;
-      // Nobody is reading this one: it was added because the CLI is here, not because a
-      // person said yes. An agent that runs a command or reaches outside its own folder
-      // needs that yes, so it waits in the catalog instead.
-      const does = agentDisclosures(read.def);
-      if (does.length) { console.warn(`[agents] ${entry.id} needs a review: ${does[0]}`); continue; }
       // Last: starting the CLI boots its whole runtime, so only for one that would be added.
       const probe = await verifyAgent({ id: entry.id, bin: entry.bin! } as Parameters<typeof verifyAgent>[0]);
       if (!probe.version) continue;
       await installAgent(dir);
       await noteCatalogAgent(entry.id);
-      added.push(read.def.label);
+      added.push({ id: entry.id, label: read.def.label, does: agentDisclosures(read.def) });
     } catch (e) {
       console.warn(`[agents] could not add ${entry.id} from the catalog:`, (e as Error).message);
     } finally {

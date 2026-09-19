@@ -4,6 +4,9 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import YAML from "yaml";
+import { defFromManifest } from "../src/manifest.js";
+import type { AgentProviderDef } from "../src/types.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CATALOG_DIR = join(HERE, "fixtures", "published-agents");
@@ -22,3 +25,8 @@ function scan(): AuthoredAgent[] {
 
 export const AUTHORED: readonly AuthoredAgent[] = scan();
 export const authoredYaml = (a: AuthoredAgent): string => readFileSync(a.file, "utf8");
+
+/** The published agents as defs — what a machine that installed them all would have. */
+export function authoredDefs(): AgentProviderDef[] {
+  return AUTHORED.map((a) => defFromManifest(YAML.parse(authoredYaml(a)) as unknown));
+}
