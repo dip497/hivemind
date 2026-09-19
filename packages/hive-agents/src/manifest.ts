@@ -181,10 +181,11 @@ function validateAssets(raw: unknown): AgentAsset[] {
   req(Array.isArray(raw) && raw.length <= 8, "assets must be a list of at most 8 files");
   return raw.map((a, i) => {
     req(isObj(a), `assets[${i}] must be a map`);
-    const { name, file } = a as Record<string, unknown>;
+    const { name, file, hook } = a as Record<string, unknown>;
     req(typeof name === "string" && ASSET_NAME_RE.test(name), `assets[${i}].name must be a plain file name`);
     req(typeof file === "string" && ASSET_NAME_RE.test(file), `assets[${i}].file must be a file beside the manifest`);
-    return { name, file };
+    req(hook === undefined || (typeof hook === "string" && /^[a-z][A-Za-z0-9]{0,31}$/.test(hook)), `assets[${i}].hook must be a hook name`);
+    return { name, file, ...(typeof hook === "string" ? { hook } : {}) };
   });
 }
 

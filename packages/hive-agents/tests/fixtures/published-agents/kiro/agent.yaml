@@ -68,6 +68,7 @@ home:
 assets:
 - name: hcp-kiro-approval-hook.cjs
   file: hcp-kiro-approval-hook.cjs
+  hook: kiroApproval
 hooks:
   file: agents/hivemind.json
   template: '{"name":"hivemind","description":"hivemind control-plane wiring (auto-generated — do not edit by hand)","hooks":{events}}'

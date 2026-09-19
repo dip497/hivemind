@@ -42,6 +42,25 @@ const runtimePaths = (p: DaemonPaths, dir: string): RuntimePaths => ({
   home: homedir(),
 });
 
+const agentDir = (def: AgentProviderDef, ctx: Parameters<NonNullable<AgentNodeParts["resume"]>>[0]): string =>
+  ctx.providers?.[def.id]?.privateDir ?? privateDir(nodePath.dirname(ctx.tileSessionsDir), def.id);
+
+/** Our hook scripts, and the ones an agent ships as assets, with what each is called with. An entry
+ *  missing here is an event the manifest asked for that this daemon cannot wire — the renderer drops it. */
+export function hookPathsFor(def: AgentProviderDef, ctx: Parameters<NonNullable<AgentNodeParts["resume"]>>[0]): Record<string, { path: string; arg: string }> {
+  return {
+    ...(ctx.trackerPath ? { tracker: { path: ctx.trackerPath, arg: ctx.tileSessionsDir } } : {}),
+    ...(ctx.planHookPath && ctx.planBridgeSock ? { plan: { path: ctx.planHookPath, arg: ctx.planBridgeSock } } : {}),
+    ...(ctx.approvalHookPath && ctx.hcpSock ? { approval: { path: ctx.approvalHookPath, arg: ctx.hcpSock } } : {}),
+    ...(ctx.stopHookPath && ctx.hcpSock ? { stop: { path: ctx.stopHookPath, arg: ctx.hcpSock } } : {}),
+    ...(ctx.subagentHookPath && ctx.hcpSock ? { subagent: { path: ctx.subagentHookPath, arg: ctx.hcpSock } } : {}),
+    ...(ctx.notificationHookPath && ctx.hcpSock ? { notification: { path: ctx.notificationHookPath, arg: ctx.hcpSock } } : {}),
+    ...(ctx.userpromptHookPath && ctx.hcpSock ? { userPrompt: { path: ctx.userpromptHookPath, arg: ctx.hcpSock } } : {}),
+    ...Object.fromEntries((def.assets ?? []).filter((a) => a.hook && ctx.hcpSock)
+      .map((a) => [a.hook!, { path: nodePath.join(agentDir(def, ctx), a.name), arg: ctx.hcpSock! }])),
+  };
+}
+
 /** An agent whose manifest describes everything it needs — no module of ours involved.
  *  The daemon writes what `install` asks for, then applies `launch` on every spawn. */
 function partsFromManifest(def: AgentProviderDef): AgentNodeParts | undefined {
@@ -59,19 +78,9 @@ function partsFromManifest(def: AgentProviderDef): AgentNodeParts | undefined {
       return { privateDir: dir, ...(def.home && existsSync(homePaths(def.home, dir).dir) ? { homeReady: "1" } : {}) };
     },
     resume: (ctx) => transformsFor(def, runtime, {
-      private: ctx.providers?.[def.id]?.privateDir ?? privateDir(nodePath.dirname(ctx.tileSessionsDir), def.id),
+      private: agentDir(def, ctx),
       ...(ctx.providers?.[def.id]?.homeReady ? { homeReady: true } : {}),
-      // Our hook scripts and what each is called with. An entry missing here is an event
-      // the manifest asked for that this daemon cannot wire — the renderer drops it.
-      hooks: {
-        ...(ctx.trackerPath ? { tracker: { path: ctx.trackerPath, arg: ctx.tileSessionsDir } } : {}),
-        ...(ctx.planHookPath && ctx.planBridgeSock ? { plan: { path: ctx.planHookPath, arg: ctx.planBridgeSock } } : {}),
-        ...(ctx.approvalHookPath && ctx.hcpSock ? { approval: { path: ctx.approvalHookPath, arg: ctx.hcpSock } } : {}),
-        ...(ctx.stopHookPath && ctx.hcpSock ? { stop: { path: ctx.stopHookPath, arg: ctx.hcpSock } } : {}),
-        ...(ctx.subagentHookPath && ctx.hcpSock ? { subagent: { path: ctx.subagentHookPath, arg: ctx.hcpSock } } : {}),
-        ...(ctx.notificationHookPath && ctx.hcpSock ? { notification: { path: ctx.notificationHookPath, arg: ctx.hcpSock } } : {}),
-        ...(ctx.userpromptHookPath && ctx.hcpSock ? { userPrompt: { path: ctx.userpromptHookPath, arg: ctx.hcpSock } } : {}),
-      },
+      hooks: hookPathsFor(def, ctx),
       execPath: ctx.execPath,
       ...(ctx.hcpSock ? { hcpSock: ctx.hcpSock } : {}),
       ...(ctx.hcpToken ? { hcpToken: ctx.hcpToken } : {}),

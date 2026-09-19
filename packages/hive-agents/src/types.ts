@@ -201,6 +201,8 @@ export interface AgentAsset {
   name: string;
   /** The file beside the manifest whose contents are written. */
   file: string;
+  /** A hook this script is: `events` may name it like one of ours, and it runs with the control-plane socket. */
+  hook?: string;
 }
 
 /** What a launch needs beyond the command itself. */
