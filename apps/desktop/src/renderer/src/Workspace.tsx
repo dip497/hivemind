@@ -57,7 +57,7 @@ const MachinesHub = lazy(() => import("./machines/MachinesHub").then((m) => ({ d
 import type { MachinesRequest } from "./machines/store";
 import type { SessionSummary } from "../../shared/ipc";
 import { isRemote } from "../../shared/remote-uri";
-import { getAgents, AgentIcon, agentById, agentForCmd } from "./agents";
+import { getAgents, AgentIcon, agentById, agentForCmd, useAgents } from "./agents";
 import { useSpawn } from "./useSpawn";
 import { useFrameOps } from "./useFrameOps";
 import { useAgentAwareness } from "./useAgentAwareness";
@@ -453,6 +453,8 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     })),
     [frames],
   );
+  // Agents arrive with the first scan, after the layout: re-derive each tile's agent then.
+  const agentCatalog = useAgents();
   const layerTiles: LayerTile[] = useMemo(() => {
     const out: LayerTile[] = [];
     const fo = frameOf;
@@ -467,7 +469,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
       out.push({ id: t.id, kind, name: tileNames[t.id] ?? agentTitles[t.id] ?? t.label, frameId: fo[t.id] ?? null, agent });
     }
     return out;
-  }, [tiles, repoPath, frameOf, frames, tileNames, agentTitles]);
+  }, [tiles, repoPath, frameOf, frames, tileNames, agentTitles, agentCatalog]);
   const tileNamesRef = useRef(tileNames);
   tileNamesRef.current = tileNames;
   const agentTitlesRef = useRef(agentTitles);

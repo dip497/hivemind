@@ -18,6 +18,11 @@ let lastProblems: AgentScanProblem[] = [];
 let entries: AgentWireEntry[] = [];
 const listeners = new Set<() => void>();
 const emit = (): void => { for (const fn of [...listeners]) fn(); };
+/** The first scan has answered. Nothing is compiled in, so until then no tile is an agent. */
+let scanned = false;
+export function useAgentsScanned(): boolean {
+  return useSyncExternalStore((fn) => { listeners.add(fn); return () => listeners.delete(fn); }, () => scanned, () => scanned);
+}
 
 export function getAgentEntries(): AgentWireEntry[] { return entries; }
 
@@ -104,6 +109,8 @@ let scanSeq = 0;
 export async function syncAgentPlugins(repoRoot: string | null = lastRoot): Promise<AgentScanProblem[]> {
   lastRoot = repoRoot;
   const seq = ++scanSeq;
+  // A scan that never answers must not keep every terminal from starting.
+  if (!scanned) setTimeout(() => { if (!scanned) { scanned = true; emit(); } }, 5000);
   try {
     const { agents } = await window.hive.listAgents(repoRoot);
     if (seq !== scanSeq) return lastProblems;
@@ -114,10 +121,12 @@ export async function syncAgentPlugins(repoRoot: string | null = lastRoot): Prom
     lastProblems = entries
       .filter((a) => a.error)
       .map((a) => ({ id: a.id, source: a.source, error: a.error! }));
+    scanned = true;
     emit();
     void refreshAgentPresence();
   } catch (e) {
     lastProblems = [{ id: "*", source: "scan", error: (e as Error).message }];
+    if (!scanned) { scanned = true; emit(); }
   }
   return lastProblems;
 }

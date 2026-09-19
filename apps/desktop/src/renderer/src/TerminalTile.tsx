@@ -28,6 +28,7 @@ import { HeaderPinButton, type PinRect } from "./canvas-nodes";
 import { SURFACE_ADOPTED, SURFACE_PARKED } from "./workspace/tile-host";
 import { statusColor } from "./workspace/tile-status-bucket";
 import { agentById, defaultAgent, taskFromTitle } from "@hivemind/agents";
+import { useAgentsScanned } from "./agent-plugins";
 
 /** Open a terminal link in the OS browser. window.open is intercepted by main's
  *  setWindowOpenHandler → shell.openExternal (and the in-app navigation denied),
@@ -241,6 +242,8 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
   // null = plain shell. `isClaude` keeps a bare/`latest` send-to-agent on the
   // default provider's tiles, never another runtime's. The default may not exist
   // (nothing installed), in which case no tile is the default one.
+  // Read after the first agent scan: before it, every restored agent tile would look like a shell.
+  const agentsScanned = useAgentsScanned();
   const agent = identifyAgent(cmd);
   const isClaude = agent === defaultAgent()?.id;
   // NOTE: we deliberately DON'T seed claude's hook-driven turn state on mount.
@@ -269,6 +272,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
   }, [effLabel, agent, tileId]);
 
   useEffect(() => {
+    if (!agentsScanned) return;
     // [color, label, pulse]. permission/question = needs the human (from the
     // real Claude-state scrape); working/idle from screen or PTY activity.
     // Labels and pulse only; colours come from workspace/tile-status-bucket so this header
@@ -1038,7 +1042,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
     // visible signal that the rebind didn't apply. Keep cwd in deps for the
     // non-persistent path where a fresh PTY at the new cwd IS the right thing.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, persistent ? [ptyId, cmd] : [ptyId, cwd, cmd]);
+  }, persistent ? [ptyId, cmd, agentsScanned] : [ptyId, cwd, cmd, agentsScanned]);
 
   // Gate keyboard on selection. pointer-events:none (tile-locked) blocks the
   // mouse but NOT the keyboard — a focused xterm keeps eating keystrokes after
