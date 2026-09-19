@@ -64,7 +64,6 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - Three views in the plugin catalog, each built for one kind of person, replace Orbit and Painted controls, which answered no question anyone had. **Queue** orders your agents by who needs you and docks the selected one's live terminal beside the list, so answering an approval is typing into it. **Tiled** lays out every terminal in a frame as live panes, with frame tabs that light when another task needs you. **Board** moves each session from doing, to review, to done, keeps work in progress to five, and never marks anything done on your behalf.
 - `@hivemind/agents` is published to npm, so a plugin registry or any other tool can validate a manifest with the same code the app runs rather than a copy of the rules that drifts. The workspace still builds from TypeScript source; only what npm receives is compiled.
 
-
 - The site wears the app's own palette, type and motion: the same canvas colour, the same text ladder, Geist, and the four status colours used only where they mean an agent's state. It has a plugins page, built from the catalog the app reads, so it cannot list something the app would refuse to install.
 - Settings feels like the rest of the app. It was built without the motion language the workspace already uses: ten hover states changed instantly, nothing acknowledged a press, and depth came from borders that a wallpaper or glass shows straight through. Changing your theme or accent no longer smears every colour on screen — the switch is instant, the way a switch should be.
 - The World view is gone, and the Office and Solar system example views with it. ⌘E now cycles canvas → windows → your installed views. A workspace saved in the World view opens on the canvas instead of a blank window. three.js left the build with it — nothing else imported it — so the app downloads and installs smaller.
@@ -141,25 +140,6 @@ World, and sandboxed community views), and the e2e/perf harnesses gate every cha
 — see BREAKING items and the migration at the end of this section.
 
 ### Added
-
-- **Windows x64 support in the code, unvalidated in the wild.** The POSIX assumptions
-  that made the app Linux/macOS-only now live behind one seam
-  (`apps/desktop/src/main/platform.ts`): the three unix sockets become named pipes
-  (`\\.\pipe\hivemind-<hash>-<name>`) since Windows has no filesystem sockets; new
-  terminals default to `powershell.exe` and a canvas carrying another OS's shell is
-  repaired rather than failing; the login-shell env resolver no-ops (there is no
-  `$SHELL -ilc env` on Windows, and it was burning its 8s timeout every launch);
-  in-app and `hive upgrade` route through `install.ps1`; the `hive`/`hivemind`
-  lookups use `%LOCALAPPDATA%`, `path.delimiter` and `.exe`.
-- `install.ps1` — PowerShell installer mirroring `install.sh`'s contract: prebuilt or
-  `-Dev`, Start Menu shortcut, PATH entry, refusal to upgrade a running app
-  (Windows locks a running `.exe`, and the Start Menu shortcut would bypass a staged swap),
-  `hivemind upgrade` / `uninstall` / `uninstall -Purge`. `install.sh` now redirects
-  Git Bash / MSYS / Cygwin users to it instead of failing as "unsupported OS".
-- Release workflow builds Windows and asserts the bundle (parse-checks `install.ps1`,
-  requires the unpacked `win32-x64` `conpty.node` + `conpty.dll`), but does **not** publish its assets and cannot
-  fail a release — the platform has never been launched on real hardware. Publishing
-  is a one-line change once it has.
 
 - **`hive ctl` is a full control plane — every verb the MCP server had, from the shell.** New
   subcommands `report`, `open-review`, `set-state`, `add-comment`, `mark-acceptance`,
@@ -309,6 +289,36 @@ World, and sandboxed community views), and the e2e/perf harnesses gate every cha
 3. Scripts parsing `hive ctl` output: read `--json` (`{ok, data}` / `{ok:false,code,message}`)
    and the exit codes above; a `read` that times out now exits 4.
 4. Nothing in `.hivemind/` changed shape; saved canvas layouts migrate automatically.
+## [1.17.1] — 2026-09-10
+
+### Added
+
+- **Windows x64 support in the code, unvalidated in the wild.** The POSIX assumptions
+  that made the app Linux/macOS-only now live behind one seam
+  (`apps/desktop/src/main/platform.ts`): the three unix sockets become named pipes
+  (`\\.\pipe\hivemind-<hash>-<name>`) since Windows has no filesystem sockets; new
+  terminals default to `powershell.exe` and a canvas carrying another OS's shell is
+  repaired rather than failing; the login-shell env resolver no-ops (there is no
+  `$SHELL -ilc env` on Windows, and it was burning its 8s timeout every launch);
+  in-app and `hive upgrade` route through `install.ps1`; the `hive`/`hivemind`
+  lookups use `%LOCALAPPDATA%`, `path.delimiter` and `.exe`.
+- `install.ps1` — PowerShell installer mirroring `install.sh`'s contract: prebuilt or
+  `-Dev`, Start Menu shortcut, PATH entry, refusal to upgrade a running app
+  (Windows locks a running `.exe`, and the Start Menu shortcut would bypass a staged swap),
+  `hivemind upgrade` / `uninstall` / `uninstall -Purge`. `install.sh` now redirects
+  Git Bash / MSYS / Cygwin users to it instead of failing as "unsupported OS".
+- Release workflow builds Windows and asserts the bundle (parse-checks `install.ps1`,
+  requires the unpacked `win32-x64` `conpty.node` + `conpty.dll`), but does **not** publish its assets and cannot
+  fail a release — the platform has never been launched on real hardware. Publishing
+  is a one-line change once it has.
+
+### Changed
+
+- `asarUnpack` now covers `@lydell/node-pty*` rather than `@lydell/node-pty` alone, so the
+  platform package holding the actual prebuilt binary (`@lydell/node-pty-<platform>-<arch>`)
+  is explicitly unpacked on every OS instead of relying on electron-builder's implicit
+  native-module handling — which covers `.node` files but not the `.dll` that ConPTY needs.
+
 ## [1.17.0] — 2026-09-07
 
 ### Added
@@ -436,7 +446,6 @@ World, and sandboxed community views), and the e2e/perf harnesses gate every cha
   unchanged context to find the actual edits. (The existing view popover's `diff`/`full`
   toggle still controls whether unchanged context collapses.)
 
-
 ## [1.14.3] — 2026-07-15
 
 ## [1.14.2] — 2026-07-15
@@ -448,7 +457,6 @@ World, and sandboxed community views), and the e2e/perf harnesses gate every cha
   did **not** actually recover the frame rate — profiling points the FPS cost at Chromium
   compositing (translucent/blurred tiles over an animated wallpaper), not terminal glyph
   rendering. Agent tiles go back to the DOM crispness path pending a compositing-side fix.
-
 
 ## [1.14.1] — 2026-07-15
 
@@ -462,7 +470,6 @@ World, and sandboxed community views), and the e2e/perf harnesses gate every cha
   reason; the crispness boost had quietly overridden it. Agent tiles now stay on WebGL
   (already supersampled to a ≥2× atlas, so still crisp at dpr=1). Plain shell tiles keep
   the DOM crispness boost.
-
 
 ## [1.14.0] — 2026-07-15
 
@@ -1245,7 +1252,8 @@ World, and sandboxed community views), and the e2e/perf harnesses gate every cha
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v1.17.0...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v1.17.1...HEAD
+[1.17.1]: https://github.com/dip497/hivemind/releases/tag/v1.17.1
 [1.17.0]: https://github.com/dip497/hivemind/releases/tag/v1.17.0
 [1.16.0]: https://github.com/dip497/hivemind/releases/tag/v1.16.0
 [1.15.0]: https://github.com/dip497/hivemind/releases/tag/v1.15.0
