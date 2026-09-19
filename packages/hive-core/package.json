@@ -21,7 +21,8 @@
     "./packages": "./src/packages.ts",
     "./tool-plugins": "./src/tool-plugins.ts",
     "./toolbar": "./src/toolbar.ts",
-    "./plugin-catalog": "./src/plugin-catalog.ts"
+    "./plugin-catalog": "./src/plugin-catalog.ts",
+    "./ipc": "./src/ipc.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

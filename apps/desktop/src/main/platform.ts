@@ -6,31 +6,14 @@
  * project has a Windows box yet. Pass `platform` explicitly in tests; it
  * defaults to the running one.
  */
-import crypto from "node:crypto";
 import path from "node:path";
 
 export type Platform = NodeJS.Platform;
 
-/**
- * Address for a local IPC endpoint.
- *
- * POSIX: a unix socket file inside userData, as before.
- *
- * Windows: there is no filesystem socket. Node's net API speaks named pipes
- * through the same connect()/createServer() calls, but the address must look
- * like `\\.\pipe\<name>` — a path under userData just yields ENOENT/EACCES.
- * The name must be IDENTICAL in every process that reaches this endpoint: the
- * pty daemon is spawned detached and re-derives it, and the hcp address is
- * handed to agent CLIs through HIVE_HCP_SOCK. So it's derived from the
- * userData dir (hashed — the raw path contains `\`, spaces and a drive letter,
- * none of which belong in a pipe name), which keeps it unique per install and
- * per user while staying stable across processes.
- */
-export function ipcPath(userDataDir: string, name: string, platform: Platform = process.platform): string {
-  if (platform !== "win32") return path.join(userDataDir, name);
-  const key = crypto.createHash("sha256").update(path.resolve(userDataDir)).digest("hex").slice(0, 12);
-  return `\\\\.\\pipe\\hivemind-${key}-${name.replace(/\.sock$/, "")}`;
-}
+// Shared with the `hive` CLI — both must derive the same address for one
+// install — so the implementation lives in hive-core; the re-export keeps the
+// desktop's existing import surface (daemon-client, token, index) intact.
+export { ipcPath } from "@hivemind/core/ipc";
 
 /**
  * The interactive shell a fresh terminal tile starts with.

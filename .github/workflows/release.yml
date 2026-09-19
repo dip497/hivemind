@@ -389,6 +389,120 @@ jobs:
           if ($missing) { throw "not unpacked in the bundle: $($missing -join ', ') - the terminal would be dead" }
           foreach ($name in @($need.Keys)) { Write-Host "ok: $($need[$name].FullName)" }
 
+      - name: "Smoke: the compiled CLI runs"
+        # The Linux jobs go further (sessions.test.ts against the binary); here
+        # the binary is at least executed, so a broken compile cannot ship.
+        shell: pwsh
+        run: |
+          $cli = Get-ChildItem apps/cli/dist -Filter hive*.exe | Select-Object -First 1
+          if (-not $cli) { throw "no hive exe built: $((Get-ChildItem apps/cli/dist | ForEach-Object Name) -join ', ')" }
+          $v = (& $cli.FullName --version) -join " "
+          Write-Host "hive --version: $v"
+          if (-not $v) { throw "hive --version printed nothing" }
+
+      - name: "Smoke: ConPTY echo through the packaged node-pty"
+        # ELECTRON_RUN_AS_NODE turns the app's own binary into the exact node
+        # runtime pty-host uses, so a ConPTY round-trip here is the closest a
+        # CI box comes to opening a terminal tile. hivemind.exe is a
+        # GUI-subsystem exe: Start-Process -Wait, output redirected to files.
+        shell: pwsh
+        run: |
+          $electron = Get-ChildItem desktop-deploy/dist-electron -Recurse -Filter hivemind.exe | Select-Object -First 1
+          if (-not $electron) { throw "no unpacked hivemind.exe" }
+          $js = @'
+          const pty = require(process.env.PTY_DIR);
+          const p = pty.spawn("cmd.exe", '/d /s /c "echo HIVE_OK"', {
+            name: "smoke", cols: 80, rows: 24, cwd: process.env.RUNNER_TEMP, env: process.env,
+          });
+          let out = "";
+          p.onData((d) => { out += d; });
+          p.onExit(() => {
+            console.log("pty output:", JSON.stringify(out));
+            process.exit(out.includes("HIVE_OK") ? 0 : 1);
+          });
+          '@
+          Set-Content -Path "$env:RUNNER_TEMP\pty-smoke.js" -Value $js -Encoding UTF8
+          # The asar copy is what the packaged app actually loads; electron's
+          # require redirects the native binding to app.asar.unpacked itself.
+          $asar = Join-Path $electron.Directory.FullName "resources\app.asar"
+          $env:PTY_DIR = if (Test-Path $asar) { "$asar/node_modules/@lydell/node-pty" } else { "$PWD/desktop-deploy/node_modules/@lydell/node-pty" }
+          $env:ELECTRON_RUN_AS_NODE = "1"
+          $p = Start-Process -FilePath $electron.FullName -ArgumentList "`"$env:RUNNER_TEMP\pty-smoke.js`"" -Wait -PassThru -NoNewWindow `
+            -RedirectStandardOutput "$env:RUNNER_TEMP\pty-out.txt" -RedirectStandardError "$env:RUNNER_TEMP\pty-err.txt"
+          Get-Content "$env:RUNNER_TEMP\pty-out.txt"; Get-Content "$env:RUNNER_TEMP\pty-err.txt"
+          Remove-Item Env:\ELECTRON_RUN_AS_NODE
+          if ($p.ExitCode -ne 0) { throw "ConPTY echo did not produce HIVE_OK" }
+
+      - name: "Smoke: a bare agent name resolves to its .cmd shim and runs"
+        # resolveWindowsSpawn is the last thing pty-host/pty-daemon call before
+        # node-pty; on the runner it runs against a REAL win32 PATH and a real
+        # shim, and the wrapped command line is driven through the same pty.
+        shell: pwsh
+        run: |
+          bun build packages/hive-agents/src/discover.ts --outfile "$env:RUNNER_TEMP/discover.cjs" --format=cjs
+          $bin = "$env:RUNNER_TEMP\fakebin"
+          New-Item -ItemType Directory -Force -Path $bin | Out-Null
+          Set-Content -Path "$bin\fakeagent.cmd" -Value "@echo FAKE_OK" -Encoding ASCII
+          $js = @'
+          const { resolveWindowsSpawn } = require(process.env.DISCOVER_CJS);
+          const pty = require(process.env.PTY_DIR);
+          const env = { ...process.env };
+          delete env.PATH;
+          env.Path = process.env.FAKE_PATH; // Windows casing on purpose
+          const r = resolveWindowsSpawn("fakeagent", [], env);
+          console.log("resolved:", JSON.stringify(r));
+          if (!(typeof r.args === "string" && /cmd\.exe$/i.test(r.file) && /fakeagent\.cmd/i.test(r.args))) {
+            console.error("not a cmd.exe-wrapped .cmd shim");
+            process.exit(1);
+          }
+          const p = pty.spawn(r.file, r.args, { name: "smoke", cols: 80, rows: 24, cwd: process.env.RUNNER_TEMP, env });
+          let out = "";
+          p.onData((d) => { out += d; });
+          p.onExit(() => {
+            console.log("pty output:", JSON.stringify(out));
+            process.exit(out.includes("FAKE_OK") ? 0 : 1);
+          });
+          '@
+          Set-Content -Path "$env:RUNNER_TEMP\shim-smoke.js" -Value $js -Encoding UTF8
+          $electron = Get-ChildItem desktop-deploy/dist-electron -Recurse -Filter hivemind.exe | Select-Object -First 1
+          $asar = Join-Path $electron.Directory.FullName "resources\app.asar"
+          $env:PTY_DIR = if (Test-Path $asar) { "$asar/node_modules/@lydell/node-pty" } else { "$PWD/desktop-deploy/node_modules/@lydell/node-pty" }
+          $env:DISCOVER_CJS = "$env:RUNNER_TEMP\discover.cjs"
+          $env:FAKE_PATH = "$bin;$env:Path"
+          $env:ELECTRON_RUN_AS_NODE = "1"
+          $p = Start-Process -FilePath $electron.FullName -ArgumentList "`"$env:RUNNER_TEMP\shim-smoke.js`"" -Wait -PassThru -NoNewWindow `
+            -RedirectStandardOutput "$env:RUNNER_TEMP\shim-out.txt" -RedirectStandardError "$env:RUNNER_TEMP\shim-err.txt"
+          Get-Content "$env:RUNNER_TEMP\shim-out.txt"; Get-Content "$env:RUNNER_TEMP\shim-err.txt"
+          Remove-Item Env:\ELECTRON_RUN_AS_NODE
+          if ($p.ExitCode -ne 0) { throw "fakeagent did not resolve and run through the shim path" }
+
+      - name: "Smoke: the app boots and opens its named pipe"
+        # The hcp control plane and the pty daemon live on \\.\pipe\hivemind-*
+        # (hive-core ipcPath) — if the pipe never appears, every agent tile and
+        # hive ctl call is dead on arrival. Booted against a scratch user-data
+        # dir, and stopped BY PID: the daemon it detaches is also hivemind.exe,
+        # and nothing here may kill by name.
+        shell: pwsh
+        run: |
+          $electron = Get-ChildItem desktop-deploy/dist-electron -Recurse -Filter hivemind.exe | Select-Object -First 1
+          if (-not $electron) { throw "no unpacked hivemind.exe" }
+          $p = Start-Process -FilePath $electron.FullName -ArgumentList "--user-data-dir=$env:RUNNER_TEMP\ud" -PassThru
+          $pipe = $null
+          foreach ($i in 1..60) {
+            Start-Sleep -Seconds 1
+            if ($p.HasExited) { break }
+            $pipe = [System.IO.Directory]::GetFiles("\\.\pipe\") |
+                    Where-Object { $_ -like "*hivemind-*" } |
+                    Select-Object -First 1
+            if ($pipe) { break }
+          }
+          if ($pipe) { Write-Host "pipe appeared: $pipe" }
+          Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          if (-not $pipe) {
+            $code = if ($p.HasExited) { $p.ExitCode } else { "still running" }
+            throw "no \\\\.\pipe\hivemind-* appeared within 60s (app: $code)"
+          }
+
       - name: Stage release artifacts
         shell: pwsh
         run: |

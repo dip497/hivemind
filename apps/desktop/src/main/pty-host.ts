@@ -3,6 +3,7 @@
  * Electron utilityProcess per the VS Code 3-process pattern).
  */
 import * as pty from "@lydell/node-pty";
+import { resolveWindowsSpawn } from "@hivemind/agents/discover";
 import { applyShellEnvToProcess, sanitizeShellEnv } from "./shell-env.js";
 import { repairShellSpec } from "./platform.js";
 import { applyInitialPrompt } from "../shared/agent-io.js";
@@ -73,7 +74,10 @@ function doSpawn(opts: SpawnOpts): pty.IPty {
   // A canvas written on another OS can name a shell this one doesn't have.
   const spec = repairShellSpec({ cmd: opts.cmd, args: opts.args });
   const { args: execArgs, env: execEnv } = applyInitialPrompt(spec.args ?? [], env);
-  return pty.spawn(spec.cmd, execArgs, {
+  // Last step before the pty: on Windows a bare agent name has to be resolved
+  // to its real file (npm shims are .cmd) — spec.cmd itself must stay bare.
+  const resolved = resolveWindowsSpawn(spec.cmd, execArgs, execEnv);
+  return pty.spawn(resolved.file, resolved.args, {
     cwd: opts.cwd,
     cols: opts.cols,
     rows: opts.rows,

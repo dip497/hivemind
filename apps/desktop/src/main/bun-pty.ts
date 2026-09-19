@@ -62,7 +62,10 @@ function loadNative(): { native: NativePty; dir: string } {
   return (loaded = { native: req(path.join(dir, "pty.node")) as NativePty, dir });
 }
 
-export function spawn(file: string, args: string[], opts: BunPtyOptions): BunPty {
+export function spawn(file: string, args: string[] | string, opts: BunPtyOptions): BunPty {
+  // The daemon's shared spawn type carries node-pty's Windows string form; this
+  // unix-only driver has no command-line parser to hand it to.
+  if (typeof args === "string") throw new Error("bun-pty: a raw command line is not supported (unix only)");
   const bun = bunRuntime(); // before fork: an unsupported bun must not leak a child
   const { native, dir } = loadNative();
   const env: Record<string, string> = { ...opts.env, PWD: opts.cwd, TERM: opts.name ?? opts.env.TERM ?? "xterm-256color" };

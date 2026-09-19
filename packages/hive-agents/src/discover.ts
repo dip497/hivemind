@@ -29,16 +29,110 @@ const versions = new Map<string, Promise<AgentPresence>>();
 /** Finished checks, so a cheap presence answer can include what is already known. */
 const settled = new Map<string, AgentPresence>();
 
-export function findBin(bin: string): string | null {
-  const exts = process.platform === "win32" ? (process.env.PATHEXT ?? ".EXE;.CMD").split(";") : [""];
-  for (const dir of (process.env.PATH ?? "").split(path.delimiter)) {
+export interface FindBinOpts {
+  /** The environment the child will actually run with — a spread of Windows
+   *  process.env carries `Path`, not `PATH`, so lookups must be case-insensitive. */
+  env?: NodeJS.ProcessEnv;
+  platform?: NodeJS.Platform;
+  /** File check, injectable so callers (and tests) can simulate a filesystem. */
+  isFile?: (file: string) => boolean;
+}
+
+const DEFAULT_PATHEXT = ".COM;.EXE;.BAT;.CMD";
+
+/** Case-insensitive env read: on Windows, variable names keep whatever casing
+ *  the first writer used (`Path` from a process.env spread, `PATH` from a
+ *  hand-built object), and both must find the same variable. */
+function envGet(env: NodeJS.ProcessEnv, name: string): string | undefined {
+  if (name in env) return env[name];
+  const key = Object.keys(env).find((k) => k.toLowerCase() === name.toLowerCase());
+  return key === undefined ? undefined : env[key];
+}
+
+export function findBin(bin: string, opts: FindBinOpts = {}): string | null {
+  const { env = process.env, platform = process.platform } = opts;
+  // Path semantics follow the TARGET platform, not the host — this must behave
+  // identically when the win32 branch is simulated on another OS in tests.
+  const p = platform === "win32" ? path.win32 : path;
+  const isFile = opts.isFile ?? ((file: string): boolean => {
+    try { return statSync(file).isFile(); } catch { return false; }
+  });
+  // "" = try the exact name; on POSIX that is the only candidate (no PATHEXT).
+  const exts = platform === "win32"
+    ? (envGet(env, "PATHEXT") ?? DEFAULT_PATHEXT).split(";").map((e) => e.trim()).filter(Boolean)
+    : [""];
+  // A PATHEXT of only separators falls back to the default rather than nothing.
+  const pathExts = exts.length ? exts : DEFAULT_PATHEXT.split(";");
+  // A name that already carries an extension is tried as-is first — Windows
+  // matches `tool.exe` literally before falling back to PATHEXT appends.
+  const hasExt = p.extname(bin) !== "";
+  for (const dir of (envGet(env, "PATH") ?? "").split(p.delimiter)) {
     if (!dir) continue; // an empty entry would resolve against the working directory
-    for (const ext of exts) {
-      const file = path.join(dir, bin + ext);
-      try { if (statSync(file).isFile()) return file; } catch { /* not here */ }
+    for (const ext of hasExt ? ["", ...pathExts] : pathExts) {
+      const file = p.join(dir, bin + ext);
+      if (isFile(file)) return file;
     }
   }
   return null;
+}
+
+/** A spawn spec node-pty accepts: argv, or on Windows a pre-escaped command
+ *  line string (node-pty's `args: string[] | string` CommandLine form). */
+export interface ResolvedSpawn { file: string; args: string[] | string; }
+
+const CMD_SHIM = /\.(cmd|bat)$/i;
+
+/**
+ * Final (file, args) for a node-pty spawn of a session spec.
+ *
+ * Windows only; elsewhere — and for any cmd that names a path — the spec
+ * passes through untouched. The spec's cmd itself must stay bare (session
+ * matching keys on its basename), so this runs last, at the pty.spawn call
+ * site. Without it a bare agent name can never start: node-pty's lookup
+ * ignores PATHEXT, so the npm `.cmd` shim every agent CLI installs as is
+ * invisible to it.
+ *
+ * A resolved `.cmd`/`.bat` shim is not executable by CreateProcess directly —
+ * it is re-parented onto cmd.exe as one pre-escaped command line, using the
+ * `/d /s /c` form so the inner quotes survive cmd's own parsing.
+ */
+export function resolveWindowsSpawn(
+  cmd: string,
+  args: readonly string[],
+  env: NodeJS.ProcessEnv,
+  opts: FindBinOpts = {},
+): ResolvedSpawn {
+  const platform = opts.platform ?? process.platform;
+  const p = platform === "win32" ? path.win32 : path;
+  if (platform !== "win32" || /[\\/]/.test(cmd)) return { file: cmd, args: [...args] };
+  const found = findBin(cmd, { ...opts, env, platform });
+  // Unknown name: pass it through bare so node-pty's own ENOENT (and the
+  // shell-env retry that recovers a half-loaded PATH) still applies.
+  if (!found || !CMD_SHIM.test(found)) return { file: found ?? cmd, args: [...args] };
+  for (const a of args) {
+    if (a.includes("\r") || a.includes("\n")) {
+      throw new Error(`cannot run ${p.basename(found)}: a cmd.exe command line cannot carry CR/LF`);
+    }
+  }
+  const line = [`"${found}"`, ...args.map(quoteWindowsArg)].join(" ");
+  // A string, not an array: node-pty passes a string through as the raw command line.
+  return { file: envGet(env, "ComSpec") || "cmd.exe", args: `/d /s /c "${line}"` };
+}
+
+/** Quote one argument per the CommandLineToArgvW rules node-pty's string form
+ *  expects: quote anything with whitespace/quotes, backslash-escape embedded
+ *  quotes (doubling the backslashes that immediately precede them). */
+function quoteWindowsArg(arg: string): string {
+  if (arg !== "" && !/[\s"]/.test(arg)) return arg;
+  let out = '"';
+  let slashes = 0;
+  for (const ch of arg) {
+    if (ch === "\\") { slashes++; continue; }
+    if (ch === '"') out += "\\".repeat(slashes * 2 + 1) + '"';
+    else out += "\\".repeat(slashes) + ch;
+    slashes = 0;
+  }
+  return `${out}${"\\".repeat(slashes)}"`;
 }
 
 /** No display and no browser: a same-named desktop app must not open windows or pages. */

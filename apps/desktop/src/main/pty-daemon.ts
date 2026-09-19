@@ -26,6 +26,7 @@ import {
 import { applyInitialPrompt, stripInitialPrompt } from "../shared/agent-io.js";
 import { sanitizeShellEnv } from "./shell-env.js";
 import { composeResume, evictTrackedSession, prepareProviders, trackerSource, setCatalog } from "@hivemind/agents/node";
+import { resolveWindowsSpawn } from "@hivemind/agents/discover";
 import { planHookSource } from "./plan-review-hook-source.js";
 import { stopHookSource } from "./hcp/stop-hook-source.js";
 import { approvalHookSource } from "./hcp/approval-hook-source.js";
@@ -35,7 +36,7 @@ import { userpromptHookSource } from "./hcp/userprompt-hook-source.js";
 import { readOrCreateToken, hcpSockPath } from "./hcp/token.js";
 
 // Lazy: node-pty must never be evaluated inside the compiled `hive` (see bun-pty.ts).
-const spawnPty: (file: string, args: string[], opts: { cwd: string; cols: number; rows: number; name: string; env: Record<string, string> }) => {
+const spawnPty: (file: string, args: string[] | string, opts: { cwd: string; cols: number; rows: number; name: string; env: Record<string, string> }) => {
   readonly pid: number; write(d: string): void; resize(c: number, r: number): void; kill(sig?: string): void;
   pause(): void; resume(): void; onData(cb: (d: string) => void): unknown; onExit(cb: (e: { exitCode: number; signal?: number }) => void): unknown;
 } = process.versions.bun
@@ -317,7 +318,10 @@ const factory = (spec: SpawnSpec): ManagedPty => {
   // A canvas written on another OS can name a shell this one doesn't have.
   const runSpec = repairShellSpec({ cmd: spec.cmd, args: spec.args });
   const { args: execArgs, env: execEnv } = applyInitialPrompt(runSpec.args ?? [], env);
-  const p = spawnPty(runSpec.cmd, execArgs, {
+  // Last step before the pty (see pty-host.doSpawn): spec.cmd stays bare here
+  // so the session-matching transforms above still see the agent's name.
+  const resolved = resolveWindowsSpawn(runSpec.cmd, execArgs, execEnv);
+  const p = spawnPty(resolved.file, resolved.args, {
     cwd: spec.cwd,
     cols: spec.cols,
     rows: spec.rows,

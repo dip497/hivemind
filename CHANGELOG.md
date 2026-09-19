@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Windows: agent tiles spawn at all — the bare agent name now resolves through PATH/PATHEXT to its real file (npm installs agents as `.cmd` shims, which node-pty's lookup cannot run), re-parented onto cmd.exe; `hive ctl` and `hive daemon` find the running app through its named pipes instead of unix socket paths; and `hivemind upgrade` is no longer blocked forever by a detached pty daemon, since only a windowed app process now counts as running in `install.ps1`.
+
 ## [2026.9.0] — 2026-09-20
 
 - Supervised Kiro agents ask for approval again before running a tool. The approval hook Kiro ships was not being wired in.
