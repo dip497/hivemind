@@ -33,7 +33,8 @@ const remote = (cmd: string) => execFileSync("ssh", ["-F", path.join(dir, "ssh_c
 const startSshd = () => execFileSync(SSHD, ["-f", sshdCfg()]);
 const sshdPid = () => Number(fs.readFileSync(path.join(dir, "sshd.pid"), "utf8"));
 const chipState = () => page.locator('button[aria-label="machine build-box"]').getAttribute("data-machine-state");
-const terminalText = () => page.evaluate(() => [...document.querySelectorAll(".xterm-rows")].map((r) => r.textContent ?? "").join("\n"));
+const terminalText = () => page.evaluate(() => [...document.querySelectorAll(".xterm")]
+  .map((x) => (x.parentElement as (HTMLElement & { __hmScreen?: () => string }) | null)?.__hmScreen?.() ?? "").join("\n"));
 
 async function freePort(): Promise<number> {
   return new Promise((resolve) => { const s = net.createServer().listen(0, "127.0.0.1", () => { const p = (s.address() as net.AddressInfo).port; s.close(() => resolve(p)); }); });
@@ -92,7 +93,7 @@ test("add a machine: probe, install hive over ssh, save", async () => {
   test.setTimeout(180_000);
   await page.getByRole("button", { name: "add machine" }).click();
   await page.getByLabel("Host").fill(`ssh://${os.userInfo().username}@127.0.0.1:${port}`);
-  await page.getByLabel("Name").fill("build-box");
+  await page.getByLabel("Name", { exact: true }).fill("build-box");
   await page.getByRole("button", { name: "Add", exact: true }).click();
   const row = page.locator('ul[aria-label="machines"] li', { hasText: "build-box" });
   await expect(row).toContainText("online", { timeout: 150_000 });

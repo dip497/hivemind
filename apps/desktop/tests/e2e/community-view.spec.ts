@@ -127,9 +127,11 @@ test("click a tile's row: the LIVE terminal docks through the hole-punch, typed 
   await expect(page.locator(".xterm")).toHaveCount(1);
   expect(await probe("[data-community-surfaces] .xterm")).toBe("kept");
   await slot.locator(".xterm-screen").click();
-  await page.keyboard.type("echo COMMUNITY_DOCK_OK");
+  // Proven through the shell, not the screen: a WebGL terminal leaves no text in the DOM.
+  const marker = path.join(XDG, "community-dock-ok");
+  await page.keyboard.type(`echo ok > ${marker}`);
   await page.keyboard.press("Enter");
-  await expect(slot.locator(".xterm")).toContainText("COMMUNITY_DOCK_OK", { timeout: 5_000 });
+  await expect.poll(() => fs.existsSync(marker), { timeout: 5_000 }).toBe(true);
   // Release from inside the view (its rule), and the surface parks again.
   await releaseViaQueue(page);
   await expect(slot).toHaveCount(0);

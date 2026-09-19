@@ -321,8 +321,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
       idleTimer.current = setTimeout(() => setStatus("idle"), 1500);
     };
 
-    // Claude-state detection (working / waiting-approval / question / idle) by
-    // scraping xterm's rendered viewport — see ./claude-state.ts.
+    // The viewport as text, for the agent's detect rules (working / approval / question / idle).
     const readScreen = (): string => {
       const buf = term.buffer.active;
       const out: string[] = [];
@@ -392,6 +391,8 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
     fitRef.current = fit;
     term.loadAddon(fit);
     term.open(host);
+    // The screen as text for tests: a WebGL terminal renders none into the DOM.
+    (host as HTMLElement & { __hmScreen?: () => string }).__hmScreen = readScreen;
     fit.fit();
     termRef.current = term;
     // ── FOCUS GUARANTEE ──────────────────────────────────────────────────────
