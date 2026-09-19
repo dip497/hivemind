@@ -32,8 +32,9 @@ export interface SessionInfo {
 /** client (desktop main, `hive attach`, `hive ps`) → daemon */
 export type ClientMsg =
   /** noSpawn: a viewer must never create a session by guessing an id.
+   *  liveOnly: with noSpawn, a running session only; a frozen one is not restored.
    *  since: resume from this output position (same epoch) instead of a full replay. */
-  | { t: "attach"; reqId: string; id: string; spec: SpawnSpecWire; noSpawn?: boolean; since?: { seq: number; epoch: string } }
+  | { t: "attach"; reqId: string; id: string; spec: SpawnSpecWire; noSpawn?: boolean; liveOnly?: boolean; since?: { seq: number; epoch: string } }
   /** Capabilities of this client; "resync" = may be sent a fresh screen instead of every byte when behind. */
   | { t: "hello"; caps: string[] }
   | { t: "write"; id: string; data: string }

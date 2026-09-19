@@ -150,8 +150,8 @@ async function doConnect(): Promise<net.Socket> {
 
 const local = new DaemonEndpoint({ connect: doConnect });
 
-export async function spawnPty(opts: SpawnOpts & { attachOnly?: boolean }, cb: Callbacks): Promise<{ pid: number }> {
-  const r = await local.spawn({ ...opts, noSpawn: opts.attachOnly }, cb);
+export async function spawnPty(opts: SpawnOpts & { attachOnly?: boolean; liveOnly?: boolean }, cb: Callbacks): Promise<{ pid: number }> {
+  const r = await local.spawn({ ...opts, noSpawn: opts.attachOnly, liveOnly: opts.attachOnly && opts.liveOnly }, cb);
   if (r.pid === -1 && opts.attachOnly) local.detach(opts.tileId);
   return r;
 }

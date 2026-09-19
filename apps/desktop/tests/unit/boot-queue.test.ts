@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { acquireBoot, bootPosition, cancelBoot, isRestored, markRestored } from "../../src/renderer/src/boot-queue.js";
+import { acquireBoot, bootPosition, cancelBoot, isRestored, markRestored, whenBootIdle } from "../../src/renderer/src/boot-queue.js";
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
@@ -27,4 +27,25 @@ test("restored agents start a few at a time and the rest wait in order", async (
   releases.get(ids[0]!)!(); // releasing twice does nothing
   await tick();
   assert.equal(started.length, limit + 1);
+
+  // Drain the queue so later tests start from an idle one.
+  while (releases.size) {
+    for (const [id, release] of [...releases]) { releases.delete(id); release(); }
+    await tick();
+  }
+});
+
+test("whenBootIdle waits for every started and waiting tile, and is immediate when none", async () => {
+  await whenBootIdle(); // nothing booting
+  let idle = false;
+  const releases = await Promise.all(["i1", "i2"].map((id) => acquireBoot(id)));
+  void whenBootIdle().then(() => { idle = true; });
+  await tick();
+  assert.equal(idle, false);
+  releases[0]!();
+  await tick();
+  assert.equal(idle, false);
+  releases[1]!();
+  await tick();
+  assert.equal(idle, true);
 });

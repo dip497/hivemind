@@ -254,11 +254,29 @@ export function transformsFor(
   };
   const marker = def.session?.resume?.args[0];
   const fallbackMarker = def.session?.resume?.fallback?.[0];
+  // Older builds re-added the resume on every restore; drop the repeats a saved spec carries.
+  const onceResumed = (spec: SpawnSpec): SpawnSpec => {
+    const args = spec.args ?? [];
+    if (!marker || args.filter((a) => a === marker).length < 2) return spec;
+    const kept: string[] = [];
+    const seen = new Set<string>();
+    for (let i = 0; i < args.length; i++) {
+      if (args[i] === marker && i + 1 < args.length) {
+        if (seen.has(args[i + 1]!)) { i++; continue; }
+        seen.add(args[i + 1]!);
+      }
+      kept.push(args[i]!);
+    }
+    return { ...spec, args: kept };
+  };
   return {
     transformSpecOnSpawn: (spec, tileId) => run(spec, tileId, "spawn"),
-    transformSpecOnRestore: (spec, tileId) => (spec.args ?? []).includes(marker ?? "\0")
-      ? run(spec, tileId, "spawn") // already resuming: keep its own session, still wire it up
-      : run(spec, tileId, "restore"),
+    transformSpecOnRestore: (saved, tileId) => {
+      const spec = onceResumed(saved);
+      return (spec.args ?? []).includes(marker ?? "\0")
+        ? run(spec, tileId, "spawn") // already resuming: keep its own session, still wire it up
+        : run(spec, tileId, "restore");
+    },
     restoreRetryTransform: (spec) => {
       // A session that has since vanished must not kill the tile: abandon the resume. The
       // tile keeps its identity though — an agent that binds its session id binds the same

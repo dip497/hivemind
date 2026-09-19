@@ -495,7 +495,7 @@ const server = net.createServer((sock) => {
     }
     switch (msg.t) {
       case "attach": {
-        if (msg.noSpawn && !manager.has(msg.id)) {
+        if (msg.noSpawn && !(msg.liveOnly ? manager.hasLive(msg.id) : manager.has(msg.id))) {
           send({ t: "attached", reqId: msg.reqId, id: msg.id, pid: -1, isNew: false, replay: "", error: `no session '${msg.id}'` });
           break;
         }

@@ -446,6 +446,8 @@ export interface HiveIpc {
     initialPrompt?: string;
     /** `tileId` names an existing daemon session to show; never start one. */
     attachOnly?: boolean;
+    /** With attachOnly: a running session only, not one saved before a reboot. */
+    liveOnly?: boolean;
   }): Promise<{ pid: number }>;
   /** Install the agentic stack (hive skills + CLAUDE.md section) into a repo so
    *  a spawned agent can actually work issues with `hive`. Idempotent. */

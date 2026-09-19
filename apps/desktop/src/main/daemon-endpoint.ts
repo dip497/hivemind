@@ -12,6 +12,8 @@ export interface SpawnOpts {
   env?: Record<string, string>;
   /** Attach to an existing session only; never start one. */
   noSpawn?: boolean;
+  /** With noSpawn: a running session only; one saved before a reboot is not restored. */
+  liveOnly?: boolean;
 }
 export interface Callbacks {
   onData: (data: string) => void;
@@ -229,7 +231,7 @@ export class DaemonEndpoint {
       t.unref?.();
     });
     try {
-      await this.send({ t: "attach", reqId, id: opts.tileId, spec, ...(opts.noSpawn ? { noSpawn: true } : {}) });
+      await this.send({ t: "attach", reqId, id: opts.tileId, spec, ...(opts.noSpawn ? { noSpawn: true } : {}), ...(opts.liveOnly ? { liveOnly: true } : {}) });
     } catch (e) {
       // Unreachable now (e.g. offline): keep retrying so the tile attaches once it is back.
       const msg = e instanceof Error ? e.message : String(e);

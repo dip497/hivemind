@@ -76,3 +76,13 @@ test("killing an unclaimed snapshot evicts it without ever reading it", () => {
   assert.deepEqual(mgr.frozenIds(), []);
   assert.equal(mgr.has("hm:t1"), false);
 });
+
+test("a saved session is known but not live until it is restored", async () => {
+  const { mgr, made } = setup();
+  mgr.restoreLazySnapshot("hm:t1", () => saved);
+  assert.equal(mgr.has("hm:t1"), true);
+  assert.equal(mgr.hasLive("hm:t1"), false, "a live-only probe must not restore it");
+  assert.equal(made.length, 0);
+  await mgr.createOrAttach("hm:t1", callerSpec, client);
+  assert.equal(mgr.hasLive("hm:t1"), true);
+});

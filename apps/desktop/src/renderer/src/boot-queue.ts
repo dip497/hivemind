@@ -10,8 +10,9 @@
  * restored tile whose session is still alive re-attaches without queueing at all.
  */
 
-// ponytail: fixed share of the cores; a setting if anyone needs to tune it.
-const LIMIT = Math.max(2, Math.min(6, Math.floor((navigator.hardwareConcurrency || 8) / 4)));
+// ponytail: fixed share of the cores; a setting if anyone needs to tune it. One agent
+// with its MCP servers keeps several cores busy for ~10 s, so this stays small.
+const LIMIT = Math.max(2, Math.min(4, Math.floor((navigator.hardwareConcurrency || 8) / 8)));
 
 const restored = new Set<string>();
 let running = 0;
@@ -63,4 +64,17 @@ export function bootPosition(id: string): number | null {
 export function subscribeBoot(fn: () => void): () => void {
   listeners.add(fn);
   return () => { listeners.delete(fn); };
+}
+
+/** Resolves once no restored tile is starting or waiting to. */
+export function whenBootIdle(): Promise<void> {
+  return new Promise((resolve) => {
+    const check = () => {
+      if (running > 0 || waiting.length > 0) return;
+      unsubscribe();
+      resolve();
+    };
+    const unsubscribe = subscribeBoot(check);
+    check();
+  });
 }

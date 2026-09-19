@@ -334,3 +334,16 @@ test("restore of a session whose JSONL vanished retries with --session-id (no ti
 function setupDirOf(tileSessionsDir: string): string {
   return path.dirname(tileSessionsDir);
 }
+
+test("a saved spec that repeats its resume restores with it once", () => {
+  const t = makeClaudeResumeTransforms({ tileSessionsDir: "/x/none", execPath: "/x/node" });
+  const id = "30e61ded-dc21-4f87-97e6-a9553fdf9930";
+  const out = t.transformSpecOnRestore!(
+    { cwd: "/w", cmd: "claude", args: ["--resume", id, "--resume", id, "--resume", id, "--permission-mode", "auto"], cols: 80, rows: 24 },
+    "hm:tile-x",
+  );
+  const args = out.args ?? [];
+  assert.equal(args.filter((a) => a === "--resume").length, 1);
+  assert.equal(args[args.indexOf("--resume") + 1], id);
+  assert.ok(args.includes("--permission-mode"));
+});

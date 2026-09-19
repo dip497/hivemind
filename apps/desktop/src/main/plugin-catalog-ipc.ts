@@ -149,8 +149,6 @@ export async function autoInstallDetectedAgents(): Promise<string[]> {
     && findBin(e.bin));
   const added: string[] = [];
   for (const entry of entries) {
-    const probe = await verifyAgent({ id: entry.id, bin: entry.bin! } as Parameters<typeof verifyAgent>[0]);
-    if (!probe.version) continue;
     let dir: string | null = null;
     try {
       dir = await stageEntry(entry);
@@ -161,6 +159,9 @@ export async function autoInstallDetectedAgents(): Promise<string[]> {
       // needs that yes, so it waits in the catalog instead.
       const does = agentDisclosures(read.def);
       if (does.length) { console.warn(`[agents] ${entry.id} needs a review: ${does[0]}`); continue; }
+      // Last: starting the CLI boots its whole runtime, so only for one that would be added.
+      const probe = await verifyAgent({ id: entry.id, bin: entry.bin! } as Parameters<typeof verifyAgent>[0]);
+      if (!probe.version) continue;
       await installAgent(dir);
       await noteCatalogAgent(entry.id);
       added.push(read.def.label);

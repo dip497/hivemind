@@ -700,9 +700,13 @@ export class SessionManager {
   }
 
   has(id: string): boolean {
+    return this.hasLive(id) || this.frozen.has(id);
+  }
+
+  /** Running now, as opposed to saved before a reboot and restored on attach. */
+  hasLive(id: string): boolean {
     const s = this.sessions.get(id);
-    if (s && !s.exited) return true;
-    return this.frozen.has(id);
+    return !!s && !s.exited;
   }
 
   size(): number {

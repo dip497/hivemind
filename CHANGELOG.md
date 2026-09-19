@@ -9,6 +9,10 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Starting Hivemind no longer pins every core. Agents restored after a reboot now really start two at a time: the check for a still-running session used to count one saved before the reboot and restore it on the spot, so every agent started in the same second. Each keeps its turn until its MCP servers are up.
+- The file watcher skips everything git ignores. A Rust `target/` or a Python venv in a workspace meant tens of thousands of files scanned and watched at every start.
+- Adding agents found on this machine waits until the restore is done, and no longer starts an agent's CLI just to learn it needs your review.
+- A restored agent no longer carries `--resume` many times over: repeats saved by older versions are dropped, and a resume that fails no longer leaves one behind.
 - The app shows its interface in Geist, as designed. The font never loaded before, so text fell back to the system font. It now ships inside the app and works offline. The editor and Markdown code use the same mono font as the terminal.
 - `hive views new <name>` starts a view outside this repository, ready to build, install and publish. The app now serves `@hivemind/view-sdk` to every view, so a view no longer bundles its own copy and always speaks the app's version. The example views moved to the published plugins repository.
 - Plugins come from HiveHub. A view is named `@owner/name`, after the GitHub account that published it, so two people's `board` never collide. An agent has one name for one CLI (`gemini`), and agents are added by pull request to the plugins repository. `hive views install @owner/name` and `hive agents install gemini` install one by name, checking every file against the hash HiveHub recorded.

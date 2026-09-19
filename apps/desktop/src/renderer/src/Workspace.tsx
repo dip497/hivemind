@@ -49,7 +49,7 @@ import {
   type FrameState,
 } from "./canvas-persistence";
 import { useStateWithRef } from "./use-state-with-ref";
-import { markRestored } from "./boot-queue";
+import { markRestored, whenBootIdle } from "./boot-queue";
 import { defaultTileSize } from "./canvas-sizing";
 import { useWorktrees } from "./useWorktrees";
 // Loaded when it is first opened: the dialog (add form, machine list, folder picker) is not startup work.
@@ -488,17 +488,18 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   }, [root]);
   // With the root, or agents the repo ships are left out.
   useEffect(() => { void syncAgentPlugins(root); }, [root]);
-  // Catalog agents whose CLI this machine has are added once the workspace is up; the
-  // delay keeps the network off the first frames.
+  // Catalog agents whose CLI this machine has are added once the workspace is up and its
+  // restored tiles have started, so the network and each CLI's `--version` stay off both.
   useEffect(() => {
-    const timer = setTimeout(() => void window.hive.autoInstallAgents().then((labels) => {
+    let live = true;
+    const timer = setTimeout(() => void whenBootIdle().then(() => live ? window.hive.autoInstallAgents() : []).then((labels) => {
       if (!labels.length) return;
       void syncAgentPlugins();
       toast.success(`Added ${labels.join(", ")} — found on this machine.`, {
         action: { label: "Agents", onClick: () => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "agents" } })) },
       });
     }).catch(() => {}), 4000);
-    return () => clearTimeout(timer);
+    return () => { live = false; clearTimeout(timer); };
   }, []);
   const activeViewId = resolveViewId(useViewMode());
   // Host chrome + wallpaper policy come from the active view's preference.

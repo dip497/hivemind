@@ -73,6 +73,8 @@ function flushFits(): void {
 
 /** A booting agent gives its slot back after this long without output — at its prompt. */
 const BOOT_SETTLE_MS = 1500;
+/** ...but not before this: an agent's MCP servers and plugins start after its prompt. */
+const BOOT_MIN_MS = 8000;
 /** ...or after this, whatever it is doing: one slow agent must not stall the rest. */
 const BOOT_CAP_MS = 12_000;
 
@@ -703,6 +705,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
     let bootRelease: (() => void) | undefined;
     let bootSettle: ReturnType<typeof setTimeout> | undefined;
     let bootCap: ReturnType<typeof setTimeout> | undefined;
+    let bootAt = 0;
     const releaseBoot = () => {
       if (bootSettle) clearTimeout(bootSettle);
       if (bootCap) clearTimeout(bootCap);
@@ -717,7 +720,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
     unsubData = window.hive.onPtyData(ptyId, (d) => {
       if (bootRelease) {
         if (bootSettle) clearTimeout(bootSettle);
-        bootSettle = setTimeout(releaseBoot, BOOT_SETTLE_MS);
+        bootSettle = setTimeout(releaseBoot, Math.max(BOOT_SETTLE_MS, bootAt + BOOT_MIN_MS - Date.now()));
       }
       flowPending += d.length;
       term.write(d, () => {
@@ -851,7 +854,9 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
         let attachedPid: number | undefined;
         if (agent && !session && isRestored(tileId) && !isRemote(cwd)) {
           if (persistent) {
-            const probe = await window.hive.ptySpawn({ tileId: ptyId, cwd, cmd, args: args ?? [], cols: term.cols, rows: term.rows, attachOnly: true });
+            // liveOnly: a session saved before a reboot restores on attach, which is the
+            // start this queue is for; it must wait its turn like any other.
+            const probe = await window.hive.ptySpawn({ tileId: ptyId, cwd, cmd, args: args ?? [], cols: term.cols, rows: term.rows, attachOnly: true, liveOnly: true });
             if (probe.pid !== -1) attachedPid = probe.pid;
           }
           if (attachedPid === undefined && !cancelled) {
@@ -897,7 +902,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
         try { fit.fit(); } catch { /* torn down */ }
         window.hive.ptyResize(ptyId, term.cols, term.rows);
         term.writeln(`\x1b[2m[hivemind] spawned ${cmd} (pid ${pid})\x1b[0m`);
-        if (bootRelease) bootCap = setTimeout(releaseBoot, BOOT_CAP_MS);
+        if (bootRelease) { bootAt = Date.now(); bootCap = setTimeout(releaseBoot, BOOT_CAP_MS); }
         setStatus("idle");
         if (agent && !agentPoll) {
           // Stabilizer state for claude's between-tool idle blip (see
