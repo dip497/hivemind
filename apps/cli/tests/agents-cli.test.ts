@@ -193,6 +193,7 @@ describe("hive agents install <name>", () => {
     }] }));
     const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "hm-cli-cwd-"));
     tmp.push(cwd);
+    fs.mkdirSync(path.join(cwd, "acme")); // a same-named folder that is not an agent
     const env = { ...profile(), HIVEMIND_PLUGIN_INDEX: `file://${path.join(reg, "index.json")}` };
     let r = hive(["agents", "install", "acme", "--json"], { cwd, env });
     expect(r.json).toMatchObject({ ok: false, code: "install_unconfirmed" });

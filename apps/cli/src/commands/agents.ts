@@ -105,7 +105,8 @@ const installCmd = defineCommand({
       // A folder is a folder; a bare name is HiveHub; anything else is a repository someone named.
       let source = String(args.dir);
       let from: { where: string; pinned: boolean } | null = null;
-      if (AGENT_NAME.test(source) && !existsSync(source)) {
+      // A same-named folder that isn't an agent (opencode keeps one in /tmp) must not shadow the registry.
+      if (AGENT_NAME.test(source) && !existsSync(path.join(source, AGENT_MANIFEST_FILE))) {
         const got = await stageFromRegistry(source, "agent");
         staged = source = got.dir;
         from = { where: `HiveHub, published from ${got.entry.source ?? "its repository"}`, pinned: true };
