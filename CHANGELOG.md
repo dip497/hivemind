@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- A new app icon in the family style: the Hivemind mark on a dark tile, matching HiveHub and hivelock.
 - Agent tiles restored at startup keep their session name, status and icon. They used to come up as plain terminals when they restored before the installed agents had been read.
 - Every agent now gets the untrusted checks, with no exception to undo them: a plan's loader variables (`LD_PRELOAD`, `NODE_OPTIONS`, …) are always stripped, a manifest may never set them, and a session root must always stay under the home directory. A stale internal flag used to exempt agents without a source root — which is every agent installed from HiveHub — from the runtime loader-variable check.
 - **Breaking:** Nothing agent-specific ships in the app any more. Every agent — claude, codex, cursor, droid, pi, kiro — is added automatically from HiveHub when its CLI is found on the machine, which needs the network on first start; openclaw is gone. With no agent installed, starting one opens Settings ▸ Plugins.
