@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [2026.9.0] — 2026-09-20
+
 - Supervised Kiro agents ask for approval again before running a tool. The approval hook Kiro ships was not being wired in.
 - A new app icon in the family style: the Hivemind mark on a dark tile, matching HiveHub and hivelock.
 - Agent tiles restored at startup keep their session name, status and icon. They used to come up as plain terminals when they restored before the installed agents had been read.
@@ -1254,7 +1256,8 @@ World, and sandboxed community views), and the e2e/perf harnesses gate every cha
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v1.17.1...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.9.0...HEAD
+[2026.9.0]: https://github.com/dip497/hivemind/releases/tag/v2026.9.0
 [1.17.1]: https://github.com/dip497/hivemind/releases/tag/v1.17.1
 [1.17.0]: https://github.com/dip497/hivemind/releases/tag/v1.17.0
 [1.16.0]: https://github.com/dip497/hivemind/releases/tag/v1.16.0
