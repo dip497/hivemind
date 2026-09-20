@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { appMeetsMinVersion, fetchCatalog, parseCatalog, stageEntry, type CatalogEntry } from "./plugin-catalog.js";
+import { appMeetsMinVersion, fetchCatalog, noteInstall, parseCatalog, stageEntry, type CatalogEntry } from "./plugin-catalog.js";
 
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
 
@@ -106,4 +106,45 @@ test("an agent may carry its own mark, bounded but not understood here", () => {
   for (const bad of ["<svg/>", 7, { shapes: Array.from({ length: 400 }, () => ({ rect: { x: "1" } })) }]) {
     expect(() => parseCatalog({ version: 1, plugins: [{ ...base, icon: bad }] })).toThrow(/icon must be a small object/);
   }
+});
+
+describe("telling the registry an install happened", () => {
+  const entry = (id: string): CatalogEntry => ({
+    id, type: "view", name: "N", description: "d", author: "a", version: "1.0.0",
+    path: "views/n", files: [],
+  });
+  const withFetch = async (fn: () => Promise<unknown>): Promise<string[]> => {
+    const seen: string[] = [];
+    const real = globalThis.fetch;
+    globalThis.fetch = (async (u: URL | string) => {
+      seen.push(String(u));
+      return new Response("{}", { status: 200 });
+    }) as typeof fetch;
+    try { await fn(); } finally { globalThis.fetch = real; }
+    return seen;
+  };
+
+  test("resolves the plugin against the same registry the index came from", async () => {
+    const seen = await withFetch(() =>
+      noteInstall(entry("@dip497/queue"), "https://hivehub.example/api/v1/index.json"));
+    expect(seen).toEqual(["https://hivehub.example/api/v1/plugins/%40dip497/queue/resolve"]);
+  });
+
+  test("an agent is one bare name, and still resolves", async () => {
+    const seen = await withFetch(() =>
+      noteInstall(entry("gemini"), "https://hivehub.example/api/v1/index.json"));
+    expect(seen).toEqual(["https://hivehub.example/api/v1/plugins/gemini/resolve"]);
+  });
+
+  // A count is never worth failing an install that already succeeded, and a local
+  // file: index (development) is nobody's to count.
+  test("a registry that is down or not https changes nothing", async () => {
+    const real = globalThis.fetch;
+    globalThis.fetch = (() => Promise.reject(new Error("offline"))) as typeof fetch;
+    try {
+      await noteInstall(entry("@a/b"), "https://hivehub.example/api/v1/index.json");
+    } finally { globalThis.fetch = real; }
+    const seen = await withFetch(() => noteInstall(entry("@a/b"), "file:///tmp/index.json"));
+    expect(seen).toEqual([]);
+  });
 });

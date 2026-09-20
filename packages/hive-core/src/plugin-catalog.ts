@@ -43,6 +43,8 @@ const SHA_RE = /^[0-9a-f]{64}$/;
 export const MAX_FILE = 20 << 20;
 const MAX_TOTAL = 50 << 20;
 const TIMEOUT_MS = 20_000;
+/** The install is already on disk by the time we tell the registry; don't make anyone wait. */
+const NOTE_TIMEOUT_MS = 3_000;
 
 /** Windows device names cannot be files, whatever the extension. */
 const DEVICE_RE = /^(con|prn|aux|nul|com\d|lpt\d)(\..*)?$/i;
@@ -141,6 +143,25 @@ export async function fetchCatalog(indexUrl = catalogIndexUrl()): Promise<Catalo
   return parseCatalog(JSON.parse(body.toString("utf8")));
 }
 
+/** Tell the registry a plugin was installed, so its count is a count.
+ *
+ *  The registry counts the request, not anything we volunteer: it dedupes on an HMAC of
+ *  (day, plugin, address), so installing the same plugin five times on one machine counts
+ *  once, and the fingerprint is not an identifier for anyone. We therefore send no id, no
+ *  machine name and no headers of our own — and never let it fail an install.
+ *
+ *  Only catalog installs reach this. A plugin installed from a folder was never resolved
+ *  from the registry and is not its to count. */
+export async function noteInstall(entry: CatalogEntry, indexUrl = catalogIndexUrl()): Promise<void> {
+  try {
+    const url = new URL(`plugins/${entry.id.split("/").map(encodeURIComponent).join("/")}/resolve`, indexUrl);
+    if (url.protocol !== "https:") return;
+    await fetch(url, { signal: AbortSignal.timeout(NOTE_TIMEOUT_MS), redirect: "error" });
+  } catch {
+    /* the plugin is installed either way — a count is never worth an error */
+  }
+}
+
 /** Download an entry's files into a fresh folder, verifying each hash. Returns the folder. */
 export async function stageEntry(entry: CatalogEntry, indexUrl = catalogIndexUrl()): Promise<string> {
   const stage = await fs.mkdtemp(path.join(os.tmpdir(), `hm-plugin-${entry.id.replace(/[^a-z0-9-]/g, "_")}-`));
@@ -159,6 +180,7 @@ export async function stageEntry(entry: CatalogEntry, indexUrl = catalogIndexUrl
       await fs.mkdir(path.dirname(dest), { recursive: true });
       await fs.writeFile(dest, body);
     }
+    await noteInstall(entry, indexUrl);
     return stage;
   } catch (e) {
     await fs.rm(stage, { recursive: true, force: true });
