@@ -3,8 +3,15 @@ title: Views
 description: Workspace views and their current limitations.
 ---
 
+Nobody agrees what a workspace should look like — so the app does not decide. A view draws the
+whole screen from what the runtime hands it: frames, tiles, names, live status. The terminal
+inside your scene is the real one, still running; you say where it goes and the session mounts
+there. A queue if you triage, a board if you lead, a city where every agent is a house, if that
+is how your head works — then publish it on [HiveHub](https://hivehub.griiken.workers.dev/) and
+everyone else can work in it too.
+
 ⌘E or the Settings ▸ Views overview switches how the workspace is shown. The workspace runtime owns
-frames, tiles, and sessions; a view only arranges them.
+frames, tiles, and sessions; a view only arranges them — never what runs.
 
 ## Built-in views
 
