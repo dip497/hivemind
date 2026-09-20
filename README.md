@@ -17,15 +17,12 @@
 > minutes ago, one is editing a file you meant to read first — and you find out by cycling
 > through windows.
 
-hivemind puts them all on one screen, and then hands you that screen. Out of the box it is a
-canvas per repository: every tile live — an agent's terminal, a diff that updates as it edits,
-a file tree, an editor, an issues board, a browser — grouped into frames bound to a repository,
-a git worktree or an SSH host, so several agents work in parallel without reaching into each
-other's directories.
+One screen instead. Each agent's terminal, the diff it is editing, the issues, a browser —
+grouped into frames bound to a repo, a worktree or an SSH host.
 
-The canvas is only the first answer. It is a **view**, and a view is a plugin you write: a
-queue if you triage, a board if you lead, a city where every agent is a house. One command
-starts yours, and [HiveHub](https://hivehub.griiken.workers.dev/) carries it to everyone else.
+That canvas is just the first answer. It is a **view**, and a view is a plugin you write: a
+queue, a board, a city. One command starts yours; [HiveHub](https://hivehub.griiken.workers.dev/)
+ships it to everyone else.
 
 <img alt="The canvas: two frames, each holding agent and shell tiles, on a shared wallpaper" src="docs/public/shots/view-canvas.webp" />
 
