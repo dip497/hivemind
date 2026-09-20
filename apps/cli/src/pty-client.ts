@@ -2,13 +2,22 @@
 import net from "node:net";
 import path from "node:path";
 import { frame, makeLineDecoder, type ClientMsg, type ServerMsg, type SessionInfo } from "../../desktop/src/main/pty-protocol.js";
-import { configDir } from "./hcp.js";
+import { ipcPath } from "@hivemind/core";
+import { configDir, win32UserDataDir } from "./hcp.js";
 
 export type { SessionInfo };
 
-/** The desktop's daemon path on Linux, so the app and the CLI share one daemon per machine. */
-export function defaultSocket(): string {
-  return process.env.HIVEMIND_PTY_SOCK || path.join(configDir(), "hivemind", "pty-daemon.sock");
+/** The desktop's daemon endpoint, so the app and the CLI share one daemon per
+ *  machine: a named pipe on Windows, the unix socket file elsewhere. */
+export function defaultSocket(opts: { platform?: NodeJS.Platform; env?: NodeJS.ProcessEnv } = {}): string {
+  const { platform = process.platform, env = process.env } = opts;
+  const override = env.HIVEMIND_PTY_SOCK;
+  if (override) return override;
+  if (platform === "win32") {
+    const ud = win32UserDataDir(env);
+    if (ud) return ipcPath(ud, "pty-daemon.sock", platform);
+  }
+  return path.join(configDir(env), "hivemind", "pty-daemon.sock");
 }
 
 /** sun_path limit; a longer path fails later with a misleading EADDRINUSE. */

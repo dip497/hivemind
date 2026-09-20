@@ -116,6 +116,7 @@ function Add-ToUserPath {
 }
 
 function Add-StartMenuShortcut {
+  # Fallback only: WScript.Shell cannot set an AppUserModelID, so the app rewrites this same .lnk (AUMID-bearing) on first launch.
   $lnk = Join-Path ([Environment]::GetFolderPath("Programs")) "hivemind.lnk"
   $shell = New-Object -ComObject WScript.Shell
   $s = $shell.CreateShortcut($lnk)
@@ -126,8 +127,11 @@ function Add-StartMenuShortcut {
   Ok "Start Menu shortcut"
 }
 
+# Only a WINDOWED process counts as "the app is running": the pty daemon runs
+# as hivemind.exe too, detached, and outlives the window — counting it would
+# refuse every upgrade on any machine with a surviving session daemon.
 function Test-AppRunning {
-  [bool](Get-Process -Name hivemind -ErrorAction SilentlyContinue)
+  [bool](Get-Process -Name hivemind -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 })
 }
 
 # Unpack the release zip.

@@ -6,31 +6,14 @@
  * project has a Windows box yet. Pass `platform` explicitly in tests; it
  * defaults to the running one.
  */
-import crypto from "node:crypto";
 import path from "node:path";
 
 export type Platform = NodeJS.Platform;
 
-/**
- * Address for a local IPC endpoint.
- *
- * POSIX: a unix socket file inside userData, as before.
- *
- * Windows: there is no filesystem socket. Node's net API speaks named pipes
- * through the same connect()/createServer() calls, but the address must look
- * like `\\.\pipe\<name>` — a path under userData just yields ENOENT/EACCES.
- * The name must be IDENTICAL in every process that reaches this endpoint: the
- * pty daemon is spawned detached and re-derives it, and the hcp address is
- * handed to agent CLIs through HIVE_HCP_SOCK. So it's derived from the
- * userData dir (hashed — the raw path contains `\`, spaces and a drive letter,
- * none of which belong in a pipe name), which keeps it unique per install and
- * per user while staying stable across processes.
- */
-export function ipcPath(userDataDir: string, name: string, platform: Platform = process.platform): string {
-  if (platform !== "win32") return path.join(userDataDir, name);
-  const key = crypto.createHash("sha256").update(path.resolve(userDataDir)).digest("hex").slice(0, 12);
-  return `\\\\.\\pipe\\hivemind-${key}-${name.replace(/\.sock$/, "")}`;
-}
+// Shared with the `hive` CLI — both must derive the same address for one
+// install — so the implementation lives in hive-core; the re-export keeps the
+// desktop's existing import surface (daemon-client, token, index) intact.
+export { ipcPath } from "@hivemind/core/ipc";
 
 /**
  * The interactive shell a fresh terminal tile starts with.
@@ -102,4 +85,21 @@ export function upgradeCommand(
   }
   const url = `https://raw.githubusercontent.com/${repo}/main/install.sh`;
   return { file: "bash", args: ["-c", `curl -fsSL ${url} | bash`] };
+}
+
+/**
+ * The Start Menu shortcut the app keeps on Windows, and its file name.
+ *
+ * The exact file install.ps1 writes as a first-run fallback: Windows only shows toasts
+ * for an app whose AUMID matches a Start Menu shortcut, and the fallback cannot carry
+ * one — so the app rewrites this same file (never adds a second) at launch.
+ */
+export function windowsStartMenuShortcut(
+  env: NodeJS.ProcessEnv = process.env,
+  platform: Platform = process.platform,
+): { file: string; name: string } | null {
+  if (platform !== "win32") return null;
+  const roaming = env.APPDATA || path.join(env.USERPROFILE ?? "", "AppData", "Roaming");
+  const name = "hivemind.lnk";
+  return { name, file: path.join(roaming, "Microsoft", "Windows", "Start Menu", "Programs", name) };
 }
