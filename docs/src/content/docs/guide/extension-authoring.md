@@ -3,8 +3,8 @@ title: Extension authoring
 description: Build and install a workspace view.
 ---
 
-**Development preview** — community views are on the unreleased development line; the
-protocol is versioned (`PROTOCOL_VERSION`).
+A view speaks a versioned protocol (`PROTOCOL_VERSION`); a view built for a newer one says so
+with `minAppVersion`, and the app refuses rather than half-loads it.
 
 ## Start one
 

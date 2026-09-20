@@ -114,8 +114,6 @@ hive ctl list-workspaces
 
 ## Views, agents, config, theme, upgrade
 
-Views, agent files and the settings file are on the unreleased development line — expect change.
-
 ```text
 hive views list                         # installed view plugins + load errors
 hive views install <dir>                # dir with hivemind-view.json; asks the app to rescan

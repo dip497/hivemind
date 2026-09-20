@@ -3,10 +3,6 @@ title: Appearance
 description: Theme, wallpaper, effects, and settings commands.
 ---
 
-**Development preview** — the settings.json system and the `hive config` / `hive theme`
-commands are on the unreleased development line, as are the plugin pages and per-view
-toolbar settings described below.
-
 ## Settings
 
 One user-owned file, validated on read and write; a running app applies changes without

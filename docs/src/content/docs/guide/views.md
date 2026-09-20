@@ -3,9 +3,6 @@ title: Views
 description: Workspace views and their current limitations.
 ---
 
-**Development preview** — views-as-plugins and community views are on the unreleased
-development line (post-1.16.0). The canvas is released behaviour.
-
 ⌘E or the Settings ▸ Views overview switches how the workspace is shown. The workspace runtime owns
 frames, tiles, and sessions; a view only arranges them.
 

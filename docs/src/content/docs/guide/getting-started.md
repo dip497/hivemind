@@ -14,7 +14,7 @@ bash <(curl -fsSL https://hivemind.griiken.com/install.sh)
 
 It installs the `hive` CLI and the `hivemind` app into `~/.hivemind-app/`, symlinks both
 into `~/.local/bin/`, and warns if no agent CLI is on `PATH`. Re-run to upgrade; pin a
-version with `HIVEMIND_VERSION=v1.0.0`.
+version with `HIVEMIND_VERSION=v2026.9.0`.
 
 ## Install an agent CLI
 
