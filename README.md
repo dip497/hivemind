@@ -34,10 +34,15 @@ host, and several agents work in parallel without reaching into each other's dir
 bash <(curl -fsSL https://hivemind.griiken.com/install.sh)
 ```
 
-Linux x86_64 and macOS Apple Silicon have prebuilt releases, so you need no toolchain;
-Intel macs and Linux arm64 build from source with `--dev`. Re-run it to upgrade, or pin a
-version with `HIVEMIND_VERSION=v2026.9.0`. Windows builds and passes its checks in CI, but
-nothing is published until it has been launched on real hardware.
+On Windows, in PowerShell:
+
+```powershell
+irm https://hivemind.griiken.com/install.ps1 | iex
+```
+
+Linux x86_64, macOS Apple Silicon and Windows x64 have prebuilt releases, so you need no
+toolchain; Intel macs and Linux arm64 build from source with `--dev`. Re-run it to upgrade,
+or pin a version with `HIVEMIND_VERSION=v2026.9.1`.
 
 ## Use
 

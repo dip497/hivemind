@@ -283,11 +283,10 @@ jobs:
     name: build windows x64
     runs-on: windows-latest
     timeout-minutes: 40
-    # UNVALIDATED PLATFORM. Nobody has launched this build on real hardware yet,
-    # so a Windows failure must not block a Linux/macOS release: this job is not
-    # in `publish`'s `needs`, and its assets are deliberately NOT in the release
-    # `files:` list. To ship Windows once someone confirms it runs: add
-    # `hive-windows-x64.exe` + `*-win.zip` to that list. Nothing else changes.
+    # Published, but never blocking: the smoke steps below run the build (CLI, a ConPTY
+    # spawn, a bare .cmd agent, the app opening its pipe, a hook through cmd.exe), and a
+    # Windows failure ships the release without its assets rather than holding Linux and
+    # macOS back.
     continue-on-error: true
 
     steps:
@@ -587,7 +586,7 @@ jobs:
 
   publish:
     name: publish github release
-    needs: [build-linux, build-linux-arm64, build-macos]
+    needs: [build-linux, build-linux-arm64, build-macos, build-windows]
     # A tag push always publishes. A MANUAL run only publishes when it explicitly
     # asks to — the default is build-only, so dispatching to smoke-test a build
     # can never cut an accidental release.
@@ -628,3 +627,5 @@ jobs:
             release-assets/hive-darwin-arm64
             release-assets/*.AppImage
             release-assets/*-mac.zip
+            release-assets/hive-windows-x64.exe
+            release-assets/*-win.zip
