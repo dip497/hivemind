@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Switching views is smooth again on a busy workspace: WebGL slots are reconciled once per frame instead of once per surface cascade, and a switch no longer hands every terminal's context to a different tile. On a 30-tile board, board→canvas went from 20-37 fps with a 1.7 s worst frame to 54-58 fps with a 0.27 s one.
+
 ## [2026.9.2] — 2026-09-20
 
 - Upgrading now shows the new app icon: the installer drops a stale `hivemind.png` left in another icon size by an older install, which the icon theme was picking over the one it writes.
