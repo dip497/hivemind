@@ -95,6 +95,19 @@ CPU-heavy disables the plugin for the session. Three are published on HiveHub, e
 
  Authoring: [Extension authoring](../extension-authoring/).
 
+## Have an agent build one
+
+```bash
+hive views new my-view
+```
+
+The starter it writes runs as-is, and includes **`PROMPT.md`** — a brief that holds the whole
+view API, the hole-punch for live terminals, the theme variables, the rules of the sandbox and
+what "done" means. Write what you want at the top of that file ("a subway map where each line is
+a git branch"), hand the file to your agent, and it can build the view without reading the
+Hivemind source. Re-run `npm run dev` to see each change in the app.
+
+
 ## Chrome in every view
 
 The workspace toolbar (spawn, frame, browser, appearance, update) draws over the active

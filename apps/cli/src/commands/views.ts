@@ -103,7 +103,7 @@ const newCmd = defineCommand({
       await mkdir(path.dirname(path.join(dir, f)), { recursive: true });
       await writeFile(path.join(dir, f), body);
     }
-    return ok(ctx, { id: `@${owner}/${name}`, dir }, () => `created @${owner}/${name} in ${dir}\n  cd ${name} && npm install && npm run dev`);
+    return ok(ctx, { id: `@${owner}/${name}`, dir }, () => `created @${owner}/${name} in ${dir}\n  cd ${name} && npm install && npm run dev\n  want an agent to build it? write your idea into PROMPT.md and hand it that file`);
   },
 });
 
