@@ -2,6 +2,7 @@
  *  package to install — the app serves it to every view — so a view gets its types here and
  *  leaves `@hivemind/view-sdk` out of its bundle. */
 import { readFileSync } from "node:fs";
+import { agentPrompt } from "./view-prompt.js";
 
 /** Embedded by scripts/build.ts; a source checkout reads the package itself. */
 declare const HIVE_VIEW_SDK: Record<string, string> | undefined;
@@ -92,6 +93,7 @@ hm.on("structure", ({ tiles }) => {
   });
 });
 `,
+    "PROMPT.md": agentPrompt(id, title(name)),
     "README.md": `# ${title(name)}
 
 A [Hivemind](https://hivemind.griiken.com) view.
@@ -100,6 +102,9 @@ A [Hivemind](https://hivemind.griiken.com) view.
 npm install
 npm run dev        # build, then install into the app
 \`\`\`
+
+Want an agent to build it? Write your idea into \`PROMPT.md\` and hand that file to it —
+it holds the whole API and the rules of the sandbox.
 
 \`dist/\` is the view. Publish it on HiveHub: \`hivehub publish dist\` after pushing the commit.
 `,
