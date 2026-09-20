@@ -1,6 +1,6 @@
 ---
 title: Hivemind
-description: A workspace for coding agents, on Linux, macOS and Windows.
+description: A workspace for coding agents.
 ---
 
 Hivemind runs coding-agent CLIs alongside terminals, editors, file trees, and diffs — in one

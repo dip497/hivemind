@@ -26,7 +26,7 @@ for (const file of files) {
   await writeFile(`dist/markdown/${file}`, text);
   entries.push({ title, description, file, text });
 }
-const preamble = '# Hivemind\n\n> A workspace for coding agents, on Linux and macOS. Local repositories, terminals, editors, and diffs.\n\nThese docs follow the development branch. Views, the view SDK, and settings commands are development previews. Check installed CLI help before using a command.\n\n';
+const preamble = '# Hivemind\n\n> A workspace for coding agents. Local repositories, terminals, editors, and diffs.\n\nThese docs follow the released line; check installed CLI help before using a command.\n\n';
 await writeFile('dist/llms.txt', preamble + '## Documentation\n\n' + entries.map((e) => `- [${e.title}](${url}/markdown/${e.file}): ${e.description}`).join('\n') + '\n');
 await writeFile('dist/llms-full.txt', preamble + entries.map((e) => e.text).join('\n---\n\n'));
 console.log(`Exported ${entries.length} Markdown guides and agent indexes.`);
