@@ -87,7 +87,7 @@ if [ "\${1:-}" = "uninstall" ]; then
   pkill -f "$appdir" 2>/dev/null || true
   data_dir="\${XDG_DATA_HOME:-\$HOME/.local/share}"
   rm -rf "$appdir" "${appdir}.staged"
-  rm -f "\$data_dir/applications/hivemind.desktop" "\$data_dir/icons/hicolor/512x512/apps/hivemind.png"
+  rm -f "\$data_dir/applications/hivemind.desktop" "\$data_dir"/icons/hicolor/*/apps/hivemind.png
   update-desktop-database "\$data_dir/applications" 2>/dev/null || true
   if [ "\$purge" = 1 ]; then
     rm -rf "\${XDG_CONFIG_HOME:-\$HOME/.config}/hivemind"
@@ -133,6 +133,9 @@ install_desktop_entry() {
   local icon_src="$appdir/usr/share/icons/hicolor/512x512/apps/hivemind.png"
   [ -f "$icon_src" ] || icon_src="$appdir/hivemind.png"
   if [ -f "$icon_src" ]; then
+    # An icon theme resolves by size, so an old hivemind.png left in another size
+    # dir by an earlier install wins over the 512 we write and the icon never changes.
+    rm -f "$data_dir"/icons/hicolor/*/apps/hivemind.png
     mkdir -p "$(dirname "$icon_dst")" && cp -f "$icon_src" "$icon_dst"
   fi
   mkdir -p "$(dirname "$desk_dst")"

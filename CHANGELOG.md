@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Upgrading now shows the new app icon: the installer drops a stale `hivemind.png` left in another icon size by an older install, which the icon theme was picking over the one it writes.
+
 ## [2026.9.1] — 2026-09-20
 
 - Windows: prebuilt `hive-windows-x64.exe` and the app zip ship with every release, and `irm https://hivemind.griiken.com/install.ps1 | iex` installs them. Agents start from their `.cmd` or `.exe`, `hive ctl` reaches the app over its named pipes, hooks run as an encoded PowerShell command, and notifications carry the app id Windows needs.
