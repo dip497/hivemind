@@ -1108,7 +1108,12 @@ html.content-glass .md-preview code {
   object-fit: cover;
   filter: brightness(var(--wp-brightness, 0.85)) saturate(1.05);
   transform-origin: center;
-  animation: hm-kenburns 44s steps(176) infinite alternate;
+  /* 24 steps/s, not the blooms' 4. The step trick documented below works because a
+     bloom is 60px-blurred, so a ~1px move has no visible edge; a PHOTO has edges
+     everywhere and the same step reads as the whole picture twitching 4x/s. 44s x 24
+     puts the per-step move at ~0.13px - under perception - and still skips ~60% of
+     the frosted tiles' backdrop re-blurs. */
+  animation: hm-kenburns 44s steps(1056) infinite alternate;
 }
 @keyframes hm-kenburns {
   from { transform: scale(1.04) translate(0, 0); }

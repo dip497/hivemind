@@ -6,6 +6,7 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { registerFileLinks } from "./terminal-file-links";
 import { installCrispDpr } from "./terminal-dpr";
+import { nextPtySize, type PtySize } from "./pty-size-sync";
 import { patchTerminalMouseWithRetry } from "./terminal-mouse-patch";
 import { wantsDomRenderer } from "./terminal-renderer-policy";
 import { registerWebglSlotClient, unregisterWebglSlotClient, reconcileWebglSlots } from "./webgl-slots";
@@ -165,6 +166,10 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
   // — applied by the selection effect when the tile is shown again.
   const pendingFitRef = useRef(false);
   const scheduleFitRef = useRef<(() => void) | null>(null);
+  // What we last told the pty. xterm only emits onResize when ITS size changes,
+  // so the pty is kept in step from here after every fit — see pty-size-sync.ts.
+  const sentSizeRef = useRef<PtySize | null>(null);
+  const syncSizeRef = useRef<(() => void) | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const webglRef = useRef<WebglAddon | null>(null);
   // Live `selected` for the WebGL slot manager's priority() (read outside render).
@@ -399,6 +404,14 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
     (host as HTMLElement & { __hmScreen?: () => string }).__hmScreen = readScreen;
     fit.fit();
     termRef.current = term;
+    /** Push the grid's size to the pty when the pty does not already have it. */
+    const syncPtySize = (): void => {
+      const next = nextPtySize(sentSizeRef.current, term.cols, term.rows);
+      if (!next) return;
+      sentSizeRef.current = next;
+      window.hive.ptyResize(ptyId, next.cols, next.rows);
+    };
+    syncSizeRef.current = syncPtySize;
     // ── FOCUS GUARANTEE ──────────────────────────────────────────────────────
     // While claude STREAMS, its title/status churn re-renders the react-flow node,
     // and react-flow re-focuses the SELECTED node's wrapper <div> (nodes are
@@ -545,8 +558,8 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
       // next frame is a safety net: disposing the WebGL addon may not recompute
       // the DOM render dimensions until the following paint, and a stale first fit
       // would re-introduce the overflow. (A no-op when the first fit already won.)
-      try { fitRef.current?.fit(); term.refresh(0, term.rows - 1); } catch { /* torn down */ }
-      requestAnimationFrame(() => { try { fitRef.current?.fit(); } catch { /* torn down */ } });
+      try { fitRef.current?.fit(); syncSizeRef.current?.(); term.refresh(0, term.rows - 1); } catch { /* torn down */ }
+      requestAnimationFrame(() => { try { fitRef.current?.fit(); syncSizeRef.current?.(); } catch { /* torn down */ } });
       restoreFocusIfSelected();
     };
     // Viewport visibility → priority. Assume visible on mount (a fresh tile is
@@ -649,6 +662,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
           if (cancelled) return;
           try {
             fit.fit();
+            syncPtySize();
             webgl?.clearTextureAtlas();
             term.refresh(0, term.rows - 1);
           } catch { /* terminal torn down mid-load */ }
@@ -728,7 +742,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
       }
       window.hive.ptyWrite(ptyId, d);
     });
-    term.onResize(({ cols, rows }) => window.hive.ptyResize(ptyId, cols, rows));
+    term.onResize(() => syncPtySize());
     // Clipboard COPY only. xterm doesn't copy on its own (Ctrl+C just sends
     // SIGINT): Cmd/Ctrl(+Shift)+C copies the selection (and clears it, so a
     // second press still sends SIGINT); plain Ctrl+C with NOTHING selected falls
@@ -853,7 +867,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
         // the stale width — "text looks bigger after restart". Pushing our dims
         // explicitly every spawn reflows claude (SIGWINCH) to the true tile size.
         try { fit.fit(); } catch { /* torn down */ }
-        window.hive.ptyResize(ptyId, term.cols, term.rows);
+        syncPtySize();
         term.writeln(`\x1b[2m[hivemind] spawned ${cmd} (pid ${pid})\x1b[0m`);
         if (bootRelease) { bootAt = Date.now(); bootCap = setTimeout(releaseBoot, BOOT_CAP_MS); }
         setStatus("idle");
@@ -936,6 +950,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
     const doFit = () => {
       try {
         fit.fit();
+        syncPtySize();
         // Anchor to the bottom after a resize so the LATEST output + prompt
         // stay visible. xterm's reflow can otherwise leave the viewport
         // scrolled up — shrinking a tile "cropped" the live prompt off the
@@ -1023,6 +1038,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
         /* ignore */
       }
       scheduleFitRef.current = null;
+      syncSizeRef.current = null;
       cancelMousePatch();
       term.dispose();
       termRef.current = null;
@@ -1087,6 +1103,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
     term.options.fontSize = font.size;
     try {
       fitRef.current?.fit();
+      syncSizeRef.current?.();
       term.refresh(0, term.rows - 1);
     } catch { /* torn down */ }
   }, [font.size]);
@@ -1106,6 +1123,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
       const term = termRef.current;
       if (!term) return;
       fitRef.current?.fit();
+      syncSizeRef.current?.();
       term.refresh(0, term.rows - 1);
       if (selectedRef.current) term.focus();
     },
