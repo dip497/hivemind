@@ -65,9 +65,10 @@ const agentCount = icons.total;
       <div class="hero-copy">
         <p class="eyebrow"><span class="tag">Free &amp; open source</span> MIT licensed</p>
         <h1>Build the workspace your agents work in.</h1>
-        <p class="lede">The screen is yours to draw — a queue, a board, a city — and we keep the
-          agents, terminals and diffs alive inside it. Your own view is one command; your own
-          agent is one file.</p>
+        <p class="lede">The screen is yours to draw — a queue, a board, a subway map, a Mars base —
+          and we keep the agents, terminals and diffs alive inside it. Every verb is a command, and
+          <code>hive ctl</code> is on every agent's PATH: one agent spawns three more, watches them
+          work and approves their tools, while you watch all four.</p>
 
         <div class="cta">
           <a class="btn primary" href={`${repo}/releases`}>Download</a>
@@ -165,10 +166,10 @@ const agentCount = icons.total;
         </li>
         <li>
           <span class="step-n">3</span>
-          <h3>Read it, and answer it</h3>
-          <p>Its screen comes back as text you can pipe. The same verb sends the next instruction —
-            to you, or from one agent to another.</p>
-          <pre class="cmd"><span class="w">$</span> hive ctl read tile-scout <span class="g">--json</span></pre>
+          <h3>Let one agent run the rest</h3>
+          <p>Its screen comes back as text you can pipe, so an agent can drive other agents: split
+            one job across three workers, read what each returns, merge it — and you watch it happen.</p>
+          <pre class="cmd"><span class="w">$</span> hive ctl workflow <span class="g">--shape</span> fanout <span class="g">--items</span> "api||web||cli"</pre>
         </li>
       </ol>
     </div>
@@ -231,7 +232,8 @@ detect:
         <p class="sub">Nobody agrees what a workspace should look like — so we stopped deciding. A
           view draws the whole screen from what we hand it: frames, tiles, names, live status. The
           terminal inside your scene is the real one, still running. A queue if you triage, a board
-          if you lead, a city where every agent is a house, if that is how your head works.</p>
+          if you lead, a subway map where each line is a branch, a Mars base where every agent is a
+          module and a stalled one goes dark — anything you can draw in a web page.</p>
         <p class="sub">Build the room you always wanted to work in, then put it on
           <a href="https://hivehub.griiken.workers.dev/">HiveHub</a> so everyone else can work in it
           too. A view decides how the workspace <em>looks</em> — never what runs.</p>
