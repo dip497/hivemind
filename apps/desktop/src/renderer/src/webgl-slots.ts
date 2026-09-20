@@ -45,6 +45,14 @@ export interface WebglSlotClient {
 const clients = new Map<string, WebglSlotClient>();
 let reconcilePending = false;
 
+// Coalesce to one pass per visual frame in the renderer. Node's unit tests pin
+// the same coalescing contract on the microtask (they have no rAF), so the
+// fallback keeps their semantics byte-for-byte while the app gets frame scope.
+const deferToNextFrame =
+  typeof requestAnimationFrame === "function"
+    ? (fn: () => void) => requestAnimationFrame(fn)
+    : (fn: () => void) => queueMicrotask(fn);
+
 /**
  * Decide which clients hold WebGL, then apply. Keep-until-needed to avoid context
  * churn while panning: a slot is revoked ONLY when a higher-priority client needs
@@ -72,7 +80,13 @@ function reconcile(): void {
     .filter((c) => !domForced.has(c.id))
     .map((c) => ({ c, p: c.priority() }))
     .filter((x) => x.p > 0)
-    .sort((a, b) => b.p - a.p);
+    // Holder preference on ties: a view switch flips visibility on every tile at
+    // once, so at budget pressure the wanter list is mostly p=1 ties. Breaking
+    // ties toward CURRENT holders means the same 12 tiles keep WebGL across a
+    // switch; without this, each switch could swap the whole set — every swap
+    // paying a GL context + shader compile on acquire and a re-fit on release
+    // (measured as the dominant half of the board→canvas long task).
+    .sort((a, b) => b.p - a.p || Number(!!b.c._hasSlot) - Number(!!a.c._hasSlot));
   for (const { c } of wanters) {
     if (n >= BUDGET) break;
     keep.add(c.id);
@@ -120,10 +134,15 @@ export function unregisterWebglSlotClient(id: string): void {
 /** Re-evaluate slots after a client's priority changed (focus / visibility). */
 export function reconcileWebglSlots(): void {
   // A view commit parks/adopts many surfaces. Read visibility only after those
-  // DOM mutations finish, once per client rather than once per surface event.
+  // DOM mutations finish, once per FRAME: a microtask here drained once per
+  // adopt/park cascade generation, and each drain re-read checkVisibility() on
+  // every client right after the previous drain's DOM writes — on a 30-tile
+  // board that was one 1.2 s task with ~700 forced layouts + style recalcs
+  // (the view-switch jank). rAF runs the reconcile once per visual frame,
+  // after the commit has settled and before paint.
   if (reconcilePending) return;
   reconcilePending = true;
-  queueMicrotask(() => {
+  deferToNextFrame(() => {
     reconcilePending = false;
     reconcile();
   });
