@@ -22,13 +22,9 @@ agent, a diff that updates as that agent edits, a file tree, an editor, an issue
 browser. Group tiles into frames, bind a frame to a repository, a git worktree or an SSH
 host, and several agents work in parallel without reaching into each other's directories.
 
-<img alt="Five agent terminals tiled in one frame; the focused one is asking to approve an edit" src="docs/public/shots/view-tiled.webp" />
+<img alt="The canvas: two frames, each holding agent and shell tiles, on a shared wallpaper" src="docs/public/shots/view-canvas.webp" />
 
-<sub>Every terminal of a frame, live at once. The one on the left is waiting for you to approve an edit.</sub>
-
-<img alt="The queue view: two agents need you, nine are working" src="docs/public/shots/view-queue.webp" />
-
-<sub>Or let it order them for you: who needs you, who is still working. <kbd>N</kbd> jumps to the one that has waited longest.</sub>
+<sub>The canvas — one frame per repository, tiles inside them.</sub>
 
 ---
 
