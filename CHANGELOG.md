@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [2026.9.1] — 2026-09-20
+
 - Windows: prebuilt `hive-windows-x64.exe` and the app zip ship with every release, and `irm https://hivemind.griiken.com/install.ps1 | iex` installs them. Agents start from their `.cmd` or `.exe`, `hive ctl` reaches the app over its named pipes, hooks run as an encoded PowerShell command, and notifications carry the app id Windows needs.
 - Windows: notifications and hooks work. The app now claims its Windows app id and keeps a matching Start Menu shortcut (without which Windows silently drops every toast), and hook commands on Windows render as an encoded PowerShell invocation instead of a POSIX line no Windows shell could run.
 - Windows: agent tiles spawn at all — the bare agent name now resolves through PATH/PATHEXT to its real file (npm installs agents as `.cmd` shims, which node-pty's lookup cannot run), re-parented onto cmd.exe; `hive ctl` and `hive daemon` find the running app through its named pipes instead of unix socket paths; and `hivemind upgrade` is no longer blocked forever by a detached pty daemon, since only a windowed app process now counts as running in `install.ps1`.
@@ -1260,7 +1262,8 @@ World, and sandboxed community views), and the e2e/perf harnesses gate every cha
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.9.0...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.9.1...HEAD
+[2026.9.1]: https://github.com/dip497/hivemind/releases/tag/v2026.9.1
 [2026.9.0]: https://github.com/dip497/hivemind/releases/tag/v2026.9.0
 [1.17.1]: https://github.com/dip497/hivemind/releases/tag/v1.17.1
 [1.17.0]: https://github.com/dip497/hivemind/releases/tag/v1.17.0
