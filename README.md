@@ -107,6 +107,10 @@ page, with real terminals living inside it.
 hive views new my-view     # a starter you can build, install and publish
 ```
 
+It writes a working view **and a `PROMPT.md`**: the whole view API, the theme variables and the
+rules of the sandbox, in one file. Describe what you want at the top of it — *"a subway map where
+each line is a git branch"* — hand it to your agent, and let the agent build it.
+
 Build the room you always wanted to work in, then put it on
 [HiveHub](https://hivehub.griiken.workers.dev/) so everyone else can work in it too. Ten people
 will build ten different rooms, and the good ones become everyone's. A view decides how the
