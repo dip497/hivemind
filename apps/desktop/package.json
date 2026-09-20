@@ -147,7 +147,7 @@
     "electron-vite": "catalog:",
     "oxlint": "^1.83.0",
     "tailwindcss": "catalog:",
-    "tsx": "^4.23.13",
+    "tsx": "^4.23.15",
     "typebox": "1.1.38",
     "typescript": "catalog:",
     "vite": "catalog:",

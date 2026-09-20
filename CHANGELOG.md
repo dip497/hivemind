@@ -10,6 +10,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 ## [Unreleased]
 
 - Switching views is smooth again on a busy workspace: WebGL slots are reconciled once per frame instead of once per surface cascade, and a switch no longer hands every terminal's context to a different tile. On a 30-tile board, board→canvas went from 20-37 fps with a 1.7 s worst frame to 54-58 fps with a 0.27 s one.
+- Security: closed 59 of 61 open Dependabot alerts by bumping the lockfile to patched releases — electron 33.4.11 → 39.8.10, vite 5.4.21 → 6.4.3 (with electron-vite 2.3 → 5.0 and @electron/rebuild 3.7 → 4.2), electron-builder 25.1.8 → 26.15.3 (which moves app-builder-lib to 26.15.3, builder-util-runtime to 9.7.0 and tar to 7.5.22), tsx 4.23.13 → 4.23.15 (esbuild 0.28.2), and docs' sharp to 0.35.4. `undici` is pinned to 8.10.2 via override because its parent (@earendil-works/pi-coding-agent, held on the 0.80.x line by design) has no release with a fixed undici. The two extract-zip alerts stay open: no patched extract-zip exists (≤ 2.0.1 is the newest release ever) and even electron 39.8.10 still depends on it.
 
 ## [2026.9.2] — 2026-09-20
 
