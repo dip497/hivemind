@@ -64,7 +64,26 @@ skills loaded. `⌘L` opens the layers rail, `⌘E` switches view.
 | **Views and plugins** | the canvas is one view; install another from HiveHub or write one against a sandboxed API with no files, network or app access |
 
 Works with **Claude Code · Codex · Cursor · Droid · Kiro · pi · Gemini · opencode** and a
-dozen more, on Linux and macOS.
+dozen more.
+
+## Build the workspace you actually want
+
+Nobody agrees what a workspace should look like — so we stopped deciding. A **view** draws the
+whole screen from the workspace we hand it: frames, tiles, names, live status. The terminal
+inside your scene is the real one, still running; you tell the app where to put it and it
+mounts the session there.
+
+A queue if you triage. A board if you lead. A city where every agent is a house, if that is how
+your head works.
+
+```bash
+hive views new my-view     # a starter you can build, install and publish
+```
+
+Build the room you always wanted to work in, then put it on
+[HiveHub](https://hivehub.griiken.workers.dev/) so everyone else can work in it too. Ten people
+will build ten different rooms, and the good ones become everyone's. A view decides how the
+workspace *looks* — never what runs: no files, no network, no app internals.
 
 ## Bring your own agent
 
