@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [2026.9.2] — 2026-09-20
+
 - Upgrading now shows the new app icon: the installer drops a stale `hivemind.png` left in another icon size by an older install, which the icon theme was picking over the one it writes.
 
 ## [2026.9.1] — 2026-09-20
@@ -1264,7 +1266,8 @@ World, and sandboxed community views), and the e2e/perf harnesses gate every cha
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.9.1...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.9.2...HEAD
+[2026.9.2]: https://github.com/dip497/hivemind/releases/tag/v2026.9.2
 [2026.9.1]: https://github.com/dip497/hivemind/releases/tag/v2026.9.1
 [2026.9.0]: https://github.com/dip497/hivemind/releases/tag/v2026.9.0
 [1.17.1]: https://github.com/dip497/hivemind/releases/tag/v1.17.1
