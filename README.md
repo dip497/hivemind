@@ -20,9 +20,10 @@
 One screen instead. Each agent's terminal, the diff it is editing, the issues, a browser —
 grouped into frames bound to a repo, a worktree or an SSH host.
 
-That canvas is just the first answer. It is a **view**, and a view is a plugin you write: a
-queue, a board, a city. One command starts yours; [HiveHub](https://hivehub.griiken.workers.dev/)
-ships it to everyone else.
+- **Agents run agents.** `hive ctl` is on every agent's PATH, so one spawns three more, watches
+  them work, reads their answers and approves their tools — while you watch all four.
+- **The screen itself is a plugin.** Don't like this canvas? Write the one you want — a queue, a
+  subway map, a Mars base — with the real, running terminals inside it.
 
 <img alt="The canvas: two frames, each holding agent and shell tiles, on a shared wallpaper" src="docs/public/shots/view-canvas.webp" />
 
