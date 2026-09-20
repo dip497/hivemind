@@ -4,7 +4,7 @@
 
 <h1 align="center">hivemind</h1>
 
-<p align="center"><b>A workspace for coding agents.</b><br />Run them next to the terminals, editors and diffs they are working on.</p>
+<p align="center"><b>Build the workspace your agents work in.</b><br />The screen is yours to draw; we keep the agents, terminals and diffs alive inside it.</p>
 
 <p align="center">
   <a href="https://hivemind.griiken.com/">site</a> ·
@@ -17,10 +17,15 @@
 > minutes ago, one is editing a file you meant to read first — and you find out by cycling
 > through windows.
 
-hivemind puts them on one canvas per repository. Every tile is live: a terminal running an
-agent, a diff that updates as that agent edits, a file tree, an editor, an issues board, a
-browser. Group tiles into frames, bind a frame to a repository, a git worktree or an SSH
-host, and several agents work in parallel without reaching into each other's directories.
+hivemind puts them all on one screen, and then hands you that screen. Out of the box it is a
+canvas per repository: every tile live — an agent's terminal, a diff that updates as it edits,
+a file tree, an editor, an issues board, a browser — grouped into frames bound to a repository,
+a git worktree or an SSH host, so several agents work in parallel without reaching into each
+other's directories.
+
+The canvas is only the first answer. It is a **view**, and a view is a plugin you write: a
+queue if you triage, a board if you lead, a city where every agent is a house. One command
+starts yours, and [HiveHub](https://hivehub.griiken.workers.dev/) carries it to everyone else.
 
 <img alt="The canvas: two frames, each holding agent and shell tiles, on a shared wallpaper" src="docs/public/shots/view-canvas.webp" />
 
