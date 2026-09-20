@@ -106,9 +106,16 @@ first; the e2e suite needs a quiet machine. See
 
 ---
 
-Ideas borrowed: [Plane](https://plane.so) for issues and cycles,
-[tldraw](https://tldraw.com) and Figma for frame-as-workspace,
-[tmux](https://github.com/tmux/tmux) for detach-keeps-alive,
-[Pierre](https://pierre.co) for a diff that belongs in the canvas.
+**Ideas borrowed**, with thanks:
+
+- [tmux](https://github.com/tmux/tmux) — detach keeps it alive. Our terminals outlive the window for the same reason.
+- [tldraw](https://tldraw.com) and Figma — a frame is a place, not a rectangle: bind one to a repo and everything inside inherits it.
+- [Plane](https://plane.so) — issues, cycles and acceptance criteria worth keeping, here as files in your own repo.
+- [Pierre](https://pierre.co) — a diff that belongs in the workspace rather than a browser tab.
+- [npm](https://docs.npmjs.com/cli/using-npm/scope) — `@owner/name` scopes, so two people's `board` never collide, and the scope is the owner.
+- [VS Code](https://code.visualstudio.com/api) — the host serves its extension API instead of shipping it on a registry, and resolves a command through `PATHEXT` before spawning it. Views get the SDK the same way.
+- Browser extensions — say plainly what a plugin may do before it is installed, from its own manifest.
+- [Go's checksum database](https://go.dev/ref/mod#checksum-database) and [Homebrew](https://brew.sh) taps — a registry that stores a pointer and a hash, never the code; a file that changed after it was listed fails the install.
+- [Orca](https://github.com/stablyai/orca) and [Emdash](https://github.com/generalaction/emdash) — the Windows details: an encoded PowerShell hook command that survives any shell, and an app id the Start Menu shortcut carries.
 
 MIT — see [LICENSE](./LICENSE).
