@@ -67,11 +67,29 @@ skills loaded. `⌘L` opens the layers rail, `⌘E` switches view.
 | **Status you can see** | working, finished, or waiting for you — read from the agent's own screen, so it needs no cooperation |
 | **Terminals that outlive the window** | a detached daemon keeps them running and replays the screen on reopen; a session resumes after a reboot |
 | **Issues as files in your repo** | markdown with YAML frontmatter under `.hivemind/`; no database, no account |
-| **Agents driving the canvas** | `hive ctl` spawns a tile, sends it work, reads the reply, pipes agents together, brokers approvals — over a local `0600` socket, with no MCP server to run |
+| **Agents driving agents** | `hive ctl` is on every agent's PATH, so one agent spawns three more, reads their replies and approves their tools — see below |
 | **Views and plugins** | the canvas is one view; install another from HiveHub or write one against a sandboxed API with no files, network or app access |
 
 Works with **Claude Code · Codex · Cursor · Droid · Kiro · pi · Gemini · opencode** and a
 dozen more.
+
+## One agent, running the others
+
+Every verb the canvas has is a command, and `hive ctl` is on the PATH of every agent you
+start. So an agent can use it on other agents — spawn them, watch them, decide for them.
+
+```bash
+hive ctl spawn --agent codex --name migrate --prompt "Port the auth module to the new API"
+hive ctl stream tile-codex-123                 # watch it work, live
+hive ctl read tile-codex-123                   # wait for its answer, use it
+hive ctl workflow --shape fanout --items "api||web||cli" --prompt "Upgrade {item} to node 24"
+hive ctl connect tile-a tile-b                 # a's replies become b's input
+hive ctl spawn --agent claude --supervise all  # it asks you before every tool; you allow or deny
+```
+
+Your lead agent writes the plan, fans it out to three workers, reads what comes back and
+merges it — while you watch all four tiles and take one over whenever you want. Nothing to
+install for it: no MCP server, just a local `0600` socket.
 
 ## Build the workspace you actually want
 
@@ -80,8 +98,9 @@ whole screen from the workspace we hand it: frames, tiles, names, live status. T
 inside your scene is the real one, still running; you tell the app where to put it and it
 mounts the session there.
 
-A queue if you triage. A board if you lead. A city where every agent is a house, if that is how
-your head works.
+A queue if you triage. A board if you lead. A subway map where each line is a branch. A Mars
+base where every agent is a module and a stalled one goes dark. Anything you can draw in a web
+page, with real terminals living inside it.
 
 ```bash
 hive views new my-view     # a starter you can build, install and publish
