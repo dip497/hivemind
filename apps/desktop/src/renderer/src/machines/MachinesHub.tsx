@@ -15,14 +15,22 @@ import { machineUri, posixJoin } from "../../../shared/remote-uri";
 import { errText, machineForRequest, statusOf, useMachines, type MachinesRequest } from "./store";
 import { AttentionNote, MachineDot, statusWords } from "./status";
 
-type View = { kind: "list" } | { kind: "add" } | { kind: "browse"; machine: MachineInfo };
+type View = { kind: "list" } | { kind: "add" } | { kind: "edit"; machine: MachineInfo } | { kind: "browse"; machine: MachineInfo };
 
 const CHECK_AFTER_MS = 60_000;
 const CHECK_PARALLEL = 4;
 
-export function MachinesHub({ request, onClose, onPick }: {
+/** What a machine is used by on this canvas: frames bound to a folder on it, and their terminals. */
+export type MachineUsage = (hostId: string) => { frames: number; terminals: number };
+
+export function MachinesHub({ request, onClose, onPick, onRepoint, usageOf, onEndTerminals }: {
   request: MachinesRequest | null;
+  /** A machine's address changed: move the frames that ran on `oldHostId` to `target`. */
+  onRepoint: (oldHostId: string, target: string) => void;
   onClose: () => void;
+  usageOf: MachineUsage;
+  /** Kill the terminals running on a machine and close their tiles. */
+  onEndTerminals: (hostId: string) => void;
   /** A folder was chosen — for `request.frameId`, or for a new frame when nothing asked. */
   onPick: (frameId: string | null, uri: string) => void;
 }) {
@@ -61,7 +69,7 @@ export function MachinesHub({ request, onClose, onPick }: {
     for (let i = 0; i < CHECK_PARALLEL; i++) void next();
   }, [request, snap]);
 
-  const title = view.kind === "add" ? "Add a machine" : view.kind === "browse" ? view.machine.label : picking ? "Run this frame on…" : "Machines";
+  const title = view.kind === "add" ? "Add a machine" : view.kind === "edit" ? `Edit ${view.machine.label}` : view.kind === "browse" ? view.machine.label : picking ? "Run this frame on…" : "Machines";
 
   return (
     <Dialog open={!!request} onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -79,8 +87,11 @@ export function MachinesHub({ request, onClose, onPick }: {
         </header>
         {view.kind === "list" && (
           <MachineList
+            usageOf={usageOf}
+            onEndTerminals={onEndTerminals}
             picking={!!picking}
             onChoose={(m) => setView({ kind: "browse", machine: m })}
+            onEdit={(m) => setView({ kind: "edit", machine: m })}
             onAdd={() => setView({ kind: "add" })}
           />
         )}
@@ -89,6 +100,14 @@ export function MachinesHub({ request, onClose, onPick }: {
             initialTarget={request?.kind === "add" ? request.target : undefined}
             onCancel={() => (request?.kind === "add" ? onClose() : setView({ kind: "list" }))}
             onAdded={(m) => (picking ? setView({ kind: "browse", machine: m }) : setView({ kind: "list" }))}
+          />
+        )}
+        {view.kind === "edit" && (
+          <AddMachine
+            editing={view.machine}
+            onCancel={() => setView({ kind: "list" })}
+            onAdded={() => setView({ kind: "list" })}
+            onRepoint={onRepoint}
           />
         )}
         {view.kind === "browse" && (
@@ -103,10 +122,15 @@ export function MachinesHub({ request, onClose, onPick }: {
   );
 }
 
-function MachineList({ picking, onChoose, onAdd }: { picking: boolean; onChoose: (m: MachineInfo) => void; onAdd: () => void }) {
+function MachineList({ picking, onChoose, onEdit, onAdd, usageOf, onEndTerminals }: {
+  picking: boolean; onChoose: (m: MachineInfo) => void; onEdit: (m: MachineInfo) => void; onAdd: () => void;
+  usageOf: MachineUsage; onEndTerminals: (hostId: string) => void;
+}) {
   const snap = useMachines();
+  // Remove asks first, and says what it touches: one click used to drop a machine its terminals
+  // were running on. Ending those terminals is an opt-in.
+  const [removing, setRemoving] = useState<{ id: string; end: boolean } | null>(null);
   const [menu, setMenu] = useState<string | null>(null);
-  const [renaming, setRenaming] = useState<{ id: string; draft: string } | null>(null);
   const [askPassword, setAskPassword] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<Record<string, string>>({});
@@ -143,33 +167,17 @@ function MachineList({ picking, onChoose, onAdd }: { picking: boolean; onChoose:
               <li key={m.id} className="group min-w-0 rounded-lg border border-transparent hover:border-[var(--color-line2)] hover:bg-[var(--color-bg3)] transition-colors">
                 <div className="flex items-center gap-2.5 px-2.5 py-2">
                   <MachineDot status={s} enabled={m.enabled} size={8} />
-                  {renaming?.id === m.id ? (
-                    <Input
-                      autoFocus
-                      data-escape-local=""
-                      aria-label={`rename ${m.label}`}
-                      value={renaming.draft}
-                      onChange={(e) => setRenaming({ id: m.id, draft: e.target.value })}
-                      onKeyDown={(e) => {
-                        if (e.key === "Escape") setRenaming(null);
-                        if (e.key === "Enter") { const d = renaming.draft; setRenaming(null); void run(m, "renaming", () => window.hive.machineUpdate(m.id, { label: d })); }
-                      }}
-                      onBlur={() => setRenaming(null)}
-                      className="h-7 flex-1"
-                    />
-                  ) : (
-                    <button
-                      onClick={() => (m.enabled ? onChoose(m) : undefined)}
-                      disabled={!m.enabled}
-                      className="flex-1 min-w-0 text-left disabled:cursor-default cursor-pointer"
-                      title={m.enabled ? `Open a folder on ${m.label}` : m.target}
-                    >
-                      <span className="block text-[13px] font-medium text-[var(--color-fg)] truncate">{m.label}</span>
-                      <span className="block text-[11px] font-mono text-[var(--color-fg3)] truncate">
-                        {m.target}{m.platform ? ` · ${m.platform}` : ""}
-                      </span>
-                    </button>
-                  )}
+                  <button
+                    onClick={() => (m.enabled ? onChoose(m) : undefined)}
+                    disabled={!m.enabled}
+                    className="flex-1 min-w-0 text-left disabled:cursor-default cursor-pointer"
+                    title={m.enabled ? `Open a folder on ${m.label}` : m.target}
+                  >
+                    <span className="block text-[13px] font-medium text-[var(--color-fg)] truncate">{m.label}</span>
+                    <span className="block text-[11px] font-mono text-[var(--color-fg3)] truncate">
+                      {m.target}{m.platform ? ` · ${m.platform}` : ""}
+                    </span>
+                  </button>
                   <span className="shrink-0 text-[11px] tabular-nums text-[var(--color-fg2)]">
                     {doing ? <span className="flex items-center gap-1"><Loader2 size={11} className="animate-spin" />{doing}</span> : statusWords(s, m.enabled)}
                   </span>
@@ -188,15 +196,15 @@ function MachineList({ picking, onChoose, onAdd }: { picking: boolean; onChoose:
                           {[
                             ["Check now", () => run(m, "checking", () => window.hive.machineCheck(m.id))],
                             [s.state === "no-hive" ? "Install hive" : "Update hive", () => run(m, "installing", () => window.hive.machineInstall(m.id))],
-                            ["Rename", () => { setMenu(null); setRenaming({ id: m.id, draft: m.label }); }],
+                            ["Edit…", () => { setMenu(null); onEdit(m); }],
                             ["Set password…", () => { setMenu(null); setAskPassword(m.id); }],
                             [m.enabled ? "Turn off" : "Turn on", () => run(m, "saving", () => window.hive.machineUpdate(m.id, { enabled: !m.enabled }))],
-                            ["Remove", () => run(m, "removing", () => window.hive.machineRemove(m.id))],
+                            ["Remove…", () => { setMenu(null); setRemoving({ id: m.id, end: false }); }],
                           ].map(([label, fn]) => (
                             <MenuItem
                               key={label as string}
                               onClick={fn as () => void}
-                              variant={label === "Remove" ? "destructive" : "default"}
+                              variant={label === "Remove…" ? "destructive" : "default"}
                             >{label as string}</MenuItem>
                           ))}
                         </div>
@@ -222,6 +230,42 @@ function MachineList({ picking, onChoose, onAdd }: { picking: boolean; onChoose:
                     <Button type="submit" size="sm">Save</Button>
                   </form>
                 )}
+                {removing?.id === m.id && (() => {
+                  const u = usageOf(m.hostId);
+                  const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
+                  return (
+                    <div role="alertdialog" aria-label={`remove ${m.label}`} data-remove-machine={m.id}
+                      className="mx-2.5 mb-2.5 grid gap-2 rounded-lg border border-[var(--color-line2)] bg-[var(--color-bg)] px-3 py-2.5 text-[12px] text-[var(--color-fg)]"
+                      onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); setRemoving(null); } }}>
+                      <p>
+                        Remove <span className="font-semibold">{m.label}</span>?{" "}
+                        {u.frames > 0
+                          ? <span data-usage>Used by {plural(u.frames, "frame")} · {plural(u.terminals, "terminal")}.</span>
+                          : <span data-usage>Nothing on this canvas uses it.</span>}
+                      </p>
+                      {u.frames > 0 && (
+                        <p className="text-[11.5px] text-[var(--color-fg2)]">
+                          Its frames keep their tiles{u.terminals > 0 && !removing.end ? " and its terminals keep running" : ""}. Add it again to connect them.
+                        </p>
+                      )}
+                      {u.terminals > 0 && (
+                        <label className="flex items-center gap-2 text-[11.5px] text-[var(--color-fg2)] cursor-pointer">
+                          <input type="checkbox" checked={removing.end} onChange={(e) => setRemoving({ id: m.id, end: e.target.checked })} />
+                          Also end its {plural(u.terminals, "terminal")} on {m.label}
+                        </label>
+                      )}
+                      <div className="flex justify-end gap-2">
+                        <Button autoFocus variant="ghost" size="sm" onClick={() => setRemoving(null)}>Cancel</Button>
+                        <Button variant="destructive" size="sm" onClick={() => {
+                          const end = removing.end;
+                          setRemoving(null);
+                          if (end) onEndTerminals(m.hostId);
+                          void run(m, "removing", () => window.hive.machineRemove(m.id));
+                        }}>Remove</Button>
+                      </div>
+                    </div>
+                  );
+                })()}
                 {notes[m.id] && <p className="px-2.5 pb-2 text-[11px] text-[var(--color-fg2)]">{notes[m.id]}</p>}
                 {m.enabled && s.state === "attention" && (
                   <div className="px-2.5 pb-2.5">
@@ -251,9 +295,16 @@ function MachineList({ picking, onChoose, onAdd }: { picking: boolean; onChoose:
   );
 }
 
-function AddMachine({ initialTarget, onCancel, onAdded }: { initialTarget?: string; onCancel: () => void; onAdded: (m: MachineInfo) => void }) {
-  const [target, setTarget] = useState(initialTarget ?? "");
-  const [label, setLabel] = useState("");
+function AddMachine({ initialTarget, editing, onCancel, onAdded, onRepoint }: {
+  initialTarget?: string;
+  /** Edit this machine instead of adding one. */
+  editing?: MachineInfo;
+  onCancel: () => void;
+  onAdded: (m: MachineInfo) => void;
+  onRepoint?: (oldHostId: string, target: string) => void;
+}) {
+  const [target, setTarget] = useState(editing?.target ?? initialTarget ?? "");
+  const [label, setLabel] = useState(editing?.label ?? "");
   const [install, setInstall] = useState(true);
   const [usePassword, setUsePassword] = useState(false);
   const [password, setPassword] = useState("");
@@ -268,6 +319,12 @@ function AddMachine({ initialTarget, onCancel, onAdded }: { initialTarget?: stri
     setBusy(true);
     setError(null);
     try {
+      if (editing) {
+        const r = await window.hive.machineEdit(editing.id, { target: target.trim(), label: label.trim() || undefined, password: usePassword && password ? password : undefined });
+        if (r.machine.hostId !== r.oldHostId) onRepoint?.(r.oldHostId, r.machine.target);
+        onAdded(r.machine);
+        return;
+      }
       const r = await window.hive.machineAdd({ target: target.trim(), label: label.trim() || undefined, install, password: usePassword && password ? password : undefined });
       if (r.passwordSaved === false) { setWarn(r.machine); return; }
       onAdded(r.machine);
@@ -309,17 +366,18 @@ function AddMachine({ initialTarget, onCancel, onAdded }: { initialTarget?: stri
       ) : (
         <Button type="button" variant="link" size="xs" onClick={() => setUsePassword(true)} className="-mt-2 justify-self-start ">Use a password instead</Button>
       )}
-      <div className="flex items-center justify-between gap-4">
+      {editing && <p className="-mt-1 text-[11px] text-muted-foreground">A new address is reached before it is saved. Frames on {editing.label} move with it; terminals already open keep their session.</p>}
+      {!editing && <div className="flex items-center justify-between gap-4">
         <Label htmlFor="machine-install" className="cursor-pointer">Install <span className="font-mono">hive</span> if missing</Label>
         <Switch id="machine-install" checked={install} onCheckedChange={setInstall} />
-      </div>
+      </div>}
       {error && (error.attention
         ? <AttentionNote target={target.trim()} detail={error.text} />
         : <p className="text-[11.5px] text-destructive break-words">{error.text}</p>)}
       <div className="flex items-center justify-end gap-2">
         {busy && <span className="mr-auto flex items-center gap-1.5 text-[11.5px] text-muted-foreground"><Loader2 size={12} className="animate-spin" />Connecting…</span>}
         <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>
-        <Button type="submit" disabled={busy || !target.trim()}>Add</Button>
+        <Button type="submit" disabled={busy || !target.trim()}>{editing ? "Save" : "Add"}</Button>
       </div>
     </form>
   );

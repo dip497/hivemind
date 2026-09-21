@@ -103,6 +103,7 @@ const api: HiveIpc & {
   machineCheck: (id) => ipcRenderer.invoke("machines:check", id),
   machineInstall: (id) => ipcRenderer.invoke("machines:install", id),
   machineUpdate: (id, patch) => ipcRenderer.invoke("machines:update", id, patch),
+  machineEdit: (id, patch) => ipcRenderer.invoke("machines:edit", id, patch),
   machineRemove: (id) => ipcRenderer.invoke("machines:remove", id),
   machineSetPassword: (id, password) => ipcRenderer.invoke("machines:set-password", id, password),
   machineSessions: (uri) => ipcRenderer.invoke("machines:sessions", uri),

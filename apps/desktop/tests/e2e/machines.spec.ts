@@ -98,8 +98,13 @@ test("add a machine: probe, install hive over ssh, save", async () => {
   const row = page.locator('ul[aria-label="machines"] li', { hasText: "build-box" });
   await expect(row).toContainText("online", { timeout: 150_000 });
   expect(fs.existsSync(rhive())).toBe(true);
-  await expect(page.locator('section[aria-label="machines"]')).toContainText("build-box");
   await page.keyboard.press("Escape");
+  // Layers is where machines live: listed before anything runs there, with its link and actions.
+  const header = page.locator('.hm-layers [data-machine-header="build-box"]');
+  await expect(header).toBeVisible();
+  await expect(header.locator("[data-machine-state]")).not.toHaveText(/offline|off/);
+  await expect(header.getByRole("button", { name: "open folder on build-box" })).toBeVisible();
+  await expect(page.locator('.hm-layers [data-machine-header="local"]')).toContainText("This computer");
 });
 
 test("a frame runs on the machine: chip online with a round trip, terminals run there", async () => {
@@ -181,4 +186,82 @@ test("the server goes away and comes back: chip and banner say so, the job never
   await expect(banner).toHaveCount(0);
   expect(remote(`${rhive()} ps`)).toContain("build-job");
   remote(`${rhive()} kill build-job`);
+});
+
+test("the Layers rail groups frames by the computer they run on, in every view", async () => {
+  const rail = page.locator(".hm-layers");
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:add-frame"))); // a frame on this computer too
+  await expect(rail.locator('[data-machine-group="build-box"]')).toBeVisible();
+  await expect(rail.locator('[data-machine-group="local"]')).toContainText("This computer");
+  // Collapse and reopen: the rail must survive both (its hooks run before the collapsed return).
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:toggle-layers")));
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:toggle-layers")));
+  await expect(rail.locator('[data-machine-group="build-box"]')).toBeVisible();
+  // The rail is shared, so the Windows view gets the same grouping.
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "windows" } })));
+  await expect(page.locator('.hm-layers [data-machine-group="build-box"]')).toBeVisible();
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "canvas" } })));
+});
+
+test("turning a machine off disconnects it and keeps its terminals running there; on brings them back", async () => {
+  test.setTimeout(90_000);
+  const header = page.locator('.hm-layers [data-machine-header="build-box"]');
+  await header.getByRole("button", { name: "build-box actions" }).click();
+  await page.getByRole("button", { name: "Turn off" }).click();
+  await expect(header.locator("[data-machine-state]")).toHaveText("off");
+  await expect(page.locator('[data-link-banner="off"]').first()).toBeVisible({ timeout: 10_000 });
+  expect(remote(`${rhive()} ps`)).toContain("bash");
+  // The tile may sit off-screen on the canvas; the banner's own button is what a user there clicks.
+  await page.locator('[data-link-banner="off"]').first().locator("xpath=..").getByRole("button", { name: "Turn on" }).dispatchEvent("click");
+  await expect.poll(chipState, { timeout: 60_000 }).toBe("online");
+  await expect(page.locator('[data-link-banner="off"]')).toHaveCount(0);
+});
+
+test("editing a machine's address: a bad one is refused and nothing moves; a good one moves its frames", async () => {
+  test.setTimeout(120_000);
+  const header = page.locator('.hm-layers [data-machine-header="build-box"]');
+  const openEdit = async () => {
+    await header.getByRole("button", { name: "build-box actions" }).click();
+    await page.getByRole("button", { name: "Manage machines…" }).click();
+    await page.locator('ul[aria-label="machines"] li', { hasText: "build-box" }).getByRole("button", { name: "build-box actions" }).click();
+    await page.getByRole("button", { name: "Edit…" }).click();
+  };
+  await openEdit();
+  await page.getByLabel("Host").fill(`ssh://${os.userInfo().username}@127.0.0.1:1`);
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("dialog")).toContainText(/refused|connect|port 1/i, { timeout: 60_000 });
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.locator('ul[aria-label="machines"] li', { hasText: "build-box" })).toContainText(`127.0.0.1:${port}`);
+  await page.keyboard.press("Escape");
+
+  await openEdit();
+  await page.getByLabel("Host").fill(`ssh://${os.userInfo().username}@localhost:${port}`);
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.locator('ul[aria-label="machines"] li', { hasText: "build-box" })).toContainText(`localhost:${port}`, { timeout: 60_000 });
+  await page.keyboard.press("Escape");
+  await expect(page.locator('.hm-layers [data-machine-group="build-box"] .group\\/grp')).toHaveCount(1); // its frame came along
+  await expect.poll(chipState, { timeout: 60_000 }).toBe("online");
+});
+
+test("removing a machine in use asks first, says what it touches, and leaves its terminals running", async () => {
+  test.setTimeout(90_000);
+  await page.locator('.hm-layers [data-machine-header="build-box"]').getByRole("button", { name: "build-box actions" }).click();
+  await page.getByRole("button", { name: "Manage machines…" }).click();
+  const row = page.locator('ul[aria-label="machines"] li', { hasText: "build-box" });
+  await row.getByRole("button", { name: "build-box actions" }).click();
+  await page.getByRole("button", { name: "Remove…" }).click();
+  const confirm = page.getByRole("alertdialog", { name: "remove build-box" });
+  await expect(confirm).toBeVisible();
+  await expect(confirm.locator("[data-usage]")).toContainText(/Used by 1 frame · [1-9]\d* terminals?/);
+  await expect(confirm.getByRole("button", { name: "Cancel" })).toBeFocused(); // a stray Enter keeps it
+  await confirm.getByRole("button", { name: "Cancel" }).click();
+  await expect(row).toBeVisible();
+
+  // Remove without ending its terminals: the machine goes, the terminal on it keeps running.
+  await row.getByRole("button", { name: "build-box actions" }).click();
+  await page.getByRole("button", { name: "Remove…" }).click();
+  await page.getByRole("alertdialog", { name: "remove build-box" }).getByRole("button", { name: "Remove", exact: true }).click();
+  await expect(row).toHaveCount(0, { timeout: 15_000 });
+  await expect.poll(() => remote(`${rhive()} ps`), { timeout: 15_000 }).toContain("bash");
+  expect(await page.locator(`.react-flow__node[data-id="${remoteTile}"]`).count()).toBe(1);
 });
