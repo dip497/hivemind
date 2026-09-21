@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: terminals were dead in the v2026.9.2 desktop builds — electron-builder 26 left node-pty's native prebuild out of the bundle on every platform. The release now fails instead of shipping a bundle without it.
+
 ## [2026.9.2] — 2026-09-21
 
 - Installing a plugin from HiveHub now tells the registry, so the install counts on the site are counts. The registry dedupes by day and address — installing the same plugin again on your machine does not inflate it — and a plugin installed from a folder is never reported.
