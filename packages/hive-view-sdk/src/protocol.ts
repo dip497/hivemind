@@ -18,7 +18,8 @@ export const PROTOCOL_VERSION = 1;
 /** What a manifest may ask for beyond the base set (projection, status,
  *  selection, reveal, surfaces, layout). The host grants exactly what the
  *  manifest lists; an unknown name is refused at install and at load. */
-export const VIEW_PERMISSIONS = ["workspace:spawn", "workspace:close"] as const;
+/** `workspace:edit` (protocol 1.2): rename a tile, bind a frame to a folder. */
+export const VIEW_PERMISSIONS = ["workspace:spawn", "workspace:close", "workspace:edit"] as const;
 export type ViewPermission = (typeof VIEW_PERMISSIONS)[number];
 
 export type ViewStatus = "unknown" | "idle" | "working" | "blocked" | "exited";
@@ -49,8 +50,26 @@ export interface ViewFrameMachine {
   state: "online" | "connecting" | "reconnecting" | "offline" | "attention" | "no-hive" | "idle";
   rttMs?: number;
 }
-export interface ViewFrame { id: string; title: string; /** `#rrggbb` */ color: string; machine?: ViewFrameMachine }
-export interface ViewTile { id: string; frameId: string | null; kind: string; name: string }
+/** The folder a frame is bound to (protocol 1.2, additive): a git `worktree` of its parent's repo, or
+ *  a plain `folder` (a repository or not). `name` is its last path segment; the path itself stays
+ *  with the host. A frame bound to nothing has no `folder`. */
+export interface ViewFrameFolder { name: string; kind: "worktree" | "folder" }
+export interface ViewFrame {
+  id: string; title: string; /** `#rrggbb` */ color: string; machine?: ViewFrameMachine;
+  /** 1.2: the frame this one is nested in (a worktree under its repo). */
+  parentId?: string;
+  /** 1.2: the git branch of a worktree frame. */
+  branch?: string;
+  folder?: ViewFrameFolder;
+}
+export interface ViewTile {
+  id: string; frameId: string | null; kind: string; name: string;
+  /** 1.2: which agent an agent tile runs — its catalog id (`"codex"`, `"claude"`, …). */
+  agent?: string;
+}
+/** Agents driving agents (protocol 1.2): `pipes` carry one agent's replies into another's input;
+ *  `spawns` record which agent opened which (`hive ctl spawn`). Tile ids at both ends. */
+export interface ViewLinks { pipes: { src: string; dst: string }[]; spawns: { parent: string; child: string }[] }
 export interface ViewRect { x: number; y: number; w: number; h: number }
 /** `chrome` (protocol 1.1, additive): "bar" (default) lets the host draw its
  *  thin slot bar — name, status, pop-out, undock — on the surface; "none"
@@ -81,7 +100,7 @@ export interface ViewTheme {
 export type HostMessage =
   | { type: "hello"; v: number; pluginId: string; capabilities: ViewPermission[]; theme: ViewTheme; layout: unknown; viewport: { w: number; h: number }; visible: boolean }
   /** Frames / tiles / membership (+ the current names). Structural only. */
-  | { type: "structure"; frames: ViewFrame[]; tiles: ViewTile[] }
+  | { type: "structure"; frames: ViewFrame[]; tiles: ViewTile[]; /** 1.2 */ links?: ViewLinks }
   /** Display names changed (renames, agent titles) — nothing structural did. */
   | { type: "names"; names: Record<string, string> }
   /** `fresh` = changed since the plugin mounted (the selection you arrive with is not fresh). */
@@ -115,12 +134,20 @@ export interface ViewCommands {
   spawnClaude: () => void;
   /** permission `workspace:spawn` */
   addFrame: () => void;
+  /** 1.2, permission `workspace:spawn`: start an agent — a catalog id, or null for the user's
+   *  default — in a frame (null: the host picks), optionally with a first prompt and a tile name. */
+  spawnAgent: (agent: string | null, frameId: string | null, opts?: { prompt?: string; name?: string }) => void;
+  /** 1.2, permission `workspace:edit`: rename a tile ("" goes back to its own name). */
+  renameTile: (id: string, name: string) => void;
+  /** 1.2, permission `workspace:edit`: ask the user for a folder to bind this frame to. */
+  openFolder: (frameId: string) => void;
 }
 export type CommandName = keyof ViewCommands;
 export const COMMAND_PERMISSION: Record<CommandName, ViewPermission | null> = {
   selectTile: null, selectFrame: null, focusTile: null,
   closeTile: "workspace:close",
   spawnTile: "workspace:spawn", spawnVis: "workspace:spawn", spawnClaude: "workspace:spawn", addFrame: "workspace:spawn",
+  spawnAgent: "workspace:spawn", renameTile: "workspace:edit", openFolder: "workspace:edit",
 };
 
 export type PluginMessage =
@@ -140,6 +167,9 @@ export type PluginMessage =
   | { type: "error"; message: string };
 
 export const MAX_SURFACE_RECTS = 16;
+/** 1.2 argument caps: a tile name, and an agent's first prompt. */
+export const NAME_MAX = 120;
+export const PROMPT_MAX = 32 * 1024;
 export const LAYOUT_MAX_BYTES = 64 * 1024;
 const ID_MAX = 256;
 
@@ -162,6 +192,12 @@ const COMMAND_ARGS: Record<CommandName, (args: unknown[]) => boolean> = {
   spawnVis: (a) => a.length === 1 && ["tree", "shell", "diff", "issues"].includes(a[0] as string),
   spawnClaude: (a) => a.length === 0,
   addFrame: (a) => a.length === 0,
+  spawnAgent: (a) => (a.length >= 2 && a.length <= 3) && (a[0] === null || isId(a[0])) && isIdOrNull(a[1])
+    && (a[2] === undefined || (isObj(a[2])
+      && (a[2].prompt === undefined || (typeof a[2].prompt === "string" && a[2].prompt.length <= PROMPT_MAX))
+      && (a[2].name === undefined || (typeof a[2].name === "string" && a[2].name.length <= NAME_MAX)))),
+  renameTile: (a) => a.length === 2 && isId(a[0]) && typeof a[1] === "string" && a[1].length <= NAME_MAX,
+  openFolder: (a) => a.length === 1 && isId(a[0]),
 };
 
 /** Host side: validate a message received from a plugin. */

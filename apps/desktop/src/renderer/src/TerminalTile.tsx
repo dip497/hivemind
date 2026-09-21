@@ -992,6 +992,8 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
           pendingFitRef.current = false;
           if (fitRaf) { cancelAnimationFrame(fitRaf); fitRaf = 0; }
           doFit();
+          // Ranked while xyflow still had the node hidden; now shown, it can take a WebGL slot.
+          if (!webgl) reconcileWebglSlots();
         },
         hidden: () => {
           pendingFitRef.current = true;

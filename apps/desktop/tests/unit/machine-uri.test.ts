@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { machineHostId, machineUri, parseRemote, sshTargetOf } from "../../src/shared/remote-uri.ts";
+import { machineHostId, machineUri, parseRemote, repointUri, sshTargetOf } from "../../src/shared/remote-uri.ts";
 import { needsAttention } from "../../src/main/remote/ssh.ts";
 
 test("a machine target becomes the frame uri at a path, for every target form", () => {
@@ -23,4 +23,12 @@ test("only failures a person must fix ask for attention", () => {
   assert.ok(needsAttention("@@@ WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED! @@@"));
   assert.ok(!needsAttention("ssh: connect to host box port 22: Connection refused"));
   assert.ok(!needsAttention("ssh: Could not resolve hostname box: Name or service not known"));
+});
+
+test("repointUri: frames on an edited machine follow its new address, others stay put", () => {
+  assert.equal(repointUri("ssh://me@old:22/srv/app", "me@old:22", "ops@new:2222"), "ssh://ops@new:2222/srv/app");
+  assert.equal(repointUri("ssh://me@other:22/srv", "me@old:22", "ops@new"), "ssh://me@other:22/srv");
+  assert.equal(repointUri("/home/me/app", "me@old:22", "ops@new"), "/home/me/app");
+  assert.equal(repointUri(undefined, "me@old:22", "ops@new"), undefined);
+  assert.equal(repointUri("ssh://box/x", "box:22", "ssh://box2:23"), "ssh://box2:23/x");
 });

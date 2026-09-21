@@ -1,4 +1,5 @@
 import * as SettingsDialog from "@radix-ui/react-dialog";
+import { ThemePanel } from "./ThemePanel";
 import { RecentProjects } from "./RecentProjects";
 import { setWorkspaceOccluded } from "./workspace-occlusion";
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
@@ -429,6 +430,7 @@ export function App() {
         pending={initing}
         onConfirm={doInitWorkspace}
       />
+      <ThemePanel />
       <SettingsModal
         open={settingsOpen}
         onOpenChange={setSettingsOpen}

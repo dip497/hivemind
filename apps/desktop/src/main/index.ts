@@ -43,7 +43,7 @@ import * as ptyDaemon from "./daemon-client.js";
 import { PtyOutputBuffer } from "./pty-output-buffer.js";
 import { isRemote, parseRemote } from "../shared/remote-uri.js";
 import { savedAuth } from "./remote/saved-hosts.js";
-import { addMachine, checkMachine, initMachines, installOnMachine, machineSessions, reconnectMachineHost, removeMachine, setMachinePassword, snapshot as machinesSnapshot, updateMachine } from "./remote/machines.js";
+import { addMachine, checkMachine, editMachine, initMachines, installOnMachine, machineSessions, reconnectMachineHost, removeMachine, setMachinePassword, snapshot as machinesSnapshot, updateMachine } from "./remote/machines.js";
 import {
   spawnRemotePty, writeRemotePty, resizeRemotePty, killRemotePty, hasRemotePty,
   pauseRemotePty, resumeRemotePty, detachRemotePty, setRemoteEventSink,
@@ -101,7 +101,7 @@ import { OutputRecorder } from "./hcp/output-recorder.js";
 import { readOrCreateToken, hcpSockPath } from "./hcp/token.js";
 import { HcpError } from "./hcp/protocol.js";
 import { handleViewProtocol, listViewPackages, registerViewScheme, startViewWatchdog } from "./view-packages.js";
-import { installSettingsIpc, reloadSettings, getSettings as getAppSettings } from "./settings-store.js";
+import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, settingsFile } from "./settings-store.js";
 import { patchSettingsExtras } from "@hivemind/core/settings";
 import { PipeManager } from "./hcp/pipes.js";
 import { readLastAssistantMessage } from "./hcp/transcript.js";
@@ -1054,6 +1054,11 @@ ipcMain.handle("machines:add", wrap(async (_e, req: MachineAddRequest) => addMac
 ipcMain.handle("machines:check", wrap(async (_e, id: string) => checkMachine(String(id))));
 ipcMain.handle("machines:install", wrap(async (_e, id: string) => installOnMachine(String(id))));
 ipcMain.handle("machines:update", wrap(async (_e, id: string, patch: { label?: string; enabled?: boolean }) => updateMachine(String(id), patch ?? {})));
+ipcMain.handle("machines:edit", wrap(async (_e, id: string, patch: { target: string; label?: string; password?: string }) => editMachine(String(id), {
+  target: String(patch?.target ?? ""),
+  ...(typeof patch?.label === "string" ? { label: patch.label } : {}),
+  ...(typeof patch?.password === "string" && patch.password ? { password: patch.password } : {}),
+})));
 ipcMain.handle("machines:remove", wrap(async (_e, id: string) => removeMachine(String(id))));
 ipcMain.handle("machines:set-password", wrap(async (_e, id: string, password: string) => setMachinePassword(String(id), String(password))));
 ipcMain.handle("machines:sessions", wrap(async (_e, uri: string | null) => machineSessions(uri ? String(uri) : null)));
@@ -1383,7 +1388,6 @@ app.commandLine.appendSwitch("max-active-webgl-contexts", "32");
 // Persisted app settings live in <userData>/settings.json. Read SYNC here
 // because the remote-debugging switch must be set before app-ready (it can't be
 // toggled at runtime — that's why the UI toggle persists a choice + relaunches).
-function settingsFile(): string { return path.join(app.getPath("userData"), "settings.json"); }
 function readSettings(): { browserCdp?: boolean } {
   try { return JSON.parse(readFileSync(settingsFile(), "utf8")) as { browserCdp?: boolean }; }
   catch { return {}; }
@@ -1567,7 +1571,9 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     // primitive (e.g. hm-media://v/<encoded /etc/passwd>), reachable from the
     // untrusted web content a BrowserTile <webview> can load. Range-forwarded so
     // the video can seek/loop.
-    const wallpaperDir = path.join(app.getPath("userData"), "wallpapers");
+    // Beside settings.json, which names these files: a dev run keeps its own userData profile
+    // but shares settings with the app, so media kept in userData was missing on the other side.
+    const wallpaperDir = path.join(path.dirname(settingsFile()), "wallpapers");
     protocol.handle("hm-media", (request) => {
       try {
         const abs = path.resolve(decodeURIComponent(new URL(request.url).pathname.replace(/^\/+/, "")));
@@ -1629,7 +1635,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     // filename via hivemedia://<file>. Copying confines what the protocol can
     // ever read to files the user explicitly chose (never an arbitrary path from
     // the URL), and survives the original being moved/deleted.
-    const mediaDir = path.join(app.getPath("userData"), "media");
+    const mediaDir = path.join(path.dirname(settingsFile()), "media"); // beside settings.json (see wallpaperDir)
     protocol.handle("hivemedia", (request) => {
       try {
         // hivemedia://media/<filename> — the filename rides in the PATH (host is

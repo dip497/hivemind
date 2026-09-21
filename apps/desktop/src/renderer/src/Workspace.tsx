@@ -54,7 +54,7 @@ import { defaultTileSize } from "./canvas-sizing";
 import { useWorktrees } from "./useWorktrees";
 // Loaded when it is first opened: the dialog (add form, machine list, folder picker) is not startup work.
 const MachinesHub = lazy(() => import("./machines/MachinesHub").then((m) => ({ default: m.MachinesHub })));
-import type { MachinesRequest } from "./machines/store";
+import { hostIdOfUri, type MachinesRequest } from "./machines/store";
 import type { SessionSummary } from "../../shared/ipc";
 import { isRemote } from "../../shared/remote-uri";
 import { getAgents, AgentIcon, agentById, agentForCmd, useAgents } from "./agents";
@@ -82,7 +82,7 @@ import { CANVAS_LAYOUT, loadCanvasLayout } from "./workspace/views/canvas-layout
 import { CanvasRuntimeContext, type CanvasRuntime, type FocusModeReq, type FocusReq, type Viewport } from "./workspace/views/canvas-runtime";
 // Registers the built-in view plugins (side effect) before the first render.
 import "./workspace/views";
-import { preferredAgent } from "@hivemind/agents";
+import { agentById as catalogAgentById, defaultAgent, preferredAgent } from "@hivemind/agents";
 import { notReady, noAgentInstalled, useAgentPresence } from "./agent-plugins";
 import { AGENT_TILE_KIND } from "./tile-kinds";
 
@@ -290,6 +290,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     });
   }, []);
 
+
   // Frames — colored comment boxes for grouping, each optionally bound to a
   // worktree / workspace folder / remote host. frames/frameOf each expose a
   // synchronously-readable ref (updated in the setter — see useStateWithRef).
@@ -317,6 +318,24 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   // Explicit tile→frame membership (see PersistedLayout.frameOf). Authoritative
   // for auto-fit, parenting, and the chip strip — geometry never decides it.
   const [frameOf, setFrameOf, frameOfRef] = useStateWithRef<Record<string, string>>(initial.frameOf ?? {});
+  // What a machine is in use by, for the remove dialog: frames bound to a folder on it, and the
+  // terminals in them.
+  const terminalsOnHost = useCallback((hostId: string) => {
+    const frames = new Set(framesRef.current.filter((f) => hostIdOfUri(f.workspacePath) === hostId).map((f) => f.id));
+    return { frames, terminals: tilesRef.current.filter((t) => (t.kind === "shell" || t.kind === AGENT_TILE_KIND) && frames.has(frameOfRef.current[t.id] ?? "")) };
+  }, [framesRef, tilesRef, frameOfRef]);
+  const machineUsage = useCallback((hostId: string) => {
+    const { frames, terminals } = terminalsOnHost(hostId);
+    return { frames: frames.size, terminals: terminals.length };
+  }, [terminalsOnHost]);
+  // End them: kill each session on the machine, then close its tile. A tile showing someone
+  // else's job (`hive run`, another device) is only let go of — it is not ours to end.
+  const endTerminalsOn = useCallback((hostId: string) => {
+    for (const t of terminalsOnHost(hostId).terminals) {
+      if (!t.session) window.hive.ptyKill(`hm:${t.id}`);
+      closeTile(t.id);
+    }
+  }, [terminalsOnHost, closeTile]);
   // The frame the user most recently touched (spawned into / dragged). The
   // collision-separation pass keeps THIS frame fixed and pushes neighbours.
   const lastActiveFrameRef = useRef<string | null>(null);
@@ -410,7 +429,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
 
   // Worktree + workspace-zone lifecycle (IPC, in-flight guard, detach confirm).
   const {
-    onAttachWorktree, onCreateWorktree, unbindBranch, bindWorkspace, unbindWorkspace, bindRemote,
+    onAttachWorktree, onCreateWorktree, unbindBranch, bindWorkspace, unbindWorkspace, bindRemote, repointHost,
   } = useWorktrees({
     framesRef, tilesRef, positionsRef, sizesRef, frameOfRef, repoPathRef,
     lastActiveFrameRef, pushToastRef, setFrames, setFrameOf, setSelectedFrameId,
@@ -450,6 +469,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
       parentFrameId: f.parentFrameId, branch: f.parentFrameId ? f.branch : undefined,
       remote: isRemote(f.workspacePath),
       remoteUri: isRemote(f.workspacePath) ? f.workspacePath : undefined,
+      folder: (f.worktreePath ?? f.workspacePath)?.split("/").filter(Boolean).pop(),
     })),
     [frames],
   );
@@ -1025,11 +1045,20 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     spawnVis,
     spawnClaude: () => spawnClaude(),
     addFrame,
+    spawnAgent: (agentId, frameId, opts) => {
+      const def = agentId ? catalogAgentById(agentId) : defaultAgent();
+      if (!def) return false;
+      const id = spawnTile(AGENT_TILE_KIND, frameId, { agent: { id: def.id, cmd: def.bin, label: def.label }, ...(opts?.prompt ? { work: opts.prompt } : {}) });
+      if (id && opts?.name) renameTile(id, opts.name);
+      return true;
+    },
+    renameTile,
+    openFolder: (frameId) => void bindWorkspace(frameId),
     // Module-level bus functions: stable identities, so status never enters the
     // memo deps — a status transition re-renders nothing here.
     subscribeTileStatus: (tileId, cb) => subscribeTileStatus(tileId, (e) => cb(e.status, e)),
     tileStatus: statusOf,
-  }), [setSelectedTileId, setSelectedFrameId, focusTile, closeTile, spawnTile, spawnVis, spawnClaude, addFrame]);
+  }), [setSelectedTileId, setSelectedFrameId, focusTile, closeTile, spawnTile, spawnVis, spawnClaude, addFrame, renameTile, bindWorkspace]);
 
   // The canvas plugin's private runtime access (milestone-1 seam).
   const canvasRuntime: CanvasRuntime = useMemo(() => ({
@@ -1143,9 +1172,12 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
           <MachinesHub
             request={machinesReq}
             onClose={() => setMachinesReq(null)}
+            usageOf={machineUsage}
+            onEndTerminals={endTerminalsOn}
             // Opened from a machine rather than a frame: the folder you chose is the
             // point, so give it a frame instead of dropping it.
             onPick={(frameId, uri) => bindRemote(frameId ?? addFrame(), uri)}
+            onRepoint={repointHost}
           />
         </Suspense>
       )}

@@ -18,7 +18,7 @@ import type { DiffScope, GitFileEntry } from "../../../shared/ipc";
 import { OVERSIZE_SENTINEL } from "../../../shared/ipc";
 import { useGitDiff } from "../queries";
 import type { ReviewComment } from "../diff-comments";
-import { oversizeBytes, oversizePlaceholder } from "./oversize";
+import { BINARY_PLACEHOLDER, isBinaryText, oversizeBytes, oversizePlaceholder } from "./oversize";
 
 export interface ItemsResult {
   items: CodeViewDiffItem<ReviewComment>[];
@@ -82,8 +82,9 @@ export function useWorkingItems(repoPath: string, files: GitFileEntry[], staged:
       // Empty old + placeholder new so the file still SHOWS (as a one-line note)
       // rather than vanishing (identical sides = no diff = dropped from the list).
       const oversize = oversizeBytes(oldR?.data) ?? oversizeBytes(newR?.data);
-      const oldContents = oversize != null ? "" : (oldR?.data ?? "");
-      const newContents = oversize != null ? oversizePlaceholder(oversize) : (newR?.data ?? "");
+      const binary = oversize == null && (isBinaryText(oldR?.data) || isBinaryText(newR?.data));
+      const oldContents = oversize != null || binary ? "" : (oldR?.data ?? "");
+      const newContents = oversize != null ? oversizePlaceholder(oversize) : binary ? BINARY_PLACEHOLDER : (newR?.data ?? "");
       const oldFile: FileContents = {
         name: f.path,
         contents: oldContents,

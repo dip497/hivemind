@@ -547,7 +547,7 @@ export function agentDisclosures(def: AgentProviderDef): string[] {
   if (def.home) out.push(`links your ${def.home.mirror} into a private copy it points ${def.bin} at`);
   if (def.session?.resume?.find) out.push(`reads ${def.session.resume.find.root} to find a session to resume`);
   if (def.launch?.hcp && (def.hooks || def.assets?.length)) {
-    out.push("wires its own hooks to Hivemind's control plane, which can read and send to your tiles");
+    out.push("reports its status and approval prompts to Hivemind through its own hooks, which can also read and type into your other tiles");
   }
   return out;
 }
