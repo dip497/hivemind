@@ -244,7 +244,6 @@ html.glass-on .hm-toast {
      and mixing it again squared the transparency (55% read as 30%). */
   background: color-mix(in srgb, var(--surface-2) var(--glass-opacity), transparent);
   backdrop-filter: blur(var(--glass-blur)) saturate(145%);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(145%);
 }
 /* The single accent — applied to exactly three spots (icon, verb, TTL line). */
 .hm-toast-icon { color: var(--color-brand); }
@@ -641,7 +640,6 @@ body.canvas-resizing .react-flow__node,
 body.canvas-resizing .react-flow__node .hm-term-root {
   box-shadow: none !important;
   backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
   transition: none !important;
 }
 
@@ -858,7 +856,6 @@ html.glass-on body {
 html.glass-on:not([data-wallpaper="none"]) .hm-layers {
   background: color-mix(in srgb, var(--surface-2) clamp(68%, var(--glass-opacity), 92%), transparent);
   backdrop-filter: blur(var(--glass-blur)) saturate(130%);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(130%);
   /* The lit edge of a real material, in place of a 1px hard divider — so the
      component's own `border-r` is retired here rather than drawn on top of it. */
   border-right-color: transparent;
@@ -873,22 +870,17 @@ html.glass-on .hm-island {
      and mixing it again squared the transparency (55% read as 30%). */
   background: color-mix(in srgb, var(--surface-2) var(--glass-opacity), transparent);
   backdrop-filter: blur(var(--glass-blur)) saturate(140%);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
 }
-/* Frost the tiles. backdrop-filter sits on the node WRAPPER (full tile box);
-   the translucent tile bg above lets the blurred wallpaper/neighbors show
-   through. border-radius clips the blur to a rounded card (resize handles are
-   absolutely positioned, so they're unaffected by the radius). Heavy interior
-   content (xterm/diff) stays opaque — the frost reads on the chrome + rim,
-   matching Clonk's low default transparency. */
+/* Tiles are CLEAR glass: the wallpaper shows through their tint, unblurred. A blur here
+   re-rasterised under every tile each frame the canvas moved, so it was dropped during
+   motion — the tile flipped frosted → clear → frosted on every pan. The chrome (island,
+   Layers, toasts) keeps the --glass-blur frost. */
 html.glass-on .react-flow__node-terminal,
 html.glass-on .react-flow__node-diff,
 html.glass-on .react-flow__node-editor,
 html.glass-on .react-flow__node-workbench,
 html.glass-on .react-flow__node-issues,
 html.glass-on .react-flow__node-browser {
-  backdrop-filter: blur(var(--glass-blur)) saturate(135%);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(135%);
   border-radius: 14px;
 }
 /* PERF: a VIDEO wallpaper changes every frame, so backdrop-filter re-blurs every
@@ -905,7 +897,6 @@ html.glass-on[data-wallpaper="video"] .react-flow__node-issues,
 html.glass-on[data-wallpaper="video"] .react-flow__node-browser,
 html[data-wallpaper="video"] .hm-term-fs-panel {
   backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
 }
 
 /* Frost tile CONTENT (opt-in, html.content-glass). The tile chrome bg is already
@@ -1011,7 +1002,6 @@ html.content-glass .md-preview code {
 .hm-term-fs-panel {
   background-color: color-mix(in srgb, var(--surface-3) var(--content-opacity, 25%), transparent);
   backdrop-filter: blur(var(--glass-blur, 16px)) saturate(135%);
-  -webkit-backdrop-filter: blur(var(--glass-blur, 16px)) saturate(135%);
 }
 .hm-wallpaper[data-scene="aurora"] { --wp-base: #090c16; --wp-1: #4f46e5; --wp-2: #14b8a6; --wp-3: #7c3aed; }
 .hm-wallpaper[data-scene="ember"]  { --wp-base: #130a07; --wp-1: #f97316; --wp-2: #db2777; --wp-3: #fbbf24; }
@@ -1238,7 +1228,6 @@ html.glass-on .react-flow__node-browser {
   html.glass-on .hm-layers,
   .hm-term-fs-panel {
     backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
   }
   html.glass-on body { background: var(--color-bg); }
   /* The layers panel is the one surface with a hand-tuned alpha, so the
@@ -1255,7 +1244,6 @@ html.glass-on .react-flow__node-browser {
   html.glass-on .hm-island,
   html.glass-on .react-flow__node {
     backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
     border: 1px solid var(--color-fg2);   /* a defined edge, not an implied one */
   }
   .hm-wallpaper { display: none !important; }

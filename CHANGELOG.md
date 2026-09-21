@@ -9,6 +9,9 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Glass tiles are clear, and look the same in a release as in development. The build was silently deleting every frost rule — a CSS optimiser drops `backdrop-filter` when a `-webkit-` copy follows it — so releases showed clear tiles and a Blur slider that did nothing, while `pnpm dev` showed frosted tiles that flipped clear on every pan. Tiles are now clear by design (the wallpaper shows through their tint); the toolbar, Layers and notifications keep the frost the Blur slider sets.
+- A wallpaper chosen in one Hivemind — the installed app or a development run — shows in the other. Both read the same settings, but each kept pictures in its own folder, so the other side showed a broken background. Pictures now live beside the settings that name them.
+
 - With glass on, a program asking the terminal for its background colour is told the theme's colour, not black. Codex tints its input box from that answer, so the box now blends with your theme instead of showing as flat grey.
 - With glass on, dim and italic text no longer sits on a solid black bar. Agents draw a lot of it — codex's header card and hints, Claude's recaps — so a transparent terminal was striped with black boxes. The terminal's GPU renderer treated those styles as a background colour and painted it opaque; it now paints a background only where the program asked for one.
 
