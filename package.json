@@ -5,7 +5,10 @@
   "description": "Canvas-per-project AI agent orchestrator. Terminals + git diff + Kanban PM. Local-first.",
   "license": "MIT",
   "packageManager": "pnpm@10.12.2",
-  "engines": { "node": ">=22", "pnpm": ">=10" },
+  "engines": {
+    "node": ">=22",
+    "pnpm": ">=10"
+  },
   "scripts": {
     "build": "pnpm -r --parallel build",
     "typecheck": "pnpm -r --parallel typecheck",
@@ -16,8 +19,8 @@
     "hive": "pnpm --filter @hivemind/cli exec bun run src/index.ts --"
   },
   "devDependencies": {
-    "typescript": "catalog:",
-    "@types/node": "catalog:"
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
@@ -30,6 +33,9 @@
       "js-yaml@>=3 <3.15.2": "3.15.2",
       "js-yaml@>=4 <4.3.2": "4.3.2",
       "undici@8.5.0": "8.10.2"
+    },
+    "patchedDependencies": {
+      "@xterm/addon-webgl@0.19.0": "patches/@xterm__addon-webgl@0.19.0.patch"
     }
   }
 }
