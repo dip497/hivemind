@@ -2,9 +2,8 @@
  * Machines — every saved ssh machine with its live state, adding one, and choosing where a
  * frame runs (machine → folder). The list is the same one `hive machine` edits.
  */
-import { MenuItem } from "../components/ui/menu-item";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ChevronRight, Folder, History, Loader2, MoreHorizontal, Plus, RefreshCw, Server } from "lucide-react";
+import { ArrowLeft, ChevronRight, Folder, History, Loader2, Plus, RefreshCw, Server } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
@@ -75,7 +74,7 @@ export function MachinesHub({ request, onClose, onPick, onRepoint, usageOf, onEn
     <Dialog open={!!request} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent
         padding="none"
-        className="sm:max-w-[560px] overflow-hidden grid-cols-[minmax(0,1fr)]"
+        className={`${view.kind === "list" && !picking ? "sm:max-w-[880px]" : "sm:max-w-[640px]"} overflow-hidden grid-cols-[minmax(0,1fr)]`}
         // Escape in an inline field cancels that field, not the dialog.
         onEscapeKeyDown={(e) => { if ((e.target as HTMLElement | null)?.dataset?.escapeLocal !== undefined) e.preventDefault(); }}
       >
@@ -127,170 +126,177 @@ function MachineList({ picking, onChoose, onEdit, onAdd, usageOf, onEndTerminals
   usageOf: MachineUsage; onEndTerminals: (hostId: string) => void;
 }) {
   const snap = useMachines();
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   // Remove asks first, and says what it touches: one click used to drop a machine its terminals
   // were running on. Ending those terminals is an opt-in.
   const [removing, setRemoving] = useState<{ id: string; end: boolean } | null>(null);
-  const [menu, setMenu] = useState<string | null>(null);
   const [askPassword, setAskPassword] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const selected = snap.machines.find((m) => m.id === selectedId) ?? snap.machines[0];
 
   const run = async (m: MachineInfo, what: string, fn: () => Promise<unknown>) => {
-    setMenu(null);
     setBusy((b) => ({ ...b, [m.id]: what }));
     setErrors((e) => { const { [m.id]: _drop, ...rest } = e; return rest; });
     try { await fn(); } catch (e) { setErrors((x) => ({ ...x, [m.id]: errText(e).replace(/^\[\w+\] /, "") })); }
     setBusy(({ [m.id]: _drop, ...rest }) => rest);
   };
 
+  if (snap.machines.length === 0) {
+    return (
+      <div className="px-6 py-12 grid gap-3 place-items-center text-center">
+        {snap.catalogError && <p className="text-[11.5px] text-[var(--color-err)]">machines.json could not be read: {snap.catalogError}</p>}
+        <Server size={24} className="text-[var(--color-fg3)]" />
+        <p className="text-[13px] text-[var(--color-fg2)] max-w-[420px] leading-relaxed">
+          Add a computer you can reach with <span className="font-mono">ssh</span>. Your keys, agent and <span className="font-mono">~/.ssh/config</span> are used as they are;
+          terminals there keep running when the connection drops or this app closes.
+        </p>
+        <Button onClick={onAdd}><Plus /> Add a machine</Button>
+      </div>
+    );
+  }
+
+  const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
   return (
-    <div className="flex flex-col">
-      {snap.catalogError && (
-        <p className="mx-4 mt-3 text-[11.5px] text-[var(--color-err)]">machines.json could not be read: {snap.catalogError}</p>
-      )}
-      {snap.machines.length === 0 ? (
-        <div className="px-6 py-8 grid gap-3 place-items-center text-center">
-          <Server size={22} className="text-[var(--color-fg3)]" />
-          <p className="text-[12.5px] text-[var(--color-fg2)] max-w-[360px] leading-relaxed">
-            Add a computer you can reach with <span className="font-mono">ssh</span>. Your keys, agent and <span className="font-mono">~/.ssh/config</span> are used as they are;
-            terminals there keep running when the connection drops or this app closes.
-          </p>
-          <Button onClick={onAdd}><Plus /> Add a machine</Button>
-        </div>
-      ) : (
-        <ul className="max-h-[420px] overflow-y-auto overflow-x-hidden p-2 grid grid-cols-[minmax(0,1fr)] gap-1" aria-label="machines">
+    <div className="grid grid-cols-[260px_minmax(0,1fr)] h-[520px] border-t border-[var(--color-line)]">
+      <aside className="flex flex-col min-h-0 border-r border-[var(--color-line)] bg-[var(--color-bg2)]">
+        <ul className="flex-1 overflow-y-auto p-2 grid content-start gap-0.5" aria-label="machines">
           {snap.machines.map((m) => {
             const s = statusOf(snap, m.hostId);
-            const doing = busy[m.id];
+            const sel = !picking && m.id === selected?.id;
             return (
-              <li key={m.id} className="group min-w-0 rounded-lg border border-transparent hover:border-[var(--color-line2)] hover:bg-[var(--color-bg3)] transition-colors">
-                <div className="flex items-center gap-2.5 px-2.5 py-2">
+              <li key={m.id}>
+                <button
+                  onClick={() => (picking ? m.enabled && onChoose(m) : setSelectedId(m.id))}
+                  data-active={sel}
+                  className={`w-full min-w-0 flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left cursor-pointer transition-colors ${sel ? "bg-[var(--surface-4)]" : "hover:bg-[var(--color-bg3)]"}`}
+                  title={picking ? `Open a folder on ${m.label}` : m.target}
+                >
                   <MachineDot status={s} enabled={m.enabled} size={8} />
-                  <button
-                    onClick={() => (m.enabled ? onChoose(m) : undefined)}
-                    disabled={!m.enabled}
-                    className="flex-1 min-w-0 text-left disabled:cursor-default cursor-pointer"
-                    title={m.enabled ? `Open a folder on ${m.label}` : m.target}
-                  >
+                  <span className="flex-1 min-w-0">
                     <span className="block text-[13px] font-medium text-[var(--color-fg)] truncate">{m.label}</span>
-                    <span className="block text-[11px] font-mono text-[var(--color-fg3)] truncate">
-                      {m.target}{m.platform ? ` · ${m.platform}` : ""}
-                    </span>
-                  </button>
-                  <span className="shrink-0 text-[11px] tabular-nums text-[var(--color-fg2)]">
-                    {doing ? <span className="flex items-center gap-1"><Loader2 size={11} className="animate-spin" />{doing}</span> : statusWords(s, m.enabled)}
+                    <span className="block text-[11px] font-mono text-[var(--color-fg3)] truncate">{m.target}</span>
                   </span>
-                  {m.enabled && <ChevronRight size={14} className="shrink-0 text-[var(--color-fg3)]" />}
-                  <div className="relative">
-                    <Button
-                      variant="ghost"
-                      size="icon-xs"
-                      onClick={() => setMenu(menu === m.id ? null : m.id)}
-                      aria-label={`${m.label} actions`}
-                    ><MoreHorizontal /></Button>
-                    {menu === m.id && (
-                      <>
-                        <div className="fixed inset-0 z-10" onClick={() => setMenu(null)} />
-                        <div className="hm-popover absolute right-0 top-7 z-20 w-[180px] flex flex-col text-[12px]">
-                          {[
-                            ["Check now", () => run(m, "checking", () => window.hive.machineCheck(m.id))],
-                            [s.state === "no-hive" ? "Install hive" : "Update hive", () => run(m, "installing", () => window.hive.machineInstall(m.id))],
-                            ["Edit…", () => { setMenu(null); onEdit(m); }],
-                            ["Set password…", () => { setMenu(null); setAskPassword(m.id); }],
-                            [m.enabled ? "Turn off" : "Turn on", () => run(m, "saving", () => window.hive.machineUpdate(m.id, { enabled: !m.enabled }))],
-                            ["Remove…", () => { setMenu(null); setRemoving({ id: m.id, end: false }); }],
-                          ].map(([label, fn]) => (
-                            <MenuItem
-                              key={label as string}
-                              onClick={fn as () => void}
-                              variant={label === "Remove…" ? "destructive" : "default"}
-                            >{label as string}</MenuItem>
-                          ))}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-                {askPassword === m.id && (
-                  <form
-                    className="px-2.5 pb-2.5 flex items-center gap-2"
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      const value = new FormData(e.currentTarget).get("pw");
-                      setAskPassword(null);
-                      void run(m, "saving", async () => {
-                        const saved = await window.hive.machineSetPassword(m.id, String(value ?? ""));
-                        setNotes((n) => ({ ...n, [m.id]: saved ? "password saved" : "no OS keychain here — the password lasts until the app closes" }));
-                        await window.hive.machineCheck(m.id).catch(() => {});
-                      });
-                    }}
-                  >
-                    <Input name="pw" type="password" autoFocus data-escape-local="" aria-label={`password for ${m.label}`} placeholder={`password for ${m.target}`} className="h-7" onKeyDown={(e) => { if (e.key === "Escape") setAskPassword(null); }} />
-                    <Button type="submit" size="sm">Save</Button>
-                  </form>
-                )}
-                {removing?.id === m.id && (() => {
-                  const u = usageOf(m.hostId);
-                  const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
-                  return (
-                    <div role="alertdialog" aria-label={`remove ${m.label}`} data-remove-machine={m.id}
-                      className="mx-2.5 mb-2.5 grid gap-2 rounded-lg border border-[var(--color-line2)] bg-[var(--color-bg)] px-3 py-2.5 text-[12px] text-[var(--color-fg)]"
-                      onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); setRemoving(null); } }}>
-                      <p>
-                        Remove <span className="font-semibold">{m.label}</span>?{" "}
-                        {u.frames > 0
-                          ? <span data-usage>Used by {plural(u.frames, "frame")} · {plural(u.terminals, "terminal")}.</span>
-                          : <span data-usage>Nothing on this canvas uses it.</span>}
-                      </p>
-                      {u.frames > 0 && (
-                        <p className="text-[11.5px] text-[var(--color-fg2)]">
-                          Its frames keep their tiles{u.terminals > 0 && !removing.end ? " and its terminals keep running" : ""}. Add it again to connect them.
-                        </p>
-                      )}
-                      {u.terminals > 0 && (
-                        <label className="flex items-center gap-2 text-[11.5px] text-[var(--color-fg2)] cursor-pointer">
-                          <input type="checkbox" checked={removing.end} onChange={(e) => setRemoving({ id: m.id, end: e.target.checked })} />
-                          Also end its {plural(u.terminals, "terminal")} on {m.label}
-                        </label>
-                      )}
-                      <div className="flex justify-end gap-2">
-                        <Button autoFocus variant="ghost" size="sm" onClick={() => setRemoving(null)}>Cancel</Button>
-                        <Button variant="destructive" size="sm" onClick={() => {
-                          const end = removing.end;
-                          setRemoving(null);
-                          if (end) onEndTerminals(m.hostId);
-                          void run(m, "removing", () => window.hive.machineRemove(m.id));
-                        }}>Remove</Button>
-                      </div>
-                    </div>
-                  );
-                })()}
-                {notes[m.id] && <p className="px-2.5 pb-2 text-[11px] text-[var(--color-fg2)]">{notes[m.id]}</p>}
-                {m.enabled && s.state === "attention" && (
-                  <div className="px-2.5 pb-2.5">
-                    <AttentionNote target={m.target} detail={s.detail} needsPassword={s.needsPassword} onSetPassword={() => setAskPassword(m.id)} />
-                  </div>
-                )}
-                {m.enabled && s.state === "no-hive" && (
-                  <div className="mx-2.5 mb-2.5 flex items-center gap-2 rounded-lg bg-[var(--color-bg)] border border-[var(--color-line2)] px-2.5 py-1.5 text-[11.5px] text-[var(--color-fg2)]">
-                    <span className="min-w-0 flex-1">{s.detail ? `${s.detail}: ` : ""}terminals here stop when the connection drops.</span>
-                    <button onClick={() => run(m, "installing", () => window.hive.machineInstall(m.id))} className="text-[var(--color-brand)] hover:underline cursor-pointer shrink-0">Install hive</button>
-                  </div>
-                )}
-                {m.enabled && s.state === "offline" && s.detail && <p className="px-2.5 pb-2 text-[11px] text-[var(--color-fg3)] truncate" title={s.detail}>{s.detail}</p>}
-                {errors[m.id] && errors[m.id] !== s.detail && <p className="px-2.5 pb-2 text-[11px] text-[var(--color-err)] break-words">{errors[m.id]}</p>}
+                  <span className="shrink-0 text-[10.5px] tabular-nums text-[var(--color-fg2)]">
+                    {busy[m.id] ? <Loader2 size={11} className="animate-spin" /> : statusWords(s, m.enabled)}
+                  </span>
+                </button>
               </li>
             );
           })}
         </ul>
-      )}
-      {snap.machines.length > 0 && (
-        <footer className="flex items-center gap-2 px-4 py-2.5 border-t border-[var(--color-line)]">
-          <span className="text-[11px] text-[var(--color-fg3)]">Same list as <span className="font-mono">hive machine</span> in a terminal.</span>
-          <Button size="sm" onClick={onAdd} className="ml-auto"><Plus /> Add</Button>
+        <footer className="p-2 border-t border-[var(--color-line)]">
+          <Button size="sm" variant="secondary" onClick={onAdd} className="w-full"><Plus /> Add a machine</Button>
+          <p className="mt-1.5 px-1 text-[10.5px] text-[var(--color-fg3)]">Same list as <span className="font-mono">hive machine</span>.</p>
         </footer>
-      )}
+      </aside>
+      {picking ? (
+        <div className="grid place-items-center p-8 text-center text-[12.5px] text-[var(--color-fg2)]">Pick the machine this frame runs on.</div>
+      ) : selected && (() => {
+        const m = selected;
+        const s = statusOf(snap, m.hostId);
+        const u = usageOf(m.hostId);
+        const doing = busy[m.id];
+        return (
+          <section className="min-w-0 overflow-y-auto p-5 grid content-start gap-4" aria-label={`${m.label} details`} data-machine-detail={m.label}>
+            <header className="flex items-start gap-3">
+              <MachineDot status={s} enabled={m.enabled} size={10} />
+              <div className="flex-1 min-w-0">
+                <h3 className="text-[16px] font-semibold text-[var(--color-fg)] truncate">{m.label}</h3>
+                <p className="font-mono text-[12px] text-[var(--color-fg3)] truncate">{m.target}{m.platform ? ` · ${m.platform}` : ""}</p>
+              </div>
+              <Button size="sm" onClick={() => onChoose(m)} disabled={!m.enabled}><Folder /> Open folder…</Button>
+            </header>
+
+            <dl className="grid grid-cols-[110px_minmax(0,1fr)] gap-y-1.5 text-[12px]">
+              <dt className="text-[var(--color-fg3)]">Connection</dt>
+              <dd className="text-[var(--color-fg)] flex items-center gap-1.5">
+                {doing ? <><Loader2 size={11} className="animate-spin" />{doing}…</> : statusWords(s, m.enabled)}
+                {s.detail && s.state !== "online" && <span className="text-[var(--color-fg3)] truncate" title={s.detail}>— {s.detail}</span>}
+              </dd>
+              <dt className="text-[var(--color-fg3)]">hive</dt>
+              <dd className="font-mono text-[var(--color-fg2)] truncate">{m.hivePath ?? "not installed"}</dd>
+              <dt className="text-[var(--color-fg3)]">Used by</dt>
+              <dd className="text-[var(--color-fg2)]">{u.frames > 0 ? `${plural(u.frames, "frame")} · ${plural(u.terminals, "terminal")}` : "nothing on this canvas"}</dd>
+            </dl>
+
+            {m.enabled && s.state === "attention" && (
+              <AttentionNote target={m.target} detail={s.detail} needsPassword={s.needsPassword} onSetPassword={() => setAskPassword(m.id)} />
+            )}
+            {m.enabled && s.state === "no-hive" && (
+              <div className="flex items-center gap-2 rounded-lg bg-[var(--color-bg2)] border border-[var(--color-line2)] px-3 py-2 text-[12px] text-[var(--color-fg2)]">
+                <span className="min-w-0 flex-1">Without hive there, terminals stop when the connection drops.</span>
+                <Button size="xs" onClick={() => run(m, "installing", () => window.hive.machineInstall(m.id))}>Install hive</Button>
+              </div>
+            )}
+
+            <div className="flex flex-wrap gap-2">
+              <Button variant="secondary" size="sm" onClick={() => run(m, "checking", () => window.hive.machineCheck(m.id))}><RefreshCw /> Check now</Button>
+              <Button variant="secondary" size="sm" onClick={() => onEdit(m)}>Edit…</Button>
+              <Button variant="secondary" size="sm" onClick={() => setAskPassword(askPassword === m.id ? null : m.id)}>Set password…</Button>
+              {s.state !== "no-hive" && <Button variant="secondary" size="sm" onClick={() => run(m, "installing", () => window.hive.machineInstall(m.id))}>Update hive</Button>}
+              <Button variant="secondary" size="sm" onClick={() => run(m, "saving", () => window.hive.machineUpdate(m.id, { enabled: !m.enabled }))}>{m.enabled ? "Turn off" : "Turn on"}</Button>
+              <Button variant="destructive" size="sm" className="ml-auto" onClick={() => setRemoving({ id: m.id, end: false })}>Remove…</Button>
+            </div>
+
+            {askPassword === m.id && (
+              <form
+                className="flex items-center gap-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const value = new FormData(e.currentTarget).get("pw");
+                  setAskPassword(null);
+                  void run(m, "saving", async () => {
+                    const saved = await window.hive.machineSetPassword(m.id, String(value ?? ""));
+                    setNotes((n) => ({ ...n, [m.id]: saved ? "Password saved." : "No OS keychain here — the password lasts until the app closes." }));
+                    await window.hive.machineCheck(m.id).catch(() => {});
+                  });
+                }}
+              >
+                <Input name="pw" type="password" autoFocus data-escape-local="" aria-label={`password for ${m.label}`} placeholder={`password for ${m.target}`} className="h-8" onKeyDown={(e) => { if (e.key === "Escape") setAskPassword(null); }} />
+                <Button type="submit" size="sm">Save</Button>
+              </form>
+            )}
+
+            {removing?.id === m.id && (
+              <div role="alertdialog" aria-label={`remove ${m.label}`} data-remove-machine={m.id}
+                className="grid gap-2 rounded-lg border border-[var(--color-line2)] bg-[var(--color-bg2)] px-3.5 py-3 text-[12.5px] text-[var(--color-fg)]"
+                onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); setRemoving(null); } }}>
+                <p>
+                  Remove <span className="font-semibold">{m.label}</span>?{" "}
+                  {u.frames > 0
+                    ? <span data-usage>Used by {plural(u.frames, "frame")} · {plural(u.terminals, "terminal")}.</span>
+                    : <span data-usage>Nothing on this canvas uses it.</span>}
+                </p>
+                {u.frames > 0 && (
+                  <p className="text-[12px] text-[var(--color-fg2)]">
+                    Its frames keep their tiles{u.terminals > 0 && !removing.end ? " and its terminals keep running" : ""}. Add it again to connect them.
+                  </p>
+                )}
+                {u.terminals > 0 && (
+                  <label className="flex items-center gap-2 text-[12px] text-[var(--color-fg2)] cursor-pointer">
+                    <input type="checkbox" checked={removing.end} onChange={(e) => setRemoving({ id: m.id, end: e.target.checked })} />
+                    Also end its {plural(u.terminals, "terminal")} on {m.label}
+                  </label>
+                )}
+                <div className="flex justify-end gap-2">
+                  <Button autoFocus variant="ghost" size="sm" onClick={() => setRemoving(null)}>Cancel</Button>
+                  <Button variant="destructive" size="sm" onClick={() => {
+                    const end = removing.end;
+                    setRemoving(null);
+                    setSelectedId(null);
+                    if (end) onEndTerminals(m.hostId);
+                    void run(m, "removing", () => window.hive.machineRemove(m.id));
+                  }}>Remove</Button>
+                </div>
+              </div>
+            )}
+            {notes[m.id] && <p className="text-[12px] text-[var(--color-fg2)]">{notes[m.id]}</p>}
+            {errors[m.id] && errors[m.id] !== s.detail && <p className="text-[12px] text-[var(--color-err)] break-words">{errors[m.id]}</p>}
+          </section>
+        );
+      })()}
     </div>
   );
 }

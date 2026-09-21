@@ -244,8 +244,7 @@ test("editing a machine's address: a bad one is refused and nothing moves; a goo
   const openEdit = async () => {
     await header.getByRole("button", { name: "build-box actions" }).click();
     await page.getByRole("button", { name: "Manage machines…" }).click();
-    await page.locator('ul[aria-label="machines"] li', { hasText: "build-box" }).getByRole("button", { name: "build-box actions" }).click();
-    await page.getByRole("button", { name: "Edit…" }).click();
+    await page.locator('[data-machine-detail="build-box"]').getByRole("button", { name: "Edit…" }).click();
   };
   await openEdit();
   await page.getByLabel("Host").fill(`ssh://${os.userInfo().username}@127.0.0.1:1`);
@@ -269,8 +268,7 @@ test("removing a machine in use asks first, says what it touches, and leaves its
   await page.locator('.hm-layers [data-machine-header="build-box"]').getByRole("button", { name: "build-box actions" }).click();
   await page.getByRole("button", { name: "Manage machines…" }).click();
   const row = page.locator('ul[aria-label="machines"] li', { hasText: "build-box" });
-  await row.getByRole("button", { name: "build-box actions" }).click();
-  await page.getByRole("button", { name: "Remove…" }).click();
+  await page.locator('[data-machine-detail="build-box"]').getByRole("button", { name: "Remove…" }).click();
   const confirm = page.getByRole("alertdialog", { name: "remove build-box" });
   await expect(confirm).toBeVisible();
   await expect(confirm.locator("[data-usage]")).toContainText(/Used by 1 frame · [1-9]\d* terminals?/);
@@ -279,8 +277,7 @@ test("removing a machine in use asks first, says what it touches, and leaves its
   await expect(row).toBeVisible();
 
   // Remove without ending its terminals: the machine goes, the terminal on it keeps running.
-  await row.getByRole("button", { name: "build-box actions" }).click();
-  await page.getByRole("button", { name: "Remove…" }).click();
+  await page.locator('[data-machine-detail="build-box"]').getByRole("button", { name: "Remove…" }).click();
   await page.getByRole("alertdialog", { name: "remove build-box" }).getByRole("button", { name: "Remove", exact: true }).click();
   await expect(row).toHaveCount(0, { timeout: 15_000 });
   await expect.poll(() => remote(`${rhive()} ps`), { timeout: 15_000 }).toContain("bash");
