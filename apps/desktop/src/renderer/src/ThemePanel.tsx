@@ -32,7 +32,7 @@ export function ThemePanel() {
       aria-label="Appearance"
       data-theme-panel
       onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); setOpen(false); } }}
-      className="theme-panel fixed right-0 top-0 bottom-0 z-[60] w-[380px] max-w-[92vw] flex flex-col bg-[var(--color-bg2)] border-l border-[var(--color-line)] shadow-2xl outline-none"
+      className="theme-panel fixed right-0 top-0 bottom-0 z-[60] w-[380px] max-w-[92vw] flex flex-col border-l border-[var(--color-line)] shadow-2xl outline-none"
     >
       <header className="flex items-center gap-2 px-4 h-12 shrink-0 border-b border-[var(--color-line)]">
         <Palette size={15} className="text-[var(--color-fg3)]" />
