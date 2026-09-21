@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Community views load again. Since the move to Electron 39 every view from HiveHub — queue, board, tiled and your own — stayed on "loading": the browser refused its script, because a view's sandboxed page counts as cross-origin to its own files and the view scheme did not allow that. It does now; the sandbox and its no-network policy are unchanged.
+
 - With glass on, a program asking the terminal for its background colour is told the theme's colour, not black. Codex tints its input box from that answer, so the box now blends with your theme instead of showing as flat grey.
 - With glass on, dim and italic text no longer sits on a solid black bar. Agents draw a lot of it — codex's header card and hints, Claude's recaps — so a transparent terminal was striped with black boxes. The terminal's GPU renderer treated those styles as a background colour and painted it opaque; it now paints a background only where the program asked for one.
 
