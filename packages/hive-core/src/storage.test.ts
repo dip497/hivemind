@@ -339,6 +339,15 @@ describe("parseSections", () => {
     expect(s.description).toBe("D.");
     expect(s.acceptanceCriteria).toEqual([{ done: false, text: "x" }]);
   });
+  test("an acceptance-criteria label line is found in linear time", () => {
+    const s = parseSections("Intro.\r\n\r\n  ### Acceptance  criteria : **\r\n- [ ] y\r\n");
+    expect(s.description).toBe("Intro.");
+    expect(s.acceptanceCriteria).toEqual([{ done: false, text: "y" }]);
+    const t = performance.now();
+    const long = parseSections(`acceptance criteria${" ".repeat(50_000)}x\n${"Acceptance criteria\t".repeat(5_000)}`);
+    expect(performance.now() - t).toBeLessThan(100);
+    expect(long.acceptanceCriteria).toEqual([]);
+  });
   test("activity entries parsed", () => {
     const s = parseSections(
       "## Activity\n\n- 2026-05-17 10:00 · sarah · created\n- 2026-05-17 11:00 · claude · changed state"

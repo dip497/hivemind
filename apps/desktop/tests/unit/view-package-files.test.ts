@@ -40,12 +40,12 @@ test("the bootstrap page carries the response nonce and refuses odd entries; the
   assert.match(nonce, /^[A-Za-z0-9+/]+=*$/);
   assert.notEqual(nonce, newNonce());
   const html = entryPage("dist/view.js", nonce)!;
-  assert.match(html, new RegExp(`<script type="module" nonce="${nonce.replace(/[+/]/g, "\\$&")}" src="\\./dist/view\\.js"></script>`));
+  assert.match(html, new RegExp(`<script type="module" nonce="${nonce.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}" src="\\./dist/view\\.js"></script>`));
   assert.equal(entryPage("../x.js", nonce), null);
   assert.equal(entryPage("/abs/x.js", nonce), null);
   assert.equal(entryPage("x.html", nonce), null);
   const csp = pluginCsp(nonce);
-  assert.match(csp, new RegExp(`script-src hm-view: 'nonce-${nonce.replace(/[+/]/g, "\\$&")}' 'wasm-unsafe-eval'`));
+  assert.match(csp, new RegExp(`script-src hm-view: 'nonce-${nonce.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}' 'wasm-unsafe-eval'`));
   assert.doesNotMatch(csp.split(";").find((d) => d.trim().startsWith("script-src"))!, /unsafe-inline/);
   assert.match(csp, /connect-src 'none'/);
   assert.match(csp, /frame-src 'none'/);
