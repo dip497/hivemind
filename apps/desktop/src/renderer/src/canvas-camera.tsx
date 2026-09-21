@@ -33,7 +33,9 @@ export function snapViewportCrisp(vp: { x: number; y: number; zoom: number }): {
 // (centered; sharp). Non-text tiles (issues/browser/planReview) zoom-to-fill.
 // (A full-screen-CRISP maximize would have to grow the tile's rows/cols rather
 // than zoom — that fought the frame layout and is deferred.)
-const PIXEL_EXACT_NODE_TYPES = new Set(["terminal", "diff", "workbench"]);
+// A browser tile is an out-of-process <webview>: the page draws at 100% and the canvas
+// scales the finished image, so any other zoom blurs it — focus pins it too.
+const PIXEL_EXACT_NODE_TYPES = new Set(["terminal", "diff", "workbench", "browser"]);
 
 export function FocusMode({ req }: { req: { id: string | null; n: number } | null }) {
   const { fitView, getNode } = useReactFlow();
