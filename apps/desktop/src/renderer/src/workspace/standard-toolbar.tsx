@@ -5,6 +5,8 @@ import { Button } from "../components/ui/button";
 import { MenuItem } from "../components/ui/menu-item";
 import { getAgents, AgentIcon, agentById } from "../agents";
 import { notReady, openAgentSettings, useAgentPresence } from "../agent-plugins";
+import { resolveViewId, useViews } from "./workspace-view";
+import { setViewMode, useViewMode } from "./view-mode-store";
 
 export interface StandardToolbarProps {
   actions: readonly ToolbarAction[];
@@ -47,6 +49,7 @@ export function StandardToolbar(props: StandardToolbarProps) {
       return <ActionButton key={action.id} action={action} labels={labels} disabled={needsRepo && !repoPath}
         onClick={callbacks[action.id]} icon={<Icon />} />;
     })}
+    <ViewSwitch compact={compact} />
     {props.updateAvailable && <Button variant="ghost" size="sm" className="ml-1" onClick={props.onUpgrade} disabled={props.upgrading} aria-busy={props.upgrading}
       title={props.upgrading ? "Downloading and installing the update…" : "Update available — click to update and restart"}>
       {props.upgrading ? <Loader2 className="animate-spin" /> : <Upload />}
@@ -55,10 +58,9 @@ export function StandardToolbar(props: StandardToolbarProps) {
   </div>;
 }
 
-function AgentAction({ action, labels, agentSel, onAgentChange, onSpawnAgent, compact }: StandardToolbarProps & { action: ToolbarAction }) {
-  const selected = agentById(agentSel) ?? enabledAgents()[0];
+/** A toolbar dropdown: closes on an outside click, and on Escape back to its trigger. */
+function useDropdown() {
   const [open, setOpen] = useState(false);
-  const presence = useAgentPresence();
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -70,6 +72,34 @@ function AgentAction({ action, labels, agentSel, onAgentChange, onSpawnAgent, co
     const element = root.current;
     return () => { document.removeEventListener("mousedown", closeOutside); element?.removeEventListener("keydown", escape); };
   }, [open]);
+  return { open, setOpen, root, trigger };
+}
+
+/** Which view the workspace is drawn in — the same list ⌘E cycles. */
+function ViewSwitch({ compact }: { compact: boolean }) {
+  const views = useViews();
+  const current = resolveViewId(useViewMode());
+  const { open, setOpen, root, trigger } = useDropdown();
+  const active = views.find((view) => view.id === current);
+  if (views.length < 2 || !active) return null;
+  return <div ref={root} className="relative ml-1 flex items-center border-l border-[var(--color-border)] pl-1">
+    <Button ref={trigger} variant="ghost" size="lg" onClick={() => setOpen((value) => !value)} aria-label="switch view" aria-expanded={open}
+      data-view-switch title="Switch view  (⌘E)">
+      <active.icon /><span className="text-[12px]">{active.label}</span><ChevronDown />
+    </Button>
+    {open && <div role="menu" className={`hm-island absolute right-0 z-30 min-w-[180px] rounded-lg p-1 ${compact ? "bottom-full mb-1" : "top-full mt-1"}`}>
+      {views.map((view) => <MenuItem key={view.id} variant="muted" data-view-choice={view.id} title={view.hint}
+        onClick={() => { setViewMode(view.id); setOpen(false); trigger.current?.focus(); }}>
+        <view.icon /><span className="flex-1">{view.label}</span>{view.id === current && <Check />}
+      </MenuItem>)}
+    </div>}
+  </div>;
+}
+
+function AgentAction({ action, labels, agentSel, onAgentChange, onSpawnAgent, compact }: StandardToolbarProps & { action: ToolbarAction }) {
+  const selected = agentById(agentSel) ?? enabledAgents()[0];
+  const presence = useAgentPresence();
+  const { open, setOpen, root, trigger } = useDropdown();
   if (!selected) return null;
   const agents = enabledAgents();
   const ready = agents.filter((agent) => !notReady(presence, agent.id));

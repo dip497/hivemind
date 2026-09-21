@@ -82,7 +82,7 @@ import { CANVAS_LAYOUT, loadCanvasLayout } from "./workspace/views/canvas-layout
 import { CanvasRuntimeContext, type CanvasRuntime, type FocusModeReq, type FocusReq, type Viewport } from "./workspace/views/canvas-runtime";
 // Registers the built-in view plugins (side effect) before the first render.
 import "./workspace/views";
-import { preferredAgent } from "@hivemind/agents";
+import { agentById as catalogAgentById, defaultAgent, preferredAgent } from "@hivemind/agents";
 import { notReady, noAgentInstalled, useAgentPresence } from "./agent-plugins";
 import { AGENT_TILE_KIND } from "./tile-kinds";
 
@@ -424,7 +424,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   } = useFrameOps({
     repoPath, positions, sizes, tiles, frameOf,
     framesRef, tilesRef, frameOfRef, positionsRef, sizesRef, lastActiveFrameRef,
-    setFrames, setPositions, focusTile,
+    setFrames, setPositions, setSelectedFrameId, focusTile,
   });
 
   // Worktree + workspace-zone lifecycle (IPC, in-flight guard, detach confirm).
@@ -918,7 +918,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
 
   // Keyboard shortcuts + menu event listeners. See useCanvasShortcuts.
   useCanvasShortcuts({
-    repoPath, spawnClaude, spawnSelectedAgent, spawnVis, spawnBrowser, addFrame, frameOpen, focusTile,
+    repoPath, spawnClaude, spawnSelectedAgent, spawnVis, spawnBrowser, addFrame, frameOpen, focusTile, closeTile,
     setSelectedTileId, setFocusModeReq, selectedTileIdRef, selectedFrameIdRef,
     focusModeNonceRef, tilesRef,
   });
@@ -996,9 +996,21 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     framesRef, frameOfRef, sizesRef, tilesRef, lastActiveFrameRef,
     setPositions, setFrames, setFrameOf, parentFrameOf, moveFrame, commitPosition, clearDragging: noopClearDragging,
   });
+  // Re-lay out, never remove. This used to clear every frame and tile, which left each agent
+  // and terminal running in the daemon with no tile to reach it by. Now: tiles back to their
+  // default size, each frame's tiles on a grid, then the whole canvas in view. Worktree frames
+  // go first — a parent's arrange moves them, and reads positions only committed next frame.
   const resetCanvas = useCallback(() => {
-    setSizes({}); setPositions({}); setFrames([]); setTiles([]); setEditorTabs({}); setFrameOf({});
-  }, []);
+    sizesRef.current = {};
+    setSizes({});
+    const frames = framesRef.current;
+    for (const f of frames) if (f.parentFrameId) arrangeFrame(f.id, "grid");
+    requestAnimationFrame(() => {
+      for (const f of framesRef.current) if (!f.parentFrameId) arrangeFrame(f.id, "grid");
+      requestAnimationFrame(() => requestAnimationFrame(() =>
+        setFocusModeReq({ id: null, n: ++focusModeNonceRef.current })));
+    });
+  }, [arrangeFrame, framesRef, sizesRef, setSizes]);
 
   // ── the shared tile surfaces (bodies) — rendered ONCE by the TileHost ─────
   // agentTitles intentionally NOT an input: a live title change must not
@@ -1033,11 +1045,20 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     spawnVis,
     spawnClaude: () => spawnClaude(),
     addFrame,
+    spawnAgent: (agentId, frameId, opts) => {
+      const def = agentId ? catalogAgentById(agentId) : defaultAgent();
+      if (!def) return false;
+      const id = spawnTile(AGENT_TILE_KIND, frameId, { agent: { id: def.id, cmd: def.bin, label: def.label }, ...(opts?.prompt ? { work: opts.prompt } : {}) });
+      if (id && opts?.name) renameTile(id, opts.name);
+      return true;
+    },
+    renameTile,
+    openFolder: (frameId) => void bindWorkspace(frameId),
     // Module-level bus functions: stable identities, so status never enters the
     // memo deps — a status transition re-renders nothing here.
     subscribeTileStatus: (tileId, cb) => subscribeTileStatus(tileId, (e) => cb(e.status, e)),
     tileStatus: statusOf,
-  }), [setSelectedTileId, setSelectedFrameId, focusTile, closeTile, spawnTile, spawnVis, spawnClaude, addFrame]);
+  }), [setSelectedTileId, setSelectedFrameId, focusTile, closeTile, spawnTile, spawnVis, spawnClaude, addFrame, renameTile, bindWorkspace]);
 
   // The canvas plugin's private runtime access (milestone-1 seam).
   const canvasRuntime: CanvasRuntime = useMemo(() => ({

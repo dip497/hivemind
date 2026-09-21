@@ -188,7 +188,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
   };
-  // ⌘/Ctrl+L toggles the panel open/closed (dispatched from App's menu bridge;
+  // ⌘/Ctrl+B toggles the panel open/closed (dispatched from App's menu bridge;
   // works even over a focused terminal since main forwards the key). The header
   // × and the collapsed pill remain for mouse.
   useEffect(() => {
@@ -246,9 +246,9 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
         onClick={() => setHidden(false)}
         className="pointer-events-auto absolute left-2.5 top-2.5 z-30"
         title={
-          needsYou > 0 ? `Show layers (⌘L) — ${needsYou} agent(s) need you`
-          : working > 0 ? `Show layers (⌘L) — ${working} working`
-          : "Show layers (⌘L)"
+          needsYou > 0 ? `Show layers (⌘B) — ${needsYou} agent(s) need you`
+          : working > 0 ? `Show layers (⌘B) — ${working} working`
+          : "Show layers (⌘B)"
         }
         aria-label="show layers"
       >
@@ -533,12 +533,12 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
           aria-hidden
           title="Toggle the Layers panel"
           className="grid place-items-center h-[15px] px-1 rounded bg-[var(--color-bg)] border border-[var(--color-line2)] text-[9px] font-mono text-[var(--color-fg3)] tracking-tight"
-        >⌘L</kbd>
+        >⌘B</kbd>
         <Button
           variant="ghost"
           size="icon-2xs"
           onClick={() => setHidden(true)}
-          title="Collapse layers (⌘L)"
+          title="Collapse layers (⌘B)"
           aria-label="collapse layers"
         ><PanelLeftClose size={14} /></Button>
       </header>

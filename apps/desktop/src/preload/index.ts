@@ -26,6 +26,7 @@ const api: HiveIpc & {
   onMenuFitOverlay: (cb: () => void) => () => void;
   onMenuResetScale: (cb: () => void) => () => void;
   onMenuFocusTile: (cb: () => void) => () => void;
+  onMenuShortcut: (cb: (action: string) => void) => () => void;
   getLaunchTarget: () => Promise<string | null>;
   onOpenProject: (cb: (path: string) => void) => () => void;
   onBrowserPopup: (cb: (p: { fromId: number; url: string }) => void) => () => void;
@@ -226,6 +227,12 @@ const api: HiveIpc & {
     const listener = () => cb();
     ipcRenderer.on("menu:reset-scale", listener);
     return () => ipcRenderer.removeListener("menu:reset-scale", listener);
+  },
+  /** A VS Code-style app shortcut main intercepted before the focused tile saw it. */
+  onMenuShortcut: (cb: (action: string) => void) => {
+    const listener = (_e: unknown, action: string) => cb(action);
+    ipcRenderer.on("menu:shortcut", listener);
+    return () => ipcRenderer.removeListener("menu:shortcut", listener);
   },
   onMenuFocusTile: (cb: () => void) => {
     const listener = () => cb();

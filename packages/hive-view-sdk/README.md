@@ -30,8 +30,8 @@ hm.setLayout({ camera });                         // ≤ 64 KB, persisted under 
 ```
 
 `closeTile` needs `"permissions": ["workspace:close"]`; `spawnTile` / `spawnVis` /
-`spawnClaude` / `addFrame` need `"workspace:spawn"`. Unknown permissions are refused
-at install. Protocol details: `src/protocol.ts`; complete views: `views/` in
+`spawnClaude` / `addFrame` / `spawnAgent` need `"workspace:spawn"`; `renameTile` /
+`openFolder` need `"workspace:edit"`. Unknown permissions are refused at install. Protocol details: `src/protocol.ts`; complete views: `views/` in
 [the published plugins](https://github.com/dip497/hivemind-plugins) — `queue` (a list with a
 docked terminal), `tiled` (every terminal of a frame laid out as live panes) and `board` (drag,
 keyboard moves, a persisted layout).

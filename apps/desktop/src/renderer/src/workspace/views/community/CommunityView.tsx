@@ -15,7 +15,7 @@
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { PORT_HANDSHAKE, PROTOCOL_VERSION, STATUS_TONES, type HostMessage, type SurfaceRect, type ViewFrameMachine, type ViewPermission, type ViewTheme } from "@hivemind/view-sdk/protocol";
+import { PORT_HANDSHAKE, PROTOCOL_VERSION, STATUS_TONES, type HostMessage, type SurfaceRect, type ViewFrameFolder, type ViewFrameMachine, type ViewPermission, type ViewTheme } from "@hivemind/view-sdk/protocol";
 import { frameMachine, useMachines } from "../../../machines/store";
 import type { ViewPackageInfo } from "../../../../../shared/ipc";
 import type { WorkspaceViewProps } from "../../workspace-view";
@@ -63,6 +63,13 @@ function layoutSpec(pluginId: string): ViewLayoutSpec<unknown> {
 
 /** The host for one package. Rendered through the lazy wrapper in registry.ts
  *  (`pkg` is fixed per registered view; the props are the view contract). */
+const baseName = (p: string) => p.split("/").filter(Boolean).pop() ?? p;
+function folderOf(worktreePath?: string, workspacePath?: string): { folder?: ViewFrameFolder } {
+  if (worktreePath) return { folder: { name: baseName(worktreePath), kind: "worktree" } };
+  if (workspacePath) return { folder: { name: baseName(workspacePath), kind: "folder" } };
+  return {};
+}
+
 export function CommunityViewHost({ pkg, model, commands }: WorkspaceViewProps & { pkg: ViewPackageInfo }) {
   const manifest = pkg.manifest!;
   const url = pkg.url!;
@@ -72,7 +79,7 @@ export function CommunityViewHost({ pkg, model, commands }: WorkspaceViewProps &
 
 function CommunityView({ pkg, url, manifest, capabilities, model, commands }: WorkspaceViewProps & { pkg: ViewPackageInfo; url: string; manifest: NonNullable<ViewPackageInfo["manifest"]>; capabilities: ViewPermission[] }) {
   {
-    const { frames, tiles, frameOf, layerTiles, selectedTileId, selectedFrameId, layoutKey } = model;
+    const { frames, tiles, frameOf, layerTiles, links, selectedTileId, selectedFrameId, layoutKey } = model;
     const rootRef = useRef<HTMLDivElement>(null);
     const iframeRef = useRef<HTMLIFrameElement>(null);
     const linkRef = useRef<CommunityLink | null>(null);
@@ -169,15 +176,25 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
     const nameOf = useMemo(() => new Map(layerTiles.map((t) => [t.id, t.name])), [layerTiles]);
     const nameRef = useRef(nameOf);
     nameRef.current = nameOf;
+    const agentOf = useMemo(() => new Map(layerTiles.flatMap((t) => (t.agent ? [[t.id, t.agent] as const] : []))), [layerTiles]);
     useEffect(() => {
       if (!ready) return;
       send({
         type: "structure",
-        frames: frames.map((f) => ({ id: f.id, title: f.title, color: cssColorToHexString(f.color), ...machineOf(f.workspacePath) })),
-        tiles: tiles.map((t) => ({ id: t.id, frameId: frameOf[t.id] ?? null, kind: t.kind, name: nameRef.current.get(t.id) ?? t.label })),
+        frames: frames.map((f) => ({
+          id: f.id, title: f.title, color: cssColorToHexString(f.color), ...machineOf(f.workspacePath),
+          ...(f.parentFrameId ? { parentId: f.parentFrameId } : {}),
+          ...(f.branch ? { branch: f.branch } : {}),
+          ...folderOf(f.worktreePath, f.workspacePath),
+        })),
+        tiles: tiles.map((t) => {
+          const agent = agentOf.get(t.id);
+          return { id: t.id, frameId: frameOf[t.id] ?? null, kind: t.kind, name: nameRef.current.get(t.id) ?? t.label, ...(agent ? { agent } : {}) };
+        }),
+        links: { pipes: links.pipes.map(({ src, dst }) => ({ src, dst })), spawns: links.spawnLinks.map(({ parent, child }) => ({ parent, child })) },
       });
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [ready, frames, tiles, frameOf, machineOf]);
+    }, [ready, frames, tiles, frameOf, machineOf, agentOf, links]);
     // Names on their own — a title tick must not look structural to the plugin.
     const lastNames = useRef("");
     useEffect(() => {
