@@ -4,7 +4,7 @@
  */
 import { MenuItem } from "../components/ui/menu-item";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ChevronRight, Folder, Loader2, MoreHorizontal, Plus, RefreshCw, Server } from "lucide-react";
+import { ArrowLeft, ChevronRight, Folder, History, Loader2, MoreHorizontal, Plus, RefreshCw, Server } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
@@ -383,53 +383,163 @@ function AddMachine({ initialTarget, editing, onCancel, onAdded, onRepoint }: {
   );
 }
 
+const RECENT_MAX = 5;
+const recentKey = (m: MachineInfo) => `hivemind:machine-recent:${m.id}`;
+function readRecent(m: MachineInfo): string[] {
+  try { const v = JSON.parse(localStorage.getItem(recentKey(m)) ?? "[]"); return Array.isArray(v) ? v.filter((x) => typeof x === "string").slice(0, RECENT_MAX) : []; } catch { return []; }
+}
+function pushRecent(m: MachineInfo, dir: string): void {
+  try { localStorage.setItem(recentKey(m), JSON.stringify([dir, ...readRecent(m).filter((d) => d !== dir)].slice(0, RECENT_MAX))); } catch { /* private mode */ }
+}
+const parentOf = (d: string) => (d === "/" ? "/" : d.replace(/\/[^/]+\/?$/, "") || "/");
+
 function FolderPicker({ machine, onPick, actionLabel }: { machine: MachineInfo; onPick: (uri: string) => void; actionLabel: string }) {
   const base = useMemo(() => machineUri(machine.target), [machine.target]);
   const [dir, setDir] = useState("");
+  const [home, setHome] = useState("");
   const [entries, setEntries] = useState<RemoteDirEntry[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState("");
+  const [cursor, setCursor] = useState(0);
+  const [editingPath, setEditingPath] = useState<string | null>(null);
+  const recent = useMemo(() => readRecent(machine), [machine]);
+  const seq = useRef(0);
+  const filterRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   async function list(next: string) {
+    const mine = ++seq.current;
     setBusy(true);
     setError(null);
     try {
       const r = await window.hive.sshListDir(base, next);
+      if (mine !== seq.current) return; // a later click already moved on
       setDir(r.dir);
+      if (!next) setHome(r.dir);
       setEntries(r.entries.filter((e) => e.isDir));
+      setFilter("");
+      setCursor(0);
     } catch (e) {
-      setError(errText(e));
+      if (mine === seq.current) setError(errText(e));
     } finally {
-      setBusy(false);
+      if (mine === seq.current) setBusy(false);
     }
   }
   useEffect(() => { void list(""); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [base]);
 
+  const open = (d: string) => { pushRecent(machine, d); onPick(machineUri(machine.target, d)); };
+  const expand = (p: string) => (p === "~" ? home : p.startsWith("~/") && home ? posixJoin(home, p.slice(2)) : p);
+  const q = filter.trim().toLowerCase();
+  const shown = entries.filter((e) => (q.startsWith(".") || !e.name.startsWith(".")) && (!q || e.name.toLowerCase().includes(q)));
+  const showRecent = !q && dir === home && recent.length > 0;
+  const crumbs = dir.split("/").filter(Boolean);
+  useEffect(() => { listRef.current?.querySelector(`[data-row="${cursor}"]`)?.scrollIntoView({ block: "nearest" }); }, [cursor]);
+
+  const onKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const row = shown[cursor];
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); if (dir) open(dir); return; }
+    if (e.key === "ArrowDown") { e.preventDefault(); setCursor((c) => Math.min(shown.length - 1, c + 1)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setCursor((c) => Math.max(0, c - 1)); }
+    else if ((e.key === "Enter" || (e.key === "ArrowRight" && e.currentTarget.selectionStart === filter.length)) && row) { e.preventDefault(); void list(posixJoin(dir, row.name)); }
+    else if ((e.key === "ArrowLeft" && !filter) || (e.key === "Backspace" && !filter)) { e.preventDefault(); if (dir !== "/") void list(parentOf(dir)); }
+    else if (e.key === "Escape" && filter) { e.preventDefault(); e.stopPropagation(); setFilter(""); }
+  };
+
   return (
     <div className="flex flex-col">
-      <div className="flex items-center gap-2 px-3 h-9 border-b border-[var(--color-line2)] text-[11.5px]">
-        <Button variant="ghost" size="2xs" onClick={() => list(posixJoin(dir, ".."))} disabled={!dir || dir === "/"}>..</Button>
-        <span className="font-mono text-[var(--color-fg2)] truncate flex-1" title={dir}>{dir || "…"}</span>
+      <div className="flex items-center gap-1 px-2 h-9 border-b border-[var(--color-line2)] text-[11.5px]">
+        <Button variant="ghost" size="icon-2xs" onClick={() => list(parentOf(dir))} disabled={!dir || dir === "/"} aria-label="up" title="Up (←)"><ArrowLeft /></Button>
+        {editingPath !== null ? (
+          <Input
+            autoFocus
+            data-escape-local=""
+            aria-label="path"
+            value={editingPath}
+            onChange={(e) => setEditingPath(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") { e.preventDefault(); const p = expand(editingPath.trim()); setEditingPath(null); if (p) void list(p); filterRef.current?.focus(); }
+              if (e.key === "Escape") { e.preventDefault(); setEditingPath(null); filterRef.current?.focus(); }
+            }}
+            onBlur={() => setEditingPath(null)}
+            font="mono"
+            spellCheck={false}
+            className="h-7 flex-1"
+          />
+        ) : (
+          <div className="flex-1 min-w-0 flex items-center overflow-x-auto font-mono text-[var(--color-fg2)]" onDoubleClick={() => setEditingPath(dir)}>
+            <button onClick={() => list("/")} className="px-1 rounded hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)] cursor-pointer">/</button>
+            {crumbs.map((c, i) => (
+              <span key={i} className="flex items-center shrink-0">
+                {i > 0 && <span className="text-[var(--color-fg3)]">/</span>}
+                <button
+                  onClick={() => list("/" + crumbs.slice(0, i + 1).join("/"))}
+                  className={`px-1 rounded hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)] cursor-pointer ${i === crumbs.length - 1 ? "text-[var(--color-fg)]" : ""}`}
+                >{c}</button>
+              </span>
+            ))}
+          </div>
+        )}
+        <Button variant="ghost" size="2xs" onClick={() => setEditingPath(dir)} title="Type a path (~ works)">Go to…</Button>
         <Button variant="ghost" size="icon-2xs" onClick={() => list(dir)} aria-label="refresh"><RefreshCw className={busy ? "animate-spin" : ""} /></Button>
       </div>
-      <div className="h-[280px] overflow-y-auto p-1">
+      <div className="px-2 pt-2">
+        <Input
+          ref={filterRef}
+          autoFocus
+          {...(filter ? { "data-escape-local": "" } : {})}
+          aria-label="filter folders"
+          placeholder="Filter · ↑↓ move · Enter go in · ← up · Ctrl+Enter open"
+          value={filter}
+          onChange={(e) => { setFilter(e.target.value); setCursor(0); }}
+          onKeyDown={onKey}
+          className="h-8"
+        />
+      </div>
+      <div ref={listRef} className="h-[300px] overflow-y-auto p-1.5" role="listbox" aria-label="folders">
+        {showRecent && (
+          <div className="mb-1.5 pb-1.5 border-b border-[var(--color-line)]">
+            <div className="px-2 pb-1 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-[var(--color-fg3)]">Recent</div>
+            {recent.map((d) => (
+              <button key={d} onClick={() => open(d)} title={`Open ${d}`} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-[12px] text-[var(--color-fg2)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)] cursor-pointer">
+                <History size={13} className="shrink-0 text-[var(--color-fg3)]" />
+                <span className="truncate flex-1 font-mono">{home && d.startsWith(home + "/") ? "~" + d.slice(home.length) : d}</span>
+              </button>
+            ))}
+          </div>
+        )}
         {error ? (
           <p className="px-3 py-4 text-[11.5px] text-[var(--color-err)] break-words">{error}</p>
-        ) : entries.length === 0 ? (
-          <div className="px-3 py-8 text-center text-[11.5px] text-[var(--color-fg3)]">{busy ? "Loading…" : "No folders here."}</div>
+        ) : shown.length === 0 ? (
+          <div className="px-3 py-8 text-center text-[11.5px] text-[var(--color-fg3)]">{busy ? "Loading…" : q ? `No folder matches “${filter}”.` : "No folders here — open this one, or go up."}</div>
         ) : (
-          entries.map((e) => (
-            <button key={e.name} onClick={() => list(posixJoin(dir, e.name))} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-[12px] text-[var(--color-fg2)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)] cursor-pointer">
+          shown.map((e, i) => (
+            <div
+              key={e.name}
+              data-row={i}
+              role="option"
+              aria-selected={i === cursor}
+              onMouseEnter={() => setCursor(i)}
+              onClick={() => list(posixJoin(dir, e.name))}
+              onDoubleClick={() => open(posixJoin(dir, e.name))}
+              className={`group/row flex items-center gap-2 px-2 h-8 rounded-md text-[12.5px] cursor-pointer ${i === cursor ? "bg-[var(--color-bg3)] text-[var(--color-fg)]" : "text-[var(--color-fg2)]"}`}
+            >
               <Folder size={14} className="shrink-0 text-[var(--color-fg3)]" />
               <span className="truncate flex-1">{e.name}</span>
+              <Button
+                variant="ghost"
+                size="2xs"
+                className={i === cursor ? "" : "invisible group-hover/row:visible"}
+                onClick={(ev) => { ev.stopPropagation(); open(posixJoin(dir, e.name)); }}
+              >Open</Button>
               <ChevronRight size={13} className="shrink-0 text-[var(--color-fg3)]" />
-            </button>
+            </div>
           ))
         )}
       </div>
       <footer className="flex items-center gap-2 px-3 py-2.5 border-t border-[var(--color-line2)]">
         <span className="flex-1 min-w-0 text-[11px] text-[var(--color-fg3)] font-mono truncate" title={dir}>{machine.label}:{dir}</span>
-        <Button onClick={() => onPick(machineUri(machine.target, dir))} disabled={!dir || busy} size="sm">{actionLabel}</Button>
+        <Button onClick={() => open(dir)} disabled={!dir || busy} size="sm">{actionLabel}</Button>
       </footer>
     </div>
   );

@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Opening a folder on a machine: type or paste a path (`~` works), click any part of the path, filter as you type, and move with the arrow keys (Enter goes in, ← goes up, Ctrl+Enter opens). Each folder has an Open button, and the folders you opened last on that machine are listed first.
 - Machines live in the Layers rail: each computer is a heading with its link, how many agents there need you, and its frames under it, with Open folder here, Retry and a menu. The separate machines list at the bottom of Layers is gone.
 - Edit a machine's address, user or port (Manage machines → Edit). The new address is tested before it is saved, and the frames on that machine move with it.
 - Turn off a machine to disconnect it. Its terminals keep running there and their tiles keep their screen; Turn on reconnects them. Turn off used to only stop the background checks.

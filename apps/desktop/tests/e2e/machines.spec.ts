@@ -107,6 +107,27 @@ test("add a machine: probe, install hive over ssh, save", async () => {
   await expect(page.locator('.hm-layers [data-machine-header="local"]')).toContainText("This computer");
 });
 
+test("the folder picker is keyboard-first: type a path, filter, go in and up, cancel", async () => {
+  await page.locator('.hm-layers [data-machine-header="build-box"]').getByRole("button", { name: "open folder on build-box" }).click();
+  const dialog = page.getByRole("dialog");
+  const footer = dialog.locator("footer");
+  await expect(footer).toContainText("build-box:/", { timeout: 30_000 });
+  await dialog.getByRole("button", { name: "Go to…" }).click();
+  await dialog.getByLabel("path").fill("/usr");
+  await page.keyboard.press("Enter");
+  await expect(footer).toContainText("build-box:/usr");
+  const filter = dialog.getByLabel("filter folders");
+  await expect(filter).toBeFocused();
+  await filter.fill("bi");
+  await expect(dialog.getByRole("option")).toHaveCount(await dialog.getByRole("option", { name: /bin/ }).count());
+  await page.keyboard.press("Enter");
+  await expect(footer).toContainText(/build-box:\/usr\/s?bin/);
+  await page.keyboard.press("ArrowLeft");
+  await expect(footer).toHaveText(/build-box:\/usr\s*Open here/);
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+});
+
 test("a frame runs on the machine: chip online with a round trip, terminals run there", async () => {
   test.setTimeout(90_000);
   await page.evaluate(() => {
