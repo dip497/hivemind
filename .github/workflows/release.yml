@@ -642,7 +642,8 @@ jobs:
           tag_name: ${{ steps.tag.outputs.tag }}
           name: ${{ steps.tag.outputs.tag }}
           generate_release_notes: true
-          # Windows assets are built but NOT listed here — see build-windows.
+          # Windows is listed but its job stays continue-on-error: a Windows failure
+          # publishes the release without those two names rather than blocking it.
           files: |
             release-assets/hive-linux-x86_64
             release-assets/hive-linux-arm64
