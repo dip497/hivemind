@@ -121,7 +121,7 @@ describe("manifest validation refuses what it cannot back", () => {
     expect(agentDisclosures(def)).toEqual([
       "runs `acme models` to list model values",
       "links your {home}/.acme into a private copy it points acme at",
-      "wires its own hooks to Hivemind's control plane, which can read and send to your tiles",
+      "reports its status and approval prompts to Hivemind through its own hooks, which can also read and type into your other tiles",
     ]);
     // Claiming the signal without wiring anything that sends it is still refused.
     expect(() => defFromManifest({ ...wired, launch: undefined, hooks: undefined, home: undefined }))

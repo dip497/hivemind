@@ -65,8 +65,7 @@ const traits = isAgent ? [
   {does.length > 0 && (
     <section class="wrap narrow block asks">
       <h2>What it asks for</h2>
-      <p class="sub">Hivemind shows you this same list before it installs, and will not add this
-        plugin automatically because of it.</p>
+      <p class="sub">Hivemind shows this list again and asks you to confirm before it installs.</p>
       <ul class="does">{does.map((d) => <li set:html={d.replace(/`([^`]+)`/g, "<code>$1</code>")} />)}</ul>
     </section>
   )}
