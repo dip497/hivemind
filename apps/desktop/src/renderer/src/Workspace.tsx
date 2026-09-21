@@ -405,7 +405,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   } = useFrameOps({
     repoPath, positions, sizes, tiles, frameOf,
     framesRef, tilesRef, frameOfRef, positionsRef, sizesRef, lastActiveFrameRef,
-    setFrames, setPositions, focusTile,
+    setFrames, setPositions, setSelectedFrameId, focusTile,
   });
 
   // Worktree + workspace-zone lifecycle (IPC, in-flight guard, detach confirm).

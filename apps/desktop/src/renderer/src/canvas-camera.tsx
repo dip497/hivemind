@@ -7,6 +7,7 @@
  */
 import { useCallback, useEffect } from "react";
 import { useReactFlow, useStore } from "@xyflow/react";
+import { focusZoom } from "./camera-fit";
 
 /** Snap a settled viewport so canvas-rendered text stays crisp: round the pan to
  *  whole DEVICE pixels (fractional CSS translate puts the xterm bitmap on
@@ -61,7 +62,7 @@ export function FocusOnTile({
 }: {
   req: { id: string; cx: number; cy: number; w?: number; h?: number; n: number; exact?: boolean } | null;
 }) {
-  const { setCenter, getZoom, getNode, fitView } = useReactFlow();
+  const { setCenter } = useReactFlow();
   // Pane size (CSS px). At the exact-path's zoom 1, flow units == screen px, so
   // we can frame the tile against the viewport directly.
   const paneW = useStore((s) => s.width);
@@ -90,27 +91,13 @@ export function FocusOnTile({
       void setCenter(tx, ty, { zoom: 1, duration: 400 });
       return;
     }
-    // Two-stage focus, same end result as the "." focus-selected hotkey but
-    // robust for a brand-new tile that isn't DOM-measured yet:
-    //   1. setCenter on the resolved absolute coords NOW — needs no
-    //      measurement/render, so the viewport pans to the tile immediately.
-    //   2. once xyflow has measured the node, fitView to frame it nicely
-    //      (zoom-to-fit, the focus-selected feel). Poll up to ~1s.
-    const z0 = Math.min(Math.max(getZoom(), 0.5), 1);
-    void setCenter(req.cx, req.cy, { zoom: z0, duration: 400 });
-    let raf = 0;
-    let tries = 0;
-    const tick = () => {
-      const n = getNode(req.id);
-      if (n && n.measured?.width && n.measured?.height) {
-        void fitView({ nodes: [{ id: req.id }], padding: 0.18, duration: 400, maxZoom: 1 });
-        return;
-      }
-      if (tries++ < 60) raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [req, setCenter, getZoom, getNode, fitView]);
+    // One flight to a target computed from the request's own rect — it needs no
+    // DOM measurement, so a brand-new tile or frame is framed on the first frame,
+    // and nothing is read from the live zoom (see camera-fit.ts). A newer request
+    // interrupting this one then lands exactly where it would have from rest.
+    void setCenter(req.cx, req.cy, { zoom: focusZoom(req.w ?? 0, req.h ?? 0, paneW, paneH), duration: 400 });
+    // Pane size is read, not depended on: a window resize must not re-fly an old request.
+  }, [req, setCenter]);
   return null;
 }
 
