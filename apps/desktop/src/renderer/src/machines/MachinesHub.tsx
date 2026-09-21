@@ -12,7 +12,7 @@ import { Label } from "../components/ui/label";
 import { Switch } from "../components/ui/switch";
 import type { MachineInfo, RemoteDirEntry } from "../../../shared/ipc";
 import { machineUri, posixJoin } from "../../../shared/remote-uri";
-import { errText, statusOf, useMachines, type MachinesRequest } from "./store";
+import { errText, machineForRequest, statusOf, useMachines, type MachinesRequest } from "./store";
 import { AttentionNote, MachineDot, statusWords } from "./status";
 
 type View = { kind: "list" } | { kind: "add" } | { kind: "browse"; machine: MachineInfo };
@@ -23,8 +23,8 @@ const CHECK_PARALLEL = 4;
 export function MachinesHub({ request, onClose, onPick }: {
   request: MachinesRequest | null;
   onClose: () => void;
-  /** A folder was chosen for `request.frameId`. */
-  onPick: (frameId: string, uri: string) => void;
+  /** A folder was chosen — for `request.frameId`, or for a new frame when nothing asked. */
+  onPick: (frameId: string | null, uri: string) => void;
 }) {
   const snap = useMachines();
   const [view, setView] = useState<View>({ kind: "list" });
@@ -34,7 +34,7 @@ export function MachinesHub({ request, onClose, onPick }: {
   // mid-flow must not throw the user back to the list.
   useEffect(() => {
     if (!request) return;
-    const m = request.kind === "pick" && request.machineId ? snap.machines.find((x) => x.id === request.machineId) : undefined;
+    const m = machineForRequest(request, snap.machines);
     setView(m ? { kind: "browse", machine: m } : request.kind === "add" ? { kind: "add" } : { kind: "list" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [request]);
@@ -94,8 +94,8 @@ export function MachinesHub({ request, onClose, onPick }: {
         {view.kind === "browse" && (
           <FolderPicker
             machine={view.machine}
-            onPick={(uri) => { if (picking) onPick(picking.frameId, uri); onClose(); }}
-            actionLabel={picking ? "Open here" : "Done"}
+            onPick={(uri) => { onPick(picking?.frameId ?? null, uri); onClose(); }}
+            actionLabel="Open here"
           />
         )}
       </DialogContent>
@@ -159,10 +159,10 @@ function MachineList({ picking, onChoose, onAdd }: { picking: boolean; onChoose:
                     />
                   ) : (
                     <button
-                      onClick={() => (picking && m.enabled ? onChoose(m) : undefined)}
-                      disabled={!picking || !m.enabled}
+                      onClick={() => (m.enabled ? onChoose(m) : undefined)}
+                      disabled={!m.enabled}
                       className="flex-1 min-w-0 text-left disabled:cursor-default cursor-pointer"
-                      title={picking ? `Choose a folder on ${m.label}` : m.target}
+                      title={m.enabled ? `Open a folder on ${m.label}` : m.target}
                     >
                       <span className="block text-[13px] font-medium text-[var(--color-fg)] truncate">{m.label}</span>
                       <span className="block text-[11px] font-mono text-[var(--color-fg3)] truncate">
@@ -173,7 +173,7 @@ function MachineList({ picking, onChoose, onAdd }: { picking: boolean; onChoose:
                   <span className="shrink-0 text-[11px] tabular-nums text-[var(--color-fg2)]">
                     {doing ? <span className="flex items-center gap-1"><Loader2 size={11} className="animate-spin" />{doing}</span> : statusWords(s, m.enabled)}
                   </span>
-                  {picking && m.enabled && <ChevronRight size={14} className="shrink-0 text-[var(--color-fg3)]" />}
+                  {m.enabled && <ChevronRight size={14} className="shrink-0 text-[var(--color-fg3)]" />}
                   <div className="relative">
                     <Button
                       variant="ghost"

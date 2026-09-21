@@ -57,6 +57,7 @@ export function useFrameOps(ctx: FrameOpsCtx) {
     });
     // Pan to the new frame — rAF lets the node mount before we center on it.
     requestAnimationFrame(() => focusTile(id));
+    return id;
   }, [focusTile, setFrames]);
 
   const updateFrameTitle = useCallback((id: string, title: string) => {

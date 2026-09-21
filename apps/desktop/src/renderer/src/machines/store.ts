@@ -46,7 +46,8 @@ export function errText(e: unknown): string {
 }
 
 export type MachinesRequest =
-  | { kind: "manage" }
+  /** `machineId` opens that machine instead of the list — clicking a machine means that one. */
+  | { kind: "manage"; machineId?: string }
   | { kind: "add"; target?: string }
   /** Choose where a frame runs; `machineId` jumps straight to that machine's folders. */
   | { kind: "pick"; frameId: string; machineId?: string };
@@ -54,4 +55,17 @@ export type MachinesRequest =
 /** Open the machines dialog from anywhere (frame header, Layers, a tile banner). */
 export function openMachines(req: MachinesRequest): void {
   window.dispatchEvent(new CustomEvent<MachinesRequest>("hivemind:machines", { detail: req }));
+}
+
+/** The machine a request opens on, if it names one that is still there.
+ *
+ *  Clicking a machine — in the rail, or in the list — means "that machine", so both the
+ *  pick flow and plain manage carry an id. A machine removed between the click and the
+ *  dialog opening falls back to the list rather than an empty screen. */
+export function machineForRequest(
+  req: MachinesRequest | null,
+  machines: readonly MachineInfo[],
+): MachineInfo | undefined {
+  const id = req && (req.kind === "pick" || req.kind === "manage") ? req.machineId : undefined;
+  return id ? machines.find((m) => m.id === id) : undefined;
 }

@@ -24,7 +24,7 @@ export function MachinesStrip() {
             key={m.id}
             size="sm"
             variant="muted"
-            onClick={() => openMachines({ kind: "manage" })}
+            onClick={() => openMachines({ kind: "manage", machineId: m.id })}
             className="h-7"
             title={`${m.target}${s.detail ? ` — ${s.detail}` : ""}`}
           >

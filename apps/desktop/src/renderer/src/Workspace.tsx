@@ -1131,7 +1131,9 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
           <MachinesHub
             request={machinesReq}
             onClose={() => setMachinesReq(null)}
-            onPick={(frameId, uri) => bindRemote(frameId, uri)}
+            // Opened from a machine rather than a frame: the folder you chose is the
+            // point, so give it a frame instead of dropping it.
+            onPick={(frameId, uri) => bindRemote(frameId ?? addFrame(), uri)}
           />
         </Suspense>
       )}
