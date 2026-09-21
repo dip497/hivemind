@@ -32,7 +32,7 @@ export function ZoomIsland({ tileCount, onReset, minimapOn, onToggleMinimap, onF
         <Button font="mono"
           variant="ghost"
           onClick={() => zoomTo(1, { duration: 150 })}
-          title="Reset to 100% (Ctrl 1)"
+          title="Reset to 100% (Ctrl 0)"
           className="min-w-[3.2rem]"
         >{pct}%</Button>
         <IslandBtn title="Zoom in (Ctrl +)" onClick={() => zoomIn({ duration: 150 })}>
@@ -40,7 +40,7 @@ export function ZoomIsland({ tileCount, onReset, minimapOn, onToggleMinimap, onF
         </IslandBtn>
       </div>
       <div className="hm-island flex items-center overflow-hidden">
-        <IslandBtn title="Fit to view (Ctrl 0)" onClick={() => fitView({ duration: 200, padding: 0.2 })}>
+        <IslandBtn title="Fit to view (Esc)" onClick={() => fitView({ duration: 200, padding: 0.2 })}>
           <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2 5V2h3M9 2h3v3M12 9v3H9M5 12H2V9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
         </IslandBtn>
         <IslandBtn title="Focus selected (.)  ·  Esc to fit all" onClick={onFocus}>

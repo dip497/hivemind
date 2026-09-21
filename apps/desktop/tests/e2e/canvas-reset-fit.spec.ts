@@ -47,13 +47,13 @@ test.afterAll(async () => {
   if (dir) fs.rmSync(dir, { recursive: true, force: true });
 });
 
-test("Fit to view shows the whole canvas, and Ctrl 1 returns to 100%", async () => {
-  await page.getByTitle("Fit to view (Ctrl 0)").click();
+test("Fit to view shows the whole canvas, Ctrl 0 returns to 100%, Esc fits again", async () => {
+  await page.getByTitle("Fit to view (Esc)").click();
   await expect.poll(allOnScreen, { timeout: 5_000 }).toBe(true);
   await page.locator(".react-flow__pane").click({ position: { x: 5, y: 5 } }); // nothing editable focused
-  await page.keyboard.press("Control+1");
-  await expect.poll(zoom, { timeout: 5_000 }).toBeCloseTo(1, 2);
   await page.keyboard.press("Control+0");
+  await expect.poll(zoom, { timeout: 5_000 }).toBeCloseTo(1, 2);
+  await page.keyboard.press("Escape");
   await expect.poll(allOnScreen, { timeout: 5_000 }).toBe(true);
 });
 

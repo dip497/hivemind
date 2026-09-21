@@ -15,7 +15,7 @@ frames, tiles, and sessions; a view only arranges them — never what runs.
 
 ## Built-in views
 
-- **Canvas** — infinite board; frames as coloured zones; Layers rail on ⌘L; per-frame
+- **Canvas** — infinite board; frames as coloured zones; Layers rail on ⌘B; per-frame
   Columns / Rows / Grid arrange.
 - **Windows** — one tab per tile; minimized tabs; the active tab follows tile selection
   from any source (click, spawn, `hive ctl focus`).

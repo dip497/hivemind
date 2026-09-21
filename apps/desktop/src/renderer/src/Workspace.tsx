@@ -898,7 +898,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
 
   // Keyboard shortcuts + menu event listeners. See useCanvasShortcuts.
   useCanvasShortcuts({
-    repoPath, spawnClaude, spawnSelectedAgent, spawnVis, spawnBrowser, addFrame, frameOpen, focusTile,
+    repoPath, spawnClaude, spawnSelectedAgent, spawnVis, spawnBrowser, addFrame, frameOpen, focusTile, closeTile,
     setSelectedTileId, setFocusModeReq, selectedTileIdRef, selectedFrameIdRef,
     focusModeNonceRef, tilesRef,
   });

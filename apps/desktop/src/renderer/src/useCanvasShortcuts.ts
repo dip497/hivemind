@@ -22,6 +22,7 @@ export interface CanvasShortcutsCtx {
   addFrame: () => void;
   frameOpen: (frameId: string, kind: string) => void;
   focusTile: (id: string) => void;
+  closeTile: (id: string) => void;
   setSelectedTileId: Dispatch<SetStateAction<string | null>>;
   setFocusModeReq: Dispatch<SetStateAction<FocusModeReq>>;
   selectedTileIdRef: MutableRefObject<string | null>;
@@ -32,7 +33,7 @@ export interface CanvasShortcutsCtx {
 
 export function useCanvasShortcuts(ctx: CanvasShortcutsCtx) {
   const {
-    repoPath, spawnClaude, spawnSelectedAgent, spawnVis, spawnBrowser, addFrame, frameOpen, focusTile,
+    repoPath, spawnClaude, spawnSelectedAgent, spawnVis, spawnBrowser, addFrame, frameOpen, focusTile, closeTile,
     setSelectedTileId, setFocusModeReq, selectedTileIdRef, selectedFrameIdRef,
     focusModeNonceRef, tilesRef,
   } = ctx;
@@ -50,20 +51,25 @@ export function useCanvasShortcuts(ctx: CanvasShortcutsCtx) {
       }
     };
     const onKey = (e: KeyboardEvent) => {
-      // ── modifier shortcuts (kept for muscle memory) ──
+      // ── modifier shortcuts ── VS Code's app-wide keys (new terminal, explorer, diff, agent,
+      // Layers, tile N, next tile, settings) come from main, before xterm sees them — see the
+      // "menu:shortcut" handler below. These are the ones that are the canvas's only when you
+      // are NOT typing: inside a tile Ctrl +/−/0 size its font, and the shell's Ctrl+W deletes
+      // a word — closing an agent by accident is not a shortcut.
       if (e.metaKey || e.ctrlKey) {
-        if (e.key === "\\") { e.preventDefault(); spawnSelectedAgent(); } // the default agent, like the toolbar
-        else if ((e.key === "b" || e.key === "B") && repoPath) { e.preventDefault(); spawnVis("tree"); }
-        else if (e.key === "t" || e.key === "T") { e.preventDefault(); spawnVis("shell"); }
-        else if ((e.key === "d" || e.key === "D") && repoPath) { e.preventDefault(); spawnVis("diff"); }
-        else if (e.key === "e" || e.key === "E") { e.preventDefault(); window.dispatchEvent(new CustomEvent("hivemind:toggle-view-mode")); }
-        // What the zoom island's tooltips promise — on the canvas only: inside a terminal or
-        // editor Ctrl +/−/0 already size that tile's font, and doing both at once is wrong.
-        else if (inEditable(e.target) && (e.key === "0" || e.key === "1" || e.key === "=" || e.key === "+" || e.key === "-")) { /* the tile's */ }
-        else if (e.key === "0") { e.preventDefault(); setFocusModeReq({ id: null, n: ++focusModeNonceRef.current }); }
-        else if (e.key === "1") { e.preventDefault(); window.dispatchEvent(new CustomEvent("hivemind:zoom", { detail: "100" })); }
+        if (e.key === "e" || e.key === "E") { e.preventDefault(); window.dispatchEvent(new CustomEvent("hivemind:toggle-view-mode")); }
+        else if (inEditable(e.target)) { /* the tile's */ }
+        else if (e.key === "0") { e.preventDefault(); window.dispatchEvent(new CustomEvent("hivemind:zoom", { detail: "100" })); }
         else if (e.key === "=" || e.key === "+") { e.preventDefault(); window.dispatchEvent(new CustomEvent("hivemind:zoom", { detail: "in" })); }
         else if (e.key === "-") { e.preventDefault(); window.dispatchEvent(new CustomEvent("hivemind:zoom", { detail: "out" })); }
+        // Open folder / Open recent switch the whole project, as in VS Code. Canvas-only: inside a
+        // terminal Ctrl+R is the shell's history search and Ctrl+O is its own.
+        else if (e.key === "o" || e.key === "O") { e.preventDefault(); window.dispatchEvent(new CustomEvent("hivemind:open-folder")); }
+        else if (e.key === "r" || e.key === "R") { e.preventDefault(); window.dispatchEvent(new CustomEvent("hivemind:open-recent")); }
+        else if (e.key === "w" || e.key === "W") {
+          const id = selectedTileIdRef.current;
+          if (id) { e.preventDefault(); closeTile(id); }
+        }
         return;
       }
       // Focus-mode hotkeys (".", Escape) fire ONLY when no editable element is
@@ -119,6 +125,27 @@ export function useCanvasShortcuts(ctx: CanvasShortcutsCtx) {
       const id = selectedTileIdRef.current ?? selectedFrameIdRef.current;
       if (id) setFocusModeReq({ id, n: ++focusModeNonceRef.current });
     };
+    // VS Code keys main intercepted (they work from inside a terminal). Tiles are numbered in
+    // the order they were opened, which is also the order Ctrl+Tab walks.
+    const onShortcut = (e: Event) => {
+      const action = (e as CustomEvent<string>).detail;
+      const tiles = tilesRef.current;
+      const select = (id: string | undefined) => { if (id) { setSelectedTileId(id); focusTile(id); } };
+      const step = (by: number) => {
+        if (!tiles.length) return;
+        const i = tiles.findIndex((t) => t.id === selectedTileIdRef.current);
+        select(tiles[((i < 0 ? (by > 0 ? -1 : 0) : i) + by + tiles.length) % tiles.length]?.id);
+      };
+      if (action === "new-terminal") spawnVis("shell");
+      else if (action === "explorer") { if (repoPath) spawnVis("tree"); }
+      else if (action === "diff") { if (repoPath) spawnVis("diff"); }
+      else if (action === "agent") spawnSelectedAgent();
+      else if (action === "new-frame") addFrame();
+      else if (action === "settings") window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: {} }));
+      else if (action === "next-tile") step(1);
+      else if (action === "prev-tile") step(-1);
+      else if (action.startsWith("tile:")) select(tiles[Number(action.slice(5)) - 1]?.id);
+    };
     // A native agent notification was clicked → select + fly to that tile.
     const onFocusTile = (e: Event) => {
       const id = (e as CustomEvent<string>).detail;
@@ -132,12 +159,14 @@ export function useCanvasShortcuts(ctx: CanvasShortcutsCtx) {
     window.addEventListener("hivemind:frame-open", onFrameOpen as EventListener);
     window.addEventListener("hivemind:focus-tile", onFocusTile as EventListener);
     window.addEventListener("hivemind:focus-selected", onFocusSelected);
+    window.addEventListener("hivemind:shortcut", onShortcut);
     window.addEventListener("keydown", onKey);
     return () => {
       window.removeEventListener("hivemind:spawn-claude", onSpawn);
       window.removeEventListener("hivemind:canvas-toggle", onToggle as EventListener);
       window.removeEventListener("hivemind:add-frame", onAddFrame);
       window.removeEventListener("hivemind:frame-open", onFrameOpen as EventListener);
+      window.removeEventListener("hivemind:shortcut", onShortcut);
       window.removeEventListener("hivemind:focus-tile", onFocusTile as EventListener);
       window.removeEventListener("hivemind:focus-selected", onFocusSelected);
       window.removeEventListener("keydown", onKey);
