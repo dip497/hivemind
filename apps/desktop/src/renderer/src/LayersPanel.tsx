@@ -12,9 +12,9 @@
 import { statusColor } from "./workspace/tile-status-bucket";
 import { MachinesStrip } from "./machines/MachinesStrip";
 import { MachineDot } from "./machines/status";
-import { hostIdOfUri, machineByHost, statusOf, useMachines } from "./machines/store";
+import { frameMachine, hostIdOfUri, machineByHost, statusOf, useMachines } from "./machines/store";
 import { memo, useEffect, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
-import { Layers, ChevronRight, ChevronDown, GitBranch, Server, Folder, FolderOpen, PanelLeftClose, Globe } from "lucide-react";
+import { Layers, ChevronRight, ChevronDown, GitBranch, Server, Folder, FolderOpen, PanelLeftClose, Globe, Monitor } from "lucide-react";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { AgentIcon } from "./agents";
 import { FrameRailMenu, type FrameActions } from "./FrameRailMenu";
@@ -157,6 +157,8 @@ function WorkspaceIcon({ color, remote, remoteUri, worktree, collapsed }: { colo
 
 // Memo: a child of the canvas view, which re-renders on every drag frame.
 export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocusFrame, frameActions }: Props) {
+  // Before the early `hidden` return: hooks run on every render, in the same order.
+  const machineSnap = useMachines();
   // Persisted: panel hidden + which frame groups are collapsed. Now that the
   // panel is DOCKED (a flex sibling, not an overlay) it no longer occludes any
   // tile, so it defaults to SHOWN; collapsing leaves a narrow icon rail. The
@@ -266,6 +268,18 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
   const tilesOf = (fid: string) => tiles.filter((t) => t.frameId === fid);
   const looseTiles = tiles.filter((t) => !t.frameId || !frames.some((f) => f.id === t.frameId));
   const totalGroups = topFrames.length + (looseTiles.length ? 1 : 0);
+  // Grouped by the computer each frame runs on — this computer first — once any frame is on
+  // another one; a local-only canvas stays a plain list. Same names the views get (frameMachine).
+  const machineGroups: { key: string; label: string; uri?: string; frames: LayerFrame[] }[] = [];
+  for (const f of topFrames) {
+    const m = f.remoteUri ? frameMachine(machineSnap, f.remoteUri) : undefined;
+    const key = m ? `m:${m.name}` : "local";
+    let g = machineGroups.find((x) => x.key === key);
+    if (!g) machineGroups.push(g = { key, label: m?.name ?? "This computer", uri: m ? f.remoteUri : undefined, frames: [] });
+    g.frames.push(f);
+  }
+  machineGroups.sort((a, b) => Number(b.key === "local") - Number(a.key === "local"));
+  const groupByMachine = machineGroups.some((g) => g.key !== "local");
 
   // Highest-priority status across a frame's tiles + descendant frames — drives
   // the per-frame status dot, so a COLLAPSED frame still signals "an agent here
@@ -515,7 +529,17 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
         {totalGroups === 0 && (
           <div className="px-3 py-2 text-[12px] text-[var(--color-fg3)]">No tiles open.</div>
         )}
-        {topFrames.map((f) => renderFrameGroup(f, 0))}
+        {groupByMachine
+          ? machineGroups.map((g) => (
+            <section key={g.key} aria-label={g.label} data-machine-group={g.key === "local" ? "local" : g.label}>
+              <div className="flex items-center gap-1.5 px-3 pt-2.5 pb-1 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-[var(--color-fg3)]">
+                {g.uri ? <MachineDot status={statusOf(machineSnap, hostIdOfUri(g.uri))} size={6} /> : <Monitor size={11} aria-hidden />}
+                <span className="truncate">{g.label}</span>
+              </div>
+              {g.frames.map((f) => renderFrameGroup(f, 0))}
+            </section>
+          ))
+          : topFrames.map((f) => renderFrameGroup(f, 0))}
         {looseTiles.length > 0 && (
           <div className="mt-1.5">
             <div className="flex items-center gap-2 h-8 pr-2 mx-2 pl-[26px]">

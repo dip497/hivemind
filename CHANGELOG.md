@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- The Layers rail groups frames by the computer they run on — "This computer" first, then each machine with its link state — once any frame is on another machine. It is shared, so every view gets it. View authors: `frame.machine` (`{ name, state, rttMs? }`, view protocol 1.1) is now documented in the extension guide and the `hive views new` brief.
+
 - With glass on, a program asking the terminal for its background colour is told the theme's colour, not black. Codex tints its input box from that answer, so the box now blends with your theme instead of showing as flat grey.
 - With glass on, dim and italic text no longer sits on a solid black bar. Agents draw a lot of it — codex's header card and hints, Claude's recaps — so a transparent terminal was striped with black boxes. The terminal's GPU renderer treated those styles as a background colour and painted it opaque; it now paints a background only where the program asked for one.
 

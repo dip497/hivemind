@@ -69,8 +69,14 @@ applyThemeVars(hm);          // theme → CSS custom properties on your document
 \`hm.subscribeStatus(tileId, cb)\` → live status per tile; returns an unsubscribe. \`statusTone(s)\`
 maps it to \`working | attention | done | exited | failed | idle\` for colour.
 
-Shapes: \`ViewTile { id, frameId, kind, name }\`, \`ViewFrame\`, and \`hm.hello\` carries
-\`{ pluginId, capabilities, theme, layout, viewport, visible }\`.
+Shapes: \`ViewTile { id, frameId, kind, name }\`, \`ViewFrame { id, title, color, machine? }\`, and
+\`hm.hello\` carries \`{ pluginId, capabilities, theme, layout, viewport, visible }\`.
+
+**Machines** — a frame whose folder is on another computer has \`frame.machine =
+{ name, state, rttMs? }\`: \`state\` is \`online\` | \`connecting\` | \`reconnecting\` | \`offline\` |
+\`attention\` (someone must log in) | \`no-hive\` | \`idle\`, and it changes live (a new \`structure\`).
+A local frame has no \`machine\`. Show it wherever the view shows the frame — which computer the work
+is on is exactly what a person needs to see.
 
 **Commands** — \`hm.commands.*\`:
 

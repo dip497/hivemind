@@ -182,3 +182,18 @@ test("the server goes away and comes back: chip and banner say so, the job never
   expect(remote(`${rhive()} ps`)).toContain("build-job");
   remote(`${rhive()} kill build-job`);
 });
+
+test("the Layers rail groups frames by the computer they run on, in every view", async () => {
+  const rail = page.locator(".hm-layers");
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:add-frame"))); // a frame on this computer too
+  await expect(rail.locator('[data-machine-group="build-box"]')).toBeVisible();
+  await expect(rail.locator('[data-machine-group="local"]')).toContainText("This computer");
+  // Collapse and reopen: the rail must survive both (its hooks run before the collapsed return).
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:toggle-layers")));
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:toggle-layers")));
+  await expect(rail.locator('[data-machine-group="build-box"]')).toBeVisible();
+  // The rail is shared, so the Windows view gets the same grouping.
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "windows" } })));
+  await expect(page.locator('.hm-layers [data-machine-group="build-box"]')).toBeVisible();
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "canvas" } })));
+});
