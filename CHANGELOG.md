@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- The Theme button opens Appearance as a panel beside the workspace instead of the Settings window, so a preset, accent, wallpaper or glass change shows on the real app as you make it. The full page is still under All appearance settings.
 - With glass on, a program asking the terminal for its background colour is told the theme's colour, not black. Codex tints its input box from that answer, so the box now blends with your theme instead of showing as flat grey.
 - With glass on, dim and italic text no longer sits on a solid black bar. Agents draw a lot of it — codex's header card and hints, Claude's recaps — so a transparent terminal was striped with black boxes. The terminal's GPU renderer treated those styles as a background colour and painted it opaque; it now paints a background only where the program asked for one.
 

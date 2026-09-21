@@ -305,3 +305,6 @@
 /* A group in the sidebar is a tree: the pages inside it are indented under their heading,
    so the overview row reads as the parent rather than as one more sibling. */
 .settings-sidebar nav button[data-plugin] { padding-left: 30px; }
+
+/* The Appearance side panel is narrow: rows stack instead of squeezing. */
+.theme-panel .settings-row { gap: 12px; flex-wrap: wrap; }
