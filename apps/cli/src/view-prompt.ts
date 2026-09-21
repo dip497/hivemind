@@ -58,7 +58,7 @@ applyThemeVars(hm);          // theme → CSS custom properties on your document
 
 | event | payload | meaning |
 |---|---|---|
-| \`structure\` | \`{ frames, tiles }\` | the workspace changed — redraw |
+| \`structure\` | \`{ frames, tiles, links }\` | the workspace changed — redraw |
 | \`names\` | \`{ names: Record<id, string> }\` | a tile was renamed |
 | \`selection\` | \`{ tileId, frameId, fresh }\` | selection moved |
 | \`resize\` | \`{ w, h }\` | your viewport changed |
@@ -69,7 +69,9 @@ applyThemeVars(hm);          // theme → CSS custom properties on your document
 \`hm.subscribeStatus(tileId, cb)\` → live status per tile; returns an unsubscribe. \`statusTone(s)\`
 maps it to \`working | attention | done | exited | failed | idle\` for colour.
 
-Shapes: \`ViewTile { id, frameId, kind, name }\`, \`ViewFrame\`, and \`hm.hello\` carries
+Shapes: \`ViewTile { id, frameId, kind, name, agent? }\`,
+\`ViewFrame { id, title, color, machine?, parentId?, branch?, folder?: { name, kind: "worktree" | "folder" } }\`,
+\`links { pipes: { src, dst }[], spawns: { parent, child }[] }\` (agents feeding and starting agents), and \`hm.hello\` carries
 \`{ pluginId, capabilities, theme, layout, viewport, visible }\`.
 
 **Commands** — \`hm.commands.*\`:
@@ -79,6 +81,8 @@ Shapes: \`ViewTile { id, frameId, kind, name }\`, \`ViewFrame\`, and \`hm.hello\
 | \`selectTile(id)\`, \`selectFrame(id)\`, \`focusTile(id)\` | — |
 | \`closeTile(id)\` | \`workspace:close\` |
 | \`spawnTile(kind, frameId)\`, \`spawnVis("tree"\\|"shell"\\|"diff"\\|"issues")\`, \`spawnClaude()\`, \`addFrame()\` | \`workspace:spawn\` |
+| \`spawnAgent(agentId \\| null, frameId \\| null, { prompt?, name? })\` — start an agent with a first prompt | \`workspace:spawn\` |
+| \`renameTile(id, name)\`, \`openFolder(frameId)\` (the user picks the folder) | \`workspace:edit\` |
 
 A permission you use must be listed in \`hivemind-view.json\`; the user sees it before installing.
 Ask for nothing you don't use.
