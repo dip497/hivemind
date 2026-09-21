@@ -104,6 +104,13 @@ describe("loading agents from disk", () => {
     expect(out.env).toEqual({ ACME_MODE: "fast" });
   });
 
+  test("a flag the tile already carries keeps its value out of the command line", () => {
+    const paths: RuntimePaths = { private: "/nonexistent", hooks: {}, execPath: "/x", tileSessionsDir: "/nonexistent", home: "/" };
+    const plan: LaunchPlan = { argsBefore: ["--settings", "{\"new\":1}", "--resume", "abc"] };
+    const out = applyPlan({ cwd: "/", cmd: "claude", args: ["--settings", "{\"old\":1}"], cols: 1, rows: 1, env: {} }, plan, paths);
+    expect(out.args).toEqual(["--resume", "abc", "--settings", "{\"old\":1}"]);
+  });
+
   test("a scoped folder is not an agent, and a scoped id cannot be removed", async () => {
     const root = userRoot();
     install(root, "@dip497/acme", ACME.replace("id: acme", "id: \"@dip497/acme\""));

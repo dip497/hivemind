@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- The install prompt for an agent that reports through hooks now says what it is for: status and approval prompts, with access that can also read and type into your other tiles.
+- A restored Claude tile no longer starts its session with the hooks JSON as the first message. The tile already had its own `--settings`; the new one was removed but its value stayed on the command line.
 - The Theme button opens Appearance as a panel beside the workspace instead of the Settings window, so a preset, accent, wallpaper or glass change shows on the real app as you make it. The full page is still under All appearance settings.
 - Layers: machines nothing runs on fold into one Machines section at the bottom, with a summary like "2 to sign in". A machine's buttons show when you point at it, and a machine that lost its login says "sign in" instead of "needs you".
 - Two agents started at the same moment no longer get the same number ("claude #1" twice).

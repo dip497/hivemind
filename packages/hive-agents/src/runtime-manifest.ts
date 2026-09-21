@@ -214,7 +214,13 @@ export function applyPlan(spec: SpawnSpec, plan: LaunchPlan, paths: RuntimePaths
   // A CLI that works through a subcommand gets it, once: `kiro` alone would open its
   // picker instead of the session this tile is.
   if (safe.subcommand && !args.includes(safe.subcommand)) args = [safe.subcommand, ...args];
-  const before = (safe.argsBefore ?? []).filter((a) => !args.includes(a));
+  const src = safe.argsBefore ?? [];
+  const before: string[] = [];
+  for (let i = 0; i < src.length; i++) {
+    if (!args.includes(src[i]!)) { before.push(src[i]!); continue; }
+    // A flag the tile already carries drops its value too, or the value lands as a positional.
+    if (src[i]!.startsWith("-")) while (i + 1 < src.length && !src[i + 1]!.startsWith("-")) i++;
+  }
   // Idempotent: a tile that already carries the flag keeps the one it has, so a user's own
   // command line always wins and a restore never doubles an argument.
   const after = safe.args && !args.includes(safe.args[0]!) ? safe.args : [];
