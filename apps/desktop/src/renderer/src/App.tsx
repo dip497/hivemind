@@ -22,6 +22,7 @@ import { Workspace } from "./Workspace";
 import { IssuePeek } from "./components/IssuePeek";
 import { NewIssueModal } from "./components/NewIssueModal";
 import { resolveSettingsPage } from "./settings-registry";
+import { flushSettings } from "./settings-store";
 import { useExpandedGroups, useSettingsNav } from "./settings-nav";
 import { getNotificationSettings, setNotificationSettingsCache, subscribeNotificationSettings, saveNotificationSettings } from "./notification-settings";
 import type { NotificationSettings } from "../../shared/ipc";
@@ -580,6 +581,8 @@ function SettingsModal({
     setWorkspaceOccluded(open);
     return () => setWorkspaceOccluded(false);
   }, [open]);
+  // Closing Settings writes what was changed there now, so a later write can't be overtaken by it.
+  useEffect(() => { if (!open) flushSettings(); }, [open]);
   useEffect(() => {
     const openPage = (event: Event) => {
       const target = resolveSettingsPage((event as CustomEvent<{ page?: string }>).detail?.page ?? "");

@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Closing Settings saves what you changed there right away. A change made just after, like `hive config set`, used to be overwritten a moment later by the Settings edit.
 - The install prompt for an agent that reports through hooks now says what it is for: status and approval prompts, with access that can also read and type into your other tiles.
 - A restored Claude tile no longer starts its session with the hooks JSON as the first message. The tile already had its own `--settings`; the new one was removed but its value stayed on the command line.
 - The Theme button opens Appearance as a panel beside the workspace instead of the Settings window, so a preset, accent, wallpaper or glass change shows on the real app as you make it. The full page is still under All appearance settings.
