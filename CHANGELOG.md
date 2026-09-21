@@ -11,6 +11,9 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 - With glass on, a program asking the terminal for its background colour is told the theme's colour, not black. Codex tints its input box from that answer, so the box now blends with your theme instead of showing as flat grey.
 - With glass on, dim and italic text no longer sits on a solid black bar. Agents draw a lot of it — codex's header card and hints, Claude's recaps — so a transparent terminal was striped with black boxes. The terminal's GPU renderer treated those styles as a background colour and painted it opaque; it now paints a background only where the program asked for one.
+- With glass on, agents that paint their own full-screen background (Grok, OpenCode) let the wallpaper through instead of covering the tile with a solid dark rectangle. Panels, highlights and selections drawn on top keep their colour.
+- A new terminal tile draws with the GPU renderer from the start; it could stay on the fallback renderer until another tile was selected.
+- The Diff tile shows "binary file changed" for images and other binary files instead of their bytes as text.
 
 ## [2026.9.3] — 2026-09-21
 
