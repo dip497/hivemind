@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [2026.9.3] — 2026-09-21
+
 - Fixed: terminals were dead in the v2026.9.2 desktop builds — electron-builder 26 left node-pty's native prebuild out of the bundle on every platform. The release now fails instead of shipping a bundle without it.
 - Clicking a machine opens that machine. It used to open the plain list from the rail, do nothing at all inside the list, and throw away the folder you picked unless a frame had asked for one — now choosing a folder opens a frame there.
 
@@ -1275,7 +1277,8 @@ World, and sandboxed community views), and the e2e/perf harnesses gate every cha
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.9.2...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.9.3...HEAD
+[2026.9.3]: https://github.com/dip497/hivemind/releases/tag/v2026.9.3
 [2026.9.2]: https://github.com/dip497/hivemind/releases/tag/v2026.9.2
 [2026.9.1]: https://github.com/dip497/hivemind/releases/tag/v2026.9.1
 [2026.9.0]: https://github.com/dip497/hivemind/releases/tag/v2026.9.0

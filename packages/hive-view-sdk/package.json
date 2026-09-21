@@ -1,6 +1,6 @@
 {
   "name": "@hivemind/view-sdk",
-  "version": "2026.9.2",
+  "version": "2026.9.3",
   "description": "Write a hivemind workspace view as a sandboxed plugin: protocol v1 types, validators, and a typed client.",
   "license": "MIT",
   "type": "module",
