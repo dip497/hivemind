@@ -253,6 +253,7 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
             title={`worktree ${data.branch}\n${data.worktreePath}`}
           >
             <GitBranch size={11} className="shrink-0" style={{ color: data.color }} />
+            <span className="shrink-0 text-[var(--color-fg3)]">worktree</span>
             <span className="truncate font-semibold">{data.branch}</span>
             {data.head && <span className="shrink-0 text-[var(--color-fg3)]">{data.head.slice(0, 7)}</span>}
             <Button
@@ -282,8 +283,11 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
                 says "a workspace is bound" (the path is on the tooltip). A remote
                 keeps its host label: that's information the title never carries,
                 and a renamed frame keeps it too. */}
-            {(isRemoteWs || wsName?.toLowerCase() !== data.title.trim().toLowerCase()) && (
+            {(isRemoteWs || wsName?.toLowerCase() !== data.title.trim().toLowerCase()) ? (
               <span className="truncate">{isRemoteWs ? remoteHostLabel : wsName}</span>
+            ) : (
+              // Name == title (the default): say what it is instead — VS Code calls it a folder.
+              <span className="text-[var(--color-fg3)]">folder</span>
             )}
             <Button
               variant="ghost-destructive"

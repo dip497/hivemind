@@ -52,9 +52,12 @@ compute one from a theme token yourself.
 | `spawnVis("tree" \| "shell" \| "diff" \| "issues")` | `workspace:spawn` |
 | `spawnClaude()` | `workspace:spawn` |
 | `addFrame()` | `workspace:spawn` |
+| `spawnAgent(agentId \| null, frameId \| null, { prompt?, name? })` | `workspace:spawn` |
+| `renameTile(id, name)` | `workspace:edit` |
+| `openFolder(frameId)` | `workspace:edit` |
 
 `spawnTile`'s free-form options are deliberately not exposed: an agent's command line
-is not something a view chooses.
+is not something a view chooses. `spawnAgent` takes a catalog id, never a command.
 
 ## Manifest
 

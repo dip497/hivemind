@@ -131,3 +131,10 @@ export function posixJoin(a: string, b: string): string {
   if (b.startsWith("/")) return b;
   return a.endsWith("/") ? a + b : `${a}/${b}`;
 }
+
+/** `uri` moved to `target` when it was on `oldHostId` (a machine whose address was edited); else unchanged. */
+export function repointUri<T extends string | null | undefined>(uri: T, oldHostId: string, target: string): T | string {
+  if (!isRemote(uri)) return uri;
+  const t = parseRemote(uri);
+  return t.hostId === oldHostId ? machineUri(target, t.path) : uri;
+}

@@ -202,6 +202,13 @@ export class CommunityLink {
       case "spawnVis": c.spawnVis(args[0] as "tree" | "shell" | "diff" | "issues"); return;
       case "spawnClaude": c.spawnClaude(); return;
       case "addFrame": c.addFrame(); return;
+      case "spawnAgent":
+        if (frame(args[1]) && !c.spawnAgent(args[0] as string | null, args[1] as string | null, args[2] as { prompt?: string; name?: string } | undefined)) {
+          this.refuse(`spawnAgent: no agent ${String(args[0] ?? "installed")}`);
+        }
+        return;
+      case "renameTile": if (tile(args[0])) c.renameTile(args[0] as string, args[1] as string); return;
+      case "openFolder": if (frame(args[0])) c.openFolder(args[0] as string); return;
     }
   }
 }

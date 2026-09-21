@@ -65,6 +65,24 @@ test("permissions: a command the manifest did not request is refused, granted on
   assert.equal(g.link.stats.refused, 2);
 });
 
+test("1.2 commands: spawnAgent needs spawn, rename/openFolder need edit, ids are checked", () => {
+  const h = harness(["workspace:spawn"]);
+  h.link.handle({ type: "ready", v: 1 });
+  h.link.handle({ type: "command", name: "spawnAgent", args: ["codex", "f1", { prompt: "go", name: "w" }] });
+  h.link.handle({ type: "command", name: "spawnAgent", args: [null, "nope"] });
+  h.link.handle({ type: "command", name: "renameTile", args: ["t1", "x"] });
+  assert.deepEqual(h.calls, ['spawnAgent("codex","f1",{"prompt":"go","name":"w"})']);
+  assert.equal(h.link.stats.refused, 2);
+  const e = harness(["workspace:edit"]);
+  e.link.handle({ type: "ready", v: 1 });
+  e.link.handle({ type: "command", name: "renameTile", args: ["t1", "x"] });
+  e.link.handle({ type: "command", name: "renameTile", args: ["ghost", "x"] });
+  e.link.handle({ type: "command", name: "openFolder", args: ["f1"] });
+  e.link.handle({ type: "command", name: "openFolder", args: ["nope"] });
+  assert.deepEqual(e.calls, ['renameTile("t1","x")', 'openFolder("f1")']);
+  assert.equal(e.link.stats.refused, 2);
+});
+
 test("ids are checked against the workspace: unknown tiles never reach a command or a subscription", () => {
   const h = harness();
   h.link.handle({ type: "ready", v: 1 });

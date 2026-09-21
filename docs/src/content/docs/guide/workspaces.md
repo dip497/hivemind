@@ -11,10 +11,27 @@ One canvas per project. **Frames** are named zones on it, each bound to a direct
 |---|---|
 | Local repo | Default; tiles run in that directory. |
 | Git worktree | A nested sub-frame scoped to one branch (frame header → **worktree**). Arrange a frame's tiles and worktrees as Columns / Rows / Grid. |
-| Remote SSH | A directory as `ssh://user@host:port/abs/path`. Terminals are PTYs on the host, the editor reads/writes over SFTP, diff/status run `git` remotely. One pooled `ssh2` connection per host; agent, key, or password auth; TOFU host keys. |
+| Remote SSH | A directory on a saved machine, as `ssh://user@host:port/abs/path`. Terminals run in `hive` on that machine and keep running when the connection drops or the app closes; the editor and diff work over the same connection. One ssh connection per machine, using your keys, agent and `~/.ssh/config` (or a password kept in the OS keychain). |
 
 Remote frames are path-keyed: the `ssh://` URI is the workspace path, so tiles go
 remote without per-tile changes (`docs/design/remote-frames.md`).
+
+## Machines
+
+Machines live in the Layers rail, one heading per computer — **This computer** first — with
+its link (round trip, or why it is down), how many agents there need you, and its frames under
+it. From a machine's heading:
+
+- **+** opens a folder there as a new frame.
+- **Retry** skips the reconnect wait (shown while it is down).
+- **⋯ → Turn off** drops the connection. Its terminals keep running on the machine and their
+  tiles keep their screen; **Turn on** (there, or on any of its tiles) reconnects them.
+- **⋯ → Manage machines…** adds, edits and removes. **Edit** changes the name, address,
+  user or port; a new address is reached before it is saved, and the frames on the machine
+  move with it. **Remove** says what uses the machine first and leaves its terminals running
+  unless you tick “also end”.
+
+The list is the same one `hive machine` edits in a terminal.
 
 ## The `.hivemind/` directory
 
@@ -93,6 +110,6 @@ own session, codex/droid the newest session for the directory, opencode none). C
 tile (`×`) kills it. Layout — frames, positions, viewport, editor tabs — persists per
 repo.
 
-Limits: remote PTYs run in the app process, so an SSH drop ends them; the daemon cannot
-reattach to a remote session. Screen content replays from disk after a daemon restart or
-reboot.
+Limits: a machine without `hive` (Manage machines → Install hive) runs plain ssh
+terminals, which end when the connection drops. Issues and `hive ctl` read this computer's
+`.hivemind/` only. Screen content replays from disk after a daemon restart or reboot.

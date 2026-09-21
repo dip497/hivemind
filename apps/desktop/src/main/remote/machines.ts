@@ -18,7 +18,7 @@ import type { SessionInfo } from "../pty-protocol.js";
 import { remoteConns } from "./conn.js";
 import { Catalog } from "./catalog.js";
 import { needsAttention, probeCommand, probeRemote } from "./ssh.js";
-import { closeIdle, endpointFor, hostConnected, hostFailure, readyEndpoints, reconnectHost, resetHost, setRemoteStatusSink, sshPaths } from "./pty.js";
+import { closeIdle, endpointFor, hostConnected, hostFailure, hostServingTiles, readyEndpoints, reconnectHost, resetHost, setHostPaused, setRemoteStatusSink, sshPaths } from "./pty.js";
 import { forgetSavedHost, listSavedHosts, passwordState, saveHost } from "./saved-hosts.js";
 
 const PING_MS = 10_000;
@@ -27,7 +27,8 @@ const IDLE_CLOSE_MS = 60_000;
 const CHECK_PARALLEL = 4;
 const run = promisify(execFile);
 
-const catalog = new Catalog(machinesPath(), () => emit());
+// Off in the catalog (here or `hive machine`) means disconnected.
+const catalog = new Catalog(machinesPath(), () => { for (const m of catalog.list) setHostPaused(machineHostId(m.target), !m.enabled); emit(); });
 const status = new Map<string, MachineStatus>();
 let sink: ((s: MachinesSnapshot) => void) | undefined;
 let emitTimer: ReturnType<typeof setTimeout> | null = null;
@@ -273,9 +274,47 @@ export async function installOnMachine(id: string): Promise<MachineProbe> {
 }
 
 export async function updateMachine(id: string, patch: { label?: string; enabled?: boolean }): Promise<void> {
-  byId(id);
+  const m = byId(id);
+  if (patch.enabled !== undefined) setHostPaused(machineHostId(m.target), !patch.enabled);
   const label = patch.label === undefined ? undefined : validateLabel(patch.label);
   await mutate((list) => list.map((m) => (m.id === id ? { ...m, ...(label !== undefined ? { label } : {}), ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}) } : m)));
+}
+
+/** Point a saved machine somewhere else. A new address is reached before it is saved, so a typo
+ *  never replaces a working one. Returns the old host id, for re-pointing the frames that ran there. */
+export async function editMachine(id: string, patch: { target: string; label?: string; password?: string }): Promise<{ machine: MachineInfo; oldHostId: string }> {
+  const m = byId(id);
+  const oldHostId = machineHostId(m.target);
+  const target = validateTarget(patch.target);
+  const t = parseRemote(machineUri(target));
+  const label = patch.label?.trim() ? validateLabel(patch.label) : m.label;
+  const moved = target !== m.target;
+  if (moved) clashWith(catalog.list.filter((x) => x.id !== id), target, t.hostId);
+  const auth = remoteConns.resolveAuthFor(t.hostId);
+  if (patch.password) remoteConns.setAuth(t.hostId, { ...auth, password: patch.password });
+  let found: ProbeResult | undefined;
+  if (moved || patch.password) {
+    try {
+      found = await probe(t);
+    } catch (e) {
+      if (patch.password) remoteConns.setAuth(t.hostId, auth);
+      throw probeError(target, e);
+    }
+  }
+  if (patch.password) saveHost(t.host, t.port, t.user ?? "", { password: patch.password });
+  await mutate((list) => {
+    if (moved) clashWith(list.filter((x) => x.id !== id), target, t.hostId);
+    return list.map((x) => {
+      if (x.id !== id) return x;
+      const { hivePath: _old, ...rest } = x;
+      return found
+        ? { ...rest, label, target, platform: found.platform, ...(found.hivePath ? { hivePath: found.hivePath } : {}) }
+        : { ...x, label };
+    });
+  });
+  if (found) { resetHost(t.hostId); setStatus(t.hostId, found.daemon ? "online" : "no-hive"); }
+  if (moved && t.hostId !== oldHostId) forgetSavedHost(oldHostId);
+  return { machine: info(byId(id)), oldHostId };
 }
 
 export async function removeMachine(id: string): Promise<void> {
@@ -283,6 +322,10 @@ export async function removeMachine(id: string): Promise<void> {
   const hostId = machineHostId(m.target);
   await mutate((list) => list.filter((x) => x.id !== id));
   forgetSavedHost(hostId);
+  // Terminals still running there keep their connection, and the login it reconnects with, until
+  // they close. Clearing it first left the next reconnect with nothing to log in with, so removing
+  // a machine in use killed its terminals. Ending them is the dialog's opt-in, not this.
+  if (await hostServingTiles(hostId)) return;
   remoteConns.clearAuth(hostId);
   resetHost(hostId);
   if (!hostConnected(hostId)) { status.delete(hostId); emit(); }

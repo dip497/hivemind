@@ -73,11 +73,38 @@ requests; `setLayout` saves up to 64 KB per repository. Canvas/WebGL views can u
 The hello/structure payload includes the resolved palette (`applyThemeVars`), so chrome
 can follow the user's theme.
 
+### Machines
+
+A frame whose folder is on another computer carries where it runs (protocol 1.1):
+
+```ts
+hm.on("structure", ({ frames }) => {
+  for (const f of frames) {
+    if (f.machine) draw(f.id, `${f.machine.name} · ${f.machine.state}`); // e.g. "build-box · online"
+  }
+});
+```
+
+`machine` is `{ name, state, rttMs? }`. `state` is `online` (with `rttMs` once measured),
+`connecting`, `reconnecting`, `offline`, `attention` (someone has to log in), `no-hive`
+(terminals there stop if the connection drops) or `idle`. It changes live — a new `structure`
+arrives — and a local frame has no `machine`. Show it wherever your view shows the frame:
+which computer the work is on is what a person needs to see.
+
 ## Permissions
 
 Declared in the manifest, refused at install if unknown:
 `workspace:close` → `closeTile`; `workspace:spawn` → `spawnTile` / `spawnVis` /
-`spawnClaude` / `addFrame`. Selection and focus need none.
+`spawnClaude` / `addFrame` / `spawnAgent`; `workspace:edit` → `renameTile` / `openFolder`.
+Selection and focus need none.
+
+`spawnAgent(agent, frameId, { prompt?, name? })` starts an agent by its catalog id (`null` is
+the user's default) and hands it `prompt` as its first message. An id that isn't installed is
+refused. `openFolder(frameId)` asks the user to pick the frame's folder; the view never sees a path.
+
+`structure` also tells you how the workspace is wired: each tile's `agent`, each frame's
+`parentId` (a worktree nested under its repo), `branch` and `folder: { name, kind }`, and
+`links: { pipes, spawns }` — which agent feeds which, and which agent started which.
 
 ## Rules
 

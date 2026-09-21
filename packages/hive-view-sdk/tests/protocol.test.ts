@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { LAYOUT_MAX_BYTES, MAX_SURFACE_RECTS, parseHostMessage, parsePluginMessage } from "../src/protocol.js";
+import { LAYOUT_MAX_BYTES, MAX_SURFACE_RECTS, NAME_MAX, PROMPT_MAX, parseHostMessage, parsePluginMessage } from "../src/protocol.js";
 import { validateViewManifest, viewHost } from "../src/manifest.js";
 
 describe("parsePluginMessage", () => {
@@ -12,6 +12,10 @@ describe("parsePluginMessage", () => {
       { type: "command", name: "spawnTile", args: ["shell", null] },
       { type: "command", name: "spawnVis", args: ["diff"] },
       { type: "command", name: "addFrame" },
+      { type: "command", name: "spawnAgent", args: [null, null] },
+      { type: "command", name: "spawnAgent", args: ["codex", "f1", { prompt: "fix the build", name: "fixer" }] },
+      { type: "command", name: "renameTile", args: ["t1", ""] },
+      { type: "command", name: "openFolder", args: ["f1"] },
       { type: "subscribeStatus", tileId: "t1" },
       { type: "unsubscribeStatus", tileId: "t1" },
       { type: "surfaceRects", rects: [{ tileId: "t1", x: 1, y: 2, w: 3, h: 4 }] },
@@ -35,6 +39,13 @@ describe("parsePluginMessage", () => {
       { type: "command", name: "selectTile", args: ["a", "b"] },
       { type: "command", name: "spawnTile", args: ["shell"] },
       { type: "command", name: "spawnVis", args: ["browser"] },
+      { type: "command", name: "spawnAgent", args: [null] },
+      { type: "command", name: "spawnAgent", args: [null, null, null] },
+      { type: "command", name: "spawnAgent", args: [null, null, { prompt: 5 }] },
+      { type: "command", name: "spawnAgent", args: [null, null, { prompt: "x".repeat(PROMPT_MAX + 1) }] },
+      { type: "command", name: "renameTile", args: [null, "x"] },
+      { type: "command", name: "renameTile", args: ["t1", "x".repeat(NAME_MAX + 1)] },
+      { type: "command", name: "openFolder", args: [null] },
       { type: "command", name: "__proto__", args: [] },
       { type: "command", name: "constructor", args: [] },
       { type: "subscribeStatus" },

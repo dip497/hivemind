@@ -12,6 +12,17 @@ export function ZoomIsland({ tileCount, onReset, minimapOn, onToggleMinimap, onF
   const pct = Math.round(zoom * 100);
   const [fpsOn, setFpsOn] = useState(false);
   const toolbar = useRovingToolbar();
+  // Ctrl 1 / Ctrl + / Ctrl − (bound in useCanvasShortcuts, which has no camera of its own).
+  useEffect(() => {
+    const onZoom = (e: Event) => {
+      const d = (e as CustomEvent<"100" | "in" | "out">).detail;
+      if (d === "100") void zoomTo(1, { duration: 150 });
+      else if (d === "in") void zoomIn({ duration: 150 });
+      else if (d === "out") void zoomOut({ duration: 150 });
+    };
+    window.addEventListener("hivemind:zoom", onZoom);
+    return () => window.removeEventListener("hivemind:zoom", onZoom);
+  }, [zoomTo, zoomIn, zoomOut]);
   return (
     <div className="flex items-center gap-1" role="toolbar" aria-label="Canvas controls" ref={toolbar.ref} onKeyDown={toolbar.onKeyDown}>
       <div className="hm-island flex items-center overflow-hidden">
@@ -21,7 +32,7 @@ export function ZoomIsland({ tileCount, onReset, minimapOn, onToggleMinimap, onF
         <Button font="mono"
           variant="ghost"
           onClick={() => zoomTo(1, { duration: 150 })}
-          title="Reset to 100% (Ctrl 1)"
+          title="Reset to 100% (Ctrl 0)"
           className="min-w-[3.2rem]"
         >{pct}%</Button>
         <IslandBtn title="Zoom in (Ctrl +)" onClick={() => zoomIn({ duration: 150 })}>
@@ -29,7 +40,7 @@ export function ZoomIsland({ tileCount, onReset, minimapOn, onToggleMinimap, onF
         </IslandBtn>
       </div>
       <div className="hm-island flex items-center overflow-hidden">
-        <IslandBtn title="Fit to view (Ctrl 0)" onClick={() => fitView({ duration: 200, padding: 0.2 })}>
+        <IslandBtn title="Fit to view (Esc)" onClick={() => fitView({ duration: 200, padding: 0.2 })}>
           <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2 5V2h3M9 2h3v3M12 9v3H9M5 12H2V9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
         </IslandBtn>
         <IslandBtn title="Focus selected (.)  ·  Esc to fit all" onClick={onFocus}>
