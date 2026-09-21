@@ -150,7 +150,7 @@ test("⌘\\ with a default whose CLI is gone starts the first installed agent in
   // fallback selects now that ghost (the default) has no CLI.
   await expect(page.getByRole("group", { name: "Workspace tools" }).getByRole("button", { name: "Acme Coder", exact: true })).toBeVisible();
   await page.locator(".react-flow__pane").click({ position: { x: 5, y: 5 } });
-  await page.keyboard.press("Control+Backslash");
+  await page.keyboard.press("2"); // the canvas key for the default agent (Ctrl+Shift+A is resolved in main)
   await expect.poll(nodes).toBeGreaterThan(before);
   await expect(page.getByText("Ghost is not installed.")).toHaveCount(0);
   await page.evaluate(() => window.hive.settingsSet("agents.defaultAgent", "acme"));

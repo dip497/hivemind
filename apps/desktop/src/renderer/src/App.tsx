@@ -1,4 +1,5 @@
 import * as SettingsDialog from "@radix-ui/react-dialog";
+import { RecentProjects } from "./RecentProjects";
 import { setWorkspaceOccluded } from "./workspace-occlusion";
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -180,6 +181,15 @@ export function App() {
   // workspace) resolves to that repo's root so the peek shows the right issue.
   const [peekRoot, setPeekRoot] = useState<string | null>(null);
   const [newOpen, setNewOpen] = useState(false);
+  // Ctrl+O / Ctrl+R on the canvas (useCanvasShortcuts): VS Code's Open Folder and Open Recent.
+  const [recentOpen, setRecentOpen] = useState(false);
+  useEffect(() => {
+    const onFolder = () => void pickFolder();
+    const onRecent = () => setRecentOpen(true);
+    window.addEventListener("hivemind:open-folder", onFolder);
+    window.addEventListener("hivemind:open-recent", onRecent);
+    return () => { window.removeEventListener("hivemind:open-folder", onFolder); window.removeEventListener("hivemind:open-recent", onRecent); };
+  });
   const [initing, setIniting] = useState(false);
   const [initOpen, setInitOpen] = useState(false);
   const openInit = useCallback(() => setInitOpen(true), []);
@@ -304,7 +314,7 @@ export function App() {
 
   // Main-process accelerator bridge: xterm swallows Ctrl+N to send it as a
   // control code to the PTY (^N = SO), so window keydown never fires when a
-  // terminal has focus. Main intercepts ⌘N / ⌘L via before-input-event and
+  // terminal has focus. Main intercepts ⌘N / ⌘B (and the VS Code keys) via before-input-event and
   // forwards over IPC — we re-emit as the same CustomEvents the handlers use.
   useEffect(() => {
     const w = window as unknown as {
@@ -314,11 +324,12 @@ export function App() {
         onMenuFitOverlay?: (cb: () => void) => () => void;
         onMenuResetScale?: (cb: () => void) => () => void;
         onMenuFocusTile?: (cb: () => void) => () => void;
+        onMenuShortcut?: (cb: (action: string) => void) => () => void;
       };
     };
     if (!w.hive?.onMenuNewIssue) return;
     const offNew = w.hive.onMenuNewIssue(() => setNewOpen(true));
-    // ⌘/Ctrl+L toggles the Layers panel (LayersPanel listens for the event).
+    // ⌘/Ctrl+B toggles the Layers panel (LayersPanel listens for the event).
     const offLayers = w.hive.onMenuToggleLayers?.(() =>
       window.dispatchEvent(new CustomEvent("hivemind:toggle-layers")),
     );
@@ -333,12 +344,16 @@ export function App() {
     const offFocusSel = w.hive.onMenuFocusTile?.(() =>
       window.dispatchEvent(new CustomEvent("hivemind:focus-selected")),
     );
+    const offShortcut = w.hive.onMenuShortcut?.((action) =>
+      window.dispatchEvent(new CustomEvent("hivemind:shortcut", { detail: action })),
+    );
     return () => {
       offNew?.();
       offLayers?.();
       offFit?.();
       offResetScale?.();
       offFocusSel?.();
+      offShortcut?.();
     };
   }, []);
 
@@ -392,6 +407,14 @@ export function App() {
       </div>
 
       <IssuePeek root={peekRoot ?? root} id={peekId} onClose={() => setPeekId(null)} />
+      <RecentProjects
+        open={recentOpen}
+        recents={recents}
+        current={repoPath}
+        onOpen={openRecent}
+        onBrowse={() => void pickFolder()}
+        onClose={() => setRecentOpen(false)}
+      />
       <NewIssueModal
         root={root}
         open={newOpen}
