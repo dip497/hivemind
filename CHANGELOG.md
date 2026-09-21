@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Keyboard shortcuts follow VS Code, and work from inside a terminal: Ctrl+Shift+` new terminal, Ctrl+Shift+A new agent, Ctrl+Shift+E file tree, Ctrl+Shift+G diff, Ctrl+B Layers, Ctrl+1…9 go to a tile, Ctrl+Tab next tile, Ctrl+, settings. On the canvas Ctrl+0 is 100%, Esc fits everything, Ctrl+W closes the selected tile. Changed: Layers moved from Ctrl+L to Ctrl+B, and Ctrl+T, Ctrl+D, Ctrl+B-for-file-tree and Ctrl+\ are gone — they are shell keys, and Ctrl+L now clears your terminal again. Settings → Shortcuts lists them all.
+
 - "Reset tile layout" re-lays the canvas out — tiles back to their default size, each frame's tiles on a grid, all of it in view — instead of deleting every frame and tile. Before, one click emptied the project and left each agent and terminal still running with no tile to reach it by.
 - Fit to view fits the whole canvas, even one several screens wide (the zoom floor was 25%, which left most of a wide canvas off-screen), and the shortcuts the zoom buttons advertise now work: Ctrl 0 fits all, Ctrl 1 is 100%, Ctrl + and Ctrl − zoom.
 

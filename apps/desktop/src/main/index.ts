@@ -1,4 +1,5 @@
 import { installViewManagementIpc } from "./view-packages.js";
+import { appShortcut } from "./shortcuts";
 import desktopPkg from "../../package.json" with { type: "json" };
 import { installPluginCatalogIpc } from "./plugin-catalog-ipc.js";
 /** Electron main process — owns the BrowserWindow + IPC + PtyHost + git/worktree. */
@@ -389,6 +390,14 @@ async function createWindow(): Promise<void> {
     if (!(input.control || input.meta)) return;
     if (input.alt) return;
     const k = input.key.toLowerCase();
+    // VS Code's app keys (see shortcuts.ts) — intercepted here, before xterm, so they work
+    // from inside a terminal too.
+    const action = appShortcut(input);
+    if (action) {
+      event.preventDefault();
+      try { wc.send("menu:shortcut", action); } catch { /* destroyed mid-call */ }
+      return;
+    }
     // Tile scaling shortcuts forwarded to the renderer (xterm eats the keys when a
     // terminal is focused, so they must be intercepted here, like ⌘N/⌘L).
     // Ctrl/Cmd+Shift+F = toggle the crisp fit-to-screen overlay on the selected
@@ -420,9 +429,9 @@ async function createWindow(): Promise<void> {
       // — the command palette + open-folder shortcut were removed, so those
       // keys now pass through to the focused terminal as normal readline keys.)
       event.preventDefault();
-    } else if (k === "l") {
-      // ⌘/Ctrl+L toggles the Layers panel (forwarded from main because xterm
-      // swallows ^L when a terminal is focused — same bridge as ⌘K/⌘N).
+    } else if (k === "b") {
+      // Ctrl+B toggles the Layers panel, as it toggles VS Code's sidebar. It was Ctrl+L,
+      // which took the shell's clear-screen away from every terminal.
       event.preventDefault();
       try { wc.send("menu:toggle-layers"); } catch { /* destroyed mid-call */ }
     }

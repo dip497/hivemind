@@ -46,6 +46,7 @@ declare global {
       onMenuResetScale?: (cb: () => void) => () => void;
       /** Ctrl/Cmd+. → focus the selected tile (plain `.` is eaten by xterm). */
       onMenuFocusTile?: (cb: () => void) => () => void;
+      onMenuShortcut?: (cb: (action: string) => void) => () => void;
       /** Resolve a picked File's absolute path (persistent video wallpaper). */
       getPathForFile?: (file: File) => string;
       /** Copy a picked media file into the sandboxed wallpaper dir → its hm-media:// URL. */

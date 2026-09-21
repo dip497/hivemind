@@ -304,7 +304,7 @@ export function App() {
 
   // Main-process accelerator bridge: xterm swallows Ctrl+N to send it as a
   // control code to the PTY (^N = SO), so window keydown never fires when a
-  // terminal has focus. Main intercepts ⌘N / ⌘L via before-input-event and
+  // terminal has focus. Main intercepts ⌘N / ⌘B (and the VS Code keys) via before-input-event and
   // forwards over IPC — we re-emit as the same CustomEvents the handlers use.
   useEffect(() => {
     const w = window as unknown as {
@@ -314,11 +314,12 @@ export function App() {
         onMenuFitOverlay?: (cb: () => void) => () => void;
         onMenuResetScale?: (cb: () => void) => () => void;
         onMenuFocusTile?: (cb: () => void) => () => void;
+        onMenuShortcut?: (cb: (action: string) => void) => () => void;
       };
     };
     if (!w.hive?.onMenuNewIssue) return;
     const offNew = w.hive.onMenuNewIssue(() => setNewOpen(true));
-    // ⌘/Ctrl+L toggles the Layers panel (LayersPanel listens for the event).
+    // ⌘/Ctrl+B toggles the Layers panel (LayersPanel listens for the event).
     const offLayers = w.hive.onMenuToggleLayers?.(() =>
       window.dispatchEvent(new CustomEvent("hivemind:toggle-layers")),
     );
@@ -333,12 +334,16 @@ export function App() {
     const offFocusSel = w.hive.onMenuFocusTile?.(() =>
       window.dispatchEvent(new CustomEvent("hivemind:focus-selected")),
     );
+    const offShortcut = w.hive.onMenuShortcut?.((action) =>
+      window.dispatchEvent(new CustomEvent("hivemind:shortcut", { detail: action })),
+    );
     return () => {
       offNew?.();
       offLayers?.();
       offFit?.();
       offResetScale?.();
       offFocusSel?.();
+      offShortcut?.();
     };
   }, []);
 
