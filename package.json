@@ -32,10 +32,12 @@
     "overrides": {
       "js-yaml@>=3 <3.15.2": "3.15.2",
       "js-yaml@>=4 <4.3.2": "4.3.2",
-      "undici@8.5.0": "8.10.2"
+      "undici@8.5.0": "8.10.2",
+      "extract-zip": "npm:@electron-internal/extract-zip@^1.0.5"
     },
     "patchedDependencies": {
-      "@xterm/addon-webgl@0.19.0": "patches/@xterm__addon-webgl@0.19.0.patch"
+      "@xterm/addon-webgl@0.19.0": "patches/@xterm__addon-webgl@0.19.0.patch",
+      "electron@39.8.10": "patches/electron@39.8.10.patch"
     }
   }
 }

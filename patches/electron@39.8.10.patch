@@ -1,0 +1,15 @@
+diff --git a/install.js b/install.js
+index 9d7ecaf55d29b67de146f8359083fe4b4548a2bf..814e56f9df9b34f20358b66bf4e6f61093766116 100644
+--- a/install.js
++++ b/install.js
+@@ -2,7 +2,9 @@
+ 
+ const { downloadArtifact } = require('@electron/get');
+ 
+-const extract = require('extract-zip');
++// extract-zip is overridden with Electron's own ESM fork; require() yields its namespace.
++const extractZip = require('extract-zip');
++const extract = extractZip.extract || extractZip;
+ 
+ const childProcess = require('child_process');
+ const fs = require('fs');
