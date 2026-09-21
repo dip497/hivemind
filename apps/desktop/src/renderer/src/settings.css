@@ -7,9 +7,9 @@
   position: fixed; inset: 0; z-index: 81; display: flex; overflow: hidden;
   background: var(--color-bg); color: var(--color-fg); font-size: 13px; line-height: 1.5;
 }
-.settings-dialog :is(button, input, select, summary, a):focus-visible { outline: 2px solid var(--color-brand); outline-offset: 3px; }
-.settings-dialog button { cursor: pointer; }
-.settings-dialog :is(button, input, select):disabled { cursor: default; opacity: .45; }
+:is(.settings-dialog, .theme-panel) :is(button, input, select, summary, a):focus-visible { outline: 2px solid var(--color-brand); outline-offset: 3px; }
+:is(.settings-dialog, .theme-panel) button { cursor: pointer; }
+:is(.settings-dialog, .theme-panel) :is(button, input, select):disabled { cursor: default; opacity: .45; }
 .settings-sidebar { width: 208px; flex-shrink: 0; padding: 28px 16px 20px; display: flex; flex-direction: column; background: var(--color-bg2); border-right: 1px solid var(--color-line2); }
 .settings-title { padding: 0 12px; margin-bottom: 28px; font-size: 14px; font-weight: 600; }
 .settings-sidebar nav { display: flex; flex-direction: column; gap: 14px; overflow-y: auto; min-height: 0; margin-right: -8px; padding-right: 8px; }
@@ -38,7 +38,7 @@
 .settings-row > :first-child { min-width: 0; }
 .settings-row label { font-weight: 500; }
 .settings-row p, .settings-note { font-size: 12px; line-height: 1.5; color: var(--color-fg2); margin-top: 3px; }
-.settings-dialog select { max-width: 100%; min-width: 160px; background: var(--color-bg2); border: 1px solid var(--color-line2); color: var(--color-fg); border-radius: 5px; padding: 6px 28px 6px 10px; font-size: 13px; }
+:is(.settings-dialog, .theme-panel) select { max-width: 100%; min-width: 160px; background: var(--color-bg2); border: 1px solid var(--color-line2); color: var(--color-fg); border-radius: 5px; padding: 6px 28px 6px 10px; font-size: 13px; }
 .settings-icon-button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border-radius: 5px; font-size: 12px; white-space: nowrap; min-height: 30px; }
 .settings-icon-button { border: 0; padding: 6px; color: var(--color-fg2); }
 .settings-icon-button:hover { background: var(--color-bg3); }
@@ -51,11 +51,11 @@
 .settings-extension-label h4 { font-size: 13px; font-weight: 500; }
 .settings-extension-label p { font-size: 12px; color: var(--color-fg2); margin-top: 2px; }
 .settings-extension-label p span { margin: 0 7px; }
-.settings-dialog details summary { cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--color-fg); font-size: 13px; list-style: none; min-height: 36px; }
-.settings-dialog summary::-webkit-details-marker { display: none; }
+:is(.settings-dialog, .theme-panel) details summary { cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--color-fg); font-size: 13px; list-style: none; min-height: 36px; }
+:is(.settings-dialog, .theme-panel) summary::-webkit-details-marker { display: none; }
 .settings-extension details { margin: 6px 0 0 36px; }
 .settings-extension details summary, .settings-developer-details summary { color: var(--color-fg2); font-size: 12px; justify-content: flex-start; }
-.settings-dialog details[open] > summary svg { transform: rotate(180deg); }
+:is(.settings-dialog, .theme-panel) details[open] > summary svg { transform: rotate(180deg); }
 .settings-dialog dl { display: grid; grid-template-columns: 110px 1fr; gap: 10px; margin: 16px 0; font-size: 12px; }
 .settings-dialog dt { color: var(--color-fg2); }
 .settings-path { overflow-wrap: anywhere; }
@@ -88,7 +88,7 @@
   .settings-page-header { padding: 18px; }
   .settings-page-content { padding: 8px 18px 28px; }
   .settings-row { gap: 12px; flex-wrap: wrap; }
-  .settings-dialog select { min-width: 120px; }
+  :is(.settings-dialog, .theme-panel) select { min-width: 120px; }
 }
 .settings-inline { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
 .settings-disclosure { border-bottom: 1px solid var(--color-line2); }
@@ -260,7 +260,7 @@
 /* Anything that takes a pointer says so within --hm-dur-2, and only the
    properties that change: naming them keeps a repaint off everything else. */
 .settings-icon-button,
-.settings-sidebar nav button, .settings-dialog summary {
+.settings-sidebar nav button, :is(.settings-dialog, .theme-panel) summary {
   transition-property: background-color, color, box-shadow, scale;
   transition-duration: var(--hm-dur-2);
   transition-timing-function: ease;
@@ -279,7 +279,7 @@
    the one thing that cannot be composited. */
 
 /* The disclosure chevron matches the one in the sidebar, which already turned. */
-.settings-dialog details > summary svg { transition: transform var(--hm-dur-2) var(--hm-ease-out); }
+:is(.settings-dialog, .theme-panel) details > summary svg { transition: transform var(--hm-dur-2) var(--hm-ease-out); }
 
 @media (prefers-reduced-motion: reduce) {
   .settings-dialog, .settings-dialog * { transition-duration: 1ms !important; }
@@ -305,3 +305,13 @@
 /* A group in the sidebar is a tree: the pages inside it are indented under their heading,
    so the overview row reads as the parent rather than as one more sibling. */
 .settings-sidebar nav button[data-plugin] { padding-left: 30px; }
+
+/* The Appearance side panel: the dialog's solid surfaces (glass must not tint the panel that edits it), sized for 380px. */
+.theme-panel {
+  --color-bg2: var(--surface-2);
+  --color-bg3: var(--surface-3);
+  --color-bg4: var(--surface-4);
+  background: var(--surface-2); color: var(--color-fg); font-size: 13px; line-height: 1.5;
+}
+.theme-panel .settings-row { gap: 16px; }
+.theme-panel .settings-slider { grid-template-columns: minmax(0, 1fr) 150px; }

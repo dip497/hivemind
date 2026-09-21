@@ -74,15 +74,33 @@ test("the island is host chrome: top on the canvas, a compact bottom island in w
   }
 });
 
-test("the toolbar's Theme button opens the unified Appearance settings from a non-canvas view", async () => {
+test("the toolbar's Theme button opens Appearance beside the workspace, live, from a non-canvas view", async () => {
   await toView("windows");
   const theme = page.locator('[data-host-island="bottom"] [data-tool-island]').getByTitle(/^Theme/);
   await theme.click();
-  await expect(page.getByRole("dialog")).toBeVisible();
+  const panel = page.locator("[data-theme-panel]");
+  await expect(panel).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0); // not modal: the app stays usable behind it
+  const before = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--color-bg"));
+  const select = panel.locator("[data-preset-select]");
+  const current = await select.inputValue();
+  const other = await select.locator("option").evaluateAll((os, cur) => (os as HTMLOptionElement[]).map((o) => o.value).filter((v) => v !== cur), current);
+  let changed = false;
+  for (const v of other) {
+    await select.selectOption(v);
+    if (await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--color-bg")) !== before) { changed = true; break; }
+  }
+  expect(changed, "a preset picked in the panel applies to the app behind it").toBe(true);
+  await select.selectOption(current);
+  await page.keyboard.press("Escape");
+  await expect(panel).toHaveCount(0);
+  await expect(theme).toBeFocused();
+  // The full page is one click away.
+  await theme.click();
+  await page.getByRole("button", { name: "All appearance settings…" }).click();
   await expect(page.locator('[data-settings-page="appearance"]')).toHaveAttribute("aria-current", "page");
   await page.getByRole("button", { name: "Close", exact: true }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(theme).toBeFocused();
 });
 
 test("wallpaper policy: an installed view gets the user's wallpaper behind it too, and a view that paints its own scene can refuse it", async () => {

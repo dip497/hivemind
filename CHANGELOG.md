@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- The Theme button opens Appearance as a panel beside the workspace instead of the Settings window, so a preset, accent, wallpaper or glass change shows on the real app as you make it. The full page is still under All appearance settings.
 - Layers: machines nothing runs on fold into one Machines section at the bottom, with a summary like "2 to sign in". A machine's buttons show when you point at it, and a machine that lost its login says "sign in" instead of "needs you".
 - Two agents started at the same moment no longer get the same number ("claude #1" twice).
 - Manage machines is a wider two-pane dialog: your machines on the left, and the selected one's address, connection, hive install and what uses it on the right, with its actions as buttons instead of a hidden menu.
