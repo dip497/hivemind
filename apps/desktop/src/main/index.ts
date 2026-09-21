@@ -1,4 +1,5 @@
 import { installViewManagementIpc } from "./view-packages.js";
+import { appShortcut } from "./shortcuts";
 import desktopPkg from "../../package.json" with { type: "json" };
 import { installPluginCatalogIpc } from "./plugin-catalog-ipc.js";
 /** Electron main process — owns the BrowserWindow + IPC + PtyHost + git/worktree. */
@@ -49,6 +50,7 @@ import {
 } from "./remote/pty.js";
 import { readRemoteFile, writeRemoteFile } from "./remote/git.js";
 import { remoteConns } from "./remote/conn.js";
+import { findGitRoot, computeRepoPath } from "./workspace-paths.js";
 // tmux-style persistence is ON by default — terminal sessions live in a
 // detached daemon and survive the window closing. No user-facing flag.
 // `HIVEMIND_PTY_DAEMON=0` is an internal escape hatch (debugging / a hostile
@@ -99,7 +101,7 @@ import { OutputRecorder } from "./hcp/output-recorder.js";
 import { readOrCreateToken, hcpSockPath } from "./hcp/token.js";
 import { HcpError } from "./hcp/protocol.js";
 import { handleViewProtocol, listViewPackages, registerViewScheme, startViewWatchdog } from "./view-packages.js";
-import { installSettingsIpc, reloadSettings, getSettings as getAppSettings } from "./settings-store.js";
+import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, settingsFile } from "./settings-store.js";
 import { patchSettingsExtras } from "@hivemind/core/settings";
 import { PipeManager } from "./hcp/pipes.js";
 import { readLastAssistantMessage } from "./hcp/transcript.js";
@@ -389,6 +391,14 @@ async function createWindow(): Promise<void> {
     if (!(input.control || input.meta)) return;
     if (input.alt) return;
     const k = input.key.toLowerCase();
+    // VS Code's app keys (see shortcuts.ts) — intercepted here, before xterm, so they work
+    // from inside a terminal too.
+    const action = appShortcut(input);
+    if (action) {
+      event.preventDefault();
+      try { wc.send("menu:shortcut", action); } catch { /* destroyed mid-call */ }
+      return;
+    }
     // Tile scaling shortcuts forwarded to the renderer (xterm eats the keys when a
     // terminal is focused, so they must be intercepted here, like ⌘N/⌘L).
     // Ctrl/Cmd+Shift+F = toggle the crisp fit-to-screen overlay on the selected
@@ -414,15 +424,9 @@ async function createWindow(): Promise<void> {
     if (k === "n") {
       event.preventDefault();
       try { wc.send("menu:new-issue"); } catch { /* destroyed mid-call */ }
-    } else if (k === "r") {
-      // Swallow Ctrl+R so muscle-memory reload doesn't tear down the canvas +
-      // re-attach every PTY. (⌘K and Ctrl+O are intentionally NOT intercepted
-      // — the command palette + open-folder shortcut were removed, so those
-      // keys now pass through to the focused terminal as normal readline keys.)
-      event.preventDefault();
-    } else if (k === "l") {
-      // ⌘/Ctrl+L toggles the Layers panel (forwarded from main because xterm
-      // swallows ^L when a terminal is focused — same bridge as ⌘K/⌘N).
+    } else if (k === "b") {
+      // Ctrl+B toggles the Layers panel, as it toggles VS Code's sidebar. It was Ctrl+L,
+      // which took the shell's clear-screen away from every terminal.
       event.preventDefault();
       try { wc.send("menu:toggle-layers"); } catch { /* destroyed mid-call */ }
     }
@@ -508,12 +512,25 @@ function wrap<A extends unknown[], R>(
 ipcMain.handle("resolveProject", wrap(async (e, rootHint?: string) => {
   const cwd = rootHint ?? process.cwd();
   const root = await findRoot(cwd);
-  // Fallback: if there's no .hivemind/ workspace, walk up to find a .git/
-  // dir. The diff + file-tree tiles only need a git repo (they call `git
-  // diff`, `git ls-files`, `git show :file`) — gating them on .hivemind/
-  // existing made them dead-on-arrival for any user who hadn't run
-  // `hive init` yet. Issues still need a real root.
-  const repoPath = root ? path.dirname(root) : await findGitRoot(cwd);
+  // The repo a frame's tiles run in. THREE cases, in priority order:
+  //
+  //  1. The picked dir (or an ancestor of it, up to $HOME) is itself a git
+  //     repo → that git root IS the workspace repo. This is the common case
+  //     AND the one that makes nested repos work: `.hivemind` may live in a
+  //     PARENT folder (a monorepo / umbrella workspace that groups many
+  //     sibling repos), yet the user picked a specific child repo. We must
+  //     bind to the child they picked — not collapse up to `dirname(root)`,
+  //     which would silently rebind the frame to the umbrella folder and lose
+  //     the repo entirely (the "selecting a repo doesn't open it" bug).
+  //  2. No git repo, but a `.hivemind/` exists → fall back to that workspace's
+  //     directory (dirname(root)) so issues + tiles still resolve.
+  //  3. Neither → null (empty playground).
+  //
+  // Issues stay keyed by `root` (the shared `.hivemind`, possibly the parent's)
+  // — so a child repo bound this way still reads/writes the umbrella workspace's
+  // issues while its terminals/editor/diff run in the child repo.
+  const gitRoot = await findGitRoot(cwd);
+  const repoPath = computeRepoPath(root, gitRoot);
   if (repoPath) watchRepo(repoPath, e.sender);
   // Index this workspace so cross-repo move/link/open can resolve its prefix.
   if (root) await registerWorkspace(root).catch(() => {});
@@ -714,29 +731,7 @@ ipcMain.handle("runUpgrade", () => new Promise<{ ok: boolean; code: number | nul
 // the renderer falls back to its persisted last-project).
 ipcMain.handle("getLaunchTarget", () => cliLaunchTarget);
 
-async function findGitRoot(start: string): Promise<string | null> {
-  const fs = await import("node:fs/promises");
-  const os = await import("node:os");
-  const home = os.homedir();
-  let dir = start;
-  for (let i = 0; i < 40; i++) {
-    // Stop AT (not past) the user's home dir — many users keep dotfiles in a
-    // git repo at $HOME, which would otherwise be matched as a "git root".
-    // Walking up from any random launch cwd would then point the fs-watcher
-    // at the whole home tree, triggering EACCES on /.wine, ELOOP on symlink
-    // farms (~/.rig/skills/*), and tens of thousands of unrelated paths to
-    // chokidar — visible in the logs as the lag the user just reported.
-    if (dir === home || dir === path.dirname(home) || dir === "/") return null;
-    try {
-      await fs.access(path.join(dir, ".git"));
-      return dir;
-    } catch { /* not here */ }
-    const parent = path.dirname(dir);
-    if (parent === dir) return null;
-    dir = parent;
-  }
-  return null;
-}
+// findGitRoot + computeRepoPath now live in ./workspace-paths (pure + tested).
 
 // Folder picker for "Open project". Returns the selected absolute path or
 // null if the user cancelled. Renderer then invokes `resolveProject` with
@@ -1388,7 +1383,6 @@ app.commandLine.appendSwitch("max-active-webgl-contexts", "32");
 // Persisted app settings live in <userData>/settings.json. Read SYNC here
 // because the remote-debugging switch must be set before app-ready (it can't be
 // toggled at runtime — that's why the UI toggle persists a choice + relaunches).
-function settingsFile(): string { return path.join(app.getPath("userData"), "settings.json"); }
 function readSettings(): { browserCdp?: boolean } {
   try { return JSON.parse(readFileSync(settingsFile(), "utf8")) as { browserCdp?: boolean }; }
   catch { return {}; }
@@ -1572,7 +1566,9 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     // primitive (e.g. hm-media://v/<encoded /etc/passwd>), reachable from the
     // untrusted web content a BrowserTile <webview> can load. Range-forwarded so
     // the video can seek/loop.
-    const wallpaperDir = path.join(app.getPath("userData"), "wallpapers");
+    // Beside settings.json, which names these files: a dev run keeps its own userData profile
+    // but shares settings with the app, so media kept in userData was missing on the other side.
+    const wallpaperDir = path.join(path.dirname(settingsFile()), "wallpapers");
     protocol.handle("hm-media", (request) => {
       try {
         const abs = path.resolve(decodeURIComponent(new URL(request.url).pathname.replace(/^\/+/, "")));
@@ -1634,7 +1630,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     // filename via hivemedia://<file>. Copying confines what the protocol can
     // ever read to files the user explicitly chose (never an arbitrary path from
     // the URL), and survives the original being moved/deleted.
-    const mediaDir = path.join(app.getPath("userData"), "media");
+    const mediaDir = path.join(path.dirname(settingsFile()), "media"); // beside settings.json (see wallpaperDir)
     protocol.handle("hivemedia", (request) => {
       try {
         // hivemedia://media/<filename> — the filename rides in the PATH (host is
