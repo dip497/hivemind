@@ -161,7 +161,7 @@ function MachineList({ picking, onChoose, onEdit, onAdd, usageOf, onEndTerminals
   return (
     <div className="grid grid-cols-[260px_minmax(0,1fr)] h-[520px] border-t border-[var(--color-line)]">
       <aside className="flex flex-col min-h-0 border-r border-[var(--color-line)] bg-[var(--color-bg2)]">
-        <ul className="flex-1 overflow-y-auto p-2 grid content-start gap-0.5" aria-label="machines">
+        <ul className="flex-1 overflow-y-auto overflow-x-hidden p-2 grid grid-cols-[minmax(0,1fr)] content-start gap-0.5" aria-label="machines">
           {snap.machines.map((m) => {
             const s = statusOf(snap, m.hostId);
             const sel = !picking && m.id === selected?.id;
@@ -199,21 +199,21 @@ function MachineList({ picking, onChoose, onEdit, onAdd, usageOf, onEndTerminals
         const u = usageOf(m.hostId);
         const doing = busy[m.id];
         return (
-          <section className="min-w-0 overflow-y-auto p-5 grid content-start gap-4" aria-label={`${m.label} details`} data-machine-detail={m.label}>
+          <section className="min-w-0 overflow-y-auto overflow-x-hidden p-5 grid grid-cols-[minmax(0,1fr)] content-start gap-4" aria-label={`${m.label} details`} data-machine-detail={m.label}>
             <header className="flex items-start gap-3">
               <MachineDot status={s} enabled={m.enabled} size={10} />
               <div className="flex-1 min-w-0">
                 <h3 className="text-[16px] font-semibold text-[var(--color-fg)] truncate">{m.label}</h3>
                 <p className="font-mono text-[12px] text-[var(--color-fg3)] truncate">{m.target}{m.platform ? ` · ${m.platform}` : ""}</p>
               </div>
-              <Button size="sm" onClick={() => onChoose(m)} disabled={!m.enabled}><Folder /> Open folder…</Button>
+              <Button size="sm" className="shrink-0" onClick={() => onChoose(m)} disabled={!m.enabled}><Folder /> Open folder…</Button>
             </header>
 
             <dl className="grid grid-cols-[110px_minmax(0,1fr)] gap-y-1.5 text-[12px]">
               <dt className="text-[var(--color-fg3)]">Connection</dt>
-              <dd className="text-[var(--color-fg)] flex items-center gap-1.5">
+              <dd className="min-w-0 text-[var(--color-fg)] flex items-center gap-1.5 whitespace-nowrap">
                 {doing ? <><Loader2 size={11} className="animate-spin" />{doing}…</> : statusWords(s, m.enabled)}
-                {s.detail && s.state !== "online" && <span className="text-[var(--color-fg3)] truncate" title={s.detail}>— {s.detail}</span>}
+                {s.detail && s.state !== "online" && s.state !== "attention" && <span className="min-w-0 text-[var(--color-fg3)] truncate" title={s.detail}>— {s.detail}</span>}
               </dd>
               <dt className="text-[var(--color-fg3)]">hive</dt>
               <dd className="font-mono text-[var(--color-fg2)] truncate">{m.hivePath ?? "not installed"}</dd>
@@ -227,7 +227,7 @@ function MachineList({ picking, onChoose, onEdit, onAdd, usageOf, onEndTerminals
             {m.enabled && s.state === "no-hive" && (
               <div className="flex items-center gap-2 rounded-lg bg-[var(--color-bg2)] border border-[var(--color-line2)] px-3 py-2 text-[12px] text-[var(--color-fg2)]">
                 <span className="min-w-0 flex-1">Without hive there, terminals stop when the connection drops.</span>
-                <Button size="xs" onClick={() => run(m, "installing", () => window.hive.machineInstall(m.id))}>Install hive</Button>
+                <Button size="xs" className="shrink-0" onClick={() => run(m, "installing", () => window.hive.machineInstall(m.id))}>Install hive</Button>
               </div>
             )}
 
