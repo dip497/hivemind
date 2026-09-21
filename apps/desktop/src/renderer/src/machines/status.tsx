@@ -28,7 +28,7 @@ export function statusWords(s: MachineStatus, enabled = true): string {
     case "offline": return "offline";
     case "attention": return "sign in";
     case "no-hive": return "no hive";
-    case "idle": return "not connected";
+    case "idle": return "idle";
   }
 }
 

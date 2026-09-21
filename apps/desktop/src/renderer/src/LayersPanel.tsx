@@ -407,7 +407,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
           </Button>
           {renaming?.id === gid ? (
             <div className="flex-1 flex items-center gap-2 min-w-0">
-              <WorkspaceIcon color={frame.color} remote={frame.remote} remoteUri={frame.remoteUri} worktree={isWt} collapsed={isCollapsed} />
+              <WorkspaceIcon color={frame.color} remote={frame.remote && !groupByMachine} remoteUri={frame.remoteUri} worktree={isWt} collapsed={isCollapsed} />
               <Input
                 autoFocus
                 value={renaming.draft}
@@ -439,7 +439,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
             className="flex-1 flex items-center gap-2 min-w-0 text-left text-[14px] font-semibold tracking-[-0.014em] text-[var(--color-fg)]"
             title={isWt ? `Focus worktree ${frame.branch ?? frame.title}` : `Focus ${frame.title}${frameActions ? " · double-click to rename" : ""}`}
           >
-            <WorkspaceIcon color={frame.color} remote={frame.remote} remoteUri={frame.remoteUri} worktree={isWt} collapsed={isCollapsed} />
+            <WorkspaceIcon color={frame.color} remote={frame.remote && !groupByMachine} remoteUri={frame.remoteUri} worktree={isWt} collapsed={isCollapsed} />
             <span className="truncate">{frame.title}</span>
             {frame.folder && frame.folder !== frame.title && (
               <span className="truncate min-w-0 font-mono text-[11px] font-normal text-[var(--color-fg3)]" title={frame.folder}>{frame.folder}</span>
@@ -550,7 +550,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
         {groupByMachine
           ? <>
             {machineGroups.filter((g) => g.key === "local" || g.frames.length > 0).map((g) => (
-              <section key={g.key} aria-label={g.label} data-machine-group={g.key === "local" ? "local" : g.label}>
+              <section key={g.key} aria-label={g.label} data-machine-group={g.key === "local" ? "local" : g.label} className={g.key === "local" ? "" : "mt-3 border-t border-[var(--color-line)] pt-1"}>
                 <MachineHeader group={g} used needsYou={g.frames.reduce((n, f) => n + needsYouIn(f.id), 0)} />
                 {g.frames.map((f) => renderFrameGroup(f, 0))}
               </section>
@@ -651,7 +651,13 @@ function MachineHeader({ group, needsYou, used }: { group: MachineGroup; needsYo
       data-machine-header={group.key === "local" ? "local" : group.label}
       title={m ? `${m.target}${s.detail ? ` — ${s.detail}` : ""}` : undefined}
     >
-      {group.hostId ? <MachineDot status={s} enabled={on} size={6} /> : <Monitor size={11} aria-hidden />}
+      {!group.hostId ? <Monitor size={11} aria-hidden />
+        : used ? (
+          <span className="relative shrink-0 grid place-items-center">
+            <Server size={11} aria-hidden />
+            <span className="absolute -right-1 -bottom-0.5 leading-[0]"><MachineDot status={s} enabled={on} size={5} /></span>
+          </span>
+        ) : <MachineDot status={s} enabled={on} size={6} />}
       <span className={`truncate min-w-0 ${on ? "" : "opacity-60"} ${used ? "" : "text-[var(--color-fg2)]"}`}>{group.label}</span>
       {group.hostId && (
         <span className="shrink-0 font-mono normal-case tracking-normal font-normal text-[10.5px] tabular-nums" data-machine-state>
