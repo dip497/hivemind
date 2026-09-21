@@ -50,6 +50,7 @@ import {
 } from "./remote/pty.js";
 import { readRemoteFile, writeRemoteFile } from "./remote/git.js";
 import { remoteConns } from "./remote/conn.js";
+import { findGitRoot, computeRepoPath } from "./workspace-paths.js";
 // tmux-style persistence is ON by default — terminal sessions live in a
 // detached daemon and survive the window closing. No user-facing flag.
 // `HIVEMIND_PTY_DAEMON=0` is an internal escape hatch (debugging / a hostile
@@ -511,12 +512,25 @@ function wrap<A extends unknown[], R>(
 ipcMain.handle("resolveProject", wrap(async (e, rootHint?: string) => {
   const cwd = rootHint ?? process.cwd();
   const root = await findRoot(cwd);
-  // Fallback: if there's no .hivemind/ workspace, walk up to find a .git/
-  // dir. The diff + file-tree tiles only need a git repo (they call `git
-  // diff`, `git ls-files`, `git show :file`) — gating them on .hivemind/
-  // existing made them dead-on-arrival for any user who hadn't run
-  // `hive init` yet. Issues still need a real root.
-  const repoPath = root ? path.dirname(root) : await findGitRoot(cwd);
+  // The repo a frame's tiles run in. THREE cases, in priority order:
+  //
+  //  1. The picked dir (or an ancestor of it, up to $HOME) is itself a git
+  //     repo → that git root IS the workspace repo. This is the common case
+  //     AND the one that makes nested repos work: `.hivemind` may live in a
+  //     PARENT folder (a monorepo / umbrella workspace that groups many
+  //     sibling repos), yet the user picked a specific child repo. We must
+  //     bind to the child they picked — not collapse up to `dirname(root)`,
+  //     which would silently rebind the frame to the umbrella folder and lose
+  //     the repo entirely (the "selecting a repo doesn't open it" bug).
+  //  2. No git repo, but a `.hivemind/` exists → fall back to that workspace's
+  //     directory (dirname(root)) so issues + tiles still resolve.
+  //  3. Neither → null (empty playground).
+  //
+  // Issues stay keyed by `root` (the shared `.hivemind`, possibly the parent's)
+  // — so a child repo bound this way still reads/writes the umbrella workspace's
+  // issues while its terminals/editor/diff run in the child repo.
+  const gitRoot = await findGitRoot(cwd);
+  const repoPath = computeRepoPath(root, gitRoot);
   if (repoPath) watchRepo(repoPath, e.sender);
   // Index this workspace so cross-repo move/link/open can resolve its prefix.
   if (root) await registerWorkspace(root).catch(() => {});
@@ -717,29 +731,7 @@ ipcMain.handle("runUpgrade", () => new Promise<{ ok: boolean; code: number | nul
 // the renderer falls back to its persisted last-project).
 ipcMain.handle("getLaunchTarget", () => cliLaunchTarget);
 
-async function findGitRoot(start: string): Promise<string | null> {
-  const fs = await import("node:fs/promises");
-  const os = await import("node:os");
-  const home = os.homedir();
-  let dir = start;
-  for (let i = 0; i < 40; i++) {
-    // Stop AT (not past) the user's home dir — many users keep dotfiles in a
-    // git repo at $HOME, which would otherwise be matched as a "git root".
-    // Walking up from any random launch cwd would then point the fs-watcher
-    // at the whole home tree, triggering EACCES on /.wine, ELOOP on symlink
-    // farms (~/.rig/skills/*), and tens of thousands of unrelated paths to
-    // chokidar — visible in the logs as the lag the user just reported.
-    if (dir === home || dir === path.dirname(home) || dir === "/") return null;
-    try {
-      await fs.access(path.join(dir, ".git"));
-      return dir;
-    } catch { /* not here */ }
-    const parent = path.dirname(dir);
-    if (parent === dir) return null;
-    dir = parent;
-  }
-  return null;
-}
+// findGitRoot + computeRepoPath now live in ./workspace-paths (pure + tested).
 
 // Folder picker for "Open project". Returns the selected absolute path or
 // null if the user cancelled. Renderer then invokes `resolveProject` with
