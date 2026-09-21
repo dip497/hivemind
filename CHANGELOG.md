@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Projects the VS Code way: Ctrl+O opens a folder as the project and Ctrl+R lists recent ones (on the canvas), Ctrl+Shift+N adds a frame, and a frame's header says what it is bound to — folder, worktree or machine. Switching projects had no way in the app at all; only `hivemind <path>` did it. And Ctrl+R reaches your shell again: every terminal had lost reverse history search to a swallowed reload key that no longer existed.
 - Keyboard shortcuts follow VS Code, and work from inside a terminal: Ctrl+Shift+` new terminal, Ctrl+Shift+A new agent, Ctrl+Shift+E file tree, Ctrl+Shift+G diff, Ctrl+B Layers, Ctrl+1…9 go to a tile, Ctrl+Tab next tile, Ctrl+, settings. On the canvas Ctrl+0 is 100%, Esc fits everything, Ctrl+W closes the selected tile. Changed: Layers moved from Ctrl+L to Ctrl+B, and Ctrl+T, Ctrl+D, Ctrl+B-for-file-tree and Ctrl+\ are gone — they are shell keys, and Ctrl+L now clears your terminal again. Settings → Shortcuts lists them all.
 
 - "Reset tile layout" re-lays the canvas out — tiles back to their default size, each frame's tiles on a grid, all of it in view — instead of deleting every frame and tile. Before, one click emptied the project and left each agent and terminal still running with no tile to reach it by.

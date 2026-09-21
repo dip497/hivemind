@@ -12,6 +12,7 @@ test("VS Code's app keys map to actions", () => {
   assert.equal(ctrl("E", true), "explorer");
   assert.equal(ctrl("G", true), "diff");
   assert.equal(ctrl("A", true), "agent");
+  assert.equal(ctrl("N", true), "new-frame");
   assert.equal(ctrl("Tab"), "next-tile");
   assert.equal(ctrl("Tab", true), "prev-tile");
   assert.equal(ctrl("1"), "tile:1");
@@ -26,7 +27,7 @@ test("⌘ works where Ctrl does", () => {
 
 // Everything else belongs to the focused tile — these are the shell's.
 test("the shell keeps its Ctrl+letter keys", () => {
-  for (const k of ["l", "w", "d", "b", "t", "e", "a", "c", "r", "u", "k", "\\"]) assert.equal(ctrl(k), null, `Ctrl+${k}`);
+  for (const k of ["l", "w", "d", "b", "t", "e", "a", "c", "r", "o", "u", "k", "\\"]) assert.equal(ctrl(k), null, `Ctrl+${k}`);
 });
 
 test("no modifier, Alt, or Ctrl+0 is not an app shortcut", () => {

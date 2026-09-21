@@ -76,3 +76,26 @@ test("Ctrl+W on the canvas closes the selected tile — never a terminal you are
   await page.keyboard.press("Control+w");
   await expect.poll(workbenches, { timeout: 5_000 }).toBe(0);
 });
+
+test("Ctrl+Shift+N adds a frame", async () => {
+  const frames = () => page.locator(".react-flow__node-frame").count();
+  const before = await frames();
+  await shortcut("new-frame");
+  await expect.poll(frames, { timeout: 5_000 }).toBe(before + 1);
+});
+
+test("Ctrl+R is the shell's history search in a terminal, and Open recent on the canvas", async () => {
+  const recent = page.locator("[data-recent-projects]");
+  await shortcut("tile:1"); // flies to the terminal and gives it the keyboard
+  await expect.poll(() => page.evaluate(() => document.activeElement?.classList.contains("xterm-helper-textarea")), { timeout: 5_000 }).toBe(true);
+  await page.keyboard.press("Control+r");
+  await expect.poll(screen, { timeout: 5_000 }).toMatch(/reverse-i-search|bck-i-search/);
+  await expect(recent).toHaveCount(0);
+  await page.keyboard.press("Control+c"); // leave the search
+  await page.locator(".react-flow__pane").click({ position: { x: 5, y: 5 } });
+  await page.keyboard.press("Control+r");
+  await expect(recent).toBeVisible();
+  await expect(recent.getByText("Open folder…")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(recent).toHaveCount(0);
+});

@@ -14,6 +14,7 @@ export function appShortcut(i: KeyInput): string | null {
     if (k === "e") return "explorer";
     if (k === "g") return "diff";
     if (k === "a") return "agent";
+    if (k === "n") return "new-frame";
     if (k === "tab") return "prev-tile";
     return null;
   }

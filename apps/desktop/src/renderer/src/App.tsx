@@ -1,4 +1,5 @@
 import * as SettingsDialog from "@radix-ui/react-dialog";
+import { RecentProjects } from "./RecentProjects";
 import { setWorkspaceOccluded } from "./workspace-occlusion";
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -180,6 +181,15 @@ export function App() {
   // workspace) resolves to that repo's root so the peek shows the right issue.
   const [peekRoot, setPeekRoot] = useState<string | null>(null);
   const [newOpen, setNewOpen] = useState(false);
+  // Ctrl+O / Ctrl+R on the canvas (useCanvasShortcuts): VS Code's Open Folder and Open Recent.
+  const [recentOpen, setRecentOpen] = useState(false);
+  useEffect(() => {
+    const onFolder = () => void pickFolder();
+    const onRecent = () => setRecentOpen(true);
+    window.addEventListener("hivemind:open-folder", onFolder);
+    window.addEventListener("hivemind:open-recent", onRecent);
+    return () => { window.removeEventListener("hivemind:open-folder", onFolder); window.removeEventListener("hivemind:open-recent", onRecent); };
+  });
   const [initing, setIniting] = useState(false);
   const [initOpen, setInitOpen] = useState(false);
   const openInit = useCallback(() => setInitOpen(true), []);
@@ -397,6 +407,14 @@ export function App() {
       </div>
 
       <IssuePeek root={peekRoot ?? root} id={peekId} onClose={() => setPeekId(null)} />
+      <RecentProjects
+        open={recentOpen}
+        recents={recents}
+        current={repoPath}
+        onOpen={openRecent}
+        onBrowse={() => void pickFolder()}
+        onClose={() => setRecentOpen(false)}
+      />
       <NewIssueModal
         root={root}
         open={newOpen}

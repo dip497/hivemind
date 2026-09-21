@@ -423,12 +423,6 @@ async function createWindow(): Promise<void> {
     if (k === "n") {
       event.preventDefault();
       try { wc.send("menu:new-issue"); } catch { /* destroyed mid-call */ }
-    } else if (k === "r") {
-      // Swallow Ctrl+R so muscle-memory reload doesn't tear down the canvas +
-      // re-attach every PTY. (⌘K and Ctrl+O are intentionally NOT intercepted
-      // — the command palette + open-folder shortcut were removed, so those
-      // keys now pass through to the focused terminal as normal readline keys.)
-      event.preventDefault();
     } else if (k === "b") {
       // Ctrl+B toggles the Layers panel, as it toggles VS Code's sidebar. It was Ctrl+L,
       // which took the shell's clear-screen away from every terminal.

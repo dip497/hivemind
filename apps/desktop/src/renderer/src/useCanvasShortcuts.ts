@@ -62,6 +62,10 @@ export function useCanvasShortcuts(ctx: CanvasShortcutsCtx) {
         else if (e.key === "0") { e.preventDefault(); window.dispatchEvent(new CustomEvent("hivemind:zoom", { detail: "100" })); }
         else if (e.key === "=" || e.key === "+") { e.preventDefault(); window.dispatchEvent(new CustomEvent("hivemind:zoom", { detail: "in" })); }
         else if (e.key === "-") { e.preventDefault(); window.dispatchEvent(new CustomEvent("hivemind:zoom", { detail: "out" })); }
+        // Open folder / Open recent switch the whole project, as in VS Code. Canvas-only: inside a
+        // terminal Ctrl+R is the shell's history search and Ctrl+O is its own.
+        else if (e.key === "o" || e.key === "O") { e.preventDefault(); window.dispatchEvent(new CustomEvent("hivemind:open-folder")); }
+        else if (e.key === "r" || e.key === "R") { e.preventDefault(); window.dispatchEvent(new CustomEvent("hivemind:open-recent")); }
         else if (e.key === "w" || e.key === "W") {
           const id = selectedTileIdRef.current;
           if (id) { e.preventDefault(); closeTile(id); }
@@ -136,6 +140,7 @@ export function useCanvasShortcuts(ctx: CanvasShortcutsCtx) {
       else if (action === "explorer") { if (repoPath) spawnVis("tree"); }
       else if (action === "diff") { if (repoPath) spawnVis("diff"); }
       else if (action === "agent") spawnSelectedAgent();
+      else if (action === "new-frame") addFrame();
       else if (action === "settings") window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: {} }));
       else if (action === "next-tile") step(1);
       else if (action === "prev-tile") step(-1);
