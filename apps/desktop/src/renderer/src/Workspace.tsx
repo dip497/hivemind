@@ -405,7 +405,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   } = useFrameOps({
     repoPath, positions, sizes, tiles, frameOf,
     framesRef, tilesRef, frameOfRef, positionsRef, sizesRef, lastActiveFrameRef,
-    setFrames, setPositions, focusTile,
+    setFrames, setPositions, setSelectedFrameId, focusTile,
   });
 
   // Worktree + workspace-zone lifecycle (IPC, in-flight guard, detach confirm).
@@ -976,9 +976,21 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     framesRef, frameOfRef, sizesRef, tilesRef, lastActiveFrameRef,
     setPositions, setFrames, setFrameOf, parentFrameOf, moveFrame, commitPosition, clearDragging: noopClearDragging,
   });
+  // Re-lay out, never remove. This used to clear every frame and tile, which left each agent
+  // and terminal running in the daemon with no tile to reach it by. Now: tiles back to their
+  // default size, each frame's tiles on a grid, then the whole canvas in view. Worktree frames
+  // go first — a parent's arrange moves them, and reads positions only committed next frame.
   const resetCanvas = useCallback(() => {
-    setSizes({}); setPositions({}); setFrames([]); setTiles([]); setEditorTabs({}); setFrameOf({});
-  }, []);
+    sizesRef.current = {};
+    setSizes({});
+    const frames = framesRef.current;
+    for (const f of frames) if (f.parentFrameId) arrangeFrame(f.id, "grid");
+    requestAnimationFrame(() => {
+      for (const f of framesRef.current) if (!f.parentFrameId) arrangeFrame(f.id, "grid");
+      requestAnimationFrame(() => requestAnimationFrame(() =>
+        setFocusModeReq({ id: null, n: ++focusModeNonceRef.current })));
+    });
+  }, [arrangeFrame, framesRef, sizesRef, setSizes]);
 
   // ── the shared tile surfaces (bodies) — rendered ONCE by the TileHost ─────
   // agentTitles intentionally NOT an input: a live title change must not
