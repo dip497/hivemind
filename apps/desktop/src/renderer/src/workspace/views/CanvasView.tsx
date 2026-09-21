@@ -519,7 +519,8 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
           nodeTypes={nodeTypes}
           edgeTypes={pipeEdgeTypes}
           defaultViewport={rt.currentViewportRef.current}
-          minZoom={0.25}
+          // Low enough for Fit to view to fit a canvas several screens wide; 0.25 left most of it off-screen.
+          minZoom={0.1}
           maxZoom={2.5}
           panOnScroll
           // Excalidraw/Figma model: hold Space to pan with left-drag; plain
