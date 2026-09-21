@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [2026.9.4] — 2026-09-22
+
 - No known vulnerabilities in the dependency tree: Electron's installer now unpacks with Electron's own maintained zip library instead of `extract-zip`, which has an unfixed path-traversal advisory.
 - Closing Settings saves what you changed there right away. A change made just after, like `hive config set`, used to be overwritten a moment later by the Settings edit.
 - The install prompt for an agent that reports through hooks now says what it is for: status and approval prompts, with access that can also read and type into your other tiles.
@@ -1297,7 +1299,8 @@ World, and sandboxed community views), and the e2e/perf harnesses gate every cha
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.9.3...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.9.4...HEAD
+[2026.9.4]: https://github.com/dip497/hivemind/releases/tag/v2026.9.4
 [2026.9.3]: https://github.com/dip497/hivemind/releases/tag/v2026.9.3
 [2026.9.2]: https://github.com/dip497/hivemind/releases/tag/v2026.9.2
 [2026.9.1]: https://github.com/dip497/hivemind/releases/tag/v2026.9.1
