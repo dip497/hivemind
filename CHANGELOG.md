@@ -9,8 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Binding a frame to a repo that sits inside a workspace now opens that repo, not its parent. When a `.hivemind/` lives in an umbrella folder (say `~/Workspace`) and you pick a repo nested under it (`~/Workspace/snr-agentx`), the frame used to silently rebind to the umbrella folder and drop the repo you chose — so selecting it did nothing. The frame now runs in the repo you picked while still sharing the umbrella's issues, which is what lets several sibling repos live under one workspace.
 - Community views load again. Since the move to Electron 39 every view from HiveHub — queue, board, tiled and your own — stayed on "loading": the browser refused its script, because a view's sandboxed page counts as cross-origin to its own files and the view scheme did not allow that. It does now; the sandbox and its no-network policy are unchanged.
-
 - With glass on, a program asking the terminal for its background colour is told the theme's colour, not black. Codex tints its input box from that answer, so the box now blends with your theme instead of showing as flat grey.
 - With glass on, dim and italic text no longer sits on a solid black bar. Agents draw a lot of it — codex's header card and hints, Claude's recaps — so a transparent terminal was striped with black boxes. The terminal's GPU renderer treated those styles as a background colour and painted it opaque; it now paints a background only where the program asked for one.
 
