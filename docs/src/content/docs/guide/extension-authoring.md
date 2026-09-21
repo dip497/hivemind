@@ -77,7 +77,16 @@ can follow the user's theme.
 
 Declared in the manifest, refused at install if unknown:
 `workspace:close` → `closeTile`; `workspace:spawn` → `spawnTile` / `spawnVis` /
-`spawnClaude` / `addFrame`. Selection and focus need none.
+`spawnClaude` / `addFrame` / `spawnAgent`; `workspace:edit` → `renameTile` / `openFolder`.
+Selection and focus need none.
+
+`spawnAgent(agent, frameId, { prompt?, name? })` starts an agent by its catalog id (`null` is
+the user's default) and hands it `prompt` as its first message. An id that isn't installed is
+refused. `openFolder(frameId)` asks the user to pick the frame's folder; the view never sees a path.
+
+`structure` also tells you how the workspace is wired: each tile's `agent`, each frame's
+`parentId` (a worktree nested under its repo), `branch` and `folder: { name, kind }`, and
+`links: { pipes, spawns }` — which agent feeds which, and which agent started which.
 
 ## Rules
 

@@ -82,7 +82,7 @@ import { CANVAS_LAYOUT, loadCanvasLayout } from "./workspace/views/canvas-layout
 import { CanvasRuntimeContext, type CanvasRuntime, type FocusModeReq, type FocusReq, type Viewport } from "./workspace/views/canvas-runtime";
 // Registers the built-in view plugins (side effect) before the first render.
 import "./workspace/views";
-import { preferredAgent } from "@hivemind/agents";
+import { agentById as catalogAgentById, defaultAgent, preferredAgent } from "@hivemind/agents";
 import { notReady, noAgentInstalled, useAgentPresence } from "./agent-plugins";
 import { AGENT_TILE_KIND } from "./tile-kinds";
 
@@ -1025,11 +1025,20 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     spawnVis,
     spawnClaude: () => spawnClaude(),
     addFrame,
+    spawnAgent: (agentId, frameId, opts) => {
+      const def = agentId ? catalogAgentById(agentId) : defaultAgent();
+      if (!def) return false;
+      const id = spawnTile(AGENT_TILE_KIND, frameId, { agent: { id: def.id, cmd: def.bin, label: def.label }, ...(opts?.prompt ? { work: opts.prompt } : {}) });
+      if (id && opts?.name) renameTile(id, opts.name);
+      return true;
+    },
+    renameTile,
+    openFolder: (frameId) => void bindWorkspace(frameId),
     // Module-level bus functions: stable identities, so status never enters the
     // memo deps — a status transition re-renders nothing here.
     subscribeTileStatus: (tileId, cb) => subscribeTileStatus(tileId, (e) => cb(e.status, e)),
     tileStatus: statusOf,
-  }), [setSelectedTileId, setSelectedFrameId, focusTile, closeTile, spawnTile, spawnVis, spawnClaude, addFrame]);
+  }), [setSelectedTileId, setSelectedFrameId, focusTile, closeTile, spawnTile, spawnVis, spawnClaude, addFrame, renameTile, bindWorkspace]);
 
   // The canvas plugin's private runtime access (milestone-1 seam).
   const canvasRuntime: CanvasRuntime = useMemo(() => ({

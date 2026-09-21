@@ -69,10 +69,16 @@ export interface WorkspaceCommands {
    *  treat it as select + reveal. `exact` asks for 1:1 (terminal/editor text). */
   focusTile: (id: string, opts?: { exact?: boolean }) => void;
   closeTile: (id: string) => void;
-  spawnTile: (kind: TileKind, frameId: string | null, opts?: SpawnOpts) => void;
+  spawnTile: (kind: TileKind, frameId: string | null, opts?: SpawnOpts) => string | undefined;
   spawnVis: (which: "tree" | "shell" | "diff" | "issues") => void;
   spawnClaude: () => void;
   addFrame: () => void;
+  /** Start an agent by catalog id (null = the user's default); false when no such agent is installed. */
+  spawnAgent: (agent: string | null, frameId: string | null, opts?: { prompt?: string; name?: string }) => boolean;
+  /** Rename a tile; "" goes back to its own name. */
+  renameTile: (id: string, name: string) => void;
+  /** Ask the user for a folder to bind the frame to. */
+  openFolder: (frameId: string) => void;
   /** Live agent status, PER TILE, off the awareness bus. Deliberately not on
    *  the model: a status transition (~1 Hz while agents work) reaches only the
    *  subscribers of that tile — a 3D view colours one object, a rail recolours

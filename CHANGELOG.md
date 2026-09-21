@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Views can start an agent with a first prompt and a name (`spawnAgent`), rename tiles and ask for a frame's folder (the new `workspace:edit` permission). They also see each tile's agent, each frame's branch, folder and parent, and which agents feed or started which. View protocol 1.2, additive.
 - Glass tiles are clear, and look the same in a release as in development. The build was silently deleting every frost rule — a CSS optimiser drops `backdrop-filter` when a `-webkit-` copy follows it — so releases showed clear tiles and a Blur slider that did nothing, while `pnpm dev` showed frosted tiles that flipped clear on every pan. Tiles are now clear by design (the wallpaper shows through their tint); the toolbar, Layers and notifications keep the frost the Blur slider sets.
 - A wallpaper chosen in one Hivemind — the installed app or a development run — shows in the other. Both read the same settings, but each kept pictures in its own folder, so the other side showed a broken background. Pictures now live beside the settings that name them.
 - The toolbar has a view switcher: it shows the view you are in and lists every one you can switch to — the built-ins and any you installed from HiveHub. ⌘E still cycles them.
