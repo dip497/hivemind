@@ -148,6 +148,12 @@ export function resetHost(hostId: string): void {
   }).catch(() => {});
 }
 
+/** Terminals are running on this host through our connection (or one is being opened). */
+export async function hostServingTiles(hostId: string): Promise<boolean> {
+  const ep = await (endpoints.get(hostId) ?? Promise.resolve(null)).catch(() => null);
+  return !!ep && (ep.tiles > 0 || busy.has(hostId));
+}
+
 export function hostConnected(hostId: string): boolean {
   return !!ready.get(hostId)?.connected;
 }

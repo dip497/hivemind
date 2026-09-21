@@ -182,3 +182,26 @@ test("the server goes away and comes back: chip and banner say so, the job never
   expect(remote(`${rhive()} ps`)).toContain("build-job");
   remote(`${rhive()} kill build-job`);
 });
+
+test("removing a machine in use asks first, says what it touches, and leaves its terminals running", async () => {
+  test.setTimeout(90_000);
+  await page.locator('section[aria-label="machines"]').getByText("build-box").click(); // opens the machine
+  await page.getByRole("button", { name: "back" }).click().catch(() => {});      // …back to the list
+  const row = page.locator('ul[aria-label="machines"] li', { hasText: "build-box" });
+  await row.getByRole("button", { name: "build-box actions" }).click();
+  await page.getByRole("button", { name: "Remove…" }).click();
+  const confirm = page.getByRole("alertdialog", { name: "remove build-box" });
+  await expect(confirm).toBeVisible();
+  await expect(confirm.locator("[data-usage]")).toContainText(/Used by 1 frame · [1-9]\d* terminals?/);
+  await expect(confirm.getByRole("button", { name: "Cancel" })).toBeFocused(); // a stray Enter keeps it
+  await confirm.getByRole("button", { name: "Cancel" }).click();
+  await expect(row).toBeVisible();
+
+  // Remove without ending its terminals: the machine goes, the terminal on it keeps running.
+  await row.getByRole("button", { name: "build-box actions" }).click();
+  await page.getByRole("button", { name: "Remove…" }).click();
+  await page.getByRole("alertdialog", { name: "remove build-box" }).getByRole("button", { name: "Remove", exact: true }).click();
+  await expect(row).toHaveCount(0, { timeout: 15_000 });
+  await expect.poll(() => remote(`${rhive()} ps`), { timeout: 15_000 }).toContain("bash");
+  expect(await page.locator(`.react-flow__node[data-id="${remoteTile}"]`).count()).toBe(1);
+});

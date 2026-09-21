@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Removing a machine asks first and says what it touches — "Used by 2 frames · 3 terminals" — with Cancel focused. Frames keep their tiles and their terminals keep running; ending those terminals is a checkbox. It used to be one click, and on a password machine it wiped the login the live terminals reconnect with, so they died at the next reconnect.
+
 - With glass on, a program asking the terminal for its background colour is told the theme's colour, not black. Codex tints its input box from that answer, so the box now blends with your theme instead of showing as flat grey.
 - With glass on, dim and italic text no longer sits on a solid black bar. Agents draw a lot of it — codex's header card and hints, Claude's recaps — so a transparent terminal was striped with black boxes. The terminal's GPU renderer treated those styles as a background colour and painted it opaque; it now paints a background only where the program asked for one.
 

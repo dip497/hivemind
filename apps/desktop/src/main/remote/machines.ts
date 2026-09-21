@@ -18,7 +18,7 @@ import type { SessionInfo } from "../pty-protocol.js";
 import { remoteConns } from "./conn.js";
 import { Catalog } from "./catalog.js";
 import { needsAttention, probeCommand, probeRemote } from "./ssh.js";
-import { closeIdle, endpointFor, hostConnected, hostFailure, readyEndpoints, reconnectHost, resetHost, setRemoteStatusSink, sshPaths } from "./pty.js";
+import { closeIdle, endpointFor, hostConnected, hostFailure, hostServingTiles, readyEndpoints, reconnectHost, resetHost, setRemoteStatusSink, sshPaths } from "./pty.js";
 import { forgetSavedHost, listSavedHosts, passwordState, saveHost } from "./saved-hosts.js";
 
 const PING_MS = 10_000;
@@ -283,6 +283,10 @@ export async function removeMachine(id: string): Promise<void> {
   const hostId = machineHostId(m.target);
   await mutate((list) => list.filter((x) => x.id !== id));
   forgetSavedHost(hostId);
+  // Terminals still running there keep their connection, and the login it reconnects with, until
+  // they close. Clearing it first left the next reconnect with nothing to log in with, so removing
+  // a machine in use killed its terminals. Ending them is the dialog's opt-in, not this.
+  if (await hostServingTiles(hostId)) return;
   remoteConns.clearAuth(hostId);
   resetHost(hostId);
   if (!hostConnected(hostId)) { status.delete(hostId); emit(); }

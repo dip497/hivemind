@@ -20,9 +20,15 @@ type View = { kind: "list" } | { kind: "add" } | { kind: "browse"; machine: Mach
 const CHECK_AFTER_MS = 60_000;
 const CHECK_PARALLEL = 4;
 
-export function MachinesHub({ request, onClose, onPick }: {
+/** What a machine is used by on this canvas: frames bound to a folder on it, and their terminals. */
+export type MachineUsage = (hostId: string) => { frames: number; terminals: number };
+
+export function MachinesHub({ request, onClose, onPick, usageOf, onEndTerminals }: {
   request: MachinesRequest | null;
   onClose: () => void;
+  usageOf: MachineUsage;
+  /** Kill the terminals running on a machine and close their tiles. */
+  onEndTerminals: (hostId: string) => void;
   /** A folder was chosen — for `request.frameId`, or for a new frame when nothing asked. */
   onPick: (frameId: string | null, uri: string) => void;
 }) {
@@ -79,6 +85,8 @@ export function MachinesHub({ request, onClose, onPick }: {
         </header>
         {view.kind === "list" && (
           <MachineList
+            usageOf={usageOf}
+            onEndTerminals={onEndTerminals}
             picking={!!picking}
             onChoose={(m) => setView({ kind: "browse", machine: m })}
             onAdd={() => setView({ kind: "add" })}
@@ -103,8 +111,14 @@ export function MachinesHub({ request, onClose, onPick }: {
   );
 }
 
-function MachineList({ picking, onChoose, onAdd }: { picking: boolean; onChoose: (m: MachineInfo) => void; onAdd: () => void }) {
+function MachineList({ picking, onChoose, onAdd, usageOf, onEndTerminals }: {
+  picking: boolean; onChoose: (m: MachineInfo) => void; onAdd: () => void;
+  usageOf: MachineUsage; onEndTerminals: (hostId: string) => void;
+}) {
   const snap = useMachines();
+  // Remove asks first, and says what it touches: one click used to drop a machine its terminals
+  // were running on. Ending those terminals is an opt-in.
+  const [removing, setRemoving] = useState<{ id: string; end: boolean } | null>(null);
   const [menu, setMenu] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<{ id: string; draft: string } | null>(null);
   const [askPassword, setAskPassword] = useState<string | null>(null);
@@ -191,12 +205,12 @@ function MachineList({ picking, onChoose, onAdd }: { picking: boolean; onChoose:
                             ["Rename", () => { setMenu(null); setRenaming({ id: m.id, draft: m.label }); }],
                             ["Set password…", () => { setMenu(null); setAskPassword(m.id); }],
                             [m.enabled ? "Turn off" : "Turn on", () => run(m, "saving", () => window.hive.machineUpdate(m.id, { enabled: !m.enabled }))],
-                            ["Remove", () => run(m, "removing", () => window.hive.machineRemove(m.id))],
+                            ["Remove…", () => { setMenu(null); setRemoving({ id: m.id, end: false }); }],
                           ].map(([label, fn]) => (
                             <MenuItem
                               key={label as string}
                               onClick={fn as () => void}
-                              variant={label === "Remove" ? "destructive" : "default"}
+                              variant={label === "Remove…" ? "destructive" : "default"}
                             >{label as string}</MenuItem>
                           ))}
                         </div>
@@ -222,6 +236,42 @@ function MachineList({ picking, onChoose, onAdd }: { picking: boolean; onChoose:
                     <Button type="submit" size="sm">Save</Button>
                   </form>
                 )}
+                {removing?.id === m.id && (() => {
+                  const u = usageOf(m.hostId);
+                  const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
+                  return (
+                    <div role="alertdialog" aria-label={`remove ${m.label}`} data-remove-machine={m.id}
+                      className="mx-2.5 mb-2.5 grid gap-2 rounded-lg border border-[var(--color-line2)] bg-[var(--color-bg)] px-3 py-2.5 text-[12px] text-[var(--color-fg)]"
+                      onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); setRemoving(null); } }}>
+                      <p>
+                        Remove <span className="font-semibold">{m.label}</span>?{" "}
+                        {u.frames > 0
+                          ? <span data-usage>Used by {plural(u.frames, "frame")} · {plural(u.terminals, "terminal")}.</span>
+                          : <span data-usage>Nothing on this canvas uses it.</span>}
+                      </p>
+                      {u.frames > 0 && (
+                        <p className="text-[11.5px] text-[var(--color-fg2)]">
+                          Its frames keep their tiles{u.terminals > 0 && !removing.end ? " and its terminals keep running" : ""}. Add it again to connect them.
+                        </p>
+                      )}
+                      {u.terminals > 0 && (
+                        <label className="flex items-center gap-2 text-[11.5px] text-[var(--color-fg2)] cursor-pointer">
+                          <input type="checkbox" checked={removing.end} onChange={(e) => setRemoving({ id: m.id, end: e.target.checked })} />
+                          Also end its {plural(u.terminals, "terminal")} on {m.label}
+                        </label>
+                      )}
+                      <div className="flex justify-end gap-2">
+                        <Button autoFocus variant="ghost" size="sm" onClick={() => setRemoving(null)}>Cancel</Button>
+                        <Button variant="destructive" size="sm" onClick={() => {
+                          const end = removing.end;
+                          setRemoving(null);
+                          if (end) onEndTerminals(m.hostId);
+                          void run(m, "removing", () => window.hive.machineRemove(m.id));
+                        }}>Remove</Button>
+                      </div>
+                    </div>
+                  );
+                })()}
                 {notes[m.id] && <p className="px-2.5 pb-2 text-[11px] text-[var(--color-fg2)]">{notes[m.id]}</p>}
                 {m.enabled && s.state === "attention" && (
                   <div className="px-2.5 pb-2.5">
