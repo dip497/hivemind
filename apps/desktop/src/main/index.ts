@@ -43,7 +43,7 @@ import * as ptyDaemon from "./daemon-client.js";
 import { PtyOutputBuffer } from "./pty-output-buffer.js";
 import { isRemote, parseRemote } from "../shared/remote-uri.js";
 import { savedAuth } from "./remote/saved-hosts.js";
-import { addMachine, checkMachine, initMachines, installOnMachine, machineSessions, reconnectMachineHost, removeMachine, setMachinePassword, snapshot as machinesSnapshot, updateMachine } from "./remote/machines.js";
+import { addMachine, checkMachine, editMachine, initMachines, installOnMachine, machineSessions, reconnectMachineHost, removeMachine, setMachinePassword, snapshot as machinesSnapshot, updateMachine } from "./remote/machines.js";
 import {
   spawnRemotePty, writeRemotePty, resizeRemotePty, killRemotePty, hasRemotePty,
   pauseRemotePty, resumeRemotePty, detachRemotePty, setRemoteEventSink,
@@ -1054,6 +1054,11 @@ ipcMain.handle("machines:add", wrap(async (_e, req: MachineAddRequest) => addMac
 ipcMain.handle("machines:check", wrap(async (_e, id: string) => checkMachine(String(id))));
 ipcMain.handle("machines:install", wrap(async (_e, id: string) => installOnMachine(String(id))));
 ipcMain.handle("machines:update", wrap(async (_e, id: string, patch: { label?: string; enabled?: boolean }) => updateMachine(String(id), patch ?? {})));
+ipcMain.handle("machines:edit", wrap(async (_e, id: string, patch: { target: string; label?: string; password?: string }) => editMachine(String(id), {
+  target: String(patch?.target ?? ""),
+  ...(typeof patch?.label === "string" ? { label: patch.label } : {}),
+  ...(typeof patch?.password === "string" && patch.password ? { password: patch.password } : {}),
+})));
 ipcMain.handle("machines:remove", wrap(async (_e, id: string) => removeMachine(String(id))));
 ipcMain.handle("machines:set-password", wrap(async (_e, id: string, password: string) => setMachinePassword(String(id), String(password))));
 ipcMain.handle("machines:sessions", wrap(async (_e, uri: string | null) => machineSessions(uri ? String(uri) : null)));

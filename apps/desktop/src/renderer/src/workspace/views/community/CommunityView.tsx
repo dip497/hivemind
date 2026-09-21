@@ -16,7 +16,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { PORT_HANDSHAKE, PROTOCOL_VERSION, STATUS_TONES, type HostMessage, type SurfaceRect, type ViewFrameFolder, type ViewFrameMachine, type ViewPermission, type ViewTheme } from "@hivemind/view-sdk/protocol";
-import { hostIdOfUri, machineByHost, statusOf, useMachines } from "../../../machines/store";
+import { frameMachine, useMachines } from "../../../machines/store";
 import type { ViewPackageInfo } from "../../../../../shared/ipc";
 import type { WorkspaceViewProps } from "../../workspace-view";
 import { TileSlot } from "../../tile-host";
@@ -168,11 +168,8 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
     // A frame bound to a machine carries that machine's name and link state; a local one carries nothing.
     const machines = useMachines();
     const machineOf = useCallback((workspacePath?: string): { machine?: ViewFrameMachine } => {
-      const hostId = hostIdOfUri(workspacePath);
-      if (!hostId) return {};
-      const s = statusOf(machines, hostId);
-      const name = machineByHost(machines, hostId)?.label ?? hostId.replace(/:22$/, "");
-      return { machine: { name, state: s.state, ...(s.rttMs !== undefined ? { rttMs: s.rttMs } : {}) } };
+      const machine = frameMachine(machines, workspacePath);
+      return machine ? { machine } : {};
     }, [machines]);
 
     // Structure: frames / tiles / membership (+ current names). Colours resolved.

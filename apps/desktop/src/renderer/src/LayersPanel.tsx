@@ -10,17 +10,18 @@
  * its own status subscription; Canvas owns the data + focus actions.
  */
 import { statusColor } from "./workspace/tile-status-bucket";
-import { MachinesStrip } from "./machines/MachinesStrip";
-import { MachineDot } from "./machines/status";
-import { hostIdOfUri, machineByHost, statusOf, useMachines } from "./machines/store";
+import { MachineDot, statusWords } from "./machines/status";
+import { hostIdOfUri, machineByHost, openMachines, statusOf, useMachines } from "./machines/store";
+import type { MachineInfo } from "../../shared/ipc";
 import { memo, useEffect, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
-import { Layers, ChevronRight, ChevronDown, GitBranch, Server, Folder, FolderOpen, PanelLeftClose, Globe } from "lucide-react";
+import { Layers, ChevronRight, ChevronDown, GitBranch, Server, Folder, FolderOpen, PanelLeftClose, Globe, Monitor, Plus, RefreshCw, MoreHorizontal, ServerCog } from "lucide-react";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { AgentIcon } from "./agents";
 import { FrameRailMenu, type FrameActions } from "./FrameRailMenu";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { AGENT_TILE_KIND } from "./tile-kinds";
+import { MenuItem } from "./components/ui/menu-item";
 
 export type LayerKind = typeof AGENT_TILE_KIND | "terminal" | "editor" | "diff" | "issues" | "browser" | "planReview" | "workbench";
 
@@ -47,6 +48,8 @@ export interface LayerFrame {
   remote?: boolean;
   /** Its ssh:// uri, so the glyph can show the machine's link state. */
   remoteUri?: string;
+  /** Name of the folder it is bound to, shown when it differs from the title. */
+  folder?: string;
 }
 
 interface Props {
@@ -157,6 +160,8 @@ function WorkspaceIcon({ color, remote, remoteUri, worktree, collapsed }: { colo
 
 // Memo: a child of the canvas view, which re-renders on every drag frame.
 export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocusFrame, frameActions }: Props) {
+  // Before the early `hidden` return: hooks run on every render, in the same order.
+  const machineSnap = useMachines();
   // Persisted: panel hidden + which frame groups are collapsed. Now that the
   // panel is DOCKED (a flex sibling, not an overlay) it no longer occludes any
   // tile, so it defaults to SHOWN; collapsing leaves a narrow icon rail. The
@@ -266,6 +271,19 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
   const tilesOf = (fid: string) => tiles.filter((t) => t.frameId === fid);
   const looseTiles = tiles.filter((t) => !t.frameId || !frames.some((f) => f.id === t.frameId));
   const totalGroups = topFrames.length + (looseTiles.length ? 1 : 0);
+  // Grouped by the computer each frame runs on — this computer first — once any frame is on
+  // another one; a local-only canvas stays a plain list. Same names the views get (frameMachine).
+  // Every saved machine is a group, frames or not, so this rail is where machines live.
+  const machineGroups: MachineGroup[] = [{ key: "local", label: "This computer", frames: [] }];
+  for (const m of machineSnap.machines) machineGroups.push({ key: m.hostId, label: m.label, hostId: m.hostId, machine: m, frames: [] });
+  for (const f of topFrames) {
+    const hostId = hostIdOfUri(f.remoteUri) ?? "local";
+    let g = machineGroups.find((x) => x.key === hostId);
+    // A frame on a machine that is not saved (removed, or never added) still says where it is.
+    if (!g) machineGroups.push(g = { key: hostId, label: hostId.replace(/:22$/, ""), hostId, frames: [] });
+    g.frames.push(f);
+  }
+  const groupByMachine = machineGroups.length > 1;
 
   // Highest-priority status across a frame's tiles + descendant frames — drives
   // the per-frame status dot, so a COLLAPSED frame still signals "an agent here
@@ -281,6 +299,10 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
     for (const k of childFramesOf(fid)) { const s = frameAgg(k.id); if (s) consider(s); }
     return best;
   };
+
+  const needsYouIn = (fid: string): number =>
+    tilesOf(fid).filter((t) => t.kind === "planReview" || NEEDS_YOU(status.get(t.id) ?? null)).length
+    + childFramesOf(fid).reduce((n, k) => n + needsYouIn(k.id), 0);
 
   const renderTile = (t: LayerTile, depth: number): ReactNode => {
     // A plan-review tile is inherently a "needs you" state (an agent is blocked
@@ -385,7 +407,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
           </Button>
           {renaming?.id === gid ? (
             <div className="flex-1 flex items-center gap-2 min-w-0">
-              <WorkspaceIcon color={frame.color} remote={frame.remote} remoteUri={frame.remoteUri} worktree={isWt} collapsed={isCollapsed} />
+              <WorkspaceIcon color={frame.color} remote={frame.remote && !groupByMachine} remoteUri={frame.remoteUri} worktree={isWt} collapsed={isCollapsed} />
               <Input
                 autoFocus
                 value={renaming.draft}
@@ -417,8 +439,11 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
             className="flex-1 flex items-center gap-2 min-w-0 text-left text-[14px] font-semibold tracking-[-0.014em] text-[var(--color-fg)]"
             title={isWt ? `Focus worktree ${frame.branch ?? frame.title}` : `Focus ${frame.title}${frameActions ? " · double-click to rename" : ""}`}
           >
-            <WorkspaceIcon color={frame.color} remote={frame.remote} remoteUri={frame.remoteUri} worktree={isWt} collapsed={isCollapsed} />
+            <WorkspaceIcon color={frame.color} remote={frame.remote && !groupByMachine} remoteUri={frame.remoteUri} worktree={isWt} collapsed={isCollapsed} />
             <span className="truncate">{frame.title}</span>
+            {frame.folder && frame.folder !== frame.title && (
+              <span className="truncate min-w-0 font-mono text-[11px] font-normal text-[var(--color-fg3)]" title={frame.folder}>{frame.folder}</span>
+            )}
             <span className="ml-auto flex items-center gap-1.5 min-w-0">
               {/* The frame's aggregate is a SUMMARY of its children. While the group
                   is expanded the children are right there saying it themselves, so
@@ -497,6 +522,13 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
           )}
           <span className="text-[var(--color-fg3)]">{tiles.length}</span>
         </span>
+        <Button
+          variant="ghost"
+          size="icon-2xs"
+          onClick={() => openMachines({ kind: "add" })}
+          title="Add a machine"
+          aria-label="add machine"
+        ><ServerCog size={14} /></Button>
         <kbd
           aria-hidden
           title="Toggle the Layers panel"
@@ -515,7 +547,17 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
         {totalGroups === 0 && (
           <div className="px-3 py-2 text-[12px] text-[var(--color-fg3)]">No tiles open.</div>
         )}
-        {topFrames.map((f) => renderFrameGroup(f, 0))}
+        {groupByMachine
+          ? <>
+            {machineGroups.filter((g) => g.key === "local" || g.frames.length > 0).map((g) => (
+              <section key={g.key} aria-label={g.label} data-machine-group={g.key === "local" ? "local" : g.label} className={g.key === "local" ? "" : "mt-3 border-t border-[var(--color-line)] pt-1"}>
+                <MachineHeader group={g} used needsYou={g.frames.reduce((n, f) => n + needsYouIn(f.id), 0)} />
+                {g.frames.map((f) => renderFrameGroup(f, 0))}
+              </section>
+            ))}
+            <IdleMachines groups={machineGroups.filter((g) => g.key !== "local" && g.frames.length === 0)} />
+          </>
+          : topFrames.map((f) => renderFrameGroup(f, 0))}
         {looseTiles.length > 0 && (
           <div className="mt-1.5">
             <div className="flex items-center gap-2 h-8 pr-2 mx-2 pl-[26px]">
@@ -529,7 +571,6 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
           </div>
         )}
       </div>
-      <MachinesStrip />
       {/* Right-edge resize grip (t3code-style) — drag to set the panel width. */}
       <div
         onPointerDown={startResize}
@@ -553,3 +594,118 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
     </aside>
   );
 });
+
+interface MachineGroup { key: string; label: string; hostId?: string; machine?: MachineInfo; frames: LayerFrame[] }
+
+const RETRYABLE = new Set(["offline", "reconnecting", "no-hive", "idle"]);
+const DOWN = new Set(["offline", "reconnecting", "attention"]);
+
+/** Machines nothing on this canvas runs on: one quiet, foldable list instead of a heading each. */
+function IdleMachines({ groups }: { groups: MachineGroup[] }) {
+  const snap = useMachines();
+  const [open, setOpen] = useState<boolean>(() => {
+    const v = localStorage.getItem("hivemind:layers-idle-machines");
+    return v === null ? groups.length <= 3 : v === "1";
+  });
+  if (groups.length === 0) return null;
+  const toggle = () => setOpen((o) => { localStorage.setItem("hivemind:layers-idle-machines", o ? "0" : "1"); return !o; });
+  const signIn = groups.filter((g) => statusOf(snap, g.hostId ?? null).state === "attention").length;
+  const down = groups.filter((g) => g.machine?.enabled !== false && DOWN.has(statusOf(snap, g.hostId ?? null).state)).length - signIn;
+  const summary = [signIn && `${signIn} to sign in`, down > 0 && `${down} offline`].filter(Boolean).join(" · ");
+  return (
+    <section aria-label="other machines" data-idle-machines className="mt-3 border-t border-[var(--color-line)] pt-1">
+      <button
+        onClick={toggle}
+        aria-expanded={open}
+        className="w-full flex items-center gap-1.5 h-7 pl-3 pr-3 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-[var(--color-fg3)] hover:text-[var(--color-fg2)] cursor-pointer"
+      >
+        {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+        <Server size={11} aria-hidden />
+        <span>Machines</span>
+        <span className="font-mono tracking-normal font-normal tabular-nums">{groups.length}</span>
+        {!open && summary && <span className="ml-auto normal-case tracking-normal font-normal truncate">{summary}</span>}
+      </button>
+      {open && groups.map((g) => (
+        <section key={g.key} aria-label={g.label} data-machine-group={g.label}>
+          <MachineHeader group={g} used={false} needsYou={0} />
+        </section>
+      ))}
+    </section>
+  );
+}
+
+/** A computer's row in Layers: its link, what needs you there, and what you can do with it. */
+function MachineHeader({ group, needsYou, used }: { group: MachineGroup; needsYou: number; used: boolean }) {
+  const snap = useMachines();
+  const [menu, setMenu] = useState(false);
+  const m = group.machine;
+  const s = statusOf(snap, group.hostId ?? null);
+  const on = m?.enabled ?? true;
+  const act = (fn: () => unknown) => () => { setMenu(false); void fn(); };
+  const retry = () => (s.state === "attention" || !m ? openMachines({ kind: "manage" }) : window.hive.machineCheck(m.id).catch(() => {}));
+  return (
+    <div
+      className={`group/mach relative flex items-center gap-1.5 h-7 pr-2 text-[var(--color-fg3)] ${used
+        ? "pl-3 mt-2 text-[10.5px] font-semibold uppercase tracking-[0.12em]"
+        : "pl-7 mx-2 rounded-lg text-[12px] hover:bg-[var(--color-bg3)]"}`}
+      data-machine-header={group.key === "local" ? "local" : group.label}
+      title={m ? `${m.target}${s.detail ? ` — ${s.detail}` : ""}` : undefined}
+    >
+      {!group.hostId ? <Monitor size={11} aria-hidden />
+        : used ? (
+          <span className="relative shrink-0 grid place-items-center">
+            <Server size={11} aria-hidden />
+            <span className="absolute -right-1 -bottom-0.5 leading-[0]"><MachineDot status={s} enabled={on} size={5} /></span>
+          </span>
+        ) : <MachineDot status={s} enabled={on} size={6} />}
+      <span className={`truncate min-w-0 ${on ? "" : "opacity-60"} ${used ? "" : "text-[var(--color-fg2)]"}`}>{group.label}</span>
+      {group.hostId && (
+        <span className="shrink-0 font-mono normal-case tracking-normal font-normal text-[10.5px] tabular-nums" data-machine-state>
+          {statusWords(s, on)}
+        </span>
+      )}
+      {needsYou > 0 && (
+        <span className="shrink-0 flex items-center gap-0.5 font-mono tracking-normal text-[var(--color-warn)]" title={`${needsYou} need you on ${group.label}`} data-machine-needs-you>
+          <span aria-hidden className="size-1.5 rounded-full animate-pulse" style={{ background: "var(--color-warn)" }} />
+          {needsYou}
+        </span>
+      )}
+      {m && (
+        <span className="ml-auto flex items-center gap-0.5 normal-case tracking-normal">
+          {/* Only a machine in use that is down keeps a button showing; the rest wait for hover or focus. */}
+          <span className={`absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-0.5 rounded-md bg-[var(--color-bg2)] shadow-[-8px_0_8px_var(--color-bg2)] ${menu ? "" : "opacity-0 group-hover/mach:opacity-100 focus-within:opacity-100"}`}>
+          {(on && RETRYABLE.has(s.state)) || s.state === "attention" ? (
+            <Button variant="ghost" size="icon-2xs" onClick={retry} title={s.state === "attention" ? "Sign in…" : "Retry now"} aria-label={`retry ${m.label}`}>
+              <RefreshCw size={12} />
+            </Button>
+          ) : null}
+          {on && (
+            <Button variant="ghost" size="icon-2xs" onClick={() => openMachines({ kind: "pick", frameId: null, machineId: m.id })} title={`Open a folder on ${m.label}`} aria-label={`open folder on ${m.label}`}>
+              <Plus size={12} />
+            </Button>
+          )}
+          <Button variant="ghost" size="icon-2xs" onClick={() => setMenu((x) => !x)} aria-label={`${m.label} actions`}>
+            <MoreHorizontal size={12} />
+          </Button>
+          </span>
+          {used && on && DOWN.has(s.state) && !menu && (
+            <Button variant="ghost" size="icon-2xs" onClick={retry} className="group-hover/mach:hidden" title={s.state === "attention" ? "Sign in…" : "Retry now"} aria-hidden tabIndex={-1}>
+              <RefreshCw size={12} />
+            </Button>
+          )}
+        </span>
+      )}
+      {menu && m && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setMenu(false)} />
+          <div className="hm-popover absolute right-2 top-7 z-20 w-[180px] flex flex-col text-[12px] normal-case tracking-normal font-normal">
+            {on && <MenuItem onClick={act(() => openMachines({ kind: "pick", frameId: null, machineId: m.id }))}>Open folder here…</MenuItem>}
+            {on && <MenuItem onClick={act(retry)}>Check now</MenuItem>}
+            <MenuItem onClick={act(() => window.hive.machineUpdate(m.id, { enabled: !on }))}>{on ? "Turn off" : "Turn on"}</MenuItem>
+            <MenuItem onClick={act(() => openMachines({ kind: "manage" }))}>Manage machines…</MenuItem>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}

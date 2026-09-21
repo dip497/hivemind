@@ -73,6 +73,24 @@ requests; `setLayout` saves up to 64 KB per repository. Canvas/WebGL views can u
 The hello/structure payload includes the resolved palette (`applyThemeVars`), so chrome
 can follow the user's theme.
 
+### Machines
+
+A frame whose folder is on another computer carries where it runs (protocol 1.1):
+
+```ts
+hm.on("structure", ({ frames }) => {
+  for (const f of frames) {
+    if (f.machine) draw(f.id, `${f.machine.name} · ${f.machine.state}`); // e.g. "build-box · online"
+  }
+});
+```
+
+`machine` is `{ name, state, rttMs? }`. `state` is `online` (with `rttMs` once measured),
+`connecting`, `reconnecting`, `offline`, `attention` (someone has to log in), `no-hive`
+(terminals there stop if the connection drops) or `idle`. It changes live — a new `structure`
+arrives — and a local frame has no `machine`. Show it wherever your view shows the frame:
+which computer the work is on is what a person needs to see.
+
 ## Permissions
 
 Declared in the manifest, refused at install if unknown:
