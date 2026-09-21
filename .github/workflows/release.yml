@@ -96,12 +96,27 @@ jobs:
       - name: Package AppImage
         # Run electron-builder INSIDE the deployed copy so node_modules are
         # all under the app dir (no more "package.json must be under …" error).
+        # `pnpm exec`, NOT `npx`: electron-builder 26 picks its node-module
+        # collector by detecting the package manager, and `pnpm deploy` leaves
+        # no lockfile in desktop-deploy/ for it to detect by file. Run under npx
+        # it guesses npm from the environment, and the npm collector only walks a
+        # flat node_modules — it never sees pnpm's nested
+        # @lydell/node-pty-<platform>, so the app ships with a dead terminal.
         run: |
           cd desktop-deploy
-          npx --yes electron-builder --linux AppImage \
+          pnpm exec electron-builder --linux AppImage \
             --config.directories.output=dist-electron
         env:
           DEBUG: electron-builder
+
+      - name: Verify the bundle has a linux-x64 pty
+        # Nothing else fails when the prebuild is missing — the app just launches
+        # with a dead terminal, which is how v2026.9.2 shipped.
+        run: |
+          set -euo pipefail
+          find desktop-deploy/dist-electron/linux-unpacked -name '*.node' -print
+          test -f desktop-deploy/dist-electron/linux-unpacked/resources/app.asar.unpacked/node_modules/@lydell/node-pty-linux-x64/prebuilds/linux-x64/pty.node \
+            || { echo "pty.node not unpacked in the bundle - the terminal would be dead"; exit 1; }
 
       - name: Stage release artifacts
         id: stage
@@ -235,7 +250,7 @@ jobs:
           set -euo pipefail
           version=$(node -p "require('./apps/desktop/package.json').version")
           cd desktop-deploy
-          npx --yes electron-builder --mac dir \
+          pnpm exec electron-builder --mac dir \
             --config.directories.output=dist-electron
           app=$(ls -d dist-electron/*/hivemind.app 2>/dev/null | head -1)
           test -n "$app" || { echo "no .app built"; exit 1; }
@@ -262,6 +277,11 @@ jobs:
         run: |
           set -euo pipefail
           app=$(ls -d desktop-deploy/dist-electron/*/hivemind.app | head -1)
+          # Assert the prebuild EXISTS before checking its arch: `find` returning
+          # nothing made this loop pass vacuously, and v2026.9.2 shipped a bundle
+          # with no pty.node at all.
+          pty="$app/Contents/Resources/app.asar.unpacked/node_modules/@lydell/node-pty-darwin-arm64/prebuilds/darwin-arm64/pty.node"
+          test -f "$pty" || { echo "pty.node not unpacked in the bundle - the terminal would be dead"; exit 1; }
           for bin in release-assets/hive-darwin-arm64 \
                      "$app/Contents/MacOS/hivemind" \
                      $(find "$app" -name '*.node'); do
@@ -342,7 +362,7 @@ jobs:
         shell: pwsh
         run: |
           cd desktop-deploy
-          npx --yes electron-builder --win zip --config.directories.output=dist-electron
+          pnpm exec electron-builder --win zip --config.directories.output=dist-electron
 
       - name: Verify the bundle is x64 with a win32 pty
         # Same class of check as the macOS job: nothing fails the build when the
@@ -360,8 +380,10 @@ jobs:
           Get-ChildItem desktop-deploy/dist-electron -Recurse -Include *.node,*.dll,*winpty*.exe -ErrorAction SilentlyContinue |
             ForEach-Object { Write-Host "  $($_.FullName.Replace((Get-Location).Path, ''))" }
 
+          # pnpm nests the platform package under .pnpm, not beside node-pty —
+          # listing only the top-level @lydell dir says "node-pty" either way.
           Write-Host "`n--- node-pty packages pnpm installed ---"
-          Get-ChildItem desktop-deploy/node_modules/@lydell -ErrorAction SilentlyContinue |
+          Get-ChildItem desktop-deploy/node_modules/.pnpm -Filter "*node-pty*" -ErrorAction SilentlyContinue |
             ForEach-Object { Write-Host "  $($_.Name)" }
           Get-ChildItem desktop-deploy/node_modules/@lydell -Recurse -Filter pty.node -ErrorAction SilentlyContinue |
             ForEach-Object { Write-Host "  prebuild: $($_.FullName.Replace((Get-Location).Path, ''))" }
