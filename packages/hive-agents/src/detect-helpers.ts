@@ -28,5 +28,7 @@ export function hasInterruptPattern(lower: string): boolean {
 
 export function cursorWordActive(rest: string): boolean {
   const word = rest.trim().split(/\s+/)[0] ?? "";
-  return word.replace(/[^a-z]+$/i, "").toLowerCase().endsWith("ing");
+  let end = word.length;
+  while (end > 0 && !/[a-z]/i.test(word[end - 1]!)) end--;
+  return word.slice(0, end).toLowerCase().endsWith("ing");
 }

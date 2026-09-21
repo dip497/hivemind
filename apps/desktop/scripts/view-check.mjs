@@ -134,9 +134,9 @@ try {
 
   agent("reviewer", "hivemind", PERMISSION("src/limits.ts"));
   agent("docs", "hivemind", IDLE);
-  agent("builder", "hivemind", `(timeout 9 bash -c "${WORKING("Refactoring the rate limiter").replace(/"/g, '\\"')}"); clear; ${PERMISSION("src/buckets.ts")}`);
+  agent("builder", "hivemind", `(timeout 9 bash -c "${WORKING("Refactoring the rate limiter").replace(/[\\"$`]/g, "\\$&")}"); clear; ${PERMISSION("src/buckets.ts")}`);
   agent("api", "hivehub", WORKING("Writing the publish endpoint"));
-  agent("tests", "hivehub", `(timeout 5 bash -c "${WORKING("Running the suite").replace(/"/g, '\\"')}"); clear; ${IDLE}`);
+  agent("tests", "hivehub", `(timeout 5 bash -c "${WORKING("Running the suite").replace(/[\\"$`]/g, "\\$&")}"); clear; ${IDLE}`);
   agent("migrate", "hivehub", PERMISSION("migrations/0001.sql"));
   await emit("hivemind:canvas-toggle", "shell");
 

@@ -44,7 +44,7 @@ export const resolveCmd = defineCommand({
           const issue = await readIssue(root, id);
           const relPath = path.relative(process.cwd(), issuePath(root, id));
           // Replace `@ID` (word-bounded) with `[ID — title](relPath)`.
-          const re = new RegExp(`@${id.replace(/\./g, "\\.")}(?![A-Za-z0-9.-])`, "g");
+          const re = new RegExp(`@${id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![A-Za-z0-9.-])`, "g");
           out = out.replace(re, `[${id} — ${issue.title}](${relPath})`);
           expanded.push({ id, title: issue.title });
         } catch {

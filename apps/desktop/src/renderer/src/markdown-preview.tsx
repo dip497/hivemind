@@ -61,7 +61,12 @@ async function renderMermaid(container: HTMLElement, alive: () => boolean): Prom
       if (!alive()) return;
       const wrap = document.createElement("div");
       wrap.className = "md-mermaid";
-      wrap.innerHTML = svg;
+      // Same allowances mermaid's own strict sanitize uses, so labels survive.
+      wrap.innerHTML = DOMPurify.sanitize(svg, {
+        ADD_TAGS: ["foreignobject"],
+        ADD_ATTR: ["dominant-baseline"],
+        HTML_INTEGRATION_POINTS: { foreignobject: true },
+      });
       pre.replaceWith(wrap);
     } catch (e) {
       const err = document.createElement("pre");

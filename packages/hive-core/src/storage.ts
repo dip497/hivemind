@@ -398,7 +398,8 @@ const SEC_DESC = /^#{1,6}\s+Description\s*$/im;
 // description — those items then never reached the dedicated section and the
 // board showed an empty Acceptance Criteria panel. Matching the label line
 // splits them out; serializeSections rewrites it canonically on next save.
-const SEC_AC = /^\s*(?:#{1,6}\s+|\*\*\s*)?Acceptance\s+criteria\s*:?\s*\**\s*$/im;
+// Tested one trimmed line at a time with no overlapping quantifiers, so it stays linear.
+const SEC_AC_LINE = /^(?:#{1,6}\s+|\*\*\s*)?Acceptance\s+criteria\s*(?::\s*)?\**$/i;
 const SEC_ACT = /^#{1,6}\s+Activity\s*$/im;
 
 /** Split the body into our three known sections + extra. Tolerant: missing sections become empty. */
@@ -419,7 +420,14 @@ export function parseSections(body: string): IssueSections {
     }
   };
   push("desc", SEC_DESC);
-  push("ac", SEC_AC);
+  let lineStart = 0;
+  for (const line of body.split("\n")) {
+    if (SEC_AC_LINE.test(line.trim())) {
+      heads.push({ name: "ac", idx: lineStart, end: lineStart + line.length });
+      break;
+    }
+    lineStart += line.length + 1;
+  }
   push("act", SEC_ACT);
   heads.sort((a, b) => a.idx - b.idx);
 
@@ -591,7 +599,7 @@ async function nextSubIssueId(root: string, parentId: string): Promise<string> {
   try {
     const entries = await fs.readdir(parentDir);
     for (const e of entries) {
-      const m = e.match(new RegExp(`^${parentId.replace(/\./g, "\\.")}\\.(\\d+)\\.md$`));
+      const m = e.match(new RegExp(`^${parentId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\.(\\d+)\\.md$`));
       if (m) {
         const n = parseInt(m[1]!, 10);
         if (n > highest) highest = n;

@@ -18,8 +18,8 @@ export interface SshCommand {
   env: Record<string, string>;
 }
 
-/** Quoted for ssh's own option parser, which splits values on spaces. */
-const sshQuote = (s: string) => (/[\s"]/.test(s) ? `"${s.replace(/"/g, '\\"')}"` : s);
+/** Quoted for ssh's own option parser, which splits on spaces and reads quotes and backslash escapes. */
+const sshQuote = (s: string) => (/[\s"'\\]/.test(s) ? `"${s.replace(/[\\"]/g, "\\$&")}"` : s);
 
 /** `tty`: allocate a remote terminal (for an interactive session run inside a local PTY). */
 export function sshCommand(t: RemoteTarget, auth: HostAuth, paths: SshPaths, remoteCommand: string, opts: { tty?: boolean } = {}): SshCommand {

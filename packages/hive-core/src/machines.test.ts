@@ -31,6 +31,13 @@ describe("validateTarget", () => {
     expect(code(() => validateTarget("ssh://host:99999"))).toBe("machine_target_invalid");
     expect(code(() => validateTarget("x".repeat(MACHINE_LIMITS.targetBytes + 1)))).toBe("machine_target_invalid");
   });
+  test("an ssh:// path is ignored, quickly even when it is all slashes", () => {
+    expect(validateTarget("ssh://me@host:2222/some/path")).toBe("ssh://me@host:2222/some/path");
+    const t = performance.now();
+    expect(code(() => validateTarget(`ssh://${"/".repeat(MACHINE_LIMITS.targetBytes - 6)}`))).toBe("machine_target_invalid");
+    expect(code(() => validateTarget(`ssh://${"/".repeat(50_000)}`))).toBe("machine_target_invalid");
+    expect(performance.now() - t).toBeLessThan(100);
+  });
 });
 
 test("validateLabel caps bytes and control characters", () => {

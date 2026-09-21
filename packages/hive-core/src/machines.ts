@@ -45,7 +45,7 @@ export function validateTarget(target: string): string {
   if (Buffer.byteLength(t) > MACHINE_LIMITS.targetBytes) throw new HiveError("machine_target_invalid", `ssh target is longer than ${MACHINE_LIMITS.targetBytes} bytes`);
   if (CONTROL.test(t) || /\s/.test(t)) throw new HiveError("machine_target_invalid", "ssh target must not contain whitespace or control characters");
   if (t.startsWith("-")) throw new HiveError("machine_target_invalid", "ssh target must not start with '-'");
-  const authority = t.startsWith("ssh://") ? t.slice("ssh://".length).replace(/\/.*$/, "") : t;
+  const authority = t.startsWith("ssh://") ? t.slice("ssh://".length).split("/")[0]! : t;
   const at = authority.lastIndexOf("@");
   if (at >= 0 && authority.slice(0, at).includes(":")) throw new HiveError("machine_target_invalid", "ssh target must not contain a password — use keys or ssh-agent");
   // An ssh:// authority, and the host after `@`, become argv tokens too.
