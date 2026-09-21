@@ -57,6 +57,13 @@ export function useCanvasShortcuts(ctx: CanvasShortcutsCtx) {
         else if (e.key === "t" || e.key === "T") { e.preventDefault(); spawnVis("shell"); }
         else if ((e.key === "d" || e.key === "D") && repoPath) { e.preventDefault(); spawnVis("diff"); }
         else if (e.key === "e" || e.key === "E") { e.preventDefault(); window.dispatchEvent(new CustomEvent("hivemind:toggle-view-mode")); }
+        // What the zoom island's tooltips promise — on the canvas only: inside a terminal or
+        // editor Ctrl +/−/0 already size that tile's font, and doing both at once is wrong.
+        else if (inEditable(e.target) && (e.key === "0" || e.key === "1" || e.key === "=" || e.key === "+" || e.key === "-")) { /* the tile's */ }
+        else if (e.key === "0") { e.preventDefault(); setFocusModeReq({ id: null, n: ++focusModeNonceRef.current }); }
+        else if (e.key === "1") { e.preventDefault(); window.dispatchEvent(new CustomEvent("hivemind:zoom", { detail: "100" })); }
+        else if (e.key === "=" || e.key === "+") { e.preventDefault(); window.dispatchEvent(new CustomEvent("hivemind:zoom", { detail: "in" })); }
+        else if (e.key === "-") { e.preventDefault(); window.dispatchEvent(new CustomEvent("hivemind:zoom", { detail: "out" })); }
         return;
       }
       // Focus-mode hotkeys (".", Escape) fire ONLY when no editable element is

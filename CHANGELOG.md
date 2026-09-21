@@ -10,6 +10,9 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 ## [Unreleased]
 
 - Community views load again. Since the move to Electron 39 every view from HiveHub — queue, board, tiled and your own — stayed on "loading": the browser refused its script, because a view's sandboxed page counts as cross-origin to its own files and the view scheme did not allow that. It does now; the sandbox and its no-network policy are unchanged.
+- "Reset tile layout" re-lays the canvas out — tiles back to their default size, each frame's tiles on a grid, all of it in view — instead of deleting every frame and tile. Before, one click emptied the project and left each agent and terminal still running with no tile to reach it by.
+- Fit to view fits the whole canvas, even one several screens wide (the zoom floor was 25%, which left most of a wide canvas off-screen), and the shortcuts the zoom buttons advertise now work: Ctrl 0 fits all, Ctrl 1 is 100%, Ctrl + and Ctrl − zoom.
+- The canvas no longer zooms out on its own. Spawning an agent, a shell or a frame — or opening a folder on a machine — flies the camera to it at a working zoom; before, doing a few of those in a row slid the canvas to a fraction of 100% (16% on a busy one) and left it there, looking at empty wallpaper. A new frame is also selected now, so the next thing you spawn goes into it.
 
 - With glass on, a program asking the terminal for its background colour is told the theme's colour, not black. Codex tints its input box from that answer, so the box now blends with your theme instead of showing as flat grey.
 - With glass on, dim and italic text no longer sits on a solid black bar. Agents draw a lot of it — codex's header card and hints, Claude's recaps — so a transparent terminal was striped with black boxes. The terminal's GPU renderer treated those styles as a background colour and painted it opaque; it now paints a background only where the program asked for one.
