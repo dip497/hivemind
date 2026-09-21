@@ -30,6 +30,7 @@ export interface FrameOpsCtx {
   // setters + actions
   setFrames: Dispatch<SetStateAction<FrameState[]>>;
   setPositions: Dispatch<SetStateAction<Record<string, { x: number; y: number }>>>;
+  setSelectedFrameId: Dispatch<SetStateAction<string | null>>;
   focusTile: (id: string) => void;
 }
 
@@ -37,28 +38,32 @@ export function useFrameOps(ctx: FrameOpsCtx) {
   const {
     repoPath, positions, sizes, tiles, frameOf,
     framesRef, tilesRef, frameOfRef, positionsRef, sizesRef, lastActiveFrameRef,
-    setFrames, setPositions, focusTile,
+    setFrames, setPositions, setSelectedFrameId, focusTile,
   } = ctx;
 
   const addFrame = useCallback(() => {
     const id = mintId("frame");
-    setFrames((fs) => {
-      const n = fs.length + 1;
-      const maxZ = fs.reduce((m, f) => (f.z > m ? f.z : m), 0);
-      // Big enough to hold a tile (workbench/diff are 720-760px wide).
-      const w = 840;
-      const h = 580;
-      // Place each new frame to the RIGHT of all existing frames; auto-pan
-      // below then flies the viewport to it, so it's always visible.
-      const rightEdge = fs.reduce((m, f) => Math.max(m, f.x + f.w), 0);
-      const x = fs.length ? rightEdge + 48 : 120;
-      const y = 120;
-      return [...fs, { id, x, y, w, h, title: `Group ${n}`, color: frameColorFor(id), z: maxZ + 1 }];
-    });
+    // Built here and written to the ref now, not in an updater: React may run an updater
+    // after the next animation frame, when the camera looks the frame up.
+    const fs = framesRef.current;
+    const maxZ = fs.reduce((m, f) => (f.z > m ? f.z : m), 0);
+    // Big enough to hold a tile (workbench/diff are 720-760px wide).
+    const w = 840;
+    const h = 580;
+    // Place each new frame to the RIGHT of all existing frames, then fly there.
+    const rightEdge = fs.reduce((m, f) => Math.max(m, f.x + f.w), 0);
+    const x = fs.length ? rightEdge + 48 : 120;
+    const y = 120;
+    const frame = { id, x, y, w, h, title: `Group ${fs.length + 1}`, color: frameColorFor(id), z: maxZ + 1 };
+    framesRef.current = [...fs, frame];
+    setFrames((prev) => [...prev, frame]);
+    // The frame you just made is where the next spawn goes, as a new worktree frame is.
+    lastActiveFrameRef.current = id;
+    setSelectedFrameId(id);
     // Pan to the new frame — rAF lets the node mount before we center on it.
     requestAnimationFrame(() => focusTile(id));
     return id;
-  }, [focusTile, setFrames]);
+  }, [focusTile, setFrames, setSelectedFrameId, framesRef, lastActiveFrameRef]);
 
   const updateFrameTitle = useCallback((id: string, title: string) => {
     setFrames((fs) => fs.map((f) => (f.id === id ? { ...f, title } : f)));

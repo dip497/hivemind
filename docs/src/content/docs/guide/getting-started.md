@@ -67,7 +67,7 @@ hivemind .
   `2` spawns the default agent in the selected frame.
 - **▶ Work** on an issue card spawns an agent pre-loaded with that issue and the hive
   skills.
-- ⌘L toggles the Layers rail (tiles grouped by frame, live agent status).
+- ⌘B toggles the Layers rail (tiles grouped by frame, live agent status).
 - ⌘E cycles workspace views; double-click a tile name to rename it.
 
 ## What the agent does
