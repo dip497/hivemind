@@ -413,6 +413,8 @@ export interface HiveIpc {
   machineCheck(id: string): Promise<MachineProbe>;
   machineInstall(id: string): Promise<MachineProbe>;
   machineUpdate(id: string, patch: { label?: string; enabled?: boolean }): Promise<void>;
+  /** Change where a machine is (tested before it is saved). `oldHostId`: re-point the frames that ran there. */
+  machineEdit(id: string, patch: { target: string; label?: string; password?: string }): Promise<{ machine: MachineInfo; oldHostId: string }>;
   machineRemove(id: string): Promise<void>;
   /** Store a password for a machine; false when the OS keychain is unavailable (kept in memory only). */
   machineSetPassword(id: string, password: string): Promise<boolean>;

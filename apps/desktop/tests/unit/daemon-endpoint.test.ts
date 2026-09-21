@@ -241,6 +241,35 @@ test("a login failure stops the retries until asked; retries stay 'reconnecting'
   await closed;
 });
 
+test("turned off: disconnects, never retries, keeps the tile; turned on re-attaches without a new spawn", async () => {
+  const sock = path.join(dir, "p.sock");
+  const d = fakeDaemon(sock, true);
+  await d.listen();
+  let off = false;
+  let connects = 0;
+  const states: string[] = [];
+  const ep = new DaemonEndpoint({
+    connect: () => new Promise((res, rej) => { connects++; const s = net.connect(sock); s.once("connect", () => res(s)); s.once("error", rej); }),
+    retryInitialMs: 10, isPaused: () => off, onStatus: (st) => states.push(st),
+  });
+  let out = "";
+  await ep.spawn({ tileId: "t1", cwd: "/", cmd: "sh", cols: 80, rows: 24 }, { onData: (x) => { out += x; }, onExit: () => {} });
+  off = true;
+  ep.disconnect();
+  assert.ok(await until(() => states.at(-1) === "idle"), states.join(","));
+  ep.write("t1", "lost");
+  await wait(150);
+  assert.equal(connects, 1, "no reconnect while off");
+  assert.equal(ep.has("t1"), true, "the tile stays");
+  off = false;
+  ep.reconnectNow();
+  assert.ok(await until(() => states.at(-1) === "online"));
+  assert.ok(await until(() => d.got.filter((m) => m.t === "attach").length === 2));
+  assert.equal(d.got.filter((m) => m.t === "attach").at(-1)?.t === "attach" && (d.got.filter((m) => m.t === "attach").at(-1) as { since?: unknown }).since !== undefined, true, "resumes, not a fresh spawn");
+  ep.close();
+  await d.close();
+});
+
 test("a peer that never ends a line is dropped instead of filling memory", () => {
   const lines: string[] = [];
   let overflowed = false;

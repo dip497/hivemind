@@ -84,7 +84,7 @@ control**, which lets agents drive Browser panels.
 ## Notifications and Shortcuts
 
 Notifications cover agent status transitions while the app is unfocused or another view
-is active. Shortcuts lists every binding (`1`–`7` spawns, ⌘L layers, ⌘E views,
+is active. Shortcuts lists every binding (`1`–`7` spawns, ⌘B layers, ⌘E views,
 Shift+Esc undock).
 
 ## CLI

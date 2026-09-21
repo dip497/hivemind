@@ -66,13 +66,13 @@ export interface SpawnCtx {
 }
 
 /** One past the highest ordinal already on the canvas for this label, so numbers neither repeat nor restart after a relaunch. */
-function nextOrdinal(tiles: readonly TileInstance[], labelFor: (n: number) => string): number {
+export function nextOrdinal(labels: readonly string[], labelFor: (n: number) => string): number {
   const probe = 987654321;
   const prefix = labelFor(probe).split(String(probe))[0]!;
   let max = 0;
-  for (const t of tiles) {
-    if (!t.label.startsWith(prefix)) continue;
-    const n = parseInt(t.label.slice(prefix.length), 10);
+  for (const label of labels) {
+    if (!label.startsWith(prefix)) continue;
+    const n = parseInt(label.slice(prefix.length), 10);
     if (n > max) max = n;
   }
   return max + 1;
@@ -95,6 +95,16 @@ export function useSpawn(ctx: SpawnCtx) {
     setFrameOf, setPositions, setSelectedTileId, setFocusReq, setFrames,
     setSelectedFrameId, setTiles, setSpawnPick, focusTile, openFileInTile, renameTile,
   } = ctx;
+
+  // Labels handed out whose tiles have not rendered yet: two spawns in one tick must not share a number.
+  const issued = useRef<string[]>([]);
+  const ordinalLabel = useCallback((countAs: (n: number) => string, labelFor = countAs): string => {
+    const shown = new Set(tilesRef.current.map((t) => t.label));
+    issued.current = issued.current.filter((l) => !shown.has(l));
+    const label = labelFor(nextOrdinal([...shown, ...issued.current], countAs));
+    issued.current.push(label);
+    return label;
+  }, [tilesRef]);
 
   const placeInFrame = useCallback((id: string, frame: FrameState, opts?: { background?: boolean }) => {
     // CRITICAL: these MUST match the auto-fit derivation in `tileBox`
@@ -281,16 +291,16 @@ export function useSpawn(ctx: SpawnCtx) {
         const so = launchOptions(def.id, { mode: opts?.mode });
         args = spawnArgsFor(def, so);
         cmd = def.bin;
-        label = spawnLabelFor(def, nextOrdinal(tilesRef.current, (n) => spawnLabelFor(def, n, {})), so);
+        label = ordinalLabel((n) => spawnLabelFor(def, n, {}), (n) => spawnLabelFor(def, n, so));
       } else if (kind === "shell" && opts?.session) {
         cmd = opts.session.cmd; args = opts.session.args;
         label = opts.session.label;
       } else if (kind === "shell") {
         const sh = defaultShell();
         cmd = sh.cmd; args = sh.args;
-        label = `shell #${nextOrdinal(tilesRef.current, (n) => `shell #${n}`)}`;
+        label = ordinalLabel((n) => `shell #${n}`);
       } else if (kind === "browser") {
-        label = `Browser #${nextOrdinal(tilesRef.current, (n) => `Browser #${n}`)}`;
+        label = ordinalLabel((n) => `Browser #${n}`);
       } else {
         label = kind === "editor" ? "Editor" : kind === "diff" ? "Diff" : "Issues";
       }
@@ -441,7 +451,7 @@ export function useSpawn(ctx: SpawnCtx) {
       const so = launchOptions(def.id, { mode: opts.mode, model: opts.model });
       const args = spawnArgsFor(def, so);
       const cmd = def.bin;
-      const label = spawnLabelFor(def, nextOrdinal(tilesRef.current, (n) => spawnLabelFor(def, n, {})), so);
+      const label = ordinalLabel((n) => spawnLabelFor(def, n, {}), (n) => spawnLabelFor(def, n, so));
       // A spawner-chosen name ("reviewer") is what tells a dozen workers apart, so it
       // ranks like a rename, above the title the agent sets itself. Main sanitizes it.
       if (opts.name) renameTile(newId, opts.name);

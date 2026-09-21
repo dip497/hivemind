@@ -49,7 +49,10 @@ export async function listViewPackages(repoRoot: string | null): Promise<ViewPac
 /** Call BEFORE app ready. */
 export function registerViewScheme(): void {
   protocol.registerSchemesAsPrivileged([
-    { scheme: VIEW_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: false } },
+    // corsEnabled: a view's page is sandboxed to an opaque origin, and loading a module
+    // script is always a CORS request — so without it Chromium refuses the view's own code
+    // and it never starts. The boundary is the sandbox + CSP (connect-src 'none'), not this.
+    { scheme: VIEW_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } },
   ]);
 }
 
@@ -64,7 +67,8 @@ export function handleViewProtocol(): void {
       if (!dir) return new Response("unknown view", { status: 404 });
       const rel = decodeURIComponent(u.pathname.replace(/^\/+/, ""));
       const nonce = newNonce();
-      const headers = { "Content-Security-Policy": pluginCsp(nonce), "X-Content-Type-Options": "nosniff", "Cache-Control": "no-store" };
+      // The files are the view's published code; who may run them is the CSP's call.
+      const headers = { "Content-Security-Policy": pluginCsp(nonce), "X-Content-Type-Options": "nosniff", "Cache-Control": "no-store", "Access-Control-Allow-Origin": "*" };
       if (rel === ENTRY_PAGE) {
         const html = entryPage(u.searchParams.get("js") ?? "", nonce);
         if (!html) return new Response("bad entry", { status: 400 });

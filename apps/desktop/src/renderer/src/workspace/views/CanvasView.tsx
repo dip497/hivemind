@@ -242,14 +242,20 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
   const [snapReq, setSnapReq] = useState(0);
   const bumpSnap = useCallback(() => setSnapReq((n) => n + 1), []);
   const { currentViewportRef, setViewport } = rt;
-  const onMove = useCallback((_: unknown, vp: { x: number; y: number; zoom: number }) => {
+  // Bumped by every move start. A camera flight (focus, fit) interrupted by the next one
+  // still emits its move-end; settling work checks this so it never acts on a move that
+  // has already been superseded.
+  const moveSeqRef = useRef(0);
+  const onMove = useCallback((e: unknown, vp: { x: number; y: number; zoom: number }) => {
     currentViewportRef.current = vp;
     if (inMomentumRef.current) return; // ignore self-generated moves
+    if (!e) return; // a programmatic flight is not a flick to fling
     const s = panSamplesRef.current;
     s.push({ t: performance.now(), x: vp.x, y: vp.y });
     if (s.length > 6) s.shift();
   }, [currentViewportRef]);
   const onMoveStart = useCallback(() => {
+    moveSeqRef.current++;
     // Ignore move-starts emitted by our OWN momentum setViewport calls — only a
     // real user grab should re-add the motion class + cancel the fling.
     if (inMomentumRef.current) return;
@@ -281,16 +287,27 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
       }
     }
     panSamplesRef.current = [];
+    if (flung) {
+      setViewport(currentViewportRef.current); // the fling snaps on settle
+      return;
+    }
     // Commit the post-pan viewport so the layout blob persists it — ONE re-render
-    // at the end of the pan (not per pointermove). When the canvas comes to REST
-    // (no fling), snap it crisp: xterm rasterizes glyphs to a canvas the
-    // react-flow viewport then CSS-transforms; a fractional translate lands that
-    // bitmap on sub-pixels → fuzzy text. Rounding the pan to the device-pixel
-    // grid and snapping a near-1 zoom to exactly 1 keeps text sharp at rest.
-    const committed = flung ? currentViewportRef.current : snapViewportCrisp(currentViewportRef.current);
-    currentViewportRef.current = committed;
-    setViewport(committed);
-    if (!flung) bumpSnap(); // snap the LIVE transform too (a fling snaps on settle)
+    // at the end of the pan (not per pointermove). When the canvas comes to REST,
+    // snap it crisp: xterm rasterizes glyphs to a canvas the react-flow viewport
+    // then CSS-transforms; a fractional translate lands that bitmap on sub-pixels
+    // → fuzzy text. The snap is an instant setViewport, which cancels whatever is
+    // animating — so it waits a frame and stands down if the camera has moved since
+    // (onMove writes a new object every tick) or another move has started, in either
+    // event order: snapping on an interrupted flight's end froze the camera mid-flight.
+    const seq = moveSeqRef.current;
+    const at = currentViewportRef.current;
+    requestAnimationFrame(() => {
+      if (moveSeqRef.current !== seq || currentViewportRef.current !== at) return;
+      const committed = snapViewportCrisp(currentViewportRef.current);
+      currentViewportRef.current = committed;
+      setViewport(committed);
+      bumpSnap(); // snap the LIVE transform too
+    });
   }, [bumpSnap, currentViewportRef, setViewport]);
   // Dragging a TILE is a node drag (not a viewport move) so onMoveStart never
   // fires for it. Use a SEPARATE class with compositing hints only (NOT
@@ -502,7 +519,8 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
           nodeTypes={nodeTypes}
           edgeTypes={pipeEdgeTypes}
           defaultViewport={rt.currentViewportRef.current}
-          minZoom={0.25}
+          // Low enough for Fit to view to fit a canvas several screens wide; 0.25 left most of it off-screen.
+          minZoom={0.1}
           maxZoom={2.5}
           panOnScroll
           // Excalidraw/Figma model: hold Space to pan with left-drag; plain

@@ -152,12 +152,13 @@ Leaking subscriptions for closed tiles is the most common resource bug in a view
 ## Permissions: ask for nothing
 
 The base set — projection, status, selection, reveal, surfaces, layout — needs no
-permission. Only two exist:
+permission. Only three exist:
 
 | Permission | Unlocks |
 | --- | --- |
-| `workspace:spawn` | `spawnTile`, `spawnVis`, `spawnClaude`, `addFrame` |
+| `workspace:spawn` | `spawnTile`, `spawnVis`, `spawnClaude`, `addFrame`, `spawnAgent` |
 | `workspace:close` | `closeTile` |
+| `workspace:edit` | `renameTile`, `openFolder` |
 
 Requesting one is a line in the install review a user has to accept, and an unknown
 name is refused at install **and** at load. Calling a command your manifest did not
