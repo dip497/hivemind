@@ -58,7 +58,7 @@ hivemind .
 
 `1`–`7` spawn a terminal, an agent, an explorer, a diff, the issues board, a frame or a
 browser. Click **Work** on an issue and the agent starts with that issue and the `hive`
-skills loaded. `⌘L` opens the layers rail, `⌘E` switches view.
+skills loaded. `⌘B` opens the layers rail, `⌘E` switches view — the keys follow VS Code (Settings → Shortcuts).
 
 ## What you get
 

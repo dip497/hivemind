@@ -82,12 +82,22 @@ const ready = new Map<string, DaemonEndpoint>();
 /** Why this host has no daemon connection: ssh's own words beat a guess about `hive`. */
 const failure = new Map<string, string>();
 
+const paused = new Set<string>();
+/** Turn a machine off (drop its connection; its terminals keep running there) or back on. */
+export function setHostPaused(hostId: string, on: boolean): void {
+  if (on === paused.has(hostId)) return;
+  if (on) { paused.add(hostId); ready.get(hostId)?.disconnect(); report(hostId, "idle"); return; }
+  paused.delete(hostId);
+  ready.get(hostId)?.reconnectNow();
+}
+
 export function hostFailure(hostId: string): string | undefined {
   return failure.get(hostId);
 }
 
 /** This host's daemon endpoint, or null when it has no daemon-capable `hive` (or cannot be probed right now). */
 export function endpointFor(target: RemoteTarget): Promise<DaemonEndpoint | null> {
+  if (paused.has(target.hostId)) return Promise.reject(new Error("this machine is turned off"));
   const cached = endpoints.get(target.hostId);
   if (cached) return cached;
   report(target.hostId, "connecting");
@@ -109,6 +119,7 @@ export function endpointFor(target: RemoteTarget): Promise<DaemonEndpoint | null
       // The bridge itself may take up to its own 20 s start budget.
       attachTimeoutMs: 30_000,
       isFatal: needsAttention,
+      isPaused: () => paused.has(target.hostId),
       onEvent: (topic, data) => remoteEvent(ep, topic, data),
       onStatus: (state, detail) => report(target.hostId, state === "reconnecting" && detail && needsAttention(detail) ? "attention" : state, detail),
     });
@@ -146,6 +157,12 @@ export function resetHost(hostId: string): void {
     idleSince.delete(hostId);
     report(hostId, "idle");
   }).catch(() => {});
+}
+
+/** Terminals are running on this host through our connection (or one is being opened). */
+export async function hostServingTiles(hostId: string): Promise<boolean> {
+  const ep = await (endpoints.get(hostId) ?? Promise.resolve(null)).catch(() => null);
+  return !!ep && (ep.tiles > 0 || busy.has(hostId));
 }
 
 export function hostConnected(hostId: string): boolean {

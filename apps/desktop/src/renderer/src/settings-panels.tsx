@@ -101,30 +101,57 @@ function AppearancePrefs() {
 
 // ── Shortcuts (read-only) ───────────────────────────────────────────────────
 
-const SHORTCUTS: [string, string][] = [
+// VS Code's keys, split by who sees them: "Anywhere" is intercepted before a terminal does
+// (main process), "On the canvas" only applies when nothing is being typed into.
+const SHORTCUTS_ANYWHERE: [string, string][] = [
+  ["⌘/Ctrl + ⇧ + `", "New terminal"],
+  ["⌘/Ctrl + ⇧ + A", "New agent"],
+  ["⌘/Ctrl + ⇧ + E", "File tree"],
+  ["⌘/Ctrl + ⇧ + G", "Diff review"],
+  ["⌘/Ctrl + ⇧ + N", "New frame"],
+  ["⌘/Ctrl + B", "Show or hide Layers"],
+  ["⌘/Ctrl + 1 … 9", "Go to tile 1 … 9"],
+  ["⌘/Ctrl + Tab", "Next tile (⇧ for previous)"],
   ["⌘/Ctrl + E", "Cycle views"],
-  ["⌘/Ctrl + \\", "New agent"],
-  ["⌘/Ctrl + T", "New terminal"],
-  ["⌘/Ctrl + B", "File tree"],
-  ["⌘/Ctrl + D", "Diff review"],
+  ["⌘/Ctrl + ,", "Settings"],
+  ["⌘/Ctrl + N", "New issue"],
+  ["⌘/Ctrl + .", "Focus the selected tile"],
+  ["F11", "Full screen"],
+];
+const SHORTCUTS_CANVAS: [string, string][] = [
   ["1 … 7", "Toolbar actions"],
-  [".", "Focus the selected tile (Escape leaves focus mode)"],
+  ["⌘/Ctrl + = / −", "Zoom in / out"],
+  ["⌘/Ctrl + 0", "Zoom to 100%"],
+  ["Esc", "Fit everything in view"],
+  ["⌘/Ctrl + O", "Open a folder as the project"],
+  ["⌘/Ctrl + R", "Open a recent project"],
+  [".", "Focus the selected tile"],
+  ["⌘/Ctrl + W", "Close the selected tile"],
   ["F2", "Rename the selected frame"],
   ["⇧ Esc", "Undock a tile from a scene view"],
 ];
 
+function ShortcutList({ items }: { items: [string, string][] }) {
+  return (
+    <dl className="settings-shortcuts">
+      {items.map(([k, what]) => (
+        <div className="settings-shortcut" key={k}>
+          <dt><kbd>{k}</kbd></dt>
+          <dd>{what}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 function ShortcutPrefs() {
   return (
     <div className="settings-stack">
-      <Section title="Keyboard" hint="Single keys apply when no terminal or editor has focus">
-        <dl className="settings-shortcuts">
-          {SHORTCUTS.map(([k, what]) => (
-            <div className="settings-shortcut" key={k}>
-              <dt><kbd>{k}</kbd></dt>
-              <dd>{what}</dd>
-            </div>
-          ))}
-        </dl>
+      <Section title="Anywhere" hint="Work even while a terminal has focus — everything else goes to the terminal">
+        <ShortcutList items={SHORTCUTS_ANYWHERE} />
+      </Section>
+      <Section title="On the canvas" hint="When no terminal or editor has focus; inside one, ⌘/Ctrl + = / − / 0 size its text">
+        <ShortcutList items={SHORTCUTS_CANVAS} />
       </Section>
     </div>
   );

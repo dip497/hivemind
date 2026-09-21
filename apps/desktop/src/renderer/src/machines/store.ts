@@ -39,6 +39,20 @@ export function statusOf(s: MachinesSnapshot, hostId: string | null): MachineSta
   return (hostId && s.status[hostId]) || IDLE;
 }
 
+/** Where a frame runs, as every view sees it (the view protocol's `ViewFrame.machine`, 1.1): the
+ *  saved machine's name — else the host itself, so a frame on a removed or never-saved machine
+ *  still says where it is — and the link's state. A local frame gets nothing. */
+export function frameMachine(
+  s: MachinesSnapshot,
+  workspacePath: string | null | undefined,
+): { name: string; state: MachineStatus["state"]; rttMs?: number } | undefined {
+  const hostId = hostIdOfUri(workspacePath);
+  if (!hostId) return undefined;
+  const st = statusOf(s, hostId);
+  const name = machineByHost(s, hostId)?.label ?? hostId.replace(/:22$/, "");
+  return { name, state: st.state, ...(st.rttMs !== undefined ? { rttMs: st.rttMs } : {}) };
+}
+
 /** An IPC rejection's own message, without Electron's wrapper. */
 export function errText(e: unknown): string {
   const m = e instanceof Error ? e.message : String(e);
@@ -49,8 +63,8 @@ export type MachinesRequest =
   /** `machineId` opens that machine instead of the list — clicking a machine means that one. */
   | { kind: "manage"; machineId?: string }
   | { kind: "add"; target?: string }
-  /** Choose where a frame runs; `machineId` jumps straight to that machine's folders. */
-  | { kind: "pick"; frameId: string; machineId?: string };
+  /** Choose where a frame runs (null: a new frame); `machineId` jumps straight to that machine's folders. */
+  | { kind: "pick"; frameId: string | null; machineId?: string };
 
 /** Open the machines dialog from anywhere (frame header, Layers, a tile banner). */
 export function openMachines(req: MachinesRequest): void {

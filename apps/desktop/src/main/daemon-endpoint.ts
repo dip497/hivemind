@@ -36,6 +36,8 @@ export interface EndpointOptions {
   onStatus?: (state: EndpointState, detail?: string) => void;
   /** A connect failure no retry can fix (login, host key): wait for `reconnectNow` instead of retrying. */
   isFatal?: (message: string) => boolean;
+  /** The user turned the machine off: stay disconnected, keep the tiles, until `reconnectNow`. */
+  isPaused?: () => boolean;
 }
 
 export type EndpointState = "connecting" | "online" | "reconnecting" | "idle";
@@ -129,6 +131,7 @@ export class DaemonEndpoint {
       // Fail in-flight attaches now rather than after their timeout.
       for (const [reqId, resolve] of [...this.pending]) { this.pending.delete(reqId); resolve({ pid: -1 }); }
       if (this.closed) return;
+      if (this.o.isPaused?.()) { this.status("idle"); return; }
       this.status(this.cbs.size ? "reconnecting" : "idle");
       this.scheduleReattach();
     });
@@ -138,6 +141,7 @@ export class DaemonEndpoint {
   private ensure(): Promise<Duplex> {
     if (this.conn && !this.conn.destroyed) return Promise.resolve(this.conn);
     if (this.closed) return Promise.reject(new Error("endpoint closed"));
+    if (this.o.isPaused?.()) return Promise.reject(new Error("turned off"));
     if (!this.connecting) {
       // A retry is still "reconnecting": flipping to "connecting" each attempt would flicker the UI.
       if (this.state !== "reconnecting") this.status("connecting");
@@ -162,7 +166,7 @@ export class DaemonEndpoint {
   }
 
   private scheduleReattach(): void {
-    if (this.retry || this.closed || this.cbs.size === 0) return;
+    if (this.retry || this.closed || this.cbs.size === 0 || this.o.isPaused?.()) return;
     const base = this.o.retryInitialMs ?? 250;
     const max = this.o.retryMaxMs ?? 30_000;
     // Jittered, so several machines dropped by one network blip don't reconnect in lockstep.
@@ -186,6 +190,12 @@ export class DaemonEndpoint {
       this.status("reconnecting", msg);
       if (!this.o.isFatal?.(msg)) this.scheduleReattach();
     }
+  }
+
+  /** Drop the connection without closing: the tiles stay, and `reconnectNow` brings them back. */
+  disconnect(): void {
+    if (this.retry) { clearTimeout(this.retry); this.retry = null; }
+    this.conn?.destroy();
   }
 
   /** Skip the backoff wait (the user asked, or the network came back). */

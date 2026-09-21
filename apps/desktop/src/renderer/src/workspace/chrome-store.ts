@@ -11,8 +11,9 @@ function set(patch: Partial<ChromeState>) {
 function subscribe(l: () => void) { listeners.add(l); return () => { listeners.delete(l); }; }
 
 export function useChromeState(): ChromeState { return useSyncExternalStore(subscribe, () => state, () => state); }
+/** The live Appearance panel beside the workspace (the full page stays in Settings). */
 export function openAppearanceSettings(): void {
-  window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "appearance" } }));
+  window.dispatchEvent(new CustomEvent("hivemind:theme-panel"));
 }
 /** A view (the canvas's zen mode) hides ALL host chrome while it is active;
  *  the view must call this with `false` on unmount. */
