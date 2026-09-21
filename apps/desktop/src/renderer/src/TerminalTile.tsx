@@ -7,6 +7,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { registerFileLinks } from "./terminal-file-links";
 import { installCrispDpr } from "./terminal-dpr";
 import { nextPtySize, type PtySize } from "./pty-size-sync";
+import { oscColorReply } from "./osc-color";
 import { patchTerminalMouseWithRetry } from "./terminal-mouse-patch";
 import { wantsDomRenderer } from "./terminal-renderer-policy";
 import { registerWebglSlotClient, unregisterWebglSlotClient, reconcileWebglSlots } from "./webgl-slots";
@@ -743,6 +744,15 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
       window.hive.ptyWrite(ptyId, d);
     });
     term.onResize(() => syncPtySize());
+    // A glass terminal's background is transparent, which xterm reports as black; answer with
+    // the theme's colour so a TUI tinting its panels from it blends toward what the user chose.
+    term.parser.registerOscHandler(11, (data) => {
+      if (data !== "?" || termBgFor(getTheme()) === getTheme().terminal.background) return false;
+      const reply = oscColorReply(getTheme().terminal.background);
+      if (!reply) return false;
+      window.hive.ptyWrite(ptyId, `\x1b]11;${reply}\x1b\\`);
+      return true;
+    });
     // Clipboard COPY only. xterm doesn't copy on its own (Ctrl+C just sends
     // SIGINT): Cmd/Ctrl(+Shift)+C copies the selection (and clears it, so a
     // second press still sends SIGINT); plain Ctrl+C with NOTHING selected falls
