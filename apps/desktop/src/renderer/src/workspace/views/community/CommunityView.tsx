@@ -136,6 +136,8 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
           const name = k as keyof WorkspaceViewProps["commands"];
           // Status subscriptions are not state changes — keep them immediate.
           if (name === "subscribeTileStatus" || name === "tileStatus") return commandsRef.current[name];
+          // Its answer (was the agent found?) is what the link checks, so it cannot wait for the batch.
+          if (name === "spawnAgent") return (...args: Parameters<WorkspaceViewProps["commands"]["spawnAgent"]>) => commandsRef.current.spawnAgent(...args);
           return (...args: unknown[]) => enqueue(() => (commandsRef.current[name] as (...a: unknown[]) => void)(...args));
         },
       }),
