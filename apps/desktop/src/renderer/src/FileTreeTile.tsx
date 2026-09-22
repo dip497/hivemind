@@ -6,6 +6,7 @@
  * Real data only: paths from `git ls-files`, status from `git status` (both via
  * IPC `window.hive.*`). No mocks.
  */
+import { COMPACT_FOLDER_CSS } from "./code/FileTree";
 import { RowsSkeleton } from "./workspace/tile-skeletons";
 import { useEffect, useMemo } from "react";
 import { FileTree, useFileTree, useFileTreeSearch } from "@pierre/trees/react";
@@ -102,6 +103,7 @@ export function FileTreeTile({ repoPath, onSelectFile, embedded = false }: Props
     paths,
     gitStatus,
     flattenEmptyDirectories: true,
+    unsafeCSS: COMPACT_FOLDER_CSS,
     // Folders start COLLAPSED (VSCode/Zed default) — "open" expanded the
     // entire tree on mount which is overwhelming for big repos. User clicks
     // to drill in; ⌘P search still expands matches on demand.
