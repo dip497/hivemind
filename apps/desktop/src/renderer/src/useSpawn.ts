@@ -166,7 +166,7 @@ export function useSpawn(ctx: SpawnCtx) {
     // focus) or pan the viewport — you stay where you are while they run.
     if (!opts?.background) {
       setSelectedTileId(id);
-      setFocusReq((prev) => ({ id, cx: placeX + me.width / 2, cy: placeY + me.height / 2, w: me.width, h: me.height, n: (prev?.n ?? 0) + 1 }));
+      setFocusReq((prev) => ({ id, cx: placeX + me.width / 2, cy: placeY + me.height / 2, w: me.width, h: me.height, n: (prev?.n ?? 0) + 1, exact: true }));
     }
   }, [repoPath]);
 

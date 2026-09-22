@@ -63,3 +63,19 @@ test("frames added one after another, each given a shell, keep the camera near 1
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:add-frame")));
   await expect.poll(async () => (await zoom()) > 0.9 && (await lastFrameOnScreen()), { timeout: 15_000 }).toBe(true);
 });
+
+test("focusing a terminal from Layers lands at exactly 100% on whole pixels, so its text is sharp", async () => {
+  // An odd-sized window centres a tile on a half pixel; the settled camera must round it away.
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.setContentSize(1301, 901));
+  for (let i = 0; i < 3; i++) await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:zoom", { detail: "out" })));
+  await expect.poll(zoom).toBeLessThan(0.95);
+  await page.locator(".hm-layers button", { hasText: /shell/ }).first().click();
+  const at = () => page.evaluate(() => {
+    const r = document.querySelector(".hm-node-selected .xterm canvas, .hm-node-selected .xterm .xterm-screen")?.getBoundingClientRect();
+    return r ? [r.x, r.y] : null;
+  });
+  await expect.poll(async () => {
+    const p = await at();
+    return (await zoom()) === 1 && !!p && Number.isInteger(p[0]) && Number.isInteger(p[1]);
+  }, { timeout: 10_000, message: "zoom must be 1 and the terminal on whole pixels" }).toBe(true);
+});

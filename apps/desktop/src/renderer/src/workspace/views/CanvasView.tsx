@@ -246,14 +246,37 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
   // still emits its move-end; settling work checks this so it never acts on a move that
   // has already been superseded.
   const moveSeqRef = useRef(0);
+  // Text is sharp only on whole pixels. The camera can rest on a half pixel (an odd-sized pane,
+  // a zoom step), so once it is still at 100% each terminal is nudged by its own remainder —
+  // a style on the tile, never a camera move, so no flight or fit can be cut short by it.
+  const alignTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const alignText = useCallback(() => {
+    if (alignTimerRef.current) clearTimeout(alignTimerRef.current);
+    alignTimerRef.current = setTimeout(() => {
+      const exact = currentViewportRef.current.zoom === 1;
+      const dpr = window.devicePixelRatio || 1;
+      for (const el of flowWrapRef.current?.querySelectorAll<HTMLElement>(".react-flow__node .xterm") ?? []) {
+        el.style.translate = "";
+        if (!exact) continue;
+        const r = el.getBoundingClientRect();
+        const dx = Math.round(r.x * dpr) / dpr - r.x;
+        const dy = Math.round(r.y * dpr) / dpr - r.y;
+        if (dx || dy) el.style.translate = `${dx}px ${dy}px`;
+      }
+    }, 120);
+  }, [currentViewportRef]);
+  useEffect(() => () => { if (alignTimerRef.current) clearTimeout(alignTimerRef.current); }, []);
+  // A tile added, moved or resized, or the camera snapped, can shift a terminal without a move.
+  useEffect(() => { alignText(); }, [liveNodes, snapReq, alignText]);
   const onMove = useCallback((e: unknown, vp: { x: number; y: number; zoom: number }) => {
     currentViewportRef.current = vp;
+    alignText();
     if (inMomentumRef.current) return; // ignore self-generated moves
     if (!e) return; // a programmatic flight is not a flick to fling
     const s = panSamplesRef.current;
     s.push({ t: performance.now(), x: vp.x, y: vp.y });
     if (s.length > 6) s.shift();
-  }, [currentViewportRef]);
+  }, [currentViewportRef, alignText]);
   const onMoveStart = useCallback(() => {
     moveSeqRef.current++;
     // Ignore move-starts emitted by our OWN momentum setViewport calls — only a
