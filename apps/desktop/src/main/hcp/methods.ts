@@ -20,6 +20,37 @@ import { agentById, agentOption, spawnableAgents, workerAgents, type AgentProvid
 import { BROWSER_TOOL_ID, tileKindAvailability } from "@hivemind/core/tool-plugins";
 import type { ToolsSettings } from "@hivemind/core/settings-schema";
 import { SUBMIT_DELAY_MS } from "../../shared/agent-io.js";
+import { customDataProblem, isCustomEventName } from "@hivemind/view-sdk/protocol";
+
+/** `view.emit` rate: a steady 10 per second, bursts of 30. */
+export const EMIT_RATE = { perSecond: 10, burst: 30 };
+
+/** Validate `view.emit` params; throws BAD_REQUEST with the reason. */
+export function parseEmit(p: Record<string, unknown>): { name: string; data: unknown; view?: string; from: "shell" | { tileId: string } } {
+  if (!isCustomEventName(p.name)) throw new HcpError("BAD_REQUEST", "name must be dotted lowercase words (a-z, 0-9, -), at most 64 characters, not under hive. or hm.");
+  const data = p.data === undefined ? null : p.data;
+  const problem = customDataProblem(data);
+  if (problem) throw new HcpError("BAD_REQUEST", problem);
+  if (p.view !== undefined && (typeof p.view !== "string" || p.view.length === 0 || p.view.length > 256)) throw new HcpError("BAD_REQUEST", "view must be a view id");
+  const caller = typeof p.callerTile === "string" && p.callerTile ? bareOf(p.callerTile) : null;
+  return { name: p.name, data, ...(p.view ? { view: p.view as string } : {}), from: caller ? { tileId: caller } : "shell" };
+}
+
+/** A token bucket: `take()` is false once the burst is spent until it refills. */
+export function tokenBucket(rate: { perSecond: number; burst: number }, now: () => number = () => Date.now()) {
+  let tokens = rate.burst;
+  let last = now();
+  return {
+    take(): boolean {
+      const t = now();
+      tokens = Math.min(rate.burst, tokens + ((t - last) / 1000) * rate.perSecond);
+      last = t;
+      if (tokens < 1) return false;
+      tokens -= 1;
+      return true;
+    },
+  };
+}
 
 /** Max agent-spawn depth (user = 0). Bounds recursive agent-spawns-agent fan-out
  *  alongside the rate cap — the review flagged this gate as specified-but-unenforced. */
@@ -179,6 +210,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
   // Per-tile read epoch: set at spawn/send so agent.read waits for the turn that
   // FOLLOWS the prompt we just delivered (not a stale earlier turn).
   const sendSeq = new Map<string, number>();
+  const emitBucket = tokenBucket(EMIT_RATE);
   const sendMark = new Map<string, number>();
 
   // Bare↔pty id mapping lives in shared/tile-id (imported as ptyId/bareOf). The
@@ -701,6 +733,12 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       // up without a restart (the renderer re-reads both roots and updates
       // its registry — the switcher and ⌘E order follow, an active view that
       // vanished falls back to the canvas).
+      // `hive ctl view emit`: a named JSON event for the active view (protocol 1.3).
+      case "view.emit": {
+        const ev = parseEmit(p as Record<string, unknown>);
+        if (!emitBucket.take()) throw new HcpError("RATE_LIMITED", `at most ${EMIT_RATE.perSecond} view events a second`);
+        return await deps.callRenderer("view.emit", ev, RENDERER_TIMEOUT);
+      }
       case "views.rescan":
         return await deps.callRenderer("views.rescan", {}, RENDERER_TIMEOUT);
       // `hive agents install|remove` calls this so a running app picks the change

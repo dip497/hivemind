@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { READ_SLICE_MS, UsageError, boolFlag, intFlag, parseKeys, readSchedule, splitDouble, tailLines, workflowParams } from "../src/ctl-args.js";
+import { READ_SLICE_MS, UsageError, boolFlag, emitArgs, intFlag, parseKeys, readSchedule, splitDouble, tailLines, workflowParams } from "../src/ctl-args.js";
 import { EXIT, exitCodeFor } from "../src/hcp.js";
 import { useFixtureAgents } from "./agents-fixtures.js";
 
@@ -71,5 +71,19 @@ describe("exit codes", () => {
     expect(exitCodeFor("UNAUTHORIZED")).toBe(EXIT.unauthorized);
     expect(exitCodeFor("RATE_LIMITED")).toBe(EXIT.refused);
     expect(exitCodeFor("INTERNAL")).toBe(EXIT.error);
+  });
+});
+
+describe("view emit arguments", () => {
+  test("a dotted name and a JSON payload, or none", () => {
+    expect(emitArgs("ci.build", '{"state":"failed"}', () => "")).toEqual({ name: "ci.build", data: { state: "failed" } });
+    expect(emitArgs("deploy.done", undefined, () => "")).toEqual({ name: "deploy.done", data: null });
+    expect(emitArgs("git.commit", "-", () => '{"sha":"abc123"}\n')).toEqual({ name: "git.commit", data: { sha: "abc123" } });
+  });
+  test("bad names, invalid JSON and oversized payloads are usage errors", () => {
+    for (const [n, j] of [["CI", "{}"], ["hive.x", "{}"], ["ci.build", "{not json"], ["ci.build", JSON.stringify("x".repeat(5000))]] as const) {
+      expect(() => emitArgs(n, j, () => "")).toThrow(UsageError);
+    }
+    expect(exitCodeFor("USAGE")).toBe(EXIT.usage);
   });
 });

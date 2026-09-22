@@ -52,6 +52,10 @@ beforeAll(async () => {
           return { text: null, finalStatus: "timeout", truncated: false, note: "agent still working — no completed turn within timeout" };
         }
         case "tile.close": throw new HcpError("TILE_NOT_FOUND", `no tile ${String(p.tileId)}`);
+        case "view.emit":
+          if (p.name === "old.app") throw new HcpError("UNKNOWN_METHOD", "unknown method: view.emit");
+          if (p.view === "@a/other") return { ok: true, id: "ev_2", delivered: false, view: "@a/valley", reason: "not-active", buffered: true };
+          return p.name === "ci.build" ? { ok: true, id: "ev_1", delivered: true, view: "@a/valley" } : { ok: true, id: "ev_3", delivered: false, view: "canvas", reason: "no-listener", buffered: true };
         case "agent.send": if (!p.text) throw new HcpError("BAD_REQUEST", "text required"); return { ok: true };
         case "workflow.run": return { shape: p.shape, items: (p.items as string[]).map((item) => ({ item, tileId: "w-x", status: "ok", text: "did " + item })) };
         default: throw new HcpError("UNKNOWN_METHOD", method);
@@ -159,5 +163,28 @@ describe("hive ctl over a real HCP socket", () => {
     clearInterval(t);
     expect(r.code).toBe(0);
     expect(r.stdout).toMatch(/^live \d+\n(live \d+\n)*$/);
+  });
+
+  test("view emit: --json shapes for delivered, not listening and not active; the caller tile rides along", async () => {
+    const d = await hive(["ctl", "view", "emit", "ci.build", '{"state":"failed"}', "--json"], { env: env() });
+    expect(d.code).toBe(0);
+    expect(d.json).toEqual({ ok: true, id: "ev_1", delivered: true, view: "@a/valley" });
+    expect(calls.at(-1)).toEqual({ method: "view.emit", params: { name: "ci.build", data: { state: "failed" }, callerTile: "me-1" } });
+    const none = await hive(["ctl", "view", "emit", "deploy.done"], { env: env() });
+    expect(none.code).toBe(0);
+    expect(none.stdout.trim()).toBe("buffered (active view canvas isn't listening)");
+    const other = await hive(["ctl", "view", "emit", "ci.x", "--view", "@a/other", "--json"], { env: env() });
+    expect(other.json).toEqual({ ok: true, id: "ev_2", delivered: false, view: "@a/valley", reason: "not-active", buffered: true });
+  });
+
+  test("view emit: bad input never reaches the app; an older app says why", async () => {
+    const before = calls.length;
+    const bad = await hive(["ctl", "view", "emit", "ci.build", "{nope", "--json"], { env: env() });
+    expect(bad.code).toBe(2);
+    expect(bad.json).toMatchObject({ ok: false, code: "USAGE" });
+    expect(calls.length).toBe(before);
+    const old = await hive(["ctl", "view", "emit", "old.app", "--json"], { env: env() });
+    expect(old.code).toBe(2);
+    expect(old.json).toMatchObject({ ok: false, code: "UNKNOWN_METHOD", message: expect.stringMatching(/predates view events/) });
   });
 });
