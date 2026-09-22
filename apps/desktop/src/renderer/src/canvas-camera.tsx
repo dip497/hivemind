@@ -90,6 +90,10 @@ export function FocusOnTile({
       // clamping against 0 would shove the tile hard off-screen.
       if (paneW > 0 && w > paneW - 2 * PAD) tx = req.cx - w / 2 + paneW / 2 - PAD; // left-anchor
       if (paneH > 0 && h > paneH - 2 * PAD) ty = req.cy - h / 2 + paneH / 2 - PAD; // top-anchor
+      // At zoom 1 a flow unit is a screen pixel: land the pan on whole pixels, or an odd-sized
+      // pane leaves the text on a half pixel (blurred) with nothing left to snap it.
+      if (paneW > 0) tx = paneW / 2 - Math.round(paneW / 2 - tx);
+      if (paneH > 0) ty = paneH / 2 - Math.round(paneH / 2 - ty);
       void setCenter(tx, ty, { zoom: 1, duration: 400 });
       return;
     }
@@ -97,7 +101,11 @@ export function FocusOnTile({
     // DOM measurement, so a brand-new tile or frame is framed on the first frame,
     // and nothing is read from the live zoom (see camera-fit.ts). A newer request
     // interrupting this one then lands exactly where it would have from rest.
-    void setCenter(req.cx, req.cy, { zoom: focusZoom(req.w ?? 0, req.h ?? 0, paneW, paneH), duration: 400 });
+    const zoom = focusZoom(req.w ?? 0, req.h ?? 0, paneW, paneH);
+    // Same whole-pixel landing as the exact path, at whatever zoom the fit chose.
+    const cx = paneW > 0 ? (paneW / 2 - Math.round(paneW / 2 - req.cx * zoom)) / zoom : req.cx;
+    const cy = paneH > 0 ? (paneH / 2 - Math.round(paneH / 2 - req.cy * zoom)) / zoom : req.cy;
+    void setCenter(cx, cy, { zoom, duration: 400 });
     // Pane size is read, not depended on: a window resize must not re-fly an old request.
   }, [req, setCenter]);
   return null;

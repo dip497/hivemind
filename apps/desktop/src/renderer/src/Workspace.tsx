@@ -413,7 +413,8 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
         w = s.width;
         h = s.height;
       }
-      setFocusReq((prev) => ({ id, cx, cy, w, h, n: (prev?.n ?? 0) + 1, exact: opts?.exact }));
+      // Text is only sharp at exactly 100%, so a tile always lands there; only a frame zooms to fit.
+      setFocusReq((prev) => ({ id, cx, cy, w, h, n: (prev?.n ?? 0) + 1, exact: opts?.exact ?? !frame }));
     },
     [],
   );
