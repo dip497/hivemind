@@ -894,8 +894,7 @@ html.glass-on[data-wallpaper="video"] .react-flow__node-diff,
 html.glass-on[data-wallpaper="video"] .react-flow__node-editor,
 html.glass-on[data-wallpaper="video"] .react-flow__node-workbench,
 html.glass-on[data-wallpaper="video"] .react-flow__node-issues,
-html.glass-on[data-wallpaper="video"] .react-flow__node-browser,
-html[data-wallpaper="video"] .hm-term-fs-panel {
+html.glass-on[data-wallpaper="video"] .react-flow__node-browser {
   backdrop-filter: none !important;
 }
 
@@ -996,12 +995,11 @@ html.content-glass .md-preview code {
    instead of the fixed full-window layer, so a fullscreen terminal floats over a
    clean copy of the wallpaper rather than the canvas + other tiles. */
 .hm-wallpaper.embedded { position: absolute; z-index: 0; }
-/* Fit-to-screen glass panel — the SAME content tint + blur recipe as the canvas
-   glass tiles (--surface-3 at --content-opacity, --glass-blur), so fullscreen
-   matches the tile the user came from instead of an ad-hoc dark scrim. */
-.hm-term-fs-panel {
+/* Fullscreen panel: exactly the canvas tile's background (.hm-term-root) — bg2, or the
+   content tint under "Frost tool content" — and, like the tile, no blur. */
+.hm-term-fs-panel { background-color: var(--color-bg2); }
+html.content-glass .hm-term-fs-panel {
   background-color: color-mix(in srgb, var(--surface-3) var(--content-opacity, 25%), transparent);
-  backdrop-filter: blur(var(--glass-blur, 16px)) saturate(135%);
 }
 .hm-wallpaper[data-scene="aurora"] { --wp-base: #090c16; --wp-1: #4f46e5; --wp-2: #14b8a6; --wp-3: #7c3aed; }
 .hm-wallpaper[data-scene="ember"]  { --wp-base: #130a07; --wp-1: #f97316; --wp-2: #db2777; --wp-3: #fbbf24; }
@@ -1225,8 +1223,7 @@ html.glass-on .react-flow__node-browser {
   /* Blur costs GPU and buys nothing behind an opaque panel. */
   html.glass-on .hm-island,
   html.glass-on .react-flow__node,
-  html.glass-on .hm-layers,
-  .hm-term-fs-panel {
+  html.glass-on .hm-layers {
     backdrop-filter: none !important;
   }
   html.glass-on body { background: var(--color-bg); }
