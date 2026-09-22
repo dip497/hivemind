@@ -1,6 +1,7 @@
 {
   "name": "@hivemind/desktop",
   "version": "2026.9.4",
+  "desktopName": "hivemind.desktop",
   "private": true,
   "type": "module",
   "main": "./out/main/index.js",
