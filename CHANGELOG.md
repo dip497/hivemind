@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [2026.9.5] — 2026-09-22
+
 - Terminal text is sharp again after the camera moves to a tile. Focusing a tile from Layers, Ctrl+1–9, Ctrl+Tab or a notification lands at exactly 100% instead of fitting a large tile below it, and a terminal no longer sits on a half pixel in an odd-sized window.
 - Ctrl+B and Ctrl+N reach the program in a terminal again, so Claude's "Ctrl+B to run in background", tmux's prefix and the shell's own keys work. On the canvas they still toggle Layers and open a new issue; ⌘B / ⌘N on macOS work everywhere.
 - A terminal, editor or diff opened full screen looks like its tile on the canvas. Full screen used to blur the wallpaper and add its own tint.
@@ -1306,7 +1308,8 @@ World, and sandboxed community views), and the e2e/perf harnesses gate every cha
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.9.4...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.9.5...HEAD
+[2026.9.5]: https://github.com/dip497/hivemind/releases/tag/v2026.9.5
 [2026.9.4]: https://github.com/dip497/hivemind/releases/tag/v2026.9.4
 [2026.9.3]: https://github.com/dip497/hivemind/releases/tag/v2026.9.3
 [2026.9.2]: https://github.com/dip497/hivemind/releases/tag/v2026.9.2
