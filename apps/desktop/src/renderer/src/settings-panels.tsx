@@ -109,16 +109,16 @@ const SHORTCUTS_ANYWHERE: [string, string][] = [
   ["⌘/Ctrl + ⇧ + E", "File tree"],
   ["⌘/Ctrl + ⇧ + G", "Diff review"],
   ["⌘/Ctrl + ⇧ + N", "New frame"],
-  ["⌘/Ctrl + B", "Show or hide Layers"],
   ["⌘/Ctrl + 1 … 9", "Go to tile 1 … 9"],
   ["⌘/Ctrl + Tab", "Next tile (⇧ for previous)"],
   ["⌘/Ctrl + E", "Cycle views"],
   ["⌘/Ctrl + ,", "Settings"],
-  ["⌘/Ctrl + N", "New issue"],
   ["⌘/Ctrl + .", "Focus the selected tile"],
   ["F11", "Full screen"],
 ];
 const SHORTCUTS_CANVAS: [string, string][] = [
+  ["⌘/Ctrl + B", "Show or hide Layers (⌘ works in a terminal too)"],
+  ["⌘/Ctrl + N", "New issue (⌘ works in a terminal too)"],
   ["1 … 7", "Toolbar actions"],
   ["⌘/Ctrl + = / −", "Zoom in / out"],
   ["⌘/Ctrl + 0", "Zoom to 100%"],

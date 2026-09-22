@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { appShortcut } from "../../src/main/shortcuts";
+import { appShortcut, menuKey } from "../../src/main/shortcuts";
 
 const key = (k: string, mods: Partial<{ control: boolean; meta: boolean; shift: boolean; alt: boolean }> = {}) =>
   appShortcut({ key: k, control: false, meta: false, shift: false, alt: false, ...mods });
@@ -35,4 +35,13 @@ test("no modifier, Alt, or Ctrl+0 is not an app shortcut", () => {
   assert.equal(key("E", { shift: true }), null);
   assert.equal(key("E", { control: true, shift: true, alt: true }), null);
   assert.equal(ctrl("0"), null);         // canvas zoom, or the tile's font — decided in the renderer
+});
+
+test("Ctrl+B and Ctrl+N stay with the terminal; ⌘B / ⌘N are the app's", () => {
+  const base = { control: false, meta: false, shift: false, alt: false };
+  assert.equal(menuKey({ ...base, key: "b", control: true }), null);
+  assert.equal(menuKey({ ...base, key: "n", control: true }), null);
+  assert.equal(menuKey({ ...base, key: "b", meta: true }), "toggle-layers");
+  assert.equal(menuKey({ ...base, key: "N", meta: true }), "new-issue");
+  assert.equal(menuKey({ ...base, key: "b", meta: true, shift: true }), null);
 });

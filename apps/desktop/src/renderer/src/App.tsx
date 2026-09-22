@@ -264,16 +264,17 @@ export function App() {
     };
   }, [root]);
 
-  // ⌘N global shortcut to open the new-issue modal.
+  // Ctrl+N new issue, Ctrl+B Layers — only when nothing is typed into: a terminal's textarea keeps them.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.key === "n" || e.key === "N") && (e.metaKey || e.ctrlKey) && !e.shiftKey) {
-        // Don't hijack ⌘N inside input/textarea/contenteditable.
-        const t = e.target as HTMLElement | null;
-        if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
-        e.preventDefault();
-        setNewOpen(true);
-      }
+      if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey) return;
+      const k = e.key.toLowerCase();
+      if (k !== "n" && k !== "b") return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      e.preventDefault();
+      if (k === "n") setNewOpen(true);
+      else window.dispatchEvent(new CustomEvent("hivemind:toggle-layers"));
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -316,7 +317,7 @@ export function App() {
 
   // Main-process accelerator bridge: xterm swallows Ctrl+N to send it as a
   // control code to the PTY (^N = SO), so window keydown never fires when a
-  // terminal has focus. Main intercepts ⌘N / ⌘B (and the VS Code keys) via before-input-event and
+  // terminal has focus. Main intercepts ⌘N / ⌘B on macOS (and the VS Code keys) via before-input-event and
   // forwards over IPC — we re-emit as the same CustomEvents the handlers use.
   useEffect(() => {
     const w = window as unknown as {

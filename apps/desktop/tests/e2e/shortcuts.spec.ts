@@ -99,3 +99,22 @@ test("Ctrl+R is the shell's history search in a terminal, and Open recent on the
   await page.keyboard.press("Escape");
   await expect(recent).toHaveCount(0);
 });
+
+test("Ctrl+B reaches the program in a terminal (run in background, tmux); on the canvas it toggles Layers", async () => {
+  const layers = () => page.locator(".hm-layers").count();
+  const before = await layers();
+  await shortcut("tile:1");
+  await page.locator(".hm-node-selected .xterm-helper-textarea").focus();
+  await page.keyboard.type("cat -v\n");
+  await page.waitForTimeout(400);
+  await page.keyboard.press("Control+b");
+  await page.keyboard.press("Enter");
+  await expect.poll(screen, { timeout: 5_000 }).toContain("^B");
+  await page.keyboard.press("Control+c");
+  expect(await layers()).toBe(before);
+  await page.locator(".react-flow__pane").click({ position: { x: 5, y: 5 } });
+  await page.keyboard.press("Control+b");
+  await expect.poll(layers).not.toBe(before);
+  await page.keyboard.press("Control+b");
+  await expect.poll(layers).toBe(before);
+});

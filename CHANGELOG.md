@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Ctrl+B and Ctrl+N reach the program in a terminal again, so Claude's "Ctrl+B to run in background", tmux's prefix and the shell's own keys work. On the canvas they still toggle Layers and open a new issue; ⌘B / ⌘N on macOS work everywhere.
+
 ## [2026.9.4] — 2026-09-22
 
 - No known vulnerabilities in the dependency tree: Electron's installer now unpacks with Electron's own maintained zip library instead of `extract-zip`, which has an unfixed path-traversal advisory.

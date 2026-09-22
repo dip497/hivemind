@@ -23,3 +23,12 @@ export function appShortcut(i: KeyInput): string | null {
   if (k === ",") return "settings";
   return null;
 }
+
+/** App keys that are a plain letter with the modifier: only ⌘ (macOS) takes them from a terminal.
+ *  Ctrl+B / Ctrl+N belong to the program there (run in background, tmux's prefix, readline); the
+ *  renderer handles them when no terminal or field has focus. */
+export function menuKey(i: KeyInput): "new-issue" | "toggle-layers" | null {
+  if (!i.meta || i.control || i.alt || i.shift) return null;
+  const k = i.key.toLowerCase();
+  return k === "n" ? "new-issue" : k === "b" ? "toggle-layers" : null;
+}
