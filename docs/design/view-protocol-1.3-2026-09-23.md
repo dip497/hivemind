@@ -679,3 +679,102 @@ The checklist gains four lines: custom `data` is rendered as text; activity neve
 8. **Model per tile** (Valley Phase 3, a robot body per model). `agent` already gives the provider.
    The model would have to come from the provider's session data, which isn't read today. It is
    out of scope here.
+
+## 10. Implementation notes (2026-09-23)
+
+Built on `feat/view-protocol-1.3` as designed, with the two maintainer decisions (step 0
+deferred; presence as daily totals). Where the code differs from the text above, and why:
+
+- **`needsInput.reason` has a fifth value, `input`.** A screen-scraped "needs you" (the bus's
+  plain `blocked`) is not a permission, a question, a review or an approval, and naming it one of
+  those would be a guess.
+- **Presence totals live in `<day>.presence.json`, not in the day's JSONL.** An append-only file
+  cannot rewrite one totals line; a separate file of three numbers can, and it keeps no times.
+  Main counts presence whether or not a view is open, so the monitor polls every 15 s while the
+  app runs.
+- **The ledger stores a tile's name as the user's rename or the tile's own label, never an
+  agent-set title.** Agent titles already reach a mounted view through `names`; writing them to a
+  30-day file would keep text an agent wrote.
+- **Each day file opens with a carry-over line (`S`)** holding the state of every tile at
+  midnight, so a day folds on its own and an interval that crosses midnight is split, not lost.
+- **Activity is counted where pty data enters main (`onData`), not at the output buffer's
+  flush.** That is the one place that still knows a chunk is a reattach replay (the daemon
+  endpoint now passes `replay: true`), and the cost is one map lookup per chunk.
+- **Subagent counts ride every hook edge.** `hcp:subagent` used to be pushed only when a tile
+  became busy or idle; it now carries `active` on each start/stop.
+- **A 1.2 bug fixed on the way:** CommunityView's batching proxy returned nothing for every
+  command, so the host link read each successful `spawnAgent` as "no such agent" and counted a
+  refusal — a view that started eight agents was disabled. `spawnAgent` now bypasses the batch.
+- **Found, not changed:** a tile's body mounts the first time some view shows it
+  (`tile-host.tsx`). An agent a community view starts therefore gets its `tileOpened` event at
+  once but no terminal, and so no status, until a view shows it. The load test below works
+  around it by showing the canvas once. Whether a community-spawned agent should start unseen is
+  a question for the maintainer (it is the same for any view that is not the canvas).
+- **Found, not changed:** an HCP client that writes one hook event and closes at once (`socat
+  -t0`) can lose it — the server never reads the line. The shipped hooks half-close and wait for the server to close, so
+  they are not affected; the load test's shim lingers the same way.
+- **Not done:** the community e2e fixture assertions of step 10. The real-app path is exercised
+  by `scripts/view-load.mjs` below (features, `since`, events, activity, presence, `history`,
+  and a `hive ctl view emit` delivered to the mounted view).
+
+## 11. Measured (2026-09-23)
+
+`apps/desktop/scripts/view-load.mjs`, run headless: `xvfb-run -n 91 -s "-screen 0 3400x2200x24"`,
+a private `XDG_CONFIG_HOME` and `HOME`, and only this run's processes killed afterwards. It starts
+50, then 100 shim agents. Each one cycles through 8 s working (a moving spinner), permission
+half the time (6 s), then 6 s idle, and reports turn start and end over the control socket, as a
+hooked agent does. A test view subscribes to status, events, activity, presence and `ci`-style
+custom events. Each step measures three 30 s windows on the same agents:
+
+1. **structure only**: the view is mounted but subscribed to nothing 1.3 adds;
+2. **subscribed, no drawing**: every 1.3 subscription on, and the view draws nothing. This is
+   what the protocol costs;
+3. **subscribed, redraw per status**: the same, plus a redraw of the view's full-window page on
+   every status. This is what a naive view adds on top.
+
+The machine was a 16-CPU box with the live desktop in use, at a 1-minute load average of 14–18.
+The measurements run under xvfb, so rendering and compositing use the CPU (the GPU process is
+software). Treat ±20 % as noise. The comparison between windows is the result; the absolute
+numbers are not.
+
+CPU is the percentage of one core; RSS is in MB.
+
+| agents | window | main | renderer | view | pty daemon | GPU proc | msgs/s to view (status · activity · events) |
+|---:|---|---:|---:|---:|---:|---:|---|
+| 50 | structure only | 5.3 | 28.2 | 0 | 3.2 | 12.9 | 0 |
+| 50 | subscribed, no drawing | 4.8 | 24.9 | 0.5 | 2.8 | 12.0 | 15.2 (7.4 · 3.5 · 4.3) |
+| 50 | subscribed, redraw per status | 5.6 | 28.4 | 3.0 | 3.3 | 54.6 | 15.2 (7.3 · 3.5 · 4.4) |
+| 100 | structure only | 8.3 | 53.8 | 0 | 5.1 | 13.2 | 0 |
+| 100 | subscribed, no drawing | 6.9 | 43.4 | 0.8 | 4.3 | 12.2 | 27.0 (14.6 · 4.0 · 8.4) |
+| 100 | subscribed, redraw per status | 9.8 | 64.3 | 6.1 | 6.1 | 98.4 | 27.4 (14.6 · 3.9 · 8.9) |
+
+| agents | RSS main | RSS renderer | RSS view | RSS daemon | RSS all app processes |
+|---:|---:|---:|---:|---:|---:|
+| 50 | 236 | 458 → 480 | 92 → 99 | 109 | 1512 → 1544 |
+| 100 | 239 → 241 | 708 → 711 | 92 → 101 | 119 | 1900 → 1918 |
+
+(Each arrow goes from the structure-only window to the last subscribed window.)
+
+What the numbers say:
+
+- **The protocol costs little.** With every subscription on, main, the renderer and the daemon
+  are within noise of the structure-only window at both 50 and 100 agents; the second window
+  even reads lower, because the machine's other load moved more than 1.3 did. The view process
+  itself spends under 1 % receiving 27 messages a second. Memory grows by a few MB for the ring,
+  the since table and the view's listeners.
+- **Activity stays under its cap.** It ran at 3.5–4.0 messages a second at 50 and 100 agents
+  alike: the 250 ms throttle holds however many tiles change. Status and events grow linearly with
+  agents, and events arrive batched.
+- **Drawing is the cost, not data.** A view that repaints its whole page on every status turns
+  about 15 status messages a second into as many full-window repaints. The GPU process goes from
+  12 % to 55 % at 50 agents and to 98 % at 100 on software compositing, and the renderer rises
+  with it. On a real GPU that composite is much cheaper, but the lesson for view authors holds
+  anywhere: redraw only what changed, and coalesce. The skill already says so; Valley should
+  batch status changes into its own frame budget rather than drawing per message.
+- **The rest works end to end at 100 agents.** `hello.features` lists all six features, every
+  status carried `since` (1,038 of 1,038 at 100 agents, all exact because the host saw them
+  begin), 374 turn and 184 needs-input events arrived, `hive ctl view emit` was delivered to the
+  mounted view, and `history(today)` folded 3,275 intervals and 1,335 turns across 100 tiles in
+  64 ms. Presence came back as day totals only.
+- **Pre-existing, not 1.3:** the renderer at 100 live terminals (54 % CPU, 708 MB before any view
+  subscription) is the cost of the terminals themselves.
