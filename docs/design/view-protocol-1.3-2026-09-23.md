@@ -700,6 +700,10 @@ deferred; presence as daily totals). Where the code differs from the text above,
 - **Activity is counted where pty data enters main (`onData`), not at the output buffer's
   flush.** That is the one place that still knows a chunk is a reattach replay (the daemon
   endpoint now passes `replay: true`), and the cost is one map lookup per chunk.
+- **The event hub loads off the first paint.** Workspace imports it lazily so the renderer's
+  entry chunk stays inside its size guard (`renderer-chunks.test.ts`); the status bus replays
+  every current status to it when it starts, so nothing is missed, and a status it finds already
+  set is a lower bound (`exact: false`), as designed.
 - **Subagent counts ride every hook edge.** `hcp:subagent` used to be pushed only when a tile
   became busy or idle; it now carries `active` on each start/stop.
 - **A 1.2 bug fixed on the way:** CommunityView's batching proxy returned nothing for every
