@@ -97,8 +97,7 @@ export function FullscreenShell({
             </button>
           </span>
         </div>
-        {/* Frosted glass panel — same content tint + blur recipe as the canvas
-            tiles (.hm-term-fs-panel), so fullscreen matches the tile you came from.
+        {/* The tile's own background (.hm-term-fs-panel), so fullscreen looks like the tile you came from.
             The caller fills this via reparent (imperative) or portal (React). */}
         <div
           ref={hostRef}
