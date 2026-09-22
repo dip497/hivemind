@@ -2,13 +2,16 @@
 // thresholds (malformed / flood / long tasks), version mismatch, reveal.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CommunityLink, LIMITS, type LinkDeps } from "../../src/renderer/src/workspace/views/community/host-link";
+import { CommunityLink, LIMITS, SHARE_DECLINES_MAX, type LinkDeps, type LinkServices } from "../../src/renderer/src/workspace/views/community/host-link";
+import { ViewEventHub } from "../../src/renderer/src/workspace/view-events";
+import type { ActivityLevel, ShareOutcome, ViewPresence } from "@hivemind/view-sdk/protocol";
 
-function harness(caps: LinkDeps["capabilities"] = [], tiles = ["t1", "t2"]) {
+function harness(caps: LinkDeps["capabilities"] = [], tiles = ["t1", "t2"], services?: LinkServices) {
   const calls: string[] = [];
   const events: string[] = [];
   const sent: unknown[] = [];
   let clock = 0;
+  const timers: Array<{ at: number; fn: () => void }> = [];
   const statusCbs = new Map<string, (s: string, e: unknown) => void>();
   const commands = new Proxy({}, {
     get: (_t, k: string) => {
@@ -26,9 +29,19 @@ function harness(caps: LinkDeps["capabilities"] = [], tiles = ["t1", "t2"]) {
     onError: (m) => events.push(`error:${m}`),
     onDisable: (why) => events.push(`disable:${why}`),
     now: () => clock,
+    services,
+    schedule: (fn, ms) => { timers.push({ at: clock + ms, fn }); },
   });
   link.attach({ postMessage: (m) => sent.push(m), onmessage: null });
-  const tick = (ms: number) => { clock += ms; };
+  const tick = (ms: number) => {
+    clock += ms;
+    for (;;) {
+      const due = timers.filter((t) => t.at <= clock).sort((a, b) => a.at - b.at)[0];
+      if (!due) break;
+      timers.splice(timers.indexOf(due), 1);
+      due.fn();
+    }
+  };
   return { link, calls, events, sent, statusCbs, tick };
 }
 
@@ -170,3 +183,139 @@ test("layout and framesDrawn and error are forwarded; dispose releases subscript
   h.link.dispose();
   assert.equal(h.statusCbs.size, 0);
 });
+
+// ── protocol 1.3 ────────────────────────────────────────────────────────────
+
+const flush = () => new Promise((r) => setTimeout(r, 0));
+const ofType = (sent: unknown[], type: string) => sent.filter((m) => (m as { type: string }).type === type) as Array<Record<string, unknown>>;
+
+function fakeActivity() {
+  const levels = new Map<string, ActivityLevel>();
+  const subs = new Set<(c: Record<string, ActivityLevel>) => void>();
+  const watched = new Map<object, string[]>();
+  return {
+    service: {
+      level: (id: string) => levels.get(id) ?? 0,
+      subscribe: (cb: (c: Record<string, ActivityLevel>) => void) => { subs.add(cb); return () => subs.delete(cb); },
+      watch: (owner: object, ids: string[]) => { watched.set(owner, ids); },
+    },
+    set(id: string, l: ActivityLevel) { levels.set(id, l); for (const cb of subs) cb({ [id]: l }); },
+    watched,
+  };
+}
+
+test("1.3: hello features list only what is wired; status carries since", () => {
+  const bare = harness();
+  assert.deepEqual(bare.link.features, []);
+  const h = harness([], ["t1"], { sinceOf: (id) => (id === "t1" ? { since: 42, exact: false } : undefined), history: async () => ({}) as never });
+  assert.deepEqual(h.link.features, ["since", "history"]);
+  h.link.handle({ type: "ready", v: 1 });
+  h.link.handle({ type: "subscribeStatus", tileId: "t1" });
+  h.statusCbs.get("t1")!("question", {});
+  assert.deepEqual(h.sent.at(-1), { type: "status", tileId: "t1", status: "blocked", since: 42, exact: false });
+});
+
+test("1.3: a feature the host did not wire is a refusal, like an unknown message", () => {
+  const h = harness();
+  h.link.handle({ type: "ready", v: 1 });
+  h.link.handle({ type: "subscribeEvents", kinds: ["turn"] });
+  h.link.handle({ type: "watchActivity", tileIds: ["t1"] });
+  h.link.handle({ type: "subscribePresence" });
+  assert.equal(h.link.stats.refused, 3);
+});
+
+test("1.3: events are filtered by kind and name, batched per task, and replayed on request", async () => {
+  const hub = new ViewEventHub();
+  hub.onHookTurn("t1");
+  hub.emitCustom("ci.build", { ok: true }, "shell");
+  const h = harness([], ["t1"], { events: { subscribe: (l) => hub.subscribe(l), replay: (s, a, v) => hub.replay(s, a, v) } });
+  h.link.handle({ type: "ready", v: 1 });
+  h.link.handle({ type: "subscribeEvents", kinds: ["custom"], custom: ["ci.*"], replaySince: 0 });
+  const replay = ofType(h.sent, "events");
+  assert.equal(replay.length, 1);
+  assert.equal(replay[0]!.replay, true);
+  assert.deepEqual((replay[0]!.events as Array<{ kind: string }>).map((e) => e.kind), ["custom"]);
+  assert.equal(hub.emitCustom("deploy.done", null, "shell").delivered, false);
+  assert.equal(hub.emitCustom("ci.test", null, { tileId: "t1" }).delivered, true);
+  hub.onHookTurn("t1");
+  hub.emitCustom("ci.lint", null, "shell");
+  await flush();
+  const live = ofType(h.sent, "events").slice(1);
+  assert.equal(live.length, 1);
+  assert.deepEqual((live[0]!.events as Array<{ name: string }>).map((e) => e.name), ["ci.test", "ci.lint"]);
+  assert.equal(hub.emitCustom("ci.y", null, "shell", "someone-else").delivered, false);
+  assert.equal(hub.emitCustom("ci.y", null, "shell", "p").delivered, true);
+  h.link.handle({ type: "unsubscribeEvents" });
+  assert.equal(hub.emitCustom("ci.x", null, "shell").delivered, false);
+});
+
+test("1.3: activity is at most one message per 250 ms, only watched tiles, nothing while hidden, a snapshot on return", () => {
+  const a = fakeActivity();
+  const h = harness([], ["t1", "t2"], { activity: a.service });
+  h.link.handle({ type: "ready", v: 1 });
+  h.link.handle({ type: "watchActivity", tileIds: ["t1", "ghost"] });
+  assert.equal(h.link.stats.refused, 1);
+  h.tick(0);
+  assert.deepEqual(ofType(h.sent, "activity").map((m) => m.levels), [{ t1: 0 }]);
+  for (let i = 0; i < 100; i++) { a.set("t1", ((i % 3) + 1) as ActivityLevel); a.set("t2", 3); h.tick(10); }
+  const sent = ofType(h.sent, "activity");
+  assert.ok(sent.length <= 1 + Math.ceil(1000 / 250), `sent ${sent.length} in 1 s`);
+  assert.ok(sent.every((m) => !("t2" in (m.levels as object))));
+  const before = sent.length;
+  h.link.setVisible(false);
+  for (let i = 0; i < 20; i++) { a.set("t1", 3); h.tick(100); }
+  assert.equal(ofType(h.sent, "activity").length, before);
+  h.link.setVisible(true);
+  h.tick(250);
+  assert.deepEqual(ofType(h.sent, "activity").at(-1)!.levels, { t1: 3 });
+  h.link.dropTile("t1");
+  assert.deepEqual(a.watched.get(h.link), []);
+});
+
+test("1.3: presence replays the current state and stops on unsubscribe", () => {
+  const cbs = new Set<(p: ViewPresence) => void>();
+  const cur: ViewPresence = { state: "active", since: 1, focused: true };
+  const h = harness([], ["t1"], { presence: { subscribe: (cb) => { cbs.add(cb); cb(cur); return () => cbs.delete(cb); } } });
+  h.link.handle({ type: "ready", v: 1 });
+  h.link.handle({ type: "subscribePresence" });
+  h.link.handle({ type: "subscribePresence" });
+  assert.equal(cbs.size, 1);
+  assert.deepEqual(ofType(h.sent, "presence").map((m) => m.presence), [cur]);
+  h.link.handle({ type: "unsubscribePresence" });
+  assert.equal(cbs.size, 0);
+});
+
+test("1.3: history allows one request at a time", async () => {
+  let release!: () => void;
+  const h = harness([], ["t1"], { history: (day) => new Promise((r) => { release = () => r({ day } as never); }) });
+  h.link.handle({ type: "ready", v: 1 });
+  h.link.handle({ type: "request", requestId: 1, name: "history", args: [{ day: "2026-09-23" }] });
+  h.link.handle({ type: "request", requestId: 2, name: "history", args: [{ day: "2026-09-22" }] });
+  assert.deepEqual(ofType(h.sent, "response").map((m) => [m.requestId, m.ok]), [[2, false]]);
+  release();
+  await flush();
+  assert.deepEqual(ofType(h.sent, "response").at(-1), { type: "response", requestId: 1, ok: true, result: { day: "2026-09-23" } });
+});
+
+test("1.3: share — one pending, never while hidden, and declined for the session after three cancels", async () => {
+  let answer!: (o: ShareOutcome) => void;
+  let shown = 0;
+  const h = harness([], ["t1"], { share: () => { shown++; return new Promise((r) => { answer = r; }); } });
+  h.link.handle({ type: "ready", v: 1 });
+  const ask = (id: number) => h.link.handle({ type: "request", requestId: id, name: "share", args: [{ png: new ArrayBuffer(8) }] });
+  ask(1); ask(2);
+  assert.deepEqual(ofType(h.sent, "response").map((m) => (m.error as { code: string }).code), ["BUSY"]);
+  answer("copied");
+  await flush();
+  assert.deepEqual(ofType(h.sent, "response").at(-1)!.result, { outcome: "copied" });
+  h.link.setVisible(false);
+  ask(3);
+  assert.equal((ofType(h.sent, "response").at(-1)!.error as { code: string }).code, "BUSY");
+  h.link.setVisible(true);
+  for (let i = 0; i < SHARE_DECLINES_MAX; i++) { ask(10 + i); answer("cancelled"); await flush(); }
+  const before = shown;
+  ask(20);
+  assert.equal(shown, before);
+  assert.equal((ofType(h.sent, "response").at(-1)!.error as { code: string }).code, "DECLINED");
+});
+
