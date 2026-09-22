@@ -10,6 +10,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 ## [Unreleased]
 
 - Terminal text is sharp again after the camera moves to a tile. Focusing a tile from Layers, Ctrl+1–9, Ctrl+Tab or a notification lands at exactly 100% instead of fitting a large tile below it, and a terminal no longer sits on a half pixel in an odd-sized window.
+- Ctrl+B and Ctrl+N reach the program in a terminal again, so Claude's "Ctrl+B to run in background", tmux's prefix and the shell's own keys work. On the canvas they still toggle Layers and open a new issue; ⌘B / ⌘N on macOS work everywhere.
 
 ## [2026.9.4] — 2026-09-22
 
