@@ -39,6 +39,11 @@ export class SubagentTracker {
     return was && s.size === 0;
   }
 
+  /** In-flight subagents for a tile. */
+  count(tileId: string): number {
+    return this.agents.get(tileId)?.size ?? 0;
+  }
+
   busy(tileId: string): boolean {
     const s = this.agents.get(tileId);
     return !!s && s.size > 0;

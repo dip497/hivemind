@@ -1,6 +1,7 @@
 /** Typed contract for IPC between main and renderer. */
 import type { Issue, IssueSummary, IssueState, AcceptanceItem, Assignee, LinkType, IssuePatch } from "@hivemind/core/types";
 import type { ViewManifest } from "@hivemind/view-sdk/manifest";
+import type { ActivityLevel, ShareOutcome, ViewHistoryDay, ViewPresence, ViewStatus } from "@hivemind/view-sdk/protocol";
 import type { NotificationSettings } from "./notification-settings.js";
 import type { ReviewComment } from "@hivemind/core/review";
 export type { NotificationSettings };
@@ -415,6 +416,18 @@ export interface HiveIpc {
   machineUpdate(id: string, patch: { label?: string; enabled?: boolean }): Promise<void>;
   /** Change where a machine is (tested before it is saved). `oldHostId`: re-point the frames that ran there. */
   machineEdit(id: string, patch: { target: string; label?: string; password?: string }): Promise<{ machine: MachineInfo; oldHostId: string }>;
+  /** View protocol 1.3: status ledger lines (see workspace/view-events.ts). */
+  viewLedgerAppend(lines: unknown[]): void;
+  viewLedgerSnapshot(): Promise<LedgerSince[]>;
+  viewHistory(layoutKey: string, day: string): Promise<ViewHistoryDay>;
+  /** Bare tile ids whose output level someone watches (main samples only these). */
+  ptyActivityWatch(tileIds: string[]): void;
+  onPtyActivity(cb: (levels: Record<string, ActivityLevel>) => void): () => void;
+  presenceNow(): Promise<ViewPresence>;
+  onPresence(cb: (p: ViewPresence) => void): () => void;
+  viewSharePrepare(png: ArrayBuffer): Promise<SharePrepared>;
+  viewShareCommit(token: string, action: "copy" | "save" | "cancel", suggestedName: string): Promise<ShareOutcome>;
+  onHcpTurn(cb: (e: HcpTurnEvent) => void): () => void;
   machineRemove(id: string): Promise<void>;
   /** Store a password for a machine; false when the OS keychain is unavailable (kept in memory only). */
   machineSetPassword(id: string, password: string): Promise<boolean>;
@@ -554,7 +567,18 @@ export interface HcpWaitEvent {
 export interface HcpSubagentEvent {
   tileId: string;
   busy: boolean;
+  /** How many subagents are in flight. */
+  active?: number;
 }
+
+/** A turn hook fired for this (bare) tile. */
+export interface HcpTurnEvent { tileId: string }
+
+/** Where a tile's current status began, as main remembers it across a renderer reload. */
+export interface LedgerSince { id: string; bucket: ViewStatus; since: number; exact: boolean }
+
+/** A PNG a view asked to share, checked and re-encoded by main, awaiting the user's choice. */
+export interface SharePrepared { token: string; preview: string; width: number; height: number }
 
 /** Pushed main→renderer when claude's `Notification` hook reports a "needs you"
  *  state (permission / interactive question). Deterministic + version-proof

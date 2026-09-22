@@ -16,7 +16,8 @@ export interface SpawnOpts {
   liveOnly?: boolean;
 }
 export interface Callbacks {
-  onData: (data: string) => void;
+  /** `replay`: a redraw of output already seen, not new output. */
+  onData: (data: string, replay?: boolean) => void;
   onExit: (code: number, signal: number | undefined) => void;
 }
 type AttachSpec = Extract<ClientMsg, { t: "attach" }>["spec"];
@@ -83,7 +84,7 @@ export class DaemonEndpoint {
         if (msg.seq !== undefined && msg.epoch) this.pos.set(msg.id, { seq: msg.seq, epoch: msg.epoch });
         // A delta continues the stream exactly; a redraw of a tile that shows the old screen starts from a reset.
         const redraw = msg.reqId.startsWith("re") && !msg.delta;
-        if (msg.replay) this.cbs.get(msg.id)?.onData(redraw ? REATTACH_RESET + msg.replay : msg.replay);
+        if (msg.replay) this.cbs.get(msg.id)?.onData(redraw ? REATTACH_RESET + msg.replay : msg.replay, true);
         const resolve = this.pending.get(msg.reqId);
         if (resolve) { this.pending.delete(msg.reqId); resolve({ pid: msg.pid }); }
         break;
@@ -96,7 +97,7 @@ export class DaemonEndpoint {
       }
       case "resync":
         this.pos.set(msg.id, { seq: msg.seq, epoch: msg.epoch });
-        this.cbs.get(msg.id)?.onData(REATTACH_RESET + msg.replay);
+        this.cbs.get(msg.id)?.onData(REATTACH_RESET + msg.replay, true);
         break;
       case "event":
         this.o.onEvent?.(msg.topic, msg.data);
