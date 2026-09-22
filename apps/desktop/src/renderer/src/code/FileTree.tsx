@@ -16,6 +16,14 @@ import { MenuItem } from "../components/ui/menu-item";
 // rendering, so we can't inject a checkbox — its decoration slot is text-only).
 export const clampFilesW = (w: number) => Math.max(180, Math.min(560, Math.round(w)));
 
+/** A compact folder row ("src / main / java") keeps each name whole and cuts the row once at its
+ *  end, as VS Code does; the library clips every segment on its own, leaving "sr / mai / jav". */
+export const COMPACT_FOLDER_CSS = `
+[data-item-flattened-subitems] { display: block; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+[data-item-flattened-subitem], [data-item-flattened-subitem] * { display: inline; overflow: visible; max-width: none; min-width: auto; }
+[data-item-flattened-subitem] [data-truncate-content="overflow"], [data-item-flattened-subitem] [data-truncate-marker-cell] { display: none; }
+`;
+
 export interface FileRow { id: string; file: string; adds: number; dels: number }
 
 export function FileTree({
@@ -42,6 +50,7 @@ export function FileTree({
   const { model } = useFileTree({
     paths,
     flattenEmptyDirectories: true,   // VS Code-style compact folders
+    unsafeCSS: COMPACT_FOLDER_CSS,
     initialExpansion: "open",        // only the changed files — show them all
     search: true,
     fileTreeSearchMode: "expand-matches",
