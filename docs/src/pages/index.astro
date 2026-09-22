@@ -1,4 +1,5 @@
 ---
+import { HIVEHUB } from "../hivehub";
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 import ViewGallery from '../components/ViewGallery.astro';
 const link = (path: string) => `${base}/${path}`;
@@ -48,7 +49,7 @@ const agentCount = icons.total;
     <nav class="links" aria-label="Main">
       <a href="#how">How it works</a>
       <a href="#views">Views</a>
-      <a href={link('plugins')}>Plugins</a>
+      <a href={HIVEHUB}>Plugins</a>
       <a href={link('guide/')}>Docs</a>
       <a href={repo}>GitHub</a>
     </nav>
@@ -137,7 +138,7 @@ const agentCount = icons.total;
         )))}
       </ul>
     </div>
-    <a class="strip-link" href={link('plugins')}>See the catalog <span aria-hidden="true">→</span></a>
+    <a class="strip-link" href={HIVEHUB}>See the catalog <span aria-hidden="true">→</span></a>
    </div>
   </section>
 

@@ -1,4 +1,5 @@
 ---
+import { HIVEHUB } from "../hivehub";
 /**
  * Chrome for the pages outside Starlight. The catalog pages share it so a plugin's detail
  * page is the same site as its listing — same nav, same theme key, same tokens.
@@ -44,7 +45,7 @@ const repo = "https://github.com/dip497/hivemind";
       Hivemind
     </a>
     <nav class="links" aria-label="Main">
-      <a href={link("plugins/")} aria-current={nav === "plugins" ? "page" : undefined}>Plugins</a>
+      <a href={HIVEHUB}>Plugins</a>
       <a href={link("guide/")}>Docs</a>
       <a href={repo}>GitHub</a>
     </nav>
