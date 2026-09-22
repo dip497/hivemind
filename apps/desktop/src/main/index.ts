@@ -1,5 +1,6 @@
 import { installViewManagementIpc } from "./view-packages.js";
 import { appShortcut, menuKey } from "./shortcuts";
+import { recoverOnProcessLoss } from "./recover";
 import desktopPkg from "../../package.json" with { type: "json" };
 import { installPluginCatalogIpc } from "./plugin-catalog-ipc.js";
 /** Electron main process — owns the BrowserWindow + IPC + PtyHost + git/worktree. */
@@ -429,12 +430,14 @@ async function createWindow(): Promise<void> {
   });
 
   const stopViewWatchdog = startViewWatchdog(mainWindow);
+  const stopRecover = recoverOnProcessLoss(mainWindow);
   mainWindow.on("closed", () => {
     // Use the pre-captured wc — mainWindow.webContents getter throws after
     // the window is destroyed. unwatchAll just needs the reference to clean
     // up watchers keyed off it; it doesn't call methods on a dead object.
     try { unwatchAll(wc); } catch { /* watcher map already cleaned */ }
     stopViewWatchdog();
+    stopRecover();
     mainWindow = null;
   });
   wc.setWindowOpenHandler(({ url }) => {
