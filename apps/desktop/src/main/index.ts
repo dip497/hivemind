@@ -1,5 +1,5 @@
 import { installViewManagementIpc } from "./view-packages.js";
-import { appShortcut } from "./shortcuts";
+import { appShortcut, menuKey } from "./shortcuts";
 import desktopPkg from "../../package.json" with { type: "json" };
 import { installPluginCatalogIpc } from "./plugin-catalog-ipc.js";
 /** Electron main process — owns the BrowserWindow + IPC + PtyHost + git/worktree. */
@@ -421,14 +421,10 @@ async function createWindow(): Promise<void> {
       try { wc.send("menu:focus-tile"); } catch { /* destroyed mid-call */ }
       return;
     }
-    if (k === "n") {
+    const menu = menuKey(input);
+    if (menu) {
       event.preventDefault();
-      try { wc.send("menu:new-issue"); } catch { /* destroyed mid-call */ }
-    } else if (k === "b") {
-      // Ctrl+B toggles the Layers panel, as it toggles VS Code's sidebar. It was Ctrl+L,
-      // which took the shell's clear-screen away from every terminal.
-      event.preventDefault();
-      try { wc.send("menu:toggle-layers"); } catch { /* destroyed mid-call */ }
+      try { wc.send(`menu:${menu}`); } catch { /* destroyed mid-call */ }
     }
   });
 
