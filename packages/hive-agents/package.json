@@ -33,7 +33,7 @@
     "url": "git+https://github.com/dip497/hivemind.git",
     "directory": "packages/hive-agents"
   },
-  "homepage": "https://hivemind.griiken.com/plugins/",
+  "homepage": "https://hivehub.griiken.workers.dev/",
   "keywords": [
     "hivemind",
     "agent",
