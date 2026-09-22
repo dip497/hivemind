@@ -26,8 +26,10 @@ Read [reference.md](reference.md) for the full message vocabulary and
 
 The host sends a **projection**, not the workspace. You get frames (id, title, colour),
 tiles (id, frameId, kind, name), selection, per-tile status on subscription, theme,
-viewport and visibility. You never get a command line, a working directory, file
-contents, or anything a terminal is showing.
+viewport and visibility. A 1.3 host also gives you when each status began, discrete
+events, output levels, whether the user is at the machine, and a day's history. You
+never get a command line, a working directory, file contents, or anything a terminal is
+showing — output is a level from 0 to 3, never text or a byte count.
 
 You may send back: selection and focus changes, surface rects, a reveal answer, a
 persisted layout blob, a frame count, and — only if the manifest asked — spawn and
@@ -149,6 +151,37 @@ hm.on("structure", ({ tiles }) => {
 
 Leaking subscriptions for closed tiles is the most common resource bug in a view.
 
+## Protocol 1.3: time, events, activity, presence, history, share
+
+All additive, and none needs a permission. Detect them from the field, never by probing a
+method: the app serves its own SDK to your view, so on an older app the 1.3 methods do not
+exist at all.
+
+```ts
+const has = new Set(hm.hello.features ?? []);   // "since" | "events" | "activity" | "presence" | "history" | "share"
+```
+
+| You want | Write | Notes |
+| --- | --- | --- |
+| How long a tile has been waiting | `hm.subscribeStatus(id, (s, info) => …)` | `info.since` is when the status began; `info.exact === false` means the host found it already there — show "≥" |
+| Turn finished, needs you, subagents, tile opened/closed | `hm.onEvents(["turn", "needsInput"], cb, { replaySince })` | one batched message per task; `replaySince` gets up to 100 buffered events from the last hour |
+| Events your scripts send | `hm.onCustom("ci.*", cb)` | from `hive ctl view emit ci.build '{"state":"failed"}'`; `data` is untrusted — render it as text |
+| How busy a tile is | `hm.activity(id, (level) => …)` | 0–3, at most 4 messages a second, none while hidden |
+| Whether the user is there | `hm.onPresence((p) => …)` | `active` / `idle` (2 min) / `away` (10 min or locked) |
+| A day you were not mounted for | `await hm.history("2026-09-23")` | per-tile status intervals, turns, gaps the host did not watch, presence as day totals |
+| Let the user keep an image | `await hm.share(pngArrayBuffer, { suggestedName })` | the host shows it and asks; you get `copied`, `saved` or `cancelled`, never a path |
+
+Two rules keep these honest:
+
+- **An activity message is your animation clock.** Step a typing robot once per message; do
+  not start a `requestAnimationFrame` loop because something is busy. When everything is
+  quiet, no messages arrive and nothing should draw.
+- **History is what the host watched.** A `gap` is time nobody was looking — the app was
+  closed, or a machine was offline. Never count it as idle or as waiting.
+
+Every `on…` and `activity` returns its unsubscribe; drop a closed tile's activity the way you
+drop its status subscription.
+
 ## Permissions: ask for nothing
 
 The base set — projection, status, selection, reveal, surfaces, layout — needs no
@@ -234,9 +267,11 @@ example; `views/{queue,tiled,board}` in dip497/hivemind-plugins are the results.
 
 Each of these cost a view real time to find out.
 
-- **Only the active view is mounted.** Switching to Canvas unmounts yours. You cannot record
-  history while you are not on screen — persist timestamps in `setLayout`, and show a
-  remembered one only as "since", only if the tile is still in that state.
+- **Only the active view is mounted.** Switching to Canvas unmounts yours. On a 1.3 host,
+  `since`, `replaySince` and `history()` tell you what happened meanwhile. On an older one
+  you cannot record history while you are not on screen — persist timestamps in
+  `setLayout`, and show a remembered one only as "since", only if the tile is still in
+  that state.
 - **The app's settings button floats over the top-right ~56px of every view.** Keep your own
   controls, and the host bar of any surface rect, out of that corner.
 - **The status colours are the app's**: working = `brand`, needs you = `warn`, idle = `fg3`,

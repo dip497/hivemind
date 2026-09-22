@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Views can now show how long each agent has been waiting, react to turns finishing and agents needing you, see how busy each terminal is and whether you're at the computer, summarise a whole day, and hand you an image to copy or save (view protocol 1.3). Scripts and git hooks can announce things to the open view with `hive ctl view emit <name> [json]`.
+
 ## [2026.9.5] — 2026-09-22
 
 - Terminal text is sharp again after the camera moves to a tile. Focusing a tile from Layers, Ctrl+1–9, Ctrl+Tab or a notification lands at exactly 100% instead of fitting a large tile below it, and a terminal no longer sits on a half pixel in an odd-sized window.
