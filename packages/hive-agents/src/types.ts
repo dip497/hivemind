@@ -13,6 +13,7 @@
  *
  * An agent is one directory: its `agent.yaml` and the files that manifest names.
  */
+import type { AgentEventName, InputKind, TurnOutcome } from "./events.js";
 
 /** "blocked" = needs the human (approval or question). */
 export type AgentState = "idle" | "working" | "blocked";
@@ -166,8 +167,15 @@ export interface AgentHome {
 
 /** One hook of ours, wired into an agent's own configuration format. */
 export interface AgentHookEntry {
-  /** Which of Hivemind's hook scripts (`tracker`, `stop`, `userPrompt`, …). */
-  hook: string;
+  /** Which of Hivemind's hook scripts (`tracker`, `plan`, `approval`, …). Exactly one of
+   *  `hook` and `emit`. */
+  hook?: string;
+  /** The canonical event this native event reports; rendered as the generic `event` script. */
+  emit?: AgentEventName;
+  /** `turn.ended` only: how the turn ended (default `done`). */
+  outcome?: TurnOutcome;
+  /** `input.requested` only: what the agent is waiting for (default `other`). */
+  kind?: InputKind;
   /** Seconds, in the agent's own hook contract. */
   timeout?: number;
   /** Which tools it applies to; `supervise` derives it from the supervision policy. */
@@ -316,6 +324,8 @@ export interface ProviderSpawnContext {
   subagentHookPath?: string;
   notificationHookPath?: string;
   userpromptHookPath?: string;
+  /** The generic script every `emit` entry runs. */
+  eventHookPath?: string;
   hcpSock?: string;
   hcpToken?: string;
   /** Provider-private paths, keyed by provider id — whatever that provider's
@@ -337,6 +347,7 @@ export interface DaemonPaths {
   stopHookPath: string;
   userpromptHookPath: string;
   notificationHookPath: string;
+  eventHookPath?: string;
   hcpSock: string;
 }
 

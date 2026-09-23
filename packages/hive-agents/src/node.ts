@@ -35,6 +35,7 @@ const runtimePaths = (p: DaemonPaths, dir: string): RuntimePaths => ({
     stop: { path: p.stopHookPath, arg: p.hcpSock },
     userPrompt: { path: p.userpromptHookPath, arg: p.hcpSock },
     notification: { path: p.notificationHookPath, arg: p.hcpSock },
+    ...(p.eventHookPath ? { event: { path: p.eventHookPath, arg: p.hcpSock } } : {}),
   },
   execPath: p.execPath,
   ...(p.hcpSock ? { hcpSock: p.hcpSock } : {}),
@@ -56,6 +57,7 @@ export function hookPathsFor(def: AgentProviderDef, ctx: Parameters<NonNullable<
     ...(ctx.subagentHookPath && ctx.hcpSock ? { subagent: { path: ctx.subagentHookPath, arg: ctx.hcpSock } } : {}),
     ...(ctx.notificationHookPath && ctx.hcpSock ? { notification: { path: ctx.notificationHookPath, arg: ctx.hcpSock } } : {}),
     ...(ctx.userpromptHookPath && ctx.hcpSock ? { userPrompt: { path: ctx.userpromptHookPath, arg: ctx.hcpSock } } : {}),
+    ...(ctx.eventHookPath && ctx.hcpSock ? { event: { path: ctx.eventHookPath, arg: ctx.hcpSock } } : {}),
     ...Object.fromEntries((def.assets ?? []).filter((a) => a.hook && ctx.hcpSock)
       .map((a) => [a.hook!, { path: nodePath.join(agentDir(def, ctx), a.name), arg: ctx.hcpSock! }])),
   };

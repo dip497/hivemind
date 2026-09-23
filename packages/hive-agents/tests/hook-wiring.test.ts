@@ -9,7 +9,7 @@ import YAML from "yaml";
 const ctx = {
   tileSessionsDir: "/ud/tile-sessions", trackerPath: "/ud/t.cjs", stopHookPath: "/ud/s.cjs", approvalHookPath: "/ud/a.cjs",
   subagentHookPath: "/ud/sa.cjs", notificationHookPath: "/ud/n.cjs", userpromptHookPath: "/ud/u.cjs",
-  planHookPath: "/ud/p.cjs", planBridgeSock: "/ud/plan.sock", hcpSock: "/ud/hcp.sock", execPath: "/bin/hive",
+  planHookPath: "/ud/p.cjs", planBridgeSock: "/ud/plan.sock", hcpSock: "/ud/hcp.sock", execPath: "/bin/hive", eventHookPath: "/ud/e.cjs",
 } as Parameters<typeof hookPathsFor>[1];
 
 for (const agent of AUTHORED) {
@@ -17,7 +17,7 @@ for (const agent of AUTHORED) {
   if (!def.hooks) continue;
   test(`${agent.id}: every hook its events name is wired`, () => {
     const wired = hookPathsFor(def, ctx);
-    const named = Object.values(def.hooks!.events).flatMap((e) => (Array.isArray(e) ? e : [e]).map((x) => x.hook));
+    const named = Object.values(def.hooks!.events).flatMap((e) => (Array.isArray(e) ? e : [e]).map((x) => (x.emit ? "event" : x.hook!)));
     expect(named.filter((h) => !wired[h])).toEqual([]);
   });
 }

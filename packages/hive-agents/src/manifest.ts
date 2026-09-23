@@ -2,6 +2,7 @@
  *  so this package stays browser-safe. What a manifest cannot express (resume,
  *  hooks) it must wire itself (`launch.hcp`, `session.resume`), and claiming a
  *  capability nothing here delivers is refused. */
+import { AGENT_EVENTS, EVENT_HOOK, INPUT_KINDS, TURN_OUTCOMES, isAgentEventName } from "./events.js";
 import type { AgentAsset, AgentCapabilities, AgentHome, AgentHomeFile, AgentHookEntry, AgentHooks, AgentIcon, AgentInstall, AgentLaunch, AgentOption, AgentProviderDef, AgentSession, SessionFind, TileStatus } from "./types.js";
 import { compileDetect, validateExpr, validateScope, type DetectRules } from "./detect-rules.js";
 import { GENERIC_AGENT_ICON } from "./icon.js";
@@ -184,7 +185,7 @@ function validateAssets(raw: unknown): AgentAsset[] {
     const { name, file, hook } = a as Record<string, unknown>;
     req(typeof name === "string" && ASSET_NAME_RE.test(name), `assets[${i}].name must be a plain file name`);
     req(typeof file === "string" && ASSET_NAME_RE.test(file), `assets[${i}].file must be a file beside the manifest`);
-    req(hook === undefined || (typeof hook === "string" && /^[a-z][A-Za-z0-9]{0,31}$/.test(hook)), `assets[${i}].hook must be a hook name`);
+    req(hook === undefined || (typeof hook === "string" && /^[a-z][A-Za-z0-9]{0,31}$/.test(hook) && hook !== EVENT_HOOK), `assets[${i}].hook must be a hook name (not "${EVENT_HOOK}", which is ours)`);
     return { name, file, ...(typeof hook === "string" ? { hook } : {}) };
   });
 }
@@ -268,7 +269,12 @@ function validateHooks(raw: unknown): AgentHooks {
     const list = (Array.isArray(spec) ? spec : [spec]).map((e, i) => {
       req(isObj(e), `hooks.events.${event}[${i}] must be a map`);
       const entry = e as Record<string, unknown>;
-      req(typeof entry.hook === "string" && HOOK_NAME_RE.test(entry.hook), `hooks.events.${event}[${i}].hook must name one of Hivemind's hooks`);
+      const at = `hooks.events.${event}[${i}]`;
+      req((entry.hook === undefined) !== (entry.emit === undefined), `${at} needs exactly one of hook or emit`);
+      if (entry.hook !== undefined) req(typeof entry.hook === "string" && HOOK_NAME_RE.test(entry.hook) && entry.hook !== EVENT_HOOK, `${at}.hook must name one of Hivemind's hooks`);
+      if (entry.emit !== undefined) req(isAgentEventName(entry.emit), `${at}.emit must be one of ${AGENT_EVENTS.join(", ")}`);
+      if (entry.outcome !== undefined) req(entry.emit === "turn.ended" && (TURN_OUTCOMES as readonly unknown[]).includes(entry.outcome), `${at}.outcome is for emit: turn.ended, one of ${TURN_OUTCOMES.join(", ")}`);
+      if (entry.kind !== undefined) req(entry.emit === "input.requested" && (INPUT_KINDS as readonly unknown[]).includes(entry.kind), `${at}.kind is for emit: input.requested, one of ${INPUT_KINDS.join(", ")}`);
       if (entry.timeout !== undefined) req(typeof entry.timeout === "number" && entry.timeout > 0 && entry.timeout <= 604800, `hooks.events.${event}[${i}].timeout must be seconds`);
       if (entry.matcher !== undefined) req(typeof entry.matcher === "string" && entry.matcher.length <= 200, `hooks.events.${event}[${i}].matcher must be a string`);
       if (entry.when !== undefined) req(entry.when === "supervised", `hooks.events.${event}[${i}].when: only "supervised"`);
