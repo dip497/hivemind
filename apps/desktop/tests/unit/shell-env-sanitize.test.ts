@@ -44,3 +44,28 @@ test("mutates and returns the same object (chaining)", () => {
   assert.equal(env.ELECTRON_RUN_AS_NODE, undefined);
   assert.equal(env.CLAUDE_CODE_CHILD_SESSION, undefined);
 });
+
+// The harness-location rescue: a desktop-launched hivemind inherits
+// /etc/environment's PATH, so bare agent commands can resolve to a same-named
+// system launcher the user never means (a broken snap shim was the incident).
+test("rescue: prepends missing user-level agent bin dirs to a system PATH", () => {
+  const env = sanitizeShellEnv({ HOME: "/home/u", PATH: "/usr/bin:/snap/bin" });
+  assert.ok(env.PATH.startsWith("/home/u/.local/bin:/home/u/.npm-global/bin:/home/u/bin:"));
+});
+
+test("rescue: never re-orders PATH entries that are already present", () => {
+  const p = "/usr/bin:/home/u/.npm-global/bin:/snap/bin";
+  const env = sanitizeShellEnv({ HOME: "/home/u", PATH: p });
+  assert.equal(env.PATH, `/home/u/.local/bin:/home/u/bin:${p}`);
+});
+
+test("rescue: a shell-resolved PATH containing the first-priority dirs only adds what's missing", () => {
+  // ~/.npm-global/bin is present; ~/.local/bin + ~/bin are not and get prepended.
+  const p = "/home/u/.npm-global/bin:/usr/bin";
+  assert.equal(sanitizeShellEnv({ HOME: "/home/u", PATH: p }).PATH, `/home/u/.local/bin:/home/u/bin:${p}`);
+});
+
+test("rescue: no HOME or empty PATH is a no-op", () => {
+  assert.equal(sanitizeShellEnv({ PATH: "/usr/bin" }).PATH, "/usr/bin");
+  assert.equal(sanitizeShellEnv({ HOME: "/home/u" }).PATH, undefined);
+});

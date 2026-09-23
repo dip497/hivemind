@@ -9,6 +9,9 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- A new `+` button in the Layers rail opens another folder as its own workspace frame alongside the current project.
+- Agents spawned by a desktop-launched app find user-installed harness binaries again: the missing `~/.local/bin`, `~/.npm-global/bin` and `~/bin` are prepended to `PATH` when absent, so a broken same-named system snap shim no longer shadows them.
+
 ## [2026.9.5] — 2026-09-22
 
 - Terminal text is sharp again after the camera moves to a tile. Focusing a tile from Layers, Ctrl+1–9, Ctrl+Tab or a notification lands at exactly 100% instead of fitting a large tile below it, and a terminal no longer sits on a half pixel in an odd-sized window.

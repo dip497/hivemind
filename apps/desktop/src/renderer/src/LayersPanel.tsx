@@ -529,6 +529,15 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
           title="Add a machine"
           aria-label="add machine"
         ><ServerCog size={14} /></Button>
+        {/* Quick "open another project": reuses App's hivemind:open-folder
+            listener (folder picker → recents → workspace switch). */}
+        <Button
+          variant="ghost"
+          size="icon-2xs"
+          onClick={() => window.dispatchEvent(new CustomEvent("hivemind:add-project"))}
+          title="Add another project (opens as its own workspace)"
+          aria-label="add project"
+        ><Plus size={14} /></Button>
         <kbd
           aria-hidden
           title="Toggle the Layers panel"
