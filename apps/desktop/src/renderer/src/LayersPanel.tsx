@@ -14,7 +14,8 @@ import { MachineDot, statusWords } from "./machines/status";
 import { hostIdOfUri, machineByHost, openMachines, statusOf, useMachines } from "./machines/store";
 import type { MachineInfo } from "../../shared/ipc";
 import { memo, useEffect, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
-import { Layers, ChevronRight, ChevronDown, GitBranch, Server, Folder, FolderOpen, PanelLeftClose, Globe, Monitor, Plus, RefreshCw, MoreHorizontal, ServerCog } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Layers, ChevronRight, ChevronDown, GitBranch, Server, Folder, FolderOpen, PanelLeftClose, Globe, Monitor, Plus, RefreshCw, MoreHorizontal, ServerCog, X, Pencil, Trash2 } from "lucide-react";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { AgentIcon } from "./agents";
 import { FrameRailMenu, type FrameActions } from "./FrameRailMenu";
@@ -63,6 +64,13 @@ interface Props {
    *  arrange, rename/color/delete). Optional so the panel still renders without
    *  a host that wires these (e.g. tests). */
   frameActions?: FrameActions;
+  /** Per-tile actions (close / rename) from the view's commands. Optional the
+   *  same way frameActions is: a host without them just hides the × and the
+   *  tile context menu. */
+  tileActions?: {
+    onClose: (id: string) => void;
+    onRename: (id: string, name: string) => void;
+  };
 }
 
 // One status, one colour, shared with every other surface (workspace/tile-status-bucket).
@@ -159,7 +167,7 @@ function WorkspaceIcon({ color, remote, remoteUri, worktree, collapsed }: { colo
 }
 
 // Memo: a child of the canvas view, which re-renders on every drag frame.
-export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocusFrame, frameActions }: Props) {
+export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocusFrame, frameActions, tileActions }: Props) {
   // Before the early `hidden` return: hooks run on every render, in the same order.
   const machineSnap = useMachines();
   // Persisted: panel hidden + which frame groups are collapsed. Now that the
@@ -199,9 +207,13 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   // Right-click-a-frame context menu (only when a host wired frameActions).
   const [menu, setMenu] = useState<{ frame: LayerFrame; x: number; y: number } | null>(null);
+  // Right-click-a-tile menu (only when a host wired tileActions).
+  const [tileMenu, setTileMenu] = useState<{ tile: LayerTile; x: number; y: number } | null>(null);
   // Inline frame rename — active frame id + its draft. Started from the context
   // menu ("Rename") or a double-click on the frame title; commits on Enter/blur.
   const [renaming, setRenaming] = useState<{ id: string; draft: string } | null>(null);
+  // Inline tile rename — same pattern, one level deeper (a tile row).
+  const [renamingTile, setRenamingTile] = useState<{ id: string; draft: string } | null>(null);
 
   // Live status per tile, from the shared bus (same source as frame chips).
   const [status, setStatus] = useState<Map<string, TileStatusKind>>(new Map());
@@ -310,10 +322,43 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
     const isPlan = t.kind === "planReview";
     const st: TileStatusKind = isPlan ? "question" : (status.get(t.id) ?? "idle");
     const sel = t.id === selectedTileId;
+    if (renamingTile?.id === t.id) {
+      return (
+        <div
+          key={t.id}
+          className="flex w-[calc(100%-1rem)] min-w-0 h-8 items-center gap-2 mx-2"
+          style={{ paddingLeft: 12 + depth * 14 }}
+        >
+          <Input
+            autoFocus
+            value={renamingTile.draft}
+            onChange={(e) => setRenamingTile({ id: t.id, draft: e.target.value })}
+            onBlur={() => {
+              tileActions?.onRename(t.id, renamingTile.draft);
+              setRenamingTile(null);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                tileActions?.onRename(t.id, renamingTile.draft);
+                setRenamingTile(null);
+              } else if (e.key === "Escape") setRenamingTile(null);
+              e.stopPropagation();
+            }}
+            className="flex-1 min-w-0"
+            aria-label="Rename tile"
+          />
+        </div>
+      );
+    }
+    // A <div> (not <button>): a hover × can't nest inside a native button, and
+    // the row already carries its own focus handling everywhere else.
     return (
-      <button
+      <div
         key={t.id}
+        role="button"
+        tabIndex={0}
         onClick={() => onFocusTile(t.id)}
+        onContextMenu={tileActions ? (e) => { e.preventDefault(); setTileMenu({ tile: t, x: e.clientX, y: e.clientY }); } : undefined}
         data-active={sel}
         style={{
           paddingLeft: 12 + depth * 14,
@@ -337,7 +382,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
         // it the row shrink-wraps its text — so the selected background hugged the
         // label instead of spanning the row, and the `truncate` on the name below
         // never engaged (the row grew past the panel instead of clipping).
-        className={`group flex w-[calc(100%-1rem)] min-w-0 h-8 items-center gap-2.5 pr-2.5 mx-2 text-left rounded-lg outline-none focus-visible:outline-none transition-colors ${
+        className={`group flex w-[calc(100%-1rem)] min-w-0 h-8 items-center gap-2.5 pr-2.5 mx-2 text-left rounded-lg outline-none focus-visible:outline-none cursor-pointer transition-colors ${
           sel
             ? "text-[var(--color-fg)]"
             : "text-[var(--color-fg2)] hover:bg-[var(--surface-3)] hover:text-[var(--color-fg)]"
@@ -361,6 +406,20 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
             words in the column and therefore impossible to miss. Only those pulse.
             (TerminalTile already said as much: "pulsing every active state is the
             slop tell.") `exited` keeps its word — a dead tile is worth reading. */}
+        {/* Close — hover/focus-revealed × (mirror of the windows-view tab strip).
+            Replaces a non-actionable status pill when it can act instead. */}
+        {tileActions && (st === "working" || st === "exited") && (
+          <Button
+            variant="ghost"
+            size="icon-2xs"
+            reveal="hidden"
+            onClick={(e) => { e.stopPropagation(); tileActions.onClose(t.id); }}
+            title={`Close ${t.name}`}
+            aria-label={`Close ${t.name}`}
+          >
+            <X size={12} />
+          </Button>
+        )}
         {st === "working" ? (
           <span
             aria-label="working"
@@ -377,7 +436,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
             {isPlan ? "review" : STATUS_LABEL[st]}
           </span>
         ) : null}
-      </button>
+      </div>
     );
   };
 
@@ -600,11 +659,57 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
           }}
         />
       )}
+      {tileMenu && tileActions && (
+        <TileRailMenu
+          tile={tileMenu.tile}
+          x={tileMenu.x}
+          y={tileMenu.y}
+          onCloseTile={(id) => { tileActions.onClose(id); setTileMenu(null); }}
+          onRequestRename={(id, draft) => { setRenamingTile({ id, draft }); setTileMenu(null); }}
+          close={() => setTileMenu(null)}
+        />
+      )}
     </aside>
   );
 });
 
 interface MachineGroup { key: string; label: string; hostId?: string; machine?: MachineInfo; frames: LayerFrame[] }
+
+/** Right-click menu for a TILE row in the rail (Close / Rename) — the tile
+ *  counterpart of FrameRailMenu, trimmed to the two actions a tile has. */
+function TileRailMenu({ tile, x, y, onCloseTile, onRequestRename, close }: {
+  tile: LayerTile;
+  x: number;
+  y: number;
+  onCloseTile: (id: string) => void;
+  onRequestRename: (id: string, draft: string) => void;
+  close: () => void;
+}) {
+  const left = Math.min(x, window.innerWidth - 230);
+  const top = Math.min(y, window.innerHeight - 120);
+  return createPortal(
+    <>
+      <div className="fixed inset-0 z-[9998]" onClick={close} onContextMenu={(e) => { e.preventDefault(); close(); }} />
+      <div
+        className="fixed z-[9999] w-[170px] bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-lg p-1 shadow-2xl"
+        style={{ top, left }}
+        onClick={(e) => e.stopPropagation()}
+        role="menu"
+      >
+        <div className="px-2 pt-1 pb-1 text-[9px] uppercase tracking-[0.12em] text-[var(--color-fg3)] font-semibold truncate">{tile.name}</div>
+        <MenuItem onClick={() => onRequestRename(tile.id, tile.name)}>
+          <span className="shrink-0 grid place-items-center size-4 text-[var(--color-fg3)]"><Pencil size={13} /></span>
+          <span className="truncate">Rename</span>
+        </MenuItem>
+        <MenuItem variant="destructive" onClick={() => onCloseTile(tile.id)}>
+          <span className="shrink-0 grid place-items-center size-4 text-[var(--color-fg3)]"><Trash2 size={13} /></span>
+          <span className="truncate">Close tile</span>
+        </MenuItem>
+      </div>
+    </>,
+    document.body,
+  );
+}
 
 const RETRYABLE = new Set(["offline", "reconnecting", "no-hive", "idle"]);
 const DOWN = new Set(["offline", "reconnecting", "attention"]);
