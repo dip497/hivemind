@@ -35,7 +35,7 @@ import {
   type LinkType,
 } from "@hivemind/core";
 import os from "node:os";
-import { agentById, agentForCmd, getCatalog, preferredAgent, setCatalog, type AgentProviderDef } from "@hivemind/agents";
+import { AGENT_EVENT_TOPIC, agentById, agentForCmd, getCatalog, legacyTopicsFor, parseAgentEvent, preferredAgent, setCatalog, type AgentProviderDef } from "@hivemind/agents";
 import { agentPresence, discoverOptions, findBin, verifyAgent } from "@hivemind/agents/discover";
 import { agentAllowedIn, loadAgents, toWire } from "@hivemind/agents/load";
 import type { IssuePatch } from "@hivemind/core/types";
@@ -1849,7 +1849,13 @@ function startHcpControlPlane(): void {
     replay: (tileId, opts) =>
       typeof opts.lines === "number" ? hcpRecorder.tail(toPtyId(tileId), opts.lines) : hcpRecorder.since(toPtyId(tileId), opts.since ?? 0),
     offsetOf: (tileId) => hcpRecorder.mark(toPtyId(tileId)),
-    onEvent: (topic, data) => {
+    onEvent: function onHookEvent(topic: string, data: unknown): void {
+      // Canonical events (manifest `emit:`) reach today's handlers as their topics.
+      if (topic === AGENT_EVENT_TOPIC) {
+        const evt = parseAgentEvent(data);
+        if (evt) for (const o of legacyTopicsFor(evt)) onHookEvent(o.topic, o.data);
+        return;
+      }
       if (topic === "subagent") {
         // SubagentStart/Stop hook: a tile gained/lost an in-flight Task subagent.
         // Track the per-tile set and push only real busy edges to the renderer so

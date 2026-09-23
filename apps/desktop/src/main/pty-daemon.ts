@@ -25,7 +25,7 @@ import {
 } from "./session-snapshot-store.js";
 import { applyInitialPrompt, stripInitialPrompt } from "../shared/agent-io.js";
 import { sanitizeShellEnv } from "./shell-env.js";
-import { composeResume, evictTrackedSession, prepareProviders, trackerSource, setCatalog } from "@hivemind/agents/node";
+import { AGENT_EVENT_TOPIC, composeResume, evictTrackedSession, legacyTopicsFor, parseAgentEvent, prepareProviders, trackerSource, setCatalog } from "@hivemind/agents/node";
 import { resolveWindowsSpawn } from "@hivemind/agents/discover";
 import { planHookSource } from "./plan-review-hook-source.js";
 import { stopHookSource } from "./hcp/stop-hook-source.js";
@@ -33,6 +33,7 @@ import { approvalHookSource } from "./hcp/approval-hook-source.js";
 import { subagentHookSource } from "./hcp/subagent-hook-source.js";
 import { notificationHookSource } from "./hcp/notification-hook-source.js";
 import { userpromptHookSource } from "./hcp/userprompt-hook-source.js";
+import { agentEventHookSource } from "./hcp/agent-event-hook-source.js";
 import { readOrCreateToken, hcpSockPath } from "./hcp/token.js";
 
 // Lazy: node-pty must never be evaluated inside the compiled `hive` (see bun-pty.ts).
@@ -145,6 +146,9 @@ try { fs.writeFileSync(notificationHookPath, notificationHookSource()); } catch 
 // UserPromptSubmit hook — turn START → working (hook-driven status; pairs with Stop).
 const userpromptHookPath = path.join(userDataDir, "hcp-userprompt-hook.cjs");
 try { fs.writeFileSync(userpromptHookPath, userpromptHookSource()); } catch { /* best-effort */ }
+// The one observe hook every manifest `emit:` entry runs (canonical agent events).
+const eventHookPath = path.join(userDataDir, "hcp-event-hook.cjs");
+try { fs.writeFileSync(eventHookPath, agentEventHookSource()); } catch { /* best-effort */ }
 const hcpSock = hcpSockPath(userDataDir);
 const hcpToken = readOrCreateToken(userDataDir);
 
@@ -176,6 +180,7 @@ const providerCtx = {
   subagentHookPath,
   userpromptHookPath,
   notificationHookPath,
+  eventHookPath,
   hcpSock,
   hcpToken,
 };
@@ -627,8 +632,13 @@ if (STANDALONE) {
       let m: { t?: unknown; id?: unknown; topic?: unknown; data?: unknown };
       try { m = JSON.parse(line); } catch { return; }
       if (m.t === "event" && typeof m.topic === "string") {
-        for (const push of eventViewers) push({ t: "event", topic: m.topic, data: m.data });
-        void notifyPush(m.topic, m.data);
+        // Viewers get today's topics, so a desktop that predates canonical events still hears them.
+        const evt = m.topic === AGENT_EVENT_TOPIC ? parseAgentEvent(m.data) : null;
+        const out = m.topic === AGENT_EVENT_TOPIC ? (evt ? legacyTopicsFor(evt) : []) : [{ topic: m.topic, data: m.data }];
+        for (const o of out) {
+          for (const push of eventViewers) push({ t: "event", topic: o.topic, data: o.data });
+          void notifyPush(o.topic, o.data);
+        }
       } else if (m.t === "req") {
         // Only a desktop can decide (e.g. approvals): answer at once so the agent falls back to its own prompt.
         c.end(`${JSON.stringify({ t: "res", id: m.id, ok: false, error: { code: "UNAVAILABLE", message: "no desktop on this machine" } })}\n`);
