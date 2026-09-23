@@ -11,6 +11,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 - A new `+` button in the Layers rail opens another folder as its own workspace frame alongside the current project.
 - Right-clicking a tile in the Layers rail now offers Rename and Close tile, and running/exited agents get a hover `×` to close straight from the sidebar — same close as the canvas and tab strip.
+- Spawning an agent from the rail's frame menu now offers its launch modes inline (`Spawn agent ▸ Claude ▸ Permission mode: bypassPermissions` → `claude --dangerously-skip-permissions`), without changing the saved defaults.
 - Agents spawned by a desktop-launched app find user-installed harness binaries again: the missing `~/.local/bin`, `~/.npm-global/bin` and `~/bin` are prepended to `PATH` when absent, so a broken same-named system snap shim no longer shadows them.
 
 ## [2026.9.5] — 2026-09-22

@@ -660,7 +660,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     return f?.worktreePath ?? f?.workspacePath ?? repoPathRef.current ?? null;
   }, []);
   const frameActions = useMemo(() => ({
-    onOpenInFrame: (frameId: string, kind: string) => frameOpen(frameId, kind),
+    onOpenInFrame: (frameId: string, kind: string, launch?: Record<string, string>) => frameOpen(frameId, kind, launch),
     onCreateWorktree,
     onAttachWorktree,
     onBindWorkspace: (frameId: string) => bindWorkspace(frameId),

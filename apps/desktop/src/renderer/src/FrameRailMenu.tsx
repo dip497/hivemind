@@ -32,8 +32,10 @@ import type { LayerFrame } from "./LayersPanel";
 /** Everything the rail needs to drive a frame — supplied by Canvas. */
 export interface FrameActions {
   /** Spawn a tile/agent into the frame. `kind` is an agent id (claude/codex/…)
-   *  or one of shell/tree/diff/issues/browser. */
-  onOpenInFrame: (frameId: string, kind: string) => void;
+   *  or one of shell/tree/diff/issues/browser. `launch` picks agent options
+   *  for THIS launch (e.g. `{ mode: "bypassPermissions" }`) without touching
+   *  the user's saved defaults. */
+  onOpenInFrame: (frameId: string, kind: string, launch?: Record<string, string>) => void;
   onCreateWorktree: (frameId: string, branch: string) => void;
   onAttachWorktree: (frameId: string, entry: import("../../shared/ipc").WorktreeEntry) => void;
   onBindWorkspace: (frameId: string) => void;
@@ -118,7 +120,7 @@ export function FrameRailMenu({
 }) {
   const agents = useAgents();
   // Which top-level submenu is expanded (only one at a time). null = none.
-  const [sub, setSub] = useState<null | "agent" | "open" | "git" | "worktree" | "workspace" | "arrange" | "color">(null);
+  const [sub, setSub] = useState<null | string>(null);
   const isWorktreeChild = !!frame.parentFrameId;
   const repoPath = actions.repoPathForFrame(frame.id);
   const fid = frame.id;
@@ -142,9 +144,30 @@ export function FrameRailMenu({
         <div className="px-2 pt-1 pb-1 text-[9px] uppercase tracking-[0.12em] text-[var(--color-fg3)] font-semibold truncate">{frame.title}</div>
 
         <SubmenuRow icon={<Bot size={13} />} label="Spawn agent" open={sub === "agent"} onOpen={() => setSub("agent")}>
-          {agents.filter((a) => a.enabled).map((a) => (
-            <Item key={a.id} icon={<a.icon size={13} />} label={a.label} onClick={() => { actions.onOpenInFrame(fid, a.id); close(); }} />
-          ))}
+          {agents.filter((a) => a.enabled).map((a) => {
+            const options = a.def.options ?? [];
+            if (!options.some((o) => Object.keys(o.values ?? {}).length)) {
+              return <Item key={a.id} icon={<a.icon size={13} />} label={a.label} onClick={() => { actions.onOpenInFrame(fid, a.id); close(); }} />;
+            }
+            // Agents with built-in per-value options (claude's permission mode,
+            // pi's yolo…) get a nested list: one entry per value of each option,
+            // so a one-off launch skips the Settings default.
+            return (
+              <SubmenuRow key={a.id} icon={<a.icon size={13} />} label={a.label} open={sub === `agent-${a.id}`} onOpen={() => setSub(`agent-${a.id}`)}>
+                <Item icon={<a.icon size={13} />} label={`${a.label} (default options)`} onClick={() => { actions.onOpenInFrame(fid, a.id); close(); }} />
+                {options.map((o) =>
+                  Object.keys(o.values ?? {}).map((v) => (
+                    <Item
+                      key={`${o.id}-${v}`}
+                      icon={<a.icon size={13} />}
+                      label={`${o.label}: ${v}`}
+                      onClick={() => { actions.onOpenInFrame(fid, a.id, { [o.id]: v }); close(); }}
+                    />
+                  )),
+                )}
+              </SubmenuRow>
+            );
+          })}
         </SubmenuRow>
 
         <SubmenuRow icon={<Plus size={13} />} label="Open" open={sub === "open"} onOpen={() => setSub("open")}>
