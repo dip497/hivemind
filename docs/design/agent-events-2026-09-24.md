@@ -100,8 +100,9 @@ transcriptPath?, agentId?, sessionId? }`. `transcriptPath` stays top-level so th
 sanitizer (`acceptRemoteEvent`) still drops it for another machine's tiles.
 
 Main translates it onto today's handlers (`turn`, `status`, `notification`, `subagent`), so this
-step changes no behaviour downstream. The standalone daemon forwards it unchanged and names phone
-pushes by the translated topic.
+step changes no behaviour downstream. The standalone daemon (a remote machine) translates it
+the same way before forwarding, so a desktop that predates canonical events still hears today's
+topics, and phone pushes are named by the translated topic.
 
 ## 7. Stages
 
