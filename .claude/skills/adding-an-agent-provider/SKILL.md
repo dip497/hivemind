@@ -121,6 +121,25 @@ field reference; `claude/agent.yaml` in the published fixtures is the richest ex
    what `hive ctl spawn --model/--mode` set.
 4. `detect` — ordered rules over the rendered screen; the first match wins.
 5. `icon` — shapes, not SVG markup; `viewBox` + `path`/`rect`/`circle`/`ellipse`.
+6. `hooks.events` — map each native hook event to a **canonical event** with `emit:`, not to
+   a script. The vocabulary is `session.started`, `session.ended`, `turn.started`,
+   `turn.ended` (+ `outcome: done | failed | interrupted`), `input.requested` (+ `kind:
+   permission | question | plan | approval | other`), `subagent.started`,
+   `subagent.stopped` (`packages/hive-agents/src/events.ts`). One generic script reports
+   them and never forwards text the agent wrote. Use `hook:` only for a script that
+   *decides* (`plan`, `approval`, an asset broker). Map an event only after seeing the real
+   binary fire it, and inject per launch — never write the user's global config.
+
+   ```yaml
+   events:
+     UserPromptSubmit: { emit: turn.started }
+     Stop: { emit: turn.ended }
+     StopFailure: { emit: turn.ended, outcome: failed }
+     PermissionRequest: { emit: input.requested, kind: permission }
+   ```
+
+   An app older than `emit` refuses such a manifest, so publishing one needs the registry to
+   carry a `minAppVersion` for agents.
 
 **Try it before you publish**: drop the folder into
 `~/.config/hivemind/agents/<id>/` (or run `hive agents install ./<id>`) — the running

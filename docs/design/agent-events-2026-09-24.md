@@ -107,8 +107,29 @@ pushes by the translated topic.
 
 | # | Change | Owner | This branch |
 |---|---|---|---|
-| 1 | Vocabulary, `emit` in manifests, generic `event` script, translation in main and the standalone daemon | host + `hive-agents` | **yes** |
-| 2 | Claude: PermissionRequest, StopFailure, SessionEnd through `emit` (fixture here; the published manifest in the plugins repository with `minAppVersion`) | agent plugins | fixture yes; plugin repo follows |
-| 3 | Start a tile's terminal when the tile is created, not when a view first shows it | host | next |
+| 1 | Vocabulary, `emit` in manifests, generic `event` script, translation in main and the standalone daemon | host + `hive-agents` | **done** (a281444, 369d24f) |
+| 2 | Claude: PermissionRequest, StopFailure, SessionEnd through `emit`, in the published manifest | agent plugins | **blocked**: see below |
+| 3 | Start a tile's terminal when the tile is created, not when a view first shows it | host | **done** (c56ee9f) |
 | 4 | One status store in main, persisted, fed by every source (hooks, plugins, titles, screen, exit), with the renderer and views as mirrors; the view protocol's `since`/events become projections | host | next milestone |
 | 5 | Codex, Gemini, OpenCode, Hermes mappings, each probed per launch, never touching global config | agent plugins | later |
+
+## 8. Blocker for stage 2: the registry cannot hold an agent back from older apps
+
+An app that predates `emit` refuses a manifest with an `emit` entry at validation. Installs and
+updates are gated by the catalog's `minAppVersion` (`apps/desktop/src/main/plugin-catalog-ipc.ts:73`,
+`:147`), but HiveHub writes `minAppVersion: null` for every agent (`hivehub/src/lib/registry.ts:111`).
+Publishing Claude's new mappings today would make Claude fail validation on 2026.9.5 and older:
+a fresh install would lose it and auto-install would skip it. Before stage 2 ships, HiveHub has
+to carry a `minAppVersion` for agents (read from the manifest or set at publish), and the
+maintainer has to decide what an older app gets: nothing with a clear message, or the previous
+manifest.
+
+## 9. Stage 3, as built
+
+`tile-host.tsx` mounted a body only after a view's slot adopted it, so first mounts happened at
+real size. A terminal no slot claims within `UNSEEN_MOUNT_MS` (1.5 s) now mounts in the park at
+its kind's default size (`defaultSizeForKind`); the first view that shows it adopts the same live
+terminal. Browsers and editors keep the old rule: a hidden `<webview>` costs a page load and
+holds no session. Checked on the real app: two agents spawned with `hive ctl spawn` while a
+community view that shows no tiles was active read `working` within 5 s (before: no status
+after 30 s). `tests/e2e/unseen-terminal.spec.ts` fails without the change and passes with it.
