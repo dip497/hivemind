@@ -42,28 +42,13 @@ export function writeTrackedSession(dir: string, tileId: string, sessionId: stri
   fs.renameSync(tmp, out);
 }
 
-/** Read a tile's tracked session id. Falls back to a legacy shared-map file
- *  (the old `tile-sessions.json`) so ids recorded before this change still
- *  resume until the tile re-tracks on its next SessionStart. */
-export function readTrackedSession(
-  dir: string,
-  tileId: string,
-  legacyMapFile?: string,
-): string | undefined {
+/** Read a tile's tracked session id, or undefined when none is recorded. */
+export function readTrackedSession(dir: string, tileId: string): string | undefined {
   try {
     const v = JSON.parse(fs.readFileSync(tileSessionFile(dir, tileId), "utf8"));
     if (v && typeof v.session_id === "string") return v.session_id;
   } catch {
-    /* no per-tile file → try legacy */
-  }
-  if (legacyMapFile) {
-    try {
-      const map = JSON.parse(fs.readFileSync(legacyMapFile, "utf8"));
-      const v = map?.[tileId];
-      if (typeof v === "string") return v;
-    } catch {
-      /* no legacy map */
-    }
+    /* none recorded */
   }
   return undefined;
 }

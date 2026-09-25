@@ -48,6 +48,8 @@ export type ClientMsg =
   | { t: "resume"; id: string }
   | { t: "list"; reqId: string; detail?: boolean }
   | { t: "ping"; reqId: string }
+  /** The session's screen now, for a viewer about to show it again. */
+  | { t: "screen"; reqId: string; id: string }
   /** Ask the daemon to exit (used to replace a stale daemon after a rebuild). */
   | { t: "shutdown" };
 
@@ -63,6 +65,8 @@ export type ServerMsg =
   | { t: "exit"; id: string; code: number; signal: number | null }
   | { t: "sessions"; reqId: string; ids: string[]; detail?: SessionInfo[] }
   | { t: "pong"; reqId: string; buildStamp?: number }
+  /** Answers `screen`, in order with the session's data: bytes before it are older than it. */
+  | { t: "screen"; reqId: string; id: string; replay: string | null }
   | { t: "error"; reqId?: string; message: string };
 
 export const SOCKET_NAME = "pty-daemon.sock";

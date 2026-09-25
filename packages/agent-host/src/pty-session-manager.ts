@@ -37,7 +37,7 @@ const pick = <T>(ns: unknown, name: string): T => {
   const m = ns as Record<string, unknown> & { default?: Record<string, unknown> };
   return (m[name] ?? m.default?.[name] ?? m.default) as T;
 };
-const HeadlessTerminal = pick<HeadlessCtor>(HeadlessXtermNS, "Terminal");
+export const HeadlessTerminal = pick<HeadlessCtor>(HeadlessXtermNS, "Terminal");
 const SerializeAddon = pick<SerializeCtor>(SerializeAddonNS, "SerializeAddon");
 type HeadlessTerminalInstance = InstanceType<typeof HeadlessTerminal>;
 type SerializeAddonInstance = InstanceType<typeof SerializeAddon>;
@@ -118,7 +118,7 @@ interface Session {
   spawnedAt: number;
   /** Whether the manager already exhausted its one retry for this session. */
   retried?: boolean;
-  /** Latest OSC 0/2 window title the process set (claude's live "session name"),
+  /** Latest OSC 0/2 window title the process set (an agent's live "session name"),
    *  captured from the headless term. SerializeAddon does NOT serialize the title,
    *  so a reattach's replay would otherwise lose it — we re-emit it (see
    *  `withTitle`) so the client's xterm re-fires onTitleChange on reattach. */
@@ -150,6 +150,8 @@ export interface SessionManagerOptions {
    *  May return a Promise (async disk write); flushSnapshot/flushAll resolve
    *  only after it settles, and a rejection re-dirties the session so a later
    *  flush retries. */
+  /** A session produced output (its screen may have changed). */
+  onOutput?: (id: string) => void;
   onSnapshot?: (id: string, snapshot: SessionSnapshot) => void | Promise<void>;
   /** OPTIONAL — invoked when a session is explicitly killed so the daemon can
    *  unlink its on-disk snapshot file. */
@@ -158,28 +160,25 @@ export interface SessionManagerOptions {
   snapshotDebounceMs?: number;
   /** OPTIONAL — transform the SpawnSpec when respawning from a frozen
    *  (reboot-restored) snapshot. Lets the daemon inject CLI flags that ask
-   *  the underlying agent to resume its prior session — e.g. claude has
-   *  `--continue` to pick up the most recent conversation in the cwd, so a
-   *  reboot replay isn't just a screen image but an actual resume of the
-   *  agent's task. If unset, the original spec is used verbatim (the user
+   *  the underlying agent to resume its prior session, so a reboot replay isn't
+   *  just a screen image but an actual resume of the agent's task. If unset, the original spec is used verbatim (the user
    *  sees their last screen but the agent forgets prior context). */
   transformSpecOnRestore?: (spec: SpawnSpec, id: string) => SpawnSpec;
   /** OPTIONAL — transform the SpawnSpec when spawning a BRAND-NEW session.
-   *  Used to inject e.g. `--session-id <uuid>` for claude so the snapshot
-   *  remembers the binding and restore can `--resume <uuid>` deterministically.
+   *  Used to bind an agent to a session id so the snapshot remembers the binding
+   *  and restore can resume exactly that session.
    *  Applied BEFORE the spec is stored on the session, so the value survives
    *  into snapshots. */
   transformSpecOnSpawn?: (spec: SpawnSpec, id: string) => SpawnSpec;
   /** OPTIONAL — if a RESTORED session (frozen → live) exits with non-zero
    *  within `restoreRetryMs`, the manager respawns it ONCE using this
-   *  transform. Lets claude's `--resume <uuid>` fall back to
-   *  `--session-id <uuid>` (fresh session, same deterministic id) when the
-   *  on-disk JSONL is missing — turns "dead tile with No-conversation-found
-   *  error" into "tile keeps working, new conversation, banner injected". */
+   *  transform: a resume that could not find its session starts fresh under the
+   *  same id — "the tile keeps working, a new conversation, a banner says so"
+   *  instead of a dead tile. */
   restoreRetryTransform?: (spec: SpawnSpec) => SpawnSpec | null;
   /** Window after restore spawn during which a non-zero exit triggers
-   *  retry. Default 5s — long enough for claude to print its error and
-   *  bail, short enough to skip retry for legitimate later exits. */
+   *  retry. Default 5s — long enough for an agent to fail its resume and
+   *  exit, short enough to skip retry for legitimate later exits. */
   restoreRetryMs?: number;
 }
 
@@ -216,6 +215,7 @@ export class SessionManager {
   private readonly transformSpecOnRestore?: (spec: SpawnSpec, id: string) => SpawnSpec;
   private readonly transformSpecOnSpawn?: (spec: SpawnSpec, id: string) => SpawnSpec;
   private readonly restoreRetryTransform?: (spec: SpawnSpec) => SpawnSpec | null;
+  private readonly onOutput?: (id: string) => void;
   private readonly restoreRetryMs: number;
 
   constructor(
@@ -227,6 +227,7 @@ export class SessionManager {
     this.onEmpty = opts.onEmpty;
     this.onSnapshot = opts.onSnapshot;
     this.onSnapshotEvict = opts.onSnapshotEvict;
+    this.onOutput = opts.onOutput;
     this.snapshotDebounceMs = opts.snapshotDebounceMs ?? 2000;
     this.transformSpecOnRestore = opts.transformSpecOnRestore;
     this.transformSpecOnSpawn = opts.transformSpecOnSpawn;
@@ -288,8 +289,8 @@ export class SessionManager {
     // Spec from the snapshot wins over the caller's (cwd/cmd/env are what the
     // user had); only cols/rows from the live attach apply (window dims).
     // For RESTORE paths, also run the optional transform so the daemon can
-    // inject e.g. `claude --continue` and get a real agent-level resume, not
-    // just a screen image with a fresh-amnesiac claude underneath.
+    // add the agent's resume arguments and get a real agent-level resume, not
+    // just a screen image with an amnesiac agent underneath.
     let effectiveSpec: SpawnSpec = frozenSnap
       ? { ...frozenSnap.spec, cols: spec.cols, rows: spec.rows }
       : spec;
@@ -334,13 +335,13 @@ export class SessionManager {
       frozenSpec: frozenSnap ? frozenSnap.spec : undefined,
       spawnedAt: Date.now(),
       // Seed the title from the snapshot so a reboot-restored session re-emits
-      // the agent name on its first attach (before the fresh claude re-sets it).
+      // the agent name on its first attach (before the fresh agent re-sets it).
       lastTitle: frozenSnap?.title,
     };
     this.sessions.set(id, session);
     // Capture the OSC 0/2 window title the headless term parses. SerializeAddon
     // omits it from the replay, so without this a reattach shows the generic
-    // spawn label instead of claude's live task summary.
+    // spawn label instead of the agent's live task summary.
     try { session.term.onTitleChange((t) => { session.lastTitle = t; }); } catch { /* headless build w/o title API */ }
     p.onData((d) => {
       // Stale-pty guard: after a retry respawn, the old pty may still flush a
@@ -355,8 +356,8 @@ export class SessionManager {
       // Ignore a STALE pty's late exit: tryRestoreRetry kills this pty and
       // swaps in a fresh one (session.pty), so the kill-induced exit arrives
       // AFTER the replacement. Without this guard it would delete the live
-      // retried session — turning the missing-JSONL recovery into "tile
-      // vanishes". (Caught by claude-resume.integration.test.ts.)
+      // retried session — turning the missing-session recovery into "tile
+      // vanishes".
       if (session.pty !== p) return;
       session.exited = true;
       // A restored session that failed within restoreRetryMs could not resume what it was
@@ -410,7 +411,7 @@ export class SessionManager {
    *  the same id, headless term, serializer, and client — the user sees a
    *  continuous tile that just spawned a different process underneath. Used
    *  by the quick-fail retry path on restored sessions whose first spawn
-   *  hard-failed (e.g. `claude --resume <uuid>` with a missing JSONL). */
+   *  hard-failed (a resume whose session was gone). */
   private respawnInPlace(session: Session, retrySpec: SpawnSpec): void {
     const p = this.factory(retrySpec);
     session.pty = p;
@@ -469,6 +470,7 @@ export class SessionManager {
   }
 
   private emit(s: Session, d: string): void {
+    this.onOutput?.(s.id);
     s.seq += d.length;
     s.ring.push({ end: s.seq, data: d });
     s.ringChars += d.length;
@@ -630,6 +632,16 @@ export class SessionManager {
   }
 
   /** Live and frozen sessions, for `hive ps`. */
+  /** The visible rows of a live session's screen as text, and the command it runs. */
+  viewport(id: string): { cmd: string; screen: string } | undefined {
+    const s = this.sessions.get(id);
+    if (!s || s.exited) return undefined;
+    const buf = s.term.buffer.active;
+    const rows: string[] = [];
+    for (let y = 0; y < s.term.rows; y++) rows.push(buf.getLine(buf.baseY + y)?.translateToString(true) ?? "");
+    return { cmd: s.spec.cmd, screen: rows.join("\n") };
+  }
+
   info(): SessionInfo[] {
     const out: SessionInfo[] = [];
     for (const s of this.sessions.values()) {

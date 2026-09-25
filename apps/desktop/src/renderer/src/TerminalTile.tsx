@@ -12,9 +12,9 @@ import { patchTerminalMouseWithRetry } from "./terminal-mouse-patch";
 import { wantsDomRenderer } from "./terminal-renderer-policy";
 import { registerWebglSlotClient, unregisterWebglSlotClient, reconcileWebglSlots } from "./webgl-slots";
 import { useTileFont, FontScaleControl, handleFontKey } from "./tile-font";
-import { identifyAgent, detectTileStatus, stabilizeScreenStatus, normalizeAgentTitle, type TileStatus } from "./agent-state";
+import { identifyAgent, normalizeAgentTitle } from "./agent-state";
 import { registerClaude, unregisterClaude, shouldDeliver, peekWork, claimWork, clearWork, type SendToClaudeDetail } from "./claude-bus";
-import { publishStatus, clearStatus, setLabel, subscribeTileStatus, type TileStatusKind } from "./agent-status-bus";
+import { publishStatus, clearStatus, setLabel, statusOf, subscribeTileStatus, type TileStatusKind } from "./agent-status-bus";
 import { SUBMIT_DELAY_MS, SPAWN_SUBMIT_RETRY_MS, deliversPromptViaArgv } from "../../shared/agent-io";
 import { Pencil, GripVertical } from "lucide-react";
 import { Button } from "./components/ui/button";
@@ -80,6 +80,8 @@ const BOOT_SETTLE_MS = 1500;
 const BOOT_MIN_MS = 8000;
 /** ...or after this, whatever it is doing: one slow agent must not stall the rest. */
 const BOOT_CAP_MS = 12_000;
+/** How long a terminal no view shows keeps its stream before it stops receiving bytes. */
+const INTEREST_HIDE_MS = 1000;
 
 // The terminal palette comes from settings.appearance.terminal (the ubuntu
 // preset is the historical Ubuntu / GNOME Terminal palette, byte-identical —
@@ -320,7 +322,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
       idleTimer.current = setTimeout(() => setStatus("idle"), 1500);
     };
 
-    // The viewport as text, for the agent's detect rules (working / approval / question / idle).
+    // The viewport as text, for tests (a WebGL terminal renders none into the DOM).
     const readScreen = (): string => {
       const buf = term.buffer.active;
       const out: string[] = [];
@@ -564,17 +566,35 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
     const hostShown = () => {
       try { return host.checkVisibility({ visibilityProperty: true }); } catch { return true; }
     };
+    // Bytes reach this terminal only while a view shows it (see main's ptyInterest). A tile
+    // scrolled past or switched away from for a moment keeps its stream; one gone longer is
+    // sent its screen as the host keeps it when it comes back.
+    let interested = true;
+    let loseInterest: ReturnType<typeof setTimeout> | undefined;
+    const reconcileInterest = () => {
+      if (!parked && inViewport) {
+        if (loseInterest) { clearTimeout(loseInterest); loseInterest = undefined; }
+        if (!interested) { interested = true; window.hive.ptyInterest(ptyId, true); }
+        return;
+      }
+      if (!interested || loseInterest) return;
+      loseInterest = setTimeout(() => { loseInterest = undefined; interested = false; window.hive.ptyInterest(ptyId, false); }, INTEREST_HIDE_MS);
+    };
+    // A remount (a view switch) picks the stream back up if main had stopped sending it.
+    window.hive.ptyInterest(ptyId, true);
     const io = new IntersectionObserver(
       (entries) => {
         const v = !!entries[entries.length - 1]?.isIntersecting;
-        if (v !== inViewport) { inViewport = v; reconcileWebglSlots(); }
+        if (v !== inViewport) { inViewport = v; reconcileWebglSlots(); reconcileInterest(); }
       },
       { threshold: 0.01 },
     );
     io.observe(host);
+    reconcileInterest();
     const surfaceEl = host.closest(".hm-tile-surface");
     const onAdopted = () => {
       parked = false;
+      reconcileInterest();
       // No explicit refit: the park freezes the surface at its last slot size,
       // so adopting into a different-size slot fires the ResizeObserver below
       // (one fit per tile), and adopting into a same-size slot needs none. A
@@ -585,6 +605,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
     };
     const onParked = (e: Event) => {
       parked = true;
+      reconcileInterest();
       reconcileWebglSlots();
       // Parked at a size other than the slot we just left (a dock pane hands
       // the tile back at its arranging view's size): fit NOW, hidden, so the
@@ -694,8 +715,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
         if (flowPaused && flowPending <= FLOW_LOW_CHARS) releaseFlowPause();
       });
       if (flowPending >= FLOW_HIGH_CHARS) requestFlowPause();
-      // Agent tiles read their screen on the next poll tick (for the host's fallback);
-      // plain shells use the cheap heuristic.
+      // An agent tile's status comes from the host; a plain shell uses the cheap heuristic.
       if (agent) agentDirty = true;
       else markActivity();
     });
@@ -866,11 +886,6 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
         if (bootRelease) { bootAt = Date.now(); bootCap = setTimeout(releaseBoot, BOOT_CAP_MS); }
         if (!agent) setStatus("idle");
         if (agent && !agentPoll) {
-          // The screen reading sent to the host, debounced across poll ticks (see
-          // stabilizeScreenStatus): the previous reading and the last time work was seen.
-          let lastReported: TileStatus = "idle";
-          let screenSent = false;
-          const lastWorkingAt = { t: null as number | null };
           // Queued-prompt ("Work on this" / workflow) delivery: deliver EXACTLY
           // ONCE, when the agent's screen has SETTLED (boot/splash output stopped
           // = it's at a ready input prompt), then consume it. Delivering on the
@@ -898,25 +913,13 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
                   // i.e. it never submitted. If the first Enter landed, the agent is
                   // "working" by now and this no-ops (no stray empty submit).
                   setTimeout(() => {
-                    if (lastReported === "idle") window.hive.ptyWrite(ptyId, "\r");
+                    if (statusOf(tileId) === "idle") window.hive.ptyWrite(ptyId, "\r");
                   }, SPAWN_SUBMIT_RETRY_MS);
                   void window.hive.diagLog?.(`[work-deliver] tile=${tileId} agent=${agent} settled`);
                 }
               }
             }
-            // Keep scanning even while the window is hidden/minimized — that is
-            // exactly when an OS notification matters. Cost is bounded by
-            // agentDirty: a quiet, hidden tile never materializes its viewport.
-            if (!agentDirty) return; // no output since last scan → nothing changed
             agentDirty = false;
-            try {
-              const raw = detectTileStatus(agent, readScreen());
-              const next = stabilizeScreenStatus(lastReported, raw, Date.now(), lastWorkingAt);
-              // The host takes it only while the agent's hooks have not reported.
-              if (next !== lastReported || !screenSent) window.hive.agentScreen(ptyId, next);
-              screenSent = true;
-              lastReported = next;
-            } catch { /* buffer not ready */ }
           }, 1200);
         }
       } catch (e) {
@@ -1008,6 +1011,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
       clearWork(tileId);
       ro.disconnect();
       io.disconnect();
+      if (loseInterest) clearTimeout(loseInterest);
       surfaceEl?.removeEventListener(SURFACE_ADOPTED, onAdopted);
       surfaceEl?.removeEventListener(SURFACE_PARKED, onParked);
       // Unregister from the slot manager — this releases our WebGL slot (disposes

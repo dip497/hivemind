@@ -46,7 +46,7 @@ import { isRemote, parseRemote } from "../shared/remote-uri.js";
 import { savedAuth } from "./remote/saved-hosts.js";
 import { addMachine, checkMachine, editMachine, initMachines, installOnMachine, machineSessions, reconnectMachineHost, removeMachine, setMachinePassword, snapshot as machinesSnapshot, updateMachine } from "./remote/machines.js";
 import {
-  spawnRemotePty, writeRemotePty, resizeRemotePty, killRemotePty, hasRemotePty,
+  spawnRemotePty, writeRemotePty, resizeRemotePty, killRemotePty, hasRemotePty, screenRemotePty, remoteKeepsScreen,
   pauseRemotePty, resumeRemotePty, detachRemotePty, setRemoteEventSink,
 } from "./remote/pty.js";
 import { readRemoteFile, writeRemoteFile } from "./remote/git.js";
@@ -95,6 +95,7 @@ import { labelOf as hcpLabelOf } from "./hcp/names.js";
 import { Mailbox } from "./hcp/mailbox.js";
 import { TurnTracker } from "./hcp/turn-tracker.js";
 import { StatusStore, type ScreenState } from "@hivemind/agent-host/status-store";
+import { REATTACH_RESET } from "@hivemind/agent-host/daemon-endpoint";
 import { ipcPath, upgradeCommand, windowsStartMenuShortcut } from "./platform.js";
 import { SubagentReaper } from "./hcp/subagent-reaper.js";
 import { OutputRecorder } from "./hcp/output-recorder.js";
@@ -1095,6 +1096,7 @@ const hcpTurns = new TurnTracker();
 // Every agent session's status, keyed by bare tile id: hooks first, the screen for agents
 // without them, exits and interrupt keys observed here. One push carries every change.
 const hcpStatus = new StatusStore();
+const SCREEN_STATES = new Set<ScreenState>(["idle", "working", "permission", "question", "blocked"]);
 hcpStatus.subscribe((change) => {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("hcp:status", change);
 });
@@ -1161,6 +1163,10 @@ const onPtyExit = (tileId: string): void => {
 // Senders are looked up per tile at flush time so a tile that re-attached from
 // a new renderer (view-mode switch, reload) gets its bytes at the live target.
 const ptySenders = new Map<string, WebContents>();
+// Tiles no view shows: their bytes are recorded but not sent, and the renderer does no work
+// for them. Shown again, a tile is sent its screen as the host keeps it, then live bytes.
+const ptyUnseen = new Set<string>();
+const ptyShowing = new Set<string>();
 const ptyOut = new PtyOutputBuffer(
   (tileId, data) => {
     // The HCP output recorder is fed from the coalesced batch, not per pty
@@ -1168,6 +1174,7 @@ const ptyOut = new PtyOutputBuffer(
     // escape sequence split across two reads is stripped as a whole. (The
     // agent.stream broadcast stays per chunk — subscribers want immediacy.)
     hcpRecorder.record(tileId, data);
+    if (ptyUnseen.has(tileId)) return;
     const target = ptySenders.get(tileId);
     if (!target || target.isDestroyed()) return;
     try { target.send(`pty:data:${tileId}`, data); } catch { /* sender torn down */ }
@@ -1195,6 +1202,8 @@ function relayPtyExit(sender: WebContents, tileId: string, info: { code: number;
 function dropPtyRelay(tileId: string): void {
   ptyOut.forget(tileId);
   ptySenders.delete(tileId);
+  ptyUnseen.delete(tileId);
+  ptyShowing.delete(tileId);
   const t = ptyPauseTimers.get(tileId);
   if (t) { clearTimeout(t); ptyPauseTimers.delete(tileId); }
 }
@@ -1300,11 +1309,27 @@ ipcMain.on("ptyWrite", (_e, tileId: string, data: string) => {
   writePty(tileId, data);
 });
 ipcMain.handle("hcp:status-all", () => hcpStatus.all());
-// What an agent's screen shows, read by the renderer that draws it: the status of an agent
-// whose hooks have not spoken (or that has none). Ignored once they have.
-const SCREEN_STATES = new Set(["idle", "working", "permission", "question", "blocked"]);
-ipcMain.on("agent:screen", (_e, tileId: string, state: ScreenState) => {
-  if (SCREEN_STATES.has(state)) hcpStatus.screen(toBareId(tileId), state);
+ipcMain.on("ptyInterest", (_e, tileId: string, shown: boolean) => {
+  const redraw = (cb: (replay: string | null) => void): boolean =>
+    hasRemotePty(tileId) ? screenRemotePty(tileId, cb) : PERSIST_PTY && ptyDaemon.screenPty(tileId, cb);
+  if (!shown) {
+    ptyShowing.delete(tileId);
+    // Only a session whose screen the host keeps can be shown again from it.
+    if (hasRemotePty(tileId) ? remoteKeepsScreen(tileId) : PERSIST_PTY && hasSession(tileId)) ptyUnseen.add(tileId);
+    return;
+  }
+  if (!ptyUnseen.has(tileId) || ptyShowing.has(tileId)) return;
+  ptyShowing.add(tileId);
+  const asked = redraw((replay) => {
+    // Runs in order with the session's data: what is buffered now is older than this screen.
+    if (!ptyShowing.delete(tileId)) return; // hidden again meanwhile
+    ptyOut.flush(tileId);
+    ptyUnseen.delete(tileId);
+    const target = ptySenders.get(tileId);
+    if (replay === null || !target || target.isDestroyed()) return;
+    try { target.send(`pty:data:${tileId}`, REATTACH_RESET + replay); } catch { /* sender torn down */ }
+  });
+  if (!asked) { ptyShowing.delete(tileId); ptyUnseen.delete(tileId); }
 });
 ipcMain.on("ptyResize", (_e, tileId: string, cols: number, rows: number) =>
   hasRemotePty(tileId) ? resizeRemotePty(tileId, cols, rows) : resizePty(tileId, cols, rows)
@@ -1850,6 +1875,12 @@ function startHcpControlPlane(): void {
     offsetOf: (tileId) => hcpRecorder.mark(toPtyId(tileId)),
     status: hcpStatus,
     onEvent: (method: string, params: unknown): void => {
+      if (method === "agent.screen") {
+        // A daemon read an agent's screen: its status until the agent's hooks report.
+        const r = (params ?? {}) as { tileId?: string; state?: ScreenState };
+        if (r.tileId && r.state && SCREEN_STATES.has(r.state)) hcpStatus.screen(toBareId(r.tileId), r.state);
+        return;
+      }
       if (method === "agent.reply") {
         // A remote machine's daemon passes its hooks' replies on as this notification.
         const r = (params ?? {}) as { tileId?: string; text?: string };
@@ -1889,6 +1920,7 @@ function startHcpControlPlane(): void {
     },
   });
   setRemoteEventSink(server.injectEvent);
+  ptyMod.setDaemonEventSink(server.injectEvent);
   hcpBroadcast = server.broadcast;
 }
 

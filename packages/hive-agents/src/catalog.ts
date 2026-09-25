@@ -119,3 +119,8 @@ export function taskFromTitle(def: AgentProviderDef | undefined, title: string):
 export function spawnLabelFor(def: AgentProviderDef, n: number, opts: SpawnOptions): string {
   return def.spawnLabel ? def.spawnLabel(n, opts) : `${def.label} #${n}`;
 }
+
+/** Every variable an installed agent says must not reach a terminal the host starts. */
+export function envToUnset(): string[] {
+  return [...new Set(getCatalog().flatMap((d) => d.launch?.unsetEnv ?? []))];
+}

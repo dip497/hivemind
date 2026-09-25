@@ -3,10 +3,9 @@ import assert from "node:assert/strict";
 import {
   identifyAgent,
   detectTileStatus,
-  stabilizeScreenStatus,
-  SCREEN_WORKING_HOLD_MS,
   normalizeAgentTitle,
 } from "../../src/renderer/src/agent-state.ts";
+import { stabilizeScreenStatus, SCREEN_WORKING_HOLD_MS } from "@hivemind/agent-host/screen-status";
 import { useAuthoredAgents } from "./authored-agents.ts";
 
 // gemini, amp, grok, opencode and cline ship from the catalog, not inside the app.

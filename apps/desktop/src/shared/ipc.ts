@@ -456,8 +456,8 @@ export interface HiveIpc {
    *  a spawned agent can actually work issues with `hive`. Idempotent. */
   installAgentic(dir: string): Promise<{ ok: boolean }>;
   ptyWrite(tileId: string, data: string): void;
-  /** What an agent tile's screen shows, for an agent whose hooks have not reported. */
-  agentScreen(tileId: string, state: "idle" | "working" | "permission" | "question" | "blocked"): void;
+  /** Whether any view shows this terminal: bytes reach the renderer only while one does. */
+  ptyInterest(tileId: string, shown: boolean): void;
   ptyResize(tileId: string, cols: number, rows: number): void;
   ptyKill(tileId: string): void;
   /** Window closed / tile unmounted: keep the session alive (daemon mode) or

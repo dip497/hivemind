@@ -234,6 +234,10 @@ export interface AgentLaunch {
   requiresHome?: boolean;
   /** Extra environment; values take the same placeholders. */
   env?: Record<string, string>;
+  /** Variables this CLI sets in the processes it starts that must not reach a terminal the
+   *  host starts — a marker that makes a child think it runs inside this CLI. Removed from
+   *  every terminal, since the host itself may have been started from inside one. */
+  unsetEnv?: string[];
 }
 
 export interface AgentProviderDef {
@@ -322,7 +326,6 @@ export interface ProviderSpawnContext {
   execPath: string;
   trackerPath: string;
   tileSessionsDir: string;
-  legacyMapFile?: string;
   /** The plan-review socket a plugin's script reaches through the SDK. */
   planBridgeSock?: string;
   /** The generic script every `emit` entry runs. */

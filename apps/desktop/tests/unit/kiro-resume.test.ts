@@ -29,8 +29,7 @@ const kiroAgentConfig = (deps: Record<string, string | undefined>) => {
   return doc ? JSON.parse(doc) : { name: KIRO_HIVEMIND_AGENT, description: "hivemind control-plane wiring (auto-generated — do not edit by hand)" };
 };
 const makeKiroResumeTransforms = (deps: Record<string, string | undefined> = {}) =>
-  transformsFor(kiroDef, manifestRuntime(kiroDef, () => undefined)!, reqFor(deps).paths,
-    { ...(deps.legacyMapFile ? { legacyMapFile: deps.legacyMapFile } : {}) });
+  transformsFor(kiroDef, manifestRuntime(kiroDef, () => undefined)!, reqFor(deps).paths,);
 const { tileSessionFile } = await import("@hivemind/agents/node");
 
 const HOOK_DEPS = {

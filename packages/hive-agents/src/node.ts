@@ -98,7 +98,7 @@ function partsFromManifest(def: AgentProviderDef): AgentNodeParts | undefined {
       ...(ctx.hcpToken ? { hcpToken: ctx.hcpToken } : {}),
       tileSessionsDir: ctx.tileSessionsDir,
       home: homedir(),
-    }, { ...(ctx.legacyMapFile ? { legacyMapFile: ctx.legacyMapFile } : {}) }),
+    }),
   };
 }
 

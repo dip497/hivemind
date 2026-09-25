@@ -45,8 +45,7 @@ const trackerSettings = (deps: Record<string, string | undefined>, tileId: strin
     tileId, cwd: "/w", args: [], env: {}, phase: "spawn", ...(supervise ? { supervise } : {}), paths: pathsFor(deps),
   })!;
 const makeClaudeResumeTransforms = (deps: Record<string, string | undefined>): ProviderResumeTransforms =>
-  transformsFor(claudeDef, manifestRuntime(claudeDef, () => undefined)!, pathsFor(deps),
-    { ...(deps.legacyMapFile ? { legacyMapFile: deps.legacyMapFile } : {}) });
+  transformsFor(claudeDef, manifestRuntime(claudeDef, () => undefined)!, pathsFor(deps),);
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -190,7 +189,6 @@ function setup() {
   const transforms = makeClaudeResumeTransforms({
     trackerPath,
     tileSessionsDir,
-    legacyMapFile: path.join(dir, "tile-sessions.json"),
     execPath: process.execPath,
     home: dir,
   });

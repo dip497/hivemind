@@ -266,6 +266,15 @@ export function resizeRemotePty(tileId: string, cols: number, rows: number): voi
   const ep = daemonTiles.get(tileId);
   if (ep) ep.resize(tileId, cols, rows); else remotePtys.get(tileId)?.resize(cols, rows);
 }
+/** Whether a remote session runs under a daemon, which keeps its screen. */
+export function remoteKeepsScreen(tileId: string): boolean { return daemonTiles.has(tileId); }
+/** Ask a daemon-backed remote session for its screen now; false for one with no screen kept. */
+export function screenRemotePty(tileId: string, cb: (replay: string | null) => void): boolean {
+  const ep = daemonTiles.get(tileId);
+  if (!ep) return false;
+  ep.screen(tileId, cb);
+  return true;
+}
 export function pauseRemotePty(tileId: string): void {
   const ep = daemonTiles.get(tileId);
   if (ep) ep.pause(tileId); else remotePtys.get(tileId)?.pause();

@@ -17,36 +17,6 @@ export function identifyAgent(cmd: string): Agent | null {
 }
 
 /**
- * A screen, sampled every poll, can show an agent's idle prompt for a moment between two
- * steps of the same turn. Hold a working→idle flip for SCREEN_WORKING_HOLD_MS: a reading
- * of idle this soon after working is taken as that gap, not the end of the turn. Set above
- * the 1200ms scan interval so an end needs a second confirming idle scan. Only the screen
- * fallback uses it; hooks say when a turn ends. `lastWorkingAt.t` mutates across polls.
- */
-export const SCREEN_WORKING_HOLD_MS = 2000;
-
-export function stabilizeScreenStatus(
-  prev: TileStatus,
-  raw: TileStatus,
-  now: number,
-  lastWorkingAt: { t: number | null },
-): TileStatus {
-  if (raw === "working") {
-    lastWorkingAt.t = now;
-    return "working";
-  }
-  // Needs-human states are authoritative — never hold them back.
-  if (raw === "permission" || raw === "question" || raw === "blocked") return raw;
-  if (raw === "idle" && prev === "working") {
-    if (lastWorkingAt.t !== null && now - lastWorkingAt.t < SCREEN_WORKING_HOLD_MS) {
-      return "working";
-    }
-    return "idle";
-  }
-  return raw;
-}
-
-/**
  * Agents set the terminal window title (OSC 0/2) to a short summary of what
  * they're doing — claude writes a live task title ("Refactor auth", "Fixing
  * the flaky test"). We surface it as the tile's session name. Normalize the raw

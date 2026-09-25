@@ -194,12 +194,12 @@ export function manifestRuntime(
 export function sessionFor(
   def: AgentProviderDef,
   spec: { cwd: string; args?: readonly string[] },
-  ctx: { tileId?: string; tileSessionsDir?: string; legacyMapFile?: string; sessionRoot?: string } = {},
+  ctx: { tileId?: string; tileSessionsDir?: string; sessionRoot?: string } = {},
 ): string | undefined {
   const resume = def.session?.resume;
   if (!resume) return undefined;
   if (resume.from?.tracked && ctx.tileId && ctx.tileSessionsDir) {
-    const tracked = readTrackedSession(ctx.tileSessionsDir, ctx.tileId, ctx.legacyMapFile);
+    const tracked = readTrackedSession(ctx.tileSessionsDir, ctx.tileId);
     if (tracked) return tracked;
   }
   if (resume.from?.bound) {
@@ -244,14 +244,14 @@ export function transformsFor(
   def: AgentProviderDef,
   runtime: AgentRuntime,
   paths: RuntimePaths,
-  opts: { sessionRoot?: string; legacyMapFile?: string } = {},
+  opts: { sessionRoot?: string } = {},
 ): ProviderResumeTransforms {
   const isThisAgent = (spec: SpawnSpec): boolean =>
     path.basename((spec.cmd ?? "").trim().split(/\s+/)[0] ?? "") === def.bin;
   const run = (spec: SpawnSpec, tileId: string, phase: "spawn" | "restore"): SpawnSpec => {
     if (!isThisAgent(spec) || !runtime.launch) return spec;
     const session = phase === "restore"
-      ? sessionFor(def, spec, { tileId, tileSessionsDir: paths.tileSessionsDir, legacyMapFile: opts.legacyMapFile, sessionRoot: opts.sessionRoot })
+      ? sessionFor(def, spec, { tileId, tileSessionsDir: paths.tileSessionsDir, sessionRoot: opts.sessionRoot })
       : undefined;
     // The flag that bound the session at spawn is replaced by the resume, not kept beside it.
     const bound = def.session?.resume?.from?.bound;

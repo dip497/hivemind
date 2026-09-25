@@ -24,6 +24,8 @@ function fakeDaemon(sock: string, delta = false) {
       if (m.t === "attach" && m.since) c.write(frame({ t: "attached", reqId: m.reqId, id: m.id, pid: 42, isNew: false, replay: `MISSED-after-${m.since.seq}`, seq: m.since.seq + 1, epoch: m.since.epoch, delta: true }));
       else if (m.t === "attach") c.write(frame({ t: "attached", reqId: m.reqId, id: m.id, pid: 42, isNew: false, replay: "SCREEN", ...(delta ? { seq: 0, epoch: "E" } : {}) }));
       if (m.t === "write") c.write(frame({ t: "data", id: m.id, data: `echo:${m.data}`, ...(delta ? { seq: 7 } : {}) }));
+      // A screen answered between two data frames, in one write: the reader must switch exactly there.
+      if (m.t === "screen") c.write(frame({ t: "data", id: m.id, data: "older" }) + frame({ t: "screen", reqId: m.reqId, id: m.id, replay: "NOW" }) + frame({ t: "data", id: m.id, data: "newer" }));
       if (m.t === "hello" && m.caps.includes("events")) c.write(frame({ t: "event", topic: "status", data: { tileId: "t1", state: "idle" } }));
     }));
   });
@@ -281,4 +283,21 @@ test("a peer that never ends a line is dropped instead of filling memory", () =>
   // The buffer is dropped, so the next complete line still parses.
   feed("{\"t\":\"pong\",\"reqId\":\"b\"}\n");
   assert.equal(lines.length, 2);
+});
+
+test("screen answers in order with the data around it: every byte after the callback is newer than the screen", async () => {
+  const sock = path.join(dir, "screen.sock");
+  const d = fakeDaemon(sock);
+  await d.listen();
+  const ep = new DaemonEndpoint({ connect: () => new Promise((res, rej) => { const s = net.connect(sock); s.once("connect", () => res(s)); s.once("error", rej); }) });
+  let shown = false;
+  const seen: string[] = [];
+  await ep.spawn({ tileId: "t1", cwd: "/", cmd: "sh", cols: 80, rows: 24 }, { onData: (x) => seen.push(`${shown ? "shown" : "hidden"}:${x}`), onExit: () => {} });
+  let screen: string | null = null;
+  ep.screen("t1", (replay) => { screen = replay; shown = true; });
+  assert.ok(await until(() => seen.some((x) => x.endsWith("newer"))));
+  assert.equal(screen, "NOW");
+  assert.deepEqual(seen.slice(1), ["hidden:older", "shown:newer"]);
+  ep.close();
+  await d.close();
 });

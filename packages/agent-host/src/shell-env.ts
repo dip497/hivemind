@@ -7,8 +7,8 @@
  *
  * Goal: spawn the user's login shell ONCE at app startup, capture its full
  * environment, and patch `process.env` so every later pty/git/exec call
- * sees the user's tools (`claude`, `gh`, nvm-managed node, asdf shims,
- * Bun) AND tokens (`ANTHROPIC_API_KEY`, `GH_TOKEN`, `OPENAI_API_KEY`, …).
+ * sees the user's tools (agent CLIs, `gh`, nvm-managed node, asdf shims,
+ * Bun) AND tokens (API keys, `GH_TOKEN`, …).
  *
  * Existing `process.env` values always win — Electron-managed vars are not
  * clobbered. PATH is the deliberate exception (always replaced with the
@@ -204,22 +204,11 @@ function mergeIntoProcessEnv(env: Record<string, string>): void {
  */
 const ELECTRON_INTERNAL_ENV = ["ELECTRON_RUN_AS_NODE", "ELECTRON_NO_ATTACH_CONSOLE"] as const;
 
-/** Claude Code marks the processes it spawns with CLAUDE_CODE_CHILD_SESSION;
- *  a `claude` that inherits the marker assumes it is a nested child session and
- *  turns transcript saving off. When hivemind itself is launched from inside a
- *  Claude Code session, every tile PTY inherits the marker — claude tiles then
- *  print "⚠ Transcript saving is off" and write no transcript, which silently
- *  breaks the --session-id/--resume persistence contract (a session with no
- *  transcript cannot be resumed after a restart). A tile is a user shell, not
- *  claude's child: strip the marker, and default the persistence override on —
- *  inert for every non-claude process, and an explicit user value (including 0)
- *  still wins. */
-const CLAUDE_CHILD_SESSION_MARKER = "CLAUDE_CODE_CHILD_SESSION";
-const CLAUDE_FORCE_PERSISTENCE = "CLAUDE_CODE_FORCE_SESSION_PERSISTENCE";
-
-export function sanitizeShellEnv(env: Record<string, string>): Record<string, string> {
+/** `unset` also drops what installed agents list as theirs to keep out of a terminal
+ *  (`launch.unsetEnv`): the host may itself run inside one of them, and a tile is the user's
+ *  shell, not that agent's child. */
+export function sanitizeShellEnv(env: Record<string, string>, unset: Iterable<string> = []): Record<string, string> {
   for (const k of ELECTRON_INTERNAL_ENV) delete env[k];
-  delete env[CLAUDE_CHILD_SESSION_MARKER];
-  if (!env[CLAUDE_FORCE_PERSISTENCE]) env[CLAUDE_FORCE_PERSISTENCE] = "1";
+  for (const k of unset) delete env[k];
   return env;
 }

@@ -41,7 +41,6 @@ const CTX = {
   execPath: "/x/electron",
   trackerPath: "/x/ud/tile-session-tracker.cjs",
   tileSessionsDir: "/x/ud/tile-sessions",
-  legacyMapFile: "/x/ud/tile-sessions.json",
   planBridgeSock: "/x/ud/plan-bridge.sock",
   eventHookPath: "/x/ud/hcp-event-hook.cjs",
   sdkPath: "/x/ud/hive-sdk.cjs",

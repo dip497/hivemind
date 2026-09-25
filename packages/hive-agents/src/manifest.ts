@@ -222,6 +222,11 @@ function validateLaunch(raw: unknown): AgentLaunch {
     }
     out.env = env;
   }
+  if (m.unsetEnv !== undefined) {
+    req(Array.isArray(m.unsetEnv) && m.unsetEnv.length <= 8 && m.unsetEnv.every((k) => typeof k === "string" && ENV_KEY_RE.test(k) && !ENV_DENY.has(k)),
+      "launch.unsetEnv must be a list of at most 8 variable names");
+    out.unsetEnv = m.unsetEnv as string[];
+  }
   return out;
 }
 

@@ -119,7 +119,7 @@ const api: HiveIpc & {
 
   ptySpawn: (opts) => ipcRenderer.invoke("ptySpawn", opts),
   ptyWrite: (tileId, data) => ipcRenderer.send("ptyWrite", tileId, data),
-  agentScreen: (tileId, state) => ipcRenderer.send("agent:screen", tileId, state),
+  ptyInterest: (tileId, shown) => ipcRenderer.send("ptyInterest", tileId, shown),
   ptyResize: (tileId, cols, rows) => ipcRenderer.send("ptyResize", tileId, cols, rows),
   ptyKill: (tileId) => ipcRenderer.send("ptyKill", tileId),
   ptyDetach: (tileId) => ipcRenderer.send("ptyDetach", tileId),

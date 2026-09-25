@@ -53,6 +53,7 @@ export class DaemonEndpoint {
   /** Tiles whose session exists in the daemon: a re-attach must never start them again. */
   private readonly live = new Set<string>();
   private readonly replies = new Map<string, (msg: ServerMsg) => void>();
+  private readonly screens = new Map<string, (replay: string | null) => void>();
   private seq = 0;
   private retry: ReturnType<typeof setTimeout> | null = null;
   private attempts = 0;
@@ -101,6 +102,14 @@ export class DaemonEndpoint {
       case "event":
         this.o.onEvent?.(msg.topic, msg.data);
         break;
+      case "screen": {
+        // Synchronously, in order with the data around it: the caller switches what it does
+        // with this session's bytes exactly here.
+        const cb = this.screens.get(msg.reqId);
+        this.screens.delete(msg.reqId);
+        cb?.(msg.replay);
+        break;
+      }
       case "pong":
       case "sessions": {
         const reply = this.replies.get(msg.reqId);
@@ -130,6 +139,7 @@ export class DaemonEndpoint {
       if (this.conn === s) this.conn = null;
       // Fail in-flight attaches now rather than after their timeout.
       for (const [reqId, resolve] of [...this.pending]) { this.pending.delete(reqId); resolve({ pid: -1 }); }
+      for (const [reqId, cb] of [...this.screens]) { this.screens.delete(reqId); cb(null); }
       if (this.closed) return;
       if (this.o.isPaused?.()) { this.status("idle"); return; }
       this.status(this.cbs.size ? "reconnecting" : "idle");
@@ -257,6 +267,13 @@ export class DaemonEndpoint {
   resize(tileId: string, cols: number, rows: number): void { this.fire({ t: "resize", id: tileId, cols, rows }); }
   pause(tileId: string): void { this.fire({ t: "pause", id: tileId }); }
   resume(tileId: string): void { this.fire({ t: "resume", id: tileId }); }
+  /** The session's screen now. `cb` runs synchronously in the message loop, so every data
+   *  callback after it carries bytes the screen does not already show. */
+  screen(tileId: string, cb: (replay: string | null) => void): void {
+    const reqId = `sc${++this.seq}`;
+    this.screens.set(reqId, cb);
+    this.send({ t: "screen", reqId, id: tileId }).catch(() => { this.screens.delete(reqId); cb(null); });
+  }
 
   /** Terminate the session in the daemon. */
   kill(tileId: string): void {

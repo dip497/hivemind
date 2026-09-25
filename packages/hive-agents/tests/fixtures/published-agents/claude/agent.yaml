@@ -295,3 +295,9 @@ assets:
   hook: approve
 launch:
   hcp: true
+  # A claude that inherits this marker thinks it is a nested session and saves no transcript,
+  # so it could not be resumed. The app may itself run inside Claude Code.
+  unsetEnv:
+  - CLAUDE_CODE_CHILD_SESSION
+  env:
+    CLAUDE_CODE_FORCE_SESSION_PERSISTENCE: '1'

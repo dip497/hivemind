@@ -2,8 +2,8 @@
  * PtyOutputBuffer — coalesces a tile's pty output before it crosses to the
  * renderer.
  *
- * node-pty hands main one chunk per kernel read, and a streaming TUI (claude's
- * spinner + token stream, a codex redraw) produces hundreds of small writes a
+ * node-pty hands main one chunk per kernel read, and a streaming TUI (an agent's
+ * spinner + token stream, a full redraw) produces hundreds of small writes a
  * second. Relaying each one as its own `webContents.send` costs a structured-
  * clone + an IPC message + a renderer task per chunk — the per-MESSAGE overhead,
  * not the bytes, is what saturates both event loops once the machine is busy,

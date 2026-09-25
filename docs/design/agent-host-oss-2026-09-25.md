@@ -219,6 +219,31 @@ reference on a published benchmark (RSS and CPU at 100 and 500 sessions, attach 
 | S5 | Interest subscriptions in the desktop client; hidden terminals hold no renderer copy | re-profile at 100 sessions; renderer cost tracks visible terminals |
 | S6 | Rust daemon prototype against the conformance suite; benchmark | switch only on a pass + a measured win |
 
+### Where each step landed (2026-09-25, `feat/agent-events`)
+
+- **S0** — `spec/` (event, status, hook and wire protocols), `conformance/` (status folds, hook
+  reports), a sync test against the TS constants.
+- **S1** — `packages/agent-host`: the daemon, session manager, protocol, hook scripts.
+- **S2** — `packages/agent-sdk`, written by the host as `hive-sdk.cjs`. Claude's reply (from its
+  Stop payload), plan review and approval broker, Droid's transcript reply, Kiro's broker and
+  Pi's reply live in those agents' plugins. The host reads no transcript and ships no
+  agent-shaped script. The naming model became `hook: <name>` on an `assets` entry with
+  `produces:` rather than a separate `run:` key.
+- **S3** — `session.resume.exists`; the output regex is gone. A restore that fails fast is still
+  retried once, on the exit the host observes.
+- **S4** — `StatusStore` in `agent-host`, run by main (and fed by remote daemons); one push to
+  the renderer, `status/subscribe` for any client. The control plane is JSON-RPC 2.0 only
+  (`spec/wire-protocol.md`); nothing speaks the old line format. The hook-health rule is the
+  simplest one that holds: the screen stands in until a session's hooks first report.
+- **S5** — the host reads agents' screens (the daemon's headless terminals, or the in-process
+  host's), so the renderer scrapes nothing. A terminal no view shows gets no bytes; shown again,
+  it is sent the host's screen, in order with the stream.
+  Re-profiled 2026-09-25 with 100 streaming terminals (xvfb, so CPU shares only, on a box
+  at load ~60): renderer 77% → 7.6% CPU with every terminal parked (xterm work: none), and
+  62% → 19% on the canvas, where terminals outside the viewport now get nothing either;
+  renderer RSS 632 → 355 MB. The `content-visibility` experiments add little on top (14% / 7%),
+  so they stay out.
+
 ## 9. Decisions (defaults taken 2026-09-25, revisit before 1.0)
 
 1. Package names `agent-host` and `agent-sdk`; repository name decided at the split.

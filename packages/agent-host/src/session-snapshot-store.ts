@@ -7,7 +7,7 @@ import type { SessionSnapshot } from "./pty-session-manager.js";
 const TOKEN_ENV = "HCP_TOKEN";
 export const TOKEN_PLACEHOLDER = "@hivemind/hcp-token";
 
-/** Matches claude's default transcript retention; past it only an old screen is left. */
+/** A month: past it a session's own history has usually been pruned, and only an old screen is left. */
 export const SNAPSHOT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
 export function fileNameForId(id: string): string {

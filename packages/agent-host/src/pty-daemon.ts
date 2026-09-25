@@ -26,10 +26,11 @@ import {
 } from "./session-snapshot-store.js";
 import { applyInitialPrompt, stripInitialPrompt } from "./initial-prompt.js";
 import { sanitizeShellEnv } from "./shell-env.js";
-import { AGENT_EVENT_METHOD, composeResume, evictTrackedSession, parseAgentEvent, prepareProviders, trackerSource, setCatalog, type AgentEvent } from "@hivemind/agents/node";
+import { AGENT_EVENT_METHOD, agentForCmd, composeResume, envToUnset, evictTrackedSession, parseAgentEvent, prepareProviders, trackerSource, setCatalog, type AgentEvent } from "@hivemind/agents/node";
 import { resolveWindowsSpawn } from "@hivemind/agents/discover";
 import { agentEventHookSource } from "./hooks/agent-event-hook-source.js";
 import { SDK_FILE, sdkSource } from "@hivemind/agent-sdk";
+import { ScreenWatcher } from "./screen-status.js";
 import { readOrCreateToken, hcpSockPath } from "./hooks/token.js";
 
 // Lazy: node-pty must never be evaluated inside the compiled `hive` (see bun-pty.ts).
@@ -49,7 +50,7 @@ delete process.env.HIVEMIND_DAEMON_STANDALONE;
 // script is newer than what we loaded) and replace us with a fresh daemon.
 // CONTENT hash (FNV-1a) of our own bundle — NOT mtime. A rebuild that doesn't
 // change the daemon's code keeps the same stamp, so a renderer/main-only rebuild
-// won't make the app respawn us and tear down live claude sessions. Must match
+// won't make the app respawn us and tear down live agent sessions. Must match
 // daemon-client.ts's currentBuildStamp() byte-for-byte.
 const BUILD_STAMP = (() => {
   try {
@@ -63,10 +64,10 @@ if (!socketPath) {
   console.error("[pty-daemon] no socket path given");
   process.exit(1);
 }
-// Every file this daemon emits (hook scripts, the pi extension, session
+// Every file this daemon emits (hook scripts, agents' assets, session
 // snapshots, the HCP socket + token) lives NEXT TO the socket. A relative
 // socket path would make all of that land in whatever the launcher's cwd is —
-// a stray `undefined/hive-pi-ext.mjs` in a repo root was exactly that — so
+// a stray `undefined/<asset>` in a repo root was exactly that — so
 // refuse anything but an absolute path instead of writing into the cwd.
 if (!path.isAbsolute(socketPath)) {
   console.error(`[pty-daemon] socket path must be absolute (got ${JSON.stringify(socketPath)})`);
@@ -81,21 +82,16 @@ if (!path.isAbsolute(socketPath)) {
 const sessionsDir = path.join(path.dirname(socketPath), "sessions");
 secureDir(sessionsDir);
 
-// ── live claude session tracking ───────────────────────────────────────────
-// hivemind spawns `claude --session-id <uuid>`, but the user can switch the
-// ACTIVE session inside the tile (`/resume`, `--continue`, claude reassigning
-// its id). To resume what the tile is ACTUALLY in, we inject a merged
-// SessionStart hook (fires on start/resume/clear) that records
-// tileId → live session_id into tile-sessions.json. On restore we prefer that
-// tracked id over the originally-injected one. The hook command bakes in the
-// tile id (HIVEMIND_TILE) so it's correct even with several claude tiles in one
-// cwd. The tracker runs as electron-as-node (.cjs forces CommonJS).
+// ── live session tracking ──────────────────────────────────────────────────
+// An agent may be spawned bound to a session id, but the user can switch the ACTIVE
+// session inside the tile. To resume what the tile is ACTUALLY in, an agent whose
+// manifest names the `tracker` hook records tileId → live session id on every session
+// start; on restore that tracked id wins over the bound one. The hook command carries the
+// tile id (HIVEMIND_TILE), so several tiles of one agent in one cwd stay apart. The
+// tracker runs as electron-as-node (.cjs forces CommonJS).
 const userDataDir = path.dirname(socketPath);
-// Legacy single-map file — read-only now (migration fallback in trackedSession).
-const tileSessionsPath = path.join(userDataDir, "tile-sessions.json");
-// Per-tile directory — each claude tile records its live session id in its OWN
-// file, so concurrent SessionStart hooks (every frame's claude tile on restart)
-// never clobber each other. See tile-session-store.ts for the why.
+// Per-tile directory — each tile records its live session id in its OWN file, so
+// concurrent session starts (every tile on restart) never clobber each other.
 const tileSessionsDir = path.join(userDataDir, "tile-sessions");
 const trackerPath = path.join(userDataDir, "tile-session-tracker.cjs");
 try { fs.writeFileSync(trackerPath, trackerSource()); } catch { /* best-effort */ }
@@ -126,9 +122,8 @@ try { fs.writeFileSync(sdkPath, sdkSource()); } catch { /* best-effort */ }
 const hcpSock = hcpSockPath(userDataDir);
 const hcpToken = readOrCreateToken(userDataDir);
 
-// Provider-owned assets + config-home overlays (the pi bridge extension, the
-// droid FACTORY_HOME_OVERRIDE overlay, the kiro KIRO_HOME overlay + its own
-// approval hook, …): every catalogued provider's `prepare()` runs here and
+// Provider-owned assets + config-home overlays (an extension, a private config home,
+// a hook script of its own, …): every catalogued provider's `prepare()` runs here and
 // hands back ITS private paths, which the spawn transforms read under
 // ctx.providers[id]. Best-effort per provider — a failure only disables that
 // provider's deterministic signals (the screen-scrape detector still drives
@@ -146,7 +141,6 @@ const providerCtx = {
   execPath: hookExecPath,
   trackerPath,
   tileSessionsDir,
-  legacyMapFile: tileSessionsPath,
   planBridgeSock,
   eventHookPath,
   sdkPath,
@@ -246,25 +240,10 @@ function evictSnapshot(id: string): void {
   // Drop the tile's per-tile tracked-session file so killed tiles don't leave
   // stale ids behind.
   evictTrackedSession(tileSessionsDir, id);
-  // Legacy cleanup: also remove the entry from the old shared map if present.
-  try {
-    const map = JSON.parse(fs.readFileSync(tileSessionsPath, "utf8"));
-    if (map && id in map) {
-      delete map[id];
-      const tmp = `${tileSessionsPath}.${process.pid}.tmp`;
-      fs.writeFileSync(tmp, JSON.stringify(map));
-      fs.renameSync(tmp, tileSessionsPath);
-    }
-  } catch { /* no map yet / unreadable — nothing to clean */ }
 }
 function registerSnapshots(): SnapshotEntry[] {
   const entries: SnapshotEntry[] = [];
   for (const entry of listSnapshotFiles(sessionsDir)) {
-    // Legacy `hm:<path>:<tileId>` ids are never asked for again.
-    if (entry.id.startsWith("hm:") && entry.id.slice(3).split(":").length > 1) {
-      try { fs.unlinkSync(entry.file); } catch { /* already gone */ }
-      continue;
-    }
     manager.restoreLazySnapshot(entry.id, () => {
       const snap = readSnapshot(entry.file, entry.id);
       return snap ? rehydrateSnapshot(snap, hcpToken) : undefined;
@@ -277,18 +256,19 @@ function registerSnapshots(): SnapshotEntry[] {
 // Real node-pty factory. Mirrors pty-host.doSpawn's env defaults so colors,
 // locale, and TERM_PROGRAM match the in-process path. UUID injection happens
 // in transformSpecOnSpawn (so the snapshot persists it) — by the time spec
-// reaches here, the args already carry `--session-id <uuid>` for claude.
+// reaches here, the args already carry the session an agent is bound to.
 const factory = (spec: SpawnSpec): ManagedPty => {
-  const env: Record<string, string> = sanitizeShellEnv({
-    ...(process.env as Record<string, string>),
+  // What this process inherited is cleaned; what the tile asked for is its own.
+  const env: Record<string, string> = {
+    ...sanitizeShellEnv({ ...(process.env as Record<string, string>) }, envToUnset()),
     ...(spec.env ?? {}),
-  });
+  };
   if (!env.COLORTERM) env.COLORTERM = "truecolor";
   if (!env.LANG) env.LANG = "C.UTF-8";
   if (!env.TERM_PROGRAM) env.TERM_PROGRAM = "hivemind";
-  // A ▶ Work prompt (HIVE_INITIAL_PROMPT) becomes claude's trailing positional
-  // arg — claude auto-submits it, so no typing race against the booting TUI. The
-  // env key is dropped from the child so claude never sees a stray var.
+  // A ▶ Work prompt (HIVE_INITIAL_PROMPT) becomes the agent's trailing positional
+  // arg — it submits it itself, so no typing race against the booting TUI. The
+  // env key is dropped from the child so it never sees a stray var.
   // A canvas written on another OS can name a shell this one doesn't have.
   const runSpec = repairShellSpec({ cmd: spec.cmd, args: spec.args });
   const { args: execArgs, env: execEnv } = applyInitialPrompt(runSpec.args ?? [], env);
@@ -316,7 +296,18 @@ const factory = (spec: SpawnSpec): ManagedPty => {
   };
 };
 
+/** Connections that asked for events: agent reports and screen readings (desktops viewing this machine). */
+const eventViewers = new Set<(m: ServerMsg) => void>();
+// Every agent session's screen, read here where the screen is kept, for the status of an
+// agent whose hooks have not reported. Viewers take it as `agent.screen`.
+const screens = new ScreenWatcher({
+  read: (id) => manager.viewport(id),
+  detect: (cmd, screen) => agentForCmd(cmd)?.detect?.(screen),
+  report: (id, state) => { for (const push of eventViewers) push({ t: "event", topic: "agent.screen", data: { tileId: id, state } }); },
+});
+setInterval(() => screens.tick(), 1200).unref();
 const manager = new SessionManager(factory, {
+  onOutput: (id) => screens.output(id),
   idleMs: 8000, // exit 8s after the last session is killed/exits — no orphans
   onEmpty: () => {
     try {
@@ -328,25 +319,13 @@ const manager = new SessionManager(factory, {
   },
   onSnapshot: persistSnapshot,
   onSnapshotEvict: evictSnapshot,
-  // claude resume/tracking: see claude-resume.ts. BIND-AT-SPAWN injects a
-  // deterministic `--session-id <uuid>` (stored in the snapshot args) + the
-  // SessionStart tracker; restore prefers the tracked live id (follows
-  // `/resume`) then swaps `--session-id` → `--resume`; a retry transform turns
-  // "No conversation found" into a fresh `--session-id` session so a missing
-  // JSONL doesn't kill the tile. Limitations inherited from claude itself
-  // (can't fix from the PTY layer): killed mid-tool-call (#18880), post-`cd`
-  // mid-session (#22566), version-upgrade across resume (#53417).
-  // Composed across all registered providers (each no-ops for specs it doesn't
-  // own): spawn binds claude's session id + injects its signal hooks; restore
-  // chains claude then codex; retry turns "No conversation found" into a fresh
-  // session. Limitations inherited from claude itself (can't fix from the PTY
-  // layer): killed mid-tool-call (#18880), post-`cd` mid-session (#22566),
-  // version-upgrade across resume (#53417).
+  // Each agent's manifest says how it binds, tracks and resumes a session (hive-agents
+  // runtime-manifest.ts); composed across every agent, each leaving specs it does not own alone.
   transformSpecOnSpawn: (spec, id) => resume.transformSpecOnSpawn(spec, id),
   // Strip the one-time HIVE_INITIAL_PROMPT before ANY provider sees the spec. A
   // restore re-execs from the persisted spec, so an un-stripped prompt is re-appended
   // as positional argv and the task RUNS AGAIN — for every agent that takes an argv
-  // prompt (claude, pi). Agent-agnostic on purpose: this is a property of restore.
+  // prompt. A property of restore, not of any one agent.
   transformSpecOnRestore: (spec, id) => resume.transformSpecOnRestore(stripInitialPrompt(spec), id),
   restoreRetryMs: resume.restoreRetryMs,
   restoreRetryTransform: (spec) => resume.restoreRetryTransform(spec),
@@ -397,8 +376,6 @@ process.on("unhandledRejection", (reason) => {
 // felt, and the per-frame overhead on both event loops drops by an order of
 // magnitude during bursts. Size-capped so a starved timer can't grow memory;
 // `exit` / `attached` flush their tile first to keep ordering.
-/** Connections that asked for agent hook events (desktops viewing this machine). */
-const eventViewers = new Set<(m: ServerMsg) => void>();
 
 // Pushes to the user's phone: ntfy or any endpoint that takes a plain-text POST (`hive push set`).
 const pushFile = path.join(userDataDir, "push.json");
@@ -549,6 +526,14 @@ const server = net.createServer((sock) => {
       case "pause":
         manager.pause(msg.id, viewers.get(msg.id));
         break;
+      case "screen": {
+        const { reqId, id } = msg;
+        // What is buffered for this viewer is older than the screen: send it first, so the
+        // screen is the line between bytes it already covers and bytes that follow it.
+        outBuf.flush(id);
+        void manager.snapshot(id).then((snap) => send({ t: "screen", reqId, id, replay: snap?.replay ?? null }));
+        break;
+      }
       case "resume":
         manager.resume(msg.id, viewers.get(msg.id));
         break;

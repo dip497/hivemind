@@ -133,7 +133,6 @@
     "zustand": "catalog:"
   },
   "devDependencies": {
-    "@earendil-works/pi-coding-agent": "~0.80.10",
     "@electron/rebuild": "catalog:",
     "@hivemind/agent-sdk": "workspace:*",
     "@hivemind/tsconfig": "workspace:*",
@@ -151,7 +150,6 @@
     "oxlint": "^1.83.0",
     "tailwindcss": "catalog:",
     "tsx": "^4.23.15",
-    "typebox": "1.1.38",
     "typescript": "catalog:",
     "vite": "catalog:",
     "yaml": "catalog:"
