@@ -608,6 +608,14 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     };
   }, []);
 
+  // `+` in the Layers rail ("add project"): a NEW frame bound to a folder,
+  // so it joins the rail alongside the current project instead of switching it.
+  useEffect(() => {
+    const onAdd = () => void bindWorkspace(addFrame());
+    window.addEventListener("hivemind:add-project", onAdd);
+    return () => window.removeEventListener("hivemind:add-project", onAdd);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Git commit/sync modal — open for a specific repo (a frame's worktree /
   // workspace / base repo), via `hivemind:frame-git` {frameId | repoPath}.
   const [gitModalRepo, setGitModalRepo] = useState<string | null>(null);
@@ -652,7 +660,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     return f?.worktreePath ?? f?.workspacePath ?? repoPathRef.current ?? null;
   }, []);
   const frameActions = useMemo(() => ({
-    onOpenInFrame: (frameId: string, kind: string) => frameOpen(frameId, kind),
+    onOpenInFrame: (frameId: string, kind: string, launch?: Record<string, string>) => frameOpen(frameId, kind, launch),
     onCreateWorktree,
     onAttachWorktree,
     onBindWorkspace: (frameId: string) => bindWorkspace(frameId),

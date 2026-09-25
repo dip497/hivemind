@@ -28,6 +28,8 @@ const SINGLETON_KINDS: ReadonlySet<TileKind> = new Set(["editor", "diff", "issue
 type FocusReq = { id: string; cx: number; cy: number; w: number; h: number; n: number; exact?: boolean } | null;
 type SpawnOpts = {
   mode?: string; work?: string; url?: string; file?: string;
+  /** Per-spawn launch options beyond `mode` (agent-option id → value). */
+  launch?: Partial<Record<string, string>>;
   agent?: { id: string; cmd: string; args?: string[]; label: string };
   /** A terminal that shows this existing daemon session instead of starting its own. */
   session?: { id: string; cmd: string; args?: string[]; label: string };
@@ -288,7 +290,7 @@ export function useSpawn(ctx: SpawnCtx) {
       let args: string[] | undefined;
       let label: string;
       if (def) {
-        const so = launchOptions(def.id, { mode: opts?.mode });
+        const so = launchOptions(def.id, { mode: opts?.mode, ...(opts?.launch ?? {}) });
         args = spawnArgsFor(def, so);
         cmd = def.bin;
         label = ordinalLabel((n) => spawnLabelFor(def, n, {}), (n) => spawnLabelFor(def, n, so));
@@ -363,12 +365,12 @@ export function useSpawn(ctx: SpawnCtx) {
 
   // Open a tile INSIDE a specific frame (the frame's launcher toolbar) — always
   // targets that frame, no picker. Same one-per-frame rule via spawnTile.
-  const frameOpen = useCallback((frameId: string, kind: string) => {
+  const frameOpen = useCallback((frameId: string, kind: string, launch?: SpawnOpts["launch"]) => {
     // A registry agent (codex / opencode / …) opens as an agent-terminal tile
     // carrying its binary + default flags.
     const agent = agentById(kind);
     if (agent) {
-      spawnTile(AGENT_TILE_KIND, frameId, { agent: { id: agent.id, cmd: agent.cmd, args: agent.defaultArgs, label: agent.label } });
+      spawnTile(AGENT_TILE_KIND, frameId, { agent: { id: agent.id, cmd: agent.cmd, args: agent.defaultArgs, label: agent.label }, launch });
       return;
     }
     const k: TileKind =

@@ -20,6 +20,7 @@
  * anyone who starts the app from a terminal and wants exactly that shell's env.
  */
 import { execFile } from "node:child_process";
+import path from "node:path";
 import { promisify } from "node:util";
 
 const execFileP = promisify(execFile);
@@ -221,5 +222,25 @@ export function sanitizeShellEnv(env: Record<string, string>): Record<string, st
   for (const k of ELECTRON_INTERNAL_ENV) delete env[k];
   delete env[CLAUDE_CHILD_SESSION_MARKER];
   if (!env[CLAUDE_FORCE_PERSISTENCE]) env[CLAUDE_FORCE_PERSISTENCE] = "1";
+  // Harness location rescue: when hivemind is desktop-launched its PATH is
+  // /etc/environment's (no ~/.local/bin, no ~/.npm-global/bin), so bare agent
+  // commands (codex, claude, opencode…) can resolve to a same-named system
+  // launcher the user never means — e.g. a snap shim that dies on
+  // snap-confine capability drift. Prepend the dirs user-level harness
+  // installs actually write to when they're missing; existing entries never
+  // move, so a shell-resolved PATH is untouched.
+  if (env.PATH?.includes("/") && env.PATH.includes(":")) {
+    const home = env.HOME;
+    if (home) {
+      const rescue = [
+        path.join(home, ".local", "bin"),
+        path.join(home, ".npm-global", "bin"), // npm i -g default prefix
+        path.join(home, "bin"),
+      ];
+      const have = new Set(env.PATH.split(":"));
+      const missing = rescue.filter((d) => !have.has(d));
+      if (missing.length) env.PATH = `${[...missing, env.PATH].join(":")}`;
+    }
+  }
   return env;
 }

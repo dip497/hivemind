@@ -26,6 +26,14 @@ icon:
 install:
   url: https://antigravity.google/docs/cli/overview/
   command: "curl -fsSL https://antigravity.google/cli/install.sh | bash"
+options:
+  - id: permissions
+    label: Permission prompt
+    # `--dangerously-skip-permissions` is a bare flag (no value), so it maps
+    # through `values`, not `flag value`.
+    values:
+      bypassPermissions:
+        - --dangerously-skip-permissions
 detect:
   rules:
     - when:

@@ -87,3 +87,43 @@ a newer app says so with `minAppVersion`. A change that breaks any of them, the 
 
 If you (Claude) made any change that ships to users — code, dependency, install behavior, `hive ctl` surface — append a one-line entry to `CHANGELOG.md` under `## [Unreleased]` BEFORE handing the session back. The maintainer can then cut a release with `./scripts/release.sh` and the changelog is ready.
 <!-- release:end -->
+
+
+<!-- hivemind:agentic:start -->
+## Agentic mode — the `hive` CLI
+
+This workspace tracks issues under `.hivemind/` and is driven through the **`hive`
+CLI** (on PATH). Use it from Bash — there is no MCP server. Every command takes
+`--json` for machine-readable output; every id from another registered repo
+resolves automatically.
+
+- `hive show <id> --json` — load an issue (title, description, `acceptanceCriteria`, activity).
+- `hive list --state todo --json` — issue summaries, filterable by state / label / assignee.
+- `hive ctl set-state <id> in_progress --note "…"` — backlog | todo | in_progress | in_review | done | cancelled
+- `hive ctl add-comment <id> "…"` · `hive ctl mark-acceptance <id> <index>` (0-based; `--undone` reopens)
+- `hive update <id> --title … --assignee claude --assignee-type agent` · `hive new "Title" --parent <id>`
+- `hive ctl delete-issue <id>` — destructive; only on an explicit ask.
+
+### Execution contract (REQUIRED)
+
+When the user asks you to work on an issue (e.g. `PAY-42`):
+
+1. `hive show PAY-42 --json` → load context.
+2. Claim it: `hive ctl set-state PAY-42 in_progress` + `hive update PAY-42 --assignee claude --assignee-type agent`.
+3. Plan briefly (one comment via `hive ctl add-comment`).
+4. Execute. Tick each criterion as you go (`hive ctl mark-acceptance PAY-42 <n>`).
+5. Comment progress at meaningful checkpoints (file:line refs).
+6. **Every session MUST end with `hive ctl set-state`** — `in_review` (done, awaiting review),
+   `done` (only with explicit authority), `in_progress` (will resume), or `cancelled` with `--note`.
+
+Do not exit a session silently.
+
+### Multi-agent control plane (when running inside hivemind)
+
+If `$HIVEMIND_TILE` is set you are an agent tile and can drive the canvas with
+`hive ctl`: spawn and coordinate other agents, read their replies, run
+fanout / pipeline / mapreduce workflows, supervise + approve, and report back to
+the agent that spawned you. The `hivemind` skill in `.claude/skills/hivemind/`
+has the exact commands; `hive ctl --help` lists them.
+
+<!-- hivemind:agentic:end -->
