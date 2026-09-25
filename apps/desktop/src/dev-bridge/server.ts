@@ -73,7 +73,7 @@ import {
   worktreeRemove,
 } from "../main/git-adapter";
 import { spawnPty, writePty, resizePty, killPty, pausePty, resumePty } from "../main/pty-host";
-import { applyShellEnvToProcess } from "../main/shell-env";
+import { applyShellEnvToProcess } from "@hivemind/agent-host/shell-env";
 import chokidar from "chokidar";
 
 const __filename = fileURLToPath(import.meta.url);

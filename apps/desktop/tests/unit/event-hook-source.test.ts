@@ -4,11 +4,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import vm from "node:vm";
-import { eventHookSource } from "../../src/main/hcp/event-hook-source.ts";
-import { stopHookSource } from "../../src/main/hcp/stop-hook-source.ts";
-import { subagentHookSource } from "../../src/main/hcp/subagent-hook-source.ts";
-import { notificationHookSource } from "../../src/main/hcp/notification-hook-source.ts";
-import { userpromptHookSource } from "../../src/main/hcp/userprompt-hook-source.ts";
+import { eventHookSource } from "@hivemind/agent-host/hooks/event-hook-source";
+import { stopHookSource } from "@hivemind/agent-host/hooks/stop-hook-source";
+import { subagentHookSource } from "@hivemind/agent-host/hooks/subagent-hook-source";
+import { notificationHookSource } from "@hivemind/agent-host/hooks/notification-hook-source";
+import { userpromptHookSource } from "@hivemind/agent-host/hooks/userprompt-hook-source";
 
 test("factory embeds the topic and compiles", () => {
   const src = eventHookSource("turn", "return { tileId: tileId };");

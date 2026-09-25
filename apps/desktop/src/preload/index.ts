@@ -1,3 +1,4 @@
+/// <reference lib="dom" />
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { HiveIpc, DiffScope, WorktreeCreateOpts, PlanReviewOpen, HcpCommand, HcpPipeEvent, HcpSpawnEvent, HcpWaitEvent, HcpSubagentEvent, HcpNotifyEvent, HcpTurnStateEvent, AppErrorEvent } from "../shared/ipc.js";
 

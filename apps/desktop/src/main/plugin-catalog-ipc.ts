@@ -12,7 +12,7 @@ import { existsSync } from "node:fs";
 import { agentDisclosures, isGenericRuntime } from "@hivemind/agents";
 import { newNonce } from "./view-package-files.js";
 import { reviewViewDir } from "./view-packages.js";
-import { applyShellEnvToProcess } from "./shell-env.js";
+import { applyShellEnvToProcess } from "@hivemind/agent-host/shell-env";
 
 export interface AgentReview {
   token: string;

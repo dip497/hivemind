@@ -24,7 +24,7 @@ import {
   type ManagedPty,
   type SpawnSpec,
   type SessionSnapshot,
-} from "../../src/main/pty-session-manager.ts";
+} from "@hivemind/agent-host/pty-session-manager";
 import { authoredDef } from "./authored-agents.ts";
 import { manifestRuntime, renderHookDocument, transformsFor, trackerSource, readTrackedSession,
   type ProviderResumeTransforms, type RuntimePaths } from "@hivemind/agents/node";

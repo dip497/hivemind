@@ -7,7 +7,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { ipcPath } from "../platform.js";
+import { ipcPath } from "@hivemind/core/ipc";
 
 /** Read the token at `<userData>/hcp.token`, creating it on first use. */
 export function readOrCreateToken(userDataDir: string): string {

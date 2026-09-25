@@ -7,7 +7,7 @@ import {
   SessionManager,
   type ManagedPty,
   type SpawnSpec,
-} from "../../src/main/pty-session-manager.ts";
+} from "@hivemind/agent-host/pty-session-manager";
 
 /** Scriptable fake PTY: capture callbacks so tests can emit data / exit. */
 class FakePty implements ManagedPty {

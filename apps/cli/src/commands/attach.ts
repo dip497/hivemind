@@ -3,7 +3,7 @@ import { defineCommand } from "citty";
 import { err } from "../format.js";
 import { EXIT } from "../hcp.js";
 import { connect, DaemonUnavailable, defaultSocket, listSessions, resolveSession, SessionRefError } from "../pty-client.js";
-import type { ServerMsg } from "../../../desktop/src/main/pty-protocol.js";
+import type { ServerMsg } from "@hivemind/agent-host/pty-protocol";
 import { execOnMachine, loadMachine } from "../remote.js";
 
 const PREFIX = 0x02; // ctrl-b

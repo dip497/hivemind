@@ -8,7 +8,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { agentEventHookSource } from "../../src/main/hcp/agent-event-hook-source.ts";
+import { agentEventHookSource } from "@hivemind/agent-host/hooks/agent-event-hook-source";
 
 interface Case { name: string; env: Record<string, string>; payload: unknown; expect: unknown; forbidden?: string[] }
 const casesFile = fileURLToPath(new URL("../../../../conformance/hook-reports.json", import.meta.url));

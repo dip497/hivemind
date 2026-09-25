@@ -1,7 +1,7 @@
 /** Client for the PTY daemon socket; the protocol is imported from the desktop, never copied. */
 import net from "node:net";
 import path from "node:path";
-import { frame, makeLineDecoder, type ClientMsg, type ServerMsg, type SessionInfo } from "../../desktop/src/main/pty-protocol.js";
+import { frame, makeLineDecoder, type ClientMsg, type ServerMsg, type SessionInfo } from "@hivemind/agent-host/pty-protocol";
 import { ipcPath } from "@hivemind/core";
 import { configDir, win32UserDataDir } from "./hcp.js";
 

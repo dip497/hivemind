@@ -4,7 +4,7 @@ import { randomBytes } from "node:crypto";
 import { err, ok } from "../format.js";
 import { EXIT } from "../hcp.js";
 import { connect, DaemonUnavailable, defaultSocket, listSessions } from "../pty-client.js";
-import type { ServerMsg } from "../../../desktop/src/main/pty-protocol.js";
+import type { ServerMsg } from "@hivemind/agent-host/pty-protocol";
 import { execOnMachine, loadMachine } from "../remote.js";
 import { attachLoop } from "./attach.js";
 import { checkSocketPath, daemonUnsupported, ensureDaemon } from "./daemon.js";

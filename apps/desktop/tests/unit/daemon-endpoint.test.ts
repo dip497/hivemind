@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import net from "node:net";
 import fs from "node:fs";
 import path from "node:path";
-import { DaemonEndpoint, REATTACH_RESET } from "../../src/main/daemon-endpoint.ts";
-import { MAX_LINE_CHARS, frame, makeLineDecoder, type ClientMsg } from "../../src/main/pty-protocol.ts";
+import { DaemonEndpoint, REATTACH_RESET } from "@hivemind/agent-host/daemon-endpoint";
+import { MAX_LINE_CHARS, frame, makeLineDecoder, type ClientMsg } from "@hivemind/agent-host/pty-protocol";
 
 const dir = fs.mkdtempSync(path.join(process.platform === "linux" ? "/tmp" : fs.realpathSync(process.env.TMPDIR ?? "/tmp"), "hde-"));
 after(() => fs.rmSync(dir, { recursive: true, force: true }));

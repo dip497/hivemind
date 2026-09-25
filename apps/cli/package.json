@@ -14,6 +14,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@hivemind/agent-host": "workspace:*",
     "@hivemind/agents": "workspace:*",
     "@hivemind/core": "workspace:*",
     "citty": "catalog:",

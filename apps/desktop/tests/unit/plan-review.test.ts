@@ -33,7 +33,7 @@ const trackerSettings = (deps: {
   },
 })!;
 import { startPlanBridge } from "../../src/main/plan-bridge.ts";
-import { planHookSource } from "../../src/main/plan-review-hook-source.ts";
+import { planHookSource } from "@hivemind/agent-host/hooks/plan-review-hook-source";
 
 const baseDeps = {
   trackerPath: "/x/tracker.cjs",

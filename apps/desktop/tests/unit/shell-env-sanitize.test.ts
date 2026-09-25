@@ -4,7 +4,7 @@
 // 'exports')").
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { sanitizeShellEnv } from "../../src/main/shell-env.ts";
+import { sanitizeShellEnv } from "@hivemind/agent-host/shell-env";
 
 test("strips ELECTRON_RUN_AS_NODE (the crash trigger)", () => {
   const env = sanitizeShellEnv({ PATH: "/usr/bin", ELECTRON_RUN_AS_NODE: "1" });

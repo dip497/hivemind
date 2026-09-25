@@ -1,0 +1,26 @@
+{
+  "name": "@hivemind/agent-host",
+  "version": "2026.9.5",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hivemind/agents": "workspace:*",
+    "@hivemind/core": "workspace:*",
+    "@lydell/node-pty": "catalog:",
+    "@xterm/addon-serialize": "^0.14.0",
+    "@xterm/headless": "catalog:"
+  },
+  "devDependencies": {
+    "@hivemind/tsconfig": "workspace:*",
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  },
+  "description": "Runs agent CLIs in real terminals that outlive any window, and reports what they do.",
+  "license": "MIT"
+}

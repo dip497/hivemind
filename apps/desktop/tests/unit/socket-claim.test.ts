@@ -5,7 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import { listenExclusive, probeLive } from "../../src/main/socket-claim.ts";
+import { listenExclusive, probeLive } from "@hivemind/agent-host/socket-claim";
 
 const unix = process.platform !== "win32";
 const dirs: string[] = [];

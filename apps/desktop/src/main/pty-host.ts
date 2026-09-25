@@ -4,9 +4,9 @@
  */
 import * as pty from "@lydell/node-pty";
 import { resolveWindowsSpawn } from "@hivemind/agents/discover";
-import { applyShellEnvToProcess, sanitizeShellEnv } from "./shell-env.js";
-import { repairShellSpec } from "./platform.js";
-import { applyInitialPrompt } from "../shared/agent-io.js";
+import { applyShellEnvToProcess, sanitizeShellEnv } from "@hivemind/agent-host/shell-env";
+import { repairShellSpec } from "@hivemind/agent-host/shell-spec";
+import { applyInitialPrompt } from "@hivemind/agent-host/initial-prompt";
 
 interface SpawnOpts {
   tileId: string;

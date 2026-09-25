@@ -14,7 +14,7 @@ import {
 } from "@hivemind/core";
 import { machineHostId, machineUri, parseRemote, sshTargetOf, type RemoteTarget } from "../../shared/remote-uri.js";
 import type { MachineAddRequest, MachineAddResult, MachineInfo, MachineProbe, MachineState, MachineStatus, MachinesSnapshot, SessionSummary } from "../../shared/ipc.js";
-import type { SessionInfo } from "../pty-protocol.js";
+import type { SessionInfo } from "@hivemind/agent-host/pty-protocol";
 import { remoteConns } from "./conn.js";
 import { Catalog } from "./catalog.js";
 import { needsAttention, probeCommand, probeRemote } from "./ssh.js";

@@ -41,7 +41,7 @@ import { agentAllowedIn, loadAgents, toWire } from "@hivemind/agents/load";
 import type { IssuePatch } from "@hivemind/core/types";
 import * as ptyHost from "./pty-host.js";
 import * as ptyDaemon from "./daemon-client.js";
-import { PtyOutputBuffer } from "./pty-output-buffer.js";
+import { PtyOutputBuffer } from "@hivemind/agent-host/pty-output-buffer";
 import { isRemote, parseRemote } from "../shared/remote-uri.js";
 import { savedAuth } from "./remote/saved-hosts.js";
 import { addMachine, checkMachine, editMachine, initMachines, installOnMachine, machineSessions, reconnectMachineHost, removeMachine, setMachinePassword, snapshot as machinesSnapshot, updateMachine } from "./remote/machines.js";
@@ -61,7 +61,7 @@ const PERSIST_PTY = process.env.HIVEMIND_PTY_DAEMON !== "0";
 const ptyMod = PERSIST_PTY ? ptyDaemon : ptyHost;
 const { spawnPty, writePty, resizePty, killPty, detachPty, hasSession, pausePty, resumePty } = ptyMod;
 const killAllPtys = ptyMod.killAll;
-import { applyShellEnvToProcess } from "./shell-env.js";
+import { applyShellEnvToProcess } from "@hivemind/agent-host/shell-env";
 import {
   gitCommit,
   gitConflictedFile,
@@ -99,7 +99,7 @@ import { ipcPath, upgradeCommand, windowsStartMenuShortcut } from "./platform.js
 import { SubagentReaper } from "./hcp/subagent-reaper.js";
 import { notifyStatusFor } from "./hcp/notification-map.js";
 import { OutputRecorder } from "./hcp/output-recorder.js";
-import { readOrCreateToken, hcpSockPath } from "./hcp/token.js";
+import { readOrCreateToken, hcpSockPath } from "@hivemind/agent-host/hooks/token";
 import { HcpError } from "./hcp/protocol.js";
 import { handleViewProtocol, listViewPackages, registerViewScheme, startViewWatchdog } from "./view-packages.js";
 import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, settingsFile } from "./settings-store.js";
@@ -107,7 +107,8 @@ import { patchSettingsExtras } from "@hivemind/core/settings";
 import { PipeManager } from "./hcp/pipes.js";
 import { readLastAssistantMessage } from "./hcp/transcript.js";
 import { toBareId, toPtyId } from "../shared/tile-id.js";
-import { SUBMIT_DELAY_MS, INITIAL_PROMPT_ENV } from "../shared/agent-io.js";
+import { SUBMIT_DELAY_MS } from "../shared/agent-io.js";
+import { INITIAL_PROMPT_ENV } from "@hivemind/agent-host/initial-prompt";
 import type {
   DiffScope,
   WorktreeCreateOpts,

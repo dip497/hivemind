@@ -18,23 +18,24 @@ import { listenExclusive } from "./socket-claim.js";
 import { SessionManager, type ManagedPty, type SpawnSpec, type SessionSnapshot, type SessionClient } from "./pty-session-manager.js";
 import { type ClientMsg, type ServerMsg, frame, makeLineDecoder } from "./pty-protocol.js";
 import { PtyOutputBuffer } from "./pty-output-buffer.js";
-import { ipcPath, repairShellSpec } from "./platform.js";
+import { ipcPath } from "@hivemind/core/ipc";
+import { repairShellSpec } from "./shell-spec.js";
 import {
   fileNameForId, listSnapshotFiles, readSnapshot, redactSnapshot, rehydrateSnapshot, secureDir,
   staleSnapshotIds, type SnapshotEntry,
 } from "./session-snapshot-store.js";
-import { applyInitialPrompt, stripInitialPrompt } from "../shared/agent-io.js";
+import { applyInitialPrompt, stripInitialPrompt } from "./initial-prompt.js";
 import { sanitizeShellEnv } from "./shell-env.js";
 import { AGENT_EVENT_TOPIC, composeResume, evictTrackedSession, legacyTopicsFor, parseAgentEvent, prepareProviders, trackerSource, setCatalog } from "@hivemind/agents/node";
 import { resolveWindowsSpawn } from "@hivemind/agents/discover";
-import { planHookSource } from "./plan-review-hook-source.js";
-import { stopHookSource } from "./hcp/stop-hook-source.js";
-import { approvalHookSource } from "./hcp/approval-hook-source.js";
-import { subagentHookSource } from "./hcp/subagent-hook-source.js";
-import { notificationHookSource } from "./hcp/notification-hook-source.js";
-import { userpromptHookSource } from "./hcp/userprompt-hook-source.js";
-import { agentEventHookSource } from "./hcp/agent-event-hook-source.js";
-import { readOrCreateToken, hcpSockPath } from "./hcp/token.js";
+import { planHookSource } from "./hooks/plan-review-hook-source.js";
+import { stopHookSource } from "./hooks/stop-hook-source.js";
+import { approvalHookSource } from "./hooks/approval-hook-source.js";
+import { subagentHookSource } from "./hooks/subagent-hook-source.js";
+import { notificationHookSource } from "./hooks/notification-hook-source.js";
+import { userpromptHookSource } from "./hooks/userprompt-hook-source.js";
+import { agentEventHookSource } from "./hooks/agent-event-hook-source.js";
+import { readOrCreateToken, hcpSockPath } from "./hooks/token.js";
 
 // Lazy: node-pty must never be evaluated inside the compiled `hive` (see bun-pty.ts).
 const spawnPty: (file: string, args: string[] | string, opts: { cwd: string; cols: number; rows: number; name: string; env: Record<string, string> }) => {

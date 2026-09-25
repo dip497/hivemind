@@ -10,8 +10,8 @@ import { readFileSync } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { app } from "electron";
-import { type ServerMsg, type SessionInfo, SOCKET_NAME, frame, makeLineDecoder } from "./pty-protocol.js";
-import { DaemonEndpoint, type Callbacks } from "./daemon-endpoint.js";
+import { type ServerMsg, type SessionInfo, SOCKET_NAME, frame, makeLineDecoder } from "@hivemind/agent-host/pty-protocol";
+import { DaemonEndpoint, type Callbacks } from "@hivemind/agent-host/daemon-endpoint";
 import { ipcPath } from "./platform.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
