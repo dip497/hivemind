@@ -740,7 +740,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
             break;
           }
           case "tile.spawn_agent": {
-            const tileId = hcpSpawnAgent(p as { agent?: string; prompt?: string; frame?: string; mode?: string; model?: string; callerTile?: string; background?: boolean; name?: string });
+            const tileId = hcpSpawnAgent(p as { agent?: string; prompt?: string; frame?: string; mode?: string; model?: string; callerTile?: string; background?: boolean; name?: string; resume?: string });
             await window.hive.hcpResult(cmd.id, true, { tileId });
             break;
           }

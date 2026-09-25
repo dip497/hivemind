@@ -38,6 +38,7 @@ import {
 import os from "node:os";
 import { AGENT_EVENT_METHOD, cleanName, agentById, agentForCmd, getCatalog, parseAgentEvent, preferredAgent, setCatalog, type AgentProviderDef } from "@hivemind/agents";
 import { agentPresence, discoverOptions, findBin, verifyAgent } from "@hivemind/agents/discover";
+import { TILE_SESSIONS_DIR, writeTrackedSession } from "@hivemind/agents/node";
 import { agentAllowedIn, loadAgents, toWire } from "@hivemind/agents/load";
 import type { IssuePatch } from "@hivemind/core/types";
 import * as ptyHost from "./pty-host.js";
@@ -1845,6 +1846,8 @@ function startHcpControlPlane(): void {
       if (method !== AGENT_EVENT_METHOD) return;
       const evt = parseAgentEvent(params);
       if (!evt) return;
+      // The session an agent reports from is the one its tile resumes.
+      if (evt.sessionId) try { writeTrackedSession(path.join(userData, TILE_SESSIONS_DIR), evt.tileId, evt.sessionId); } catch { /* best-effort */ }
       const bare = toBareId(evt.tileId);
       const pid = toPtyId(evt.tileId);
       hcpStatus.event(bare, evt);

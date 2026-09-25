@@ -23,6 +23,12 @@ options:
       yolo:
         - --yolo
     unattended: yolo
+# A resumed id Hermes no longer has starts a fresh session, so nothing is checked first.
+session:
+  resume:
+    args: [--resume, '{id}']
+    from:
+      tracked: true
 # Hermes reads hooks only from config.yaml in HERMES_HOME, so it runs in a private home: the
 # user's own files linked in, config.yaml their own with our hooks added. Hermes asks once per
 # hook before running it.

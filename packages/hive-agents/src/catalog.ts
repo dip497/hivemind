@@ -156,3 +156,16 @@ export function spawnLabelFor(def: AgentProviderDef, n: number, opts: SpawnOptio
 export function envToUnset(): string[] {
   return [...new Set(getCatalog().flatMap((d) => d.launch?.unsetEnv ?? []))];
 }
+
+/** A session id goes on a command line. Anything that is not shaped like one — a path, a
+ *  sentence, a secret that happened to sit in the field a manifest named — never does. */
+const SESSION_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+export const isSessionId = (v: unknown): v is string => typeof v === "string" && SESSION_ID_RE.test(v);
+
+/** A launch that continues session `id`: the agent's resume tokens, where its manifest puts them. */
+export function withResume(def: AgentProviderDef, args: readonly string[], id: string): string[] {
+  const resume = def.session?.resume;
+  if (!resume) return [...args];
+  const tokens = resume.args.map((t) => t.replace(/\{id\}/g, id));
+  return resume.position === "before" ? [...tokens, ...args] : [...args, ...tokens];
+}

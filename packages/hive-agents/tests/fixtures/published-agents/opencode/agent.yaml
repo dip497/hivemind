@@ -35,6 +35,17 @@ options:
   list:
     args:
     - models
+session:
+  list:
+    args: [session, list, --format, json, --pure]
+    idPath: id
+    cwdPath: directory
+    titlePath: title
+    updatedPath: updated
+  resume:
+    args: [--session, '{id}']
+    from:
+      tracked: true
 # OpenCode merges the file OPENCODE_CONFIG names into the user's own configuration; ours only
 # adds the plugin, which reports through the host's SDK.
 assets:

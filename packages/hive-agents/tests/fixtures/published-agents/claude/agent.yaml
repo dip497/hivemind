@@ -197,6 +197,11 @@ detect:
     then: idle
   default: working
 session:
+  # Each transcript's first lines carry its folder, and its title or first prompt.
+  list:
+    lines: 30
+    cwdPath: cwd
+    titlePath: [aiTitle, message.content]
   bind:
     args:
     - --session-id

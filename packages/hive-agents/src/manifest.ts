@@ -331,6 +331,31 @@ function validateSession(raw: unknown): AgentSession {
       out.bind.unless = b.unless as string[];
     }
   }
+  if (m.list !== undefined) {
+    req(isObj(m.list), "session.list must be a map");
+    const l = m.list as Record<string, unknown>;
+    const list: NonNullable<AgentSession["list"]> = {};
+    if (l.args !== undefined) {
+      req(strArray(l.args) && l.args.length > 0 && l.args.length <= 8, "session.list.args must be 1-8 tokens");
+      for (const t of l.args as string[]) req(/^[\w@./:=-]{1,64}$/.test(t), `session.list.args: "${t}" is not a plain token`);
+      req(typeof l.idPath === "string" && DOT_PATH_RE.test(l.idPath), "session.list.idPath must be a field path");
+      Object.assign(list, { args: l.args, idPath: l.idPath });
+    } else {
+      req(typeof l.lines === "number" && Number.isInteger(l.lines) && l.lines >= 1 && l.lines <= 200, "session.list needs args (a listing command) or lines (1-200 of each session file)");
+      list.lines = l.lines as number;
+    }
+    for (const k of ["cwdPath", "updatedPath"] as const) {
+      if (l[k] === undefined) continue;
+      req(typeof l[k] === "string" && DOT_PATH_RE.test(l[k] as string), `session.list.${k} must be a field path`);
+      list[k] = l[k] as string;
+    }
+    if (l.titlePath !== undefined) {
+      const paths = typeof l.titlePath === "string" ? [l.titlePath] : l.titlePath;
+      req(strArray(paths) && paths.length >= 1 && paths.length <= 4 && (paths as string[]).every((p) => DOT_PATH_RE.test(p)), "session.list.titlePath must be a field path or up to 4 of them");
+      list.titlePath = l.titlePath as string | string[];
+    }
+    out.list = list;
+  }
   if (m.resume === undefined) return out;
   req(isObj(m.resume), "session.resume must be a map");
   const r = m.resume as Record<string, unknown>;

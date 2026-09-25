@@ -34,3 +34,8 @@ agent the host started, else `<config>/hivemind/hcp.sock` and `hcp.token`.
 
 The verbs `hive ctl` uses — `tile.spawn_agent`, `agent.send`, `agent.read`, `agent.report`,
 `agent.approve`, `workflow.run`, … — take and return the shapes `hive ctl --json` prints.
+
+`agent.sessions {"agent", "cwd"?, "limit"?}` → `{"agent", "resumable", "sessions": [{"id",
+"cwd"?, "title"?, "updated"?}]}`, newest first; only sessions started in `cwd` when it is given.
+`UNSUPPORTED` for an agent whose manifest does not say where its sessions are.
+`tile.spawn_agent {"resume": id}` starts the agent on that session instead of a new one.

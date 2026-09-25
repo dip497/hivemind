@@ -30,6 +30,8 @@ const readline = require("node:readline");
 const [, , provider, ...args] = process.argv;
 const tile = process.env.HIVEMIND_TILE || "no-tile";
 const sessionId = `fake-${provider}-${process.pid}`;
+// The session a restore or a `--resume` asked for, for a turn to echo back.
+process.env.FAKE_RESUMED = args.includes("--resume") ? args[args.indexOf("--resume") + 1] || "" : "";
 
 // ── hook lookup (per provider) ────────────────────────────────────────────────
 function hooksTable() {

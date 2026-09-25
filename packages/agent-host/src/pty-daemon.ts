@@ -26,7 +26,7 @@ import {
 } from "./session-snapshot-store.js";
 import { applyInitialPrompt, stripInitialPrompt } from "./initial-prompt.js";
 import { sanitizeShellEnv } from "./shell-env.js";
-import { AGENT_EVENT_METHOD, agentForCmd, agentTitle, composeResume, envToUnset, evictTrackedSession, parseAgentEvent, prepareProviders, trackerSource, setCatalog, type AgentEvent } from "@hivemind/agents/node";
+import { AGENT_EVENT_METHOD, agentForCmd, agentTitle, composeResume, envToUnset, evictTrackedSession, parseAgentEvent, prepareProviders, TILE_SESSIONS_DIR, trackerSource, writeTrackedSession, setCatalog, type AgentEvent } from "@hivemind/agents/node";
 import { resolveWindowsSpawn } from "@hivemind/agents/discover";
 import { agentEventHookSource } from "./hooks/agent-event-hook-source.js";
 import { SDK_FILE, sdkSource } from "@hivemind/agent-sdk";
@@ -92,7 +92,7 @@ secureDir(sessionsDir);
 const userDataDir = path.dirname(socketPath);
 // Per-tile directory — each tile records its live session id in its OWN file, so
 // concurrent session starts (every tile on restart) never clobber each other.
-const tileSessionsDir = path.join(userDataDir, "tile-sessions");
+const tileSessionsDir = path.join(userDataDir, TILE_SESSIONS_DIR);
 const trackerPath = path.join(userDataDir, "tile-session-tracker.cjs");
 try { fs.writeFileSync(trackerPath, trackerSource()); } catch { /* best-effort */ }
 
@@ -615,6 +615,8 @@ if (STANDALONE) {
         if (m.method !== AGENT_EVENT_METHOD) return;
         const evt = parseAgentEvent(m.params);
         if (!evt) return;
+        // The session an agent reports from is the one its tile resumes.
+        if (evt.sessionId) try { writeTrackedSession(tileSessionsDir, evt.tileId, evt.sessionId); } catch { /* best-effort */ }
         for (const push of eventViewers) push({ t: "event", topic: AGENT_EVENT_METHOD, data: evt });
         void notifyPush(evt);
         return;

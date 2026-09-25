@@ -110,7 +110,33 @@ export interface SessionFind {
   skipWhen?: Record<string, unknown>;
 }
 
+/** How to list the agent's sessions. With `args`, its CLI prints a JSON array of records and
+ *  the paths point into each one. Without, the sessions are the files its store keeps
+ *  (`resume.find` or `resume.exists`), and `lines` says how many of each file's first lines to
+ *  read: a field comes from the first of them that has it. */
+export interface SessionList {
+  args?: string[];
+  idPath?: string;
+  lines?: number;
+  cwdPath?: string;
+  /** In order of preference. */
+  titlePath?: string | string[];
+  /** Epoch milliseconds or an ISO date. */
+  updatedPath?: string;
+}
+
+/** One of an agent's sessions, as the host lists them. */
+export interface SessionInfo {
+  id: string;
+  cwd?: string;
+  title?: string;
+  /** Epoch milliseconds. */
+  updated?: number;
+}
+
 export interface AgentSession {
+  /** The agent's own listing of its sessions, when it has one. */
+  list?: SessionList;
   /** Give a fresh session an id we choose, so a restore can ask for it by name. */
   bind?: {
     /** Tokens placed before the tile's own; `{newId}` is the generated id. */

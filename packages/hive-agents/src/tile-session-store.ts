@@ -21,6 +21,9 @@
 import fs from "node:fs";
 import path from "node:path";
 
+/** The directory, under the host's data directory, where each tile's live session is kept. */
+export const TILE_SESSIONS_DIR = "tile-sessions";
+
 /** The per-tile file path. base64url so any tile id (incl. `:`) is path-safe. */
 export function tileSessionFile(dir: string, tileId: string): string {
   return path.join(dir, Buffer.from(tileId).toString("base64url") + ".json");

@@ -26,6 +26,7 @@ let app: ElectronApplication;
 let page: Page;
 let repo: string;
 let fakeBin: string;
+const home = fs.mkdtempSync(path.join(os.tmpdir(), "hm-xprov-home-"));
 let sock: string;
 let token: string;
 let orchestrator: string;
@@ -70,7 +71,8 @@ test.beforeAll(async () => {
     cwd: repo,
     // HIVEMIND_SHELL_ENV=0: keep OUR PATH (the stand-ins first) instead of the
     // login shell's, which would put the real `claude` back in front.
-    env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH}`, HIVEMIND_PTY_DAEMON: "1", HIVEMIND_SHELL_ENV: "0" } as Record<string, string>,
+    // HOME of its own: the sessions this spec lists are written there, never in a real one.
+    env: { ...process.env, HOME: home, PATH: `${fakeBin}:${process.env.PATH}`, HIVEMIND_PTY_DAEMON: "1", HIVEMIND_SHELL_ENV: "0" } as Record<string, string>,
   });
   page = await app.firstWindow();
   await page.waitForLoadState("domcontentloaded");
@@ -98,6 +100,7 @@ test.afterAll(async () => {
   try { execSync(`pkill -f "fixtures/fake-agent\\.cjs (claude|droid|cursor-agent|faux) "`, { stdio: "ignore" }); } catch { /* none */ }
   fs.rmSync(repo, { recursive: true, force: true });
   fs.rmSync(fakeBin, { recursive: true, force: true });
+  fs.rmSync(home, { recursive: true, force: true });
 });
 
 test("spawn a claude worker and read its reply: --settings hooks → reply → turn", async () => {
@@ -162,6 +165,24 @@ test("a droid worker reports back to the claude orchestrator with `hive ctl repo
   await expect
     .poll(() => hive(["ctl", "list", "--json"]).json.frames.flatMap((f: any) => f.tiles.map((t: any) => t.tileId)), { timeout: 10_000 })
     .not.toContain(worker);
+});
+
+test("an agent's past sessions are listed for its folder, and one can be continued", async () => {
+  const id = "0d3c2a10-1111-4222-8333-444455556666";
+  const proj = path.join(home, ".claude", "projects", "-repo");
+  fs.mkdirSync(proj, { recursive: true });
+  fs.writeFileSync(path.join(proj, `${id}.jsonl`), JSON.stringify({ type: "user", cwd: repo, message: { content: "earlier work" } }) + "\n");
+  const list = hive(["ctl", "sessions", "claude", "--cwd", repo, "--json"]);
+  expect(list.code, list.stderr).toBe(0);
+  expect(list.json).toMatchObject({ agent: "claude", resumable: true, sessions: [{ id, cwd: repo, title: "earlier work" }] });
+  expect(hive(["ctl", "sessions", "claude", "--cwd", "/nowhere", "--json"]).json.sessions).toEqual([]);
+
+  const r = hive(["ctl", "spawn", "--agent", "claude", "--resume", id, "--prompt", "echo resumed=$FAKE_RESUMED", "--json"]);
+  expect(r.code, r.stderr).toBe(0);
+  const read = hive(["ctl", "read", r.json.tileId, "--timeout", "40000", "--json"]);
+  expect(read.json).toMatchObject({ text: `resumed=${id}`, finalStatus: "turn" });
+  // An id is never anything but an id on the command line.
+  expect(hive(["ctl", "spawn", "--agent", "claude", "--resume", "../x", "--json"]).code).not.toBe(0);
 });
 
 test("structured failures: bad token exits 6, missing tile exits 5", async () => {

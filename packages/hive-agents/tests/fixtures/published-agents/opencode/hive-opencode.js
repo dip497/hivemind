@@ -35,11 +35,11 @@ export const HivePlugin = async () => {
           }
           if (p.status?.type === "busy" && !working) {
             working = true; outcome = "done"; lastAssistant = ""; parts.clear();
-            send(() => hive.emit("turn.started"));
+            send(() => hive.emit("turn.started", { sessionId: session }));
           } else if (p.status?.type === "idle" && working) {
             working = false;
             const text = replyText(), ended = outcome;
-            send(async () => { if (text) await hive.reportReply(text); await hive.emit("turn.ended", { outcome: ended }); });
+            send(async () => { if (text) await hive.reportReply(text); await hive.emit("turn.ended", { outcome: ended, sessionId: session }); });
           }
           return;
         case "session.error":

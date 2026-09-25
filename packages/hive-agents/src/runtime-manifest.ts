@@ -8,7 +8,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { findSession, sessionExists } from "./session.js";
+import { findSession, sessionExists, sessionListed } from "./session.js";
 import { readTrackedSession } from "./tile-session-store.js";
 import { hookCommand, renderHookDocument } from "./hooks.js";
 import { EVENT_HOOK, isAgentEventName } from "./events.js";
@@ -287,13 +287,15 @@ export function transformsFor(
       args: carried && bind ? [...bind.args.map((t) => t.replace(/\{newId\}/g, carried)), ...rest] : rest,
     };
   };
-  /** The session a resume names, if the manifest says where sessions are kept and it is not there. */
+  /** The session a resume names, if the manifest says where sessions are kept or how the
+   *  agent lists them, and it is not there. */
   const vanished = (spec: SpawnSpec): boolean => {
-    if (!exists || !marker) return false;
+    if (!marker || (!exists && !def.session?.list?.args)) return false;
     const args = spec.args ?? [];
     const i = args.indexOf(marker);
     const id = i >= 0 ? args[i + 1] : undefined;
-    return !!id && !id.startsWith("-") && !sessionExists(exists, id, paths.home);
+    if (!id || id.startsWith("-")) return false;
+    return exists ? !sessionExists(exists, id, paths.home) : !sessionListed(def, id);
   };
   return {
     transformSpecOnSpawn: (spec, tileId) => run(spec, tileId, "spawn"),

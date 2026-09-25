@@ -19,6 +19,7 @@
  *     never trip a caller's tool timeout — `read --timeout` is honoured
  *     end-to-end and `--poll` returns immediately.
  */
+import path from "node:path";
 import { defineCommand, type ArgsDef, type ParsedArgs } from "citty";
 import fs from "node:fs";
 import {
@@ -111,11 +112,26 @@ const spawn = sub("spawn", "Spawn an agent tile; prints { tileId, … }", {
   model: { type: "string", description: "model override" },
   report: { type: "boolean", description: "worker auto-reports its finished reply to the caller (--no-report to disable)" },
   supervise: { type: "string", description: "broker the worker's tool permissions to this CLI/agent: 'all', or a comma-list of tools" },
+  resume: { type: "string", description: "continue this session instead of starting one — ids from `hive ctl sessions <agent>`" },
 }, async (a) => {
   await ensureAgentCatalog(); // --agent may name an agent added from a manifest
   return hcpCall("tile.spawn_agent", {
     agent: resolveAgent(a.agent), prompt: a.prompt, name: a.name, frame: a.frame, mode: a.mode, model: a.model,
-    report: boolFlag(a.report), supervise: a.supervise, callerTile: ownTile(),
+    report: boolFlag(a.report), supervise: a.supervise, callerTile: ownTile(), resume: a.resume,
+  });
+});
+
+const sessions = sub("sessions", "An agent's past sessions, newest first, to resume with `hive ctl spawn --resume <id>`", {
+  agent: { type: "positional", required: false, description: "agent id (default: your default agent)" },
+  cwd: { type: "string", description: "only sessions started in this folder (default: the current one)" },
+  all: { type: "boolean", description: "sessions from every folder" },
+  limit: { type: "string", description: "at most this many (default 100)" },
+}, async (a) => {
+  await ensureAgentCatalog();
+  return hcpCall("agent.sessions", {
+    agent: resolveAgent(a.agent as string | undefined),
+    ...(a.all ? {} : { cwd: path.resolve(a.cwd ?? process.cwd()) }),
+    limit: intFlag(a.limit, "limit", 100),
   });
 });
 
@@ -295,7 +311,7 @@ const listWorkspacesCmd = sub("list-workspaces", "List every registered workspac
 export const ctlCmd = defineCommand({
   meta: { name: "ctl", description: "Drive the running hivemind app (spawn/send/read/stream/workflow/report) and the issue verbs agents use" },
   subCommands: {
-    list, frames, "open-tool": openTool, spawn, send, keys, read, stream, workflow, approve, report, "open-review": openReview,
+    list, frames, "open-tool": openTool, spawn, sessions, send, keys, read, stream, workflow, approve, report, "open-review": openReview,
     focus, close, connect, disconnect,
     "set-state": setState, "add-comment": addComment, "mark-acceptance": markAcceptance,
     "delete-issue": deleteIssueCmd, "list-workspaces": listWorkspacesCmd,

@@ -21,7 +21,7 @@ import { checkAgentInstalled, noAgentInstalled } from "./agent-plugins";
 import { isRemote } from "../../shared/remote-uri";
 import { mintId } from "../../shared/tile-id";
 import { getSettings } from "./settings-store";
-import { promptTask } from "@hivemind/agents";
+import { promptTask, withResume } from "@hivemind/agents";
 
 /** Kinds that are one-per-frame (spawn → focus existing). claude/shell are not. */
 const SINGLETON_KINDS: ReadonlySet<TileKind> = new Set(["editor", "diff", "issues"]);
@@ -402,7 +402,7 @@ export function useSpawn(ctx: SpawnCtx) {
   // claude/registry-agent branch of spawnTile, plus prompt delivery via the
   // claude-bus work queue. `agent` is a catalog id.
   const hcpSpawnAgent = useCallback(
-    (opts: { agent?: string; prompt?: string; frame?: string; mode?: string; model?: string; callerTile?: string; background?: boolean; name?: string }): string => {
+    (opts: { agent?: string; prompt?: string; frame?: string; mode?: string; model?: string; callerTile?: string; background?: boolean; name?: string; resume?: string }): string => {
       // Frame preference: explicit > the CALLER agent's frame (so a worker lands
       // beside the agent that spawned it) > the active/first frame.
       // The caller passes its HIVEMIND_TILE, which is the PTY id (`hm:<tileId>`
@@ -435,7 +435,8 @@ export function useSpawn(ctx: SpawnCtx) {
       if (!def) { noAgentInstalled(); return ""; }
       const newId = mintId(`tile-${def.id}`);
       const so = launchOptions(def.id, { mode: opts.mode, model: opts.model });
-      const args = spawnArgsFor(def, so);
+      // Main checked the id and that the agent can resume.
+      const args = opts.resume ? withResume(def, spawnArgsFor(def, so), opts.resume) : spawnArgsFor(def, so);
       const cmd = def.bin;
       const label = ordinalLabel((n) => spawnLabelFor(def, n, {}), (n) => spawnLabelFor(def, n, so));
       // A spawner-chosen name ("reviewer") is what tells a dozen workers apart, so it

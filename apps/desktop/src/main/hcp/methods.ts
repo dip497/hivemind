@@ -14,7 +14,8 @@ import type { TurnTracker } from "./turn-tracker.js";
 import type { OutputRecorder } from "./output-recorder.js";
 import { toPtyId as ptyId, toBareId as bareOf } from "../../shared/tile-id.js";
 import { setName, labelOf } from "./names.js";
-import { agentById, agentOption, cleanName, spawnableAgents, workerAgents, type AgentProviderDef } from "@hivemind/agents";
+import { agentById, agentOption, cleanName, isSessionId, spawnableAgents, workerAgents, type AgentProviderDef } from "@hivemind/agents";
+import { canListSessions, listSessions } from "@hivemind/agents/node";
 import { BROWSER_TOOL_ID, tileKindAvailability } from "@hivemind/core/tool-plugins";
 import type { ToolsSettings } from "@hivemind/core/settings-schema";
 import { SUBMIT_DELAY_MS } from "../../shared/agent-io.js";
@@ -235,7 +236,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
   // workflow workers pass report:false and gather via waitForTurn instead.
   const doSpawn = async (opts: {
     agent?: unknown; prompt?: unknown; frame?: unknown; mode?: unknown; model?: unknown;
-    callerTile?: unknown; report?: unknown; supervise?: unknown; name?: unknown;
+    callerTile?: unknown; report?: unknown; supervise?: unknown; name?: unknown; resume?: unknown;
   }): Promise<string> => {
     const callerDepth = opts.callerTile ? (depthOf.get(bareOf(String(opts.callerTile))) ?? 0) : 0;
     const childDepth = callerDepth + 1;
@@ -277,6 +278,11 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     // mode — unless the caller chose one, or it is supervised (its broker hook
     // only fires while permissions are not skipped).
     const mode = opts.mode != null ? opts.mode : sup ? undefined : agentOption(def, "mode")?.unattended;
+    const resume = opts.resume != null ? String(opts.resume) : undefined;
+    if (resume !== undefined) {
+      if (!def.session?.resume) throw new HcpError("UNSUPPORTED", `${def.label} cannot resume a session`);
+      if (!isSessionId(resume)) throw new HcpError("BAD_REQUEST", "resume must be a session id");
+    }
     // A spawner-chosen display name ("reviewer", "test-writer") — becomes the tile
     // name and tags every message this worker sends back. One printable line, capped like every
     // name, so a worker can't smuggle a paragraph (or ANSI) into the parent's terminal banner.
@@ -286,7 +292,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       // `background` = a silent worker (report:false → gathered in bulk, e.g. a
       // workflow worker). The renderer uses it to NOT steal focus / center the
       // viewport on spawn and to suppress the per-worker "finished" notification.
-      { agent, prompt: opts.prompt, frame: opts.frame, mode, model: opts.model, callerTile: opts.callerTile, background: opts.report === false, name: name || undefined },
+      { agent, prompt: opts.prompt, frame: opts.frame, mode, model: opts.model, callerTile: opts.callerTile, background: opts.report === false, name: name || undefined, resume },
       RENDERER_TIMEOUT,
     )) as { tileId?: string };
     if (!res?.tileId) throw new HcpError("INTERNAL", "spawn returned no tileId");
@@ -360,9 +366,18 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         // armed so a follow-up agent.read waits for THIS agent's first turn.
         const tileId = await doSpawn({
           agent: p.agent, name: p.name, prompt: p.prompt, frame: p.frame, mode: p.mode, model: p.model,
-          callerTile: p.callerTile, report: p.report, supervise: p.supervise,
+          callerTile: p.callerTile, report: p.report, supervise: p.supervise, resume: p.resume,
         });
         return { tileId };
+      }
+
+      case "agent.sessions": {
+        const def = agentById(String(p.agent ?? ""));
+        if (!def) throw new HcpError("BAD_REQUEST", `unknown agent '${String(p.agent ?? "")}'`);
+        if (!canListSessions(def)) throw new HcpError("UNSUPPORTED", `${def.label} does not say where its sessions are, so they cannot be listed`);
+        const limit = typeof p.limit === "number" && p.limit > 0 ? Math.min(p.limit, 500) : undefined;
+        const sessions = await listSessions(def, { ...(typeof p.cwd === "string" ? { cwd: p.cwd } : {}), ...(limit ? { limit } : {}) });
+        return { agent: def.id, resumable: !!def.session?.resume, sessions };
       }
 
       case "agent.send": {

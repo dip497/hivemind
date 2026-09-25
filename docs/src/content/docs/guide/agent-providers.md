@@ -19,6 +19,10 @@ can *declare*, if it also says how it is done:
 
 - **resuming** needs a `session.resume` block naming where the CLI keeps its sessions;
   the daemon does the reading
+- **listing past sessions** (`hive ctl sessions <agent>`, then `hive ctl spawn --resume <id>`)
+  needs `session.list`: the CLI's own listing command and where each record keeps its id,
+  folder and title (`args`, `idPath`, `cwdPath`, `titlePath`), or, when sessions are the
+  files `session.resume` names, how many of each file's first lines hold them (`lines`)
 - **a turn signal** and **brokering permission prompts** need the manifest to wire the
   agent to the control plane: `launch.hcp` plus the hook file it ships beside it
 
