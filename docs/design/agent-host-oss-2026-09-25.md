@@ -243,6 +243,16 @@ reference on a published benchmark (RSS and CPU at 100 and 500 sessions, attach 
   62% → 19% on the canvas, where terminals outside the viewport now get nothing either;
   renderer RSS 632 → 355 MB. The `content-visibility` experiments add little on top (14% / 7%),
   so they stay out.
+- **S6** — `crates/agent-host`: the status fold in Rust passes `conformance/status.json`
+  unchanged, and `src/bin/bench.rs` / `bench/node-bench.mjs` run the daemon's hot path (N PTYs
+  streaming agent-like output into a screen model, every screen read each 1.2 s) in each host.
+  Measured 2026-09-25, interleaved runs on a box at load ~110: 100 sessions — Rust 2.2 % CPU /
+  15 MB, TypeScript 10–11 % / 108 MB; 500 sessions — Rust 11 % / 85 MB, TypeScript 17 % / 212 MB
+  and behind the output (it had parsed ~25 % less of it). **Not switched:** the gate is the whole
+  suite, and `vt100` cannot serialize a screen with scrollback into a redraw xterm.js renders
+  the same — which snapshots and showing a hidden terminal depend on. Next for a Rust daemon:
+  pick the VT model by that test (`alacritty_terminal` or `wezterm-term`), then the daemon
+  protocol, then the hook and screen conformance.
 
 ## 9. Decisions (defaults taken 2026-09-25, revisit before 1.0)
 

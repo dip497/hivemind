@@ -60,3 +60,4 @@ gha-creds-*.json
 
 # Astro writes type stubs wherever it is run; the site keeps its own under docs/.
 /.astro/
+target/
