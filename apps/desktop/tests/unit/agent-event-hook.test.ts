@@ -39,7 +39,7 @@ async function run(env: Record<string, string>, payload: unknown): Promise<unkno
 for (const c of cases) {
   test(c.name, async () => {
     const got = await run(c.env, c.payload);
-    assert.deepEqual(got, c.expect === null ? [] : [{ t: "event", topic: "agent.event", data: c.expect }]);
+    assert.deepEqual(got, c.expect === null ? [] : [{ jsonrpc: "2.0", method: "agent.event", params: c.expect }]);
     for (const f of c.forbidden ?? []) assert.ok(!JSON.stringify(got).includes(f), `"${f}" must not leave the hook`);
   });
 }

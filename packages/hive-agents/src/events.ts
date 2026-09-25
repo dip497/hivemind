@@ -33,8 +33,8 @@ export interface AgentEvent {
   sessionId?: string;
 }
 
-/** The HCP topic the generic script posts. */
-export const AGENT_EVENT_TOPIC = "agent.event";
+/** The JSON-RPC notification a hook reports with (spec/hook-protocol.md). */
+export const AGENT_EVENT_METHOD = "agent.event";
 
 /** The script an `emit` entry runs, and the environment that tells it what to report. */
 export const EVENT_HOOK = "event";
@@ -74,24 +74,4 @@ export function parseAgentEvent(raw: unknown): AgentEvent | null {
     ...(d.event === "turn.ended" && Number.isInteger(d.background) && (d.background as number) > 0 && (d.background as number) < 10_000 ? { background: d.background as number } : {}),
     ...(str(d.sessionId, 256) ? { sessionId: d.sessionId as string } : {}),
   };
-}
-
-/** The HCP topics today's handlers understand, for one canonical event. A bridge: the status
- *  store that reads canonical events directly replaces it. */
-export function legacyTopicsFor(e: AgentEvent): Array<{ topic: string; data: Record<string, unknown> }> {
-  switch (e.event) {
-    case "turn.started":
-    case "input.resolved":
-      return [{ topic: "status", data: { tileId: e.tileId, state: "working" } }];
-    case "turn.ended":
-      return [{ topic: "turn", data: { tileId: e.tileId, ...(e.background ? { background: e.background } : {}) } }];
-    case "input.requested":
-      // Plan review and approvals have their own control-plane waits; these are "needs you" signals.
-      return [{ topic: "notification", data: { tileId: e.tileId, notificationType: e.kind === "permission" ? "permission_prompt" : "elicitation_dialog" } }];
-    case "subagent.started":
-    case "subagent.stopped":
-      return [{ topic: "subagent", data: { tileId: e.tileId, phase: e.event === "subagent.started" ? "start" : "stop", agentId: e.agentId ?? "" } }];
-    default:
-      return [];
-  }
 }

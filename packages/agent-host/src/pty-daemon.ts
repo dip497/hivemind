@@ -26,7 +26,7 @@ import {
 } from "./session-snapshot-store.js";
 import { applyInitialPrompt, stripInitialPrompt } from "./initial-prompt.js";
 import { sanitizeShellEnv } from "./shell-env.js";
-import { AGENT_EVENT_TOPIC, composeResume, evictTrackedSession, legacyTopicsFor, parseAgentEvent, prepareProviders, trackerSource, setCatalog } from "@hivemind/agents/node";
+import { AGENT_EVENT_METHOD, composeResume, evictTrackedSession, parseAgentEvent, prepareProviders, trackerSource, setCatalog, type AgentEvent } from "@hivemind/agents/node";
 import { resolveWindowsSpawn } from "@hivemind/agents/discover";
 import { agentEventHookSource } from "./hooks/agent-event-hook-source.js";
 import { SDK_FILE, sdkSource } from "@hivemind/agent-sdk";
@@ -403,20 +403,20 @@ const eventViewers = new Set<(m: ServerMsg) => void>();
 // Pushes to the user's phone: ntfy or any endpoint that takes a plain-text POST (`hive push set`).
 const pushFile = path.join(userDataDir, "push.json");
 const lastPush = new Map<string, number>();
-async function notifyPush(topic: string, data: unknown): Promise<void> {
+async function notifyPush(evt: AgentEvent): Promise<void> {
   let cfg: { url?: unknown; events?: unknown };
   try { cfg = JSON.parse(fs.readFileSync(pushFile, "utf8")); } catch { return; }
   if (typeof cfg.url !== "string" || !/^https?:\/\//.test(cfg.url)) return;
-  const events = Array.isArray(cfg.events) ? cfg.events : ["notification"];
-  if (!events.includes(topic)) return;
-  const tileId = (data as { tileId?: unknown } | null)?.tileId;
-  const key = `${String(tileId)}:${topic}`;
+  const events = Array.isArray(cfg.events) ? cfg.events : ["input.requested"];
+  if (!events.includes(evt.event)) return;
+  const tileId = evt.tileId;
+  const key = `${tileId}:${evt.event}`;
   const now = Date.now();
   if ((lastPush.get(key) ?? 0) > now - 15_000) return;
   lastPush.set(key, now);
   const info = manager.info().find((x) => x.id === tileId);
   const what = (info?.title || info?.cmd || "an agent").replace(/[\x00-\x1f\x7f]/g, " ").slice(0, 80);
-  const body = topic === "notification" ? `${what} needs your input` : topic === "turn" ? `${what} finished its turn` : `${what}: ${topic}`;
+  const body = evt.event === "input.requested" ? `${what} needs your input` : evt.event === "turn.ended" ? `${what} finished its turn` : `${what}: ${evt.event}`;
   try {
     await fetch(cfg.url, { method: "POST", body, headers: { Title: `hivemind - ${hostname()}` }, signal: AbortSignal.timeout(10_000) });
   } catch (e) {
@@ -597,25 +597,34 @@ if (STANDALONE) {
   // No desktop here owns the control-plane socket, so hook events come to us and go on to viewers and push.
   const hcp = net.createServer((c) => {
     c.on("error", () => { /* hook gone */ });
+    const answer = (id: unknown, body: Record<string, unknown>) => { try { c.write(`${JSON.stringify({ jsonrpc: "2.0", id, ...body })}\n`); } catch { /* gone */ } };
+    let authed = false;
     c.on("data", makeLineDecoder((line) => {
-      let m: { t?: unknown; id?: unknown; topic?: unknown; data?: unknown };
+      let m: { jsonrpc?: unknown; id?: unknown; method?: unknown; params?: unknown };
       try { m = JSON.parse(line); } catch { return; }
-      if (m.t === "event" && typeof m.topic === "string") {
-        // Viewers get today's topics, so a desktop that predates canonical events still hears them.
-        const evt = m.topic === AGENT_EVENT_TOPIC ? parseAgentEvent(m.data) : null;
-        const out = m.topic === AGENT_EVENT_TOPIC ? (evt ? legacyTopicsFor(evt) : []) : [{ topic: m.topic, data: m.data }];
-        for (const o of out) {
-          for (const push of eventViewers) push({ t: "event", topic: o.topic, data: o.data });
-          void notifyPush(o.topic, o.data);
-        }
-      } else if (m.t === "req" && (m as { method?: unknown }).method === "agent.reply") {
-        // A reply goes to the desktops watching this machine, never to push.
-        for (const push of eventViewers) push({ t: "event", topic: "agent.reply", data: (m as { params?: unknown }).params });
-        c.end(`${JSON.stringify({ t: "res", id: m.id, ok: true, result: { ok: true } })}\n`);
-      } else if (m.t === "req") {
-        // Only a desktop can decide (e.g. approvals): answer at once so the agent falls back to its own prompt.
-        c.end(`${JSON.stringify({ t: "res", id: m.id, ok: false, error: { code: "UNAVAILABLE", message: "no desktop on this machine" } })}\n`);
+      if (m.jsonrpc !== "2.0" || typeof m.method !== "string") return;
+      const params = (m.params ?? {}) as Record<string, unknown>;
+      if (m.id === undefined) {
+        if (m.method !== AGENT_EVENT_METHOD) return;
+        const evt = parseAgentEvent(m.params);
+        if (!evt) return;
+        for (const push of eventViewers) push({ t: "event", topic: AGENT_EVENT_METHOD, data: evt });
+        void notifyPush(evt);
+        return;
       }
+      if (m.method === "initialize") {
+        if (params.token !== hcpToken) return answer(m.id, { error: { code: -32000, message: "bad or missing token", data: { code: "UNAUTHORIZED" } } });
+        authed = true;
+        return answer(m.id, { result: { protocolVersion: 2, capabilities: { status: false } } });
+      }
+      if (!authed) return answer(m.id, { error: { code: -32000, message: "call initialize with the token first", data: { code: "UNAUTHORIZED" } } });
+      if (m.method === "agent.reply") {
+        // A reply goes to the desktops watching this machine, never to push.
+        for (const push of eventViewers) push({ t: "event", topic: "agent.reply", data: m.params });
+        return answer(m.id, { result: { ok: true } });
+      }
+      // Only a desktop can decide (e.g. approvals): answer at once so the agent falls back to its own prompt.
+      answer(m.id, { error: { code: -32000, message: "no desktop on this machine", data: { code: "UNAVAILABLE" } } });
     }));
   });
   void listenExclusive(hcp, hcpSock)

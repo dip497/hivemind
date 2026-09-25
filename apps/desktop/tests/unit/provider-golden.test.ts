@@ -103,7 +103,7 @@ function fakeDeps() {
     callRenderer: async () => ({ tileId: "tile-x" }),
     writeToTile: () => true,
     deliverToTile: (id: string, data: string, onSent?: () => void) => mailbox.deliver(id, data, onSent),
-    spawnAllowed: () => true, connect: () => true, disconnect: () => {}, forgetPipes: () => {}, spawnEdge: () => {}, setSupervise: () => {}, pushWait: () => {},
+    spawnAllowed: () => true, connect: () => true, disconnect: () => {}, forgetPipes: () => {}, spawnEdge: () => {}, setSupervise: () => {}, awaitingApproval: () => {},
   };
 }
 

@@ -16,25 +16,16 @@ export function identifyAgent(cmd: string): Agent | null {
   return identifyProvider(cmd)?.id ?? null;
 }
 
-/** Permission and question both collapse into "blocked". */
-export function detectAgentState(agent: Agent, screen: string): AgentState {
-  const t = agentById(agent)?.detect?.(screen) ?? "idle";
-  return t === "permission" || t === "question" ? "blocked" : t;
-}
-
 /**
- * Claude briefly renders its idle prompt BETWEEN tool calls — a sub-second blip
- * that the raw scrape reads as "idle" before work resumes. Left alone that blip
- * fires a false "finished" notification. Hold a working→idle flip for
- * CLAUDE_WORKING_HOLD_MS: if Claude was working that recently, keep reporting
- * working until it has been genuinely quiet for the full window. Set above the
- * 1200ms scan interval so "finished" needs a second confirming idle scan — one
- * lone idle poll is treated as a between-tool blip, not completion. claude-only
- * (other detectors are already steady). `lastWorkingAt.t` mutates across polls.
+ * A screen, sampled every poll, can show an agent's idle prompt for a moment between two
+ * steps of the same turn. Hold a working→idle flip for SCREEN_WORKING_HOLD_MS: a reading
+ * of idle this soon after working is taken as that gap, not the end of the turn. Set above
+ * the 1200ms scan interval so an end needs a second confirming idle scan. Only the screen
+ * fallback uses it; hooks say when a turn ends. `lastWorkingAt.t` mutates across polls.
  */
-export const CLAUDE_WORKING_HOLD_MS = 2000;
+export const SCREEN_WORKING_HOLD_MS = 2000;
 
-export function stabilizeClaudeStatus(
+export function stabilizeScreenStatus(
   prev: TileStatus,
   raw: TileStatus,
   now: number,
@@ -47,7 +38,7 @@ export function stabilizeClaudeStatus(
   // Needs-human states are authoritative — never hold them back.
   if (raw === "permission" || raw === "question" || raw === "blocked") return raw;
   if (raw === "idle" && prev === "working") {
-    if (lastWorkingAt.t !== null && now - lastWorkingAt.t < CLAUDE_WORKING_HOLD_MS) {
+    if (lastWorkingAt.t !== null && now - lastWorkingAt.t < SCREEN_WORKING_HOLD_MS) {
       return "working";
     }
     return "idle";

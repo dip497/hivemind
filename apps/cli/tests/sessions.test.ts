@@ -81,7 +81,7 @@ describe.skipIf(!unix)("hive push", () => {
     const srv = (await import("node:http")).createServer((req, res) => { let b = ""; req.on("data", (d) => { b += d; }); req.on("end", () => { got.push({ body: b, title: req.headers.title as string }); res.end(); }); });
     await new Promise<void>((r) => srv.listen(0, "127.0.0.1", r));
     const url = `http://127.0.0.1:${(srv.address() as import("node:net").AddressInfo).port}/topic`;
-    expect(data(run("push", "set", url, "--json"))).toEqual({ url, events: ["notification"] });
+    expect(data(run("push", "set", url, "--json"))).toEqual({ url, events: ["input.requested"] });
     expect(fs.statSync(path.join(dir, "push.json")).mode & 0o777).toBe(0o600);
     expect(data(run("push", "status", "--json"))).toMatchObject({ enabled: true, url });
     const sent = await hiveAsync(["push", "test", "--json"], { env });

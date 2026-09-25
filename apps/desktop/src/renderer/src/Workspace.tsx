@@ -30,7 +30,7 @@ import { toast } from "sonner";
 import { Button } from "./components/ui/button";
 import { MenuItem } from "./components/ui/menu-item";
 import type { LayerTile, LayerFrame } from "./LayersPanel";
-import { statusOf, setWaitStatus, setSubagentBusy, setNotify, setTurnState, type TileStatusKind, subscribeTileStatus } from "./agent-status-bus";
+import { statusOf, setHostedStatus, type TileStatusKind, subscribeTileStatus } from "./agent-status-bus";
 import { frameAtPoint } from "./frame-layout";
 import { Wallpaper } from "./Wallpaper";
 import { CanvasOverlay } from "./CanvasOverlay";
@@ -858,36 +858,12 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     });
   }, []);
 
-  // HCP "wait" states (a supervised worker blocked on its parent's approval) →
-  // override the scrape on the status bus.
+  // Agent sessions' statuses, from the host: everything there is, then every change.
   useEffect(() => {
-    return window.hive.onHcpWait((ev) => {
-      setWaitStatus(ev.tileId, (ev.status as TileStatusKind | null) ?? null);
-    });
+    const off = window.hive.onHcpStatus((ev) => setHostedStatus(ev.tileId, ev.status));
+    void window.hive.hcpStatusAll().then((all) => { for (const { tileId, status } of all) setHostedStatus(tileId, status); });
+    return off;
   }, []);
-  // HCP subagent lifecycle → keep a tile "working" while it has in-flight Tasks.
-  useEffect(() => {
-    return window.hive.onHcpSubagent((ev) => { setSubagentBusy(ev.tileId, ev.busy); });
-  }, []);
-  // HCP "needs you" (claude's Notification hook) → soft status override.
-  useEffect(() => {
-    return window.hive.onHcpNotify((ev) => { setNotify(ev.tileId, ev.status as TileStatusKind); });
-  }, []);
-  // HCP turn state — hook-driven working/idle, authoritative over the scrape.
-  useEffect(() => {
-    return window.hive.onHcpTurnState((ev) => { setTurnState(ev.tileId, ev.state); });
-  }, []);
-
-  // Plan-review wait: while a planReview tile is open for an agent, mark that
-  // agent "waiting: review" (cleared when the plan tile closes).
-  const planAgentsRef = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    const now = new Set<string>();
-    for (const t of tiles) if (t.kind === "planReview" && t.review?.agentTileId) now.add(t.review.agentTileId);
-    for (const a of now) if (!planAgentsRef.current.has(a)) setWaitStatus(a, "plan_review");
-    for (const a of planAgentsRef.current) if (!now.has(a)) setWaitStatus(a, null);
-    planAgentsRef.current = now;
-  }, [tiles]);
 
   // Deliver a prompt to claude with a TARGET PICKER. 0 claude tiles → spawn a
   // new claude carrying the prompt; 1+ → picker (the chosen tile, or "New").

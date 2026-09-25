@@ -13,6 +13,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - Agent manifests can map a native hook to a canonical event with `emit:` (turn started/ended, input requested/resolved, subagents, compacting) instead of naming a script. The vocabulary and how it becomes a status are specified in `spec/`, with shared test cases in `conformance/`.
 - **Breaking:** agent plugins report through their own scripts and the new agent SDK instead of hook scripts built into the app, and the app no longer reads agent transcripts. Update the Claude, Droid, Kiro and Pi plugins to their latest versions; until then `hive ctl read` gets no reply from them.
 - A restored agent whose session is gone starts fresh under the same id straight away, instead of trying to resume it and failing first. An agent's manifest says where its sessions are kept (`session.resume.exists`).
+- **Breaking:** the control-plane socket speaks JSON-RPC 2.0 (`spec/wire-protocol.md`): a client calls `initialize` with the token, then any method; statuses and a tile's output are `status/subscribe` and `agent.stream/subscribe`. `hive ctl` is unchanged; a script that spoke the old line format must move. `hive push --events` takes `input.requested` and `turn.ended`.
+- An agent's status comes from one place for every surface — tiles, the layers panel, views, notifications: its hooks once they report, its screen until then or when it has none. Pressing Esc or Ctrl+C during a turn shows the turn interrupted, and a usage limit or a failed turn says so.
 
 ## [2026.9.5] — 2026-09-22
 

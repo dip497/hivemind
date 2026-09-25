@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 import { contextBridge, ipcRenderer, webUtils } from "electron";
-import type { HiveIpc, DiffScope, WorktreeCreateOpts, PlanReviewOpen, HcpCommand, HcpPipeEvent, HcpSpawnEvent, HcpWaitEvent, HcpSubagentEvent, HcpNotifyEvent, HcpTurnStateEvent, AppErrorEvent } from "../shared/ipc.js";
+import type { HiveIpc, DiffScope, WorktreeCreateOpts, PlanReviewOpen, HcpCommand, HcpPipeEvent, HcpSpawnEvent, HcpStatusEvent, AppErrorEvent } from "../shared/ipc.js";
 
 const api: HiveIpc & {
   /** The host OS, so the renderer can pick a default shell without an IPC
@@ -36,10 +36,8 @@ const api: HiveIpc & {
   onHcpCommand: (cb: (cmd: HcpCommand) => void) => () => void;
   onHcpPipe: (cb: (e: HcpPipeEvent) => void) => () => void;
   onHcpSpawn: (cb: (e: HcpSpawnEvent) => void) => () => void;
-  onHcpWait: (cb: (e: HcpWaitEvent) => void) => () => void;
-  onHcpSubagent: (cb: (e: HcpSubagentEvent) => void) => () => void;
-  onHcpNotify: (cb: (e: HcpNotifyEvent) => void) => () => void;
-  onHcpTurnState: (cb: (e: HcpTurnStateEvent) => void) => () => void;
+  onHcpStatus: (cb: (e: HcpStatusEvent) => void) => () => void;
+  hcpStatusAll: () => Promise<Array<{ tileId: string; status: HcpStatusEvent["status"] }>>;
   onAppError: (cb: (e: AppErrorEvent) => void) => () => void;
 } = {
   resolveProject: (rootHint) => ipcRenderer.invoke("resolveProject", rootHint),
@@ -121,6 +119,7 @@ const api: HiveIpc & {
 
   ptySpawn: (opts) => ipcRenderer.invoke("ptySpawn", opts),
   ptyWrite: (tileId, data) => ipcRenderer.send("ptyWrite", tileId, data),
+  agentScreen: (tileId, state) => ipcRenderer.send("agent:screen", tileId, state),
   ptyResize: (tileId, cols, rows) => ipcRenderer.send("ptyResize", tileId, cols, rows),
   ptyKill: (tileId) => ipcRenderer.send("ptyKill", tileId),
   ptyDetach: (tileId) => ipcRenderer.send("ptyDetach", tileId),
@@ -280,25 +279,11 @@ const api: HiveIpc & {
     ipcRenderer.on("hcp:pipe", listener);
     return () => ipcRenderer.removeListener("hcp:pipe", listener);
   },
-  onHcpWait: (cb: (e: HcpWaitEvent) => void) => {
-    const listener = (_e: unknown, ev: HcpWaitEvent) => cb(ev);
-    ipcRenderer.on("hcp:wait", listener);
-    return () => ipcRenderer.removeListener("hcp:wait", listener);
-  },
-  onHcpSubagent: (cb: (e: HcpSubagentEvent) => void) => {
-    const listener = (_e: unknown, ev: HcpSubagentEvent) => cb(ev);
-    ipcRenderer.on("hcp:subagent", listener);
-    return () => ipcRenderer.removeListener("hcp:subagent", listener);
-  },
-  onHcpNotify: (cb: (e: HcpNotifyEvent) => void) => {
-    const listener = (_e: unknown, ev: HcpNotifyEvent) => cb(ev);
-    ipcRenderer.on("hcp:notify", listener);
-    return () => ipcRenderer.removeListener("hcp:notify", listener);
-  },
-  onHcpTurnState: (cb: (e: HcpTurnStateEvent) => void) => {
-    const listener = (_e: unknown, ev: HcpTurnStateEvent) => cb(ev);
-    ipcRenderer.on("hcp:turnstate", listener);
-    return () => ipcRenderer.removeListener("hcp:turnstate", listener);
+  hcpStatusAll: () => ipcRenderer.invoke("hcp:status-all"),
+  onHcpStatus: (cb: (e: HcpStatusEvent) => void) => {
+    const listener = (_e: unknown, ev: HcpStatusEvent) => cb(ev);
+    ipcRenderer.on("hcp:status", listener);
+    return () => ipcRenderer.removeListener("hcp:status", listener);
   },
   onAppError: (cb: (e: AppErrorEvent) => void) => {
     const listener = (_e: unknown, ev: AppErrorEvent) => cb(ev);

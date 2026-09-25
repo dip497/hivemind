@@ -25,7 +25,7 @@ async function spawnedMode(params: Record<string, unknown>, agentInstalled?: () 
     forgetPipes: () => {},
     spawnEdge: () => {},
     setSupervise: () => {},
-    pushWait: () => {},
+    awaitingApproval: () => {},
   } as unknown as Parameters<typeof makeDispatch>[0]);
   await dispatch("tile.spawn_agent", { callerTile: "hm:tile-p", ...params });
   return seen[0]?.mode;

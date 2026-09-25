@@ -2,16 +2,21 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   identifyAgent,
-  detectAgentState,
   detectTileStatus,
-  stabilizeClaudeStatus,
-  CLAUDE_WORKING_HOLD_MS,
+  stabilizeScreenStatus,
+  SCREEN_WORKING_HOLD_MS,
   normalizeAgentTitle,
 } from "../../src/renderer/src/agent-state.ts";
 import { useAuthoredAgents } from "./authored-agents.ts";
 
 // gemini, amp, grok, opencode and cline ship from the catalog, not inside the app.
 useAuthoredAgents();
+
+/** A detector's verdict with the two needs-you kinds folded into "blocked". */
+const detectAgentState = (agent: string, screen: string): string => {
+  const t = detectTileStatus(agent, screen);
+  return t === "permission" || t === "question" ? "blocked" : t;
+};
 
 test("normalizeAgentTitle: trims, strips control chars, collapses whitespace, caps length", () => {
   assert.equal(normalizeAgentTitle("  Refactor auth  "), "Refactor auth");
@@ -22,27 +27,27 @@ test("normalizeAgentTitle: trims, strips control chars, collapses whitespace, ca
   assert.equal(normalizeAgentTitle("x".repeat(120)).length, 80);
 });
 
-test("stabilizeClaudeStatus: holds a lone idle blip, releases after the window", () => {
+test("stabilizeScreenStatus: holds a lone idle blip, releases after the window", () => {
   const lw = { t: null as number | null };
   // first working scan records the timestamp
-  assert.equal(stabilizeClaudeStatus("idle", "working", 1000, lw), "working");
+  assert.equal(stabilizeScreenStatus("idle", "working", 1000, lw), "working");
   assert.equal(lw.t, 1000);
   // idle within the hold window (between-tool blip) → still working
-  assert.equal(stabilizeClaudeStatus("working", "idle", 1000 + CLAUDE_WORKING_HOLD_MS - 1, lw), "working");
+  assert.equal(stabilizeScreenStatus("working", "idle", 1000 + SCREEN_WORKING_HOLD_MS - 1, lw), "working");
   // idle past the hold window → genuinely finished
-  assert.equal(stabilizeClaudeStatus("working", "idle", 1000 + CLAUDE_WORKING_HOLD_MS + 1, lw), "idle");
+  assert.equal(stabilizeScreenStatus("working", "idle", 1000 + SCREEN_WORKING_HOLD_MS + 1, lw), "idle");
 });
 
-test("stabilizeClaudeStatus: needs-human states are never held back", () => {
+test("stabilizeScreenStatus: needs-human states are never held back", () => {
   const lw = { t: 1000 };
-  assert.equal(stabilizeClaudeStatus("working", "permission", 1100, lw), "permission");
-  assert.equal(stabilizeClaudeStatus("working", "question", 1100, lw), "question");
-  assert.equal(stabilizeClaudeStatus("working", "blocked", 1100, lw), "blocked");
+  assert.equal(stabilizeScreenStatus("working", "permission", 1100, lw), "permission");
+  assert.equal(stabilizeScreenStatus("working", "question", 1100, lw), "question");
+  assert.equal(stabilizeScreenStatus("working", "blocked", 1100, lw), "blocked");
 });
 
-test("stabilizeClaudeStatus: idle stays idle when not coming from working", () => {
+test("stabilizeScreenStatus: idle stays idle when not coming from working", () => {
   const lw = { t: null as number | null };
-  assert.equal(stabilizeClaudeStatus("idle", "idle", 5000, lw), "idle");
+  assert.equal(stabilizeScreenStatus("idle", "idle", 5000, lw), "idle");
 });
 
 test("identifyAgent: bare names + path + aliases", () => {

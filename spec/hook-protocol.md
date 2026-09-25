@@ -16,16 +16,17 @@ agent on the host being there.
 | `HIVE_PLAN_SOCK` | a plugin's own scripts | the plan-review socket |
 | `HIVE_SUPERVISE` | a plugin's own scripts, supervised sessions | `all` or a comma list of tools the supervisor brokers |
 
-## Messages (one JSON object per line, on `HIVE_HOOK_SOCK`)
+## Messages (JSON-RPC 2.0, one per line, on `HIVE_HOOK_SOCK`)
 
-- **Event** — `{"t":"event","topic":"agent.event","data":{…}}`, `data` per
-  `agent-event.schema.json`. No reply. The host drops fields outside the schema.
-- **Reply** — `{"t":"req","id":…,"method":"agent.reply","token":…,"params":{"tileId":…,"text":…}}`
-  → `{"t":"res","id":…,"ok":true}`. The turn's reply for `hive ctl read`; sent before the
-  `turn.ended` it belongs to. Never forwarded on the event stream or to push.
-- **Approval** — `{"t":"req",…,"method":"agent.await_approval","params":{"callerTile":…,"tool_name":…,"tool_input":…}}`
-  → `result: {"decision":"allow"|"deny"|"ask","reason"?}`. `ask`: nobody decided; the script
-  falls back to the agent's own prompt, or refuses if the agent has none.
+- **Event** — the notification `{"jsonrpc":"2.0","method":"agent.event","params":{…}}`, `params`
+  per `agent-event.schema.json`. No token: the socket is the owner's alone. No reply. The host
+  drops fields outside the schema.
+- **Requests** need the connection introduced first: `initialize {"token": HCP_TOKEN}`, then
+  - `agent.reply {"tileId","text"}` → `{"ok":true}`. The turn's reply for `hive ctl read`, sent
+    before the `turn.ended` it belongs to. Never forwarded on the event stream or to push.
+  - `agent.await_approval {"callerTile","tool_name","tool_input"}` →
+    `{"decision":"allow"|"deny"|"ask","reason"?}`. `ask`: nobody decided; the script falls
+    back to the agent's own prompt, or refuses if the agent has none.
 
 ## Plan review (on `HIVE_PLAN_SOCK`)
 

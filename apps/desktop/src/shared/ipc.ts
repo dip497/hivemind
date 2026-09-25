@@ -1,3 +1,4 @@
+import type { SessionStatus } from "@hivemind/agent-host/status-store";
 /** Typed contract for IPC between main and renderer. */
 import type { Issue, IssueSummary, IssueState, AcceptanceItem, Assignee, LinkType, IssuePatch } from "@hivemind/core/types";
 import type { ViewManifest } from "@hivemind/view-sdk/manifest";
@@ -455,6 +456,8 @@ export interface HiveIpc {
    *  a spawned agent can actually work issues with `hive`. Idempotent. */
   installAgentic(dir: string): Promise<{ ok: boolean }>;
   ptyWrite(tileId: string, data: string): void;
+  /** What an agent tile's screen shows, for an agent whose hooks have not reported. */
+  agentScreen(tileId: string, state: "idle" | "working" | "permission" | "question" | "blocked"): void;
   ptyResize(tileId: string, cols: number, rows: number): void;
   ptyKill(tileId: string): void;
   /** Window closed / tile unmounted: keep the session alive (daemon mode) or
@@ -536,45 +539,12 @@ export interface HcpSpawnEvent {
   connected: boolean;
 }
 
-/** Pushed main→renderer when a tile enters/leaves a control-plane "wait" state
- *  (e.g. a supervised worker blocked on its parent's approval). `status` is a
- *  TileStatusKind string, or null to clear. The renderer forwards it to the
- *  agent-status bus as an override. */
-export interface HcpWaitEvent {
+/** Pushed main→renderer on every change to an agent session's status (the host's status
+ *  store: packages/agent-host/src/status-store.ts). `tileId` is the bare tile id. */
+export interface HcpStatusEvent {
+  seq: number;
   tileId: string;
-  status: string | null;
-}
-
-/** Pushed main→renderer when a tile gains/loses in-flight Task subagents (from
- *  the injected SubagentStart/SubagentStop hooks). `busy` true keeps the tile
- *  reading "working" while subagents run — including BACKGROUND agents, where the
- *  main loop returns to the idle prompt and the screen-scrape would read "idle".
- *  Deterministic and correctly attributed (the hook fires in the parent session).
- *  `tileId` is the bare tile id (the status-bus key). */
-export interface HcpSubagentEvent {
-  tileId: string;
-  busy: boolean;
-}
-
-/** Pushed main→renderer when claude's `Notification` hook reports a "needs you"
- *  state (permission / interactive question). Deterministic + version-proof
- *  (claude's own signal, not a scraped UI string). SOFT: the renderer lifts an
- *  idle tile to this status and auto-clears it when the scrape shows work
- *  resumed, so it can't get stuck. `tileId` is the bare tile id. */
-export interface HcpNotifyEvent {
-  tileId: string;
-  status: "permission" | "question";
-}
-
-/** Pushed main→renderer with claude's HOOK-DRIVEN turn state: `working` on
- *  UserPromptSubmit (turn start), `idle` on Stop (turn end). This is the
- *  deterministic, version-proof replacement for the working/idle screen-scrape —
- *  it can't be fooled by spinner-glyph/wording changes, focus/scroll, or stale
- *  buffer replay on restart (no hook has fired → the tile stays idle). The scrape
- *  remains the fallback for non-claude agents. `tileId` is the bare tile id. */
-export interface HcpTurnStateEvent {
-  tileId: string;
-  state: "working" | "idle";
+  status: SessionStatus;
 }
 
 /** Pushed main→renderer when an agent hands off a plan (PreToolUse/ExitPlanMode).

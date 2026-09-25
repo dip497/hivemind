@@ -12,9 +12,9 @@ import { patchTerminalMouseWithRetry } from "./terminal-mouse-patch";
 import { wantsDomRenderer } from "./terminal-renderer-policy";
 import { registerWebglSlotClient, unregisterWebglSlotClient, reconcileWebglSlots } from "./webgl-slots";
 import { useTileFont, FontScaleControl, handleFontKey } from "./tile-font";
-import { identifyAgent, detectTileStatus, stabilizeClaudeStatus, normalizeAgentTitle, type TileStatus } from "./agent-state";
+import { identifyAgent, detectTileStatus, stabilizeScreenStatus, normalizeAgentTitle, type TileStatus } from "./agent-state";
 import { registerClaude, unregisterClaude, shouldDeliver, peekWork, claimWork, clearWork, type SendToClaudeDetail } from "./claude-bus";
-import { publishStatus, clearStatus, noteOutput, revalidate, type TileStatusKind } from "./agent-status-bus";
+import { publishStatus, clearStatus, setLabel, subscribeTileStatus, type TileStatusKind } from "./agent-status-bus";
 import { SUBMIT_DELAY_MS, SPAWN_SUBMIT_RETRY_MS, deliversPromptViaArgv } from "../../shared/agent-io";
 import { Pencil, GripVertical } from "lucide-react";
 import { Button } from "./components/ui/button";
@@ -252,13 +252,6 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
   const agentsScanned = useAgentsScanned();
   const agent = identifyAgent(cmd);
   const isClaude = agent === defaultAgent()?.id;
-  // NOTE: we deliberately DON'T seed claude's hook-driven turn state on mount.
-  // liveTurn is authoritative ONLY once a real UserPromptSubmit/Stop hook fires.
-  // An earlier version seeded "idle" here to suppress the stale-replayed-buffer
-  // "working" on restart — but that idle seed HARD-overrode the scrape, so a
-  // claude process WITHOUT the hooks (any session already running before the
-  // hooks were injected) got stuck reading idle while actually working. Now
-  // hook-less sessions fall back to the scrape; only a real hook overrides it.
   // The label shown on canvas chips / toasts / notifications. `name` already
   // resolves user-rename ?? agent OSC title ?? auto label (Canvas), so the
   // session title claude writes flows through here. Kept in a ref so the
@@ -266,16 +259,12 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
   const effLabel = name?.trim() || label || agent || cmd.split("/").slice(-1)[0] || "shell";
   const chipLabelRef = useRef(effLabel);
   const lastStatusRef = useRef<TileStatusKind | null>(null);
-  // When the session name changes (claude wrote a new title, or a rename), keep
-  // the ref current and re-publish the last status under the new label so the
-  // chip / toast / pending notification re-label without waiting for the next
-  // status transition.
+  // A new session name (the agent wrote a title, or a rename) re-labels its chips, toasts and
+  // any pending notification at once.
   useEffect(() => {
     chipLabelRef.current = effLabel;
-    if ((agent || lastStatusRef.current === "exited") && lastStatusRef.current) {
-      publishStatus({ tileId, label: effLabel, status: lastStatusRef.current });
-    }
-  }, [effLabel, agent, tileId]);
+    setLabel(tileId, effLabel);
+  }, [effLabel, tileId]);
 
   useEffect(() => {
     if (!agentsScanned) return;
@@ -290,11 +279,11 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
       permission: ["approve?", true],
       question: ["input?", true],
       blocked: ["blocked", true],
+      plan_review: ["review?", true],
+      awaiting_approval: ["approval?", true],
     };
-    const setStatus = (
-      s: "working" | "idle" | "exited" | "permission" | "question" | "blocked",
-      extra?: { exitCode?: number; detail?: string },
-    ) => {
+    /** The header chip. An agent tile's follows the bus (the host's status); a shell's its own activity. */
+    const paint = (s: TileStatusKind, extra?: { exitCode?: number; detail?: string }) => {
       const dot = dotRef.current;
       const label = labelRef.current;
       if (!dot || !label) return;
@@ -317,13 +306,13 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
       label.textContent = text;
       label.style.color = color;
       lastStatusRef.current = s;
-      // Broadcast to the Canvas (chips / toasts / done-unseen). Only agent tiles
-      // and exits are interesting — a plain shell's working/idle churn is noise.
-      // exitCode/detail ride along on an `exited` so the awareness layer can
-      // tell a crash (non-zero → error toast) from a clean close and show the code.
-      if (agent || s === "exited") {
-        publishStatus({ tileId, label: chipLabelRef.current, status: s, ...extra });
-      }
+    };
+    const offStatus = agent ? subscribeTileStatus(tileId, (e) => paint(e.status, e.status === "exited" ? e : undefined)) : undefined;
+    /** What the tile itself knows: a shell's activity, and how any process exited — the code
+     *  and detail let the awareness layer tell a crash from a clean close. */
+    const setStatus = (s: "working" | "idle" | "exited", extra?: { exitCode?: number; detail?: string }) => {
+      paint(s, extra);
+      if (s === "exited") publishStatus({ tileId, label: chipLabelRef.current, status: s, ...extra });
     };
     const markActivity = () => {
       setStatus("working");
@@ -705,15 +694,10 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
         if (flowPaused && flowPending <= FLOW_LOW_CHARS) releaseFlowPause();
       });
       if (flowPending >= FLOW_HIGH_CHARS) requestFlowPause();
-      // Agent tiles get authoritative state from the screen poll (mark dirty so
-      // the next poll tick actually scans); plain shells use the cheap heuristic.
-      if (agent) {
-        agentDirty = true;
-        // Ground-truth liveness: a working agent streams output. noteOutput keeps
-        // a "working" status honored; its absence lets the status bus decay a
-        // stuck "working" (missed Stop hook / frozen replayed buffer) to idle.
-        noteOutput(tileId);
-      } else markActivity();
+      // Agent tiles read their screen on the next poll tick (for the host's fallback);
+      // plain shells use the cheap heuristic.
+      if (agent) agentDirty = true;
+      else markActivity();
     });
     unsubExit = window.hive.onPtyExit(ptyId, ({ code, signal }) => {
       releaseBoot();
@@ -880,12 +864,12 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
         syncPtySize();
         term.writeln(`\x1b[2m[hivemind] spawned ${cmd} (pid ${pid})\x1b[0m`);
         if (bootRelease) { bootAt = Date.now(); bootCap = setTimeout(releaseBoot, BOOT_CAP_MS); }
-        setStatus("idle");
+        if (!agent) setStatus("idle");
         if (agent && !agentPoll) {
-          // Stabilizer state for claude's between-tool idle blip (see
-          // stabilizeClaudeStatus). Tracks the previous reported status and the
-          // last time work was seen, across poll ticks.
+          // The screen reading sent to the host, debounced across poll ticks (see
+          // stabilizeScreenStatus): the previous reading and the last time work was seen.
           let lastReported: TileStatus = "idle";
+          let screenSent = false;
           const lastWorkingAt = { t: null as number | null };
           // Queued-prompt ("Work on this" / workflow) delivery: deliver EXACTLY
           // ONCE, when the agent's screen has SETTLED (boot/splash output stopped
@@ -920,10 +904,6 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
                 }
               }
             }
-            // Re-evaluate the bus status every tick (even with no new output) so
-            // the time-based staleness gate can decay a stuck "working" (missed
-            // Stop hook / frozen replayed buffer) to idle on its own.
-            if (agent) revalidate(tileId);
             // Keep scanning even while the window is hidden/minimized — that is
             // exactly when an OS notification matters. Cost is bounded by
             // agentDirty: a quiet, hidden tile never materializes its viewport.
@@ -931,15 +911,11 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
             agentDirty = false;
             try {
               const raw = detectTileStatus(agent, readScreen());
-              // Anti-flicker for the between-tool idle blip — applied to EVERY
-              // agent, not just claude. A momentary idle during work used to
-              // publish straight through for non-claude agents, and Canvas
-              // re-derives "finished" from working→idle → a spurious done toast
-              // + OS notification on the flicker. Debounce uniformly here so the
-              // published status is the single source the rest of the app trusts.
-              const next = stabilizeClaudeStatus(lastReported, raw, Date.now(), lastWorkingAt);
+              const next = stabilizeScreenStatus(lastReported, raw, Date.now(), lastWorkingAt);
+              // The host takes it only while the agent's hooks have not reported.
+              if (next !== lastReported || !screenSent) window.hive.agentScreen(ptyId, next);
+              screenSent = true;
               lastReported = next;
-              setStatus(next);
             } catch { /* buffer not ready */ }
           }, 1200);
         }
@@ -1027,6 +1003,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
       inputEl?.removeEventListener("blur", onInputBlur);
       if (titleTimer) clearTimeout(titleTimer);
       clearWork(tileId);
+      offStatus?.();
       clearStatus(tileId);
       clearWork(tileId);
       ro.disconnect();

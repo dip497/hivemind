@@ -25,9 +25,10 @@ async function run(agent: string, file: string, payload: unknown, answer: (m: Li
       let nl;
       while ((nl = buf.indexOf("\n")) >= 0) {
         const m = JSON.parse(buf.slice(0, nl)) as Line; buf = buf.slice(nl + 1);
+        if (m.method === "initialize") { c.write(JSON.stringify({ jsonrpc: "2.0", id: m.id, result: {} }) + "\n"); continue; }
         got.push(m);
         const res = answer(m);
-        if (res) c.write(JSON.stringify(res) + "\n");
+        if (res) c.write(JSON.stringify({ jsonrpc: "2.0", id: m.id, ...res }) + "\n");
       }
     });
   });
@@ -47,9 +48,9 @@ async function run(agent: string, file: string, payload: unknown, answer: (m: Li
   return { got, stdout, stderr, code };
 }
 
-const ok = (m: Line): Line | null => (m.t === "req" ? { t: "res", id: m.id, ok: true, result: { ok: true } } : null);
+const ok = (m: Line): Line | null => (m.id ? { result: { ok: true } } : null);
 const decide = (decision: string, reason?: string) => (m: Line): Line | null =>
-  (m.t === "req" ? { t: "res", id: m.id, ok: true, result: { decision, ...(reason ? { reason } : {}) } } : null);
+  (m.id ? { result: { decision, ...(reason ? { reason } : {}) } } : null);
 
 test("claude turn end: the reply goes on its own request, then the turn end with running shells counted", async () => {
   const { got, code } = await run("claude", "hive-turn-end.cjs", {
@@ -57,9 +58,9 @@ test("claude turn end: the reply goes on its own request, then the turn end with
     background_tasks: [{ status: "running", command: "npm run dev --token=secret" }, { status: "completed" }],
   }, ok);
   assert.equal(code, 0);
-  assert.deepEqual(got.map((m) => m.method ?? m.topic), ["agent.reply", "agent.event"]);
+  assert.deepEqual(got.map((m) => m.method), ["agent.reply", "agent.event"]);
   assert.deepEqual((got[0] as { params: unknown }).params, { tileId: "hm:t1", text: "done — see the diff" });
-  assert.deepEqual((got[1] as { data: unknown }).data, { background: 1, tileId: "hm:t1", event: "turn.ended" });
+  assert.deepEqual((got[1] as { params: unknown }).params, { background: 1, tileId: "hm:t1", event: "turn.ended" });
   assert.ok(!JSON.stringify(got[1]).includes("secret"));
 });
 
@@ -98,14 +99,14 @@ test("droid turn end reads the reply from droid's own transcript", async () => {
   const { got } = await run("droid", "hive-turn-end.cjs", { transcript_path: tx }, ok);
   fs.rmSync(dir, { recursive: true, force: true });
   assert.deepEqual((got[0] as { params: unknown }).params, { tileId: "hm:t1", text: "FINAL" });
-  assert.equal((got[1] as { data: { event: string } }).data.event, "turn.ended");
+  assert.equal((got[1] as { params: { event: string } }).params.event, "turn.ended");
 });
 
 test("droid notifications: permission and elicitation need you; idle does not", async () => {
   const kinds = [];
   for (const t of ["permission_prompt", "elicitation_dialog", "idle_prompt"]) {
     const { got } = await run("droid", "hive-notify.cjs", { notification_type: t, message: "secret text" }, ok);
-    kinds.push(got.map((m) => (m.data as { kind: string }).kind));
+    kinds.push(got.map((m) => (m.params as { kind: string }).kind));
     assert.ok(!JSON.stringify(got).includes("secret"));
   }
   assert.deepEqual(kinds, [["permission"], ["question"], []]);

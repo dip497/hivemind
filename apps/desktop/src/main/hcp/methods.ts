@@ -154,7 +154,8 @@ export interface MethodDeps {
   setSupervise: (tileId: string, spec: string | null) => void;
   /** Push a control-plane "wait" status for a tile (e.g. "awaiting_approval")
    *  to the renderer's status bus, or null to clear. */
-  pushWait: (tileId: string, status: string | null) => void;
+  /** A supervised worker waits on its supervisor (true) or no longer does (false). */
+  awaitingApproval: (tileId: string, waiting: boolean) => void;
 }
 
 const RENDERER_TIMEOUT = 15_000;
@@ -338,7 +339,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       }
     }
     for (const key of approveCache.keys()) if (key.startsWith(`${bare}:`)) approveCache.delete(key);
-    deps.pushWait(bare, null);
+    deps.awaitingApproval(bare, false);
   };
 
   // Close a tile: ask the renderer to remove it, then drop its state. Shared by the
@@ -462,13 +463,13 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
           `\n[hive] APPROVAL — worker ${labelOf(worker)} wants to run ${tool}: ${summary}\n` +
           `Reply: hive ctl approve ${reqId} allow|deny|always|never\n`;
         // Surface the pause in the UI: this worker is now waiting on its parent.
-        deps.pushWait(worker, "awaiting_approval");
+        deps.awaitingApproval(worker, true);
         return await new Promise((resolve) => {
           const done = (decision: "ask") => {
             const pend = pendingApprovals.get(reqId);
             if (pend) clearTimeout(pend.timer);
             pendingApprovals.delete(reqId);
-            deps.pushWait(worker, null);
+            deps.awaitingApproval(worker, false);
             resolve({ decision }); // no answer → "ask" (claude: human prompt; pi: blocks)
           };
           // Two timers, never both live. Until the banner is DELIVERED, only the
@@ -521,7 +522,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         }
         clearTimeout(pend.timer);
         pendingApprovals.delete(reqId);
-        deps.pushWait(pend.worker, null); // resolved → clear the "waiting" status
+        deps.awaitingApproval(pend.worker, false); // resolved → clear the "waiting" status
         pend.resolve({ decision: d, reason });
         return { ok: true, decision: d };
       }

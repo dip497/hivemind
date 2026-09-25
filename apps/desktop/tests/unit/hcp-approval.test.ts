@@ -39,7 +39,7 @@ test("an approval for a BUSY supervisor is held, then delivered when it hits its
     forgetPipes: () => {},
     spawnEdge: () => {},
     setSupervise: () => {},
-    pushWait: () => {},
+    awaitingApproval: () => {},
   } as unknown as Parameters<typeof makeDispatch>[0]);
 
   await dispatch("tile.spawn_agent", { agent: "claude", callerTile: "hm:tile-parent", supervise: true });
@@ -75,7 +75,7 @@ test("approval with a dead supervisor resolves instead of hanging the worker", a
     forgetPipes: () => {},
     spawnEdge: () => {},
     setSupervise: () => {},
-    pushWait: () => {},
+    awaitingApproval: () => {},
   } as unknown as Parameters<typeof makeDispatch>[0]);
   await dispatch("tile.spawn_agent", { agent: "claude", callerTile: "hm:tile-parent", supervise: true });
   const r = await dispatch("agent.await_approval", { callerTile: "hm:tile-w", tool_name: "write", tool_input: {} });
@@ -113,7 +113,7 @@ test("spawning a pi worker with supervise is REFUSED — never silently ungated"
     forgetPipes: () => {},
     spawnEdge: () => {},
     setSupervise: () => {},
-    pushWait: () => {},
+    awaitingApproval: () => {},
   } as unknown as Parameters<typeof makeDispatch>[0]);
 
   await assert.rejects(

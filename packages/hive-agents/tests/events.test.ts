@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { hookSignals, legacyTopicsFor, parseAgentEvent } from "../src/events.js";
+import { hookSignals, parseAgentEvent } from "../src/events.js";
 import { renderHookEvents } from "../src/hooks.js";
 import { defFromManifest } from "../src/manifest.js";
 import type { LaunchRequest } from "../src/runtime.js";
@@ -85,16 +85,5 @@ describe("the posted event", () => {
     expect(parseAgentEvent({ tileId: "t", event: "turn.started", background: 2 })).toEqual({ tileId: "t", event: "turn.started" });
     expect(parseAgentEvent({ tileId: "t", event: "turn.ended", background: "3; rm -rf" })).toEqual({ tileId: "t", event: "turn.ended", outcome: "done" });
     for (const bad of [null, {}, { tileId: "", event: "turn.ended" }, { tileId: "t", event: "tool.called" }]) expect(parseAgentEvent(bad)).toBeNull();
-  });
-
-  test("bridges onto today's topics without changing their payloads", () => {
-    expect(legacyTopicsFor({ tileId: "t", event: "turn.started" })).toEqual([{ topic: "status", data: { tileId: "t", state: "working" } }]);
-    expect(legacyTopicsFor({ tileId: "t", event: "input.resolved" })).toEqual([{ topic: "status", data: { tileId: "t", state: "working" } }]);
-    expect(legacyTopicsFor({ tileId: "t", event: "compacting.started" })).toEqual([]);
-    expect(legacyTopicsFor({ tileId: "t", event: "turn.ended", outcome: "failed" })).toEqual([{ topic: "turn", data: { tileId: "t" } }]);
-    expect(legacyTopicsFor({ tileId: "t", event: "input.requested", kind: "permission" })[0]!.data.notificationType).toBe("permission_prompt");
-    expect(legacyTopicsFor({ tileId: "t", event: "input.requested", kind: "question" })[0]!.data.notificationType).toBe("elicitation_dialog");
-    expect(legacyTopicsFor({ tileId: "t", event: "subagent.stopped", agentId: "a1" })).toEqual([{ topic: "subagent", data: { tileId: "t", phase: "stop", agentId: "a1" } }]);
-    expect(legacyTopicsFor({ tileId: "t", event: "session.ended" })).toEqual([]);
   });
 });

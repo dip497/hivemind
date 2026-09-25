@@ -54,15 +54,16 @@ function payload() {
   return payloadP;
 }
 
-// One line out; with an id, wait for the matching reply line. Never rejects.
-function send(path, msg, id, timeoutMs) {
+// Lines out; with an id, wait for the reply that carries it (null: take the first line back).
+// Never rejects.
+function send(path, msgs, id, timeoutMs) {
   return new Promise((resolve) => {
     if (!path) return resolve(null);
     let done = false, buf = "";
     const finish = (v) => { if (done) return; done = true; try { c.end(); } catch (e) {} resolve(v); };
     const t = setTimeout(() => finish(null), timeoutMs); if (t.unref) t.unref();
     const c = net.connect(path, () => {
-      try { c.write(JSON.stringify(msg) + "\\n", () => { if (id === undefined) finish(true); }); } catch (e) { finish(null); }
+      try { c.write(msgs.map((m) => JSON.stringify(m) + "\\n").join(""), () => { if (id === undefined) finish(true); }); } catch (e) { finish(null); }
     });
     c.setEncoding("utf8");
     c.on("data", (chunk) => {
@@ -72,7 +73,7 @@ function send(path, msg, id, timeoutMs) {
         const line = buf.slice(0, nl); buf = buf.slice(nl + 1);
         let m; try { m = JSON.parse(line); } catch (e) { continue; }
         if (id === null) return finish(m);
-        if (m && m.t === "res" && m.id === id) return finish(m);
+        if (m && m.id === id) return finish(m);
       }
     });
     c.on("error", () => finish(null));
@@ -82,9 +83,13 @@ function send(path, msg, id, timeoutMs) {
 
 let seq = 0;
 const reqId = () => "sdk_" + process.pid + "_" + (++seq) + "_" + Math.floor(Math.random() * 1e9);
+// JSON-RPC 2.0: introduce this connection with the token, then ask.
 function request(method, params, timeoutMs) {
   const id = reqId();
-  return send(sock, { t: "req", id: id, method: method, token: token, params: params }, id, timeoutMs);
+  return send(sock, [
+    { jsonrpc: "2.0", id: id + "_init", method: "initialize", params: { token: token } },
+    { jsonrpc: "2.0", id: id, method: method, params: params },
+  ], id, timeoutMs);
 }
 
 module.exports = {
@@ -93,20 +98,20 @@ module.exports = {
   payload: payload,
   emit: async (event, fields) => {
     if (!tile || typeof event !== "string") return;
-    await send(sock, { t: "event", topic: "agent.event", data: Object.assign({}, fields || {}, { tileId: tile, event: event }) }, undefined, 2000);
+    await send(sock, [{ jsonrpc: "2.0", method: "agent.event", params: Object.assign({}, fields || {}, { tileId: tile, event: event }) }], undefined, 2000);
   },
   reportReply: async (text) => {
     if (!tile || typeof text !== "string" || !text) return false;
     const m = await request("agent.reply", { tileId: tile, text: text }, 5000);
-    return !!(m && m.ok);
+    return !!(m && !m.error);
   },
   requestApproval: async (req) => {
     const m = await request("agent.await_approval", { callerTile: tile, tool_name: req && req.tool, tool_input: (req && req.input) || {} }, 9 * 60 * 1000);
-    const d = m && m.ok && m.result && m.result.decision;
+    const d = m && m.result && m.result.decision;
     return d === "allow" || d === "deny" ? { decision: d, reason: m.result.reason } : { decision: "ask" };
   },
   openPlanReview: async (req) => {
-    const m = await send(planSock, { tileId: tile, plan: req && req.plan, cwd: req && req.cwd }, null, 4 * 24 * 3600 * 1000);
+    const m = await send(planSock, [{ tileId: tile, plan: req && req.plan, cwd: req && req.cwd }], null, 4 * 24 * 3600 * 1000);
     if (!m) return null;
     return m.decision === "deny" ? { decision: "deny", feedback: m.feedback } : { decision: "approve" };
   },

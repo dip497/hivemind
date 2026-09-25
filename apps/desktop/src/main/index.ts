@@ -35,7 +35,7 @@ import {
   type LinkType,
 } from "@hivemind/core";
 import os from "node:os";
-import { AGENT_EVENT_TOPIC, agentById, agentForCmd, getCatalog, legacyTopicsFor, parseAgentEvent, preferredAgent, setCatalog, type AgentProviderDef } from "@hivemind/agents";
+import { AGENT_EVENT_METHOD, agentById, agentForCmd, getCatalog, parseAgentEvent, preferredAgent, setCatalog, type AgentProviderDef } from "@hivemind/agents";
 import { agentPresence, discoverOptions, findBin, verifyAgent } from "@hivemind/agents/discover";
 import { agentAllowedIn, loadAgents, toWire } from "@hivemind/agents/load";
 import type { IssuePatch } from "@hivemind/core/types";
@@ -94,10 +94,9 @@ import { makeDispatch, type Dispatcher } from "./hcp/methods.js";
 import { labelOf as hcpLabelOf } from "./hcp/names.js";
 import { Mailbox } from "./hcp/mailbox.js";
 import { TurnTracker } from "./hcp/turn-tracker.js";
-import { SubagentTracker } from "./hcp/subagent-tracker.js";
+import { StatusStore, type ScreenState } from "@hivemind/agent-host/status-store";
 import { ipcPath, upgradeCommand, windowsStartMenuShortcut } from "./platform.js";
 import { SubagentReaper } from "./hcp/subagent-reaper.js";
-import { notifyStatusFor } from "./hcp/notification-map.js";
 import { OutputRecorder } from "./hcp/output-recorder.js";
 import { readOrCreateToken, hcpSockPath } from "@hivemind/agent-host/hooks/token";
 import { HcpError } from "./hcp/protocol.js";
@@ -1093,30 +1092,21 @@ const recordPtySpawn = makeSpawnPacer({ windowMs: 10_000, max: 24, queueMax: 128
 // on its tile staying mounted. See startHcpControlPlane().
 const hcpRecorder = new OutputRecorder();
 const hcpTurns = new TurnTracker();
-const hcpSubagents = new SubagentTracker();
-/** Push a tile's subagent-busy edge to the renderer status bus (bare tile id).
- *  Keeps the tile reading "working" while it has in-flight Task subagents. */
-function pushSubagent(tileId: string, busy: boolean): void {
-  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("hcp:subagent", { tileId, busy });
-}
-// Watchdog: a lost SubagentStop (subagent errored / turn interrupted / session
-// compacted / process died) would otherwise pin a tile "working" forever. The
-// reaper force-drains a tile's in-flight set after a quiet grace window — it's
-// (re)armed on every subagent edge and on turn-end while busy, so a genuinely
-// active background population (which keeps emitting edges) is never reaped.
+// Every agent session's status, keyed by bare tile id: hooks first, the screen for agents
+// without them, exits and interrupt keys observed here. One push carries every change.
+const hcpStatus = new StatusStore();
+hcpStatus.subscribe((change) => {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("hcp:status", change);
+});
+// A lost SubagentStop (the subagent errored, the turn was interrupted, the session compacted)
+// would pin a tile's subagents forever: once the last subagent edge is this old, the host
+// reports the rest stopped. Every edge pushes the deadline out.
 const SUBAGENT_REAP_MS = 120_000;
 const hcpSubagentReaper = new SubagentReaper(SUBAGENT_REAP_MS, (tileId) => {
-  if (hcpSubagents.forget(tileId)) {
-    pushSubagent(tileId, false);
-    void writeDiagLog(`[subagent-reap] tile=${tileId} drained ${SUBAGENT_REAP_MS}ms after last edge (lost SubagentStop)`);
-  }
+  const left = hcpStatus.get(tileId)?.subagents ?? [];
+  for (const agentId of left) hcpStatus.event(tileId, { event: "subagent.stopped", agentId });
+  if (left.length) void writeDiagLog(`[subagent-reap] tile=${tileId} drained ${left.length} ${SUBAGENT_REAP_MS}ms after the last edge`);
 });
-/** Push a deterministic "needs you" status (from claude's Notification hook) to
- *  the renderer status bus (bare tile id). Soft + auto-cleared by the scrape when
- *  work resumes — see agent-status-bus.setNotify. */
-function pushNotify(tileId: string, status: "permission" | "question"): void {
-  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("hcp:notify", { tileId, status });
-}
 /** Push a NON-FATAL background-subsystem error to the renderer as a toast, so
  *  nothing fails silently (e.g. a stale PTY daemon that breaks hook injection).
  *  Fatal errors still use dialogs. Idempotent + cheap; safe to call pre-window. */
@@ -1125,12 +1115,6 @@ function pushAppError(message: string, source: string): void {
     try { mainWindow.webContents.send("app:error", { message, source } satisfies AppErrorEvent); }
     catch { /* mid-teardown */ }
   }
-}
-/** Push claude's hook-driven turn state (UserPromptSubmit → working, Stop → idle)
- *  to the renderer status bus (bare tile id). This is the deterministic
- *  replacement for the working/idle screen-scrape. */
-function pushTurnState(tileId: string, state: "working" | "idle"): void {
-  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("hcp:turnstate", { tileId, state });
 }
 const hcpPipes = new PipeManager();
 // bare tileId → supervision spec ("all" or a tool list). Set when an agent
@@ -1165,7 +1149,7 @@ const onPtyExit = (tileId: string): void => {
   const bare = toBareId(tileId);
   hcpSubagentReaper.cancel(bare);
   hcpMailbox.forget(toPtyId(tileId));
-  if (hcpSubagents.forget(bare)) pushSubagent(bare, false);
+  hcpStatus.exited(bare);
   hcpForgetTile(tileId); // turns/recorder/pipes/sendSeq/parent/depth/name/supervise/approvals
 };
 
@@ -1307,11 +1291,20 @@ ipcMain.on("ptyFlow", (_e, tileId: string, paused: boolean) => {
   }
 });
 ipcMain.on("ptyWrite", (_e, tileId: string, data: string) => {
-  // Remote ptys relay elsewhere; programmatic writes never take this handler,
-  // so the mark says "a human keystroke on a local pty" — echo skips batching.
+  // Only a person's keystrokes take this handler — programmatic writes go through the
+  // mailbox — so an interrupt key here is the user stopping the agent's turn.
+  hcpStatus.input(toBareId(tileId), data);
+  // Remote ptys relay elsewhere; the mark says "a human keystroke on a local pty" — echo skips batching.
   if (hasRemotePty(tileId)) { writeRemotePty(tileId, data); return; }
   ptyOut.markInput(tileId);
   writePty(tileId, data);
+});
+ipcMain.handle("hcp:status-all", () => hcpStatus.all());
+// What an agent's screen shows, read by the renderer that draws it: the status of an agent
+// whose hooks have not spoken (or that has none). Ignored once they have.
+const SCREEN_STATES = new Set(["idle", "working", "permission", "question", "blocked"]);
+ipcMain.on("agent:screen", (_e, tileId: string, state: ScreenState) => {
+  if (SCREEN_STATES.has(state)) hcpStatus.screen(toBareId(tileId), state);
 });
 ipcMain.on("ptyResize", (_e, tileId: string, cols: number, rows: number) =>
   hasRemotePty(tileId) ? resizeRemotePty(tileId, cols, rows) : resizePty(tileId, cols, rows)
@@ -1738,8 +1731,15 @@ function startPlanReviewBridge(): void {
   startPlanBridge(sock, (req) => {
     const win = mainWindow;
     if (!win || win.isDestroyed()) { req.reply("allow"); return; } // fail-open: no UI
-    planReplies.set(req.requestId, req.reply);
+    // The agent waits on a person: that is its status until the review is answered or dropped.
+    const bare = toBareId(req.tileId);
+    hcpStatus.event(bare, { event: "input.requested", kind: "plan" });
+    planReplies.set(req.requestId, (decision, feedback) => {
+      hcpStatus.event(bare, { event: "input.resolved" });
+      req.reply(decision, feedback);
+    });
     req.onAbort(() => {
+      hcpStatus.event(bare, { event: "input.resolved" });
       planReplies.delete(req.requestId);
       if (mainWindow && !mainWindow.isDestroyed())
         mainWindow.webContents.send("plan-review:abort", req.requestId);
@@ -1831,9 +1831,8 @@ function startHcpControlPlane(): void {
     forgetPipes: (id) => { hcpPipes.forget(id); pushPipe(id, null, false); },
     spawnEdge: (child, parent, connected) => pushSpawn(child, parent, connected),
     setSupervise: (id, spec) => { if (spec) hcpSupervise.set(id, spec); else hcpSupervise.delete(id); },
-    pushWait: (tileId, status) => {
-      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("hcp:wait", { tileId, status });
-    },
+    awaitingApproval: (tileId, waiting) =>
+      hcpStatus.event(tileId, waiting ? { event: "input.requested", kind: "approval" } : { event: "input.resolved" }),
   });
   // Every verb routes through the boot scan first: spawn resolves the agent by id
   // and other verbs read its capabilities, so none may run against a half-set catalog.
@@ -1849,109 +1848,43 @@ function startHcpControlPlane(): void {
     replay: (tileId, opts) =>
       typeof opts.lines === "number" ? hcpRecorder.tail(toPtyId(tileId), opts.lines) : hcpRecorder.since(toPtyId(tileId), opts.since ?? 0),
     offsetOf: (tileId) => hcpRecorder.mark(toPtyId(tileId)),
-    onEvent: function onHookEvent(topic: string, data: unknown): void {
-      // Canonical events (manifest `emit:`) reach today's handlers as their topics.
-      if (topic === AGENT_EVENT_TOPIC) {
-        const evt = parseAgentEvent(data);
-        if (evt) for (const o of legacyTopicsFor(evt)) onHookEvent(o.topic, o.data);
-        return;
-      }
-      if (topic === "subagent") {
-        // SubagentStart/Stop hook: a tile gained/lost an in-flight Task subagent.
-        // Track the per-tile set and push only real busy edges to the renderer so
-        // the tile reads "working" even when its main loop is back at the prompt
-        // (the background-agent case the screen-scrape misses). tileId is bare.
-        const s = (data ?? {}) as { tileId?: string; phase?: string; agentId?: string };
-        if (!s.tileId) return;
-        // The hook reports the PTY id; key the tracker + renderer push + reaper by
-        // BARE (matches the renderer status bus and the onExit `forget`).
-        const tileId = toBareId(s.tileId);
-        const changed =
-          s.phase === "start" ? hcpSubagents.start(tileId, s.agentId ?? "")
-          : s.phase === "stop" ? hcpSubagents.stop(tileId, s.agentId ?? "")
-          : false;
-        if (changed) pushSubagent(tileId, hcpSubagents.busy(tileId));
-        // (Re)arm the lost-edge watchdog while busy; cancel it once the set
-        // drains naturally. Every edge pushes the reap deadline out, so an
-        // active subagent population is never reaped — only a quiet stuck set.
-        if (hcpSubagents.busy(tileId)) hcpSubagentReaper.arm(tileId);
-        else hcpSubagentReaper.cancel(tileId);
-        return;
-      }
-      if (topic === "status") {
-        // UserPromptSubmit hook: a turn STARTED → working (deterministic). The hook
-        // reports the PTY id (`hm:<bare>` = HIVEMIND_TILE); the renderer status bus
-        // keys by the BARE tile id, so normalize before pushing.
-        const s = (data ?? {}) as { tileId?: string; state?: string };
-        if (s.tileId && (s.state === "working" || s.state === "idle")) {
-          pushTurnState(toBareId(s.tileId), s.state);
-          // Same signal gates delivery: hold agent-to-agent messages while this
-          // tile is mid-turn (its TUI would swallow them), release at its prompt.
-          if (s.state === "working") hcpMailbox.setBusy(toPtyId(s.tileId));
-          else hcpMailbox.setIdle(toPtyId(s.tileId));
-        }
-        return;
-      }
-      if (topic === "notification") {
-        // claude's Notification hook: map the type to a "needs you" status and
-        // push it. Stateless here — the renderer auto-clears it when the scrape
-        // shows work resumed. Normalize the pty id → bare for the renderer bus.
-        const n = (data ?? {}) as { tileId?: string; notificationType?: string };
-        if (!n.tileId) return;
-        const status = notifyStatusFor(n.notificationType ?? "");
-        if (status) pushNotify(toBareId(n.tileId), status);
-        return;
-      }
-      if (topic === "agent.reply") {
-        // A remote machine's daemon passes its hooks' replies on as this topic.
-        const r = (data ?? {}) as { tileId?: string; text?: string };
+    status: hcpStatus,
+    onEvent: (method: string, params: unknown): void => {
+      if (method === "agent.reply") {
+        // A remote machine's daemon passes its hooks' replies on as this notification.
+        const r = (params ?? {}) as { tileId?: string; text?: string };
         if (r.tileId && typeof r.text === "string" && r.text) hcpTurns.recordReply(toPtyId(r.tileId), r.text);
         return;
       }
-      if (topic !== "turn") return;
-      const d = (data ?? {}) as { tileId?: string; text?: string };
-      if (!d.tileId) return;
-      // The reply comes from the agent's plugin (`agent.reply`) ahead of the turn end; an
-      // older plugin may still carry it inline here.
-      // Single-delivery ladder: true if this reply was already delivered by a more
-      // specific channel — a blocking agent.read (hive ctl read) took it, OR the
-      // worker authored an explicit agent.report (hive ctl report) this turn. Either way the auto-report banner below
-      // stands down, so the parent isn't handed the same reply twice (the duplicate
-      // would arrive as an unsolicited banner that spawns a spurious extra turn).
-      const deliveredElsewhere = hcpTurns.recordTurn(d.tileId, typeof d.text === "string" && d.text ? d.text : null);
-      // Turn END → idle (hook-driven status). The hook reports the PTY id; the
-      // renderer status bus keys by BARE — normalize (recordTurn above stays on
-      // the pty id, the turn-tracker's key). If a background subagent is still
-      // running, the subagent-busy override re-lifts the tile to "working" — see
-      // the status-bus precedence — so this is safe to push unconditionally.
-      pushTurnState(toBareId(d.tileId), "idle");
-      // Back at its prompt → release one held message (a report / approval that
-      // arrived while this tile was mid-turn and would have been swallowed).
-      hcpMailbox.setIdle(toPtyId(d.tileId));
-      // Arm the watchdog: if the set is still non-empty at turn-end and no further
-      // subagent edge arrives within the grace window, those are lost SubagentStops
-      // (interrupt / error / compaction) — reap them so the tile doesn't read
-      // "working" forever. A real background subagent will keep emitting edges.
-      // Both are keyed by the BARE id (see the subagent branch above); d.tileId is the pty id.
-      if (hcpSubagents.busy(toBareId(d.tileId))) hcpSubagentReaper.arm(toBareId(d.tileId));
+      if (method !== AGENT_EVENT_METHOD) return;
+      const evt = parseAgentEvent(params);
+      if (!evt) return;
+      const bare = toBareId(evt.tileId);
+      const pid = toPtyId(evt.tileId);
+      hcpStatus.event(bare, evt);
+      if (evt.event === "subagent.started" || evt.event === "subagent.stopped" || evt.event === "turn.ended") {
+        // Re-arm the lost-edge watchdog while subagents run; cancel it once they drain.
+        if (hcpStatus.get(bare)?.subagents.length) hcpSubagentReaper.arm(bare);
+        else hcpSubagentReaper.cancel(bare);
+      }
+      // Hold agent-to-agent messages while this tile is mid-turn (its TUI would swallow
+      // them), release one at its prompt.
+      if (evt.event === "turn.started") { hcpMailbox.setBusy(pid); return; }
+      if (evt.event !== "turn.ended") return;
+      // Single-delivery ladder: true if this reply was already delivered by a more specific
+      // channel — a blocking agent.read (hive ctl read) took it, OR the worker authored an
+      // explicit agent.report this turn. Either way the auto-report below stands down, so the
+      // parent isn't handed the same reply twice.
+      const deliveredElsewhere = hcpTurns.recordTurn(pid);
+      hcpMailbox.setIdle(pid);
       // Pipe forwarding: feed this agent's reply into any piped destinations.
-      // Skip if a blocking reader already took it — agent.read is the delivery
-      // channel this turn; the auto-report is only the fallback for when nobody's
-      // reading. (Exotic: a worker fan-piped to several tiles where only one reads
-      // would skip the others too — acceptable; the common auto-report pipe is the
-      // single worker→spawner edge, which IS the reader.)
-      const dests = hcpPipes.dests(toBareId(d.tileId));
+      const dests = hcpPipes.dests(bare);
       if (dests.length === 0 || deliveredElsewhere) return;
-      const reply = (hcpTurns.lastReply(d.tileId) ?? "").trim();
+      const reply = (hcpTurns.lastReply(pid) ?? "").trim();
       if (!reply) return;
-      // Tag the forward with its source so the receiving agent knows which
-      // worker just reported (this is the agent-to-agent "mailbox" delivery —
-      // also what an auto-reporting spawned worker uses to reach its parent).
-      const banner = `\n[hive] from ${hcpLabelOf(toBareId(d.tileId))}:\n${reply}\n`;
-      // Deliver via the mailbox: if the destination agent is mid-turn, typing the
-      // report into its TUI would leave it stranded in the composer, unsubmitted
-      // and unread — so it's held until that agent is back at its prompt. dests are
-      // BARE ids; the pty namespace is what writeToTile takes → convert.
+      // Tag the forward with its source so the receiving agent knows which worker reported.
+      // The mailbox holds it until the destination is back at its prompt.
+      const banner = `\n[hive] from ${hcpLabelOf(bare)}:\n${reply}\n`;
       for (const dst of dests) hcpMailbox.deliver(toPtyId(dst), banner);
     },
   });
