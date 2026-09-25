@@ -107,12 +107,15 @@ function fakeDeps() {
   };
 }
 
-async function capture(resume = composeResume(CTX)) {
-  // Restore transforms scan the user's session stores under $HOME (codex / pi /
-  // droid): point HOME at an empty dir so the snapshot is machine-independent.
+async function capture(make = () => composeResume(CTX)) {
+  // Restore transforms read the user's session stores under $HOME: point HOME at a dir
+  // holding only the one session the restores name, so the snapshot is machine-independent.
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "golden-home-"));
+  fs.mkdirSync(path.join(home, ".claude", "projects", "-repo"), { recursive: true });
+  fs.writeFileSync(path.join(home, ".claude", "projects", "-repo", "sess-1.jsonl"), "{}\n");
   const prevHome = process.env.HOME;
   process.env.HOME = home;
+  const resume = make();
   try {
     const { dispatch } = makeDispatch(fakeDeps());
     const out: Record<string, unknown> = {};
@@ -189,7 +192,7 @@ test("provider golden: spawn/restore/retry transforms, injected files, assets, d
 
 test("provider transforms are order-independent: reversed composition matches the golden outputs", async () => {
   const forward = JSON.parse(JSON.stringify(await capture())) as Record<string, unknown>;
-  const reversed = JSON.parse(JSON.stringify(await capture(composeResumeFrom([...registry()].reverse(), CTX)))) as Record<string, unknown>;
+  const reversed = JSON.parse(JSON.stringify(await capture(() => composeResumeFrom([...registry()].reverse(), CTX)))) as Record<string, unknown>;
   for (const key of Object.keys(forward)) {
     const f = forward[key] as Record<string, unknown>, r = reversed[key] as Record<string, unknown>;
     if (f && typeof f === "object") for (const sub of Object.keys(f)) assert.deepEqual(r[sub], f[sub], `order-dependent output at ${key}.${sub} — a provider transform touched a spec it does not own`);

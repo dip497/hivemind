@@ -218,6 +218,7 @@ session:
       bound: --session-id
     fallback:
     - --continue
+    exists: '{home}/.claude/projects/*/{id}.jsonl'
 hooks:
   arg: --settings
   template: '{"hooks":{events}}'

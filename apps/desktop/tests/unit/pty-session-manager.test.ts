@@ -220,7 +220,7 @@ test("kill before pty onExit: no orphan snapshot resurrection, no disposed-term 
   assert.equal(saved, undefined, "snapshot must not be resurrected post-kill");
 });
 
-test("restore retry: --resume failure output respawns with --session-id, no client exit", async () => {
+test("restore retry: a --resume that fails fast respawns with --session-id, no client exit", async () => {
   const made: FakePty[] = [];
   const mgr = new SessionManager(
     (spec) => { const p = new FakePty(spec); made.push(p); return p; },
@@ -257,13 +257,14 @@ test("restore retry: --resume failure output respawns with --session-id, no clie
   );
   // First spawn used --resume.
   assert.deepEqual(made[0]!.spec.args, ["--resume", "u-123"]);
-  // claude prints the resume failure.
+  // The agent could not resume and exits at once; what it printed is not read.
   made[0]!.emit("\x1b[31mNo conversation found with session ID: u-123\x1b[0m\r\n");
+  assert.equal(made.length, 1, "output alone never triggers a retry");
+  made[0]!.exit(1);
   await new Promise((r) => setTimeout(r, 5));
-  // A SECOND pty was spawned with --session-id (same uuid), old one killed.
+  // A SECOND pty was spawned with --session-id (same uuid).
   assert.equal(made.length, 2, "respawned once");
   assert.deepEqual(made[1]!.spec.args, ["--session-id", "u-123"]);
-  assert.equal(made[0]!.killed, true, "old --resume pty killed");
   // Client must NOT see an exit — the tile stays live.
   assert.equal(clientExited, false);
 });
@@ -425,16 +426,3 @@ test("restore retry watch retires after 512 KB of output (bytes, not time) — n
   assert.equal(created.length, 1, "past the byte bound the error is a normal message, not a resume failure");
 });
 
-test("restore retry still fires on a slow start — the bound is output volume, not wall clock", async () => {
-  const { mgr, created, spec } = makeManager({
-    transformSpecOnRestore: (s) => ({ ...s, args: ["--resume", "u-1"] }),
-    restoreRetryTransform: (s) => ({ ...s, args: ["--session-id", "u-1"] }),
-    restoreRetryMs: 1, // exit-path window is effectively closed; only the output watch can retry
-  });
-  mgr.restoreSnapshot({ id: "t", spec, replay: "", savedAt: Date.now() });
-  await mgr.createOrAttach("t", spec, { onData: () => {}, onExit: () => {} });
-  await new Promise((r) => setTimeout(r, 15)); // "slow start": nothing printed for > 6× restoreRetryMs
-  created[0]!.emit("No conversation found with session ID: u-1\r\n");
-  assert.equal(created.length, 2, "first output carrying the error still triggers the retry");
-  assert.deepEqual(created[1]!.spec.args, ["--session-id", "u-1"]);
-});

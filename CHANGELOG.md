@@ -12,6 +12,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - Agents and terminals started while a view other than the canvas is showing now run right away. They used to wait, with no status, until a view showed them — including workers another agent started with `hive ctl spawn`.
 - Agent manifests can map a native hook to a canonical event with `emit:` (turn started/ended, input requested/resolved, subagents, compacting) instead of naming a script. The vocabulary and how it becomes a status are specified in `spec/`, with shared test cases in `conformance/`.
 - **Breaking:** agent plugins report through their own scripts and the new agent SDK instead of hook scripts built into the app, and the app no longer reads agent transcripts. Update the Claude, Droid, Kiro and Pi plugins to their latest versions; until then `hive ctl read` gets no reply from them.
+- A restored agent whose session is gone starts fresh under the same id straight away, instead of trying to resume it and failing first. An agent's manifest says where its sessions are kept (`session.resume.exists`).
 
 ## [2026.9.5] — 2026-09-22
 

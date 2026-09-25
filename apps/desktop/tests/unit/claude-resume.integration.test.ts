@@ -36,7 +36,7 @@ const pathsFor = (deps: Record<string, string | undefined>): RuntimePaths => ({
   private: "/x/agents/claude",
   execPath: deps.execPath!,
   tileSessionsDir: deps.tileSessionsDir!,
-  home: "/home/u",
+  home: deps.home ?? "/home/u",
   ...(deps.hcpSock ? { hcpSock: deps.hcpSock, hcpToken: "tok" } : {}),
   hooks: hookPathsFor(claudeDef, { ...deps, execPath: deps.execPath!, tileSessionsDir: deps.tileSessionsDir! }),
 });
@@ -130,10 +130,10 @@ class FakeClaude implements ManagedPty {
     // real claude does on SessionStart — records tile → live session id.
     spawnSync("sh", ["-c", cmd], { input: JSON.stringify({ session_id: sid }) });
   }
-  private markerExists(uuid: string) { return existsSync(path.join(this.ctx.markerDir, uuid)); }
+  private markerExists(uuid: string) { return existsSync(path.join(this.ctx.markerDir, `${uuid}.jsonl`)); }
   private createMarker(uuid: string) {
     mkdirSync(this.ctx.markerDir, { recursive: true });
-    writeFileSync(path.join(this.ctx.markerDir, uuid), "jsonl");
+    writeFileSync(path.join(this.ctx.markerDir, `${uuid}.jsonl`), "jsonl");
   }
   private run(): void {
     const a = this.args();
@@ -142,7 +142,7 @@ class FakeClaude implements ManagedPty {
     if (rIdx >= 0) {
       const uuid = a[rIdx + 1]!;
       if (!this.markerExists(uuid)) {
-        // exactly what real claude prints → triggers the daemon's retry
+        // what real claude prints, then exits: the fast failure is what the daemon retries on
         this.dataCb?.(`No conversation found with session ID: ${uuid}\r\n`);
         this.exitCb?.(1, undefined);
         return;
@@ -184,13 +184,15 @@ function setup() {
   const dir = mkdtempSync(path.join(tmpdir(), "hm-resume-"));
   const tileSessionsDir = path.join(dir, "tile-sessions");
   const trackerPath = path.join(dir, "tile-session-tracker.cjs");
-  const markerDir = path.join(dir, "markers");
+  // Where claude keeps a session, as its manifest declares: {home}/.claude/projects/<slug>/<id>.jsonl.
+  const markerDir = path.join(dir, ".claude", "projects", "-repo");
   writeFileSync(trackerPath, trackerSource());
   const transforms = makeClaudeResumeTransforms({
     trackerPath,
     tileSessionsDir,
     legacyMapFile: path.join(dir, "tile-sessions.json"),
     execPath: process.execPath,
+    home: dir,
   });
   const snaps = new Map<string, SessionSnapshot>();
   const ctx: Ctx = { markerDir };
@@ -270,7 +272,7 @@ test("multi-frame: /resume-old + new session both survive a daemon restart", asy
   }
 });
 
-test("restore of a session whose JSONL vanished retries with --session-id (no tile crash)", async () => {
+test("restore of a session whose JSONL vanished starts fresh under the same id, without a failed spawn", async () => {
   const { tileSessionsDir, markerDir, snaps, makeMgr } = setup();
   try {
     const { mgr, created } = makeMgr();
@@ -281,17 +283,17 @@ test("restore of a session whose JSONL vanished retries with --session-id (no ti
     await mgr.flushAll();
 
     // The session's JSONL disappears (claude GC, repo moved, etc.).
-    unlinkSync(path.join(markerDir, uuidC!));
+    unlinkSync(path.join(markerDir, `${uuidC!}.jsonl`));
 
     const { mgr: mgr2, created: created2 } = makeMgr();
     mgr2.restoreSnapshot(snaps.get("hm:tile-C")!);
     await mgr2.createOrAttach("hm:tile-C", liveSpec("/repoC"), client());
     await delay(150);
 
-    // First restore attempt: --resume uuidC → "No conversation found" → exit 1.
-    assert.equal(argVal(created2[0], "--resume"), uuidC, "first attempt resumes the tracked id");
-    // Retry transform recreates the session deterministically with --session-id.
-    assert.equal(argVal(created2[1], "--session-id"), uuidC, "retry recreates the session with the same id");
+    // The store says the session is gone, so the tile is not handed a resume it would fail.
+    assert.equal(created2.length, 1, "one spawn, no failed attempt");
+    assert.equal(argVal(created2[0], "--resume"), undefined);
+    assert.equal(argVal(created2[0], "--session-id"), uuidC, "recreated with the same id");
     assert.ok(mgr2.has("hm:tile-C"), "tile survived the missing-session restore");
   } finally {
     rmSync(setupDirOf(tileSessionsDir), { recursive: true, force: true });
@@ -304,8 +306,11 @@ function setupDirOf(tileSessionsDir: string): string {
 }
 
 test("a saved spec that repeats its resume restores with it once", () => {
-  const t = makeClaudeResumeTransforms({ tileSessionsDir: "/x/none", execPath: "/x/node" });
+  const home = mkdtempSync(path.join(tmpdir(), "hm-home-"));
   const id = "30e61ded-dc21-4f87-97e6-a9553fdf9930";
+  mkdirSync(path.join(home, ".claude", "projects", "-w"), { recursive: true });
+  writeFileSync(path.join(home, ".claude", "projects", "-w", `${id}.jsonl`), "{}");
+  const t = makeClaudeResumeTransforms({ tileSessionsDir: "/x/none", execPath: "/x/node", home });
   const out = t.transformSpecOnRestore!(
     { cwd: "/w", cmd: "claude", args: ["--resume", id, "--resume", id, "--resume", id, "--permission-mode", "auto"], cols: 80, rows: 24 },
     "hm:tile-x",

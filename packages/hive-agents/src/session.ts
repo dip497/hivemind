@@ -162,3 +162,24 @@ export function resumeFromManifest(def: AgentProviderDef, root?: string): Provid
     },
   };
 }
+
+/**
+ * Whether the session `id` is where the manifest says sessions are kept. One `*` segment
+ * stands for a directory whose name the host does not know. Only a store that can be read
+ * and does not have it says no: anything unreadable counts as there, so the agent decides.
+ */
+export function sessionExists(pattern: string, id: string, home: string = homedir()): boolean {
+  if (!/^[\w.-]{1,128}$/.test(id)) return false;
+  const full = pattern.replace("{home}", home).replace("{id}", id);
+  const star = full.indexOf("/*/");
+  try {
+    if (star < 0) return statSync(full).isFile();
+    const dir = full.slice(0, star);
+    const rest = full.slice(star + 3);
+    const names = readdirSync(dir);
+    if (names.length > MAX_FILES) return true;
+    return names.some((n) => { try { return statSync(join(dir, n, rest)).isFile(); } catch { return false; } });
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code !== "ENOENT";
+  }
+}

@@ -132,6 +132,10 @@ export interface AgentSession {
     };
     /** Nothing known: a best-effort argument rather than a fresh session. */
     fallback?: string[];
+    /** Where a session is kept, `{id}` for its id and one `*` for a directory whose name the
+     *  host does not know (a whole path segment). A session not there is not
+     *  resumed; the tile starts fresh under the same id instead. */
+    exists?: string;
     /** Where the resume goes: `before` the tile's own arguments, `beforeLaunch` after them
      *  but ahead of what the launch adds, or last of all (the default). */
     position?: "before" | "beforeLaunch" | "after";

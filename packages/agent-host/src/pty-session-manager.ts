@@ -118,15 +118,6 @@ interface Session {
   spawnedAt: number;
   /** Whether the manager already exhausted its one retry for this session. */
   retried?: boolean;
-  /** Small rolling buffer of recent output for a restored session spawned with
-   *  `--resume`, scanned for claude's "No conversation found" error so the
-   *  retry fires the instant the error prints — not when the PTY finally exits
-   *  (a slow SessionEnd hook can delay exit well past restoreRetryMs). */
-  retryWatch?: string;
-  /** Output seen while `retryWatch` is active; the watch retires once this
-   *  passes RETRY_WATCH_MAX_BYTES (the resume error prints at startup, so a
-   *  session that has emitted that much has clearly come up). */
-  retryWatchBytes: number;
   /** Latest OSC 0/2 window title the process set (claude's live "session name"),
    *  captured from the headless term. SerializeAddon does NOT serialize the title,
    *  so a reattach's replay would otherwise lose it — we re-emit it (see
@@ -144,16 +135,8 @@ interface Session {
   ringChars: number;
 }
 
-// claude's resume-failure message (stable across recent versions). Matched
-// against a restored session's output to fire the fresh-restart retry the
-// instant it prints. Loose enough to survive minor wording changes.
-const RESUME_FAIL_RE = /No conversation found with session ID|session ID:\s*\S+\s*(?:not found|does not exist)/i;
 
 const DEFAULT_SCROLLBACK = 5000; // lines of replay scrollback per session
-// Stop scanning restored-session output for the resume-failure message after
-// this much output. Bounded by BYTES, not time: a slow start on a loaded box
-// must not retire the watch before claude has printed anything.
-const RETRY_WATCH_MAX_BYTES = 512 * 1024;
 
 export interface SessionManagerOptions {
   /** Scrollback lines kept in each session's headless xterm (replay capacity). */
@@ -353,13 +336,6 @@ export class SessionManager {
       // Seed the title from the snapshot so a reboot-restored session re-emits
       // the agent name on its first attach (before the fresh claude re-sets it).
       lastTitle: frozenSnap?.title,
-      // Watch output for a resume failure only when this is a restored session
-      // spawned with --resume and a retry transform exists.
-      retryWatch:
-        frozenSnap && this.restoreRetryTransform && (effectiveSpec.args ?? []).includes("--resume")
-          ? ""
-          : undefined,
-      retryWatchBytes: 0,
     };
     this.sessions.set(id, session);
     // Capture the OSC 0/2 window title the headless term parses. SerializeAddon
@@ -374,23 +350,6 @@ export class SessionManager {
       session.dirty = true;
       this.scheduleSnapshot(session);
       this.emit(session, d);
-      // Output-driven resume retry: scan a small rolling buffer for claude's
-      // "No conversation found" error. Firing here (not on PTY exit) is robust
-      // to a slow SessionEnd hook that delays the exit past restoreRetryMs.
-      // The watch is BOUNDED by output volume: the resume error is among the
-      // first things claude prints, so once a restored session has emitted
-      // RETRY_WATCH_MAX_BYTES it has clearly come up — stop paying a 4 KB
-      // concat + regex on every chunk for the rest of the session's life.
-      if (session.retryWatch !== undefined && !session.retried) {
-        session.retryWatch = (session.retryWatch + d).slice(-4096);
-        session.retryWatchBytes += d.length;
-        if (RESUME_FAIL_RE.test(session.retryWatch)) {
-          session.retryWatch = undefined;
-          if (this.tryRestoreRetry(session)) return;
-        } else if (session.retryWatchBytes > RETRY_WATCH_MAX_BYTES) {
-          session.retryWatch = undefined;
-        }
-      }
     });
     p.onExit((code, signal) => {
       // Ignore a STALE pty's late exit: tryRestoreRetry kills this pty and
@@ -400,9 +359,9 @@ export class SessionManager {
       // vanishes". (Caught by claude-resume.integration.test.ts.)
       if (session.pty !== p) return;
       session.exited = true;
-      // Timing fallback (in case the error string changed / wasn't captured):
-      // a restored session that died non-zero within restoreRetryMs almost
-      // certainly hit `--resume` with a missing JSONL. Retry once.
+      // A restored session that failed within restoreRetryMs could not resume what it was
+      // given (the store check can miss, e.g. an agent pointed at another config dir). Retry
+      // once, fresh. Observed, not guessed from its output.
       const sinceSpawn = Date.now() - session.spawnedAt;
       if (code !== 0 && sinceSpawn < this.restoreRetryMs && this.tryRestoreRetry(session)) return;
       for (const c of session.clients) c.onExit(code, signal);
@@ -435,15 +394,12 @@ export class SessionManager {
     const retrySpec = this.restoreRetryTransform(session.spec);
     if (!retrySpec) return false;
     session.retried = true;
-    // Kill the old PTY if it's still alive (output-driven path fires before
-    // the process exits — e.g. claude printed the error but a SessionEnd hook
-    // is still running). Ignore errors on an already-dead pty.
     try { session.pty.kill(); } catch { /* already gone */ }
     // One-shot banner so the user sees history is gone (the Mosh-style replay
     // would otherwise show the old transcript + a blank prompt — invisible
     // amnesia).
     const banner =
-      "\r\n\x1b[33m[hivemind] previous claude session not found — starting fresh with same id\x1b[0m\r\n";
+      "\r\n\x1b[33m[hivemind] previous session could not be resumed — starting fresh with the same id\x1b[0m\r\n";
     session.term.write(banner);
     this.emit(session, banner);
     this.respawnInPlace(session, retrySpec);

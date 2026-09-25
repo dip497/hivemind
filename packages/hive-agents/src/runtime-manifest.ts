@@ -8,7 +8,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { findSession } from "./session.js";
+import { findSession, sessionExists } from "./session.js";
 import { readTrackedSession } from "./tile-session-store.js";
 import { hookCommand, renderHookDocument } from "./hooks.js";
 import { EVENT_HOOK, isAgentEventName } from "./events.js";
@@ -282,29 +282,41 @@ export function transformsFor(
     }
     return { ...spec, args: kept };
   };
+  const exists = def.session?.resume?.exists;
+  const retry = (spec: SpawnSpec): SpawnSpec | null => {
+    // A session that has since vanished must not kill the tile: abandon the resume. The
+    // tile keeps its identity though — an agent that binds its session id binds the same
+    // one again, so the next start continues the tile rather than becoming a stranger.
+    if (!marker || !isThisAgent(spec)) return null;
+    const args = spec.args ?? [];
+    const i = args.indexOf(marker) >= 0 ? args.indexOf(marker) : (fallbackMarker ? args.indexOf(fallbackMarker) : -1);
+    if (i < 0) return null;
+    const carried = i + 1 < args.length && !args[i + 1]!.startsWith("-") ? args[i + 1] : undefined;
+    const rest = [...args.slice(0, i), ...args.slice(i + (carried ? 2 : 1))];
+    const bind = def.session?.bind;
+    return {
+      ...spec,
+      args: carried && bind ? [...bind.args.map((t) => t.replace(/\{newId\}/g, carried)), ...rest] : rest,
+    };
+  };
+  /** The session a resume names, if the manifest says where sessions are kept and it is not there. */
+  const vanished = (spec: SpawnSpec): boolean => {
+    if (!exists || !marker) return false;
+    const args = spec.args ?? [];
+    const i = args.indexOf(marker);
+    const id = i >= 0 ? args[i + 1] : undefined;
+    return !!id && !id.startsWith("-") && !sessionExists(exists, id, paths.home);
+  };
   return {
     transformSpecOnSpawn: (spec, tileId) => run(spec, tileId, "spawn"),
     transformSpecOnRestore: (saved, tileId) => {
       const spec = onceResumed(saved);
-      return (spec.args ?? []).includes(marker ?? "\0")
+      const out = (spec.args ?? []).includes(marker ?? "\0")
         ? run(spec, tileId, "spawn") // already resuming: keep its own session, still wire it up
         : run(spec, tileId, "restore");
+      // Known to be gone: start fresh under the same id now, rather than fail and retry.
+      return vanished(out) ? retry(out) ?? out : out;
     },
-    restoreRetryTransform: (spec) => {
-      // A session that has since vanished must not kill the tile: abandon the resume. The
-      // tile keeps its identity though — an agent that binds its session id binds the same
-      // one again, so the next start continues the tile rather than becoming a stranger.
-      if (!marker || !isThisAgent(spec)) return null;
-      const args = spec.args ?? [];
-      const i = args.indexOf(marker) >= 0 ? args.indexOf(marker) : (fallbackMarker ? args.indexOf(fallbackMarker) : -1);
-      if (i < 0) return null;
-      const carried = i + 1 < args.length && !args[i + 1]!.startsWith("-") ? args[i + 1] : undefined;
-      const rest = [...args.slice(0, i), ...args.slice(i + (carried ? 2 : 1))];
-      const bind = def.session?.bind;
-      return {
-        ...spec,
-        args: carried && bind ? [...bind.args.map((t) => t.replace(/\{newId\}/g, carried)), ...rest] : rest,
-      };
-    },
+    restoreRetryTransform: retry,
   };
 }
