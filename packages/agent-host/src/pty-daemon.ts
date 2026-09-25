@@ -26,7 +26,7 @@ import {
 } from "./session-snapshot-store.js";
 import { applyInitialPrompt, stripInitialPrompt } from "./initial-prompt.js";
 import { sanitizeShellEnv } from "./shell-env.js";
-import { AGENT_EVENT_METHOD, agentForCmd, composeResume, envToUnset, evictTrackedSession, parseAgentEvent, prepareProviders, trackerSource, setCatalog, type AgentEvent } from "@hivemind/agents/node";
+import { AGENT_EVENT_METHOD, agentForCmd, agentTitle, composeResume, envToUnset, evictTrackedSession, parseAgentEvent, prepareProviders, trackerSource, setCatalog, type AgentEvent } from "@hivemind/agents/node";
 import { resolveWindowsSpawn } from "@hivemind/agents/discover";
 import { agentEventHookSource } from "./hooks/agent-event-hook-source.js";
 import { SDK_FILE, sdkSource } from "@hivemind/agent-sdk";
@@ -306,8 +306,20 @@ const screens = new ScreenWatcher({
   report: (id, state) => { for (const push of eventViewers) push({ t: "event", topic: "agent.screen", data: { tileId: id, state } }); },
 });
 setInterval(() => screens.tick(), 1200).unref();
+// Every agent session's title as the agent's manifest reads it ("" = nothing worth a name).
+// Viewers take it as `agent.title`, and one that connects is sent what there is.
+const titles = new Map<string, string>();
+function reportTitle(id: string, raw: string): void {
+  const def = agentForCmd(manager.commandOf(id) ?? "");
+  if (!def) return;
+  const title = agentTitle(def, raw);
+  if ((titles.get(id) ?? "") === title) return;
+  if (title) titles.set(id, title); else titles.delete(id);
+  for (const push of eventViewers) push({ t: "event", topic: "agent.title", data: { tileId: id, title } });
+}
 const manager = new SessionManager(factory, {
   onOutput: (id) => screens.output(id),
+  onTitle: (id, raw) => reportTitle(id, raw),
   idleMs: 8000, // exit 8s after the last session is killed/exits — no orphans
   onEmpty: () => {
     try {
@@ -545,7 +557,11 @@ const server = net.createServer((sock) => {
         break;
       case "hello":
         canResync = Array.isArray(msg.caps) && msg.caps.includes("resync");
-        if (Array.isArray(msg.caps) && msg.caps.includes("events")) eventViewers.add(send);
+        if (Array.isArray(msg.caps) && msg.caps.includes("events")) {
+          eventViewers.add(send);
+          for (const [tileId, title] of titles) send({ t: "event", topic: "agent.title", data: { tileId, title } });
+          for (const [tileId, state] of screens.current()) send({ t: "event", topic: "agent.screen", data: { tileId, state } });
+        }
         break;
       case "shutdown":
         // Stop listening first so the replacement can bind while we flush snapshots.

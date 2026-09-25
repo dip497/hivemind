@@ -53,6 +53,9 @@ export class ScreenWatcher {
 
   output(id: string): void { this.dirty.add(id); }
 
+  /** Every session's last reported reading, for a viewer that just connected. */
+  current(): Array<[string, TileStatus]> { return [...this.seen].map(([id, s]) => [id, s.status]); }
+
   forget(id: string): void { this.dirty.delete(id); this.seen.delete(id); }
 
   tick(): void {

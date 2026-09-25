@@ -16,6 +16,7 @@
  * the tile — see tile-host.tsx) and by every view via `TileSlot`.
  */
 import type { FrameState, TileInstance } from "../canvas-persistence";
+import { tileName } from "../tile-name";
 import { defaultShell } from "../canvas-persistence";
 import { identifyAgent } from "../agent-state";
 import type { TileKind } from "../tile-kinds";
@@ -33,7 +34,6 @@ export type TerminalTileData = {
   label?: string;
   name?: string;
   onRename?: (id: string, name: string) => void;
-  onAgentTitle?: (id: string, title: string) => void;
   onOpenInBrowser?: (url: string) => void;
   onOpenInEditor?: (path: string) => void;
   onClose?: () => void;
@@ -141,7 +141,8 @@ export interface TileSurfaceCtx {
   closeTabInTile: (tileId: string, file: string) => void;
   closeTile: (id: string) => void;
   renameTile: (id: string, name: string) => void;
-  setAgentTitle: (id: string, title: string) => void;
+  /** What each agent tile's agent says it is doing (the host's title). */
+  agentTitles: Record<string, string>;
   /** Toggle a tile's pinned state. `rect` is the tile's SCREEN rect (top-left +
    *  size) captured from its DOM at click time (ignored when unpinning). */
   onTogglePin: (id: string, rect: PinRect) => void;
@@ -167,9 +168,9 @@ export function createTileSurfaceBuilder(): (ctx: TileSurfaceCtx) => TileSurface
         tile, ctx.repoPath, ctx.root, ctx.cwd, ctx.frameOf[tile.id],
         owner?.worktreePath, owner?.workspacePath, owner?.workspaceRoot,
         ctx.pinnedIds.has(tile.id), ctx.editorTabs[tile.id],
-        ctx.browserOpenReqs[tile.id], ctx.tileNames[tile.id],
+        ctx.browserOpenReqs[tile.id], ctx.tileNames[tile.id], ctx.agentTitles[tile.id],
         ctx.openFileInTile, ctx.openUrlInBrowser, ctx.openFileFromTerminal,
-        ctx.closeTabInTile, ctx.closeTile, ctx.renameTile, ctx.setAgentTitle, ctx.onTogglePin,
+        ctx.closeTabInTile, ctx.closeTile, ctx.renameTile, ctx.onTogglePin,
       ];
       const cached = previous.get(tile.id);
       const entry = cached && inputs.every((value, i) => Object.is(value, cached.inputs[i]))
@@ -191,8 +192,8 @@ export function createTileSurfaceBuilder(): (ctx: TileSurfaceCtx) => TileSurface
  */
 export function buildTileSurfaces(ctx: TileSurfaceCtx): TileSurface[] {
   const {
-    repoPath, root, cwd, tiles, frames, frameOf, pinnedIds, editorTabs, browserOpenReqs, tileNames,
-    openFileInTile, openUrlInBrowser, openFileFromTerminal, closeTabInTile, closeTile, renameTile, setAgentTitle,
+    repoPath, root, cwd, tiles, frames, frameOf, pinnedIds, editorTabs, browserOpenReqs, tileNames, agentTitles,
+    openFileInTile, openUrlInBrowser, openFileFromTerminal, closeTabInTile, closeTile, renameTile,
     onTogglePin,
   } = ctx;
   const out: TileSurface[] = [];
@@ -272,13 +273,10 @@ export function buildTileSurfaces(ctx: TileSurfaceCtx): TileSurface[] {
           id: t.id, kind: t.kind, type: "terminal",
           data: {
             tileId: t.id, cwd: effCwd, cmd, args, label: t.label, ...(t.session ? { session: t.session } : {}),
-            // NOTE: the live agent OSC title is deliberately NOT used here. It
-            // updates ~every 600ms while an agent streams; feeding it into tile
-            // data re-rendered every host — cursor-flicker + focus loss. Live
-            // titles show in the Layers panel (its own memo) and the status line.
-            name: tileNames[t.id] ?? autoNameFromCmd(cmd),
+            // The host reports a title only when what the agent says it is doing changes,
+            // so this rebuilds one tile's body now and then, not on every spinner frame.
+            name: tileName(tileNames, agentTitles, t) ?? autoNameFromCmd(cmd),
             onRename: renameTile,
-            onAgentTitle: setAgentTitle,
             onOpenInBrowser: (url: string) => openUrlInBrowser(t.id, url),
             onOpenInEditor: (path: string) => openFileFromTerminal(t.id, path),
             onClose: () => closeTile(t.id),

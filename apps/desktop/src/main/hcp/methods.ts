@@ -14,7 +14,7 @@ import type { TurnTracker } from "./turn-tracker.js";
 import type { OutputRecorder } from "./output-recorder.js";
 import { toPtyId as ptyId, toBareId as bareOf } from "../../shared/tile-id.js";
 import { setName, labelOf } from "./names.js";
-import { agentById, agentOption, spawnableAgents, workerAgents, type AgentProviderDef } from "@hivemind/agents";
+import { agentById, agentOption, cleanName, spawnableAgents, workerAgents, type AgentProviderDef } from "@hivemind/agents";
 import { BROWSER_TOOL_ID, tileKindAvailability } from "@hivemind/core/tool-plugins";
 import type { ToolsSettings } from "@hivemind/core/settings-schema";
 import { SUBMIT_DELAY_MS } from "../../shared/agent-io.js";
@@ -278,9 +278,9 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     // only fires while permissions are not skipped).
     const mode = opts.mode != null ? opts.mode : sup ? undefined : agentOption(def, "mode")?.unattended;
     // A spawner-chosen display name ("reviewer", "test-writer") — becomes the tile
-    // label and tags every message this worker sends back. Bounded so a worker
-    // can't smuggle a whole paragraph (or ANSI) into the parent's terminal banner.
-    const name = typeof opts.name === "string" ? opts.name.replace(/[\p{C}]/gu, "").trim().slice(0, 40) : "";
+    // name and tags every message this worker sends back. One printable line, capped like every
+    // name, so a worker can't smuggle a paragraph (or ANSI) into the parent's terminal banner.
+    const name = typeof opts.name === "string" ? cleanName(opts.name) : "";
     const res = (await deps.callRenderer(
       "tile.spawn_agent",
       // `background` = a silent worker (report:false → gathered in bulk, e.g. a

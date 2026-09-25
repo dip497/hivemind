@@ -16,6 +16,8 @@ export interface SessionStatus extends AgentStatus {
   source: StatusSource | null;
   /** When `state` last changed (ms since epoch). */
   since: number;
+  /** What the agent says it is doing, from its window title; absent when it says nothing. */
+  title?: string;
 }
 
 export interface StatusChange {
@@ -84,10 +86,17 @@ export class StatusStore {
     this.apply(tileId, "hooks", (s) => foldStatus(s, { fact: "interrupt" }));
   }
 
-  /** The process ended. */
+  /** The process ended: nothing it was doing is still true. */
   exited(tileId: string): void {
     const cur = this.sessions.get(tileId);
-    this.apply(tileId, cur?.source ?? null, (s) => foldStatus(s, { fact: "exited" }));
+    this.apply(tileId, cur?.source ?? null, (s) => ({ ...foldStatus(s, { fact: "exited" }), title: undefined }));
+  }
+
+  /** The agent's title changed ("" when it says nothing worth a name). Changes no state. */
+  title(tileId: string, title: string): void {
+    const cur = this.sessions.get(tileId);
+    if (cur?.state === "exited") return;
+    this.apply(tileId, cur?.source ?? null, (s) => ({ ...s, title: title || undefined }));
   }
 
   forget(tileId: string): void { this.sessions.delete(tileId); }
@@ -110,7 +119,7 @@ export class StatusStore {
 }
 
 function sameStatus(a: SessionStatus, b: SessionStatus): boolean {
-  return a.state === b.state && a.kind === b.kind && a.source === b.source && a.background === b.background
+  return a.state === b.state && a.kind === b.kind && a.source === b.source && a.background === b.background && a.title === b.title
     && a.compacting === b.compacting && a.subagents.length === b.subagents.length && a.subagents.every((x, i) => x === b.subagents[i]);
 }
 

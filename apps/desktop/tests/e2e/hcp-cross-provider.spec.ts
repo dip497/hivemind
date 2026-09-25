@@ -114,6 +114,13 @@ test("spawn a claude worker and read its reply: --settings hooks → reply → t
   expect(second.json.text).toBe(`id=claude tile=hm:${orchestrator}`);
 });
 
+test("an unnamed tile is called by what its agent says it is doing — the host's reading of its title", async () => {
+  const r = hive(["ctl", "spawn", "--agent", "claude", "--prompt", "echo titled", "--json"]);
+  expect(r.code, r.stderr).toBe(0);
+  const nameOf = () => hive(["ctl", "list", "--json"]).json.frames.flatMap((f: any) => f.tiles).find((t: any) => t.tileId === r.json.tileId)?.name;
+  await expect.poll(nameOf, { timeout: 20_000 }).toBe("echo titled");
+});
+
 test("fanout over droid workers from the claude orchestrator: hooks.json injection + typed prompt + gather", async () => {
   const r = hive(
     ["ctl", "workflow", "--shape", "fanout", "--agent", "droid", "--items", "alpha || beta", "--prompt", "echo reviewed {item} by $HIVE_AGENT_ID", "--timeout", "60000", "--close", "--json"],

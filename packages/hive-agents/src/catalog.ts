@@ -116,6 +116,21 @@ export function taskFromTitle(def: AgentProviderDef | undefined, title: string):
   return title;
 }
 
+/** How long a tile's name may be, whoever gives it: a person, a spawner or the agent. */
+export const NAME_MAX = 80;
+
+/** A name as one printable line: whitespace collapsed, control characters dropped, capped. */
+export function cleanName(raw: string): string {
+  return Array.from((raw ?? "").replace(/\s+/g, " ")).filter((ch) => ch >= " " && ch !== "\x7f").join("").trim().slice(0, NAME_MAX).trim();
+}
+
+/** What an agent's window title (OSC 0/2) says it is doing, or "" when it says nothing a tile
+ *  should be called by. A leading status glyph (a spinner, a bullet) is the agent's own status
+ *  display, not part of the name; the manifest's `titles` pick the task out of the rest. */
+export function agentTitle(def: AgentProviderDef | undefined, raw: string): string {
+  return taskFromTitle(def, cleanName(raw).replace(/^[\s·•∙‣⁃*✶✱✲✳✴✻✽✦✧★☆●○◦◌◆◇]+/u, ""));
+}
+
 export function spawnLabelFor(def: AgentProviderDef, n: number, opts: SpawnOptions): string {
   return def.spawnLabel ? def.spawnLabel(n, opts) : `${def.label} #${n}`;
 }

@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import {
   identifyAgent,
   detectTileStatus,
-  normalizeAgentTitle,
 } from "../../src/renderer/src/agent-state.ts";
 import { stabilizeScreenStatus, SCREEN_WORKING_HOLD_MS } from "@hivemind/agent-host/screen-status";
 import { useAuthoredAgents } from "./authored-agents.ts";
@@ -16,15 +15,6 @@ const detectAgentState = (agent: string, screen: string): string => {
   const t = detectTileStatus(agent, screen);
   return t === "permission" || t === "question" ? "blocked" : t;
 };
-
-test("normalizeAgentTitle: trims, strips control chars, collapses whitespace, caps length", () => {
-  assert.equal(normalizeAgentTitle("  Refactor auth  "), "Refactor auth");
-  assert.equal(normalizeAgentTitle("Fixing\tthe\nflaky   test"), "Fixing the flaky test");
-  assert.equal(normalizeAgentTitle("\x1b]0;hi\x07"), "]0;hi"); // C0 escape byte dropped, payload kept
-  assert.equal(normalizeAgentTitle(""), "");
-  assert.equal(normalizeAgentTitle("   "), "");
-  assert.equal(normalizeAgentTitle("x".repeat(120)).length, 80);
-});
 
 test("stabilizeScreenStatus: holds a lone idle blip, releases after the window", () => {
   const lw = { t: null as number | null };

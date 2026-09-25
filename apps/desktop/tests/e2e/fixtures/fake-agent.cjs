@@ -85,6 +85,8 @@ function positionalPrompt() {
 // ── one turn ──────────────────────────────────────────────────────────────────
 function turn(prompt) {
   process.stdout.write(`\n[${provider}] ▶ ${prompt}\n`);
+  // Like claude: the window title says what the turn is doing, behind a status glyph.
+  process.stdout.write(`\x1b]0;✳ ${prompt}\x07`);
   fire("UserPromptSubmit", { session_id: sessionId, prompt });
   const r = spawnSync("bash", ["-c", prompt], { encoding: "utf8", env: process.env, timeout: 60_000 });
   const reply = ((r.stdout || "") + (r.status ? `\n[exit ${r.status}] ${r.stderr || ""}` : "")).trim() || "(no output)";

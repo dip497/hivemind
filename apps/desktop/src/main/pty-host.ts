@@ -4,7 +4,7 @@
  * headless screen per session, and reads agents' screens there for their fallback status.
  */
 import * as pty from "@lydell/node-pty";
-import { agentForCmd, envToUnset } from "@hivemind/agents";
+import { agentForCmd, agentTitle, envToUnset } from "@hivemind/agents";
 import { ScreenWatcher } from "@hivemind/agent-host/screen-status";
 import { HeadlessTerminal } from "@hivemind/agent-host/pty-session-manager";
 import { resolveWindowsSpawn } from "@hivemind/agents/discover";
@@ -48,8 +48,14 @@ const watcher = new ScreenWatcher({
   report: (id, state) => eventSink?.("agent.screen", { tileId: id, state }),
 });
 setInterval(() => watcher.tick(), 1200).unref();
+/** An agent session's title, as its manifest reads it; "" clears it. */
+function reportTitle(tileId: string, cmd: string, raw: string): void {
+  eventSink?.("agent.title", { tileId, title: agentTitle(agentForCmd(cmd), raw) });
+}
 function dropScreen(tileId: string): void {
-  screens.get(tileId)?.term.dispose();
+  const s = screens.get(tileId);
+  if (s) reportTitle(tileId, s.cmd, "");
+  s?.term.dispose();
   screens.delete(tileId);
   watcher.forget(tileId);
 }
@@ -77,7 +83,10 @@ export async function spawnPty(
   ptys.set(opts.tileId, p);
   // Only an agent's screen is read; a plain shell keeps none.
   const term = agentForCmd(opts.cmd) ? new HeadlessTerminal({ cols: opts.cols, rows: opts.rows, scrollback: 0, allowProposedApi: true }) : undefined;
-  if (term) screens.set(opts.tileId, { term, cmd: opts.cmd });
+  if (term) {
+    screens.set(opts.tileId, { term, cmd: opts.cmd });
+    term.onTitleChange((t) => reportTitle(opts.tileId, opts.cmd, t));
+  }
   p.onData((d: string) => {
     if (term) { term.write(d); watcher.output(opts.tileId); }
     cb.onData(d);

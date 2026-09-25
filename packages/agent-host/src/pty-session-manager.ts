@@ -152,6 +152,8 @@ export interface SessionManagerOptions {
    *  flush retries. */
   /** A session produced output (its screen may have changed). */
   onOutput?: (id: string) => void;
+  /** A session's window title (OSC 0/2) changed, or was restored from its snapshot. */
+  onTitle?: (id: string, title: string) => void;
   onSnapshot?: (id: string, snapshot: SessionSnapshot) => void | Promise<void>;
   /** OPTIONAL — invoked when a session is explicitly killed so the daemon can
    *  unlink its on-disk snapshot file. */
@@ -216,6 +218,7 @@ export class SessionManager {
   private readonly transformSpecOnSpawn?: (spec: SpawnSpec, id: string) => SpawnSpec;
   private readonly restoreRetryTransform?: (spec: SpawnSpec) => SpawnSpec | null;
   private readonly onOutput?: (id: string) => void;
+  private readonly onTitle?: (id: string, title: string) => void;
   private readonly restoreRetryMs: number;
 
   constructor(
@@ -228,6 +231,7 @@ export class SessionManager {
     this.onSnapshot = opts.onSnapshot;
     this.onSnapshotEvict = opts.onSnapshotEvict;
     this.onOutput = opts.onOutput;
+    this.onTitle = opts.onTitle;
     this.snapshotDebounceMs = opts.snapshotDebounceMs ?? 2000;
     this.transformSpecOnRestore = opts.transformSpecOnRestore;
     this.transformSpecOnSpawn = opts.transformSpecOnSpawn;
@@ -342,7 +346,8 @@ export class SessionManager {
     // Capture the OSC 0/2 window title the headless term parses. SerializeAddon
     // omits it from the replay, so without this a reattach shows the generic
     // spawn label instead of the agent's live task summary.
-    try { session.term.onTitleChange((t) => { session.lastTitle = t; }); } catch { /* headless build w/o title API */ }
+    try { session.term.onTitleChange((t) => { session.lastTitle = t; this.onTitle?.(id, t); }); } catch { /* headless build w/o title API */ }
+    if (session.lastTitle) this.onTitle?.(id, session.lastTitle);
     p.onData((d) => {
       // Stale-pty guard: after a retry respawn, the old pty may still flush a
       // trailing chunk — it must not write to the now-retried session.
@@ -365,6 +370,7 @@ export class SessionManager {
       // once, fresh. Observed, not guessed from its output.
       const sinceSpawn = Date.now() - session.spawnedAt;
       if (code !== 0 && sinceSpawn < this.restoreRetryMs && this.tryRestoreRetry(session)) return;
+      this.onTitle?.(id, ""); // a process that has ended is doing nothing
       for (const c of session.clients) c.onExit(code, signal);
       this.flushSnapshot(session); // last write before drop
       this.sessions.delete(id);
@@ -433,6 +439,7 @@ export class SessionManager {
       // not tear down the live session.
       if (session.pty !== p) return;
       session.exited = true;
+      this.onTitle?.(session.id, ""); // a process that has ended is doing nothing
       for (const c of session.clients) c.onExit(code, signal);
       this.flushSnapshot(session);
       this.sessions.delete(session.id);
@@ -632,6 +639,11 @@ export class SessionManager {
   }
 
   /** Live and frozen sessions, for `hive ps`. */
+  /** The command a live session runs. */
+  commandOf(id: string): string | undefined {
+    return this.sessions.get(id)?.spec.cmd;
+  }
+
   /** The visible rows of a live session's screen as text, and the command it runs. */
   viewport(id: string): { cmd: string; screen: string } | undefined {
     const s = this.sessions.get(id);

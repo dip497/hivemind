@@ -91,8 +91,6 @@ export interface FrameNodeData {
   /** Terminal tile ids inside this frame — Canvas precomputes via position
    *  overlap. Drives the header chip strip so renames inside surface here. */
   tileIds?: string[];
-  /** User-assigned (or auto-named) display names for tiles. Keyed by tileId. */
-  tileNames?: Record<string, string>;
 }
 
 // Identity colours, shared with the rail menu and the default generator (frame-color.ts).

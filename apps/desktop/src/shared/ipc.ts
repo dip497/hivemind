@@ -456,6 +456,8 @@ export interface HiveIpc {
    *  a spawned agent can actually work issues with `hive`. Idempotent. */
   installAgentic(dir: string): Promise<{ ok: boolean }>;
   ptyWrite(tileId: string, data: string): void;
+  /** The names tiles were given (renames, spawners' names), whole, each time they change. */
+  tileNames(names: Record<string, string>): void;
   /** Whether any view shows this terminal: bytes reach the renderer only while one does. */
   ptyInterest(tileId: string, shown: boolean): void;
   ptyResize(tileId: string, cols: number, rows: number): void;

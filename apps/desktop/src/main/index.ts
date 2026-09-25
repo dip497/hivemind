@@ -35,7 +35,7 @@ import {
   type LinkType,
 } from "@hivemind/core";
 import os from "node:os";
-import { AGENT_EVENT_METHOD, agentById, agentForCmd, getCatalog, parseAgentEvent, preferredAgent, setCatalog, type AgentProviderDef } from "@hivemind/agents";
+import { AGENT_EVENT_METHOD, cleanName, agentById, agentForCmd, getCatalog, parseAgentEvent, preferredAgent, setCatalog, type AgentProviderDef } from "@hivemind/agents";
 import { agentPresence, discoverOptions, findBin, verifyAgent } from "@hivemind/agents/discover";
 import { agentAllowedIn, loadAgents, toWire } from "@hivemind/agents/load";
 import type { IssuePatch } from "@hivemind/core/types";
@@ -91,7 +91,7 @@ import { randomUUID } from "node:crypto";
 import { startHcpServer } from "./hcp/hcp-server.js";
 import { makeSpawnPacer } from "./spawn-pacer.js";
 import { makeDispatch, type Dispatcher } from "./hcp/methods.js";
-import { labelOf as hcpLabelOf } from "./hcp/names.js";
+import { labelOf as hcpLabelOf, setNames as setHcpNames, setTitleSource } from "./hcp/names.js";
 import { Mailbox } from "./hcp/mailbox.js";
 import { TurnTracker } from "./hcp/turn-tracker.js";
 import { StatusStore, type ScreenState } from "@hivemind/agent-host/status-store";
@@ -1096,6 +1096,10 @@ const hcpTurns = new TurnTracker();
 // Every agent session's status, keyed by bare tile id: hooks first, the screen for agents
 // without them, exits and interrupt keys observed here. One push carries every change.
 const hcpStatus = new StatusStore();
+setTitleSource((tileId) => hcpStatus.get(tileId)?.title);
+ipcMain.on("tile:names", (_e, names: Record<string, string>) => {
+  if (names && typeof names === "object") setHcpNames(Object.fromEntries(Object.entries(names).filter(([, v]) => typeof v === "string").map(([k, v]) => [k, cleanName(v as string)])));
+});
 const SCREEN_STATES = new Set<ScreenState>(["idle", "working", "permission", "question", "blocked"]);
 hcpStatus.subscribe((change) => {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("hcp:status", change);
@@ -1875,6 +1879,12 @@ function startHcpControlPlane(): void {
     offsetOf: (tileId) => hcpRecorder.mark(toPtyId(tileId)),
     status: hcpStatus,
     onEvent: (method: string, params: unknown): void => {
+      if (method === "agent.title") {
+        // A host read an agent's window title: what it says it is doing ("" = nothing).
+        const r = (params ?? {}) as { tileId?: string; title?: unknown };
+        if (r.tileId && typeof r.title === "string") hcpStatus.title(toBareId(r.tileId), cleanName(r.title));
+        return;
+      }
       if (method === "agent.screen") {
         // A daemon read an agent's screen: its status until the agent's hooks report.
         const r = (params ?? {}) as { tileId?: string; state?: ScreenState };

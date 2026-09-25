@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { getCatalog, agentById, agentForCmd, identifyProvider, spawnableAgents, workerAgents, detectStatus, taskFromTitle, setCatalog } from "../src/index.js";
+import { agentTitle, cleanName, NAME_MAX, getCatalog, agentById, agentForCmd, identifyProvider, spawnableAgents, workerAgents, detectStatus, taskFromTitle, setCatalog } from "../src/index.js";
 import { providers, providerFor, nodePartsFor, composeResume } from "../src/node.js";
 import { authoredDefs } from "./authored.js";
 
@@ -62,5 +62,13 @@ describe("agent catalog", () => {
     expect(taskFromTitle(agentById("claude"), "Claude Code")).toBe("");
     expect(taskFromTitle(agentById("claude"), "Fix the flaky test")).toBe("Fix the flaky test");
     expect(taskFromTitle(undefined, "a (b) [c] $d")).toBe("a (b) [c] $d");
+  });
+  test("names are one printable line, capped; an agent's title loses its status glyph and generic titles", () => {
+    expect(cleanName("  Fixing\tthe\nflaky   test ")).toBe("Fixing the flaky test");
+    expect(cleanName("\x1b]0;hi\x07")).toBe("]0;hi");
+    expect(cleanName("x".repeat(120)).length).toBe(NAME_MAX);
+    expect(agentTitle(agentById("claude"), "✳ Fix the bug")).toBe("Fix the bug");
+    expect(agentTitle(agentById("claude"), "✳ Claude Code")).toBe("");
+    expect(agentTitle(undefined, "   ")).toBe("");
   });
 });

@@ -65,3 +65,17 @@ test("since moves only when the state changes", () => {
   s.event("a", { event: "turn.ended" });
   expect(s.get("a")!.since).toBeGreaterThan(since);
 });
+
+test("a title rides the session record: set, cleared by an empty title, gone at exit", () => {
+  const s = store();
+  s.screen("a", "working");
+  s.title("a", "Fix the flaky test");
+  expect(s.get("a")).toMatchObject({ state: "working", title: "Fix the flaky test" });
+  s.title("a", "");
+  expect(s.get("a")!.title).toBeUndefined();
+  s.title("a", "Refactor auth");
+  s.exited("a");
+  expect(s.get("a")!.title).toBeUndefined();
+  s.title("a", "late");
+  expect(s.get("a")!.title).toBeUndefined();
+});
