@@ -1,5 +1,5 @@
-// The generic observe hook, run for real: node executes the generated script with an agent's
-// payload on stdin, and a unix socket stands in for the control plane.
+// The generic observe hook, run for real against the shared conformance cases: node executes the
+// generated script with an agent's payload on stdin, and a unix socket stands in for the host.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -7,7 +7,12 @@ import fs from "node:fs";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { agentEventHookSource } from "../../src/main/hcp/agent-event-hook-source.ts";
+
+interface Case { name: string; env: Record<string, string>; payload: unknown; expect: unknown; forbidden?: string[] }
+const casesFile = fileURLToPath(new URL("../../../../conformance/hook-reports.json", import.meta.url));
+const { cases } = JSON.parse(fs.readFileSync(casesFile, "utf8")) as { cases: Case[] };
 
 async function run(env: Record<string, string>, payload: unknown): Promise<unknown[]> {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "evh-"));
@@ -22,7 +27,7 @@ async function run(env: Record<string, string>, payload: unknown): Promise<unkno
   });
   await new Promise<void>((r) => server.listen(sock, r));
   const child = spawn(process.execPath, [script, sock], { env: { PATH: process.env.PATH ?? "", ...env }, stdio: ["pipe", "ignore", "ignore"] });
-  child.stdin.end(JSON.stringify(payload));
+  child.stdin.end(typeof payload === "string" ? payload : JSON.stringify(payload));
   const code = await new Promise<number | null>((r) => child.on("exit", r));
   await new Promise((r) => setTimeout(r, 50));
   server.close();
@@ -31,35 +36,10 @@ async function run(env: Record<string, string>, payload: unknown): Promise<unkno
   return got;
 }
 
-test("reports the canonical event from its environment, with only whitelisted ids from the payload", async () => {
-  const got = await run(
-    { HIVEMIND_TILE: "hm:t1", HIVE_EVENT: "turn.ended", HIVE_EVENT_OUTCOME: "failed" },
-    { hook_event_name: "StopFailure", session_id: "s-1", transcript_path: "/h/.claude/p/x.jsonl", last_assistant_message: "secret reply", prompt: "user text" },
-  );
-  assert.deepEqual(got, [{ t: "event", topic: "agent.event", data: { tileId: "hm:t1", event: "turn.ended", outcome: "failed", transcriptPath: "/h/.claude/p/x.jsonl", sessionId: "s-1" } }]);
-  assert.ok(!JSON.stringify(got).includes("secret"), "agent-written text never leaves the hook");
-});
-
-test("a turn end counts running background tasks and never forwards their commands", async () => {
-  const [a] = await run({ HIVEMIND_TILE: "hm:t1", HIVE_EVENT: "turn.ended" }, {
-    background_tasks: [
-      { id: "b1", type: "shell", status: "running", command: "npm run build --token=secret" },
-      { id: "b2", type: "shell", status: "completed", command: "ls" },
-    ],
+for (const c of cases) {
+  test(c.name, async () => {
+    const got = await run(c.env, c.payload);
+    assert.deepEqual(got, c.expect === null ? [] : [{ t: "event", topic: "agent.event", data: c.expect }]);
+    for (const f of c.forbidden ?? []) assert.ok(!JSON.stringify(got).includes(f), `"${f}" must not leave the hook`);
   });
-  assert.deepEqual((a as { data: unknown }).data, { tileId: "hm:t1", event: "turn.ended", background: 1 });
-  assert.ok(!JSON.stringify(a).includes("secret"));
-});
-
-test("an input request carries its kind; a subagent event its id", async () => {
-  const [a] = await run({ HIVEMIND_TILE: "hm:t1", HIVE_EVENT: "input.requested", HIVE_EVENT_KIND: "permission" }, { tool_name: "Bash", tool_input: { command: "rm -rf" } });
-  assert.deepEqual((a as { data: unknown }).data, { tileId: "hm:t1", event: "input.requested", kind: "permission" });
-  const [b] = await run({ HIVEMIND_TILE: "hm:t1", HIVE_EVENT: "subagent.started" }, { agent_id: 42 });
-  assert.deepEqual((b as { data: unknown }).data, { tileId: "hm:t1", event: "subagent.started", agentId: "42" });
-});
-
-test("fails open: no event, no tile, or unreadable stdin sends nothing and still exits 0", async () => {
-  assert.deepEqual(await run({ HIVEMIND_TILE: "hm:t1" }, {}), []);
-  assert.deepEqual(await run({ HIVE_EVENT: "turn.ended" }, {}), []);
-  assert.equal((await run({ HIVEMIND_TILE: "hm:t1", HIVE_EVENT: "turn.started" }, "not json")).length, 1);
-});
+}

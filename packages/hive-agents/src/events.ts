@@ -6,14 +6,15 @@
 import type { AgentHookEntry, AgentHooks } from "./types.js";
 
 export const AGENT_EVENTS = [
-  "session.started", "session.ended",
+  "session.started", "session.ready", "session.ended",
   "turn.started", "turn.ended",
-  "input.requested",
+  "input.requested", "input.resolved",
   "subagent.started", "subagent.stopped",
+  "compacting.started", "compacting.ended",
 ] as const;
 export type AgentEventName = (typeof AGENT_EVENTS)[number];
 
-export const TURN_OUTCOMES = ["done", "failed", "interrupted"] as const;
+export const TURN_OUTCOMES = ["done", "failed", "interrupted", "limited"] as const;
 export type TurnOutcome = (typeof TURN_OUTCOMES)[number];
 
 export const INPUT_KINDS = ["permission", "question", "plan", "approval", "other"] as const;
@@ -90,6 +91,7 @@ export function parseAgentEvent(raw: unknown): AgentEvent | null {
 export function legacyTopicsFor(e: AgentEvent): Array<{ topic: string; data: Record<string, unknown> }> {
   switch (e.event) {
     case "turn.started":
+    case "input.resolved":
       return [{ topic: "status", data: { tileId: e.tileId, state: "working" } }];
     case "turn.ended":
       return [{ topic: "turn", data: { tileId: e.tileId, transcriptPath: e.transcriptPath ?? null, ...(e.background ? { background: e.background } : {}) } }];

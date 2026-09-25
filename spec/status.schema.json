@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hivemind.dev/spec/status/0.1.json",
+  "title": "Agent status",
+  "description": "A session's status: the fold of its events and host facts (status.md).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["state", "subagents", "background", "compacting"],
+  "properties": {
+    "state": { "enum": ["idle", "working", "waiting", "done", "failed", "interrupted", "limited", "exited"] },
+    "kind": { "enum": ["permission", "question", "plan", "approval", "other"], "description": "Present only while waiting." },
+    "subagents": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+    "background": { "type": "integer", "minimum": 0 },
+    "compacting": { "type": "boolean" }
+  }
+}

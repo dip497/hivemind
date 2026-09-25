@@ -86,6 +86,8 @@ describe("the posted event", () => {
 
   test("bridges onto today's topics without changing their payloads", () => {
     expect(legacyTopicsFor({ tileId: "t", event: "turn.started" })).toEqual([{ topic: "status", data: { tileId: "t", state: "working" } }]);
+    expect(legacyTopicsFor({ tileId: "t", event: "input.resolved" })).toEqual([{ topic: "status", data: { tileId: "t", state: "working" } }]);
+    expect(legacyTopicsFor({ tileId: "t", event: "compacting.started" })).toEqual([]);
     expect(legacyTopicsFor({ tileId: "t", event: "turn.ended", outcome: "failed", transcriptPath: null })).toEqual([{ topic: "turn", data: { tileId: "t", transcriptPath: null } }]);
     expect(legacyTopicsFor({ tileId: "t", event: "input.requested", kind: "permission" })[0]!.data.notificationType).toBe("permission_prompt");
     expect(legacyTopicsFor({ tileId: "t", event: "input.requested", kind: "question" })[0]!.data.notificationType).toBe("elicitation_dialog");

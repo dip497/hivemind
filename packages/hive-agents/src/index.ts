@@ -4,6 +4,7 @@
  */
 export * from "./types.js";
 export * from "./events.js";
+export * from "./status.js";
 export * from "./catalog.js";
 export * from "./detect-helpers.js";
 export { GENERIC_AGENT_ICON } from "./icon.js";

@@ -1,0 +1,61 @@
+{
+  "spec": "agent-event 0.1",
+  "about": "A hook runs with the session and the canonical event in its environment and the agent's payload on stdin. It reports the event, keeps only ids, paths and counts from the payload, and never forwards text in `forbidden`. `expect: null` means it reports nothing. A hook always exits 0.",
+  "cases": [
+    {
+      "name": "the event and outcome come from the environment; only whitelisted ids from the payload",
+      "env": { "HIVEMIND_TILE": "hm:t1", "HIVE_EVENT": "turn.ended", "HIVE_EVENT_OUTCOME": "failed" },
+      "payload": { "hook_event_name": "StopFailure", "session_id": "s-1", "transcript_path": "/h/.claude/p/x.jsonl", "last_assistant_message": "secret reply", "prompt": "secret prompt" },
+      "expect": { "tileId": "hm:t1", "event": "turn.ended", "outcome": "failed", "transcriptPath": "/h/.claude/p/x.jsonl", "sessionId": "s-1" },
+      "forbidden": ["secret"]
+    },
+    {
+      "name": "a turn end counts running background tasks and never forwards their commands",
+      "env": { "HIVEMIND_TILE": "hm:t1", "HIVE_EVENT": "turn.ended" },
+      "payload": { "background_tasks": [
+        { "id": "b1", "type": "shell", "status": "running", "command": "npm run build --token=secret" },
+        { "id": "b2", "type": "shell", "status": "completed", "command": "ls" }
+      ] },
+      "expect": { "tileId": "hm:t1", "event": "turn.ended", "background": 1 },
+      "forbidden": ["secret", "npm"]
+    },
+    {
+      "name": "an input request carries its kind, not the tool call",
+      "env": { "HIVEMIND_TILE": "hm:t1", "HIVE_EVENT": "input.requested", "HIVE_EVENT_KIND": "permission" },
+      "payload": { "tool_name": "Bash", "tool_input": { "command": "rm -rf secret" } },
+      "expect": { "tileId": "hm:t1", "event": "input.requested", "kind": "permission" },
+      "forbidden": ["secret", "Bash"]
+    },
+    {
+      "name": "a subagent event carries its id as a string",
+      "env": { "HIVEMIND_TILE": "hm:t1", "HIVE_EVENT": "subagent.started" },
+      "payload": { "agent_id": 42 },
+      "expect": { "tileId": "hm:t1", "event": "subagent.started", "agentId": "42" }
+    },
+    {
+      "name": "an input resolution needs nothing from the payload",
+      "env": { "HIVEMIND_TILE": "hm:t1", "HIVE_EVENT": "input.resolved" },
+      "payload": { "tool_name": "Bash", "tool_response": { "stdout": "secret output" } },
+      "expect": { "tileId": "hm:t1", "event": "input.resolved" },
+      "forbidden": ["secret"]
+    },
+    {
+      "name": "no event in the environment: nothing reported",
+      "env": { "HIVEMIND_TILE": "hm:t1" },
+      "payload": {},
+      "expect": null
+    },
+    {
+      "name": "no session in the environment: nothing reported",
+      "env": { "HIVE_EVENT": "turn.ended" },
+      "payload": {},
+      "expect": null
+    },
+    {
+      "name": "an unreadable payload still reports the event",
+      "env": { "HIVEMIND_TILE": "hm:t1", "HIVE_EVENT": "turn.started" },
+      "payload": "not json",
+      "expect": { "tileId": "hm:t1", "event": "turn.started" }
+    }
+  ]
+}

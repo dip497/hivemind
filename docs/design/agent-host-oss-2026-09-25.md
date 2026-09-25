@@ -104,9 +104,11 @@ hooks:
       - emit: turn.ended      # canonical: from the spec vocabulary, validated
     StopFailure:
       - emit: turn.ended
+        outcome: limited
+        matcher: rate_limit   # the agent's own matcher picks the case; the host adds nothing
+      - emit: turn.ended
         outcome: failed
-        errorFrom: error      # payload field whose value is mapped by `errors:` below
-        errors: { rate_limit: limit, overloaded: limit, authentication_failed: auth, billing_error: auth }
+        matcher: overloaded|authentication_failed|billing_error|server_error|unknown
     PreToolUse:
       - run: hooks/approve.cjs          # script: a path inside the plugin, using the SDK
         matcher: ExitPlanMode
@@ -121,15 +123,19 @@ scripts may only emit what `produces:` declares; anything else is dropped and lo
 Status is a fold over the session's events — the same events in the same order give the same
 status in every implementation (the conformance suite checks exactly this).
 
-| From | Event | To |
+Starts `idle`; `exited` is final.
+
+| From | Input | To |
 |---|---|---|
-| any | `session.started` | `idle` |
-| `idle`, `done`, `failed`, `interrupted`, `limited` | `turn.started` | `working` |
-| `working` | `input.requested {kind}` | `waiting {kind}` |
+| any | `turn.started` | `working` |
+| any | `input.requested {kind}` | `waiting {kind}` (a lost `turn.started` does not hide a question) |
 | `waiting` | `input.resolved` | `working` |
-| `working`, `waiting` | `turn.ended {outcome}` | `done` / `failed` / `interrupted` / `limited` |
+| any | `turn.ended {outcome}` | `done` / `failed` / `interrupted` / `limited` |
 | `working`, `waiting` | user sent interrupt (host observed) | `interrupted` |
-| any | process exit | `exited` |
+| any | process exit (host observed) | `exited` |
+
+`session.*` events change no state — Claude's `SessionStart` arrives mid-turn after an automatic
+compaction. Reference: `packages/hive-agents/src/status.ts`.
 
 Orthogonal to the state, and carried with it: `subagents` (count from `subagent.*`),
 `background` (from `turn.ended`), `compacting` (bool), `source` (`hooks` | `protocol` | `screen`),
@@ -170,8 +176,7 @@ follow ACP's where they overlap.
 - `input.resolved` — the question was answered (either way).
 - `session.ready` — the agent can take typed input; a prompt delivered `typed-when-ready` waits
   for it, instead of a fixed delay.
-- `turn.ended` outcome `limited` (usage limit), and `error` as a closed class
-  (`limit | auth | server | other`) mapped from the agent's own error value by the manifest.
+- `turn.ended` outcome `limited` (usage limit), picked by the agent's matcher.
 - `compacting.started` / `compacting.ended`.
 
 The host never touches an agent's login: it launches the user's own CLI as the user would.

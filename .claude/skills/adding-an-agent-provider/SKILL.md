@@ -122,10 +122,15 @@ field reference; `claude/agent.yaml` in the published fixtures is the richest ex
 4. `detect` — ordered rules over the rendered screen; the first match wins.
 5. `icon` — shapes, not SVG markup; `viewBox` + `path`/`rect`/`circle`/`ellipse`.
 6. `hooks.events` — map each native hook event to a **canonical event** with `emit:`, not to
-   a script. The vocabulary is `session.started`, `session.ended`, `turn.started`,
-   `turn.ended` (+ `outcome: done | failed | interrupted`), `input.requested` (+ `kind:
-   permission | question | plan | approval | other`), `subagent.started`,
-   `subagent.stopped` (`packages/hive-agents/src/events.ts`). One generic script reports
+   a script. The vocabulary is `session.started`, `session.ready`, `session.ended`,
+   `turn.started`, `turn.ended` (+ `outcome: done | failed | interrupted | limited`),
+   `input.requested` (+ `kind: permission | question | plan | approval | other`),
+   `input.resolved`, `subagent.started`, `subagent.stopped`, `compacting.started`,
+   `compacting.ended` — specified in `spec/agent-event.schema.json`, and how they fold into a
+   status in `spec/status.md`. Use the agent's own `matcher` to split one native event
+   (Claude's `StopFailure` with `matcher: rate_limit` → `outcome: limited`). Map
+   `input.resolved` too (e.g. `PostToolUse`), or a tile answered in the agent stays
+   "needs you" until the turn ends. One generic script reports
    them and never forwards text the agent wrote. Use `hook:` only for a script that
    *decides* (`plan`, `approval`, an asset broker). Map an event only after seeing the real
    binary fire it, and inject per launch — never write the user's global config.

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hivemind.dev/spec/agent-event/0.1.json",
+  "title": "Agent event",
+  "description": "One canonical event reported for a session. Facts only: ids, kinds, counts and paths — never text the agent wrote.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["tileId", "event"],
+  "properties": {
+    "tileId": { "type": "string", "minLength": 1, "description": "The session the event is about." },
+    "event": {
+      "enum": [
+        "session.started", "session.ready", "session.ended",
+        "turn.started", "turn.ended",
+        "input.requested", "input.resolved",
+        "subagent.started", "subagent.stopped",
+        "compacting.started", "compacting.ended"
+      ]
+    },
+    "outcome": { "enum": ["done", "failed", "interrupted", "limited"], "description": "turn.ended only; defaults to done." },
+    "kind": { "enum": ["permission", "question", "plan", "approval", "other"], "description": "input.requested only; defaults to other." },
+    "transcriptPath": { "type": ["string", "null"], "maxLength": 4096 },
+    "agentId": { "type": "string", "maxLength": 256, "description": "subagent.*: which subagent." },
+    "background": { "type": "integer", "minimum": 1, "maximum": 9999, "description": "turn.ended: background tasks left running." },
+    "sessionId": { "type": "string", "maxLength": 256, "description": "The agent's own session id." }
+  }
+}
