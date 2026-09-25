@@ -5,18 +5,15 @@
  * id in the same tick — no CustomEvent round trips, no "re-read after a
  * timeout" (the stale Settings card after ⌘E).
  *
- * Persisted raw under `hivemind:view-mode` (windows-view-state.ts); consumers
- * map it through `resolveViewId` so an id whose plugin is gone falls back.
+ * Persisted as settings.json `views.defaultView`; consumers map it through
+ * `resolveViewId` so an id whose plugin is gone falls back.
  * `hivemind:toggle-view-mode` (⌘E, menu, tests) still works — handled here.
  */
 import { useSyncExternalStore } from "react";
-import { loadViewMode, saveViewMode } from "../windows-view-state";
 import { nextViewId, resolveViewId } from "./workspace-view";
 import { getSettings, patchSettings } from "../settings-store";
 
-// settings.json `views.defaultView` wins; the pre-2.0 localStorage key is the
-// fallback (and was imported into the file once by settings-store).
-let current: string | null = getSettings().migrated ? getSettings().views.defaultView : (loadViewMode() ?? getSettings().views.defaultView);
+let current: string | null = getSettings().views.defaultView;
 const listeners = new Set<() => void>();
 
 export function getViewMode(): string | null {
@@ -26,7 +23,7 @@ export function getViewMode(): string | null {
 export function setViewMode(id: string | null): void {
   if (id === current) return;
   current = id;
-  if (id) { saveViewMode(id); if (getSettings().views.defaultView !== id) patchSettings("views.defaultView", id); }
+  if (id && getSettings().views.defaultView !== id) patchSettings("views.defaultView", id);
   for (const l of listeners) l();
 }
 

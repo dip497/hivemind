@@ -20,6 +20,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - Codex reports its turns, questions, subagents and replies, so `hive ctl read` and workflows work with Codex workers. The first Codex tile asks you once, in Codex's own hooks review, to trust Hivemind's hooks.
 - The Gemini plugin is gone: Gemini CLI has been replaced by Antigravity, whose plugin stays on the screen reading because its hooks can only be set in your own configuration.
 - A tile is called the same thing everywhere — header, Layers, tabs, views, toasts, notifications, `hive ctl list`, the messages agents send each other and the window title: the name you or its spawner gave it, else what its agent says it is doing, else its label. The agent's title comes from where it runs, so it stays current for tiles no view shows and clears when the agent goes back to a generic title or exits.
+- **Breaking:** the app no longer reads what builds older than this release stored: pre-2.0 settings kept in the window, canvas layouts from before per-view layouts, the old tile and frame formats, review comments kept in the window, the pre-rename app profile and the old saved-SSH-hosts list. Workspaces are migrated instead: a workspace's `.hivemind/config.yaml` now records its format, and the first time this build opens an older one it rewrites old activity timestamps to UTC once.
 
 ## [2026.9.5] — 2026-09-22
 

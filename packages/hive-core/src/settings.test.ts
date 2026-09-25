@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
-  ACCENTS, DEFAULT_APPEARANCE, DEFAULT_SETTINGS, ISLAND_PLACEMENTS, PRESETS, UBUNTU, SIGNAL, applyPreset, flattenAppearance, getPath, mergeSettings, migrateLegacy, nestAppearance, setPath, terminalThemeFor,
+  ACCENTS, DEFAULT_APPEARANCE, DEFAULT_SETTINGS, ISLAND_PLACEMENTS, PRESETS, UBUNTU, SIGNAL, applyPreset, flattenAppearance, getPath, mergeSettings, nestAppearance, setPath, terminalThemeFor,
 } from "./settings-schema.js";
 import { BUILTIN_TOOLBAR_ACTIONS, resolveToolbar } from "./toolbar.js";
 import { SettingsLockError, breakSettingsLock, patchSettingsExtras, patchSettingsFile, readSettings, settingsPath, updateSettings, writeSettings } from "./settings.js";
@@ -159,42 +159,16 @@ describe("settings schema", () => {
     expect(mergeSettings(undefined).views.toolbars).toEqual({});
   });
 
-  test("tools: a fresh install has every plugin off; a pre-tools v:1 file keeps its Browser", () => {
+  test("tools: a fresh install has every plugin off; the section, once present, is authoritative", () => {
     // Missing file / no input at all → defaults → nothing enabled.
     expect(mergeSettings(undefined).tools).toEqual({ enabledPlugins: [], disabledTools: [] });
     expect(DEFAULT_SETTINGS.tools).toEqual({ enabledPlugins: [], disabledTools: [] });
     expect(mergeSettings({}).tools.enabledPlugins).toEqual([]); // an object with no `v` is not a v:1 file
+    expect(mergeSettings({ v: 1, appearance: {} }).tools.enabledPlugins).toEqual([]);
 
-    // An EXISTING v:1 file written before the section existed: that user had the
-    // Browser tile unconditionally, so migrate them to the enabled plugin.
-    const legacy = mergeSettings({ v: 1, appearance: {}, views: {}, plugins: {}, agents: {}, migrated: true });
-    expect(legacy.tools).toEqual({ enabledPlugins: ["hivemind/web"], disabledTools: [] });
-
-    // Once the section exists it is authoritative — including deliberately empty.
     expect(mergeSettings({ v: 1, tools: { enabledPlugins: [], disabledTools: [] } }).tools.enabledPlugins).toEqual([]);
     expect(mergeSettings({ v: 1, tools: { enabledPlugins: ["hivemind/web"], disabledTools: ["hivemind/web/browser"] } }).tools)
       .toEqual({ enabledPlugins: ["hivemind/web"], disabledTools: ["hivemind/web/browser"] });
-  });
-
-  test("tools: a PARTIAL v:1 merge onto existing settings never re-enables the plugin", () => {
-    // The user switched the Browser OFF. Every later edit reaches mergeSettings as
-    // a partial object that also carries `v: 1` and no `tools` key — the same
-    // shape as a legacy file. Treating that as a load would silently turn the
-    // Browser back on the moment they changed a colour.
-    const off = mergeSettings({ v: 1, tools: { enabledPlugins: [], disabledTools: [] } });
-    expect(off.tools.enabledPlugins).toEqual([]);
-
-    const patched = mergeSettings({ v: 1, appearance: { accent: "ember" } }, off);
-    expect(patched.tools).toEqual({ enabledPlugins: [], disabledTools: [] });
-    expect(patched.appearance.accent).toBe("ember"); // the patch still applied
-
-    // Same for a user who had it ON and edits something unrelated.
-    const on = mergeSettings({ v: 1, tools: { enabledPlugins: ["hivemind/web"], disabledTools: ["hivemind/web/browser"] } });
-    expect(mergeSettings({ v: 1, views: { defaultView: "world" } }, on).tools)
-      .toEqual({ enabledPlugins: ["hivemind/web"], disabledTools: ["hivemind/web/browser"] });
-
-    // …and the load path still migrates (no base given = a file from disk).
-    expect(mergeSettings({ v: 1, appearance: {} }).tools.enabledPlugins).toEqual(["hivemind/web"]);
   });
 
   test("tools: ids are validated, deduped and bounded", () => {
@@ -239,28 +213,9 @@ describe("settings schema", () => {
     expect(nestAppearance(flattenAppearance(a))).toEqual(a);
   });
 
-  test("migrateLegacy: the old flat theme blob + view mode + agent keys land in settings", () => {
-    const s = migrateLegacy({
-      theme: { glass: false, blur: 12, opacity: 0.5, wallpaper: "mesh", accent: "rose", videoSrc: "blob:dead", animate: false, contentGlass: true, contentOpacity: 0.4, overlayMedia: { id: "o1", url: "hivemedia://media/x.png", kind: "image", opacity: 0.5, fit: "tile", size: 0.5, anchor: "top-left" } },
-      viewMode: "windows", agentSel: "codex", claudeMode: "plan", claudeModel: "opus",
-    });
-    expect(s.migrated).toBe(true);
-    expect(s.appearance.glass).toEqual({ enabled: false, contentGlass: true, opacity: 0.5, blur: 12, contentOpacity: 0.4, animate: false });
-    expect(s.appearance.wallpaper.kind).toBe("mesh");
-    expect(s.appearance.wallpaper.videoSrc).toBeUndefined(); // dead blob dropped
-    expect(s.appearance.accent).toBe("rose");
-    expect(s.appearance.overlayMedia).toHaveLength(1);
-    expect(s.appearance.preset).toBe("signal");
-    expect(s.views.defaultView).toBe("windows");
-    expect(s.agents).toEqual({ disabled: [], defaultAgent: "codex", options: { claude: { model: "opus", mode: "plan" } }, autoInstall: true, declined: [], fromCatalog: [] });
-    expect(migrateLegacy({}).migrated).toBe(true);
-  });
-
-  test("agent options: per agent, validated, and the old global pair moves to claude", () => {
+  test("agent options: per agent, validated", () => {
     const s = mergeSettings({ v: 1, agents: { options: { claude: { model: "opus", mode: "", "Bad Key": "x" }, "../x": { model: "y" }, codex: "nope" } } });
     expect(s.agents.options).toEqual({ claude: { model: "opus" } });
-    const old = mergeSettings({ v: 1, agents: { defaultAgent: "codex", model: "sonnet", permissionMode: "default" } });
-    expect(old.agents).toEqual({ disabled: [], defaultAgent: "codex", options: { claude: { model: "sonnet" } }, autoInstall: true, declined: [], fromCatalog: [] });
     const off = mergeSettings({ v: 1, agents: { autoInstall: false, declined: ["aider", "../x", 3] } });
     expect(off.agents.autoInstall).toBe(false);
     expect(off.agents.declined).toEqual(["aider"]);
@@ -445,21 +400,6 @@ describe("settings concurrency", () => {
     const s = await patchSettingsFile([{ path: "agents.options.claude.model", value: "sonnet" }]);
     expect(s.agents.options.claude?.model).toBe("sonnet");
     expect(fs.existsSync(lock)).toBe(false); // our own lock released
-  });
-
-  test("migration computed INSIDE the lock keeps a concurrent write, and runs once", async () => {
-    // What main does now: `updateSettings(cur => cur.migrated ? cur : migrateLegacy(legacy, cur))`.
-    // Deriving the migration from a snapshot taken before the lock would write
-    // back a settings object that predates the CLI's preset — reverting it.
-    await updateSettings((cur) => ({ ...cur, appearance: applyPreset(cur.appearance, PRESETS.nord!) }));
-    const migrated = await updateSettings((cur) => (cur.migrated ? cur : migrateLegacy({ viewMode: "world" }, cur)));
-    expect(migrated.appearance.preset).toBe("nord");   // the CLI's write survived
-    expect(migrated.views.defaultView).toBe("world");  // the migration landed
-    expect(migrated.migrated).toBe(true);
-
-    // A second window racing the same migration is a no-op, not a second import.
-    const again = await updateSettings((cur) => (cur.migrated ? cur : migrateLegacy({ viewMode: "canvas" }, cur)));
-    expect(again.views.defaultView).toBe("world");
   });
 
   test("a writer releases only its own lock (a recovered-and-retaken lock is left alone)", async () => {

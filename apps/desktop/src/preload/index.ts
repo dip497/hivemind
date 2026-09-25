@@ -146,7 +146,6 @@ const api: HiveIpc & {
   settingsSet: (p, v) => ipcRenderer.invoke("settings:set", p, v),
   settingsPatch: (patches) => ipcRenderer.invoke("settings:patch", patches),
   settingsReplace: (next) => ipcRenderer.invoke("settings:replace", next),
-  settingsMigrate: (legacy) => ipcRenderer.invoke("settings:migrate", legacy),
   settingsPath: () => ipcRenderer.invoke("settings:path"),
   onSettingsChanged: (cb) => {
     const listener = (_e: unknown, s: Parameters<typeof cb>[0]) => cb(s);

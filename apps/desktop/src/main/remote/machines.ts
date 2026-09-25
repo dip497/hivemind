@@ -12,14 +12,14 @@ import {
   PUBLISHED_PLATFORMS, installCopyCommand, installFetchCommand, localPlatform, machinesPath, newMachineId,
   releaseAssetUrl, validateLabel, validateTarget, type Machine, type ProbeResult,
 } from "@hivemind/core";
-import { machineHostId, machineUri, parseRemote, sshTargetOf, type RemoteTarget } from "../../shared/remote-uri.js";
+import { machineHostId, machineUri, parseRemote, type RemoteTarget } from "../../shared/remote-uri.js";
 import type { MachineAddRequest, MachineAddResult, MachineInfo, MachineProbe, MachineState, MachineStatus, MachinesSnapshot, SessionSummary } from "../../shared/ipc.js";
 import type { SessionInfo } from "@hivemind/agent-host/pty-protocol";
 import { remoteConns } from "./conn.js";
 import { Catalog } from "./catalog.js";
 import { needsAttention, probeCommand, probeRemote } from "./ssh.js";
 import { closeIdle, endpointFor, hostConnected, hostFailure, hostServingTiles, readyEndpoints, reconnectHost, resetHost, setHostPaused, setRemoteStatusSink, sshPaths } from "./pty.js";
-import { forgetSavedHost, listSavedHosts, passwordState, saveHost } from "./saved-hosts.js";
+import { forgetSavedHost, passwordState, saveHost } from "./saved-hosts.js";
 
 const PING_MS = 10_000;
 const IDLE_CLOSE_MS = 60_000;
@@ -89,32 +89,12 @@ function pingAll(): void {
 
 const mutate = (fn: (list: Machine[]) => Machine[]) => catalog.mutate(fn);
 
-/** Once per profile: after that, removing a machine (here or with `hive machine`) must stick. */
-async function migrateSavedHosts(flag: string): Promise<void> {
-  if (fs.existsSync(flag)) return;
-  await mutate((list) => {
-    const known = new Set(list.map((m) => machineHostId(m.target)));
-    const added: Machine[] = [];
-    for (const h of listSavedHosts()) {
-      if (known.has(h.hostId)) continue;
-      try {
-        const target = validateTarget(sshTargetOf({ host: h.host, port: h.port, user: h.user || null }));
-        added.push({ id: newMachineId(), label: validateLabel(h.host), target, enabled: true });
-        known.add(h.hostId);
-      } catch { /* a row we cannot express as a target stays a plain saved host */ }
-    }
-    return added.length ? [...list, ...added] : list;
-  });
-  fs.writeFileSync(flag, "");
-}
-
-export async function initMachines(opts: { send: (s: MachinesSnapshot) => void; listLocalSessions: () => Promise<SessionInfo[]>; version: string; stateDir: string }): Promise<void> {
+export async function initMachines(opts: { send: (s: MachinesSnapshot) => void; listLocalSessions: () => Promise<SessionInfo[]>; version: string }): Promise<void> {
   sink = opts.send;
   listSessionsLocal = opts.listLocalSessions;
   appVersion = opts.version;
   setRemoteStatusSink(setStatus);
   await catalog.reload();
-  if (!catalog.error) await migrateSavedHosts(path.join(opts.stateDir, "machines-migrated")).catch(() => {});
   const file = machinesPath();
   try {
     fs.mkdirSync(path.dirname(file), { recursive: true });

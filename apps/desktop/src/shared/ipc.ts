@@ -211,7 +211,7 @@ export interface UpdateStatus {
   ok: boolean;
 }
 
-import type { LegacyRendererState, Settings } from "@hivemind/core/settings-schema";
+import type { Settings } from "@hivemind/core/settings-schema";
 import type { CatalogEntry } from "@hivemind/core/plugin-catalog";
 
 /** One community view package as the main process sees it (see main/view-packages.ts). */
@@ -240,8 +240,6 @@ export interface HiveIpc {
   settingsPatch(patches: readonly { path: string; value: unknown }[]): Promise<Settings>;
   /** Whole-object write (a theme import). Merged onto the file under the same lock. */
   settingsReplace(next: Settings): Promise<Settings>;
-  /** One-time import of the renderer's pre-2.0 localStorage keys. */
-  settingsMigrate(legacy: LegacyRendererState): Promise<Settings>;
   settingsPath(): Promise<string>;
   onSettingsChanged(cb: (s: Settings) => void): () => void;
   // ── community views ───────────────────────────────────────

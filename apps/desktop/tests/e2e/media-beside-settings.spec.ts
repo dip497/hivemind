@@ -18,7 +18,7 @@ test("a photo named in the shared settings loads in a run with its own profile",
   fs.mkdirSync(path.join(dir, "home"));
   fs.writeFileSync(path.join(config, "media/bg.jpg"), JPEG);
   fs.writeFileSync(path.join(config, "settings.json"), JSON.stringify({
-    v: 1, migrated: true,
+    v: 1,
     appearance: { wallpaper: { kind: "image", imageSrc: "hivemedia://media/bg.jpg", brightness: 0.9 }, glass: { enabled: true } },
   }));
   const app = await electron.launch({

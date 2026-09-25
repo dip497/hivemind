@@ -89,8 +89,7 @@ export async function listSessions(socket: string): Promise<SessionInfo[]> {
   try {
     c.send({ t: "list", reqId: "ls", detail: true });
     const r = await c.next((m): m is Extract<ServerMsg, { t: "sessions" }> => m.t === "sessions");
-    // Older daemons answer with ids only.
-    return r.detail ?? r.ids.map((id) => ({ id, state: "live" as const, cmd: "?", args: [], cwd: "?", pid: null, viewers: 0, cols: 0, rows: 0 }));
+    return r.detail ?? [];
   } finally { c.close(); }
 }
 

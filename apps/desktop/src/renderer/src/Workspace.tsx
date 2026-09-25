@@ -390,13 +390,10 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   // repo switch (under the old key), unmount and beforeunload by
   // useDebouncedSave (the ONE mechanism every layout blob uses). Two blobs, two
   // triggers: the core blob rewrites on structural edits only — a pan/drop
-  // touches just the canvas view's geometry blob. The core write mirrors the
-  // geometry current at that moment (downgrade safety — see canvas-persistence).
+  // touches just the canvas view's geometry blob.
   const coreSnap = useMemo(() => ({ frames, tileNames, tiles, editorTabs, frameOf }), [frames, tileNames, tiles, editorTabs, frameOf]);
   const geometry = useMemo(() => ({ positions, sizes, viewport }), [positions, sizes, viewport]);
-  const geometryRef = useRef(geometry);
-  geometryRef.current = geometry;
-  useDebouncedSave(persistKey, coreSnap, useCallback((key: string, v: typeof coreSnap) => saveLayout(key, { ...v, legacy: geometryRef.current }), []));
+  useDebouncedSave(persistKey, coreSnap, useCallback((key: string, v: typeof coreSnap) => saveLayout(key, v), []));
   useDebouncedSave(persistKey, geometry, useCallback((key: string, v: typeof geometry) => saveViewLayout(CANVAS_LAYOUT, key, v), []));
 
   // Viewport-focus request: resolve the target's CENTER from our own state

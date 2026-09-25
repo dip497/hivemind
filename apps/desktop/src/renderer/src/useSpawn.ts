@@ -243,21 +243,6 @@ export function useSpawn(ctx: SpawnCtx) {
     return frame;
   }, []);
 
-  // Wrap legacy loose tiles on mount: layouts persisted before frame=workspace
-  // landed have positions but no frames → create the base frame sized to their
-  // bounding box so they visually live INSIDE the workspace (and the slot
-  // scanner sees them as occupied, so new spawns land in free slots).
-  const wrapOnceRef = useRef(false);
-  useEffect(() => {
-    if (wrapOnceRef.current) return;
-    if (!repoPath) return;
-    if (framesRef.current.length > 0) { wrapOnceRef.current = true; return; }
-    if (Object.keys(positionsRef.current).length === 0) return;
-    wrapOnceRef.current = true;
-    ensureFrame();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [repoPath]);
-
   // Create a tile of `kind` inside `targetFrameId` (or the resolved active
   // frame). claude/shell are unlimited per frame; editor/diff/issues are
   // one-per-frame — if the frame already has one, focus it instead of making a

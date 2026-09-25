@@ -303,18 +303,3 @@ function setupDirOf(tileSessionsDir: string): string {
   return path.dirname(tileSessionsDir);
 }
 
-test("a saved spec that repeats its resume restores with it once", () => {
-  const home = mkdtempSync(path.join(tmpdir(), "hm-home-"));
-  const id = "30e61ded-dc21-4f87-97e6-a9553fdf9930";
-  mkdirSync(path.join(home, ".claude", "projects", "-w"), { recursive: true });
-  writeFileSync(path.join(home, ".claude", "projects", "-w", `${id}.jsonl`), "{}");
-  const t = makeClaudeResumeTransforms({ tileSessionsDir: "/x/none", execPath: "/x/node", home });
-  const out = t.transformSpecOnRestore!(
-    { cwd: "/w", cmd: "claude", args: ["--resume", id, "--resume", id, "--resume", id, "--permission-mode", "auto"], cols: 80, rows: 24 },
-    "hm:tile-x",
-  );
-  const args = out.args ?? [];
-  assert.equal(args.filter((a) => a === "--resume").length, 1);
-  assert.equal(args[args.indexOf("--resume") + 1], id);
-  assert.ok(args.includes("--permission-mode"));
-});

@@ -30,6 +30,7 @@ import {
   updateIssue,
   writeAgentContext,
   writeConfig,
+  WORKSPACE_FORMAT,
   installAgenticStack as coreInstallAgenticStack,
   type IssueState,
   type LinkType,
@@ -130,57 +131,6 @@ if (!app.isPackaged) app.setName("hivemind-dev");
 // electron-builder strips `build` from the package.json it packages.
 const windowsAppId: string = desktopPkg.build.appId;
 if (process.platform === "win32") app.setAppUserModelId(windowsAppId);
-
-// Renaming the app (above) moves the userData dir to ~/.config/hivemind. Without
-// this, EVERY existing user loses their canvas (frames/tiles/layout live in the
-// OLD profile's localStorage) the first time they upgrade to this version. So on
-// first run with the new name, if the new profile is empty, clone the most recent
-// legacy profile into it. Idempotent: once the new profile has localStorage, skip.
-// Legacy names seen in the wild: "Electron" (dev/source default) and
-// "@hivemind/desktop" / "@hivemind" (packaged, from the asar package.json name).
-function migrateLegacyProfile(): void {
-  try {
-    const userData = app.getPath("userData");
-    if (existsSync(path.join(userData, "Local Storage"))) return; // already populated
-    const appData = app.getPath("appData");
-    const candidates = ["Electron", "@hivemind/desktop", "@hivemind", "hivemind-desktop"];
-    let best: { dir: string; mtime: number } | null = null;
-    for (const name of candidates) {
-      const dir = path.join(appData, name);
-      const ls = path.join(dir, "Local Storage");
-      if (existsSync(ls)) {
-        const mtime = statSync(ls).mtimeMs;
-        if (!best || mtime > best.mtime) best = { dir, mtime };
-      }
-    }
-    if (!best) return;
-    // Copy ONLY the browser-storage state that holds the canvas (frames/tiles/
-    // layout live in localStorage). A blanket recursive copy of the whole
-    // profile throws `ERR_FS_CP_SOCKET` the moment cpSync hits the daemon's
-    // `pty-daemon.sock` (a UNIX socket the PtyHost leaves in userData) — which
-    // aborted the ENTIRE migration and silently blanked every upgrader's canvas.
-    // A socket-skipping filter is kept as defense in case any of these subtrees
-    // ever contains one.
-    const STORAGE = ["Local Storage", "Session Storage", "IndexedDB", "Local State", "Preferences"];
-    mkdirSync(userData, { recursive: true });
-    const copied: string[] = [];
-    for (const name of STORAGE) {
-      const src = path.join(best.dir, name);
-      if (!existsSync(src)) continue;
-      cpSync(src, path.join(userData, name), {
-        recursive: true,
-        force: false,
-        errorOnExist: false,
-        filter: (p) => { try { return !statSync(p).isSocket(); } catch { return true; } },
-      });
-      copied.push(name);
-    }
-    console.log(`hivemind: migrated profile ${best.dir} → ${userData} (${copied.join(", ") || "nothing"})`);
-  } catch (e) {
-    console.warn("hivemind: legacy profile migration skipped:", (e as Error).message);
-  }
-}
-migrateLegacyProfile();
 
 // Rewrite the Start Menu shortcut with our AUMID: install.ps1 can only write an
 // AUMID-less fallback (its COM API cannot set one), and without the id Windows drops
@@ -765,7 +715,7 @@ ipcMain.handle(
     const existing = await findRoot(dir);
     if (existing === root) throw new Error(`.hivemind/ already exists at ${root}`);
     await fsp.mkdir(path.join(root, "issues"), { recursive: true });
-    await writeConfig(root, { prefix, next_id: 1, agents: {} });
+    await writeConfig(root, { prefix, next_id: 1, agents: {}, format: WORKSPACE_FORMAT });
     await writeAgentContext(root);
     // Install the agentic stack by default — a brand-new workspace should be
     // agent-ready so "Work on this" actually works (the agent gets the hive
@@ -1494,7 +1444,6 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
       send: (snap) => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("machines:changed", snap); },
       listLocalSessions: () => (PERSIST_PTY ? ptyDaemon.listSessions() : Promise.resolve([])),
       version: app.getVersion(),
-      stateDir: app.getPath("userData"),
     }).catch((e: unknown) => console.warn("[machines] init failed:", e));
     installViewManagementIpc(() => mainWindow);
     installPluginCatalogIpc(() => mainWindow);
@@ -1660,12 +1609,10 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     protocol.handle("hivemedia", (request) => {
       try {
         // hivemedia://media/<filename> — the filename rides in the PATH (host is
-        // the fixed marker "media"). Older URLs put the bare filename in the host
-        // (hivemedia://<filename>, pathname empty); tolerate that too so a
-        // persisted overlay from before this fix still resolves. Resolve against
-        // mediaDir, then verify it never escaped the dir (path-traversal guard).
+        // the fixed marker "media"). Resolve against mediaDir, then verify it
+        // never escaped the dir (path-traversal guard).
         const u = new URL(request.url);
-        const rawName = u.pathname.replace(/^\/+/, "") || u.host;
+        const rawName = u.pathname.replace(/^\/+/, "");
         const name = decodeURIComponent(rawName);
         const abs = path.resolve(mediaDir, name);
         if (abs !== mediaDir && !abs.startsWith(mediaDir + path.sep)) {
@@ -1682,16 +1629,14 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     // null if the user cancels.
     const MEDIA_VIDEO_EXT = new Set(["webm", "mp4", "mov"]);
     ipcMain.handle("media:pick", async (_e, slotRaw: unknown) => {
-      // Slot key → a per-slot filename PREFIX. "background" and legacy "overlay"
-      // are single slots; "overlay:<id>" is one of many stacked overlays, each
-      // its OWN slot so a new/replaced overlay only prunes ITS file, never a
-      // sibling's. The id is sanitized (it names a file + a prune glob).
-      const slot = typeof slotRaw === "string" ? slotRaw : "overlay";
+      // Slot key → a per-slot filename PREFIX: "background", or "overlay:<id>" — one of
+      // many stacked overlays, each its OWN slot so a new/replaced overlay only prunes
+      // ITS file, never a sibling's. The id is sanitized (it names a file + a prune glob).
+      const slot = typeof slotRaw === "string" ? slotRaw : "";
+      if (slot !== "background" && !slot.startsWith("overlay:")) return null;
       const prefix = slot === "background"
         ? "background"
-        : slot.startsWith("overlay:")
-          ? `overlay-${slot.slice("overlay:".length).replace(/[^a-z0-9-]/gi, "").slice(0, 40) || "x"}`
-          : "overlay";
+        : `overlay-${slot.slice("overlay:".length).replace(/[^a-z0-9-]/gi, "").slice(0, 40) || "x"}`;
       if (!mainWindow || mainWindow.isDestroyed()) return null;
       const result = await dialog.showOpenDialog(mainWindow, {
         properties: ["openFile"],

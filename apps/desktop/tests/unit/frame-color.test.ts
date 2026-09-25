@@ -31,9 +31,3 @@ test("no frame colour sits where a status colour does: warm means attention, gre
   }
 });
 
-test("an earlier generated colour is migrated; a chosen one is not", () => {
-  assert.equal(isGeneratedFrameColor(LEGACY_FRAME_COLOR), true);
-  assert.equal(isGeneratedFrameColor("oklch(0.7 0.14 70)"), true);
-  assert.equal(isGeneratedFrameColor("#f59e0b"), false);
-  assert.equal(isGeneratedFrameColor(FRAME_SWATCHES[0]!.value), false);
-});

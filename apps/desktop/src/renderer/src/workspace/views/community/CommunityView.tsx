@@ -58,7 +58,7 @@ function readTheme(): ViewTheme {
 
 /** Plugin layout blobs are opaque to the host: `{ v: 1, data: <whatever the plugin sent> }`. */
 function layoutSpec(pluginId: string): ViewLayoutSpec<unknown> {
-  return { viewId: pluginId, version: 1, initial: () => null, migrate: () => null };
+  return { viewId: pluginId, version: 1, initial: () => null };
 }
 
 /** The host for one package. Rendered through the lazy wrapper in registry.ts
