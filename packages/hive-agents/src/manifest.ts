@@ -308,6 +308,8 @@ function validateHooks(raw: unknown): AgentHooks {
       "hooks.file must be a file name, at most one directory deep");
     out.file = m.file;
   }
+  if (m.format !== undefined) { req(m.format === "json" || m.format === "toml", "hooks.format must be json or toml"); out.format = m.format; }
+  if (m.stable !== undefined) { req(m.stable === true, "hooks.stable must be true"); out.stable = true; }
   req(!!out.arg !== !!out.file, "hooks needs exactly one of `arg` (inline) or `file` (written)");
   return out;
 }

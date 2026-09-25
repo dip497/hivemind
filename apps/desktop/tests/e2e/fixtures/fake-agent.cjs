@@ -11,7 +11,7 @@
  *   - droid:  `$FACTORY_HOME_OVERRIDE/.factory/hooks.json` (top-level event keys),
  *     the initial prompt typed into its stdin once the tile reads idle.
  *   - faux:   `$FAUX_HOOKS` (the throwaway sixth provider's node half), argv prompt.
- *   - codex (or any other name): no hooks — a raw-tier stand-in with no turn signal.
+ *   - cursor-agent (or any other name): no hooks — a raw-tier stand-in with no turn signal.
  * Each turn: fire UserPromptSubmit → run the snippet → append the reply to a
  * transcript JSONL (Claude/droid shape) → fire Stop with `transcript_path` and, as
  * claude does, `last_assistant_message`.
@@ -50,7 +50,7 @@ function hooksTable() {
     if (!file) return {};
     try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return {}; }
   }
-  // "codex" and any other name: a raw-tier runtime — no hooks at all. Turns
+  // "cursor-agent" and any other name: a raw-tier runtime — no hooks at all. Turns
   // never reach the control plane, which is exactly what the no-turn-signal
   // path under test must surface instead of timing out.
   return {};

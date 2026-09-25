@@ -138,11 +138,22 @@ export function renderHookEvents(hooks: AgentHooks, req: LaunchRequest): Record<
   return Object.keys(out).length ? out : undefined;
 }
 
+/** A value as a TOML inline value: tables `{k=v,...}`, arrays, and strings in TOML's
+ *  basic-string escapes (a subset JSON also uses, so JSON.stringify writes them). */
+function toTomlInline(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(toTomlInline).join(",")}]`;
+  if (v && typeof v === "object") {
+    return `{${Object.entries(v).map(([k, x]) => `${/^[A-Za-z0-9_-]+$/.test(k) ? k : JSON.stringify(k)}=${toTomlInline(x)}`).join(",")}}`;
+  }
+  return JSON.stringify(v);
+}
+
 /** The whole document, in the shape the agent's own configuration wants. */
 export function renderHookDocument(def: AgentProviderDef, req: LaunchRequest): string | undefined {
   if (!def.hooks) return undefined;
-  const events = renderHookEvents(def.hooks, req);
+  // Commands every tile shares carry no tile id; the tile is in the spawn environment.
+  const events = renderHookEvents(def.hooks, def.hooks.stable ? { ...req, tileId: "", supervise: undefined } : req);
   if (!events) return undefined;
   const template = def.hooks.template ?? "{events}";
-  return template.replace("{events}", JSON.stringify(events));
+  return template.replace("{events}", def.hooks.format === "toml" ? toTomlInline(events) : JSON.stringify(events));
 }

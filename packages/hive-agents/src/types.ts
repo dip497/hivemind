@@ -204,6 +204,12 @@ export interface AgentHooks {
   arg?: string;
   /** Or written to this asset name instead. */
   file?: string;
+  /** The document's syntax: JSON (the default), or a TOML inline table for a CLI whose
+   *  configuration is TOML (`-c hooks={events}`). */
+  format?: "json" | "toml";
+  /** The commands name no tile: for an agent that asks its user to trust each distinct hook
+   *  command once, so every tile runs the same commands and the tile rides the spawn env. */
+  stable?: boolean;
 }
 
 /** A file an agent needs on disk before it runs: a bridge extension, a hook script, a

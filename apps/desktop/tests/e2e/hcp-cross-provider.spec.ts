@@ -56,7 +56,7 @@ test.beforeAll(async () => {
   execSync("git init -q", { cwd: repo });
   // Provider stand-ins + a `hive` that runs this checkout's CLI, first on PATH.
   fakeBin = fs.mkdtempSync(path.join(os.tmpdir(), "hm-xprov-bin-"));
-  for (const name of ["claude", "droid", "codex"]) {
+  for (const name of ["claude", "droid", "cursor-agent"]) {
     const shim = path.join(fakeBin, name);
     fs.writeFileSync(shim, `#!/usr/bin/env bash\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(FIXTURE)} ${name} "$@"\n`);
     fs.chmodSync(shim, 0o755);
@@ -95,7 +95,7 @@ test.afterAll(async () => {
   if (!closed) { try { app?.process().kill("SIGKILL"); } catch { /* gone */ } }
   // Stand-in agents this spec's tiles spawned (pattern anchored on the fixture
   // path + provider argv so it can never match an unrelated shell).
-  try { execSync(`pkill -f "fixtures/fake-agent\\.cjs (claude|droid|codex|faux) "`, { stdio: "ignore" }); } catch { /* none */ }
+  try { execSync(`pkill -f "fixtures/fake-agent\\.cjs (claude|droid|cursor-agent|faux) "`, { stdio: "ignore" }); } catch { /* none */ }
   fs.rmSync(repo, { recursive: true, force: true });
   fs.rmSync(fakeBin, { recursive: true, force: true });
 });
@@ -168,20 +168,20 @@ test("structured failures: bad token exits 6, missing tile exits 5", async () =>
 
 test("a runtime without a turn signal is refused up front, not timed out (exit 7 UNSUPPORTED)", async () => {
   // Client-side: `workflow` needs gatherable replies — refused before any tile is spawned.
-  const wf = hive(["ctl", "workflow", "--shape", "fanout", "--agent", "codex", "--items", "a", "--prompt", "echo {item}", "--json"], { HIVEMIND_TILE: orchestrator });
+  const wf = hive(["ctl", "workflow", "--shape", "fanout", "--agent", "cursor", "--items", "a", "--prompt", "echo {item}", "--json"], { HIVEMIND_TILE: orchestrator });
   expect(wf.code).toBe(7);
   expect(wf.json).toMatchObject({ ok: false, code: "UNSUPPORTED" });
-  expect(String(wf.json.message)).toContain("codex");
+  expect(String(wf.json.message)).toContain("cursor");
   // An unknown runtime is a usage error listing the spawnable ids.
   const unknown = hive(["ctl", "spawn", "--agent", "nope", "--prompt", "x", "--json"]);
   expect(unknown.code).toBe(2);
   expect(String(unknown.json.message)).toContain("claude");
   // Spawning it is fine (a manual tile); reading from it is refused by the control plane.
-  const spawn = hive(["ctl", "spawn", "--agent", "codex", "--name", "manual", "--prompt", "echo raw", "--json"]);
+  const spawn = hive(["ctl", "spawn", "--agent", "cursor", "--name", "manual", "--prompt", "echo raw", "--json"]);
   expect(spawn.code, spawn.stderr).toBe(0);
   const read = hive(["ctl", "read", spawn.json.tileId, "--poll", "--json"]);
   expect(read.code).toBe(7);
   expect(read.json).toMatchObject({ ok: false, code: "UNSUPPORTED" });
-  expect(String(read.json.message)).toMatch(/codex has no turn signal/);
+  expect(String(read.json.message)).toMatch(/cursor has no turn signal/);
   expect(hive(["ctl", "close", spawn.json.tileId, "--json"]).json).toEqual({ ok: true });
 });

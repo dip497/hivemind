@@ -29,8 +29,8 @@ describe("agent catalog", () => {
   test("spawnable vs worker sets follow the declared capabilities", () => {
     expect(spawnableAgents().map((d) => d.id)).toEqual(getCatalog().filter((d) => d.enabled).map((d) => d.id));
     expect(workerAgents().map((d) => d.id)).toEqual(getCatalog().filter((d) => d.enabled && d.caps.turnSignal).map((d) => d.id));
-    for (const id of ["claude", "droid", "pi", "kiro"]) expect(workerAgents().map((d) => d.id)).toContain(id);
-    expect(workerAgents().map((d) => d.id)).not.toContain("codex");
+    for (const id of ["claude", "codex", "droid", "pi", "kiro"]) expect(workerAgents().map((d) => d.id)).toContain(id);
+    expect(workerAgents().map((d) => d.id)).not.toContain("cursor");
     for (const d of getCatalog()) if (!d.caps.turnSignal) expect(d.note).toBeTruthy();
   });
   test("drift guard: what the daemon builds agrees with what each def declares", () => {

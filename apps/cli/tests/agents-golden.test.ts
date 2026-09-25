@@ -34,19 +34,19 @@ describe("agents golden", () => {
     // The agents a machine that found their CLIs would have installed from the catalog —
     // so this proves an installed agent is probed exactly like the old built-ins were.
     const examples = path.join(__dirname, "..", "..", "..", "packages", "hive-agents", "tests", "fixtures", "published-agents");
-    for (const id of ["claude", "codex", "droid", "gemini", "hermes", "kiro", "opencode", "amp", "pi", "cursor"]) {
+    for (const id of ["claude", "codex", "droid", "antigravity", "hermes", "kiro", "opencode", "amp", "pi", "cursor"]) {
       const dest = path.join(ws, "xdg", "hivemind", "agents", id);
       fs.mkdirSync(dest, { recursive: true });
       fs.copyFileSync(path.join(examples, id, "agent.yaml"), path.join(dest, "agent.yaml"));
     }
-    for (const b of ["claude", "codex", "droid", "kiro-cli", "kiro", "pi", "opencode", "gemini", "amp", "cursor-agent", "cursor", "hermes", "openclaw", "vim"]) {
+    for (const b of ["claude", "codex", "droid", "kiro-cli", "kiro", "pi", "opencode", "agy", "amp", "cursor-agent", "cursor", "hermes", "openclaw", "vim"]) {
       fs.writeFileSync(path.join(bin, b), "#!/bin/sh\n"); fs.chmodSync(path.join(bin, b), 0o755);
     }
     const r = hive(["agent", "detect", "--json"], { cwd: ws, env: { PATH: `${bin}:${path.dirname(process.execPath)}:/usr/bin:/bin`, XDG_CONFIG_HOME: path.join(ws, "xdg") } });
     expect(r.code).toBe(0);
     const found = Object.keys((r.json as { data: Record<string, unknown> }).data);
     // Every stand-in binary that an installed agent names is probed and found …
-    expect(found).toEqual(expect.arrayContaining(["amp", "claude", "codex", "cursor-agent", "droid", "gemini", "hermes", "kiro-cli", "opencode", "pi"]));
+    expect(found).toEqual(expect.arrayContaining(["agy", "amp", "claude", "codex", "cursor-agent", "droid", "hermes", "kiro-cli", "opencode", "pi"]));
     // … and nothing that is not an installed agent's binary (`kiro` and `cursor` are
     // the IDEs, whose agents are `kiro-cli` and `cursor-agent`; `openclaw` and `vim`
     // are not installed here).

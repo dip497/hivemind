@@ -17,6 +17,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - An agent's status comes from one place for every surface — tiles, the layers panel, views, notifications: its hooks once they report, its screen until then or when it has none. Pressing Esc or Ctrl+C during a turn shows the turn interrupted, and a usage limit or a failed turn says so.
 - Terminals no view shows cost the window nothing: they receive no output until shown, and then open on their current screen. Agents' screens are read where they run, not in the window.
 - An agent's manifest can list environment variables that must not reach a terminal (`launch.unsetEnv`); Claude's plugin lists the marker that turned transcript saving off when Hivemind was started from inside Claude Code.
+- Codex reports its turns, questions, subagents and replies, so `hive ctl read` and workflows work with Codex workers. The first Codex tile asks you once, in Codex's own hooks review, to trust Hivemind's hooks.
+- The Gemini plugin is gone: Gemini CLI has been replaced by Antigravity, whose plugin stays on the screen reading because its hooks can only be set in your own configuration.
 
 ## [2026.9.5] — 2026-09-22
 

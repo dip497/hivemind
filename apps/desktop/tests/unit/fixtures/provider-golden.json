@@ -19,7 +19,8 @@
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
         "HCP_TOKEN": "golden-token",
         "HIVEMIND_TILE": "tile-g",
-        "HIVE_AGENT_ID": "claude"
+        "HIVE_AGENT_ID": "claude",
+        "CLAUDE_CODE_FORCE_SESSION_PERSISTENCE": "1"
       },
       "settings": {
         "hooks": {
@@ -226,7 +227,8 @@
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
         "HCP_TOKEN": "golden-token",
         "HIVEMIND_TILE": "tile-g",
-        "HIVE_AGENT_ID": "claude"
+        "HIVE_AGENT_ID": "claude",
+        "CLAUDE_CODE_FORCE_SESSION_PERSISTENCE": "1"
       },
       "settings": {
         "hooks": {
@@ -452,7 +454,8 @@
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
         "HCP_TOKEN": "golden-token",
         "HIVEMIND_TILE": "tile-g",
-        "HIVE_AGENT_ID": "claude"
+        "HIVE_AGENT_ID": "claude",
+        "CLAUDE_CODE_FORCE_SESSION_PERSISTENCE": "1"
       },
       "settings": {
         "hooks": {
@@ -658,7 +661,8 @@
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
         "HCP_TOKEN": "golden-token",
         "HIVEMIND_TILE": "tile-g",
-        "HIVE_AGENT_ID": "claude"
+        "HIVE_AGENT_ID": "claude",
+        "CLAUDE_CODE_FORCE_SESSION_PERSISTENCE": "1"
       },
       "settings": {
         "hooks": {
@@ -864,7 +868,8 @@
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
         "HCP_TOKEN": "golden-token",
         "HIVEMIND_TILE": "tile-g",
-        "HIVE_AGENT_ID": "claude"
+        "HIVE_AGENT_ID": "claude",
+        "CLAUDE_CODE_FORCE_SESSION_PERSISTENCE": "1"
       },
       "settings": {
         "hooks": {
@@ -1091,18 +1096,8 @@
     "spawn": {
       "cmd": "codex",
       "args": [
-        "--sandbox",
-        "workspace-write",
-        "--ask-for-approval",
-        "on-request"
-      ],
-      "env": {
-        "HIVE_AGENT_DEPTH": "1"
-      }
-    },
-    "spawnSupervised": {
-      "cmd": "codex",
-      "args": [
+        "-c",
+        "hooks={SessionStart=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='session.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],SessionEnd=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='session.ended' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=3}]}],UserPromptSubmit=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='turn.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],Stop=[{hooks=[{type=\"command\",command=\"HIVE_SDK='/x/ud/hive-sdk.cjs' HIVE_HOOK_SOCK='/x/ud/hcp.sock' HIVE_PLAN_SOCK='/x/ud/plan-bridge.sock' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/agents/codex/hive-turn-end.cjs'\",timeout=10}]}],Interrupt=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='turn.ended' HIVE_EVENT_OUTCOME='interrupted' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=3}]}],PermissionRequest=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='input.requested' HIVE_EVENT_KIND='permission' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],PostToolUse=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='input.resolved' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],SubagentStart=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='subagent.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],SubagentStop=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='subagent.stopped' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],PreCompact=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='compacting.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],PostCompact=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='compacting.ended' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}]}",
         "--sandbox",
         "workspace-write",
         "--ask-for-approval",
@@ -1110,11 +1105,35 @@
       ],
       "env": {
         "HIVE_AGENT_DEPTH": "1",
-        "HIVE_SUPERVISE": "all"
+        "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
+        "HCP_TOKEN": "golden-token",
+        "HIVEMIND_TILE": "tile-g",
+        "HIVE_AGENT_ID": "codex"
+      }
+    },
+    "spawnSupervised": {
+      "cmd": "codex",
+      "args": [
+        "-c",
+        "hooks={SessionStart=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='session.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],SessionEnd=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='session.ended' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=3}]}],UserPromptSubmit=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='turn.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],Stop=[{hooks=[{type=\"command\",command=\"HIVE_SDK='/x/ud/hive-sdk.cjs' HIVE_HOOK_SOCK='/x/ud/hcp.sock' HIVE_PLAN_SOCK='/x/ud/plan-bridge.sock' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/agents/codex/hive-turn-end.cjs'\",timeout=10}]}],Interrupt=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='turn.ended' HIVE_EVENT_OUTCOME='interrupted' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=3}]}],PermissionRequest=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='input.requested' HIVE_EVENT_KIND='permission' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],PostToolUse=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='input.resolved' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],SubagentStart=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='subagent.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],SubagentStop=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='subagent.stopped' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],PreCompact=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='compacting.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],PostCompact=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='compacting.ended' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}]}",
+        "--sandbox",
+        "workspace-write",
+        "--ask-for-approval",
+        "on-request"
+      ],
+      "env": {
+        "HIVE_AGENT_DEPTH": "1",
+        "HIVE_SUPERVISE": "all",
+        "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
+        "HCP_TOKEN": "golden-token",
+        "HIVEMIND_TILE": "tile-g",
+        "HIVE_AGENT_ID": "codex"
       }
     },
     "spawnWithPrompt": {
       "args": [
+        "-c",
+        "hooks={SessionStart=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='session.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],SessionEnd=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='session.ended' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=3}]}],UserPromptSubmit=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='turn.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],Stop=[{hooks=[{type=\"command\",command=\"HIVE_SDK='/x/ud/hive-sdk.cjs' HIVE_HOOK_SOCK='/x/ud/hcp.sock' HIVE_PLAN_SOCK='/x/ud/plan-bridge.sock' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/agents/codex/hive-turn-end.cjs'\",timeout=10}]}],Interrupt=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='turn.ended' HIVE_EVENT_OUTCOME='interrupted' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=3}]}],PermissionRequest=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='input.requested' HIVE_EVENT_KIND='permission' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],PostToolUse=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='input.resolved' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],SubagentStart=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='subagent.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],SubagentStop=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='subagent.stopped' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],PreCompact=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='compacting.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],PostCompact=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='compacting.ended' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}]}",
         "--sandbox",
         "workspace-write",
         "--ask-for-approval",
@@ -1126,35 +1145,53 @@
     "restoreFresh": {
       "cmd": "codex",
       "args": [
+        "-c",
+        "hooks={SessionStart=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='session.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],SessionEnd=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='session.ended' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=3}]}],UserPromptSubmit=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='turn.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],Stop=[{hooks=[{type=\"command\",command=\"HIVE_SDK='/x/ud/hive-sdk.cjs' HIVE_HOOK_SOCK='/x/ud/hcp.sock' HIVE_PLAN_SOCK='/x/ud/plan-bridge.sock' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/agents/codex/hive-turn-end.cjs'\",timeout=10}]}],Interrupt=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='turn.ended' HIVE_EVENT_OUTCOME='interrupted' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=3}]}],PermissionRequest=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='input.requested' HIVE_EVENT_KIND='permission' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],PostToolUse=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='input.resolved' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],SubagentStart=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='subagent.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],SubagentStop=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='subagent.stopped' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],PreCompact=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='compacting.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],PostCompact=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='compacting.ended' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}]}",
         "--sandbox",
         "workspace-write",
         "--ask-for-approval",
         "on-request"
       ],
       "env": {
-        "HIVE_AGENT_DEPTH": "1"
+        "HIVE_AGENT_DEPTH": "1",
+        "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
+        "HCP_TOKEN": "golden-token",
+        "HIVEMIND_TILE": "tile-g",
+        "HIVE_AGENT_ID": "codex"
       }
     },
     "restoreAlreadyResuming": {
       "cmd": "codex",
       "args": [
+        "-c",
+        "hooks={SessionStart=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='session.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],SessionEnd=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='session.ended' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=3}]}],UserPromptSubmit=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='turn.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],Stop=[{hooks=[{type=\"command\",command=\"HIVE_SDK='/x/ud/hive-sdk.cjs' HIVE_HOOK_SOCK='/x/ud/hcp.sock' HIVE_PLAN_SOCK='/x/ud/plan-bridge.sock' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/agents/codex/hive-turn-end.cjs'\",timeout=10}]}],Interrupt=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='turn.ended' HIVE_EVENT_OUTCOME='interrupted' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=3}]}],PermissionRequest=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='input.requested' HIVE_EVENT_KIND='permission' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],PostToolUse=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='input.resolved' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],SubagentStart=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='subagent.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],SubagentStop=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='subagent.stopped' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],PreCompact=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='compacting.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],PostCompact=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='compacting.ended' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}]}",
         "--sandbox",
         "workspace-write",
         "resume",
         "sess-1"
       ],
       "env": {
-        "HIVE_AGENT_DEPTH": "1"
+        "HIVE_AGENT_DEPTH": "1",
+        "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
+        "HCP_TOKEN": "golden-token",
+        "HIVEMIND_TILE": "tile-g",
+        "HIVE_AGENT_ID": "codex"
       }
     },
     "retry": {
       "cmd": "codex",
       "args": [
+        "-c",
+        "hooks={SessionStart=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='session.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],SessionEnd=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='session.ended' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=3}]}],UserPromptSubmit=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='turn.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],Stop=[{hooks=[{type=\"command\",command=\"HIVE_SDK='/x/ud/hive-sdk.cjs' HIVE_HOOK_SOCK='/x/ud/hcp.sock' HIVE_PLAN_SOCK='/x/ud/plan-bridge.sock' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/agents/codex/hive-turn-end.cjs'\",timeout=10}]}],Interrupt=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='turn.ended' HIVE_EVENT_OUTCOME='interrupted' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=3}]}],PermissionRequest=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='input.requested' HIVE_EVENT_KIND='permission' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],PostToolUse=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='input.resolved' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],SubagentStart=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='subagent.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],SubagentStop=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='subagent.stopped' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],PreCompact=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='compacting.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],PostCompact=[{hooks=[{type=\"command\",command=\"HIVE_EVENT='compacting.ended' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}]}",
         "--sandbox",
         "workspace-write"
       ],
       "env": {
-        "HIVE_AGENT_DEPTH": "1"
+        "HIVE_AGENT_DEPTH": "1",
+        "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
+        "HCP_TOKEN": "golden-token",
+        "HIVEMIND_TILE": "tile-g",
+        "HIVE_AGENT_ID": "codex"
       }
     },
     "superviseSpawn": {

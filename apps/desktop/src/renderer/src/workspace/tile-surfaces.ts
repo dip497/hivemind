@@ -103,7 +103,7 @@ export type TileSurfaceType = TileSurfaceSpec["type"];
 export type TileSurface = TileSurfaceSpec & { id: string; kind: TileKind };
 
 /** Auto-derive a short tile name from the command. Uses identifyAgent for known
- *  agents (claude, codex, gemini, …), falls back to the cmd basename. */
+ *  agents (claude, codex, opencode, …), falls back to the cmd basename. */
 export function autoNameFromCmd(cmd: string): string {
   const agent = identifyAgent(cmd);
   if (agent) return agent;

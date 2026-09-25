@@ -8,7 +8,7 @@ import {
 import { stabilizeScreenStatus, SCREEN_WORKING_HOLD_MS } from "@hivemind/agent-host/screen-status";
 import { useAuthoredAgents } from "./authored-agents.ts";
 
-// gemini, amp, grok, opencode and cline ship from the catalog, not inside the app.
+// amp, grok, opencode and cline ship from the catalog, not inside the app.
 useAuthoredAgents();
 
 /** A detector's verdict with the two needs-you kinds folded into "blocked". */
@@ -71,13 +71,6 @@ test("codex: confirm prompt → blocked, interrupt → working", () => {
   assert.equal(detectAgentState("codex", "generating\nesc to interrupt"), "working");
   assert.equal(detectAgentState("codex", "• Working (0s • esc…"), "working");
   assert.equal(detectAgentState("codex", "❯ "), "idle");
-});
-
-test("gemini: box confirmation → blocked, esc to cancel → working", () => {
-  assert.equal(detectAgentState("gemini", "│ Apply this change\n│ Yes  │ No"), "blocked");
-  assert.equal(detectAgentState("gemini", "waiting for user confirmation"), "blocked");
-  assert.equal(detectAgentState("gemini", "thinking…\nesc to cancel"), "working");
-  assert.equal(detectAgentState("gemini", "❯ "), "idle");
 });
 
 test("cursor: approval → blocked, spinner → working", () => {

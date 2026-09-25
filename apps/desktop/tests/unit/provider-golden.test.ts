@@ -79,7 +79,7 @@ const SCREENS: Record<Agent, string[]> = {
   kiro: ["Allow this tool to run?\nAllow  Deny\nEnter to select", "do you want to proceed?\n❯ yes", "● Editing file…\nesc to cancel", "kiro is working…", "> "],
   pi: ["out\nWorking...", "❯ ", ""],
   // Recognised-but-unspawnable (scrape-only) agents are not providers.
-  gemini: [], cursor: [], antigravity: [], cline: [], opencode: [], copilot: [], kimi: [], amp: [], grok: [], hermes: [],
+  cursor: [], antigravity: [], cline: [], opencode: [], copilot: [], kimi: [], amp: [], grok: [], hermes: [],
 };
 
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
