@@ -33,6 +33,8 @@ export type TerminalTileData = {
   session?: string;
   label?: string;
   name?: string;
+  /** The name alone, without the task: what a rename edits. */
+  given?: string;
   onRename?: (id: string, name: string) => void;
   onOpenInBrowser?: (url: string) => void;
   onOpenInEditor?: (path: string) => void;
@@ -276,6 +278,7 @@ export function buildTileSurfaces(ctx: TileSurfaceCtx): TileSurface[] {
             // The host reports a title only when what the agent says it is doing changes,
             // so this rebuilds one tile's body now and then, not on every spinner frame.
             name: tileName(tileNames, agentTitles, t) ?? autoNameFromCmd(cmd),
+            given: tileNames[t.id] ?? t.label,
             onRename: renameTile,
             onOpenInBrowser: (url: string) => openUrlInBrowser(t.id, url),
             onOpenInEditor: (path: string) => openFileFromTerminal(t.id, path),

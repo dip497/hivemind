@@ -157,7 +157,7 @@ test("editor/diff surfaces are skipped when there's no repo anywhere", () => {
   assert.equal(effectiveRepoOf("ed", {}, [], null), null);
 });
 
-test("surface type follows the tile kind; terminal name resolves rename ?? agent title ?? label ?? auto name from cmd", () => {
+test("surface type follows the tile kind; a terminal is called its name (rename, else label), then its task (agent title, else first prompt)", () => {
   const s = buildTileSurfaces(ctx({
     tiles: [
       tile({ id: "c", kind: "claude", cmd: "claude", args: [], label: "claude #1 · plan" }),
@@ -174,9 +174,14 @@ test("surface type follows the tile kind; terminal name resolves rename ?? agent
   assert.equal(data(s, "c").name, "claude #1 · plan");
   assert.equal(data(s, "sh").name, "build box");
   const titled = buildTileSurfaces(ctx({ tiles: [tile({ id: "c", kind: "claude", cmd: "claude", args: [] })], agentTitles: { c: "Fix the flaky test" } }));
-  assert.equal(data(titled, "c").name, "Fix the flaky test");
-  const both = buildTileSurfaces(ctx({ tiles: [tile({ id: "c", kind: "claude", cmd: "claude", args: [] })], agentTitles: { c: "Fix it" }, tileNames: { c: "reviewer" } }));
-  assert.equal(data(both, "c").name, "reviewer");
+  assert.equal(data(titled, "c").name, "shell · Fix the flaky test");
+  const both = buildTileSurfaces(ctx({ tiles: [tile({ id: "c", kind: "claude", cmd: "claude", args: [], label: "claude #2" })], agentTitles: { c: "Fix it" }, tileNames: { c: "reviewer" } }));
+  assert.equal(data(both, "c").name, "reviewer · Fix it");
+  assert.equal(data(both, "c").given, "reviewer", "a rename edits the name, not the task");
+  const started = buildTileSurfaces(ctx({ tiles: [tile({ id: "c", kind: "claude", cmd: "claude", args: [], label: "claude #2", task: "Fix the login test" })] }));
+  assert.equal(data(started, "c").name, "claude #2 · Fix the login test");
+  const told = buildTileSurfaces(ctx({ tiles: [tile({ id: "c", kind: "claude", cmd: "claude", args: [], label: "claude #2", task: "Fix the login test" })], agentTitles: { c: "Running tests" } }));
+  assert.equal(data(told, "c").name, "claude #2 · Running tests");
   assert.deepEqual(data(s, "ed").tabs, ["src/a.ts"]);
   assert.deepEqual(data(s, "b").openReq, { url: "https://x", seq: 3 });
   assert.equal(data(s, "pr").cwd, "/x");

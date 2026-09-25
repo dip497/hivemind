@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { agentTitle, cleanName, NAME_MAX, getCatalog, agentById, agentForCmd, identifyProvider, spawnableAgents, workerAgents, detectStatus, taskFromTitle, setCatalog } from "../src/index.js";
+import { agentTitle, cleanName, NAME_MAX, promptTask, getCatalog, agentById, agentForCmd, identifyProvider, spawnableAgents, workerAgents, detectStatus, taskFromTitle, setCatalog } from "../src/index.js";
 import { providers, providerFor, nodePartsFor, composeResume } from "../src/node.js";
 import { authoredDefs } from "./authored.js";
 
@@ -70,5 +70,15 @@ describe("agent catalog", () => {
     expect(agentTitle(agentById("claude"), "✳ Fix the bug")).toBe("Fix the bug");
     expect(agentTitle(agentById("claude"), "✳ Claude Code")).toBe("");
     expect(agentTitle(undefined, "   ")).toBe("");
+    for (const frame of ["⠋", "⠹", "◐", "◓", "✻", "·"]) expect(agentTitle(undefined, `${frame} Fix it`)).toBe("Fix it");
+    expect(agentTitle(undefined, "[ ! ] Action Required")).toBe("[ ! ] Action Required");
+  });
+  test("a prompt's task line: its first clause, no links or markdown, cut at a word", () => {
+    expect(promptTask("Fix the flaky login test. Then run the suite.")).toBe("Fix the flaky login test");
+    expect(promptTask("## Review https://github.com/x/y/pull/3 — carefully")).toBe("Review");
+    expect(promptTask("\n\n  `echo` titled\nmore")).toBe("echo titled");
+    const long = promptTask("Refactor the authentication middleware so that every request carries a verified session");
+    expect(long.endsWith("…")).toBe(true);
+    expect(long.length).toBeLessThanOrEqual(41);
   });
 });

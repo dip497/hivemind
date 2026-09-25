@@ -32,6 +32,8 @@ export interface TileInstance {
   /** claude / shell only. */
   cmd?: string;
   args?: string[];
+  /** Agent only: what it was started to do, from its first prompt. Shown until the agent says. */
+  task?: string;
   /** browser only — last/initial URL so the tile restores where it was. */
   url?: string;
   /** Terminal only: an existing daemon session it shows (started by `hive run` or another device); never spawns one. */

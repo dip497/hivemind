@@ -118,7 +118,7 @@ test("an unnamed tile is called by what its agent says it is doing — the host'
   const r = hive(["ctl", "spawn", "--agent", "claude", "--prompt", "echo titled", "--json"]);
   expect(r.code, r.stderr).toBe(0);
   const nameOf = () => hive(["ctl", "list", "--json"]).json.frames.flatMap((f: any) => f.tiles).find((t: any) => t.tileId === r.json.tileId)?.name;
-  await expect.poll(nameOf, { timeout: 20_000 }).toBe("echo titled");
+  await expect.poll(nameOf, { timeout: 20_000 }).toMatch(/ · echo titled$/);
 });
 
 test("fanout over droid workers from the claude orchestrator: hooks.json injection + typed prompt + gather", async () => {

@@ -21,6 +21,7 @@ import { checkAgentInstalled, noAgentInstalled } from "./agent-plugins";
 import { isRemote } from "../../shared/remote-uri";
 import { mintId } from "../../shared/tile-id";
 import { getSettings } from "./settings-store";
+import { promptTask } from "@hivemind/agents";
 
 /** Kinds that are one-per-frame (spawn → focus existing). claude/shell are not. */
 const SINGLETON_KINDS: ReadonlySet<TileKind> = new Set(["editor", "diff", "issues"]);
@@ -290,7 +291,7 @@ export function useSpawn(ctx: SpawnCtx) {
         label = kind === "editor" ? "Editor" : kind === "diff" ? "Diff" : "Issues";
       }
       placeInFrame(newId, frame);
-      setTiles((cur) => [...cur, { id: newId, kind, label, cmd, args, ...(kind === "browser" && opts?.url ? { url: opts.url } : {}), ...(kind === "shell" && opts?.session ? { session: opts.session.id } : {}) }]);
+      setTiles((cur) => [...cur, { id: newId, kind, label, cmd, args, ...(kind === "browser" && opts?.url ? { url: opts.url } : {}), ...(kind === "shell" && opts?.session ? { session: opts.session.id } : {}), ...(kind === AGENT_TILE_KIND && opts?.work ? { task: promptTask(opts.work) } : {}) }]);
       // "Work on this": hand the fresh claude tile its prompt. It delivers it to
       // itself the first time it's ready (see claude-bus queueWork/claimWork).
       if (kind === AGENT_TILE_KIND && opts?.work) queueWork(newId, opts.work);
@@ -445,7 +446,7 @@ export function useSpawn(ctx: SpawnCtx) {
       // their "finished" notification — they're gathered in bulk, not driven.
       if (opts.background) markBackgroundTile(newId);
       placeInFrame(newId, frame, { background: opts.background });
-      setTiles((cur) => [...cur, { id: newId, kind: AGENT_TILE_KIND, label, cmd, args }]);
+      setTiles((cur) => [...cur, { id: newId, kind: AGENT_TILE_KIND, label, cmd, args, ...(opts.prompt ? { task: promptTask(opts.prompt) } : {}) }]);
       if (opts.prompt) queueWork(newId, opts.prompt);
       return newId;
     },

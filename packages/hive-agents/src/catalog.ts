@@ -128,7 +128,24 @@ export function cleanName(raw: string): string {
  *  should be called by. A leading status glyph (a spinner, a bullet) is the agent's own status
  *  display, not part of the name; the manifest's `titles` pick the task out of the rest. */
 export function agentTitle(def: AgentProviderDef | undefined, raw: string): string {
-  return taskFromTitle(def, cleanName(raw).replace(/^[\s·•∙‣⁃*✶✱✲✳✴✻✽✦✧★☆●○◦◌◆◇]+/u, ""));
+  return taskFromTitle(def, cleanName(raw).replace(STATUS_GLYPHS, ""));
+}
+
+/** Leading status glyphs agents animate in their titles: the Braille block (spinners), circle
+ *  and half-circle frames, stars and bullets. Status is shown from the agent's state, not here. */
+const STATUS_GLYPHS = /^[\s\u2800-\u28ff\u25cb-\u25d7\u2605\u2606\u2726-\u274b·•∙‣⁃*◆◇◦◌]+/u;
+
+/** How long a task line may be: a glance, not a sentence. */
+const TASK_MAX = 40;
+
+/** A task line from the prompt a tile was started with: its first clause, without links or
+ *  markdown, cut at a word within TASK_MAX. What a tile shows until its agent says more. */
+export function promptTask(prompt: string): string {
+  const line = (prompt ?? "").replace(/https?:\/\/\S+/g, "").replace(/[`*_#>\[\]]/g, "").split("\n").map((l) => l.trim()).find(Boolean) ?? "";
+  const clause = cleanName(line.split(/(?<=[.!?;:])\s|\s[—–-]\s/)[0] ?? "").replace(/[.!?;:]$/, "");
+  if (clause.length <= TASK_MAX) return clause;
+  const cut = clause.slice(0, TASK_MAX + 1);
+  return `${cut.slice(0, cut.lastIndexOf(" ") > 20 ? cut.lastIndexOf(" ") : TASK_MAX).trim()}…`;
 }
 
 export function spawnLabelFor(def: AgentProviderDef, n: number, opts: SpawnOptions): string {

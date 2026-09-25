@@ -128,9 +128,10 @@ interface Props {
   session?: string;
   /** Display label for the canvas session chip / toasts (e.g. "claude #2"). */
   label?: string;
-  /** What the tile is called (tile-name.ts): a given name, else what its agent says it is
-   *  doing (the host's title), else its label. */
+  /** What the tile is called (tile-name.ts): its name, then what it is doing. */
   name?: string;
+  /** The name alone (a given one, else the label): what a rename edits. */
+  given?: string;
   onRename?: (id: string, name: string) => void;
   /** Open URL targets in the frame's browser tile instead of the OS browser. */
   onOpenInBrowser?: (url: string) => void;
@@ -148,7 +149,7 @@ interface Props {
   onTogglePin?: (id: string, rect: PinRect) => void;
 }
 
-export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onRename, onOpenInBrowser, onOpenInEditor, onClose, selected, pinned, onTogglePin }: Props) {
+export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, given, onRename, onOpenInBrowser, onOpenInEditor, onClose, selected, pinned, onTogglePin }: Props) {
   // Editable header name: starts in display mode; double-click opens input.
   // Persists via onRename → Canvas tileNames → LAYOUT_KEY localStorage.
   const [editing, setEditing] = useState(false);
@@ -1122,7 +1123,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
             onBlur={() => { onRename?.(tileId, draft); setEditing(false); }}
             onKeyDown={(e) => {
               if (e.key === "Enter") { onRename?.(tileId, draft); setEditing(false); }
-              if (e.key === "Escape") { setDraft(name ?? ""); setEditing(false); }
+              if (e.key === "Escape") { setDraft(given ?? name ?? ""); setEditing(false); }
             }}
             font="mono"
             className="nodrag w-32"
@@ -1131,7 +1132,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
         ) : (
           <>
             <button
-              onDoubleClick={() => { setDraft(name ?? "Terminal"); setEditing(true); }}
+              onDoubleClick={() => { setDraft(given ?? name ?? "Terminal"); setEditing(true); }}
               // No `nodrag` here: it would force drag-suppression on the WHOLE
               // width the name occupies (most of the header) — which is exactly
               // where users grab the tile to drag. xyflow's drag has a movement
@@ -1146,7 +1147,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
             <Button
               variant="ghost"
               size="icon-micro"
-              onClick={() => { setDraft(name ?? "Terminal"); setEditing(true); }}
+              onClick={() => { setDraft(given ?? name ?? "Terminal"); setEditing(true); }}
               reveal="hidden"
               className="nodrag"
               aria-label="rename tile"
