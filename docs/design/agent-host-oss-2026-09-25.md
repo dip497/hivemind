@@ -60,6 +60,25 @@ separate binary data channel for terminal bytes so large output never goes throu
   from the host's log, falling back to a status snapshot past its window.
 - Status: `status/get`, and status changes as events (value + `since` + `source`).
 - Control: approvals and plan reviews as requests the host routes to whichever client answers.
+- `schema/get` returns the schemas the running host implements, and `agent-host schema` prints
+  them: a client in another language generates types from the binary it talks to.
+
+One socket, typed frames: a frame is either a JSON-RPC message or a raw byte chunk for one
+session (`[type][session][len][bytes]`), so terminal output never pays for JSON and there is one
+connection to authenticate, not two.
+
+### Hook → host
+
+A hook invocation is a short-lived client with one message: `event/report {id, session, token,
+event, …}`.
+
+- **Identity.** Each session gets a capability token at spawn (in its environment, alongside the
+  session id). The host accepts a report only for the session the token was minted for — a hook
+  cannot report for another session by setting an env var.
+- **Delivery.** `id` is unique per report (the hook makes it), the host acks, and duplicates are
+  dropped by id. If the host does not ack in 200 ms the hook appends the report to a spool file
+  and exits 0; the host drains the spool when it next starts or when the session reconnects. A hook
+  never blocks its agent.
 
 ## 5. Adapter model
 
@@ -76,17 +95,86 @@ separate binary data channel for terminal bytes so large output never goes throu
   notification types, the plan and approval scripts, `stabilizeClaudeStatus`, the 15 s staleness
   timeout, `isClaude` in `TerminalTile.tsx:255`.
 
-### Status without guesses, for agents with hooks
+### Naming: three namespaces, never mixed
 
-| State | Signal |
-|---|---|
-| turn started / ended / failed | `turn.started`, `turn.ended {outcome}` |
-| needs you / answered | `input.requested {kind}` / `input.resolved` (PostToolUse, PostToolUseFailure) |
-| interrupted | the agent's hook (Codex `Interrupt`), or the host seeing the user send Esc/Ctrl+C during a turn |
-| subagents, background shells | `subagent.*`; `turn.ended {background}` |
-| exited | process exit, observed by the host |
+```yaml
+hooks:
+  events:
+    Stop:                     # native: the agent CLI's own event name, as its docs spell it
+      - emit: turn.ended      # canonical: from the spec vocabulary, validated
+    StopFailure:
+      - emit: turn.ended
+        outcome: failed
+        errorFrom: error      # payload field whose value is mapped by `errors:` below
+        errors: { rate_limit: limit, overloaded: limit, authentication_failed: auth, billing_error: auth }
+    PreToolUse:
+      - run: hooks/approve.cjs          # script: a path inside the plugin, using the SDK
+        matcher: ExitPlanMode
+        produces: [input.requested]     # what it may emit — declared, so the host can check
+```
 
-Agents without hooks get the fallback screen rules, and their statuses carry `source: "screen"`.
+A plugin author never invents a canonical name, and the host never learns a native one. `run:`
+scripts may only emit what `produces:` declares; anything else is dropped and logged.
+
+### Status: one state machine, one authority
+
+Status is a fold over the session's events — the same events in the same order give the same
+status in every implementation (the conformance suite checks exactly this).
+
+| From | Event | To |
+|---|---|---|
+| any | `session.started` | `idle` |
+| `idle`, `done`, `failed`, `interrupted`, `limited` | `turn.started` | `working` |
+| `working` | `input.requested {kind}` | `waiting {kind}` |
+| `waiting` | `input.resolved` | `working` |
+| `working`, `waiting` | `turn.ended {outcome}` | `done` / `failed` / `interrupted` / `limited` |
+| `working`, `waiting` | user sent interrupt (host observed) | `interrupted` |
+| any | process exit | `exited` |
+
+Orthogonal to the state, and carried with it: `subagents` (count from `subagent.*`),
+`background` (from `turn.ended`), `compacting` (bool), `source` (`hooks` | `protocol` | `screen`),
+`since`.
+
+**One authority per session.** A session's status comes from exactly one source. It is `hooks`
+when the adapter declares hooks and they have reported since spawn; it is `screen` for an adapter
+without hooks. If a hooked session prints steadily for 30 s with no hook report since spawn, the
+host marks its hooks unhealthy, switches the session to `screen` (when the adapter has fallback
+rules) and says so in the status. It never mixes sources within one session.
+
+### Hook inventory (probed 2026-09-25)
+
+| Canonical | Claude 2.1.280 | Codex 0.155.1 | Gemini 0.59.0 | OpenCode 1.17.12 (plugin) | Hermes |
+|---|---|---|---|---|---|
+| `session.started {source}` | SessionStart (startup/resume/clear/compact/fork) | SessionStart | SessionStart | — | — |
+| `session.ended {reason}` | SessionEnd | SessionEnd | SessionEnd | — | — |
+| `turn.started` | UserPromptSubmit; Notification `quota_auto_resume_fired` | UserPromptSubmit | BeforeAgent | `session.status` busy | `pre_llm_call` |
+| `turn.ended` | Stop; StopFailure → `failed`/`limited` | Stop; `turn_aborted` → `interrupted` | AfterAgent | `session.idle`; `session.error` → `failed` | `post_llm_call` |
+| interrupted | none (Stop does not run) → host-observed | Interrupt | host-observed | host-observed | host-observed |
+| `input.requested {kind}` | PermissionRequest (immediate); Elicitation → `question`; PreToolUse ExitPlanMode → `plan` | PermissionRequest | Notification | `permission.asked` | `pre_approval_request` |
+| `input.resolved` | PostToolUse, PostToolUseFailure, PermissionDenied, Notification `elicitation_response` | PostToolUse | AfterTool | — | — |
+| `subagent.*` | SubagentStart/Stop | SubagentStart/Stop | — | — | `subagent_start`/`subagent_stop` |
+| `compacting` | PreCompact / PostCompact | PreCompact | — | — | — |
+
+Not events: `TaskCreated`/`TaskCompleted` are the agent's todo list; Claude's `Notification
+permission_prompt` arrives ~6 s after `PermissionRequest` and is ignored when the latter is
+mapped. Session facts that are not status — cost, context-window use, model — come from an
+adapter's status-line hook (Claude runs one after every assistant message) and land on the session
+record, never the event stream.
+
+Protocol agents (ACP, Codex app-server) are sessions of kind `protocol`: their structured
+updates are the source (`source: "protocol"`), mapped to the same vocabulary; the canonical names
+follow ACP's where they overlap.
+
+### New in the vocabulary
+
+- `input.resolved` — the question was answered (either way).
+- `session.ready` — the agent can take typed input; a prompt delivered `typed-when-ready` waits
+  for it, instead of a fixed delay.
+- `turn.ended` outcome `limited` (usage limit), and `error` as a closed class
+  (`limit | auth | server | other`) mapped from the agent's own error value by the manifest.
+- `compacting.started` / `compacting.ended`.
+
+The host never touches an agent's login: it launches the user's own CLI as the user would.
 
 ## 6. Language and performance
 
@@ -126,9 +214,9 @@ reference on a published benchmark (RSS and CPU at 100 and 500 sessions, attach 
 | S5 | Interest subscriptions in the desktop client; hidden terminals hold no renderer copy | re-profile at 100 sessions; renderer cost tracks visible terminals |
 | S6 | Rust daemon prototype against the conformance suite; benchmark | switch only on a pass + a measured win |
 
-## 9. Open decisions
+## 9. Decisions (defaults taken 2026-09-25, revisit before 1.0)
 
-1. Names for the packages and the future repository.
-2. Agents without hooks: labelled screen fallback (recommended) or running/exited/activity only.
-3. Whether the event vocabulary should also be expressible as ACP `session/update` for clients
-   that already speak ACP.
+1. Package names `agent-host` and `agent-sdk`; repository name decided at the split.
+2. Agents without hooks get the labelled screen fallback.
+3. Canonical names align with ACP's where they overlap; a full ACP `session/update` projection is
+   a client concern, not the host's.
