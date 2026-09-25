@@ -3,7 +3,7 @@
  * own hook names. A manifest maps a native event to one of these (`emit:`), and the host only
  * ever reasons about these. Facts only — never text an agent wrote.
  */
-import type { AgentHookEntry, AgentHooks } from "./types.js";
+import type { AgentHookEntry, AgentProviderDef } from "./types.js";
 
 export const AGENT_EVENTS = [
   "session.started", "session.ready", "session.ended",
@@ -26,8 +26,6 @@ export interface AgentEvent {
   event: AgentEventName;
   outcome?: TurnOutcome;
   kind?: InputKind;
-  /** Where the agent keeps its transcript, for reading a reply; dropped for another machine's tiles. */
-  transcriptPath?: string | null;
   /** The subagent this start or stop is about. */
   agentId?: string;
   /** `turn.ended`: background tasks (shells) the agent left running — a count, never their commands. */
@@ -42,22 +40,15 @@ export const AGENT_EVENT_TOPIC = "agent.event";
 export const EVENT_HOOK = "event";
 export const EVENT_ENV = { event: "HIVE_EVENT", outcome: "HIVE_EVENT_OUTCOME", kind: "HIVE_EVENT_KIND" } as const;
 
-/** What each of our named observe scripts reports, in canonical terms. Scripts that decide
- *  (plan review, approval brokers) are absent: they are control, not observation. */
-export const NAMED_HOOK_EVENTS: Readonly<Record<string, readonly AgentEventName[]>> = {
-  stop: ["turn.ended"],
-  userPrompt: ["turn.started"],
-  notification: ["input.requested"],
-  subagent: ["subagent.started", "subagent.stopped"],
-};
-
-/** Every canonical event an agent's hooks can produce, from `emit` entries and named scripts. */
-export function hookSignals(hooks: AgentHooks | undefined): Set<AgentEventName> {
+/** Every canonical event an agent's hooks can produce: its `emit` entries, and what the
+ *  scripts it ships declare they report. */
+export function hookSignals(def: Pick<AgentProviderDef, "hooks" | "assets">): Set<AgentEventName> {
+  const produces = new Map((def.assets ?? []).filter((a) => a.hook).map((a) => [a.hook!, a.produces ?? []]));
   const out = new Set<AgentEventName>();
-  for (const spec of Object.values(hooks?.events ?? {})) {
+  for (const spec of Object.values(def.hooks?.events ?? {})) {
     for (const e of (Array.isArray(spec) ? spec : [spec]) as AgentHookEntry[]) {
       if (e.emit) out.add(e.emit);
-      else for (const n of NAMED_HOOK_EVENTS[e.hook ?? ""] ?? []) out.add(n);
+      else for (const n of produces.get(e.hook ?? "") ?? []) out.add(n);
     }
   }
   return out;
@@ -79,7 +70,6 @@ export function parseAgentEvent(raw: unknown): AgentEvent | null {
     tileId: d.tileId, event: d.event,
     ...(d.event === "turn.ended" ? { outcome: outcome ?? "done" } : {}),
     ...(d.event === "input.requested" ? { kind: kind ?? "other" } : {}),
-    ...(d.transcriptPath === null ? { transcriptPath: null } : str(d.transcriptPath, 4096) ? { transcriptPath: d.transcriptPath as string } : {}),
     ...(str(d.agentId, 256) ? { agentId: d.agentId as string } : {}),
     ...(d.event === "turn.ended" && Number.isInteger(d.background) && (d.background as number) > 0 && (d.background as number) < 10_000 ? { background: d.background as number } : {}),
     ...(str(d.sessionId, 256) ? { sessionId: d.sessionId as string } : {}),
@@ -94,7 +84,7 @@ export function legacyTopicsFor(e: AgentEvent): Array<{ topic: string; data: Rec
     case "input.resolved":
       return [{ topic: "status", data: { tileId: e.tileId, state: "working" } }];
     case "turn.ended":
-      return [{ topic: "turn", data: { tileId: e.tileId, transcriptPath: e.transcriptPath ?? null, ...(e.background ? { background: e.background } : {}) } }];
+      return [{ topic: "turn", data: { tileId: e.tileId, ...(e.background ? { background: e.background } : {}) } }];
     case "input.requested":
       // Plan review and approvals have their own control-plane waits; these are "needs you" signals.
       return [{ topic: "notification", data: { tileId: e.tileId, notificationType: e.kind === "permission" ? "permission_prompt" : "elicitation_dialog" } }];

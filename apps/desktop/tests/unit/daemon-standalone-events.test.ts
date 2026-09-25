@@ -76,6 +76,15 @@ test("standalone: hook events reach event viewers, requests are refused at once,
   assert.ok(Date.now() - started < 2000, "an approval request never waits");
   assert.deepEqual(JSON.parse(reply), { t: "res", id: "a1", ok: false, error: { code: "UNAVAILABLE", message: "no desktop on this machine" } });
   assert.equal(fs.statSync(d.hcp).mode & 0o777, 0o600);
+
+  // A reply is answered at once and goes to the desktops watching, never to push.
+  const before = pushes.length;
+  const ack = await hook(d.hcp, { t: "req", id: "r1", method: "agent.reply", token: "x", params: { tileId: "tile-1", text: "the reply" } }, true);
+  assert.deepEqual(JSON.parse(ack), { t: "res", id: "r1", ok: true, result: { ok: true } });
+  for (let t = 0; t < 3000 && !events.some((e) => (e as { topic?: string }).topic === "agent.reply"); t += 25) await wait(25);
+  assert.deepEqual(events.at(-1), { t: "event", topic: "agent.reply", data: { tileId: "tile-1", text: "the reply" } });
+  await wait(200);
+  assert.equal(pushes.length, before);
   viewer.destroy();
   srv.close();
 });

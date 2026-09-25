@@ -28,13 +28,8 @@ import { applyInitialPrompt, stripInitialPrompt } from "./initial-prompt.js";
 import { sanitizeShellEnv } from "./shell-env.js";
 import { AGENT_EVENT_TOPIC, composeResume, evictTrackedSession, legacyTopicsFor, parseAgentEvent, prepareProviders, trackerSource, setCatalog } from "@hivemind/agents/node";
 import { resolveWindowsSpawn } from "@hivemind/agents/discover";
-import { planHookSource } from "./hooks/plan-review-hook-source.js";
-import { stopHookSource } from "./hooks/stop-hook-source.js";
-import { approvalHookSource } from "./hooks/approval-hook-source.js";
-import { subagentHookSource } from "./hooks/subagent-hook-source.js";
-import { notificationHookSource } from "./hooks/notification-hook-source.js";
-import { userpromptHookSource } from "./hooks/userprompt-hook-source.js";
 import { agentEventHookSource } from "./hooks/agent-event-hook-source.js";
+import { SDK_FILE, sdkSource } from "@hivemind/agent-sdk";
 import { readOrCreateToken, hcpSockPath } from "./hooks/token.js";
 
 // Lazy: node-pty must never be evaluated inside the compiled `hive` (see bun-pty.ts).
@@ -119,37 +114,15 @@ const hookExecPath = (() => {
   return wrapper;
 })();
 
-// Plan review: the daemon writes the PreToolUse(ExitPlanMode) hook script; the
-// SOCKET is owned by Electron main (it alone can drive the canvas). Both sides
-// derive the same socket path from userDataDir, so no extra arg-passing. main
-// binds the bridge in plan-bridge.ts.
-const planHookPath = path.join(userDataDir, "plan-review-hook.cjs");
+// Plan review: the SOCKET is owned by Electron main (it alone can drive the canvas); an
+// agent's plugin reaches it through the SDK. Both sides derive the path from userDataDir.
 const planBridgeSock = ipcPath(userDataDir, "plan-bridge.sock");
-try { fs.writeFileSync(planHookPath, planHookSource()); } catch { /* best-effort */ }
-
-// HCP: the daemon writes the Stop hook (turn reporter) and shares the control-
-// plane socket + capability token with Electron main (both derive the socket
-// path from userDataDir; the token file is read/created by whichever starts
-// first). Injected into spawned claude tiles via claude-resume.
-const stopHookPath = path.join(userDataDir, "hcp-stop-hook.cjs");
-try { fs.writeFileSync(stopHookPath, stopHookSource()); } catch { /* best-effort */ }
-// Permission-broker hook (HCP Phase 6) — injected ONLY for supervised workers.
-const approvalHookPath = path.join(userDataDir, "hcp-approval-hook.cjs");
-try { fs.writeFileSync(approvalHookPath, approvalHookSource()); } catch { /* best-effort */ }
-// Subagent lifecycle hook — marks a tile "working" while it has in-flight
-// (incl. background) Task subagents, the case the screen-scrape misses.
-const subagentHookPath = path.join(userDataDir, "hcp-subagent-hook.cjs");
-try { fs.writeFileSync(subagentHookPath, subagentHookSource()); } catch { /* best-effort */ }
-// Notification hook — relays claude's "needs your permission/input" signal so a
-// deterministic "needs you" status hardens the screen-scrape.
-const notificationHookPath = path.join(userDataDir, "hcp-notification-hook.cjs");
-try { fs.writeFileSync(notificationHookPath, notificationHookSource()); } catch { /* best-effort */ }
-// UserPromptSubmit hook — turn START → working (hook-driven status; pairs with Stop).
-const userpromptHookPath = path.join(userDataDir, "hcp-userprompt-hook.cjs");
-try { fs.writeFileSync(userpromptHookPath, userpromptHookSource()); } catch { /* best-effort */ }
 // The one observe hook every manifest `emit:` entry runs (canonical agent events).
 const eventHookPath = path.join(userDataDir, "hcp-event-hook.cjs");
 try { fs.writeFileSync(eventHookPath, agentEventHookSource()); } catch { /* best-effort */ }
+// What an agent's own hook scripts load to report and ask (HIVE_SDK).
+const sdkPath = path.join(userDataDir, SDK_FILE);
+try { fs.writeFileSync(sdkPath, sdkSource()); } catch { /* best-effort */ }
 const hcpSock = hcpSockPath(userDataDir);
 const hcpToken = readOrCreateToken(userDataDir);
 
@@ -174,14 +147,9 @@ const providerCtx = {
   trackerPath,
   tileSessionsDir,
   legacyMapFile: tileSessionsPath,
-  stopHookPath,
-  planHookPath,
   planBridgeSock,
-  approvalHookPath,
-  subagentHookPath,
-  userpromptHookPath,
-  notificationHookPath,
   eventHookPath,
+  sdkPath,
   hcpSock,
   hcpToken,
 };
@@ -640,6 +608,10 @@ if (STANDALONE) {
           for (const push of eventViewers) push({ t: "event", topic: o.topic, data: o.data });
           void notifyPush(o.topic, o.data);
         }
+      } else if (m.t === "req" && (m as { method?: unknown }).method === "agent.reply") {
+        // A reply goes to the desktops watching this machine, never to push.
+        for (const push of eventViewers) push({ t: "event", topic: "agent.reply", data: (m as { params?: unknown }).params });
+        c.end(`${JSON.stringify({ t: "res", id: m.id, ok: true, result: { ok: true } })}\n`);
       } else if (m.t === "req") {
         // Only a desktop can decide (e.g. approvals): answer at once so the agent falls back to its own prompt.
         c.end(`${JSON.stringify({ t: "res", id: m.id, ok: false, error: { code: "UNAVAILABLE", message: "no desktop on this machine" } })}\n`);

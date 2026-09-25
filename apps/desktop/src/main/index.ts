@@ -105,7 +105,6 @@ import { handleViewProtocol, listViewPackages, registerViewScheme, startViewWatc
 import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, settingsFile } from "./settings-store.js";
 import { patchSettingsExtras } from "@hivemind/core/settings";
 import { PipeManager } from "./hcp/pipes.js";
-import { readLastAssistantMessage } from "./hcp/transcript.js";
 import { toBareId, toPtyId } from "../shared/tile-id.js";
 import { SUBMIT_DELAY_MS } from "../shared/agent-io.js";
 import { INITIAL_PROMPT_ENV } from "@hivemind/agent-host/initial-prompt";
@@ -1903,31 +1902,23 @@ function startHcpControlPlane(): void {
         if (status) pushNotify(toBareId(n.tileId), status);
         return;
       }
+      if (topic === "agent.reply") {
+        // A remote machine's daemon passes its hooks' replies on as this topic.
+        const r = (data ?? {}) as { tileId?: string; text?: string };
+        if (r.tileId && typeof r.text === "string" && r.text) hcpTurns.recordReply(toPtyId(r.tileId), r.text);
+        return;
+      }
       if (topic !== "turn") return;
-      const d = (data ?? {}) as { tileId?: string; transcriptPath?: string; text?: string };
+      const d = (data ?? {}) as { tileId?: string; text?: string };
       if (!d.tileId) return;
-      // Forged-event hardening: the `turn` event is token-less (only the 0600
-      // socket gates it), so constrain the transcript path to a real agent
-      // transcript — claude's `~/.claude/**`, droid's `~/.factory/**`, or droid's
-      // ephemeral FACTORY_HOME_OVERRIDE overlay (`<userData>/droid-home/**`). A
-      // bogus path can't make agent.read return an arbitrary user-readable file's
-      // contents — it falls back to the recorder instead.
-      let tp = d.transcriptPath;
-      if (tp && tp.startsWith("~/")) tp = path.join(os.homedir(), tp.slice(2)); // hooks may report a literal ~
-      const okRoots = [
-        path.join(os.homedir(), ".claude") + path.sep,
-        path.join(os.homedir(), ".factory") + path.sep,
-        path.join(app.getPath("userData"), "droid-home") + path.sep,
-      ];
-      const safeTp = tp && tp.endsWith(".jsonl") && okRoots.some((r) => tp!.startsWith(r)) ? tp : null;
-      // pi carries its reply inline on the turn event (no transcript path); pass
-      // it through so agent.read returns it directly. claude/droid send no text.
+      // The reply comes from the agent's plugin (`agent.reply`) ahead of the turn end; an
+      // older plugin may still carry it inline here.
       // Single-delivery ladder: true if this reply was already delivered by a more
       // specific channel — a blocking agent.read (hive ctl read) took it, OR the
       // worker authored an explicit agent.report (hive ctl report) this turn. Either way the auto-report banner below
       // stands down, so the parent isn't handed the same reply twice (the duplicate
       // would arrive as an unsolicited banner that spawns a spurious extra turn).
-      const deliveredElsewhere = hcpTurns.recordTurn(d.tileId, safeTp, typeof d.text === "string" ? d.text : null);
+      const deliveredElsewhere = hcpTurns.recordTurn(d.tileId, typeof d.text === "string" && d.text ? d.text : null);
       // Turn END → idle (hook-driven status). The hook reports the PTY id; the
       // renderer status bus keys by BARE — normalize (recordTurn above stays on
       // the pty id, the turn-tracker's key). If a background subagent is still
@@ -1951,14 +1942,7 @@ function startHcpControlPlane(): void {
       // single worker→spawner edge, which IS the reader.)
       const dests = hcpPipes.dests(toBareId(d.tileId));
       if (dests.length === 0 || deliveredElsewhere) return;
-      // claude/droid carry the reply in a transcript; pi carries it inline on the
-      // turn event. Gating on the transcript alone silently dropped every pi
-      // worker's auto-report to its parent.
-      const reply = safeTp
-        ? readLastAssistantMessage(safeTp)
-        : typeof d.text === "string"
-          ? d.text.trim()
-          : "";
+      const reply = (hcpTurns.lastReply(d.tileId) ?? "").trim();
       if (!reply) return;
       // Tag the forward with its source so the receiving agent knows which
       // worker just reported (this is the agent-to-agent "mailbox" delivery —

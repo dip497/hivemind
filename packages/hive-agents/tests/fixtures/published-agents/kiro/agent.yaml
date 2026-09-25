@@ -81,9 +81,9 @@ hooks:
       hook: tracker
     userPromptSubmit:
     - hook: tracker
-    - hook: userPrompt
+    - emit: turn.started
     stop:
-      hook: stop
+      emit: turn.ended
     preToolUse:
       hook: kiroApproval
       matcher: '*'

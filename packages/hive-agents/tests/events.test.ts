@@ -64,19 +64,22 @@ describe("rendering", () => {
   });
 });
 
-test("what an agent can report is derived from its hooks, old names included", () => {
-  const signals = hookSignals({ events: {
-    Stop: { hook: "stop" }, SubagentStart: { hook: "subagent" },
-    PermissionRequest: { emit: "input.requested", kind: "permission" }, PreToolUse: [{ hook: "plan" }],
-  } });
-  expect([...signals].sort()).toEqual(["input.requested", "subagent.started", "subagent.stopped", "turn.ended"]);
-  expect(hookSignals(undefined).size).toBe(0);
+test("what an agent can report is derived from its hooks and what its own scripts declare", () => {
+  const signals = hookSignals({
+    hooks: { events: {
+      Stop: { hook: "turnEnd" }, SubagentStart: { emit: "subagent.started" },
+      PermissionRequest: { emit: "input.requested", kind: "permission" }, PreToolUse: [{ hook: "planReview" }],
+    } },
+    assets: [{ name: "a.cjs", file: "a.cjs", hook: "turnEnd", produces: ["turn.ended"] }, { name: "p.cjs", file: "p.cjs", hook: "planReview" }],
+  });
+  expect([...signals].sort()).toEqual(["input.requested", "subagent.started", "turn.ended"]);
+  expect(hookSignals({}).size).toBe(0);
 });
 
 describe("the posted event", () => {
   test("is parsed into a closed shape, with defaults for the qualifier", () => {
     expect(parseAgentEvent({ tileId: "t", event: "turn.ended", transcriptPath: "/x.jsonl", message: "agent text", extra: 1 }))
-      .toEqual({ tileId: "t", event: "turn.ended", outcome: "done", transcriptPath: "/x.jsonl" });
+      .toEqual({ tileId: "t", event: "turn.ended", outcome: "done" });
     expect(parseAgentEvent({ tileId: "t", event: "input.requested", kind: "nonsense" })).toEqual({ tileId: "t", event: "input.requested", kind: "other" });
     expect(parseAgentEvent({ tileId: "t", event: "turn.ended", background: 2 })).toEqual({ tileId: "t", event: "turn.ended", outcome: "done", background: 2 });
     expect(parseAgentEvent({ tileId: "t", event: "turn.started", background: 2 })).toEqual({ tileId: "t", event: "turn.started" });
@@ -88,7 +91,7 @@ describe("the posted event", () => {
     expect(legacyTopicsFor({ tileId: "t", event: "turn.started" })).toEqual([{ topic: "status", data: { tileId: "t", state: "working" } }]);
     expect(legacyTopicsFor({ tileId: "t", event: "input.resolved" })).toEqual([{ topic: "status", data: { tileId: "t", state: "working" } }]);
     expect(legacyTopicsFor({ tileId: "t", event: "compacting.started" })).toEqual([]);
-    expect(legacyTopicsFor({ tileId: "t", event: "turn.ended", outcome: "failed", transcriptPath: null })).toEqual([{ topic: "turn", data: { tileId: "t", transcriptPath: null } }]);
+    expect(legacyTopicsFor({ tileId: "t", event: "turn.ended", outcome: "failed" })).toEqual([{ topic: "turn", data: { tileId: "t" } }]);
     expect(legacyTopicsFor({ tileId: "t", event: "input.requested", kind: "permission" })[0]!.data.notificationType).toBe("permission_prompt");
     expect(legacyTopicsFor({ tileId: "t", event: "input.requested", kind: "question" })[0]!.data.notificationType).toBe("elicitation_dialog");
     expect(legacyTopicsFor({ tileId: "t", event: "subagent.stopped", agentId: "a1" })).toEqual([{ topic: "subagent", data: { tileId: "t", phase: "stop", agentId: "a1" } }]);

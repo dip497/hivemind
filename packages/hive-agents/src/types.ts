@@ -209,8 +209,10 @@ export interface AgentAsset {
   name: string;
   /** The file beside the manifest whose contents are written. */
   file: string;
-  /** A hook this script is: `events` may name it like one of ours, and it runs with the control-plane socket. */
+  /** A hook this script is: `events` may name it like one of ours, and it runs with the SDK. */
   hook?: string;
+  /** The canonical events this script reports — what the agent can be relied on for. */
+  produces?: AgentEventName[];
 }
 
 /** What a launch needs beyond the command itself. */
@@ -317,15 +319,12 @@ export interface ProviderSpawnContext {
   trackerPath: string;
   tileSessionsDir: string;
   legacyMapFile?: string;
-  planHookPath?: string;
+  /** The plan-review socket a plugin's script reaches through the SDK. */
   planBridgeSock?: string;
-  stopHookPath?: string;
-  approvalHookPath?: string;
-  subagentHookPath?: string;
-  notificationHookPath?: string;
-  userpromptHookPath?: string;
   /** The generic script every `emit` entry runs. */
   eventHookPath?: string;
+  /** The SDK a plugin's own hook scripts load (`HIVE_SDK`). */
+  sdkPath?: string;
   hcpSock?: string;
   hcpToken?: string;
   /** Provider-private paths, keyed by provider id — whatever that provider's
@@ -344,10 +343,9 @@ export interface DaemonPaths {
   execPath: string;
   trackerPath: string;
   tileSessionsDir: string;
-  stopHookPath: string;
-  userpromptHookPath: string;
-  notificationHookPath: string;
   eventHookPath?: string;
+  sdkPath?: string;
+  planBridgeSock?: string;
   hcpSock: string;
 }
 

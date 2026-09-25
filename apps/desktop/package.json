@@ -135,6 +135,7 @@
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "~0.80.10",
     "@electron/rebuild": "catalog:",
+    "@hivemind/agent-sdk": "workspace:*",
     "@hivemind/tsconfig": "workspace:*",
     "@playwright/test": "^1.63.0",
     "@shadcn/lint": "^0.1.0",

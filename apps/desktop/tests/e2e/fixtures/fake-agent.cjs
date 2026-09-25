@@ -13,7 +13,8 @@
  *   - faux:   `$FAUX_HOOKS` (the throwaway sixth provider's node half), argv prompt.
  *   - codex (or any other name): no hooks — a raw-tier stand-in with no turn signal.
  * Each turn: fire UserPromptSubmit → run the snippet → append the reply to a
- * transcript JSONL (Claude/droid shape) → fire Stop with `transcript_path`.
+ * transcript JSONL (Claude/droid shape) → fire Stop with `transcript_path` and, as
+ * claude does, `last_assistant_message`.
  * Follow-up prompts arrive as stdin lines (`hive ctl send` types text + Enter).
  * Lines starting with "[hive]" are control-plane deliveries (reports, approvals):
  * echoed, never executed.
@@ -62,10 +63,8 @@ function fire(event, payload) {
   return true;
 }
 
-// ── transcript (must live under a root the app trusts: <userData>/droid-home) ─
-// The socket path hivemind injects is <userData>/hcp.sock, so the isolated
-// profile's droid-home overlay is derivable for BOTH providers — no writes
-// outside the test profile.
+// ── transcript (inside the isolated test profile, derived from the socket path
+// hivemind injects: <userData>/hcp.sock) — droid's plugin reads its reply from here.
 const userData = path.dirname(process.env.HIVE_HCP_SOCK || path.join(require("node:os").tmpdir(), "x"));
 const transcriptDir = path.join(userData, "droid-home", "fake-transcripts");
 fs.mkdirSync(transcriptDir, { recursive: true });
@@ -94,7 +93,7 @@ function turn(prompt) {
     JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: reply }] } }) + "\n",
   );
   process.stdout.write(`${reply}\n`);
-  fire("Stop", { session_id: sessionId, transcript_path: transcriptPath, stop_hook_active: false });
+  fire("Stop", { session_id: sessionId, transcript_path: transcriptPath, stop_hook_active: false, last_assistant_message: reply });
   process.stdout.write(`${provider}> `);
 }
 

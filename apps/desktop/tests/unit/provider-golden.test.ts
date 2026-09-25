@@ -16,7 +16,7 @@ import os from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { composeResume, composeResumeFrom, providers as registry, renderHookDocument } from "@hivemind/agents/node";
+import { composeResume, composeResumeFrom, hookPathsFor, providers as registry, renderHookDocument } from "@hivemind/agents/node";
 import { authoredDef, authoredAsset, useAuthoredAgents } from "./authored-agents.ts";
 import type { SpawnSpec } from "@hivemind/agent-host/pty-session-manager";
 import { deliversPromptViaArgv } from "../../src/shared/agent-io.ts";
@@ -42,13 +42,9 @@ const CTX = {
   trackerPath: "/x/ud/tile-session-tracker.cjs",
   tileSessionsDir: "/x/ud/tile-sessions",
   legacyMapFile: "/x/ud/tile-sessions.json",
-  planHookPath: "/x/ud/plan-review-hook.cjs",
   planBridgeSock: "/x/ud/plan-bridge.sock",
-  stopHookPath: "/x/ud/hcp-stop-hook.cjs",
-  approvalHookPath: "/x/ud/hcp-approval-hook.cjs",
-  subagentHookPath: "/x/ud/hcp-subagent-hook.cjs",
-  notificationHookPath: "/x/ud/hcp-notification-hook.cjs",
-  userpromptHookPath: "/x/ud/hcp-userprompt-hook.cjs",
+  eventHookPath: "/x/ud/hcp-event-hook.cjs",
+  sdkPath: "/x/ud/hive-sdk.cjs",
   hcpSock: "/x/ud/hcp.sock",
   hcpToken: "golden-token",
   // Provider-private paths, as each provider's prepare() would return them.
@@ -57,7 +53,7 @@ const CTX = {
   providers: {
     pi: { privateDir: "/x/ud/agents/pi" },
     droid: { privateDir: "/x/ud/agents/droid", homeReady: "1" },
-    kiro: { privateDir: "/x/ud/agents/kiro", homeReady: "1", kiroApprovalHookPath: "/x/ud/hcp-kiro-approval-hook.cjs" },
+    kiro: { privateDir: "/x/ud/agents/kiro", homeReady: "1" },
   },
 };
 
@@ -150,11 +146,7 @@ async function capture(resume = composeResume(CTX)) {
         paths: {
           private: "/x/ud/agents/droid", execPath: CTX.execPath, tileSessionsDir: CTX.tileSessionsDir, home: "/home/u",
           hcpSock: CTX.hcpSock,
-          hooks: {
-            stop: { path: CTX.stopHookPath, arg: CTX.hcpSock },
-            userPrompt: { path: CTX.userpromptHookPath, arg: CTX.hcpSock },
-            notification: { path: CTX.notificationHookPath, arg: CTX.hcpSock },
-          },
+          hooks: hookPathsFor(authoredDef("droid"), CTX),
         },
       })!),
       "kiro-home/.kiro/agents/hivemind.json": JSON.parse(renderHookDocument(authoredDef("kiro"), {
@@ -162,12 +154,7 @@ async function capture(resume = composeResume(CTX)) {
         paths: {
           private: "/x/ud/agents/kiro", execPath: CTX.execPath, tileSessionsDir: CTX.tileSessionsDir, home: "/home/u",
           hcpSock: CTX.hcpSock,
-          hooks: {
-            tracker: { path: CTX.trackerPath, arg: CTX.tileSessionsDir },
-            stop: { path: CTX.stopHookPath, arg: CTX.hcpSock },
-            userPrompt: { path: CTX.userpromptHookPath, arg: CTX.hcpSock },
-            kiroApproval: { path: CTX.providers.kiro.kiroApprovalHookPath, arg: CTX.hcpSock },
-          },
+          hooks: hookPathsFor(authoredDef("kiro"), CTX),
         },
       })!),
     };
@@ -175,6 +162,8 @@ async function capture(resume = composeResume(CTX)) {
       // The same files the daemon reads from an installed agent's dir — here, the fixtures.
       "hive-pi-ext.mjs": sha(authoredAsset("pi", "hive-pi-ext.mjs")),
       "hcp-kiro-approval-hook.cjs": sha(authoredAsset("kiro", "hcp-kiro-approval-hook.cjs")),
+      ...Object.fromEntries(["hive-turn-end.cjs", "hive-plan-review.cjs", "hive-approve.cjs"].map((f) => [`claude/${f}`, sha(authoredAsset("claude", f))])),
+      ...Object.fromEntries(["hive-turn-end.cjs", "hive-notify.cjs"].map((f) => [`droid/${f}`, sha(authoredAsset("droid", f))])),
     };
     return out;
   } finally {

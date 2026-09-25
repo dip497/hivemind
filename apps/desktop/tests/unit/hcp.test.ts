@@ -1,4 +1,4 @@
-/** HCP core — protocol framing, transcript parse, turn tracker, recorder,
+/** HCP core — protocol framing, turn tracker, recorder,
  *  method dispatch, and an end-to-end server round-trip (token + event). */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -7,7 +7,6 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { takeLines, HCP_MAX_LINE } from "../../src/main/hcp/protocol.ts";
-import { readLastAssistantMessage } from "../../src/main/hcp/transcript.ts";
 import { TurnTracker } from "../../src/main/hcp/turn-tracker.ts";
 import { OutputRecorder, stripAnsi } from "../../src/main/hcp/output-recorder.ts";
 import { makeDispatch } from "../../src/main/hcp/methods.ts";
@@ -51,30 +50,17 @@ test("takeLines: splits complete lines, keeps remainder, rejects overlong", () =
   assert.throws(() => takeLines("x".repeat(HCP_MAX_LINE + 1)));
 });
 
-test("transcript: extracts the last assistant text block", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tx-"));
-  const f = path.join(dir, "t.jsonl");
-  fs.writeFileSync(
-    f,
-    [
-      JSON.stringify({ type: "user", message: { role: "user", content: "hi" } }),
-      JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "first" }] } }),
-      JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", name: "x" }] } }),
-      JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "FINAL answer" }] } }),
-      "",
-    ].join("\n"),
-  );
-  assert.equal(readLastAssistantMessage(f), "FINAL answer");
-  assert.equal(readLastAssistantMessage(path.join(dir, "missing.jsonl")), null);
-});
-
 test("TurnTracker: waitForTurn resolves on next turn, times out otherwise", async () => {
   const tt = new TurnTracker();
   const epoch = tt.currentSeq("t1");
   const p = tt.waitForTurn("t1", epoch, 1000);
-  tt.recordTurn("t1", "/tmp/x.jsonl");
+  tt.recordReply("t1", "the reply");
+  tt.recordTurn("t1");
   const rec = await p;
-  assert.equal(rec?.transcriptPath, "/tmp/x.jsonl");
+  assert.equal(rec?.text, "the reply");
+  // A reply belongs to one turn: the next turn without one carries none.
+  tt.recordTurn("t1");
+  assert.equal((await tt.waitForTurn("t1", rec!.seq, 10))?.text, null);
   // Already-past turn resolves immediately.
   assert.ok(await tt.waitForTurn("t1", -1, 1000));
   // No turn → timeout → null.
@@ -133,16 +119,14 @@ test("dispatch agent.send: writes text + carriage return", async () => {
   assert.deepEqual(writes, [["hm:t1", "hello"], ["hm:t1", "\r"]]);
 });
 
-test("dispatch agent.read: returns transcript reply after a turn", async () => {
+test("dispatch agent.read: returns the reply the agent's plugin reported for the turn", async () => {
   const { deps, turns } = fakeDeps();
   const { dispatch } = makeDispatch(deps);
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tx2-"));
-  const f = path.join(dir, "t.jsonl");
-  fs.writeFileSync(f, JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "the reply" }] } }));
   await dispatch("agent.send", { tileId: "t1", text: "go" });
   const read = dispatch("agent.read", { tileId: "t1", timeoutMs: 1000 });
-  // The Stop hook records the turn under the PTY id (HIVEMIND_TILE = hm:<tileId>).
-  turns.recordTurn("hm:t1", f);
+  // The plugin reports under the PTY id (HIVEMIND_TILE = hm:<tileId>): the reply, then the turn.
+  await dispatch("agent.reply", { tileId: "hm:t1", text: "the reply" });
+  turns.recordTurn("hm:t1");
   assert.deepEqual(await read, { text: "the reply", finalStatus: "turn", truncated: false });
 });
 
@@ -348,9 +332,9 @@ test("recordTurn reports whether a blocking reader took the turn (auto-report de
   // A parent's hive_read is blocked on the worker's next turn.
   const reader = tt.waitForTurn("hm:worker", tt.currentSeq("hm:worker"), 2000);
   // Worker finishes → the reader takes it, so the auto-report must stand down.
-  assert.equal(tt.recordTurn("hm:worker", null, "reply"), true);
+  assert.equal(tt.recordTurn("hm:worker", "reply"), true);
   // No one waiting → the auto-report is the delivery channel, so it must fire.
-  assert.equal(tt.recordTurn("hm:lonely", null, "reply"), false);
+  assert.equal(tt.recordTurn("hm:lonely", "reply"), false);
   return reader; // settle the promise
 });
 
@@ -360,9 +344,9 @@ test("single-delivery ladder: an explicit hive_report suppresses that turn's aut
   tt.markReported("hm:worker");
   // Turn ends. recordTurn must report the reply was already delivered (by the explicit
   // report) so the auto-report banner stands down — no duplicate, no spurious turn.
-  assert.equal(tt.recordTurn("hm:worker", null, "raw turn text"), true);
+  assert.equal(tt.recordTurn("hm:worker", "raw turn text"), true);
   // The flag is per-turn: a later turn with no explicit report auto-reports normally.
-  assert.equal(tt.recordTurn("hm:worker", null, "next turn"), false);
+  assert.equal(tt.recordTurn("hm:worker", "next turn"), false);
 });
 
 test("forgetTile (pty-exit teardown) wakes a blocked hive_read instead of hanging it", async () => {

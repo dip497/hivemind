@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 // droid is a manifest now: its hooks document and its transforms both come from there.
-const { findSession: _find, manifestRuntime, renderHookDocument, transformsFor, specIsAgent } =
+const { findSession: _find, hookPathsFor, manifestRuntime, renderHookDocument, transformsFor, specIsAgent } =
   await import("@hivemind/agents/node");
 const { authoredDef: _bundled } = await import("./authored-agents.ts");
 const droidDef = _bundled("droid");
@@ -14,11 +14,7 @@ const isDroid = (spec: { cmd: string }) => specIsAgent(droidDef, spec);
 const pathsOf = (deps: Record<string, string | undefined>) => ({
   private: "/x", execPath: deps.execPath ?? "", tileSessionsDir: "/x/sessions", home: "/home/u",
   ...(deps.hcpSock ? { hcpSock: deps.hcpSock, hcpToken: deps.hcpToken ?? "tok" } : {}),
-  hooks: {
-    ...(deps.stopHookPath && deps.hcpSock ? { stop: { path: deps.stopHookPath, arg: deps.hcpSock } } : {}),
-    ...(deps.userpromptHookPath && deps.hcpSock ? { userPrompt: { path: deps.userpromptHookPath, arg: deps.hcpSock } } : {}),
-    ...(deps.notificationHookPath && deps.hcpSock ? { notification: { path: deps.notificationHookPath, arg: deps.hcpSock } } : {}),
-  },
+  hooks: hookPathsFor(droidDef, { ...deps, execPath: deps.execPath ?? "", tileSessionsDir: "/x/sessions" }),
 });
 const droidHooksSettings = (deps: Record<string, string | undefined>) => {
   const doc = renderHookDocument(droidDef, {
@@ -48,9 +44,8 @@ function sessionFile(root: string, rel: string, id: string, cwd: string, mtime: 
 const HOOK_DEPS = {
   execPath: "/x/electron",
   droidHome: "/x/droid-home",
-  stopHookPath: "/x/stop.cjs",
-  userpromptHookPath: "/x/up.cjs",
-  notificationHookPath: "/x/notif.cjs",
+  eventHookPath: "/x/event.cjs",
+  sdkPath: "/x/hive-sdk.cjs",
   hcpSock: "/x/hcp.sock",
   hcpToken: "tok",
 };
@@ -78,10 +73,12 @@ test("droidHooksSettings wires Stop/UserPromptSubmit/Notification at TOP LEVEL (
   // Top-level event keys — droid's hooks.json matches 0 commands if wrapped.
   assert.ok(hooks.Stop && hooks.UserPromptSubmit && hooks.Notification, "all three events wired");
   assert.equal((hooks as any).hooks, undefined, "must NOT be nested under a `hooks` key");
+  // Stop runs droid's own script (it reads droid's transcript for the reply) with the SDK.
   const stopCmd = (hooks.Stop[0] as any).hooks[0].command as string;
   assert.match(stopCmd, /ELECTRON_RUN_AS_NODE=1/);
-  assert.match(stopCmd, /stop\.cjs/);
-  assert.match(stopCmd, /hcp\.sock/);
+  assert.match(stopCmd, /HIVE_SDK='\/x\/hive-sdk\.cjs'/);
+  assert.match(stopCmd, /agents\/droid\/hive-turn-end\.cjs/);
+  assert.match((hooks.UserPromptSubmit[0] as any).hooks[0].command, /HIVE_EVENT='turn\.started'/);
   // Attribution must NOT be baked into the shared hooks.json command — it rides env.
   assert.doesNotMatch(stopCmd, /HIVEMIND_TILE=/);
 });

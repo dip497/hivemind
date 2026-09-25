@@ -223,29 +223,74 @@ hooks:
   template: '{"hooks":{events}}'
   events:
     SessionStart:
-      hook: tracker
+    - hook: tracker
+    - emit: session.started
+      timeout: 10
+    SessionEnd:
+      emit: session.ended
+      timeout: 10
+    UserPromptSubmit:
+      emit: turn.started
+      timeout: 10
+    Stop:
+      hook: turnEnd
+      timeout: 10
+    StopFailure:
+    - emit: turn.ended
+      outcome: limited
+      matcher: rate_limit
+      timeout: 10
+    - emit: turn.ended
+      outcome: failed
+      matcher: overloaded|authentication_failed|oauth_org_not_allowed|account_on_hold|billing_error|invalid_request|model_not_found|server_error|max_output_tokens|cloud_credential_error|unknown
+      timeout: 10
+    PermissionRequest:
+      emit: input.requested
+      kind: permission
+      timeout: 10
+    Elicitation:
+      emit: input.requested
+      kind: question
+      timeout: 10
+    PostToolUse:
+      emit: input.resolved
+      timeout: 10
+    PostToolUseFailure:
+      emit: input.resolved
+      timeout: 10
+    PermissionDenied:
+      emit: input.resolved
+      timeout: 10
+    SubagentStart:
+      emit: subagent.started
+      timeout: 10
+    SubagentStop:
+      emit: subagent.stopped
+      timeout: 10
+    PreCompact:
+      emit: compacting.started
+      timeout: 10
+    PostCompact:
+      emit: compacting.ended
+      timeout: 10
     PreToolUse:
-    - hook: plan
+    - hook: planReview
       matcher: ExitPlanMode
       timeout: 345600
-    - hook: approval
+    - hook: approve
       matcher: supervise
       when: supervised
       timeout: 600
-    Stop:
-      hook: stop
-      timeout: 10
-    SubagentStart:
-      hook: subagent
-      timeout: 10
-    SubagentStop:
-      hook: subagent
-      timeout: 10
-    Notification:
-      hook: notification
-      timeout: 10
-    UserPromptSubmit:
-      hook: userPrompt
-      timeout: 10
+assets:
+- name: hive-turn-end.cjs
+  file: hive-turn-end.cjs
+  hook: turnEnd
+  produces: [turn.ended]
+- name: hive-plan-review.cjs
+  file: hive-plan-review.cjs
+  hook: planReview
+- name: hive-approve.cjs
+  file: hive-approve.cjs
+  hook: approve
 launch:
   hcp: true

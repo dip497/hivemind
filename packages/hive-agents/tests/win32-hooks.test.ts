@@ -26,7 +26,7 @@ function decode(cmd: string): { exe: string; script: string } {
 }
 
 test("win32: the command decodes back to the script, with env vars and quoted paths", () => {
-  const cmd = hookCommand("approval", hook, req({ supervise: "all" }));
+  const cmd = hookCommand({ ...hook, env: {} }, req({ supervise: "all" }));
   const { script } = decode(cmd);
   expect(script).toBe(
     "$ProgressPreference='SilentlyContinue'"
@@ -36,7 +36,7 @@ test("win32: the command decodes back to the script, with env vars and quoted pa
     + "; $p=[System.Diagnostics.Process]::Start($s); $p.WaitForExit(); exit $p.ExitCode",
   );
   // A hook argument lands quoted after the script path, in the same escaping.
-  const withArg = decode(hookCommand("stop", { path: hook.path, arg: "C:\\ud\\hcp.sock" }, req()));
+  const withArg = decode(hookCommand({ path: hook.path, arg: "C:\\ud\\hcp.sock" }, req()));
   expect(withArg.script).toBe(
     "$ProgressPreference='SilentlyContinue'"
     + "; $env:HIVEMIND_TILE='tile-1'; $env:ELECTRON_RUN_AS_NODE='1'"
@@ -47,12 +47,12 @@ test("win32: the command decodes back to the script, with env vars and quoted pa
 });
 
 test("win32: a single quote in a path is doubled, not broken out of", () => {
-  const { script } = decode(hookCommand("stop", hook, req({ paths: { ...req().paths, execPath: "C:\\app\\o'brien.exe" } })));
+  const { script } = decode(hookCommand(hook, req({ paths: { ...req().paths, execPath: "C:\\app\\o'brien.exe" } })));
   expect(script).toContain("$s.FileName='C:\\app\\o''brien.exe'");
 });
 
 test("win32: the rendered line is bare of quoting metacharacters outside the powershell path", () => {
-  const cmd = hookCommand("stop", { path: hook.path, arg: "C:\\ud\\hcp.sock" }, req());
+  const cmd = hookCommand({ path: hook.path, arg: "C:\\ud\\hcp.sock" }, req());
   const exe = cmd.slice(0, cmd.indexOf(" -NoProfile "));
   const tail = cmd.slice(cmd.indexOf(" -NoProfile "));
   // The path itself must carry no backslash (the forward slashes are the point), and
@@ -62,13 +62,13 @@ test("win32: the rendered line is bare of quoting metacharacters outside the pow
 });
 
 test("win32: SystemRoot comes from the render env, or falls back to C:/Windows", () => {
-  expect(decode(hookCommand("stop", hook, req())).exe).toBe("C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe");
-  const withRoot = decode(hookCommand("stop", hook, req({ env: { SystemRoot: "C:\\WINDOWS" } })));
+  expect(decode(hookCommand(hook, req())).exe).toBe("C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe");
+  const withRoot = decode(hookCommand(hook, req({ env: { SystemRoot: "C:\\WINDOWS" } })));
   expect(withRoot.exe).toBe("C:/WINDOWS/System32/WindowsPowerShell/v1.0/powershell.exe");
 });
 
 test("posix: the form is unchanged — env-prefixed, single-quoted, ELECTRON_RUN_AS_NODE first-class", () => {
-  const cmd = hookCommand("approval", { path: "/ud/hook.cjs", arg: "/ud/s.sock" }, req({
+  const cmd = hookCommand({ path: "/ud/hook.cjs", arg: "/ud/s.sock", env: {} }, req({
     platform: "linux", supervise: "all",
     paths: { ...req().paths, execPath: "/x/electron", hooks: {} },
   }));

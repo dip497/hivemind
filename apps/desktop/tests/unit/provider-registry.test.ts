@@ -12,9 +12,8 @@ const ctx = {
   execPath: "/x/node",
   trackerPath: "/x/tracker.cjs",
   tileSessionsDir: "/x/sess",
-  stopHookPath: "/x/stop.cjs",
-  subagentHookPath: "/x/sub.cjs",
-  notificationHookPath: "/x/notif.cjs",
+  eventHookPath: "/x/event.cjs",
+  sdkPath: "/x/hive-sdk.cjs",
   hcpSock: "/x/hcp.sock",
   hcpToken: "tok",
 };
@@ -45,19 +44,18 @@ test("composeResume injects claude's signal hooks on a fresh claude spawn", () =
   // The composed transform wires every claude deterministic signal.
   assert.ok(settings.hooks.Stop, "Stop (turn) hook injected");
   assert.ok(settings.hooks.SubagentStart, "SubagentStart hook injected");
-  assert.ok(settings.hooks.Notification, "Notification hook injected");
+  assert.ok(settings.hooks.PermissionRequest, "PermissionRequest (needs you) hook injected");
   assert.ok(settings.hooks.SessionStart, "SessionStart tracker injected");
 });
 
 // ── PLAN MODE ────────────────────────────────────────────────────────────────
 // The PreToolUse(ExitPlanMode) hook IS plan mode: when claude finishes planning
 // and calls ExitPlanMode, this hook routes the plan to the in-canvas review tile
-// and blocks the agent on the decision. It's injected only when BOTH
-// planHookPath AND planBridgeSock are threaded (claude.ts → claude-resume.ts).
-// If a refactor drops either thread, plan mode silently stops working with no
-// failing test — these two lock the wiring.
-test("composeResume injects the ExitPlanMode plan-review hook when planHookPath + planBridgeSock are set", () => {
-  const r = composeResume({ ...ctx, planHookPath: "/x/plan-hook.cjs", planBridgeSock: "/x/plan-bridge.sock" });
+// and blocks the agent on the decision. It is claude's own script, run with the SDK,
+// which reaches the bridge through HIVE_PLAN_SOCK. If a refactor drops the SDK or the
+// socket thread, plan mode silently stops working with no failing test — these lock it.
+test("composeResume injects the ExitPlanMode plan-review hook with the bridge socket", () => {
+  const r = composeResume({ ...ctx, planBridgeSock: "/x/plan-bridge.sock" });
   const out = r.transformSpecOnSpawn(spec("claude"), "t1");
   const settings = JSON.parse(out.args[out.args.indexOf("--settings") + 1]!);
   const pre = settings.hooks.PreToolUse as Array<{ matcher: string; hooks: Array<{ command: string }> }>;
@@ -65,12 +63,13 @@ test("composeResume injects the ExitPlanMode plan-review hook when planHookPath 
   const planHook = pre.find((h) => h.matcher === "ExitPlanMode");
   assert.ok(planHook, "ExitPlanMode PreToolUse hook injected — this is the plan-review handoff");
   const cmd = planHook!.hooks[0]!.command;
-  assert.match(cmd, /plan-hook\.cjs/, "hook runs the plan-review hook script");
-  assert.match(cmd, /plan-bridge\.sock/, "hook targets the plan-bridge socket");
+  assert.match(cmd, /hive-plan-review\.cjs/, "hook runs claude's plan-review script");
+  assert.match(cmd, /HIVE_PLAN_SOCK='\/x\/plan-bridge\.sock'/, "hook targets the plan-bridge socket");
 });
 
-test("composeResume does NOT inject the plan hook when planHookPath/planBridgeSock are absent", () => {
-  const r = composeResume(ctx); // no plan deps
+test("composeResume does NOT inject the plan hook without the SDK", () => {
+  const { sdkPath: _, ...noSdk } = ctx;
+  const r = composeResume(noSdk);
   const out = r.transformSpecOnSpawn(spec("claude"), "t1");
   const settings = JSON.parse(out.args[out.args.indexOf("--settings") + 1]!);
   const planHook = ((settings.hooks.PreToolUse ?? []) as Array<{ matcher: string }>).find((h) => h.matcher === "ExitPlanMode");

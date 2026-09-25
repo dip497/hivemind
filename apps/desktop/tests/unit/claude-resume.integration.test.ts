@@ -26,7 +26,7 @@ import {
   type SessionSnapshot,
 } from "@hivemind/agent-host/pty-session-manager";
 import { authoredDef } from "./authored-agents.ts";
-import { manifestRuntime, renderHookDocument, transformsFor, trackerSource, readTrackedSession,
+import { hookPathsFor, manifestRuntime, renderHookDocument, transformsFor, trackerSource, readTrackedSession,
   type ProviderResumeTransforms, type RuntimePaths } from "@hivemind/agents/node";
 
 // claude is a manifest now. These build the same two things its module used to expose: the
@@ -38,15 +38,7 @@ const pathsFor = (deps: Record<string, string | undefined>): RuntimePaths => ({
   tileSessionsDir: deps.tileSessionsDir!,
   home: "/home/u",
   ...(deps.hcpSock ? { hcpSock: deps.hcpSock, hcpToken: "tok" } : {}),
-  hooks: {
-    ...(deps.trackerPath ? { tracker: { path: deps.trackerPath, arg: deps.tileSessionsDir! } } : {}),
-    ...(deps.planHookPath && deps.planBridgeSock ? { plan: { path: deps.planHookPath, arg: deps.planBridgeSock } } : {}),
-    ...(deps.approvalHookPath && deps.hcpSock ? { approval: { path: deps.approvalHookPath, arg: deps.hcpSock } } : {}),
-    ...(deps.stopHookPath && deps.hcpSock ? { stop: { path: deps.stopHookPath, arg: deps.hcpSock } } : {}),
-    ...(deps.subagentHookPath && deps.hcpSock ? { subagent: { path: deps.subagentHookPath, arg: deps.hcpSock } } : {}),
-    ...(deps.notificationHookPath && deps.hcpSock ? { notification: { path: deps.notificationHookPath, arg: deps.hcpSock } } : {}),
-    ...(deps.userpromptHookPath && deps.hcpSock ? { userPrompt: { path: deps.userpromptHookPath, arg: deps.hcpSock } } : {}),
-  },
+  hooks: hookPathsFor(claudeDef, { ...deps, execPath: deps.execPath!, tileSessionsDir: deps.tileSessionsDir! }),
 });
 const trackerSettings = (deps: Record<string, string | undefined>, tileId: string, supervise?: string): string =>
   renderHookDocument(claudeDef, {
@@ -58,67 +50,43 @@ const makeClaudeResumeTransforms = (deps: Record<string, string | undefined>): P
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-test("trackerSettings: injects the permission-broker hook ONLY when supervised", () => {
-  const deps = {
-    trackerPath: "/x/tracker.cjs", tileSessionsDir: "/x/sess", execPath: "/x/node",
-    approvalHookPath: "/x/approval.cjs", hcpSock: "/x/hcp.sock",
-  };
-  // No supervise → no approval hook (PreToolUse absent without a plan hook either).
+test("trackerSettings: claude's own approval script is wired ONLY when supervised", () => {
+  const deps = { trackerPath: "/x/tracker.cjs", tileSessionsDir: "/x/sess", execPath: "/x/node", sdkPath: "/x/hive-sdk.cjs", hcpSock: "/x/hcp.sock" };
+  // No supervise → only the plan review on PreToolUse.
   const plain = JSON.parse(trackerSettings(deps, "t1"));
-  assert.equal(plain.hooks.PreToolUse, undefined);
-  // Supervised with a tool list → a PreToolUse entry matching those tools, whose
-  // command runs the approval hook against the HCP socket with HIVE_SUPERVISE set.
+  assert.deepEqual(plain.hooks.PreToolUse.map((e: { matcher: string }) => e.matcher), ["ExitPlanMode"]);
+  // Supervised with a tool list → an entry matching those tools, running claude's script with the SDK.
   const sup = JSON.parse(trackerSettings(deps, "t1", "Bash,Write"));
   const entry = sup.hooks.PreToolUse.find((e: { matcher: string }) => e.matcher === "Bash|Write");
-  assert.ok(entry, "approval hook entry present with the brokered-tools matcher");
+  assert.ok(entry, "approval entry present with the brokered-tools matcher");
   const cmd = entry.hooks[0].command as string;
-  assert.match(cmd, /HIVE_SUPERVISE=/);
-  assert.match(cmd, /approval\.cjs/);
-  assert.match(cmd, /hcp\.sock/);
+  assert.match(cmd, /HIVE_SUPERVISE='Bash,Write'/);
+  assert.match(cmd, /HIVE_SDK='\/x\/hive-sdk\.cjs'/);
+  assert.match(cmd, /HIVE_HOOK_SOCK='\/x\/hcp\.sock'/);
+  assert.match(cmd, /'\/x\/agents\/claude\/hive-approve\.cjs'/);
   // "all" → matcher "*".
   const all = JSON.parse(trackerSettings(deps, "t1", "all"));
   assert.ok(all.hooks.PreToolUse.some((e: { matcher: string }) => e.matcher === "*"));
 });
 
-test("trackerSettings: injects SubagentStart/Stop hooks when the subagent hook path is set", () => {
-  // Without the subagent hook path → no SubagentStart/Stop (e.g. older daemon).
-  const bare = JSON.parse(trackerSettings(
-    { trackerPath: "/x/tracker.cjs", tileSessionsDir: "/x/sess", execPath: "/x/node", hcpSock: "/x/hcp.sock" },
-    "t1",
-  ));
-  assert.equal(bare.hooks.SubagentStart, undefined);
-  assert.equal(bare.hooks.SubagentStop, undefined);
-  // With the path + socket → both events run the subagent hook against the socket,
-  // carrying this tile's HIVEMIND_TILE so main attributes the subagent correctly.
-  const deps = {
-    trackerPath: "/x/tracker.cjs", tileSessionsDir: "/x/sess", execPath: "/x/node",
-    subagentHookPath: "/x/subagent.cjs", hcpSock: "/x/hcp.sock",
-  };
-  const s = JSON.parse(trackerSettings(deps, "t-abc"));
-  const cmd = s.hooks.SubagentStart[0].hooks[0].command as string;
-  assert.equal(s.hooks.SubagentStop[0].hooks[0].command, cmd); // one command, both events
-  assert.match(cmd, /HIVEMIND_TILE='t-abc'/);
-  assert.match(cmd, /subagent\.cjs/);
-  assert.match(cmd, /hcp\.sock/);
-});
-
-test("trackerSettings: injects the UserPromptSubmit hook (turn-start → working)", () => {
-  const bare = JSON.parse(trackerSettings(
-    { trackerPath: "/x/tracker.cjs", tileSessionsDir: "/x/sess", execPath: "/x/node", hcpSock: "/x/hcp.sock" },
-    "t1",
-  ));
-  assert.equal(bare.hooks.UserPromptSubmit, undefined); // no path → not injected
-  const s = JSON.parse(trackerSettings(
-    {
-      trackerPath: "/x/tracker.cjs", tileSessionsDir: "/x/sess", execPath: "/x/node",
-      userpromptHookPath: "/x/userprompt.cjs", hcpSock: "/x/hcp.sock",
-    },
-    "t-up",
-  ));
-  const cmd = s.hooks.UserPromptSubmit[0].hooks[0].command as string;
-  assert.match(cmd, /HIVEMIND_TILE='t-up'/);
-  assert.match(cmd, /userprompt\.cjs/);
-  assert.match(cmd, /hcp\.sock/);
+test("trackerSettings: claude's lifecycle events run the generic event script, each naming its canonical event", () => {
+  const base = { trackerPath: "/x/tracker.cjs", tileSessionsDir: "/x/sess", execPath: "/x/node", hcpSock: "/x/hcp.sock" };
+  // A daemon without the generic script wires none of them.
+  const bare = JSON.parse(trackerSettings(base, "t1"));
+  for (const e of ["UserPromptSubmit", "SubagentStart", "SubagentStop", "PermissionRequest"]) assert.equal(bare.hooks[e], undefined, e);
+  const s = JSON.parse(trackerSettings({ ...base, eventHookPath: "/x/event.cjs" }, "t-abc"));
+  const cmd = (e: string) => s.hooks[e][0].hooks[0].command as string;
+  assert.match(cmd("UserPromptSubmit"), /HIVE_EVENT='turn\.started'/);
+  assert.match(cmd("SubagentStart"), /HIVE_EVENT='subagent\.started'/);
+  assert.match(cmd("SubagentStop"), /HIVE_EVENT='subagent\.stopped'/);
+  assert.match(cmd("PermissionRequest"), /HIVE_EVENT='input\.requested' HIVE_EVENT_KIND='permission'/);
+  for (const e of ["UserPromptSubmit", "SubagentStart"]) {
+    assert.match(cmd(e), /HIVEMIND_TILE='t-abc'/);
+    assert.match(cmd(e), /'\/x\/event\.cjs' '\/x\/hcp\.sock'/);
+  }
+  // A usage limit and any other failure are told apart by claude's own matcher.
+  assert.deepEqual(s.hooks.StopFailure.map((g: { matcher: string }) => g.matcher.split("|")[0]), ["rate_limit", "overloaded"]);
+  assert.match(s.hooks.StopFailure[0].hooks[0].command, /HIVE_EVENT_OUTCOME='limited'/);
 });
 const client = () => ({ onData: () => {}, onExit: () => {} });
 const liveSpec = (cwd: string): SpawnSpec => ({ cwd, cmd: "claude", args: [], cols: 80, rows: 24 });

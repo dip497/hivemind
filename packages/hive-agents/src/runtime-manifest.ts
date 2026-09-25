@@ -11,13 +11,14 @@ import { randomUUID } from "node:crypto";
 import { findSession } from "./session.js";
 import { readTrackedSession } from "./tile-session-store.js";
 import { hookCommand, renderHookDocument } from "./hooks.js";
+import { EVENT_HOOK, isAgentEventName } from "./events.js";
 import { homePaths, seedHome } from "./home-overlay.js";
 import { NO_PLAN, validatePlan, type AgentRuntime, type LaunchPlan, type LaunchRequest, type RuntimePaths } from "./runtime.js";
 import type { AgentProviderDef, ProviderResumeTransforms, SpawnSpec } from "./types.js";
 
 /** The closed set a manifest may ask for. An unknown one is left alone, so a typo shows up
  *  as a literal in the argument list rather than resolving to something unintended. */
-const PLACEHOLDER = /\{(asset:[A-Za-z0-9][\w.-]{0,63}|hook(?:Cmd)?:[a-z][A-Za-z]{0,31}|hcpSock|hcpToken|tileId|agentId|cwd|private|home|execPath|session)\}/g;
+const PLACEHOLDER = /\{(asset:[A-Za-z0-9][\w.-]{0,63}|hook(?:Cmd)?:[a-z][A-Za-z]{0,31}|emit:[a-z]+\.[a-z]+|hcpSock|hcpToken|tileId|agentId|cwd|private|home|execPath|session)\}/g;
 
 /** What a substituted value must survive. A command line dropped into a JSON string has to
  *  be JSON, or a Windows path or a quoted argument silently breaks the file it lands in. */
@@ -41,7 +42,13 @@ function resolve(
     if (key.startsWith("hookCmd:")) {
       const name = key.slice(8);
       const hook = req.paths.hooks[name];
-      return hook ? put(hookCommand(name, hook, req)) : whole;
+      return hook ? put(hookCommand(hook, req)) : whole;
+    }
+    // A canonical event, for an agent whose hook configuration is a file of its own shape.
+    if (key.startsWith("emit:")) {
+      const event = key.slice(5);
+      const hook = req.paths.hooks[EVENT_HOOK];
+      return hook && isAgentEventName(event) ? put(hookCommand(hook, req, { emit: event })) : whole;
     }
     if (key.startsWith("hook:")) { const h = req.paths.hooks[key.slice(5)]; return h ? put(h.path) : whole; }
     switch (key) {

@@ -100,7 +100,7 @@ test.afterAll(async () => {
   fs.rmSync(fakeBin, { recursive: true, force: true });
 });
 
-test("spawn a claude worker and read its reply: --settings hooks → turn → transcript", async () => {
+test("spawn a claude worker and read its reply: --settings hooks → reply → turn", async () => {
   const r = hive(["ctl", "spawn", "--agent", "claude", "--name", "orchestrator", "--prompt", "echo orchestrator ready", "--json"]);
   expect(r.code, r.stderr).toBe(0);
   orchestrator = r.json.tileId;

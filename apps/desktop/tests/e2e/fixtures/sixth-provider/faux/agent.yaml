@@ -38,6 +38,10 @@ detect:
 assets:
 - name: faux-hooks.json
   file: faux-hooks.json
+- name: faux-turn-end.cjs
+  file: faux-turn-end.cjs
+  hook: turnEnd
+  produces: [turn.ended]
 launch:
   hcp: true
   env:

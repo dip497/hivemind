@@ -348,6 +348,9 @@ importers:
       '@electron/rebuild':
         specifier: 'catalog:'
         version: 4.2.0
+      '@hivemind/agent-sdk':
+        specifier: workspace:*
+        version: link:../../packages/agent-sdk
       '@hivemind/tsconfig':
         specifier: workspace:*
         version: link:../../packages/tsconfig
@@ -408,6 +411,9 @@ importers:
 
   packages/agent-host:
     dependencies:
+      '@hivemind/agent-sdk':
+        specifier: workspace:*
+        version: link:../agent-sdk
       '@hivemind/agents':
         specifier: workspace:*
         version: link:../hive-agents
@@ -434,8 +440,23 @@ importers:
         specifier: 'catalog:'
         version: 5.9.3
 
+  packages/agent-sdk:
+    devDependencies:
+      '@hivemind/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      '@types/node':
+        specifier: 'catalog:'
+        version: 22.19.19
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
   packages/hive-agents:
     dependencies:
+      '@hivemind/agent-sdk':
+        specifier: workspace:*
+        version: link:../agent-sdk
       yaml:
         specifier: 'catalog:'
         version: 2.9.0

@@ -30,7 +30,7 @@ export default function (pi) {
   };
 
   let lastText = "";
-  pi.on("agent_start", async () => { lastText = ""; post("status", { tileId: tile, state: "working" }); });
+  pi.on("agent_start", async () => { lastText = ""; post("agent.event", { tileId: tile, event: "turn.started" }); });
   pi.on("message_end", async (event) => {
     const m = event && event.message;
     if (m && m.role === "assistant") { const t = textOf(m); if (t) lastText = t; }
@@ -44,8 +44,9 @@ export default function (pi) {
         if (m && m.role === "assistant") { const t = textOf(m); if (t) { text = t; break; } }
       }
     }
-    post("turn", { tileId: tile, text: text || "" });
-    post("status", { tileId: tile, state: "idle" });
+    // The reply first, on its own token-gated request; then the turn end it belongs to.
+    if (text) await hcpRequest("agent.reply", { tileId: tile, text: text }, undefined, 5000);
+    post("agent.event", { tileId: tile, event: "turn.ended" });
   });
 
   // ── HCP request/response client (token-authenticated, line-framed). Resolves

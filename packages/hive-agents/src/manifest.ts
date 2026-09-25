@@ -182,11 +182,13 @@ function validateAssets(raw: unknown): AgentAsset[] {
   req(Array.isArray(raw) && raw.length <= 8, "assets must be a list of at most 8 files");
   return raw.map((a, i) => {
     req(isObj(a), `assets[${i}] must be a map`);
-    const { name, file, hook } = a as Record<string, unknown>;
+    const { name, file, hook, produces } = a as Record<string, unknown>;
     req(typeof name === "string" && ASSET_NAME_RE.test(name), `assets[${i}].name must be a plain file name`);
     req(typeof file === "string" && ASSET_NAME_RE.test(file), `assets[${i}].file must be a file beside the manifest`);
     req(hook === undefined || (typeof hook === "string" && /^[a-z][A-Za-z0-9]{0,31}$/.test(hook) && hook !== EVENT_HOOK), `assets[${i}].hook must be a hook name (not "${EVENT_HOOK}", which is ours)`);
-    return { name, file, ...(typeof hook === "string" ? { hook } : {}) };
+    req(produces === undefined || (hook !== undefined && Array.isArray(produces) && produces.every(isAgentEventName)),
+      `assets[${i}].produces is for a hook script: a list of ${AGENT_EVENTS.join(", ")}`);
+    return { name, file, ...(typeof hook === "string" ? { hook } : {}), ...(Array.isArray(produces) ? { produces: produces as AgentAsset["produces"] } : {}) };
   });
 }
 
@@ -271,7 +273,7 @@ function validateHooks(raw: unknown): AgentHooks {
       const entry = e as Record<string, unknown>;
       const at = `hooks.events.${event}[${i}]`;
       req((entry.hook === undefined) !== (entry.emit === undefined), `${at} needs exactly one of hook or emit`);
-      if (entry.hook !== undefined) req(typeof entry.hook === "string" && HOOK_NAME_RE.test(entry.hook) && entry.hook !== EVENT_HOOK, `${at}.hook must name one of Hivemind's hooks`);
+      if (entry.hook !== undefined) req(typeof entry.hook === "string" && HOOK_NAME_RE.test(entry.hook) && entry.hook !== EVENT_HOOK, `${at}.hook must name tracker or a script in assets`);
       if (entry.emit !== undefined) req(isAgentEventName(entry.emit), `${at}.emit must be one of ${AGENT_EVENTS.join(", ")}`);
       if (entry.outcome !== undefined) req(entry.emit === "turn.ended" && (TURN_OUTCOMES as readonly unknown[]).includes(entry.outcome), `${at}.outcome is for emit: turn.ended, one of ${TURN_OUTCOMES.join(", ")}`);
       if (entry.kind !== undefined) req(entry.emit === "input.requested" && (INPUT_KINDS as readonly unknown[]).includes(entry.kind), `${at}.kind is for emit: input.requested, one of ${INPUT_KINDS.join(", ")}`);

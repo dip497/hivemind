@@ -3,8 +3,7 @@
  *   - RENDERER verbs (tile.spawn_agent) delegate to `deps.callRenderer` — the
  *     request-id-correlated main→renderer channel (the plan-bridge pattern).
  *   - MAIN verbs (agent.send, agent.read) run here: send writes to the pty;
- *     read awaits the next Stop-hook turn and returns the transcript reply, with
- *     a buffered-output timeout fallback.
+ *     read awaits the next turn and returns the reply the agent's plugin reported.
  *
  * Phase 1 surface: tile.spawn_agent, agent.send, agent.read. (tile.list/focus/
  * close, agent.status/stream, review.open, issue.* land in later phases.)
@@ -13,7 +12,6 @@ import { randomUUID } from "node:crypto";
 import { HcpError } from "./protocol.js";
 import type { TurnTracker } from "./turn-tracker.js";
 import type { OutputRecorder } from "./output-recorder.js";
-import { readLastAssistantMessage } from "./transcript.js";
 import { toPtyId as ptyId, toBareId as bareOf } from "../../shared/tile-id.js";
 import { setName, labelOf } from "./names.js";
 import { agentById, agentOption, spawnableAgents, workerAgents, type AgentProviderDef } from "@hivemind/agents";
@@ -436,6 +434,15 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         return { delivered: true, parent };
       }
 
+      case "agent.reply": {
+        // The agent's plugin hands over this turn's reply before it reports the turn end.
+        const tileId = String(p.tileId ?? "");
+        const text = typeof p.text === "string" ? p.text : "";
+        if (!tileId || !text) throw new HcpError("BAD_REQUEST", "tileId and text required");
+        deps.turns.recordReply(ptyId(tileId), text);
+        return { ok: true };
+      }
+
       case "agent.await_approval": {
         // Called by a SUPERVISED worker's PreToolUse broker hook before a tool
         // runs. Resolve from the remember-cache, else ask the parent and BLOCK
@@ -542,25 +549,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         // Consume this turn: without advancing the epoch the NEXT read returns the same
         // turn instantly, so a poll loop can never tell a new answer from the old one.
         if (rec) sendSeq.set(pid, rec.seq);
-        if (rec && typeof rec.text === "string" && rec.text.length > 0) {
-          // pi inline-reply path: pi has no transcript file — its lifecycle-bridge
-          // extension carries the finished reply on the turn event itself.
-          return { text: rec.text, finalStatus: "turn", truncated: false };
-        }
-        if (rec?.transcriptPath) {
-          // Clean reply from the session transcript JSONL (NOT screen-scrape).
-          // The Stop hook can fire a beat before the assistant's final message is
-          // flushed to the transcript file, so a first read returns null on a
-          // genuinely-completed turn (the observed `text:null` + finalStatus:turn).
-          // Retry a few times over ~0.5s to let the flush land before giving up.
-          let text = readLastAssistantMessage(rec.transcriptPath);
-          for (let i = 0; text == null && i < 4; i++) {
-            await new Promise<void>((r) => { const t = setTimeout(r, 130); t.unref?.(); });
-            text = readLastAssistantMessage(rec.transcriptPath);
-          }
-          if (text != null) return { text, finalStatus: "turn", truncated: false };
-          return { text: null, finalStatus: "turn", truncated: false, note: "turn completed but its transcript was unreadable" };
-        }
+        if (rec && typeof rec.text === "string" && rec.text.length > 0) return { text: rec.text, finalStatus: "turn", truncated: false };
         if (rec) return { text: null, finalStatus: "turn", truncated: false, note: "turn completed but carried no readable reply" };
         // No completed turn within the timeout. Report status honestly instead of
         // scraping the raw ANSI terminal buffer (which returned garbled bytes, not
@@ -573,7 +562,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         // Multi-agent orchestration. Fan a list of items out to visible worker
         // tiles (or chain them as a pipeline), await each worker's turn
         // deterministically via the turn-tracker (NOT screen-scrape), and return
-        // the aggregated transcript replies. Workers are spawned report:false —
+        // the aggregated replies. Workers are spawned report:false —
         // the workflow gathers them itself, so their replies don't also spam the
         // orchestrator's terminal. The orchestrator's `hive ctl workflow` call blocks until
         // this returns (`hive ctl workflow` blocks with a matching client ceiling).
@@ -598,7 +587,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         const fill = (tmpl: string, item: string) => tmpl.replace(/\{item\}/g, item);
 
         // Spawn one worker (retrying through transient rate-limits), await its
-        // turn, read the clean transcript reply. Returns a per-worker result.
+        // turn, take its reply. Returns a per-worker result.
         type WR = { item: string; tileId: string | null; status: "turn" | "timeout" | "error"; text: string | null };
         const runWorker = async (label: string, prompt: string): Promise<WR> => {
           let tileId: string;
@@ -610,11 +599,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
           const pid = ptyId(tileId);
           const afterSeq = sendSeq.get(pid) ?? deps.turns.currentSeq(pid);
           const rec = await deps.turns.waitForTurn(pid, afterSeq, perTurnMs);
-          // Same two carriers agent.read handles: an inline reply (pi's bridge sends the
-          // text on the turn event) or a transcript path (claude/droid).
-          const text = rec?.text && rec.text.length > 0
-            ? rec.text
-            : rec?.transcriptPath ? readLastAssistantMessage(rec.transcriptPath) : null;
+          const text = rec?.text && rec.text.length > 0 ? rec.text : null;
           const status: WR["status"] = !rec ? "timeout" : rec.seq === -1 ? "error" : "turn";
           if (closeWhenDone && status === "turn") { try { await closeTile(tileId); } catch { /* best-effort */ } }
           return { item: label, tileId, status, text };

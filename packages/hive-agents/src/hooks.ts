@@ -17,12 +17,6 @@ import type { AgentHookEntry, AgentHooks, AgentProviderDef } from "./types.js";
 import type { HookScript, LaunchRequest } from "./runtime.js";
 import { EVENT_ENV, EVENT_HOOK } from "./events.js";
 
-/** Hooks that need more than the tile's name in front of the command. */
-const ENV_PREFIX: Record<string, (req: LaunchRequest) => Record<string, string>> = {
-  // The broker double-checks the policy itself and falls back to the normal prompt.
-  approval: (req): Record<string, string> => (req.supervise ? { HIVE_SUPERVISE: req.supervise } : {}),
-};
-
 /** What the generic script reports for an `emit` entry. */
 function emitEnv(entry: AgentHookEntry | undefined): Record<string, string> {
   if (!entry?.emit) return {};
@@ -33,11 +27,17 @@ function emitEnv(entry: AgentHookEntry | undefined): Record<string, string> {
   };
 }
 
-/** The variables one of our hooks runs with, attributed to a tile. */
-function hookEnv(name: string, req: LaunchRequest, entry?: AgentHookEntry): Record<string, string> {
+/** The variables a hook runs with, attributed to a tile. */
+function hookEnv(hook: HookScript, req: LaunchRequest, entry?: AgentHookEntry): Record<string, string> {
   // A document written once for every tile of an agent cannot name one of them; those hooks
   // are attributed by the spawn environment instead, which carries the same tile id.
-  return { ...(req.tileId ? { HIVEMIND_TILE: req.tileId } : {}), ...(ENV_PREFIX[name]?.(req) ?? {}), ...emitEnv(entry) };
+  return {
+    ...(req.tileId ? { HIVEMIND_TILE: req.tileId } : {}),
+    // A plugin's approval script double-checks the policy itself.
+    ...(req.supervise && hook.env ? { HIVE_SUPERVISE: req.supervise } : {}),
+    ...hook.env,
+    ...emitEnv(entry),
+  };
 }
 
 /** Single-quote for a PowerShell literal — the only escape inside one is a doubled quote. */
@@ -72,8 +72,8 @@ function win32HookCommand(env: Record<string, string>, hook: HookScript, req: La
 }
 
 /** The command line the daemon runs for one of its own hooks, attributed to a tile. */
-export function hookCommand(name: string, hook: HookScript, req: LaunchRequest, entry?: AgentHookEntry): string {
-  const env = hookEnv(name, req, entry);
+export function hookCommand(hook: HookScript, req: LaunchRequest, entry?: AgentHookEntry): string {
+  const env = hookEnv(hook, req, entry);
   if ((req.platform ?? process.platform) === "win32") return win32HookCommand(env, hook, req);
   const parts = Object.entries(env).map(([k, v]) => `${k}=${shq(v)}`);
   parts.push("ELECTRON_RUN_AS_NODE=1", shq(req.paths.execPath), shq(hook.path));
@@ -118,7 +118,7 @@ function entryFor(
   const hook = req.paths.hooks[name];
   if (!hook) return undefined; // the daemon does not have this script: the event is not wired
   const matcher = matcherFor(entry, req);
-  const values = { command: hookCommand(name, hook, req, entry), timeout: entry.timeout, matcher };
+  const values = { command: hookCommand(hook, req, entry), timeout: entry.timeout, matcher };
   return { body: fill(hooks.entry ?? DEFAULT_ENTRY, values), ...(matcher ? { matcher } : {}) };
 }
 
