@@ -29,6 +29,8 @@ export interface AgentEvent {
   transcriptPath?: string | null;
   /** The subagent this start or stop is about. */
   agentId?: string;
+  /** `turn.ended`: background tasks (shells) the agent left running — a count, never their commands. */
+  background?: number;
   sessionId?: string;
 }
 
@@ -78,6 +80,7 @@ export function parseAgentEvent(raw: unknown): AgentEvent | null {
     ...(d.event === "input.requested" ? { kind: kind ?? "other" } : {}),
     ...(d.transcriptPath === null ? { transcriptPath: null } : str(d.transcriptPath, 4096) ? { transcriptPath: d.transcriptPath as string } : {}),
     ...(str(d.agentId, 256) ? { agentId: d.agentId as string } : {}),
+    ...(d.event === "turn.ended" && Number.isInteger(d.background) && (d.background as number) > 0 && (d.background as number) < 10_000 ? { background: d.background as number } : {}),
     ...(str(d.sessionId, 256) ? { sessionId: d.sessionId as string } : {}),
   };
 }
@@ -89,7 +92,7 @@ export function legacyTopicsFor(e: AgentEvent): Array<{ topic: string; data: Rec
     case "turn.started":
       return [{ topic: "status", data: { tileId: e.tileId, state: "working" } }];
     case "turn.ended":
-      return [{ topic: "turn", data: { tileId: e.tileId, transcriptPath: e.transcriptPath ?? null } }];
+      return [{ topic: "turn", data: { tileId: e.tileId, transcriptPath: e.transcriptPath ?? null, ...(e.background ? { background: e.background } : {}) } }];
     case "input.requested":
       // Plan review and approvals have their own control-plane waits; these are "needs you" signals.
       return [{ topic: "notification", data: { tileId: e.tileId, notificationType: e.kind === "permission" ? "permission_prompt" : "elicitation_dialog" } }];

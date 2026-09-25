@@ -63,7 +63,10 @@ type InputKind = "permission" | "question" | "plan" | "approval" | "other";
 
 A reported event carries the tile, the name, its qualifier, and a closed whitelist of payload
 fields the host needs (`transcriptPath` for reading a reply, `agentId` for subagent counting,
-`sessionId`). **Never** text the agent wrote (`last_assistant_message`, `message`, `prompt`): the
+`sessionId`, and on `turn.ended` a `background` count of shells the agent left running — Claude's
+`Stop` payload lists them in `background_tasks`; no hook fires when one finishes, so the status
+store treats a turn that ended with background work as still busy until a screen or hook signal
+says otherwise). **Never** text the agent wrote (`last_assistant_message`, `message`, `prompt`): the
 generic script does not read them.
 
 Deliberately left out until a use case exists: tool-level events, message chunks, token usage,

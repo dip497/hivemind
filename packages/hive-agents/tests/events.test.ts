@@ -78,6 +78,9 @@ describe("the posted event", () => {
     expect(parseAgentEvent({ tileId: "t", event: "turn.ended", transcriptPath: "/x.jsonl", message: "agent text", extra: 1 }))
       .toEqual({ tileId: "t", event: "turn.ended", outcome: "done", transcriptPath: "/x.jsonl" });
     expect(parseAgentEvent({ tileId: "t", event: "input.requested", kind: "nonsense" })).toEqual({ tileId: "t", event: "input.requested", kind: "other" });
+    expect(parseAgentEvent({ tileId: "t", event: "turn.ended", background: 2 })).toEqual({ tileId: "t", event: "turn.ended", outcome: "done", background: 2 });
+    expect(parseAgentEvent({ tileId: "t", event: "turn.started", background: 2 })).toEqual({ tileId: "t", event: "turn.started" });
+    expect(parseAgentEvent({ tileId: "t", event: "turn.ended", background: "3; rm -rf" })).toEqual({ tileId: "t", event: "turn.ended", outcome: "done" });
     for (const bad of [null, {}, { tileId: "", event: "turn.ended" }, { tileId: "t", event: "tool.called" }]) expect(parseAgentEvent(bad)).toBeNull();
   });
 

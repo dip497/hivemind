@@ -19,6 +19,10 @@ export function agentEventHookSource(): string {
      if (typeof e.transcript_path === "string") out.transcriptPath = e.transcript_path;
      if (e.agent_id != null) out.agentId = String(e.agent_id);
      if (typeof e.session_id === "string") out.sessionId = e.session_id;
+     if (Array.isArray(e.background_tasks)) {
+       var running = e.background_tasks.filter(function (t) { return t && t.status === "running"; }).length;
+       if (running > 0) out.background = running;
+     }
      return out;`,
   );
 }

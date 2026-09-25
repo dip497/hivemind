@@ -40,6 +40,17 @@ test("reports the canonical event from its environment, with only whitelisted id
   assert.ok(!JSON.stringify(got).includes("secret"), "agent-written text never leaves the hook");
 });
 
+test("a turn end counts running background tasks and never forwards their commands", async () => {
+  const [a] = await run({ HIVEMIND_TILE: "hm:t1", HIVE_EVENT: "turn.ended" }, {
+    background_tasks: [
+      { id: "b1", type: "shell", status: "running", command: "npm run build --token=secret" },
+      { id: "b2", type: "shell", status: "completed", command: "ls" },
+    ],
+  });
+  assert.deepEqual((a as { data: unknown }).data, { tileId: "hm:t1", event: "turn.ended", background: 1 });
+  assert.ok(!JSON.stringify(a).includes("secret"));
+});
+
 test("an input request carries its kind; a subagent event its id", async () => {
   const [a] = await run({ HIVEMIND_TILE: "hm:t1", HIVE_EVENT: "input.requested", HIVE_EVENT_KIND: "permission" }, { tool_name: "Bash", tool_input: { command: "rm -rf" } });
   assert.deepEqual((a as { data: unknown }).data, { tileId: "hm:t1", event: "input.requested", kind: "permission" });
