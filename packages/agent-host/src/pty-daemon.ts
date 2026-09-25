@@ -96,12 +96,18 @@ const tileSessionsDir = path.join(userDataDir, "tile-sessions");
 const trackerPath = path.join(userDataDir, "tile-session-tracker.cjs");
 try { fs.writeFileSync(trackerPath, trackerSource()); } catch { /* best-effort */ }
 
-// Hooks run as `<execPath> hook.cjs`; a compiled `hive` needs BUN_BE_BUN for that, set only
-// in this wrapper — in the agent's env it would turn every `hive ctl` into bun.
+// Hooks run as `env VAR=… <execPath> hook.cjs`; a compiled `hive` needs BUN_BE_BUN for that, set
+// only in this wrapper — in the agent's env it would turn every `hive ctl` into bun.
 const hookExecPath = (() => {
   const compiledHive = !!process.versions.bun && !/(^|[/\\])bun(\.exe)?$/.test(process.execPath);
-  if (!compiledHive) return process.execPath;
   const wrapper = path.join(userDataDir, "hive-hook-runtime");
+  if (!compiledHive) {
+    // `env` reads any word with "=" as an assignment, so an interpreter whose path has one is
+    // named through a link that does not.
+    if (process.platform === "win32" || !process.execPath.includes("=")) return process.execPath;
+    try { fs.rmSync(wrapper, { force: true }); fs.symlinkSync(process.execPath, wrapper); } catch { /* best-effort */ }
+    return wrapper;
+  }
   const quoted = `'${process.execPath.replace(/'/g, `'\\''`)}'`;
   try {
     fs.writeFileSync(wrapper, `#!/bin/sh\nBUN_BE_BUN=1 exec ${quoted} "$@"\n`);

@@ -231,7 +231,7 @@ function validateLaunch(raw: unknown): AgentLaunch {
 }
 
 const HOOK_NAME_RE = /^[a-z][A-Za-z]{0,31}$/;
-const EVENT_RE = /^[A-Za-z][A-Za-z0-9]{0,31}$/;
+const EVENT_RE = /^[A-Za-z][A-Za-z0-9_]{0,47}$/;
 
 /** A private home links a directory of the user's into a place the agent is pointed at.
  *  Anyone may declare one — nothing is ever written back into the real directory — but the
@@ -241,8 +241,9 @@ function validateHome(raw: unknown): AgentHome {
   req(isObj(raw), "home must be a map");
   const m = raw as Record<string, unknown>;
   const plain = (v: unknown): v is string => typeof v === "string" && /^[\w.-]{1,64}$/.test(v);
-  req(plain(m.root), "home.root must be a plain directory name");
-  req(plain(m.dir), "home.dir must be a plain directory name");
+  req(plain(m.root) && m.root !== "." && m.root !== "..", "home.root must be a plain directory name");
+  // "." when the agent is pointed at its configuration directory itself rather than a home above it.
+  req(plain(m.dir) && m.dir !== "..", "home.dir must be a plain directory name, or .");
   req(typeof m.mirror === "string" && m.mirror.startsWith("{home}/") && !m.mirror.includes(".."), "home.mirror must be a path under {home}/");
   req(typeof m.env === "string" && ENV_KEY_RE.test(m.env), "home.env must be an environment variable name");
   const out: AgentHome = { root: m.root, dir: m.dir, mirror: m.mirror, env: m.env };

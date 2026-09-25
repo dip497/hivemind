@@ -35,6 +35,7 @@ const runtimePaths = (def: AgentProviderDef, p: DaemonPaths, dir: string): Runti
   hooks: hookScripts(def, dir, p),
   execPath: p.execPath,
   ...(p.hcpSock ? { hcpSock: p.hcpSock } : {}),
+  ...(p.sdkPath ? { sdk: p.sdkPath } : {}),
   tileSessionsDir: p.tileSessionsDir,
   home: homedir(),
 });
@@ -96,6 +97,7 @@ function partsFromManifest(def: AgentProviderDef): AgentNodeParts | undefined {
       execPath: ctx.execPath,
       ...(ctx.hcpSock ? { hcpSock: ctx.hcpSock } : {}),
       ...(ctx.hcpToken ? { hcpToken: ctx.hcpToken } : {}),
+      ...(ctx.sdkPath ? { sdk: ctx.sdkPath } : {}),
       tileSessionsDir: ctx.tileSessionsDir,
       home: homedir(),
     }),

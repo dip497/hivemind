@@ -71,11 +71,12 @@ function win32HookCommand(env: Record<string, string>, hook: HookScript, req: La
   return `${exe} -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand ${Buffer.from(script, "utf16le").toString("base64")}`;
 }
 
-/** The command line the daemon runs for one of its own hooks, attributed to a tile. */
+/** The command line the daemon runs for one of its own hooks, attributed to a tile. It starts
+ *  with `env` so it runs the same whether the agent hands it to a shell or splits it into argv. */
 export function hookCommand(hook: HookScript, req: LaunchRequest, entry?: AgentHookEntry): string {
   const env = hookEnv(hook, req, entry);
   if ((req.platform ?? process.platform) === "win32") return win32HookCommand(env, hook, req);
-  const parts = Object.entries(env).map(([k, v]) => `${k}=${shq(v)}`);
+  const parts = ["env", ...Object.entries(env).map(([k, v]) => `${k}=${shq(v)}`)];
   parts.push("ELECTRON_RUN_AS_NODE=1", shq(req.paths.execPath), shq(hook.path));
   if (hook.arg) parts.push(shq(hook.arg));
   return parts.join(" ");

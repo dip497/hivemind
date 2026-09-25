@@ -111,3 +111,16 @@ test("droid notifications: permission and elicitation need you; idle does not", 
   }
   assert.deepEqual(kinds, [["permission"], ["question"], []]);
 });
+
+test("hermes: post_llm_call hands over the reply; on_session_end ends the turn with how it ended", async () => {
+  const reply = await run("hermes", "hive-turn.cjs", { hook_event_name: "post_llm_call", extra: { assistant_response: "all green" } }, ok);
+  assert.deepEqual(reply.got.map((m) => m.method), ["agent.reply"]);
+  assert.deepEqual((reply.got[0] as { params: unknown }).params, { tileId: "hm:t1", text: "all green" });
+  assert.equal(reply.stdout.trim(), "{}");
+  const outcomes = [];
+  for (const extra of [{ completed: true }, { failed: true }, { interrupted: true, failed: true }]) {
+    const { got } = await run("hermes", "hive-turn.cjs", { hook_event_name: "on_session_end", extra }, ok);
+    outcomes.push((got[0] as { params: { event: string; outcome: string } }).params);
+  }
+  assert.deepEqual(outcomes.map((p) => [p.event, p.outcome]), [["turn.ended", "done"], ["turn.ended", "failed"], ["turn.ended", "interrupted"]]);
+});

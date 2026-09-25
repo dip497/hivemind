@@ -149,17 +149,23 @@ rules) and says so in the status. It never mixes sources within one session.
 
 ### Hook inventory (probed 2026-09-25)
 
-| Canonical | Claude 2.1.280 | Codex 0.155.1 | Gemini 0.59.0 | OpenCode 1.17.12 (plugin) | Hermes |
+| Canonical | Claude 2.1.280 | Codex 0.155.1 | Gemini 0.59.0 | OpenCode 1.17.12 (plugin) | Hermes (source a6578fc) |
 |---|---|---|---|---|---|
 | `session.started {source}` | SessionStart (startup/resume/clear/compact/fork) | SessionStart | SessionStart | — | — |
 | `session.ended {reason}` | SessionEnd | SessionEnd | SessionEnd | — | — |
 | `turn.started` | UserPromptSubmit; Notification `quota_auto_resume_fired` | UserPromptSubmit | BeforeAgent | `session.status` busy | `pre_llm_call` |
-| `turn.ended` | Stop; StopFailure → `failed`/`limited` | Stop; `turn_aborted` → `interrupted` | AfterAgent | `session.idle`; `session.error` → `failed` | `post_llm_call` |
-| interrupted | none (Stop does not run) → host-observed | Interrupt | host-observed | host-observed | host-observed |
-| `input.requested {kind}` | PermissionRequest (immediate); Elicitation → `question`; PreToolUse ExitPlanMode → `plan` | PermissionRequest | Notification | `permission.asked` | `pre_approval_request` |
-| `input.resolved` | PostToolUse, PostToolUseFailure, PermissionDenied, Notification `elicitation_response` | PostToolUse | AfterTool | — | — |
-| `subagent.*` | SubagentStart/Stop | SubagentStart/Stop | — | — | `subagent_start`/`subagent_stop` |
+| `turn.ended` | Stop; StopFailure → `failed`/`limited` | Stop; `turn_aborted` → `interrupted` | AfterAgent | `session.status` idle; `session.error` → `failed`/`interrupted` | `on_session_end` (once per turn, `completed`/`failed`/`interrupted`); reply in `post_llm_call` |
+| interrupted | none (Stop does not run) → host-observed | Interrupt | host-observed | `MessageAbortedError` | `on_session_end` `interrupted` |
+| `input.requested {kind}` | PermissionRequest (immediate); Elicitation → `question`; PreToolUse ExitPlanMode → `plan` | PermissionRequest | Notification | `permission.asked`; `question.asked` → `question` | `pre_approval_request`; `pre_tool_call` clarify → `question` |
+| `input.resolved` | PostToolUse, PostToolUseFailure, PermissionDenied, Notification `elicitation_response` | PostToolUse | AfterTool | `permission.replied`, `question.replied`/`rejected` | `post_approval_response`; `post_tool_call` clarify |
+| `subagent.*` | SubagentStart/Stop | SubagentStart/Stop | — | child sessions (`parentID`) | `subagent_start`/`subagent_stop` |
 | `compacting` | PreCompact / PostCompact | PreCompact | — | — | — |
+
+Delivery, both verified on the real binaries (2026-09-26): OpenCode loads our plugin from the
+file `OPENCODE_CONFIG` names, merged over the user's configuration. Hermes reads hooks only from
+`config.yaml` in `HERMES_HOME`, so it runs in a private home whose `config.yaml` is the user's with
+our hooks added; it runs each hook command split into argv (no shell), which is why every hook
+command starts with `env`, and asks once per hook before running it.
 
 Not events: `TaskCreated`/`TaskCompleted` are the agent's todo list; Claude's `Notification
 permission_prompt` arrives ~6 s after `PermissionRequest` and is ignored when the latter is

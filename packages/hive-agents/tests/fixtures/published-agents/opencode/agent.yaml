@@ -9,7 +9,7 @@ aliases:
 enabled: true
 caps:
   promptDelivery: typed
-  turnSignal: false
+  turnSignal: true
   resume: none
   supervise: human
   blockedDetection: true
@@ -35,6 +35,17 @@ options:
   list:
     args:
     - models
+# OpenCode merges the file OPENCODE_CONFIG names into the user's own configuration; ours only
+# adds the plugin, which reports through the host's SDK.
+assets:
+- name: hive-opencode.json
+  file: hive-opencode.json
+- name: hive-opencode.js
+  file: hive-opencode.js
+launch:
+  hcp: true
+  env:
+    OPENCODE_CONFIG: '{asset:hive-opencode.json}'
 install:
   url: https://opencode.ai/docs/
   command: "curl -fsSL https://opencode.ai/install | bash"
@@ -57,5 +68,3 @@ detect:
       helper: hasInterruptPattern
     then: working
   default: idle
-note: scrape-only status and no turn signal — drive it by hand on the canvas; `hive ctl read` / `hive
-  ctl workflow` cannot gather from it.

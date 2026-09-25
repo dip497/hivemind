@@ -35,6 +35,8 @@ export interface RuntimePaths {
   /** Control plane, when the daemon has one. */
   hcpSock?: string;
   hcpToken?: string;
+  /** The SDK an agent's plugin loads, in its hook scripts or inside the agent itself. */
+  sdk?: string;
   /** Where per-tile session records live. */
   tileSessionsDir: string;
   /** The user's home, for an agent whose CLI keeps its own configuration there. */

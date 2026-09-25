@@ -67,10 +67,10 @@ test("win32: SystemRoot comes from the render env, or falls back to C:/Windows",
   expect(withRoot.exe).toBe("C:/WINDOWS/System32/WindowsPowerShell/v1.0/powershell.exe");
 });
 
-test("posix: the form is unchanged — env-prefixed, single-quoted, ELECTRON_RUN_AS_NODE first-class", () => {
+test("posix: env first, so a shell and an argv split run it alike — single-quoted, single-quoted, ELECTRON_RUN_AS_NODE first-class", () => {
   const cmd = hookCommand({ path: "/ud/hook.cjs", arg: "/ud/s.sock", env: {} }, req({
     platform: "linux", supervise: "all",
     paths: { ...req().paths, execPath: "/x/electron", hooks: {} },
   }));
-  expect(cmd).toBe("HIVEMIND_TILE='tile-1' HIVE_SUPERVISE='all' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/ud/hook.cjs' '/ud/s.sock'");
+  expect(cmd).toBe("env HIVEMIND_TILE='tile-1' HIVE_SUPERVISE='all' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/ud/hook.cjs' '/ud/s.sock'");
 });

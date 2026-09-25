@@ -54,7 +54,7 @@ describe("rendering", () => {
     const hooks: AgentHooks = { arg: "--settings", events: { StopFailure: { emit: "turn.ended", outcome: "failed", timeout: 10 } } };
     const out = renderHookEvents(hooks, req())!;
     const cmd = (out.StopFailure![0] as { hooks: Array<{ command: string; timeout: number }> }).hooks[0]!;
-    expect(cmd.command).toBe("HIVEMIND_TILE='tile-1' HIVE_EVENT='turn.ended' HIVE_EVENT_OUTCOME='failed' ELECTRON_RUN_AS_NODE=1 '/app/hive' '/ud/hcp-event-hook.cjs' '/ud/hcp.sock'");
+    expect(cmd.command).toBe("env HIVEMIND_TILE='tile-1' HIVE_EVENT='turn.ended' HIVE_EVENT_OUTCOME='failed' ELECTRON_RUN_AS_NODE=1 '/app/hive' '/ud/hcp-event-hook.cjs' '/ud/hcp.sock'");
     expect(cmd.timeout).toBe(10);
   });
 

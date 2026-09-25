@@ -13,6 +13,7 @@ import { readTrackedSession } from "./tile-session-store.js";
 import { hookCommand, renderHookDocument } from "./hooks.js";
 import { EVENT_HOOK, isAgentEventName } from "./events.js";
 import { homePaths, seedHome } from "./home-overlay.js";
+import { SDK_ENV } from "@hivemind/agent-sdk";
 import { NO_PLAN, validatePlan, type AgentRuntime, type LaunchPlan, type LaunchRequest, type RuntimePaths } from "./runtime.js";
 import type { AgentProviderDef, ProviderResumeTransforms, SpawnSpec } from "./types.js";
 
@@ -75,7 +76,8 @@ const perTileName = (name: string, tileId: string): string => {
   return `${stem}-${tileId.replace(/[^A-Za-z0-9._-]/g, "-")}${ext}`;
 };
 
-/** Every agent that reports through the control plane needs the same five variables. */
+/** Every agent that reports through the control plane needs the same variables; the SDK's
+ *  are there for a plugin that runs inside the agent rather than as a hook command. */
 function hcpEnv(def: AgentProviderDef, req: LaunchRequest): Record<string, string> {
   return {
     HIVE_HCP_SOCK: req.paths.hcpSock!,
@@ -83,6 +85,7 @@ function hcpEnv(def: AgentProviderDef, req: LaunchRequest): Record<string, strin
     HIVEMIND_TILE: req.tileId, // the agent's own `hive ctl` calls attribute to this tile
     HIVE_AGENT_ID: def.id, // signs the Activity rows it writes
     HIVE_AGENT_DEPTH: req.env.HIVE_AGENT_DEPTH ?? "0",
+    ...(req.paths.sdk ? { [SDK_ENV.sdk]: req.paths.sdk, [SDK_ENV.sock]: req.paths.hcpSock! } : {}),
   };
 }
 

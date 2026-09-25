@@ -11,8 +11,8 @@ agent on the host being there.
 | `HIVEMIND_TILE` | every hook | the session the hook reports for |
 | `HCP_TOKEN` | the agent's spawn env | authorizes requests |
 | `HIVE_EVENT`, `HIVE_EVENT_OUTCOME`, `HIVE_EVENT_KIND` | `emit:` entries | the canonical event the generic script reports |
-| `HIVE_SDK` | a plugin's own scripts | path of the SDK to `require` |
-| `HIVE_HOOK_SOCK` | a plugin's own scripts | the host socket |
+| `HIVE_SDK` | a plugin's own scripts; the spawn env of an agent with `launch.hcp`, for a plugin that runs inside it | path of the SDK to `require` |
+| `HIVE_HOOK_SOCK` | the same | the host socket |
 | `HIVE_PLAN_SOCK` | a plugin's own scripts | the plan-review socket |
 | `HIVE_SUPERVISE` | a plugin's own scripts, supervised sessions | `all` or a comma list of tools the supervisor brokers |
 

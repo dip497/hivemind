@@ -9,7 +9,7 @@ aliases:
 enabled: true
 caps:
   promptDelivery: typed
-  turnSignal: false
+  turnSignal: true
   resume: none
   supervise: human
   blockedDetection: true
@@ -23,6 +23,59 @@ options:
       yolo:
         - --yolo
     unattended: yolo
+# Hermes reads hooks only from config.yaml in HERMES_HOME, so it runs in a private home: the
+# user's own files linked in, config.yaml their own with our hooks added. Hermes asks once per
+# hook before running it.
+home:
+  root: hermes-home
+  dir: .
+  mirror: '{home}/.hermes'
+  env: HERMES_HOME
+  own:
+  - name: config.yaml
+    merge: true
+hooks:
+  file: config.yaml
+  stable: true
+  template: '{"hooks":{events}}'
+  group: false
+  entry:
+    command: '{command}'
+    timeout: '{timeout}'
+    matcher: '{matcher}'
+  events:
+    pre_llm_call:
+      emit: turn.started
+      timeout: 10
+    post_llm_call:
+      hook: turn
+      timeout: 10
+    on_session_end:
+      hook: turn
+      timeout: 10
+    pre_approval_request:
+      emit: input.requested
+      kind: permission
+      timeout: 10
+    post_approval_response:
+      emit: input.resolved
+      timeout: 10
+    pre_tool_call:
+      emit: input.requested
+      kind: question
+      matcher: clarify
+      timeout: 10
+    post_tool_call:
+      emit: input.resolved
+      matcher: clarify
+      timeout: 10
+assets:
+- name: hive-turn.cjs
+  file: hive-turn.cjs
+  hook: turn
+  produces: [turn.ended]
+launch:
+  hcp: true
 install:
   url: https://hermes-agent.nousresearch.com/docs/getting-started/installation
   command: "curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash"
@@ -47,4 +100,3 @@ detect:
           - contains: ctrl+c cancel
       then: working
   default: idle
-note: launches and reads status; other agents cannot collect its replies.
