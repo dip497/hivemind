@@ -1068,7 +1068,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     spawnAgent: (agentId, frameId, opts) => {
       const def = agentId ? catalogAgentById(agentId) : defaultAgent();
       if (!def) return false;
-      const id = spawnTile(AGENT_TILE_KIND, frameId, { agent: { id: def.id, cmd: def.bin, label: def.label }, ...(opts?.prompt ? { work: opts.prompt } : {}) });
+      const id = spawnTile(AGENT_TILE_KIND, frameId, { agent: { id: def.id, cmd: def.bin, label: def.label }, ...(opts?.prompt ? { work: opts.prompt } : {}), ...(opts?.resume ? { resume: opts.resume } : {}) });
       if (id && opts?.name) renameTile(id, opts.name);
       return true;
     },

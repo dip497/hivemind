@@ -18,6 +18,7 @@ import {
   ACTIVITY_MIN_INTERVAL_MS, COMMAND_PERMISSION, EVENT_REPLAY_MAX, PROTOCOL_VERSION, customNameMatches, parsePluginMessage,
   type ActivityLevel, type HostMessage, type PluginMessage, type RequestErrorCode, type ShareOutcome, type SurfaceRect, type ViewEvent,
   type ViewEventKind, type ViewFeature, type ViewHistoryDay, type ViewPermission, type ViewPresence, type ViewRect,
+  type ViewAgent, type ViewAgentStatus, type ViewSession, type ViewStatus,
 } from "@hivemind/view-sdk/protocol";
 import type { WorkspaceCommands } from "../../workspace-view";
 import { AGENT_TILE_KIND, type TileKind } from "../../../tile-kinds";
@@ -43,9 +44,19 @@ export interface LinkServices {
   presence?: { subscribe(cb: (p: ViewPresence) => void): () => void };
   history?: (day: string) => Promise<ViewHistoryDay>;
   share?: (png: ArrayBuffer, suggestedName?: string) => Promise<ShareOutcome>;
+  /** 1.4: an agent tile's full status; the current one now, then each change. */
+  agentStatus?: (tileId: string, cb: (s: ViewAgentStatus) => void) => () => void;
+  agents?: () => ViewAgent[];
+  /** A frame's folder's past sessions. Rejects with `{ code: "UNSUPPORTED" }` for a frame it cannot list. */
+  sessions?: (agent: string, frameId: string) => Promise<ViewSession[]>;
+  /** The host's confirm for a prompt the view wrote: true when the user sends it. */
+  confirmPrompt?: (req: { agent: string | null; tileId?: string; frameId: string | null; text: string }) => Promise<boolean>;
+  /** Type a confirmed prompt into an agent tile. Rejects with `{ code: "BAD_REQUEST" }` for a tile that is not one. */
+  sendPrompt?: (tileId: string, text: string) => Promise<void>;
 }
 
 export const SHARE_DECLINES_MAX = 3;
+export const PROMPT_DECLINES_MAX = 3;
 
 export function linkFeatures(s: LinkServices): ViewFeature[] {
   const f: ViewFeature[] = [];
@@ -55,6 +66,10 @@ export function linkFeatures(s: LinkServices): ViewFeature[] {
   if (s.presence) f.push("presence");
   if (s.history) f.push("history");
   if (s.share) f.push("share");
+  if (s.agentStatus) f.push("agentStatus");
+  if (s.agents) f.push("agents");
+  if (s.sessions) f.push("sessions");
+  if (s.confirmPrompt && s.sendPrompt) f.push("prompt");
   return f;
 }
 
@@ -113,6 +128,8 @@ export class CommunityLink {
   private historyBusy = false;
   private sharePending = false;
   private shareDeclines = 0;
+  private promptPending = false;
+  private promptDeclines = 0;
 
   constructor(private deps: LinkDeps) {
     this.now = deps.now ?? (() => performance.now());
@@ -211,11 +228,21 @@ export class CommunityLink {
       case "subscribeStatus": {
         if (!this.deps.hasTile(m.tileId)) { this.refuse(`subscribeStatus: unknown tile ${m.tileId}`); return; }
         if (this.statusUnsubs.has(m.tileId)) return;
-        const unsub = this.deps.commands.subscribeTileStatus(m.tileId, (status) => {
-          const s = this.services.sinceOf?.(m.tileId);
-          this.send({ type: "status", tileId: m.tileId, status: bucketTileStatus(status), ...(s ? { since: s.since, exact: s.exact } : {}) });
+        const tileId = m.tileId;
+        let bucket: ViewStatus | null = null;
+        let agent: ViewAgentStatus | undefined;
+        const push = () => {
+          if (bucket === null) return;
+          const s = this.services.sinceOf?.(tileId);
+          this.send({ type: "status", tileId, status: bucket, ...(s ? { since: s.since, exact: s.exact } : {}), ...(agent ? { agent } : {}) });
+        };
+        const offBus = this.deps.commands.subscribeTileStatus(tileId, (status) => { bucket = bucketTileStatus(status); push(); });
+        const offAgent = this.services.agentStatus?.(tileId, (a) => {
+          if (agent && JSON.stringify(agent) === JSON.stringify(a)) return;
+          agent = a;
+          push();
         });
-        this.statusUnsubs.set(m.tileId, unsub);
+        this.statusUnsubs.set(tileId, () => { offBus(); offAgent?.(); });
         this.stats.statusSubscriptions = this.statusUnsubs.size;
         return;
       }
@@ -321,8 +348,42 @@ export class CommunityLink {
   private request(m: Extract<PluginMessage, { type: "request" }>) {
     const reply = (p: Promise<unknown>) => p.then(
       (result) => this.send({ type: "response", requestId: m.requestId, ok: true, result }),
-      (e: unknown) => this.fail(m.requestId, "INTERNAL", (e as Error)?.message ?? String(e)),
+      (e: unknown) => {
+        const code = (e as { code?: unknown })?.code;
+        this.fail(m.requestId, code === "UNSUPPORTED" || code === "BAD_REQUEST" ? code : "INTERNAL", (e as Error)?.message ?? String(e));
+      },
     );
+    const granted = (p: ViewPermission) => (this.deps.capabilities.includes(p) ? true : (this.fail(m.requestId, "DECLINED", `${m.name} needs permission "${p}"`), false));
+    if (m.name === "agents") {
+      const agents = this.services.agents;
+      if (!agents) { this.fail(m.requestId, "UNSUPPORTED", "agents are not listed here"); return; }
+      void reply(Promise.resolve().then(() => ({ agents: agents() })));
+      return;
+    }
+    if (m.name === "sessions") {
+      const sessions = this.services.sessions;
+      if (!sessions) { this.fail(m.requestId, "UNSUPPORTED", "sessions are not listed here"); return; }
+      if (!granted("workspace:sessions")) return;
+      if (!this.deps.hasFrame(m.args[0].frameId)) { this.fail(m.requestId, "BAD_REQUEST", `unknown frame ${m.args[0].frameId}`); return; }
+      void reply(sessions(m.args[0].agent, m.args[0].frameId).then((list) => ({ sessions: list })));
+      return;
+    }
+    if (m.name === "prompt") {
+      const { confirmPrompt, sendPrompt } = this.services;
+      if (!confirmPrompt || !sendPrompt) { this.fail(m.requestId, "UNSUPPORTED", "prompts are not available"); return; }
+      if (!granted("workspace:prompt")) return;
+      const { tileId, text } = m.args[0];
+      if (!this.deps.hasTile(tileId)) { this.fail(m.requestId, "BAD_REQUEST", `unknown tile ${tileId}`); return; }
+      const why = this.promptBlocked();
+      if (why) { this.fail(m.requestId, why.code, why.message); return; }
+      this.promptPending = true;
+      void reply(confirmPrompt({ agent: null, tileId, frameId: null, text }).then(async (ok) => {
+        if (!ok) { this.promptDeclines++; return { outcome: "cancelled" }; }
+        await sendPrompt(tileId, text);
+        return { outcome: "sent" };
+      }).finally(() => { this.promptPending = false; }));
+      return;
+    }
     if (m.name === "history") {
       const history = this.services.history;
       if (!history) { this.fail(m.requestId, "UNSUPPORTED", "history is not available"); return; }
@@ -340,6 +401,13 @@ export class CommunityLink {
       if (outcome === "cancelled") this.shareDeclines++;
       return { outcome };
     }).finally(() => { this.sharePending = false; }));
+  }
+
+  /** Why a prompt cannot be shown now: one at a time, not while hidden, not after the user said no three times. */
+  private promptBlocked(): { code: RequestErrorCode; message: string } | null {
+    if (this.promptDeclines >= PROMPT_DECLINES_MAX) return { code: "DECLINED", message: "the user declined this view's prompts" };
+    if (this.promptPending || !this.visible) return { code: "BUSY", message: this.promptPending ? "a prompt is already waiting" : "the view is hidden" };
+    return null;
   }
 
   private fail(requestId: number, code: RequestErrorCode, message: string) {
@@ -371,11 +439,26 @@ export class CommunityLink {
       case "spawnVis": c.spawnVis(args[0] as "tree" | "shell" | "diff" | "issues"); return;
       case "spawnClaude": c.spawnClaude(); return;
       case "addFrame": c.addFrame(); return;
-      case "spawnAgent":
-        if (frame(args[1]) && !c.spawnAgent(args[0] as string | null, args[1] as string | null, args[2] as { prompt?: string; name?: string } | undefined)) {
-          this.refuse(`spawnAgent: no agent ${String(args[0] ?? "installed")}`);
-        }
+      case "spawnAgent": {
+        const opts = args[2] as { prompt?: string; name?: string; resume?: string } | undefined;
+        if (opts?.prompt !== undefined && !this.deps.capabilities.includes("workspace:prompt")) { this.refuse('spawnAgent with a prompt needs permission "workspace:prompt"'); return; }
+        if (opts?.resume !== undefined && !this.deps.capabilities.includes("workspace:sessions")) { this.refuse('spawnAgent with resume needs permission "workspace:sessions"'); return; }
+        if (!frame(args[1])) return;
+        const go = () => {
+          if (!c.spawnAgent(args[0] as string | null, args[1] as string | null, opts)) this.refuse(`spawnAgent: no agent ${String(args[0] ?? "installed")}`);
+        };
+        if (opts?.prompt === undefined) { go(); return; }
+        // The prompt is what the agent will do: the user reads it first.
+        const confirm = this.services.confirmPrompt;
+        if (!confirm) { this.refuse("spawnAgent: prompts are not available"); return; }
+        const why = this.promptBlocked();
+        if (why) { this.refuse(`spawnAgent: ${why.message}`); return; }
+        this.promptPending = true;
+        void confirm({ agent: args[0] as string | null, frameId: args[1] as string | null, text: opts.prompt })
+          .then((ok) => { if (ok) go(); else this.promptDeclines++; }, () => { /* no dialog: nothing runs */ })
+          .finally(() => { this.promptPending = false; });
         return;
+      }
       case "renameTile": if (tile(args[0])) c.renameTile(args[0] as string, args[1] as string); return;
       case "openFolder": if (frame(args[0])) c.openFolder(args[0] as string); return;
     }

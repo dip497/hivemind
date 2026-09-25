@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   ACTIVITY_MAX_TILES, CUSTOM_DATA_MAX_BYTES, LAYOUT_MAX_BYTES, MAX_SURFACE_RECTS, NAME_MAX, PROMPT_MAX, SHARE_MAX_BYTES,
-  customDataProblem, customNameMatches, isCustomEventName, isDay, parseHostMessage, parsePluginMessage,
+  customDataProblem, customNameMatches, isCustomEventName, isDay, parseHostMessage, parsePluginMessage, promptProblem,
 } from "../src/protocol.js";
 import { validateViewManifest, viewHost } from "../src/manifest.js";
 
@@ -211,5 +211,38 @@ describe("validateViewManifest", () => {
   test("known permissions are kept, de-duplicated", () => {
     const r = validateViewManifest({ ...good, permissions: ["workspace:close", "workspace:close"] });
     expect(r.ok && r.manifest.permissions).toEqual(["workspace:close"]);
+  });
+});
+
+describe("protocol 1.4", () => {
+  test("a prompt a view wrote: text only, no keystrokes, nothing hidden", () => {
+    expect(promptProblem("run the tests\n\tthen report")).toBeNull();
+    for (const bad of ["", "   ", "ok\r", "a\u001b[2Jb", "x\u0085", "safe\u202eevil", "zero\u200bwidth", "x".repeat(PROMPT_MAX + 1), 42]) {
+      expect(promptProblem(bad)).not.toBeNull();
+    }
+  });
+
+  test("requests: agents, sessions, prompt; spawnAgent carries a checked resume and prompt", () => {
+    expect(parsePluginMessage({ type: "request", requestId: 1, name: "agents", args: [{}] }).ok).toBe(true);
+    expect(parsePluginMessage({ type: "request", requestId: 2, name: "sessions", args: [{ agent: "claude", frameId: "f1" }] }).ok).toBe(true);
+    expect(parsePluginMessage({ type: "request", requestId: 3, name: "sessions", args: [{ agent: "claude" }] }).ok).toBe(false);
+    expect(parsePluginMessage({ type: "request", requestId: 4, name: "prompt", args: [{ tileId: "t1", text: "go" }] }).ok).toBe(true);
+    expect(parsePluginMessage({ type: "request", requestId: 5, name: "prompt", args: [{ tileId: "t1", text: "go\r" }] }).ok).toBe(false);
+    const spawn = (o: unknown) => parsePluginMessage({ type: "command", name: "spawnAgent", args: ["claude", "f1", o] }).ok;
+    expect(spawn({ resume: "0d3c2a10-1111-4222-8333-444455556666" })).toBe(true);
+    expect(spawn({ resume: "../etc" })).toBe(false);
+    expect(spawn({ resume: "--help" })).toBe(false);
+    expect(spawn({ prompt: "a\u001bb" })).toBe(false);
+  });
+
+  test("a status may carry the agent's own; a malformed one is refused", () => {
+    const agent = { state: "waiting", waitingFor: "question", subagents: 2, background: 0, compacting: false, source: "hooks" };
+    expect(parseHostMessage({ type: "status", tileId: "t1", status: "blocked", agent }).ok).toBe(true);
+    expect(parseHostMessage({ type: "status", tileId: "t1", status: "blocked", agent: { state: "thinking", subagents: 0 } }).ok).toBe(false);
+  });
+
+  test("manifests may ask for the 1.4 permissions", () => {
+    const m = { id: "board", name: "Board", version: "1.0.0", entry: "main.js", protocol: 1, permissions: ["workspace:prompt", "workspace:sessions"] };
+    expect(validateViewManifest(m).ok).toBe(true);
   });
 });

@@ -3,8 +3,11 @@
  * session statuses, the activity and presence stores main updates, and the LinkServices a community view's
  * host link reads. Started once; it runs whatever view is active.
  */
-import type { ActivityLevel, ShareOutcome, ViewPresence } from "@hivemind/view-sdk/protocol";
-import { subscribeStatus } from "../agent-status-bus";
+import type { ActivityLevel, ShareOutcome, TurnOutcome, ViewAgent, ViewAgentStatus, ViewPresence } from "@hivemind/view-sdk/protocol";
+import { canListSessions, defaultAgent, spawnableAgents, agentById as catalogAgentById } from "@hivemind/agents";
+import type { SessionStatus } from "@hivemind/agent-host/status-store";
+import { subscribeHostedStatus, subscribeStatus } from "../agent-status-bus";
+import { agentMissing } from "../agent-plugins";
 import { AGENT_TILE_KIND } from "../tile-kinds";
 import { ViewEventHub } from "./view-events";
 import type { LinkServices } from "./views/community/host-link";
@@ -17,7 +20,7 @@ export function feedHostedStatus(hub: Pick<ViewEventHub, "onHookTurn" | "onSubag
   const prev = last.get(e.tileId);
   const { state, subagents, source } = e.status;
   last.set(e.tileId, { state, subagents: subagents.length });
-  if (source === "hooks" && TURN_ENDS.has(state) && prev && !TURN_ENDS.has(prev.state)) hub.onHookTurn(e.tileId);
+  if (source === "hooks" && TURN_ENDS.has(state) && prev && !TURN_ENDS.has(prev.state)) hub.onHookTurn(e.tileId, state as TurnOutcome);
   if ((prev?.subagents ?? 0) !== subagents.length) hub.onSubagents(e.tileId, subagents.length);
 }
 
@@ -96,9 +99,52 @@ export function startViewHost(): void {
   window.hive.presenceNow().then((p) => viewPresence.set(p), () => {});
 }
 
-/** What a community view's host link may read. `share` shows the host's confirm. */
-export function viewLinkServices(opts: { layoutKey: () => string | null; share: (png: ArrayBuffer, suggestedName?: string) => Promise<ShareOutcome> }): LinkServices {
+/** A session's status as views see it: fixed words and counts, never a subagent's name. */
+export function viewAgentStatus(s: SessionStatus): ViewAgentStatus {
   return {
+    state: s.state,
+    ...(s.state === "waiting" && s.kind ? { waitingFor: s.kind } : {}),
+    subagents: s.subagents.length,
+    background: s.background,
+    compacting: s.compacting,
+    ...(s.source ? { source: s.source } : {}),
+  };
+}
+
+/** The agents a view may start: installed, enabled, and what each supports. */
+export function viewAgents(): ViewAgent[] {
+  const dflt = defaultAgent()?.id;
+  return spawnableAgents().filter((d) => !agentMissing(d.id)).map((d) => ({
+    id: d.id, label: d.label, default: d.id === dflt, turns: d.caps.turnSignal, resumes: !!d.session?.resume, sessions: canListSessions(d),
+  }));
+}
+
+const coded = (code: "UNSUPPORTED" | "BAD_REQUEST", message: string) => Object.assign(new Error(message), { code });
+
+/** What a community view's host link may read. `share` and `confirmPrompt` show the host's confirm. */
+export function viewLinkServices(opts: {
+  layoutKey: () => string | null;
+  share: (png: ArrayBuffer, suggestedName?: string) => Promise<ShareOutcome>;
+  /** The local folder a frame is bound to, or null (none, or on another machine). */
+  frameFolder: (frameId: string) => string | null;
+  isAgentTile: (tileId: string) => boolean;
+  confirmPrompt: LinkServices["confirmPrompt"];
+}): LinkServices {
+  return {
+    agentStatus: (tileId, cb) => subscribeHostedStatus(tileId, (s) => cb(viewAgentStatus(s))),
+    agents: viewAgents,
+    sessions: async (agent, frameId) => {
+      const def = catalogAgentById(agent);
+      if (!def || !canListSessions(def)) throw coded("UNSUPPORTED", `${def?.label ?? agent} sessions cannot be listed`);
+      const cwd = opts.frameFolder(frameId);
+      if (!cwd) throw coded("UNSUPPORTED", "this frame has no folder on this machine");
+      return window.hive.viewSessions(def.id, cwd);
+    },
+    confirmPrompt: opts.confirmPrompt,
+    sendPrompt: async (tileId, text) => {
+      if (!opts.isAgentTile(tileId)) throw coded("BAD_REQUEST", "only an agent tile takes a prompt");
+      await window.hive.viewPrompt(tileId, text);
+    },
     sinceOf: (id) => { const s = viewEvents.sinceOf(id); return s ? { since: s.since, exact: s.exact } : undefined; },
     events: { subscribe: (l) => viewEvents.subscribe(l), replay: (since, accept, viewId) => viewEvents.replay(since, accept, viewId) },
     activity: viewActivity,

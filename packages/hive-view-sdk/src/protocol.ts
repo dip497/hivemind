@@ -18,8 +18,10 @@ export const PROTOCOL_VERSION = 1;
 /** What a manifest may ask for beyond the base set (projection, status,
  *  selection, reveal, surfaces, layout). The host grants exactly what the
  *  manifest lists; an unknown name is refused at install and at load. */
-/** `workspace:edit` (protocol 1.2): rename a tile, bind a frame to a folder. */
-export const VIEW_PERMISSIONS = ["workspace:spawn", "workspace:close", "workspace:edit"] as const;
+/** `workspace:edit` (protocol 1.2): rename a tile, bind a frame to a folder.
+ *  `workspace:prompt` (1.4): give an agent an instruction the view wrote; the user confirms each one.
+ *  `workspace:sessions` (1.4): see past agent sessions in a frame's folder and continue one. */
+export const VIEW_PERMISSIONS = ["workspace:spawn", "workspace:close", "workspace:edit", "workspace:prompt", "workspace:sessions"] as const;
 export type ViewPermission = (typeof VIEW_PERMISSIONS)[number];
 
 export type ViewStatus = "unknown" | "idle" | "working" | "blocked" | "exited";
@@ -99,7 +101,7 @@ export interface ViewTheme {
 
 /** What a host implements beyond 1.2, sent in `hello.features`. A host that predates 1.3 sends
  *  none, so read the field (`hm.hello.features ?? []`), never probe for a client method. */
-export const VIEW_FEATURES = ["since", "events", "activity", "presence", "history", "share"] as const;
+export const VIEW_FEATURES = ["since", "events", "activity", "presence", "history", "share", "agentStatus", "agents", "sessions", "prompt"] as const;
 export type ViewFeature = (typeof VIEW_FEATURES)[number];
 
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [k: string]: JsonValue };
@@ -107,10 +109,49 @@ export type JsonValue = null | boolean | number | string | JsonValue[] | { [k: s
 /** Why a tile needs the user. A category, never the text the agent showed. */
 export type NeedsInputReason = "permission" | "question" | "review" | "approval" | "input";
 
+// ── protocol 1.4 (additive) ─────────────────────────────────────────────────
+
+/** What an agent session is doing, from the host's status store. */
+export type ViewAgentState = "idle" | "working" | "waiting" | "done" | "failed" | "interrupted" | "limited" | "exited";
+export const AGENT_STATES: readonly ViewAgentState[] = ["idle", "working", "waiting", "done", "failed", "interrupted", "limited", "exited"];
+export type ViewWaitingFor = "permission" | "question" | "plan" | "approval" | "other";
+export type TurnOutcome = "done" | "failed" | "interrupted" | "limited";
+
+/** Fixed words and counts: never a subagent's name or anything an agent wrote. */
+export interface ViewAgentStatus {
+  state: ViewAgentState;
+  waitingFor?: ViewWaitingFor;
+  subagents: number;
+  /** Shells the last turn left running. */
+  background: number;
+  compacting: boolean;
+  /** "hooks": the agent reports it; "screen": read from its screen, so coarser. */
+  source?: "hooks" | "screen";
+}
+
+/** An agent this machine can start, and what it supports. */
+export interface ViewAgent {
+  id: string;
+  label: string;
+  /** The user's default agent. */
+  default: boolean;
+  /** Reports when its turns end (so `turn` events are exact). */
+  turns: boolean;
+  /** Can continue a past session. */
+  resumes: boolean;
+  /** Its past sessions can be listed. */
+  sessions: boolean;
+}
+
+/** A past session in a frame's folder. `prompt`: the first line of the user's first prompt. */
+export interface ViewSession { id: string; updated?: number; prompt?: string }
+
+export type PromptOutcome = "sent" | "cancelled";
+
 /** Discrete facts about the workspace. Ids, kinds, counts and times — no text an agent wrote. */
 export type ViewEvent =
   /** `inferred`: the agent has no turn hook, so this is a working → idle transition. */
-  | { kind: "turn"; seq: number; at: number; tileId: string; inferred?: boolean }
+  | { kind: "turn"; seq: number; at: number; tileId: string; inferred?: boolean; /** 1.4 */ outcome?: TurnOutcome }
   | { kind: "needsInput"; seq: number; at: number; tileId: string; reason: NeedsInputReason }
   | { kind: "subagents"; seq: number; at: number; tileId: string; active: number }
   | { kind: "tileOpened"; seq: number; at: number; tileId: string; frameId: string | null; tileKind: string; agent?: string; spawnedBy?: string }
@@ -171,7 +212,7 @@ export type HostMessage =
   | { type: "selection"; tileId: string | null; frameId: string | null; fresh: boolean }
   /** 1.3: `since` is when the tile entered this status; `exact: false` means the host found it
    *  already there, so `since` is a lower bound. */
-  | { type: "status"; tileId: string; status: ViewStatus; since?: number; exact?: boolean }
+  | { type: "status"; tileId: string; status: ViewStatus; since?: number; exact?: boolean; /** 1.4, agent tiles */ agent?: ViewAgentStatus }
   /** 1.3, after `subscribeEvents`: batched, oldest first. `replay` = from the host's buffer. */
   | { type: "events"; events: ViewEvent[]; replay?: boolean }
   /** 1.3, after `watchActivity`: only tiles whose level changed, at most 4 per second. */
@@ -210,8 +251,10 @@ export interface ViewCommands {
   /** permission `workspace:spawn` */
   addFrame: () => void;
   /** 1.2, permission `workspace:spawn`: start an agent — a catalog id, or null for the user's
-   *  default — in a frame (null: the host picks), optionally with a first prompt and a tile name. */
-  spawnAgent: (agent: string | null, frameId: string | null, opts?: { prompt?: string; name?: string }) => void;
+   *  default — in a frame (null: the host picks), optionally with a tile name. 1.4: a `prompt`
+   *  also needs `workspace:prompt` and the user's confirm; `resume` (a session id from
+   *  `sessions`) also needs `workspace:sessions`. */
+  spawnAgent: (agent: string | null, frameId: string | null, opts?: { prompt?: string; name?: string; resume?: string }) => void;
   /** 1.2, permission `workspace:edit`: rename a tile ("" goes back to its own name). */
   renameTile: (id: string, name: string) => void;
   /** 1.2, permission `workspace:edit`: ask the user for a folder to bind this frame to. */
@@ -249,7 +292,13 @@ export type PluginMessage =
   | { type: "unsubscribePresence" }
   /** 1.3: answered by one `response` with the same id. The share buffer is the one non-JSON value. */
   | { type: "request"; requestId: number; name: "history"; args: [{ day: string }] }
-  | { type: "request"; requestId: number; name: "share"; args: [{ png: ArrayBuffer; suggestedName?: string }] };
+  | { type: "request"; requestId: number; name: "share"; args: [{ png: ArrayBuffer; suggestedName?: string }] }
+  /** 1.4: result `{ agents: ViewAgent[] }`. */
+  | { type: "request"; requestId: number; name: "agents"; args: [Record<string, never>] }
+  /** 1.4, `workspace:sessions`: result `{ sessions: ViewSession[] }`, newest first. */
+  | { type: "request"; requestId: number; name: "sessions"; args: [{ agent: string; frameId: string }] }
+  /** 1.4, `workspace:prompt`: result `{ outcome: PromptOutcome }` once the user chose. */
+  | { type: "request"; requestId: number; name: "prompt"; args: [{ tileId: string; text: string }] };
 
 export const MAX_SURFACE_RECTS = 16;
 /** 1.2 argument caps: a tile name, and an agent's first prompt. */
@@ -272,6 +321,19 @@ const CUSTOM_NAME_RE = /^[a-z][a-z0-9-]*(\.[a-z0-9-]+)*$/;
 const RESERVED_PREFIXES = ["hive.", "hm."];
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const SUGGESTED_NAME_RE = /^[\w .-]{1,64}$/;
+/** A session id as the host puts it on a command line. */
+const SESSION_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+/** Keystrokes and hidden text: C0/C1 controls but tab and newline, bidi controls, zero-width. */
+const UNSAFE_PROMPT_RE = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]/;
+
+/** Why a prompt a view wrote is refused, or null. The app types it into a terminal, so a control
+ *  character is a keystroke, and hidden characters would keep it from the user's confirm. */
+export function promptProblem(text: unknown): string | null {
+  if (typeof text !== "string" || !text.trim()) return "text must be a non-empty string";
+  if (text.length > PROMPT_MAX) return `text exceeds ${PROMPT_MAX} characters`;
+  if (UNSAFE_PROMPT_RE.test(text)) return "text carries control, bidi or zero-width characters";
+  return null;
+}
 
 /** A `hive ctl view emit` name: dotted lowercase words, ≤ 64, not under a reserved prefix. */
 export function isCustomEventName(name: unknown): name is string {
@@ -340,8 +402,9 @@ const COMMAND_ARGS: Record<CommandName, (args: unknown[]) => boolean> = {
   addFrame: (a) => a.length === 0,
   spawnAgent: (a) => (a.length >= 2 && a.length <= 3) && (a[0] === null || isId(a[0])) && isIdOrNull(a[1])
     && (a[2] === undefined || (isObj(a[2])
-      && (a[2].prompt === undefined || (typeof a[2].prompt === "string" && a[2].prompt.length <= PROMPT_MAX))
-      && (a[2].name === undefined || (typeof a[2].name === "string" && a[2].name.length <= NAME_MAX)))),
+      && (a[2].prompt === undefined || promptProblem(a[2].prompt) === null)
+      && (a[2].name === undefined || (typeof a[2].name === "string" && a[2].name.length <= NAME_MAX))
+      && (a[2].resume === undefined || (typeof a[2].resume === "string" && SESSION_ID_RE.test(a[2].resume))))),
   renameTile: (a) => a.length === 2 && isId(a[0]) && typeof a[1] === "string" && a[1].length <= NAME_MAX,
   openFolder: (a) => a.length === 1 && isId(a[0]),
 };
@@ -425,6 +488,17 @@ export function parsePluginMessage(raw: unknown): ParseResult<PluginMessage> {
         if (o.suggestedName !== undefined && (typeof o.suggestedName !== "string" || !SUGGESTED_NAME_RE.test(o.suggestedName))) return bad("suggestedName must be ≤ 64 letters, digits, spaces, dots or dashes");
         return { ok: true, msg: { type: "request", requestId: raw.requestId, name: "share", args: [{ png: o.png, ...(o.suggestedName ? { suggestedName: o.suggestedName as string } : {}) }] } };
       }
+      if (raw.name === "agents") return { ok: true, msg: { type: "request", requestId: raw.requestId, name: "agents", args: [{}] } };
+      if (raw.name === "sessions") {
+        if (!isId(o.agent) || !isId(o.frameId)) return bad("agent and frameId must be ids");
+        return { ok: true, msg: { type: "request", requestId: raw.requestId, name: "sessions", args: [{ agent: o.agent, frameId: o.frameId }] } };
+      }
+      if (raw.name === "prompt") {
+        if (!isId(o.tileId)) return bad("tileId must be an id");
+        const why = promptProblem(o.text);
+        if (why) return bad(why);
+        return { ok: true, msg: { type: "request", requestId: raw.requestId, name: "prompt", args: [{ tileId: o.tileId, text: o.text as string }] } };
+      }
       return bad(`unknown request ${JSON.stringify(raw.name)}`);
     }
     default:
@@ -450,6 +524,7 @@ export function parseHostMessage(raw: unknown): ParseResult<HostMessage> {
     case "status":
       if (raw.since !== undefined && !isNum(raw.since)) return bad("since must be a number");
       if (raw.exact !== undefined && typeof raw.exact !== "boolean") return bad("exact must be a boolean");
+      if (raw.agent !== undefined && !(isObj(raw.agent) && AGENT_STATES.includes(raw.agent.state as ViewAgentState) && isNum(raw.agent.subagents))) return bad("agent must be an agent status");
       return isId(raw.tileId) && STATUSES.includes(raw.status as ViewStatus) ? { ok: true, msg: raw as unknown as HostMessage } : bad("bad fields");
     case "events":
       return Array.isArray(raw.events) && raw.events.every((e) => isObj(e) && EVENT_KINDS.includes(e.kind as ViewEventKind) && isNum(e.at))

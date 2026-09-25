@@ -349,10 +349,11 @@ function validateSession(raw: unknown): AgentSession {
       req(typeof l[k] === "string" && DOT_PATH_RE.test(l[k] as string), `session.list.${k} must be a field path`);
       list[k] = l[k] as string;
     }
-    if (l.titlePath !== undefined) {
-      const paths = typeof l.titlePath === "string" ? [l.titlePath] : l.titlePath;
-      req(strArray(paths) && paths.length >= 1 && paths.length <= 4 && (paths as string[]).every((p) => DOT_PATH_RE.test(p)), "session.list.titlePath must be a field path or up to 4 of them");
-      list.titlePath = l.titlePath as string | string[];
+    for (const k of ["titlePath", "promptPath"] as const) {
+      if (l[k] === undefined) continue;
+      const paths = typeof l[k] === "string" ? [l[k]] : l[k];
+      req(strArray(paths) && paths.length >= 1 && paths.length <= 4 && (paths as string[]).every((p) => DOT_PATH_RE.test(p)), `session.list.${k} must be a field path or up to 4 of them`);
+      list[k] = l[k] as string | string[];
     }
     out.list = list;
   }

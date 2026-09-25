@@ -2,7 +2,7 @@ import type { SessionStatus } from "@hivemind/agent-host/status-store";
 /** Typed contract for IPC between main and renderer. */
 import type { Issue, IssueSummary, IssueState, AcceptanceItem, Assignee, LinkType, IssuePatch } from "@hivemind/core/types";
 import type { ViewManifest } from "@hivemind/view-sdk/manifest";
-import type { ActivityLevel, ShareOutcome, ViewHistoryDay, ViewPresence, ViewStatus } from "@hivemind/view-sdk/protocol";
+import type { ActivityLevel, ShareOutcome, ViewHistoryDay, ViewSession, ViewPresence, ViewStatus } from "@hivemind/view-sdk/protocol";
 import type { NotificationSettings } from "./notification-settings.js";
 import type { ReviewComment } from "@hivemind/core/review";
 export type { NotificationSettings };
@@ -419,6 +419,10 @@ export interface HiveIpc {
   viewLedgerAppend(lines: unknown[]): void;
   viewLedgerSnapshot(): Promise<LedgerSince[]>;
   viewHistory(layoutKey: string, day: string): Promise<ViewHistoryDay>;
+  /** View protocol 1.4: an agent's past sessions in a folder (id, time, the user's first prompt). */
+  viewSessions(agent: string, cwd: string): Promise<ViewSession[]>;
+  /** View protocol 1.4: type a prompt the user confirmed into an agent tile and submit it. */
+  viewPrompt(tileId: string, text: string): Promise<void>;
   /** Bare tile ids whose output level someone watches (main samples only these). */
   ptyActivityWatch(tileIds: string[]): void;
   onPtyActivity(cb: (levels: Record<string, ActivityLevel>) => void): () => void;

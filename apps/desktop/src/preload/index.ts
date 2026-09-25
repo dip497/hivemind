@@ -107,6 +107,8 @@ const api: HiveIpc & {
   viewLedgerAppend: (lines) => ipcRenderer.send("viewLedger:append", lines),
   viewLedgerSnapshot: () => ipcRenderer.invoke("viewLedger:snapshot"),
   viewHistory: (layoutKey, day) => ipcRenderer.invoke("viewLedger:history", layoutKey, day),
+  viewSessions: (agent, cwd) => ipcRenderer.invoke("view:sessions", agent, cwd),
+  viewPrompt: (tileId, text) => ipcRenderer.invoke("view:prompt", tileId, text),
   ptyActivityWatch: (tileIds) => ipcRenderer.send("ptyActivity:watch", tileIds),
   onPtyActivity: (cb) => {
     const listener = (_e: unknown, levels: Parameters<typeof cb>[0]) => cb(levels);

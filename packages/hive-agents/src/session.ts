@@ -12,7 +12,8 @@ import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import { execFile, execFileSync } from "node:child_process";
-import { isSessionId } from "./catalog.js";
+import { canListSessions, isSessionId } from "./catalog.js";
+export { canListSessions };
 import type { AgentProviderDef, ProviderResumeTransforms, SessionFind, SessionInfo, SessionList, SpawnSpec } from "./types.js";
 
 /** Bounds, not preferences: a session store nobody pruned must never stall a restore. */
@@ -199,12 +200,14 @@ export function parseListing(list: SessionList, stdout: string): SessionInfo[] {
     if (!isSessionId(id)) continue;
     const cwd = list.cwdPath ? at(r, list.cwdPath) : undefined;
     const title = titleOf([r], list.titlePath);
+    const prompt = titleOf([r], list.promptPath);
     const raw = list.updatedPath ? at(r, list.updatedPath) : undefined;
     const updated = typeof raw === "number" ? raw : typeof raw === "string" ? Date.parse(raw) : NaN;
     out.push({
       id,
       ...(typeof cwd === "string" ? { cwd } : {}),
       ...(title ? { title } : {}),
+      ...(prompt ? { prompt } : {}),
       ...(Number.isFinite(updated) ? { updated } : {}),
     });
   }
@@ -257,7 +260,8 @@ function fillFromLines(rows: Array<SessionInfo & { file?: string }>, list: Sessi
     try { records = firstRecords(file, n); } catch { return s; }
     const cwd = s.cwd ?? (list!.cwdPath ? records.map((r) => at(r, list!.cwdPath!)).find((v) => typeof v === "string") : undefined);
     const title = titleOf(records, list!.titlePath);
-    return { ...s, ...(typeof cwd === "string" ? { cwd } : {}), ...(title ? { title } : {}) };
+    const prompt = titleOf(records, list!.promptPath);
+    return { ...s, ...(typeof cwd === "string" ? { cwd } : {}), ...(title ? { title } : {}), ...(prompt ? { prompt } : {}) };
   });
 }
 
@@ -314,12 +318,6 @@ function storedSessions(def: AgentProviderDef, home: string, cwd?: string): Arra
     }
   }
   return out;
-}
-
-/** Whether the manifest says how to list this agent's sessions. */
-export function canListSessions(def: AgentProviderDef): boolean {
-  const s = def.session;
-  return !!(s?.list || s?.resume?.find || s?.resume?.exists);
 }
 
 /** An agent's sessions, newest first: from its own listing when it has one, else from its

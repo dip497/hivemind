@@ -12,8 +12,8 @@
  * right after the iframe loads; `connect()` resolves once `hello` arrives.
  */
 import {
-  COMMAND_PERMISSION, PORT_HANDSHAKE, PROTOCOL_VERSION, STATUS_TONES, customNameMatches, parseHostMessage,
-  type ActivityLevel, type CommandName, type HostMessage, type PluginMessage, type RequestErrorCode, type ShareOutcome, type StatusTone, type SurfaceRect,
+  COMMAND_PERMISSION, PORT_HANDSHAKE, PROTOCOL_VERSION, STATUS_TONES, customNameMatches, parseHostMessage, promptProblem,
+  type ActivityLevel, type PromptOutcome, type ViewAgent, type ViewAgentStatus, type ViewSession, type CommandName, type HostMessage, type PluginMessage, type RequestErrorCode, type ShareOutcome, type StatusTone, type SurfaceRect,
   type ViewCommands, type ViewEvent, type ViewEventKind, type ViewFeature, type ViewHistoryDay, type ViewPermission, type ViewPresence, type ViewRect, type ViewStatus, type ViewTheme,
 } from "./protocol.js";
 
@@ -22,8 +22,8 @@ export class HostError extends Error {
   constructor(readonly code: RequestErrorCode, message: string) { super(message); this.name = "HostError"; }
 }
 
-/** 1.3: what arrives with a status — absent from a host that predates it. */
-export interface StatusInfo { since?: number; exact?: boolean }
+/** 1.3: what arrives with a status — absent from a host that predates it. 1.4: `agent`, on agent tiles. */
+export interface StatusInfo { since?: number; exact?: boolean; agent?: ViewAgentStatus }
 
 type Hello = Extract<HostMessage, { type: "hello" }>;
 type EventMap = {
@@ -63,6 +63,14 @@ export interface ViewClient {
   history(day: string): Promise<ViewHistoryDay>;
   /** 1.3: ask the user to copy or save this PNG; resolves with what they chose. */
   share(png: ArrayBuffer, opts?: { suggestedName?: string }): Promise<ShareOutcome>;
+  /** 1.4: the agents this machine can start and what each supports. */
+  agents(): Promise<ViewAgent[]>;
+  /** 1.4, `workspace:sessions`: an agent's past sessions in a frame's folder, newest first.
+   *  Continue one with `commands.spawnAgent(agent, frameId, { resume: id })`. */
+  sessions(agent: string, frameId: string): Promise<ViewSession[]>;
+  /** 1.4, `workspace:prompt`: give an agent tile an instruction. The user sees it first and
+   *  sends or cancels it; resolves with what they chose. */
+  prompt(tileId: string, text: string): Promise<PromptOutcome>;
   /** Typed commands; one the manifest did not request throws locally. */
   readonly commands: ViewCommands;
   /** The hole-punch — deduplicated: identical rects are not re-sent. */
@@ -154,7 +162,9 @@ class Client implements ViewClient {
     switch (m.type) {
       case "structure": case "names": case "selection": this.emit(m.type, m); break;
       case "status": {
-        const info: StatusInfo | undefined = m.since === undefined ? undefined : { since: m.since, ...(m.exact === undefined ? {} : { exact: m.exact }) };
+        const info: StatusInfo | undefined = m.since === undefined && m.agent === undefined ? undefined : {
+          ...(m.since === undefined ? {} : { since: m.since }), ...(m.exact === undefined ? {} : { exact: m.exact }), ...(m.agent ? { agent: m.agent } : {}),
+        };
         for (const cb of this.status.get(m.tileId) ?? []) cb(m.status, info);
         break;
       }
@@ -205,6 +215,13 @@ class Client implements ViewClient {
   private command(name: CommandName, args: unknown[]) {
     const need = COMMAND_PERMISSION[name];
     if (need && !this.capabilities.includes(need)) throw new Error(`hivemind: ${name} needs permission "${need}" — add it to hivemind-view.json`);
+    if (name === "spawnAgent") {
+      const o = (args[2] ?? {}) as { prompt?: string; resume?: string };
+      if (o.prompt !== undefined) this.need("workspace:prompt", "spawnAgent with a prompt");
+      if (o.resume !== undefined) this.need("workspace:sessions", "spawnAgent with resume");
+      const why = o.prompt === undefined ? null : promptProblem(o.prompt);
+      if (why) throw new Error(`hivemind: spawnAgent: ${why}`);
+    }
     this.send({ type: "command", name, args });
   }
 
@@ -292,6 +309,30 @@ class Client implements ViewClient {
     return () => {
       if (this.presenceCbs.delete(cb) && this.presenceCbs.size === 0) { this.presence = null; this.send({ type: "unsubscribePresence" }); }
     };
+  }
+
+  private need(p: ViewPermission, what: string) {
+    if (!this.capabilities.includes(p)) throw new Error(`hivemind: ${what} needs permission "${p}" — add it to hivemind-view.json`);
+  }
+
+  agents(): Promise<ViewAgent[]> {
+    if (!this.supports("agents")) return Promise.reject(new HostError("UNSUPPORTED", "this host does not list agents"));
+    return this.request((requestId) => ({ type: "request", requestId, name: "agents", args: [{}] }), 10_000).then((r) => (r as { agents: ViewAgent[] }).agents);
+  }
+
+  sessions(agent: string, frameId: string): Promise<ViewSession[]> {
+    this.need("workspace:sessions", "sessions");
+    if (!this.supports("sessions")) return Promise.reject(new HostError("UNSUPPORTED", "this host does not list sessions"));
+    return this.request((requestId) => ({ type: "request", requestId, name: "sessions", args: [{ agent, frameId }] }), 30_000).then((r) => (r as { sessions: ViewSession[] }).sessions);
+  }
+
+  prompt(tileId: string, text: string): Promise<PromptOutcome> {
+    this.need("workspace:prompt", "prompt");
+    if (!this.supports("prompt")) return Promise.reject(new HostError("UNSUPPORTED", "this host cannot prompt agents"));
+    const why = promptProblem(text);
+    if (why) return Promise.reject(new HostError("BAD_REQUEST", why));
+    // No timeout: the user may be reading the prompt.
+    return this.request((requestId) => ({ type: "request", requestId, name: "prompt", args: [{ tileId, text }] })).then((r) => (r as { outcome: PromptOutcome }).outcome);
   }
 
   history(day: string): Promise<ViewHistoryDay> {

@@ -6,7 +6,7 @@
  * It runs whatever view is active (terminals stay mounted in the TileHost), so a view that
  * mounts late still learns the truth. Pure: time, timers and the ledger sink are injected.
  */
-import type { JsonValue, NeedsInputReason, ViewEvent, ViewStatus } from "@hivemind/view-sdk/protocol";
+import type { JsonValue, NeedsInputReason, TurnOutcome, ViewEvent, ViewStatus } from "@hivemind/view-sdk/protocol";
 import type { StatusEvent, TileStatusKind } from "../agent-status-bus";
 import { bucketTileStatus } from "./tile-status-bucket";
 
@@ -162,11 +162,11 @@ export class ViewEventHub {
     this.initialized = true;
   }
 
-  /** A turn hook fired for this tile. */
-  onHookTurn(tileId: string): void {
+  /** A turn hook fired for this tile, ending the turn this way. */
+  onHookTurn(tileId: string, outcome?: TurnOutcome): void {
     this.hookTurns.add(tileId);
     const t = this.now();
-    this.emit({ kind: "turn", tileId }, t);
+    this.emit({ kind: "turn", tileId, ...(outcome ? { outcome } : {}) }, t);
     this.line({ t, e: "t", id: tileId });
   }
 

@@ -30,6 +30,8 @@ type FocusReq = { id: string; cx: number; cy: number; w: number; h: number; n: n
 type SpawnOpts = {
   mode?: string; work?: string; url?: string; file?: string;
   agent?: { id: string; cmd: string; args?: string[]; label: string };
+  /** An agent tile that continues this session instead of starting one. */
+  resume?: string;
   /** A terminal that shows this existing daemon session instead of starting its own. */
   session?: { id: string; cmd: string; args?: string[]; label: string };
 };
@@ -275,7 +277,7 @@ export function useSpawn(ctx: SpawnCtx) {
       let label: string;
       if (def) {
         const so = launchOptions(def.id, { mode: opts?.mode });
-        args = spawnArgsFor(def, so);
+        args = opts?.resume ? withResume(def, spawnArgsFor(def, so), opts.resume) : spawnArgsFor(def, so);
         cmd = def.bin;
         label = ordinalLabel((n) => spawnLabelFor(def, n, {}), (n) => spawnLabelFor(def, n, so));
       } else if (kind === "shell" && opts?.session) {

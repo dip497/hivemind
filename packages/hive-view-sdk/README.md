@@ -43,9 +43,20 @@ const day = await hm.history("2026-09-23");       // per-tile status intervals, 
 const outcome = await hm.share(pngBuffer);        // the host asks the user: copied | saved | cancelled
 ```
 
+Protocol 1.4 adds the agents themselves (`has.has("agentStatus")` and friends):
+
+```ts
+hm.subscribeStatus(tileId, (status, info) => { /* info.agent: { state, waitingFor, subagents, background, compacting } */ });
+const agents = await hm.agents();                 // installed agents and what each supports
+const past = await hm.sessions("claude", frameId); // "workspace:sessions": that folder's sessions, newest first
+hm.commands.spawnAgent("claude", frameId, { resume: past[0].id }); // continue one
+await hm.prompt(tileId, "run the tests");         // "workspace:prompt": the user reads it and sends or cancels
+```
+
 `closeTile` needs `"permissions": ["workspace:close"]`; `spawnTile` / `spawnVis` /
 `spawnClaude` / `addFrame` / `spawnAgent` need `"workspace:spawn"`; `renameTile` /
-`openFolder` need `"workspace:edit"`. Unknown permissions are refused at install. Protocol details: `src/protocol.ts`; complete views: `views/` in
+`openFolder` need `"workspace:edit"`; `prompt`, and `spawnAgent` with a `prompt`, need
+`"workspace:prompt"`; `sessions`, and `spawnAgent` with `resume`, need `"workspace:sessions"`. Unknown permissions are refused at install. Protocol details: `src/protocol.ts`; complete views: `views/` in
 [the published plugins](https://github.com/dip497/hivemind-plugins) — `queue` (a list with a
 docked terminal), `tiled` (every terminal of a frame laid out as live panes) and `board` (drag,
 keyboard moves, a persisted layout).

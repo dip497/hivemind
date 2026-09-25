@@ -27,6 +27,10 @@ import { loadViewLayout, saveViewLayout, type ViewLayoutSpec } from "../../view-
 import { cssColorToHexString } from "../../css-color";
 import { CommunityLink } from "./host-link";
 import { ShareDialog, type ShareChoice } from "./ShareDialog";
+import { PromptDialog, type PromptAsk } from "./PromptDialog";
+import { isRemote } from "../../../../../shared/remote-uri";
+import { agentById as catalogAgentById, defaultAgent } from "@hivemind/agents";
+import { AGENT_TILE_KIND } from "../../../tile-kinds";
 import { viewLinkServices } from "../../view-services";
 import type { SharePrepared } from "../../../../../shared/ipc";
 import type { ShareOutcome } from "@hivemind/view-sdk/protocol";
@@ -95,6 +99,10 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
     tilesRef.current = tiles;
     const framesRef = useRef(frames);
     framesRef.current = frames;
+    const layerTilesRef = useRef(layerTiles);
+    layerTilesRef.current = layerTiles;
+    const repoRef = useRef(model.repoPath);
+    repoRef.current = model.repoPath;
 
     // ── the link: created once per mount, attached when the iframe loads ─────
     // Plugin messages arrive one task each, so "selectTile(null)" + "rects: []"
@@ -128,6 +136,21 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
       setShareImage(null);
       return window.hive.viewShareCommit(prepared.token, choice, suggestedName ?? manifest.name);
     };
+    // A prompt the view wrote waits here for the user to read it and send or cancel it.
+    const [promptAsk, setPromptAsk] = useState<PromptAsk | null>(null);
+    const promptAnswer = useRef<((send: boolean) => void) | null>(null);
+    const confirmPrompt = async (req: { agent: string | null; tileId?: string; frameId: string | null; text: string }): Promise<boolean> => {
+      const tile = req.tileId ? layerTilesRef.current.find((t) => t.id === req.tileId) : undefined;
+      const frameId = tile?.frameId ?? req.frameId;
+      const frame = frameId ? framesRef.current.find((f) => f.id === frameId) : undefined;
+      const agentId = tile?.agent ?? req.agent;
+      const agent = (agentId ? catalogAgentById(agentId) : defaultAgent())?.label ?? "an agent";
+      const where = tile ? `To the tile “${tile.name}”` : `A new ${agent} tile${frame ? ` in “${frame.title}”` : ""}`;
+      const send = await new Promise<boolean>((resolve) => { promptAnswer.current = resolve; setPromptAsk({ viewName: manifest.name, agent, where, text: req.text }); });
+      promptAnswer.current = null;
+      setPromptAsk(null);
+      return send;
+    };
     const link = useMemo(() => new CommunityLink({
       pluginId: pkg.id,
       capabilities,
@@ -148,7 +171,18 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
       onLayout: (data) => saveViewLayout(layoutSpec(pkg.id), layoutKey, data),
       onFramesDrawn: () => { /* read from stats by the test seam / perf harness */ },
       onError: (message) => console.warn(`[hivemind] view "${pkg.id}": ${message}`),
-      services: viewLinkServices({ layoutKey: () => layoutKeyRef.current, share }),
+      services: viewLinkServices({
+        layoutKey: () => layoutKeyRef.current,
+        share,
+        frameFolder: (frameId) => {
+          const f = framesRef.current.find((x) => x.id === frameId);
+          // Same rule as a tile's working directory: the frame's own folder, else the workspace's.
+          const folder = f ? f.worktreePath ?? f.workspacePath ?? repoRef.current : null;
+          return folder && !isRemote(folder) ? folder : null;
+        },
+        isAgentTile: (tileId) => tilesRef.current.some((t) => t.id === tileId && t.kind === AGENT_TILE_KIND),
+        confirmPrompt,
+      }),
       onDisable: (reason) => {
         toast.error(`The ${manifest.name} view was disabled: ${reason}. Switched back to Canvas — your tiles are untouched.`);
         disableCommunityView(pkg.id, reason);
@@ -156,7 +190,7 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }), []);
     linkRef.current = link;
-    useEffect(() => () => { shareAnswer.current?.("cancel"); link.dispose(); }, [link]);
+    useEffect(() => () => { shareAnswer.current?.("cancel"); promptAnswer.current?.(false); link.dispose(); }, [link]);
 
     const onLoad = useCallback(() => {
       const win = iframeRef.current?.contentWindow;
@@ -344,6 +378,7 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
           ))}
         </div>
         <ShareDialog viewName={manifest.name} image={shareImage} onChoose={(c) => shareAnswer.current?.(c)} />
+        <PromptDialog ask={promptAsk} onChoose={(send) => promptAnswer.current?.(send)} />
         {!ready && (
           <div className="pointer-events-none absolute inset-0 grid place-items-center text-[12px] text-[var(--color-fg3)]">
             Loading {manifest.name}…

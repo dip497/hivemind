@@ -183,4 +183,25 @@ describe("view-sdk client", () => {
     expect(await h).toEqual({ day: "2026-09-23" } as never);
     await expect(s).rejects.toMatchObject({ code: "DECLINED" });
   });
+
+  test("1.4: agent status rides on status; sessions and prompt check permissions and features locally", async () => {
+    const { client, inbox, send } = await scriptedHost(["workspace:spawn"], ["agentStatus", "agents", "sessions", "prompt"]);
+    const seen: unknown[] = [];
+    client.subscribeStatus("t1", (s, info) => seen.push([s, info?.agent?.state]));
+    send({ type: "status", tileId: "t1", status: "working", agent: { state: "working", subagents: 1, background: 0, compacting: false } });
+    await tick();
+    expect(seen).toEqual([["working", "working"]]);
+    expect(() => client.sessions("claude", "f1")).toThrow(/workspace:sessions/);
+    expect(() => client.prompt("t1", "go")).toThrow(/workspace:prompt/);
+    expect(() => client.commands.spawnAgent("claude", "f1", { prompt: "go" })).toThrow(/workspace:prompt/);
+    expect(() => client.commands.spawnAgent("claude", "f1", { resume: "s1" })).toThrow(/workspace:sessions/);
+    const agents = client.agents();
+    await tick();
+    const req = inbox.find((m) => m.type === "request") as { requestId: number; name: string };
+    expect(req.name).toBe("agents");
+    send({ type: "response", requestId: req.requestId, ok: true, result: { agents: [{ id: "claude", label: "Claude", default: true, turns: true, resumes: true, sessions: true }] } });
+    expect((await agents).map((a) => a.id)).toEqual(["claude"]);
+    const p = await scriptedHost(["workspace:prompt"], ["prompt"]);
+    await expect(p.client.prompt("t1", "bad\u001b")).rejects.toThrow(/control/);
+  });
 });

@@ -25,11 +25,13 @@ one wins.
 | `activity` (1.3) | `levels: Record<id, 0..3>` | After `watchActivity`; only changes, ≤ 4/s, none while hidden |
 | `presence` (1.3) | `presence {state, since, focused}` | After `subscribePresence`; on change |
 | `response` (1.3) | `requestId`, `ok`, `result \| error {code}` | The answer to `request`; codes `UNSUPPORTED`, `BAD_REQUEST`, `BUSY`, `DECLINED`, `INTERNAL` |
+| `status` (1.4) | `agent? {state, waitingFor?, subagents, background, compacting, source?}` | On agent tiles; `state`: idle, working, waiting, done, failed, interrupted, limited, exited |
 
 `hello.features` (1.3) lists what the host wired: `since`, `events`, `activity`, `presence`,
-`history`, `share`. A host that predates 1.3 sends none.
+`history`, `share`; 1.4 adds `agentStatus`, `agents`, `sessions`, `prompt`. A host that predates
+1.3 sends none.
 
-`ViewEvent` kinds: `turn {inferred?}`, `needsInput {reason: permission | question | review |
+`ViewEvent` kinds: `turn {inferred?, outcome? (1.4): done | failed | interrupted | limited}`, `needsInput {reason: permission | question | review |
 approval | input}`, `subagents {active}`, `tileOpened {frameId, tileKind, agent?, spawnedBy?}`,
 `tileClosed {lastStatus, failed?}`, `custom {id, name, data, from}`. Every event carries
 `seq`, `at` and (except custom) `tileId` — never text an agent wrote.
@@ -57,6 +59,7 @@ compute one from a theme token yourself.
 | `watchActivity` (1.3) | `tileIds[]` | The whole watched set, ≤ 256 |
 | `subscribePresence` / `unsubscribePresence` (1.3) | — | |
 | `request` (1.3) | `requestId`, `name: history \| share`, `args` | `history [{day}]`; `share [{png: ArrayBuffer, suggestedName?}]` — the one non-JSON value |
+| `request` (1.4) | `name: agents \| sessions \| prompt` | `agents [{}]` → `{agents}`; `sessions [{agent, frameId}]` → `{sessions: [{id, updated?, prompt?}]}`; `prompt [{tileId, text}]` → `{outcome: sent \| cancelled}` |
 
 Sending a 1.3 message to a host that did not advertise the feature is a refusal, like an
 unknown message; the SDK never does.
@@ -73,7 +76,7 @@ unknown message; the SDK never does.
 | `spawnVis("tree" \| "shell" \| "diff" \| "issues")` | `workspace:spawn` |
 | `spawnClaude()` | `workspace:spawn` |
 | `addFrame()` | `workspace:spawn` |
-| `spawnAgent(agentId \| null, frameId \| null, { prompt?, name? })` | `workspace:spawn` |
+| `spawnAgent(agentId \| null, frameId \| null, { prompt?, name?, resume? })` | `workspace:spawn`; with `prompt` also `workspace:prompt` (the user confirms); with `resume` also `workspace:sessions` |
 | `renameTile(id, name)` | `workspace:edit` |
 | `openFolder(frameId)` | `workspace:edit` |
 

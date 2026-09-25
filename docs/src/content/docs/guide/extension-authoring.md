@@ -123,15 +123,37 @@ on your machine: show it, never run it.
 Nothing here carries what a terminal shows: output is a level, never text or a count, and events
 carry ids and times, never what an agent wrote.
 
+### Agents
+
+View protocol 1.4 lets a view see and drive the agents. Check the same `hm.hello.features`:
+
+```ts
+hm.subscribeStatus(tileId, (status, info) => {
+  // info.agent: state (idle, working, waiting, done, failed, interrupted, limited, exited),
+  // waitingFor (permission, question, plan, approval), subagents, background, compacting
+});
+const agents = await hm.agents();                   // installed agents: turns, resumes, sessions
+const past = await hm.sessions("claude", frameId);  // the frame's folder: { id, updated, prompt }
+hm.commands.spawnAgent("claude", frameId, { resume: past[0].id });
+const outcome = await hm.prompt(tileId, "run the tests"); // sent or cancelled — the user decides
+```
+
+`prompt` is the user's own first line of that session; a title the agent wrote is never sent.
+Every prompt a view writes opens a dialog in the app showing the full text, with Cancel focused;
+after three cancels the view's prompts are declined until it's reloaded. Text with control, bidi
+or zero-width characters is refused. A view never reads an agent's replies and never answers its
+permission prompts.
+
 ## Permissions
 
 Declared in the manifest, refused at install if unknown:
 `workspace:close` → `closeTile`; `workspace:spawn` → `spawnTile` / `spawnVis` /
-`spawnClaude` / `addFrame` / `spawnAgent`; `workspace:edit` → `renameTile` / `openFolder`.
-Selection and focus need none.
+`spawnClaude` / `addFrame` / `spawnAgent`; `workspace:edit` → `renameTile` / `openFolder`;
+`workspace:prompt` → `prompt` and `spawnAgent` with a `prompt`; `workspace:sessions` →
+`sessions` and `spawnAgent` with `resume`. Selection and focus need none.
 
-`spawnAgent(agent, frameId, { prompt?, name? })` starts an agent by its catalog id (`null` is
-the user's default) and hands it `prompt` as its first message. An id that isn't installed is
+`spawnAgent(agent, frameId, { prompt?, name?, resume? })` starts an agent by its catalog id (`null` is
+the user's default); a `prompt` becomes its first message once the user sends it. An id that isn't installed is
 refused. `openFolder(frameId)` asks the user to pick the frame's folder; the view never sees a path.
 
 `structure` also tells you how the workspace is wired: each tile's `agent`, each frame's

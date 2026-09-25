@@ -119,8 +119,10 @@ export interface SessionList {
   idPath?: string;
   lines?: number;
   cwdPath?: string;
-  /** In order of preference. */
+  /** In order of preference. May be what the agent wrote. */
   titlePath?: string | string[];
+  /** Where the user's own first prompt is, as opposed to a title the agent wrote. */
+  promptPath?: string | string[];
   /** Epoch milliseconds or an ISO date. */
   updatedPath?: string;
 }
@@ -130,6 +132,8 @@ export interface SessionInfo {
   id: string;
   cwd?: string;
   title?: string;
+  /** The first line of the user's first prompt. */
+  prompt?: string;
   /** Epoch milliseconds. */
   updated?: number;
 }

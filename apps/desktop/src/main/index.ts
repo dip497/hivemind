@@ -5,7 +5,7 @@ import desktopPkg from "../../package.json" with { type: "json" };
 import { installPluginCatalogIpc } from "./plugin-catalog-ipc.js";
 /** Electron main process — owns the BrowserWindow + IPC + PtyHost + git/worktree. */
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, net, powerMonitor, protocol, screen, session, shell, webContents, type WebContents } from "electron";
-import { isDay } from "@hivemind/view-sdk/protocol";
+import { isDay, promptProblem } from "@hivemind/view-sdk/protocol";
 import { ActivityMeter } from "./pty-activity.js";
 import { POLL_MS as PRESENCE_POLL_MS, PresenceMonitor, localDay, type PresenceTotals } from "./presence.js";
 import { StatusLedger } from "./status-ledger.js";
@@ -43,7 +43,7 @@ import {
 import os from "node:os";
 import { AGENT_EVENT_METHOD, cleanName, agentById, agentForCmd, getCatalog, parseAgentEvent, preferredAgent, setCatalog, type AgentProviderDef } from "@hivemind/agents";
 import { agentPresence, discoverOptions, findBin, verifyAgent } from "@hivemind/agents/discover";
-import { TILE_SESSIONS_DIR, writeTrackedSession } from "@hivemind/agents/node";
+import { TILE_SESSIONS_DIR, listSessions, writeTrackedSession } from "@hivemind/agents/node";
 import { agentAllowedIn, loadAgents, toWire } from "@hivemind/agents/load";
 import type { IssuePatch } from "@hivemind/core/types";
 import * as ptyHost from "./pty-host.js";
@@ -1883,6 +1883,18 @@ function startHcpControlPlane(): void {
   // Every verb routes through the boot scan first: spawn resolves the agent by id
   // and other verbs read its capabilities, so none may run against a half-set catalog.
   const dispatch: Dispatcher["dispatch"] = (method, params) => agentsScanned.then(() => _hcp.dispatch(method, params));
+  // View protocol 1.4: a folder's past sessions, without what the agent wrote; a prompt the user
+  // confirmed, delivered like `hive ctl send` (held while the agent is mid-turn).
+  ipcMain.handle("view:sessions", async (_e, agentId: unknown, cwd: unknown) => {
+    const def = typeof agentId === "string" ? agentById(agentId) : undefined;
+    if (!def || typeof cwd !== "string" || !path.isAbsolute(cwd)) throw new Error("bad sessions request");
+    const rows = await listSessions(def, { cwd, limit: 100 });
+    return rows.map((s) => ({ id: s.id, ...(s.updated ? { updated: s.updated } : {}), ...(s.prompt ? { prompt: s.prompt } : {}) }));
+  });
+  ipcMain.handle("view:prompt", async (_e, tileId: unknown, text: unknown) => {
+    if (typeof tileId !== "string" || promptProblem(text)) throw new Error("bad prompt");
+    await dispatch("agent.send", { tileId, text });
+  });
   hcpForgetTile = _hcp.forgetTile; // wire the pty-exit teardown to the dispatch's per-tile cleanup
   const server = startHcpServer(hcpSockPath(userData), {
     token,

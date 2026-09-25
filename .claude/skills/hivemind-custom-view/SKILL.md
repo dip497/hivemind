@@ -182,16 +182,31 @@ Two rules keep these honest:
 Every `on…` and `activity` returns its unsubscribe; drop a closed tile's activity the way you
 drop its status subscription.
 
+## Protocol 1.4: the agents
+
+| You want | Write | Needs |
+| --- | --- | --- |
+| Why an agent waits, how its turn ended, its subagents | `hm.subscribeStatus(id, (s, info) => info.agent)` | feature `agentStatus`; `turn` events carry `outcome` |
+| Which agents are installed and what they can do | `await hm.agents()` | feature `agents` |
+| A folder's past sessions, to continue one | `await hm.sessions(agent, frameId)`, then `spawnAgent(agent, frameId, { resume: id })` | `workspace:sessions` |
+| Give an agent an instruction | `await hm.prompt(tileId, text)` → `sent` / `cancelled` | `workspace:prompt`; the user reads and sends every one |
+
+A prompt is the one way a view makes an agent act, so the host shows the full text and focuses
+Cancel; three cancels decline the view's prompts until it reloads. Never retry a cancel. A view
+never gets an agent's replies, answers its permission prompts, or sees a title the agent wrote.
+
 ## Permissions: ask for nothing
 
 The base set — projection, status, selection, reveal, surfaces, layout — needs no
-permission. Only three exist:
+permission. Only five exist:
 
 | Permission | Unlocks |
 | --- | --- |
 | `workspace:spawn` | `spawnTile`, `spawnVis`, `spawnClaude`, `addFrame`, `spawnAgent` |
 | `workspace:close` | `closeTile` |
 | `workspace:edit` | `renameTile`, `openFolder` |
+| `workspace:prompt` | `prompt`, and `spawnAgent` with a `prompt` (1.4) |
+| `workspace:sessions` | `sessions`, and `spawnAgent` with `resume` (1.4) |
 
 Requesting one is a line in the install review a user has to accept, and an unknown
 name is refused at install **and** at load. Calling a command your manifest did not

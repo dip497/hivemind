@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Views can see what each agent is doing (why it is waiting, how its turn ended, its subagents), which agents are installed, and a folder's past sessions to continue one, and can give an agent an instruction you read and send in the app first (view protocol 1.4, `workspace:sessions` and `workspace:prompt`).
+- **Breaking:** a view that starts an agent with a first prompt needs the `workspace:prompt` permission, and you confirm the prompt before the agent gets it.
 - Agents and terminals started while a view other than the canvas is showing now run right away. They used to wait, with no status, until a view showed them — including workers another agent started with `hive ctl spawn`.
 - Agent manifests can map a native hook to a canonical event with `emit:` (turn started/ended, input requested/resolved, subagents, compacting) instead of naming a script. The vocabulary and how it becomes a status are specified in `spec/`, with shared test cases in `conformance/`.
 - **Breaking:** agent plugins report through their own scripts and the new agent SDK instead of hook scripts built into the app, and the app no longer reads agent transcripts. Update the Claude, Droid, Kiro and Pi plugins to their latest versions; until then `hive ctl read` gets no reply from them.

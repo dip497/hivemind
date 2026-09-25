@@ -169,3 +169,9 @@ export function withResume(def: AgentProviderDef, args: readonly string[], id: s
   const tokens = resume.args.map((t) => t.replace(/\{id\}/g, id));
   return resume.position === "before" ? [...tokens, ...args] : [...args, ...tokens];
 }
+
+/** Whether an agent's manifest says how to list its sessions. */
+export function canListSessions(def: AgentProviderDef): boolean {
+  const s = def.session;
+  return !!(s?.list || s?.resume?.find || s?.resume?.exists);
+}

@@ -86,10 +86,26 @@ export function publishStatus(e: StatusEvent): void {
   flush(e.tileId);
 }
 
+const hostedListeners = new Map<string, Set<(s: SessionStatus) => void>>();
+
 /** The host's status for an agent session (from main's status store). */
 export function setHostedStatus(tileId: string, status: SessionStatus): void {
   hosted.set(tileId, status);
   flush(tileId);
+  for (const l of hostedListeners.get(tileId) ?? []) l(status);
+}
+
+/** One agent session's full status from the host: the last one now, then every change. */
+export function subscribeHostedStatus(tileId: string, l: (s: SessionStatus) => void): () => void {
+  let set = hostedListeners.get(tileId);
+  if (!set) hostedListeners.set(tileId, (set = new Set()));
+  set.add(l);
+  const last = hosted.get(tileId);
+  if (last) l(last);
+  return () => {
+    set!.delete(l);
+    if (set!.size === 0) hostedListeners.delete(tileId);
+  };
 }
 
 /** The name a tile's chips and toasts use. */
