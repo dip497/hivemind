@@ -26,6 +26,10 @@ import { ACCENTS, effectiveGlass, getTheme, useSurfacePolicy } from "../../../th
 import { loadViewLayout, saveViewLayout, type ViewLayoutSpec } from "../../view-layout-store";
 import { cssColorToHexString } from "../../css-color";
 import { CommunityLink } from "./host-link";
+import { ShareDialog, type ShareChoice } from "./ShareDialog";
+import { viewLinkServices } from "../../view-services";
+import type { SharePrepared } from "../../../../../shared/ipc";
+import type { ShareOutcome } from "@hivemind/view-sdk/protocol";
 import { disableCommunityView } from "./registry";
 import { edgeBandClip } from "./edge-band";
 
@@ -112,6 +116,18 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
       });
     };
     useEffect(() => () => { if (batchRaf.current) cancelAnimationFrame(batchRaf.current); }, []);
+    const layoutKeyRef = useRef(layoutKey);
+    layoutKeyRef.current = layoutKey;
+    // A share waits here for the user's choice in the host dialog.
+    const [shareImage, setShareImage] = useState<SharePrepared | null>(null);
+    const shareAnswer = useRef<((c: ShareChoice) => void) | null>(null);
+    const share = async (png: ArrayBuffer, suggestedName?: string): Promise<ShareOutcome> => {
+      const prepared = await window.hive.viewSharePrepare(png);
+      const choice = await new Promise<ShareChoice>((resolve) => { shareAnswer.current = resolve; setShareImage(prepared); });
+      shareAnswer.current = null;
+      setShareImage(null);
+      return window.hive.viewShareCommit(prepared.token, choice, suggestedName ?? manifest.name);
+    };
     const link = useMemo(() => new CommunityLink({
       pluginId: pkg.id,
       capabilities,
@@ -120,6 +136,8 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
           const name = k as keyof WorkspaceViewProps["commands"];
           // Status subscriptions are not state changes — keep them immediate.
           if (name === "subscribeTileStatus" || name === "tileStatus") return commandsRef.current[name];
+          // Its answer (was the agent found?) is what the link checks, so it cannot wait for the batch.
+          if (name === "spawnAgent") return (...args: Parameters<WorkspaceViewProps["commands"]["spawnAgent"]>) => commandsRef.current.spawnAgent(...args);
           return (...args: unknown[]) => enqueue(() => (commandsRef.current[name] as (...a: unknown[]) => void)(...args));
         },
       }),
@@ -130,6 +148,7 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
       onLayout: (data) => saveViewLayout(layoutSpec(pkg.id), layoutKey, data),
       onFramesDrawn: () => { /* read from stats by the test seam / perf harness */ },
       onError: (message) => console.warn(`[hivemind] view "${pkg.id}": ${message}`),
+      services: viewLinkServices({ layoutKey: () => layoutKeyRef.current, share }),
       onDisable: (reason) => {
         toast.error(`The ${manifest.name} view was disabled: ${reason}. Switched back to Canvas — your tiles are untouched.`);
         disableCommunityView(pkg.id, reason);
@@ -137,7 +156,7 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }), []);
     linkRef.current = link;
-    useEffect(() => () => link.dispose(), [link]);
+    useEffect(() => () => { shareAnswer.current?.("cancel"); link.dispose(); }, [link]);
 
     const onLoad = useCallback(() => {
       const win = iframeRef.current?.contentWindow;
@@ -160,7 +179,7 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
       send({
         type: "hello", v: PROTOCOL_VERSION, pluginId: pkg.id, capabilities,
         theme: readTheme(), layout: loadViewLayout(layoutSpec(pkg.id), layoutKey),
-        viewport: box(), visible: !document.hidden,
+        viewport: box(), visible: !document.hidden, features: link.features,
       });
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [ready]);
@@ -227,7 +246,7 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
       if (!el) return;
       const ro = new ResizeObserver(() => { if (linkRef.current?.stats.ready) send({ type: "resize", ...box() }); });
       ro.observe(el);
-      const onVis = () => send({ type: "visibility", visible: !document.hidden });
+      const onVis = () => { linkRef.current?.setVisible(!document.hidden); send({ type: "visibility", visible: !document.hidden }); };
       document.addEventListener("visibilitychange", onVis);
       // Any appearance change (a preset from Settings, `hive theme use`, a
       // slider) lands on <html>'s style/class; coalesce to one theme message.
@@ -324,6 +343,7 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
             </div>
           ))}
         </div>
+        <ShareDialog viewName={manifest.name} image={shareImage} onChoose={(c) => shareAnswer.current?.(c)} />
         {!ready && (
           <div className="pointer-events-none absolute inset-0 grid place-items-center text-[12px] text-[var(--color-fg3)]">
             Loading {manifest.name}…

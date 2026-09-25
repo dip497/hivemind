@@ -27,7 +27,7 @@ import {
   type IssueState,
 } from "@hivemind/core";
 import { EXIT, HcpCliError, exitCodeFor, hcpCall, hcpStream, ownTile } from "../hcp.js";
-import { UnsupportedError, UsageError, boolFlag, intFlag, parseKeys, readSchedule, resolveAgent, workflowParams } from "../ctl-args.js";
+import { UnsupportedError, UsageError, boolFlag, emitArgs, intFlag, parseKeys, readSchedule, resolveAgent, workflowParams } from "../ctl-args.js";
 import { ensureAgentCatalog } from "../agent-catalog.js";
 import { detectWho } from "../who.js";
 
@@ -308,11 +308,43 @@ const deleteIssueCmd = sub("delete-issue", "Delete an issue file (irreversible)"
 const listWorkspacesCmd = sub("list-workspaces", "List every registered workspace (prefix, title, repo)", {},
   async () => (await listWorkspaces({ persistPrune: true })).map((w) => ({ prefix: w.prefix, title: w.title, repo: w.repo })));
 
+type EmitResult = { ok: true; id: string; delivered: boolean; view: string; reason?: "no-listener" | "not-active"; buffered?: boolean };
+
+const viewEmit = defineCommand({
+  meta: { name: "emit", description: "Send a named JSON event to the active view (`-` reads the JSON from stdin)" },
+  args: {
+    name: { type: "positional", required: true, description: "dotted lowercase name, e.g. ci.build" },
+    payload: { type: "positional", required: false, description: "JSON payload, or - for stdin" },
+    view: { type: "string", description: "deliver only while this view is active" },
+    ...JSON_ARG,
+  },
+  async run({ args }) {
+    const json = !!args.json;
+    try {
+      const ev = emitArgs(args.name, args.payload, () => fs.readFileSync(0, "utf8"));
+      let r: EmitResult;
+      try {
+        r = await hcpCall("view.emit", { ...ev, ...(args.view ? { view: String(args.view) } : {}), callerTile: ownTile() }) as EmitResult;
+      } catch (e) {
+        if (e instanceof HcpCliError && e.code === "UNKNOWN_METHOD") throw new HcpCliError("UNKNOWN_METHOD", "this Hivemind predates view events (needs view protocol 1.3)", e.exit);
+        throw e;
+      }
+      if (json) console.log(JSON.stringify(r));
+      else console.log(r.delivered ? `delivered to ${r.view}` : r.reason === "not-active" ? `buffered for ${String(args.view)} (active view is ${r.view})` : `buffered (active view ${r.view} isn't listening)`);
+    } catch (e) { fail(e, json); }
+  },
+});
+
+const view = defineCommand({
+  meta: { name: "view", description: "Talk to the active workspace view" },
+  subCommands: { emit: viewEmit },
+});
+
 export const ctlCmd = defineCommand({
   meta: { name: "ctl", description: "Drive the running hivemind app (spawn/send/read/stream/workflow/report) and the issue verbs agents use" },
   subCommands: {
     list, frames, "open-tool": openTool, spawn, sessions, send, keys, read, stream, workflow, approve, report, "open-review": openReview,
-    focus, close, connect, disconnect,
+    focus, close, connect, disconnect, view,
     "set-state": setState, "add-comment": addComment, "mark-acceptance": markAcceptance,
     "delete-issue": deleteIssueCmd, "list-workspaces": listWorkspacesCmd,
   },

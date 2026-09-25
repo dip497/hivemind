@@ -104,6 +104,24 @@ const api: HiveIpc & {
   machineInstall: (id) => ipcRenderer.invoke("machines:install", id),
   machineUpdate: (id, patch) => ipcRenderer.invoke("machines:update", id, patch),
   machineEdit: (id, patch) => ipcRenderer.invoke("machines:edit", id, patch),
+  viewLedgerAppend: (lines) => ipcRenderer.send("viewLedger:append", lines),
+  viewLedgerSnapshot: () => ipcRenderer.invoke("viewLedger:snapshot"),
+  viewHistory: (layoutKey, day) => ipcRenderer.invoke("viewLedger:history", layoutKey, day),
+  ptyActivityWatch: (tileIds) => ipcRenderer.send("ptyActivity:watch", tileIds),
+  onPtyActivity: (cb) => {
+    const listener = (_e: unknown, levels: Parameters<typeof cb>[0]) => cb(levels);
+    ipcRenderer.on("ptyActivity:levels", listener);
+    return () => ipcRenderer.removeListener("ptyActivity:levels", listener);
+  },
+  presenceNow: () => ipcRenderer.invoke("presence:now"),
+  onPresence: (cb) => {
+    const listener = (_e: unknown, p: Parameters<typeof cb>[0]) => cb(p);
+    ipcRenderer.on("presence:changed", listener);
+    return () => ipcRenderer.removeListener("presence:changed", listener);
+  },
+  viewSharePrepare: (png) => ipcRenderer.invoke("viewShare:prepare", png),
+  viewShareCommit: (token, action, suggestedName) => ipcRenderer.invoke("viewShare:commit", token, action, suggestedName),
+
   machineRemove: (id) => ipcRenderer.invoke("machines:remove", id),
   machineSetPassword: (id, password) => ipcRenderer.invoke("machines:set-password", id, password),
   machineSessions: (uri) => ipcRenderer.invoke("machines:sessions", uri),

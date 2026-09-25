@@ -91,6 +91,38 @@ hm.on("structure", ({ frames }) => {
 arrives — and a local frame has no `machine`. Show it wherever your view shows the frame:
 which computer the work is on is what a person needs to see.
 
+### Time, events, activity and history
+
+A newer app (view protocol 1.3) also tells a view what it knows about time and work, with no
+permission. Check `hm.hello.features` before using any of it — an older app serves an older SDK
+that doesn't have these methods:
+
+```ts
+const has = new Set(hm.hello.features ?? []);
+
+hm.subscribeStatus(tileId, (status, info) => {
+  // info.since: when this status began. info.exact === false: the app found it already there — show "≥".
+});
+hm.onEvents(["turn", "needsInput", "tileClosed"], (e) => { /* ids, kinds and times */ });
+hm.activity(tileId, (level) => { /* 0 quiet … 3 heavy, at most 4 a second, nothing while hidden */ });
+hm.onPresence(({ state }) => { /* active, idle, away */ });
+const day = await hm.history("2026-09-23");   // per-tile status intervals, even for a day your view wasn't open
+const outcome = await hm.share(png);          // the app shows the image and asks: copied, saved or cancelled
+```
+
+Your own scripts can talk to the view too. A git hook or a CI wrapper runs
+
+```bash
+hive ctl view emit ci.build '{"frame":"payments","state":"failed"}'
+```
+
+and a view that asked with `hm.onCustom("ci.*", cb)` gets it. With no view listening, the event
+waits an hour for one that asks with `replaySince`. Treat the payload as text from any program
+on your machine: show it, never run it.
+
+Nothing here carries what a terminal shows: output is a level, never text or a count, and events
+carry ids and times, never what an agent wrote.
+
 ## Permissions
 
 Declared in the manifest, refused at install if unknown:

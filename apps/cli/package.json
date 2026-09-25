@@ -17,6 +17,7 @@
     "@hivemind/agent-host": "workspace:*",
     "@hivemind/agents": "workspace:*",
     "@hivemind/core": "workspace:*",
+    "@hivemind/view-sdk": "workspace:*",
     "citty": "catalog:",
     "yaml": "catalog:",
     "zod": "catalog:"

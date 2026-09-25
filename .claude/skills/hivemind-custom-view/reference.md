@@ -20,6 +20,19 @@ one wins.
 | `visibility` | `visible` | Draw nothing while false |
 | `theme` | `theme` | The user changed appearance |
 | `undock` | `tileId` | The tile is **already** released; drop your rect |
+| `status` (1.3) | `since?`, `exact?` | When the status began; `exact: false` = a lower bound |
+| `events` (1.3) | `events[]`, `replay?` | After `subscribeEvents`; one message per host task |
+| `activity` (1.3) | `levels: Record<id, 0..3>` | After `watchActivity`; only changes, ≤ 4/s, none while hidden |
+| `presence` (1.3) | `presence {state, since, focused}` | After `subscribePresence`; on change |
+| `response` (1.3) | `requestId`, `ok`, `result \| error {code}` | The answer to `request`; codes `UNSUPPORTED`, `BAD_REQUEST`, `BUSY`, `DECLINED`, `INTERNAL` |
+
+`hello.features` (1.3) lists what the host wired: `since`, `events`, `activity`, `presence`,
+`history`, `share`. A host that predates 1.3 sends none.
+
+`ViewEvent` kinds: `turn {inferred?}`, `needsInput {reason: permission | question | review |
+approval | input}`, `subagents {active}`, `tileOpened {frameId, tileKind, agent?, spawnedBy?}`,
+`tileClosed {lastStatus, failed?}`, `custom {id, name, data, from}`. Every event carries
+`seq`, `at` and (except custom) `tileId` — never text an agent wrote.
 
 `ViewFrame` is `{ id, title, color: "#rrggbb" }`. `ViewTile` is
 `{ id, frameId: string | null, kind, name }`. Colours arrive resolved — you never
@@ -39,6 +52,14 @@ compute one from a theme token yourself.
 | `framesDrawn` | `count` | Monotonic, throttled to ~1/s by the SDK |
 | `layout` | `data` | ≤ 64 KB, debounced |
 | `error` | `message` | Non-fatal, goes to the host log |
+| `subscribeEvents` (1.3) | `kinds[]`, `custom?[]`, `replaySince?` | Replaces the previous subscription; ≤ 32 custom names or `name.*` |
+| `unsubscribeEvents` (1.3) | — | |
+| `watchActivity` (1.3) | `tileIds[]` | The whole watched set, ≤ 256 |
+| `subscribePresence` / `unsubscribePresence` (1.3) | — | |
+| `request` (1.3) | `requestId`, `name: history \| share`, `args` | `history [{day}]`; `share [{png: ArrayBuffer, suggestedName?}]` — the one non-JSON value |
+
+Sending a 1.3 message to a host that did not advertise the feature is a refusal, like an
+unknown message; the SDK never does.
 
 ## Commands and their permissions
 
@@ -102,6 +123,11 @@ in your own build and you will never be surprised by `hive views install`.
 | `LAYOUT_MAX_BYTES` | 64 KB |
 | id length | 256 chars |
 | handshake timeout | 10 s (`connect({ timeoutMs })`) |
+| activity | ≤ 4 messages/s, 256 watched tiles |
+| event replay | 100 events, 1 hour |
+| custom event | name ≤ 64 (`a-z0-9-` dotted, not `hive.`/`hm.`), payload ≤ 4 KB JSON, depth ≤ 8, 10/s |
+| history | one request at a time, 30 days kept, 20,000 intervals |
+| share | PNG ≤ 8 MB, ≤ 4096 px a side, one at a time, refused after 3 cancels in a session |
 
 ## Serving and the sandbox
 

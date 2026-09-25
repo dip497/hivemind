@@ -32,7 +32,7 @@ interface SpawnOpts {
 }
 
 interface Callbacks {
-  onData: (data: string) => void;
+  onData: (data: string, replay?: boolean) => void;
   onExit: (code: number, signal: number | undefined) => void;
 }
 

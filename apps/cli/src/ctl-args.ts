@@ -3,6 +3,7 @@
  * No I/O, so they're unit-tested directly (tests/ctl-args.test.ts).
  */
 import { agentById, spawnableAgents, workerAgents } from "@hivemind/agents";
+import { CUSTOM_NAME_MAX, customDataProblem, isCustomEventName } from "@hivemind/view-sdk/protocol";
 import { cliDefaultAgent } from "./agent-catalog.js";
 
 export class UnsupportedError extends Error {
@@ -115,4 +116,17 @@ export function tailLines(text: string, n: number): string {
   const lines = text.split("\n");
   if (lines[lines.length - 1] === "") lines.pop();
   return lines.slice(-n).join("\n") + (text.endsWith("\n") ? "\n" : "");
+}
+
+/** `hive ctl view emit <name> [json]`: the name and payload, checked before anything is sent. `-` reads the payload from `stdin`. */
+export function emitArgs(name: unknown, json: unknown, stdin: () => string): { name: string; data: unknown } {
+  if (!isCustomEventName(name)) throw new UsageError(`event name must be dotted lowercase words (a-z, 0-9, -), at most ${CUSTOM_NAME_MAX} characters, not under hive. or hm. (got ${JSON.stringify(name)})`);
+  let data: unknown = null;
+  if (json !== undefined && json !== "") {
+    const text = json === "-" ? stdin() : String(json);
+    try { data = JSON.parse(text); } catch { throw new UsageError(`payload is not JSON: ${text.slice(0, 80)}`); }
+  }
+  const problem = customDataProblem(data);
+  if (problem) throw new UsageError(`payload: ${problem}`);
+  return { name, data };
 }

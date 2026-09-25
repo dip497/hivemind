@@ -154,6 +154,9 @@ importers:
       '@hivemind/core':
         specifier: workspace:*
         version: link:../../packages/hive-core
+      '@hivemind/view-sdk':
+        specifier: workspace:*
+        version: link:../../packages/hive-view-sdk
       citty:
         specifier: 'catalog:'
         version: 0.1.6

@@ -4,7 +4,12 @@ import { recoverOnProcessLoss } from "./recover";
 import desktopPkg from "../../package.json" with { type: "json" };
 import { installPluginCatalogIpc } from "./plugin-catalog-ipc.js";
 /** Electron main process — owns the BrowserWindow + IPC + PtyHost + git/worktree. */
-import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, screen, session, shell, webContents, type WebContents } from "electron";
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, net, powerMonitor, protocol, screen, session, shell, webContents, type WebContents } from "electron";
+import { isDay } from "@hivemind/view-sdk/protocol";
+import { ActivityMeter } from "./pty-activity.js";
+import { POLL_MS as PRESENCE_POLL_MS, PresenceMonitor, localDay, type PresenceTotals } from "./presence.js";
+import { StatusLedger } from "./status-ledger.js";
+import { ViewShare } from "./view-share.js";
 import path from "node:path";
 import { promises as fsp, statSync, readFileSync, writeFileSync, existsSync, cpSync, mkdirSync, readdirSync, unlinkSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -1058,6 +1063,10 @@ hcpStatus.subscribe((change) => {
 // A lost SubagentStop (the subagent errored, the turn was interrupted, the session compacted)
 // would pin a tile's subagents forever: once the last subagent edge is this old, the host
 // reports the rest stopped. Every edge pushes the deadline out.
+// View protocol 1.3: output levels for watched tiles (renderer asks via ptyActivity:watch).
+const ptyActivity = new ActivityMeter((levels) => {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("ptyActivity:levels", levels);
+});
 const SUBAGENT_REAP_MS = 120_000;
 const hcpSubagentReaper = new SubagentReaper(SUBAGENT_REAP_MS, (tileId) => {
   const left = hcpStatus.get(tileId)?.subagents ?? [];
@@ -1219,7 +1228,7 @@ ipcMain.handle("ptySpawn", wrap(async (e, opts: Parameters<typeof spawnPty>[0]) 
   // plumbing below is identical.
   if (isRemote(opts.cwd)) {
     return spawnRemotePty(opts, {
-      onData: (data) => { hcpBroadcast?.(toBareId(opts.tileId), data); relayPtyData(sender, opts.tileId, data); },
+      onData: (data, replay) => { hcpBroadcast?.(toBareId(opts.tileId), data); relayPtyData(sender, opts.tileId, data); if (!replay) ptyActivity.note(toBareId(opts.tileId), data.length); },
       // Flush (records the tail + ships it) BEFORE the HCP teardown forgets the tile.
       onExit: (code, signal) => { relayPtyExit(sender, opts.tileId, { code, signal }); onPtyExit(opts.tileId); },
     });
@@ -1236,7 +1245,7 @@ ipcMain.handle("ptySpawn", wrap(async (e, opts: Parameters<typeof spawnPty>[0]) 
   // data/exit after the sender is gone — the relay helpers check
   // `isDestroyed()` and drop those instead of crashing main.
   return spawnPty(opts, {
-    onData: (data) => { hcpBroadcast?.(toBareId(opts.tileId), data); relayPtyData(sender, opts.tileId, data); },
+    onData: (data, replay) => { hcpBroadcast?.(toBareId(opts.tileId), data); relayPtyData(sender, opts.tileId, data); if (!replay) ptyActivity.note(toBareId(opts.tileId), data.length); },
     // Flush (records the tail + ships it) BEFORE the HCP teardown forgets the tile.
     onExit: (code, signal) => { relayPtyExit(sender, opts.tileId, { code, signal }); onPtyExit(opts.tileId); },
   });
@@ -1689,6 +1698,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     registerAgentNotifications(() => mainWindow);
     startPlanReviewBridge();
     startHcpControlPlane();
+    startViewHost();
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) void createWindow();
     });
@@ -1772,6 +1782,67 @@ function hcpSpawnAllowed(): boolean {
   hcpSpawnTimes.push(now);
   return true;
 }
+/** View protocol 1.3 host services: the status ledger, presence, and sharing an image. */
+function startViewHost(): void {
+  let ledger: StatusLedger | null = new StatusLedger(path.join(app.getPath("userData"), "status-ledger"));
+  try { ledger.boot(); } catch (e) { console.warn("[ledger] off:", e); ledger = null; }
+  const totals = new Map<string, PresenceTotals>();
+  const presence = new PresenceMonitor({
+    idleSeconds: () => powerMonitor.getSystemIdleTime(),
+    focused: () => !!mainWindow && !mainWindow.isDestroyed() && mainWindow.isFocused(),
+    dayOf: localDay,
+    onChange: (p) => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("presence:changed", p); },
+    onTotals: (day, t) => totals.set(day, t),
+  });
+  const persistTotals = () => { for (const [day, t] of totals) ledger?.setPresenceTotals(day, t); totals.clear(); };
+  setInterval(() => presence.evaluate(), PRESENCE_POLL_MS).unref();
+  setInterval(() => { ledger?.heartbeat(); persistTotals(); }, 60_000).unref();
+  powerMonitor.on("lock-screen", () => presence.setLocked(true));
+  powerMonitor.on("suspend", () => presence.setLocked(true));
+  powerMonitor.on("unlock-screen", () => presence.setLocked(false));
+  powerMonitor.on("resume", () => presence.setLocked(false));
+  app.on("browser-window-focus", () => presence.evaluate());
+  app.on("browser-window-blur", () => presence.evaluate());
+  app.on("before-quit", () => { presence.evaluate(); persistTotals(); ledger?.stop(); });
+
+  ipcMain.on("viewLedger:append", (_e, lines: unknown) => { if (Array.isArray(lines)) ledger?.append(lines.slice(0, 10_000)); });
+  ipcMain.handle("viewLedger:snapshot", () => ledger?.snapshot() ?? []);
+  ipcMain.handle("viewLedger:history", (_e, layoutKey: unknown, day: unknown) => {
+    if (typeof layoutKey !== "string" || !isDay(day)) throw new Error("bad history request");
+    if (!ledger) throw new Error("the status ledger is off");
+    persistTotals();
+    return ledger.history(layoutKey, day);
+  });
+  ipcMain.on("ptyActivity:watch", (_e, ids: unknown) => {
+    if (Array.isArray(ids)) ptyActivity.setWatched(ids.filter((x): x is string => typeof x === "string").slice(0, 1024));
+  });
+  ipcMain.handle("presence:now", () => presence.current);
+
+  const share = new ViewShare({
+    reencode: (bytes) => {
+      const img = nativeImage.createFromBuffer(Buffer.from(bytes));
+      if (img.isEmpty()) return null;
+      const { width, height } = img.getSize();
+      return { png: img.toPNG(), width, height };
+    },
+    copy: (png) => clipboard.writeImage(nativeImage.createFromBuffer(Buffer.from(png))),
+    chooseSavePath: async (name) => {
+      const opts = { defaultPath: path.join(app.getPath("pictures"), name), filters: [{ name: "PNG image", extensions: ["png"] }] };
+      const r = mainWindow && !mainWindow.isDestroyed() ? await dialog.showSaveDialog(mainWindow, opts) : await dialog.showSaveDialog(opts);
+      return r.canceled || !r.filePath ? null : r.filePath;
+    },
+  });
+  ipcMain.handle("viewShare:prepare", (_e, png: unknown) => {
+    const buf = png instanceof ArrayBuffer ? png : ArrayBuffer.isView(png) ? png.buffer.slice(png.byteOffset, png.byteOffset + png.byteLength) as ArrayBuffer : null;
+    if (!buf) throw new Error("not an image");
+    return share.prepare(buf);
+  });
+  ipcMain.handle("viewShare:commit", (_e, token: unknown, action: unknown, name: unknown) => {
+    if (typeof token !== "string" || (action !== "copy" && action !== "save" && action !== "cancel")) throw new Error("bad share request");
+    return share.commit(token, action, typeof name === "string" ? name : "");
+  });
+}
+
 function startHcpControlPlane(): void {
   const userData = app.getPath("userData");
   const token = readOrCreateToken(userData);

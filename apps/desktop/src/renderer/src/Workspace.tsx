@@ -56,7 +56,7 @@ import { defaultTileSize } from "./canvas-sizing";
 import { useWorktrees } from "./useWorktrees";
 // Loaded when it is first opened: the dialog (add form, machine list, folder picker) is not startup work.
 const MachinesHub = lazy(() => import("./machines/MachinesHub").then((m) => ({ default: m.MachinesHub })));
-import { hostIdOfUri, type MachinesRequest } from "./machines/store";
+import { frameMachine, hostIdOfUri, useMachines, type MachinesRequest } from "./machines/store";
 import type { SessionSummary } from "../../shared/ipc";
 import { isRemote } from "../../shared/remote-uri";
 import { getAgents, AgentIcon, agentById, agentForCmd, useAgents } from "./agents";
@@ -547,6 +547,32 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     return () => { live = false; clearTimeout(timer); };
   }, []);
   const activeViewId = resolveViewId(useViewMode());
+  const activeViewIdRef = useRef(activeViewId);
+  activeViewIdRef.current = activeViewId;
+  // View protocol 1.3: the event hub hears every tile whatever view is active. Off the first
+  // paint — the status bus replays current statuses to it when it starts.
+  const [viewHost, setViewHost] = useState<typeof import("./workspace/view-services") | null>(null);
+  const viewHostRef = useRef(viewHost);
+  viewHostRef.current = viewHost;
+  useEffect(() => {
+    let live = true;
+    void import("./workspace/view-services").then((m) => { m.startViewHost(); if (live) setViewHost(m); });
+    return () => { live = false; };
+  }, []);
+  const machinesSnap = useMachines();
+  useEffect(() => {
+    if (!viewHost) return;
+    viewHost.viewEvents.setWorkspace(persistKey, tiles.map((t) => {
+      const frame = frameOf[t.id] ? frames.find((f) => f.id === frameOf[t.id]) : undefined;
+      const machine = frame ? frameMachine(machinesSnap, frame.workspacePath) : undefined;
+      const agent = t.kind === AGENT_TILE_KIND ? agentForCmd(t.cmd)?.id : undefined;
+      return {
+        id: t.id, frameId: frameOf[t.id] ?? null, kind: t.kind, name: tileNames[t.id] ?? t.label,
+        ...(frame ? { frameTitle: frame.title } : {}), ...(agent ? { agent } : {}),
+        ...(machine && machine.state !== "online" ? { unwatched: true } : {}),
+      };
+    }), spawnLinks);
+  }, [viewHost, persistKey, tiles, frameOf, frames, tileNames, machinesSnap, spawnLinks]);
   // Host chrome + wallpaper policy come from the active view's preference.
   const settings = useSettings();
   const chrome = useMemo(() => {
@@ -782,6 +808,16 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
               .filter((t) => { const fid = frameOfRef.current[t.id]; return !fid || !frameIds.has(fid); })
               .map(mapTile);
             await window.hive.hcpResult(cmd.id, true, { frames, loose });
+            break;
+          }
+          case "view.emit": {
+            const ev = p as { name: string; data: never; view?: string; from: "shell" | { tileId: string } };
+            const active = activeViewIdRef.current ?? FALLBACK_VIEW_ID;
+            const vh = viewHostRef.current;
+            if (!vh) throw new Error("views are still starting");
+            const { event, delivered } = vh.viewEvents.emitCustom(ev.name, ev.data, ev.from, ev.view);
+            const reason = delivered ? null : ev.view && ev.view !== active ? "not-active" : "no-listener";
+            await window.hive.hcpResult(cmd.id, true, { ok: true, id: event.id, delivered, view: active, ...(reason ? { reason, buffered: true } : {}) });
             break;
           }
           case "views.rescan": {
