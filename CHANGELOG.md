@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- A terminal shown again after it was hidden no longer prints stray `62;190m`-style fragments or doubled lines: its output is cut only where an escape sequence ends.
+- A newly started agent no longer reads "working" until its first turn when its startup screen looked busy.
 - Views can see what each agent is doing (why it is waiting, how its turn ended, its subagents), which agents are installed, and a folder's past sessions to continue one, and can give an agent an instruction you read and send in the app first (view protocol 1.4, `workspace:sessions` and `workspace:prompt`).
 - **Breaking:** a view that starts an agent with a first prompt needs the `workspace:prompt` permission, and you confirm the prompt before the agent gets it.
 - Agents and terminals started while a view other than the canvas is showing now run right away. They used to wait, with no status, until a view showed them — including workers another agent started with `hive ctl spawn`.

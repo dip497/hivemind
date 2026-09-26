@@ -15,6 +15,18 @@ test("the screen stands in until the hooks speak; from then on only the hooks de
   expect(s.get("b")).toMatchObject({ state: "waiting", kind: "other", source: "screen" });
 });
 
+test("what the screen read before the hooks spoke is dropped: a session start leaves it idle", () => {
+  const s = store();
+  s.screen("a", "working"); // a busy startup screen
+  s.title("a", "Fix the tests");
+  s.event("a", { event: "session.started" });
+  expect(s.get("a")).toMatchObject({ state: "idle", source: "hooks", title: "Fix the tests" });
+  s.screen("b", "blocked");
+  s.event("b", { event: "turn.started" });
+  expect(s.get("b")).toMatchObject({ state: "working", source: "hooks" });
+  expect(s.get("b")!.kind).toBeUndefined();
+});
+
 test("a lone Esc or Ctrl+C during a hook-reported turn interrupts it; anything else does not", () => {
   const s = store();
   s.event("a", { event: "turn.started" });

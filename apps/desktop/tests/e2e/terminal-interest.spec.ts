@@ -71,3 +71,18 @@ test("a parked terminal receives nothing, and shows what it missed when it comes
   await page.keyboard.press("Enter");
   await expect.poll(screens, { timeout: 10_000 }).toContain("AFTER-MARK");
 });
+
+test("a sequence cut between the screen and the live bytes still lands whole", async () => {
+  // Half a colour sequence now, the rest once the terminal has been hidden and shown again.
+  await page.locator(".react-flow__node-terminal .xterm").click();
+  await page.keyboard.type(`printf '\\033[38;2;10;62;19'; sleep 8; printf '0m%sLORED\\n' CO`);
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(1_000);
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "blank" } })));
+  await page.waitForSelector('[data-community-view="blank"][data-community-ready="1"]', { timeout: 20_000 });
+  await page.waitForTimeout(4_000);
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "canvas" } })));
+  await expect(page.locator(".react-flow__node-terminal .xterm")).toHaveCount(1, { timeout: 10_000 });
+  await expect.poll(screens, { timeout: 15_000 }).toMatch(/^COLORED$/m);
+  expect(await screens()).not.toMatch(/0mCOLORED|62;190m/);
+});

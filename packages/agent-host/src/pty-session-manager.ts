@@ -31,6 +31,7 @@ import * as HeadlessXtermNS from "@xterm/headless";
 import * as SerializeAddonNS from "@xterm/addon-serialize";
 import type { SessionInfo } from "./pty-protocol.js";
 import { randomUUID } from "node:crypto";
+import { splitAtBoundary } from "./vt-boundary.js";
 type HeadlessCtor = typeof import("@xterm/headless").Terminal;
 type SerializeCtor = typeof import("@xterm/addon-serialize").SerializeAddon;
 const pick = <T>(ns: unknown, name: string): T => {
@@ -94,6 +95,8 @@ interface Session {
   /** Headless xterm fed every byte the PTY emits. `serializer.serialize()` on
    *  this produces the replay payload — Mosh-style coalesced visible state. */
   term: HeadlessTerminalInstance;
+  /** The end of the last read when it stopped inside an escape sequence (vt-boundary.ts). */
+  carry: string;
   serializer: SerializeAddonInstance;
   spec: SpawnSpec;
   exited: boolean;
@@ -324,6 +327,7 @@ export class SessionManager {
       id,
       pty: p,
       term,
+      carry: "",
       serializer,
       spec: effectiveSpec,
       exited: false,
@@ -352,10 +356,7 @@ export class SessionManager {
       // Stale-pty guard: after a retry respawn, the old pty may still flush a
       // trailing chunk — it must not write to the now-retried session.
       if (session.pty !== p) return;
-      session.term.write(d);
-      session.dirty = true;
-      this.scheduleSnapshot(session);
-      this.emit(session, d);
+      this.output(session, d);
     });
     p.onExit((code, signal) => {
       // Ignore a STALE pty's late exit: tryRestoreRetry kills this pty and
@@ -364,6 +365,7 @@ export class SessionManager {
       // retried session — turning the missing-session recovery into "tile
       // vanishes".
       if (session.pty !== p) return;
+      if (session.carry) this.output(session, "", true); // its last bytes, whole or not
       session.exited = true;
       // A restored session that failed within restoreRetryMs could not resume what it was
       // given (the store check can miss, e.g. an agent pointed at another config dir). Retry
@@ -429,15 +431,13 @@ export class SessionManager {
     p.onData((d) => {
       // Ignore output from a pty that's already been replaced by a later retry.
       if (session.pty !== p) return;
-      session.term.write(d);
-      session.dirty = true;
-      this.scheduleSnapshot(session);
-      this.emit(session, d);
+      this.output(session, d);
     });
     p.onExit((code, signal) => {
       // Stale-pty guard (see the spawn path) — a replaced pty's late exit must
       // not tear down the live session.
       if (session.pty !== p) return;
+      if (session.carry) this.output(session, "", true); // its last bytes, whole or not
       session.exited = true;
       this.onTitle?.(session.id, ""); // a process that has ended is doing nothing
       for (const c of session.clients) c.onExit(code, signal);
@@ -474,6 +474,17 @@ export class SessionManager {
       out += seq > begin ? chunk.data.slice(seq - begin) : chunk.data;
     }
     return out;
+  }
+
+  /** A read from the PTY, cut where a sequence ends; `flush` sends what was held back. */
+  private output(session: Session, d: string, flush = false): void {
+    const [ready, held] = flush ? [session.carry + d, ""] : splitAtBoundary(session.carry + d);
+    session.carry = held;
+    if (!ready) return;
+    session.term.write(ready);
+    session.dirty = true;
+    this.scheduleSnapshot(session);
+    this.emit(session, ready);
   }
 
   private emit(s: Session, d: string): void {

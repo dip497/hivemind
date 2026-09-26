@@ -22,4 +22,8 @@ their `agentId` from `subagents` (a repeated start is one subagent). `compacting
 set `compacting`. `session.*` events change nothing: they are facts for the session record, and
 some agents report a session start mid-turn.
 
+A host may read a session's screen until the session's first event, and only then: from the
+first event the fold alone decides, starting from the initial status, not from what the screen
+last read.
+
 Cases: `../conformance/status.json`.

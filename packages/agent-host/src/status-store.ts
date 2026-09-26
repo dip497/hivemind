@@ -65,9 +65,12 @@ export class StatusStore {
     return () => { this.listeners.delete(fn); };
   }
 
-  /** A hook reported for this session: the hooks are its authority from now on. */
+  /** A hook reported for this session: the hooks are its authority from now on. They report
+   *  from the session's start, so what the screen read before they spoke is not carried over. */
   event(tileId: string, input: StatusInput): void {
-    this.apply(tileId, "hooks", (s) => foldStatus(s, input));
+    const cur = this.sessions.get(tileId);
+    const fromScreen = cur?.source !== "hooks" && cur?.state !== "exited";
+    this.apply(tileId, "hooks", (s) => foldStatus(fromScreen ? { ...s, ...INITIAL_STATUS, kind: undefined } : s, input));
   }
 
   /** The screen, read by whoever renders it. Ignored once the session's hooks have spoken. */
