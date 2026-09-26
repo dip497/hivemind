@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Codex tiles no longer open on Codex's update prompt, and its hooks review reads as waiting for you instead of idle. Update Codex from a terminal.
 - A terminal shown again after it was hidden no longer prints stray `62;190m`-style fragments or doubled lines: its output is cut only where an escape sequence ends.
 - A newly started agent no longer reads "working" until its first turn when its startup screen looked busy.
 - Views can see what each agent is doing (why it is waiting, how its turn ended, its subagents), which agents are installed, and a folder's past sessions to continue one, and can give an agent an instruction you read and send in the app first (view protocol 1.4, `workspace:sessions` and `workspace:prompt`).

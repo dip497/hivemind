@@ -53,6 +53,10 @@ detect:
       - contains: allow command?
       - contains: '[y/n]'
       - contains: yes (y)
+      - contains: hooks need review
+      - all:
+        - contains: update available!
+        - contains: skip until next version
       - helper: hasConfirmationPrompt
     then: blocked
   - when:
@@ -124,5 +128,10 @@ assets:
   file: hive-turn-end.cjs
   hook: turnEnd
   produces: [turn.ended]
+# A tile Hivemind starts must not open on Codex's own update prompt, where a message sent to the
+# tile would answer it; the user updates Codex from a terminal instead.
 launch:
   hcp: true
+  args:
+  - -c
+  - check_for_update_on_startup=false
