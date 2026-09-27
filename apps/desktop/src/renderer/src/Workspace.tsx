@@ -109,13 +109,16 @@ interface Props {
   /** A newer GitHub release exists → show the "Update available" pill by Theme.
    *  Owned by App (so the Settings dialog + this pill share one check). */
   updateAvailable?: boolean;
+  /** A version is downloaded and waiting for a restart. */
+  updateStaged?: boolean;
+  onRestart?: () => void;
   /** Run the installer + restart (from the pill). */
   onUpgrade?: () => void;
   /** An upgrade is in flight — the pill shows a spinner + is click-inert. */
   upgrading?: boolean;
 }
 
-export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateAvailable = false, onUpgrade, upgrading = false }: Props) {
+export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateAvailable = false, updateStaged = false, onUpgrade, onRestart, upgrading = false }: Props) {
   // Persistence key for the workspace. Prefer repoPath (a git/.hivemind
   // project); fall back to the absolute cwd so a plain folder — including
   // `$HOME` — still persists + resumes. Keyed on the absolute path (never a
@@ -1102,13 +1105,13 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     onAttachWorktree, onCreateWorktree, unbindBranch, bindWorkspace, unbindWorkspace,
     pinnedIds, togglePin, onPinChange,
     agentSel, setAgentSel, spawnAgent, spawnBrowser, onInitWorkspace,
-    updateAvailable, onUpgrade: () => onUpgrade?.(), upgrading,
+    updateAvailable, updateStaged, onUpgrade: () => onUpgrade?.(), onRestart: () => onRestart?.(), upgrading,
   }), [
     positions, sizes, onNodeResizeCommit, handleNodeDragStop, resetCanvas, focusReq, focusModeReq,
     selectedTileIdRef, selectedFrameIdRef, selectedTileIdsRef, markSeen, toasts, dismissToast, frameTiles,
     updateFrameTitle, updateFrameColor, deleteFrame, arrangeFrame, bringFrameToFront,
     onAttachWorktree, onCreateWorktree, unbindBranch, bindWorkspace, unbindWorkspace,
-    pinnedIds, togglePin, onPinChange, agentSel, spawnAgent, spawnBrowser, onInitWorkspace, updateAvailable, onUpgrade, upgrading,
+    pinnedIds, togglePin, onPinChange, agentSel, spawnAgent, spawnBrowser, onInitWorkspace, updateAvailable, updateStaged, onUpgrade, onRestart, upgrading,
   ]);
 
   return (
@@ -1147,7 +1150,9 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
         onFrame={addFrame}
         onBrowser={spawnBrowser}
         updateAvailable={updateAvailable}
+        updateStaged={updateStaged}
         onUpgrade={() => onUpgrade?.()}
+        onRestart={() => onRestart?.()}
         upgrading={upgrading}
       />
       {/* Shared-layer selection: a body's native pointerdown selects its tile

@@ -632,17 +632,46 @@ function isNewerVersion(latest: string, current: string): boolean {
 // Fetch the latest GitHub release in MAIN (the renderer's CSP blocks the
 // api.github.com request). Any failure — offline, DNS, rate-limit, non-200 —
 // resolves to a no-update result so the UI shows nothing rather than an error.
+/** A build the installer downloaded beside the running one, waiting for a restart. The
+ *  installer records it apart from the installed version, and the launcher promotes it when
+ *  it applies it (`install.sh`). Absent, unreadable or not newer: nothing is waiting. */
+function stagedVersion(current: string): string | null {
+  const dir = process.env.HIVEMIND_APP_DIR?.trim() || path.join(os.homedir(), ".hivemind-app");
+  try {
+    const v = readFileSync(path.join(dir, ".staged-version"), "utf8").trim().replace(/^v/, "");
+    return v && isNewerVersion(v, current) ? v : null;
+  } catch { return null; }
+}
+
 ipcMain.handle("checkForUpdate", async () => {
   const current = app.getVersion();
+  const staged = stagedVersion(current);
+  // Test seam: the update affordances are driven by what GitHub answers, which an e2e cannot
+  // arrange. Gated to non-packaged builds — in a shipped binary an env var must not be able
+  // to tell the app an update exists (the same rule as the folder picker below).
+  if (!app.isPackaged && process.env.HIVEMIND_TEST_UPDATE) {
+    try {
+      const t = JSON.parse(process.env.HIVEMIND_TEST_UPDATE) as { latest?: string; staged?: string };
+      const latest = t.latest ?? null;
+      return {
+        current, latest, ok: true,
+        updateAvailable: !!latest && isNewerVersion(latest, current),
+        staged: t.staged && isNewerVersion(t.staged, current) ? t.staged : null,
+      };
+    } catch { /* not JSON: fall through to the real check */ }
+  }
   // `ok` distinguishes a COMPLETED check (whose result the renderer can trust
   // and cache) from a FAILED one (offline / timeout / 403 rate-limit). Without
   // it a network blip returns updateAvailable:false — indistinguishable from a
   // genuine "up to date" — and clobbers a real "update available" banner.
   try {
     const res = await net.fetch(
-      "https://api.github.com/repos/dip497/hivemind/releases/latest",
+      // A cache would answer with the release before this one for its first minute (the api
+      // sends max-age=60), and Chromium's own cache for longer: ask nobody's stored copy.
+      `https://api.github.com/repos/dip497/hivemind/releases/latest?nocache=${Date.now()}`,
       {
-        headers: { Accept: "application/vnd.github+json", "User-Agent": "hivemind-desktop" },
+        cache: "no-store",
+        headers: { Accept: "application/vnd.github+json", "User-Agent": "hivemind-desktop", "Cache-Control": "no-cache" },
         // Never let the fetch hang forever: a stalled socket would otherwise
         // pin the renderer on "Checking…" with no way out.
         signal: AbortSignal.timeout(8000),
@@ -650,13 +679,13 @@ ipcMain.handle("checkForUpdate", async () => {
     );
     // A non-2xx (notably 403 rate-limit) is NOT "up to date" — it's a failed
     // check. Report ok:false so the renderer keeps its last known-good state.
-    if (!res.ok) return { current, latest: null, updateAvailable: false, ok: false };
+    if (!res.ok) return { current, latest: null, updateAvailable: false, ok: false, staged };
     const json = (await res.json()) as { tag_name?: string };
     const latest = (json.tag_name ?? "").replace(/^v/, "").trim();
-    if (!latest) return { current, latest: null, updateAvailable: false, ok: false };
-    return { current, latest, updateAvailable: isNewerVersion(latest, current), ok: true };
+    if (!latest) return { current, latest: null, updateAvailable: false, ok: false, staged };
+    return { current, latest, updateAvailable: isNewerVersion(latest, current), ok: true, staged };
   } catch {
-    return { current, latest: null, updateAvailable: false, ok: false };
+    return { current, latest: null, updateAvailable: false, ok: false, staged };
   }
 });
 
@@ -668,6 +697,24 @@ ipcMain.handle("checkForUpdate", async () => {
 // The bare-CLI `upgrade` arg path still uses runUpgradeAndExit (it runs in a
 // real terminal, so inherited stdio + exit is correct there).
 ipcMain.handle("runUpgrade", () => new Promise<{ ok: boolean; code: number | null }>((resolve) => {
+  // Test seam (non-packaged only, as above): replay the installer's lines instead of running
+  // it, so an e2e can drive what the user reads without downloading a release.
+  const scripted = !app.isPackaged && process.env.HIVEMIND_TEST_UPDATE;
+  if (scripted) {
+    let lines: string[] = [];
+    try { lines = (JSON.parse(scripted) as { progress?: string[] }).progress ?? []; } catch { lines = []; }
+    if (lines.length) {
+      let i = 0;
+      const next = (): void => {
+        if (i >= lines.length) { resolve({ ok: true, code: 0 }); return; }
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("update:progress", lines[i]!);
+        i++;
+        setTimeout(next, 150);
+      };
+      next();
+      return;
+    }
+  }
   const up = upgradeCommand("dip497/hivemind");
   const child = spawn(up.file, up.args, { stdio: ["ignore", "pipe", "pipe"] });
   const relay = (d: Buffer) => {

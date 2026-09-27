@@ -33,7 +33,9 @@ export interface HostChromeProps {
   onFrame: () => void;
   onBrowser: () => void;
   updateAvailable: boolean;
+  updateStaged: boolean;
   onUpgrade: () => void;
+  onRestart: () => void;
   upgrading: boolean;
 }
 

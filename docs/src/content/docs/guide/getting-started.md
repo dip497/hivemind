@@ -23,6 +23,11 @@ It installs the `hive` CLI and the `hivemind` app into `~/.hivemind-app/`, symli
 into `~/.local/bin/`, and warns if no agent CLI is on `PATH`. Re-run to upgrade; pin a
 version with `HIVEMIND_VERSION=v2026.9.0`.
 
+Upgrading while the app is open downloads the new version beside the running one — it cannot
+replace a live app — so the last step is yours: Settings ▸ About, or the toolbar, says
+**Restart to finish**. Until you do, the version that runs is the old one, and asking again
+says it is downloaded already rather than fetching it twice.
+
 ## Install an agent CLI
 
 hivemind runs agent CLIs you install yourself. It ships with none: when it starts, it adds
