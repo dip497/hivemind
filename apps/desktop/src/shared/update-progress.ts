@@ -48,3 +48,10 @@ export function updateProgress(line: string, prev: UpdateProgress = UPDATE_START
   if (l.includes("resolving latest release")) return at("check", "Looking for the latest release");
   return { ...prev, ...(version ? { version } : {}) };
 }
+
+/** The version GitHub's `releases/latest` redirected to — `…/releases/tag/v2026.9.7` → "2026.9.7".
+ *  That redirect is not the API, so it has no hourly limit; null when the URL is not a tag. */
+export function tagFromReleasesLatest(finalUrl: string): string | null {
+  const m = /\/releases\/tag\/v?([0-9][^/?#]*)/.exec(finalUrl);
+  return m?.[1] ?? null;
+}

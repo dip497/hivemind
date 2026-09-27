@@ -164,12 +164,26 @@ function Install-Prebuilt {
   $tag = $Version
   if (-not $tag) {
     Say "resolving latest release of $Repo"
+    # Where GitHub redirects releases/latest: not the api, so no 60-requests-an-hour limit
+    # shared with everyone behind this address.
     try {
-      # A cache answers with the release before this one for its first minute (the api sends
-      # max-age=60), so ask for an answer nobody has stored.
-      $url = "https://api.github.com/repos/$Repo/releases/latest?nocache=" + [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-      $tag = (Invoke-RestMethod $url -Headers @{ "Cache-Control" = "no-cache" }).tag_name
-    } catch { Die "could not reach the GitHub API - check your network" }
+      $r = Invoke-WebRequest "https://github.com/$Repo/releases/latest" -MaximumRedirection 5 -UseBasicParsing
+      if ($r.BaseResponse.ResponseUri) { $final = $r.BaseResponse.ResponseUri.AbsoluteUri } else { $final = $r.BaseResponse.RequestMessage.RequestUri.AbsoluteUri }
+      if ($final -match '/releases/tag/(v?[0-9][^/?#]*)') { $tag = $Matches[1] }
+    } catch { }
+    if (-not $tag) {
+      try {
+        # A cache answers with the release before this one for its first minute (the api sends
+        # max-age=60), so ask for an answer nobody has stored.
+        $url = "https://api.github.com/repos/$Repo/releases/latest?nocache=" + [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+        $tag = (Invoke-RestMethod $url -Headers @{ "Cache-Control" = "no-cache" }).tag_name
+      } catch {
+        if ($_.Exception.Response.StatusCode.value__ -in 403,429) {
+          Die "GitHub is rate-limiting this address (60 api requests an hour, shared). Wait, or install a known version: -Version vX.Y.Z"
+        }
+        Die "could not resolve the latest release of $Repo - check your network"
+      }
+    }
   }
   if (-not $tag) { Die "no published releases for $Repo. Use -Dev to build from source." }
   Say "target version: $tag"

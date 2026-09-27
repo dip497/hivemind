@@ -92,6 +92,7 @@ import { unwatchAll, watchRepo } from "./fs-watcher.js";
 import { registerAgentNotifications } from "./agent-notify.js";
 import { getNotificationSettings, setNotificationSettings } from "./notification-settings-store.js";
 import { normalizeNotificationSettings } from "../shared/notification-settings.js";
+import { tagFromReleasesLatest } from "../shared/update-progress.js";
 import type { AppErrorEvent, MachineAddRequest } from "../shared/ipc.js";
 import { startPlanBridge, type PlanRequest } from "./plan-bridge.js";
 import { randomUUID } from "node:crypto";
@@ -664,6 +665,15 @@ ipcMain.handle("checkForUpdate", async () => {
   // and cache) from a FAILED one (offline / timeout / 403 rate-limit). Without
   // it a network blip returns updateAvailable:false — indistinguishable from a
   // genuine "up to date" — and clobbers a real "update available" banner.
+  // The tag GitHub redirects `releases/latest` to: no api, so no 60-requests-an-hour limit
+  // shared with everyone behind this address. The api is the fallback when that fails.
+  try {
+    const r = await net.fetch("https://github.com/dip497/hivemind/releases/latest", {
+      cache: "no-store", headers: { "User-Agent": "hivemind-desktop" }, signal: AbortSignal.timeout(8000),
+    });
+    const latest = tagFromReleasesLatest(r.url);
+    if (latest) return { current, latest, updateAvailable: isNewerVersion(latest, current), ok: true, staged };
+  } catch { /* fall through to the api */ }
   try {
     const res = await net.fetch(
       // A cache would answer with the release before this one for its first minute (the api
