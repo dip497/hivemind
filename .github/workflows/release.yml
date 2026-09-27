@@ -666,3 +666,4 @@ jobs:
             release-assets/hivemind-macos-arm64.zip
             release-assets/hive-windows-x64.exe
             release-assets/*-win.zip
+            release-assets/hivemind-windows-x64.zip
