@@ -26,7 +26,8 @@ import {
 } from "./session-snapshot-store.js";
 import { applyInitialPrompt, stripInitialPrompt } from "./initial-prompt.js";
 import { sanitizeShellEnv } from "./shell-env.js";
-import { AGENT_EVENT_METHOD, agentForCmd, agentTitle, composeResume, envToUnset, evictTrackedSession, parseAgentEvent, prepareProviders, TILE_SESSIONS_DIR, trackerSource, writeTrackedSession, setCatalog, type AgentEvent } from "@hivemind/agents/node";
+import { titleBook } from "./title-book.js";
+import { AGENT_EVENT_METHOD, agentForCmd, composeResume, envToUnset, evictTrackedSession, parseAgentEvent, prepareProviders, TILE_SESSIONS_DIR, trackerSource, writeTrackedSession, setCatalog, type AgentEvent } from "@hivemind/agents/node";
 import { resolveWindowsSpawn } from "@hivemind/agents/discover";
 import { agentEventHookSource } from "./hooks/agent-event-hook-source.js";
 import { SDK_FILE, sdkSource } from "@hivemind/agent-sdk";
@@ -157,6 +158,9 @@ let providerPaths: Record<string, Record<string, string>> = {};
 // Rebound by a rescan; the manager reads them through these variables.
 let resume = composeResume({ ...providerCtx, providers: providerPaths });
 let ensureAgentsCurrent: () => Promise<void> = async () => {};
+// Assigned once the title book exists: a manifest that arrives later (an install, a repair)
+// makes the titles read before it show up, without anything restarting.
+let onAgentsReloaded: () => void = () => {};
 try {
   const [{ loadAgents, userAgentsDir }] = await Promise.all([import("@hivemind/agents/load")]);
   let agentsStamp: number | undefined;
@@ -168,6 +172,7 @@ try {
     setCatalog(defs);
     providerPaths = prepareProviders(providerCtx);
     resume = composeResume({ ...providerCtx, providers: providerPaths });
+    onAgentsReloaded();
   };
   ensureAgentsCurrent = () => {
     if (dirMtime(userAgentsDir()) === agentsStamp) return Promise.resolve();
@@ -311,18 +316,23 @@ const screens = new ScreenWatcher({
   detect: (cmd, screen) => agentForCmd(cmd)?.detect?.(screen),
   report: (id, state) => { for (const push of eventViewers) push({ t: "event", topic: "agent.screen", data: { tileId: id, state } }); },
 });
-setInterval(() => screens.tick(), 1200).unref();
+setInterval(() => {
+  screens.tick();
+  // An agent installed or repaired while sessions run: one stat, and the titles and screen
+  // rules it brings take effect without waiting for the next spawn.
+  void ensureAgentsCurrent();
+}, 1200).unref();
 // Every agent session's title as the agent's manifest reads it ("" = nothing worth a name).
 // Viewers take it as `agent.title`, and one that connects is sent what there is.
-const titles = new Map<string, string>();
+const titles = titleBook((id) => agentForCmd(manager.commandOf(id) ?? ""));
+const pushTitle = (tileId: string, title: string): void => {
+  for (const push of eventViewers) push({ t: "event", topic: "agent.title", data: { tileId, title } });
+};
 function reportTitle(id: string, raw: string): void {
-  const def = agentForCmd(manager.commandOf(id) ?? "");
-  if (!def) return;
-  const title = agentTitle(def, raw);
-  if ((titles.get(id) ?? "") === title) return;
-  if (title) titles.set(id, title); else titles.delete(id);
-  for (const push of eventViewers) push({ t: "event", topic: "agent.title", data: { tileId: id, title } });
+  const { changed, title } = titles.set(id, raw);
+  if (changed) pushTitle(id, title);
 }
+onAgentsReloaded = () => { for (const t of titles.recompute()) pushTitle(t.id, t.title); };
 const manager = new SessionManager(factory, {
   onOutput: (id) => screens.output(id),
   onTitle: (id, raw) => reportTitle(id, raw),
@@ -538,6 +548,7 @@ const server = net.createServer((sock) => {
         const killer = viewers.get(msg.id);
         viewers.delete(msg.id);
         outBuf.forget(msg.id);
+        titles.forget(msg.id);
         manager.kill(msg.id, killer);
         break;
       }
@@ -565,7 +576,7 @@ const server = net.createServer((sock) => {
         canResync = Array.isArray(msg.caps) && msg.caps.includes("resync");
         if (Array.isArray(msg.caps) && msg.caps.includes("events")) {
           eventViewers.add(send);
-          for (const [tileId, title] of titles) send({ t: "event", topic: "agent.title", data: { tileId, title } });
+          for (const { id, title } of titles.current()) send({ t: "event", topic: "agent.title", data: { tileId: id, title } });
           for (const [tileId, state] of screens.current()) send({ t: "event", topic: "agent.screen", data: { tileId, state } });
         }
         break;

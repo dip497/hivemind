@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Tiles get their names back after an agent's plugin is installed or repaired, without restarting anything: what each agent said it was doing is kept even while the host had no manifest to read it, and an agent installed while sessions run takes effect within a second or two instead of at the next spawn.
+
 ## [2026.9.6] — 2026-09-27
 
 - **Breaking:** agent manifests are `manifestVersion: 2`; a version 1 manifest is refused. Agents Hivemind installed from the catalog update themselves on the next start (the copy they replace is kept in `agents-previous/`); one you installed from a folder or edited needs reinstalling. A manifest may name the oldest Hivemind it needs (`minAppVersion`), and the catalog keeps it from older apps.

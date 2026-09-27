@@ -213,3 +213,30 @@ test("a runtime without a turn signal is refused up front, not timed out (exit 7
   expect(String(read.json.message)).toMatch(/cursor has no turn signal/);
   expect(hive(["ctl", "close", spawn.json.tileId, "--json"]).json).toEqual({ ok: true });
 });
+
+test("a title read while the agent's manifest is broken shows up when the manifest comes back", async () => {
+  // What an app upgraded past a manifest change sees: the agent's manifest on disk is one it
+  // refuses, so nothing tells it which of that agent's titles are a task. The titles read
+  // meanwhile must not be lost — an idle agent never sets its title again, so putting the
+  // manifest back has to be enough. Last in this file: it takes claude's manifest away.
+  const r = hive(["ctl", "spawn", "--agent", "claude", "--prompt", "echo first", "--json"]);
+  expect(r.code, r.stderr).toBe(0);
+  const tile: string = r.json.tileId;
+  const nameOf = () => hive(["ctl", "list", "--json"]).json.frames.flatMap((f: any) => f.tiles).find((t: any) => t.tileId === tile)?.name;
+  await expect.poll(nameOf, { timeout: 20_000 }).toMatch(/ · echo first$/);
+
+  const dir = path.join(process.env.XDG_CONFIG_HOME!, "hivemind", "agents", "claude");
+  const away = `${dir}.away`;
+  try {
+    fs.renameSync(dir, away); // an install replaces the folder, which is what the host watches
+    await new Promise((done) => setTimeout(done, 3000));
+    hive(["ctl", "send", tile, "echo second"]);
+    await new Promise((done) => setTimeout(done, 6000)); // its new title is read with no manifest to read it
+    expect(await nameOf()).not.toMatch(/echo second/);
+    fs.renameSync(away, dir);
+    await expect.poll(nameOf, { timeout: 30_000 }).toMatch(/ · echo second$/);
+  } finally {
+    if (fs.existsSync(away)) fs.renameSync(away, dir);
+    hive(["ctl", "close", tile, "--json"]);
+  }
+});
