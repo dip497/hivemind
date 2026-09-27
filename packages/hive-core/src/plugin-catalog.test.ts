@@ -161,3 +161,15 @@ test("an installed agent follows the catalog only while it is the catalog's own,
   expect(catalogAgentNeedsUpdate(entry, { ...base, appVersion: "2026.9.5" })).toBe(false); // needs a newer app
   expect(catalogAgentNeedsUpdate(entry, { ...base, manifestSha: "b".repeat(64) })).toBe(false); // already current
 });
+
+test("an agent this app cannot load is repaired from the catalog, however it was installed", () => {
+  const entry = parseCatalog({ version: 1, plugins: [{ id: "claude", type: "agent", name: "Claude", description: "d", author: "a",
+    version: "1.0.0", path: "agents/claude", minAppVersion: "2026.9.7", files: [{ path: "agent.yaml", sha256: "b".repeat(64) }] }] })[0]!;
+  // Installed by an older app, so nothing recorded it and it is not in fromCatalog — and its
+  // manifest is one this app refuses. It does nothing as it is, so the catalog's copy wins.
+  const broken = { fromCatalog: false, manifestSha: "a".repeat(64), recordedSha: null, appVersion: "2026.9.7", broken: true };
+  expect(catalogAgentNeedsUpdate(entry, broken)).toBe(true);
+  expect(catalogAgentNeedsUpdate(entry, { ...broken, broken: false })).toBe(false);
+  // Still never onto an app too old to run what the catalog lists.
+  expect(catalogAgentNeedsUpdate(entry, { ...broken, appVersion: "2026.9.6" })).toBe(false);
+});
