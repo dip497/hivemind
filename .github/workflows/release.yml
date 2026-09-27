@@ -543,7 +543,7 @@ jobs:
           $js = @'
           const { hookCommand } = require(process.env.HOOKS_CJS);
           const env = { ...(process.env.SystemRoot ? { SystemRoot: process.env.SystemRoot } : {}) };
-          const cmd = hookCommand("stop", { path: process.env.HOOK_SCRIPT }, {
+          const cmd = hookCommand({ path: process.env.HOOK_SCRIPT }, {
             tileId: "tile-smoke", cwd: process.env.RUNNER_TEMP, args: [], env, phase: "spawn", platform: "win32",
             paths: {
               private: process.env.RUNNER_TEMP, execPath: process.execPath, hooks: {},
