@@ -1,7 +1,7 @@
 // The installer writes for a terminal; the app says which of four things is happening.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { UPDATE_START, updateProgress, type UpdateProgress } from "../../src/shared/update-progress.ts";
+import { UPDATE_START, tagFromReleasesLatest, updateProgress, type UpdateProgress } from "../../src/shared/update-progress.ts";
 
 /** The lines install.sh prints, in order, for an upgrade that lands in place. */
 const RUN = [
@@ -52,4 +52,12 @@ test("where a running app cannot be replaced at all, it says what the user has t
   assert.equal(p.blocked, true);
   assert.equal(p.staged, undefined);
   assert.match(p.label, /Close hivemind/);
+});
+
+test("the tag comes out of the url GitHub's releases/latest redirects to", () => {
+  assert.equal(tagFromReleasesLatest("https://github.com/dip497/hivemind/releases/tag/v2026.9.7"), "2026.9.7");
+  assert.equal(tagFromReleasesLatest("https://github.com/dip497/hivemind/releases/tag/2026.9.7"), "2026.9.7");
+  // Not a tag: the redirect went somewhere else, or there is no release at all.
+  assert.equal(tagFromReleasesLatest("https://github.com/dip497/hivemind/releases"), null);
+  assert.equal(tagFromReleasesLatest("https://github.com/login?return_to=/releases/tag/x"), null);
 });

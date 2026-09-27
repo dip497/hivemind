@@ -159,6 +159,32 @@ EOF
   ok "installed desktop entry + icon ($desk_dst)"
 }
 
+# The tag of the latest release, without asking the API for it: the /releases/latest URL
+# redirects to /releases/tag/<tag>, and a redirect is served by the website, which has no
+# hourly limit. The API is the fallback — its 403 is that limit for this address (60 an hour,
+# shared by everyone behind it), which is not a network fault and must not be reported as one.
+LATEST_ERROR="could not resolve the latest release"
+latest_tag() {
+  local url tag code body
+  LATEST_ERROR="could not resolve the latest release of $REPO"
+  url=$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest" 2>/dev/null || true)
+  tag=${url##*/tag/}
+  case "$tag" in
+    v[0-9]*|[0-9]*) printf '%s\n' "$tag"; return 0 ;;
+  esac
+  body=$(curl -sS -H 'Cache-Control: no-cache' -w '\n%{http_code}' \
+    "https://api.github.com/repos/$REPO/releases/latest?nocache=$(date +%s)" 2>/dev/null || true)
+  code=$(printf '%s' "$body" | tail -n1)
+  tag=$(printf '%s' "$body" | grep -oE '"tag_name":[[:space:]]*"[^"]+"' | sed -E 's/.*"([^"]+)".*/\1/' | head -1)
+  if [ -n "$tag" ]; then printf '%s\n' "$tag"; return 0; fi
+  case "$code" in
+    403|429) LATEST_ERROR="github is rate-limiting this address (60 api requests an hour, shared). Wait, or install a known version: HIVEMIND_VERSION=vX.Y.Z" ;;
+    "") LATEST_ERROR="could not reach github.com — check your network" ;;
+    *) LATEST_ERROR="github answered $code asking for the latest release of $REPO" ;;
+  esac
+  return 1
+}
+
 # Is a packaged hivemind instance live right now? Matches the bundled Electron /
 # AppRun running out of our extracted dir. Used to avoid replacing files under a
 # running app (e.g. `hivemind upgrade` run from a terminal tile inside the app).
@@ -384,13 +410,7 @@ install_prebuilt() {
     TAG="$HIVEMIND_VERSION"
   else
     say "resolving latest release of $REPO"
-    # A shared cache would answer with the release before this one for its first
-    # minute (the api sends max-age=60), so ask for an answer nobody has stored.
-    TAG=$(curl -fsSL -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' \
-      "https://api.github.com/repos/$REPO/releases/latest?nocache=$(date +%s)" \
-      | grep -oE '"tag_name":\s*"[^"]+"' \
-      | sed -E 's/.*"([^"]+)".*/\1/' | head -1) \
-      || die "could not reach github.com api — check your network"
+    TAG=$(latest_tag) || die "$LATEST_ERROR"
     [ -n "$TAG" ] || die "no published releases yet for $REPO. Try --dev to build from source."
   fi
   say "target version: $TAG"

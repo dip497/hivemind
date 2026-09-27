@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Installing and upgrading resolve the latest release from GitHub's `releases/latest` redirect instead of its API, so a shared address that has used up the 60 API requests an hour no longer fails with a 403; the API is the fallback, and its rate limit is now named in the error instead of blaming the network. The in-app update check does the same.
 ## [2026.9.7] — 2026-09-28
 
 - The site downloads Hivemind instead of handing you GitHub's release page: hivemind.griiken.com/download has the command for the computer you are on, first, and a file for anyone who would rather have the file. Every download link points at the current release without naming a version, so a link in a README or a message keeps working — the release publishes `hivemind-linux-x86_64.AppImage`, `hivemind-macos-arm64.zip` and `hivemind-windows-x64.zip` under those names as well.
