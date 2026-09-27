@@ -470,7 +470,7 @@ const REPO_URL = "https://github.com/dip497/hivemind";
 function UpdateWork({ progress, busy, onRestart }: { progress: UpdateProgress | null; busy: boolean; onRestart: () => void }) {
   const p = progress ?? UPDATE_START;
   const filled = ((UPDATE_STEPS.indexOf(p.step) + 1) / UPDATE_STEPS.length) * 100;
-  const ready = p.step === "done" && !busy;
+  const ready = p.step === "done" && !busy && !p.blocked;
   return (
     <>
       <div className="min-w-0 flex-1">

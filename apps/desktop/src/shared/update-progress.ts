@@ -19,6 +19,9 @@ export interface UpdateProgress {
   version?: string;
   /** It is downloaded, and becomes the running version at the next restart. */
   staged?: boolean;
+  /** Nothing was installed and the app cannot do it for you: on macOS and Windows a running
+   *  app cannot be replaced at all, so the user has to close it and run the upgrade. */
+  blocked?: boolean;
 }
 
 export const UPDATE_START: UpdateProgress = { step: "check", label: "Looking for the latest release" };
@@ -33,6 +36,9 @@ export function updateProgress(line: string, prev: UpdateProgress = UPDATE_START
   const at = (step: UpdateStep, label: string, staged?: boolean): UpdateProgress =>
     ({ step, label, ...(version ? { version } : {}), ...(staged ? { staged: true } : {}) });
 
+  if (l.includes("was not upgraded")) {
+    return { step: "done", label: "Close hivemind, then run `hivemind upgrade`", blocked: true, ...(version ? { version } : {}) };
+  }
   if (l.includes("restart hivemind to finish") || l.includes("upgrade staged") || l.includes("downloaded already")) {
     return at("done", "Downloaded — restart to finish", true);
   }

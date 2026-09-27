@@ -45,3 +45,11 @@ test("nothing known yet, and noise, are both safe", () => {
   assert.deepEqual(updateProgress("some line nobody expected"), UPDATE_START);
   assert.equal(updateProgress("warn: could not reach github.com", { step: "download", label: "Downloading" }).step, "download");
 });
+
+test("where a running app cannot be replaced at all, it says what the user has to do", () => {
+  // macOS and Windows: the installer upgrades the CLI and refuses the app.
+  const p = updateProgress("hivemind is running - the app was NOT upgraded (Windows locks a running .exe).", { step: "download", label: "Downloading", version: "2026.9.7" });
+  assert.equal(p.blocked, true);
+  assert.equal(p.staged, undefined);
+  assert.match(p.label, /Close hivemind/);
+});

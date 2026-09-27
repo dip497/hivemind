@@ -165,7 +165,10 @@ function Install-Prebuilt {
   if (-not $tag) {
     Say "resolving latest release of $Repo"
     try {
-      $tag = (Invoke-RestMethod "https://api.github.com/repos/$Repo/releases/latest").tag_name
+      # A cache answers with the release before this one for its first minute (the api sends
+      # max-age=60), so ask for an answer nobody has stored.
+      $url = "https://api.github.com/repos/$Repo/releases/latest?nocache=" + [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+      $tag = (Invoke-RestMethod $url -Headers @{ "Cache-Control" = "no-cache" }).tag_name
     } catch { Die "could not reach the GitHub API - check your network" }
   }
   if (-not $tag) { Die "no published releases for $Repo. Use -Dev to build from source." }
