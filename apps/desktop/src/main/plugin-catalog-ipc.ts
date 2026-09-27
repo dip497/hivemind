@@ -182,10 +182,9 @@ const CATALOG_MARK = ".catalog-sha256";
 const sha256 = (body: Buffer): string => createHash("sha256").update(body).digest("hex");
 
 /** Catalog agents brought up to what the catalog lists now: a new Hivemind changes what its
- *  agents' manifests must say, and an agent left behind would stop working. Only a copy the
- *  catalog installed and nobody has edited since; the copy it replaces is kept in
- *  `agents-previous/`. An install from before the catalog recorded what it put there counts
- *  as untouched. */
+ *  agents' manifests must say, and an agent left behind would stop working. A copy the catalog
+ *  installed and nobody has edited since, or one this app refuses to load at all — an agent
+ *  that does nothing cannot be made worse. The copy it replaces is kept in `agents-previous/`. */
 export async function autoUpdateCatalogAgents(listed: CatalogEntry[]): Promise<Array<{ id: string; label: string }>> {
   const settings = getSettings().agents;
   if (!settings.autoInstall) return [];
@@ -196,7 +195,11 @@ export async function autoUpdateCatalogAgents(listed: CatalogEntry[]): Promise<A
     let have: string;
     try { have = sha256(await readFile(path.join(dir, AGENT_MANIFEST_FILE))); } catch { continue; }
     const recorded = await readFile(path.join(dir, CATALOG_MARK), "utf8").then((s) => s.trim(), () => null);
-    if (!catalogAgentNeedsUpdate(entry, { fromCatalog: settings.fromCatalog.includes(entry.id), manifestSha: have, recordedSha: recorded, appVersion: app.getVersion() })) continue;
+    const installed = await readAgentManifest(path.join(dir, AGENT_MANIFEST_FILE), { source: "user" });
+    if (!catalogAgentNeedsUpdate(entry, {
+      fromCatalog: settings.fromCatalog.includes(entry.id), manifestSha: have, recordedSha: recorded,
+      appVersion: app.getVersion(), broken: !!installed.error,
+    })) continue;
     let stage: string | null = null;
     try {
       stage = await stageEntry(entry);

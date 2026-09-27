@@ -155,3 +155,30 @@ caps:
   expect(fs.readFileSync(path.join(agents, "follows", ".catalog-sha256"), "utf8")).toBe(sha(yaml("follows", "follows new")));
   expect(fs.readFileSync(path.join(agents, "edited", "agent.yaml"), "utf8")).toBe(yaml("edited", "edited old"));
 });
+
+test("an agent this app cannot load is repaired from the catalog, even though nothing recorded installing it", async () => {
+  test.setTimeout(90_000);
+  const id = "brokenagent";
+  const good = `manifestVersion: 2
+id: ${id}
+label: "Broken agent"
+bin: ${id}-cli
+enabled: true
+caps:
+  promptDelivery: typed
+  turnSignal: false
+  resume: none
+  supervise: human
+  blockedDetection: false
+`;
+  registry.add({ id, type: "agent", name: "Broken agent", files: { "agent.yaml": good }, bin: `${id}-cli` });
+  const dir = path.join(xdg, "hivemind", "agents", id);
+  fs.mkdirSync(dir, { recursive: true });
+  // What an older Hivemind installed: a manifest this one refuses, and no record of where it came from.
+  fs.writeFileSync(path.join(dir, "agent.yaml"), good.replace("manifestVersion: 2", "manifestVersion: 1"));
+  fs.writeFileSync(settingsFile(), JSON.stringify({ agents: { fromCatalog: [] } }));
+  await launch();
+  await expect(page.getByText(/Updated Broken agent for this version of Hivemind/)).toBeVisible({ timeout: INSTALL_WAIT });
+  expect(fs.readFileSync(path.join(dir, "agent.yaml"), "utf8")).toBe(good);
+  expect(fs.readFileSync(path.join(xdg, "hivemind", "agents-previous", id, "agent.yaml"), "utf8")).toContain("manifestVersion: 1");
+});

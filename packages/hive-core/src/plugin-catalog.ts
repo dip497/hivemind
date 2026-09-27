@@ -194,15 +194,20 @@ export async function stageEntry(entry: CatalogEntry, indexUrl = catalogIndexUrl
 // not fail once it is installed.
 export { appMeetsMinVersion };
 
-/** Whether an installed agent should become the catalog's current one: the catalog put it
- *  there, nobody edited it since (`recorded` is the manifest hash the catalog installed, null
- *  for an install from before that was recorded), the catalog lists something else now, and
- *  this app can run it. */
+/** Whether an installed agent should become the catalog's current one. Two cases: it is
+ *  `broken` — this app refuses its manifest, so it is doing nothing at all and the catalog's
+ *  copy can only be better — or the catalog put it there and nobody edited it since
+ *  (`recordedSha` is the manifest hash the catalog installed, null for an install from before
+ *  that was recorded). Either way this app must be able to run what the catalog lists. */
 export function catalogAgentNeedsUpdate(entry: CatalogEntry, installed: {
   fromCatalog: boolean; manifestSha: string; recordedSha: string | null; appVersion: string;
+  /** The installed manifest does not load in this app. */
+  broken?: boolean;
 }): boolean {
-  if (entry.type !== "agent" || !installed.fromCatalog) return false;
+  if (entry.type !== "agent") return false;
   if (!appMeetsMinVersion(installed.appVersion, entry.minAppVersion)) return false;
+  if (installed.broken) return true;
+  if (!installed.fromCatalog) return false;
   const want = entry.files.find((f) => f.path === AGENT_MANIFEST_FILE)?.sha256;
   if (!want || want === installed.manifestSha) return false;
   return installed.recordedSha === null || installed.recordedSha === installed.manifestSha;
