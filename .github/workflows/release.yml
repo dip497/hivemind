@@ -627,6 +627,18 @@ jobs:
           find artifacts -type f -exec cp {} release-assets/ \;
           ls -la release-assets/
 
+      # A second copy of each desktop build under a name with no version in it, so
+      # `releases/latest/download/<name>` is a link that keeps working after every release —
+      # what the site's /download routes point at, and what anyone can link to.
+      - name: Name the builds without their version too
+        run: |
+          set -euo pipefail
+          cd release-assets
+          for f in *-x86_64.AppImage; do [ -e "$f" ] && cp "$f" hivemind-linux-x86_64.AppImage; done
+          for f in *-arm64-mac.zip; do [ -e "$f" ] && cp "$f" hivemind-macos-arm64.zip; done
+          for f in *-x64-win.zip; do [ -e "$f" ] && cp "$f" hivemind-windows-x64.zip; done
+          ls -la
+
       - name: Resolve release tag
         id: tag
         run: |
@@ -650,5 +662,7 @@ jobs:
             release-assets/hive-darwin-arm64
             release-assets/*.AppImage
             release-assets/*-mac.zip
+            release-assets/hivemind-linux-x86_64.AppImage
+            release-assets/hivemind-macos-arm64.zip
             release-assets/hive-windows-x64.exe
             release-assets/*-win.zip
