@@ -5,6 +5,7 @@ import { setWorkspaceOccluded } from "./workspace-occlusion";
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { UPDATE_START, UPDATE_STEPS, updateProgress, type UpdateProgress } from "../../shared/update-progress";
 import { Bell, ChevronRight, ExternalLink, Loader2, Plus, Settings, X, Palette, PanelsTopLeft, Puzzle, Bot, Keyboard, Info } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
@@ -101,29 +102,40 @@ function useUpdateCheck() {
   // toast that keeps the app open. Guarded against double-clicks (the pill, the
   // Settings button, and the toast action all call this).
   const [upgrading, setUpgrading] = useState(false);
+  const [progress, setProgress] = useState<UpdateProgress | null>(null);
   const upgradingRef = useRef(false);
+  const restart = useCallback(() => {
+    toast.loading("Restarting into the new version…");
+    window.setTimeout(() => { void window.hive.relaunchApp(); }, 600);
+  }, []);
   const upgrade = useCallback(() => {
     if (upgradingRef.current || !window.hive?.runUpgrade) return;
     upgradingRef.current = true;
     setUpgrading(true);
-    const id = toast.loading("Downloading update… (this can take ~30s)");
-    const off = window.hive.onUpdateProgress?.((line) => { toast.loading(line, { id }); });
+    setProgress(UPDATE_START);
+    // The installer's own lines are written for a terminal; the app says which step they mean.
+    const off = window.hive.onUpdateProgress?.((line) => setProgress((p) => updateProgress(line, p ?? UPDATE_START)));
     const done = () => { off?.(); upgradingRef.current = false; setUpgrading(false); };
     window.hive
       .runUpgrade()
       .then((r) => {
-        if (r.ok) {
-          off?.();
-          toast.success("Update installed — restarting…", { id, duration: 4000 });
-          window.setTimeout(() => { void window.hive.relaunchApp(); }, 1200);
-        } else {
-          toast.error(`Update failed (exit ${r.code ?? "?"}). Run \`hivemind upgrade\` in a terminal.`, { id, duration: 8000 });
+        off?.();
+        if (!r.ok) {
+          setProgress(null);
+          toast.error(`Update failed (exit ${r.code ?? "?"}). Run \`hivemind upgrade\` in a terminal.`, { duration: 8000 });
           done();
+          return;
         }
+        // Downloaded beside a running app: it becomes this app at the next restart, and the
+        // user decides when. Installed in place: restart now, into the version just installed.
+        setProgress((p) => ({ ...(p ?? UPDATE_START), step: "done" }));
+        upgradingRef.current = false;
+        setUpgrading(false);
+        void check({ force: true });
       })
-      .catch(() => { toast.error("Update failed to start.", { id }); done(); });
-  }, []);
-  return { version, status, checking, check, upgrade, upgrading };
+      .catch(() => { toast.error("Update failed to start."); setProgress(null); done(); });
+  }, [check]);
+  return { version, status, checking, check, upgrade, upgrading, progress, restart };
 }
 
 export function App() {
@@ -376,7 +388,9 @@ export function App() {
           root={root}
           onInitWorkspace={!root ? openInit : undefined}
           updateAvailable={update.status?.updateAvailable === true}
+          updateStaged={!!update.status?.staged}
           onUpgrade={update.upgrade}
+          onRestart={update.restart}
           upgrading={update.upgrading}
         />
         <div className="absolute top-0 right-0 z-40 flex items-start gap-2 px-3 py-2.5 pointer-events-none">
@@ -442,12 +456,37 @@ export function App() {
         onCheck={() => { void update.check(); }}
         onUpgrade={update.upgrade}
         upgrading={update.upgrading}
+        progress={update.progress}
+        onRestart={update.restart}
       />
     </div>
   );
 }
 
 const REPO_URL = "https://github.com/dip497/hivemind";
+
+/** What the installer is doing, and the one thing left to do when it is finished: a bar that
+ *  fills to the step it reached, so a download that stalls stops moving instead of pretending. */
+function UpdateWork({ progress, busy, onRestart }: { progress: UpdateProgress | null; busy: boolean; onRestart: () => void }) {
+  const p = progress ?? UPDATE_START;
+  const filled = ((UPDATE_STEPS.indexOf(p.step) + 1) / UPDATE_STEPS.length) * 100;
+  const ready = p.step === "done" && !busy;
+  return (
+    <>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5 text-[12px] text-[var(--color-fg)]">
+          {busy && <Loader2 className="size-3 animate-spin text-[var(--color-fg2)]" aria-hidden />}
+          <span className="truncate">{p.label}</span>
+        </div>
+        <div className="hm-update-bar mt-1.5" data-busy={busy ? "1" : "0"} role="progressbar"
+          aria-valuemin={0} aria-valuemax={UPDATE_STEPS.length} aria-valuenow={UPDATE_STEPS.indexOf(p.step) + 1} aria-label={p.label}>
+          <span style={{ width: `${filled}%` }} />
+        </div>
+      </div>
+      {ready && <Button onClick={onRestart} size="xs" title="Restart into the new version">Restart</Button>}
+    </>
+  );
+}
 
 
 function NotificationPrefs() {
@@ -558,6 +597,8 @@ function SettingsModal({
   onCheck,
   onUpgrade,
   upgrading,
+  progress,
+  onRestart,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -573,6 +614,10 @@ function SettingsModal({
   onUpgrade: () => void;
   /** An upgrade is in flight — disable the button + show a spinner. */
   upgrading: boolean;
+  /** Which of the installer's steps is happening, or null when none is. */
+  progress: UpdateProgress | null;
+  /** Restart into a version that is downloaded and waiting. */
+  onRestart: () => void;
 }) {
   const [page, setPage] = useState("appearance");
   const nav = useSettingsNav(page);
@@ -659,28 +704,23 @@ function SettingsModal({
             </a>
           </div>
           <div className="settings-row">
-            {update?.updateAvailable ? (
+            {upgrading || progress ? (
+              <UpdateWork progress={progress} busy={upgrading} onRestart={onRestart} />
+            ) : update?.staged ? (
+              <>
+                <span className="inline-flex items-center gap-1.5 text-[12px] text-[var(--color-fg)]">
+                  <span className="size-2 rounded-full bg-[var(--color-ok)]" aria-hidden />
+                  v{update.staged} is downloaded — restart to finish
+                </span>
+                <Button onClick={onRestart} size="xs" title="Restart into the version already downloaded">Restart</Button>
+              </>
+            ) : update?.updateAvailable ? (
               <>
                 <span className="inline-flex items-center gap-1.5 text-[12px] text-[var(--color-fg)]">
                   <span className="size-2 rounded-full bg-[var(--color-warn)]" aria-hidden />
                   Update available{update.latest ? ` — v${update.latest}` : ""}
                 </span>
-                <Button
-                  onClick={onUpgrade}
-                  disabled={upgrading}
-                  aria-busy={upgrading}
-                  size="xs"
-                  title={upgrading ? "Downloading and installing the update…" : "Download the latest release and restart"}
-                >
-                  {upgrading ? (
-                    <>
-                      <Loader2 className="animate-spin" aria-hidden />
-                      Updating…
-                    </>
-                  ) : (
-                    "Update & restart"
-                  )}
-                </Button>
+                <Button onClick={onUpgrade} size="xs" title="Download the latest release">Update</Button>
               </>
             ) : (
               <>

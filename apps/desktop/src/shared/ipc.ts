@@ -210,6 +210,10 @@ export interface UpdateStatus {
    *  False on offline / timeout / rate-limit — the renderer must NOT treat a
    *  false-ok result as "up to date" or persist it over a known-good state. */
   ok: boolean;
+  /** A version already downloaded and waiting for a restart to become the one that
+   *  runs (the installer could not replace a live app), when it is newer than this one.
+   *  Restarting is then the whole of what is left to do — never another download. */
+  staged: string | null;
 }
 
 import type { Settings } from "@hivemind/core/settings-schema";
