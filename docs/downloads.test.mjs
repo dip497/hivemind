@@ -24,3 +24,14 @@ test("a download path is answered, anything else is not", () => {
     assert.equal(downloadFor(p), null, p);
   }
 });
+
+test("the image carries what the server imports", () => {
+  // A module the server imports but the image does not copy fails at startup, and the deploy
+  // says only "the container failed to listen on PORT".
+  const server = readFileSync(new URL("./server.mjs", import.meta.url), "utf8");
+  const dockerfile = readFileSync(new URL("./Dockerfile", import.meta.url), "utf8");
+  const copied = new Set(dockerfile.split("\n").filter((l) => l.startsWith("COPY ")).flatMap((l) => l.split(/\s+/)));
+  for (const m of server.matchAll(/from\s+"\.\/([\w.-]+)"/g)) {
+    assert.ok(copied.has(m[1]), `the Dockerfile does not COPY ${m[1]}`);
+  }
+});
