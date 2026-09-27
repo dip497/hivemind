@@ -397,7 +397,7 @@ function validateSession(raw: unknown): AgentSession {
   }
   if (r.exists !== undefined) {
     const e = r.exists;
-    req(typeof e === "string" && SESSION_ROOT_RE.test(e.replace("*", "")) && e.startsWith("{home}/") && !e.includes("..") && e.includes("{id}"),
+    req(typeof e === "string" && SESSION_ROOT_RE.test(e.replaceAll("*", "")) && e.startsWith("{home}/") && !e.includes("..") && e.includes("{id}"),
       "session.resume.exists must be a path under {home}/ naming {id}");
     req((e as string).split("/").filter((seg) => seg.includes("*")).every((seg) => seg === "*") && (e as string).split("*").length <= 2,
       "session.resume.exists may use one * as a whole path segment");
