@@ -239,8 +239,12 @@ test("multi-frame: /resume-old + new session both survive a daemon restart", asy
     assert.ok(uuidB);
     assert.equal(readTrackedSession(tileSessionsDir, "hm:tile-B"), uuidB);
 
-    // snapshot both (what survives a daemon restart)
-    await mgr.flushAll();
+    // snapshot both (what survives a daemon restart). A session is snapshotted once it has
+    // printed something, and a slow machine may not have B's first output yet.
+    for (let i = 0; i < 60 && !(snaps.has("hm:tile-A") && snaps.has("hm:tile-B")); i++) {
+      await mgr.flushAll();
+      if (!snaps.has("hm:tile-B")) await delay(50);
+    }
     assert.ok(snaps.has("hm:tile-A") && snaps.has("hm:tile-B"), "both tiles snapshotted");
 
     // ── KILL DAEMON + RESTART: fresh manager, rehydrate snapshots ──
