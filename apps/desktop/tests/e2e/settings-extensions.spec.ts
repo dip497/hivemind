@@ -53,7 +53,9 @@ test("settings has a focused dialog, view-specific automatic toolbar, and indepe
   await settings("view:canvas");
   await expect(page.getByLabel("Display", { exact: true })).toHaveValue("bottom");
   await page.getByLabel("Display", { exact: true }).selectOption("auto");
-  await expect.poll(() => JSON.parse(fs.readFileSync(path.join(xdg, "hivemind/settings.json"), "utf8")).views.chrome).toEqual({});
+  // The file first appears when the change is saved, which is debounced.
+  const chrome = () => { try { return JSON.parse(fs.readFileSync(path.join(xdg, "hivemind/settings.json"), "utf8")).views.chrome; } catch { return undefined; } };
+  await expect.poll(chrome).toEqual({});
   await page.screenshot({ path: "/tmp/hivemind-settings-views.png" });
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
