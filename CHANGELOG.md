@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- An agent this Hivemind cannot load is repaired from the catalog on the next start, whatever installed it — an agent from a release before manifests changed showed as "Unavailable" with a generic icon until you reinstalled it by hand. The copy it replaces is kept in `agents-previous/`.
+
 ## [2026.9.6] — 2026-09-27
 
 - **Breaking:** agent manifests are `manifestVersion: 2`; a version 1 manifest is refused. Agents Hivemind installed from the catalog update themselves on the next start (the copy they replace is kept in `agents-previous/`); one you installed from a folder or edited needs reinstalling. A manifest may name the oldest Hivemind it needs (`minAppVersion`), and the catalog keeps it from older apps.
