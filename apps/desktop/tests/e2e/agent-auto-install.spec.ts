@@ -105,8 +105,11 @@ test("an agent you remove is not added back on the next start", async () => {
   await launch();
   await expect.poll(installed, { timeout: INSTALL_WAIT }).toBe(true);
   await page.evaluate((id) => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: `agent:${id}` } })), CONTINUE);
-  await page.getByRole("button", { name: "Remove Continue" }).click();
-  await page.getByRole("button", { name: "Remove", exact: true }).click();
+  // Settings, not the notice: the toast that announced the agent offers "Remove Continue" too,
+  // and it is still on screen when this runs behind other specs.
+  const settings = page.locator(".settings-dialog");
+  await settings.getByRole("button", { name: "Remove Continue" }).click();
+  await settings.getByRole("button", { name: "Remove", exact: true }).click();
   await expect(page.locator(`[data-agent-card="${CONTINUE}"]`)).toHaveCount(0);
   expect(installed()).toBe(false);
   await app!.close(); app = undefined;
