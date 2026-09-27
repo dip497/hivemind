@@ -7,8 +7,9 @@ import type { AgentAsset, AgentCapabilities, AgentHome, AgentHomeFile, AgentHook
 import { compileDetect, validateExpr, validateScope, type DetectRules } from "./detect-rules.js";
 import { GENERIC_AGENT_ICON } from "./icon.js";
 import { RESERVED_AGENTS } from "./reserved.js";
+import { MIN_APP_VERSION_RE } from "./catalog.js";
 
-export const AGENT_MANIFEST_VERSION = 1;
+export const AGENT_MANIFEST_VERSION = 2;
 
 const SHAPES = ["path", "rect", "circle", "ellipse"] as const;
 const ATTRS = [
@@ -57,6 +58,9 @@ export interface AgentManifest {
   spawn?: ManifestSpawn;
   options?: AgentOption[];
   install?: AgentInstall;
+  /** The oldest Hivemind that can run this manifest: the catalog lists it, so an older app
+   *  never downloads the plugin. The app itself answers to `manifestVersion`. */
+  minAppVersion?: string;
   detect?: DetectRules;
   session?: unknown;
   assets?: unknown;
@@ -521,6 +525,8 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
     "aliases must be a string array");
 
   const options = m.options === undefined ? undefined : validateOptions(m.options);
+  req(m.minAppVersion === undefined || (typeof m.minAppVersion === "string" && MIN_APP_VERSION_RE.test(m.minAppVersion)),
+    "minAppVersion must look like 2026.9.6");
   if (m.install !== undefined) {
     const i = m.install as unknown as Record<string, unknown>;
     req(i && typeof i.url === "string" && /^https:\/\/[^\s]+$/.test(i.url), "install.url must be an https link");
@@ -559,6 +565,7 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
     ...(m.note ? { note: m.note } : {}),
     ...(options ? { options } : {}),
     ...(m.install ? { install: m.install } : {}),
+    ...(m.minAppVersion ? { minAppVersion: m.minAppVersion } : {}),
     ...(m.session ? { session: validateSession(m.session) } : {}),
     ...(m.assets ? { assets: validateAssets(m.assets) } : {}),
     ...(m.hooks ? { hooks: validateHooks(m.hooks) } : {}),

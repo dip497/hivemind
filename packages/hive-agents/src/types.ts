@@ -305,6 +305,8 @@ export interface AgentProviderDef {
   options?: readonly AgentOption[];
   /** Where to get the CLI when this machine does not have it. Shown, never run. */
   install?: AgentInstall;
+  /** The oldest Hivemind that can run it, as the catalog lists it. */
+  minAppVersion?: string;
   /** Where this CLI keeps its sessions, so a restore can find the one for a cwd. */
   session?: AgentSession;
   /** How this CLI is told to call our hooks. */

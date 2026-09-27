@@ -29,6 +29,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@hivemind/agents": "workspace:*",
     "@hivemind/view-sdk": "workspace:*",
     "gray-matter": "catalog:",
     "yaml": "catalog:",

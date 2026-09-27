@@ -36,7 +36,8 @@ Create a folder named after the agent's id, holding `agent.yaml`:
 
 ```yaml
 # ~/.config/hivemind/agents/acme/agent.yaml
-manifestVersion: 1
+manifestVersion: 2
+minAppVersion: "2026.9.6"   # optional: the catalog hides it from older Hivemind
 id: acme                 # lowercase letters, digits and dashes
 label: Acme Coder
 bin: acme-coder          # the binary name on your PATH — never a path

@@ -517,7 +517,11 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   // restored tiles have started, so the network and each CLI's `--version` stay off both.
   useEffect(() => {
     let live = true;
-    const timer = setTimeout(() => void whenBootIdle().then(() => live ? window.hive.autoInstallAgents() : []).then((added) => {
+    const timer = setTimeout(() => void whenBootIdle().then(() => live ? window.hive.autoInstallAgents() : { added: [], updated: [] }).then(({ added, updated }) => {
+      if (updated.length) {
+        void syncAgentPlugins();
+        toast.success(`Updated ${updated.map((a) => a.label).join(", ")} for this version of Hivemind.`);
+      }
       if (!added.length) return;
       void syncAgentPlugins();
       const toastId = toast.success(`Added ${added.map((a) => a.label).join(", ")} — found on this machine.`, {

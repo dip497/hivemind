@@ -1,6 +1,6 @@
 # THROWAWAY sixth agent — dropped in by tests/e2e/zz-sixth-provider.spec.ts to prove that
 # a new agent is a manifest plus, only when it needs one, a daemon half. Never shipped.
-manifestVersion: 1
+manifestVersion: 2
 id: faux
 label: Faux
 bin: faux-agent

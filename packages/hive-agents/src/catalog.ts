@@ -175,3 +175,18 @@ export function canListSessions(def: AgentProviderDef): boolean {
   const s = def.session;
   return !!(s?.list || s?.resume?.find || s?.resume?.exists);
 }
+
+/** A version a plugin may require: up to three dot-separated numbers. */
+export const MIN_APP_VERSION_RE = /^\d{1,4}(\.\d{1,4}){0,2}$/;
+
+/** Is this app new enough for that plugin? Numeric compare, missing parts are zero. */
+export function appMeetsMinVersion(appVersion: string, min: string | undefined): boolean {
+  if (!min) return true;
+  const parts = (v: string): number[] => v.split(".").map((n) => Number.parseInt(n, 10) || 0);
+  const have = parts(appVersion), want = parts(min);
+  for (let i = 0; i < Math.max(have.length, want.length); i++) {
+    const a = have[i] ?? 0, b = want[i] ?? 0;
+    if (a !== b) return a > b;
+  }
+  return true;
+}

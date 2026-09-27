@@ -470,6 +470,9 @@ importers:
 
   packages/hive-core:
     dependencies:
+      '@hivemind/agents':
+        specifier: workspace:*
+        version: link:../hive-agents
       '@hivemind/view-sdk':
         specifier: workspace:*
         version: link:../hive-view-sdk

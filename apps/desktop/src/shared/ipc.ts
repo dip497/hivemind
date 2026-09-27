@@ -273,7 +273,8 @@ export interface HiveIpc {
   /** Remove an agent you installed; a catalog one is then never added automatically again. */
   removeAgent(id: string): Promise<void>;
   /** Add catalog agents whose CLI was found; what was added and what each can do. Runs once per launch. */
-  autoInstallAgents(): Promise<Array<{ id: string; label: string; does: string[] }>>;
+  /** Catalog agents found on this machine and added, and ones brought up to the catalog. */
+  autoInstallAgents(): Promise<{ added: Array<{ id: string; label: string; does: string[] }>; updated: Array<{ id: string; label: string }> }>;
   installViewPackage(token: string): Promise<void>;
   removeViewPackage(id: string): Promise<void>;
   /** Main's watchdog saw a plugin frame peg a core for several samples. */

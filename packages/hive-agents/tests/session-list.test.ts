@@ -9,7 +9,7 @@ import { withResume } from "../src/catalog.ts";
 import { defFromManifest } from "../src/manifest.ts";
 import type { AgentProviderDef } from "../src/types.ts";
 
-const base = { manifestVersion: 1, label: "X", caps: { promptDelivery: "typed", turnSignal: false, resume: "none", supervise: "human", blockedDetection: false } };
+const base = { manifestVersion: 2, label: "X", caps: { promptDelivery: "typed", turnSignal: false, resume: "none", supervise: "human", blockedDetection: false } };
 const def = (id: string, bin: string, session: unknown): AgentProviderDef => defFromManifest({ ...base, id, bin, session }) as AgentProviderDef;
 
 test("a listing's records become sessions; ids that could not go on a command line are dropped", () => {

@@ -18,7 +18,7 @@ const bin = path.join(dir, "bin");
 const sock = path.join(dir, "d.sock");
 const PROBE_ID = "probe";
 const cli = path.join(bin, "probe-cli");
-const manifest = `manifestVersion: 1
+const manifest = `manifestVersion: 2
 id: ${PROBE_ID}
 label: "Probe"
 bin: probe-cli
