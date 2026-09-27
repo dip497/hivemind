@@ -8,6 +8,10 @@ const description =
   'Run coding-agent CLIs on one canvas, next to the terminals, editor and diffs they are working on. Local, open source, driven from your shell.';
 const repo = 'https://github.com/dip497/hivemind';
 const install = 'bash <(curl -fsSL https://hivemind.griiken.com/install.sh)';
+const installPs = 'irm https://hivemind.griiken.com/install.ps1 | iex';
+// Every file link goes through /download/<key>, which the server sends on to the current
+// release (docs/downloads.mjs) — a link here never carries a version that will go stale.
+const dl = (key: string) => `${base}/download/${key}`;
 // The strip comes from the published agent manifests, vendored at build time — the page
 // cannot show an agent the registry does not list, or miscount what it carries.
 import icons from '../generated/agent-icons.json';
@@ -53,7 +57,7 @@ const agentCount = icons.total;
       <a href={link('guide/')}>Docs</a>
       <a href={repo}>GitHub</a>
     </nav>
-    <a class="btn small" href={`${repo}/releases`}>Download</a>
+    <a class="btn small" href="#download">Download</a>
   </div>
 </header>
 
@@ -72,7 +76,7 @@ const agentCount = icons.total;
           work and approves their tools, while you watch all four.</p>
 
         <div class="cta">
-          <a class="btn primary" href={`${repo}/releases`}>Download</a>
+          <a class="btn primary" href="#download">Download</a>
           <a class="btn ghost" href={link('guide/getting-started/')}>Read the quickstart</a>
         </div>
 
@@ -282,6 +286,50 @@ detect:
     </div>
   </section>
 
+  <!-- ─────────── DOWNLOAD ───────────
+       One command per platform, the one for this computer first, and the file for anyone who
+       would rather have the file. Nothing here names a version: the links go through
+       /download/<key>, which the server sends on to the current release. -->
+  <section class="dl plate" id="download">
+    <div class="wrap">
+      <h2>Download Hivemind</h2>
+      <p class="sub">One command. It installs the app and the <code>hive</code> CLI into
+        <code>~/.hivemind-app</code>, links both into <code>~/.local/bin</code>, and touches nothing else.</p>
+
+      <div class="dl-grid">
+        <article class="dl-card" data-os="linux">
+          <h3>Linux <span class="dl-arch">x86_64</span></h3>
+          <div class="install"><code>{install}</code>
+            <button class="copy" type="button" data-copy={install} aria-label="Copy the install command for Linux">Copy</button></div>
+          <a class="dl-file" href={dl('linux')}>Or take the AppImage</a>
+        </article>
+
+        <article class="dl-card" data-os="macos">
+          <h3>macOS <span class="dl-arch">Apple Silicon</span></h3>
+          <div class="install"><code>{install}</code>
+            <button class="copy" type="button" data-copy={install} aria-label="Copy the install command for macOS">Copy</button></div>
+          <a class="dl-file" href={dl('macos')}>Or take the .app</a>
+        </article>
+
+        <article class="dl-card" data-os="windows">
+          <h3>Windows <span class="dl-arch">x64 · new</span></h3>
+          <div class="install"><code>{installPs}</code>
+            <button class="copy" type="button" data-copy={installPs} aria-label="Copy the install command for Windows">Copy</button></div>
+          <p class="dl-note">Built and installable, and the platform we have run least — tell us what breaks.</p>
+        </article>
+      </div>
+
+      <p class="dl-more">
+        An Intel mac or a Linux arm64 box builds from source: add <code>--dev</code>.
+        A machine you only drive from another desktop needs the CLI alone —
+        <a href={dl('cli-linux-x86_64')}>Linux x86_64</a>, <a href={dl('cli-linux-arm64')}>arm64</a>,
+        <a href={dl('cli-macos-arm64')}>macOS</a>, <a href={dl('cli-windows-x64')}>Windows</a>.
+        Re-run the command to upgrade, or use the app's own button.
+        <a href={dl('notes')}>Release notes and every file</a>.
+      </p>
+    </div>
+  </section>
+
   <!-- ─────────── CLOSE ─────────── -->
   <section class="close">
     <div class="wrap close-in">
@@ -290,7 +338,7 @@ detect:
         <p class="sub">One binary. Linux, macOS and Windows, MIT licensed.</p>
       </div>
       <div class="cta">
-        <a class="btn primary" href={`${repo}/releases`}>Download</a>
+        <a class="btn primary" href="#download">Download</a>
         <a class="btn ghost" href={repo}>Read the source</a>
       </div>
     </div>
@@ -310,6 +358,20 @@ detect:
 </footer>
 
 <script is:inline>
+  // Which of the three is this computer: it goes first and says so. Everything stays visible,
+  // so a wrong guess costs nothing and a browser that runs no script loses nothing.
+  (() => {
+    const grid = document.querySelector('.dl-grid');
+    if (!grid) return;
+    const ua = navigator.userAgent;
+    const os = /Windows|Win32|Win64/.test(ua) ? 'windows' : /Mac OS X|Macintosh/.test(ua) ? 'macos' : /Linux|X11|CrOS/.test(ua) ? 'linux' : null;
+    const mine = os && grid.querySelector(`.dl-card[data-os="${os}"]`);
+    if (!mine) return;
+    mine.dataset.me = '1';
+    mine.querySelector('h3')?.insertAdjacentHTML('beforeend', ' <span class="dl-me">this computer</span>');
+    grid.prepend(mine);
+  })();
+
   document.querySelectorAll('.copy').forEach((b) => {
     b.addEventListener('click', async () => {
       try {
@@ -432,6 +494,22 @@ detect:
   .install code{color:var(--fg2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .install code::before{content:"$ ";color:var(--fg3)}
   /* Inner radius 4 = the frame's 7 minus its 10px padding, floored at the control's height. */
+  /* Download: three cards, the one for this computer first and outlined. */
+  .dl{padding:72px 0}
+  .dl h2{margin:0 0 6px}
+  .dl .sub{max-width:62ch}
+  .dl-grid{display:grid;gap:14px;margin:26px 0 18px;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr))}
+  .dl-card{border:1px solid var(--line);border-radius:var(--r2);padding:16px 16px 14px;background:color-mix(in oklab,var(--bg2) 60%,transparent)}
+  .dl-card[data-me="1"]{border-color:color-mix(in oklab,var(--ok) 45%,var(--line))}
+  .dl-card h3{margin:0 0 10px;font-size:15px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+  .dl-arch{font:inherit;font-family:var(--f-m);font-size:11px;color:var(--fg3);font-weight:400}
+  .dl-me{font-family:var(--f-m);font-size:11px;color:var(--ok);font-weight:400}
+  .dl-card .install{margin:0}
+  .dl-card .install code{overflow-x:auto;white-space:nowrap}
+  .dl-file{display:inline-block;margin-top:10px;font-size:12px;color:var(--fg2)}
+  .dl-file:hover{color:var(--fg)}
+  .dl-note{margin:10px 0 0;font-size:12px;color:var(--fg3)}
+  .dl-more{margin:0;font-size:13px;color:var(--fg2);max-width:78ch}
   .copy{margin-left:auto;flex-shrink:0;font:inherit;font-family:var(--f-m);font-size:12px;cursor:pointer;
     color:var(--fg3);background:transparent;border:1px solid var(--line2);border-radius:4px;padding:4px 10px;
     transition-property:color,border-color,background-color,scale;transition-duration:var(--d2);transition-timing-function:ease}
