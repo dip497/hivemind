@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [2026.9.7] — 2026-09-28
+
 - The site downloads Hivemind instead of handing you GitHub's release page: hivemind.griiken.com/download has the command for the computer you are on, first, and a file for anyone who would rather have the file. Every download link points at the current release without naming a version, so a link in a README or a message keeps working — the release publishes `hivemind-linux-x86_64.AppImage`, `hivemind-macos-arm64.zip` and `hivemind-windows-x64.zip` under those names as well.
 - Updating says where it is: the button names the step it is on (looking, downloading, installing) with a bar that fills to it, and when the app was open while it downloaded, it says **Restart to finish** instead of offering the same update again. Asking again while a download waits no longer refetches it.
 - An update taken while the app is open is no longer recorded as installed before it runs. A version that was downloaded but never started left `hivemind upgrade` saying "already on this version — nothing to do", so the old build kept running with nothing left to try.
@@ -1345,7 +1347,8 @@ World, and sandboxed community views), and the e2e/perf harnesses gate every cha
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.9.6...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.9.7...HEAD
+[2026.9.7]: https://github.com/dip497/hivemind/releases/tag/v2026.9.7
 [2026.9.6]: https://github.com/dip497/hivemind/releases/tag/v2026.9.6
 [2026.9.5]: https://github.com/dip497/hivemind/releases/tag/v2026.9.5
 [2026.9.4]: https://github.com/dip497/hivemind/releases/tag/v2026.9.4
