@@ -1,6 +1,6 @@
 {
   "name": "@hivemind/desktop",
-  "version": "2026.9.5",
+  "version": "2026.9.6",
   "desktopName": "hivemind.desktop",
   "private": true,
   "type": "module",

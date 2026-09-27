@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [2026.9.6] — 2026-09-27
+
 - **Breaking:** agent manifests are `manifestVersion: 2`; a version 1 manifest is refused. Agents Hivemind installed from the catalog update themselves on the next start (the copy they replace is kept in `agents-previous/`); one you installed from a folder or edited needs reinstalling. A manifest may name the oldest Hivemind it needs (`minAppVersion`), and the catalog keeps it from older apps.
 - Codex tiles no longer open on Codex's update prompt, and its hooks review reads as waiting for you instead of idle. Update Codex from a terminal.
 - A terminal shown again after it was hidden no longer prints stray `62;190m`-style fragments or doubled lines: its output is cut only where an escape sequence ends.
@@ -1335,7 +1337,8 @@ World, and sandboxed community views), and the e2e/perf harnesses gate every cha
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.9.5...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.9.6...HEAD
+[2026.9.6]: https://github.com/dip497/hivemind/releases/tag/v2026.9.6
 [2026.9.5]: https://github.com/dip497/hivemind/releases/tag/v2026.9.5
 [2026.9.4]: https://github.com/dip497/hivemind/releases/tag/v2026.9.4
 [2026.9.3]: https://github.com/dip497/hivemind/releases/tag/v2026.9.3
