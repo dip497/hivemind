@@ -130,6 +130,7 @@ export function WindowsView({ model, commands }: WorkspaceViewProps) {
           onFocusTile={restoreTab}
           onFocusFrame={focusFrame}
           frameActions={frameActions}
+          tileActions={{ onClose: commands.closeTile, onRename: commands.renameTile }}
         />
       )}
 

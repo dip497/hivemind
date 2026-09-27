@@ -20,6 +20,7 @@
  * anyone who starts the app from a terminal and wants exactly that shell's env.
  */
 import { execFile } from "node:child_process";
+import path from "node:path";
 import { promisify } from "node:util";
 
 const execFileP = promisify(execFile);
@@ -210,5 +211,21 @@ const ELECTRON_INTERNAL_ENV = ["ELECTRON_RUN_AS_NODE", "ELECTRON_NO_ATTACH_CONSO
 export function sanitizeShellEnv(env: Record<string, string>, unset: Iterable<string> = []): Record<string, string> {
   for (const k of ELECTRON_INTERNAL_ENV) delete env[k];
   for (const k of unset) delete env[k];
+  // A desktop-launched app gets the system PATH, without the directories user-level CLI
+  // installs write to, so a bare agent command can resolve to a same-named system launcher.
+  // Missing ones are prepended; existing entries never move.
+  if (env.PATH?.includes("/") && env.PATH.includes(":")) {
+    const home = env.HOME;
+    if (home) {
+      const rescue = [
+        path.join(home, ".local", "bin"),
+        path.join(home, ".npm-global", "bin"), // npm i -g default prefix
+        path.join(home, "bin"),
+      ];
+      const have = new Set(env.PATH.split(":"));
+      const missing = rescue.filter((d) => !have.has(d));
+      if (missing.length) env.PATH = `${[...missing, env.PATH].join(":")}`;
+    }
+  }
   return env;
 }
