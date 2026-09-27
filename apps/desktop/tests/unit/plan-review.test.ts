@@ -3,9 +3,9 @@
  *  1. trackerSettings injects the PreToolUse(ExitPlanMode) hook only when the
  *     plan-bridge paths are supplied (and never breaks the SessionStart hook).
  *  2. startPlanBridge round-trips a plan → decision over the unix socket.
- *  3. The GENERATED hook .cjs honors the Claude Code contract end-to-end:
- *     reads tool_input.plan, blocks on the socket, prints the right
- *     allow/deny JSON, and FAILS OPEN when the bridge is unreachable.
+ *  3. Claude's plugin script, run through the real SDK, honors the Claude Code
+ *     contract end-to-end: reads tool_input.plan, blocks on the bridge, prints
+ *     the right allow/deny JSON, and FAILS OPEN when the bridge is unreachable.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -14,7 +14,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import { authoredDef } from "./authored-agents.ts";
+import { authoredAsset, authoredDef } from "./authored-agents.ts";
+import { SDK_ENV, SDK_FILE, sdkSource } from "@hivemind/agent-sdk";
 import { renderHookDocument } from "@hivemind/agents/node";
 
 // claude's hooks are declared in its manifest now; this renders the same document the
@@ -28,12 +29,11 @@ const trackerSettings = (deps: {
     private: "/x/agents/claude", execPath: deps.execPath, tileSessionsDir: deps.tileSessionsDir, home: "/home/u",
     hooks: {
       tracker: { path: deps.trackerPath, arg: deps.tileSessionsDir },
-      ...(deps.planHookPath && deps.planBridgeSock ? { plan: { path: deps.planHookPath, arg: deps.planBridgeSock } } : {}),
+      ...(deps.planHookPath && deps.planBridgeSock ? { planReview: { path: deps.planHookPath, env: { [SDK_ENV.planSock]: deps.planBridgeSock } } } : {}),
     },
   },
 })!;
 import { startPlanBridge } from "../../src/main/plan-bridge.ts";
-import { planHookSource } from "../../src/main/plan-review-hook-source.ts";
 
 const baseDeps = {
   trackerPath: "/x/tracker.cjs",
@@ -96,15 +96,15 @@ test("startPlanBridge: round-trips a plan → deny+feedback", async () => {
   bridge.close();
 });
 
-/** Run the generated hook .cjs with a stdin event + env, return its stdout. */
+/** Run Claude's plan-review script with a stdin event, the SDK and the bridge socket; return its stdout. */
 function runHook(
   hookPath: string,
   sock: string,
   event: unknown,
 ): Promise<{ stdout: string; code: number | null }> {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [hookPath, sock], {
-      env: { ...process.env, HIVEMIND_TILE: "tile-hook" },
+    const child = spawn(process.execPath, [hookPath], {
+      env: { ...process.env, HIVEMIND_TILE: "tile-hook", [SDK_ENV.sdk]: path.join(path.dirname(hookPath), SDK_FILE), [SDK_ENV.planSock]: sock },
     });
     let stdout = "";
     child.stdout.setEncoding("utf8");
@@ -117,8 +117,9 @@ function runHook(
 
 const writeHook = (): string => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "planhook-"));
-  const p = path.join(dir, "plan-review-hook.cjs");
-  fs.writeFileSync(p, planHookSource());
+  const p = path.join(dir, "hive-plan-review.cjs");
+  fs.writeFileSync(p, authoredAsset("claude", "hive-plan-review.cjs"));
+  fs.writeFileSync(path.join(dir, SDK_FILE), sdkSource());
   return p;
 };
 
@@ -129,7 +130,7 @@ const PLAN_EVENT = {
   tool_input: { plan: "## Step 1\nDo the thing." },
 };
 
-test("generated hook: deny → emits permissionDecision deny + reason", async () => {
+test("claude plan-review script: deny → emits permissionDecision deny + reason", async () => {
   const sock = tmpSock();
   const bridge = startPlanBridge(sock, (req) => {
     assert.equal(req.plan, "## Step 1\nDo the thing.");
@@ -147,7 +148,7 @@ test("generated hook: deny → emits permissionDecision deny + reason", async ()
   assert.equal(out.hookSpecificOutput.hookEventName, "PreToolUse");
 });
 
-test("generated hook: approve → emits permissionDecision allow", async () => {
+test("claude plan-review script: approve → emits permissionDecision allow", async () => {
   const sock = tmpSock();
   const bridge = startPlanBridge(sock, (req) => req.reply("allow"));
   await new Promise((r) => setTimeout(r, 50));
@@ -156,7 +157,7 @@ test("generated hook: approve → emits permissionDecision allow", async () => {
   assert.equal(JSON.parse(stdout).hookSpecificOutput.permissionDecision, "allow");
 });
 
-test("generated hook: FAILS OPEN (allow) when the bridge is unreachable", async () => {
+test("claude plan-review script: FAILS OPEN (allow) when the bridge is unreachable", async () => {
   // Point at a socket nothing is listening on.
   const dead = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "dead-")), "nope.sock");
   const { stdout, code } = await runHook(writeHook(), dead, PLAN_EVENT);
@@ -164,7 +165,7 @@ test("generated hook: FAILS OPEN (allow) when the bridge is unreachable", async 
   assert.equal(JSON.parse(stdout).hookSpecificOutput.permissionDecision, "allow");
 });
 
-test("generated hook: no plan in event → fail open", async () => {
+test("claude plan-review script: no plan in event → fail open", async () => {
   const sock = tmpSock();
   const bridge = startPlanBridge(sock, () => assert.fail("should not reach bridge without a plan"));
   await new Promise((r) => setTimeout(r, 50));

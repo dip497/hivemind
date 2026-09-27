@@ -51,6 +51,7 @@ function installFauxAgent(): void {
   fs.mkdirSync(AGENT_DIR, { recursive: true });
   fs.copyFileSync(path.join(__dirname, "fixtures/sixth-provider/faux/agent.yaml"), path.join(AGENT_DIR, "agent.yaml"));
   fs.copyFileSync(path.join(__dirname, "fixtures/sixth-provider/assets/faux-hooks.json"), path.join(AGENT_DIR, "faux-hooks.json"));
+  fs.copyFileSync(path.join(__dirname, "fixtures/sixth-provider/assets/faux-turn-end.cjs"), path.join(AGENT_DIR, "faux-turn-end.cjs"));
 }
 
 test.beforeAll(async () => {

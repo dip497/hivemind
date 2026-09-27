@@ -21,6 +21,7 @@ import { checkAgentInstalled, noAgentInstalled } from "./agent-plugins";
 import { isRemote } from "../../shared/remote-uri";
 import { mintId } from "../../shared/tile-id";
 import { getSettings } from "./settings-store";
+import { promptTask, withResume } from "@hivemind/agents";
 
 /** Kinds that are one-per-frame (spawn → focus existing). claude/shell are not. */
 const SINGLETON_KINDS: ReadonlySet<TileKind> = new Set(["editor", "diff", "issues"]);
@@ -31,6 +32,8 @@ type SpawnOpts = {
   /** Per-spawn launch options beyond `mode` (agent-option id → value). */
   launch?: Partial<Record<string, string>>;
   agent?: { id: string; cmd: string; args?: string[]; label: string };
+  /** An agent tile that continues this session instead of starting one. */
+  resume?: string;
   /** A terminal that shows this existing daemon session instead of starting its own. */
   session?: { id: string; cmd: string; args?: string[]; label: string };
 };
@@ -245,21 +248,6 @@ export function useSpawn(ctx: SpawnCtx) {
     return frame;
   }, []);
 
-  // Wrap legacy loose tiles on mount: layouts persisted before frame=workspace
-  // landed have positions but no frames → create the base frame sized to their
-  // bounding box so they visually live INSIDE the workspace (and the slot
-  // scanner sees them as occupied, so new spawns land in free slots).
-  const wrapOnceRef = useRef(false);
-  useEffect(() => {
-    if (wrapOnceRef.current) return;
-    if (!repoPath) return;
-    if (framesRef.current.length > 0) { wrapOnceRef.current = true; return; }
-    if (Object.keys(positionsRef.current).length === 0) return;
-    wrapOnceRef.current = true;
-    ensureFrame();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [repoPath]);
-
   // Create a tile of `kind` inside `targetFrameId` (or the resolved active
   // frame). claude/shell are unlimited per frame; editor/diff/issues are
   // one-per-frame — if the frame already has one, focus it instead of making a
@@ -291,7 +279,7 @@ export function useSpawn(ctx: SpawnCtx) {
       let label: string;
       if (def) {
         const so = launchOptions(def.id, { mode: opts?.mode, ...(opts?.launch ?? {}) });
-        args = spawnArgsFor(def, so);
+        args = opts?.resume ? withResume(def, spawnArgsFor(def, so), opts.resume) : spawnArgsFor(def, so);
         cmd = def.bin;
         label = ordinalLabel((n) => spawnLabelFor(def, n, {}), (n) => spawnLabelFor(def, n, so));
       } else if (kind === "shell" && opts?.session) {
@@ -307,7 +295,7 @@ export function useSpawn(ctx: SpawnCtx) {
         label = kind === "editor" ? "Editor" : kind === "diff" ? "Diff" : "Issues";
       }
       placeInFrame(newId, frame);
-      setTiles((cur) => [...cur, { id: newId, kind, label, cmd, args, ...(kind === "browser" && opts?.url ? { url: opts.url } : {}), ...(kind === "shell" && opts?.session ? { session: opts.session.id } : {}) }]);
+      setTiles((cur) => [...cur, { id: newId, kind, label, cmd, args, ...(kind === "browser" && opts?.url ? { url: opts.url } : {}), ...(kind === "shell" && opts?.session ? { session: opts.session.id } : {}), ...(kind === AGENT_TILE_KIND && opts?.work ? { task: promptTask(opts.work) } : {}) }]);
       // "Work on this": hand the fresh claude tile its prompt. It delivers it to
       // itself the first time it's ready (see claude-bus queueWork/claimWork).
       if (kind === AGENT_TILE_KIND && opts?.work) queueWork(newId, opts.work);
@@ -418,7 +406,7 @@ export function useSpawn(ctx: SpawnCtx) {
   // claude/registry-agent branch of spawnTile, plus prompt delivery via the
   // claude-bus work queue. `agent` is a catalog id.
   const hcpSpawnAgent = useCallback(
-    (opts: { agent?: string; prompt?: string; frame?: string; mode?: string; model?: string; callerTile?: string; background?: boolean; name?: string }): string => {
+    (opts: { agent?: string; prompt?: string; frame?: string; mode?: string; model?: string; callerTile?: string; background?: boolean; name?: string; resume?: string }): string => {
       // Frame preference: explicit > the CALLER agent's frame (so a worker lands
       // beside the agent that spawned it) > the active/first frame.
       // The caller passes its HIVEMIND_TILE, which is the PTY id (`hm:<tileId>`
@@ -451,7 +439,8 @@ export function useSpawn(ctx: SpawnCtx) {
       if (!def) { noAgentInstalled(); return ""; }
       const newId = mintId(`tile-${def.id}`);
       const so = launchOptions(def.id, { mode: opts.mode, model: opts.model });
-      const args = spawnArgsFor(def, so);
+      // Main checked the id and that the agent can resume.
+      const args = opts.resume ? withResume(def, spawnArgsFor(def, so), opts.resume) : spawnArgsFor(def, so);
       const cmd = def.bin;
       const label = ordinalLabel((n) => spawnLabelFor(def, n, {}), (n) => spawnLabelFor(def, n, so));
       // A spawner-chosen name ("reviewer") is what tells a dozen workers apart, so it
@@ -462,7 +451,7 @@ export function useSpawn(ctx: SpawnCtx) {
       // their "finished" notification — they're gathered in bulk, not driven.
       if (opts.background) markBackgroundTile(newId);
       placeInFrame(newId, frame, { background: opts.background });
-      setTiles((cur) => [...cur, { id: newId, kind: AGENT_TILE_KIND, label, cmd, args }]);
+      setTiles((cur) => [...cur, { id: newId, kind: AGENT_TILE_KIND, label, cmd, args, ...(opts.prompt ? { task: promptTask(opts.prompt) } : {}) }]);
       if (opts.prompt) queueWork(newId, opts.prompt);
       return newId;
     },

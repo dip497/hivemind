@@ -1,0 +1,77 @@
+{
+  "spec": "status 0.1",
+  "cases": [
+    {
+      "name": "a plain turn",
+      "inputs": [{ "event": "session.started" }, { "event": "turn.started" }, { "event": "turn.ended" }],
+      "expect": { "state": "done", "subagents": [], "background": 0, "compacting": false }
+    },
+    {
+      "name": "a permission asked mid-turn",
+      "inputs": [{ "event": "turn.started" }, { "event": "input.requested", "kind": "permission" }],
+      "expect": { "state": "waiting", "kind": "permission", "subagents": [], "background": 0, "compacting": false }
+    },
+    {
+      "name": "the answer returns the turn to working",
+      "inputs": [{ "event": "turn.started" }, { "event": "input.requested", "kind": "permission" }, { "event": "input.resolved" }],
+      "expect": { "state": "working", "subagents": [], "background": 0, "compacting": false }
+    },
+    {
+      "name": "a question without its turn start still shows as waiting",
+      "inputs": [{ "event": "input.requested" }],
+      "expect": { "state": "waiting", "kind": "other", "subagents": [], "background": 0, "compacting": false }
+    },
+    {
+      "name": "a resolve outside a question changes nothing",
+      "inputs": [{ "event": "turn.started" }, { "event": "turn.ended" }, { "event": "input.resolved" }],
+      "expect": { "state": "done", "subagents": [], "background": 0, "compacting": false }
+    },
+    {
+      "name": "the user interrupts a turn the agent never ends",
+      "inputs": [{ "event": "turn.started" }, { "fact": "interrupt" }],
+      "expect": { "state": "interrupted", "subagents": [], "background": 0, "compacting": false }
+    },
+    {
+      "name": "an interrupt key at rest is not an interrupt",
+      "inputs": [{ "event": "turn.started" }, { "event": "turn.ended" }, { "fact": "interrupt" }],
+      "expect": { "state": "done", "subagents": [], "background": 0, "compacting": false }
+    },
+    {
+      "name": "usage limit, then the agent resumes on its own",
+      "inputs": [{ "event": "turn.started" }, { "event": "turn.ended", "outcome": "limited" }],
+      "expect": { "state": "limited", "subagents": [], "background": 0, "compacting": false }
+    },
+    {
+      "name": "a turn ends with subagents and background shells still running",
+      "inputs": [
+        { "event": "turn.started" },
+        { "event": "subagent.started", "agentId": "a1" },
+        { "event": "subagent.started", "agentId": "a2" },
+        { "event": "subagent.started", "agentId": "a1" },
+        { "event": "subagent.stopped", "agentId": "a2" },
+        { "event": "turn.ended", "background": 2 }
+      ],
+      "expect": { "state": "done", "subagents": ["a1"], "background": 2, "compacting": false }
+    },
+    {
+      "name": "the next turn end recounts background tasks",
+      "inputs": [{ "event": "turn.ended", "background": 2 }, { "event": "turn.started" }, { "event": "turn.ended" }],
+      "expect": { "state": "done", "subagents": [], "background": 0, "compacting": false }
+    },
+    {
+      "name": "a session start mid-turn (after automatic compaction) keeps the turn",
+      "inputs": [{ "event": "turn.started" }, { "event": "compacting.started" }, { "event": "compacting.ended" }, { "event": "session.started" }],
+      "expect": { "state": "working", "subagents": [], "background": 0, "compacting": false }
+    },
+    {
+      "name": "compacting is carried beside the state",
+      "inputs": [{ "event": "turn.started" }, { "event": "compacting.started" }],
+      "expect": { "state": "working", "subagents": [], "background": 0, "compacting": true }
+    },
+    {
+      "name": "exit is final",
+      "inputs": [{ "event": "turn.started" }, { "fact": "exited" }, { "event": "turn.started" }],
+      "expect": { "state": "exited", "subagents": [], "background": 0, "compacting": false }
+    }
+  ]
+}

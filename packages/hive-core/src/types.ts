@@ -84,13 +84,8 @@ export interface AcceptanceItem {
 }
 
 export interface ActivityEntry {
-  /** Always a parseable ISO-with-Z string after `parseActivity` normalization. */
+  /** An ISO-8601 timestamp with `Z` (UTC). */
   at: string;
-  /** Raw on-disk timestamp form (legacy `YYYY-MM-DD HH:MM` or ISO). When set,
-   *  the serializer round-trips it as-is so loading + re-writing an issue
-   *  doesn't churn timestamp tokens across the file (would otherwise produce
-   *  noisy diffs on the very first updateIssue after upgrade). */
-  rawAt?: string;
   who: string; // user id or agent id
   message: string;
 }
@@ -139,6 +134,8 @@ export type IssuePatch = Partial<{
 export const ConfigZ = z.object({
   prefix: z.string().regex(/^[A-Z][A-Z0-9]{1,9}$/, "prefix must be UPPERCASE 2-10 chars"),
   next_id: z.number().int().positive(),
+  /** The on-disk format the workspace is at (storage.ts WORKSPACE_FORMAT). */
+  format: z.number().int().positive().optional(),
   agents: z
     .record(
       z.string(),

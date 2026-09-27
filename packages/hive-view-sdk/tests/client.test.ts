@@ -5,14 +5,14 @@ import { PORT_HANDSHAKE, type PluginMessage } from "../src/protocol.js";
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
-async function scriptedHost(capabilities: string[] = []) {
+async function scriptedHost(capabilities: string[] = [], features?: string[]) {
   const target = new EventTarget() as unknown as Window;
   const ch = new MessageChannel();
   const inbox: PluginMessage[] = [];
   ch.port1.onmessage = (e) => {
     inbox.push(e.data as PluginMessage);
     if ((e.data as PluginMessage).type === "ready") {
-      ch.port1.postMessage({ type: "hello", v: 1, pluginId: "p", capabilities, theme: { colors: { bg: "#000000" } }, layout: { saved: 1 }, viewport: { w: 800, h: 600 }, visible: true });
+      ch.port1.postMessage({ type: "hello", v: 1, pluginId: "p", capabilities, theme: { colors: { bg: "#000000" } }, layout: { saved: 1 }, viewport: { w: 800, h: 600 }, visible: true, ...(features ? { features } : {}) });
     }
   };
   ch.port1.start();
@@ -87,5 +87,121 @@ describe("view-sdk client", () => {
     send({ type: "selection", tileId: "t1" });
     await tick(); await tick();
     expect(inbox.filter((m) => m.type === "revealed")).toEqual([{ type: "revealed", requestId: 9, rect: { x: 5, y: 6, w: 7, h: 8 } }]);
+  });
+
+  test("a host without features gets no 1.3 message, and the promise methods reject UNSUPPORTED", async () => {
+    const { client, inbox } = await scriptedHost();
+    expect(client.features).toEqual([]);
+    client.onEvents(["turn"], () => {});
+    client.onCustom("ci.*", () => {});
+    client.activity("t1", () => {});
+    client.onPresence(() => {});
+    await expect(client.history("2026-09-23")).rejects.toMatchObject({ code: "UNSUPPORTED" });
+    await expect(client.share(new ArrayBuffer(4))).rejects.toMatchObject({ code: "UNSUPPORTED" });
+    await tick();
+    expect(inbox.map((m) => m.type)).toEqual(["ready"]);
+  });
+
+  test("status carries since and exact when the host sends them", async () => {
+    const { client, send } = await scriptedHost([], ["since"]);
+    const seen: unknown[] = [];
+    client.subscribeStatus("t1", (s, info) => seen.push([s, info]));
+    send({ type: "status", tileId: "t1", status: "blocked", since: 100, exact: false });
+    send({ type: "status", tileId: "t1", status: "idle" });
+    await tick();
+    expect(seen).toEqual([["blocked", { since: 100, exact: false }], ["idle", undefined]]);
+  });
+
+  test("event listeners merge into one subscription; each listener sees an event once", async () => {
+    const { client, inbox, send } = await scriptedHost([], ["events"]);
+    const a: string[] = [];
+    const b: string[] = [];
+    const offA = client.onEvents(["turn"], (e) => a.push(`${e.kind}${e.seq}`));
+    const offB = client.onCustom(["ci.*"], (e) => b.push(e.name), { replaySince: 0 });
+    await tick();
+    const subs = inbox.filter((m) => m.type === "subscribeEvents");
+    expect(subs).toEqual([{ type: "subscribeEvents", kinds: ["custom", "turn"], custom: ["ci.*"], replaySince: 0 }]);
+    const turn = { kind: "turn", seq: 1, at: 1, tileId: "t1" };
+    const ci = { kind: "custom", seq: 2, at: 2, id: "e", name: "ci.build", data: null, from: "shell" };
+    const other = { kind: "custom", seq: 3, at: 3, id: "f", name: "deploy.done", data: null, from: "shell" };
+    send({ type: "events", events: [turn, ci, other] });
+    send({ type: "events", events: [turn, ci], replay: true });
+    await tick();
+    expect(a).toEqual(["turn1"]);
+    expect(b).toEqual(["ci.build"]);
+    offA();
+    await tick();
+    expect(inbox.filter((m) => m.type === "subscribeEvents").at(-1)).toEqual({ type: "subscribeEvents", kinds: ["custom"], custom: ["ci.*"] });
+    offB();
+    await tick();
+    expect(inbox.at(-1)).toEqual({ type: "unsubscribeEvents" });
+  });
+
+  test("activity listeners coalesce into one watched set per task", async () => {
+    const { client, inbox, send } = await scriptedHost([], ["activity"]);
+    const levels: number[] = [];
+    const off1 = client.activity("t1", (l) => levels.push(l));
+    const off2 = client.activity("t2", () => {});
+    client.activity("t1", () => {});
+    await tick();
+    expect(inbox.filter((m) => m.type === "watchActivity")).toEqual([{ type: "watchActivity", tileIds: ["t1", "t2"] }]);
+    send({ type: "activity", levels: { t1: 2 } });
+    await tick();
+    expect(levels).toEqual([2]);
+    off1(); off2();
+    await tick();
+    expect(inbox.filter((m) => m.type === "watchActivity").at(-1)).toEqual({ type: "watchActivity", tileIds: ["t1"] });
+  });
+
+  test("presence subscribes once and replays the latest state to a late listener", async () => {
+    const { client, inbox, send } = await scriptedHost([], ["presence"]);
+    const first: string[] = [];
+    const off = client.onPresence((p) => first.push(p.state));
+    send({ type: "presence", presence: { state: "away", since: 1, focused: false } });
+    await tick();
+    const late: string[] = [];
+    const off2 = client.onPresence((p) => late.push(p.state));
+    expect(first).toEqual(["away"]);
+    expect(late).toEqual(["away"]);
+    off(); off2();
+    await tick();
+    expect(inbox.filter((m) => m.type === "subscribePresence")).toHaveLength(1);
+    expect(inbox.filter((m) => m.type === "unsubscribePresence")).toHaveLength(1);
+  });
+
+  test("history and share round-trip through request/response", async () => {
+    const { client, inbox, send } = await scriptedHost([], ["history", "share"]);
+    const h = client.history("2026-09-23");
+    const png = new ArrayBuffer(16);
+    const s = client.share(png, { suggestedName: "card" });
+    await tick();
+    const reqs = inbox.filter((m) => m.type === "request") as Array<{ requestId: number; name: string }>;
+    expect(reqs.map((r) => r.name)).toEqual(["history", "share"]);
+    expect(png.byteLength).toBe(0); // transferred, not copied
+    send({ type: "response", requestId: reqs[0]!.requestId, ok: true, result: { day: "2026-09-23" } });
+    send({ type: "response", requestId: reqs[1]!.requestId, ok: false, error: { code: "DECLINED", message: "no" } });
+    expect(await h).toEqual({ day: "2026-09-23" } as never);
+    await expect(s).rejects.toMatchObject({ code: "DECLINED" });
+  });
+
+  test("1.4: agent status rides on status; sessions and prompt check permissions and features locally", async () => {
+    const { client, inbox, send } = await scriptedHost(["workspace:spawn"], ["agentStatus", "agents", "sessions", "prompt"]);
+    const seen: unknown[] = [];
+    client.subscribeStatus("t1", (s, info) => seen.push([s, info?.agent?.state]));
+    send({ type: "status", tileId: "t1", status: "working", agent: { state: "working", subagents: 1, background: 0, compacting: false } });
+    await tick();
+    expect(seen).toEqual([["working", "working"]]);
+    expect(() => client.sessions("claude", "f1")).toThrow(/workspace:sessions/);
+    expect(() => client.prompt("t1", "go")).toThrow(/workspace:prompt/);
+    expect(() => client.commands.spawnAgent("claude", "f1", { prompt: "go" })).toThrow(/workspace:prompt/);
+    expect(() => client.commands.spawnAgent("claude", "f1", { resume: "s1" })).toThrow(/workspace:sessions/);
+    const agents = client.agents();
+    await tick();
+    const req = inbox.find((m) => m.type === "request") as { requestId: number; name: string };
+    expect(req.name).toBe("agents");
+    send({ type: "response", requestId: req.requestId, ok: true, result: { agents: [{ id: "claude", label: "Claude", default: true, turns: true, resumes: true, sessions: true }] } });
+    expect((await agents).map((a) => a.id)).toEqual(["claude"]);
+    const p = await scriptedHost(["workspace:prompt"], ["prompt"]);
+    await expect(p.client.prompt("t1", "bad\u001b")).rejects.toThrow(/control/);
   });
 });

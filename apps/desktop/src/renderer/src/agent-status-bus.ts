@@ -1,21 +1,15 @@
 /**
- * Agent status bus — a tiny pub/sub so terminal tiles can broadcast their
- * detected state (working / idle / blocked / …) to the Canvas without prop
- * drilling. The Canvas uses it for live-colored session
- * chips (the "sidebar"), toast notifications when an OFF-SCREEN agent needs you
- * or finishes, and the done-unseen highlight.
+ * Agent status bus — a tiny pub/sub so tiles, panels and views read one status per tile
+ * without prop drilling.
  *
- * Two sources, with an override:
- *   - BASE: the per-tile screen-scrape (working / idle / …), re-asserted on a poll.
- *   - OVERRIDE: control-plane "wait" states the app knows precisely — an agent
- *     blocked on plan review or on a supervisor's approval — set via
- *     setWaitStatus(). The override WINS over the scrape until cleared, so a
- *     paused agent reads "waiting: review" / "waiting: approval" instead of a
- *     misleading scraped "idle".
- *
- * Separate from claude-bus.ts (which routes send-to-claude text); this bus is
- * one-way, tile/control-plane → Canvas, status only.
+ * Two sources, never mixed for one tile:
+ *   - HOSTED: an agent session's status from the host's status store (main), pushed on every
+ *     change. It already folds hooks, the screen fallback, exits and interrupts.
+ *   - LOCAL: what a tile says about itself when it is not an agent session — a plain shell's
+ *     activity — and the exit details (code, signal) only the tile sees.
  */
+import type { SessionStatus } from "@hivemind/agent-host/status-store";
+
 export type TileStatusKind =
   | "working"
   | "idle"
@@ -23,94 +17,55 @@ export type TileStatusKind =
   | "permission"
   | "question"
   | "exited"
-  // Control-plane "wait" states (set via setWaitStatus, override the scrape):
-  | "plan_review"        // blocked handing off a plan — waiting for human review
-  | "awaiting_approval"; // supervised worker — waiting for its parent to approve
+  | "plan_review"        // handed off a plan — waiting for a person's review
+  | "awaiting_approval"; // supervised worker — waiting for its supervisor
 
 export interface StatusEvent {
   tileId: string;
   /** Human label for chips/toasts, e.g. "claude #2 · plan". */
   label: string;
   status: TileStatusKind;
-  /** True when this `idle` is a STALENESS CORRECTION (a stuck "working" decayed
-   *  because output stopped), NOT a real completion. The awareness layer updates
-   *  the status but must NOT treat it as "finished" — no toast, no OS
-   *  notification, no done-unseen highlight. A real finish (Stop hook / scrape
-   *  idle) is unmarked and still notifies. */
+  /** True for an `idle` that is not the agent finishing (the user interrupted it): the
+   *  awareness layer updates the status but does not announce a finish. */
   synthetic?: boolean;
-  /** Process exit code, attached only to an `exited` status published from a
-   *  PTY exit. Lets the awareness layer distinguish a crash (non-zero → "error"
-   *  toast) from a clean close (0 → quiet/"done") and show the code in the body. */
+  /** Process exit code, on an `exited` status from a PTY exit: a crash (non-zero) vs a close. */
   exitCode?: number;
-  /** One-line exit detail (e.g. "signal SIGTERM"), attached to an `exited`
-   *  status. Forwarded to the error toast/notification body when present. */
+  /** One-line detail: why an exit or a turn ended the way it did. */
   detail?: string;
 }
 
 type Listener = (e: StatusEvent) => void;
 
 const listeners = new Set<Listener>();
-/** Per-tile listeners (a view colouring one object per tile subscribes here —
- *  a status change reaches only that tile's subscribers, never every panel). */
+/** Per-tile listeners (a view colouring one object per tile subscribes here). */
 const tileListeners = new Map<string, Set<Listener>>();
-const base = new Map<string, StatusEvent>();          // scrape-driven
-const overrides = new Map<string, TileStatusKind>();  // control-plane wait states
-const subagentBusy = new Set<string>();                // tiles with in-flight subagents
-const notify = new Map<string, TileStatusKind>();      // claude Notification "needs you"
-const liveTurn = new Map<string, "working" | "idle">(); // claude hook-driven turn state
-const lastOutputAt = new Map<string, number>();        // last pty-output time per tile
-const emitted = new Map<string, StatusEvent>();        // last EFFECTIVE emitted
+const local = new Map<string, StatusEvent>();
+const hosted = new Map<string, SessionStatus>();
+const labels = new Map<string, string>();
+const emitted = new Map<string, StatusEvent>();
 
-// Ground-truth staleness window. A genuinely-working agent STREAMS pty output —
-// an animated spinner, an elapsed-seconds timer, streaming tokens — i.e. it
-// updates its screen roughly every second. A finished / interrupted / killed /
-// restart-replayed tile is QUIET. So a "working" claim (from a hook turn OR the
-// scrape) with no pty output for this long is stale and must read idle. This is
-// the universal self-heal: unlike the scrape, it can't itself freeze on a stale
-// buffer, and unlike the Stop hook it can't be missed by an Esc-interrupt.
-const WORKING_STALE_MS = 15000;
+const WAITING: Record<NonNullable<SessionStatus["kind"]>, TileStatusKind> = {
+  permission: "permission", question: "question", plan: "plan_review", approval: "awaiting_approval", other: "blocked",
+};
+const ENDED: Partial<Record<SessionStatus["state"], string>> = { failed: "turn failed", limited: "usage limit reached", interrupted: "interrupted" };
+
+/** A hosted status, as the kinds tiles and views colour by. */
+export function tileStatusOf(s: SessionStatus): Pick<StatusEvent, "status" | "synthetic" | "detail"> {
+  if (s.state === "exited") return { status: "exited" };
+  if (s.state === "waiting") return { status: WAITING[s.kind ?? "other"] };
+  if (s.state === "working" || s.subagents.length > 0) return { status: "working" };
+  const detail = ENDED[s.state];
+  return { status: "idle", ...(detail ? { detail } : {}), ...(s.state === "interrupted" ? { synthetic: true } : {}) };
+}
 
 function effective(tileId: string): StatusEvent | undefined {
-  const b = base.get(tileId);
-  const here = (status: TileStatusKind, synthetic?: boolean): StatusEvent =>
-    ({ tileId, label: b?.label ?? tileId, status, ...(synthetic ? { synthetic: true } : {}) });
-  const ov = overrides.get(tileId);
-  // 1. Explicit control-plane wait (plan_review / awaiting_approval) — a terminal
-  //    pause the app set deliberately. Authoritative over everything.
-  if (ov) return here(ov);
-  // 2. Needs-you — a real human-required state. From the scrape base
-  //    (permission/question/blocked) or claude's Notification hook. A turn paused
-  //    for you must read "needs you", never a stale "working".
-  if (b && (b.status === "permission" || b.status === "question" || b.status === "blocked")) return b;
-  const n = notify.get(tileId);
-  if (n && (!b || b.status === "idle")) return here(n);
-  // 3. Exited — the process is gone; never mask it as working/idle.
-  if (b && b.status === "exited") return b;
-  // 4. Background subagents in flight → working (covers a finished main turn that
-  //    still has background agents running). Event-driven (with its own lost-edge
-  //    reaper) and legitimately QUIET — so NOT subject to the output-staleness
-  //    gate below.
-  if (subagentBusy.has(tileId)) return here("working");
-  // 5. Hook-driven turn state (claude/droid): UserPromptSubmit → working, Stop →
-  //    idle. AUTHORITATIVE and NOT staleness-gated: the hook KNOWS the turn is
-  //    live, so "working" holds even when claude is output-SILENT — extended
-  //    "max effort" thinking can be quiet for minutes with a frozen elapsed timer.
-  //    (Gating this on output was the "genuinely-working tile shows idle" bug.)
-  //    A crash is caught by `exited` above; an Esc-interrupt leaves a stale
-  //    "working" only until the next UserPromptSubmit re-affirms / Stop clears it.
-  const lt = liveTurn.get(tileId);
-  if (lt === "working") return here("working");
-  if (lt === "idle") return here("idle"); // dominates a spinner false-"working"
-  // 6. Scrape base — the ONLY signal for hook-less agents (codex/opencode, or a
-  //    claude session from before hook injection). The scrape can FREEZE on a
-  //    replayed/stale buffer the poll can't re-evaluate (no new output), so gate a
-  //    quiet scraped "working" as stale → idle. Restricted to the no-hook path so
-  //    it can never override an authoritative live turn. Gated only once the tile
-  //    has emitted at least once (a working status coupled to a real stream).
-  const lastOut = lastOutputAt.get(tileId);
-  const stale = lastOut !== undefined && Date.now() - lastOut > WORKING_STALE_MS;
-  if (b?.status === "working" && stale) return here("idle", true);
-  return b;
+  const l = local.get(tileId);
+  const h = hosted.get(tileId);
+  const label = labels.get(tileId) ?? l?.label ?? tileId;
+  // The tile saw its process exit and knows how; that detail outranks the host's bare "exited".
+  if (l?.status === "exited") return { ...l, label };
+  if (h) return { tileId, label, ...tileStatusOf(h) };
+  return l ? { ...l, label } : undefined;
 }
 
 /** Emit the tile's effective status if it changed since the last emit. */
@@ -118,101 +73,58 @@ function flush(tileId: string): void {
   const eff = effective(tileId);
   if (!eff) return;
   const prev = emitted.get(tileId);
-  if (prev && prev.status === eff.status && prev.label === eff.label) return;
+  if (prev && prev.status === eff.status && prev.label === eff.label && prev.detail === eff.detail) return;
   emitted.set(tileId, eff);
   for (const l of listeners) l(eff);
   const tl = tileListeners.get(tileId);
   if (tl) for (const l of tl) l(eff);
 }
 
-/** Publish a SCRAPED status. Suppressed while a control-plane override is active
- *  (the override is authoritative until cleared). Only real transitions reach
- *  subscribers — the poll re-asserts the same status every tick. */
+/** A tile's own status: a plain shell's activity, or how its process exited. */
 export function publishStatus(e: StatusEvent): void {
-  base.set(e.tileId, e);
-  // Auto-clear a "needs you" notify once the scrape moves OFF idle: the scrape is
-  // then authoritative (it shows permission/working/… itself). Keeps notify from
-  // sticking after the user answers and work resumes.
-  if (e.status !== "idle") notify.delete(e.tileId);
+  local.set(e.tileId, e);
   flush(e.tileId);
 }
 
-/** Force a control-plane "wait" status (plan_review / awaiting_approval) that
- *  OVERRIDES the scraped status until cleared with null. */
-export function setWaitStatus(tileId: string, status: TileStatusKind | null): void {
-  if (status) overrides.set(tileId, status);
-  else overrides.delete(tileId);
+const hostedListeners = new Map<string, Set<(s: SessionStatus) => void>>();
+
+/** The host's status for an agent session (from main's status store). */
+export function setHostedStatus(tileId: string, status: SessionStatus): void {
+  hosted.set(tileId, status);
   flush(tileId);
+  for (const l of hostedListeners.get(tileId) ?? []) l(status);
 }
 
-/** Mark whether a tile has in-flight Task subagents (from the SubagentStart/Stop
- *  hooks via main). While busy, the tile's effective status is lifted to
- *  "working" if its scrape reads idle — covers background agents the scrape
- *  misses. Does not mask needs-human states (see effective()). */
-export function setSubagentBusy(tileId: string, busy: boolean): void {
-  if (busy === subagentBusy.has(tileId)) return;
-  if (busy) subagentBusy.add(tileId);
-  else subagentBusy.delete(tileId);
-  flush(tileId);
+/** One agent session's full status from the host: the last one now, then every change. */
+export function subscribeHostedStatus(tileId: string, l: (s: SessionStatus) => void): () => void {
+  let set = hostedListeners.get(tileId);
+  if (!set) hostedListeners.set(tileId, (set = new Set()));
+  set.add(l);
+  const last = hosted.get(tileId);
+  if (last) l(last);
+  return () => {
+    set!.delete(l);
+    if (set!.size === 0) hostedListeners.delete(tileId);
+  };
 }
 
-/** Set a deterministic "needs you" status (permission / question) from claude's
- *  Notification hook, or null to clear. Soft — lifts an idle tile only and is
- *  auto-cleared by the scrape (see publishStatus / effective). */
-export function setNotify(tileId: string, status: TileStatusKind | null): void {
-  if (status) {
-    if (notify.get(tileId) === status) return;
-    notify.set(tileId, status);
-  } else if (!notify.delete(tileId)) {
-    return;
-  }
-  flush(tileId);
-}
-
-/** Set claude's hook-driven turn state — "working" (UserPromptSubmit) or "idle"
- *  (Stop) — or null to clear. Authoritative over the scrape for working/idle (see
- *  effective). Seed "idle" on a claude tile's mount so a re-attached tile reads
- *  idle until a real turn fires, not the stale scraped "working". */
-export function setTurnState(tileId: string, state: "working" | "idle" | null): void {
-  if (state) {
-    if (liveTurn.get(tileId) === state) return;
-    liveTurn.set(tileId, state);
-  } else if (!liveTurn.delete(tileId)) {
-    return;
-  }
-  flush(tileId);
-}
-
-/** Note that a tile just produced pty output (the ground-truth "alive" signal).
- *  Called from TerminalTile on every pty data event — keeps a "working" status
- *  honored; its absence is what lets the staleness gate decay a stuck "working"
- *  to idle. Cheap (a timestamp write); does NOT flush. */
-export function noteOutput(tileId: string, at: number = Date.now()): void {
-  lastOutputAt.set(tileId, at);
-}
-
-/** Re-evaluate + emit a tile's effective status NOW (no input change). The
- *  staleness gate is time-based, so a tile that's gone quiet won't transition to
- *  idle on its own — TerminalTile's poll calls this each tick so a stale
- *  "working" decays to idle even with no further status events. */
-export function revalidate(tileId: string): void {
+/** The name a tile's chips and toasts use. */
+export function setLabel(tileId: string, label: string): void {
+  if (labels.get(tileId) === label) return;
+  labels.set(tileId, label);
   flush(tileId);
 }
 
 export function subscribeStatus(l: Listener): () => void {
   listeners.add(l);
-  // Replay the last effective status of every live tile to the NEW subscriber,
-  // so a panel that mounts late doesn't show stale state until the next change.
+  // Replay every live tile's last status, so a panel that mounts late is not stale.
   for (const e of emitted.values()) l(e);
   return () => {
     listeners.delete(l);
   };
 }
 
-/** Subscribe to ONE tile's effective status. Replays the last emitted status
- *  synchronously (if any), then fires on every transition of that tile only.
- *  This is what a view uses to colour a per-tile object: it is independent of
- *  the workspace model, so a ~1 Hz status change never re-renders a body. */
+/** Subscribe to ONE tile's effective status: replays the last one, then every transition. */
 export function subscribeTileStatus(tileId: string, l: Listener): () => void {
   let set = tileListeners.get(tileId);
   if (!set) { set = new Set(); tileListeners.set(tileId, set); }
@@ -227,14 +139,11 @@ export function subscribeTileStatus(tileId: string, l: Listener): () => void {
   };
 }
 
-/** Drop a tile's status (call on tile unmount). */
+/** Drop what a tile said about itself (call on tile unmount). The host's status stays: the
+ *  session outlives its tile's mount. */
 export function clearStatus(tileId: string): void {
-  base.delete(tileId);
-  overrides.delete(tileId);
-  subagentBusy.delete(tileId);
-  notify.delete(tileId);
-  liveTurn.delete(tileId);
-  lastOutputAt.delete(tileId);
+  local.delete(tileId);
+  labels.delete(tileId);
   emitted.delete(tileId);
 }
 

@@ -6,7 +6,7 @@ import net from "node:net";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { frame, makeLineDecoder, type ClientMsg, type ServerMsg } from "../../src/main/pty-protocol.ts";
+import { frame, makeLineDecoder, type ClientMsg, type ServerMsg } from "@hivemind/agent-host/pty-protocol";
 
 const unix = process.platform !== "win32";
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -17,7 +17,7 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 before(async () => {
   if (!unix) return;
-  daemon = spawn(process.execPath, ["--import", "tsx", path.join(here, "../../src/main/pty-daemon.ts"), sock], { stdio: "ignore" });
+  daemon = spawn(process.execPath, ["--import", "tsx", path.join(here, "../../../../packages/agent-host/src/pty-daemon.ts"), sock], { stdio: "ignore" });
   for (let i = 0; i < 100 && !fs.existsSync(sock); i++) await wait(100);
 });
 after(() => { daemon?.kill("SIGKILL"); if (dir) fs.rmSync(dir, { recursive: true, force: true }); });

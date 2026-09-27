@@ -15,7 +15,7 @@ let xdg: string;
 
 const CODER = "catalog-coder";
 const QUEUE = `${SCOPE}/queue`, TILED = `${SCOPE}/tiled`;
-const AGENT = `manifestVersion: 1
+const AGENT = `manifestVersion: 2
 id: "${CODER}"
 label: Catalog Coder
 bin: catalog-coder

@@ -9,7 +9,7 @@ import { build as viteBuild, type Plugin } from "vite";
 // into main/preload because node has no .ts loader at runtime. Their
 // transitive npm deps (gray-matter, yaml, zod)
 // stay externalized — they're plain JS and load fine from app.asar.
-const BUNDLE_INTERNAL = ["@hivemind/core", "@hivemind/core/storage", "@hivemind/core/settings", "@hivemind/core/settings-schema", "@hivemind/core/views", "@hivemind/agents", "@hivemind/agents/node", "@hivemind/view-sdk", "@hivemind/view-sdk/manifest", "@hivemind/view-sdk/protocol"];
+const BUNDLE_INTERNAL = ["@hivemind/core", "@hivemind/core/storage", "@hivemind/core/settings", "@hivemind/core/settings-schema", "@hivemind/core/views", "@hivemind/agents", "@hivemind/agents/node", "@hivemind/agent-host", "@hivemind/agent-sdk", "@hivemind/view-sdk", "@hivemind/view-sdk/manifest", "@hivemind/view-sdk/protocol"];
 
 // ---------------------------------------------------------------------------
 // shiki language / theme allowlist
@@ -96,7 +96,7 @@ export default defineConfig({
         // the same node-pty binding and ships in the same bundle.
         input: {
           index: path.resolve("src/main/index.ts"),
-          "pty-daemon": path.resolve("src/main/pty-daemon.ts"),
+          "pty-daemon": path.resolve("../../packages/agent-host/src/pty-daemon.ts"),
         },
       },
     },

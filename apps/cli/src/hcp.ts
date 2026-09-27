@@ -1,5 +1,5 @@
 /**
- * HCP client for `hive ctl` — one short-lived NDJSON connection per request
+ * HCP client for `hive ctl` — one short-lived JSON-RPC connection per request
  * to the running desktop app's control-plane socket, plus a subscription helper
  * for `agent.stream`.
  *
@@ -119,12 +119,42 @@ export function ownTile(): string | undefined {
 }
 
 type ServerMsg = {
-  t?: string; id?: string; subId?: string; ok?: boolean; result?: unknown;
-  error?: { code?: string; message?: string }; data?: unknown; topic?: string;
+  id?: string | number | null; method?: string; result?: unknown; params?: unknown;
+  error?: { code?: number; message?: string; data?: { code?: string } };
 };
 
 function unavailable(msg: string): HcpCliError {
   return new HcpCliError("UNAVAILABLE", msg, EXIT.unavailable);
+}
+
+function rpcError(m: ServerMsg): HcpCliError {
+  const code = m.error?.data?.code || (m.error?.code === -32601 ? "UNKNOWN_METHOD" : "INTERNAL");
+  return new HcpCliError(code, m.error?.message || code, exitCodeFor(code));
+}
+
+/** A connection that has introduced itself: `initialize` with the token, then `first`. */
+function open(first: { id: string; method: string; params: unknown }, onMessage: (m: ServerMsg) => void, onDone: (e?: Error) => void): net.Socket {
+  const c = net.connect(sockPath(), () => {
+    try {
+      c.write(JSON.stringify({ jsonrpc: "2.0", id: "init", method: "initialize", params: { token: token() } }) + "\n"
+        + JSON.stringify({ jsonrpc: "2.0", ...first }) + "\n");
+    } catch (e) { onDone(unavailable((e as Error).message)); }
+  });
+  c.setEncoding("utf8");
+  let buf = "";
+  c.on("data", (d: string) => {
+    buf += d;
+    let nl: number;
+    while ((nl = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, nl); buf = buf.slice(nl + 1);
+      let m: ServerMsg;
+      try { m = JSON.parse(line); } catch { continue; }
+      if (m.id === "init") { if (m.error) onDone(rpcError(m)); continue; }
+      onMessage(m);
+    }
+  });
+  c.on("error", (e: Error) => onDone(unavailable(`hivemind app not reachable: ${e.message}`)));
+  return c;
 }
 
 /** One request. `timeoutMs` is the WIRE ceiling for this single round trip —
@@ -136,31 +166,14 @@ export function hcpCall(method: string, params: unknown, timeoutMs = 30_000): Pr
   if (!fs.existsSync(sock)) return Promise.reject(unavailable(`hivemind app not running (no socket at ${sock})`));
   return new Promise((resolve, reject) => {
     const id = randomUUID();
-    let buf = "";
     let settled = false;
-    const c = net.connect(sock, () => {
-      try { c.write(JSON.stringify({ t: "req", id, method, params, token: token() }) + "\n"); } catch (e) { fail(unavailable((e as Error).message)); }
-    });
-    c.setEncoding("utf8");
     const timer = setTimeout(() => fail(new HcpCliError("TIMEOUT", `HCP request timed out after ${timeoutMs} ms`, EXIT.timeout)), timeoutMs);
     function ok(v: unknown) { if (settled) return; settled = true; clearTimeout(timer); try { c.end(); } catch { /* */ } resolve(v); }
     function fail(e: Error) { if (settled) return; settled = true; clearTimeout(timer); try { c.destroy(); } catch { /* */ } reject(e); }
-    c.on("data", (d: string) => {
-      buf += d;
-      let nl: number;
-      while ((nl = buf.indexOf("\n")) >= 0) {
-        const line = buf.slice(0, nl); buf = buf.slice(nl + 1);
-        let m: ServerMsg;
-        try { m = JSON.parse(line); } catch { continue; }
-        if (m.t === "hello") continue;
-        if (m.t === "res" && m.id === id) {
-          if (m.ok) return ok(m.result);
-          const code = m.error?.code || "INTERNAL";
-          return fail(new HcpCliError(code, m.error?.message || code, exitCodeFor(code)));
-        }
-      }
-    });
-    c.on("error", (e: Error) => fail(unavailable(`hivemind app not reachable: ${e.message}`)));
+    const c = open({ id, method, params }, (m) => {
+      if (m.id !== id) return;
+      if (m.error) fail(rpcError(m)); else ok(m.result);
+    }, (e) => fail(e ?? unavailable("HCP connection closed")));
     c.on("close", () => fail(unavailable("HCP connection closed before a reply")));
   });
 }
@@ -177,15 +190,28 @@ export function hcpStream(
   const sock = sockPath();
   if (!fs.existsSync(sock)) return Promise.reject(unavailable(`hivemind app not running (no socket at ${sock})`));
   return new Promise((resolve, reject) => {
-    const subId = randomUUID();
-    let buf = "";
+    const reqId = randomUUID();
+    let subscriptionId: string | undefined;
     let lastOffset = params.since ?? 0;
     let done = false;
-    const c = net.connect(sock, () => {
-      try { c.write(JSON.stringify({ t: "sub", id: subId, topic: "agent.stream", params, token: token() }) + "\n"); } catch (e) { finish(unavailable((e as Error).message)); }
-    });
-    c.setEncoding("utf8");
-    const stop = () => { try { c.write(JSON.stringify({ t: "unsub", id: subId }) + "\n"); } catch { /* */ } finish(); };
+    const c = open({ id: reqId, method: "agent.stream/subscribe", params }, (m) => {
+      if (m.id === reqId) {
+        if (m.error) return finish(rpcError(m));
+        const r = (m.result ?? {}) as { subscriptionId?: string; offset?: number };
+        subscriptionId = r.subscriptionId;
+        if (typeof r.offset === "number") lastOffset = r.offset;
+        return;
+      }
+      if (m.method !== "agent.stream") return;
+      const ev = (m.params ?? {}) as StreamEvent & { subscriptionId?: string };
+      if (ev.subscriptionId !== subscriptionId) return;
+      if (typeof ev.offset === "number") lastOffset = ev.offset;
+      onEvent(ev);
+    }, (e) => finish(e));
+    const stop = () => {
+      try { c.write(JSON.stringify({ jsonrpc: "2.0", id: "unsub", method: "agent.stream/unsubscribe", params: { subscriptionId } }) + "\n"); } catch { /* */ }
+      finish();
+    };
     if (opts.signal) opts.signal.stop = stop;
     const timer = opts.timeoutMs ? setTimeout(stop, opts.timeoutMs) : undefined;
     function finish(err?: Error) {
@@ -194,27 +220,6 @@ export function hcpStream(
       try { c.end(); } catch { /* */ }
       if (err) reject(err); else resolve({ offset: lastOffset });
     }
-    c.on("data", (d: string) => {
-      buf += d;
-      let nl: number;
-      while ((nl = buf.indexOf("\n")) >= 0) {
-        const line = buf.slice(0, nl); buf = buf.slice(nl + 1);
-        let m: ServerMsg;
-        try { m = JSON.parse(line); } catch { continue; }
-        if (m.t === "res" && m.id === subId) {
-          if (m.ok === false) { const code = m.error?.code || "INTERNAL"; return finish(new HcpCliError(code, m.error?.message || code, exitCodeFor(code))); }
-          const off = (m.result as { offset?: number } | undefined)?.offset;
-          if (typeof off === "number") lastOffset = off;
-          continue;
-        }
-        if (m.t === "evt" && m.subId === subId) {
-          const ev = (m.data ?? {}) as StreamEvent;
-          if (typeof ev.offset === "number") lastOffset = ev.offset;
-          onEvent(ev);
-        }
-      }
-    });
-    c.on("error", (e: Error) => finish(unavailable(`hivemind app not reachable: ${e.message}`)));
     c.on("close", () => finish());
   });
 }

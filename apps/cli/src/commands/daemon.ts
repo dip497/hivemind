@@ -8,7 +8,7 @@ import { err, ok } from "../format.js";
 import { EXIT } from "../hcp.js";
 import { connect, defaultSocket, listSessions, MAX_SOCKET_PATH, ping } from "../pty-client.js";
 import { compiledSelf } from "../remote.js";
-import { BRIDGE_READY } from "../../../desktop/src/main/pty-protocol.js";
+import { BRIDGE_READY } from "@hivemind/agent-host/pty-protocol";
 
 /** Set by scripts/build.ts so bun embeds the addon; absent when running from source. */
 declare const HIVE_PTY_NATIVE: string | undefined;
@@ -61,7 +61,7 @@ async function runForeground(sock: string): Promise<never> {
   // The daemon reads its socket from argv[2] and runs on import.
   process.argv = [process.argv[0]!, process.argv[1]!, sock];
   process.env.HIVEMIND_DAEMON_STANDALONE = "1";
-  await import("../../../desktop/src/main/pty-daemon.js");
+  await import("@hivemind/agent-host/pty-daemon");
   return new Promise<never>(() => { /* the daemon owns the process now */ });
 }
 

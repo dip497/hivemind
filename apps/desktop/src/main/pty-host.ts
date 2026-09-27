@@ -1,12 +1,16 @@
 /**
  * Minimal Pty Host inside the main process (v1; later moves into
- * Electron utilityProcess per the VS Code 3-process pattern).
+ * Electron utilityProcess per the VS Code 3-process pattern). Like the daemon, it keeps a
+ * headless screen per session, and reads agents' screens there for their fallback status.
  */
 import * as pty from "@lydell/node-pty";
+import { agentForCmd, agentTitle, envToUnset } from "@hivemind/agents";
+import { ScreenWatcher } from "@hivemind/agent-host/screen-status";
+import { HeadlessTerminal } from "@hivemind/agent-host/pty-session-manager";
 import { resolveWindowsSpawn } from "@hivemind/agents/discover";
-import { applyShellEnvToProcess, sanitizeShellEnv } from "./shell-env.js";
-import { repairShellSpec } from "./platform.js";
-import { applyInitialPrompt } from "../shared/agent-io.js";
+import { applyShellEnvToProcess, sanitizeShellEnv } from "@hivemind/agent-host/shell-env";
+import { repairShellSpec } from "@hivemind/agent-host/shell-spec";
+import { applyInitialPrompt } from "@hivemind/agent-host/initial-prompt";
 
 interface SpawnOpts {
   tileId: string;
@@ -26,6 +30,35 @@ interface Callbacks {
 }
 
 const ptys = new Map<string, pty.IPty>();
+
+const screens = new Map<string, { term: InstanceType<typeof HeadlessTerminal>; cmd: string }>();
+let eventSink: ((topic: string, data: unknown) => void) | null = null;
+/** Where screen readings go (the same `agent.screen` events a daemon sends). */
+export function setDaemonEventSink(fn: (topic: string, data: unknown) => void): void { eventSink = fn; }
+const watcher = new ScreenWatcher({
+  read: (id) => {
+    const s = screens.get(id);
+    if (!s) return undefined;
+    const buf = s.term.buffer.active;
+    const rows: string[] = [];
+    for (let y = 0; y < s.term.rows; y++) rows.push(buf.getLine(buf.baseY + y)?.translateToString(true) ?? "");
+    return { cmd: s.cmd, screen: rows.join("\n") };
+  },
+  detect: (cmd, screen) => agentForCmd(cmd)?.detect?.(screen),
+  report: (id, state) => eventSink?.("agent.screen", { tileId: id, state }),
+});
+setInterval(() => watcher.tick(), 1200).unref();
+/** An agent session's title, as its manifest reads it; "" clears it. */
+function reportTitle(tileId: string, cmd: string, raw: string): void {
+  eventSink?.("agent.title", { tileId, title: agentTitle(agentForCmd(cmd), raw) });
+}
+function dropScreen(tileId: string): void {
+  const s = screens.get(tileId);
+  if (s) reportTitle(tileId, s.cmd, "");
+  s?.term.dispose();
+  screens.delete(tileId);
+  watcher.forget(tileId);
+}
 
 export async function spawnPty(
   opts: SpawnOpts,
@@ -48,9 +81,19 @@ export async function spawnPty(
     p = doSpawn(opts);
   }
   ptys.set(opts.tileId, p);
-  p.onData((d: string) => cb.onData(d));
+  // Only an agent's screen is read; a plain shell keeps none.
+  const term = agentForCmd(opts.cmd) ? new HeadlessTerminal({ cols: opts.cols, rows: opts.rows, scrollback: 0, allowProposedApi: true }) : undefined;
+  if (term) {
+    screens.set(opts.tileId, { term, cmd: opts.cmd });
+    term.onTitleChange((t) => reportTitle(opts.tileId, opts.cmd, t));
+  }
+  p.onData((d: string) => {
+    if (term) { term.write(d); watcher.output(opts.tileId); }
+    cb.onData(d);
+  });
   p.onExit(({ exitCode, signal }: { exitCode: number; signal?: number }) => {
     ptys.delete(opts.tileId);
+    dropScreen(opts.tileId);
     cb.onExit(exitCode, signal);
   });
   return { pid: p.pid };
@@ -62,10 +105,11 @@ function doSpawn(opts: SpawnOpts): pty.IPty {
   // LC_ALL (UTF-8 locale for unicode glyphs in claude/gh/nvim) are NOT set by
   // node-pty. Fill them only if the parent env didn't already carry a value
   // — never clobber a user-configured locale.
-  const env: Record<string, string> = sanitizeShellEnv({
-    ...(process.env as Record<string, string>),
+  // What this process inherited is cleaned; what the tile asked for is its own.
+  const env: Record<string, string> = {
+    ...sanitizeShellEnv({ ...(process.env as Record<string, string>) }, envToUnset()),
     ...(opts.env ?? {}),
-  });
+  };
   if (!env.COLORTERM) env.COLORTERM = "truecolor";
   if (!env.LANG) env.LANG = "C.UTF-8";
   if (!env.TERM_PROGRAM) env.TERM_PROGRAM = "hivemind";
@@ -114,6 +158,7 @@ export function resumePty(tileId: string): void {
 export function resizePty(tileId: string, cols: number, rows: number): void {
   const p = ptys.get(tileId);
   if (p) p.resize(cols, rows);
+  screens.get(tileId)?.term.resize(cols, rows);
 }
 
 export function killPty(tileId: string): void {
@@ -126,6 +171,7 @@ export function killPty(tileId: string): void {
     }
     ptys.delete(tileId);
   }
+  dropScreen(tileId);
 }
 
 /** Best-effort reap before app quit. Sends SIGHUP (node-pty default), waits

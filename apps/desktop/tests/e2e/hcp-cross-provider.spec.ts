@@ -26,6 +26,7 @@ let app: ElectronApplication;
 let page: Page;
 let repo: string;
 let fakeBin: string;
+const home = fs.mkdtempSync(path.join(os.tmpdir(), "hm-xprov-home-"));
 let sock: string;
 let token: string;
 let orchestrator: string;
@@ -56,7 +57,7 @@ test.beforeAll(async () => {
   execSync("git init -q", { cwd: repo });
   // Provider stand-ins + a `hive` that runs this checkout's CLI, first on PATH.
   fakeBin = fs.mkdtempSync(path.join(os.tmpdir(), "hm-xprov-bin-"));
-  for (const name of ["claude", "droid", "codex"]) {
+  for (const name of ["claude", "droid", "cursor-agent"]) {
     const shim = path.join(fakeBin, name);
     fs.writeFileSync(shim, `#!/usr/bin/env bash\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(FIXTURE)} ${name} "$@"\n`);
     fs.chmodSync(shim, 0o755);
@@ -70,7 +71,8 @@ test.beforeAll(async () => {
     cwd: repo,
     // HIVEMIND_SHELL_ENV=0: keep OUR PATH (the stand-ins first) instead of the
     // login shell's, which would put the real `claude` back in front.
-    env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH}`, HIVEMIND_PTY_DAEMON: "1", HIVEMIND_SHELL_ENV: "0" } as Record<string, string>,
+    // HOME of its own: the sessions this spec lists are written there, never in a real one.
+    env: { ...process.env, HOME: home, PATH: `${fakeBin}:${process.env.PATH}`, HIVEMIND_PTY_DAEMON: "1", HIVEMIND_SHELL_ENV: "0" } as Record<string, string>,
   });
   page = await app.firstWindow();
   await page.waitForLoadState("domcontentloaded");
@@ -95,12 +97,13 @@ test.afterAll(async () => {
   if (!closed) { try { app?.process().kill("SIGKILL"); } catch { /* gone */ } }
   // Stand-in agents this spec's tiles spawned (pattern anchored on the fixture
   // path + provider argv so it can never match an unrelated shell).
-  try { execSync(`pkill -f "fixtures/fake-agent\\.cjs (claude|droid|codex|faux) "`, { stdio: "ignore" }); } catch { /* none */ }
+  try { execSync(`pkill -f "fixtures/fake-agent\\.cjs (claude|droid|cursor-agent|faux) "`, { stdio: "ignore" }); } catch { /* none */ }
   fs.rmSync(repo, { recursive: true, force: true });
   fs.rmSync(fakeBin, { recursive: true, force: true });
+  fs.rmSync(home, { recursive: true, force: true });
 });
 
-test("spawn a claude worker and read its reply: --settings hooks → turn → transcript", async () => {
+test("spawn a claude worker and read its reply: --settings hooks → reply → turn", async () => {
   const r = hive(["ctl", "spawn", "--agent", "claude", "--name", "orchestrator", "--prompt", "echo orchestrator ready", "--json"]);
   expect(r.code, r.stderr).toBe(0);
   orchestrator = r.json.tileId;
@@ -112,6 +115,13 @@ test("spawn a claude worker and read its reply: --settings hooks → turn → tr
   hive(["ctl", "send", orchestrator, "echo id=$HIVE_AGENT_ID tile=$HIVEMIND_TILE"]);
   const second = hive(["ctl", "read", orchestrator, "--timeout", "40000", "--json"]);
   expect(second.json.text).toBe(`id=claude tile=hm:${orchestrator}`);
+});
+
+test("an unnamed tile is called by what its agent says it is doing — the host's reading of its title", async () => {
+  const r = hive(["ctl", "spawn", "--agent", "claude", "--prompt", "echo titled", "--json"]);
+  expect(r.code, r.stderr).toBe(0);
+  const nameOf = () => hive(["ctl", "list", "--json"]).json.frames.flatMap((f: any) => f.tiles).find((t: any) => t.tileId === r.json.tileId)?.name;
+  await expect.poll(nameOf, { timeout: 20_000 }).toMatch(/ · echo titled$/);
 });
 
 test("fanout over droid workers from the claude orchestrator: hooks.json injection + typed prompt + gather", async () => {
@@ -157,6 +167,24 @@ test("a droid worker reports back to the claude orchestrator with `hive ctl repo
     .not.toContain(worker);
 });
 
+test("an agent's past sessions are listed for its folder, and one can be continued", async () => {
+  const id = "0d3c2a10-1111-4222-8333-444455556666";
+  const proj = path.join(home, ".claude", "projects", "-repo");
+  fs.mkdirSync(proj, { recursive: true });
+  fs.writeFileSync(path.join(proj, `${id}.jsonl`), JSON.stringify({ type: "user", cwd: repo, message: { content: "earlier work" } }) + "\n");
+  const list = hive(["ctl", "sessions", "claude", "--cwd", repo, "--json"]);
+  expect(list.code, list.stderr).toBe(0);
+  expect(list.json).toMatchObject({ agent: "claude", resumable: true, sessions: [{ id, cwd: repo, title: "earlier work" }] });
+  expect(hive(["ctl", "sessions", "claude", "--cwd", "/nowhere", "--json"]).json.sessions).toEqual([]);
+
+  const r = hive(["ctl", "spawn", "--agent", "claude", "--resume", id, "--prompt", "echo resumed=$FAKE_RESUMED", "--json"]);
+  expect(r.code, r.stderr).toBe(0);
+  const read = hive(["ctl", "read", r.json.tileId, "--timeout", "40000", "--json"]);
+  expect(read.json).toMatchObject({ text: `resumed=${id}`, finalStatus: "turn" });
+  // An id is never anything but an id on the command line.
+  expect(hive(["ctl", "spawn", "--agent", "claude", "--resume", "../x", "--json"]).code).not.toBe(0);
+});
+
 test("structured failures: bad token exits 6, missing tile exits 5", async () => {
   const bad = hive(["ctl", "list", "--json"], { HCP_TOKEN: "nope" });
   expect(bad.code).toBe(6);
@@ -168,20 +196,20 @@ test("structured failures: bad token exits 6, missing tile exits 5", async () =>
 
 test("a runtime without a turn signal is refused up front, not timed out (exit 7 UNSUPPORTED)", async () => {
   // Client-side: `workflow` needs gatherable replies — refused before any tile is spawned.
-  const wf = hive(["ctl", "workflow", "--shape", "fanout", "--agent", "codex", "--items", "a", "--prompt", "echo {item}", "--json"], { HIVEMIND_TILE: orchestrator });
+  const wf = hive(["ctl", "workflow", "--shape", "fanout", "--agent", "cursor", "--items", "a", "--prompt", "echo {item}", "--json"], { HIVEMIND_TILE: orchestrator });
   expect(wf.code).toBe(7);
   expect(wf.json).toMatchObject({ ok: false, code: "UNSUPPORTED" });
-  expect(String(wf.json.message)).toContain("codex");
+  expect(String(wf.json.message)).toContain("cursor");
   // An unknown runtime is a usage error listing the spawnable ids.
   const unknown = hive(["ctl", "spawn", "--agent", "nope", "--prompt", "x", "--json"]);
   expect(unknown.code).toBe(2);
   expect(String(unknown.json.message)).toContain("claude");
   // Spawning it is fine (a manual tile); reading from it is refused by the control plane.
-  const spawn = hive(["ctl", "spawn", "--agent", "codex", "--name", "manual", "--prompt", "echo raw", "--json"]);
+  const spawn = hive(["ctl", "spawn", "--agent", "cursor", "--name", "manual", "--prompt", "echo raw", "--json"]);
   expect(spawn.code, spawn.stderr).toBe(0);
   const read = hive(["ctl", "read", spawn.json.tileId, "--poll", "--json"]);
   expect(read.code).toBe(7);
   expect(read.json).toMatchObject({ ok: false, code: "UNSUPPORTED" });
-  expect(String(read.json.message)).toMatch(/codex has no turn signal/);
+  expect(String(read.json.message)).toMatch(/cursor has no turn signal/);
   expect(hive(["ctl", "close", spawn.json.tileId, "--json"]).json).toEqual({ ok: true });
 });

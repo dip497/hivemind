@@ -4,7 +4,7 @@
 // echo right after user input skips the wait entirely (interactive fast path).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { PtyOutputBuffer } from "../../src/main/pty-output-buffer.ts";
+import { PtyOutputBuffer } from "@hivemind/agent-host/pty-output-buffer";
 
 /** Manual timer: tests fire the pending flush themselves. */
 function fakeTimers() {

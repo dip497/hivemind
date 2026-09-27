@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 // kiro is a manifest now: its agent config, its hooks and its transforms all come from it.
-const { manifestRuntime, renderHookDocument, renderHookEvents, transformsFor, specIsAgent } =
+const { hookPathsFor, manifestRuntime, renderHookDocument, renderHookEvents, transformsFor, specIsAgent } =
   await import("@hivemind/agents/node");
 const { authoredDef } = await import("./authored-agents.ts");
 const kiroDef = authoredDef("kiro");
@@ -19,12 +19,7 @@ const reqFor = (deps: Record<string, string | undefined>, tileId = "") => ({
     private: "/x", execPath: deps.execPath ?? "", tileSessionsDir: deps.tileSessionsDir ?? "/x/sessions",
     home: "/home/u", ...(deps.kiroHome ? { homeReady: true } : {}),
     ...(deps.hcpSock ? { hcpSock: deps.hcpSock, hcpToken: deps.hcpToken ?? "tok" } : {}),
-    hooks: {
-      ...(deps.trackerPath && deps.tileSessionsDir ? { tracker: { path: deps.trackerPath, arg: deps.tileSessionsDir } } : {}),
-      ...(deps.stopHookPath && deps.hcpSock ? { stop: { path: deps.stopHookPath, arg: deps.hcpSock } } : {}),
-      ...(deps.userpromptHookPath && deps.hcpSock ? { userPrompt: { path: deps.userpromptHookPath, arg: deps.hcpSock } } : {}),
-      ...(deps.kiroApprovalHookPath && deps.hcpSock ? { kiroApproval: { path: deps.kiroApprovalHookPath, arg: deps.hcpSock } } : {}),
-    },
+    hooks: hookPathsFor(kiroDef, { ...deps, execPath: deps.execPath ?? "", tileSessionsDir: deps.tileSessionsDir ?? "/x/sessions" }),
   },
 });
 const kiroHooksSettings = (deps: Record<string, string | undefined>) =>
@@ -34,16 +29,14 @@ const kiroAgentConfig = (deps: Record<string, string | undefined>) => {
   return doc ? JSON.parse(doc) : { name: KIRO_HIVEMIND_AGENT, description: "hivemind control-plane wiring (auto-generated — do not edit by hand)" };
 };
 const makeKiroResumeTransforms = (deps: Record<string, string | undefined> = {}) =>
-  transformsFor(kiroDef, manifestRuntime(kiroDef, () => undefined)!, reqFor(deps).paths,
-    { ...(deps.legacyMapFile ? { legacyMapFile: deps.legacyMapFile } : {}) });
+  transformsFor(kiroDef, manifestRuntime(kiroDef, () => undefined)!, reqFor(deps).paths,);
 const { tileSessionFile } = await import("@hivemind/agents/node");
 
 const HOOK_DEPS = {
   execPath: "/x/electron",
   kiroHome: "/x/kiro-home",
-  stopHookPath: "/x/stop.cjs",
-  userpromptHookPath: "/x/up.cjs",
-  kiroApprovalHookPath: "/x/approve.cjs",
+  eventHookPath: "/x/event.cjs",
+  sdkPath: "/x/hive-sdk.cjs",
   trackerPath: "/x/tracker.cjs",
   tileSessionsDir: "/x/tile-sessions",
   hcpSock: "/x/hcp.sock",
@@ -68,14 +61,15 @@ test("kiroHooksSettings wires agentSpawn/userPromptSubmit/stop/preToolUse in kir
   const stopEntry = hooks.stop[0] as { command: string };
   assert.equal((stopEntry as any).hooks, undefined, "kiro's shape has no per-event `hooks` array wrapper");
   assert.match(stopEntry.command, /ELECTRON_RUN_AS_NODE=1/);
-  assert.match(stopEntry.command, /stop\.cjs/);
-  assert.match(stopEntry.command, /hcp\.sock/);
+  assert.match(stopEntry.command, /HIVE_EVENT='turn\.ended'/);
+  assert.match(stopEntry.command, /'\/x\/event\.cjs' '\/x\/hcp\.sock'/);
   // Attribution/supervision must NOT be baked into the shared command — they
   // ride the spawn env (HIVEMIND_TILE / HIVE_SUPERVISE), inherited into the
   // hook subprocess (see kiro-resume.ts docblock).
   assert.doesNotMatch(stopEntry.command, /HIVEMIND_TILE=/);
   const preToolUse = hooks.preToolUse[0] as { matcher: string; command: string };
   assert.equal(preToolUse.matcher, "*");
+  assert.match(preToolUse.command, /agents\/kiro\/hcp-kiro-approval-hook\.cjs/);
   assert.doesNotMatch(preToolUse.command, /HIVE_SUPERVISE=/);
 });
 

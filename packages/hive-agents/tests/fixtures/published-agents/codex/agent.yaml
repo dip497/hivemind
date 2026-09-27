@@ -1,13 +1,15 @@
 # Codex — built-in provider manifest.
 # Authoring format for the def half. See packages/hive-agents/src/manifest.ts.
-manifestVersion: 1
+manifestVersion: 2
+# Written for the agent host that shipped in this release.
+minAppVersion: '2026.9.6'
 id: codex
 label: Codex
 bin: codex
 enabled: true
 caps:
   promptDelivery: typed
-  turnSignal: false
+  turnSignal: true
   resume: cwd
   supervise: human
   blockedDetection: true
@@ -53,6 +55,10 @@ detect:
       - contains: allow command?
       - contains: '[y/n]'
       - contains: yes (y)
+      - contains: hooks need review
+      - all:
+        - contains: update available!
+        - contains: skip until next version
       - helper: hasConfirmationPrompt
     then: blocked
   - when:
@@ -64,8 +70,6 @@ detect:
       - containsCS: Working (
     then: working
   default: idle
-note: scrape-only status and no turn signal — drive it by hand on the canvas; `hive ctl read` / `hive
-  ctl workflow` cannot gather from it.
 session:
   resume:
     args:
@@ -78,3 +82,58 @@ session:
       idPath: payload.id
       require:
         type: session_meta
+# Codex runs a hook only once its user has trusted that exact command (it asks in the tile, once).
+# So the commands are the same in every tile, and the tile is read from the spawn environment.
+hooks:
+  arg: -c
+  format: toml
+  stable: true
+  template: 'hooks={events}'
+  events:
+    SessionStart:
+      emit: session.started
+      timeout: 10
+    SessionEnd:
+      emit: session.ended
+      timeout: 3
+    UserPromptSubmit:
+      emit: turn.started
+      timeout: 10
+    Stop:
+      hook: turnEnd
+      timeout: 10
+    Interrupt:
+      emit: turn.ended
+      outcome: interrupted
+      timeout: 3
+    PermissionRequest:
+      emit: input.requested
+      kind: permission
+      timeout: 10
+    PostToolUse:
+      emit: input.resolved
+      timeout: 10
+    SubagentStart:
+      emit: subagent.started
+      timeout: 10
+    SubagentStop:
+      emit: subagent.stopped
+      timeout: 10
+    PreCompact:
+      emit: compacting.started
+      timeout: 10
+    PostCompact:
+      emit: compacting.ended
+      timeout: 10
+assets:
+- name: hive-turn-end.cjs
+  file: hive-turn-end.cjs
+  hook: turnEnd
+  produces: [turn.ended]
+# A tile Hivemind starts must not open on Codex's own update prompt, where a message sent to the
+# tile would answer it; the user updates Codex from a terminal instead.
+launch:
+  hcp: true
+  args:
+  - -c
+  - check_for_update_on_startup=false

@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { hive } from "./helpers.js";
 
-const ACME = `manifestVersion: 1
+const ACME = `manifestVersion: 2
 id: acme
 label: Acme Coder
 bin: acme-coder

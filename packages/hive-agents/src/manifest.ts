@@ -2,12 +2,14 @@
  *  so this package stays browser-safe. What a manifest cannot express (resume,
  *  hooks) it must wire itself (`launch.hcp`, `session.resume`), and claiming a
  *  capability nothing here delivers is refused. */
+import { AGENT_EVENTS, EVENT_HOOK, INPUT_KINDS, TURN_OUTCOMES, isAgentEventName } from "./events.js";
 import type { AgentAsset, AgentCapabilities, AgentHome, AgentHomeFile, AgentHookEntry, AgentHooks, AgentIcon, AgentInstall, AgentLaunch, AgentOption, AgentProviderDef, AgentSession, SessionFind, TileStatus } from "./types.js";
 import { compileDetect, validateExpr, validateScope, type DetectRules } from "./detect-rules.js";
 import { GENERIC_AGENT_ICON } from "./icon.js";
 import { RESERVED_AGENTS } from "./reserved.js";
+import { MIN_APP_VERSION_RE } from "./catalog.js";
 
-export const AGENT_MANIFEST_VERSION = 1;
+export const AGENT_MANIFEST_VERSION = 2;
 
 const SHAPES = ["path", "rect", "circle", "ellipse"] as const;
 const ATTRS = [
@@ -56,6 +58,9 @@ export interface AgentManifest {
   spawn?: ManifestSpawn;
   options?: AgentOption[];
   install?: AgentInstall;
+  /** The oldest Hivemind that can run this manifest: the catalog lists it, so an older app
+   *  never downloads the plugin. The app itself answers to `manifestVersion`. */
+  minAppVersion?: string;
   detect?: DetectRules;
   session?: unknown;
   assets?: unknown;
@@ -181,11 +186,13 @@ function validateAssets(raw: unknown): AgentAsset[] {
   req(Array.isArray(raw) && raw.length <= 8, "assets must be a list of at most 8 files");
   return raw.map((a, i) => {
     req(isObj(a), `assets[${i}] must be a map`);
-    const { name, file, hook } = a as Record<string, unknown>;
+    const { name, file, hook, produces } = a as Record<string, unknown>;
     req(typeof name === "string" && ASSET_NAME_RE.test(name), `assets[${i}].name must be a plain file name`);
     req(typeof file === "string" && ASSET_NAME_RE.test(file), `assets[${i}].file must be a file beside the manifest`);
-    req(hook === undefined || (typeof hook === "string" && /^[a-z][A-Za-z0-9]{0,31}$/.test(hook)), `assets[${i}].hook must be a hook name`);
-    return { name, file, ...(typeof hook === "string" ? { hook } : {}) };
+    req(hook === undefined || (typeof hook === "string" && /^[a-z][A-Za-z0-9]{0,31}$/.test(hook) && hook !== EVENT_HOOK), `assets[${i}].hook must be a hook name (not "${EVENT_HOOK}", which is ours)`);
+    req(produces === undefined || (hook !== undefined && Array.isArray(produces) && produces.every(isAgentEventName)),
+      `assets[${i}].produces is for a hook script: a list of ${AGENT_EVENTS.join(", ")}`);
+    return { name, file, ...(typeof hook === "string" ? { hook } : {}), ...(Array.isArray(produces) ? { produces: produces as AgentAsset["produces"] } : {}) };
   });
 }
 
@@ -219,11 +226,16 @@ function validateLaunch(raw: unknown): AgentLaunch {
     }
     out.env = env;
   }
+  if (m.unsetEnv !== undefined) {
+    req(Array.isArray(m.unsetEnv) && m.unsetEnv.length <= 8 && m.unsetEnv.every((k) => typeof k === "string" && ENV_KEY_RE.test(k) && !ENV_DENY.has(k)),
+      "launch.unsetEnv must be a list of at most 8 variable names");
+    out.unsetEnv = m.unsetEnv as string[];
+  }
   return out;
 }
 
 const HOOK_NAME_RE = /^[a-z][A-Za-z]{0,31}$/;
-const EVENT_RE = /^[A-Za-z][A-Za-z0-9]{0,31}$/;
+const EVENT_RE = /^[A-Za-z][A-Za-z0-9_]{0,47}$/;
 
 /** A private home links a directory of the user's into a place the agent is pointed at.
  *  Anyone may declare one — nothing is ever written back into the real directory — but the
@@ -233,8 +245,9 @@ function validateHome(raw: unknown): AgentHome {
   req(isObj(raw), "home must be a map");
   const m = raw as Record<string, unknown>;
   const plain = (v: unknown): v is string => typeof v === "string" && /^[\w.-]{1,64}$/.test(v);
-  req(plain(m.root), "home.root must be a plain directory name");
-  req(plain(m.dir), "home.dir must be a plain directory name");
+  req(plain(m.root) && m.root !== "." && m.root !== "..", "home.root must be a plain directory name");
+  // "." when the agent is pointed at its configuration directory itself rather than a home above it.
+  req(plain(m.dir) && m.dir !== "..", "home.dir must be a plain directory name, or .");
   req(typeof m.mirror === "string" && m.mirror.startsWith("{home}/") && !m.mirror.includes(".."), "home.mirror must be a path under {home}/");
   req(typeof m.env === "string" && ENV_KEY_RE.test(m.env), "home.env must be an environment variable name");
   const out: AgentHome = { root: m.root, dir: m.dir, mirror: m.mirror, env: m.env };
@@ -268,7 +281,12 @@ function validateHooks(raw: unknown): AgentHooks {
     const list = (Array.isArray(spec) ? spec : [spec]).map((e, i) => {
       req(isObj(e), `hooks.events.${event}[${i}] must be a map`);
       const entry = e as Record<string, unknown>;
-      req(typeof entry.hook === "string" && HOOK_NAME_RE.test(entry.hook), `hooks.events.${event}[${i}].hook must name one of Hivemind's hooks`);
+      const at = `hooks.events.${event}[${i}]`;
+      req((entry.hook === undefined) !== (entry.emit === undefined), `${at} needs exactly one of hook or emit`);
+      if (entry.hook !== undefined) req(typeof entry.hook === "string" && HOOK_NAME_RE.test(entry.hook) && entry.hook !== EVENT_HOOK, `${at}.hook must name tracker or a script in assets`);
+      if (entry.emit !== undefined) req(isAgentEventName(entry.emit), `${at}.emit must be one of ${AGENT_EVENTS.join(", ")}`);
+      if (entry.outcome !== undefined) req(entry.emit === "turn.ended" && (TURN_OUTCOMES as readonly unknown[]).includes(entry.outcome), `${at}.outcome is for emit: turn.ended, one of ${TURN_OUTCOMES.join(", ")}`);
+      if (entry.kind !== undefined) req(entry.emit === "input.requested" && (INPUT_KINDS as readonly unknown[]).includes(entry.kind), `${at}.kind is for emit: input.requested, one of ${INPUT_KINDS.join(", ")}`);
       if (entry.timeout !== undefined) req(typeof entry.timeout === "number" && entry.timeout > 0 && entry.timeout <= 604800, `hooks.events.${event}[${i}].timeout must be seconds`);
       if (entry.matcher !== undefined) req(typeof entry.matcher === "string" && entry.matcher.length <= 200, `hooks.events.${event}[${i}].matcher must be a string`);
       if (entry.when !== undefined) req(entry.when === "supervised", `hooks.events.${event}[${i}].when: only "supervised"`);
@@ -295,6 +313,8 @@ function validateHooks(raw: unknown): AgentHooks {
       "hooks.file must be a file name, at most one directory deep");
     out.file = m.file;
   }
+  if (m.format !== undefined) { req(m.format === "json" || m.format === "toml", "hooks.format must be json or toml"); out.format = m.format; }
+  if (m.stable !== undefined) { req(m.stable === true, "hooks.stable must be true"); out.stable = true; }
   req(!!out.arg !== !!out.file, "hooks needs exactly one of `arg` (inline) or `file` (written)");
   return out;
 }
@@ -314,6 +334,32 @@ function validateSession(raw: unknown): AgentSession {
       for (const f of b.unless as string[]) req(/^--?[\w-]{1,32}$/.test(f), `session.bind.unless: "${f}" is not a flag`);
       out.bind.unless = b.unless as string[];
     }
+  }
+  if (m.list !== undefined) {
+    req(isObj(m.list), "session.list must be a map");
+    const l = m.list as Record<string, unknown>;
+    const list: NonNullable<AgentSession["list"]> = {};
+    if (l.args !== undefined) {
+      req(strArray(l.args) && l.args.length > 0 && l.args.length <= 8, "session.list.args must be 1-8 tokens");
+      for (const t of l.args as string[]) req(/^[\w@./:=-]{1,64}$/.test(t), `session.list.args: "${t}" is not a plain token`);
+      req(typeof l.idPath === "string" && DOT_PATH_RE.test(l.idPath), "session.list.idPath must be a field path");
+      Object.assign(list, { args: l.args, idPath: l.idPath });
+    } else {
+      req(typeof l.lines === "number" && Number.isInteger(l.lines) && l.lines >= 1 && l.lines <= 200, "session.list needs args (a listing command) or lines (1-200 of each session file)");
+      list.lines = l.lines as number;
+    }
+    for (const k of ["cwdPath", "updatedPath"] as const) {
+      if (l[k] === undefined) continue;
+      req(typeof l[k] === "string" && DOT_PATH_RE.test(l[k] as string), `session.list.${k} must be a field path`);
+      list[k] = l[k] as string;
+    }
+    for (const k of ["titlePath", "promptPath"] as const) {
+      if (l[k] === undefined) continue;
+      const paths = typeof l[k] === "string" ? [l[k]] : l[k];
+      req(strArray(paths) && paths.length >= 1 && paths.length <= 4 && (paths as string[]).every((p) => DOT_PATH_RE.test(p)), `session.list.${k} must be a field path or up to 4 of them`);
+      list[k] = l[k] as string | string[];
+    }
+    out.list = list;
   }
   if (m.resume === undefined) return out;
   req(isObj(m.resume), "session.resume must be a map");
@@ -348,6 +394,14 @@ function validateSession(raw: unknown): AgentSession {
       if (f.skipWhen !== undefined) { req(isObj(f.skipWhen), "session.resume.find.skipWhen must be a map"); find.skipWhen = f.skipWhen as Record<string, unknown>; }
     }
     resume.find = find;
+  }
+  if (r.exists !== undefined) {
+    const e = r.exists;
+    req(typeof e === "string" && SESSION_ROOT_RE.test(e.replaceAll("*", "")) && e.startsWith("{home}/") && !e.includes("..") && e.includes("{id}"),
+      "session.resume.exists must be a path under {home}/ naming {id}");
+    req((e as string).split("/").filter((seg) => seg.includes("*")).every((seg) => seg === "*") && (e as string).split("*").length <= 2,
+      "session.resume.exists may use one * as a whole path segment");
+    resume.exists = e as string;
   }
   if (r.from !== undefined) {
     req(isObj(r.from), "session.resume.from must be a map");
@@ -471,6 +525,8 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
     "aliases must be a string array");
 
   const options = m.options === undefined ? undefined : validateOptions(m.options);
+  req(m.minAppVersion === undefined || (typeof m.minAppVersion === "string" && MIN_APP_VERSION_RE.test(m.minAppVersion)),
+    "minAppVersion must look like 2026.9.6");
   if (m.install !== undefined) {
     const i = m.install as unknown as Record<string, unknown>;
     req(i && typeof i.url === "string" && /^https:\/\/[^\s]+$/.test(i.url), "install.url must be an https link");
@@ -509,6 +565,7 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
     ...(m.note ? { note: m.note } : {}),
     ...(options ? { options } : {}),
     ...(m.install ? { install: m.install } : {}),
+    ...(m.minAppVersion ? { minAppVersion: m.minAppVersion } : {}),
     ...(m.session ? { session: validateSession(m.session) } : {}),
     ...(m.assets ? { assets: validateAssets(m.assets) } : {}),
     ...(m.hooks ? { hooks: validateHooks(m.hooks) } : {}),

@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { MIN_BUN } from "../../src/main/bun-pty.ts";
+import { MIN_BUN } from "@hivemind/agent-host/bun-pty";
 
 const HARNESS = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "fixtures", "bun-pty-harness.ts");
 const ver = spawnSync("bun", ["--version"], { encoding: "utf8" });

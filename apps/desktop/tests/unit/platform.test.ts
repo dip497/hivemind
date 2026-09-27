@@ -6,11 +6,10 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 import { test } from "node:test";
+import { defaultShellFor, repairShellSpec } from "@hivemind/agent-host/shell-spec";
 import {
-  defaultShellFor,
   hiveBinCandidates,
   ipcPath,
-  repairShellSpec,
   upgradeCommand,
   windowsStartMenuShortcut,
 } from "../../src/main/platform.js";

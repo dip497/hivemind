@@ -19,6 +19,10 @@ can *declare*, if it also says how it is done:
 
 - **resuming** needs a `session.resume` block naming where the CLI keeps its sessions;
   the daemon does the reading
+- **listing past sessions** (`hive ctl sessions <agent>`, then `hive ctl spawn --resume <id>`)
+  needs `session.list`: the CLI's own listing command and where each record keeps its id,
+  folder and title (`args`, `idPath`, `cwdPath`, `titlePath`), or, when sessions are the
+  files `session.resume` names, how many of each file's first lines hold them (`lines`)
 - **a turn signal** and **brokering permission prompts** need the manifest to wire the
   agent to the control plane: `launch.hcp` plus the hook file it ships beside it
 
@@ -32,7 +36,8 @@ Create a folder named after the agent's id, holding `agent.yaml`:
 
 ```yaml
 # ~/.config/hivemind/agents/acme/agent.yaml
-manifestVersion: 1
+manifestVersion: 2
+minAppVersion: "2026.9.6"   # optional: the catalog hides it from older Hivemind
 id: acme                 # lowercase letters, digits and dashes
 label: Acme Coder
 bin: acme-coder          # the binary name on your PATH — never a path

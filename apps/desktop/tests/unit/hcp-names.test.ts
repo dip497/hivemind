@@ -74,7 +74,7 @@ test("tile.spawn_agent actually forwards `name` — it enumerates its params, an
     forgetPipes: () => {},
     spawnEdge: () => {},
     setSupervise: () => {},
-    pushWait: () => {},
+    awaitingApproval: () => {},
   } as unknown as Parameters<typeof makeDispatch>[0]);
 
   await dispatch("tile.spawn_agent", { agent: "pi", name: "student-fe", callerTile: "hm:tile-p" });

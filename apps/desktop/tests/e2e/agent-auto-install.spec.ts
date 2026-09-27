@@ -5,6 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { buildRegistry, type Registry } from "./helpers/registry";
 
 let app: ElectronApplication | undefined;
@@ -21,7 +22,7 @@ let registry: Registry;
 // user's home to find sessions to resume. It must be auto-installed too, with the notice
 // telling the user what it can do.
 const DISCLOSED = "recall";
-const DISCLOSED_YAML = `manifestVersion: 1
+const DISCLOSED_YAML = `manifestVersion: 2
 id: ${DISCLOSED}
 label: "Recall"
 bin: rc
@@ -121,4 +122,36 @@ test("with auto-install switched off, nothing is added", async () => {
   await launch();
   await page.waitForTimeout(8000);
   expect(installed()).toBe(false);
+});
+
+test("an agent the catalog installed follows the catalog; one you edited stays as you left it", async () => {
+  test.setTimeout(90_000);
+  const yaml = (id: string, label: string) => `manifestVersion: 2
+id: ${id}
+label: "${label}"
+bin: ${id}-cli
+enabled: true
+caps:
+  promptDelivery: typed
+  turnSignal: false
+  resume: none
+  supervise: human
+  blockedDetection: false
+`;
+  const sha = (s: string) => createHash("sha256").update(s).digest("hex");
+  for (const id of ["follows", "edited"]) registry.add({ id, type: "agent", name: id, files: { "agent.yaml": yaml(id, `${id} new`) }, bin: `${id}-cli` });
+  const agents = path.join(xdg, "hivemind", "agents");
+  for (const id of ["follows", "edited"]) {
+    fs.mkdirSync(path.join(agents, id), { recursive: true });
+    fs.writeFileSync(path.join(agents, id, "agent.yaml"), yaml(id, `${id} old`));
+  }
+  // The catalog recorded what it put there, and someone has changed it since.
+  fs.writeFileSync(path.join(agents, "edited", ".catalog-sha256"), sha(yaml("edited", "edited as installed")));
+  fs.writeFileSync(settingsFile(), JSON.stringify({ agents: { fromCatalog: ["follows", "edited"] } }));
+  await launch();
+  await expect(page.getByText(/Updated follows new for this version of Hivemind/)).toBeVisible({ timeout: INSTALL_WAIT });
+  expect(fs.readFileSync(path.join(agents, "follows", "agent.yaml"), "utf8")).toBe(yaml("follows", "follows new"));
+  expect(fs.readFileSync(path.join(xdg, "hivemind", "agents-previous", "follows", "agent.yaml"), "utf8")).toBe(yaml("follows", "follows old"));
+  expect(fs.readFileSync(path.join(agents, "follows", ".catalog-sha256"), "utf8")).toBe(sha(yaml("follows", "follows new")));
+  expect(fs.readFileSync(path.join(agents, "edited", "agent.yaml"), "utf8")).toBe(yaml("edited", "edited old"));
 });

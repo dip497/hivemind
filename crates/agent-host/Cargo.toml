@@ -1,0 +1,15 @@
+[package]
+name = "agent-host"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Prototype: the agent host's status fold and session hot path in Rust, held to the shared conformance suite and benchmarked against the TypeScript host."
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+portable-pty = "0.9"
+vt100 = "0.15"
+
+[profile.release]
+debug = false

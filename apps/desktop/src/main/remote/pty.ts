@@ -12,7 +12,7 @@ import * as nodePty from "@lydell/node-pty";
 import { parseRemote, type RemoteTarget } from "../../shared/remote-uri.js";
 import { shq } from "@hivemind/agents/node";
 import { remoteConns } from "./conn.js";
-import { DaemonEndpoint, type EndpointState } from "../daemon-endpoint.js";
+import { DaemonEndpoint, type EndpointState } from "@hivemind/agent-host/daemon-endpoint";
 import { acceptRemoteEvent } from "./events.js";
 import { ASKPASS_SCRIPT, bridgeRemoteCommand, needsAttention, openBridge, probeCommand, probeRemote, sshCommand, type SshPaths } from "./ssh.js";
 
@@ -32,7 +32,7 @@ interface SpawnOpts {
 }
 
 interface Callbacks {
-  onData: (data: string) => void;
+  onData: (data: string, replay?: boolean) => void;
   onExit: (code: number, signal: number | undefined) => void;
 }
 
@@ -265,6 +265,15 @@ export function writeRemotePty(tileId: string, data: string): void {
 export function resizeRemotePty(tileId: string, cols: number, rows: number): void {
   const ep = daemonTiles.get(tileId);
   if (ep) ep.resize(tileId, cols, rows); else remotePtys.get(tileId)?.resize(cols, rows);
+}
+/** Whether a remote session runs under a daemon, which keeps its screen. */
+export function remoteKeepsScreen(tileId: string): boolean { return daemonTiles.has(tileId); }
+/** Ask a daemon-backed remote session for its screen now; false for one with no screen kept. */
+export function screenRemotePty(tileId: string, cb: (replay: string | null) => void): boolean {
+  const ep = daemonTiles.get(tileId);
+  if (!ep) return false;
+  ep.screen(tileId, cb);
+  return true;
 }
 export function pauseRemotePty(tileId: string): void {
   const ep = daemonTiles.get(tileId);

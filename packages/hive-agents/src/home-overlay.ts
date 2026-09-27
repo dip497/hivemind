@@ -14,6 +14,7 @@
  */
 import { lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { parse, stringify } from "yaml";
 import type { AgentHome } from "./types.js";
 
 /** Where the CLI is pointed, and where its configuration directory lives inside it. */
@@ -24,7 +25,9 @@ export function homePaths(home: AgentHome, privateDir: string): { root: string; 
 
 /**
  * Build (or refresh) the overlay. `files` are written into the configuration directory
- * after the links, so a file we own always wins over a link of the same name.
+ * after the links, so a file we own always wins over a link of the same name. An owned file
+ * marked `merge` starts from the user's own copy, and a rendered file of the same name is
+ * merged into it rather than replacing it.
  */
 export function seedHome(
   home: AgentHome,
@@ -36,19 +39,48 @@ export function seedHome(
   const owned = [...new Set([...Object.keys(files), ...(home.own ?? []).map((f) => f.name)])];
   mirrorInto(mirror, dir, owned);
 
+  const rendered = { ...files };
   for (const file of home.own ?? []) {
-    if (files[file.name] !== undefined) continue; // rendered content wins
+    if (rendered[file.name] !== undefined && !file.merge) continue; // rendered content wins
     let body: Record<string, unknown> = {};
-    if (file.merge) {
-      try { body = JSON.parse(readFileSync(path.join(mirror, file.name), "utf8")) as Record<string, unknown>; }
-      catch { /* none of theirs to carry over */ }
-    }
+    if (file.merge) body = readObject(path.join(mirror, file.name));
     Object.assign(body, file.set ?? {});
-    write(path.join(dir, file.name), JSON.stringify(body, null, 2));
+    if (rendered[file.name] !== undefined) {
+      body = mergeInto(body, parseObject(rendered[file.name]!));
+      delete rendered[file.name];
+    }
+    write(path.join(dir, file.name), /\.ya?ml$/.test(file.name) ? stringify(body) : JSON.stringify(body, null, 2));
   }
-  for (const [name, body] of Object.entries(files)) write(path.join(dir, name), body);
+  for (const [name, body] of Object.entries(rendered)) write(path.join(dir, name), body);
   return root;
 }
+
+/** JSON is YAML, so one parser reads either. Anything but a map reads as empty. */
+function parseObject(text: string): Record<string, unknown> {
+  try {
+    const v: unknown = parse(text);
+    return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+  } catch { return {}; }
+}
+
+function readObject(file: string): Record<string, unknown> {
+  try { return parseObject(readFileSync(file, "utf8")); } catch { return {}; /* none of theirs to carry over */ }
+}
+
+/** Ours added to theirs: maps merge key by key and lists keep their entries before ours, so a
+ *  hook the user configured still runs beside the ones we add. */
+function mergeInto(base: Record<string, unknown>, ours: Record<string, unknown>): Record<string, unknown> {
+  const out = { ...base };
+  for (const [k, v] of Object.entries(ours)) {
+    const b = out[k];
+    if (Array.isArray(b) && Array.isArray(v)) out[k] = [...b, ...v];
+    else if (isMap(b) && isMap(v)) out[k] = mergeInto(b, v);
+    else out[k] = v;
+  }
+  return out;
+}
+
+const isMap = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 
 const write = (file: string, body: string): void => {
   try { mkdirSync(path.dirname(file), { recursive: true }); writeFileSync(file, body); }

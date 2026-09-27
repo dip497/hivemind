@@ -6,8 +6,8 @@ import path from "node:path";
 import {
   TOKEN_PLACEHOLDER, fileNameForId, idFromFileName, listSnapshotFiles, readSnapshot,
   redactSnapshot, rehydrateSnapshot, secureDir, staleSnapshotIds, SNAPSHOT_RETENTION_MS,
-} from "../../src/main/session-snapshot-store.ts";
-import type { SessionSnapshot } from "../../src/main/pty-session-manager.ts";
+} from "@hivemind/agent-host/session-snapshot-store";
+import type { SessionSnapshot } from "@hivemind/agent-host/pty-session-manager";
 
 const posix = process.platform !== "win32";
 const tmp = (): string => fs.mkdtempSync(path.join(os.tmpdir(), "hm-snap-"));

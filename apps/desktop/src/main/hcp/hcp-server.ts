@@ -1,28 +1,16 @@
 /**
- * HCP server — a 0600 unix socket (NDJSON) owned by Electron main. Drivers
- * (`hive ctl`, the pi extension) issue token-authenticated `req`s; injected hooks fire
- * unauthenticated one-shot `event`s (the 0600 socket gates them to same-uid).
- * Drivers may also `sub`scribe to an agent's live output and receive `evt`
- * chunks until they `unsub` or disconnect (the agent.stream feature).
+ * HCP server — a 0600 unix socket owned by Electron main, speaking JSON-RPC 2.0 (protocol.ts).
  *
- * Transport only: it frames messages, checks the token, delegates every method
- * to `deps.dispatch` (hcp/methods.ts), and fans out output chunks to
- * subscribers via the returned `broadcast`. Generalizes plan-bridge.ts.
- *
- * Streaming follows the LSP/CDP/MCP convention: one socket, multiplexed by a
- * subscription id carried in the event params (NOT the request id — a stream
- * outlives its request, and JSON-RPC forbids two responses to one id). Each
- * chunk carries a monotonic `seq` so a client can detect drops.
+ * Transport only: it frames messages, checks the token, delegates every method to
+ * `deps.dispatch` (hcp/methods.ts), and runs the two streams — a tile's live output
+ * (`agent.stream/subscribe`) and every session's status (`status/subscribe`). A stream's
+ * notifications carry the subscription id, not the request id: a stream outlives its request.
+ * Each output chunk carries a monotonic `seq` so a client can detect drops.
  */
 import net from "node:net";
 import fs from "node:fs";
-import {
-  HCP_VERSION,
-  HcpError,
-  takeLines,
-  type HcpClientMsg,
-  type HcpServerMsg,
-} from "./protocol.js";
+import { randomUUID } from "node:crypto";
+import { HCP_VERSION, HcpError, RPC, takeLines, type RpcId } from "./protocol.js";
 
 export interface HcpServerDeps {
   token: string;
@@ -31,29 +19,40 @@ export interface HcpServerDeps {
   onListenError?: (err: Error) => void;
   rendererUp: () => boolean;
   dispatch: (method: string, params: unknown) => Promise<unknown>;
-  onEvent: (topic: string, data: unknown) => void;
-  /** agent.stream replay: the recorder's ANSI-stripped text for a tile — the
-   *  last `lines` lines, or everything appended after byte offset `since`.
-   *  Lets `hive ctl stream --lines/--since` catch up instead of only seeing
-   *  chunks that arrive after it connected. */
+  /** A hook's `agent.event`, or anything a remote machine's daemon passes on. */
+  onEvent: (method: string, params: unknown) => void;
+  /** agent.stream catch-up: the recorder's ANSI-stripped text for a tile — the last
+   *  `lines` lines, or everything appended after byte offset `since`. */
   replay?: (tileId: string, opts: { since?: number; lines?: number }) => string;
-  /** The recorder's current byte offset for a tile — attached to every stream
-   *  event so a client can resume exactly where it stopped (`--since`). */
+  /** The recorder's current byte offset for a tile — on every chunk, so a client can resume. */
   offsetOf?: (tileId: string) => number;
+  /** Session statuses. */
+  status?: StatusFeed;
+}
+
+/** What `status/subscribe` reads: a snapshot, the changes since a cursor, and live ones. */
+export interface StatusFeed {
+  all: () => Array<{ tileId: string; status: unknown }>;
+  cursor: () => number;
+  since: (seq: number) => Array<{ seq: number; tileId: string; status: unknown }> | null;
+  subscribe: (fn: (c: { seq: number; tileId: string; status: unknown }) => void) => () => void;
 }
 
 export interface HcpServer {
   close: () => void;
   /** Fan a raw output chunk out to every live agent.stream subscriber of a tile. */
   broadcast: (tileId: string, chunk: string) => void;
-  /** Handle a hook event that arrived some other way (a remote machine's daemon). */
-  injectEvent: (topic: string, data: unknown) => void;
+  /** Handle a notification that arrived some other way (a remote machine's daemon). */
+  injectEvent: (method: string, params: unknown) => void;
 }
+
+/** The one notification accepted before `initialize`: a hook reporting. */
+const HOOK_NOTIFICATIONS = new Set(["agent.event"]);
 
 interface Sub {
   id: string;
   tileId: string;
-  send: (m: HcpServerMsg) => void;
+  notify: (method: string, params: unknown) => void;
   seq: number;
   /** Socket buffered-but-not-flushed → we're behind; drop+gap rather than OOM. */
   isBackedUp: () => boolean;
@@ -62,16 +61,17 @@ interface Sub {
 export function startHcpServer(sockPath: string, deps: HcpServerDeps): HcpServer {
   try { fs.unlinkSync(sockPath); } catch { /* none / not ours */ }
 
-  // subId → Sub, shared across all connections (one tile can have many subs).
+  // subscriptionId → Sub, shared across all connections (one tile can have many subs).
   const subs = new Map<string, Sub>();
 
   const server = net.createServer((conn) => {
     conn.setEncoding("utf8");
     let buf = "";
-    const mySubIds = new Set<string>();
-    const send = (m: HcpServerMsg) => { try { conn.write(JSON.stringify(m) + "\n"); } catch { /* gone */ } };
-
-    send({ t: "hello", version: HCP_VERSION, rendererUp: deps.rendererUp() });
+    let authed = false;
+    const mySubs = new Set<string>();
+    let statusOff: (() => void) | undefined;
+    const write = (m: Record<string, unknown>) => { try { conn.write(JSON.stringify({ jsonrpc: "2.0", ...m }) + "\n"); } catch { /* gone */ } };
+    const notify = (method: string, params: unknown) => write({ method, params });
 
     conn.on("data", (chunk: string) => {
       buf += chunk;
@@ -84,69 +84,77 @@ export function startHcpServer(sockPath: string, deps: HcpServerDeps): HcpServer
       }
       for (const line of lines) {
         if (!line.trim()) continue;
-        let msg: HcpClientMsg;
-        try {
-          msg = JSON.parse(line) as HcpClientMsg;
-        } catch {
-          send({ t: "res", id: "?", ok: false, error: { code: "BAD_REQUEST", message: "invalid json" } });
-          continue;
-        }
+        let msg: { jsonrpc?: unknown; id?: RpcId; method?: unknown; params?: unknown };
+        try { msg = JSON.parse(line); } catch { write({ id: null, error: { code: RPC.parse, message: "invalid json" } }); continue; }
         handle(msg);
       }
     });
-    conn.on("close", () => { for (const id of mySubIds) subs.delete(id); });
+    conn.on("close", () => { for (const id of mySubs) subs.delete(id); statusOff?.(); });
     conn.on("error", () => { /* client gone; close handler sweeps subs */ });
 
-    function handle(msg: HcpClientMsg): void {
-      if (msg.t === "event") {
-        try { deps.onEvent(msg.topic, msg.data); } catch { /* ignore */ }
+    function handle(m: { jsonrpc?: unknown; id?: RpcId; method?: unknown; params?: unknown }): void {
+      const id = m.id ?? null;
+      const reply = (result: unknown) => { if (id !== null) write({ id, result: result ?? null }); };
+      const fail = (code: number, message: string, hcp?: string) => {
+        if (id !== null) write({ id, error: { code, message, ...(hcp ? { data: { code: hcp } } : {}) } });
+      };
+      if (m.jsonrpc !== "2.0" || typeof m.method !== "string") return fail(RPC.invalid, "not a JSON-RPC 2.0 message");
+      const params = (m.params ?? {}) as Record<string, unknown>;
+
+      if (id === null) {
+        // A notification: a hook reporting. No reply, whatever happens.
+        if (HOOK_NOTIFICATIONS.has(m.method) || authed) { try { deps.onEvent(m.method, m.params); } catch { /* ignore */ } }
         return;
       }
-      if (msg.t === "unsub") {
-        if (subs.delete(msg.id)) mySubIds.delete(msg.id);
-        return;
+      if (m.method === "initialize") {
+        if (params.token !== deps.token) return fail(RPC.hcp, "bad or missing token", "UNAUTHORIZED");
+        authed = true;
+        return reply({ protocolVersion: HCP_VERSION, rendererUp: deps.rendererUp(), capabilities: { status: !!deps.status } });
       }
-      if (msg.t === "sub") {
-        if (msg.token !== deps.token) {
-          send({ t: "res", id: msg.id, ok: false, error: { code: "UNAUTHORIZED", message: "bad or missing token" } });
+      if (!authed) return fail(RPC.hcp, "call initialize with the token first", "UNAUTHORIZED");
+
+      switch (m.method) {
+        case "agent.stream/subscribe": {
+          const tileId = String(params.tileId ?? "");
+          if (!tileId) return fail(RPC.hcp, "tileId required", "BAD_REQUEST");
+          const subscriptionId = randomUUID();
+          subs.set(subscriptionId, { id: subscriptionId, tileId, notify, seq: 0, isBackedUp: () => conn.writableLength > 4 * 1024 * 1024 });
+          mySubs.add(subscriptionId);
+          const offset = deps.offsetOf?.(tileId) ?? 0;
+          reply({ subscriptionId, offset });
+          // Catch-up: what the recorder already holds (seq 0, replay) before live chunks.
+          const since = typeof params.since === "number" ? params.since : undefined;
+          const lines = typeof params.lines === "number" ? params.lines : undefined;
+          if ((since !== undefined || lines !== undefined) && deps.replay) {
+            const chunk = deps.replay(tileId, { since, lines });
+            if (chunk) notify("agent.stream", { subscriptionId, seq: 0, chunk, offset, replay: true });
+          }
           return;
         }
-        if (msg.topic !== "agent.stream") {
-          send({ t: "res", id: msg.id, ok: false, error: { code: "UNKNOWN_METHOD", message: `unknown sub topic: ${msg.topic}` } });
+        case "agent.stream/unsubscribe": {
+          const sid = String(params.subscriptionId ?? "");
+          if (subs.delete(sid)) mySubs.delete(sid);
+          return reply(null);
+        }
+        case "status/subscribe": {
+          const feed = deps.status;
+          if (!feed) return fail(RPC.method, "status is not available here", "UNKNOWN_METHOD");
+          statusOff?.();
+          const changes = typeof params.since === "number" ? feed.since(params.since) : null;
+          // Past the log's reach (or no cursor): the whole picture, then changes from here on.
+          reply(changes ? { cursor: feed.cursor(), changes } : { cursor: feed.cursor(), snapshot: feed.all() });
+          statusOff = feed.subscribe((c) => notify("status/changed", c));
           return;
         }
-        const sp = (msg.params ?? {}) as { tileId?: string; since?: number; lines?: number };
-        const tileId = String(sp.tileId ?? "");
-        if (!tileId) {
-          send({ t: "res", id: msg.id, ok: false, error: { code: "BAD_REQUEST", message: "tileId required" } });
-          return;
-        }
-        subs.set(msg.id, { id: msg.id, tileId, send, seq: 0, isBackedUp: () => conn.writableLength > 4 * 1024 * 1024 });
-        mySubIds.add(msg.id);
-        const offset = deps.offsetOf?.(tileId) ?? 0;
-        send({ t: "res", id: msg.id, ok: true, result: { subscriptionId: msg.id, offset } });
-        // Catch-up: replay what the recorder already holds (seq 0, replay:true)
-        // before live chunks start flowing.
-        const wantsReplay = typeof sp.since === "number" || typeof sp.lines === "number";
-        if (wantsReplay && deps.replay) {
-          const chunk = deps.replay(tileId, { since: sp.since, lines: sp.lines });
-          if (chunk) send({ t: "evt", subId: msg.id, topic: "agent.stream", data: { seq: 0, chunk, offset, replay: true } });
-        }
-        return;
+        case "status/unsubscribe":
+          statusOff?.();
+          statusOff = undefined;
+          return reply(null);
       }
-      // req
-      const { id, method, params, token } = msg;
-      if (token !== deps.token) {
-        send({ t: "res", id, ok: false, error: { code: "UNAUTHORIZED", message: "bad or missing token" } });
-        return;
-      }
-      deps.dispatch(method, params).then(
-        (result) => send({ t: "res", id, ok: true, result }),
-        (e) => {
-          const err = e instanceof HcpError ? e : new HcpError("INTERNAL", (e as Error)?.message ?? String(e));
-          send({ t: "res", id, ok: false, error: { code: err.code, message: err.message } });
-        },
-      );
+      deps.dispatch(m.method, params).then(reply, (e) => {
+        const err = e instanceof HcpError ? e : new HcpError("INTERNAL", (e as Error)?.message ?? String(e));
+        fail(err.code === "UNKNOWN_METHOD" ? RPC.method : RPC.hcp, err.message, err.code);
+      });
     }
   });
 
@@ -165,18 +173,16 @@ export function startHcpServer(sockPath: string, deps: HcpServerDeps): HcpServer
       try { server.close(); } catch { /* ignore */ }
       try { fs.unlinkSync(sockPath); } catch { /* ignore */ }
     },
-    injectEvent: (topic, data) => {
-      try { deps.onEvent(topic, data); } catch { /* ignore */ }
+    injectEvent: (method, params) => {
+      try { deps.onEvent(method, params); } catch { /* ignore */ }
     },
     broadcast: (tileId, chunk) => {
       for (const sub of subs.values()) {
         if (sub.tileId !== tileId) continue;
         sub.seq += 1;
-        // Backpressure: if the client's socket buffer is deep, skip the chunk
-        // (the seq gap tells the client bytes were dropped) instead of growing
-        // memory unbounded for a slow reader.
+        // Backpressure: a slow reader loses chunks (the seq gap says so) instead of growing memory.
         if (sub.isBackedUp()) continue;
-        sub.send({ t: "evt", subId: sub.id, topic: "agent.stream", data: { seq: sub.seq, chunk, offset: deps.offsetOf?.(tileId) } });
+        sub.notify("agent.stream", { subscriptionId: sub.id, seq: sub.seq, chunk, offset: deps.offsetOf?.(tileId) });
       }
     },
   };

@@ -212,7 +212,7 @@ describe("manifest validation refuses what it cannot back", () => {
   });
 
   test("an unversioned or misversioned manifest is refused", () => {
-    bad({ manifestVersion: 999 }, /manifestVersion must be 1/);
+    bad({ manifestVersion: 999 }, /manifestVersion must be 2/);
     bad({ id: "Not Valid" }, /id must be lowercase/);
     bad({ caps: { ...base.caps, blockedDetection: undefined } }, /caps.blockedDetection is required/);
   });

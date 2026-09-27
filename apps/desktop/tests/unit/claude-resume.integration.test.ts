@@ -24,9 +24,9 @@ import {
   type ManagedPty,
   type SpawnSpec,
   type SessionSnapshot,
-} from "../../src/main/pty-session-manager.ts";
+} from "@hivemind/agent-host/pty-session-manager";
 import { authoredDef } from "./authored-agents.ts";
-import { manifestRuntime, renderHookDocument, transformsFor, trackerSource, readTrackedSession,
+import { hookPathsFor, manifestRuntime, renderHookDocument, transformsFor, trackerSource, readTrackedSession,
   type ProviderResumeTransforms, type RuntimePaths } from "@hivemind/agents/node";
 
 // claude is a manifest now. These build the same two things its module used to expose: the
@@ -36,89 +36,56 @@ const pathsFor = (deps: Record<string, string | undefined>): RuntimePaths => ({
   private: "/x/agents/claude",
   execPath: deps.execPath!,
   tileSessionsDir: deps.tileSessionsDir!,
-  home: "/home/u",
+  home: deps.home ?? "/home/u",
   ...(deps.hcpSock ? { hcpSock: deps.hcpSock, hcpToken: "tok" } : {}),
-  hooks: {
-    ...(deps.trackerPath ? { tracker: { path: deps.trackerPath, arg: deps.tileSessionsDir! } } : {}),
-    ...(deps.planHookPath && deps.planBridgeSock ? { plan: { path: deps.planHookPath, arg: deps.planBridgeSock } } : {}),
-    ...(deps.approvalHookPath && deps.hcpSock ? { approval: { path: deps.approvalHookPath, arg: deps.hcpSock } } : {}),
-    ...(deps.stopHookPath && deps.hcpSock ? { stop: { path: deps.stopHookPath, arg: deps.hcpSock } } : {}),
-    ...(deps.subagentHookPath && deps.hcpSock ? { subagent: { path: deps.subagentHookPath, arg: deps.hcpSock } } : {}),
-    ...(deps.notificationHookPath && deps.hcpSock ? { notification: { path: deps.notificationHookPath, arg: deps.hcpSock } } : {}),
-    ...(deps.userpromptHookPath && deps.hcpSock ? { userPrompt: { path: deps.userpromptHookPath, arg: deps.hcpSock } } : {}),
-  },
+  hooks: hookPathsFor(claudeDef, { ...deps, execPath: deps.execPath!, tileSessionsDir: deps.tileSessionsDir! }),
 });
 const trackerSettings = (deps: Record<string, string | undefined>, tileId: string, supervise?: string): string =>
   renderHookDocument(claudeDef, {
     tileId, cwd: "/w", args: [], env: {}, phase: "spawn", ...(supervise ? { supervise } : {}), paths: pathsFor(deps),
   })!;
 const makeClaudeResumeTransforms = (deps: Record<string, string | undefined>): ProviderResumeTransforms =>
-  transformsFor(claudeDef, manifestRuntime(claudeDef, () => undefined)!, pathsFor(deps),
-    { ...(deps.legacyMapFile ? { legacyMapFile: deps.legacyMapFile } : {}) });
+  transformsFor(claudeDef, manifestRuntime(claudeDef, () => undefined)!, pathsFor(deps),);
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-test("trackerSettings: injects the permission-broker hook ONLY when supervised", () => {
-  const deps = {
-    trackerPath: "/x/tracker.cjs", tileSessionsDir: "/x/sess", execPath: "/x/node",
-    approvalHookPath: "/x/approval.cjs", hcpSock: "/x/hcp.sock",
-  };
-  // No supervise → no approval hook (PreToolUse absent without a plan hook either).
+test("trackerSettings: claude's own approval script is wired ONLY when supervised", () => {
+  const deps = { trackerPath: "/x/tracker.cjs", tileSessionsDir: "/x/sess", execPath: "/x/node", sdkPath: "/x/hive-sdk.cjs", hcpSock: "/x/hcp.sock" };
+  // No supervise → only the plan review on PreToolUse.
   const plain = JSON.parse(trackerSettings(deps, "t1"));
-  assert.equal(plain.hooks.PreToolUse, undefined);
-  // Supervised with a tool list → a PreToolUse entry matching those tools, whose
-  // command runs the approval hook against the HCP socket with HIVE_SUPERVISE set.
+  assert.deepEqual(plain.hooks.PreToolUse.map((e: { matcher: string }) => e.matcher), ["ExitPlanMode"]);
+  // Supervised with a tool list → an entry matching those tools, running claude's script with the SDK.
   const sup = JSON.parse(trackerSettings(deps, "t1", "Bash,Write"));
   const entry = sup.hooks.PreToolUse.find((e: { matcher: string }) => e.matcher === "Bash|Write");
-  assert.ok(entry, "approval hook entry present with the brokered-tools matcher");
+  assert.ok(entry, "approval entry present with the brokered-tools matcher");
   const cmd = entry.hooks[0].command as string;
-  assert.match(cmd, /HIVE_SUPERVISE=/);
-  assert.match(cmd, /approval\.cjs/);
-  assert.match(cmd, /hcp\.sock/);
+  assert.match(cmd, /HIVE_SUPERVISE='Bash,Write'/);
+  assert.match(cmd, /HIVE_SDK='\/x\/hive-sdk\.cjs'/);
+  assert.match(cmd, /HIVE_HOOK_SOCK='\/x\/hcp\.sock'/);
+  assert.match(cmd, /'\/x\/agents\/claude\/hive-approve\.cjs'/);
   // "all" → matcher "*".
   const all = JSON.parse(trackerSettings(deps, "t1", "all"));
   assert.ok(all.hooks.PreToolUse.some((e: { matcher: string }) => e.matcher === "*"));
 });
 
-test("trackerSettings: injects SubagentStart/Stop hooks when the subagent hook path is set", () => {
-  // Without the subagent hook path → no SubagentStart/Stop (e.g. older daemon).
-  const bare = JSON.parse(trackerSettings(
-    { trackerPath: "/x/tracker.cjs", tileSessionsDir: "/x/sess", execPath: "/x/node", hcpSock: "/x/hcp.sock" },
-    "t1",
-  ));
-  assert.equal(bare.hooks.SubagentStart, undefined);
-  assert.equal(bare.hooks.SubagentStop, undefined);
-  // With the path + socket → both events run the subagent hook against the socket,
-  // carrying this tile's HIVEMIND_TILE so main attributes the subagent correctly.
-  const deps = {
-    trackerPath: "/x/tracker.cjs", tileSessionsDir: "/x/sess", execPath: "/x/node",
-    subagentHookPath: "/x/subagent.cjs", hcpSock: "/x/hcp.sock",
-  };
-  const s = JSON.parse(trackerSettings(deps, "t-abc"));
-  const cmd = s.hooks.SubagentStart[0].hooks[0].command as string;
-  assert.equal(s.hooks.SubagentStop[0].hooks[0].command, cmd); // one command, both events
-  assert.match(cmd, /HIVEMIND_TILE='t-abc'/);
-  assert.match(cmd, /subagent\.cjs/);
-  assert.match(cmd, /hcp\.sock/);
-});
-
-test("trackerSettings: injects the UserPromptSubmit hook (turn-start → working)", () => {
-  const bare = JSON.parse(trackerSettings(
-    { trackerPath: "/x/tracker.cjs", tileSessionsDir: "/x/sess", execPath: "/x/node", hcpSock: "/x/hcp.sock" },
-    "t1",
-  ));
-  assert.equal(bare.hooks.UserPromptSubmit, undefined); // no path → not injected
-  const s = JSON.parse(trackerSettings(
-    {
-      trackerPath: "/x/tracker.cjs", tileSessionsDir: "/x/sess", execPath: "/x/node",
-      userpromptHookPath: "/x/userprompt.cjs", hcpSock: "/x/hcp.sock",
-    },
-    "t-up",
-  ));
-  const cmd = s.hooks.UserPromptSubmit[0].hooks[0].command as string;
-  assert.match(cmd, /HIVEMIND_TILE='t-up'/);
-  assert.match(cmd, /userprompt\.cjs/);
-  assert.match(cmd, /hcp\.sock/);
+test("trackerSettings: claude's lifecycle events run the generic event script, each naming its canonical event", () => {
+  const base = { trackerPath: "/x/tracker.cjs", tileSessionsDir: "/x/sess", execPath: "/x/node", hcpSock: "/x/hcp.sock" };
+  // A daemon without the generic script wires none of them.
+  const bare = JSON.parse(trackerSettings(base, "t1"));
+  for (const e of ["UserPromptSubmit", "SubagentStart", "SubagentStop", "PermissionRequest"]) assert.equal(bare.hooks[e], undefined, e);
+  const s = JSON.parse(trackerSettings({ ...base, eventHookPath: "/x/event.cjs" }, "t-abc"));
+  const cmd = (e: string) => s.hooks[e][0].hooks[0].command as string;
+  assert.match(cmd("UserPromptSubmit"), /HIVE_EVENT='turn\.started'/);
+  assert.match(cmd("SubagentStart"), /HIVE_EVENT='subagent\.started'/);
+  assert.match(cmd("SubagentStop"), /HIVE_EVENT='subagent\.stopped'/);
+  assert.match(cmd("PermissionRequest"), /HIVE_EVENT='input\.requested' HIVE_EVENT_KIND='permission'/);
+  for (const e of ["UserPromptSubmit", "SubagentStart"]) {
+    assert.match(cmd(e), /HIVEMIND_TILE='t-abc'/);
+    assert.match(cmd(e), /'\/x\/event\.cjs' '\/x\/hcp\.sock'/);
+  }
+  // A usage limit and any other failure are told apart by claude's own matcher.
+  assert.deepEqual(s.hooks.StopFailure.map((g: { matcher: string }) => g.matcher.split("|")[0]), ["rate_limit", "overloaded"]);
+  assert.match(s.hooks.StopFailure[0].hooks[0].command, /HIVE_EVENT_OUTCOME='limited'/);
 });
 const client = () => ({ onData: () => {}, onExit: () => {} });
 const liveSpec = (cwd: string): SpawnSpec => ({ cwd, cmd: "claude", args: [], cols: 80, rows: 24 });
@@ -162,10 +129,10 @@ class FakeClaude implements ManagedPty {
     // real claude does on SessionStart — records tile → live session id.
     spawnSync("sh", ["-c", cmd], { input: JSON.stringify({ session_id: sid }) });
   }
-  private markerExists(uuid: string) { return existsSync(path.join(this.ctx.markerDir, uuid)); }
+  private markerExists(uuid: string) { return existsSync(path.join(this.ctx.markerDir, `${uuid}.jsonl`)); }
   private createMarker(uuid: string) {
     mkdirSync(this.ctx.markerDir, { recursive: true });
-    writeFileSync(path.join(this.ctx.markerDir, uuid), "jsonl");
+    writeFileSync(path.join(this.ctx.markerDir, `${uuid}.jsonl`), "jsonl");
   }
   private run(): void {
     const a = this.args();
@@ -174,7 +141,7 @@ class FakeClaude implements ManagedPty {
     if (rIdx >= 0) {
       const uuid = a[rIdx + 1]!;
       if (!this.markerExists(uuid)) {
-        // exactly what real claude prints → triggers the daemon's retry
+        // what real claude prints, then exits: the fast failure is what the daemon retries on
         this.dataCb?.(`No conversation found with session ID: ${uuid}\r\n`);
         this.exitCb?.(1, undefined);
         return;
@@ -216,13 +183,14 @@ function setup() {
   const dir = mkdtempSync(path.join(tmpdir(), "hm-resume-"));
   const tileSessionsDir = path.join(dir, "tile-sessions");
   const trackerPath = path.join(dir, "tile-session-tracker.cjs");
-  const markerDir = path.join(dir, "markers");
+  // Where claude keeps a session, as its manifest declares: {home}/.claude/projects/<slug>/<id>.jsonl.
+  const markerDir = path.join(dir, ".claude", "projects", "-repo");
   writeFileSync(trackerPath, trackerSource());
   const transforms = makeClaudeResumeTransforms({
     trackerPath,
     tileSessionsDir,
-    legacyMapFile: path.join(dir, "tile-sessions.json"),
     execPath: process.execPath,
+    home: dir,
   });
   const snaps = new Map<string, SessionSnapshot>();
   const ctx: Ctx = { markerDir };
@@ -302,7 +270,7 @@ test("multi-frame: /resume-old + new session both survive a daemon restart", asy
   }
 });
 
-test("restore of a session whose JSONL vanished retries with --session-id (no tile crash)", async () => {
+test("restore of a session whose JSONL vanished starts fresh under the same id, without a failed spawn", async () => {
   const { tileSessionsDir, markerDir, snaps, makeMgr } = setup();
   try {
     const { mgr, created } = makeMgr();
@@ -313,17 +281,17 @@ test("restore of a session whose JSONL vanished retries with --session-id (no ti
     await mgr.flushAll();
 
     // The session's JSONL disappears (claude GC, repo moved, etc.).
-    unlinkSync(path.join(markerDir, uuidC!));
+    unlinkSync(path.join(markerDir, `${uuidC!}.jsonl`));
 
     const { mgr: mgr2, created: created2 } = makeMgr();
     mgr2.restoreSnapshot(snaps.get("hm:tile-C")!);
     await mgr2.createOrAttach("hm:tile-C", liveSpec("/repoC"), client());
     await delay(150);
 
-    // First restore attempt: --resume uuidC → "No conversation found" → exit 1.
-    assert.equal(argVal(created2[0], "--resume"), uuidC, "first attempt resumes the tracked id");
-    // Retry transform recreates the session deterministically with --session-id.
-    assert.equal(argVal(created2[1], "--session-id"), uuidC, "retry recreates the session with the same id");
+    // The store says the session is gone, so the tile is not handed a resume it would fail.
+    assert.equal(created2.length, 1, "one spawn, no failed attempt");
+    assert.equal(argVal(created2[0], "--resume"), undefined);
+    assert.equal(argVal(created2[0], "--session-id"), uuidC, "recreated with the same id");
     assert.ok(mgr2.has("hm:tile-C"), "tile survived the missing-session restore");
   } finally {
     rmSync(setupDirOf(tileSessionsDir), { recursive: true, force: true });
@@ -335,15 +303,3 @@ function setupDirOf(tileSessionsDir: string): string {
   return path.dirname(tileSessionsDir);
 }
 
-test("a saved spec that repeats its resume restores with it once", () => {
-  const t = makeClaudeResumeTransforms({ tileSessionsDir: "/x/none", execPath: "/x/node" });
-  const id = "30e61ded-dc21-4f87-97e6-a9553fdf9930";
-  const out = t.transformSpecOnRestore!(
-    { cwd: "/w", cmd: "claude", args: ["--resume", id, "--resume", id, "--resume", id, "--permission-mode", "auto"], cols: 80, rows: 24 },
-    "hm:tile-x",
-  );
-  const args = out.args ?? [];
-  assert.equal(args.filter((a) => a === "--resume").length, 1);
-  assert.equal(args[args.indexOf("--resume") + 1], id);
-  assert.ok(args.includes("--permission-mode"));
-});

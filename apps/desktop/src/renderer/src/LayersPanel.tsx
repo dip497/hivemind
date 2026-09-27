@@ -131,8 +131,8 @@ const KIND_GLYPH: Record<LayerKind, string> = {
  * its keep, separating workspaces across a wide board.
  *
  * `color-mix` (not a chroma tweak in frame-color.ts) because `color` may be an
- * oklch() string, a user-picked hex from the header swatch, OR the legacy
- * `var(--color-brand)` — mixing handles all three without parsing any of them.
+ * oklch() string or a user-picked hex from the header swatch — mixing handles
+ * both without parsing either.
  */
 const muted = (color: string) => `color-mix(in oklab, ${color} 62%, var(--color-fg3))`;
 

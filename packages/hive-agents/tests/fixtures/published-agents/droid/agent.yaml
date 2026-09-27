@@ -1,6 +1,8 @@
 # Droid — built-in provider manifest.
 # Authoring format for the def half. See packages/hive-agents/src/manifest.ts.
-manifestVersion: 1
+manifestVersion: 2
+# Written for the agent host that shipped in this release.
+minAppVersion: '2026.9.6'
 id: droid
 label: Droid
 bin: droid
@@ -101,14 +103,32 @@ hooks:
   file: hooks.json
   template: '{events}'
   events:
+    SessionStart:
+      emit: session.started
+      timeout: 10
+    SessionEnd:
+      emit: session.ended
+      timeout: 10
     UserPromptSubmit:
-      hook: userPrompt
+      emit: turn.started
       timeout: 10
     Stop:
-      hook: stop
+      hook: turnEnd
       timeout: 10
     Notification:
-      hook: notification
+      hook: notify
       timeout: 10
+    PostToolUse:
+      emit: input.resolved
+      timeout: 10
+assets:
+- name: hive-turn-end.cjs
+  file: hive-turn-end.cjs
+  hook: turnEnd
+  produces: [turn.ended]
+- name: hive-notify.cjs
+  file: hive-notify.cjs
+  hook: notify
+  produces: [input.requested]
 launch:
   hcp: true

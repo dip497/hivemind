@@ -30,7 +30,9 @@ import { toast } from "sonner";
 import { Button } from "./components/ui/button";
 import { MenuItem } from "./components/ui/menu-item";
 import type { LayerTile, LayerFrame } from "./LayersPanel";
-import { statusOf, setWaitStatus, setSubagentBusy, setNotify, setTurnState, type TileStatusKind, subscribeTileStatus } from "./agent-status-bus";
+import { statusOf, setHostedStatus, type TileStatusKind, subscribeTileStatus } from "./agent-status-bus";
+import { tileName } from "./tile-name";
+import { cleanName } from "@hivemind/agents";
 import { frameAtPoint } from "./frame-layout";
 import { Wallpaper } from "./Wallpaper";
 import { CanvasOverlay } from "./CanvasOverlay";
@@ -54,7 +56,7 @@ import { defaultTileSize } from "./canvas-sizing";
 import { useWorktrees } from "./useWorktrees";
 // Loaded when it is first opened: the dialog (add form, machine list, folder picker) is not startup work.
 const MachinesHub = lazy(() => import("./machines/MachinesHub").then((m) => ({ default: m.MachinesHub })));
-import { hostIdOfUri, type MachinesRequest } from "./machines/store";
+import { frameMachine, hostIdOfUri, useMachines, type MachinesRequest } from "./machines/store";
 import type { SessionSummary } from "../../shared/ipc";
 import { isRemote } from "../../shared/remote-uri";
 import { getAgents, AgentIcon, agentById, agentForCmd, useAgents } from "./agents";
@@ -153,7 +155,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   // Persisted with layout. An absent entry means "use the agent title, else the label".
   const [tileNames, setTileNames] = useState<Record<string, string>>(initial.tileNames ?? {});
   const renameTile = useCallback((id: string, name: string) => {
-    const trimmed = name.trim();
+    const trimmed = cleanName(name);
     setTileNames((m) => {
       if (!trimmed) {
         if (!(id in m)) return m;
@@ -164,12 +166,18 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
       return { ...m, [id]: trimmed };
     });
   }, []);
-  // Live agent session titles from the terminal OSC window-title. NOT persisted
-  // here — the DAEMON owns the title as session state and re-emits it ahead of
-  // the replay on every attach. A user rename (tileNames) takes precedence.
+  // Main prints the same names in the messages it types into agents.
+  useEffect(() => { window.hive.tileNames(tileNames); }, [tileNames]);
+  // What each agent says it is doing, as the host reports it (its session record's title).
+  // Not persisted here: the host keeps it. A name someone gave the tile takes precedence.
   const [agentTitles, setAgentTitles] = useState<Record<string, string>>({});
-  const setAgentTitle = useCallback((id: string, title: string) => {
-    setAgentTitles((m) => (m[id] === title ? m : { ...m, [id]: title }));
+  const setAgentTitle = useCallback((id: string, title: string | undefined) => {
+    setAgentTitles((m) => {
+      if ((m[id] ?? undefined) === title) return m;
+      if (title) return { ...m, [id]: title };
+      const { [id]: _, ...rest } = m;
+      return rest;
+    });
   }, []);
   const onNodeResizeCommit = useCallback((id: string, width: number, height: number, x?: number, y?: number) => {
     setSizes((s) => {
@@ -382,13 +390,10 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   // repo switch (under the old key), unmount and beforeunload by
   // useDebouncedSave (the ONE mechanism every layout blob uses). Two blobs, two
   // triggers: the core blob rewrites on structural edits only — a pan/drop
-  // touches just the canvas view's geometry blob. The core write mirrors the
-  // geometry current at that moment (downgrade safety — see canvas-persistence).
+  // touches just the canvas view's geometry blob.
   const coreSnap = useMemo(() => ({ frames, tileNames, tiles, editorTabs, frameOf }), [frames, tileNames, tiles, editorTabs, frameOf]);
   const geometry = useMemo(() => ({ positions, sizes, viewport }), [positions, sizes, viewport]);
-  const geometryRef = useRef(geometry);
-  geometryRef.current = geometry;
-  useDebouncedSave(persistKey, coreSnap, useCallback((key: string, v: typeof coreSnap) => saveLayout(key, { ...v, legacy: geometryRef.current }), []));
+  useDebouncedSave(persistKey, coreSnap, useCallback((key: string, v: typeof coreSnap) => saveLayout(key, v), []));
   useDebouncedSave(persistKey, geometry, useCallback((key: string, v: typeof geometry) => saveViewLayout(CANVAS_LAYOUT, key, v), []));
 
   // Viewport-focus request: resolve the target's CENTER from our own state
@@ -459,9 +464,6 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     }
     return map;
   }, [frameOf, tiles]);
-  // Frame-chip names: rename / static only — NOT the live agent OSC title (it
-  // churns ~every 600ms while streaming and would rebuild the node array).
-  const framesChipNames = useMemo(() => ({ ...tileNames }), [tileNames]);
 
   // ── view-agnostic listing (Layers rail, tab strip, 3D labels …) ────────────
   const layerFrames: LayerFrame[] = useMemo(
@@ -487,7 +489,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
       if ((t.kind === "editor" || t.kind === "diff") && !effRepo) continue;
       const kind: LayerTile["kind"] = t.kind === "shell" ? "terminal" : t.kind;
       const agent = t.kind === AGENT_TILE_KIND ? agentForCmd(t.cmd)?.id : undefined;
-      out.push({ id: t.id, kind, name: tileNames[t.id] ?? agentTitles[t.id] ?? t.label, frameId: fo[t.id] ?? null, agent });
+      out.push({ id: t.id, kind, name: tileName(tileNames, agentTitles, t), frameId: fo[t.id] ?? null, agent });
     }
     return out;
   }, [tiles, repoPath, frameOf, frames, tileNames, agentTitles, agentCatalog]);
@@ -515,7 +517,11 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   // restored tiles have started, so the network and each CLI's `--version` stay off both.
   useEffect(() => {
     let live = true;
-    const timer = setTimeout(() => void whenBootIdle().then(() => live ? window.hive.autoInstallAgents() : []).then((added) => {
+    const timer = setTimeout(() => void whenBootIdle().then(() => live ? window.hive.autoInstallAgents() : { added: [], updated: [] }).then(({ added, updated }) => {
+      if (updated.length) {
+        void syncAgentPlugins();
+        toast.success(`Updated ${updated.map((a) => a.label).join(", ")} for this version of Hivemind.`);
+      }
       if (!added.length) return;
       void syncAgentPlugins();
       const toastId = toast.success(`Added ${added.map((a) => a.label).join(", ")} — found on this machine.`, {
@@ -545,6 +551,32 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     return () => { live = false; clearTimeout(timer); };
   }, []);
   const activeViewId = resolveViewId(useViewMode());
+  const activeViewIdRef = useRef(activeViewId);
+  activeViewIdRef.current = activeViewId;
+  // View protocol 1.3: the event hub hears every tile whatever view is active. Off the first
+  // paint — the status bus replays current statuses to it when it starts.
+  const [viewHost, setViewHost] = useState<typeof import("./workspace/view-services") | null>(null);
+  const viewHostRef = useRef(viewHost);
+  viewHostRef.current = viewHost;
+  useEffect(() => {
+    let live = true;
+    void import("./workspace/view-services").then((m) => { m.startViewHost(); if (live) setViewHost(m); });
+    return () => { live = false; };
+  }, []);
+  const machinesSnap = useMachines();
+  useEffect(() => {
+    if (!viewHost) return;
+    viewHost.viewEvents.setWorkspace(persistKey, tiles.map((t) => {
+      const frame = frameOf[t.id] ? frames.find((f) => f.id === frameOf[t.id]) : undefined;
+      const machine = frame ? frameMachine(machinesSnap, frame.workspacePath) : undefined;
+      const agent = t.kind === AGENT_TILE_KIND ? agentForCmd(t.cmd)?.id : undefined;
+      return {
+        id: t.id, frameId: frameOf[t.id] ?? null, kind: t.kind, name: tileNames[t.id] ?? t.label,
+        ...(frame ? { frameTitle: frame.title } : {}), ...(agent ? { agent } : {}),
+        ...(machine && machine.state !== "online" ? { unwatched: true } : {}),
+      };
+    }), spawnLinks);
+  }, [viewHost, persistKey, tiles, frameOf, frames, tileNames, machinesSnap, spawnLinks]);
   // Host chrome + wallpaper policy come from the active view's preference.
   const settings = useSettings();
   const chrome = useMemo(() => {
@@ -746,7 +778,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
             break;
           }
           case "tile.spawn_agent": {
-            const tileId = hcpSpawnAgent(p as { agent?: string; prompt?: string; frame?: string; mode?: string; model?: string; callerTile?: string; background?: boolean; name?: string });
+            const tileId = hcpSpawnAgent(p as { agent?: string; prompt?: string; frame?: string; mode?: string; model?: string; callerTile?: string; background?: boolean; name?: string; resume?: string });
             await window.hive.hcpResult(cmd.id, true, { tileId });
             break;
           }
@@ -767,7 +799,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
             const filterId = p.frame ? resolveFrameId(String(p.frame)) : undefined;
             const mapTile = (t: typeof tilesRef.current[number]) => ({
               tileId: t.id, kind: t.kind, label: t.label, status: statusOf(t.id),
-              name: tileNamesRef.current[t.id] ?? agentTitlesRef.current[t.id] ?? t.label,
+              name: tileName(tileNamesRef.current, agentTitlesRef.current, t),
               ...(t.kind === AGENT_TILE_KIND ? { agent: agentForCmd(t.cmd)?.id } : {}),
             });
             const groupOf = (f: FrameState) => ({
@@ -788,6 +820,16 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
               .filter((t) => { const fid = frameOfRef.current[t.id]; return !fid || !frameIds.has(fid); })
               .map(mapTile);
             await window.hive.hcpResult(cmd.id, true, { frames, loose });
+            break;
+          }
+          case "view.emit": {
+            const ev = p as { name: string; data: never; view?: string; from: "shell" | { tileId: string } };
+            const active = activeViewIdRef.current ?? FALLBACK_VIEW_ID;
+            const vh = viewHostRef.current;
+            if (!vh) throw new Error("views are still starting");
+            const { event, delivered } = vh.viewEvents.emitCustom(ev.name, ev.data, ev.from, ev.view);
+            const reason = delivered ? null : ev.view && ev.view !== active ? "not-active" : "no-listener";
+            await window.hive.hcpResult(cmd.id, true, { ok: true, id: event.id, delivered, view: active, ...(reason ? { reason, buffered: true } : {}) });
             break;
           }
           case "views.rescan": {
@@ -866,36 +908,18 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     });
   }, []);
 
-  // HCP "wait" states (a supervised worker blocked on its parent's approval) →
-  // override the scrape on the status bus.
+  // The window says which tile you are on, by the name every surface uses.
   useEffect(() => {
-    return window.hive.onHcpWait((ev) => {
-      setWaitStatus(ev.tileId, (ev.status as TileStatusKind | null) ?? null);
-    });
+    const t = selectedTileId ? tiles.find((x) => x.id === selectedTileId) : undefined;
+    const n = t ? tileName(tileNames, agentTitles, t) : undefined;
+    document.title = n ? `${n} — hivemind` : "hivemind";
+  }, [selectedTileId, tiles, tileNames, agentTitles]);
+  // Agent sessions' statuses, from the host: everything there is, then every change.
+  useEffect(() => {
+    const off = window.hive.onHcpStatus((ev) => { setHostedStatus(ev.tileId, ev.status); setAgentTitle(ev.tileId, ev.status.title); });
+    void window.hive.hcpStatusAll().then((all) => { for (const { tileId, status } of all) { setHostedStatus(tileId, status); setAgentTitle(tileId, status.title); } });
+    return off;
   }, []);
-  // HCP subagent lifecycle → keep a tile "working" while it has in-flight Tasks.
-  useEffect(() => {
-    return window.hive.onHcpSubagent((ev) => { setSubagentBusy(ev.tileId, ev.busy); });
-  }, []);
-  // HCP "needs you" (claude's Notification hook) → soft status override.
-  useEffect(() => {
-    return window.hive.onHcpNotify((ev) => { setNotify(ev.tileId, ev.status as TileStatusKind); });
-  }, []);
-  // HCP turn state — hook-driven working/idle, authoritative over the scrape.
-  useEffect(() => {
-    return window.hive.onHcpTurnState((ev) => { setTurnState(ev.tileId, ev.state); });
-  }, []);
-
-  // Plan-review wait: while a planReview tile is open for an agent, mark that
-  // agent "waiting: review" (cleared when the plan tile closes).
-  const planAgentsRef = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    const now = new Set<string>();
-    for (const t of tiles) if (t.kind === "planReview" && t.review?.agentTileId) now.add(t.review.agentTileId);
-    for (const a of now) if (!planAgentsRef.current.has(a)) setWaitStatus(a, "plan_review");
-    for (const a of planAgentsRef.current) if (!now.has(a)) setWaitStatus(a, null);
-    planAgentsRef.current = now;
-  }, [tiles]);
 
   // Deliver a prompt to claude with a TARGET PICKER. 0 claude tiles → spawn a
   // new claude carrying the prompt; 1+ → picker (the chosen tile, or "New").
@@ -1022,20 +1046,19 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   }, [arrangeFrame, framesRef, sizesRef, setSizes]);
 
   // ── the shared tile surfaces (bodies) — rendered ONCE by the TileHost ─────
-  // agentTitles intentionally NOT an input: a live title change must not
-  // re-render every tile body (cursor-flicker + focus loss while streaming).
-  // buildSurfaces carries the per-workspace reuse cache (keyed on persistKey);
+  // A title change rebuilds only that tile's body: the host reports one only when what the
+  // agent says it is doing changes. buildSurfaces carries the per-workspace reuse cache (keyed on persistKey);
   // the memo below must list EVERY input that can change a body — the builder
   // diffs per tile and reuses the rest (callbacks included, so a changed
   // handler can never leave a stale closure behind).
   const buildSurfaces = useMemo(() => createTileSurfaceBuilder(), [persistKey]);
   const surfaces = useMemo(() => buildSurfaces({
-    repoPath, root, cwd, tiles, frames, frameOf, pinnedIds, editorTabs, browserOpenReqs, tileNames,
-    openFileInTile, openUrlInBrowser, openFileFromTerminal, closeTabInTile, closeTile, renameTile, setAgentTitle,
+    repoPath, root, cwd, tiles, frames, frameOf, pinnedIds, editorTabs, browserOpenReqs, tileNames, agentTitles,
+    openFileInTile, openUrlInBrowser, openFileFromTerminal, closeTabInTile, closeTile, renameTile,
     onTogglePin: togglePin,
   }), [
-    buildSurfaces, repoPath, root, cwd, tiles, frames, frameOf, pinnedIds, editorTabs, browserOpenReqs, tileNames,
-    openFileInTile, openUrlInBrowser, openFileFromTerminal, closeTabInTile, closeTile, renameTile, setAgentTitle, togglePin,
+    buildSurfaces, repoPath, root, cwd, tiles, frames, frameOf, pinnedIds, editorTabs, browserOpenReqs, tileNames, agentTitles,
+    openFileInTile, openUrlInBrowser, openFileFromTerminal, closeTabInTile, closeTile, renameTile, togglePin,
   ]);
 
   // ── what the active view receives ─────────────────────────────────────────
@@ -1057,7 +1080,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     spawnAgent: (agentId, frameId, opts) => {
       const def = agentId ? catalogAgentById(agentId) : defaultAgent();
       if (!def) return false;
-      const id = spawnTile(AGENT_TILE_KIND, frameId, { agent: { id: def.id, cmd: def.bin, label: def.label }, ...(opts?.prompt ? { work: opts.prompt } : {}) });
+      const id = spawnTile(AGENT_TILE_KIND, frameId, { agent: { id: def.id, cmd: def.bin, label: def.label }, ...(opts?.prompt ? { work: opts.prompt } : {}), ...(opts?.resume ? { resume: opts.resume } : {}) });
       if (id && opts?.name) renameTile(id, opts.name);
       return true;
     },
@@ -1075,14 +1098,14 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     onNodeResizeCommit, handleNodeDragStop, resetCanvas,
     focusReq, focusModeReq, setFocusModeReq, focusModeNonceRef, selectedTileIdRef, selectedFrameIdRef,
     selectedTileIdsRef, markSeen, toasts, dismissToast,
-    frameTiles, framesChipNames, updateFrameTitle, updateFrameColor, deleteFrame, arrangeFrame, bringFrameToFront,
+    frameTiles, updateFrameTitle, updateFrameColor, deleteFrame, arrangeFrame, bringFrameToFront,
     onAttachWorktree, onCreateWorktree, unbindBranch, bindWorkspace, unbindWorkspace,
     pinnedIds, togglePin, onPinChange,
     agentSel, setAgentSel, spawnAgent, spawnBrowser, onInitWorkspace,
     updateAvailable, onUpgrade: () => onUpgrade?.(), upgrading,
   }), [
     positions, sizes, onNodeResizeCommit, handleNodeDragStop, resetCanvas, focusReq, focusModeReq,
-    selectedTileIdRef, selectedFrameIdRef, selectedTileIdsRef, markSeen, toasts, dismissToast, frameTiles, framesChipNames,
+    selectedTileIdRef, selectedFrameIdRef, selectedTileIdsRef, markSeen, toasts, dismissToast, frameTiles,
     updateFrameTitle, updateFrameColor, deleteFrame, arrangeFrame, bringFrameToFront,
     onAttachWorktree, onCreateWorktree, unbindBranch, bindWorkspace, unbindWorkspace,
     pinnedIds, togglePin, onPinChange, agentSel, spawnAgent, spawnBrowser, onInitWorkspace, updateAvailable, onUpgrade, upgrading,
@@ -1212,7 +1235,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
               </Button>
             </div>
             {tiles.filter((t) => t.kind === AGENT_TILE_KIND).map((t) => {
-              const name = tileNames[t.id] ?? agentTitles[t.id] ?? t.label;
+              const name = tileName(tileNames, agentTitles, t);
               const frame = frames.find((f) => f.id === frameOf[t.id]);
               return (
                 <MenuItem

@@ -1,6 +1,8 @@
 # Antigravity — built-in provider manifest.
 # Authoring format for the def half. See packages/hive-agents/src/manifest.ts.
-manifestVersion: 1
+manifestVersion: 2
+# Written for the agent host that shipped in this release.
+minAppVersion: '2026.9.6'
 id: antigravity
 label: Antigravity
 bin: agy
@@ -26,14 +28,6 @@ icon:
 install:
   url: https://antigravity.google/docs/cli/overview/
   command: "curl -fsSL https://antigravity.google/cli/install.sh | bash"
-options:
-  - id: permissions
-    label: Permission prompt
-    # `--dangerously-skip-permissions` is a bare flag (no value), so it maps
-    # through `values`, not `flag value`.
-    values:
-      bypassPermissions:
-        - --dangerously-skip-permissions
 detect:
   rules:
     - when:

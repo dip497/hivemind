@@ -8,16 +8,18 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { findSession } from "./session.js";
+import { findSession, sessionExists, sessionListed } from "./session.js";
 import { readTrackedSession } from "./tile-session-store.js";
 import { hookCommand, renderHookDocument } from "./hooks.js";
+import { EVENT_HOOK, isAgentEventName } from "./events.js";
 import { homePaths, seedHome } from "./home-overlay.js";
+import { SDK_ENV } from "@hivemind/agent-sdk";
 import { NO_PLAN, validatePlan, type AgentRuntime, type LaunchPlan, type LaunchRequest, type RuntimePaths } from "./runtime.js";
 import type { AgentProviderDef, ProviderResumeTransforms, SpawnSpec } from "./types.js";
 
 /** The closed set a manifest may ask for. An unknown one is left alone, so a typo shows up
  *  as a literal in the argument list rather than resolving to something unintended. */
-const PLACEHOLDER = /\{(asset:[A-Za-z0-9][\w.-]{0,63}|hook(?:Cmd)?:[a-z][A-Za-z]{0,31}|hcpSock|hcpToken|tileId|agentId|cwd|private|home|execPath|session)\}/g;
+const PLACEHOLDER = /\{(asset:[A-Za-z0-9][\w.-]{0,63}|hook(?:Cmd)?:[a-z][A-Za-z]{0,31}|emit:[a-z]+\.[a-z]+|hcpSock|hcpToken|tileId|agentId|cwd|private|home|execPath|session)\}/g;
 
 /** What a substituted value must survive. A command line dropped into a JSON string has to
  *  be JSON, or a Windows path or a quoted argument silently breaks the file it lands in. */
@@ -41,7 +43,13 @@ function resolve(
     if (key.startsWith("hookCmd:")) {
       const name = key.slice(8);
       const hook = req.paths.hooks[name];
-      return hook ? put(hookCommand(name, hook, req)) : whole;
+      return hook ? put(hookCommand(hook, req)) : whole;
+    }
+    // A canonical event, for an agent whose hook configuration is a file of its own shape.
+    if (key.startsWith("emit:")) {
+      const event = key.slice(5);
+      const hook = req.paths.hooks[EVENT_HOOK];
+      return hook && isAgentEventName(event) ? put(hookCommand(hook, req, { emit: event })) : whole;
     }
     if (key.startsWith("hook:")) { const h = req.paths.hooks[key.slice(5)]; return h ? put(h.path) : whole; }
     switch (key) {
@@ -68,7 +76,8 @@ const perTileName = (name: string, tileId: string): string => {
   return `${stem}-${tileId.replace(/[^A-Za-z0-9._-]/g, "-")}${ext}`;
 };
 
-/** Every agent that reports through the control plane needs the same five variables. */
+/** Every agent that reports through the control plane needs the same variables; the SDK's
+ *  are there for a plugin that runs inside the agent rather than as a hook command. */
 function hcpEnv(def: AgentProviderDef, req: LaunchRequest): Record<string, string> {
   return {
     HIVE_HCP_SOCK: req.paths.hcpSock!,
@@ -76,6 +85,7 @@ function hcpEnv(def: AgentProviderDef, req: LaunchRequest): Record<string, strin
     HIVEMIND_TILE: req.tileId, // the agent's own `hive ctl` calls attribute to this tile
     HIVE_AGENT_ID: def.id, // signs the Activity rows it writes
     HIVE_AGENT_DEPTH: req.env.HIVE_AGENT_DEPTH ?? "0",
+    ...(req.paths.sdk ? { [SDK_ENV.sdk]: req.paths.sdk, [SDK_ENV.sock]: req.paths.hcpSock! } : {}),
   };
 }
 
@@ -187,12 +197,12 @@ export function manifestRuntime(
 export function sessionFor(
   def: AgentProviderDef,
   spec: { cwd: string; args?: readonly string[] },
-  ctx: { tileId?: string; tileSessionsDir?: string; legacyMapFile?: string; sessionRoot?: string } = {},
+  ctx: { tileId?: string; tileSessionsDir?: string; sessionRoot?: string } = {},
 ): string | undefined {
   const resume = def.session?.resume;
   if (!resume) return undefined;
   if (resume.from?.tracked && ctx.tileId && ctx.tileSessionsDir) {
-    const tracked = readTrackedSession(ctx.tileSessionsDir, ctx.tileId, ctx.legacyMapFile);
+    const tracked = readTrackedSession(ctx.tileSessionsDir, ctx.tileId);
     if (tracked) return tracked;
   }
   if (resume.from?.bound) {
@@ -237,14 +247,14 @@ export function transformsFor(
   def: AgentProviderDef,
   runtime: AgentRuntime,
   paths: RuntimePaths,
-  opts: { sessionRoot?: string; legacyMapFile?: string } = {},
+  opts: { sessionRoot?: string } = {},
 ): ProviderResumeTransforms {
   const isThisAgent = (spec: SpawnSpec): boolean =>
     path.basename((spec.cmd ?? "").trim().split(/\s+/)[0] ?? "") === def.bin;
   const run = (spec: SpawnSpec, tileId: string, phase: "spawn" | "restore"): SpawnSpec => {
     if (!isThisAgent(spec) || !runtime.launch) return spec;
     const session = phase === "restore"
-      ? sessionFor(def, spec, { tileId, tileSessionsDir: paths.tileSessionsDir, legacyMapFile: opts.legacyMapFile, sessionRoot: opts.sessionRoot })
+      ? sessionFor(def, spec, { tileId, tileSessionsDir: paths.tileSessionsDir, sessionRoot: opts.sessionRoot })
       : undefined;
     // The flag that bound the session at spawn is replaced by the resume, not kept beside it.
     const bound = def.session?.resume?.from?.bound;
@@ -260,44 +270,42 @@ export function transformsFor(
   };
   const marker = def.session?.resume?.args[0];
   const fallbackMarker = def.session?.resume?.fallback?.[0];
-  // Older builds re-added the resume on every restore; drop the repeats a saved spec carries.
-  const onceResumed = (spec: SpawnSpec): SpawnSpec => {
+  const exists = def.session?.resume?.exists;
+  const retry = (spec: SpawnSpec): SpawnSpec | null => {
+    // A session that has since vanished must not kill the tile: abandon the resume. The
+    // tile keeps its identity though — an agent that binds its session id binds the same
+    // one again, so the next start continues the tile rather than becoming a stranger.
+    if (!marker || !isThisAgent(spec)) return null;
     const args = spec.args ?? [];
-    if (!marker || args.filter((a) => a === marker).length < 2) return spec;
-    const kept: string[] = [];
-    const seen = new Set<string>();
-    for (let i = 0; i < args.length; i++) {
-      if (args[i] === marker && i + 1 < args.length) {
-        if (seen.has(args[i + 1]!)) { i++; continue; }
-        seen.add(args[i + 1]!);
-      }
-      kept.push(args[i]!);
-    }
-    return { ...spec, args: kept };
+    const i = args.indexOf(marker) >= 0 ? args.indexOf(marker) : (fallbackMarker ? args.indexOf(fallbackMarker) : -1);
+    if (i < 0) return null;
+    const carried = i + 1 < args.length && !args[i + 1]!.startsWith("-") ? args[i + 1] : undefined;
+    const rest = [...args.slice(0, i), ...args.slice(i + (carried ? 2 : 1))];
+    const bind = def.session?.bind;
+    return {
+      ...spec,
+      args: carried && bind ? [...bind.args.map((t) => t.replace(/\{newId\}/g, carried)), ...rest] : rest,
+    };
+  };
+  /** The session a resume names, if the manifest says where sessions are kept or how the
+   *  agent lists them, and it is not there. */
+  const vanished = (spec: SpawnSpec): boolean => {
+    if (!marker || (!exists && !def.session?.list?.args)) return false;
+    const args = spec.args ?? [];
+    const i = args.indexOf(marker);
+    const id = i >= 0 ? args[i + 1] : undefined;
+    if (!id || id.startsWith("-")) return false;
+    return exists ? !sessionExists(exists, id, paths.home) : !sessionListed(def, id);
   };
   return {
     transformSpecOnSpawn: (spec, tileId) => run(spec, tileId, "spawn"),
-    transformSpecOnRestore: (saved, tileId) => {
-      const spec = onceResumed(saved);
-      return (spec.args ?? []).includes(marker ?? "\0")
+    transformSpecOnRestore: (spec, tileId) => {
+      const out = (spec.args ?? []).includes(marker ?? "\0")
         ? run(spec, tileId, "spawn") // already resuming: keep its own session, still wire it up
         : run(spec, tileId, "restore");
+      // Known to be gone: start fresh under the same id now, rather than fail and retry.
+      return vanished(out) ? retry(out) ?? out : out;
     },
-    restoreRetryTransform: (spec) => {
-      // A session that has since vanished must not kill the tile: abandon the resume. The
-      // tile keeps its identity though — an agent that binds its session id binds the same
-      // one again, so the next start continues the tile rather than becoming a stranger.
-      if (!marker || !isThisAgent(spec)) return null;
-      const args = spec.args ?? [];
-      const i = args.indexOf(marker) >= 0 ? args.indexOf(marker) : (fallbackMarker ? args.indexOf(fallbackMarker) : -1);
-      if (i < 0) return null;
-      const carried = i + 1 < args.length && !args[i + 1]!.startsWith("-") ? args[i + 1] : undefined;
-      const rest = [...args.slice(0, i), ...args.slice(i + (carried ? 2 : 1))];
-      const bind = def.session?.bind;
-      return {
-        ...spec,
-        args: carried && bind ? [...bind.args.map((t) => t.replace(/\{newId\}/g, carried)), ...rest] : rest,
-      };
-    },
+    restoreRetryTransform: retry,
   };
 }

@@ -29,9 +29,34 @@ hm.onReveal((tileId) => rectOf(tileId));          // the host asks "where is thi
 hm.setLayout({ camera });                         // ≤ 64 KB, persisted under your id, back in hm.hello.layout
 ```
 
+Protocol 1.3 adds, with no permission, what the host knows about time and activity. Check
+`hm.hello.features` first — an older app serves an older SDK without these methods:
+
+```ts
+const has = new Set(hm.hello.features ?? []);
+hm.subscribeStatus(tileId, (status, info) => { /* info.since: when it began; info.exact false → "≥" */ });
+hm.onEvents(["turn", "needsInput", "tileClosed"], (e) => {}, { replaySince: lastSeen }); // ids, kinds, times
+hm.onCustom("ci.*", (e) => {});                   // from `hive ctl view emit ci.build '{"state":"failed"}'`
+hm.activity(tileId, (level) => {});               // 0–3, ≤ 4/s, nothing while hidden — never a byte count
+hm.onPresence(({ state }) => {});                 // active | idle | away
+const day = await hm.history("2026-09-23");       // per-tile status intervals, turns, gaps
+const outcome = await hm.share(pngBuffer);        // the host asks the user: copied | saved | cancelled
+```
+
+Protocol 1.4 adds the agents themselves (`has.has("agentStatus")` and friends):
+
+```ts
+hm.subscribeStatus(tileId, (status, info) => { /* info.agent: { state, waitingFor, subagents, background, compacting } */ });
+const agents = await hm.agents();                 // installed agents and what each supports
+const past = await hm.sessions("claude", frameId); // "workspace:sessions": that folder's sessions, newest first
+hm.commands.spawnAgent("claude", frameId, { resume: past[0].id }); // continue one
+await hm.prompt(tileId, "run the tests");         // "workspace:prompt": the user reads it and sends or cancels
+```
+
 `closeTile` needs `"permissions": ["workspace:close"]`; `spawnTile` / `spawnVis` /
 `spawnClaude` / `addFrame` / `spawnAgent` need `"workspace:spawn"`; `renameTile` /
-`openFolder` need `"workspace:edit"`. Unknown permissions are refused at install. Protocol details: `src/protocol.ts`; complete views: `views/` in
+`openFolder` need `"workspace:edit"`; `prompt`, and `spawnAgent` with a `prompt`, need
+`"workspace:prompt"`; `sessions`, and `spawnAgent` with `resume`, need `"workspace:sessions"`. Unknown permissions are refused at install. Protocol details: `src/protocol.ts`; complete views: `views/` in
 [the published plugins](https://github.com/dip497/hivemind-plugins) — `queue` (a list with a
 docked terminal), `tiled` (every terminal of a frame laid out as live panes) and `board` (drag,
 keyboard moves, a persisted layout).

@@ -10,11 +10,11 @@ export default function (pi) {
   const token = process.env.HCP_TOKEN;
   if (!sock || !tile) return; // not spawned by hivemind → stay a plain pi session
 
-  // ── lifecycle bridge: fire-and-forget HCP event (connect, write one line, close) ──
-  const post = (topic, data) => {
+  // ── lifecycle bridge: fire-and-forget JSON-RPC notification (connect, write one line, close) ──
+  const post = (method, params) => {
     try {
       const c = net.connect(sock, () => {
-        try { c.write(JSON.stringify({ t: "event", topic: topic, data: data }) + "\n"); } catch (e) {}
+        try { c.write(JSON.stringify({ jsonrpc: "2.0", method: method, params: params }) + "\n"); } catch (e) {}
         try { c.end(); } catch (e) {}
       });
       c.on("error", () => {});
@@ -30,7 +30,7 @@ export default function (pi) {
   };
 
   let lastText = "";
-  pi.on("agent_start", async () => { lastText = ""; post("status", { tileId: tile, state: "working" }); });
+  pi.on("agent_start", async () => { lastText = ""; post("agent.event", { tileId: tile, event: "turn.started" }); });
   pi.on("message_end", async (event) => {
     const m = event && event.message;
     if (m && m.role === "assistant") { const t = textOf(m); if (t) lastText = t; }
@@ -44,11 +44,12 @@ export default function (pi) {
         if (m && m.role === "assistant") { const t = textOf(m); if (t) { text = t; break; } }
       }
     }
-    post("turn", { tileId: tile, text: text || "" });
-    post("status", { tileId: tile, state: "idle" });
+    // The reply first, on its own token-gated request; then the turn end it belongs to.
+    if (text) await hcpRequest("agent.reply", { tileId: tile, text: text }, undefined, 5000);
+    post("agent.event", { tileId: tile, event: "turn.ended" });
   });
 
-  // ── HCP request/response client (token-authenticated, line-framed). Resolves
+  // ── HCP JSON-RPC client (initialize with the token, then one request). Resolves
   //    { ok, result } | { ok:false, error } | null. NEVER rejects, NEVER hangs:
   //    any socket error / close / parse failure / timeout / abort → resolve(null)
   //    so callers can fail open. `id` is a monotonic counter + this tile id. ──
@@ -68,7 +69,8 @@ export default function (pi) {
     try {
       c = net.connect(sock, () => {
         try {
-          c.write(JSON.stringify({ t: "req", id: id, method: method, params: params, token: token }) + "\n");
+          c.write(JSON.stringify({ jsonrpc: "2.0", id: id + "_init", method: "initialize", params: { token: token } }) + "\n"
+            + JSON.stringify({ jsonrpc: "2.0", id: id, method: method, params: params }) + "\n");
         } catch (e) { done(null); }
       });
     } catch (e) { resolve(null); return; }
@@ -82,8 +84,9 @@ export default function (pi) {
         if (!line) continue;
         let msg;
         try { msg = JSON.parse(line); } catch (e) { continue; }
-        if (msg && msg.t === "res" && msg.id === id) {
-          done(msg.ok ? { ok: true, result: msg.result } : { ok: false, error: msg.error });
+        if (msg && msg.id === id + "_init" && msg.error) { done({ ok: false, error: msg.error.data || msg.error }); return; }
+        if (msg && msg.id === id) {
+          done(msg.error ? { ok: false, error: msg.error.data ? { code: msg.error.data.code, message: msg.error.message } : msg.error } : { ok: true, result: msg.result });
           return;
         }
       }

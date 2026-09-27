@@ -4,7 +4,12 @@ import { recoverOnProcessLoss } from "./recover";
 import desktopPkg from "../../package.json" with { type: "json" };
 import { installPluginCatalogIpc } from "./plugin-catalog-ipc.js";
 /** Electron main process — owns the BrowserWindow + IPC + PtyHost + git/worktree. */
-import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, screen, session, shell, webContents, type WebContents } from "electron";
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, net, powerMonitor, protocol, screen, session, shell, webContents, type WebContents } from "electron";
+import { isDay, promptProblem } from "@hivemind/view-sdk/protocol";
+import { ActivityMeter } from "./pty-activity.js";
+import { POLL_MS as PRESENCE_POLL_MS, PresenceMonitor, localDay, type PresenceTotals } from "./presence.js";
+import { StatusLedger } from "./status-ledger.js";
+import { ViewShare } from "./view-share.js";
 import path from "node:path";
 import { promises as fsp, statSync, readFileSync, writeFileSync, existsSync, cpSync, mkdirSync, readdirSync, unlinkSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -30,23 +35,25 @@ import {
   updateIssue,
   writeAgentContext,
   writeConfig,
+  WORKSPACE_FORMAT,
   installAgenticStack as coreInstallAgenticStack,
   type IssueState,
   type LinkType,
 } from "@hivemind/core";
 import os from "node:os";
-import { agentById, agentForCmd, getCatalog, preferredAgent, setCatalog, type AgentProviderDef } from "@hivemind/agents";
+import { AGENT_EVENT_METHOD, cleanName, agentById, agentForCmd, getCatalog, parseAgentEvent, preferredAgent, setCatalog, type AgentProviderDef } from "@hivemind/agents";
 import { agentPresence, discoverOptions, findBin, verifyAgent } from "@hivemind/agents/discover";
+import { TILE_SESSIONS_DIR, listSessions, writeTrackedSession } from "@hivemind/agents/node";
 import { agentAllowedIn, loadAgents, toWire } from "@hivemind/agents/load";
 import type { IssuePatch } from "@hivemind/core/types";
 import * as ptyHost from "./pty-host.js";
 import * as ptyDaemon from "./daemon-client.js";
-import { PtyOutputBuffer } from "./pty-output-buffer.js";
+import { PtyOutputBuffer } from "@hivemind/agent-host/pty-output-buffer";
 import { isRemote, parseRemote } from "../shared/remote-uri.js";
 import { savedAuth } from "./remote/saved-hosts.js";
 import { addMachine, checkMachine, editMachine, initMachines, installOnMachine, machineSessions, reconnectMachineHost, removeMachine, setMachinePassword, snapshot as machinesSnapshot, updateMachine } from "./remote/machines.js";
 import {
-  spawnRemotePty, writeRemotePty, resizeRemotePty, killRemotePty, hasRemotePty,
+  spawnRemotePty, writeRemotePty, resizeRemotePty, killRemotePty, hasRemotePty, screenRemotePty, remoteKeepsScreen,
   pauseRemotePty, resumeRemotePty, detachRemotePty, setRemoteEventSink,
 } from "./remote/pty.js";
 import { readRemoteFile, writeRemoteFile } from "./remote/git.js";
@@ -61,7 +68,7 @@ const PERSIST_PTY = process.env.HIVEMIND_PTY_DAEMON !== "0";
 const ptyMod = PERSIST_PTY ? ptyDaemon : ptyHost;
 const { spawnPty, writePty, resizePty, killPty, detachPty, hasSession, pausePty, resumePty } = ptyMod;
 const killAllPtys = ptyMod.killAll;
-import { applyShellEnvToProcess } from "./shell-env.js";
+import { applyShellEnvToProcess } from "@hivemind/agent-host/shell-env";
 import {
   gitCommit,
   gitConflictedFile,
@@ -91,23 +98,23 @@ import { randomUUID } from "node:crypto";
 import { startHcpServer } from "./hcp/hcp-server.js";
 import { makeSpawnPacer } from "./spawn-pacer.js";
 import { makeDispatch, type Dispatcher } from "./hcp/methods.js";
-import { labelOf as hcpLabelOf } from "./hcp/names.js";
+import { labelOf as hcpLabelOf, setNames as setHcpNames, setTitleSource } from "./hcp/names.js";
 import { Mailbox } from "./hcp/mailbox.js";
 import { TurnTracker } from "./hcp/turn-tracker.js";
-import { SubagentTracker } from "./hcp/subagent-tracker.js";
+import { StatusStore, type ScreenState } from "@hivemind/agent-host/status-store";
+import { REATTACH_RESET } from "@hivemind/agent-host/daemon-endpoint";
 import { ipcPath, upgradeCommand, windowsStartMenuShortcut } from "./platform.js";
 import { SubagentReaper } from "./hcp/subagent-reaper.js";
-import { notifyStatusFor } from "./hcp/notification-map.js";
 import { OutputRecorder } from "./hcp/output-recorder.js";
-import { readOrCreateToken, hcpSockPath } from "./hcp/token.js";
+import { readOrCreateToken, hcpSockPath } from "@hivemind/agent-host/hooks/token";
 import { HcpError } from "./hcp/protocol.js";
 import { handleViewProtocol, listViewPackages, registerViewScheme, startViewWatchdog } from "./view-packages.js";
 import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, settingsFile } from "./settings-store.js";
 import { patchSettingsExtras } from "@hivemind/core/settings";
 import { PipeManager } from "./hcp/pipes.js";
-import { readLastAssistantMessage } from "./hcp/transcript.js";
 import { toBareId, toPtyId } from "../shared/tile-id.js";
-import { SUBMIT_DELAY_MS, INITIAL_PROMPT_ENV } from "../shared/agent-io.js";
+import { SUBMIT_DELAY_MS } from "../shared/agent-io.js";
+import { INITIAL_PROMPT_ENV } from "@hivemind/agent-host/initial-prompt";
 import type {
   DiffScope,
   WorktreeCreateOpts,
@@ -130,57 +137,6 @@ if (!app.isPackaged) app.setName("hivemind-dev");
 // electron-builder strips `build` from the package.json it packages.
 const windowsAppId: string = desktopPkg.build.appId;
 if (process.platform === "win32") app.setAppUserModelId(windowsAppId);
-
-// Renaming the app (above) moves the userData dir to ~/.config/hivemind. Without
-// this, EVERY existing user loses their canvas (frames/tiles/layout live in the
-// OLD profile's localStorage) the first time they upgrade to this version. So on
-// first run with the new name, if the new profile is empty, clone the most recent
-// legacy profile into it. Idempotent: once the new profile has localStorage, skip.
-// Legacy names seen in the wild: "Electron" (dev/source default) and
-// "@hivemind/desktop" / "@hivemind" (packaged, from the asar package.json name).
-function migrateLegacyProfile(): void {
-  try {
-    const userData = app.getPath("userData");
-    if (existsSync(path.join(userData, "Local Storage"))) return; // already populated
-    const appData = app.getPath("appData");
-    const candidates = ["Electron", "@hivemind/desktop", "@hivemind", "hivemind-desktop"];
-    let best: { dir: string; mtime: number } | null = null;
-    for (const name of candidates) {
-      const dir = path.join(appData, name);
-      const ls = path.join(dir, "Local Storage");
-      if (existsSync(ls)) {
-        const mtime = statSync(ls).mtimeMs;
-        if (!best || mtime > best.mtime) best = { dir, mtime };
-      }
-    }
-    if (!best) return;
-    // Copy ONLY the browser-storage state that holds the canvas (frames/tiles/
-    // layout live in localStorage). A blanket recursive copy of the whole
-    // profile throws `ERR_FS_CP_SOCKET` the moment cpSync hits the daemon's
-    // `pty-daemon.sock` (a UNIX socket the PtyHost leaves in userData) — which
-    // aborted the ENTIRE migration and silently blanked every upgrader's canvas.
-    // A socket-skipping filter is kept as defense in case any of these subtrees
-    // ever contains one.
-    const STORAGE = ["Local Storage", "Session Storage", "IndexedDB", "Local State", "Preferences"];
-    mkdirSync(userData, { recursive: true });
-    const copied: string[] = [];
-    for (const name of STORAGE) {
-      const src = path.join(best.dir, name);
-      if (!existsSync(src)) continue;
-      cpSync(src, path.join(userData, name), {
-        recursive: true,
-        force: false,
-        errorOnExist: false,
-        filter: (p) => { try { return !statSync(p).isSocket(); } catch { return true; } },
-      });
-      copied.push(name);
-    }
-    console.log(`hivemind: migrated profile ${best.dir} → ${userData} (${copied.join(", ") || "nothing"})`);
-  } catch (e) {
-    console.warn("hivemind: legacy profile migration skipped:", (e as Error).message);
-  }
-}
-migrateLegacyProfile();
 
 // Rewrite the Start Menu shortcut with our AUMID: install.ps1 can only write an
 // AUMID-less fallback (its COM API cannot set one), and without the id Windows drops
@@ -765,7 +721,7 @@ ipcMain.handle(
     const existing = await findRoot(dir);
     if (existing === root) throw new Error(`.hivemind/ already exists at ${root}`);
     await fsp.mkdir(path.join(root, "issues"), { recursive: true });
-    await writeConfig(root, { prefix, next_id: 1, agents: {} });
+    await writeConfig(root, { prefix, next_id: 1, agents: {}, format: WORKSPACE_FORMAT });
     await writeAgentContext(root);
     // Install the agentic stack by default — a brand-new workspace should be
     // agent-ready so "Work on this" actually works (the agent gets the hive
@@ -1093,30 +1049,30 @@ const recordPtySpawn = makeSpawnPacer({ windowMs: 10_000, max: 24, queueMax: 128
 // on its tile staying mounted. See startHcpControlPlane().
 const hcpRecorder = new OutputRecorder();
 const hcpTurns = new TurnTracker();
-const hcpSubagents = new SubagentTracker();
-/** Push a tile's subagent-busy edge to the renderer status bus (bare tile id).
- *  Keeps the tile reading "working" while it has in-flight Task subagents. */
-function pushSubagent(tileId: string, busy: boolean): void {
-  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("hcp:subagent", { tileId, busy });
-}
-// Watchdog: a lost SubagentStop (subagent errored / turn interrupted / session
-// compacted / process died) would otherwise pin a tile "working" forever. The
-// reaper force-drains a tile's in-flight set after a quiet grace window — it's
-// (re)armed on every subagent edge and on turn-end while busy, so a genuinely
-// active background population (which keeps emitting edges) is never reaped.
+// Every agent session's status, keyed by bare tile id: hooks first, the screen for agents
+// without them, exits and interrupt keys observed here. One push carries every change.
+const hcpStatus = new StatusStore();
+setTitleSource((tileId) => hcpStatus.get(tileId)?.title);
+ipcMain.on("tile:names", (_e, names: Record<string, string>) => {
+  if (names && typeof names === "object") setHcpNames(Object.fromEntries(Object.entries(names).filter(([, v]) => typeof v === "string").map(([k, v]) => [k, cleanName(v as string)])));
+});
+const SCREEN_STATES = new Set<ScreenState>(["idle", "working", "permission", "question", "blocked"]);
+hcpStatus.subscribe((change) => {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("hcp:status", change);
+});
+// A lost SubagentStop (the subagent errored, the turn was interrupted, the session compacted)
+// would pin a tile's subagents forever: once the last subagent edge is this old, the host
+// reports the rest stopped. Every edge pushes the deadline out.
+// View protocol 1.3: output levels for watched tiles (renderer asks via ptyActivity:watch).
+const ptyActivity = new ActivityMeter((levels) => {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("ptyActivity:levels", levels);
+});
 const SUBAGENT_REAP_MS = 120_000;
 const hcpSubagentReaper = new SubagentReaper(SUBAGENT_REAP_MS, (tileId) => {
-  if (hcpSubagents.forget(tileId)) {
-    pushSubagent(tileId, false);
-    void writeDiagLog(`[subagent-reap] tile=${tileId} drained ${SUBAGENT_REAP_MS}ms after last edge (lost SubagentStop)`);
-  }
+  const left = hcpStatus.get(tileId)?.subagents ?? [];
+  for (const agentId of left) hcpStatus.event(tileId, { event: "subagent.stopped", agentId });
+  if (left.length) void writeDiagLog(`[subagent-reap] tile=${tileId} drained ${left.length} ${SUBAGENT_REAP_MS}ms after the last edge`);
 });
-/** Push a deterministic "needs you" status (from claude's Notification hook) to
- *  the renderer status bus (bare tile id). Soft + auto-cleared by the scrape when
- *  work resumes — see agent-status-bus.setNotify. */
-function pushNotify(tileId: string, status: "permission" | "question"): void {
-  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("hcp:notify", { tileId, status });
-}
 /** Push a NON-FATAL background-subsystem error to the renderer as a toast, so
  *  nothing fails silently (e.g. a stale PTY daemon that breaks hook injection).
  *  Fatal errors still use dialogs. Idempotent + cheap; safe to call pre-window. */
@@ -1125,12 +1081,6 @@ function pushAppError(message: string, source: string): void {
     try { mainWindow.webContents.send("app:error", { message, source } satisfies AppErrorEvent); }
     catch { /* mid-teardown */ }
   }
-}
-/** Push claude's hook-driven turn state (UserPromptSubmit → working, Stop → idle)
- *  to the renderer status bus (bare tile id). This is the deterministic
- *  replacement for the working/idle screen-scrape. */
-function pushTurnState(tileId: string, state: "working" | "idle"): void {
-  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("hcp:turnstate", { tileId, state });
 }
 const hcpPipes = new PipeManager();
 // bare tileId → supervision spec ("all" or a tool list). Set when an agent
@@ -1165,7 +1115,7 @@ const onPtyExit = (tileId: string): void => {
   const bare = toBareId(tileId);
   hcpSubagentReaper.cancel(bare);
   hcpMailbox.forget(toPtyId(tileId));
-  if (hcpSubagents.forget(bare)) pushSubagent(bare, false);
+  hcpStatus.exited(bare);
   hcpForgetTile(tileId); // turns/recorder/pipes/sendSeq/parent/depth/name/supervise/approvals
 };
 
@@ -1177,6 +1127,10 @@ const onPtyExit = (tileId: string): void => {
 // Senders are looked up per tile at flush time so a tile that re-attached from
 // a new renderer (view-mode switch, reload) gets its bytes at the live target.
 const ptySenders = new Map<string, WebContents>();
+// Tiles no view shows: their bytes are recorded but not sent, and the renderer does no work
+// for them. Shown again, a tile is sent its screen as the host keeps it, then live bytes.
+const ptyUnseen = new Set<string>();
+const ptyShowing = new Set<string>();
 const ptyOut = new PtyOutputBuffer(
   (tileId, data) => {
     // The HCP output recorder is fed from the coalesced batch, not per pty
@@ -1184,6 +1138,7 @@ const ptyOut = new PtyOutputBuffer(
     // escape sequence split across two reads is stripped as a whole. (The
     // agent.stream broadcast stays per chunk — subscribers want immediacy.)
     hcpRecorder.record(tileId, data);
+    if (ptyUnseen.has(tileId)) return;
     const target = ptySenders.get(tileId);
     if (!target || target.isDestroyed()) return;
     try { target.send(`pty:data:${tileId}`, data); } catch { /* sender torn down */ }
@@ -1211,6 +1166,8 @@ function relayPtyExit(sender: WebContents, tileId: string, info: { code: number;
 function dropPtyRelay(tileId: string): void {
   ptyOut.forget(tileId);
   ptySenders.delete(tileId);
+  ptyUnseen.delete(tileId);
+  ptyShowing.delete(tileId);
   const t = ptyPauseTimers.get(tileId);
   if (t) { clearTimeout(t); ptyPauseTimers.delete(tileId); }
 }
@@ -1271,7 +1228,7 @@ ipcMain.handle("ptySpawn", wrap(async (e, opts: Parameters<typeof spawnPty>[0]) 
   // plumbing below is identical.
   if (isRemote(opts.cwd)) {
     return spawnRemotePty(opts, {
-      onData: (data) => { hcpBroadcast?.(toBareId(opts.tileId), data); relayPtyData(sender, opts.tileId, data); },
+      onData: (data, replay) => { hcpBroadcast?.(toBareId(opts.tileId), data); relayPtyData(sender, opts.tileId, data); if (!replay) ptyActivity.note(toBareId(opts.tileId), data.length); },
       // Flush (records the tail + ships it) BEFORE the HCP teardown forgets the tile.
       onExit: (code, signal) => { relayPtyExit(sender, opts.tileId, { code, signal }); onPtyExit(opts.tileId); },
     });
@@ -1288,7 +1245,7 @@ ipcMain.handle("ptySpawn", wrap(async (e, opts: Parameters<typeof spawnPty>[0]) 
   // data/exit after the sender is gone — the relay helpers check
   // `isDestroyed()` and drop those instead of crashing main.
   return spawnPty(opts, {
-    onData: (data) => { hcpBroadcast?.(toBareId(opts.tileId), data); relayPtyData(sender, opts.tileId, data); },
+    onData: (data, replay) => { hcpBroadcast?.(toBareId(opts.tileId), data); relayPtyData(sender, opts.tileId, data); if (!replay) ptyActivity.note(toBareId(opts.tileId), data.length); },
     // Flush (records the tail + ships it) BEFORE the HCP teardown forgets the tile.
     onExit: (code, signal) => { relayPtyExit(sender, opts.tileId, { code, signal }); onPtyExit(opts.tileId); },
   });
@@ -1307,11 +1264,36 @@ ipcMain.on("ptyFlow", (_e, tileId: string, paused: boolean) => {
   }
 });
 ipcMain.on("ptyWrite", (_e, tileId: string, data: string) => {
-  // Remote ptys relay elsewhere; programmatic writes never take this handler,
-  // so the mark says "a human keystroke on a local pty" — echo skips batching.
+  // Only a person's keystrokes take this handler — programmatic writes go through the
+  // mailbox — so an interrupt key here is the user stopping the agent's turn.
+  hcpStatus.input(toBareId(tileId), data);
+  // Remote ptys relay elsewhere; the mark says "a human keystroke on a local pty" — echo skips batching.
   if (hasRemotePty(tileId)) { writeRemotePty(tileId, data); return; }
   ptyOut.markInput(tileId);
   writePty(tileId, data);
+});
+ipcMain.handle("hcp:status-all", () => hcpStatus.all());
+ipcMain.on("ptyInterest", (_e, tileId: string, shown: boolean) => {
+  const redraw = (cb: (replay: string | null) => void): boolean =>
+    hasRemotePty(tileId) ? screenRemotePty(tileId, cb) : PERSIST_PTY && ptyDaemon.screenPty(tileId, cb);
+  if (!shown) {
+    ptyShowing.delete(tileId);
+    // Only a session whose screen the host keeps can be shown again from it.
+    if (hasRemotePty(tileId) ? remoteKeepsScreen(tileId) : PERSIST_PTY && hasSession(tileId)) ptyUnseen.add(tileId);
+    return;
+  }
+  if (!ptyUnseen.has(tileId) || ptyShowing.has(tileId)) return;
+  ptyShowing.add(tileId);
+  const asked = redraw((replay) => {
+    // Runs in order with the session's data: what is buffered now is older than this screen.
+    if (!ptyShowing.delete(tileId)) return; // hidden again meanwhile
+    ptyOut.flush(tileId);
+    ptyUnseen.delete(tileId);
+    const target = ptySenders.get(tileId);
+    if (replay === null || !target || target.isDestroyed()) return;
+    try { target.send(`pty:data:${tileId}`, REATTACH_RESET + replay); } catch { /* sender torn down */ }
+  });
+  if (!asked) { ptyShowing.delete(tileId); ptyUnseen.delete(tileId); }
 });
 ipcMain.on("ptyResize", (_e, tileId: string, cols: number, rows: number) =>
   hasRemotePty(tileId) ? resizeRemotePty(tileId, cols, rows) : resizePty(tileId, cols, rows)
@@ -1472,7 +1454,6 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
       send: (snap) => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("machines:changed", snap); },
       listLocalSessions: () => (PERSIST_PTY ? ptyDaemon.listSessions() : Promise.resolve([])),
       version: app.getVersion(),
-      stateDir: app.getPath("userData"),
     }).catch((e: unknown) => console.warn("[machines] init failed:", e));
     installViewManagementIpc(() => mainWindow);
     installPluginCatalogIpc(() => mainWindow);
@@ -1638,12 +1619,10 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     protocol.handle("hivemedia", (request) => {
       try {
         // hivemedia://media/<filename> — the filename rides in the PATH (host is
-        // the fixed marker "media"). Older URLs put the bare filename in the host
-        // (hivemedia://<filename>, pathname empty); tolerate that too so a
-        // persisted overlay from before this fix still resolves. Resolve against
-        // mediaDir, then verify it never escaped the dir (path-traversal guard).
+        // the fixed marker "media"). Resolve against mediaDir, then verify it
+        // never escaped the dir (path-traversal guard).
         const u = new URL(request.url);
-        const rawName = u.pathname.replace(/^\/+/, "") || u.host;
+        const rawName = u.pathname.replace(/^\/+/, "");
         const name = decodeURIComponent(rawName);
         const abs = path.resolve(mediaDir, name);
         if (abs !== mediaDir && !abs.startsWith(mediaDir + path.sep)) {
@@ -1660,16 +1639,14 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     // null if the user cancels.
     const MEDIA_VIDEO_EXT = new Set(["webm", "mp4", "mov"]);
     ipcMain.handle("media:pick", async (_e, slotRaw: unknown) => {
-      // Slot key → a per-slot filename PREFIX. "background" and legacy "overlay"
-      // are single slots; "overlay:<id>" is one of many stacked overlays, each
-      // its OWN slot so a new/replaced overlay only prunes ITS file, never a
-      // sibling's. The id is sanitized (it names a file + a prune glob).
-      const slot = typeof slotRaw === "string" ? slotRaw : "overlay";
+      // Slot key → a per-slot filename PREFIX: "background", or "overlay:<id>" — one of
+      // many stacked overlays, each its OWN slot so a new/replaced overlay only prunes
+      // ITS file, never a sibling's. The id is sanitized (it names a file + a prune glob).
+      const slot = typeof slotRaw === "string" ? slotRaw : "";
+      if (slot !== "background" && !slot.startsWith("overlay:")) return null;
       const prefix = slot === "background"
         ? "background"
-        : slot.startsWith("overlay:")
-          ? `overlay-${slot.slice("overlay:".length).replace(/[^a-z0-9-]/gi, "").slice(0, 40) || "x"}`
-          : "overlay";
+        : `overlay-${slot.slice("overlay:".length).replace(/[^a-z0-9-]/gi, "").slice(0, 40) || "x"}`;
       if (!mainWindow || mainWindow.isDestroyed()) return null;
       const result = await dialog.showOpenDialog(mainWindow, {
         properties: ["openFile"],
@@ -1721,6 +1698,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     registerAgentNotifications(() => mainWindow);
     startPlanReviewBridge();
     startHcpControlPlane();
+    startViewHost();
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) void createWindow();
     });
@@ -1738,8 +1716,15 @@ function startPlanReviewBridge(): void {
   startPlanBridge(sock, (req) => {
     const win = mainWindow;
     if (!win || win.isDestroyed()) { req.reply("allow"); return; } // fail-open: no UI
-    planReplies.set(req.requestId, req.reply);
+    // The agent waits on a person: that is its status until the review is answered or dropped.
+    const bare = toBareId(req.tileId);
+    hcpStatus.event(bare, { event: "input.requested", kind: "plan" });
+    planReplies.set(req.requestId, (decision, feedback) => {
+      hcpStatus.event(bare, { event: "input.resolved" });
+      req.reply(decision, feedback);
+    });
     req.onAbort(() => {
+      hcpStatus.event(bare, { event: "input.resolved" });
       planReplies.delete(req.requestId);
       if (mainWindow && !mainWindow.isDestroyed())
         mainWindow.webContents.send("plan-review:abort", req.requestId);
@@ -1797,6 +1782,67 @@ function hcpSpawnAllowed(): boolean {
   hcpSpawnTimes.push(now);
   return true;
 }
+/** View protocol 1.3 host services: the status ledger, presence, and sharing an image. */
+function startViewHost(): void {
+  let ledger: StatusLedger | null = new StatusLedger(path.join(app.getPath("userData"), "status-ledger"));
+  try { ledger.boot(); } catch (e) { console.warn("[ledger] off:", e); ledger = null; }
+  const totals = new Map<string, PresenceTotals>();
+  const presence = new PresenceMonitor({
+    idleSeconds: () => powerMonitor.getSystemIdleTime(),
+    focused: () => !!mainWindow && !mainWindow.isDestroyed() && mainWindow.isFocused(),
+    dayOf: localDay,
+    onChange: (p) => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("presence:changed", p); },
+    onTotals: (day, t) => totals.set(day, t),
+  });
+  const persistTotals = () => { for (const [day, t] of totals) ledger?.setPresenceTotals(day, t); totals.clear(); };
+  setInterval(() => presence.evaluate(), PRESENCE_POLL_MS).unref();
+  setInterval(() => { ledger?.heartbeat(); persistTotals(); }, 60_000).unref();
+  powerMonitor.on("lock-screen", () => presence.setLocked(true));
+  powerMonitor.on("suspend", () => presence.setLocked(true));
+  powerMonitor.on("unlock-screen", () => presence.setLocked(false));
+  powerMonitor.on("resume", () => presence.setLocked(false));
+  app.on("browser-window-focus", () => presence.evaluate());
+  app.on("browser-window-blur", () => presence.evaluate());
+  app.on("before-quit", () => { presence.evaluate(); persistTotals(); ledger?.stop(); });
+
+  ipcMain.on("viewLedger:append", (_e, lines: unknown) => { if (Array.isArray(lines)) ledger?.append(lines.slice(0, 10_000)); });
+  ipcMain.handle("viewLedger:snapshot", () => ledger?.snapshot() ?? []);
+  ipcMain.handle("viewLedger:history", (_e, layoutKey: unknown, day: unknown) => {
+    if (typeof layoutKey !== "string" || !isDay(day)) throw new Error("bad history request");
+    if (!ledger) throw new Error("the status ledger is off");
+    persistTotals();
+    return ledger.history(layoutKey, day);
+  });
+  ipcMain.on("ptyActivity:watch", (_e, ids: unknown) => {
+    if (Array.isArray(ids)) ptyActivity.setWatched(ids.filter((x): x is string => typeof x === "string").slice(0, 1024));
+  });
+  ipcMain.handle("presence:now", () => presence.current);
+
+  const share = new ViewShare({
+    reencode: (bytes) => {
+      const img = nativeImage.createFromBuffer(Buffer.from(bytes));
+      if (img.isEmpty()) return null;
+      const { width, height } = img.getSize();
+      return { png: img.toPNG(), width, height };
+    },
+    copy: (png) => clipboard.writeImage(nativeImage.createFromBuffer(Buffer.from(png))),
+    chooseSavePath: async (name) => {
+      const opts = { defaultPath: path.join(app.getPath("pictures"), name), filters: [{ name: "PNG image", extensions: ["png"] }] };
+      const r = mainWindow && !mainWindow.isDestroyed() ? await dialog.showSaveDialog(mainWindow, opts) : await dialog.showSaveDialog(opts);
+      return r.canceled || !r.filePath ? null : r.filePath;
+    },
+  });
+  ipcMain.handle("viewShare:prepare", (_e, png: unknown) => {
+    const buf = png instanceof ArrayBuffer ? png : ArrayBuffer.isView(png) ? png.buffer.slice(png.byteOffset, png.byteOffset + png.byteLength) as ArrayBuffer : null;
+    if (!buf) throw new Error("not an image");
+    return share.prepare(buf);
+  });
+  ipcMain.handle("viewShare:commit", (_e, token: unknown, action: unknown, name: unknown) => {
+    if (typeof token !== "string" || (action !== "copy" && action !== "save" && action !== "cancel")) throw new Error("bad share request");
+    return share.commit(token, action, typeof name === "string" ? name : "");
+  });
+}
+
 function startHcpControlPlane(): void {
   const userData = app.getPath("userData");
   const token = readOrCreateToken(userData);
@@ -1831,13 +1877,24 @@ function startHcpControlPlane(): void {
     forgetPipes: (id) => { hcpPipes.forget(id); pushPipe(id, null, false); },
     spawnEdge: (child, parent, connected) => pushSpawn(child, parent, connected),
     setSupervise: (id, spec) => { if (spec) hcpSupervise.set(id, spec); else hcpSupervise.delete(id); },
-    pushWait: (tileId, status) => {
-      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("hcp:wait", { tileId, status });
-    },
+    awaitingApproval: (tileId, waiting) =>
+      hcpStatus.event(tileId, waiting ? { event: "input.requested", kind: "approval" } : { event: "input.resolved" }),
   });
   // Every verb routes through the boot scan first: spawn resolves the agent by id
   // and other verbs read its capabilities, so none may run against a half-set catalog.
   const dispatch: Dispatcher["dispatch"] = (method, params) => agentsScanned.then(() => _hcp.dispatch(method, params));
+  // View protocol 1.4: a folder's past sessions, without what the agent wrote; a prompt the user
+  // confirmed, delivered like `hive ctl send` (held while the agent is mid-turn).
+  ipcMain.handle("view:sessions", async (_e, agentId: unknown, cwd: unknown) => {
+    const def = typeof agentId === "string" ? agentById(agentId) : undefined;
+    if (!def || typeof cwd !== "string" || !path.isAbsolute(cwd)) throw new Error("bad sessions request");
+    const rows = await listSessions(def, { cwd, limit: 100 });
+    return rows.map((s) => ({ id: s.id, ...(s.updated ? { updated: s.updated } : {}), ...(s.prompt ? { prompt: s.prompt } : {}) }));
+  });
+  ipcMain.handle("view:prompt", async (_e, tileId: unknown, text: unknown) => {
+    if (typeof tileId !== "string" || promptProblem(text)) throw new Error("bad prompt");
+    await dispatch("agent.send", { tileId, text });
+  });
   hcpForgetTile = _hcp.forgetTile; // wire the pty-exit teardown to the dispatch's per-tile cleanup
   const server = startHcpServer(hcpSockPath(userData), {
     token,
@@ -1849,122 +1906,62 @@ function startHcpControlPlane(): void {
     replay: (tileId, opts) =>
       typeof opts.lines === "number" ? hcpRecorder.tail(toPtyId(tileId), opts.lines) : hcpRecorder.since(toPtyId(tileId), opts.since ?? 0),
     offsetOf: (tileId) => hcpRecorder.mark(toPtyId(tileId)),
-    onEvent: (topic, data) => {
-      if (topic === "subagent") {
-        // SubagentStart/Stop hook: a tile gained/lost an in-flight Task subagent.
-        // Track the per-tile set and push only real busy edges to the renderer so
-        // the tile reads "working" even when its main loop is back at the prompt
-        // (the background-agent case the screen-scrape misses). tileId is bare.
-        const s = (data ?? {}) as { tileId?: string; phase?: string; agentId?: string };
-        if (!s.tileId) return;
-        // The hook reports the PTY id; key the tracker + renderer push + reaper by
-        // BARE (matches the renderer status bus and the onExit `forget`).
-        const tileId = toBareId(s.tileId);
-        const changed =
-          s.phase === "start" ? hcpSubagents.start(tileId, s.agentId ?? "")
-          : s.phase === "stop" ? hcpSubagents.stop(tileId, s.agentId ?? "")
-          : false;
-        if (changed) pushSubagent(tileId, hcpSubagents.busy(tileId));
-        // (Re)arm the lost-edge watchdog while busy; cancel it once the set
-        // drains naturally. Every edge pushes the reap deadline out, so an
-        // active subagent population is never reaped — only a quiet stuck set.
-        if (hcpSubagents.busy(tileId)) hcpSubagentReaper.arm(tileId);
-        else hcpSubagentReaper.cancel(tileId);
+    status: hcpStatus,
+    onEvent: (method: string, params: unknown): void => {
+      if (method === "agent.title") {
+        // A host read an agent's window title: what it says it is doing ("" = nothing).
+        const r = (params ?? {}) as { tileId?: string; title?: unknown };
+        if (r.tileId && typeof r.title === "string") hcpStatus.title(toBareId(r.tileId), cleanName(r.title));
         return;
       }
-      if (topic === "status") {
-        // UserPromptSubmit hook: a turn STARTED → working (deterministic). The hook
-        // reports the PTY id (`hm:<bare>` = HIVEMIND_TILE); the renderer status bus
-        // keys by the BARE tile id, so normalize before pushing.
-        const s = (data ?? {}) as { tileId?: string; state?: string };
-        if (s.tileId && (s.state === "working" || s.state === "idle")) {
-          pushTurnState(toBareId(s.tileId), s.state);
-          // Same signal gates delivery: hold agent-to-agent messages while this
-          // tile is mid-turn (its TUI would swallow them), release at its prompt.
-          if (s.state === "working") hcpMailbox.setBusy(toPtyId(s.tileId));
-          else hcpMailbox.setIdle(toPtyId(s.tileId));
-        }
+      if (method === "agent.screen") {
+        // A daemon read an agent's screen: its status until the agent's hooks report.
+        const r = (params ?? {}) as { tileId?: string; state?: ScreenState };
+        if (r.tileId && r.state && SCREEN_STATES.has(r.state)) hcpStatus.screen(toBareId(r.tileId), r.state);
         return;
       }
-      if (topic === "notification") {
-        // claude's Notification hook: map the type to a "needs you" status and
-        // push it. Stateless here — the renderer auto-clears it when the scrape
-        // shows work resumed. Normalize the pty id → bare for the renderer bus.
-        const n = (data ?? {}) as { tileId?: string; notificationType?: string };
-        if (!n.tileId) return;
-        const status = notifyStatusFor(n.notificationType ?? "");
-        if (status) pushNotify(toBareId(n.tileId), status);
+      if (method === "agent.reply") {
+        // A remote machine's daemon passes its hooks' replies on as this notification.
+        const r = (params ?? {}) as { tileId?: string; text?: string };
+        if (r.tileId && typeof r.text === "string" && r.text) hcpTurns.recordReply(toPtyId(r.tileId), r.text);
         return;
       }
-      if (topic !== "turn") return;
-      const d = (data ?? {}) as { tileId?: string; transcriptPath?: string; text?: string };
-      if (!d.tileId) return;
-      // Forged-event hardening: the `turn` event is token-less (only the 0600
-      // socket gates it), so constrain the transcript path to a real agent
-      // transcript — claude's `~/.claude/**`, droid's `~/.factory/**`, or droid's
-      // ephemeral FACTORY_HOME_OVERRIDE overlay (`<userData>/droid-home/**`). A
-      // bogus path can't make agent.read return an arbitrary user-readable file's
-      // contents — it falls back to the recorder instead.
-      let tp = d.transcriptPath;
-      if (tp && tp.startsWith("~/")) tp = path.join(os.homedir(), tp.slice(2)); // hooks may report a literal ~
-      const okRoots = [
-        path.join(os.homedir(), ".claude") + path.sep,
-        path.join(os.homedir(), ".factory") + path.sep,
-        path.join(app.getPath("userData"), "droid-home") + path.sep,
-      ];
-      const safeTp = tp && tp.endsWith(".jsonl") && okRoots.some((r) => tp!.startsWith(r)) ? tp : null;
-      // pi carries its reply inline on the turn event (no transcript path); pass
-      // it through so agent.read returns it directly. claude/droid send no text.
-      // Single-delivery ladder: true if this reply was already delivered by a more
-      // specific channel — a blocking agent.read (hive ctl read) took it, OR the
-      // worker authored an explicit agent.report (hive ctl report) this turn. Either way the auto-report banner below
-      // stands down, so the parent isn't handed the same reply twice (the duplicate
-      // would arrive as an unsolicited banner that spawns a spurious extra turn).
-      const deliveredElsewhere = hcpTurns.recordTurn(d.tileId, safeTp, typeof d.text === "string" ? d.text : null);
-      // Turn END → idle (hook-driven status). The hook reports the PTY id; the
-      // renderer status bus keys by BARE — normalize (recordTurn above stays on
-      // the pty id, the turn-tracker's key). If a background subagent is still
-      // running, the subagent-busy override re-lifts the tile to "working" — see
-      // the status-bus precedence — so this is safe to push unconditionally.
-      pushTurnState(toBareId(d.tileId), "idle");
-      // Back at its prompt → release one held message (a report / approval that
-      // arrived while this tile was mid-turn and would have been swallowed).
-      hcpMailbox.setIdle(toPtyId(d.tileId));
-      // Arm the watchdog: if the set is still non-empty at turn-end and no further
-      // subagent edge arrives within the grace window, those are lost SubagentStops
-      // (interrupt / error / compaction) — reap them so the tile doesn't read
-      // "working" forever. A real background subagent will keep emitting edges.
-      // Both are keyed by the BARE id (see the subagent branch above); d.tileId is the pty id.
-      if (hcpSubagents.busy(toBareId(d.tileId))) hcpSubagentReaper.arm(toBareId(d.tileId));
+      if (method !== AGENT_EVENT_METHOD) return;
+      const evt = parseAgentEvent(params);
+      if (!evt) return;
+      // The session an agent reports from is the one its tile resumes.
+      if (evt.sessionId) try { writeTrackedSession(path.join(userData, TILE_SESSIONS_DIR), evt.tileId, evt.sessionId); } catch { /* best-effort */ }
+      const bare = toBareId(evt.tileId);
+      const pid = toPtyId(evt.tileId);
+      hcpStatus.event(bare, evt);
+      if (evt.event === "subagent.started" || evt.event === "subagent.stopped" || evt.event === "turn.ended") {
+        // Re-arm the lost-edge watchdog while subagents run; cancel it once they drain.
+        if (hcpStatus.get(bare)?.subagents.length) hcpSubagentReaper.arm(bare);
+        else hcpSubagentReaper.cancel(bare);
+      }
+      // Hold agent-to-agent messages while this tile is mid-turn (its TUI would swallow
+      // them), release one at its prompt.
+      if (evt.event === "turn.started") { hcpMailbox.setBusy(pid); return; }
+      if (evt.event !== "turn.ended") return;
+      // Single-delivery ladder: true if this reply was already delivered by a more specific
+      // channel — a blocking agent.read (hive ctl read) took it, OR the worker authored an
+      // explicit agent.report this turn. Either way the auto-report below stands down, so the
+      // parent isn't handed the same reply twice.
+      const deliveredElsewhere = hcpTurns.recordTurn(pid);
+      hcpMailbox.setIdle(pid);
       // Pipe forwarding: feed this agent's reply into any piped destinations.
-      // Skip if a blocking reader already took it — agent.read is the delivery
-      // channel this turn; the auto-report is only the fallback for when nobody's
-      // reading. (Exotic: a worker fan-piped to several tiles where only one reads
-      // would skip the others too — acceptable; the common auto-report pipe is the
-      // single worker→spawner edge, which IS the reader.)
-      const dests = hcpPipes.dests(toBareId(d.tileId));
+      const dests = hcpPipes.dests(bare);
       if (dests.length === 0 || deliveredElsewhere) return;
-      // claude/droid carry the reply in a transcript; pi carries it inline on the
-      // turn event. Gating on the transcript alone silently dropped every pi
-      // worker's auto-report to its parent.
-      const reply = safeTp
-        ? readLastAssistantMessage(safeTp)
-        : typeof d.text === "string"
-          ? d.text.trim()
-          : "";
+      const reply = (hcpTurns.lastReply(pid) ?? "").trim();
       if (!reply) return;
-      // Tag the forward with its source so the receiving agent knows which
-      // worker just reported (this is the agent-to-agent "mailbox" delivery —
-      // also what an auto-reporting spawned worker uses to reach its parent).
-      const banner = `\n[hive] from ${hcpLabelOf(toBareId(d.tileId))}:\n${reply}\n`;
-      // Deliver via the mailbox: if the destination agent is mid-turn, typing the
-      // report into its TUI would leave it stranded in the composer, unsubmitted
-      // and unread — so it's held until that agent is back at its prompt. dests are
-      // BARE ids; the pty namespace is what writeToTile takes → convert.
+      // Tag the forward with its source so the receiving agent knows which worker reported.
+      // The mailbox holds it until the destination is back at its prompt.
+      const banner = `\n[hive] from ${hcpLabelOf(bare)}:\n${reply}\n`;
       for (const dst of dests) hcpMailbox.deliver(toPtyId(dst), banner);
     },
   });
   setRemoteEventSink(server.injectEvent);
+  ptyMod.setDaemonEventSink(server.injectEvent);
   hcpBroadcast = server.broadcast;
 }
 

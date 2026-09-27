@@ -19,7 +19,10 @@
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
         "HCP_TOKEN": "golden-token",
         "HIVEMIND_TILE": "tile-g",
-        "HIVE_AGENT_ID": "claude"
+        "HIVE_AGENT_ID": "claude",
+        "HIVE_SDK": "/x/ud/hive-sdk.cjs",
+        "HIVE_HOOK_SOCK": "/x/ud/hcp.sock",
+        "CLAUDE_CODE_FORCE_SESSION_PERSISTENCE": "1"
       },
       "settings": {
         "hooks": {
@@ -28,62 +31,26 @@
               "hooks": [
                 {
                   "type": "command",
-                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/tile-session-tracker.cjs' '/x/ud/tile-sessions'"
+                  "command": "env HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/tile-session-tracker.cjs' '/x/ud/tile-sessions'"
                 }
               ]
-            }
-          ],
-          "PreToolUse": [
-            {
-              "matcher": "ExitPlanMode",
-              "hooks": [
-                {
-                  "type": "command",
-                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/plan-review-hook.cjs' '/x/ud/plan-bridge.sock'",
-                  "timeout": 345600
-                }
-              ]
-            }
-          ],
-          "Stop": [
+            },
             {
               "hooks": [
                 {
                   "type": "command",
-                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-stop-hook.cjs' '/x/ud/hcp.sock'",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='session.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
                   "timeout": 10
                 }
               ]
             }
           ],
-          "SubagentStart": [
+          "SessionEnd": [
             {
               "hooks": [
                 {
                   "type": "command",
-                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-subagent-hook.cjs' '/x/ud/hcp.sock'",
-                  "timeout": 10
-                }
-              ]
-            }
-          ],
-          "SubagentStop": [
-            {
-              "hooks": [
-                {
-                  "type": "command",
-                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-subagent-hook.cjs' '/x/ud/hcp.sock'",
-                  "timeout": 10
-                }
-              ]
-            }
-          ],
-          "Notification": [
-            {
-              "hooks": [
-                {
-                  "type": "command",
-                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-notification-hook.cjs' '/x/ud/hcp.sock'",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='session.ended' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
                   "timeout": 10
                 }
               ]
@@ -94,8 +61,152 @@
               "hooks": [
                 {
                   "type": "command",
-                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-userprompt-hook.cjs' '/x/ud/hcp.sock'",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='turn.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
                   "timeout": 10
+                }
+              ]
+            }
+          ],
+          "Stop": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_SDK='/x/ud/hive-sdk.cjs' HIVE_HOOK_SOCK='/x/ud/hcp.sock' HIVE_PLAN_SOCK='/x/ud/plan-bridge.sock' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/agents/claude/hive-turn-end.cjs'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "StopFailure": [
+            {
+              "matcher": "rate_limit",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='turn.ended' HIVE_EVENT_OUTCOME='limited' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            },
+            {
+              "matcher": "overloaded|authentication_failed|oauth_org_not_allowed|account_on_hold|billing_error|invalid_request|model_not_found|server_error|max_output_tokens|cloud_credential_error|unknown",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='turn.ended' HIVE_EVENT_OUTCOME='failed' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "PermissionRequest": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.requested' HIVE_EVENT_KIND='permission' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "Elicitation": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.requested' HIVE_EVENT_KIND='question' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "PostToolUse": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.resolved' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "PostToolUseFailure": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.resolved' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "PermissionDenied": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.resolved' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "SubagentStart": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='subagent.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "SubagentStop": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='subagent.stopped' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "PreCompact": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='compacting.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "PostCompact": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='compacting.ended' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "PreToolUse": [
+            {
+              "matcher": "ExitPlanMode",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_SDK='/x/ud/hive-sdk.cjs' HIVE_HOOK_SOCK='/x/ud/hcp.sock' HIVE_PLAN_SOCK='/x/ud/plan-bridge.sock' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/agents/claude/hive-plan-review.cjs'",
+                  "timeout": 345600
                 }
               ]
             }
@@ -118,7 +229,10 @@
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
         "HCP_TOKEN": "golden-token",
         "HIVEMIND_TILE": "tile-g",
-        "HIVE_AGENT_ID": "claude"
+        "HIVE_AGENT_ID": "claude",
+        "HIVE_SDK": "/x/ud/hive-sdk.cjs",
+        "HIVE_HOOK_SOCK": "/x/ud/hcp.sock",
+        "CLAUDE_CODE_FORCE_SESSION_PERSISTENCE": "1"
       },
       "settings": {
         "hooks": {
@@ -127,72 +241,26 @@
               "hooks": [
                 {
                   "type": "command",
-                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/tile-session-tracker.cjs' '/x/ud/tile-sessions'"
-                }
-              ]
-            }
-          ],
-          "PreToolUse": [
-            {
-              "matcher": "ExitPlanMode",
-              "hooks": [
-                {
-                  "type": "command",
-                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/plan-review-hook.cjs' '/x/ud/plan-bridge.sock'",
-                  "timeout": 345600
+                  "command": "env HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/tile-session-tracker.cjs' '/x/ud/tile-sessions'"
                 }
               ]
             },
             {
-              "matcher": "*",
               "hooks": [
                 {
                   "type": "command",
-                  "command": "HIVEMIND_TILE='tile-g' HIVE_SUPERVISE='all' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-approval-hook.cjs' '/x/ud/hcp.sock'",
-                  "timeout": 600
-                }
-              ]
-            }
-          ],
-          "Stop": [
-            {
-              "hooks": [
-                {
-                  "type": "command",
-                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-stop-hook.cjs' '/x/ud/hcp.sock'",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='session.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
                   "timeout": 10
                 }
               ]
             }
           ],
-          "SubagentStart": [
+          "SessionEnd": [
             {
               "hooks": [
                 {
                   "type": "command",
-                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-subagent-hook.cjs' '/x/ud/hcp.sock'",
-                  "timeout": 10
-                }
-              ]
-            }
-          ],
-          "SubagentStop": [
-            {
-              "hooks": [
-                {
-                  "type": "command",
-                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-subagent-hook.cjs' '/x/ud/hcp.sock'",
-                  "timeout": 10
-                }
-              ]
-            }
-          ],
-          "Notification": [
-            {
-              "hooks": [
-                {
-                  "type": "command",
-                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-notification-hook.cjs' '/x/ud/hcp.sock'",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='session.ended' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
                   "timeout": 10
                 }
               ]
@@ -203,8 +271,162 @@
               "hooks": [
                 {
                   "type": "command",
-                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-userprompt-hook.cjs' '/x/ud/hcp.sock'",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='turn.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
                   "timeout": 10
+                }
+              ]
+            }
+          ],
+          "Stop": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_SUPERVISE='all' HIVE_SDK='/x/ud/hive-sdk.cjs' HIVE_HOOK_SOCK='/x/ud/hcp.sock' HIVE_PLAN_SOCK='/x/ud/plan-bridge.sock' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/agents/claude/hive-turn-end.cjs'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "StopFailure": [
+            {
+              "matcher": "rate_limit",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='turn.ended' HIVE_EVENT_OUTCOME='limited' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            },
+            {
+              "matcher": "overloaded|authentication_failed|oauth_org_not_allowed|account_on_hold|billing_error|invalid_request|model_not_found|server_error|max_output_tokens|cloud_credential_error|unknown",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='turn.ended' HIVE_EVENT_OUTCOME='failed' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "PermissionRequest": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.requested' HIVE_EVENT_KIND='permission' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "Elicitation": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.requested' HIVE_EVENT_KIND='question' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "PostToolUse": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.resolved' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "PostToolUseFailure": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.resolved' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "PermissionDenied": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.resolved' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "SubagentStart": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='subagent.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "SubagentStop": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='subagent.stopped' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "PreCompact": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='compacting.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "PostCompact": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='compacting.ended' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "PreToolUse": [
+            {
+              "matcher": "ExitPlanMode",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_SUPERVISE='all' HIVE_SDK='/x/ud/hive-sdk.cjs' HIVE_HOOK_SOCK='/x/ud/hcp.sock' HIVE_PLAN_SOCK='/x/ud/plan-bridge.sock' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/agents/claude/hive-plan-review.cjs'",
+                  "timeout": 345600
+                }
+              ]
+            },
+            {
+              "matcher": "*",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_SUPERVISE='all' HIVE_SDK='/x/ud/hive-sdk.cjs' HIVE_HOOK_SOCK='/x/ud/hcp.sock' HIVE_PLAN_SOCK='/x/ud/plan-bridge.sock' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/agents/claude/hive-approve.cjs'",
+                  "timeout": 600
                 }
               ]
             }
@@ -236,7 +458,10 @@
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
         "HCP_TOKEN": "golden-token",
         "HIVEMIND_TILE": "tile-g",
-        "HIVE_AGENT_ID": "claude"
+        "HIVE_AGENT_ID": "claude",
+        "HIVE_SDK": "/x/ud/hive-sdk.cjs",
+        "HIVE_HOOK_SOCK": "/x/ud/hcp.sock",
+        "CLAUDE_CODE_FORCE_SESSION_PERSISTENCE": "1"
       },
       "settings": {
         "hooks": {
@@ -245,62 +470,26 @@
               "hooks": [
                 {
                   "type": "command",
-                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/tile-session-tracker.cjs' '/x/ud/tile-sessions'"
+                  "command": "env HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/tile-session-tracker.cjs' '/x/ud/tile-sessions'"
                 }
               ]
-            }
-          ],
-          "PreToolUse": [
-            {
-              "matcher": "ExitPlanMode",
-              "hooks": [
-                {
-                  "type": "command",
-                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/plan-review-hook.cjs' '/x/ud/plan-bridge.sock'",
-                  "timeout": 345600
-                }
-              ]
-            }
-          ],
-          "Stop": [
+            },
             {
               "hooks": [
                 {
                   "type": "command",
-                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-stop-hook.cjs' '/x/ud/hcp.sock'",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='session.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
                   "timeout": 10
                 }
               ]
             }
           ],
-          "SubagentStart": [
+          "SessionEnd": [
             {
               "hooks": [
                 {
                   "type": "command",
-                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-subagent-hook.cjs' '/x/ud/hcp.sock'",
-                  "timeout": 10
-                }
-              ]
-            }
-          ],
-          "SubagentStop": [
-            {
-              "hooks": [
-                {
-                  "type": "command",
-                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-subagent-hook.cjs' '/x/ud/hcp.sock'",
-                  "timeout": 10
-                }
-              ]
-            }
-          ],
-          "Notification": [
-            {
-              "hooks": [
-                {
-                  "type": "command",
-                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-notification-hook.cjs' '/x/ud/hcp.sock'",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='session.ended' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
                   "timeout": 10
                 }
               ]
@@ -311,8 +500,152 @@
               "hooks": [
                 {
                   "type": "command",
-                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-userprompt-hook.cjs' '/x/ud/hcp.sock'",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='turn.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
                   "timeout": 10
+                }
+              ]
+            }
+          ],
+          "Stop": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_SDK='/x/ud/hive-sdk.cjs' HIVE_HOOK_SOCK='/x/ud/hcp.sock' HIVE_PLAN_SOCK='/x/ud/plan-bridge.sock' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/agents/claude/hive-turn-end.cjs'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "StopFailure": [
+            {
+              "matcher": "rate_limit",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='turn.ended' HIVE_EVENT_OUTCOME='limited' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            },
+            {
+              "matcher": "overloaded|authentication_failed|oauth_org_not_allowed|account_on_hold|billing_error|invalid_request|model_not_found|server_error|max_output_tokens|cloud_credential_error|unknown",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='turn.ended' HIVE_EVENT_OUTCOME='failed' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "PermissionRequest": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.requested' HIVE_EVENT_KIND='permission' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "Elicitation": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.requested' HIVE_EVENT_KIND='question' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "PostToolUse": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.resolved' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "PostToolUseFailure": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.resolved' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "PermissionDenied": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.resolved' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "SubagentStart": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='subagent.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "SubagentStop": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='subagent.stopped' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "PreCompact": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='compacting.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "PostCompact": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='compacting.ended' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "PreToolUse": [
+            {
+              "matcher": "ExitPlanMode",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_SDK='/x/ud/hive-sdk.cjs' HIVE_HOOK_SOCK='/x/ud/hcp.sock' HIVE_PLAN_SOCK='/x/ud/plan-bridge.sock' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/agents/claude/hive-plan-review.cjs'",
+                  "timeout": 345600
                 }
               ]
             }
@@ -334,7 +667,10 @@
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
         "HCP_TOKEN": "golden-token",
         "HIVEMIND_TILE": "tile-g",
-        "HIVE_AGENT_ID": "claude"
+        "HIVE_AGENT_ID": "claude",
+        "HIVE_SDK": "/x/ud/hive-sdk.cjs",
+        "HIVE_HOOK_SOCK": "/x/ud/hcp.sock",
+        "CLAUDE_CODE_FORCE_SESSION_PERSISTENCE": "1"
       },
       "settings": {
         "hooks": {
@@ -343,62 +679,26 @@
               "hooks": [
                 {
                   "type": "command",
-                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/tile-session-tracker.cjs' '/x/ud/tile-sessions'"
+                  "command": "env HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/tile-session-tracker.cjs' '/x/ud/tile-sessions'"
                 }
               ]
-            }
-          ],
-          "PreToolUse": [
-            {
-              "matcher": "ExitPlanMode",
-              "hooks": [
-                {
-                  "type": "command",
-                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/plan-review-hook.cjs' '/x/ud/plan-bridge.sock'",
-                  "timeout": 345600
-                }
-              ]
-            }
-          ],
-          "Stop": [
+            },
             {
               "hooks": [
                 {
                   "type": "command",
-                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-stop-hook.cjs' '/x/ud/hcp.sock'",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='session.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
                   "timeout": 10
                 }
               ]
             }
           ],
-          "SubagentStart": [
+          "SessionEnd": [
             {
               "hooks": [
                 {
                   "type": "command",
-                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-subagent-hook.cjs' '/x/ud/hcp.sock'",
-                  "timeout": 10
-                }
-              ]
-            }
-          ],
-          "SubagentStop": [
-            {
-              "hooks": [
-                {
-                  "type": "command",
-                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-subagent-hook.cjs' '/x/ud/hcp.sock'",
-                  "timeout": 10
-                }
-              ]
-            }
-          ],
-          "Notification": [
-            {
-              "hooks": [
-                {
-                  "type": "command",
-                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-notification-hook.cjs' '/x/ud/hcp.sock'",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='session.ended' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
                   "timeout": 10
                 }
               ]
@@ -409,8 +709,152 @@
               "hooks": [
                 {
                   "type": "command",
-                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-userprompt-hook.cjs' '/x/ud/hcp.sock'",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='turn.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
                   "timeout": 10
+                }
+              ]
+            }
+          ],
+          "Stop": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_SDK='/x/ud/hive-sdk.cjs' HIVE_HOOK_SOCK='/x/ud/hcp.sock' HIVE_PLAN_SOCK='/x/ud/plan-bridge.sock' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/agents/claude/hive-turn-end.cjs'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "StopFailure": [
+            {
+              "matcher": "rate_limit",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='turn.ended' HIVE_EVENT_OUTCOME='limited' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            },
+            {
+              "matcher": "overloaded|authentication_failed|oauth_org_not_allowed|account_on_hold|billing_error|invalid_request|model_not_found|server_error|max_output_tokens|cloud_credential_error|unknown",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='turn.ended' HIVE_EVENT_OUTCOME='failed' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "PermissionRequest": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.requested' HIVE_EVENT_KIND='permission' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "Elicitation": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.requested' HIVE_EVENT_KIND='question' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "PostToolUse": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.resolved' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "PostToolUseFailure": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.resolved' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "PermissionDenied": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.resolved' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "SubagentStart": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='subagent.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "SubagentStop": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='subagent.stopped' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "PreCompact": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='compacting.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "PostCompact": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='compacting.ended' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "PreToolUse": [
+            {
+              "matcher": "ExitPlanMode",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_SDK='/x/ud/hive-sdk.cjs' HIVE_HOOK_SOCK='/x/ud/hcp.sock' HIVE_PLAN_SOCK='/x/ud/plan-bridge.sock' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/agents/claude/hive-plan-review.cjs'",
+                  "timeout": 345600
                 }
               ]
             }
@@ -432,7 +876,10 @@
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
         "HCP_TOKEN": "golden-token",
         "HIVEMIND_TILE": "tile-g",
-        "HIVE_AGENT_ID": "claude"
+        "HIVE_AGENT_ID": "claude",
+        "HIVE_SDK": "/x/ud/hive-sdk.cjs",
+        "HIVE_HOOK_SOCK": "/x/ud/hcp.sock",
+        "CLAUDE_CODE_FORCE_SESSION_PERSISTENCE": "1"
       },
       "settings": {
         "hooks": {
@@ -441,62 +888,26 @@
               "hooks": [
                 {
                   "type": "command",
-                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/tile-session-tracker.cjs' '/x/ud/tile-sessions'"
+                  "command": "env HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/tile-session-tracker.cjs' '/x/ud/tile-sessions'"
                 }
               ]
-            }
-          ],
-          "PreToolUse": [
-            {
-              "matcher": "ExitPlanMode",
-              "hooks": [
-                {
-                  "type": "command",
-                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/plan-review-hook.cjs' '/x/ud/plan-bridge.sock'",
-                  "timeout": 345600
-                }
-              ]
-            }
-          ],
-          "Stop": [
+            },
             {
               "hooks": [
                 {
                   "type": "command",
-                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-stop-hook.cjs' '/x/ud/hcp.sock'",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='session.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
                   "timeout": 10
                 }
               ]
             }
           ],
-          "SubagentStart": [
+          "SessionEnd": [
             {
               "hooks": [
                 {
                   "type": "command",
-                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-subagent-hook.cjs' '/x/ud/hcp.sock'",
-                  "timeout": 10
-                }
-              ]
-            }
-          ],
-          "SubagentStop": [
-            {
-              "hooks": [
-                {
-                  "type": "command",
-                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-subagent-hook.cjs' '/x/ud/hcp.sock'",
-                  "timeout": 10
-                }
-              ]
-            }
-          ],
-          "Notification": [
-            {
-              "hooks": [
-                {
-                  "type": "command",
-                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-notification-hook.cjs' '/x/ud/hcp.sock'",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='session.ended' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
                   "timeout": 10
                 }
               ]
@@ -507,8 +918,152 @@
               "hooks": [
                 {
                   "type": "command",
-                  "command": "HIVEMIND_TILE='tile-g' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-userprompt-hook.cjs' '/x/ud/hcp.sock'",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='turn.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
                   "timeout": 10
+                }
+              ]
+            }
+          ],
+          "Stop": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_SDK='/x/ud/hive-sdk.cjs' HIVE_HOOK_SOCK='/x/ud/hcp.sock' HIVE_PLAN_SOCK='/x/ud/plan-bridge.sock' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/agents/claude/hive-turn-end.cjs'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "StopFailure": [
+            {
+              "matcher": "rate_limit",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='turn.ended' HIVE_EVENT_OUTCOME='limited' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            },
+            {
+              "matcher": "overloaded|authentication_failed|oauth_org_not_allowed|account_on_hold|billing_error|invalid_request|model_not_found|server_error|max_output_tokens|cloud_credential_error|unknown",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='turn.ended' HIVE_EVENT_OUTCOME='failed' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "PermissionRequest": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.requested' HIVE_EVENT_KIND='permission' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "Elicitation": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.requested' HIVE_EVENT_KIND='question' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "PostToolUse": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.resolved' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "PostToolUseFailure": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.resolved' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "PermissionDenied": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.resolved' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "SubagentStart": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='subagent.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "SubagentStop": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='subagent.stopped' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "PreCompact": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='compacting.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "PostCompact": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='compacting.ended' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 10
+                }
+              ]
+            }
+          ],
+          "PreToolUse": [
+            {
+              "matcher": "ExitPlanMode",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_SDK='/x/ud/hive-sdk.cjs' HIVE_HOOK_SOCK='/x/ud/hcp.sock' HIVE_PLAN_SOCK='/x/ud/plan-bridge.sock' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/agents/claude/hive-plan-review.cjs'",
+                  "timeout": 345600
                 }
               ]
             }
@@ -551,34 +1106,58 @@
     "spawn": {
       "cmd": "codex",
       "args": [
+        "-c",
+        "hooks={SessionStart=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='session.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],SessionEnd=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='session.ended' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=3}]}],UserPromptSubmit=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='turn.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],Stop=[{hooks=[{type=\"command\",command=\"env HIVE_SDK='/x/ud/hive-sdk.cjs' HIVE_HOOK_SOCK='/x/ud/hcp.sock' HIVE_PLAN_SOCK='/x/ud/plan-bridge.sock' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/agents/codex/hive-turn-end.cjs'\",timeout=10}]}],Interrupt=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='turn.ended' HIVE_EVENT_OUTCOME='interrupted' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=3}]}],PermissionRequest=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='input.requested' HIVE_EVENT_KIND='permission' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],PostToolUse=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='input.resolved' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],SubagentStart=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='subagent.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],SubagentStop=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='subagent.stopped' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],PreCompact=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='compacting.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],PostCompact=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='compacting.ended' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}]}",
         "--sandbox",
         "workspace-write",
         "--ask-for-approval",
-        "on-request"
+        "on-request",
+        "-c",
+        "check_for_update_on_startup=false"
       ],
       "env": {
-        "HIVE_AGENT_DEPTH": "1"
+        "HIVE_AGENT_DEPTH": "1",
+        "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
+        "HCP_TOKEN": "golden-token",
+        "HIVEMIND_TILE": "tile-g",
+        "HIVE_AGENT_ID": "codex",
+        "HIVE_SDK": "/x/ud/hive-sdk.cjs",
+        "HIVE_HOOK_SOCK": "/x/ud/hcp.sock"
       }
     },
     "spawnSupervised": {
       "cmd": "codex",
       "args": [
-        "--sandbox",
-        "workspace-write",
-        "--ask-for-approval",
-        "on-request"
-      ],
-      "env": {
-        "HIVE_AGENT_DEPTH": "1",
-        "HIVE_SUPERVISE": "all"
-      }
-    },
-    "spawnWithPrompt": {
-      "args": [
+        "-c",
+        "hooks={SessionStart=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='session.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],SessionEnd=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='session.ended' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=3}]}],UserPromptSubmit=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='turn.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],Stop=[{hooks=[{type=\"command\",command=\"env HIVE_SDK='/x/ud/hive-sdk.cjs' HIVE_HOOK_SOCK='/x/ud/hcp.sock' HIVE_PLAN_SOCK='/x/ud/plan-bridge.sock' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/agents/codex/hive-turn-end.cjs'\",timeout=10}]}],Interrupt=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='turn.ended' HIVE_EVENT_OUTCOME='interrupted' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=3}]}],PermissionRequest=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='input.requested' HIVE_EVENT_KIND='permission' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],PostToolUse=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='input.resolved' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],SubagentStart=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='subagent.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],SubagentStop=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='subagent.stopped' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],PreCompact=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='compacting.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],PostCompact=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='compacting.ended' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}]}",
         "--sandbox",
         "workspace-write",
         "--ask-for-approval",
         "on-request",
+        "-c",
+        "check_for_update_on_startup=false"
+      ],
+      "env": {
+        "HIVE_AGENT_DEPTH": "1",
+        "HIVE_SUPERVISE": "all",
+        "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
+        "HCP_TOKEN": "golden-token",
+        "HIVEMIND_TILE": "tile-g",
+        "HIVE_AGENT_ID": "codex",
+        "HIVE_SDK": "/x/ud/hive-sdk.cjs",
+        "HIVE_HOOK_SOCK": "/x/ud/hcp.sock"
+      }
+    },
+    "spawnWithPrompt": {
+      "args": [
+        "-c",
+        "hooks={SessionStart=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='session.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],SessionEnd=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='session.ended' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=3}]}],UserPromptSubmit=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='turn.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],Stop=[{hooks=[{type=\"command\",command=\"env HIVE_SDK='/x/ud/hive-sdk.cjs' HIVE_HOOK_SOCK='/x/ud/hcp.sock' HIVE_PLAN_SOCK='/x/ud/plan-bridge.sock' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/agents/codex/hive-turn-end.cjs'\",timeout=10}]}],Interrupt=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='turn.ended' HIVE_EVENT_OUTCOME='interrupted' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=3}]}],PermissionRequest=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='input.requested' HIVE_EVENT_KIND='permission' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],PostToolUse=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='input.resolved' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],SubagentStart=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='subagent.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],SubagentStop=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='subagent.stopped' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],PreCompact=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='compacting.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],PostCompact=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='compacting.ended' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}]}",
+        "--sandbox",
+        "workspace-write",
+        "--ask-for-approval",
+        "on-request",
+        "-c",
+        "check_for_update_on_startup=false",
         "do the thing"
       ],
       "envHasPrompt": false
@@ -586,35 +1165,65 @@
     "restoreFresh": {
       "cmd": "codex",
       "args": [
+        "-c",
+        "hooks={SessionStart=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='session.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],SessionEnd=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='session.ended' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=3}]}],UserPromptSubmit=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='turn.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],Stop=[{hooks=[{type=\"command\",command=\"env HIVE_SDK='/x/ud/hive-sdk.cjs' HIVE_HOOK_SOCK='/x/ud/hcp.sock' HIVE_PLAN_SOCK='/x/ud/plan-bridge.sock' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/agents/codex/hive-turn-end.cjs'\",timeout=10}]}],Interrupt=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='turn.ended' HIVE_EVENT_OUTCOME='interrupted' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=3}]}],PermissionRequest=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='input.requested' HIVE_EVENT_KIND='permission' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],PostToolUse=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='input.resolved' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],SubagentStart=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='subagent.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],SubagentStop=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='subagent.stopped' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],PreCompact=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='compacting.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],PostCompact=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='compacting.ended' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}]}",
         "--sandbox",
         "workspace-write",
         "--ask-for-approval",
-        "on-request"
+        "on-request",
+        "-c",
+        "check_for_update_on_startup=false"
       ],
       "env": {
-        "HIVE_AGENT_DEPTH": "1"
+        "HIVE_AGENT_DEPTH": "1",
+        "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
+        "HCP_TOKEN": "golden-token",
+        "HIVEMIND_TILE": "tile-g",
+        "HIVE_AGENT_ID": "codex",
+        "HIVE_SDK": "/x/ud/hive-sdk.cjs",
+        "HIVE_HOOK_SOCK": "/x/ud/hcp.sock"
       }
     },
     "restoreAlreadyResuming": {
       "cmd": "codex",
       "args": [
+        "-c",
+        "hooks={SessionStart=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='session.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],SessionEnd=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='session.ended' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=3}]}],UserPromptSubmit=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='turn.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],Stop=[{hooks=[{type=\"command\",command=\"env HIVE_SDK='/x/ud/hive-sdk.cjs' HIVE_HOOK_SOCK='/x/ud/hcp.sock' HIVE_PLAN_SOCK='/x/ud/plan-bridge.sock' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/agents/codex/hive-turn-end.cjs'\",timeout=10}]}],Interrupt=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='turn.ended' HIVE_EVENT_OUTCOME='interrupted' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=3}]}],PermissionRequest=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='input.requested' HIVE_EVENT_KIND='permission' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],PostToolUse=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='input.resolved' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],SubagentStart=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='subagent.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],SubagentStop=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='subagent.stopped' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],PreCompact=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='compacting.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],PostCompact=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='compacting.ended' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}]}",
         "--sandbox",
         "workspace-write",
         "resume",
-        "sess-1"
+        "sess-1",
+        "-c",
+        "check_for_update_on_startup=false"
       ],
       "env": {
-        "HIVE_AGENT_DEPTH": "1"
+        "HIVE_AGENT_DEPTH": "1",
+        "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
+        "HCP_TOKEN": "golden-token",
+        "HIVEMIND_TILE": "tile-g",
+        "HIVE_AGENT_ID": "codex",
+        "HIVE_SDK": "/x/ud/hive-sdk.cjs",
+        "HIVE_HOOK_SOCK": "/x/ud/hcp.sock"
       }
     },
     "retry": {
       "cmd": "codex",
       "args": [
+        "-c",
+        "hooks={SessionStart=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='session.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],SessionEnd=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='session.ended' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=3}]}],UserPromptSubmit=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='turn.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],Stop=[{hooks=[{type=\"command\",command=\"env HIVE_SDK='/x/ud/hive-sdk.cjs' HIVE_HOOK_SOCK='/x/ud/hcp.sock' HIVE_PLAN_SOCK='/x/ud/plan-bridge.sock' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/agents/codex/hive-turn-end.cjs'\",timeout=10}]}],Interrupt=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='turn.ended' HIVE_EVENT_OUTCOME='interrupted' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=3}]}],PermissionRequest=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='input.requested' HIVE_EVENT_KIND='permission' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],PostToolUse=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='input.resolved' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],SubagentStart=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='subagent.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],SubagentStop=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='subagent.stopped' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],PreCompact=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='compacting.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}],PostCompact=[{hooks=[{type=\"command\",command=\"env HIVE_EVENT='compacting.ended' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'\",timeout=10}]}]}",
         "--sandbox",
-        "workspace-write"
+        "workspace-write",
+        "-c",
+        "check_for_update_on_startup=false"
       ],
       "env": {
-        "HIVE_AGENT_DEPTH": "1"
+        "HIVE_AGENT_DEPTH": "1",
+        "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
+        "HCP_TOKEN": "golden-token",
+        "HIVEMIND_TILE": "tile-g",
+        "HIVE_AGENT_ID": "codex",
+        "HIVE_SDK": "/x/ud/hive-sdk.cjs",
+        "HIVE_HOOK_SOCK": "/x/ud/hcp.sock"
       }
     },
     "superviseSpawn": {
@@ -658,6 +1267,8 @@
         "HCP_TOKEN": "golden-token",
         "HIVEMIND_TILE": "tile-g",
         "HIVE_AGENT_ID": "droid",
+        "HIVE_SDK": "/x/ud/hive-sdk.cjs",
+        "HIVE_HOOK_SOCK": "/x/ud/hcp.sock",
         "FACTORY_HOME_OVERRIDE": "/x/ud/agents/droid/droid-home"
       }
     },
@@ -671,6 +1282,8 @@
         "HCP_TOKEN": "golden-token",
         "HIVEMIND_TILE": "tile-g",
         "HIVE_AGENT_ID": "droid",
+        "HIVE_SDK": "/x/ud/hive-sdk.cjs",
+        "HIVE_HOOK_SOCK": "/x/ud/hcp.sock",
         "FACTORY_HOME_OVERRIDE": "/x/ud/agents/droid/droid-home"
       }
     },
@@ -689,6 +1302,8 @@
         "HCP_TOKEN": "golden-token",
         "HIVEMIND_TILE": "tile-g",
         "HIVE_AGENT_ID": "droid",
+        "HIVE_SDK": "/x/ud/hive-sdk.cjs",
+        "HIVE_HOOK_SOCK": "/x/ud/hcp.sock",
         "FACTORY_HOME_OVERRIDE": "/x/ud/agents/droid/droid-home"
       }
     },
@@ -704,6 +1319,8 @@
         "HCP_TOKEN": "golden-token",
         "HIVEMIND_TILE": "tile-g",
         "HIVE_AGENT_ID": "droid",
+        "HIVE_SDK": "/x/ud/hive-sdk.cjs",
+        "HIVE_HOOK_SOCK": "/x/ud/hcp.sock",
         "FACTORY_HOME_OVERRIDE": "/x/ud/agents/droid/droid-home"
       }
     },
@@ -716,6 +1333,8 @@
         "HCP_TOKEN": "golden-token",
         "HIVEMIND_TILE": "tile-g",
         "HIVE_AGENT_ID": "droid",
+        "HIVE_SDK": "/x/ud/hive-sdk.cjs",
+        "HIVE_HOOK_SOCK": "/x/ud/hcp.sock",
         "FACTORY_HOME_OVERRIDE": "/x/ud/agents/droid/droid-home"
       }
     },
@@ -760,6 +1379,8 @@
         "HCP_TOKEN": "golden-token",
         "HIVEMIND_TILE": "tile-g",
         "HIVE_AGENT_ID": "kiro",
+        "HIVE_SDK": "/x/ud/hive-sdk.cjs",
+        "HIVE_HOOK_SOCK": "/x/ud/hcp.sock",
         "KIRO_HOME": "/x/ud/agents/kiro/kiro-home"
       }
     },
@@ -777,6 +1398,8 @@
         "HCP_TOKEN": "golden-token",
         "HIVEMIND_TILE": "tile-g",
         "HIVE_AGENT_ID": "kiro",
+        "HIVE_SDK": "/x/ud/hive-sdk.cjs",
+        "HIVE_HOOK_SOCK": "/x/ud/hcp.sock",
         "KIRO_HOME": "/x/ud/agents/kiro/kiro-home"
       }
     },
@@ -803,6 +1426,8 @@
         "HCP_TOKEN": "golden-token",
         "HIVEMIND_TILE": "tile-g",
         "HIVE_AGENT_ID": "kiro",
+        "HIVE_SDK": "/x/ud/hive-sdk.cjs",
+        "HIVE_HOOK_SOCK": "/x/ud/hcp.sock",
         "KIRO_HOME": "/x/ud/agents/kiro/kiro-home"
       }
     },
@@ -821,6 +1446,8 @@
         "HCP_TOKEN": "golden-token",
         "HIVEMIND_TILE": "tile-g",
         "HIVE_AGENT_ID": "kiro",
+        "HIVE_SDK": "/x/ud/hive-sdk.cjs",
+        "HIVE_HOOK_SOCK": "/x/ud/hcp.sock",
         "KIRO_HOME": "/x/ud/agents/kiro/kiro-home"
       }
     },
@@ -837,6 +1464,8 @@
         "HCP_TOKEN": "golden-token",
         "HIVEMIND_TILE": "tile-g",
         "HIVE_AGENT_ID": "kiro",
+        "HIVE_SDK": "/x/ud/hive-sdk.cjs",
+        "HIVE_HOOK_SOCK": "/x/ud/hcp.sock",
         "KIRO_HOME": "/x/ud/agents/kiro/kiro-home"
       }
     },
@@ -883,7 +1512,9 @@
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
         "HCP_TOKEN": "golden-token",
         "HIVEMIND_TILE": "tile-g",
-        "HIVE_AGENT_ID": "pi"
+        "HIVE_AGENT_ID": "pi",
+        "HIVE_SDK": "/x/ud/hive-sdk.cjs",
+        "HIVE_HOOK_SOCK": "/x/ud/hcp.sock"
       }
     },
     "spawnSupervised": {
@@ -898,7 +1529,9 @@
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
         "HCP_TOKEN": "golden-token",
         "HIVEMIND_TILE": "tile-g",
-        "HIVE_AGENT_ID": "pi"
+        "HIVE_AGENT_ID": "pi",
+        "HIVE_SDK": "/x/ud/hive-sdk.cjs",
+        "HIVE_HOOK_SOCK": "/x/ud/hcp.sock"
       }
     },
     "spawnWithPrompt": {
@@ -920,7 +1553,9 @@
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
         "HCP_TOKEN": "golden-token",
         "HIVEMIND_TILE": "tile-g",
-        "HIVE_AGENT_ID": "pi"
+        "HIVE_AGENT_ID": "pi",
+        "HIVE_SDK": "/x/ud/hive-sdk.cjs",
+        "HIVE_HOOK_SOCK": "/x/ud/hcp.sock"
       }
     },
     "restoreAlreadyResuming": {
@@ -936,7 +1571,9 @@
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
         "HCP_TOKEN": "golden-token",
         "HIVEMIND_TILE": "tile-g",
-        "HIVE_AGENT_ID": "pi"
+        "HIVE_AGENT_ID": "pi",
+        "HIVE_SDK": "/x/ud/hive-sdk.cjs",
+        "HIVE_HOOK_SOCK": "/x/ud/hcp.sock"
       }
     },
     "retry": {
@@ -950,7 +1587,9 @@
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
         "HCP_TOKEN": "golden-token",
         "HIVEMIND_TILE": "tile-g",
-        "HIVE_AGENT_ID": "pi"
+        "HIVE_AGENT_ID": "pi",
+        "HIVE_SDK": "/x/ud/hive-sdk.cjs",
+        "HIVE_HOOK_SOCK": "/x/ud/hcp.sock"
       }
     },
     "superviseSpawn": {
@@ -973,12 +1612,34 @@
   },
   "files": {
     "droid-home/.factory/hooks.json": {
+      "SessionStart": [
+        {
+          "hooks": [
+            {
+              "type": "command",
+              "command": "env HIVE_EVENT='session.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+              "timeout": 10
+            }
+          ]
+        }
+      ],
+      "SessionEnd": [
+        {
+          "hooks": [
+            {
+              "type": "command",
+              "command": "env HIVE_EVENT='session.ended' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+              "timeout": 10
+            }
+          ]
+        }
+      ],
       "UserPromptSubmit": [
         {
           "hooks": [
             {
               "type": "command",
-              "command": "ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-userprompt-hook.cjs' '/x/ud/hcp.sock'",
+              "command": "env HIVE_EVENT='turn.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
               "timeout": 10
             }
           ]
@@ -989,7 +1650,7 @@
           "hooks": [
             {
               "type": "command",
-              "command": "ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-stop-hook.cjs' '/x/ud/hcp.sock'",
+              "command": "env HIVE_SDK='/x/ud/hive-sdk.cjs' HIVE_HOOK_SOCK='/x/ud/hcp.sock' HIVE_PLAN_SOCK='/x/ud/plan-bridge.sock' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/agents/droid/hive-turn-end.cjs'",
               "timeout": 10
             }
           ]
@@ -1000,7 +1661,18 @@
           "hooks": [
             {
               "type": "command",
-              "command": "ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-notification-hook.cjs' '/x/ud/hcp.sock'",
+              "command": "env HIVE_SDK='/x/ud/hive-sdk.cjs' HIVE_HOOK_SOCK='/x/ud/hcp.sock' HIVE_PLAN_SOCK='/x/ud/plan-bridge.sock' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/agents/droid/hive-notify.cjs'",
+              "timeout": 10
+            }
+          ]
+        }
+      ],
+      "PostToolUse": [
+        {
+          "hooks": [
+            {
+              "type": "command",
+              "command": "env HIVE_EVENT='input.resolved' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
               "timeout": 10
             }
           ]
@@ -1013,25 +1685,25 @@
       "hooks": {
         "agentSpawn": [
           {
-            "command": "ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/tile-session-tracker.cjs' '/x/ud/tile-sessions'"
+            "command": "env ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/tile-session-tracker.cjs' '/x/ud/tile-sessions'"
           }
         ],
         "userPromptSubmit": [
           {
-            "command": "ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/tile-session-tracker.cjs' '/x/ud/tile-sessions'"
+            "command": "env ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/tile-session-tracker.cjs' '/x/ud/tile-sessions'"
           },
           {
-            "command": "ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-userprompt-hook.cjs' '/x/ud/hcp.sock'"
+            "command": "env HIVE_EVENT='turn.started' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'"
           }
         ],
         "stop": [
           {
-            "command": "ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-stop-hook.cjs' '/x/ud/hcp.sock'"
+            "command": "env HIVE_EVENT='turn.ended' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'"
           }
         ],
         "preToolUse": [
           {
-            "command": "ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-kiro-approval-hook.cjs' '/x/ud/hcp.sock'",
+            "command": "env HIVE_SDK='/x/ud/hive-sdk.cjs' HIVE_HOOK_SOCK='/x/ud/hcp.sock' HIVE_PLAN_SOCK='/x/ud/plan-bridge.sock' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/agents/kiro/hcp-kiro-approval-hook.cjs'",
             "matcher": "*"
           }
         ]
@@ -1039,7 +1711,12 @@
     }
   },
   "assets": {
-    "hive-pi-ext.mjs": "e9c58649bb30601cdbc950a080ea93a78980a2eef8ccdd6ed086f3eae2036165",
-    "hcp-kiro-approval-hook.cjs": "81e4d1a321932ff2d7ae30bec70b20d4c666c3b19fdf130a4f03cd68e1c2ae53"
+    "hive-pi-ext.mjs": "505467021c2bcb61454beaa51c933e16d83ba4778ab5616cee7f9c7fdab10988",
+    "hcp-kiro-approval-hook.cjs": "b62f10d5ff6cab616d966756c0bd05fe827bacf589c472c1ce48aaaca8214374",
+    "claude/hive-turn-end.cjs": "1077bad09dea98da794d3162dcb7e23b9963bfc5991eea1a5d12dde6db691694",
+    "claude/hive-plan-review.cjs": "bc00e18ae13c822fb3b7e312a7e32c7a570a7f9475dd6d43ea31c7c0345f7d8f",
+    "claude/hive-approve.cjs": "a66664ec6cead2853bbf6866d8f2c747a02192fe930563324d7ff51b353b4186",
+    "droid/hive-turn-end.cjs": "cbe6c72bb1a0c87c96578d872e63d6b35fbb863bf18c4019f5f894dba7d037f5",
+    "droid/hive-notify.cjs": "9cc07e21e3308c526bd8bfd6a5d2767a058b795b531750e19debdccda47fb0d5"
   }
 }

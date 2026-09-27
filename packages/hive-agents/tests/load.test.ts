@@ -19,7 +19,7 @@ const published = (id: string): string => {
   return authoredYaml(a);
 };
 
-const ACME = `manifestVersion: 1
+const ACME = `manifestVersion: 2
 id: acme
 label: Acme Coder
 bin: acme
@@ -179,7 +179,7 @@ describe("loading agents from disk", () => {
   test("one broken plugin is reported and does not stop the others", async () => {
     const root = userRoot();
     install(root, "acme", ACME);
-    install(root, "broken", "manifestVersion: 1\nid: broken\nlabel: [unclosed\n");
+    install(root, "broken", "manifestVersion: 2\nid: broken\nlabel: [unclosed\n");
     install(root, "liar", ACME.replace("id: acme", "id: liar").replace("turnSignal: false", "turnSignal: true"));
     install(root, "mismatch", ACME); // dir "mismatch" vs id "acme"
 
@@ -257,7 +257,7 @@ describe("what the loader hands the renderer", () => {
 
   test("a broken plugin still carries no manifest", async () => {
     const root = userRoot();
-    install(root, "broken", "manifestVersion: 1\nid: broken\nlabel: [unclosed\n");
+    install(root, "broken", "manifestVersion: 2\nid: broken\nlabel: [unclosed\n");
     const { loaded } = await loadAgents();
     const b = loaded.find((a) => a.id === "broken")!;
     expect(b.manifest).toBeNull();
@@ -273,7 +273,7 @@ describe("main → IPC → renderer round trip", () => {
     const root = userRoot();
     install(root, "acme", ACME);
     install(root, "beta", ACME.replace("id: acme", "id: beta").replace("bin: acme", "bin: beta").replace("Acme Coder", "Beta"));
-    install(root, "broken", "manifestVersion: 1\nid: broken\nlabel: [unclosed\n");
+    install(root, "broken", "manifestVersion: 2\nid: broken\nlabel: [unclosed\n");
     install(root, "codex", published("codex"));
     const repoRoot = mkdtempSync(join(tmpdir(), "hm-repo-"));
     install(join(repoRoot, ".hivemind", "agents"), "acme", ACME.replace("Acme Coder", "Repo Acme"));
@@ -309,7 +309,7 @@ describe("an installed agent gets the same daemon half as any other", () => {
   // The gap this closes: validation accepting `hooks`, `home` and `assets` from anyone
   // means nothing if the daemon only ever built the halves of agents that used to ship
   // in the box — an installed agent would declare them and have them silently never happen.
-  const WORKER = `manifestVersion: 1
+  const WORKER = `manifestVersion: 2
 id: acme
 label: Acme
 bin: acme

@@ -27,7 +27,6 @@ export interface NodeBuildCtx {
   sizes: Record<string, { width: number; height: number }>;
   positions: Record<string, { x: number; y: number }>;
   frameTiles: Map<string, string[]>;
-  framesChipNames: Record<string, string>;
   updateFrameTitle: (id: string, title: string) => void;
   updateFrameColor: (id: string, color: string) => void;
   deleteFrame: (id: string) => void;
@@ -56,7 +55,7 @@ const NODE_TYPE: Record<TileInstance["kind"], TileSurfaceType> = {
 
 export function buildBaseNodes(ctx: NodeBuildCtx): Node[] {
   const {
-    repoPath, tiles, frames, frameOf, pinnedIds, sizes, positions, frameTiles, framesChipNames,
+    repoPath, tiles, frames, frameOf, pinnedIds, sizes, positions, frameTiles,
     updateFrameTitle, updateFrameColor, deleteFrame, arrangeFrame, bringFrameToFront,
     onAttachWorktree, onCreateWorktree, unbindBranch, bindWorkspace, unbindWorkspace,
     closeTile, onNodeResizeCommit, onTogglePin, onPinChange,
@@ -161,7 +160,6 @@ export function buildBaseNodes(ctx: NodeBuildCtx): Node[] {
         onBindWorkspace: bindWorkspace,
         onUnbindWorkspace: unbindWorkspace,
         tileIds: frameTiles.get(f.id) ?? NO_TILES,
-        tileNames: framesChipNames,
       },
       dragHandle: ".tile-drag-handle",
     });

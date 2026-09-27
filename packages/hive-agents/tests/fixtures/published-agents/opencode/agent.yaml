@@ -1,6 +1,8 @@
 # opencode — built-in provider manifest.
 # Authoring format for the def half. See packages/hive-agents/src/manifest.ts.
-manifestVersion: 1
+manifestVersion: 2
+# Written for the agent host that shipped in this release.
+minAppVersion: '2026.9.6'
 id: opencode
 label: opencode
 bin: opencode
@@ -9,7 +11,7 @@ aliases:
 enabled: true
 caps:
   promptDelivery: typed
-  turnSignal: false
+  turnSignal: true
   resume: none
   supervise: human
   blockedDetection: true
@@ -35,6 +37,28 @@ options:
   list:
     args:
     - models
+session:
+  list:
+    args: [session, list, --format, json, --pure]
+    idPath: id
+    cwdPath: directory
+    titlePath: title
+    updatedPath: updated
+  resume:
+    args: [--session, '{id}']
+    from:
+      tracked: true
+# OpenCode merges the file OPENCODE_CONFIG names into the user's own configuration; ours only
+# adds the plugin, which reports through the host's SDK.
+assets:
+- name: hive-opencode.json
+  file: hive-opencode.json
+- name: hive-opencode.js
+  file: hive-opencode.js
+launch:
+  hcp: true
+  env:
+    OPENCODE_CONFIG: '{asset:hive-opencode.json}'
 install:
   url: https://opencode.ai/docs/
   command: "curl -fsSL https://opencode.ai/install | bash"
@@ -57,5 +81,3 @@ detect:
       helper: hasInterruptPattern
     then: working
   default: idle
-note: scrape-only status and no turn signal — drive it by hand on the canvas; `hive ctl read` / `hive
-  ctl workflow` cannot gather from it.

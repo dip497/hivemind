@@ -24,6 +24,7 @@
     "typescript": "catalog:"
   },
   "dependencies": {
+    "@hivemind/agent-sdk": "workspace:*",
     "yaml": "catalog:"
   },
   "description": "Agent provider manifests for Hivemind — the declarative format and its validator.",
