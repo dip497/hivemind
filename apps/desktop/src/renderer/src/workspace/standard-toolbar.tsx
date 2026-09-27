@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, Download, Folder, GitCompare, Globe2, ListTodo, Loader2, Palette, Scan, Terminal, Upload, type LucideIcon } from "lucide-react";
+import { Check, ChevronDown, Download, Folder, GitCompare, Globe2, ListTodo, Loader2, Palette, RotateCw, Scan, Terminal, Upload, type LucideIcon } from "lucide-react";
 import type { ToolbarAction, ToolbarActionId } from "@hivemind/core/toolbar";
 import { Button } from "../components/ui/button";
 import { MenuItem } from "../components/ui/menu-item";
@@ -21,7 +21,10 @@ export interface StandardToolbarProps {
   onBrowser: () => void;
   onTheme: () => void;
   updateAvailable: boolean;
+  /** A version is downloaded and waiting: restarting is all that is left. */
+  updateStaged: boolean;
   onUpgrade: () => void;
+  onRestart: () => void;
   upgrading: boolean;
 }
 
@@ -50,10 +53,13 @@ export function StandardToolbar(props: StandardToolbarProps) {
         onClick={callbacks[action.id]} icon={<Icon />} />;
     })}
     <ViewSwitch compact={compact} />
-    {props.updateAvailable && <Button variant="ghost" size="sm" className="ml-1" onClick={props.onUpgrade} disabled={props.upgrading} aria-busy={props.upgrading}
-      title={props.upgrading ? "Downloading and installing the update…" : "Update available — click to update and restart"}>
-      {props.upgrading ? <Loader2 className="animate-spin" /> : <Upload />}
-      {props.upgrading ? "Updating…" : "Update available"}
+    {/* One action, whichever is left to do: download it, or restart into what is downloaded. */}
+    {(props.updateAvailable || props.updateStaged) && <Button variant="ghost" size="sm" className="ml-1"
+      onClick={props.updateStaged && !props.upgrading ? props.onRestart : props.onUpgrade}
+      disabled={props.upgrading} aria-busy={props.upgrading}
+      title={props.upgrading ? "Downloading the update…" : props.updateStaged ? "Downloaded — restart to finish" : "Update available — click to download it"}>
+      {props.upgrading ? <Loader2 className="animate-spin" /> : props.updateStaged ? <RotateCw /> : <Upload />}
+      {props.upgrading ? "Updating…" : props.updateStaged ? "Restart to finish" : "Update available"}
     </Button>}
   </div>;
 }
