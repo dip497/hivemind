@@ -1,6 +1,6 @@
 {
   "name": "@hivemind/agent-host",
-  "version": "2026.9.7",
+  "version": "2026.9.8",
   "private": true,
   "type": "module",
   "exports": {

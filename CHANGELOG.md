@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [2026.9.8] — 2026-09-28
+
 - **Breaking:** a supervisor's `allow` now covers the call it was asked about, and nothing more. Hivemind used to remember it for the rest of that worker's life for a list of file-touching tools, which is what `always` is for — and the list was one agent's tool names, so it fit some agents and not others. Answer `always` to remember a tool for that worker; the request says so.
 - Internal: the module that routed "send this to an agent" and held a spawned tile's task was still named after the one agent that existed when it was written. It is two modules now, named after what they do, and a test keeps a provider's name out of any file or exported name in the apps.
 - A first Codex tile starts working instead of waiting: it opens its hook review before it will take anything, although the flags it is started with already tell it to run those hooks, so Hivemind skips that one screen (Esc — its own "skip", which trusts nothing and writes nothing to your Codex config). A manifest says which screen and which key; the host sends it only at the start of a session, at most twice, and never once you have typed into the tile.
@@ -1360,7 +1362,8 @@ World, and sandboxed community views), and the e2e/perf harnesses gate every cha
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.9.7...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.9.8...HEAD
+[2026.9.8]: https://github.com/dip497/hivemind/releases/tag/v2026.9.8
 [2026.9.7]: https://github.com/dip497/hivemind/releases/tag/v2026.9.7
 [2026.9.6]: https://github.com/dip497/hivemind/releases/tag/v2026.9.6
 [2026.9.5]: https://github.com/dip497/hivemind/releases/tag/v2026.9.5
