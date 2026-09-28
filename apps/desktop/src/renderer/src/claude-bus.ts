@@ -46,7 +46,13 @@ export interface SendToClaudeDetail {
 // nothing. Instead we queue the prompt against the NEW tile's id at spawn time;
 // that tile delivers it to itself the first time it is genuinely ready (idle).
 interface PendingWork { text: string; at: number; }
-const pendingWork = new Map<string, PendingWork>();
+// One map for the window, not one per module instance: a tile's body can be mounted twice at
+// once (React mounts every component twice in development, and a hot reload brings a second
+// copy of this module with it), and a queue per copy means the same task claimed — and
+// submitted — twice.
+const pendingWork: Map<string, PendingWork> =
+  ((globalThis as { __hmPendingWork?: Map<string, PendingWork> }).__hmPendingWork ??=
+    new Map<string, PendingWork>());
 // A spawn that never reaches ready within this window is abandoned (claude
 // missing, or the user closed the tile before it booted).
 const WORK_TTL_MS = 120_000;
