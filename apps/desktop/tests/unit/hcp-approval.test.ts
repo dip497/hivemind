@@ -82,21 +82,23 @@ test("approval with a dead supervisor resolves instead of hanging the worker", a
   assert.deepEqual(r, { decision: "ask" }, "resolves immediately — never blocks for 9 minutes on a corpse");
 });
 
-test("a plain allow sticks for file-touching tools", () => {
-  assert.equal(stickyAllow("tile-claude-1:Edit"), true);
-  assert.equal(stickyAllow("tile-claude-1:Write"), true);
-  assert.equal(stickyAllow("tile-claude-1:MultiEdit"), true);
-  // pi lowercases its tool names; claude capitalizes. Both must hit.
-  assert.equal(stickyAllow("tile-claude-1:edit"), true);
-  assert.equal(stickyAllow("tile-claude-1:write"), true);
+test("a plain allow sticks for the file-touching tools the agent named", () => {
+  assert.equal(stickyAllow("tile-1:Edit", "claude"), true);
+  assert.equal(stickyAllow("tile-1:Write", "claude"), true);
+  assert.equal(stickyAllow("tile-1:MultiEdit", "claude"), true);
+  // One agent capitalizes its tool names, another lowercases them. Both must hit.
+  assert.equal(stickyAllow("tile-1:edit", "claude"), true);
+  assert.equal(stickyAllow("tile-1:write", "pi"), true);
 });
 
-test("a plain allow NEVER sticks for bash — each command is a different action", () => {
-  assert.equal(stickyAllow("tile-claude-1:Bash"), false);
-  assert.equal(stickyAllow("tile-claude-1:bash"), false);
-  // Nor for anything we haven't explicitly vetted.
-  assert.equal(stickyAllow("tile-claude-1:SomeNewMcpTool"), false);
-  assert.equal(stickyAllow(""), false);
+test("a plain allow NEVER sticks for a shell — each command is a different action", () => {
+  assert.equal(stickyAllow("tile-1:Bash", "claude"), false);
+  assert.equal(stickyAllow("tile-1:bash", "claude"), false);
+  // Nor for anything the agent did not name, nor for an agent that named nothing.
+  assert.equal(stickyAllow("tile-1:SomeNewMcpTool", "claude"), false);
+  assert.equal(stickyAllow("tile-1:Edit", "opencode"), false);
+  assert.equal(stickyAllow("tile-1:Edit", undefined), false);
+  assert.equal(stickyAllow("", "claude"), false);
 });
 
 
