@@ -10,6 +10,7 @@ import path from "node:path";
 import { app } from "electron";
 import * as nodePty from "@lydell/node-pty";
 import { parseRemote, type RemoteTarget } from "../../shared/remote-uri.js";
+import { pasteText } from "@hivemind/agent-host/paste";
 import { shq } from "@hivemind/agents/node";
 import { remoteConns } from "./conn.js";
 import { DaemonEndpoint, type EndpointState } from "@hivemind/agent-host/daemon-endpoint";
@@ -258,9 +259,9 @@ async function spawnThroughDaemon(opts: SpawnOpts, target: RemoteTarget, cb: Cal
   return { pid: -(++remotePidSeq) };
 }
 
-export function writeRemotePty(tileId: string, data: string): void {
+export function writeRemotePty(tileId: string, data: string, paste?: boolean): void {
   const ep = daemonTiles.get(tileId);
-  if (ep) ep.write(tileId, data); else remotePtys.get(tileId)?.write(data);
+  if (ep) ep.write(tileId, data, paste); else remotePtys.get(tileId)?.write(paste ? pasteText(data, false) : data);
 }
 export function resizeRemotePty(tileId: string, cols: number, rows: number): void {
   const ep = daemonTiles.get(tileId);

@@ -138,7 +138,7 @@ const api: HiveIpc & {
   worktreePrune: (repoPath) => ipcRenderer.invoke("worktreePrune", repoPath),
 
   ptySpawn: (opts) => ipcRenderer.invoke("ptySpawn", opts),
-  ptyWrite: (tileId, data) => ipcRenderer.send("ptyWrite", tileId, data),
+  ptyWrite: (tileId, data, paste) => ipcRenderer.send("ptyWrite", tileId, data, paste),
   ptyInterest: (tileId, shown) => ipcRenderer.send("ptyInterest", tileId, shown),
   tileNames: (names) => ipcRenderer.send("tile:names", names),
   ptyResize: (tileId, cols, rows) => ipcRenderer.send("ptyResize", tileId, cols, rows),

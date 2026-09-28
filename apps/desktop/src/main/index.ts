@@ -1148,9 +1148,9 @@ const hcpSupervise = new Map<string, string>();
 // Set once the HCP server binds; fans live pty output to agent.stream subscribers.
 let hcpBroadcast: ((tileId: string, chunk: string) => void) | null = null;
 // Resolve writeToTile once (used by HCP agent.send AND pipe forwarding).
-const hcpWriteToTile = (tileId: string, data: string): boolean => {
-  if (hasRemotePty(tileId)) { writeRemotePty(tileId, data); return true; }
-  if (hasSession(tileId)) { writePty(tileId, data); return true; }
+const hcpWriteToTile = (tileId: string, data: string, paste?: boolean): boolean => {
+  if (hasRemotePty(tileId)) { writeRemotePty(tileId, data, paste); return true; }
+  if (hasSession(tileId)) { writePty(tileId, data, paste); return true; }
   return false; // dead/unknown tile → agent.send surfaces TILE_NOT_FOUND
 };
 // Turn-aware delivery for every agent-to-agent message (reports, approval
@@ -1320,14 +1320,14 @@ ipcMain.on("ptyFlow", (_e, tileId: string, paused: boolean) => {
     }, PTY_PAUSE_MAX_MS));
   }
 });
-ipcMain.on("ptyWrite", (_e, tileId: string, data: string) => {
+ipcMain.on("ptyWrite", (_e, tileId: string, data: string, paste?: boolean) => {
   // Only a person's keystrokes take this handler — programmatic writes go through the
   // mailbox — so an interrupt key here is the user stopping the agent's turn.
   hcpStatus.input(toBareId(tileId), data);
   // Remote ptys relay elsewhere; the mark says "a human keystroke on a local pty" — echo skips batching.
-  if (hasRemotePty(tileId)) { writeRemotePty(tileId, data); return; }
+  if (hasRemotePty(tileId)) { writeRemotePty(tileId, data, paste); return; }
   ptyOut.markInput(tileId);
-  writePty(tileId, data);
+  writePty(tileId, data, paste);
 });
 ipcMain.handle("hcp:status-all", () => hcpStatus.all());
 ipcMain.on("ptyInterest", (_e, tileId: string, shown: boolean) => {

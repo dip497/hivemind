@@ -474,7 +474,8 @@ export interface HiveIpc {
   /** Install the agentic stack (hive skills + CLAUDE.md section) into a repo so
    *  a spawned agent can actually work issues with `hive`. Idempotent. */
   installAgentic(dir: string): Promise<{ ok: boolean }>;
-  ptyWrite(tileId: string, data: string): void;
+  /** `paste`: a message handed to the TUI as one block, not keystrokes. */
+  ptyWrite(tileId: string, data: string, paste?: boolean): void;
   /** The names tiles were given (renames, spawners' names), whole, each time they change. */
   tileNames(names: Record<string, string>): void;
   /** Whether any view shows this terminal: bytes reach the renderer only while one does. */

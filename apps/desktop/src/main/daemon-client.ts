@@ -172,8 +172,8 @@ export function screenPty(tileId: string, cb: (replay: string | null) => void): 
   local.screen(tileId, cb);
   return true;
 }
-export function writePty(tileId: string, data: string): void {
-  local.write(tileId, data);
+export function writePty(tileId: string, data: string, paste?: boolean): void {
+  local.write(tileId, data, paste);
 }
 export function resizePty(tileId: string, cols: number, rows: number): void {
   local.resize(tileId, cols, rows);
