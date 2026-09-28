@@ -1,5 +1,14 @@
 # CLAUDE
 
+## Multiplayer, other devices, phone — work in progress
+
+A multi-session project. **Start at `docs/plans/multiplayer.md`**: what is done, what is in
+progress, how to resume, and the checks to run. The design is
+`docs/design/multiplayer-2026-09-28.md` (accepted; Phase 0 refactors R1–R16 come before any
+feature work) and the facts behind it are in `docs/design/multiplayer-2026-09-28-research.md`.
+Update the status table in `docs/plans/multiplayer.md` in the same commit as the work it
+describes, so the next session picks up where this one stopped.
+
 ## Adding or completing an agent integration
 
 Wiring a new CLI agent (kiro, gemini, amp, …) — or finishing a half-wired one — follows

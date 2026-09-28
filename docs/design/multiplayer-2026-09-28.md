@@ -1,7 +1,10 @@
 # Multiplayer, other devices, phone — design
 
-**Status:** proposed, rev 4. **Date:** 2026-09-28. **Supersedes:** the transport and phone
-sections of `remote-machines-2026-09-11.md` (§7b, §12c). Its ssh path stays.
+**Status:** accepted 2026-09-28, rev 4. **Date:** 2026-09-28. **Supersedes:** the transport
+and phone sections of `remote-machines-2026-09-11.md` (§7b, §12c). Its ssh path stays.
+
+**Progress:** [`docs/plans/multiplayer.md`](../plans/multiplayer.md) (start here) ·
+**Research:** [`multiplayer-2026-09-28-research.md`](multiplayer-2026-09-28-research.md)
 
 **Rev 2 decisions (2026-09-28):** we run our own relay, address lookup and push server
 (§12); a workspace outlives its host (§5.7–5.9); sticky notes and other board objects ship in
