@@ -60,8 +60,9 @@ export class Mailbox {
   private releaseTimer = new Map<string, ReturnType<typeof setTimeout>>();
 
   constructor(
-    /** Raw write into a tile's pty. False → dead/unknown tile. */
-    private readonly write: (ptyId: string, data: string) => boolean,
+    /** Raw write into a tile's pty. `paste` = a message handed over as one block, not
+     *  keystrokes. False → dead/unknown tile. */
+    private readonly write: (ptyId: string, data: string, paste?: boolean) => boolean,
     /** Gap between the text and the Enter — claude's TUI drops a bundled newline. */
     private readonly submitDelayMs: number,
   ) {}
@@ -146,7 +147,9 @@ export class Mailbox {
   }
 
   private send(ptyId: string, text: string): boolean {
-    const ok = this.write(ptyId, text);
+    // The message is a paste (a newline in it must not submit half of it); the Enter that
+    // follows is the keystroke that sends it.
+    const ok = this.write(ptyId, text, true);
     if (!ok) return false;
     const t = setTimeout(() => this.write(ptyId, "\r"), this.submitDelayMs);
     t.unref?.();

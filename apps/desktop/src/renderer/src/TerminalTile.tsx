@@ -878,7 +878,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
               if (workQuietTicks >= WORK_SETTLE_TICKS) {
                 const work = claimWork(tileId);
                 if (work) {
-                  window.hive.ptyWrite(ptyId, work);
+                  window.hive.ptyWrite(ptyId, work, true); // a prompt is pasted, not typed
                   setTimeout(() => window.hive.ptyWrite(ptyId, "\r"), SUBMIT_DELAY_MS);
                   // Backstop: a fresh claude TUI can drop that first Enter, leaving
                   // the prompt typed-but-unsubmitted (the "I had to press Enter"

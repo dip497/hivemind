@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: a task given to an agent when it starts — or any message sent to one with `hive ctl send`, a worker's report, an approval request — is now handed to its TUI as a paste instead of as keystrokes. A multi-line task used to submit its first line on its own, leaving the rest as a draft, and an agent that guards against input it cannot parse in time exited instead of starting.
 - Fixed: a terminal restored after a restart took no mouse at all — clicking and scrolling inside an agent did nothing, while typing and its output kept working, until the tile was resized. The replay restored the mouse tracking an agent had turned on but not the coordinate encoding it asked for, so its clicks were answered in a dialect it does not read.
 - Machines nothing runs on sit at the foot of the Layers rail instead of after the tiles, so the last of them is never below the fold: the tile list scrolls above them, and the machines scroll inside their own block (at most 40% of the rail).
 - A tile is called what it is doing: the agent's own task line, with the spawn label (`claude #3`) kept only until it says one. A name you give the tile yourself still wins over both.

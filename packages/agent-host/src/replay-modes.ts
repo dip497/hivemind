@@ -19,3 +19,8 @@ export function mouseEncodingSeq(term: unknown): string {
     default: return "";
   }
 }
+
+/** Whether the app running in this terminal turned bracketed paste on (`?2004h`). */
+export function bracketedPaste(term: unknown): boolean {
+  return (term as { modes?: { bracketedPasteMode?: boolean } } | null)?.modes?.bracketedPasteMode === true;
+}

@@ -7,6 +7,7 @@ import * as pty from "@lydell/node-pty";
 import { agentForCmd, agentTitle, envToUnset } from "@hivemind/agents";
 import { ScreenWatcher } from "@hivemind/agent-host/screen-status";
 import { HeadlessTerminal } from "@hivemind/agent-host/pty-session-manager";
+import { pasteText } from "@hivemind/agent-host/paste";
 import { resolveWindowsSpawn } from "@hivemind/agents/discover";
 import { applyShellEnvToProcess, sanitizeShellEnv } from "@hivemind/agent-host/shell-env";
 import { repairShellSpec } from "@hivemind/agent-host/shell-spec";
@@ -134,9 +135,10 @@ function doSpawn(opts: SpawnOpts): pty.IPty {
 export function hasSession(tileId: string): boolean {
   return ptys.has(tileId);
 }
-export function writePty(tileId: string, data: string): void {
+export function writePty(tileId: string, data: string, paste?: boolean): void {
   const p = ptys.get(tileId);
-  if (p) p.write(data);
+  // No headless terminal here to ask about bracketed paste, so a message goes in as one line.
+  if (p) p.write(paste ? pasteText(data, false) : data);
 }
 
 /** In-process path has no persistence — detach == kill (matches today's

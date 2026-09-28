@@ -28,7 +28,8 @@
  */
 // Namespace import: bundlers disagree on whether these expose `.default` or named ESM exports.
 import * as HeadlessXtermNS from "@xterm/headless";
-import { mouseEncodingSeq } from "./replay-modes.js";
+import { bracketedPaste, mouseEncodingSeq } from "./replay-modes.js";
+import { pasteText } from "./paste.js";
 import * as SerializeAddonNS from "@xterm/addon-serialize";
 import type { SessionInfo } from "./pty-protocol.js";
 import { randomUUID } from "node:crypto";
@@ -525,9 +526,12 @@ export class SessionManager {
   }
 
   /** Typing is interacting: the typing viewer takes the size back. */
-  write(id: string, data: string, client?: SessionClient): void {
+  write(id: string, data: string, client?: SessionClient, paste?: boolean): void {
     const s = this.sessions.get(id);
     if (!s) return;
+    // A message, not keystrokes: hand it over the way a terminal hands over a paste, using
+    // whether the app running here turned bracketed paste on.
+    if (paste) data = pasteText(data, bracketedPaste(s.term));
     const own = client && s.sizes.get(client);
     if (own) {
       this.touch(s, client!, own);

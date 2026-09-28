@@ -37,7 +37,7 @@ export type ClientMsg =
   | { t: "attach"; reqId: string; id: string; spec: SpawnSpecWire; noSpawn?: boolean; liveOnly?: boolean; since?: { seq: number; epoch: string } }
   /** Capabilities of this client; "resync" = may be sent a fresh screen instead of every byte when behind. */
   | { t: "hello"; caps: string[] }
-  | { t: "write"; id: string; data: string }
+  | { t: "write"; id: string; data: string; /** A message pasted into the TUI, not keystrokes (see paste.ts). */ paste?: boolean }
   | { t: "resize"; id: string; cols: number; rows: number }
   | { t: "detach"; id: string }
   | { t: "kill"; id: string }
