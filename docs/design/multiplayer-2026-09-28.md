@@ -37,8 +37,9 @@ Phase 1 starts until Phase 0 is done.
 | D10 | **Board objects** — sticky notes, checklists, text labels, arrows — live in the shared document from the first multiplayer milestone. | Decided 2026-09-28. A shared board without shared notes is a screen share. |
 
 Rejected: Tailcat (point-to-point pipes, no multiplexing or datagrams, Go-only, v0.x);
-Yjs (no movable tree; no native Swift core); a central server of our own (cost, accounts,
-and it would hold everyone's terminal output).
+Yjs (no movable tree; no native Swift core); a central server that holds workspaces and
+terminal output (cost, accounts, and everyone's sessions in one place). The servers we do
+run (§12) only forward encrypted packets, look up addresses and wake phones.
 
 ---
 
@@ -226,12 +227,21 @@ exactly as today. They are ordered by dependency.
 - **Done when.** Protocol tests; an existing view works unchanged; a sample view shows
   participants.
 
-### R13. Relay and address lookup we run
+### R13. Our relays, address lookup and relay access
 
-- **What.** Self-host `iroh-relay` (and optionally `iroh-dns-server`) in two regions, or
-  buy n0 Pro ($19/mo). Public n0 relays are dev-only. Configurable per install.
-- **Done when.** Relay reachable from both regions; hive-net uses it by default; a custom
-  relay can be set in Settings.
+- **What.** Stand up the infrastructure in §12.1–12.3: three `iroh-relay` servers, one
+  `iroh-dns-server`, and the small relay-access service. `hive-net` uses them by default
+  (`presets::Minimal`, `RelayMode::Custom` with the same relay map on every device,
+  `PkarrPublisher`/`PkarrResolver` pointed at our DNS server) and registers its device key
+  with the access service on first run. Settings → Network lets a company point everything
+  at its own relays and lookup server.
+- **Files.** new `infra/` (Terraform or `gcloud` scripts, relay and DNS configs,
+  Dockerfiles for the access service), `.github/workflows/infra.yml` (manual dispatch),
+  `crates/hive-net` (relay map, lookup, registration, `home_relay_status()` watch).
+- **Done when.** Two hive-net instances on different networks connect through each relay
+  and directly; a device that never registered is refused by the relays; lookup of a
+  published endpoint and of a host record works from a third network; a relay restart is
+  survived by reconnecting clients.
 
 ### R14. Headless host: `hive host`
 
@@ -345,7 +355,8 @@ watch them live, and type into one when you hand them the keyboard.
 3. Host quits or sleeps: guests see "Adarsh's hivemind went offline" with the last board
    state; terminals frozen with a grey overlay. Agents on the host keep running if the
    daemon is alive (it outlives the window), and guests see them again when the host is
-   back.
+   back. A workspace hosted on an always-on machine (§5.7) never goes offline this way;
+   only the frames that run on the sleeping laptop grey out.
 
 **G. Board objects together (sticky notes, checklists, text, arrows)**
 1. **Add.** Toolbar → **Board** menu, or keys on the canvas: `8` sticky note, `9`
@@ -533,11 +544,15 @@ Hosting → **Move to** *this laptop* (or any of your devices). Same sheet.
 ### 5.8 How hosting moves
 
 - **Workspace id and host record.** Every workspace has a random `workspaceId` and an owner
-  (a person key). The current host is named by a **host record**
-  `{workspaceId, hostEndpointId, seq}` signed by the workspace key (R3) and published
-  through our own address-lookup service (pkarr records on our DNS server, §12) under the
-  workspace public key. Invites carry the workspace public key, so guests can always find
-  the current host.
+  (a person key). The current host is named by a **host record**: a pkarr packet signed by
+  the workspace key (R3), holding one TXT record `_hive host=<endpointId>;seq=<n>`,
+  uploaded to our address-lookup server with `PUT /pkarr/<z32 workspace public key>`
+  (§12.2). The server accepts any correctly signed packet up to 1000 bytes and keeps the
+  newest; it evicts a packet not republished for 7 days, so the host republishes hourly and
+  on every move. Readers fetch `GET /pkarr/<key>` and verify the signature themselves.
+  Invites carry the workspace public key, so guests can always find the current host. The
+  record reveals only which endpoint hosts the workspace, which iroh treats as public
+  anyway; the access list still decides who gets in.
 - **Replicas.** Each of the owner's devices keeps the workspace document and the owner-only
   access document in sync while online. Guests keep a document replica for offline viewing
   but never the access list, and can never host.
@@ -661,10 +676,19 @@ agents.
   like Zeron's mobile rewrite. iroh's Swift xcframework is published for iOS.
 - **Foreground only.** iOS suspends sockets in the background (Apple TN2277); the app
   reconnects on open.
-- **Push needs a server.** The host sends "needs you / finished / failed" to a small push
-  relay that holds the APNs credentials; payloads carry ids and short text only, and a
-  notification action posts the approval back through the relay to the host as an
-  idempotent intent. This is the only hosted service besides relays.
+- **Push goes through our push server (§12.4), which never sees content.** The host
+  encrypts "needs you / finished / failed" to the phone's push key and sends only the
+  ciphertext and an opaque handle. The server wakes the phone through APNs or FCM with a
+  generic alert; on iOS a Notification Service Extension decrypts the real text on the
+  device (it has about 30 seconds). Only hosts the phone has authorised can push to it.
+- **Answers never go through the push server.** Tapping **Allow** / **Deny** (marked
+  `.authenticationRequired`, so the phone must be unlocked) wakes the app in the
+  background for about 30 seconds — Apple does not guarantee it — and the app dials the
+  host over iroh and sends a signed, idempotent approve intent. If the host cannot be
+  reached in about 20 seconds, the phone shows "Open hivemind to answer" instead.
+- **The phone needs our own Rust layer.** iroh's Swift/Kotlin bindings (`iroh-ffi`,
+  1.1.0) set relays and auth tokens but cannot point address lookup at our server, so the
+  app links the `hive-net` crate through UniFFI, as Zeron does.
 - Views on the phone run in a WKWebView host that speaks view protocol 1.5 over
   `hive/view/1`.
 
@@ -702,6 +726,13 @@ agents.
   than the last one seen; a stale or forged record cannot redirect guests.
 - **Only the owner's devices can host.** A guest's machine can be an executor for its own
   frames (§5.4) but never holds the document authority or the access list.
+- **What our servers see.** Relays and the lookup server: which device keys connect, which
+  pairs talk, when and how much; never content. The lookup server also holds host records,
+  readable by anyone who has a workspace's public key. The access service: registered
+  device keys and connection counts. The push server: handles, times and sizes of
+  ciphertexts; never titles, names or content. Metrics ports are never public.
+- **Nobody can push to a phone it has not paired with**, and a push that decrypts to
+  something stale, duplicated or not signed by a paired host is dropped on the phone.
 
 ---
 
@@ -709,28 +740,164 @@ agents.
 
 | # | Milestone | Contents | Gate |
 |---|---|---|---|
-| M0 | Phase 0 | R1–R13 | Single-user app unchanged in behaviour; full e2e suite and installer tests green; perf re-profile no worse |
-| M1 | Multiplayer, board only | Share, join, presence, board edits, roles, remove | Two instances on different networks edit together; revoke works |
+| M0 | Phase 0 | R1–R15, with relays, lookup server and relay access live (§12.1–12.3) | Single-user app unchanged in behaviour; full e2e suite and installer tests green; perf re-profile no worse; R13's network checks pass from three networks |
+| M1 | Multiplayer, board | Share, join, presence, board edits, **sticky notes, checklists, text, arrows**, roles, remove | Two instances on different networks edit together; three people in one note (§4.4); revoke works |
 | M2 | Multiplayer, terminals | Terminal streams, keyboard handover, prompts answered by guests | Handover and reconnect e2e; 5-person load gate (§4.4) |
-| M3 | Your devices | Pairing, device workspaces in Recent, executor machine over iroh | Laptop drives desktop over the internet with no ssh |
+| M3 | Your devices and always-on hosting | Pairing (person key, device certificates), device workspaces in Recent, executor machine over iroh, `hive host`, moving and taking over hosting | Laptop drives desktop over the internet with no ssh; §5.9 |
 | M4 | Agents on my machine in their workspace | Frames on guest machines, per-machine ACL, hand off by branch/bundle | §5.6 |
-| M5 | Phone | iOS app, push relay, approvals, views on phone | §9.4 |
+| M5 | Phone | iOS app (Rust core via UniFFI), push server (§12.4), approvals from notifications, views on phone; Android after | §9.4; push content never readable on the server (checked by inspecting stored and logged data) |
+
+**Before M5 starts:** Apple Developer Program membership and a Firebase project (§12.4).
 
 ---
 
-## 12. Open questions
+## 12. Our infrastructure
 
-1. Hosted pieces: self-host `iroh-relay` + push relay, or n0 Pro relays + our push relay?
-   (Cost vs. operations.)
-2. Should a workspace outlive its host — e.g. an always-on machine that becomes the host?
-   (Design allows it: the host is just the machine whose hive-net holds authority.)
-3. Guest agent logins: an agent on the host runs with the host's API keys even when a guest
-   drives it. Show a "billed to Adarsh" note? Allow per-guest limits?
-4. Sticky notes and other board objects: in scope for M1, or later?
-5. Intel Macs: the release publishes arm64 only; hive-net inherits that.
-6. Windows as a host for others: `remote-machines` §12 kept Windows out of scope as a
+Decided: we run all of it (D8). Four pieces; the first three are needed before M1, the push
+server before M5. Versions pinned; **relays and the lookup server are upgraded before
+clients**, since iroh 1.x keeps the wire protocol compatible across minor versions but its
+public relays run only the newest major.
+
+```
+                         ┌── euw1.relay.hivemind.griiken.com ──┐
+ hive-net (laptop) ──────┼── use1.relay.hivemind.griiken.com ──┼────── hive-net (guest, phone)
+                         └── aps1.relay.hivemind.griiken.com ──┘
+        │  publish/resolve              │ "may this endpoint use the relay?"
+        ▼                               ▼
+ dns.hivemind.griiken.com       access.hivemind.griiken.com  (Cloud Run, 2 regions)
+ (iroh-dns-server, pkarr)                │
+                                 push.hivemind.griiken.com   (Cloud Run)  ──► APNs / FCM ──► phone
+```
+
+### 12.1 Relays
+
+- **Three relays**, one per region: `euw1` (Belgium, next to the site's `europe-west1`),
+  `use1` (US East), `aps1` (Asia-Pacific; Singapore unless most users are elsewhere).
+  Each is **one process behind one hostname**. A relay keeps its clients in memory and
+  drops packets for clients connected to another process, so relays are never put
+  behind a load balancer; capacity grows by adding hostnames to the relay map.
+- **Where:** small Compute Engine VMs with static IPv4 and IPv6, in the site's GCP project.
+  Not Cloud Run: it cannot take UDP, cuts WebSockets at its request timeout, and runs
+  several instances.
+- **Software:** `n0computer/iroh-relay:v1.3.0` (pinned) under systemd.
+- **Config** (TOML): `[tls] cert_mode = "LetsEncrypt"` (it obtains certificates itself over
+  TLS-ALPN-01 on 443), `enable_quic_addr_discovery = true`, a per-connection limit in
+  `[limits.client.rx]` (start at 4 MB/s, burst 8 MB), `metrics_bind_addr` on the private IP,
+  and `access.http` pointing at the access service (§12.3).
+- **Firewall:** 443/tcp (relay over WebSocket, `/ping`, `/healthz`), 80/tcp (captive-portal
+  probe), 7842/udp (QUIC address discovery). Port 9090 (metrics) only from our monitoring.
+  Clients need outbound 443 with WebSocket upgrades, and ideally outbound UDP.
+- **Sizing:** n0 quotes up to 60,000 concurrent connections per relay; no official CPU or
+  RAM figures exist, so we size from the metrics. Relays only carry traffic that could not
+  go direct (about 1 in 10 networks); terminal output is small, so the cost to watch is
+  internet egress per GB, not the VMs.
+
+### 12.2 Address lookup
+
+- **One `iroh-dns-server`** at `dns.hivemind.griiken.com`, on its own small VM (it keeps
+  signed packets in a local database file, so it is not replicated). Image
+  `n0computer/iroh-dns-server:v1.3.0`.
+- Config: `[https]` on 443 with `cert_mode = "lets_encrypt"` **and `letsencrypt_prod =
+  true`** (without it the staging CA is used), `pkarr_put_rate_limit = "smart"`, metrics on
+  127.0.0.1.
+- Clients publish their endpoint record and resolve others over **HTTPS**
+  (`/pkarr/<key>`), so no DNS delegation is needed at first; the DNS port can be opened
+  later.
+- It also stores **workspace host records** (§5.8): any Ed25519-signed pkarr packet is
+  accepted, newest wins, 1000-byte limit, evicted after 7 days without republish.
+- If it is down: new lookups fail, but peers that already know each other's relay (from
+  pairing or an earlier connection) still connect. Nightly backup of its database.
+
+### 12.3 Relay access
+
+hivemind has no accounts, so "who may use our relays" cannot mean "who is signed in". The
+relays use `access.http`: for each new connection the relay asks our access service about
+the connecting endpoint id (which the relay handshake has already proven) and admits it
+only on HTTP 200 with the body `true`.
+
+- **Registration.** On first run hive-net registers its device key with the access service:
+  it signs a challenge and solves a small proof-of-work (about a second), which makes
+  mass registration expensive. Registered keys are allowed.
+- **Abuse.** Per-connection rate limits on the relays; a denylist in the access service;
+  per-key connection counts reported from relay metrics.
+- **Where:** a small Rust service on Cloud Run in two regions (`europe-west1`,
+  `us-east1`), each relay pointed at the nearer one, backed by Firestore (as the HiveHub
+  plan proposes). If it is unreachable the relay refuses new connections, so it runs in
+  two regions and is monitored like the relays.
+- We do **not** use the relay's `shared_token` mode: a token shipped in the app can be
+  extracted and can only be revoked by restarting the relays.
+- Later, if the access check becomes a bottleneck: embed `iroh-relay` in our own binary
+  with a custom `AccessControl` that verifies short-lived tokens issued by the access
+  service, so relays decide without a network call.
+
+### 12.4 Push server
+
+Built for M5. It holds our APNs and FCM credentials and nothing else of value.
+
+- **Stack:** Rust, `axum` + `apns-h2` (Threema's maintained successor of `a2`, MIT) +
+  `reqwest`/`yup-oauth2` for FCM HTTP v1; the structure of Threema's `push-relay`
+  (MIT/Apache) is the reference. Cloud Run, `europe-west1`, Firestore; APNs `.p8` key and
+  FCM service account in Secret Manager.
+- **Phone registers** with the push server: platform, APNs environment, device token and its
+  push public key, signed by the phone's device key. The server returns a random 128-bit
+  **handle**. The phone re-registers on every launch (tokens change); the handle stays.
+- **Phone authorises hosts.** When pairing, the phone gives the host `{push URL, handle,
+  push public key}` over iroh and tells the push server, in a message it signs: "host key
+  K may push to this handle until T". Unpairing sends a signed revocation.
+- **Host pushes** `{handle, msgId (random 128-bit), ts, ttl, priority, ciphertext}` with an
+  Ed25519 signature by its device key over the method, path, body hash and time. The server
+  checks the signature, that K is authorised for the handle, the time is within ±60 s, the
+  `msgId` is new (replay cache), the size fits a padding bucket, and per-host and
+  per-handle quotas. Unknown handles and unauthorised senders get the same error.
+- **End-to-end encryption.** The host encrypts to the phone's push key (HPKE, X25519); the
+  plaintext carries the message id, host id, time, expiry and the host's signature, padded to
+  fixed sizes (about 2.5 KB usable within the 4096-byte APNs/FCM limit). The server sends:
+  - **APNs:** `alert` push, priority 10, `mutable-content: 1`, generic text ("hivemind — an
+    agent needs you"), an opaque collapse id, expiry 1 hour; the phone's Notification
+    Service Extension decrypts and replaces the text and picks the action category.
+  - **FCM:** a high-priority **data** message (notification messages cannot be end-to-end
+    encrypted); the app builds the notification and its buttons.
+- **Stores only** handle → token (encrypted at rest), authorised host keys and counters. No
+  titles, no content, no workspace names.
+- **Token hygiene.** APNs 410 / FCM `UNREGISTERED` delete the token; the next push from a
+  host gets 410 so the host drops the handle. APNs JWT refreshed every 20–60 minutes; 5xx
+  retried with backoff.
+- **Prerequisites:** an **Apple Developer Program** membership ($99/year; the project has
+  none today — the same membership also lets us sign and notarise the macOS app) and a
+  Firebase project for FCM (free).
+
+### 12.5 Operations
+
+- **Monitoring:** Prometheus scrapes relays (9090, private), the lookup server (9117,
+  local) and the services; alerts on relay `send_packets_dropped`,
+  `bytes_rx_ratelimited_total`, access-service errors, APNs 403/410/429 rates and FCM
+  quota errors. `/healthz` on every relay from an uptime check.
+- **Deploys:** `infra/` holds the VM definitions, configs and service Dockerfiles;
+  `.github/workflows/infra.yml` deploys on manual dispatch. Relays roll one region at a
+  time; the relay map lists all three, so clients fail over.
+- **Staging:** one extra relay and lookup server that pre-release builds point at, so a
+  relay upgrade is tried before production.
+- **Cost:** four small VMs plus egress, Cloud Run and Firestore (inside the free tier at
+  first), and the Apple membership. Estimate with the GCP calculator before M0 ends; the
+  number to watch is relay egress.
+- **Self-hosting by others:** Settings → Network takes a relay list, a lookup URL and a push
+  URL, so a company can run all of §12 itself.
+
+## 13. Open questions
+
+1. Guest agent logins: an agent on the host runs with the host's API keys even when a guest
+   drives it. Show a "runs on Adarsh's account" note? Allow per-guest limits?
+2. Intel Macs: the release publishes arm64 only; hive-net inherits that.
+3. Windows as a host for others: `remote-machines` §12 kept Windows out of scope as a
    *remote* host; iroh removes the ssh reason, but the daemon on Windows needs the same
    e2e coverage.
+4. The Asia-Pacific relay region: Singapore by default; move it if most users are
+   elsewhere (e.g. Mumbai).
+5. Relay access without accounts relies on proof-of-work registration and rate limits.
+   Acceptable for launch, or do we want accounts before opening relays to everyone?
+
+Resolved 2026-09-28: we run our own relay and push server (§12); a workspace outlives its
+host (§5.7–5.9); board objects are in M1 (§4.2 G).
 
 ---
 
@@ -758,3 +925,30 @@ agents.
   [Zeron iOS rewrite](https://github.com/zeronsh/zeron/pull/570),
   [Zeron push](https://github.com/zeronsh/zeron/pull/589)
 - [Apple TN2277 (background sockets)](https://developer.apple.com/library/archive/technotes/tn2277/_index.html)
+- Our infrastructure (§12):
+  [iroh-relay config (`main.rs`, v1.3.0)](https://github.com/n0-computer/iroh/blob/v1.3.0/iroh-relay/src/main.rs),
+  [iroh-relay defaults](https://github.com/n0-computer/iroh/blob/v1.3.0/iroh-relay/src/defaults.rs),
+  [relay client map (one process per relay)](https://github.com/n0-computer/iroh/blob/v1.3.0/iroh-relay/src/server/clients.rs),
+  [self-hosted relays](https://docs.iroh.computer/iroh-services/relays/self-hosted),
+  [rate limiting](https://docs.iroh.computer/relays/rate-limiting),
+  [dedicated infrastructure](https://docs.iroh.computer/deployment/dedicated-infrastructure),
+  [configuring networks](https://docs.iroh.computer/configuring-networks),
+  [release policy](https://docs.iroh.computer/about/release-policy),
+  [iroh-dns-server](https://github.com/n0-computer/iroh/tree/v1.3.0/iroh-dns-server),
+  [pkarr](https://github.com/pubky/pkarr),
+  [iroh-ffi relay/endpoint](https://github.com/n0-computer/iroh-ffi/blob/main/src/endpoint.rs),
+  [Cloud Run WebSockets](https://docs.cloud.google.com/run/docs/triggering/websockets)
+- Push (§12.4):
+  [APNs token auth](https://developer.apple.com/documentation/usernotifications/establishing-a-token-based-connection-to-apns),
+  [APNs requests](https://developer.apple.com/documentation/usernotifications/sending-notification-requests-to-apns),
+  [APNs responses](https://developer.apple.com/documentation/usernotifications/handling-notification-responses-from-apns),
+  [Notification Service Extension](https://developer.apple.com/documentation/usernotifications/modifying-content-in-newly-delivered-notifications),
+  [actionable notifications](https://developer.apple.com/documentation/usernotifications/declaring-your-actionable-notification-types),
+  [background execution time](https://developer.apple.com/documentation/uikit/extending-your-app-s-background-execution-time),
+  [FCM HTTP v1](https://firebase.google.com/docs/cloud-messaging/send/v1-api),
+  [FCM message priority](https://firebase.google.com/docs/cloud-messaging/android/message-priority),
+  [apns-h2](https://github.com/threema-ch/apns-h2),
+  [Threema push-relay](https://github.com/threema-ch/push-relay),
+  [chatmail notifiers](https://github.com/chatmail/notifiers),
+  [Matrix push gateway API](https://spec.matrix.org/latest/push-gateway-api/),
+  [RFC 8291](https://www.rfc-editor.org/rfc/rfc8291), [RFC 8292](https://www.rfc-editor.org/rfc/rfc8292)
