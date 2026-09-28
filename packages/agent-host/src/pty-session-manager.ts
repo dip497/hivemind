@@ -28,6 +28,7 @@
  */
 // Namespace import: bundlers disagree on whether these expose `.default` or named ESM exports.
 import * as HeadlessXtermNS from "@xterm/headless";
+import { mouseEncodingSeq } from "./replay-modes.js";
 import * as SerializeAddonNS from "@xterm/addon-serialize";
 import type { SessionInfo } from "./pty-protocol.js";
 import { randomUUID } from "node:crypto";
@@ -265,9 +266,12 @@ export class SessionManager {
    *  client's xterm re-fires onTitleChange on reattach (SerializeAddon drops the
    *  title). Control chars stripped so an embedded BEL/ESC can't truncate it. */
   private withTitle(s: Session, replay: string): string {
-    if (!s.lastTitle) return replay;
+    // The mouse encoding goes after the replay: SerializeAddon restores the tracking mode but
+    // not the encoding, and an app that asked for SGR ignores anything else (see replay-modes).
+    const withMouse = replay + mouseEncodingSeq(s.term);
+    if (!s.lastTitle) return withMouse;
     const t = s.lastTitle.replace(/[\x00-\x1f\x7f]/g, " ").trim();
-    return t ? `\x1b]0;${t}\x07${replay}` : replay;
+    return t ? `\x1b]0;${t}\x07${withMouse}` : withMouse;
   }
 
   async createOrAttach(id: string, spec: SpawnSpec, client: SessionClient): Promise<AttachResult> {
