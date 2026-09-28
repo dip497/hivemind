@@ -56,6 +56,10 @@ options:
 install:
   url: https://code.claude.com/docs/en/setup
   command: "curl -fsSL https://claude.ai/install.sh | bash"
+supervise:
+  # One decision covers the rest for the tools that touch files; a shell tool never, since
+  # every command it runs is its own action.
+  sticky: [Edit, Write, Read, MultiEdit, NotebookEdit, WebFetch]
 detect:
   scope:
     kind: tail

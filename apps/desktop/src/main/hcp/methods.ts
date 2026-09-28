@@ -83,18 +83,20 @@ const WORKFLOW_SPAWN_RETRIES = 6;
 
 
 
-/** Tools where a plain `allow` is remembered for the rest of that worker's life
- *  (see `agent.approve`). File-touching tools only — approving them one call at a
- *  time is pure friction. Bash is deliberately ABSENT: each command is a distinct
- *  action, so a cached allow there would be a blanket shell. Names are lowercased
- *  before lookup — claude says "Edit"/"Write", pi says "edit"/"write". */
-const STICKY_ALLOW = new Set(["edit", "write", "read", "multiedit", "notebookedit", "webfetch"]);
-
-/** Whether a plain `allow` on this approveCache key (`<worker>:<tool>`) should be
- *  remembered. The worker id contains no ":" (it's `tile-<kind>-<ts>`), so the tool
- *  is the last segment; case is normalized (claude "Edit" vs pi "edit"). */
-export function stickyAllow(cacheKey: string): boolean {
-  return STICKY_ALLOW.has((cacheKey.split(":").pop() ?? "").toLowerCase());
+/** Whether a plain `allow` on this approveCache key (`<worker>:<tool>`) is remembered for the
+ *  rest of that worker's life, or asked again next time.
+ *
+ *  Which tools those are is the agent's own business — it names them in its manifest
+ *  (`supervise.sticky`), because it is the only one that knows what it calls the tool that
+ *  writes a file. An agent that names none is asked every time; a shell tool is refused
+ *  there, since every command it runs is a different action.
+ *
+ *  The worker id contains no ":" (it is `tile-<kind>-<ts>`), so the tool is the last segment;
+ *  case is normalized (one agent says "Edit", another "edit"). */
+export function stickyAllow(cacheKey: string, agentId: string | undefined): boolean {
+  const sticky = agentId ? agentById(agentId)?.superviseSticky : undefined;
+  if (!sticky?.length) return false;
+  return sticky.includes((cacheKey.split(":").pop() ?? "").toLowerCase());
 }
 
 /** Whether a provider can be supervised is declared in its catalog def
@@ -553,7 +555,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         // BASH IS EXEMPT: every command is a different action ("ls" ≠ "rm -rf /"),
         // so caching an allow there would hand the worker a blanket shell. Bash
         // (and anything else) still re-asks unless the parent says `always`.
-        if (decision === "allow" && stickyAllow(pend.cacheKey)) {
+        if (decision === "allow" && stickyAllow(pend.cacheKey, providerOf(pend.worker))) {
           approveCache.set(pend.cacheKey, "allow");
         }
         clearTimeout(pend.timer);
