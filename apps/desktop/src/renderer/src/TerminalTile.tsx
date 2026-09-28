@@ -891,10 +891,13 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
               }
             }
             if (agent && peekWork(tileId)) {
-              // Quiet is not ready when the agent is waiting on the user: a first run can open
-              // a trust or update chooser and sit there, and a task typed into a chooser picks
-              // an option instead. Hold it until the tile is at its own prompt.
-              if (agentDirty || statusOf(tileId) !== "idle") workQuietTicks = 0; else workQuietTicks++;
+              // Quiet alone is not ready: a first run can open a trust or update chooser and
+              // sit there, and a task typed into a chooser picks an option instead. Only a
+              // screen that WAITS holds the task back — a booting agent has no status yet, and
+              // its own splash can read as working; neither means a chooser is up.
+              const st = statusOf(tileId);
+              const waiting = st === "blocked" || st === "permission" || st === "question";
+              if (agentDirty || waiting) workQuietTicks = 0; else workQuietTicks++;
               if (workQuietTicks >= WORK_SETTLE_TICKS) {
                 const work = claimWork(tileId);
                 if (work) {
