@@ -874,7 +874,12 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
           // "settled" signal = N consecutive QUIET ticks (no new pty output) —
           // robust for any agent (claude/codex/droid/…), not tied to scrape status.
           let workQuietTicks = 0;
+          let workTicks = 0;
           const WORK_SETTLE_TICKS = 2; // ~2.4s of quiet after boot → ready prompt
+          // An agent that never goes quiet — one that keeps a tip, a clock or a spinner
+          // ticking in its composer — would hold the task for ever. Deliver anyway once it
+          // has had this long to boot, as long as it is not waiting on the user.
+          const WORK_DEADLINE_TICKS = 8;
           agentPoll = setInterval(() => {
             // One-shot delivery — runs BEFORE the agentDirty early-return so it can
             // fire while the agent is quiet (the exact "ready" moment). claimWork
@@ -897,8 +902,9 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
               // its own splash can read as working; neither means a chooser is up.
               const st = statusOf(tileId);
               const waiting = st === "blocked" || st === "permission" || st === "question";
+              workTicks++;
               if (agentDirty || waiting) workQuietTicks = 0; else workQuietTicks++;
-              if (workQuietTicks >= WORK_SETTLE_TICKS) {
+              if (!waiting && (workQuietTicks >= WORK_SETTLE_TICKS || workTicks >= WORK_DEADLINE_TICKS)) {
                 const work = claimWork(tileId);
                 if (work) {
                   window.hive.ptyWrite(ptyId, work, true); // a prompt is pasted, not typed
