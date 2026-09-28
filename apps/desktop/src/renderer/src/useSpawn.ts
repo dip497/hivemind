@@ -2,7 +2,7 @@
  * useSpawn — tile spawning + in-frame placement, lifted from Canvas.tsx. Owns:
  * placeInFrame (slot packing + auto-grow), ensureFrame (resolve/lazily-create
  * the target frame), spawnTile (the single-source create path), and the
- * spawnInto/spawnClaude/spawnVis/frameOpen wrappers. Canvas passes its state
+ * spawnInto/spawnDefaultAgent/spawnVis/frameOpen wrappers. Canvas passes its state
  * refs + setters as context; the handlers read/update them exactly as before.
  */
 import { useCallback, useEffect, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
@@ -242,7 +242,7 @@ export function useSpawn(ctx: SpawnCtx) {
         return copy;
       });
     }
-    // Sync the ref NOW so an immediately-following placeInFrame / doSpawnClaude
+    // Sync the ref NOW so an immediately-following placeInFrame / a spawn
     // (both read framesRef) see the new frame before the next render commits.
     if (!framesRef.current.length) framesRef.current = [frame];
     return frame;
@@ -342,7 +342,7 @@ export function useSpawn(ctx: SpawnCtx) {
   }, [spawnInto]);
 
   // Back-compat thin wrappers for the many existing call sites.
-  const spawnClaude = useCallback(
+  const spawnDefaultAgent = useCallback(
     (mode?: string, work?: string) => spawnInto(AGENT_TILE_KIND, { mode, work }),
     [spawnInto],
   );
@@ -458,5 +458,5 @@ export function useSpawn(ctx: SpawnCtx) {
     [ensureFrame, placeInFrame, renameTile, tilesRef],
   );
 
-  return { placeInFrame, ensureFrame, spawnTile, spawnInto, spawnClaude, spawnAgent, spawnVis, frameOpen, openPlanReview, hcpSpawnAgent };
+  return { placeInFrame, ensureFrame, spawnTile, spawnInto, spawnDefaultAgent, spawnAgent, spawnVis, frameOpen, openPlanReview, hcpSpawnAgent };
 }

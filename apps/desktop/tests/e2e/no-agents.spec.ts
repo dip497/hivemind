@@ -25,7 +25,7 @@ test("with no agent installed, starting one opens Settings ▸ Plugins, and a pl
 
     const nodes = () => page.locator(".react-flow__node-terminal").count();
     const before = await nodes();
-    await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:spawn-claude")));
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:spawn-agent")));
     await expect(page.getByText("No agent installed — install one from Settings ▸ Plugins.")).toBeVisible();
     await expect(page.locator(".settings-dialog")).toBeVisible();
     await expect(page.locator('[data-settings-page="plugins"]')).toHaveAttribute("aria-current", "page");

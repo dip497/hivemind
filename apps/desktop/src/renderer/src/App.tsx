@@ -266,7 +266,7 @@ export function App() {
         .catch(() => { /* fall back to base root */ });
     };
     const onNew = () => setNewOpen(true);
-    // Canvas is always mounted now (canvas-only), so spawn-claude is handled
+    // Canvas is always mounted now (canvas-only), so spawn-agent is handled
     // directly by Canvas's own listener — no view-switch bridge needed.
     window.addEventListener("hivemind:open-issue", onOpen as EventListener);
     window.addEventListener("hivemind:new-issue", onNew);
