@@ -1,11 +1,15 @@
 # Multiplayer, other devices, phone — design
 
-**Status:** proposed, rev 2. **Date:** 2026-09-28. **Supersedes:** the transport and phone
+**Status:** proposed, rev 3. **Date:** 2026-09-28. **Supersedes:** the transport and phone
 sections of `remote-machines-2026-09-11.md` (§7b, §12c). Its ssh path stays.
 
 **Rev 2 decisions (2026-09-28):** we run our own relay, address lookup and push server
 (§12); a workspace outlives its host (§5.7–5.9); sticky notes and other board objects ship in
 the first multiplayer milestone (§4.2 G).
+
+**Rev 3 (2026-09-28):** hivemind is open source, so our servers are a default and never a
+requirement: a local-network mode with no servers, self-hosting every server role from the
+same binary we run, and one device serving a small group (§13).
 
 Three features, built in this order, on one networking choice:
 
@@ -35,6 +39,7 @@ Phase 1 starts until Phase 0 is done.
 | D8 | **We run our own infrastructure:** iroh relays, address lookup (pkarr DNS) and a push server. No third-party relay or push service carries hivemind traffic. | Decided 2026-09-28. Public n0 relays are dev-only; a push relay must hold our APNs/FCM credentials anyway. |
 | D9 | **A workspace outlives its host.** Each of the owner's devices keeps a full replica of the document and the access list; hosting can move to an always-on machine (`hive host`), or any of the owner's devices can take it over. | Decided 2026-09-28. The CRDT makes failover a merge, not a recovery. |
 | D10 | **Board objects** — sticky notes, checklists, text labels, arrows — live in the shared document from the first multiplayer milestone. | Decided 2026-09-28. A shared board without shared notes is a screen share. |
+| D11 | **Our servers are optional.** Every device works on a local network with no servers; every server role (relay, lookup, access, push) is part of the MIT-licensed `hive-net` binary; every address comes from a **network profile**, never a constant. Our hosted network runs the same binary as anyone else. | hivemind is open source (MIT): people must be able to run it entirely on their own machines and networks (§13). |
 
 Rejected: Tailcat (point-to-point pipes, no multiplexing or datagrams, Go-only, v0.x);
 Yjs (no movable tree; no native Swift core); a central server that holds workspaces and
@@ -197,10 +202,17 @@ exactly as today. They are ordered by dependency.
   §7, `after_handshake` gating against the ACL (R11), a local socket to main. Built for
   every release target (Linux x64/arm64, macOS arm64, Windows x64) and bundled like the
   `hive` binary; `install.sh`/`install.ps1` and `release.yml` updated.
+- **Takes its whole network setup from a network profile (R16):** relays, lookup, access,
+  push — or **local mode**: no relays, mDNS lookup (`iroh-mdns-address-lookup`), direct
+  connections (§13.4).
+- **Also the server:** `hive-net serve --relay --lookup --access --push` runs any mix of the
+  server roles (§13.4). `hive serve` wraps it.
 - **Files.** new `crates/hive-net`, `.github/workflows/release.yml`, `scripts/*install*`,
   installer tests.
-- **Done when.** Two machines ping each other by `EndpointId` through a self-hosted relay
-  and directly; release artifacts include it; installer tests green.
+- **Done when.** Two machines ping each other by `EndpointId` through a relay run by
+  `hive-net serve --relay` and directly; two machines on one Wi-Fi with no internet find
+  and connect to each other in local mode; release artifacts include it; installer tests
+  green.
 
 ### R11. Access list and audit
 
@@ -229,19 +241,23 @@ exactly as today. They are ordered by dependency.
 
 ### R13. Our relays, address lookup and relay access
 
-- **What.** Stand up the infrastructure in §12.1–12.3: three `iroh-relay` servers, one
-  `iroh-dns-server`, and the small relay-access service. `hive-net` uses them by default
-  (`presets::Minimal`, `RelayMode::Custom` with the same relay map on every device,
-  `PkarrPublisher`/`PkarrResolver` pointed at our DNS server) and registers its device key
-  with the access service on first run. Settings → Network lets a company point everything
-  at its own relays and lookup server.
-- **Files.** new `infra/` (Terraform or `gcloud` scripts, relay and DNS configs,
-  Dockerfiles for the access service), `.github/workflows/infra.yml` (manual dispatch),
-  `crates/hive-net` (relay map, lookup, registration, `home_relay_status()` watch).
+- **What.** Stand up the infrastructure in §12.1–12.3 — three relays, one lookup server,
+  the relay-access service — each running `hive-net serve` with the matching role, so our
+  hosted network runs exactly the code self-hosters run (D11). Our network is the built-in
+  *Hosted* profile (R16): `hive-net` uses it by default (`presets::Minimal`,
+  `RelayMode::Custom` with the same relay map on every device, `PkarrPublisher`/
+  `PkarrResolver` pointed at our lookup server) and registers its device key with the
+  access service on first run.
+- **For self-hosters:** `infra/compose.yml` runs every role on one machine, and a
+  **self-hosting guide** goes on the docs site. The compose stack runs in CI, so it cannot
+  rot.
+- **Files.** new `infra/` (Terraform or `gcloud` scripts, role configs, `compose.yml`),
+  `.github/workflows/infra.yml` (manual dispatch), `crates/hive-net` (relay map, lookup,
+  registration, `home_relay_status()` watch), `docs/src/content/docs/guide/self-hosting.md`.
 - **Done when.** Two hive-net instances on different networks connect through each relay
   and directly; a device that never registered is refused by the relays; lookup of a
   published endpoint and of a host record works from a third network; a relay restart is
-  survived by reconnecting clients.
+  survived by reconnecting clients; the same checks pass against the compose stack.
 
 ### R14. Headless host: `hive host`
 
@@ -271,9 +287,30 @@ exactly as today. They are ordered by dependency.
 - **Done when.** Single user, no network: create, edit, resize, nest, undo, persist and
   delete each object kind; e2e covers typing in a note without triggering shortcuts.
 
+### R16. Network profiles and admission
+
+- **What.** Everything a device needs to know about a network, as one signed file (§13.2):
+  relays, lookup, access and push URLs, the admission policy, the admin's public key,
+  local-mode switches. Built in: *Hosted* (ours) and *Local network* (no servers).
+  Distributed by pairing (a new device inherits it), by link or QR, or by
+  `hive network use <file>`. Settings → **Network** shows the active profile and its health;
+  `hive network show | use | doctor` does the same from a terminal.
+- **Admission** (enforced by the access role, §12.3): `open-pow` (our hosted network),
+  `closed` (self-hosted default: devices enrolled by the admin or by an enrolled device),
+  and **vouchers**: a host signs a time-limited admission for a guest's device key when it
+  invites them, so guests from other networks can use the host's relays (§13.3 D).
+- **Files.** `crates/hive-net` (profile loading, verification), `packages/workspace-host`
+  (profile store), Settings → Network panel, `apps/cli/src/commands/network.ts`.
+- **Done when.** A device switched between Hosted, Local network and a self-hosted profile
+  talks only to that profile's servers (checked by capturing its traffic in the e2e run);
+  a guest from another network joins with a voucher and is refused once it expires.
+
 **Order:** R1 → R2 → R15; R3 in parallel; R4 in parallel; R5 after R1; R6 after R5; R7
-after R5; R8 after R7; R9 any time before Phase 2; R10–R11 after R3; R12 any time; R13
-before Phase 1 ships; R14 after R1, R7, R10 and R11.
+after R5; R8 after R7; R9 any time before Phase 2; R10–R11 after R3; R16 with R10; R12 any
+time; R13 before Phase 1 ships; R14 after R1, R7, R10 and R11.
+
+**Local network mode lands first.** It needs no servers, so Phase 1 is developed and
+e2e-tested on it; the hosted network (R13) then adds reaching across the internet.
 
 ---
 
@@ -730,7 +767,9 @@ agents.
   pairs talk, when and how much; never content. The lookup server also holds host records,
   readable by anyone who has a workspace's public key. The access service: registered
   device keys and connection counts. The push server: handles, times and sizes of
-  ciphertexts; never titles, names or content. Metrics ports are never public.
+  ciphertexts; never titles, names or content. Metrics ports are never public. A
+  self-hosted network's servers (§13) see exactly the same and no more, and a
+  local-network setup has no servers to see anything.
 - **Nobody can push to a phone it has not paired with**, and a push that decrypts to
   something stale, duplicated or not signed by a paired host is dropped on the phone.
 
@@ -740,12 +779,12 @@ agents.
 
 | # | Milestone | Contents | Gate |
 |---|---|---|---|
-| M0 | Phase 0 | R1–R15, with relays, lookup server and relay access live (§12.1–12.3) | Single-user app unchanged in behaviour; full e2e suite and installer tests green; perf re-profile no worse; R13's network checks pass from three networks |
-| M1 | Multiplayer, board | Share, join, presence, board edits, **sticky notes, checklists, text, arrows**, roles, remove | Two instances on different networks edit together; three people in one note (§4.4); revoke works |
+| M0 | Phase 0 | R1–R16; local network mode first; then relays, lookup server and relay access live (§12.1–12.3), all from `hive-net serve`; `infra/compose.yml` and the self-hosting guide | Single-user app unchanged in behaviour; full e2e suite and installer tests green; perf re-profile no worse; two devices with no internet connect in local mode; R13's network checks pass from three networks and against the compose stack; no connection outside the active profile (§13.4) |
+| M1 | Multiplayer, board | Share, join, presence, board edits, **sticky notes, checklists, text, arrows**, roles, remove — in every network mode (§13.1) | On one local network with no servers, then across two networks: people edit together; three people in one note (§4.4); revoke works; a guest from a self-hosted network joins a hosted workspace by voucher |
 | M2 | Multiplayer, terminals | Terminal streams, keyboard handover, prompts answered by guests | Handover and reconnect e2e; 5-person load gate (§4.4) |
 | M3 | Your devices and always-on hosting | Pairing (person key, device certificates), device workspaces in Recent, executor machine over iroh, `hive host`, moving and taking over hosting | Laptop drives desktop over the internet with no ssh; §5.9 |
 | M4 | Agents on my machine in their workspace | Frames on guest machines, per-machine ACL, hand off by branch/bundle | §5.6 |
-| M5 | Phone | iOS app (Rust core via UniFFI), push server (§12.4), approvals from notifications, views on phone; Android after | §9.4; push content never readable on the server (checked by inspecting stored and logged data) |
+| M5 | Phone | iOS app (Rust core via UniFFI), push server (§12.4), approvals from notifications, views on phone; Android after, with FCM and UnifiedPush (§13.4) | §9.4; push content never readable on the server (checked by inspecting stored and logged data); an Android phone on a local network with no internet gets a notification through UnifiedPush |
 
 **Before M5 starts:** Apple Developer Program membership and a Firebase project (§12.4).
 
@@ -779,11 +818,15 @@ public relays run only the newest major.
 - **Where:** small Compute Engine VMs with static IPv4 and IPv6, in the site's GCP project.
   Not Cloud Run: it cannot take UDP, cuts WebSockets at its request timeout, and runs
   several instances.
-- **Software:** `n0computer/iroh-relay:v1.3.0` (pinned) under systemd.
+- **Software:** `hive-net serve --relay` under systemd — our binary embedding `iroh-relay`
+  1.3 (`server` feature), the same one self-hosters run (§13.4). Its `AccessControl` asks
+  the access service and caches each answer for five minutes, so a short access-service
+  outage does not lock anyone out. The stock `n0computer/iroh-relay:v1.3.0` image with
+  `access.http` is the fallback while the prototype is built.
 - **Config** (TOML): `[tls] cert_mode = "LetsEncrypt"` (it obtains certificates itself over
   TLS-ALPN-01 on 443), `enable_quic_addr_discovery = true`, a per-connection limit in
   `[limits.client.rx]` (start at 4 MB/s, burst 8 MB), `metrics_bind_addr` on the private IP,
-  and `access.http` pointing at the access service (§12.3).
+  and admission checked through the access service (§12.3).
 - **Firewall:** 443/tcp (relay over WebSocket, `/ping`, `/healthz`), 80/tcp (captive-portal
   probe), 7842/udp (QUIC address discovery). Port 9090 (metrics) only from our monitoring.
   Clients need outbound 443 with WebSocket upgrades, and ideally outbound UDP.
@@ -795,8 +838,9 @@ public relays run only the newest major.
 ### 12.2 Address lookup
 
 - **One `iroh-dns-server`** at `dns.hivemind.griiken.com`, on its own small VM (it keeps
-  signed packets in a local database file, so it is not replicated). Image
-  `n0computer/iroh-dns-server:v1.3.0`.
+  signed packets in a local database file, so it is not replicated). It runs
+  `hive-net serve --lookup`, which embeds `iroh-dns-server` 1.3 (a library as well as a
+  binary); the stock `n0computer/iroh-dns-server:v1.3.0` image serves the prototype.
 - Config: `[https]` on 443 with `cert_mode = "lets_encrypt"` **and `letsencrypt_prod =
   true`** (without it the staging CA is used), `pkarr_put_rate_limit = "smart"`, metrics on
   127.0.0.1.
@@ -810,10 +854,12 @@ public relays run only the newest major.
 
 ### 12.3 Relay access
 
-hivemind has no accounts, so "who may use our relays" cannot mean "who is signed in". The
-relays use `access.http`: for each new connection the relay asks our access service about
-the connecting endpoint id (which the relay handshake has already proven) and admits it
-only on HTTP 200 with the body `true`.
+hivemind has no accounts, so "who may use our relays" cannot mean "who is signed in". For
+each new connection the relay asks our access service about the connecting endpoint id
+(which the relay handshake has already proven) — through `hive-net serve --relay`'s
+`AccessControl`, or through `access.http` (admit only on HTTP 200 with the body `true`) on
+a stock relay. The same service implements every admission policy of §13
+(`open-pow` here, `closed` and vouchers for self-hosted networks).
 
 - **Registration.** On first run hive-net registers its device key with the access service:
   it signs a challenge and solves a small proof-of-work (about a second), which makes
@@ -826,18 +872,20 @@ only on HTTP 200 with the body `true`.
   two regions and is monitored like the relays.
 - We do **not** use the relay's `shared_token` mode: a token shipped in the app can be
   extracted and can only be revoked by restarting the relays.
-- Later, if the access check becomes a bottleneck: embed `iroh-relay` in our own binary
-  with a custom `AccessControl` that verifies short-lived tokens issued by the access
-  service, so relays decide without a network call.
+- Later, if the access check becomes a bottleneck even with caching: the access service
+  issues short-lived signed tokens and the relay's `AccessControl` verifies them without
+  a network call.
 
 ### 12.4 Push server
 
 Built for M5. It holds our APNs and FCM credentials and nothing else of value.
 
-- **Stack:** Rust, `axum` + `apns-h2` (Threema's maintained successor of `a2`, MIT) +
-  `reqwest`/`yup-oauth2` for FCM HTTP v1; the structure of Threema's `push-relay`
-  (MIT/Apache) is the reference. Cloud Run, `europe-west1`, Firestore; APNs `.p8` key and
-  FCM service account in Secret Manager.
+- **Stack:** the `push` role of `hive-net serve` (§13.4). Rust, `axum` + `apns-h2`
+  (Threema's maintained successor of `a2`, MIT) + `reqwest`/`yup-oauth2` for FCM HTTP v1,
+  plus UnifiedPush (Web Push encryption, RFC 8291) for Android without Google; the
+  structure of Threema's `push-relay` (MIT/Apache) is the reference. Ours runs on Cloud
+  Run, `europe-west1`, Firestore; APNs `.p8` key and FCM service account in Secret
+  Manager.
 - **Phone registers** with the push server: platform, APNs environment, device token and its
   push public key, signed by the phone's device key. The server returns a random 128-bit
   **handle**. The phone re-registers on every launch (tokens change); the handle stays.
@@ -880,10 +928,162 @@ Built for M5. It holds our APNs and FCM credentials and nothing else of value.
 - **Cost:** four small VMs plus egress, Cloud Run and Firestore (inside the free tier at
   first), and the Apple membership. Estimate with the GCP calculator before M0 ends; the
   number to watch is relay egress.
-- **Self-hosting by others:** Settings → Network takes a relay list, a lookup URL and a push
-  URL, so a company can run all of §12 itself.
+- **Self-hosting by others:** everything above is the *Hosted* network profile; §13 covers
+  running any or all of it yourself, or using no servers at all.
 
-## 13. Open questions
+## 13. Open source: run it your way
+
+hivemind is MIT-licensed, so none of this may depend on us (D11). Three rules:
+
+- **Our servers are a default, never a requirement.** Every device works on a local
+  network with no servers at all.
+- **No private server code.** Every server role in §12 is part of the `hive-net` binary in
+  this repo (`hive serve …`), under MIT. Our hosted network runs exactly that binary.
+- **Every address is configuration.** Where a device finds relays, lookup, admission and
+  push comes from a network profile, never from a constant in the code.
+
+### 13.1 Network modes
+
+| Mode | For | Servers | Works | Doesn't |
+|---|---|---|---|---|
+| **Hosted** (default) | Most people | Ours (§12) | Everything, across the internet | — |
+| **Local network** | A home or office network — say 4–5 devices — including offline and air-gapped | None | Pairing, multiplayer, board objects, hosting, agents on any machine, the phone while its app is open | Devices outside that network; iPhone notifications (APNs needs the internet) |
+| **Self-hosted** | Companies, privacy, regulated sites | Theirs — one machine can run every role | Everything, including people working from outside | Our App Store iPhone app cannot use *their* push server (§13.4) |
+| **This device serves** | One laptop, desktop or small box acting as the server for a group | That device | What self-hosted does, while that device is awake and reachable | From outside the network, a laptop behind home NAT is reachable only with a forwarded port or a VPN |
+
+A device has one **home network**. Workspaces on other networks are reachable through
+their invites (§13.3 D).
+
+### 13.2 Network profiles
+
+A small file, signed by the network's admin key, saying where the network's servers are:
+
+```
+name
+relays[]            URL, optional pinned certificate
+lookup              URL (pkarr)
+access              URL, policy: open-pow | closed
+push                URL, kinds: apns | fcm | unifiedpush
+admin               public key (verifies enrolments and profile updates)
+local               mDNS on/off, direct connections on/off, relays off (local mode)
+```
+
+- **Built in:** *Hosted* (ours) and *Local network* (no servers, mDNS on).
+- **Distributed** by pairing (a new device takes the profile of the device it pairs with),
+  by a link or QR (`hivemind://network/<signed profile>`), or `hive network use <file>`.
+- A profile change must be signed by the same admin key; devices show who signed it.
+- Settings → **Network** shows the active profile and its health; `hive network doctor`
+  checks the same from a terminal.
+
+### 13.3 UX journeys
+
+**A. Local network, no servers (4–5 devices in one office)**
+1. Settings → Network → **Local network only**: "Devices find each other on this network.
+   Nothing leaves it. Devices outside it can't connect."
+2. Settings → Devices → **Pair a device** lists **Nearby** devices ("office-nuc", "Priya's
+   laptop"). Pick one; both screens show the same six words; confirm on both, so a
+   stranger on the same Wi-Fi cannot slip in.
+3. One machine hosts: an office box runs `hive host` (R14); workspaces move to it (§5.7);
+   laptops come and go.
+4. Share a workspace: the invite sheet lists **Nearby people** first; a link or QR carries
+   local addresses and works on this network only.
+5. Phones on the office Wi-Fi pair by QR and work while the app is open. Notifications:
+   Android through UnifiedPush with a push server on the same network (the `push` role, or
+   ntfy); iPhone only while the app is open.
+6. Multicast blocked or "client isolation" on (common on guest Wi-Fi): "Can't see other
+   devices on this network." Offer **Enter an address** (shown on the other device), or ask
+   one machine to **Serve this network** (journey C), which gives everyone a relay inside
+   the network.
+7. Laptop taken home: its office workspaces show "Not on the office network"; nothing is
+   sent anywhere; they reconnect when it is back.
+
+**B. Self-host everything (a company, or one person with a server)**
+1. On a server: `hive serve --all --domain hive.example.com`, or `docker compose up` with
+   `infra/compose.yml`. It lists the ports to open, obtains certificates, creates an admin
+   key (backed up by the admin), and prints a **network link and QR**.
+2. The admin opens the link on their laptop: "Use the *Example Corp* network, signed by
+   …?" → **Use**. The link enrols the admin's device.
+3. Colleagues join the network by pairing with an enrolled device, or through an enrolment
+   link the admin sends. Devices that were never enrolled are refused by the relays
+   (`closed` policy).
+4. Push: Android through their own push server (UnifiedPush, or FCM with their own Firebase
+   project and their own build of the app). iPhone: through our push server, which only
+   ever sees ciphertext (§12.4), or their own build of the iOS app signed by their own
+   Apple team.
+5. Health: Settings → Network → "*Example Corp* · 3 relays ✓ · lookup ✓ · push ✓";
+   `hive network doctor`.
+6. Leaving: Settings → Network → back to Hosted. The company's workspaces stay reachable
+   only if its network admits outside devices.
+
+**C. This device serves the network**
+1. Settings → Network → **Serve from this device** (or `hive serve --relay --lookup` on a
+   headless box).
+2. It checks and says how it can be reached: on the local network always; from outside
+   only with a public address, a forwarded port or a VPN.
+3. It shows a network QR for the other devices.
+4. While it sleeps: "Devices outside this network can't reach you while *Adarsh's MacBook*
+   is asleep." Devices on the same network keep connecting to each other directly.
+
+**D. Joining a workspace that lives on another network**
+1. The invite carries the host network's relays and lookup, so the guest's device uses them
+   for this workspace only; its own home network is unchanged.
+2. The host's relays admit the guest because the host **vouched** for them when inviting: a
+   signed, time-limited admission for the guest's device key, given to the host network's
+   access service (R16). The guest never registers with the host's network.
+3. The joining side always dials the host, so the host never has to look the guest up on a
+   lookup server it doesn't use.
+4. A local-network workspace cannot be joined from outside it; the invite sheet says so.
+
+### 13.4 How it works
+
+- **Local mode:** no relays (`RelayMode::Custom` with an empty `RelayMap`), mDNS lookup
+  (`iroh-mdns-address-lookup`, 0.4 for iroh 1.x), direct QUIC connections. iroh documents
+  this fully air-gapped setup; it needs multicast forwarded and client isolation off.
+  Invites and pairing also carry direct addresses, so manual entry works where mDNS does
+  not. Host records travel peer to peer: any of the owner's devices answers "who hosts this
+  workspace now?" with the signed record (§5.8).
+- **One binary, every role:** `hive-net serve` embeds `iroh-relay` (`server` feature:
+  `Server::spawn` with our `AccessControl`), `iroh-dns-server` (`Server::bind`), the access
+  service and the push server; `--all` runs every role, and a TOML file configures them.
+  Our hosted network (§12) and `infra/compose.yml` run this same binary.
+- **Admission policies** in the access role: `open-pow` (our hosted network: anyone may
+  register a device key with a small proof-of-work), `closed` (self-hosted default:
+  enrolled devices plus vouchers), and none in local mode (no relays to protect).
+- **Push kinds:**
+  - **APNs** only reaches an iOS app signed by the same Apple team as the push server's key
+    (Apple keys are team-scoped). A self-hoster cannot push to our App Store app; they use
+    our push server, which relays only ciphertext to phones that authorised their hosts, or
+    they build the iOS app under their own team.
+  - **FCM** needs the Firebase project the Android build was made with: ours for the Play
+    Store build, theirs for their own build.
+  - **UnifiedPush** (Android): the app registers with a distributor app such as ntfy and
+    gets an endpoint URL; our push role sends Web Push-encrypted messages (RFC 8291) to it.
+    No Google, works on a local network, fits self-hosting. iOS has no equivalent.
+- **Nothing phones home.** A local or self-hosted profile never contacts our servers. An
+  e2e test runs the app with only the profile's addresses reachable and fails on any other
+  connection.
+
+### 13.5 What this changes elsewhere
+
+- **Phase 0:** R10 (profiles, local mode, `serve` roles), R13 (our network on the same
+  binary, `compose.yml`, self-hosting guide), new R16 (profiles, admission, vouchers).
+- **Order:** local network mode lands first — it needs no servers, so Phase 1 is built and
+  e2e-tested on it — then the hosted network.
+- **M5:** UnifiedPush for Android alongside FCM.
+- **Docs:** `guide/self-hosting.md` on the docs site: modes, profiles, `compose.yml`, ports,
+  certificates, push options, backups.
+
+### 13.6 To prove in the M0 prototype
+
+1. A relay inside a local network has no public name for a Let's Encrypt certificate: pin a
+   self-signed certificate in the profile, or run the relay over plain HTTP (relayed traffic
+   is end-to-end encrypted anyway). Check which of the two iroh 1.x clients accept.
+2. On iPhone, local discovery needs the Local Network permission and declared Bonjour service
+   types; check iroh's mDNS works under them.
+3. Corporate networks often block multicast; measure how often people fall back to entering
+   an address or serving a relay.
+
+## 14. Open questions
 
 1. Guest agent logins: an agent on the host runs with the host's API keys even when a guest
    drives it. Show a "runs on Adarsh's account" note? Allow per-guest limits?
@@ -893,11 +1093,15 @@ Built for M5. It holds our APNs and FCM credentials and nothing else of value.
    e2e coverage.
 4. The Asia-Pacific relay region: Singapore by default; move it if most users are
    elsewhere (e.g. Mumbai).
-5. Relay access without accounts relies on proof-of-work registration and rate limits.
-   Acceptable for launch, or do we want accounts before opening relays to everyone?
+5. Our hosted relays admit any device that registers with a small proof-of-work, with rate
+   limits on top. Acceptable for launch, or do we want accounts before opening them to
+   everyone? (Self-hosted networks default to `closed` either way.)
+6. Official iOS builds for self-hosters: publish a "bring your own Apple team" build guide,
+   or keep iPhone push always through our push server (it sees only ciphertext)?
 
 Resolved 2026-09-28: we run our own relay and push server (§12); a workspace outlives its
-host (§5.7–5.9); board objects are in M1 (§4.2 G).
+host (§5.7–5.9); board objects are in M1 (§4.2 G); our servers are optional and every role
+can be self-hosted, including no servers at all on a local network (§13).
 
 ---
 
@@ -952,3 +1156,12 @@ host (§5.7–5.9); board objects are in M1 (§4.2 G).
   [chatmail notifiers](https://github.com/chatmail/notifiers),
   [Matrix push gateway API](https://spec.matrix.org/latest/push-gateway-api/),
   [RFC 8291](https://www.rfc-editor.org/rfc/rfc8291), [RFC 8292](https://www.rfc-editor.org/rfc/rfc8292)
+- Open source, run it your way (§13):
+  [iroh: configuring networks (air-gapped, local)](https://docs.iroh.computer/configuring-networks),
+  [iroh mDNS local discovery](https://docs.iroh.computer/connecting/local-discovery),
+  [iroh-mdns-address-lookup](https://docs.rs/iroh-mdns-address-lookup/latest/iroh_mdns_address_lookup/),
+  [iroh-relay server (embeddable)](https://docs.rs/iroh-relay/latest/iroh_relay/server/index.html),
+  [iroh-dns-server (library)](https://docs.rs/iroh-dns-server/latest/iroh_dns_server/),
+  [UnifiedPush](https://unifiedpush.org/developers/spec/definitions/),
+  [ntfy as a UnifiedPush distributor](https://unifiedpush.org/users/distributors/ntfy/),
+  [APNs token-based connection (team-scoped keys)](https://developer.apple.com/documentation/usernotifications/establishing-a-token-based-connection-to-apns)
