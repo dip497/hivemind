@@ -1,15 +1,19 @@
 # Multiplayer, other devices, phone — design
 
-**Status:** proposed, rev 3. **Date:** 2026-09-28. **Supersedes:** the transport and phone
+**Status:** proposed, rev 4. **Date:** 2026-09-28. **Supersedes:** the transport and phone
 sections of `remote-machines-2026-09-11.md` (§7b, §12c). Its ssh path stays.
 
 **Rev 2 decisions (2026-09-28):** we run our own relay, address lookup and push server
 (§12); a workspace outlives its host (§5.7–5.9); sticky notes and other board objects ship in
 the first multiplayer milestone (§4.2 G).
 
-**Rev 3 (2026-09-28):** hivemind is open source, so our servers are a default and never a
-requirement: a local-network mode with no servers, self-hosting every server role from the
-same binary we run, and one device serving a small group (§13).
+**Rev 3 (2026-09-28):** hivemind is open source, so our servers are never a requirement: a
+local-network mode with no servers, self-hosting every server role from the same binary we
+run, and one device serving a small group (§13).
+
+**Rev 4 (2026-09-28):** our servers are **not the default**. A fresh install is on the local
+network and uses no servers at all. The first time you reach beyond your network, hivemind
+asks how: our servers, your own, one of your devices, or not at all (§13.3 E).
 
 Three features, built in this order, on one networking choice:
 
@@ -36,10 +40,10 @@ Phase 1 starts until Phase 0 is done.
 | D5 | **Permissions live outside the document**, in the host's local ACL, and are enforced in hive-net and main, never in a renderer. | Guests can edit the document, so they could otherwise edit their own role. |
 | D6 | **Terminals stay on the machine that runs them.** The daemon is unchanged as the owner; it gains viewers over the network. | Already true for ssh machines (`remote-machines`, validated two-way on real hosts). |
 | D7 | **One input holder per terminal** (an input lease); everyone else watches. | Two people typing into one agent corrupts its input. VS Code Live Share and upterm reach the same rule. |
-| D8 | **We run our own infrastructure:** iroh relays, address lookup (pkarr DNS) and a push server. No third-party relay or push service carries hivemind traffic. | Decided 2026-09-28. Public n0 relays are dev-only; a push relay must hold our APNs/FCM credentials anyway. |
+| D8 | **We run our own infrastructure:** iroh relays, address lookup (pkarr DNS) and a push server, for people who choose them (D11). No third-party relay or push service carries hivemind traffic. | Decided 2026-09-28. Public n0 relays are dev-only; a push relay must hold our APNs/FCM credentials anyway. |
 | D9 | **A workspace outlives its host.** Each of the owner's devices keeps a full replica of the document and the access list; hosting can move to an always-on machine (`hive host`), or any of the owner's devices can take it over. | Decided 2026-09-28. The CRDT makes failover a merge, not a recovery. |
 | D10 | **Board objects** — sticky notes, checklists, text labels, arrows — live in the shared document from the first multiplayer milestone. | Decided 2026-09-28. A shared board without shared notes is a screen share. |
-| D11 | **Our servers are optional.** Every device works on a local network with no servers; every server role (relay, lookup, access, push) is part of the MIT-licensed `hive-net` binary; every address comes from a **network profile**, never a constant. Our hosted network runs the same binary as anyone else. | hivemind is open source (MIT): people must be able to run it entirely on their own machines and networks (§13). |
+| D11 | **Our servers are optional, and not the default.** A fresh install is on the **local network** and uses no servers at all — ours, n0's or anyone's. The first time you reach beyond your network, hivemind asks how (§13.3 E). Every server role (relay, lookup, access, push) is part of the MIT-licensed `hive-net` binary; every address comes from a **network profile**, never a constant. Our hosted network runs the same binary as anyone else. | hivemind is open source (MIT): people must be able to run it entirely on their own machines and networks, and nothing should leave their network unless they chose it (§13). |
 
 Rejected: Tailcat (point-to-point pipes, no multiplexing or datagrams, Go-only, v0.x);
 Yjs (no movable tree; no native Swift core); a central server that holds workspaces and
@@ -244,10 +248,10 @@ exactly as today. They are ordered by dependency.
 - **What.** Stand up the infrastructure in §12.1–12.3 — three relays, one lookup server,
   the relay-access service — each running `hive-net serve` with the matching role, so our
   hosted network runs exactly the code self-hosters run (D11). Our network is the built-in
-  *Hosted* profile (R16): `hive-net` uses it by default (`presets::Minimal`,
-  `RelayMode::Custom` with the same relay map on every device, `PkarrPublisher`/
-  `PkarrResolver` pointed at our lookup server) and registers its device key with the
-  access service on first run.
+  *Hosted* profile (R16), **used only by devices whose owner chooses it** (§13.3 E). Then
+  `hive-net` uses it (`presets::Minimal`, `RelayMode::Custom` with the same relay map on
+  every device, `PkarrPublisher`/`PkarrResolver` pointed at our lookup server) and
+  registers its device key with the access service. Until then it never contacts them.
 - **For self-hosters:** `infra/compose.yml` runs every role on one machine, and a
   **self-hosting guide** goes on the docs site. The compose stack runs in CI, so it cannot
   rot.
@@ -291,19 +295,27 @@ exactly as today. They are ordered by dependency.
 
 - **What.** Everything a device needs to know about a network, as one signed file (§13.2):
   relays, lookup, access and push URLs, the admission policy, the admin's public key,
-  local-mode switches. Built in: *Hosted* (ours) and *Local network* (no servers).
-  Distributed by pairing (a new device inherits it), by link or QR, or by
-  `hive network use <file>`. Settings → **Network** shows the active profile and its health;
-  `hive network show | use | doctor` does the same from a terminal.
+  local-mode switches. Built in: *Local network* (no servers) — **the default** — and
+  *Hosted* (ours), off until chosen. Distributed by pairing (a new device inherits it), by
+  link or QR, or by `hive network use <file>`. Settings → **Network** shows the active
+  profile and its health; `hive network show | use | doctor` does the same from a terminal.
+- **The reach chooser** (§13.3 E): the sheet that appears the first time something needs to
+  reach beyond the local network, and the same choice in Settings → Network.
+- **Update check switch:** the app's existing update check (GitHub releases, `main/index.ts`)
+  moves under Settings → Network with an off switch, so a fully offline install makes no
+  outside connection at all. It stays on by default; it is not part of the multiplayer
+  network.
 - **Admission** (enforced by the access role, §12.3): `open-pow` (our hosted network),
   `closed` (self-hosted default: devices enrolled by the admin or by an enrolled device),
   and **vouchers**: a host signs a time-limited admission for a guest's device key when it
   invites them, so guests from other networks can use the host's relays (§13.3 D).
 - **Files.** `crates/hive-net` (profile loading, verification), `packages/workspace-host`
   (profile store), Settings → Network panel, `apps/cli/src/commands/network.ts`.
-- **Done when.** A device switched between Hosted, Local network and a self-hosted profile
-  talks only to that profile's servers (checked by capturing its traffic in the e2e run);
-  a guest from another network joins with a voucher and is refused once it expires.
+- **Done when.** A fresh install makes no network connection outside the local network
+  (update check off) — not to our servers, not to n0's; a device switched between Local
+  network, Hosted and a self-hosted profile talks only to that profile's servers (both
+  checked by capturing traffic in the e2e run); a guest from another network joins with a
+  voucher and is refused once it expires.
 
 **Order:** R1 → R2 → R15; R3 in parallel; R4 in parallel; R5 after R1; R6 after R5; R7
 after R5; R8 after R7; R9 any time before Phase 2; R10–R11 after R3; R16 with R10; R12 any
@@ -331,8 +343,11 @@ watch them live, and type into one when you hand them the keyboard.
 3. **Copy link** or **Show QR**. The link is `hivemind://join/<host-id>#<secret>`; the
    secret is in the fragment, single-use by default, expires in 24 h (options: 1 h, 7 d,
    reusable).
-4. Empty state before anyone joins: "Nobody here yet. Share the link — it works across
-   networks."
+4. **Who can use it.** On the local network (the default) the sheet says "Works for people
+   on this network" and lists **Nearby people** to invite directly. **Invite someone
+   elsewhere…** opens the reach chooser (§13.3 E) the first time; once a way to reach out
+   is chosen, links work across networks.
+5. Empty state before anyone joins: "Nobody here yet. Share the link."
 
 **B. Join (guest)**
 1. Guest clicks the link. If hivemind is not installed: a web page explains and offers the
@@ -469,8 +484,11 @@ each one's terminals stream from where they run.
 ### 5.2 UX journey — pair your own device
 
 1. On device A: Settings → **Devices** → **Pair a device**. Shows a QR code and a 6-word
-   code, valid for 5 minutes.
-2. On device B: Settings → Devices → **Pair with a device** → scan or type the words.
+   code, valid for 5 minutes, and lists **Nearby** devices on the same network.
+2. On device B: Settings → Devices → **Pair with a device** → scan or type the words, or pick
+   A from Nearby (both screens then show the same six words to confirm). A device that is
+   not on this network — a server, a laptop at home — needs a way to reach it: the reach
+   chooser (§13.3 E) opens first.
 3. Both show: "Pair *Adarsh's MacBook* with *Adarsh's desktop*? Both will be able to
    see and control everything on each other." **Pair**. Behind the scenes the new device
    receives your person key and a device certificate (R3), so it is "you" everywhere, and
@@ -539,9 +557,13 @@ Terms: the **host** holds the document and the access list and serves everyone; 
 **A. Set up an always-on machine (once)**
 1. On a server, VPS or home box: `curl -fsSL https://hivemind.griiken.com/install.sh | sh`,
    then `hive host pair`. It prints a QR code and six words.
-2. On the laptop: Settings → Devices → **Pair with a device** → the words. The server
-   appears under Devices with an **Always on** badge and under Machines.
-3. Errors: server unreachable → "Can't reach *home-server*. Is `hive host` running?" with
+2. On the laptop: Settings → Devices → **Pair with a device** → the words. A box on the same
+   network pairs directly. A server elsewhere needs a way to reach it, so the reach chooser
+   (§13.3 E) opens; for a VPS with a public address the natural pick is **Serve from one
+   of my devices** — `hive host pair --serve` makes the server itself your network (relay
+   and lookup), with no third party involved.
+3. The server appears under Devices with an **Always on** badge and under Machines.
+4. Errors: server unreachable → "Can't reach *home-server*. Is `hive host` running?" with
    the command to check (`hive host status`).
 
 **B. Move hosting**
@@ -691,21 +713,30 @@ agents.
 
 1. **Install and pair.** App Store → open → **Pair with hivemind** → scan the QR from
    Settings → Devices → *Pair a phone* on the desktop. Name and colour carry over.
-2. **Home: Needs you.** A list, most urgent first: agent, workspace, machine, reason
+2. **Away from this network?** On the local network (the default) the phone works only on
+   the same Wi-Fi and only while the app is open. The pairing sheet asks once:
+   - *Use hivemind's servers* — reach your devices from anywhere; notifications through our
+     push server, which only ever sees encrypted content.
+   - *Use my network's servers* — the network you already chose (self-hosted or a device
+     that serves).
+   - *Only on this Wi-Fi* — no servers, notifications only while the app is open (Android:
+     UnifiedPush if a push server runs on this network).
+   This is the reach chooser (§13.3 E), phrased for a phone.
+3. **Home: Needs you.** A list, most urgent first: agent, workspace, machine, reason
    (permission · question · plan), how long it has waited. Empty state: "Nothing needs
    you. 4 agents working."
-3. **Push notification.** "*api · Fix nav overflow* needs permission: Edit Nav.tsx" with
+4. **Push notification.** "*api · Fix nav overflow* needs permission: Edit Nav.tsx" with
    **Allow** / **Deny** actions on the notification itself; tap opens the item.
-4. **Answer.** Permission → Allow once / Always / Deny. Question → the options as buttons,
+5. **Answer.** Permission → Allow once / Always / Deny. Question → the options as buttons,
    plus a text box. Plan → the plan as text, Approve / Ask for changes.
-5. **Watch.** Tap an agent → a live terminal, read-only by default, scaled to width;
+6. **Watch.** Tap an agent → a live terminal, read-only by default, scaled to width;
    pinch to zoom. **Type** asks for the keyboard like a guest; the reply box sends one
    line through the task-delivery path, which is easier than typing into a TUI.
-6. **Views.** A tab bar: *Needs you* · *Working* · *Board* (a compact list of frames and
+7. **Views.** A tab bar: *Needs you* · *Working* · *Board* (a compact list of frames and
    tiles) · community views that declare phone support (R12 `hello.device.compact`).
-7. **Offline host.** "Desktop is asleep. You'll get a notification when it's back." The
+8. **Offline host.** "Desktop is asleep. You'll get a notification when it's back." The
    last known state is shown with its age.
-8. **Unpair.** Settings on the phone or on the desktop → the phone → Unpair.
+9. **Unpair.** Settings on the phone or on the desktop → the phone → Unpair.
 
 ### 9.3 How it works
 
@@ -763,8 +794,9 @@ agents.
   than the last one seen; a stale or forged record cannot redirect guests.
 - **Only the owner's devices can host.** A guest's machine can be an executor for its own
   frames (§5.4) but never holds the document authority or the access list.
-- **What our servers see.** Relays and the lookup server: which device keys connect, which
-  pairs talk, when and how much; never content. The lookup server also holds host records,
+- **What our servers see** — only for people who chose *Hosted* (§13.3 E). Relays and the
+  lookup server: which device keys connect, which pairs talk, when and how much; never
+  content. The lookup server also holds host records,
   readable by anyone who has a workspace's public key. The access service: registered
   device keys and connection counts. The push server: handles, times and sizes of
   ciphertexts; never titles, names or content. Metrics ports are never public. A
@@ -779,7 +811,7 @@ agents.
 
 | # | Milestone | Contents | Gate |
 |---|---|---|---|
-| M0 | Phase 0 | R1–R16; local network mode first; then relays, lookup server and relay access live (§12.1–12.3), all from `hive-net serve`; `infra/compose.yml` and the self-hosting guide | Single-user app unchanged in behaviour; full e2e suite and installer tests green; perf re-profile no worse; two devices with no internet connect in local mode; R13's network checks pass from three networks and against the compose stack; no connection outside the active profile (§13.4) |
+| M0 | Phase 0 | R1–R16; local network mode first (the default); then relays, lookup server and relay access live (§12.1–12.3), all from `hive-net serve`; `infra/compose.yml` and the self-hosting guide | Single-user app unchanged in behaviour; full e2e suite and installer tests green; perf re-profile no worse; a fresh install makes no connection outside the local network; two devices with no internet connect in local mode; R13's network checks pass from three networks and against the compose stack; no connection outside the active profile (§13.4) |
 | M1 | Multiplayer, board | Share, join, presence, board edits, **sticky notes, checklists, text, arrows**, roles, remove — in every network mode (§13.1) | On one local network with no servers, then across two networks: people edit together; three people in one note (§4.4); revoke works; a guest from a self-hosted network joins a hosted workspace by voucher |
 | M2 | Multiplayer, terminals | Terminal streams, keyboard handover, prompts answered by guests | Handover and reconnect e2e; 5-person load gate (§4.4) |
 | M3 | Your devices and always-on hosting | Pairing (person key, device certificates), device workspaces in Recent, executor machine over iroh, `hive host`, moving and taking over hosting | Laptop drives desktop over the internet with no ssh; §5.9 |
@@ -792,8 +824,9 @@ agents.
 
 ## 12. Our infrastructure
 
-Decided: we run all of it (D8). Four pieces; the first three are needed before M1, the push
-server before M5. Versions pinned; **relays and the lookup server are upgraded before
+Decided: we run all of it (D8), **for people who choose it** — it is the *Hosted* network
+profile, never the default (D11, §13). Four pieces; the first three are needed before M1,
+the push server before M5. Versions pinned; **relays and the lookup server are upgraded before
 clients**, since iroh 1.x keeps the wire protocol compatible across minor versions but its
 public relays run only the newest major.
 
@@ -861,9 +894,10 @@ each new connection the relay asks our access service about the connecting endpo
 a stock relay. The same service implements every admission policy of §13
 (`open-pow` here, `closed` and vouchers for self-hosted networks).
 
-- **Registration.** On first run hive-net registers its device key with the access service:
-  it signs a challenge and solves a small proof-of-work (about a second), which makes
-  mass registration expensive. Registered keys are allowed.
+- **Registration.** When a device's owner chooses *Hosted* (§13.3 E), hive-net registers its
+  device key with the access service: it signs a challenge and solves a small
+  proof-of-work (about a second), which makes mass registration expensive. Registered keys
+  are allowed.
 - **Abuse.** Per-connection rate limits on the relays; a denylist in the access service;
   per-key connection counts reported from relay metrics.
 - **Where:** a small Rust service on Cloud Run in two regions (`europe-west1`,
@@ -933,10 +967,13 @@ Built for M5. It holds our APNs and FCM credentials and nothing else of value.
 
 ## 13. Open source: run it your way
 
-hivemind is MIT-licensed, so none of this may depend on us (D11). Three rules:
+hivemind is MIT-licensed, so none of this may depend on us (D11). Four rules:
 
-- **Our servers are a default, never a requirement.** Every device works on a local
-  network with no servers at all.
+- **The local network is the default.** A fresh install uses no servers at all — not ours,
+  not n0's, not anyone's. Every device works on a local network with nothing else.
+- **Reaching further is a choice you make, once.** The first time something needs to reach
+  beyond your network, hivemind asks how (§13.3 E). Our servers are one of the answers,
+  never the assumed one.
 - **No private server code.** Every server role in §12 is part of the `hive-net` binary in
   this repo (`hive serve …`), under MIT. Our hosted network runs exactly that binary.
 - **Every address is configuration.** Where a device finds relays, lookup, admission and
@@ -946,13 +983,14 @@ hivemind is MIT-licensed, so none of this may depend on us (D11). Three rules:
 
 | Mode | For | Servers | Works | Doesn't |
 |---|---|---|---|---|
-| **Hosted** (default) | Most people | Ours (§12) | Everything, across the internet | — |
-| **Local network** | A home or office network — say 4–5 devices — including offline and air-gapped | None | Pairing, multiplayer, board objects, hosting, agents on any machine, the phone while its app is open | Devices outside that network; iPhone notifications (APNs needs the internet) |
+| **Local network** (default) | A home or office network — say 4–5 devices — including offline and air-gapped | None | Pairing, multiplayer, board objects, hosting, agents on any machine, the phone while its app is open | Devices outside that network; iPhone notifications (APNs needs the internet) |
+| **Hosted** (hivemind's servers, by choice) | People who want to reach anyone, anywhere, with nothing to set up | Ours (§12) | Everything, across the internet | — |
 | **Self-hosted** | Companies, privacy, regulated sites | Theirs — one machine can run every role | Everything, including people working from outside | Our App Store iPhone app cannot use *their* push server (§13.4) |
-| **This device serves** | One laptop, desktop or small box acting as the server for a group | That device | What self-hosted does, while that device is awake and reachable | From outside the network, a laptop behind home NAT is reachable only with a forwarded port or a VPN |
+| **This device serves** | One laptop, desktop, VPS or small box acting as the server for a group | That device | What self-hosted does, while that device is awake and reachable | From outside the network, a laptop behind home NAT is reachable only with a forwarded port or a VPN |
 
-A device has one **home network**. Workspaces on other networks are reachable through
-their invites (§13.3 D).
+A device has one **home network**, the local network until you choose otherwise. Local
+discovery stays on whichever you choose, so devices on the same network always connect
+directly. Workspaces on other networks are reachable through their invites (§13.3 D).
 
 ### 13.2 Network profiles
 
@@ -968,7 +1006,8 @@ admin               public key (verifies enrolments and profile updates)
 local               mDNS on/off, direct connections on/off, relays off (local mode)
 ```
 
-- **Built in:** *Hosted* (ours) and *Local network* (no servers, mDNS on).
+- **Built in:** *Local network* (no servers, mDNS on) — **the default** — and *Hosted*
+  (ours), used only once chosen.
 - **Distributed** by pairing (a new device takes the profile of the device it pairs with),
   by a link or QR (`hivemind://network/<signed profile>`), or `hive network use <file>`.
 - A profile change must be signed by the same admin key; devices show who signed it.
@@ -978,8 +1017,9 @@ local               mDNS on/off, direct connections on/off, relays off (local mo
 ### 13.3 UX journeys
 
 **A. Local network, no servers (4–5 devices in one office)**
-1. Settings → Network → **Local network only**: "Devices find each other on this network.
-   Nothing leaves it. Devices outside it can't connect."
+1. Nothing to set up: a fresh install is already on the local network. Settings → Network
+   reads "**Local network** — devices find each other on this network. Nothing leaves it.
+   Devices outside it can't connect."
 2. Settings → Devices → **Pair a device** lists **Nearby** devices ("office-nuc", "Priya's
    laptop"). Pick one; both screens show the same six words; confirm on both, so a
    stranger on the same Wi-Fi cannot slip in.
@@ -1012,8 +1052,8 @@ local               mDNS on/off, direct connections on/off, relays off (local mo
    Apple team.
 5. Health: Settings → Network → "*Example Corp* · 3 relays ✓ · lookup ✓ · push ✓";
    `hive network doctor`.
-6. Leaving: Settings → Network → back to Hosted. The company's workspaces stay reachable
-   only if its network admits outside devices.
+6. Leaving: Settings → Network → back to Local network (or to Hosted). The company's
+   workspaces stay reachable only if its network admits outside devices.
 
 **C. This device serves the network**
 1. Settings → Network → **Serve from this device** (or `hive serve --relay --lookup` on a
@@ -1033,6 +1073,31 @@ local               mDNS on/off, direct connections on/off, relays off (local mo
 3. The joining side always dials the host, so the host never has to look the guest up on a
    lookup server it doesn't use.
 4. A local-network workspace cannot be joined from outside it; the invite sheet says so.
+
+**E. The first time you reach beyond your network (the reach chooser)**
+1. **When it appears** — only when something needs a device outside this network:
+   **Invite someone elsewhere…** (§4.2 A), pairing a device that is not nearby (§5.2), a
+   server for always-on hosting (§5.7 A), a phone you want to use away from this Wi-Fi
+   (§9.2). Never at first launch, never for someone who only works locally.
+2. **The sheet:** "To reach devices outside this network, hivemind needs a way through.
+   Choose one:"
+   - **Use hivemind's servers** — free, nothing to set up. They forward encrypted traffic,
+     help devices find each other and wake your phone; they never see your work.
+     *What they see* expands to the list in §10.
+   - **Use my own servers** — scan or paste a network link (journey B).
+   - **Serve from one of my devices** — a machine with a public address or a forwarded port,
+     such as a VPS running `hive host`, becomes your network (journey C).
+   - **Not now** — stay on this network; the action that opened the sheet is cancelled with
+     a one-line reason.
+3. **After choosing:** the choice becomes the device's home network, is passed on to the
+   devices you pair from now on, and shows in Settings → Network with **Change**. Choosing
+   *Hosted* registers the device with our access service at that moment (§12.3), not
+   before.
+4. **Local stays local.** Whatever is chosen, devices on the same network keep finding and
+   connecting to each other directly; the servers are used only for devices elsewhere.
+5. **Going back:** Settings → Network → **Local network**. The device stops using the
+   chosen servers at once; workspaces with people elsewhere show them as unreachable until
+   a way through is chosen again.
 
 ### 13.4 How it works
 
@@ -1059,16 +1124,24 @@ local               mDNS on/off, direct connections on/off, relays off (local mo
   - **UnifiedPush** (Android): the app registers with a distributor app such as ntfy and
     gets an endpoint URL; our push role sends Web Push-encrypted messages (RFC 8291) to it.
     No Google, works on a local network, fits self-hosting. iOS has no equivalent.
-- **Nothing phones home.** A local or self-hosted profile never contacts our servers. An
-  e2e test runs the app with only the profile's addresses reachable and fails on any other
-  connection.
+- **Nothing phones home.** The default local profile contacts no server at all. hive-net
+  never uses iroh's default presets (`presets::N0` would publish to n0's lookup server and
+  use n0's relays); it builds from `presets::Minimal` plus whatever the active profile
+  names. A self-hosted profile contacts only its own servers. An e2e test runs the app with
+  only the profile's addresses reachable and fails on any other connection. The app's
+  update check (GitHub releases) is separate from the network features and has its own
+  switch (R16).
 
 ### 13.5 What this changes elsewhere
 
 - **Phase 0:** R10 (profiles, local mode, `serve` roles), R13 (our network on the same
-  binary, `compose.yml`, self-hosting guide), new R16 (profiles, admission, vouchers).
-- **Order:** local network mode lands first — it needs no servers, so Phase 1 is built and
-  e2e-tested on it — then the hosted network.
+  binary, used only by choice, `compose.yml`, self-hosting guide), new R16 (profiles with
+  Local network as the default, the reach chooser, admission, vouchers, the update-check
+  switch).
+- **Journeys:** inviting (§4.2 A), pairing (§5.2), always-on hosting (§5.7 A) and phone
+  pairing (§9.2) open the reach chooser the first time they need a device elsewhere.
+- **Order:** local network mode lands first — it is the default and needs no servers, so
+  Phase 1 is built and e2e-tested on it — then the ways of reaching further.
 - **M5:** UnifiedPush for Android alongside FCM.
 - **Docs:** `guide/self-hosting.md` on the docs site: modes, profiles, `compose.yml`, ports,
   certificates, push options, backups.
@@ -1101,7 +1174,8 @@ local               mDNS on/off, direct connections on/off, relays off (local mo
 
 Resolved 2026-09-28: we run our own relay and push server (§12); a workspace outlives its
 host (§5.7–5.9); board objects are in M1 (§4.2 G); our servers are optional and every role
-can be self-hosted, including no servers at all on a local network (§13).
+can be self-hosted, including no servers at all on a local network (§13); the local network
+is the default and our servers are used only by choice (§13.3 E).
 
 ---
 
