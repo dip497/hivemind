@@ -256,7 +256,7 @@ Shipped in this change: `src/detect-rules.ts` (the interpreter), `src/manifest.t
 | `spawn.args` | yes | the old `defaultArgs` |
 | `spawn.modes` | yes | permission mode → flags, with `"*"` as the catch-all and `{mode}` interpolation |
 | `spawn.model` | yes | `{model}` interpolation |
-| `spawn.label` / `labelMode` | yes | `{n}`, `{label}`, `{mode}` |
+| `spawn.label` | yes | `{n}`, `{label}` |
 | `detect` | yes | ordered rules over three scopes (see below) |
 | session resume | **no** | needs the agent's session store read — code |
 | hook injection / turn signal | **no** | needs to write the agent's config — code |

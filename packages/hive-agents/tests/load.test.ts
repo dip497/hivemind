@@ -34,7 +34,6 @@ caps:
 spawn:
   args: ["--no-color"]
   label: "acme #{n}"
-  labelMode: " [{mode}]"
 options:
   - { id: mode, label: Mode, flag: --mode, values: { plan: ["--dry-run"] } }
   - { id: model, label: Model, flag: -m }
@@ -73,8 +72,8 @@ describe("loading agents from disk", () => {
     expect(spawnArgsFor(acme!, { mode: "acceptEdits", model: "big" }))
       .toEqual(["--no-color", "--mode", "acceptEdits", "-m", "big"]);
     expect(spawnArgsFor(acme!, {})).toEqual(["--no-color"]);
-    expect(acme!.spawnLabel!(2, { mode: "plan" })).toBe("acme #2 [plan]");
-    expect(acme!.spawnLabel!(2, {})).toBe("acme #2");
+    // The mode a tile was started in is not part of its name: the name says what it is doing.
+    expect(acme!.spawnLabel!(2, { mode: "plan" })).toBe("acme #2");
     // and its detector runs
     expect(acme!.detect!("nothing here")).toBe("idle");
     expect(acme!.detect!("APPROVE THIS?")).toBe("blocked");

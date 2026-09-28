@@ -37,7 +37,6 @@ icon:
         4.1164-1.1293.1457-.4857-.4554.0608-.7467.2307-.2429 1.9064-1.3114Z
 spawn:
   label: 'claude #{n}'
-  labelMode: " · {mode}"
   titles:
   - Claude Code
 options:
