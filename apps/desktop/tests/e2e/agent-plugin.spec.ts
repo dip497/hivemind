@@ -20,6 +20,8 @@ const BIN = fs.mkdtempSync(path.join(os.tmpdir(), "hm-agent-plugin-bin-"));
 fs.writeFileSync(path.join(BIN, "acme-coder"), "#!/bin/sh\n[ \"$1\" = --version ] && echo 'acme 1.0.0'\nexit 0\n", { mode: 0o755 });
 // A stand-in claude, so the first installed agent is the same on every machine and nothing real starts.
 fs.writeFileSync(path.join(BIN, "claude"), "#!/bin/sh\n[ \"$1\" = --version ] && { echo '2.0.0 (Claude Code)'; exit 0; }\nexec sleep 60\n", { mode: 0o755 });
+// And a stand-in codex, so a catalog agent is installed (and can be the default) on a machine without it.
+fs.writeFileSync(path.join(BIN, "codex"), "#!/bin/sh\n[ \"$1\" = --version ] && { echo 'codex-cli 0.40.0'; exit 0; }\nexec sleep 60\n", { mode: 0o755 });
 const ENV = { ...process.env, XDG_CONFIG_HOME: XDG, PATH: `${BIN}${path.delimiter}${process.env.PATH}` } as Record<string, string>;
 
 /** A complete provider, written the way a user would write one. */
