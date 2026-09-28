@@ -38,7 +38,7 @@ Legend: ☐ not started · ◐ in progress · ☑ done (its "Done when" passes)
 
 | # | Refactor | Status | Notes |
 |---|---|---|---|
-| R1 | Workspace store out of the renderer, into `packages/workspace-host` | ◐ | ☑ Step 1: `WorkspaceStore` (`packages/workspace-host/src/store.ts`) — sync reads, debounced atomic writes, one-time legacy import, change events with origin; 11 bun tests. ☐ Step 2: main embeds it (`<userData>/workspaces/`), preload `workspaceLoadSync`/`workspaceSetCore`/`workspaceSetView`/`workspaceImport`, `canvas-persistence.ts` and `view-layout-store.ts` read/write through it with the one-time localStorage import; update `tests/e2e/shipped-persistence.spec.ts` and `browser-plugin.spec.ts`, which read localStorage directly; add `@hivemind/workspace-host` to `BUNDLE_INTERNAL` in `electron.vite.config.ts`. ☐ Step 3: HCP `tile.list` answered from main's store. ☐ Step 4: done-when checks (e2e green; restart with localStorage cleared). |
+| R1 | Workspace store out of the renderer, into `packages/workspace-host` | ◐ | ☑ Step 1: `WorkspaceStore` (`packages/workspace-host/src/store.ts`) — sync reads, debounced atomic writes, one-time legacy import, change events with origin; 11 bun tests. ☑ Step 2 (code): main embeds it (`main/workspace-store-ipc.ts`, `<userData>/workspaces/`, flushed on quit); preload `workspaceCoreSync`/`workspaceViewSync`/`workspaceSetCoreSync`/`workspaceSetViewSync`/`workspaceImportSync`; `canvas-persistence.ts` and `view-layout-store.ts` go through `workspace/workspace-store-client.ts` (localStorage only without the bridge; old localStorage imported once); the two e2e specs that read localStorage now read the store. Verified: typecheck (all packages), desktop unit tests 607 pass / 1 skipped (6 new), e2e for persistence, browser plugin, community views, tile move and frames (15/15). ☐ Full e2e suite run (was running when committed — check it first). ☐ Step 3: `shipped-persistence.spec.ts` deletes the window's `Local Storage` between its two launches, proving the store alone restores the canvas. Then R1 is done. (`tile.list` without a window moved to R5.) |
 | R2 | Store backed by a Loro document (schema incl. board objects) | ☐ | After R1 |
 | R3 | Identity: device key, person key, workspace key, profile | ☐ | |
 | R4 | Daemon: size announcements, input lease, write attribution | ☐ | |
@@ -87,3 +87,6 @@ Legend: ☐ not started · ◐ in progress · ☑ done (its "Done when" passes)
   added; R1 started.
 - 2026-09-28 — R1 step 1: `@hivemind/workspace-host` with `WorkspaceStore` and its tests.
   Design R1 clarified: whole snapshots in R1, edit operations with R2.
+- 2026-09-28 — R1 step 2: the app reads and writes layouts through main's store;
+  CHANGELOG entry added. `tile.list` without a window moved from R1 to R5 in the design.
+  Full e2e run started (155 tests; log in the session scratchpad, not the repo).

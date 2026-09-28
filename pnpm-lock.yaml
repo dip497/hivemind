@@ -221,6 +221,9 @@ importers:
       '@hivemind/view-sdk':
         specifier: workspace:*
         version: link:../../packages/hive-view-sdk
+      '@hivemind/workspace-host':
+        specifier: workspace:*
+        version: link:../../packages/workspace-host
       '@lezer/highlight':
         specifier: ^1.2.3
         version: 1.2.3

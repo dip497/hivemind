@@ -229,9 +229,30 @@ export interface ViewPackageInfo {
   url: string | null;
 }
 
+// ── workspace store (main owns it; docs/design/multiplayer-2026-09-28.md, R1) ──
+
+/** A view's layout as stored: its schema version and the view's own data. */
+export interface WorkspaceViewLayout { v: number; data: unknown }
+/** What a window kept in localStorage before the store existed, offered once for import. */
+export interface WorkspaceLegacyLayout { core?: unknown; views?: Record<string, WorkspaceViewLayout> }
+/** What an import took: the core blob, and which views. It never overwrites. */
+export interface WorkspaceImportResult { core: boolean; views: string[] }
+
 // ── full IPC surface ──────────────────────────────────────────────────────
 
 export interface HiveIpc {
+  // ── workspace layout (main owns it; see main/workspace-store-ipc.ts) ──
+  /** The workspace's core layout blob (frames, tiles, membership, names, tabs), or null. */
+  workspaceCoreSync(repo: string): unknown;
+  /** One view's stored layout, or null. */
+  workspaceViewSync(repo: string, viewId: string): WorkspaceViewLayout | null;
+  /** Replace the core layout blob. Synchronous so a write made while the window unloads is kept. */
+  workspaceSetCoreSync(repo: string, core: unknown): void;
+  /** Replace one view's layout. Synchronous for the same reason. */
+  workspaceSetViewSync(repo: string, viewId: string, layout: WorkspaceViewLayout): void;
+  /** Offer this window's old localStorage layout once; the store keeps only what it lacks. */
+  workspaceImportSync(repo: string, legacy: WorkspaceLegacyLayout): WorkspaceImportResult;
+
   // ── settings.json (main owns it; see main/settings-store.ts) ──
   /** The whole settings object, synchronously (boot: no theme flash). */
   settingsSync(): Settings;

@@ -3,7 +3,7 @@
 // share one user-data-dir + repo cwd.
 import { test, expect, _electron as electron, type ElectronApplication } from "@playwright/test";
 import { execSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import fs, { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -27,12 +27,13 @@ test("open tiles restore after restart (same repo)", async () => {
   await page.waitForTimeout(400);
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "shell" })));
   await page.waitForSelector(".react-flow__node-terminal", { timeout: 6_000 });
-  await page.waitForTimeout(900); // allow the persist effect to write
-  const saved = await page.evaluate(() => {
-    const k = Object.keys(localStorage).find((k) => k.includes("canvas-layout"));
-    return k ? localStorage.getItem(k) : "";
-  });
-  expect(saved).toMatch(/"kind":"shell"/);
+  // Main's workspace store owns the layout (docs/design/multiplayer-2026-09-28.md, R1): the
+  // window's debounced save reaches it, then the store's own debounce writes the file.
+  const stored = () => {
+    const d = path.join(ud, "workspaces");
+    return fs.existsSync(d) ? fs.readdirSync(d).filter((f) => f.endsWith(".json")).map((f) => fs.readFileSync(path.join(d, f), "utf8")).join("\n") : "";
+  };
+  await expect.poll(stored, { timeout: 5_000 }).toMatch(/"kind":"shell"/);
   await app.close();
 
   // ── session 2: relaunch same ud + repo → terminal tile restored, no clicks ──

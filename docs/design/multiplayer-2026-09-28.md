@@ -97,10 +97,11 @@ exactly as today. They are ordered by dependency.
 - **Migration.** On first run, main reads each repo's localStorage blobs once (sent by the
   renderer), writes them to the store and marks them migrated. The blobs stay as a
   fallback for one release.
-- **Unblocks.** Everything: HCP `tile.list` without a renderer, several windows, remote
+- **Unblocks.** Everything: HCP `tile.list` without a renderer (R5), several windows, remote
   peers.
-- **Done when.** All e2e specs green; `tile.list` answers with the window closed; the
-  canvas round-trips through a restart with localStorage cleared.
+- **Done when.** All e2e specs green; the canvas round-trips through a restart with
+  localStorage cleared. (`tile.list` without a window moved to R5: today closing the last
+  window quits the app, and R5 is where the live tile state moves into main.)
 
 ### R2. The store becomes a Loro document
 
@@ -158,8 +159,9 @@ exactly as today. They are ordered by dependency.
   `hcpCallRenderer` is kept only for things that are truly visual (camera focus).
 - **Files.** `main/index.ts` (pty relay, `hcpCallRenderer`), `main/hcp/methods.ts`,
   `useSpawn.ts` (spawn logic moves to main), `Workspace.tsx`.
-- **Done when.** HCP spawn/close/rename work with no window; two windows on one workspace
-  show the same terminals live.
+- **Done when.** HCP `tile.list`, spawn, close and rename work with no window (the tile
+  list built by one shared function from main's store and status store, which the window
+  also uses); two windows on one workspace show the same terminals live.
 
 ### R6. One status per session, from its host
 

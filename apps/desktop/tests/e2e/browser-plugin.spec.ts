@@ -91,8 +91,8 @@ test("a disabled Browser restores existing panels without enabling new ones", as
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "canvas" } })));
   await expect(browsers()).toHaveCount(1);
   await expect.poll(() => page.evaluate((root) => {
-    const saved = JSON.parse(localStorage.getItem(`hivemind:canvas-layout:${root}`) ?? "{}");
-    return saved.tiles?.some((tile: { kind: string }) => tile.kind === "browser") ?? false;
+    const saved = (window.hive.workspaceCoreSync(root) ?? {}) as { tiles?: { kind: string }[] };
+    return saved.tiles?.some((tile) => tile.kind === "browser") ?? false;
   }, root)).toBe(true);
   await app.close();
   app = await electron.launch({ args: [path.join(process.cwd(), "out/main/index.js"), "--no-sandbox"], cwd: root, env });

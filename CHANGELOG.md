@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- The app now keeps each project's canvas and view layouts itself, in `workspaces/` under its data folder, instead of in the window's browser storage — the first step towards several windows, devices and people sharing one workspace. Layouts saved by an earlier version are imported the first time a project opens, and nothing newer is overwritten.
+
 ## [2026.9.8] — 2026-09-28
 
 - **Breaking:** a supervisor's `allow` now covers the call it was asked about, and nothing more. Hivemind used to remember it for the rest of that worker's life for a list of file-touching tools, which is what `always` is for — and the list was one agent's tool names, so it fit some agents and not others. Answer `always` to remember a tool for that worker; the request says so.

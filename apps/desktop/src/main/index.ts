@@ -111,6 +111,7 @@ import { readOrCreateToken, hcpSockPath } from "@hivemind/agent-host/hooks/token
 import { HcpError } from "./hcp/protocol.js";
 import { handleViewProtocol, listViewPackages, registerViewScheme, startViewWatchdog } from "./view-packages.js";
 import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, settingsFile } from "./settings-store.js";
+import { flushWorkspaceStore, installWorkspaceStoreIpc } from "./workspace-store-ipc.js";
 import { patchSettingsExtras } from "@hivemind/core/settings";
 import { PipeManager } from "./hcp/pipes.js";
 import { toBareId, toPtyId } from "../shared/tile-id.js";
@@ -1507,6 +1508,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     refreshWindowsStartMenuShortcut();
     handleViewProtocol();
     installSettingsIpc(() => mainWindow);
+    installWorkspaceStoreIpc();
     void initMachines({
       send: (snap) => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("machines:changed", snap); },
       listLocalSessions: () => (PERSIST_PTY ? ptyDaemon.listSessions() : Promise.resolve([])),
@@ -2034,6 +2036,7 @@ function forceExitAfterFlush(): void {
   } catch {
     /* best-effort */
   }
+  flushWorkspaceStore();
   try {
     session.defaultSession.flushStorageData();
   } catch {
@@ -2057,6 +2060,7 @@ app.on("before-quit", () => {
   // Catches every quit path that doesn't go through window-all-closed
   // (app.quit / Cmd+Q / playwright's app.close). Daemon mode force-exits after
   // flushing storage; legacy mode reaps in-process PTYs and quits normally.
+  flushWorkspaceStore();
   if (PERSIST_PTY) {
     forceExitAfterFlush();
     return;
