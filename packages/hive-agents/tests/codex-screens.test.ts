@@ -2,6 +2,7 @@
 // would answer them. Screens as Codex draws them (rendered from a real session).
 import { expect, test } from "bun:test";
 import { authoredDefs } from "./authored.js";
+import { agentDisclosures } from "../src/manifest.js";
 
 const codex = () => authoredDefs().find((d) => d.id === "codex")!;
 
@@ -35,7 +36,13 @@ test("tiles Hivemind starts skip the startup update check and keep the wheel", (
   expect(codex().launch?.args).toEqual([
     "-c", "check_for_update_on_startup=false",
     "-c", "tui.fullscreen_transcript=false",
+    "--dangerously-bypass-hook-trust",
   ]);
+});
+
+test("waiving its hook review is disclosed, because it waives the review of your own hooks too", () => {
+  const lines = agentDisclosures(codex());
+  expect(lines.some((l) => l.includes("hook review waived"))).toBe(true);
 });
 
 test("what it is printing is not what it is asking: a working screen quoting a question stays working", () => {

@@ -598,5 +598,9 @@ export function agentDisclosures(def: AgentProviderDef): string[] {
   if (def.launch?.hcp && (def.hooks || def.assets?.length)) {
     out.push("reports its status and approval prompts to Hivemind through its own hooks, which can also read and type into your other tiles");
   }
+  // A CLI that gates its own hooks behind a per-hook review, waived for tiles Hivemind starts.
+  if (def.launch?.args?.some((a) => a.includes("bypass-hook-trust"))) {
+    out.push(`starts ${def.bin} with its hook review waived, so every hook its configuration enables — this agent's and your own — runs without being reviewed first`);
+  }
   return out;
 }
