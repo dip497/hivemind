@@ -249,13 +249,13 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
   /** Wrapper around the status dot+label — hidden entirely while idle. */
   const statusWrapRef = useRef<HTMLSpanElement>(null);
 
-  // null = plain shell. `isClaude` keeps a bare/`latest` send-to-agent on the
+  // null = plain shell. `isDefaultAgent` keeps a bare/`latest` send-to-agent on the
   // default provider's tiles, never another runtime's. The default may not exist
   // (nothing installed), in which case no tile is the default one.
   // Read after the first agent scan: before it, every restored agent tile would look like a shell.
   const agentsScanned = useAgentsScanned();
   const agent = identifyAgent(cmd);
-  const isClaude = agent === defaultAgent()?.id;
+  const isDefaultAgent = agent === defaultAgent()?.id;
   // The label shown on canvas chips / toasts / notifications: the tile's name (tile-name.ts).
   // Kept in a ref so the long-lived status effect always publishes the CURRENT label.
   const effLabel = name?.trim() || label || agent || cmd.split("/").slice(-1)[0] || "shell";
@@ -637,7 +637,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     let exited = false;
     let unsubData: (() => void) | undefined;
     let unsubExit: (() => void) | undefined;
-    let unsubClaude: (() => void) | undefined;
+    let unsubAgentSend: (() => void) | undefined;
 
     // Rebuild the glyph atlas once the web font is truly loaded. xterm measures
     // the font at open(); "JetBrains Mono" loads async (web font), so the first
@@ -776,7 +776,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     // Cross-tile bus: if this PTY is a claude session, accept ADDRESSED text
     // (see agent-send.ts). Registering makes this the latest agent tile so a
     // bare/`latest` send lands here only — no more broadcast to every agent.
-    if (isClaude) {
+    if (isDefaultAgent) {
       registerAgentTile(tileId);
       const onSend = (e: Event) => {
         const detail = (e as CustomEvent<string | SendToAgentDetail>).detail;
@@ -790,7 +790,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
         }
       };
       window.addEventListener("hivemind:send-to-agent", onSend as EventListener);
-      unsubClaude = () => {
+      unsubAgentSend = () => {
         unregisterAgentTile(tileId);
         window.removeEventListener("hivemind:send-to-agent", onSend as EventListener);
       };
@@ -1005,7 +1005,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       if (agentPoll) clearInterval(agentPoll);
       unsubData?.();
       unsubExit?.();
-      unsubClaude?.();
+      unsubAgentSend?.();
       inputEl?.removeEventListener("blur", onInputBlur);
       offStatus?.();
       clearStatus(tileId);

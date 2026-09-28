@@ -75,6 +75,8 @@ export interface WorkspaceCommands {
   closeTile: (id: string) => void;
   spawnTile: (kind: TileKind, frameId: string | null, opts?: SpawnOpts) => string | undefined;
   spawnVis: (which: "tree" | "shell" | "diff" | "issues") => void;
+  /** Protocol name since 1.0: it starts the DEFAULT agent, whichever that is. 1.2 views use
+   *  `spawnAgent(null, frameId)` instead. */
   spawnClaude: () => void;
   addFrame: () => void;
   /** Start an agent by catalog id (null = the user's default); false when no such agent is installed. */

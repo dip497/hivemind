@@ -671,7 +671,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   }, []);
 
   // Tile spawning + in-frame placement. See useSpawn.
-  const { spawnTile, spawnClaude, spawnAgent, spawnVis, spawnInto, frameOpen, openPlanReview, hcpSpawnAgent } = useSpawn({
+  const { spawnTile, spawnDefaultAgent, spawnAgent, spawnVis, spawnInto, frameOpen, openPlanReview, hcpSpawnAgent } = useSpawn({
     repoPath,
     positionsRef, sizesRef, tilesRef, frameOfRef, framesRef, selectedFrameIdRef,
     selectedTileIdRef, repoPathRef, rootRef, lastActiveFrameRef,
@@ -929,22 +929,22 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   // Deliver a prompt to claude with a TARGET PICKER. 0 claude tiles → spawn a
   // new claude carrying the prompt; 1+ → picker (the chosen tile, or "New").
   const deliverToAgent = useCallback((text: string, target: "new" | string) => {
-    if (target === "new") { spawnClaude(undefined, text); return; }
+    if (target === "new") { spawnDefaultAgent(undefined, text); return; }
     window.dispatchEvent(new CustomEvent("hivemind:send-to-agent", { detail: { text, target } }));
     setSelectedTileId(target);
     focusTile(target);
-  }, [spawnClaude, focusTile]);
+  }, [spawnDefaultAgent, focusTile]);
   useEffect(() => {
     const onDeliver = (e: Event) => {
       const text = (e as CustomEvent<{ text: string }>).detail?.text;
       if (!text) return;
-      const claudes = tilesRef.current.filter((t) => t.kind === AGENT_TILE_KIND);
-      if (claudes.length === 0) { spawnClaude(undefined, text); return; }
+      const agentTiles = tilesRef.current.filter((t) => t.kind === AGENT_TILE_KIND);
+      if (agentTiles.length === 0) { spawnDefaultAgent(undefined, text); return; }
       setAgentPick({ text });
     };
     window.addEventListener("hivemind:deliver-to-claude", onDeliver as EventListener);
     return () => window.removeEventListener("hivemind:deliver-to-claude", onDeliver as EventListener);
-  }, [spawnClaude]);
+  }, [spawnDefaultAgent]);
 
   // Spawn the island's CURRENTLY-selected agent (key "2").
   const spawnSelectedAgent = useCallback(() => {
@@ -956,7 +956,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
 
   // Keyboard shortcuts + menu event listeners. See useCanvasShortcuts.
   useCanvasShortcuts({
-    repoPath, spawnClaude, spawnSelectedAgent, spawnVis, spawnBrowser, addFrame, frameOpen, focusTile, closeTile,
+    repoPath, spawnDefaultAgent, spawnSelectedAgent, spawnVis, spawnBrowser, addFrame, frameOpen, focusTile, closeTile,
     setSelectedTileId, setFocusModeReq, selectedTileIdRef, selectedFrameIdRef,
     focusModeNonceRef, tilesRef,
   });
@@ -1080,7 +1080,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     closeTile,
     spawnTile: (kind, frameId, opts) => spawnTile(kind, frameId, opts ?? {}),
     spawnVis,
-    spawnClaude: () => spawnClaude(),
+    spawnClaude: () => spawnDefaultAgent(), // protocol name (1.0); it starts the DEFAULT agent
     addFrame,
     spawnAgent: (agentId, frameId, opts) => {
       const def = agentId ? catalogAgentById(agentId) : defaultAgent();
@@ -1095,7 +1095,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     // memo deps — a status transition re-renders nothing here.
     subscribeTileStatus: (tileId, cb) => subscribeTileStatus(tileId, (e) => cb(e.status, e)),
     tileStatus: statusOf,
-  }), [setSelectedTileId, setSelectedFrameId, focusTile, closeTile, spawnTile, spawnVis, spawnClaude, addFrame, renameTile, bindWorkspace]);
+  }), [setSelectedTileId, setSelectedFrameId, focusTile, closeTile, spawnTile, spawnVis, spawnDefaultAgent, addFrame, renameTile, bindWorkspace]);
 
   // The canvas plugin's private runtime access (milestone-1 seam).
   const canvasRuntime: CanvasRuntime = useMemo(() => ({
