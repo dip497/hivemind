@@ -1,7 +1,7 @@
 /**
  * canvas-layout — the canvas view's persisted arrangement state: tile positions
- * + sizes (world coords) and the last viewport. Its own versioned blob
- * (`hivemind:view-layout:canvas:<repo>`).
+ * + sizes (world coords) and the last viewport. Its own versioned blob in the
+ * workspace store, under the view id `canvas`.
  *
  * Frame rects (FrameState.x/y/w/h) are still on the core frame record — the
  * runtime's frame auto-fit / spawn placement / worktree hooks read them and must

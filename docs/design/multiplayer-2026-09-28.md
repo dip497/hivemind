@@ -82,21 +82,25 @@ exactly as today. They are ordered by dependency.
 ### R1. Workspace store out of the renderer, into a headless package
 
 - **What.** Move the core layout blob and the per-view layout blobs out of renderer
-  `localStorage` into a `WorkspaceStore`: one writer, change events, a snapshot per repo on
-  disk (`<userData>/workspaces/<repo-hash>.json`). The renderer reads it synchronously over
-  IPC (as `settingsSync` already does) and writes debounced snapshots of the same shapes it
-  saves today. Edits as operations (`frame.move`, `tile.rename`, …) come with R2, where each
+  `localStorage` into a `WorkspaceStore`: one writer that checks every input, a snapshot
+  per repo on disk (`<userData>/workspaces/<repo-hash>.json`) written through on every
+  change. The renderer reads it synchronously over IPC (as `settingsSync` already does) and
+  writes debounced snapshots of the same shapes it saves today. Change events come with
+  R5, where their first subscriber is. Edits as operations (`frame.move`, `tile.rename`, …) come with R2, where each
   one becomes a Loro change; doing operations twice would be wasted work.
 - **It lives in a package, not in Electron main.** `packages/workspace-host` holds the store
   (and, later, intents R7 and the access list R11). Electron main embeds it; the `hive`
   binary runs it headless for an always-on host (R14). Nothing in the package imports
   Electron.
-- **Files.** `canvas-persistence.ts`, `view-layout-store.ts`, `canvas-layout.ts`,
-  `windows-layout.ts`, `Workspace.tsx` (state becomes a mirror), `main/index.ts`, new
-  `packages/workspace-host/src/store.ts`, `shared/ipc.ts`, `preload/index.ts`.
-- **Migration.** On first run, main reads each repo's localStorage blobs once (sent by the
-  renderer), writes them to the store and marks them migrated. The blobs stay as a
-  fallback for one release.
+- **Files.** new `packages/workspace-host/src/` (`layout.ts` shapes shared with the window,
+  `record-file.ts` the file format, `store.ts`), `main/workspace-store-ipc.ts`,
+  `main/index.ts`, `shared/ipc.ts`, `preload/index.ts`, new
+  `renderer/src/workspace/workspace-store-client.ts` (where layouts live),
+  `canvas-persistence.ts`, `view-layout-store.ts`.
+- **Migration.** The first read of a repo in a window offers main that window's
+  localStorage blobs; main keeps only what it lacks, so an offer made twice changes
+  nothing and a newer layout is never overwritten. The blobs stay in localStorage, so an
+  older version still finds them.
 - **Unblocks.** Everything: HCP `tile.list` without a renderer (R5), several windows, remote
   peers.
 - **Done when.** All e2e specs green; the canvas round-trips through a restart with
@@ -157,6 +161,8 @@ exactly as today. They are ordered by dependency.
   session (local windows now, network peers in Phase 1). Canvas verbs (`tile.list`,
   `tile.focus`, spawn, close, rename) execute in main against `WorkspaceStore`;
   `hcpCallRenderer` is kept only for things that are truly visual (camera focus).
+  `WorkspaceStore` gains change events carrying the writer's origin, so every window
+  mirrors the others' edits without echoing its own.
 - **Files.** `main/index.ts` (pty relay, `hcpCallRenderer`), `main/hcp/methods.ts`,
   `useSpawn.ts` (spawn logic moves to main), `Workspace.tsx`.
 - **Done when.** HCP `tile.list`, spawn, close and rename work with no window (the tile

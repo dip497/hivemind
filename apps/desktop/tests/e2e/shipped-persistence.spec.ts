@@ -1,6 +1,8 @@
 // Regression: "resume where you left off" — open tiles (vis/extras/fileTiles)
 // must persist across an app restart for the same repo. Uses two launches that
-// share one user-data-dir + repo cwd.
+// share one user-data-dir + repo cwd. Main's workspace store is where the layout
+// lives (docs/design/multiplayer-2026-09-28.md, R1), so the window's own storage
+// is deleted between the launches.
 import { test, expect, _electron as electron, type ElectronApplication } from "@playwright/test";
 import { execSync } from "node:child_process";
 import fs, { mkdtempSync, writeFileSync } from "node:fs";
@@ -27,14 +29,16 @@ test("open tiles restore after restart (same repo)", async () => {
   await page.waitForTimeout(400);
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "shell" })));
   await page.waitForSelector(".react-flow__node-terminal", { timeout: 6_000 });
-  // Main's workspace store owns the layout (docs/design/multiplayer-2026-09-28.md, R1): the
-  // window's debounced save reaches it, then the store's own debounce writes the file.
+  // The window's debounced save reaches main's store, which writes it through to disk.
   const stored = () => {
     const d = path.join(ud, "workspaces");
     return fs.existsSync(d) ? fs.readdirSync(d).filter((f) => f.endsWith(".json")).map((f) => fs.readFileSync(path.join(d, f), "utf8")).join("\n") : "";
   };
   await expect.poll(stored, { timeout: 5_000 }).toMatch(/"kind":"shell"/);
   await app.close();
+  const windowStorage = path.join(ud, "Local Storage");
+  expect(fs.existsSync(windowStorage)).toBe(true);
+  fs.rmSync(windowStorage, { recursive: true, force: true });
 
   // ── session 2: relaunch same ud + repo → terminal tile restored, no clicks ──
   app = await launch();

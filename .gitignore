@@ -31,13 +31,14 @@ linux-unpacked/
 # the skills that are part of the product / the contribution process, not local cruft:
 # hive-browser backs the Browser tile; adding-an-agent-provider and hivemind-custom-view
 # are the procedures a contributor (or their agent) follows to wire a new CLI agent, or to
-# write a view, end to end.
+# write a view, end to end; test-audit is the gate every new or changed test passes.
 .claude/*
 !.claude/skills/
 .claude/skills/*
 !.claude/skills/hive-browser/
 !.claude/skills/adding-an-agent-provider/
 !.claude/skills/hivemind-custom-view/
+!.claude/skills/test-audit/
 .hyperresearch/
 research/
 # screenshots/ are the README demo images — they MUST be committed so GitHub

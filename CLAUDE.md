@@ -7,7 +7,14 @@ progress, how to resume, and the checks to run. The design is
 `docs/design/multiplayer-2026-09-28.md` (accepted; Phase 0 refactors R1–R16 come before any
 feature work) and the facts behind it are in `docs/design/multiplayer-2026-09-28-research.md`.
 Update the status table in `docs/plans/multiplayer.md` in the same commit as the work it
-describes, so the next session picks up where this one stopped.
+describes, so the next session picks up where this one stopped. Its **Working rules** (modular
+code, one owner per job, no seams for tests) apply to every item.
+
+## Tests
+
+Every test written or changed passes the authoring gate in `.claude/skills/test-audit/SKILL.md`
+(the maintainer's rule, adapted from openclaw's test-audit skill), and each new test is shown
+to fail when the behaviour it guards is broken.
 
 ## Adding or completing an agent integration
 

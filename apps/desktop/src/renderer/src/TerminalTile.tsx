@@ -155,7 +155,7 @@ interface Props {
 
 export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, given, onRename, onOpenInBrowser, onOpenInEditor, onClose, selected, pinned, onTogglePin }: Props) {
   // Editable header name: starts in display mode; double-click opens input.
-  // Persists via onRename → Canvas tileNames → LAYOUT_KEY localStorage.
+  // Persists via onRename → Canvas tileNames → the workspace store (canvas-persistence.ts).
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(name ?? "");
   // Crisp fit-to-screen overlay. When on, the LIVE .xterm DOM node is re-parented

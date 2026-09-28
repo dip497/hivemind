@@ -1,7 +1,6 @@
-// Per-view versioned layout blobs + the two built-in specs' one-time imports
-// from the pre-plugin storage (canvas geometry inline in the core blob; the
-// windows minimized-tab array). A tiny in-memory localStorage shim stands in
-// for the browser store.
+// Per-view versioned layout blobs, with no bridge: localStorage is where they
+// live, and a tiny in-memory shim stands in for it. Moving them into main's
+// store is workspace-store-client.test.ts.
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 
@@ -14,7 +13,7 @@ const store = new Map<string, string>();
   },
 };
 
-const { loadViewLayout, saveViewLayout, VIEW_LAYOUT_KEY } = await import("../../src/renderer/src/workspace/view-layout-store.ts");
+const { loadViewLayout, saveViewLayout } = await import("../../src/renderer/src/workspace/view-layout-store.ts");
 const { CANVAS_LAYOUT } = await import("../../src/renderer/src/workspace/views/canvas-layout.ts");
 
 beforeEach(() => store.clear());
@@ -25,13 +24,14 @@ const DEMO = {
   initial: (): Demo => ({ a: 0 }),
 };
 
-test("save → load round-trips under a per-view, per-repo key wrapped in {v, data}", () => {
+test("save → load round-trips per view and per repo; they never collide", () => {
+  const OTHER = { ...DEMO, viewId: "other" };
   saveViewLayout(DEMO, "/r", { a: 7 });
+  saveViewLayout(OTHER, "/r", { a: 8 });
+  saveViewLayout(DEMO, "/s", { a: 9 });
   assert.deepEqual(loadViewLayout(DEMO, "/r"), { a: 7 });
-  assert.deepEqual(JSON.parse(store.get(VIEW_LAYOUT_KEY("demo", "/r"))!), { v: 2, data: { a: 7 } });
-  // Distinct views / repos never collide.
-  assert.notEqual(VIEW_LAYOUT_KEY("demo", "/r"), VIEW_LAYOUT_KEY("other", "/r"));
-  assert.notEqual(VIEW_LAYOUT_KEY("demo", "/r"), VIEW_LAYOUT_KEY("demo", "/s"));
+  assert.deepEqual(loadViewLayout(OTHER, "/r"), { a: 8 });
+  assert.deepEqual(loadViewLayout(DEMO, "/s"), { a: 9 });
 });
 
 test("no repo → initial, never touches storage", () => {
@@ -41,10 +41,11 @@ test("no repo → initial, never touches storage", () => {
 });
 
 test("a blob at another version, or corrupt, starts fresh", () => {
-  store.set(VIEW_LAYOUT_KEY("demo", "/r"), JSON.stringify({ v: 1, data: { n: 5 } }));
+  saveViewLayout({ ...DEMO, version: 1 }, "/r", { a: 5 });
   assert.deepEqual(loadViewLayout(DEMO, "/r"), { a: 0 });
-  store.set(VIEW_LAYOUT_KEY("demo", "/r"), "{not json");
-  assert.deepEqual(loadViewLayout(DEMO, "/r"), { a: 0 });
+  assert.equal(store.size, 1);
+  for (const key of store.keys()) store.set(key, "{not json");
+  assert.deepEqual(loadViewLayout({ ...DEMO, version: 1 }, "/r"), { a: 0 });
 });
 
 

@@ -166,7 +166,7 @@ const api: HiveIpc & {
   workspaceViewSync: (repo, viewId) => ipcRenderer.sendSync("workspace:view-sync", repo, viewId),
   workspaceSetCoreSync: (repo, core) => { ipcRenderer.sendSync("workspace:set-core-sync", repo, core); },
   workspaceSetViewSync: (repo, viewId, layout) => { ipcRenderer.sendSync("workspace:set-view-sync", repo, viewId, layout); },
-  workspaceImportSync: (repo, legacy) => ipcRenderer.sendSync("workspace:import-sync", repo, legacy),
+  workspaceImportSync: (repo, legacy) => { ipcRenderer.sendSync("workspace:import-sync", repo, legacy); },
   settingsGet: () => ipcRenderer.invoke("settings:get"),
   settingsSet: (p, v) => ipcRenderer.invoke("settings:set", p, v),
   settingsPatch: (patches) => ipcRenderer.invoke("settings:patch", patches),

@@ -80,9 +80,12 @@ Full design + edge cases: `docs/design/remote-frames.md`.
 
 PTYs survive window close via a detached daemon (`packages/agent-host/src/pty-daemon.ts`); claude is
 `--session-id`-bound at spawn and `--resume`d after reboot. State persists
-per-repo in `localStorage`: the core blob (`canvas-persistence.ts`, v2) plus one
+per-repo in main's workspace store (`packages/workspace-host`, files in
+`<userData>/workspaces/`): the core blob (`canvas-persistence.ts`, v2) plus one
 versioned blob per view (`workspace/view-layout-store.ts`), all migrated on
-load. Remote PTYs are the exception — in-main, detach == kill — which is why
+load. Both reach it through `workspace/workspace-store-client.ts`, which imports a
+window's pre-store localStorage layout once and uses localStorage only when there
+is no bridge. Remote PTYs are the exception — in-main, detach == kill — which is why
 tile bodies live in the TileHost and are never remounted by a view.
 
 ## Gotchas

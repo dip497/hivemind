@@ -1,14 +1,15 @@
 /**
- * Workspace core persistence — the localStorage blob (per repo) holding what
- * EVERY view shares: frames (identity + bindings + their canvas rect, see
- * FrameState), open tiles, tile→frame membership, user renames, editor tabs.
+ * Workspace core persistence — the blob (per repo) holding what EVERY view
+ * shares: frames (identity + bindings + their canvas rect, see FrameState),
+ * open tiles, tile→frame membership, user renames, editor tabs.
  * Pure (no React): load returns a PersistedLayout, save serializes a snapshot.
- * Workspace.tsx owns the React state; this module owns how it sleeps + wakes.
+ * Workspace.tsx owns the React state; this module owns the blob's shape, and
+ * workspace/workspace-store-client.ts where it is kept (main's workspace store).
  * The canvas view's geometry (tile positions / sizes / viewport) is the canvas
  * view's own layout blob (workspace/views/canvas-layout.ts), like every view's.
  */
 import type { TileKind } from "./tile-kinds";
-import { legacyCoreKey, readStoredCore, writeStoredCore } from "./workspace/workspace-store-client";
+import { readCore, writeCore } from "./workspace/workspace-store-client";
 
 /** On POSIX: `-i` keeps the shell interactive so it doesn't exit, `-l` sources
  *  the login profile (PATH includes ~/.local/bin → claude resolves). Windows
@@ -83,10 +84,8 @@ export interface FrameState {
   parentFrameId?: string;
 }
 
-// Persisted layout — survives app restarts. Keyed by repoPath (or a sentinel
-// for the no-repo case) so each project's canvas comes back the way the user
-// left it. Main's workspace store owns it (workspace/workspace-store-client.ts);
-// localStorage is only the fallback without the bridge (browser mode, tests).
+// Persisted layout — survives app restarts. Keyed by repoPath so each
+// project's canvas comes back the way the user left it.
 export interface PersistedLayout {
   frames: FrameState[];
   /** User-renamed tile labels (per tile id). */
@@ -109,46 +108,28 @@ export type LayoutSnapshot = Required<
   Pick<PersistedLayout, "frames" | "tileNames" | "tiles" | "editorTabs" | "frameOf">
 >;
 
-export const LAYOUT_KEY = (repoPath: string | null) => legacyCoreKey(repoPath ?? "__global__");
-
 export function loadLayout(repoPath: string | null): PersistedLayout {
   // Only persist when we have a real repo — the no-repo case is transient
   // (welcome screen / e2e bootstrap) and persisting it leaks layouts across
   // unrelated sessions.
-  if (typeof window === "undefined" || !repoPath) return { frames: [], tileNames: {} };
-  try {
-    const stored = readStoredCore(repoPath);
-    let p: Partial<PersistedLayout> | null;
-    if (stored !== undefined) p = stored as Partial<PersistedLayout> | null;
-    else {
-      const raw = window.localStorage.getItem(LAYOUT_KEY(repoPath));
-      p = raw ? (JSON.parse(raw) as Partial<PersistedLayout>) : null;
-    }
-    if (!p || typeof p !== "object") return { frames: [], tileNames: {} };
-    return {
-      frames: Array.isArray(p.frames) ? p.frames : [],
-      frameOf: p.frameOf,
-      tileNames: p.tileNames ?? {},
-      tiles: Array.isArray(p.tiles) ? p.tiles : [],
-      editorTabs: p.editorTabs && typeof p.editorTabs === "object" && !Array.isArray(p.editorTabs) ? p.editorTabs : {},
-    };
-  } catch {
-    return { frames: [], tileNames: {} };
-  }
+  if (!repoPath) return { frames: [], tileNames: {} };
+  const p = readCore(repoPath) as Partial<PersistedLayout> | null;
+  if (!p || typeof p !== "object") return { frames: [], tileNames: {} };
+  return {
+    frames: Array.isArray(p.frames) ? p.frames : [],
+    frameOf: p.frameOf,
+    tileNames: p.tileNames ?? {},
+    tiles: Array.isArray(p.tiles) ? p.tiles : [],
+    editorTabs: p.editorTabs && typeof p.editorTabs === "object" && !Array.isArray(p.editorTabs) ? p.editorTabs : {},
+  };
 }
 
-/** Write a layout snapshot for a repo to the workspace store (localStorage without
- *  the bridge; best-effort either way). The single writer — Canvas's debounced effect
- *  AND the beforeunload flush both call this, so the blob shape lives in one place. */
+/** Write a layout snapshot for a repo (best-effort). The single writer — Canvas's
+ *  debounced effect AND the beforeunload flush both call this, so the blob shape
+ *  lives in one place. */
 export function saveLayout(repoPath: string | null, snap: LayoutSnapshot): void {
-  if (typeof window === "undefined" || !repoPath) return;
+  if (!repoPath) return;
   // planReview tiles are ephemeral (tied to a live, blocked agent hook) — drop
   // them so a reload doesn't resurrect a dead review with a stale requestId.
-  const persisted = { ...snap, tiles: snap.tiles.filter((t) => t.kind !== "planReview") };
-  try {
-    if (writeStoredCore(repoPath, persisted)) return;
-    window.localStorage.setItem(LAYOUT_KEY(repoPath), JSON.stringify(persisted));
-  } catch {
-    // QuotaExceeded / private-mode etc — swallow; layout is best-effort.
-  }
+  writeCore(repoPath, { ...snap, tiles: snap.tiles.filter((t) => t.kind !== "planReview") });
 }

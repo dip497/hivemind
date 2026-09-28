@@ -8,16 +8,12 @@
  * added, removed, or change its schema without touching the core or any other
  * view. Each blob is `{ v, data }`; a blob at another version starts fresh.
  *
- * Pure functions + one small hook. Main's workspace store owns the blobs
- * (workspace-store-client.ts); localStorage is only the fallback without the bridge
- * (browser mode, tests). Best-effort either way, same policy as canvas-persistence.
+ * Pure functions + one small hook. This module owns the versioning; where the
+ * blobs are kept (main's workspace store) is workspace-store-client.ts.
+ * Best-effort, same policy as canvas-persistence.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { legacyViewKey, readStoredView, writeStoredView } from "./workspace-store-client";
-
-export const VIEW_LAYOUT_KEY = (viewId: string, repoPath: string): string => legacyViewKey(viewId, repoPath);
-
-interface Envelope { v: number; data: unknown }
+import { readView, writeView } from "./workspace-store-client";
 
 export interface ViewLayoutSpec<T> {
   viewId: string;
@@ -27,28 +23,14 @@ export interface ViewLayoutSpec<T> {
 }
 
 export function loadViewLayout<T>(spec: ViewLayoutSpec<T>, repoPath: string | null): T {
-  if (typeof window === "undefined" || !repoPath) return spec.initial();
-  try {
-    const stored = readStoredView(repoPath, spec.viewId);
-    if (stored !== undefined) return stored && stored.v === spec.version ? (stored.data as T) : spec.initial();
-    const raw = window.localStorage.getItem(VIEW_LAYOUT_KEY(spec.viewId, repoPath));
-    if (!raw) return spec.initial();
-    const env = JSON.parse(raw) as Partial<Envelope>;
-    return env.v === spec.version ? (env.data as T) : spec.initial();
-  } catch {
-    return spec.initial();
-  }
+  if (!repoPath) return spec.initial();
+  const stored = readView(repoPath, spec.viewId);
+  return stored && stored.v === spec.version ? (stored.data as T) : spec.initial();
 }
 
 export function saveViewLayout<T>(spec: ViewLayoutSpec<T>, repoPath: string | null, data: T): void {
-  if (typeof window === "undefined" || !repoPath) return;
-  try {
-    const env: Envelope = { v: spec.version, data };
-    if (writeStoredView(repoPath, spec.viewId, env)) return;
-    window.localStorage.setItem(VIEW_LAYOUT_KEY(spec.viewId, repoPath), JSON.stringify(env));
-  } catch {
-    /* quota / private mode — best-effort */
-  }
+  if (!repoPath) return;
+  writeView(repoPath, spec.viewId, { v: spec.version, data });
 }
 
 /**
