@@ -874,7 +874,10 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
             // fire while the agent is quiet (the exact "ready" moment). claimWork
             // consumes, so the prompt can never be submitted twice.
             if (agent && peekWork(tileId)) {
-              if (agentDirty) workQuietTicks = 0; else workQuietTicks++;
+              // Quiet is not ready when the agent is waiting on the user: a first run can open
+              // a trust or update chooser and sit there, and a task typed into a chooser picks
+              // an option instead. Hold it until the tile is at its own prompt.
+              if (agentDirty || statusOf(tileId) !== "idle") workQuietTicks = 0; else workQuietTicks++;
               if (workQuietTicks >= WORK_SETTLE_TICKS) {
                 const work = claimWork(tileId);
                 if (work) {

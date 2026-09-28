@@ -1113,7 +1113,9 @@
         "--ask-for-approval",
         "on-request",
         "-c",
-        "check_for_update_on_startup=false"
+        "check_for_update_on_startup=false",
+        "-c",
+        "tui.fullscreen_transcript=false"
       ],
       "env": {
         "HIVE_AGENT_DEPTH": "1",
@@ -1135,7 +1137,9 @@
         "--ask-for-approval",
         "on-request",
         "-c",
-        "check_for_update_on_startup=false"
+        "check_for_update_on_startup=false",
+        "-c",
+        "tui.fullscreen_transcript=false"
       ],
       "env": {
         "HIVE_AGENT_DEPTH": "1",
@@ -1158,6 +1162,8 @@
         "on-request",
         "-c",
         "check_for_update_on_startup=false",
+        "-c",
+        "tui.fullscreen_transcript=false",
         "do the thing"
       ],
       "envHasPrompt": false
@@ -1172,7 +1178,9 @@
         "--ask-for-approval",
         "on-request",
         "-c",
-        "check_for_update_on_startup=false"
+        "check_for_update_on_startup=false",
+        "-c",
+        "tui.fullscreen_transcript=false"
       ],
       "env": {
         "HIVE_AGENT_DEPTH": "1",
@@ -1194,7 +1202,9 @@
         "resume",
         "sess-1",
         "-c",
-        "check_for_update_on_startup=false"
+        "check_for_update_on_startup=false",
+        "-c",
+        "tui.fullscreen_transcript=false"
       ],
       "env": {
         "HIVE_AGENT_DEPTH": "1",
@@ -1214,7 +1224,9 @@
         "--sandbox",
         "workspace-write",
         "-c",
-        "check_for_update_on_startup=false"
+        "check_for_update_on_startup=false",
+        "-c",
+        "tui.fullscreen_transcript=false"
       ],
       "env": {
         "HIVE_AGENT_DEPTH": "1",
