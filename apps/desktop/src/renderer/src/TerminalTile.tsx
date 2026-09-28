@@ -14,7 +14,7 @@ import { registerWebglSlotClient, unregisterWebglSlotClient, reconcileWebglSlots
 import { useTileFont, FontScaleControl, handleFontKey } from "./tile-font";
 import { identifyAgent } from "./agent-state";
 import { agentById } from "@hivemind/agents";
-import { registerClaude, unregisterClaude, shouldDeliver, peekWork, claimWork, clearWork, type SendToClaudeDetail } from "./claude-bus";
+import { registerClaude, unregisterClaude, shouldDeliver, peekWork, claimWork, type SendToClaudeDetail } from "./claude-bus";
 import { publishStatus, clearStatus, setLabel, statusOf, subscribeTileStatus, type TileStatusKind } from "./agent-status-bus";
 import { mayDismiss, newDismissState } from "./dismiss-startup";
 import { keyBytes, KEY_GAP_MS } from "../../shared/keys";
@@ -880,6 +880,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
           // ticking in its composer — would hold the task for ever. Deliver anyway once it
           // has had this long to boot, as long as it is not waiting on the user.
           const WORK_DEADLINE_TICKS = 8;
+          void window.hive.diagLog?.(`[work-poll] start tile=${tileId} agent=${agent} peek=${!!peekWork(tileId)}`);
           agentPoll = setInterval(() => {
             // One-shot delivery — runs BEFORE the agentDirty early-return so it can
             // fire while the agent is quiet (the exact "ready" moment). claimWork
@@ -1005,10 +1006,11 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       unsubExit?.();
       unsubClaude?.();
       inputEl?.removeEventListener("blur", onInputBlur);
-      clearWork(tileId);
       offStatus?.();
       clearStatus(tileId);
-      clearWork(tileId);
+      // The queued task is NOT dropped here: a body unmounts on a view switch, on a park,
+      // and twice on every mount in development — the task belongs to the tile, and the
+      // tile is still open. Closing one drops it (Workspace.closeTile).
       ro.disconnect();
       io.disconnect();
       if (loseInterest) clearTimeout(loseInterest);
