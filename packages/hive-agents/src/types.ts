@@ -328,6 +328,9 @@ export interface AgentProviderDef {
   titles?: readonly string[];
   /** The tile label for the n-th spawn (default `"<label> #<n>"`). */
   spawnLabel?: (n: number, opts: SpawnOptions) => string;
+  /** Startup screens the host may answer because the launch flags already answered them
+   *  (see ManifestSpawn.dismiss). `keys` are the tokens `hive ctl keys` takes. */
+  dismiss?: ReadonlyArray<{ match: (screen: string) => boolean; keys: readonly string[] }>;
 }
 
 // ── daemon-side ──────────────────────────────────────────────────────────────

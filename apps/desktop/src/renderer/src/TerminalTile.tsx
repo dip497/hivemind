@@ -13,8 +13,11 @@ import { wantsDomRenderer } from "./terminal-renderer-policy";
 import { registerWebglSlotClient, unregisterWebglSlotClient, reconcileWebglSlots } from "./webgl-slots";
 import { useTileFont, FontScaleControl, handleFontKey } from "./tile-font";
 import { identifyAgent } from "./agent-state";
+import { agentById } from "@hivemind/agents";
 import { registerClaude, unregisterClaude, shouldDeliver, peekWork, claimWork, clearWork, type SendToClaudeDetail } from "./claude-bus";
 import { publishStatus, clearStatus, setLabel, statusOf, subscribeTileStatus, type TileStatusKind } from "./agent-status-bus";
+import { mayDismiss, newDismissState } from "./dismiss-startup";
+import { keyBytes, KEY_GAP_MS } from "../../shared/keys";
 import { SUBMIT_DELAY_MS, SPAWN_SUBMIT_RETRY_MS, deliversPromptViaArgv } from "../../shared/agent-io";
 import { Pencil, GripVertical } from "lucide-react";
 import { Button } from "./components/ui/button";
@@ -319,6 +322,8 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     };
 
     // The viewport as text, for tests (a WebGL terminal renders none into the DOM).
+    // Startup screens the manifest says the launch flags already answered (see dismiss-startup).
+    const dismissState = newDismissState(Date.now());
     const readScreen = (): string => {
       const buf = term.buffer.active;
       const out: string[] = [];
@@ -718,6 +723,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
         }
         return;
       }
+      dismissState.touched = true; // the person is driving now: nothing is sent for them
       window.hive.ptyWrite(ptyId, d);
     });
     term.onResize(() => syncPtySize());
@@ -873,6 +879,17 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
             // One-shot delivery — runs BEFORE the agentDirty early-return so it can
             // fire while the agent is quiet (the exact "ready" moment). claimWork
             // consumes, so the prompt can never be submitted twice.
+            // A screen this agent opens before it will take anything, which our own launch
+            // flags already answered: skip it once so the tile reaches its prompt.
+            const toDismiss = agentById(agent)?.dismiss;
+            if (toDismiss?.length && mayDismiss(dismissState, Date.now())) {
+              const screen = readScreen();
+              const hit = toDismiss.find((d) => d.match(screen));
+              if (hit) {
+                dismissState.left--;
+                hit.keys.forEach((k, i) => setTimeout(() => window.hive.ptyWrite(ptyId, keyBytes(k)), KEY_GAP_MS * i));
+              }
+            }
             if (agent && peekWork(tileId)) {
               // Quiet is not ready when the agent is waiting on the user: a first run can open
               // a trust or update chooser and sit there, and a task typed into a chooser picks

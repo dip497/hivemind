@@ -9,6 +9,7 @@
  * close, agent.status/stream, review.open, issue.* land in later phases.)
  */
 import { randomUUID } from "node:crypto";
+import { keyBytes, KEY_GAP_MS } from "../../shared/keys.js";
 import { HcpError } from "./protocol.js";
 import type { TurnTracker } from "./turn-tracker.js";
 import type { OutputRecorder } from "./output-recorder.js";
@@ -80,19 +81,7 @@ const WORKFLOW_MAX_CONCURRENCY = 12;
 const WORKFLOW_SPAWN_RETRY_MS = 1500;
 const WORKFLOW_SPAWN_RETRIES = 6;
 
-/** Symbolic key → terminal bytes, for driving a worker's TUI (e.g. answering a
- *  native AskUserQuestion picker). A raw ESC byte can't be expressed through a
- *  plain-text param from a tool call, so agent.send_keys maps tokens here; any
- *  unknown token is sent as literal text (so digits / words type themselves). */
-const KEYMAP: Record<string, string> = {
-  up: "\x1b[A", down: "\x1b[B", right: "\x1b[C", left: "\x1b[D",
-  enter: "\r", return: "\r", esc: "\x1b", escape: "\x1b",
-  tab: "\t", space: " ", backspace: "\x7f", del: "\x1b[3~", delete: "\x1b[3~",
-  home: "\x1b[H", end: "\x1b[F", pageup: "\x1b[5~", pagedown: "\x1b[6~",
-};
-/** Gap between successive keys, so a TUI registers each (e.g. arrow THEN enter)
- *  rather than processing a bundled write at once — mirrors SUBMIT_DELAY_MS. */
-const KEY_GAP_MS = 40;
+
 
 /** Tools where a plain `allow` is remembered for the rest of that worker's life
  *  (see `agent.approve`). File-touching tools only — approving them one call at a
@@ -449,7 +438,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         if (!keys.length) throw new HcpError("BAD_REQUEST", "keys required");
         const pid = ptyId(tileId);
         armRead(tileId); // keys can submit a prompt; a following read wants the turn they cause
-        const bytesOf = (k: string) => KEYMAP[k.toLowerCase()] ?? k;
+        const bytesOf = keyBytes;
         const ok = deps.writeToTile(pid, bytesOf(keys[0]!));
         if (!ok) throw new HcpError("TILE_NOT_FOUND", `no live agent for tile ${tileId}`);
         for (let i = 1; i < keys.length; i++) {
