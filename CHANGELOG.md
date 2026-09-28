@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Codex tiles report again: it runs no hook it has not been told to trust, so on a fresh install none of ours ran — no turn signals, no approval events, `hive ctl read` timing out on a worker that had already answered, and a supervised worker waiting on an answer that never came. Tiles Hivemind starts now waive that review, which the agent's install review states, because it waives the review of the hooks in your own Codex config too.
 - Codex tiles: the wheel scrolls them again (its fullscreen transcript took the wheel and did nothing with it — tiles now start in its scrollback mode, `/tui` switches back), a tile no longer announces "needs your input" every few seconds while it works (what it prints is no longer read as what it asks — only its own chooser and footer are), and its first-run hook review is recognised as waiting for you.
 - A task queued for an agent is held until the agent is at its own prompt: a first run that opens a trust or update chooser used to have the task typed into it, which picked an option instead of starting the work.
 - Fixed: a task given to an agent when it starts — or any message sent to one with `hive ctl send`, a worker's report, an approval request — is now handed to its TUI as a paste instead of as keystrokes. A multi-line task used to submit its first line on its own, leaving the rest as a draft, and an agent that guards against input it cannot parse in time exited instead of starting.

@@ -162,3 +162,7 @@ launch:
   # transcript lands in the tile's own scrollback. `/tui` switches it back.
   - -c
   - tui.fullscreen_transcript=false
+  # It runs no hook it has not been told to trust, one screen at a time, and the hooks here
+  # are the ones this manifest just wrote. Without this it reports nothing: no turn, no
+  # approval, no status — and a supervised worker waits on an answer that never comes.
+  - --dangerously-bypass-hook-trust
