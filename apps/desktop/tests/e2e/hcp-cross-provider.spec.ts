@@ -121,7 +121,7 @@ test("an unnamed tile is called by what its agent says it is doing — the host'
   const r = hive(["ctl", "spawn", "--agent", "claude", "--prompt", "echo titled", "--json"]);
   expect(r.code, r.stderr).toBe(0);
   const nameOf = () => hive(["ctl", "list", "--json"]).json.frames.flatMap((f: any) => f.tiles).find((t: any) => t.tileId === r.json.tileId)?.name;
-  await expect.poll(nameOf, { timeout: 20_000 }).toMatch(/ · echo titled$/);
+  await expect.poll(nameOf, { timeout: 20_000 }).toBe("echo titled");
 });
 
 test("fanout over droid workers from the claude orchestrator: hooks.json injection + typed prompt + gather", async () => {
@@ -223,7 +223,7 @@ test("a title read while the agent's manifest is broken shows up when the manife
   expect(r.code, r.stderr).toBe(0);
   const tile: string = r.json.tileId;
   const nameOf = () => hive(["ctl", "list", "--json"]).json.frames.flatMap((f: any) => f.tiles).find((t: any) => t.tileId === tile)?.name;
-  await expect.poll(nameOf, { timeout: 20_000 }).toMatch(/ · echo first$/);
+  await expect.poll(nameOf, { timeout: 20_000 }).toBe("echo first");
 
   const dir = path.join(process.env.XDG_CONFIG_HOME!, "hivemind", "agents", "claude");
   const away = `${dir}.away`;
@@ -234,7 +234,7 @@ test("a title read while the agent's manifest is broken shows up when the manife
     await new Promise((done) => setTimeout(done, 6000)); // its new title is read with no manifest to read it
     expect(await nameOf()).not.toMatch(/echo second/);
     fs.renameSync(away, dir);
-    await expect.poll(nameOf, { timeout: 30_000 }).toMatch(/ · echo second$/);
+    await expect.poll(nameOf, { timeout: 30_000 }).toBe("echo second");
   } finally {
     if (fs.existsSync(away)) fs.renameSync(away, dir);
     hive(["ctl", "close", tile, "--json"]);
