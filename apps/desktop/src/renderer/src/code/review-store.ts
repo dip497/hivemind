@@ -17,6 +17,6 @@ export async function saveComments(repoPath: string, list: ReviewComment[]): Pro
 }
 
 /** Send review text to claude via the target picker (Canvas routes the event). */
-export function deliverToClaude(text: string): void {
+export function deliverToAgent(text: string): void {
   window.dispatchEvent(new CustomEvent("hivemind:deliver-to-claude", { detail: { text } }));
 }

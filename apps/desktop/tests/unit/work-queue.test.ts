@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-const path = "../../src/renderer/src/claude-bus.ts";
+const path = "../../src/renderer/src/work-queue.ts";
 const first = await import(path);
 // A second copy of the same module, as a hot reload produces.
 const second = await import(`${path}?copy=2`);

@@ -110,7 +110,7 @@ export function IssuesTile({ root, onClose, selected = false, pinned, onTogglePi
 
   const workOn = async (issue: IssueSummary) => {
     // Ensure the repo has the hive skills + CLAUDE.md section (idempotent), then spawn claude
-    // with the work prompt attached (delivered once it's ready — see claude-bus).
+    // with the work prompt attached (delivered once it's ready — see work-queue).
     const repoDir = root ? root.replace(/\/\.hivemind\/?$/, "") : null;
     if (repoDir) {
       try { await window.hive.installAgentic(repoDir); } catch { /* best-effort */ }

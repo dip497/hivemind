@@ -1,40 +1,41 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { registerClaude, unregisterClaude, latestClaude, shouldDeliver, queueWork, claimWork, clearWork } from "../../src/renderer/src/claude-bus.ts";
+import { registerAgentTile, unregisterAgentTile, latestAgentTile, shouldDeliver } from "../../src/renderer/src/agent-send.ts";
+import { queueWork, claimWork, clearWork } from "../../src/renderer/src/work-queue.ts";
 
 test("latest resolves to most-recently-registered", () => {
-  registerClaude("a");
-  registerClaude("b");
-  assert.equal(latestClaude(), "b");
-  registerClaude("a"); // re-register moves to latest
-  assert.equal(latestClaude(), "a");
-  unregisterClaude("a");
-  assert.equal(latestClaude(), "b");
-  unregisterClaude("b");
+  registerAgentTile("a");
+  registerAgentTile("b");
+  assert.equal(latestAgentTile(), "b");
+  registerAgentTile("a"); // re-register moves to latest
+  assert.equal(latestAgentTile(), "a");
+  unregisterAgentTile("a");
+  assert.equal(latestAgentTile(), "b");
+  unregisterAgentTile("b");
 });
 
 test("bare string send delivers ONLY to the latest tile", () => {
-  registerClaude("a");
-  registerClaude("b");
+  registerAgentTile("a");
+  registerAgentTile("b");
   assert.equal(shouldDeliver("b", "hello").deliver, true);
   assert.equal(shouldDeliver("a", "hello").deliver, false); // the bug we fixed
-  unregisterClaude("a"); unregisterClaude("b");
+  unregisterAgentTile("a"); unregisterAgentTile("b");
 });
 
 test("target 'all' broadcasts; specific tileId targets one", () => {
-  registerClaude("a");
-  registerClaude("b");
+  registerAgentTile("a");
+  registerAgentTile("b");
   assert.equal(shouldDeliver("a", { text: "x", target: "all" }).deliver, true);
   assert.equal(shouldDeliver("b", { text: "x", target: "all" }).deliver, true);
   assert.equal(shouldDeliver("a", { text: "x", target: "a" }).deliver, true);
   assert.equal(shouldDeliver("b", { text: "x", target: "a" }).deliver, false);
-  unregisterClaude("a"); unregisterClaude("b");
+  unregisterAgentTile("a"); unregisterAgentTile("b");
 });
 
 test("empty text never delivers", () => {
-  registerClaude("a");
+  registerAgentTile("a");
   assert.equal(shouldDeliver("a", { text: "", target: "all" }).deliver, false);
-  unregisterClaude("a");
+  unregisterAgentTile("a");
 });
 
 test("work prompt is queued against a tile id and claimed once by that tile", () => {

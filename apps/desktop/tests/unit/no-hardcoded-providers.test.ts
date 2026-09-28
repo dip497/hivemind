@@ -77,3 +77,34 @@ test("the host library names no agent at all — not in code, not in prose, not 
   }
   assert.deepEqual(hits, [], `agent names in the host library:\n  ${hits.join("\n  ")}`);
 });
+
+test("no file or exported name in an app carries a provider's name", () => {
+  const names = new Set<string>();
+  for (const d of AUTHORED_DEFS) { names.add(d.id); names.add(d.bin); for (const a of d.aliases ?? []) names.add(a); }
+  // Ids that are also ordinary words, and the file CLAUDE.md, which is a file the tracker
+  // writes — not a reference to a provider.
+  for (const w of ["continue", "cursor", "pi", "amp"]) names.delete(w);
+  // Two- and three-letter ids collide with ordinary code (`cn`, `pi`): the string-literal
+  // rule above covers those.
+  for (const n of [...names]) if (n.length <= 3) names.delete(n);
+  const words = [...names].map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const inName = new RegExp(`\\b(${words.join("|")})\\b`, "i");
+  const exported = new RegExp(`export (?:async )?(?:function|const|class|interface|type) ([A-Za-z0-9_]+)`, "g");
+  const hits: string[] = [];
+  for (const dir of [path.join(ROOT, "apps/desktop/src"), path.join(ROOT, "apps/cli/src")]) {
+    for (const file of walk(dir)) {
+      const rel = path.relative(ROOT, file);
+      if (ALLOW[rel]) continue;
+      if (inName.test(path.basename(file))) hits.push(`${rel} — file name`);
+      let m: RegExpExecArray | null;
+      const src = code(fs.readFileSync(file, "utf8"));
+      while ((m = exported.exec(src))) {
+        const name = m[1]!;
+        // ClaudeMd and friends name the file CLAUDE.md, not the agent.
+        if (/Md$|MD$/.test(name)) continue;
+        if (inName.test(name.replace(/([a-z0-9])([A-Z])/g, "$1 $2"))) hits.push(`${rel} — export ${name}`);
+      }
+    }
+  }
+  assert.deepEqual(hits, [], `a provider's name in a file or export name:\n  ${hits.join("\n  ")}`);
+});

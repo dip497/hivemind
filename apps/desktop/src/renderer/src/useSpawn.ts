@@ -13,7 +13,7 @@ import { agentById } from "./agents";
 import { agentById as catalogAgentById, defaultAgent, spawnArgsFor, spawnLabelFor, type AgentProviderDef, type SpawnOptions } from "@hivemind/agents";
 import { AGENT_TILE_KIND } from "./tile-kinds";
 import { defaultShell, type FrameState, type TileInstance } from "./canvas-persistence";
-import { queueWork } from "./claude-bus";
+import { queueWork } from "./work-queue";
 import { markBackgroundTile } from "./worker-tiles";
 import type { TileKind } from "./tile-kinds";
 import { checkToolCreation } from "./tool-availability";
@@ -297,7 +297,7 @@ export function useSpawn(ctx: SpawnCtx) {
       placeInFrame(newId, frame);
       setTiles((cur) => [...cur, { id: newId, kind, label, cmd, args, ...(kind === "browser" && opts?.url ? { url: opts.url } : {}), ...(kind === "shell" && opts?.session ? { session: opts.session.id } : {}), ...(kind === AGENT_TILE_KIND && opts?.work ? { task: promptTask(opts.work) } : {}) }]);
       // "Work on this": hand the fresh claude tile its prompt. It delivers it to
-      // itself the first time it's ready (see claude-bus queueWork/claimWork).
+      // itself the first time it's ready (see work-queue).
       if (kind === AGENT_TILE_KIND && opts?.work) queueWork(newId, opts.work);
       // An editor spawned to show a specific file (a path clicked in a terminal,
       // a "reveal in editor") carries it in `opts.file`: the id was minted here,
@@ -404,7 +404,7 @@ export function useSpawn(ctx: SpawnCtx) {
   // HCP control-plane spawn: create an agent tile and return its id so the
   // caller (main, via the renderer command channel) can drive it. Mirrors the
   // claude/registry-agent branch of spawnTile, plus prompt delivery via the
-  // claude-bus work queue. `agent` is a catalog id.
+  // work queue. `agent` is a catalog id.
   const hcpSpawnAgent = useCallback(
     (opts: { agent?: string; prompt?: string; frame?: string; mode?: string; model?: string; callerTile?: string; background?: boolean; name?: string; resume?: string }): string => {
       // Frame preference: explicit > the CALLER agent's frame (so a worker lands
