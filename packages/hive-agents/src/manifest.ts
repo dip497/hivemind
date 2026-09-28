@@ -4,7 +4,7 @@
  *  capability nothing here delivers is refused. */
 import { AGENT_EVENTS, EVENT_HOOK, INPUT_KINDS, TURN_OUTCOMES, isAgentEventName } from "./events.js";
 import type { AgentAsset, AgentCapabilities, AgentHome, AgentHomeFile, AgentHookEntry, AgentHooks, AgentIcon, AgentInstall, AgentLaunch, AgentOption, AgentProviderDef, AgentSession, SessionFind, TileStatus } from "./types.js";
-import { compileDetect, validateExpr, validateScope, type DetectRules } from "./detect-rules.js";
+import { compileDetect, validateExpr, validateScope, type DetectRules, type Expr, type Scope } from "./detect-rules.js";
 import { GENERIC_AGENT_ICON } from "./icon.js";
 import { RESERVED_AGENTS } from "./reserved.js";
 import { MIN_APP_VERSION_RE } from "./catalog.js";
@@ -38,10 +38,14 @@ export interface ManifestSpawn {
   args?: string[];
   /** Tile label; `{n}` is the spawn ordinal, `{label}` the provider label. */
   label?: string;
-  /** Appended to the label when a non-default mode is set. `{mode}` interpolates. */
   /** Window titles this CLI sets, as literal templates: `{task}` is the part worth showing,
    *  `{any}` matches anything. A title matching a template without `{task}` is ignored. */
   titles?: string[];
+  /** Startup screens the host may answer for the user, because the launch flags already
+   *  answered them — a hook review waived on the command line, say. `keys` may only SKIP a
+   *  screen, never grant anything, and the host sends them once, at the start of a session,
+   *  and never after the person has typed into the tile. */
+  dismiss?: Array<{ when: Expr; scope?: Scope; keys: string[] }>;
 }
 
 export interface AgentManifest {
@@ -516,6 +520,16 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
     req(sp.args === undefined || strArray(sp.args), "spawn.args must be a string array");
     req(sp.label === undefined || typeof sp.label === "string", "spawn.label must be a string");
     req(sp.titles === undefined || strArray(sp.titles), "spawn.titles must be a string array");
+    if (sp.dismiss !== undefined) {
+      req(Array.isArray(sp.dismiss), "spawn.dismiss must be an array");
+      (sp.dismiss as Array<Record<string, unknown>>).forEach((d, i) => {
+        req(d && typeof d === "object" && d.when !== undefined, `spawn.dismiss[${i}] needs a \`when\``);
+        req(strArray(d.keys) && (d.keys as string[]).length > 0 && (d.keys as string[]).length <= 4,
+          `spawn.dismiss[${i}].keys must be 1-4 key tokens`);
+        try { validateExpr(d.when, `spawn.dismiss[${i}].when`); validateScope(d.scope, `spawn.dismiss[${i}].scope`); }
+        catch (e) { throw new ManifestError((e as Error).message); }
+      });
+    }
   }
 
   const aliases = m.aliases;
@@ -549,6 +563,12 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
     detect = compileDetect(m.detect);
   }
 
+  // A dismissable screen is matched the way a status is, so a manifest has one vocabulary.
+  const dismiss = (m.spawn?.dismiss ?? []).map((d) => ({
+    match: compileDetect({ rules: [{ when: d.when, then: "blocked", ...(d.scope ? { scope: d.scope } : {}) }], default: "idle" }),
+    keys: d.keys,
+  })).map(({ match, keys }) => ({ match: (screen: string) => match(screen) === "blocked", keys }));
+
   const def: AgentProviderDef = {
     id: m.id,
     label: m.label,
@@ -556,6 +576,7 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
     ...(aliases ? { aliases } : {}),
     ...(m.spawn?.args ? { defaultArgs: m.spawn.args } : {}),
     ...(m.spawn?.titles ? { titles: m.spawn.titles } : {}),
+    ...(dismiss.length ? { dismiss } : {}),
     enabled: m.enabled ?? false,
     caps: m.caps,
     ...(detect ? { detect } : {}),

@@ -46,6 +46,19 @@ options:
 install:
   url: https://developers.openai.com/codex/cli
   command: "npm install -g @openai/codex"
+spawn:
+  # It opens its hook review before it will take a task, although the launch flags below
+  # already tell it to run those hooks: the screen's answer changes nothing, so skip it. Esc
+  # is its own "skip" — it trusts nothing and writes nothing.
+  dismiss:
+  - when:
+      all:
+      - line:
+        - contains: hooks need review
+      - line:
+        - contains: trust all and continue
+    keys:
+    - Escape
 detect:
   # Only the live prompt area says what the agent is waiting for: its own streamed output
   # quotes files and plans full of "do you want … yes", and a screen-wide match reads those

@@ -57,3 +57,19 @@ test("what it is printing is not what it is asking: a working screen quoting a q
   // And a real prompt, at the bottom where it lives, still reads as waiting.
   expect(codex().detect!(`${streaming}\n  Allow command?\n› 1. Yes (y)\n  2. No`)).toBe("blocked");
 });
+
+test("the hook review it opens before it will take a task is skipped, not answered", () => {
+  const d = codex().dismiss ?? [];
+  expect(d.length).toBe(1);
+  // Esc is its own "skip": it trusts nothing and writes nothing. The launch flags already
+  // told it to run the hooks.
+  expect(d[0]!.keys).toEqual(["Escape"]);
+  const review = [
+    "  Hooks need review", "  11 hooks are new or changed.",
+    "› 1. Review hooks", "  2. Trust all and continue", "  3. Continue without trusting (hooks won't run)",
+  ].join("\n");
+  expect(d[0]!.match(review)).toBe(true);
+  // Its per-hook screen is NOT dismissed: that one the user opened themselves.
+  expect(d[0]!.match("  PostToolUse hooks\n  1 hook needs review before it can run.\n  space/enter toggle · esc back")).toBe(false);
+  expect(d[0]!.match("› Ask Codex to do anything")).toBe(false);
+});
