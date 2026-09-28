@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: a terminal restored after a restart took no mouse at all — clicking and scrolling inside an agent did nothing, while typing and its output kept working, until the tile was resized. The replay restored the mouse tracking an agent had turned on but not the coordinate encoding it asked for, so its clicks were answered in a dialect it does not read.
 - Machines nothing runs on sit at the foot of the Layers rail instead of after the tiles, so the last of them is never below the fold: the tile list scrolls above them, and the machines scroll inside their own block (at most 40% of the rail).
 - A tile is called what it is doing: the agent's own task line, with the spawn label (`claude #3`) kept only until it says one. A name you give the tile yourself still wins over both.
 - A tile's name no longer carries the permission mode it was started in (`claude #1 · auto · …` is now `claude #1 · …`): the name says what the agent is doing, and the mode is already shown as state. `spawn.labelMode` is gone from the manifest format; a manifest that still declares it is accepted and ignored, so no agent needs republishing.
