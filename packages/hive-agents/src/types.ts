@@ -328,10 +328,6 @@ export interface AgentProviderDef {
   titles?: readonly string[];
   /** The tile label for the n-th spawn (default `"<label> #<n>"`). */
   spawnLabel?: (n: number, opts: SpawnOptions) => string;
-  /** Tools of THIS agent where one `allow` covers the rest of a supervised worker's life —
-   *  its file-touching ones. A tool it does not name is asked about every time, which is why
-   *  a shell tool never belongs here: every command is a different action. */
-  superviseSticky?: readonly string[];
   /** Startup screens the host may answer because the launch flags already answered them
    *  (see ManifestSpawn.dismiss). `keys` are the tokens `hive ctl keys` takes. */
   dismiss?: ReadonlyArray<{ match: (screen: string) => boolean; keys: readonly string[] }>;

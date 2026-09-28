@@ -83,21 +83,6 @@ const WORKFLOW_SPAWN_RETRIES = 6;
 
 
 
-/** Whether a plain `allow` on this approveCache key (`<worker>:<tool>`) is remembered for the
- *  rest of that worker's life, or asked again next time.
- *
- *  Which tools those are is the agent's own business — it names them in its manifest
- *  (`supervise.sticky`), because it is the only one that knows what it calls the tool that
- *  writes a file. An agent that names none is asked every time; a shell tool is refused
- *  there, since every command it runs is a different action.
- *
- *  The worker id contains no ":" (it is `tile-<kind>-<ts>`), so the tool is the last segment;
- *  case is normalized (one agent says "Edit", another "edit"). */
-export function stickyAllow(cacheKey: string, agentId: string | undefined): boolean {
-  const sticky = agentId ? agentById(agentId)?.superviseSticky : undefined;
-  if (!sticky?.length) return false;
-  return sticky.includes((cacheKey.split(":").pop() ?? "").toLowerCase());
-}
 
 /** Whether a provider can be supervised is declared in its catalog def
  *  (`caps.supervise`). A runtime with no permission system of its own has
@@ -499,7 +484,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         const summary = summarizeTool(tool, inp);
         const banner =
           `\n[hive] APPROVAL — worker ${labelOf(worker)} wants to run ${tool}: ${summary}\n` +
-          `Reply: hive ctl approve ${reqId} allow|deny|always|never\n`;
+          `Reply: hive ctl approve ${reqId} allow|deny|always|never  (allow = this call; always = this tool, for this worker)\n`;
         // Surface the pause in the UI: this worker is now waiting on its parent.
         deps.awaitingApproval(worker, true);
         return await new Promise((resolve) => {
@@ -548,16 +533,6 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         else throw new HcpError("BAD_REQUEST", "decision must be allow | deny | always | never");
         if (decision === "always") approveCache.set(pend.cacheKey, "allow");
         if (decision === "never") approveCache.set(pend.cacheKey, "deny");
-        // A plain `allow` STICKS for the file-touching tools. Approving "edit" once
-        // and then being re-asked on every subsequent edit stalls the worker ~9min
-        // per file and burns a parent turn each time — the supervisor ends up
-        // rubber-stamping, which is worse than not supervising at all.
-        // BASH IS EXEMPT: every command is a different action ("ls" ≠ "rm -rf /"),
-        // so caching an allow there would hand the worker a blanket shell. Bash
-        // (and anything else) still re-asks unless the parent says `always`.
-        if (decision === "allow" && stickyAllow(pend.cacheKey, providerOf(pend.worker))) {
-          approveCache.set(pend.cacheKey, "allow");
-        }
         clearTimeout(pend.timer);
         pendingApprovals.delete(reqId);
         deps.awaitingApproval(pend.worker, false); // resolved → clear the "waiting" status

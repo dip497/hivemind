@@ -40,10 +40,6 @@ spawn:
 install:
   url: https://github.com/earendil-works/pi/blob/main/packages/coding-agent/README.md
   command: "npm install -g --ignore-scripts @earendil-works/pi-coding-agent"
-supervise:
-  # One decision covers the rest for the tools that touch files; a shell tool never, since
-  # every command it runs is its own action.
-  sticky: [edit, write, read]
 detect:
   rules:
   - when:
