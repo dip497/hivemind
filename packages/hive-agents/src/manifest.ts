@@ -34,9 +34,6 @@ export interface ManifestIcon {
   shapes: IconShape[];
 }
 
-/** `supervise.sticky`: the agent's own file-touching tool names (see AgentProviderDef). */
-export interface ManifestSupervise { sticky?: string[] }
-
 export interface ManifestSpawn {
   args?: string[];
   /** Tile label; `{n}` is the spawn ordinal, `{label}` the provider label. */
@@ -62,7 +59,6 @@ export interface AgentManifest {
   caps: AgentCapabilities;
   icon?: ManifestIcon;
   spawn?: ManifestSpawn;
-  supervise?: ManifestSupervise;
   options?: AgentOption[];
   install?: AgentInstall;
   /** The oldest Hivemind that can run this manifest: the catalog lists it, so an older app
@@ -536,17 +532,6 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
     }
   }
 
-  if (m.supervise !== undefined) {
-    const sv = m.supervise as Record<string, unknown>;
-    req(sv && typeof sv === "object" && !Array.isArray(sv), "supervise must be an object");
-    req(sv.sticky === undefined || strArray(sv.sticky), "supervise.sticky must be a string array");
-    // A shell is never one decision: each command it runs is a different action.
-    for (const t of (sv.sticky as string[] | undefined) ?? []) {
-      req(!["bash", "shell", "sh", "exec", "run"].includes(t.toLowerCase()),
-        `supervise.sticky must not carry a shell tool ('${t}'): each command it runs is its own decision`);
-    }
-  }
-
   const aliases = m.aliases;
   req(aliases === undefined || (Array.isArray(aliases) && aliases.every((a) => typeof a === "string")),
     "aliases must be a string array");
@@ -592,7 +577,6 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
     ...(m.spawn?.args ? { defaultArgs: m.spawn.args } : {}),
     ...(m.spawn?.titles ? { titles: m.spawn.titles } : {}),
     ...(dismiss.length ? { dismiss } : {}),
-    ...(m.supervise?.sticky?.length ? { superviseSticky: m.supervise.sticky.map((t) => t.toLowerCase()) } : {}),
     enabled: m.enabled ?? false,
     caps: m.caps,
     ...(detect ? { detect } : {}),

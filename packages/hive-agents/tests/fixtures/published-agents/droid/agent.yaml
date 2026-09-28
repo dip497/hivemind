@@ -51,10 +51,6 @@ options:
 install:
   url: https://docs.factory.ai/cli/getting-started/quickstart
   command: "curl -fsSL https://app.factory.ai/cli | sh"
-supervise:
-  # One decision covers the rest for the tools that touch files; a shell tool never, since
-  # every command it runs is its own action.
-  sticky: [edit, write, read]
 detect:
   rules:
   - when:
