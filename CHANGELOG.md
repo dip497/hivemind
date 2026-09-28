@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Codex tiles: the wheel scrolls them again (its fullscreen transcript took the wheel and did nothing with it — tiles now start in its scrollback mode, `/tui` switches back), a tile no longer announces "needs your input" every few seconds while it works (what it prints is no longer read as what it asks — only its own chooser and footer are), and its first-run hook review is recognised as waiting for you.
+- A task queued for an agent is held until the agent is at its own prompt: a first run that opens a trust or update chooser used to have the task typed into it, which picked an option instead of starting the work.
 - Fixed: a task given to an agent when it starts — or any message sent to one with `hive ctl send`, a worker's report, an approval request — is now handed to its TUI as a paste instead of as keystrokes. A multi-line task used to submit its first line on its own, leaving the rest as a draft, and an agent that guards against input it cannot parse in time exited instead of starting.
 - Fixed: a terminal restored after a restart took no mouse at all — clicking and scrolling inside an agent did nothing, while typing and its output kept working, until the tile was resized. The replay restored the mouse tracking an agent had turned on but not the coordinate encoding it asked for, so its clicks were answered in a dialect it does not read.
 - Machines nothing runs on sit at the foot of the Layers rail instead of after the tiles, so the last of them is never below the fold: the tile list scrolls above them, and the machines scroll inside their own block (at most 40% of the rail).
