@@ -1,7 +1,11 @@
 # Multiplayer, other devices, phone — design
 
-**Status:** proposed, rev 1. **Date:** 2026-09-28. **Supersedes:** the transport and phone
+**Status:** proposed, rev 2. **Date:** 2026-09-28. **Supersedes:** the transport and phone
 sections of `remote-machines-2026-09-11.md` (§7b, §12c). Its ssh path stays.
+
+**Rev 2 decisions (2026-09-28):** we run our own relay, address lookup and push server
+(§12); a workspace outlives its host (§5.7–5.9); sticky notes and other board objects ship in
+the first multiplayer milestone (§4.2 G).
 
 Three features, built in this order, on one networking choice:
 
@@ -28,6 +32,9 @@ Phase 1 starts until Phase 0 is done.
 | D5 | **Permissions live outside the document**, in the host's local ACL, and are enforced in hive-net and main, never in a renderer. | Guests can edit the document, so they could otherwise edit their own role. |
 | D6 | **Terminals stay on the machine that runs them.** The daemon is unchanged as the owner; it gains viewers over the network. | Already true for ssh machines (`remote-machines`, validated two-way on real hosts). |
 | D7 | **One input holder per terminal** (an input lease); everyone else watches. | Two people typing into one agent corrupts its input. VS Code Live Share and upterm reach the same rule. |
+| D8 | **We run our own infrastructure:** iroh relays, address lookup (pkarr DNS) and a push server. No third-party relay or push service carries hivemind traffic. | Decided 2026-09-28. Public n0 relays are dev-only; a push relay must hold our APNs/FCM credentials anyway. |
+| D9 | **A workspace outlives its host.** Each of the owner's devices keeps a full replica of the document and the access list; hosting can move to an always-on machine (`hive host`), or any of the owner's devices can take it over. | Decided 2026-09-28. The CRDT makes failover a merge, not a recovery. |
+| D10 | **Board objects** — sticky notes, checklists, text labels, arrows — live in the shared document from the first multiplayer milestone. | Decided 2026-09-28. A shared board without shared notes is a screen share. |
 
 Rejected: Tailcat (point-to-point pipes, no multiplexing or datagrams, Go-only, v0.x);
 Yjs (no movable tree; no native Swift core); a central server of our own (cost, accounts,
@@ -59,15 +66,19 @@ Facts from the code, 2026-09-28:
 Each refactor stands alone, ships behind no flag, and leaves the single-user app working
 exactly as today. They are ordered by dependency.
 
-### R1. Workspace store in main
+### R1. Workspace store out of the renderer, into a headless package
 
 - **What.** Move the core layout blob and the per-view layout blobs out of renderer
-  `localStorage` into a `WorkspaceStore` in main: one writer, change events, a snapshot
-  per repo on disk (`<userData>/workspaces/<repo-hash>.json`). The renderer mirrors it
-  over IPC and sends edits as operations (`frame.move`, `tile.rename`, …), not whole blobs.
+  `localStorage` into a `WorkspaceStore`: one writer, change events, a snapshot per repo on
+  disk (`<userData>/workspaces/<repo-hash>.json`). The renderer mirrors it over IPC and sends
+  edits as operations (`frame.move`, `tile.rename`, …), not whole blobs.
+- **It lives in a package, not in Electron main.** `packages/workspace-host` holds the store
+  (and, later, intents R7 and the access list R11). Electron main embeds it; the `hive`
+  binary runs it headless for an always-on host (R14). Nothing in the package imports
+  Electron.
 - **Files.** `canvas-persistence.ts`, `view-layout-store.ts`, `canvas-layout.ts`,
   `windows-layout.ts`, `Workspace.tsx` (state becomes a mirror), `main/index.ts`, new
-  `main/workspace-store.ts`, `shared/ipc.ts`, `preload/index.ts`.
+  `packages/workspace-host/src/store.ts`, `shared/ipc.ts`, `preload/index.ts`.
 - **Migration.** On first run, main reads each repo's localStorage blobs once (sent by the
   renderer), writes them to the store and marks them migrated. The blobs stay as a
   fallback for one release.
@@ -79,20 +90,32 @@ exactly as today. They are ordered by dependency.
 ### R2. The store becomes a Loro document
 
 - **What.** `WorkspaceStore` keeps its API and is backed by one `LoroDoc` per workspace.
-  Schema in §8. Local undo moves to Loro's `UndoManager` (this peer's edits only).
-- **Files.** `main/workspace-store.ts`, new `packages/workspace-doc` (schema, typed
-  accessors, validation, shared with the phone later).
+  Schema in §8, including board objects (`objects`) from the start, so M1 needs no schema
+  migration. Local undo moves to Loro's `UndoManager` (this peer's edits only).
+- **Files.** `packages/workspace-host/src/store.ts`, new `packages/workspace-doc` (schema,
+  typed accessors, validation, shared with the phone later).
 - **Done when.** Snapshot + update export/import round-trip tests; two in-process docs
   editing concurrently converge (fuzz test); undo only reverts local edits.
 
-### R3. Identity
+### R3. Identity: devices, people, workspaces
 
-- **What.** A **device** identity: an Ed25519 key generated once, kept in the OS keychain,
-  whose public half is the iroh `EndpointId`. A **person** profile: display name and
-  colour, set on first use (prefilled from git config). Every document edit carries the
-  person's peer id; every PTY write carries it too (R4).
-- **Files.** new `main/identity.ts`, `settings-store.ts` (profile), Settings UI panel.
-- **Done when.** The key survives restarts and upgrades; the profile shows in Settings.
+- **What.**
+  - **Device key.** Ed25519, generated once per machine, kept in the OS keychain (a 0600
+    file on a headless server). Its public half is the iroh `EndpointId`.
+  - **Person key.** Ed25519, generated on a person's first device and copied to their other
+    devices during self-pairing (§5.2), over the end-to-end encrypted pairing channel. It
+    signs a **device certificate** for each of that person's devices ("device X belongs to
+    person P"), so roles are granted to people and follow them to any of their devices.
+  - **Workspace key.** Derived per workspace from the owner's person key
+    (`HKDF(person secret, "hive-workspace" ‖ workspaceId)`), so every one of the owner's
+    devices can derive it and nobody else can. It signs the workspace's **host record**
+    (which machine hosts it now; §5.8).
+  - **Profile.** Display name and colour, set on first use (prefilled from git config).
+    Every document edit carries the person's peer id; every PTY write carries it too (R4).
+- **Files.** new `packages/workspace-host/src/identity.ts`, `main/keychain.ts`,
+  `settings-store.ts` (profile), Settings → Profile panel.
+- **Done when.** Keys survive restarts and upgrades; a device certificate verifies; the same
+  workspace key is derived on two devices of one person and on no one else's.
 
 ### R4. Daemon: size authority, input lease, attribution
 
@@ -140,7 +163,8 @@ exactly as today. They are ordered by dependency.
   (`can(actor, intent)`), an audit record, and an idempotency id (first answer wins, as
   in `remote-machines` §12c). The renderer, HCP and (later) network peers all go through
   it.
-- **Files.** new `main/intents.ts`, `main/hcp/methods.ts`, IPC handlers in `main/index.ts`.
+- **Files.** new `packages/workspace-host/src/intents.ts` (runs in Electron main and in
+  `hive host`), `main/hcp/methods.ts`, IPC handlers in `main/index.ts`.
 - **Done when.** Every side-effecting IPC and HCP method is routed through it; the audit
   log (`<userData>/audit.jsonl`) records actor, intent, outcome.
 
@@ -179,11 +203,16 @@ exactly as today. They are ordered by dependency.
 
 ### R11. Access list and audit
 
-- **What.** The host's ACL: `endpointId → { person, role, grantedAt, expires? }`, stored
-  locally (`<userData>/access.json`, 0600), never in the shared document. Roles in §6.
-  Revoking closes live connections.
-- **Files.** new `main/access.ts`, `crates/hive-net` (reads it), Settings → People panel.
-- **Done when.** A revoked peer is disconnected within a second and cannot reconnect.
+- **What.** The access list per workspace: `person key → { role, grantedAt, expires?,
+  devices: [device certificates seen] }`. Each entry is signed by the owner's person key,
+  so any of the owner's devices can verify it when it becomes host. It is replicated
+  **only among the owner's own devices** (a separate, owner-only Loro document), never in
+  the shared workspace document and never sent to guests. Roles in §6. Revoking closes
+  live connections on the current host within a second.
+- **Files.** new `packages/workspace-host/src/access.ts`, `crates/hive-net` (reads it for
+  `after_handshake`), Settings → People panel.
+- **Done when.** A revoked peer is disconnected within a second and cannot reconnect; a
+  grant made on one of the owner's devices is enforced by another after a host move.
 
 ### R12. View protocol 1.5
 
@@ -204,9 +233,37 @@ exactly as today. They are ordered by dependency.
 - **Done when.** Relay reachable from both regions; hive-net uses it by default; a custom
   relay can be set in Settings.
 
-**Order:** R1 → R2; R3 in parallel; R4 in parallel; R5 after R1; R6 after R5; R7 after R5;
-R8 after R7; R9 any time before Phase 2; R10–R11 after R3; R12 any time; R13 before
-Phase 1 ships.
+### R14. Headless host: `hive host`
+
+- **What.** The `hive` binary gains a service mode that runs, without Electron: the PTY
+  daemon (as today's standalone `hive daemon`), `hive-net`, and `packages/workspace-host`
+  (store, intents, access list, status store, HCP for agents running on it). Installed as a
+  systemd/launchd user service, like Zeron's `daemon install`. It pairs as one of your
+  devices (§5.2) from its terminal: `hive host pair` prints a QR and words, or accepts the
+  words shown by your laptop.
+- **Files.** `apps/cli/src/commands/host.ts`, `apps/cli/src/commands/daemon.ts`,
+  `packages/workspace-host`, `crates/hive-net`, `install.sh`, `release.yml` (Linux x64/arm64
+  assets are the main target; servers are usually Linux).
+- **Done when.** A Linux VPS runs `hive host` after a reboot with no desktop session; a
+  laptop pairs with it and opens a workspace hosted there; agents started in its frames
+  keep running with the laptop closed.
+
+### R15. The canvas renders board objects
+
+- **What.** The canvas node builder (`canvas-node-build.ts`) and node types
+  (`canvas-nodes.tsx`, today `frame` and `tile`) gain a third kind, **board object**, drawn
+  by plain React (no TileHost surface): sticky note, checklist, text label, arrow. Text
+  inside an object is edited in place; while it has focus, the canvas single-key shortcuts
+  (`1`–`7`) do not fire (`dom-focus.ts`). Objects nest in frames like tiles and move with
+  them.
+- **Files.** `canvas-node-build.ts`, `canvas-nodes.tsx`, new `board-objects/*.tsx`,
+  `useCanvasShortcuts.ts`, `dom-focus.ts`, `packages/workspace-doc` (object schema).
+- **Done when.** Single user, no network: create, edit, resize, nest, undo, persist and
+  delete each object kind; e2e covers typing in a note without triggering shortcuts.
+
+**Order:** R1 → R2 → R15; R3 in parallel; R4 in parallel; R5 after R1; R6 after R5; R7
+after R5; R8 after R7; R9 any time before Phase 2; R10–R11 after R3; R12 any time; R13
+before Phase 1 ships; R14 after R1, R7, R10 and R11.
 
 ---
 
@@ -290,8 +347,34 @@ watch them live, and type into one when you hand them the keyboard.
    daemon is alive (it outlives the window), and guests see them again when the host is
    back.
 
+**G. Board objects together (sticky notes, checklists, text, arrows)**
+1. **Add.** Toolbar → **Board** menu, or keys on the canvas: `8` sticky note, `9`
+   checklist (next to today's `1`–`7` tools); Text and Arrow from the menu. The object
+   appears at the cursor, already in edit mode, tinted with the author's colour for a
+   moment so others see who added it.
+2. **Write together.** Everyone can type in the same note at once. Each person's caret and
+   selection show inside the note in their colour with their name; edits merge
+   character by character (Loro text), never "someone else is editing".
+3. **Checklists.** `Enter` adds an item, `Space` on an item ticks it, drag reorders.
+   Ticks are live for everyone, and the item shows who ticked it on hover.
+4. **Arrows.** Hover the edge of any tile, frame or object → a handle; drag to another →
+   the arrow snaps and follows when either end moves. Double-click an arrow to label it.
+   Arrows between a note and an agent tile are how people say "this note is about that
+   agent".
+5. **Arrange.** Drop an object into a frame and it moves with the frame. Resize, recolour
+   (six note colours), delete (`Backspace`), duplicate (`⌘D`). Undo (`⌘Z`) undoes only your
+   own changes, including text you typed.
+6. **Roles.** *Can view* sees objects and cursors but cannot edit; *Can edit board* and
+   above can.
+7. **Where they show.** The Canvas view draws objects. Other views (Windows, Queue, Tiled,
+   community views) ignore them in M1; the phone shows notes read-only in its *Board* tab.
+8. **Empty state.** A new shared workspace offers "Add a note to say what this board is
+   for" once, dismissible.
+9. Not in M1: images and files (need blob transfer), shapes, freehand drawing, comments
+   on objects, agents writing notes (`hive ctl note`).
+
 **Keys:** `⌘⇧S` share · `⌘⇧K` take keyboard back · `F` on an avatar to follow · `Esc`
-stops following.
+stops following · `8` note · `9` checklist.
 
 ### 4.3 How it works
 
@@ -300,8 +383,9 @@ stops following.
   updates (`export({mode:"update", from: vv})`) over one reliable stream. The host
   validates each guest update against the guest's role (a "Can view" guest's updates are
   dropped) before applying and rebroadcasting.
-- **Presence:** Loro `EphemeralStore` (cursor, camera, selection, typing-in), throttled to
-  50 ms, sent as datagrams; receivers interpolate. Never stored.
+- **Presence:** Loro `EphemeralStore` (cursor, camera, selection, typing-in, and the caret
+  inside a board object as a Loro `Cursor`, which stays on the right character while others
+  type), throttled to 50 ms, sent as datagrams; receivers interpolate. Never stored.
 - **Terminals:** a guest subscribes to a session; the host opens one uni stream per
   subscribed session carrying daemon `data`/`resync`, and an input stream when the guest
   holds the lease (R4). Only visible tiles are subscribed (the existing interest rule).
@@ -311,6 +395,8 @@ stops following.
 
 - Two people on different networks (one behind a mobile hotspot) edit one board with
   cursors under 150 ms p95 on a direct link, 300 ms through the relay.
+- Three people type in one sticky note at once for a minute; all three end with the same
+  text and nobody's keystrokes are lost (fuzz test plus a live check).
 - 100 tiles, 5 people, 10 visible terminals streaming: host CPU under 20% above
   single-user.
 - Handover, revoke and reconnect journeys pass as e2e tests with two app instances.
@@ -338,7 +424,9 @@ each one's terminals stream from where they run.
    code, valid for 5 minutes.
 2. On device B: Settings → Devices → **Pair with a device** → scan or type the words.
 3. Both show: "Pair *Adarsh's MacBook* with *Adarsh's desktop*? Both will be able to
-   see and control everything on each other." **Pair**.
+   see and control everything on each other." **Pair**. Behind the scenes the new device
+   receives your person key and a device certificate (R3), so it is "you" everywhere, and
+   starts replicating the workspaces and access lists you own.
 4. Device B appears under **Machines** on A (and vice versa) with a "Your device" badge.
 5. Unpair: Devices → the device → **Unpair**. Both sides forget each other immediately.
 
@@ -395,6 +483,82 @@ granted it.
   agents; the host cannot type there without the guest's grant.
 - Hand off by bundle lands a branch in the host's repo and opens a Diff tile.
 
+### 5.7 UX journey — keep a workspace alive when your laptop sleeps
+
+Terms: the **host** holds the document and the access list and serves everyone; an
+**executor** runs a frame's terminals. They can be different machines.
+
+**A. Set up an always-on machine (once)**
+1. On a server, VPS or home box: `curl -fsSL https://hivemind.griiken.com/install.sh | sh`,
+   then `hive host pair`. It prints a QR code and six words.
+2. On the laptop: Settings → Devices → **Pair with a device** → the words. The server
+   appears under Devices with an **Always on** badge and under Machines.
+3. Errors: server unreachable → "Can't reach *home-server*. Is `hive host` running?" with
+   the command to check (`hive host status`).
+
+**B. Move hosting**
+1. Workspace menu (or Share panel) → **Hosting**: "Hosted on *Adarsh's MacBook*. It goes
+   offline when this laptop sleeps."
+2. **Move to an always-on machine** → pick *home-server* → confirm: "The board, notes,
+   people and invite links move to home-server. Agents keep running where they are."
+3. A short progress sheet: *Copying board* → *Copying people* → *Telling everyone*. Guests
+   see a one-line toast: "This workspace moved to home-server" and reconnect by themselves.
+4. The Hosting row now reads "Hosted on *home-server* · always on".
+
+**C. Where agents run after the move**
+1. Existing frames keep their executor. A frame on the laptop shows "Runs on Adarsh's
+   MacBook"; when the laptop sleeps it turns grey ("asleep"), and everyone else can still
+   see the board and every other frame.
+2. The move sheet offers **Run new frames on home-server by default** (on by default).
+3. A running agent cannot move between machines. Its frame menu offers **Continue on
+   home-server**: if the agent can resume sessions and the repo exists there, a new tile
+   starts on the server resuming that session; otherwise the menu explains why not.
+
+**D. Laptop asleep, work goes on**
+1. From the phone or another laptop: the workspace opens (it is hosted on the server),
+   agents on the server keep working, "needs you" still arrives.
+2. The laptop wakes: its frames come back online; its local edits made offline merge in.
+
+**E. The host dies (or you never moved it)**
+1. If the host is unreachable for 2 minutes, your other devices show: "*home-server* isn't
+   responding. **Host from this device**?" (only on the owner's devices).
+2. Taking over publishes a new host record; guests reconnect to it; the board is the last
+   synced copy plus any offline edits, merged.
+3. When the old host returns, it sees a newer host record, becomes an ordinary replica and
+   merges what it had. Nothing is lost that either side saved.
+
+**F. Move back**
+Hosting → **Move to** *this laptop* (or any of your devices). Same sheet.
+
+### 5.8 How hosting moves
+
+- **Workspace id and host record.** Every workspace has a random `workspaceId` and an owner
+  (a person key). The current host is named by a **host record**
+  `{workspaceId, hostEndpointId, seq}` signed by the workspace key (R3) and published
+  through our own address-lookup service (pkarr records on our DNS server, §12) under the
+  workspace public key. Invites carry the workspace public key, so guests can always find
+  the current host.
+- **Replicas.** Each of the owner's devices keeps the workspace document and the owner-only
+  access document in sync while online. Guests keep a document replica for offline viewing
+  but never the access list, and can never host.
+- **Move.** The old host freezes writes for a moment, syncs the new host to its latest
+  version, publishes the new record (`seq + 1`), sends connected peers `moved{record}`,
+  and becomes a replica. Peers verify the record's signature before following it.
+- **Take-over.** Any owner device publishes `seq + 1` from its replica. Two devices taking
+  over at once: the higher `seq` wins, ties broken by endpoint id; the loser becomes a
+  replica. The CRDT merges their edits.
+- **Terminals are not part of hosting.** They stay with their executor's daemon; a new host
+  learns executors from frame records and connects to them.
+
+### 5.9 Done when (hosting)
+
+- A workspace moves from a laptop to a VPS while two guests are connected; both reconnect
+  in under 10 s without re-inviting.
+- With the laptop off, a phone and a guest keep working on the board and on the VPS's
+  agents.
+- Pull the VPS's network for 5 minutes: the laptop takes over; when the VPS returns it
+  becomes a replica and both sides' edits are present.
+
 ---
 
 ## 6. Roles
@@ -436,14 +600,23 @@ speaks.
 
 ```
 root: Map
-  meta: Map        { id, name, hostMachine, schema: 1 }
+  meta: Map        { workspaceId, workspacePublicKey, owner (person key), name, schema: 1 }
   machines: Map    machineId → Map { endpointId, label, owner }
   frames: Tree     node data: Map { title, color, machine, path, branch, worktreePath, rect{x,y,w,h}, z }
   tiles: Map       tileId → Map { kind, frame, name, cmd, args, session, pinned, pinAnchor, created{by, at} }
+  objects: Map     objectId → Map {
+                     kind: "note" | "checklist" | "text" | "arrow",
+                     frame?, rect{x,y,w,h}, z, color, created{by, at},
+                     text: LoroText                                   (note, text, checklist title)
+                     items: MovableList<Map { done, doneBy?, text: LoroText }>   (checklist)
+                     from, to: { id, side } , label: LoroText         (arrow; ends are tiles, frames or objects)
+                   }
   order: MovableList   tile ids for Windows-view tab order
   views: Map       viewId → Map (shared view layout, e.g. canvas positions/sizes)
-  notes: Map       noteId → LoroText   (future sticky notes)
 ```
+
+The **host record** is not in this document; it is published separately and signed by the
+workspace key (§5.8). The **access list** is a separate owner-only document (R11).
 
 - Per-person view state (camera, selection, collapsed panels) is **presence or local**,
   never in the document.
@@ -518,8 +691,17 @@ agents.
   internals are never served; ignored files (like `.env`) are refused unless the owner
   turns on "share ignored files" per frame.
 - **Audit:** `<userData>/audit.jsonl` on each machine: actor, intent, target, outcome.
-- **Keys:** device key in the OS keychain; losing a device → unpair it from any other
-  device of yours.
+- **Keys:** device key in the OS keychain (a 0600 file under `hive host`); losing a device
+  → unpair it from any other device of yours, which adds its certificate to a revocation
+  list in the owner-only document; hosts refuse it from then on.
+- **Person key compromise** (a device holding it is stolen and not merely lost): rotate the
+  person key from a remaining device. This re-signs your device certificates and access
+  entries and derives new workspace keys, so existing invite links stop working and guests
+  need new ones. Documented as a deliberate, rare procedure, not automated.
+- **Host records** are only followed when signed by the workspace key and newer (`seq`)
+  than the last one seen; a stale or forged record cannot redirect guests.
+- **Only the owner's devices can host.** A guest's machine can be an executor for its own
+  frames (§5.4) but never holds the document authority or the access list.
 
 ---
 
