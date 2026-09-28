@@ -1172,7 +1172,7 @@
           "--permission-mode",
           "plan"
         ],
-        "label": "claude #2 · plan"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1183,7 +1183,7 @@
           "--permission-mode",
           "plan"
         ],
-        "label": "claude #2 · plan"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1196,7 +1196,7 @@
           "--model",
           "opus"
         ],
-        "label": "claude #2 · plan"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1209,7 +1209,7 @@
           "--model",
           "gpt-5"
         ],
-        "label": "claude #2 · plan"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1219,7 +1219,7 @@
           "--permission-mode",
           "acceptEdits"
         ],
-        "label": "claude #2 · acceptEdits"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1230,7 +1230,7 @@
           "--permission-mode",
           "acceptEdits"
         ],
-        "label": "claude #2 · acceptEdits"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1243,7 +1243,7 @@
           "--model",
           "opus"
         ],
-        "label": "claude #2 · acceptEdits"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1256,7 +1256,7 @@
           "--model",
           "gpt-5"
         ],
-        "label": "claude #2 · acceptEdits"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1265,7 +1265,7 @@
         "args": [
           "--dangerously-skip-permissions"
         ],
-        "label": "claude #2 · bypassPermissions"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1275,7 +1275,7 @@
         "args": [
           "--dangerously-skip-permissions"
         ],
-        "label": "claude #2 · bypassPermissions"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1287,7 +1287,7 @@
           "--model",
           "opus"
         ],
-        "label": "claude #2 · bypassPermissions"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1299,7 +1299,7 @@
           "--model",
           "gpt-5"
         ],
-        "label": "claude #2 · bypassPermissions"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1309,7 +1309,7 @@
           "--permission-mode",
           "ask"
         ],
-        "label": "claude #2 · ask"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1320,7 +1320,7 @@
           "--permission-mode",
           "ask"
         ],
-        "label": "claude #2 · ask"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1333,7 +1333,7 @@
           "--model",
           "opus"
         ],
-        "label": "claude #2 · ask"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1346,7 +1346,7 @@
           "--model",
           "gpt-5"
         ],
-        "label": "claude #2 · ask"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1356,7 +1356,7 @@
           "--permission-mode",
           "yolo"
         ],
-        "label": "claude #2 · yolo"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1367,7 +1367,7 @@
           "--permission-mode",
           "yolo"
         ],
-        "label": "claude #2 · yolo"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1380,7 +1380,7 @@
           "--model",
           "opus"
         ],
-        "label": "claude #2 · yolo"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1393,7 +1393,7 @@
           "--model",
           "gpt-5"
         ],
-        "label": "claude #2 · yolo"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1403,7 +1403,7 @@
           "--permission-mode",
           "high"
         ],
-        "label": "claude #2 · high"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1414,7 +1414,7 @@
           "--permission-mode",
           "high"
         ],
-        "label": "claude #2 · high"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1427,7 +1427,7 @@
           "--model",
           "opus"
         ],
-        "label": "claude #2 · high"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1440,7 +1440,7 @@
           "--model",
           "gpt-5"
         ],
-        "label": "claude #2 · high"
+        "label": "claude #2"
       }
     ],
     "cline": [

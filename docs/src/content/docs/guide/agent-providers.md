@@ -54,7 +54,6 @@ caps:
 spawn:
   args: ["--no-color"]           # always passed
   label: "acme #{n}"             # tile name; {n} is the tile number
-  labelMode: " · {mode}"         # appended when a mode is set
   titles: ["acme — {task}", "acme"]  # window titles: {task} names the tile, a match without it is ignored
 
 options:                         # what Settings lets you choose for this agent

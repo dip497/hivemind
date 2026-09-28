@@ -39,7 +39,6 @@ export interface ManifestSpawn {
   /** Tile label; `{n}` is the spawn ordinal, `{label}` the provider label. */
   label?: string;
   /** Appended to the label when a non-default mode is set. `{mode}` interpolates. */
-  labelMode?: string;
   /** Window titles this CLI sets, as literal templates: `{task}` is the part worth showing,
    *  `{any}` matches anything. A title matching a template without `{task}` is ignored. */
   titles?: string[];
@@ -516,7 +515,6 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
     const sp = m.spawn as Record<string, unknown>;
     req(sp.args === undefined || strArray(sp.args), "spawn.args must be a string array");
     req(sp.label === undefined || typeof sp.label === "string", "spawn.label must be a string");
-    req(sp.labelMode === undefined || typeof sp.labelMode === "string", "spawn.labelMode must be a string");
     req(sp.titles === undefined || strArray(sp.titles), "spawn.titles must be a string array");
   }
 
@@ -575,14 +573,8 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
 
   if (m.spawn) {
     if (m.spawn.label) {
-      const { label: tpl, labelMode } = m.spawn;
-      def.spawnLabel = (n, { mode }) => {
-        let out = tpl.replace(/\{n\}/g, String(n)).replace(/\{label\}/g, m.label);
-        if (labelMode && mode && mode !== "default") {
-          out += labelMode.replace(/\{mode\}/g, mode);
-        }
-        return out;
-      };
+      const tpl = m.spawn.label;
+      def.spawnLabel = (n) => tpl.replace(/\{n\}/g, String(n)).replace(/\{label\}/g, m.label);
     }
   }
   return def;
