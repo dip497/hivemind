@@ -7,11 +7,22 @@ import { DOWNLOADS, downloadFor } from "./downloads.mjs";
 
 test("every route points at a name the release publishes, with no version in it", () => {
   const workflow = readFileSync(new URL("../.github/workflows/release.yml", import.meta.url), "utf8");
+  // The list the release uploads, not the whole workflow: a name that is only written by the
+  // step that renames the builds is a file nobody ever gets (that shipped once already).
+  const lines = workflow.split("\n");
+  const start = lines.findIndex((l) => /^\s*files:\s*\|\s*$/.test(l));
+  assert.ok(start >= 0, "the release step still lists its files");
+  const indent = lines[start].search(/\S/);
+  const uploads = [];
+  for (const l of lines.slice(start + 1)) {
+    if (l.trim() && l.search(/\S/) <= indent) break;
+    if (l.trim()) uploads.push(l.trim());
+  }
   for (const [key, url] of Object.entries(DOWNLOADS)) {
     if (key === "notes") continue;
     const asset = url.split("/").pop();
     assert.ok(!/\d+\.\d+\.\d+/.test(asset), `${key} carries a version: ${asset}`);
-    assert.ok(workflow.includes(asset), `the release workflow does not publish ${asset}`);
+    assert.ok(uploads.some((u) => u.endsWith(`/${asset}`)), `the release does not upload ${asset}`);
     assert.match(url, /^https:\/\/github\.com\/dip497\/hivemind\/releases\/latest\/download\//);
   }
 });
