@@ -510,6 +510,18 @@ importers:
 
   packages/tsconfig: {}
 
+  packages/workspace-host:
+    devDependencies:
+      '@hivemind/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      '@types/node':
+        specifier: 'catalog:'
+        version: 22.19.19
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
 packages:
 
   '@antfu/install-pkg@2.1.0':

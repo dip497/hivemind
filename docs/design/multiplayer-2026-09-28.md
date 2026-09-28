@@ -83,8 +83,10 @@ exactly as today. They are ordered by dependency.
 
 - **What.** Move the core layout blob and the per-view layout blobs out of renderer
   `localStorage` into a `WorkspaceStore`: one writer, change events, a snapshot per repo on
-  disk (`<userData>/workspaces/<repo-hash>.json`). The renderer mirrors it over IPC and sends
-  edits as operations (`frame.move`, `tile.rename`, …), not whole blobs.
+  disk (`<userData>/workspaces/<repo-hash>.json`). The renderer reads it synchronously over
+  IPC (as `settingsSync` already does) and writes debounced snapshots of the same shapes it
+  saves today. Edits as operations (`frame.move`, `tile.rename`, …) come with R2, where each
+  one becomes a Loro change; doing operations twice would be wasted work.
 - **It lives in a package, not in Electron main.** `packages/workspace-host` holds the store
   (and, later, intents R7 and the access list R11). Electron main embeds it; the `hive`
   binary runs it headless for an always-on host (R14). Nothing in the package imports

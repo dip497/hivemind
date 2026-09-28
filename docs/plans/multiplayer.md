@@ -38,7 +38,7 @@ Legend: ☐ not started · ◐ in progress · ☑ done (its "Done when" passes)
 
 | # | Refactor | Status | Notes |
 |---|---|---|---|
-| R1 | Workspace store out of the renderer, into `packages/workspace-host` | ◐ | Step 1: the store package with unit tests. Step 2: main embeds it, IPC mirror, one-time localStorage migration. Step 3: view layouts. Step 4: HCP `tile.list` from main. |
+| R1 | Workspace store out of the renderer, into `packages/workspace-host` | ◐ | ☑ Step 1: `WorkspaceStore` (`packages/workspace-host/src/store.ts`) — sync reads, debounced atomic writes, one-time legacy import, change events with origin; 11 bun tests. ☐ Step 2: main embeds it (`<userData>/workspaces/`), preload `workspaceLoadSync`/`workspaceSetCore`/`workspaceSetView`/`workspaceImport`, `canvas-persistence.ts` and `view-layout-store.ts` read/write through it with the one-time localStorage import; update `tests/e2e/shipped-persistence.spec.ts` and `browser-plugin.spec.ts`, which read localStorage directly; add `@hivemind/workspace-host` to `BUNDLE_INTERNAL` in `electron.vite.config.ts`. ☐ Step 3: HCP `tile.list` answered from main's store. ☐ Step 4: done-when checks (e2e green; restart with localStorage cleared). |
 | R2 | Store backed by a Loro document (schema incl. board objects) | ☐ | After R1 |
 | R3 | Identity: device key, person key, workspace key, profile | ☐ | |
 | R4 | Daemon: size announcements, input lease, write attribution | ☐ | |
@@ -85,3 +85,5 @@ Legend: ☐ not started · ◐ in progress · ☑ done (its "Done when" passes)
 
 - 2026-09-28 — design written and accepted (rev 1–4); research notes saved; this tracker
   added; R1 started.
+- 2026-09-28 — R1 step 1: `@hivemind/workspace-host` with `WorkspaceStore` and its tests.
+  Design R1 clarified: whole snapshots in R1, edit operations with R2.
