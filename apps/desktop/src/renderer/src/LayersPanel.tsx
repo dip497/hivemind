@@ -623,7 +623,6 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
                 {g.frames.map((f) => renderFrameGroup(f, 0))}
               </section>
             ))}
-            <IdleMachines groups={machineGroups.filter((g) => g.key !== "local" && g.frames.length === 0)} />
           </>
           : topFrames.map((f) => renderFrameGroup(f, 0))}
         {looseTiles.length > 0 && (
@@ -639,6 +638,9 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
           </div>
         )}
       </div>
+      {/* Machines nothing runs on sit at the foot of the rail, not after the tiles: a row of
+          them below the fold is a row nobody scrolls to. The list scrolls inside itself. */}
+      {groupByMachine && <IdleMachines groups={machineGroups.filter((g) => g.key !== "local" && g.frames.length === 0)} />}
       {/* Right-edge resize grip (t3code-style) — drag to set the panel width. */}
       <div
         onPointerDown={startResize}
@@ -727,11 +729,11 @@ function IdleMachines({ groups }: { groups: MachineGroup[] }) {
   const down = groups.filter((g) => g.machine?.enabled !== false && DOWN.has(statusOf(snap, g.hostId ?? null).state)).length - signIn;
   const summary = [signIn && `${signIn} to sign in`, down > 0 && `${down} offline`].filter(Boolean).join(" · ");
   return (
-    <section aria-label="other machines" data-idle-machines className="mt-3 border-t border-[var(--color-line)] pt-1">
+    <section aria-label="other machines" data-idle-machines className="shrink-0 max-h-[40%] overflow-y-auto overscroll-contain border-t border-[var(--color-line)] pt-1 pb-1 bg-[var(--color-bg2)]">
       <button
         onClick={toggle}
         aria-expanded={open}
-        className="w-full flex items-center gap-1.5 h-7 pl-3 pr-3 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-[var(--color-fg3)] hover:text-[var(--color-fg2)] cursor-pointer"
+        className="sticky top-0 z-10 bg-[var(--color-bg2)] w-full flex items-center gap-1.5 h-7 pl-3 pr-3 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-[var(--color-fg3)] hover:text-[var(--color-fg2)] cursor-pointer"
       >
         {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
         <Server size={11} aria-hidden />
