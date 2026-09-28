@@ -25,6 +25,7 @@
  * The work lives in extracted modules/hooks that destructure a `ctx` object —
  * keep it that way (this file was decomposed out of a 3147-LOC god component).
  */
+import { clearWork } from "./claude-bus";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "./components/ui/button";
@@ -263,6 +264,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   // unmounts its body (TerminalTile's cleanup kills/detaches the PTY).
   const closeTile = useCallback((id: string) => {
     unmarkBackgroundTile(id);
+    clearWork(id); // a task queued for a tile that is gone has nowhere to land
     setTiles((ts) => ts.filter((t) => t.id !== id));
     setBrowserOpenReqs((m) => {
       if (!(id in m)) return m;
