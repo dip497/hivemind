@@ -11,7 +11,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import type { AnnotationSide, DiffLineAnnotation } from "@pierre/diffs";
 import { ReviewPopover, CommentBox, ActionToolbar, ReviewAnnotation, composerAnchor } from "../review-ui";
 import { newCid, formatReviewMessage, type ReviewComment } from "../diff-comments";
-import { loadComments, saveComments, deliverToClaude } from "./review-store";
+import { loadComments, saveComments, deliverToAgent } from "./review-store";
 
 type Composer = {
   startLine: number; endLine: number; side: AnnotationSide;
@@ -100,7 +100,7 @@ export function useReviewComments(repoPath: string, file: string | null) {
   // Send THIS file's unresolved comments to claude as one message.
   const sendReview = useCallback(() => {
     const msg = formatReviewMessage(fileComments);
-    if (msg) deliverToClaude(msg);
+    if (msg) deliverToAgent(msg);
   }, [fileComments]);
 
   const composerNode: ReactNode = composer && file ? (

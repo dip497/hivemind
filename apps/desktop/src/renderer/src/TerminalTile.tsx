@@ -14,7 +14,8 @@ import { registerWebglSlotClient, unregisterWebglSlotClient, reconcileWebglSlots
 import { useTileFont, FontScaleControl, handleFontKey } from "./tile-font";
 import { identifyAgent } from "./agent-state";
 import { agentById } from "@hivemind/agents";
-import { registerClaude, unregisterClaude, shouldDeliver, peekWork, claimWork, type SendToClaudeDetail } from "./claude-bus";
+import { registerAgentTile, unregisterAgentTile, shouldDeliver, type SendToAgentDetail } from "./agent-send";
+import { peekWork, claimWork } from "./work-queue";
 import { publishStatus, clearStatus, setLabel, statusOf, subscribeTileStatus, type TileStatusKind } from "./agent-status-bus";
 import { mayDismiss, newDismissState } from "./dismiss-startup";
 import { keyBytes, KEY_GAP_MS } from "../../shared/keys";
@@ -773,12 +774,12 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       return true;
     });
     // Cross-tile bus: if this PTY is a claude session, accept ADDRESSED text
-    // (see claude-bus.ts). Registering makes this the "latest" claude so a
+    // (see agent-send.ts). Registering makes this the latest agent tile so a
     // bare/`latest` send lands here only — no more broadcast to every agent.
     if (isClaude) {
-      registerClaude(tileId);
+      registerAgentTile(tileId);
       const onSend = (e: Event) => {
-        const detail = (e as CustomEvent<string | SendToClaudeDetail>).detail;
+        const detail = (e as CustomEvent<string | SendToAgentDetail>).detail;
         const { deliver, text } = shouldDeliver(tileId, detail);
         // Type the text, THEN press Enter as a SEPARATE keystroke a tick later.
         // A single "text\n" write reaches claude's TUI before it has staged the
@@ -788,10 +789,10 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
           setTimeout(() => window.hive.ptyWrite(ptyId, "\r"), SUBMIT_DELAY_MS);
         }
       };
-      window.addEventListener("hivemind:send-to-claude", onSend as EventListener);
+      window.addEventListener("hivemind:send-to-agent", onSend as EventListener);
       unsubClaude = () => {
-        unregisterClaude(tileId);
-        window.removeEventListener("hivemind:send-to-claude", onSend as EventListener);
+        unregisterAgentTile(tileId);
+        window.removeEventListener("hivemind:send-to-agent", onSend as EventListener);
       };
     }
 

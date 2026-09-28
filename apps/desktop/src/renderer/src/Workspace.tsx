@@ -25,7 +25,7 @@
  * The work lives in extracted modules/hooks that destructure a `ctx` object —
  * keep it that way (this file was decomposed out of a 3147-LOC god component).
  */
-import { clearWork } from "./claude-bus";
+import { clearWork } from "./work-queue";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "./components/ui/button";
@@ -628,7 +628,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   const [browserOpenReqs, setBrowserOpenReqs] = useState<Record<string, { url: string; seq: number }>>({});
   // Text awaiting a claude target — set when something wants to deliver a prompt
   // ("Work on this", diff "send review") and 1+ claude tiles exist.
-  const [claudePick, setClaudePick] = useState<{ text: string } | null>(null);
+  const [agentPick, setAgentPick] = useState<{ text: string } | null>(null);
   // The Machines dialog: `hivemind:attach-remote` picks where a frame runs, `hivemind:machines` opens it for anything else.
   const [machinesReq, setMachinesReq] = useState<MachinesRequest | null>(null);
   useEffect(() => {
@@ -928,9 +928,9 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
 
   // Deliver a prompt to claude with a TARGET PICKER. 0 claude tiles → spawn a
   // new claude carrying the prompt; 1+ → picker (the chosen tile, or "New").
-  const deliverToClaude = useCallback((text: string, target: "new" | string) => {
+  const deliverToAgent = useCallback((text: string, target: "new" | string) => {
     if (target === "new") { spawnClaude(undefined, text); return; }
-    window.dispatchEvent(new CustomEvent("hivemind:send-to-claude", { detail: { text, target } }));
+    window.dispatchEvent(new CustomEvent("hivemind:send-to-agent", { detail: { text, target } }));
     setSelectedTileId(target);
     focusTile(target);
   }, [spawnClaude, focusTile]);
@@ -940,7 +940,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
       if (!text) return;
       const claudes = tilesRef.current.filter((t) => t.kind === AGENT_TILE_KIND);
       if (claudes.length === 0) { spawnClaude(undefined, text); return; }
-      setClaudePick({ text });
+      setAgentPick({ text });
     };
     window.addEventListener("hivemind:deliver-to-claude", onDeliver as EventListener);
     return () => window.removeEventListener("hivemind:deliver-to-claude", onDeliver as EventListener);
@@ -1220,10 +1220,10 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
           />
         </Suspense>
       )}
-      {claudePick && (
+      {agentPick && (
         // z above the tile fullscreen overlay (z-[9999]) so the picker shows ON
         // TOP of a fullscreened diff/editor instead of behind it.
-        <div className="fixed inset-0 z-[10000] grid place-items-center" onClick={() => setClaudePick(null)}>
+        <div className="fixed inset-0 z-[10000] grid place-items-center" onClick={() => setAgentPick(null)}>
           <div className="absolute inset-0 bg-black/40" />
           <div className="relative w-[340px] max-w-[90vw] rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] shadow-2xl p-1.5" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center px-2 py-1.5">
@@ -1234,7 +1234,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
                 variant="ghost"
                 size="icon-micro"
                 className="ml-auto"
-                onClick={() => setClaudePick(null)}
+                onClick={() => setAgentPick(null)}
                 aria-label="cancel"
                 title="cancel (Esc)"
               >
@@ -1248,7 +1248,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
                 <MenuItem
                   key={t.id}
                   variant="muted"
-                  onClick={() => { deliverToClaude(claudePick.text, t.id); setClaudePick(null); }}
+                  onClick={() => { deliverToAgent(agentPick.text, t.id); setAgentPick(null); }}
                 >
                   <AgentIcon id={agentForCmd(t.cmd)?.id} size={13} className="text-[var(--color-fg3)]" />
                   <span className="truncate flex-1">{name}</span>
@@ -1258,7 +1258,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
             })}
             <div className="my-1 border-t border-[var(--color-line2)]" />
             <MenuItem
-              onClick={() => { deliverToClaude(claudePick.text, "new"); setClaudePick(null); }}
+              onClick={() => { deliverToAgent(agentPick.text, "new"); setAgentPick(null); }}
             >
               <span className="shrink-0 grid place-items-center size-3.5 text-[var(--color-fg3)]">+</span>
               <span className="flex-1">New claude</span>
@@ -1267,7 +1267,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
               variant="ghost"
               size="xs"
               className="w-full justify-start"
-              onClick={() => setClaudePick(null)}
+              onClick={() => setAgentPick(null)}
             >
               cancel
             </Button>
