@@ -159,6 +159,8 @@ export interface SessionManagerOptions {
   onOutput?: (id: string) => void;
   /** A session's window title (OSC 0/2) changed, or was restored from its snapshot. */
   onTitle?: (id: string, title: string) => void;
+  /** A session ended: its process exited, or it was killed. */
+  onEnd?: (id: string) => void;
   onSnapshot?: (id: string, snapshot: SessionSnapshot) => void | Promise<void>;
   /** OPTIONAL — invoked when a session is explicitly killed so the daemon can
    *  unlink its on-disk snapshot file. */
@@ -224,6 +226,7 @@ export class SessionManager {
   private readonly restoreRetryTransform?: (spec: SpawnSpec) => SpawnSpec | null;
   private readonly onOutput?: (id: string) => void;
   private readonly onTitle?: (id: string, title: string) => void;
+  private readonly onEnd?: (id: string) => void;
   private readonly restoreRetryMs: number;
 
   constructor(
@@ -236,6 +239,7 @@ export class SessionManager {
     this.onSnapshot = opts.onSnapshot;
     this.onSnapshotEvict = opts.onSnapshotEvict;
     this.onOutput = opts.onOutput;
+    this.onEnd = opts.onEnd;
     this.onTitle = opts.onTitle;
     this.snapshotDebounceMs = opts.snapshotDebounceMs ?? 2000;
     this.transformSpecOnRestore = opts.transformSpecOnRestore;
@@ -381,6 +385,7 @@ export class SessionManager {
       for (const c of session.clients) c.onExit(code, signal);
       this.flushSnapshot(session); // last write before drop
       this.sessions.delete(id);
+      this.onEnd?.(id);
       this.scheduleIdle();
     });
     this.cancelIdle();
@@ -448,6 +453,7 @@ export class SessionManager {
       for (const c of session.clients) c.onExit(code, signal);
       this.flushSnapshot(session);
       this.sessions.delete(session.id);
+      this.onEnd?.(session.id);
       this.scheduleIdle();
     });
   }

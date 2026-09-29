@@ -16,11 +16,11 @@ const dirs: string[] = [];
 after(() => { for (const d of daemons) d.kill("SIGKILL"); for (const d of dirs) fs.rmSync(d, { recursive: true, force: true }); });
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function startDaemon(standalone: boolean) {
+async function startDaemon(standalone: boolean, prepare?: (dir: string) => Record<string, string>) {
   const dir = fs.mkdtempSync("/tmp/hse-");
   dirs.push(dir);
   const sock = path.join(dir, "d.sock");
-  const env = { ...process.env, ...(standalone ? { HIVEMIND_DAEMON_STANDALONE: "1" } : {}) };
+  const env = { ...process.env, ...(standalone ? { HIVEMIND_DAEMON_STANDALONE: "1" } : {}), ...prepare?.(dir) };
   daemons.push(spawn(process.execPath, ["--import", "tsx", path.join(here, "../../../../packages/agent-host/src/pty-daemon.ts"), sock], { stdio: "ignore", env }));
   for (let i = 0; i < 100 && !fs.existsSync(sock); i++) await wait(100);
   await wait(300);
@@ -54,7 +54,8 @@ test("standalone: hook events reach event viewers, requests are answered at once
   const token = fs.readFileSync(path.join(d.dir, "hcp.token"), "utf8").trim();
   const viewer = net.connect(d.sock);
   const events: ServerMsg[] = [];
-  viewer.on("data", makeLineDecoder((l) => { const m = JSON.parse(l) as ServerMsg; if (m.t === "event") events.push(m); }));
+  // The raw events: each session's status, which the machine keeps too, is the next test's.
+  viewer.on("data", makeLineDecoder((l) => { const m = JSON.parse(l) as ServerMsg; if (m.t === "event" && m.topic !== "agent.status") events.push(m); }));
   await new Promise((r) => viewer.once("connect", r));
   viewer.write(frame({ t: "hello", caps: ["events"] }));
   await wait(200);
@@ -94,6 +95,69 @@ test("standalone: hook events reach event viewers, requests are answered at once
   assert.equal(pushes.length, before);
   viewer.destroy();
   srv.close();
+});
+
+/** A desktop watching the machine: each session's status as the machine last sent it. */
+async function statusViewer(sock: string) {
+  const c = net.connect(sock);
+  const statuses = new Map<string, { state: string; source?: string | null; title?: string }>();
+  c.on("data", makeLineDecoder((l) => {
+    const m = JSON.parse(l) as ServerMsg;
+    if (m.t !== "event" || m.topic !== "agent.status") return;
+    const { tileId, status } = m.data as { tileId: string; status: { state: string; source?: string | null; title?: string } };
+    statuses.set(tileId, status);
+  }));
+  await new Promise((r) => c.once("connect", r));
+  c.write(frame({ t: "hello", caps: ["events"] }));
+  return { c, stateOf: (id: string) => statuses.get(id)?.state, statusOf: (id: string) => statuses.get(id) };
+}
+const until = async (done: () => boolean) => { for (let t = 0; t < 5000 && !done(); t += 25) await wait(25); };
+
+test("standalone: the machine keeps each session's status, and every desktop watching, one that connects later too, is sent it", { skip: !unix, timeout: 30000 }, async () => {
+  const d = await startDaemon(true);
+  const id = "hm:tile-9";
+  const a = await statusViewer(d.sock);
+  // A session that outlives a Ctrl+C, as an agent's TUI does.
+  a.c.write(frame({ t: "attach", reqId: "r1", id, spec: { cwd: d.dir, cmd: "bash", args: ["-c", "trap '' INT; sleep 30"], cols: 80, rows: 24 } }));
+  await hook(d.hcp, { jsonrpc: "2.0", method: "agent.event", params: { tileId: id, event: "turn.started" } });
+  await until(() => a.stateOf(id) === "working");
+  assert.equal(a.stateOf(id), "working");
+  const b = await statusViewer(d.sock);
+  await until(() => b.stateOf(id) === "working");
+  assert.equal(b.stateOf(id), "working", "a desktop that connects later is sent the status there is");
+  // A person's Ctrl+C reaches the machine, which ends the turn for everyone watching.
+  b.c.write(frame({ t: "write", id, data: "\x03" }));
+  await until(() => a.stateOf(id) === "interrupted" && b.stateOf(id) === "interrupted");
+  assert.deepEqual([a.stateOf(id), b.stateOf(id)], ["interrupted", "interrupted"]);
+  a.c.write(frame({ t: "kill", id }));
+  await until(() => a.stateOf(id) === "exited" && b.stateOf(id) === "exited");
+  assert.deepEqual([a.stateOf(id), b.stateOf(id)], ["exited", "exited"]);
+  a.c.destroy();
+  b.c.destroy();
+});
+
+test("standalone: an agent that reports nothing is shown by what the machine reads of its screen and its title", { skip: !unix, timeout: 30000 }, async () => {
+  // A throwaway agent: its manifest says a screen reading "probe is thinking" means working.
+  const d = await startDaemon(true, (dir) => {
+    const agent = path.join(dir, "xdg", "hivemind", "agents", "probe");
+    fs.mkdirSync(agent, { recursive: true });
+    fs.writeFileSync(path.join(agent, "agent.yaml"), [
+      "manifestVersion: 2", "id: probe", "label: Probe", "bin: probe-agent", "enabled: true",
+      "caps: { promptDelivery: argv, turnSignal: false, resume: none, supervise: human, blockedDetection: true }",
+      "detect:", "  default: idle", "  rules:", "  - when: { contains: probe is thinking }", "    then: working", "",
+    ].join("\n"));
+    const bin = path.join(dir, "probe-agent");
+    fs.writeFileSync(bin, "#!/bin/bash\nprintf '\\033]0;Fixing the tests\\007probe is thinking\\n'\nexec sleep 30\n");
+    fs.chmodSync(bin, 0o755);
+    return { XDG_CONFIG_HOME: path.join(dir, "xdg") };
+  });
+  const id = "hm:tile-probe";
+  const a = await statusViewer(d.sock);
+  a.c.write(frame({ t: "attach", reqId: "r1", id, spec: { cwd: d.dir, cmd: path.join(d.dir, "probe-agent"), args: [], cols: 80, rows: 24 } }));
+  await until(() => a.statusOf(id)?.state === "working" && a.statusOf(id)?.title === "Fixing the tests");
+  assert.deepEqual({ ...a.statusOf(id) }, { ...a.statusOf(id), state: "working", source: "screen", title: "Fixing the tests" });
+  a.c.write(frame({ t: "kill", id }));
+  a.c.destroy();
 });
 
 test("inside the desktop the daemon leaves the control-plane socket to the app", { skip: !unix, timeout: 30000 }, async () => {

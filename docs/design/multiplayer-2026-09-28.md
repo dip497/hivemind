@@ -223,6 +223,11 @@ exactly as today. They are ordered by dependency.
   `remote/events.ts`.
 - **Done when.** Two viewers of one agent always show the same status; a remote ssh session's
   status matches its host's.
+- **Decided while building it (2026-09-29).** The host of a session is where its hooks report:
+  a desktop for its own sessions, a machine's daemon for the sessions it runs with no desktop
+  there. That daemon keeps the status (the same `StatusStore`) and sends `agent.status`; a
+  desktop mirrors it and folds nothing of its own into it but the session's end. Mirroring is
+  taken only from a machine's own report, never from the control-plane socket.
 
 ### R7. Intents: one path for every side effect
 

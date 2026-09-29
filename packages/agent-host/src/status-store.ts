@@ -7,8 +7,12 @@
  * the first hook event on, the hooks alone decide and screen reports are ignored. An agent
  * whose hooks never fire (not installed, or it has none) therefore stays on the screen,
  * and every status says which source it came from.
+ *
+ * The machine that runs a session is the one that derives its status (docs/design/
+ * multiplayer-2026-09-28.md, R6). A session another machine hosts is mirrored: the status is
+ * taken as that host has it, and nothing seen here is folded into it, except that it ended.
  */
-import { INITIAL_STATUS, foldStatus, type AgentStatus, type SessionState, type StatusInput } from "@hivemind/agents";
+import { INITIAL_STATUS, INPUT_KINDS, SESSION_STATES, foldStatus, type AgentStatus, type SessionState, type StatusInput } from "@hivemind/agents";
 
 export type StatusSource = "hooks" | "screen";
 
@@ -33,8 +37,21 @@ const SCREEN_KIND = { permission: "permission", question: "question", blocked: "
 /** Bytes that interrupt an agent's turn when typed on their own: Esc, Ctrl+C. */
 const INTERRUPT_KEYS = new Set(["\x1b", "\x03"]);
 
+/** A status as a host sends it: what a mirror takes, nothing else. */
+export function isSessionStatus(x: unknown): x is SessionStatus {
+  const s = x as Partial<SessionStatus> | null;
+  return typeof s === "object" && s !== null && (SESSION_STATES as readonly unknown[]).includes(s.state)
+    && Array.isArray(s.subagents) && s.subagents.every((a) => typeof a === "string")
+    && typeof s.background === "number" && typeof s.compacting === "boolean"
+    && (s.kind === undefined || (INPUT_KINDS as readonly unknown[]).includes(s.kind))
+    && (s.source === null || s.source === "hooks" || s.source === "screen") && typeof s.since === "number"
+    && (s.title === undefined || typeof s.title === "string");
+}
+
 export class StatusStore {
   private sessions = new Map<string, SessionStatus>();
+  /** Sessions another machine hosts, whose status is that host's. */
+  private mirrored = new Set<string>();
   private log: StatusChange[] = [];
   private seq = 0;
   private listeners = new Set<(c: StatusChange) => void>();
@@ -68,6 +85,7 @@ export class StatusStore {
   /** A hook reported for this session: the hooks are its authority from now on. They report
    *  from the session's start, so what the screen read before they spoke is not carried over. */
   event(tileId: string, input: StatusInput): void {
+    if (this.mirrored.has(tileId)) return;
     const cur = this.sessions.get(tileId);
     const fromScreen = cur?.source !== "hooks" && cur?.state !== "exited";
     this.apply(tileId, "hooks", (s) => foldStatus(fromScreen ? { ...s, ...INITIAL_STATUS, kind: undefined } : s, input));
@@ -75,6 +93,7 @@ export class StatusStore {
 
   /** The screen, read by whoever renders it. Ignored once the session's hooks have spoken. */
   screen(tileId: string, state: ScreenState): void {
+    if (this.mirrored.has(tileId)) return;
     const cur = this.sessions.get(tileId);
     if (cur?.source === "hooks" || cur?.state === "exited") return;
     this.apply(tileId, "screen", (s) => (state === "idle" || state === "working"
@@ -84,6 +103,7 @@ export class StatusStore {
 
   /** What the user typed into the session. A lone interrupt key during a turn ends it. */
   input(tileId: string, data: string): void {
+    if (this.mirrored.has(tileId)) return;
     const cur = this.sessions.get(tileId);
     if (!cur || cur.source !== "hooks" || !INTERRUPT_KEYS.has(data)) return;
     this.apply(tileId, "hooks", (s) => foldStatus(s, { fact: "interrupt" }));
@@ -97,12 +117,22 @@ export class StatusStore {
 
   /** The agent's title changed ("" when it says nothing worth a name). Changes no state. */
   title(tileId: string, title: string): void {
+    if (this.mirrored.has(tileId)) return;
     const cur = this.sessions.get(tileId);
     if (cur?.state === "exited") return;
     this.apply(tileId, cur?.source ?? null, (s) => ({ ...s, title: title || undefined }));
   }
 
-  forget(tileId: string): void { this.sessions.delete(tileId); }
+  /** The session's status as the machine that runs it has it. From now on it is that host's. */
+  mirror(tileId: string, status: SessionStatus): void {
+    this.mirrored.add(tileId);
+    this.put(tileId, status);
+  }
+
+  forget(tileId: string): void {
+    this.sessions.delete(tileId);
+    this.mirrored.delete(tileId);
+  }
 
   private apply(tileId: string, source: StatusSource | null, fold: (s: AgentStatus) => AgentStatus): void {
     const prev = this.sessions.get(tileId);
@@ -110,7 +140,11 @@ export class StatusStore {
     const next = fold(base);
     const clean = Object.fromEntries(Object.entries(next).filter(([, v]) => v !== undefined)) as unknown as AgentStatus;
     const changedState = !prev || prev.state !== clean.state;
-    const status: SessionStatus = { ...clean, source, since: changedState ? this.now() : prev.since };
+    this.put(tileId, { ...clean, source, since: changedState ? this.now() : prev.since });
+  }
+
+  private put(tileId: string, status: SessionStatus): void {
+    const prev = this.sessions.get(tileId);
     if (prev && sameStatus(prev, status)) return;
     this.sessions.set(tileId, status);
     const change: StatusChange = { seq: ++this.seq, tileId, status };

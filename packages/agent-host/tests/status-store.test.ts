@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { StatusStore, type StatusChange } from "../src/status-store.js";
+import { StatusStore, isSessionStatus, type SessionStatus, type StatusChange } from "../src/status-store.js";
 
 const store = () => { let t = 1000; const s = new StatusStore({ now: () => ++t, logSize: 5 }); return s; };
 
@@ -90,4 +90,42 @@ test("a title rides the session record: set, cleared by an empty title, gone at 
   expect(s.get("a")!.title).toBeUndefined();
   s.title("a", "late");
   expect(s.get("a")!.title).toBeUndefined();
+});
+
+test("a session another machine hosts shows that host's status; nothing seen here changes it but its end", () => {
+  const s = store();
+  const told: StatusChange[] = [];
+  s.subscribe((c) => told.push(c));
+  const hosts: SessionStatus = { state: "working", source: "hooks", since: 5, subagents: ["s1"], background: 0, compacting: false, title: "Fix it" };
+  s.screen("r", "blocked"); // read here before the host's status arrived
+  s.mirror("r", hosts);
+  expect(s.get("r")).toEqual(hosts);
+  s.event("r", { event: "turn.ended", outcome: "done" });
+  s.screen("r", "idle");
+  s.input("r", "\x03");
+  s.title("r", "Something else");
+  expect(s.get("r")).toEqual(hosts);
+  s.mirror("r", { ...hosts, state: "done", subagents: [] });
+  expect(s.get("r")).toMatchObject({ state: "done", subagents: [] });
+  // The host read it from the screen: a screen read here does not change it either.
+  s.mirror("r", { ...hosts, state: "working", source: "screen" });
+  s.screen("r", "idle");
+  expect(s.get("r")).toMatchObject({ state: "working", source: "screen" });
+  s.exited("r");
+  expect(s.get("r")!.state).toBe("exited");
+  expect(told.map((c) => c.status.state)).toEqual(["waiting", "working", "done", "working", "exited"]);
+  // Forgotten, the session is this store's own again.
+  s.forget("r");
+  s.screen("r", "working");
+  expect(s.get("r")).toMatchObject({ state: "working", source: "screen" });
+});
+
+test("only a status as a host sends it is taken from the wire", () => {
+  const ok: SessionStatus = { state: "waiting", kind: "permission", source: "hooks", since: 1, subagents: [], background: 2, compacting: false };
+  expect(isSessionStatus(ok)).toBe(true);
+  expect(isSessionStatus({ ...ok, source: null, kind: undefined, title: "t" })).toBe(true);
+  for (const bad of [null, "working", { ...ok, state: "busy" }, { ...ok, kind: "coffee" }, { ...ok, subagents: [1] }, { ...ok, source: "guess" },
+    { ...ok, since: "now" }, { ...ok, background: "2" }, { ...ok, compacting: 1 }, { ...ok, title: 7 }]) {
+    expect(isSessionStatus(bad)).toBe(false);
+  }
 });

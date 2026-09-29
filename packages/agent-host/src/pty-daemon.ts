@@ -32,6 +32,8 @@ import { resolveWindowsSpawn } from "@hivemind/agents/discover";
 import { agentEventHookSource } from "./hooks/agent-event-hook-source.js";
 import { SDK_FILE, sdkSource } from "@hivemind/agent-sdk";
 import { ScreenWatcher } from "./screen-status.js";
+import { StatusStore } from "./status-store.js";
+import { cleanName } from "@hivemind/agents";
 import { readOrCreateToken, hcpSockPath } from "./hooks/token.js";
 
 // Lazy: node-pty must never be evaluated inside the compiled `hive` (see bun-pty.ts).
@@ -309,12 +311,21 @@ const factory = (spec: SpawnSpec): ManagedPty => {
 
 /** Connections that asked for events: agent reports and screen readings (desktops viewing this machine). */
 const eventViewers = new Set<(m: ServerMsg) => void>();
+// With no desktop on this machine (one others connect to), it is its sessions' host: the hooks
+// report here, so the status of each session is kept here and every viewer mirrors it as
+// `agent.status` (docs/design/multiplayer-2026-09-28.md, R6). A desktop's own daemon leaves
+// that to the desktop, which its hooks report to.
+const statuses = STANDALONE ? new StatusStore() : null;
+statuses?.subscribe(({ tileId, status }) => { for (const push of eventViewers) push({ t: "event", topic: "agent.status", data: { tileId, status } }); });
 // Every agent session's screen, read here where the screen is kept, for the status of an
 // agent whose hooks have not reported. Viewers take it as `agent.screen`.
 const screens = new ScreenWatcher({
   read: (id) => manager.viewport(id),
   detect: (cmd, screen) => agentForCmd(cmd)?.detect?.(screen),
-  report: (id, state) => { for (const push of eventViewers) push({ t: "event", topic: "agent.screen", data: { tileId: id, state } }); },
+  report: (id, state) => {
+    statuses?.screen(id, state);
+    for (const push of eventViewers) push({ t: "event", topic: "agent.screen", data: { tileId: id, state } });
+  },
 });
 setInterval(() => {
   screens.tick();
@@ -326,6 +337,7 @@ setInterval(() => {
 // Viewers take it as `agent.title`, and one that connects is sent what there is.
 const titles = titleBook((id) => agentForCmd(manager.commandOf(id) ?? ""));
 const pushTitle = (tileId: string, title: string): void => {
+  statuses?.title(tileId, cleanName(title));
   for (const push of eventViewers) push({ t: "event", topic: "agent.title", data: { tileId, title } });
 };
 function reportTitle(id: string, raw: string): void {
@@ -336,6 +348,7 @@ onAgentsReloaded = () => { for (const t of titles.recompute()) pushTitle(t.id, t
 const manager = new SessionManager(factory, {
   onOutput: (id) => screens.output(id),
   onTitle: (id, raw) => reportTitle(id, raw),
+  onEnd: (id) => { statuses?.exited(id); statuses?.forget(id); },
   idleMs: 8000, // exit 8s after the last session is killed/exits — no orphans
   onEmpty: () => {
     try {
@@ -536,6 +549,7 @@ const server = net.createServer((sock) => {
         // Only the writing connection's outBuf fast-paths its echo; other
         // viewers of the tile keep normal batching.
         outBuf.markInput(msg.id);
+        statuses?.input(msg.id, msg.data);
         manager.write(msg.id, msg.data, viewers.get(msg.id), msg.paste);
         break;
       case "resize":
@@ -578,6 +592,7 @@ const server = net.createServer((sock) => {
           eventViewers.add(send);
           for (const { id, title } of titles.current()) send({ t: "event", topic: "agent.title", data: { tileId: id, title } });
           for (const [tileId, state] of screens.current()) send({ t: "event", topic: "agent.screen", data: { tileId, state } });
+          for (const { tileId, status } of statuses?.all() ?? []) send({ t: "event", topic: "agent.status", data: { tileId, status } });
         }
         break;
       case "shutdown":
@@ -628,6 +643,7 @@ if (STANDALONE) {
         if (!evt) return;
         // The session an agent reports from is the one its tile resumes.
         if (evt.sessionId) try { writeTrackedSession(tileSessionsDir, evt.tileId, evt.sessionId); } catch { /* best-effort */ }
+        statuses?.event(evt.tileId, evt);
         for (const push of eventViewers) push({ t: "event", topic: AGENT_EVENT_METHOD, data: evt });
         void notifyPush(evt);
         return;

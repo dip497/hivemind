@@ -100,7 +100,7 @@ import { makeSpawnPacer } from "./spawn-pacer.js";
 import { makeDispatch, type Dispatcher } from "./hcp/methods.js";
 import { Mailbox } from "./hcp/mailbox.js";
 import { TurnTracker } from "./hcp/turn-tracker.js";
-import { StatusStore, type ScreenState } from "@hivemind/agent-host/status-store";
+import { StatusStore, isSessionStatus, type ScreenState } from "@hivemind/agent-host/status-store";
 import { REATTACH_RESET } from "@hivemind/agent-host/daemon-endpoint";
 import { SessionRelay, type ReadScreen, type Viewer } from "@hivemind/agent-host/session-relay";
 import { ipcPath, upgradeCommand, windowsStartMenuShortcut } from "./platform.js";
@@ -2043,7 +2043,13 @@ function startHcpControlPlane(): void {
       for (const dst of dests) hcpMailbox.deliver(toPtyId(dst), banner);
     },
   });
-  setRemoteEventSink(server.injectEvent);
+  // A machine's daemon keeps the status of the sessions it runs (R6): shown here as it has it.
+  // Only a machine's own report does that: from then on the session's local reports are ignored.
+  setRemoteEventSink((topic, data) => {
+    if (topic !== "agent.status") { server.injectEvent(topic, data); return; }
+    const r = data as { tileId?: unknown; status?: unknown };
+    if (typeof r.tileId === "string" && isSessionStatus(r.status)) hcpStatus.mirror(toBareId(r.tileId), r.status);
+  });
   ptyMod.setDaemonEventSink(server.injectEvent);
   hcpBroadcast = server.broadcast;
 }
