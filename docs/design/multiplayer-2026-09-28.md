@@ -83,17 +83,18 @@ exactly as today. They are ordered by dependency.
 
 - **What.** Move the core layout blob and the per-view layout blobs out of renderer
   `localStorage` into a `WorkspaceStore`: one writer that checks every input, a snapshot
-  per repo on disk (`<userData>/workspaces/<repo-hash>.json`) written through on every
-  change. The renderer reads it synchronously over IPC (as `settingsSync` already does) and
-  writes debounced snapshots of the same shapes it saves today. Change events come with
-  R5, where their first subscriber is. Edits as operations (`frame.move`, `tile.rename`, …) come with R2, where each
-  one becomes a Loro change; doing operations twice would be wasted work.
+  per repo on disk (`<userData>/workspaces/<repo-hash>.json`; R2 replaced it with the
+  workspace's document before either shipped) written through on every change. The
+  renderer reads it synchronously over IPC (as `settingsSync` already does) and writes
+  debounced snapshots of the same shapes it saves today. Change events come with R5, where
+  their first subscriber is. R2 turns each snapshot into the edits it makes; edits sent as
+  operations (`frame.move`, `tile.rename`, …) wait for several writers (R5).
 - **It lives in a package, not in Electron main.** `packages/workspace-host` holds the store
   (and, later, intents R7 and the access list R11). Electron main embeds it; the `hive`
   binary runs it headless for an always-on host (R14). Nothing in the package imports
   Electron.
 - **Files.** new `packages/workspace-host/src/` (`layout.ts` shapes shared with the window,
-  `record-file.ts` the file format, `store.ts`), `main/workspace-store-ipc.ts`,
+  `record-file.ts` the file format (R2: `doc-file.ts`), `store.ts`), `main/workspace-store-ipc.ts`,
   `main/index.ts`, `shared/ipc.ts`, `preload/index.ts`, new
   `renderer/src/workspace/workspace-store-client.ts` (where layouts live),
   `canvas-persistence.ts`, `view-layout-store.ts`.
@@ -109,13 +110,35 @@ exactly as today. They are ordered by dependency.
 
 ### R2. The store becomes a Loro document
 
-- **What.** `WorkspaceStore` keeps its API and is backed by one `LoroDoc` per workspace.
-  Schema in §8, including board objects (`objects`) from the start, so M1 needs no schema
-  migration. Local undo moves to Loro's `UndoManager` (this peer's edits only).
-- **Files.** `packages/workspace-host/src/store.ts`, new `packages/workspace-doc` (schema,
-  typed accessors, validation, shared with the phone later).
-- **Done when.** Snapshot + update export/import round-trip tests; two in-process docs
-  editing concurrently converge (fuzz test); undo only reverts local edits.
+- **What.** `WorkspaceStore` keeps its API and is backed by one `LoroDoc` per workspace,
+  kept as `<userData>/workspaces/<repo-hash>.loro`: a header line naming the format, its
+  version and the repo, then a shallow snapshot (the state, without history). The repo path
+  is in the header, not in the document, which will be shared. The window still saves whole
+  layouts; the document takes each as the edits that make it hold that layout (a frame
+  dragged sets its `x` and `y`, a tile renamed its `name`, a frame nested in another is one
+  tree move), so edits made at once to different things merge. Schema in §8. A root container needs no migration when it is added, so
+  `objects` (M1) and `machines` (R9) arrive with their first writer.
+- **Waiting for a first caller.** Undo: the app has no canvas undo (only the editor's own),
+  so Loro's `UndoManager` (this peer's edits only) comes with ⌘Z on board objects (M1).
+  Update export and import come with sync (M1); the file is a snapshot. Whole layouts stay
+  the way a window writes until there are several writers (R5): then each window writes from
+  the document's current state (change events refresh it) or sends operations, or a window
+  holding a stale layout would undo another's edit.
+- **Per-person state.** The canvas camera and the Windows view's active tab and minimized
+  tiles are in the view layouts the document holds. They are per-person (§8) and leave the
+  document with R5, where two windows on one workspace would otherwise share a camera, and
+  so before M1 shares it with people.
+- **Migration.** The window's old localStorage layouts are imported as in R1, each entry
+  checked by the document's writers. R1's `.json` file shipped in no release (R1 and R2 go
+  out together), so it is not read.
+- **Files.** new `packages/workspace-doc` (`shapes.ts` Node-free types and guards,
+  `schema.ts` root containers, `fields.ts` a record's fields in a map, `core.ts`, `views.ts`;
+  shared with the phone later), `packages/workspace-host/src/doc-file.ts` (the file),
+  `store.ts`.
+- **Done when.** A layout round-trips through the document and through a restart; two
+  in-process documents editing concurrently converge (fuzz test) with both sides' edits to
+  different tiles and fields kept; a golden file pins the format; all e2e specs green.
+  (Undo reverting only local edits, and update round-trips, move to M1 with their callers.)
 
 ### R3. Identity: devices, people, workspaces
 
@@ -687,10 +710,10 @@ speaks.
 
 ```
 root: Map
-  meta: Map        { workspaceId, workspacePublicKey, owner (person key), name, schema: 1 }
+  meta: Map        { schema: 1, core (true once a core layout is written), workspaceId, workspacePublicKey, owner (person key), name }
   machines: Map    machineId → Map { endpointId, label, owner }
-  frames: Tree     node data: Map { title, color, machine, path, branch, worktreePath, rect{x,y,w,h}, z }
-  tiles: Map       tileId → Map { kind, frame, name, cmd, args, session, pinned, pinAnchor, created{by, at} }
+  frames: Tree     node data: Map { the frame's fields as the window keeps them: x, y, w, h, title, color, z, workspacePath, branch, worktreePath, …; machine }
+  tiles: Map       tileId → Map { the tile's fields as the window keeps them: kind, label, cmd, args, session, pinned, pinAnchor, …; frame, name, tabs; created{by, at} }
   objects: Map     objectId → Map {
                      kind: "note" | "checklist" | "text" | "arrow",
                      frame?, rect{x,y,w,h}, z, color, created{by, at},
@@ -699,8 +722,12 @@ root: Map
                      from, to: { id, side } , label: LoroText         (arrow; ends are tiles, frames or objects)
                    }
   order: MovableList   tile ids for Windows-view tab order
-  views: Map       viewId → Map (shared view layout, e.g. canvas positions/sizes)
+  views: Map       viewId → Map { v, data } (each view's own layout; data merges two levels deep)
 ```
+
+R2 built `meta` (`schema`, `core`), `frames`, `tiles`, `order` and `views`. The rest comes
+with its first writer: the workspace's id, keys and owner and a record's `created` with
+identity (R3), `machines` and a frame's `machine` with R9, `objects` with M1.
 
 The **host record** is not in this document; it is published separately and signed by the
 workspace key (§5.8). The **access list** is a separate owner-only document (R11).
@@ -710,7 +737,8 @@ workspace key (§5.8). The **access list** is a separate owner-only document (R1
 - Positions: per-property last-writer-wins by default (Loro Map values).
 - The host rejects updates that break invariants (tile in a missing frame, frame cycles)
   and replies with a corrective update.
-- History: shallow snapshots after 30 days; full history kept locally by the host.
+- History: none on disk while nothing reads it (R2 writes shallow snapshots); from M1,
+  shallow snapshots after 30 days, full history kept locally by the host.
 
 ---
 
