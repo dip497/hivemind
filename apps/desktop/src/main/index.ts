@@ -48,7 +48,6 @@ import { agentAllowedIn, loadAgents, toWire } from "@hivemind/agents/load";
 import type { IssuePatch } from "@hivemind/core/types";
 import * as ptyHost from "./pty-host.js";
 import * as ptyDaemon from "./daemon-client.js";
-import { PtyOutputBuffer } from "@hivemind/agent-host/pty-output-buffer";
 import { isRemote, parseRemote } from "../shared/remote-uri.js";
 import { savedAuth } from "./remote/saved-hosts.js";
 import { addMachine, checkMachine, editMachine, initMachines, installOnMachine, machineSessions, reconnectMachineHost, removeMachine, setMachinePassword, snapshot as machinesSnapshot, updateMachine } from "./remote/machines.js";
@@ -103,6 +102,7 @@ import { Mailbox } from "./hcp/mailbox.js";
 import { TurnTracker } from "./hcp/turn-tracker.js";
 import { StatusStore, type ScreenState } from "@hivemind/agent-host/status-store";
 import { REATTACH_RESET } from "@hivemind/agent-host/daemon-endpoint";
+import { SessionRelay, type ReadScreen, type Viewer } from "@hivemind/agent-host/session-relay";
 import { ipcPath, upgradeCommand, windowsStartMenuShortcut } from "./platform.js";
 import { SubagentReaper } from "./hcp/subagent-reaper.js";
 import { OutputRecorder } from "./hcp/output-recorder.js";
@@ -1180,50 +1180,56 @@ const onPtyExit = (tileId: string): void => {
 // and ships one message; the renderer's xterm parses the batch in one go.
 // Senders are looked up per tile at flush time so a tile that re-attached from
 // a new renderer (view-mode switch, reload) gets its bytes at the live target.
-const ptySenders = new Map<string, WebContents>();
-// Tiles no view shows: their bytes are recorded but not sent, and the renderer does no work
-// for them. Shown again, a tile is sent its screen as the host keeps it, then live bytes.
-const ptyUnseen = new Set<string>();
-const ptyShowing = new Set<string>();
-const ptyOut = new PtyOutputBuffer(
-  (tileId, data) => {
-    // The HCP output recorder is fed from the coalesced batch, not per pty
-    // read: its three strip-ANSI regex passes then run once per batch, and an
-    // escape sequence split across two reads is stripped as a whole. (The
-    // agent.stream broadcast stays per chunk — subscribers want immediacy.)
-    hcpRecorder.record(tileId, data);
-    if (ptyUnseen.has(tileId)) return;
-    const target = ptySenders.get(tileId);
-    if (!target || target.isDestroyed()) return;
-    try { target.send(`pty:data:${tileId}`, data); } catch { /* sender torn down */ }
-  },
-  {
-    // Minimized / hidden: the renderer can't paint, so stretch the batching —
-    // backgroundThrottling is off (a backgrounded claude must keep streaming),
-    // which otherwise means parsing every chunk at full rate while unseen.
-    hidden: () => !mainWindow || mainWindow.isDestroyed() || mainWindow.isMinimized() || !mainWindow.isVisible(),
-  },
-);
-/** Route a tile's pty output through the coalescer. */
-function relayPtyData(sender: WebContents, tileId: string, data: string): void {
-  if (ptySenders.get(tileId) !== sender) ptySenders.set(tileId, sender);
-  ptyOut.push(tileId, data);
+// Every session's output to every window that shows it (@hivemind/agent-host/session-relay):
+// main holds one attach per session, and a window that mounts a tile another window already
+// shows joins it, its screen first.
+const ptyRelay = new SessionRelay({
+  // The HCP output recorder is fed from the coalesced batch, not per pty read: its three
+  // strip-ANSI regex passes then run once per batch, and an escape sequence split across two
+  // reads is stripped as a whole. (The agent.stream broadcast stays per chunk.)
+  record: (tileId, data) => hcpRecorder.record(tileId, data),
+  screenPrefix: REATTACH_RESET,
+  // Every window minimized or hidden: no renderer can paint, so stretch the batching
+  // (backgroundThrottling is off: a backgrounded agent must keep streaming).
+  hidden: () => BrowserWindow.getAllWindows().every((w) => w.isDestroyed() || w.isMinimized() || !w.isVisible()),
+});
+/** The pid each session main holds runs as, for a window that joins it. */
+const heldPid = new Map<string, number>();
+/** The window that last typed into each session: while others watch, only it sizes the session
+ *  (the last to type wins, until R4 gives a terminal one keyboard at a time). */
+const lastTyper = new Map<string, number>();
+const viewers = new WeakMap<WebContents, Viewer>();
+/** A window, as a viewer of the sessions it shows. Closed, it leaves them, and a session nobody
+ *  watches any more is let go of, as a window unmounting its last view of it does. */
+function viewerOf(wc: WebContents): Viewer {
+  let v = viewers.get(wc);
+  if (v) return v;
+  const viewer: Viewer = {
+    data: (tileId, data) => { try { wc.send(`pty:data:${tileId}`, data); } catch { /* torn down */ } },
+    exit: (tileId, info) => { try { wc.send(`pty:exit:${tileId}`, info); } catch { /* torn down */ } },
+    alive: () => !wc.isDestroyed(),
+  };
+  viewers.set(wc, viewer);
+  wc.once("destroyed", () => { for (const tileId of ptyRelay.leaveAll(viewer)) detachSession(tileId); });
+  return viewer;
 }
-/** Ship whatever is buffered for the tile, THEN the exit — the last bytes must
- *  land ahead of the "[hivemind] exited" banner. */
-function relayPtyExit(sender: WebContents, tileId: string, info: { code: number; signal?: number }): void {
-  ptyOut.flush(tileId);
-  ptySenders.delete(tileId);
-  if (sender.isDestroyed()) return;
-  try { sender.send(`pty:exit:${tileId}`, info); } catch { /* sender torn down */ }
+/** The host's screen for a session, read in order with its output; null when it keeps none. */
+function screenOf(tileId: string): ReadScreen | null {
+  if (hasRemotePty(tileId)) return remoteKeepsScreen(tileId) ? (cb) => screenRemotePty(tileId, cb) : null;
+  return PERSIST_PTY && hasSession(tileId) ? (cb) => ptyDaemon.screenPty(tileId, cb) : null;
 }
 function dropPtyRelay(tileId: string): void {
-  ptyOut.forget(tileId);
-  ptySenders.delete(tileId);
-  ptyUnseen.delete(tileId);
-  ptyShowing.delete(tileId);
+  ptyRelay.forget(tileId);
+  heldPid.delete(tileId);
+  lastTyper.delete(tileId);
   const t = ptyPauseTimers.get(tileId);
   if (t) { clearTimeout(t); ptyPauseTimers.delete(tileId); }
+}
+/** Let go of a session nobody shows: daemons keep it running, local or remote; an in-process
+ *  PTY ends. */
+function detachSession(tileId: string): void {
+  dropPtyRelay(tileId);
+  if (hasRemotePty(tileId)) detachRemotePty(tileId); else detachPty(tileId);
 }
 // ── pty flow control ──────────────────────────────────────────
 // A pause is a short LEASE, not a latch. node-pty reports a child's exit only
@@ -1258,6 +1264,16 @@ ipcMain.handle("ptySpawn", wrap(async (e, opts: Parameters<typeof spawnPty>[0]) 
     throw new Error(`${spawning.label} comes from ${spawning.sourceRoot} and only runs in tiles there`);
   }
   { const d = spawning; if (d) hcpAgentOf.set(toBareId(opts.tileId), d.id); else hcpAgentOf.delete(toBareId(opts.tileId)); }
+  const viewer = viewerOf(e.sender);
+  // A session main already holds (another window shows it, or this one remounted it): join it,
+  // its screen first. Joining starts no process.
+  const held = heldPid.get(opts.tileId);
+  if (held !== undefined) {
+    const screen = screenOf(opts.tileId);
+    if (screen) ptyRelay.join(opts.tileId, viewer, screen);
+    else ptyRelay.add(opts.tileId, viewer);
+    return { pid: held };
+  }
   // Spawn rate-limit: a compromised renderer (XSS via rendered diff/issue
   // content) could fork-bomb the host through ptySpawn. Cap spawns per sliding
   // window — the dev-bridge already guards the identical call; the IPC path
@@ -1276,17 +1292,29 @@ ipcMain.handle("ptySpawn", wrap(async (e, opts: Parameters<typeof spawnPty>[0]) 
   if (opts.initialPrompt) {
     opts = { ...opts, env: { ...(opts.env ?? {}), [INITIAL_PROMPT_ENV]: opts.initialPrompt } };
   }
-  const sender = e.sender;
+  // The window watches from the first byte: an attach's screen arrives as data.
+  const bare = toBareId(opts.tileId);
+  const callbacks = {
+    onData: (data: string, replay?: boolean) => { hcpBroadcast?.(bare, data); ptyRelay.push(opts.tileId, data); if (!replay) ptyActivity.note(bare, data.length); },
+    // What is pending (recorded and shipped), then the exit, BEFORE the HCP teardown forgets the tile.
+    onExit: (code: number, signal?: number) => { ptyRelay.exit(opts.tileId, { code, signal }); heldPid.delete(opts.tileId); onPtyExit(opts.tileId); },
+  };
+  const hold = async (spawned: Promise<{ pid: number }>): Promise<{ pid: number }> => {
+    ptyRelay.add(opts.tileId, viewer);
+    try {
+      const r = await spawned;
+      if (r.pid === -1) ptyRelay.leave(opts.tileId, viewer);
+      else heldPid.set(opts.tileId, r.pid);
+      return r;
+    } catch (err) {
+      ptyRelay.leave(opts.tileId, viewer);
+      throw err;
+    }
+  };
   // Remote frame (ssh:// cwd): run the PTY over ssh, in-main. Skip the local
   // cwd stat + shell-env patch (those are for the LOCAL host). The data/exit
-  // plumbing below is identical.
-  if (isRemote(opts.cwd)) {
-    return spawnRemotePty(opts, {
-      onData: (data, replay) => { hcpBroadcast?.(toBareId(opts.tileId), data); relayPtyData(sender, opts.tileId, data); if (!replay) ptyActivity.note(toBareId(opts.tileId), data.length); },
-      // Flush (records the tail + ships it) BEFORE the HCP teardown forgets the tile.
-      onExit: (code, signal) => { relayPtyExit(sender, opts.tileId, { code, signal }); onPtyExit(opts.tileId); },
-    });
-  }
+  // plumbing is identical.
+  if (isRemote(opts.cwd)) return hold(spawnRemotePty(opts, callbacks));
   if (opts.cwd) {
     const st = await fsp.stat(opts.cwd).catch(() => null);
     if (!st?.isDirectory()) throw new Error(`pty cwd is not a directory: ${opts.cwd}`);
@@ -1295,14 +1323,9 @@ ipcMain.handle("ptySpawn", wrap(async (e, opts: Parameters<typeof spawnPty>[0]) 
   // (or, in daemon mode, the daemon process that inherits this env) spawns —
   // otherwise `claude`/`gh`/nvm-node may not resolve. Idempotent + cached.
   await applyShellEnvToProcess();
-  // A PTY can outlive the renderer (window closed mid-session) and emit
-  // data/exit after the sender is gone — the relay helpers check
-  // `isDestroyed()` and drop those instead of crashing main.
-  return spawnPty(opts, {
-    onData: (data, replay) => { hcpBroadcast?.(toBareId(opts.tileId), data); relayPtyData(sender, opts.tileId, data); if (!replay) ptyActivity.note(toBareId(opts.tileId), data.length); },
-    // Flush (records the tail + ships it) BEFORE the HCP teardown forgets the tile.
-    onExit: (code, signal) => { relayPtyExit(sender, opts.tileId, { code, signal }); onPtyExit(opts.tileId); },
-  });
+  // A PTY can outlive its windows and emit data/exit after they are gone: the relay skips a
+  // viewer whose window is destroyed.
+  return hold(spawnPty(opts, callbacks));
 }));
 // Renderer back-pressure (TerminalTile flow control): pause/resume reading the
 // child's output on the transport that owns this tile. See PTY_PAUSE_MAX_MS.
@@ -1317,41 +1340,28 @@ ipcMain.on("ptyFlow", (_e, tileId: string, paused: boolean) => {
     }, PTY_PAUSE_MAX_MS));
   }
 });
-ipcMain.on("ptyWrite", (_e, tileId: string, data: string, paste?: boolean) => {
+ipcMain.on("ptyWrite", (e, tileId: string, data: string, paste?: boolean) => {
   // Only a person's keystrokes take this handler — programmatic writes go through the
   // mailbox — so an interrupt key here is the user stopping the agent's turn.
   hcpStatus.input(toBareId(tileId), data);
+  lastTyper.set(tileId, e.sender.id);
   // Remote ptys relay elsewhere; the mark says "a human keystroke on a local pty" — echo skips batching.
   if (hasRemotePty(tileId)) { writeRemotePty(tileId, data, paste); return; }
-  ptyOut.markInput(tileId);
+  ptyRelay.markInput(tileId);
   writePty(tileId, data, paste);
 });
 ipcMain.handle("hcp:status-all", () => hcpStatus.all());
-ipcMain.on("ptyInterest", (_e, tileId: string, shown: boolean) => {
-  const redraw = (cb: (replay: string | null) => void): boolean =>
-    hasRemotePty(tileId) ? screenRemotePty(tileId, cb) : PERSIST_PTY && ptyDaemon.screenPty(tileId, cb);
-  if (!shown) {
-    ptyShowing.delete(tileId);
-    // Only a session whose screen the host keeps can be shown again from it.
-    if (hasRemotePty(tileId) ? remoteKeepsScreen(tileId) : PERSIST_PTY && hasSession(tileId)) ptyUnseen.add(tileId);
-    return;
-  }
-  if (!ptyUnseen.has(tileId) || ptyShowing.has(tileId)) return;
-  ptyShowing.add(tileId);
-  const asked = redraw((replay) => {
-    // Runs in order with the session's data: what is buffered now is older than this screen.
-    if (!ptyShowing.delete(tileId)) return; // hidden again meanwhile
-    ptyOut.flush(tileId);
-    ptyUnseen.delete(tileId);
-    const target = ptySenders.get(tileId);
-    if (replay === null || !target || target.isDestroyed()) return;
-    try { target.send(`pty:data:${tileId}`, REATTACH_RESET + replay); } catch { /* sender torn down */ }
-  });
-  if (!asked) { ptyShowing.delete(tileId); ptyUnseen.delete(tileId); }
+// Whether any view of the asking window shows the tile. Hidden, the window is sent nothing for it
+// while the host keeps its screen; shown again, the screen, then live bytes.
+ipcMain.on("ptyInterest", (e, tileId: string, shown: boolean) => {
+  ptyRelay.show(tileId, viewerOf(e.sender), shown, screenOf(tileId));
 });
-ipcMain.on("ptyResize", (_e, tileId: string, cols: number, rows: number) =>
-  hasRemotePty(tileId) ? resizeRemotePty(tileId, cols, rows) : resizePty(tileId, cols, rows)
-);
+ipcMain.on("ptyResize", (e, tileId: string, cols: number, rows: number) => {
+  // While several windows show a session, the one that typed last sizes it.
+  const typer = lastTyper.get(tileId);
+  if (typer !== undefined && typer !== e.sender.id && ptyRelay.count(tileId) > 1) return;
+  if (hasRemotePty(tileId)) resizeRemotePty(tileId, cols, rows); else resizePty(tileId, cols, rows);
+});
 /** End a tile's session. A daemon tells its killer nothing of the exit, so its teardown runs
  *  here: anything waiting on the tile (a parent's read, an approval) is answered now, not at its
  *  timeout. */
@@ -1361,11 +1371,10 @@ function endSession(tileId: string): void {
   onPtyExit(tileId);
 }
 ipcMain.on("ptyKill", (_e, tileId: string) => endSession(tileId));
-// Detach (window closed / tile unmounted): daemons keep the session alive,
-// local or remote; in-process PTYs treat it as a kill.
-ipcMain.on("ptyDetach", (_e, tileId: string) => {
-  dropPtyRelay(tileId);
-  if (hasRemotePty(tileId)) detachRemotePty(tileId); else detachPty(tileId);
+// Detach (tile unmounted): the window stops watching; the last window to go lets go of the
+// session (daemons keep it alive, local or remote; in-process PTYs treat it as a kill).
+ipcMain.on("ptyDetach", (e, tileId: string) => {
+  if (ptyRelay.leave(tileId, viewerOf(e.sender)) === 0) detachSession(tileId);
 });
 
 // ── lifecycle ─────────────────────────────────────────────────
