@@ -199,6 +199,11 @@ exactly as today. They are ordered by dependency.
   quits the app today. The in-process PTY path (`HIVEMIND_PTY_DAEMON=0`) stays one window: it
   gives each mount a session of its own, and detaching from one kills it. The steps are in the
   tracker (`docs/plans/multiplayer.md`).
+- **Decided while building it (2026-09-29).** A window takes another writer's change by merging
+  it into what it has: the rebase the store runs on a window's write, run the other way, so an
+  edit the window has not yet saved survives. Main ends a closed tile's session itself, so a
+  close needs no window; a window that sees a tile closed closes it as its own × does, which
+  also ends a session still starting there.
 
 ### R6. One status per session, from its host
 

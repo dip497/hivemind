@@ -223,3 +223,21 @@ test("a tile named by the control plane keeps its name when a window then writes
   s.setCore("/a", core("moved"), { base: read });
   expect(restart().getCore("/a")).toEqual({ ...core("moved"), tileNames: { t1: "reviewer" } });
 });
+
+test("a tile closed by the control plane is gone after a restart, and stays closed when a window then writes what it read before", () => {
+  const told: unknown[] = [];
+  const s = new WorkspaceStore({ dir, onChange: (c) => told.push(c) });
+  s.getCore("/b"); // another open workspace, without the tile
+  s.setCore("/a", core("api"), { writer: "window:1" });
+  const read = s.getCore("/a");
+  expect(s.removeTile("nowhere", { writer: "control" })).toBeNull();
+  expect(s.removeTile("t1", { writer: "control" })).toEqual({ repo: "/a", tile: { id: "t1", kind: "claude" } });
+  expect(restart().getCore("/a")).toEqual({ ...core("api"), tiles: [], frameOf: {} });
+  s.setCore("/a", core("moved"), { base: read, writer: "window:1" });
+  expect(restart().getCore("/a")).toEqual({ ...core("moved"), tiles: [], frameOf: {} });
+  expect(told).toEqual([
+    { repo: "/a", part: "core", writer: "window:1" },
+    { repo: "/a", part: "core", writer: "control" },
+    { repo: "/a", part: "core", writer: "window:1" },
+  ]);
+});

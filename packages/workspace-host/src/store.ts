@@ -23,11 +23,11 @@
  * history lasts as long as the store does.
  */
 import { UndoManager, type LoroDoc } from "loro-crdt";
-import { hasCore, readCore, writeCore, writeTileName } from "@hivemind/workspace-doc/core";
+import { hasCore, readCore, removeTile, writeCore, writeTileName } from "@hivemind/workspace-doc/core";
 import { readObjects, writeObjects } from "@hivemind/workspace-doc/objects";
 import { readView, writeView } from "@hivemind/workspace-doc/views";
 import { stampSchema } from "@hivemind/workspace-doc/schema";
-import type { BoardObject, CoreLayout, ViewLayout } from "@hivemind/workspace-doc/shapes";
+import type { BoardObject, CoreLayout, TileRecord, ViewLayout } from "@hivemind/workspace-doc/shapes";
 import type { LegacyLayout, WorkspaceChange } from "./layout.js";
 import { readDoc, writeDoc } from "./doc-file.js";
 
@@ -108,6 +108,19 @@ export class WorkspaceStore {
       let held = false;
       this.write(repo, "core", LAYOUT, from, (doc) => { held = writeTileName(doc, tileId, name); });
       if (held) return repo;
+    }
+    return null;
+  }
+
+  /**
+   * Take the tile `tileId` out of whichever workspace this store has open holds it (the control
+   * plane closes a tile by its id alone). That workspace and what the tile was, or null.
+   */
+  removeTile(tileId: string, from: Writer = {}): { repo: string; tile: TileRecord } | null {
+    for (const repo of this.workspaces.keys()) {
+      let tile: TileRecord | null = null;
+      this.write(repo, "core", LAYOUT, from, (doc) => { tile = removeTile(doc, tileId); });
+      if (tile) return { repo, tile };
     }
     return null;
   }

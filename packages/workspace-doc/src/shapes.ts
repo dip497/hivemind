@@ -33,7 +33,20 @@ export interface FrameRecord {
 export interface TileRecord {
   id: string;
   kind: string;
+  /** Terminal only: an existing session it shows (started by `hive run` or another device). It
+   *  never starts one, and closing it only lets go. */
+  session?: string;
 }
+
+/** The kind every agent's tile has, whatever runs in it: the historical id, kept for saved
+ *  layouts. The only place a provider's name appears as a literal outside its own definition. */
+export const AGENT_TILE_KIND = "claude" as const;
+
+/** What a tile is. */
+export type TileKind = typeof AGENT_TILE_KIND | "shell" | "editor" | "diff" | "issues" | "browser" | "planReview" | "workbench";
+
+/** A tile that runs in a terminal, an agent's or a shell: the kinds with a session. */
+export const isTerminalKind = (kind: string): boolean => kind === AGENT_TILE_KIND || kind === "shell";
 
 /**
  * The layout every view shares, as the window saves it (canvas-persistence.ts): the frames,

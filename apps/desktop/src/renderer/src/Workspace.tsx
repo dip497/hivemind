@@ -47,6 +47,7 @@ import { pickEditorTile } from "./workspace/editor-target";
 import type { TileKind } from "./tile-kinds";
 import {
   loadLayout,
+  reloadLayout,
   saveLayout,
   type TileInstance,
   type FrameState,
@@ -96,6 +97,12 @@ import { endTileSession } from "./TerminalTile";
 const DEFAULT_VIEWPORT: Viewport = { x: 16, y: 24, zoom: 1 };
 /** The agent that runs in a tile, when one does. */
 const agentOfTile = (t: TileInstance): string | undefined => (t.kind === AGENT_TILE_KIND ? agentForCmd(t.cmd)?.id : undefined);
+/** A per-tile map without `id`'s entry: the map itself when it has none, so dropping nothing re-renders nothing. */
+const withoutKey = <T,>(id: string) => (m: Record<string, T>): Record<string, T> => {
+  if (!(id in m)) return m;
+  const { [id]: _drop, ...rest } = m;
+  return rest;
+};
 
 interface Props {
   cwd: string;
@@ -258,49 +265,22 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
       return { ...m, [tileId]: cur.filter((f) => f !== file) };
     });
   }, []);
-  // Close a tile: drop the instance + everything keyed by it. The TileHost
-  // unmounts its body (TerminalTile's cleanup kills/detaches the PTY).
+  // Close a tile: end what runs in it, then drop the instance and everything keyed by it. The
+  // TileHost unmounts its body. A closed tile's id never comes back, so its geometry and frame
+  // membership would otherwise ride along in the saved layouts for the life of the workspace,
+  // and `frameOf` keep claiming it.
   const closeTile = useCallback((id: string) => {
     const closed = tilesRef.current.find((t) => t.id === id);
     if (closed && isTerminalKind(closed.kind)) endTileSession(id, !!closed.session);
     unmarkBackgroundTile(id);
     clearWork(id); // a task queued for a tile that is gone has nowhere to land
     setTiles((ts) => ts.filter((t) => t.id !== id));
-    setBrowserOpenReqs((m) => {
-      if (!(id in m)) return m;
-      const { [id]: _drop, ...rest } = m;
-      return rest;
-    });
-    setEditorTabs((m) => {
-      if (!(id in m)) return m;
-      const { [id]: _drop, ...rest } = m;
-      return rest;
-    });
-    setAgentTitles((m) => {
-      if (!(id in m)) return m;
-      const { [id]: _t, ...rest } = m;
-      return rest;
-    });
-    // Geometry + frame membership are keyed by tile id too, and a closed tile's
-    // id never comes back — without this they ride along in the persisted
-    // layout blob for the life of the workspace (and `frameOf` keeps claiming a
-    // tile that no longer exists). Same drop-if-present shape as above, so a
-    // close that touches nothing re-renders nothing.
-    setPositions((m) => {
-      if (!(id in m)) return m;
-      const { [id]: _p, ...rest } = m;
-      return rest;
-    });
-    setSizes((m) => {
-      if (!(id in m)) return m;
-      const { [id]: _s, ...rest } = m;
-      return rest;
-    });
-    setFrameOf((m) => {
-      if (!(id in m)) return m;
-      const { [id]: _f, ...rest } = m;
-      return rest;
-    });
+    setBrowserOpenReqs(withoutKey(id));
+    setEditorTabs(withoutKey(id));
+    setAgentTitles(withoutKey(id));
+    setPositions(withoutKey(id));
+    setSizes(withoutKey(id));
+    setFrameOf(withoutKey(id));
   }, []);
 
 
@@ -415,19 +395,31 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   const coreSnap = useMemo(() => ({ frames, tileNames, tiles, editorTabs, frameOf }), [frames, tileNames, tiles, editorTabs, frameOf]);
   const geometry = useMemo(() => ({ positions, sizes, viewport }), [positions, sizes, viewport]);
   const { flush: flushCore } = useDebouncedSave(persistKey, coreSnap, useCallback((key: string, v: typeof coreSnap) => saveLayout(key, v), []));
-  // Another writer changed this workspace's core layout (the control plane named a tile): write
-  // what this window has yet to save, which the store applies as this window's change alone, then
-  // read it again. A plan review is never saved, so it stays open.
+  // Until spawning runs in main (R5 step 4), a tile the control plane asks for is made here. It is
+  // saved as it first renders, not at the next debounced save, so a rename or close that follows
+  // at once finds it in main's store; the render comes after the spawn's answer, as ever, so its
+  // terminal starts once main has wired the spawn.
+  const saveCoreOnRender = useRef(false);
+  useEffect(() => {
+    if (!saveCoreOnRender.current) return;
+    saveCoreOnRender.current = false;
+    flushCore();
+  }, [coreSnap, flushCore]);
+  // Another writer changed this workspace's core layout (the control plane named or closed a
+  // tile): write what this window has yet to save, which the store applies as this window's change
+  // alone, then take the layout as stored, keeping what this window changed since. A tile that
+  // writer closed is closed here as its × closes it, which also ends a session still starting.
   useEffect(() => onStoreChange(({ repo, part }) => {
     if (repo !== persistKey || part !== "core") return;
     flushCore();
-    const next = loadLayout(repo);
-    setFrames(next.frames);
-    setTileNames(next.tileNames ?? {});
-    setTiles((cur) => [...(next.tiles ?? []), ...cur.filter((t) => t.kind === "planReview")]);
-    setEditorTabs(next.editorTabs ?? {});
-    setFrameOf(next.frameOf ?? {});
-  }), [persistKey, flushCore, setFrames, setTiles, setFrameOf]);
+    const stored = reloadLayout(repo);
+    setFrames(stored.frames);
+    setTileNames(stored.tileNames);
+    setTiles(stored.tiles);
+    setEditorTabs(stored.editorTabs);
+    setFrameOf(stored.frameOf);
+    for (const id of stored.closed) closeTile(id);
+  }), [persistKey, flushCore, closeTile, setFrames, setTiles, setFrameOf]);
   useDebouncedSave(persistKey, geometry, useCallback((key: string, v: typeof geometry) => saveViewLayout(CANVAS_LAYOUT, key, v), []));
 
   // Viewport-focus request: resolve the target's CENTER from our own state
@@ -808,11 +800,13 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
             if (frameId && !framesRef.current.some((frame) => frame.id === frameId)) throw new Error("Unknown frame id");
             const tileId = spawnTile("browser", frameId, { url: typeof p.url === "string" ? p.url : undefined });
             if (!tileId) throw new Error("Browser is disabled");
+            saveCoreOnRender.current = true;
             await window.hive.hcpResult(cmd.id, true, { tileId });
             break;
           }
           case "tile.spawn_agent": {
             const tileId = hcpSpawnAgent(p as { agent?: string; prompt?: string; frame?: string; mode?: string; model?: string; callerTile?: string; background?: boolean; name?: string; resume?: string });
+            saveCoreOnRender.current = true;
             await window.hive.hcpResult(cmd.id, true, { tileId });
             break;
           }
@@ -855,11 +849,6 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
             await window.hive.hcpResult(cmd.id, true, { ok: true });
             break;
           }
-          case "tile.close": {
-            closeTile(String(p.tileId ?? ""));
-            await window.hive.hcpResult(cmd.id, true, { ok: true });
-            break;
-          }
           case "review.open": {
             // The review tile replies (hcpResult) on the user's decision.
             openPlanReview({ plan: String(p.plan ?? ""), cwd: String(p.cwd ?? ""), hcpCmdId: cmd.id });
@@ -873,7 +862,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
       }
     });
     return off;
-  }, [hcpSpawnAgent, spawnTile, focusTile, closeTile]);
+  }, [hcpSpawnAgent, spawnTile, focusTile]);
 
   // HCP pipes → animated data-flow edges. Add on connect; on disconnect remove
   // the one edge (dst set) or all of src's edges (dst null).

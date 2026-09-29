@@ -101,6 +101,15 @@ export function readCore(repo: string): unknown {
   return core;
 }
 
+/**
+ * The core blob stored for `repo` again, now that another writer changed it, and the one this
+ * window last read or wrote before (null: none): what the window's state was made from.
+ */
+export function rereadCore(repo: string): { base: unknown; core: unknown } {
+  const base = coreBase.get(repo) ?? null;
+  return { base, core: readCore(repo) };
+}
+
 export function writeCore(repo: string, core: unknown): void {
   const b = bridge();
   if (!b) return writeJson(coreKey(repo), core);

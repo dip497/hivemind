@@ -1357,12 +1357,15 @@ ipcMain.on("ptyInterest", (_e, tileId: string, shown: boolean) => {
 ipcMain.on("ptyResize", (_e, tileId: string, cols: number, rows: number) =>
   hasRemotePty(tileId) ? resizeRemotePty(tileId, cols, rows) : resizePty(tileId, cols, rows)
 );
-ipcMain.on("ptyKill", (_e, tileId: string) => {
+/** End a tile's session. A daemon tells its killer nothing of the exit, so its teardown runs
+ *  here: anything waiting on the tile (a parent's read, an approval) is answered now, not at its
+ *  timeout. */
+function endSession(tileId: string): void {
   dropPtyRelay(tileId);
   if (hasRemotePty(tileId)) killRemotePty(tileId); else killPty(tileId);
-  // Anything waiting on the tile (a parent's read, an approval) is answered now, not at its timeout.
   onPtyExit(tileId);
-});
+}
+ipcMain.on("ptyKill", (_e, tileId: string) => endSession(tileId));
 // Detach (window closed / tile unmounted): daemons keep the session alive,
 // local or remote; in-process PTYs treat it as a kill.
 ipcMain.on("ptyDetach", (_e, tileId: string) => {
@@ -1942,6 +1945,8 @@ function startHcpControlPlane(): void {
     awaitingApproval: (tileId, waiting) =>
       hcpStatus.event(tileId, waiting ? { event: "input.requested", kind: "approval" } : { event: "input.resolved" }),
     renameTile: (tileId, name) => workspaceStore().renameTile(tileId, name, { writer: "control" }) !== null,
+    removeTile: (tileId) => workspaceStore().removeTile(tileId, { writer: "control" })?.tile ?? null,
+    endSession,
   });
   // Every verb routes through the boot scan first: spawn resolves the agent by id
   // and other verbs read its capabilities, so none may run against a half-set catalog.

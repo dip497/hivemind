@@ -21,6 +21,7 @@ import { BROWSER_TOOL_ID, tileKindAvailability } from "@hivemind/core/tool-plugi
 import type { ToolsSettings } from "@hivemind/core/settings-schema";
 import { SUBMIT_DELAY_MS } from "../../shared/agent-io.js";
 import { customDataProblem, isCustomEventName } from "@hivemind/view-sdk/protocol";
+import { isTerminalKind, type TileRecord } from "@hivemind/workspace-doc/shapes";
 
 /** `view.emit` rate: a steady 10 per second, bursts of 30. */
 export const EMIT_RATE = { perSecond: 10, burst: 30 };
@@ -167,6 +168,11 @@ export interface MethodDeps {
   /** Name a tile (an empty name takes its name away) in the open workspace that holds it; its
    *  windows follow. False when none does. */
   renameTile: (tileId: string, name: string) => boolean;
+  /** Take a tile out of the open workspace that holds it; its windows follow. What it was, or null
+   *  when none holds it. */
+  removeTile: (tileId: string) => TileRecord | null;
+  /** End the session a tile runs (by its pty id), as its window's kill does. */
+  endSession: (ptyId: string) => void;
 }
 
 const RENDERER_TIMEOUT = 15_000;
@@ -359,12 +365,15 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     deps.awaitingApproval(bare, false);
   };
 
-  // Close a tile: ask the renderer to remove it, then drop its state. Shared by the
-  // `tile.close` verb and workflow's `close_when_done`.
+  // Close a tile, with no window needed: it leaves its workspace and the session it runs ends, but
+  // not one it adopted (`hive run`, another device), which is someone else's job and keeps running.
+  // Then its state here goes. Shared by the `tile.close` verb and workflow's `close_when_done`.
   const closeTile = async (tileId: string): Promise<unknown> => {
-    const r = await deps.callRenderer("tile.close", { tileId }, RENDERER_TIMEOUT);
+    const closed = deps.removeTile(bareOf(tileId));
+    if (!closed) throw new HcpError("TILE_NOT_FOUND", `no open workspace has tile ${bareOf(tileId)}`);
+    if (isTerminalKind(closed.kind) && !closed.session) deps.endSession(ptyId(tileId));
     forgetTileState(tileId);
-    return r;
+    return { ok: true };
   };
 
   const dispatch = async (method: string, rawParams: unknown): Promise<unknown> => {

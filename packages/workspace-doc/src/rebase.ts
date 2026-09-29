@@ -4,6 +4,10 @@
  * may have changed the document (the control plane renamed a tile). The write keeps what the
  * writer changed from its base, and everything else as the document has it now, so a window
  * writing from an older reading never reverts an edit made since.
+ *
+ * A read is the same merge the other way: the window takes the document as it is now, keeping
+ * what it changed since its base and has not yet saved. It keeps each part of the layout apart,
+ * so it merges them one by one.
  */
 import type { Fields } from "./input.js";
 import type { CoreLayout } from "./shapes.js";
@@ -26,7 +30,7 @@ export function rebaseCore(base: Layout, next: Layout, current: Layout): Layout 
  * removed goes; one another writer removed since stays gone; one another writer added since
  * stays. In the writer's order, then what others added.
  */
-function rebaseRecords<T extends { id: string }>(base: readonly T[], next: readonly T[], current: readonly T[]): T[] {
+export function rebaseRecords<T extends { id: string }>(base: readonly T[], next: readonly T[], current: readonly T[]): T[] {
   const was = new Map(base.map((r) => [r.id, r]));
   const now = new Map(current.map((r) => [r.id, r]));
   const out: T[] = [];
@@ -42,7 +46,7 @@ function rebaseRecords<T extends { id: string }>(base: readonly T[], next: reado
 }
 
 /** Fields by name: those the writer changed from its base are its, the rest as they are now. */
-function rebaseFields<T extends Fields>(base: T, next: T, current: T): T {
+export function rebaseFields<T extends Fields>(base: T, next: T, current: T): T {
   const out: Fields = { ...current };
   for (const key of new Set([...Object.keys(base), ...Object.keys(next)])) {
     if (sameJson(base[key], next[key])) continue;

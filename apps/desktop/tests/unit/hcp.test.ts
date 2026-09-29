@@ -19,6 +19,7 @@ import { startHcpServer } from "../../src/main/hcp/hcp-server.ts";
 import { PipeManager } from "../../src/main/hcp/pipes.ts";
 import { Mailbox } from "../../src/main/hcp/mailbox.ts";
 import { SUBMIT_DELAY_MS } from "../../src/shared/agent-io.ts";
+import { WorkspaceStore } from "@hivemind/workspace-host/store";
 
 test("PipeManager: edges, self-loop refused, forget removes both directions", () => {
   const pm = new PipeManager();
@@ -273,6 +274,30 @@ test("forgetTile resolves a supervised worker's pending approval (deny), not lea
   forgetTile("tile-x"); // worker crashed mid-approval
   const r = (await approval) as { decision: string };
   assert.equal(r.decision, "deny", "a crashed worker's approval resolves deny, doesn't hang 20 min");
+});
+
+test("dispatch tile.close needs no window: the tile leaves its workspace, and the session it runs ends, not one it adopted", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hcp-close-"));
+  const store = new WorkspaceStore({ dir });
+  store.setCore("/w", { frames: [], tiles: [
+    { id: "tile-a", kind: "claude", label: "a" },
+    { id: "tile-s", kind: "shell", label: "s", session: "hive-run-1" }, // `hive run`'s session, shown here
+    { id: "tile-e", kind: "editor", label: "e" },
+  ] });
+  const ended: string[] = [];
+  const { deps } = fakeDeps({
+    callRenderer: async () => { throw new Error("no window"); },
+    removeTile: (tileId) => store.removeTile(tileId, { writer: "control" })?.tile ?? null,
+    endSession: (ptyId) => void ended.push(ptyId),
+  });
+  const { dispatch } = makeDispatch(deps);
+  const read = dispatch("agent.read", { tileId: "tile-a", timeoutMs: 5_000 });
+  for (const tileId of ["hm:tile-a", "tile-s", "tile-e"]) assert.deepEqual(await dispatch("tile.close", { tileId }), { ok: true });
+  assert.deepEqual(ended, ["hm:tile-a"]);
+  assert.deepEqual(store.getCore("/w")?.tiles, []);
+  assert.equal(((await read) as { finalStatus: string }).finalStatus, "closed", "a read waiting on it is answered at once");
+  await assert.rejects(dispatch("tile.close", { tileId: "tile-a" }), (e: unknown) => e instanceof HcpError && e.code === "TILE_NOT_FOUND");
+  fs.rmSync(dir, { recursive: true, force: true });
 });
 
 test("OutputRecorder: lazy trim still never returns more than the ring cap, and since() is exact after overshoot", () => {

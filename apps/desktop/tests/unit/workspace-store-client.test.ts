@@ -34,7 +34,7 @@ const ls = new Map<string, string>();
   },
 };
 
-const { loadLayout, saveLayout } = await import("../../src/renderer/src/canvas-persistence.ts");
+const { loadLayout, reloadLayout, saveLayout } = await import("../../src/renderer/src/canvas-persistence.ts");
 const { loadViewLayout, saveViewLayout } = await import("../../src/renderer/src/workspace/view-layout-store.ts");
 
 after(() => fs.rmSync(dir, { recursive: true, force: true }));
@@ -81,4 +81,45 @@ test("a save from what the window last read or wrote keeps what another writer c
   store.renameTile("t7", "theirs", { writer: "control" });
   saveLayout("/shared", { ...layout, tileNames: { t7: "mine" }, frames: [frame("f1", "api, moved again")] });
   assert.deepEqual(store.getCore("/shared")?.tileNames, { t7: "theirs" });
+});
+
+test("what another writer changed comes in over what the window has not saved, which stays, and is saved from there", () => {
+  const tile = (id: string, kind: "claude" | "shell" | "planReview" = "shell") => ({ id, kind, label: id });
+  const saved = { frames: [frame("f1", "api")], tileNames: {}, tiles: [tile("b1", "claude"), tile("b2")], editorTabs: {}, frameOf: { b1: "f1", b2: "f1" } };
+  saveLayout("/both", { ...saved, frames: [frame("f1", "first")] });
+  saveLayout("/both", saved); // the window's base is what it wrote last
+  // Since: the control plane names b1 and closes b2, and another window opens b4.
+  store.renameTile("b1", "lead", { writer: "control" });
+  store.removeTile("b2", { writer: "control" });
+  store.setCore("/both", { ...saved, tiles: [...saved.tiles, tile("b4")] }, { base: saved, writer: "window:9" });
+  // What the window has, not yet saved: f1 moved, b3 opened, and a plan review, which is never saved.
+  const mine = { ...saved, frames: [frame("f1", "api, moved")], tiles: [...saved.tiles, tile("b3"), tile("bp", "planReview")], frameOf: { ...saved.frameOf, b3: "f1" } };
+
+  const stored = reloadLayout("/both");
+  assert.deepEqual(stored.closed, ["b2"]);
+  const merged = {
+    frames: stored.frames(mine.frames),
+    tileNames: stored.tileNames(mine.tileNames),
+    tiles: stored.tiles(mine.tiles),
+    editorTabs: stored.editorTabs(mine.editorTabs),
+    frameOf: stored.frameOf(mine.frameOf),
+  };
+  assert.deepEqual(merged, {
+    frames: [frame("f1", "api, moved")],
+    tileNames: { b1: "lead" },
+    tiles: [tile("b1", "claude"), tile("b3"), tile("bp", "planReview"), tile("b4")],
+    editorTabs: {},
+    frameOf: { b1: "f1", b3: "f1" },
+  });
+  // Saved from what it read now: the window's own changes, and the control plane's stay.
+  saveLayout("/both", merged);
+  store.renameTile("b1", "lead, again", { writer: "control" });
+  saveLayout("/both", { ...merged, frames: [frame("f1", "api, moved again")] });
+  assert.deepEqual(store.getCore("/both"), {
+    frames: [frame("f1", "api, moved again")],
+    tiles: [tile("b1", "claude"), tile("b3"), tile("b4")],
+    tileNames: { b1: "lead, again" },
+    editorTabs: {},
+    frameOf: { b1: "f1", b3: "f1" },
+  });
 });

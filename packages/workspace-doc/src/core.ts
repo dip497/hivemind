@@ -3,8 +3,8 @@
  * a tree, tiles as a map of records, their order as a movable list. `writeCore` turns a whole
  * layout, as the window saves it, into the edits that make the document hold it, so a write
  * records only what changed and edits from two writers merge; given the layout the writer
- * started from, it writes only what the writer changed (rebase.ts). `readCore` builds it back,
- * and `writeTileName` names one tile.
+ * started from, it writes only what the writer changed (rebase.ts). `readCore` builds it back;
+ * `writeTileName` names one tile and `removeTile` takes one out.
  */
 import type { LoroDoc, LoroMap, LoroTree, LoroTreeNode, TreeID } from "loro-crdt";
 import { isMap, writeFields } from "./fields.js";
@@ -39,6 +39,22 @@ export function writeCore(doc: LoroDoc, value: unknown, base?: unknown): void {
   writeOrder(doc.getMovableList(ORDER), layout.tiles.map((t) => t.id));
   const meta = doc.getMap(META);
   if (meta.get("core") !== true) meta.set("core", true);
+}
+
+/** Take the tile `tileId` out of the layout, with its name, tabs and frame. What it was, or null
+ *  when `doc` has no such tile. */
+export function removeTile(doc: LoroDoc, tileId: string): TileRecord | null {
+  if (typeof tileId !== "string") throw new TypeError("workspace doc: a tile's id is a string");
+  const tiles = doc.getMap(TILES);
+  const record = tiles.get(tileId);
+  if (!isMap(record)) return null;
+  const { frame: _frame, name: _name, tabs: _tabs, ...fields } = record.toJSON() as Fields;
+  tiles.delete(tileId);
+  // A merge can leave an id listed twice.
+  const order = doc.getMovableList(ORDER);
+  const listed = order.toArray();
+  for (let at = listed.length - 1; at >= 0; at--) if (listed[at] === tileId) order.delete(at, 1);
+  return { ...fields, id: tileId } as unknown as TileRecord;
 }
 
 /** Name the tile `tileId`, or take its name away with "". False when `doc` has no such tile. */

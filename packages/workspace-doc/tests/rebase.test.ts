@@ -3,7 +3,7 @@
 // write keeps its own changes and leaves everyone else's as they are.
 import { expect, test } from "bun:test";
 import { LoroDoc } from "loro-crdt";
-import { readCore, writeCore, writeTileName } from "../src/core.ts";
+import { readCore, removeTile, writeCore, writeTileName } from "../src/core.ts";
 
 type Fields = Record<string, unknown>;
 const frame = (id: string, fields: Fields = {}) => ({ id, x: 0, y: 0, w: 400, h: 300, title: id, color: "#888", z: 1, ...fields });
@@ -67,4 +67,16 @@ test("a tile is named, and its name taken away, on its own; a tile the document 
   expect(readCore(doc)?.tileNames).toEqual({ t2: "server" });
   expect(writeTileName(doc, "gone", "x")).toBe(false);
   expect(readCore(doc)?.tiles.map((t) => t.id)).toEqual(["t1", "t2", "t3", "ed"]);
+});
+
+test("a tile is taken out on its own, with its name, tabs and frame, leaving nothing behind; a tile the document does not hold is not", () => {
+  const doc = new LoroDoc();
+  writeCore(doc, READ);
+  doc.getMovableList("order").push("t1"); // a merge listed it twice
+  expect(removeTile(doc, "t1")).toEqual(tile("t1"));
+  expect(removeTile(doc, "ed")).toEqual(tile("ed", { kind: "editor" }));
+  expect(readCore(doc)).toEqual({ frames: READ.frames, tiles: [tile("t2"), tile("t3")], tileNames: {}, editorTabs: {}, frameOf: { t2: "f2", t3: "f2" } });
+  expect(doc.getMovableList("order").toArray()).toEqual(["t2", "t3"]);
+  expect(removeTile(doc, "t1")).toBeNull();
+  expect(removeTile(doc, "gone")).toBeNull();
 });

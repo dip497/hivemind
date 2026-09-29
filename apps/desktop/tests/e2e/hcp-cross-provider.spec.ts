@@ -69,6 +69,9 @@ function processesOf(tileId: string): string[] {
   });
 }
 
+/** The tiles the canvas has a place for, as main's store keeps them for this workspace. */
+const placed = () => page.evaluate((r) => Object.keys((window.hive.workspaceViewSync(r, "canvas") as { data?: { positions?: object } } | null)?.data?.positions ?? {}), repo);
+
 test.beforeAll(async () => {
   test.setTimeout(180_000);
   repo = fs.mkdtempSync(path.join(os.tmpdir(), "hm-xprov-"));
@@ -183,12 +186,14 @@ test("a droid worker reports back to the claude orchestrator with `hive ctl repo
   const ids = list.json.frames.flatMap((f: any) => f.tiles.map((t: any) => t.tileId));
   expect(ids).toEqual(expect.arrayContaining([orchestrator, worker]));
   expect(processesOf(worker)).not.toEqual([]);
+  await expect.poll(placed).toContain(worker);
   expect(hive(["ctl", "close", worker, "--json"]).json).toEqual({ ok: true });
   await expect
     .poll(() => hive(["ctl", "list", "--json"]).json.frames.flatMap((f: any) => f.tiles.map((t: any) => t.tileId)), { timeout: 10_000 })
     .not.toContain(worker);
-  // Closed is ended: nothing is left running for it in the daemon.
+  // Closed is ended: nothing is left running for it in the daemon, and the window keeps nothing of it.
   await expect.poll(() => processesOf(worker), { timeout: 10_000 }).toEqual([]);
+  await expect.poll(placed).not.toContain(worker);
 });
 
 test("a busy worker closed in the Windows view ends, and a read waiting on its reply is told so at once", async () => {
@@ -213,11 +218,8 @@ test("a tile named by the control plane is named in the window at once; with no 
   const spawned = hive(["ctl", "spawn", "--agent", "claude", "--name", "before", "--prompt", "echo named", "--json"]);
   expect(spawned.code, spawned.stderr).toBe(0);
   const tile: string = spawned.json.tileId;
-  // The window saves a new tile a moment after it opens it; until spawning runs in main (R5), a
-  // rename that quick finds no such tile yet.
-  let renamed = hive(["ctl", "rename", tile, "after", "--json"]);
-  await expect.poll(() => (renamed = renamed.code === 5 ? hive(["ctl", "rename", tile, "after", "--json"]) : renamed).code, { timeout: 5_000 }).toBe(0);
-  expect(renamed.json).toEqual({ ok: true, name: "after" });
+  // Straight after the spawn: the tile the window made for it is already in main's store.
+  expect(hive(["ctl", "rename", tile, "after", "--json"]).json).toEqual({ ok: true, name: "after" });
   await expect(page.locator(".hm-layers").getByText("after", { exact: true })).toBeVisible();
   const nameOf = () => hive(["ctl", "list", "--json"]).json.frames.flatMap((f: any) => f.tiles).find((t: any) => t.tileId === tile)?.name;
   expect(nameOf()).toBe("after");
@@ -225,6 +227,17 @@ test("a tile named by the control plane is named in the window at once; with no 
   expect(hive(["ctl", "rename", tile, "--json"]).json).toEqual({ ok: true, name: "" });
   await expect.poll(nameOf).not.toBe("after");
   expect(hive(["ctl", "rename", "tile-nowhere", "x", "--json"]).code).toBe(5);
+});
+
+test("a tile the control plane closes straight after spawning it leaves the window and ends; one no workspace holds is not found", async () => {
+  const spawned = hive(["ctl", "spawn", "--agent", "claude", "--name", "brief", "--prompt", "sleep 60; echo late", "--json"]);
+  expect(spawned.code, spawned.stderr).toBe(0);
+  const tile: string = spawned.json.tileId;
+  await expect(page.locator(`.react-flow__node[data-id="${tile}"]`)).toHaveCount(1);
+  expect(hive(["ctl", "close", tile, "--json"])).toMatchObject({ code: 0, json: { ok: true } });
+  await expect(page.locator(`.react-flow__node[data-id="${tile}"]`)).toHaveCount(0);
+  await expect.poll(() => processesOf(tile), { timeout: 10_000 }).toEqual([]);
+  expect(hive(["ctl", "close", tile, "--json"])).toMatchObject({ code: 5, json: { code: "TILE_NOT_FOUND" } });
 });
 
 test("an agent's past sessions are listed for its folder, and one can be continued", async () => {

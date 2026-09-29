@@ -2,14 +2,17 @@
  * Workspace core persistence — the blob (per repo) holding what EVERY view
  * shares: frames (identity + bindings + their canvas rect, see FrameState),
  * open tiles, tile→frame membership, user renames, editor tabs.
- * Pure (no React): load returns a PersistedLayout, save serializes a snapshot.
+ * Pure (no React): load returns a PersistedLayout, save serializes a snapshot,
+ * and reload merges what another writer changed into the window's state.
  * Workspace.tsx owns the React state; this module owns the blob's shape, and
  * workspace/workspace-store-client.ts where it is kept (main's workspace store).
  * The canvas view's geometry (tile positions / sizes / viewport) is the canvas
  * view's own layout blob (workspace/views/canvas-layout.ts), like every view's.
  */
+import { rebaseFields, rebaseRecords } from "@hivemind/workspace-doc/rebase";
+import type { TileRecord } from "@hivemind/workspace-doc/shapes";
 import type { TileKind } from "./tile-kinds";
-import { readCore, writeCore } from "./workspace/workspace-store-client";
+import { readCore, rereadCore, writeCore } from "./workspace/workspace-store-client";
 
 /** On POSIX: `-i` keeps the shell interactive so it doesn't exit, `-l` sources
  *  the login profile (PATH includes ~/.local/bin → claude resolves). Windows
@@ -27,8 +30,9 @@ export function defaultShell(): { cmd: string; args: string[] } {
  *  tabbed editor, attached) on the canvas. */
 export const WORKBENCH_TILE_ID = "tile-workbench-1";
 
-export interface TileInstance {
-  id: string;
+/** A tile as the window keeps it, and the layout saves it (a plan review aside): TileRecord's
+ *  fields, which the document and main read too, and the rest. */
+export interface TileInstance extends TileRecord {
   kind: TileKind;
   label: string;
   /** claude / shell only. */
@@ -38,8 +42,6 @@ export interface TileInstance {
   task?: string;
   /** browser only — last/initial URL so the tile restores where it was. */
   url?: string;
-  /** Terminal only: an existing daemon session it shows (started by `hive run` or another device); never spawns one. */
-  session?: string;
   /** Pinned = the tile becomes a TRUE screen-fixed floating panel: its content is
    *  portaled out of react-flow's transformed viewport into a fixed full-window
    *  layer, so it holds a constant screen position + size, unaffected by canvas
@@ -113,11 +115,49 @@ export function loadLayout(repoPath: string | null): PersistedLayout {
   // (welcome screen / e2e bootstrap) and persisting it leaks layouts across
   // unrelated sessions.
   if (!repoPath) return { frames: [], tileNames: {} };
-  const p = readCore(repoPath) as Partial<PersistedLayout> | null;
-  if (!p || typeof p !== "object") return { frames: [], tileNames: {} };
+  return layoutOf(readCore(repoPath));
+}
+
+/** What another writer changed, as the window takes it: each part of the layout as an update of
+ *  the window's own, and the tiles that writer closed. */
+export interface LayoutReload {
+  frames: (mine: FrameState[]) => FrameState[];
+  tileNames: (mine: Record<string, string>) => Record<string, string>;
+  tiles: (mine: TileInstance[]) => TileInstance[];
+  editorTabs: (mine: Record<string, string[]>) => Record<string, string[]>;
+  frameOf: (mine: Record<string, string>) => Record<string, string>;
+  /** The window closes these as its own × does. */
+  closed: string[];
+}
+
+/**
+ * Another writer changed `repoPath`'s core layout: read it again. Each part comes as an update of
+ * the window's own, which takes the layout as stored and keeps what the window changed since it
+ * last read or wrote, so an edit it has not saved, or not yet rendered, is not lost (a plan
+ * review, never saved, is one). Write what is pending first: what the window last wrote is then
+ * what its state was made from.
+ */
+export function reloadLayout(repoPath: string): LayoutReload {
+  const { base, core } = rereadCore(repoPath);
+  const was = layoutOf(base);
+  const now = layoutOf(core);
+  const open = new Set(now.tiles.map((t) => t.id));
+  return {
+    frames: (mine) => rebaseRecords(was.frames, mine, now.frames),
+    tileNames: (mine) => rebaseFields(was.tileNames, mine, now.tileNames),
+    tiles: (mine) => rebaseRecords(was.tiles, mine, now.tiles),
+    editorTabs: (mine) => rebaseFields(was.editorTabs, mine, now.editorTabs),
+    frameOf: (mine) => rebaseFields(was.frameOf, mine, now.frameOf),
+    closed: was.tiles.filter((t) => !open.has(t.id)).map((t) => t.id),
+  };
+}
+
+/** A stored core blob as the window reads it: a part missing or malformed is empty. */
+function layoutOf(stored: unknown): LayoutSnapshot {
+  const p = (typeof stored === "object" && stored !== null ? stored : {}) as Partial<PersistedLayout>;
   return {
     frames: Array.isArray(p.frames) ? p.frames : [],
-    frameOf: p.frameOf,
+    frameOf: p.frameOf ?? {},
     tileNames: p.tileNames ?? {},
     tiles: Array.isArray(p.tiles) ? p.tiles : [],
     editorTabs: p.editorTabs && typeof p.editorTabs === "object" && !Array.isArray(p.editorTabs) ? p.editorTabs : {},
