@@ -260,3 +260,7 @@ spawn wires not being drawn, and two issues found while verifying R1.
   its project reads none). Banners use the name every surface shows, down to the tile's label.
   Full e2e on the list commit, on a quiet machine: 155 passed, 10 skipped (the Windows view test
   that failed under load passed). Step 3 done; steps 4 and 5 re-sliced (see the row).
+- 2026-09-29 — R5 step 4: spawning writes the tile in main (see the row). Full e2e: 156
+  passed, 10 skipped. Working rule adopted at the maintainer's ask to move faster: one full e2e
+  per step, run in the background while the next is written, specs the change touches in
+  between, and each step's mutation checks in one batch.
