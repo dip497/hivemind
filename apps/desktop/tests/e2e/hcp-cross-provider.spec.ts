@@ -277,6 +277,9 @@ test("structured failures: bad token exits 6, missing tile or frame exits 5", as
   expect(gone.code).toBe(5);
   expect(gone.json).toMatchObject({ ok: false, code: "TILE_NOT_FOUND" });
   expect(hive(["ctl", "list", "--frame", "no-such-frame", "--json"])).toMatchObject({ code: 5, json: { ok: false, code: "NOT_FOUND" } });
+  const started = Date.now();
+  expect(hive(["ctl", "read", "tile-does-not-exist", "--timeout", "30000", "--json"])).toMatchObject({ code: 5, json: { ok: false, code: "TILE_NOT_FOUND" } });
+  expect(Date.now() - started).toBeLessThan(10_000); // at once, not at the timeout
 });
 
 test("a runtime without a turn signal is refused up front, not timed out (exit 7 UNSUPPORTED)", async () => {

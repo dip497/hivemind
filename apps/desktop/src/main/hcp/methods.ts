@@ -184,6 +184,8 @@ export interface MethodDeps {
   status: Pick<StatusStore, "get">;
   /** End the session a tile runs (by its pty id), as its window's kill does. */
   endSession: (ptyId: string) => void;
+  /** Whether main holds a session by this pty id (a window showed it, here or remote). */
+  sessionHeld: (ptyId: string) => boolean;
 }
 
 /** How the control plane writes a workspace: its windows hear of it, and it hears of none. */
@@ -624,6 +626,12 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         requireTurnSignal(tileId, "agent.read");
         const timeoutMs = typeof p.timeoutMs === "number" ? p.timeoutMs : DEFAULT_READ_TIMEOUT;
         const pid = ptyId(tileId);
+        // A tile no open workspace holds, running no session main holds, is gone: say so now
+        // rather than wait out the timeout for a turn that cannot come. A tile still starting
+        // is in its workspace already.
+        if (deps.workspaces.workspaceOf(bareOf(tileId)) === null && !deps.sessionHeld(pid)) {
+          throw new HcpError("TILE_NOT_FOUND", `no tile ${bareOf(tileId)} is open`);
+        }
         // A send may still be queued behind the turn in flight; its epoch is armed when
         // it is typed, so wait for that before deciding which turn this read wants.
         // One budget for the whole read: waiting for a held send to be typed must not

@@ -124,7 +124,7 @@ test("dispatch agent.send: writes text + carriage return", async () => {
 });
 
 test("dispatch agent.read: returns the reply the agent's plugin reported for the turn", async () => {
-  const { deps, turns } = fakeDeps();
+  const { deps, turns } = fakeDeps({ sessionHeld: (id) => id === "hm:t1" });
   const { dispatch } = makeDispatch(deps);
   await dispatch("agent.send", { tileId: "t1", text: "go" });
   const read = dispatch("agent.read", { tileId: "t1", timeoutMs: 1000 });
@@ -132,6 +132,16 @@ test("dispatch agent.read: returns the reply the agent's plugin reported for the
   await dispatch("agent.reply", { tileId: "hm:t1", text: "the reply" });
   turns.recordTurn("hm:t1");
   assert.deepEqual(await read, { text: "the reply", finalStatus: "turn", truncated: false });
+});
+
+test("dispatch agent.read: a tile nothing knows of is not found at once; one opened but not yet running is waited on", async () => {
+  const { deps } = fakeDeps();
+  deps.workspaces.addTile(REPO, { id: "tile-new", kind: "claude", label: "claude #1" });
+  const { dispatch } = makeDispatch(deps);
+  const started = Date.now();
+  await assert.rejects(dispatch("agent.read", { tileId: "tile-gone", timeoutMs: 5_000 }), (e: unknown) => e instanceof HcpError && e.code === "TILE_NOT_FOUND");
+  assert.ok(Date.now() - started < 1_000, "answered at once, not at the timeout");
+  assert.deepEqual(await dispatch("agent.read", { tileId: "tile-new", timeoutMs: 50 }), { text: null, finalStatus: "timeout", truncated: false, note: "agent still working — no completed turn within timeout" });
 });
 
 test("dispatch agent.send_keys: maps symbolic tokens to terminal bytes", async () => {

@@ -24,6 +24,7 @@ export function workspaceDeps() {
     launchOptions: () => ({}),
     announceSpawn: (spawn: HcpSpawnedEvent) => void announced.push(spawn),
     endSession: () => {},
+    sessionHeld: () => false,
     announced,
   };
 }

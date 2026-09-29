@@ -1947,6 +1947,7 @@ function startHcpControlPlane(): void {
     },
     status: hcpStatus,
     endSession,
+    sessionHeld: (id) => hasSession(id) || hasRemotePty(id),
   });
   // Every verb routes through the boot scan first: spawn resolves the agent by id
   // and other verbs read its capabilities, so none may run against a half-set catalog.
