@@ -7,6 +7,9 @@
  * A viewer that joins a session others already watch is sent the screen as the host keeps it,
  * then live bytes. A viewer none of whose views shows the session is sent nothing for it while
  * the host keeps its screen, and the screen again when it shows it. An exit reaches every viewer.
+ *
+ * A session is started once, however many viewers open it at once: the first starts it, the rest
+ * wait for that start and join. The one that started it gives it its first task.
  */
 import { PtyOutputBuffer } from "./pty-output-buffer.js";
 
@@ -41,6 +44,10 @@ export interface SessionRelayOptions {
 
 export class SessionRelay {
   private readonly viewers = new Map<string, Map<Viewer, Watch>>();
+  /** Sessions running, with the pid they run as and the viewer that started them. */
+  private readonly running = new Map<string, { pid: number; starter: Viewer }>();
+  /** Starts not yet answered. */
+  private readonly starting = new Map<string, Promise<{ pid: number }>>();
   private readonly out: PtyOutputBuffer;
 
   constructor(private readonly opts: SessionRelayOptions) {
@@ -50,6 +57,37 @@ export class SessionRelay {
   /** Viewers of `tileId`. */
   count(tileId: string): number {
     return this.viewers.get(tileId)?.size ?? 0;
+  }
+
+  /**
+   * `viewer` shows `tileId`. The first to open it starts it with `start` and watches it from its
+   * first byte; one that opens it while it starts waits for that start; one that opens it once it
+   * runs joins it, the host's screen (`screen`) first. `joined`: another viewer started it, and
+   * gave it its first task. A start that fails, or finds no session (pid -1), leaves no viewer.
+   */
+  async open(tileId: string, viewer: Viewer, start: () => Promise<{ pid: number }>, screen: () => ReadScreen | null): Promise<{ pid: number; joined: boolean }> {
+    for (let wait = this.starting.get(tileId); wait; wait = this.starting.get(tileId)) await wait.catch(() => undefined);
+    const run = this.running.get(tileId);
+    if (run) {
+      const read = screen();
+      if (read) this.join(tileId, viewer, read);
+      else this.add(tileId, viewer);
+      return { pid: run.pid, joined: run.starter !== viewer };
+    }
+    this.add(tileId, viewer);
+    const started = start();
+    this.starting.set(tileId, started);
+    try {
+      const { pid } = await started;
+      if (pid === -1) this.leave(tileId, viewer);
+      else this.running.set(tileId, { pid, starter: viewer });
+      return { pid, joined: false };
+    } catch (e) {
+      this.leave(tileId, viewer);
+      throw e;
+    } finally {
+      if (this.starting.get(tileId) === started) this.starting.delete(tileId);
+    }
   }
 
   /** `viewer` shows `tileId` from now on, from the session's own start or an attach that brought
@@ -116,12 +154,14 @@ export class SessionRelay {
       if (viewer.alive()) viewer.exit(tileId, info);
     }
     this.viewers.delete(tileId);
+    this.running.delete(tileId);
   }
 
   /** Forget `tileId` without a word to its viewers (the tile closed). */
   forget(tileId: string): void {
     this.out.forget(tileId);
     this.viewers.delete(tileId);
+    this.running.delete(tileId);
   }
 
   private watches(tileId: string): Map<Viewer, Watch> {

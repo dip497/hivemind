@@ -430,6 +430,7 @@ export function App() {
         current={repoPath}
         onOpen={openRecent}
         onBrowse={() => void pickFolder()}
+        onNewWindow={() => void window.hive.newWindow()}
         onClose={() => setRecentOpen(false)}
       />
       <NewIssueModal

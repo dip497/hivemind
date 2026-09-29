@@ -110,7 +110,8 @@ import { readOrCreateToken, hcpSockPath } from "@hivemind/agent-host/hooks/token
 import { HcpError } from "./hcp/protocol.js";
 import { handleViewProtocol, listViewPackages, registerViewScheme, startViewWatchdog } from "./view-packages.js";
 import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, settingsFile, settingsBusy, settingsSettled } from "./settings-store.js";
-import { flushWorkspaceStore, installWorkspaceStoreIpc, shownWorkspace, workspaceStore } from "./workspace-store-ipc.js";
+import { flushWorkspaceStore, installWorkspaceStoreIpc, shownWorkspace, workspaceShownBy, workspaceStore } from "./workspace-store-ipc.js";
+import { appWindowOf, broadcast, openWindows, registerWindow, userWindow } from "./windows.js";
 import { patchSettingsExtras } from "@hivemind/core/settings";
 import { PipeManager } from "./hcp/pipes.js";
 import { toBareId, toPtyId } from "../shared/tile-id.js";
@@ -160,7 +161,11 @@ function refreshWindowsStartMenuShortcut(): void {
   }
 }
 
-let mainWindow: BrowserWindow | null = null;
+/** The project each window opens on: the one `hivemind <path>` named for the first, the one the
+ *  window that asked shows for a new one. */
+const launchTargets = new WeakMap<WebContents, string | null>();
+/** Spawn wires drawn now (child → parent): what a window that opens late draws. */
+const spawnWires = new Map<string, string>();
 
 // ── CLI launch target ─────────────────────────────────────────
 // Lets `hivemind .` / `hivemind /path/to/repo` open THAT repo instead of the
@@ -246,7 +251,7 @@ function attachWinStateSaver(win: BrowserWindow): void {
   win.on("unmaximize", save);
 }
 
-async function createWindow(): Promise<void> {
+async function createWindow(target: string | null = cliLaunchTarget): Promise<void> {
   // Remove the native File/Edit/View/Window/Help menu entirely (autoHideMenuBar
   // only hides it until Alt; this kills it outright). No app actions live there
   // — everything is in the in-canvas chrome + ⌘K palette.
@@ -256,7 +261,7 @@ async function createWindow(): Promise<void> {
   // when the CDP enabler is off; the file just lists tiles with no endpoint.
   process.env.HIVEMIND_BROWSER_TARGETS = path.join(app.getPath("userData"), "browser-targets.json");
   const state = await loadWinState();
-  mainWindow = new BrowserWindow({
+  const win = new BrowserWindow({
     width: state.width,
     height: state.height,
     ...(typeof state.x === "number" ? { x: state.x } : {}),
@@ -296,22 +301,24 @@ async function createWindow(): Promise<void> {
   });
 
   // Capture webContents up front — after `closed`, accessing
-  // mainWindow.webContents throws "Object has been destroyed".
-  const wc = mainWindow.webContents;
+  // win.webContents throws "Object has been destroyed".
+  const wc = win.webContents;
+  registerWindow(win);
+  launchTargets.set(wc, target);
 
-  attachWinStateSaver(mainWindow);
+  attachWinStateSaver(win);
   // Maximize AFTER the window is mapped, not before. The window is created with
   // `show: false`, and a maximize request against an unmapped window is silently
   // dropped by several Linux WMs (mutter among them) — the app then opened at the
   // 1440×920 fallback no matter what the saved state said.
-  mainWindow.on("ready-to-show", () => mainWindow?.show());
+  win.on("ready-to-show", () => win.show());
   // Maximize once the window is actually MAPPED. The window is created with
   // `show: false`, and a maximize request against an unmapped X11 window is
   // silently dropped by mutter — issuing it in `ready-to-show`, before or after
   // show(), left the app at the 1440×920 fallback regardless of saved state
   // (window-state.json would then persist `maximized: false`, making it sticky).
   // `once("show")` + a macrotask lets the WM map the frame first.
-  mainWindow.once("show", () => {
+  win.once("show", () => {
     if (!state.maximized) return;
     // A bare maximize() here is a no-op under mutter: the request races the WM
     // mapping the frame and is dropped (verified — `isMaximized()` stays false and
@@ -319,15 +326,15 @@ async function createWindow(): Promise<void> {
     // `maximized: false`). Snap to the display's work area first so the geometry is
     // right regardless, then ask the WM to own it as a real maximized window.
     setTimeout(() => {
-      if (!mainWindow || mainWindow.isDestroyed()) return;
-      const { workArea } = screen.getDisplayMatching(mainWindow.getBounds());
-      mainWindow.setBounds(workArea);
-      mainWindow.maximize();
+      if (win.isDestroyed()) return;
+      const { workArea } = screen.getDisplayMatching(win.getBounds());
+      win.setBounds(workArea);
+      win.maximize();
     }, 120);
   });
   // Stop the taskbar/dock attention (set by a native agent notification) the
   // moment the user looks at the window.
-  mainWindow.on("focus", () => { try { mainWindow?.flashFrame(false); } catch { /* unsupported */ } });
+  win.on("focus", () => { try { win.flashFrame(false); } catch { /* unsupported */ } });
 
   // xterm's Terminal captures Ctrl+K (sends ^K / VT to the PTY) via
   // preventDefault on its hidden textarea — so window-level keydown for
@@ -343,7 +350,7 @@ async function createWindow(): Promise<void> {
     // toggle to also hide the in-app chrome for a pure-wallpaper view.
     if (input.key === "F11" && !input.control && !input.meta && !input.shift && !input.alt) {
       event.preventDefault();
-      try { mainWindow?.setFullScreen(!mainWindow.isFullScreen()); } catch { /* window gone */ }
+      try { win.setFullScreen(!win.isFullScreen()); } catch { /* window gone */ }
       return;
     }
     if (!(input.control || input.meta)) return;
@@ -386,16 +393,15 @@ async function createWindow(): Promise<void> {
     }
   });
 
-  const stopViewWatchdog = startViewWatchdog(mainWindow);
-  const stopRecover = recoverOnProcessLoss(mainWindow);
-  mainWindow.on("closed", () => {
-    // Use the pre-captured wc — mainWindow.webContents getter throws after
+  const stopViewWatchdog = startViewWatchdog(win);
+  const stopRecover = recoverOnProcessLoss(win);
+  win.on("closed", () => {
+    // Use the pre-captured wc — win.webContents getter throws after
     // the window is destroyed. unwatchAll just needs the reference to clean
     // up watchers keyed off it; it doesn't call methods on a dead object.
     try { unwatchAll(wc); } catch { /* watcher map already cleaned */ }
     stopViewWatchdog();
     stopRecover();
-    mainWindow = null;
   });
   wc.setWindowOpenHandler(({ url }) => {
     // Only web links reach the OS: plugin manifests supply some of these URLs.
@@ -427,10 +433,10 @@ async function createWindow(): Promise<void> {
 
   const devUrl = process.env["ELECTRON_RENDERER_URL"];
   if (devUrl) {
-    mainWindow.loadURL(devUrl);
-    mainWindow.webContents.openDevTools({ mode: "right" });
+    win.loadURL(devUrl);
+    win.webContents.openDevTools({ mode: "right" });
   } else {
-    mainWindow.loadFile(path.join(__dirname, "../renderer/index.html"));
+    win.loadFile(path.join(__dirname, "../renderer/index.html"));
   }
 }
 
@@ -717,7 +723,7 @@ ipcMain.handle("runUpgrade", () => new Promise<{ ok: boolean; code: number | nul
       let i = 0;
       const next = (): void => {
         if (i >= lines.length) { resolve({ ok: true, code: 0 }); return; }
-        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("update:progress", lines[i]!);
+        broadcast("update:progress", lines[i]!);
         i++;
         setTimeout(next, 150);
       };
@@ -729,9 +735,7 @@ ipcMain.handle("runUpgrade", () => new Promise<{ ok: boolean; code: number | nul
   const child = spawn(up.file, up.args, { stdio: ["ignore", "pipe", "pipe"] });
   const relay = (d: Buffer) => {
     const line = d.toString().split("\n").map((s) => s.trim()).filter(Boolean).pop();
-    if (line && mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send("update:progress", line);
-    }
+    if (line) broadcast("update:progress", line);
   };
   child.stdout?.on("data", relay);
   child.stderr?.on("data", relay);
@@ -741,7 +745,9 @@ ipcMain.handle("runUpgrade", () => new Promise<{ ok: boolean; code: number | nul
 
 // The repo passed on the CLI (`hivemind .`), or null for a bare launch (then
 // the renderer falls back to its persisted last-project).
-ipcMain.handle("getLaunchTarget", () => cliLaunchTarget);
+ipcMain.handle("getLaunchTarget", (e) => launchTargets.get(e.sender) ?? null);
+// A New Window command: another window on the workspace the asking one shows.
+ipcMain.handle("window:new", (e) => createWindow(workspaceShownBy(e.sender)));
 
 // findGitRoot + computeRepoPath now live in ./workspace-paths (pure + tested).
 
@@ -756,8 +762,9 @@ ipcMain.handle("pickProjectFolder", async () => {
   if (!app.isPackaged && process.env.HIVEMIND_TEST_PICK_DIR) {
     return process.env.HIVEMIND_TEST_PICK_DIR;
   }
-  if (!mainWindow || mainWindow.isDestroyed()) return null;
-  const result = await dialog.showOpenDialog(mainWindow, {
+  const win = userWindow();
+  if (!win) return null;
+  const result = await dialog.showOpenDialog(win, {
     title: "Open project",
     properties: ["openDirectory", "createDirectory"],
   });
@@ -1111,14 +1118,14 @@ const hcpTurns = new TurnTracker();
 const hcpStatus = new StatusStore();
 const SCREEN_STATES = new Set<ScreenState>(["idle", "working", "permission", "question", "blocked"]);
 hcpStatus.subscribe((change) => {
-  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("hcp:status", change);
+  broadcast("hcp:status", change);
 });
 // A lost SubagentStop (the subagent errored, the turn was interrupted, the session compacted)
 // would pin a tile's subagents forever: once the last subagent edge is this old, the host
 // reports the rest stopped. Every edge pushes the deadline out.
 // View protocol 1.3: output levels for watched tiles (renderer asks via ptyActivity:watch).
 const ptyActivity = new ActivityMeter((levels) => {
-  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("ptyActivity:levels", levels);
+  broadcast("ptyActivity:levels", levels);
 });
 const SUBAGENT_REAP_MS = 120_000;
 const hcpSubagentReaper = new SubagentReaper(SUBAGENT_REAP_MS, (tileId) => {
@@ -1130,10 +1137,7 @@ const hcpSubagentReaper = new SubagentReaper(SUBAGENT_REAP_MS, (tileId) => {
  *  nothing fails silently (e.g. a stale PTY daemon that breaks hook injection).
  *  Fatal errors still use dialogs. Idempotent + cheap; safe to call pre-window. */
 function pushAppError(message: string, source: string): void {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    try { mainWindow.webContents.send("app:error", { message, source } satisfies AppErrorEvent); }
-    catch { /* mid-teardown */ }
-  }
+  broadcast("app:error", { message, source } satisfies AppErrorEvent);
 }
 const hcpPipes = new PipeManager();
 // bare tileId → supervision spec ("all" or a tool list). Set when an agent
@@ -1193,8 +1197,6 @@ const ptyRelay = new SessionRelay({
   // (backgroundThrottling is off: a backgrounded agent must keep streaming).
   hidden: () => BrowserWindow.getAllWindows().every((w) => w.isDestroyed() || w.isMinimized() || !w.isVisible()),
 });
-/** The pid each session main holds runs as, for a window that joins it. */
-const heldPid = new Map<string, number>();
 /** The window that last typed into each session: while others watch, only it sizes the session
  *  (the last to type wins, until R4 gives a terminal one keyboard at a time). */
 const lastTyper = new Map<string, number>();
@@ -1220,7 +1222,6 @@ function screenOf(tileId: string): ReadScreen | null {
 }
 function dropPtyRelay(tileId: string): void {
   ptyRelay.forget(tileId);
-  heldPid.delete(tileId);
   lastTyper.delete(tileId);
   const t = ptyPauseTimers.get(tileId);
   if (t) { clearTimeout(t); ptyPauseTimers.delete(tileId); }
@@ -1264,16 +1265,12 @@ ipcMain.handle("ptySpawn", wrap(async (e, opts: Parameters<typeof spawnPty>[0]) 
     throw new Error(`${spawning.label} comes from ${spawning.sourceRoot} and only runs in tiles there`);
   }
   { const d = spawning; if (d) hcpAgentOf.set(toBareId(opts.tileId), d.id); else hcpAgentOf.delete(toBareId(opts.tileId)); }
-  const viewer = viewerOf(e.sender);
-  // A session main already holds (another window shows it, or this one remounted it): join it,
-  // its screen first. Joining starts no process.
-  const held = heldPid.get(opts.tileId);
-  if (held !== undefined) {
-    const screen = screenOf(opts.tileId);
-    if (screen) ptyRelay.join(opts.tileId, viewer, screen);
-    else ptyRelay.add(opts.tileId, viewer);
-    return { pid: held };
-  }
+  // A session main already holds (another window shows it, or this one remounted it) is joined,
+  // its screen first: joining starts no process, and whoever started it gave it its first task.
+  return ptyRelay.open(opts.tileId, viewerOf(e.sender), () => startSession(opts), () => screenOf(opts.tileId));
+}));
+/** Start (or, with a daemon, attach to) the session a tile runs. */
+async function startSession(opts: Parameters<typeof spawnPty>[0]): Promise<{ pid: number }> {
   // Spawn rate-limit: a compromised renderer (XSS via rendered diff/issue
   // content) could fork-bomb the host through ptySpawn. Cap spawns per sliding
   // window — the dev-bridge already guards the identical call; the IPC path
@@ -1297,24 +1294,12 @@ ipcMain.handle("ptySpawn", wrap(async (e, opts: Parameters<typeof spawnPty>[0]) 
   const callbacks = {
     onData: (data: string, replay?: boolean) => { hcpBroadcast?.(bare, data); ptyRelay.push(opts.tileId, data); if (!replay) ptyActivity.note(bare, data.length); },
     // What is pending (recorded and shipped), then the exit, BEFORE the HCP teardown forgets the tile.
-    onExit: (code: number, signal?: number) => { ptyRelay.exit(opts.tileId, { code, signal }); heldPid.delete(opts.tileId); onPtyExit(opts.tileId); },
-  };
-  const hold = async (spawned: Promise<{ pid: number }>): Promise<{ pid: number }> => {
-    ptyRelay.add(opts.tileId, viewer);
-    try {
-      const r = await spawned;
-      if (r.pid === -1) ptyRelay.leave(opts.tileId, viewer);
-      else heldPid.set(opts.tileId, r.pid);
-      return r;
-    } catch (err) {
-      ptyRelay.leave(opts.tileId, viewer);
-      throw err;
-    }
+    onExit: (code: number, signal?: number) => { ptyRelay.exit(opts.tileId, { code, signal }); onPtyExit(opts.tileId); },
   };
   // Remote frame (ssh:// cwd): run the PTY over ssh, in-main. Skip the local
   // cwd stat + shell-env patch (those are for the LOCAL host). The data/exit
   // plumbing is identical.
-  if (isRemote(opts.cwd)) return hold(spawnRemotePty(opts, callbacks));
+  if (isRemote(opts.cwd)) return spawnRemotePty(opts, callbacks);
   if (opts.cwd) {
     const st = await fsp.stat(opts.cwd).catch(() => null);
     if (!st?.isDirectory()) throw new Error(`pty cwd is not a directory: ${opts.cwd}`);
@@ -1325,8 +1310,8 @@ ipcMain.handle("ptySpawn", wrap(async (e, opts: Parameters<typeof spawnPty>[0]) 
   await applyShellEnvToProcess();
   // A PTY can outlive its windows and emit data/exit after they are gone: the relay skips a
   // viewer whose window is destroyed.
-  return hold(spawnPty(opts, callbacks));
-}));
+  return spawnPty(opts, callbacks);
+}
 // Renderer back-pressure (TerminalTile flow control): pause/resume reading the
 // child's output on the transport that owns this tile. See PTY_PAUSE_MAX_MS.
 ipcMain.on("ptyFlow", (_e, tileId: string, paused: boolean) => {
@@ -1351,6 +1336,12 @@ ipcMain.on("ptyWrite", (e, tileId: string, data: string, paste?: boolean) => {
   writePty(tileId, data, paste);
 });
 ipcMain.handle("hcp:status-all", () => hcpStatus.all());
+// The agent links there are now, for a window that opens (or reloads) after they were drawn;
+// every change after this answer is pushed (`hcp:pipe`, `hcp:spawn`).
+ipcMain.handle("hcp:links", () => ({
+  pipes: hcpPipes.edges().map(([src, dst]) => ({ src, dst })),
+  spawns: [...spawnWires].map(([child, parent]) => ({ parent, child })),
+}));
 // Whether any view of the asking window shows the tile. Hidden, the window is sent nothing for it
 // while the host keeps its screen; shown again, the screen, then live bytes.
 ipcMain.on("ptyInterest", (e, tileId: string, shown: boolean) => {
@@ -1490,13 +1481,16 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
   app.quit();
 } else {
   app.on("second-instance", (_e, argv, workingDirectory) => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
+    const win = userWindow();
+    if (!win) {
+      void createWindow(resolveLaunchTarget(argv, workingDirectory || process.cwd()));
+    } else {
+      if (win.isMinimized()) win.restore();
+      win.focus();
       // `hivemind <path>` run while a window is already open → switch it to
       // that repo instead of just refocusing the (stale) current project.
       const target = resolveLaunchTarget(argv, workingDirectory || process.cwd());
-      if (target) mainWindow.webContents.send("open-project", target);
+      if (target) win.webContents.send("open-project", target);
     }
   });
   // Persistent local-video wallpaper: serve a user-picked clip by its real path
@@ -1517,15 +1511,15 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
   app.whenReady().then(async () => {
     refreshWindowsStartMenuShortcut();
     handleViewProtocol();
-    installSettingsIpc(() => mainWindow);
+    installSettingsIpc(broadcast);
     installWorkspaceStoreIpc();
     void initMachines({
-      send: (snap) => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("machines:changed", snap); },
+      send: (snap) => broadcast("machines:changed", snap),
       listLocalSessions: () => (PERSIST_PTY ? ptyDaemon.listSessions() : Promise.resolve([])),
       version: app.getVersion(),
     }).catch((e: unknown) => console.warn("[machines] init failed:", e));
-    installViewManagementIpc(() => mainWindow);
-    installPluginCatalogIpc(() => mainWindow);
+    installViewManagementIpc(appWindowOf);
+    installPluginCatalogIpc(appWindowOf);
     ipcMain.handle("views:list", wrap(async (_e, repoRoot: string | null) => listViewPackages(repoRoot ? String(repoRoot) : null)));
 
     // A repo's agents belong to that repo. Opening a second workspace must not take the
@@ -1716,8 +1710,9 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
       const prefix = slot === "background"
         ? "background"
         : `overlay-${slot.slice("overlay:".length).replace(/[^a-z0-9-]/gi, "").slice(0, 40) || "x"}`;
-      if (!mainWindow || mainWindow.isDestroyed()) return null;
-      const result = await dialog.showOpenDialog(mainWindow, {
+      const win = userWindow();
+      if (!win) return null;
+      const result = await dialog.showOpenDialog(win, {
         properties: ["openFile"],
         filters: [{ name: "Media", extensions: ["webm", "gif", "apng", "png", "jpg", "jpeg", "webp", "mp4", "mov"] }],
       });
@@ -1763,8 +1758,8 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     void createWindow();
     // Native OS notifications for agents that need you — driven by the renderer's
     // agent-status bus over IPC (multi-agent, transition-deduped). Reads
-    // `mainWindow` lazily; gated on window-not-focused inside the bridge.
-    registerAgentNotifications(() => mainWindow);
+    // The window the user is at, read lazily; gated on it not being focused inside the bridge.
+    registerAgentNotifications(userWindow);
     startPlanReviewBridge();
     startHcpControlPlane();
     startViewHost();
@@ -1783,8 +1778,8 @@ const planReplies = new Map<string, PlanRequest["reply"]>();
 function startPlanReviewBridge(): void {
   const sock = ipcPath(app.getPath("userData"), "plan-bridge.sock");
   startPlanBridge(sock, (req) => {
-    const win = mainWindow;
-    if (!win || win.isDestroyed()) { req.reply("allow"); return; } // fail-open: no UI
+    const win = userWindow();
+    if (!win) { req.reply("allow"); return; } // fail-open: no UI
     // The agent waits on a person: that is its status until the review is answered or dropped.
     const bare = toBareId(req.tileId);
     hcpStatus.event(bare, { event: "input.requested", kind: "plan" });
@@ -1795,8 +1790,7 @@ function startPlanReviewBridge(): void {
     req.onAbort(() => {
       hcpStatus.event(bare, { event: "input.resolved" });
       planReplies.delete(req.requestId);
-      if (mainWindow && !mainWindow.isDestroyed())
-        mainWindow.webContents.send("plan-review:abort", req.requestId);
+      broadcast("plan-review:abort", req.requestId);
     });
     win.webContents.send("plan-review:open", {
       requestId: req.requestId, tileId: req.tileId, plan: req.plan, cwd: req.cwd,
@@ -1818,9 +1812,20 @@ ipcMain.handle(
 // (twin of plan-review). Main verbs (agent.send/read) run here against the
 // recorder + turn tracker. The injected Stop hook reports finished turns.
 const pendingHcp = new Map<string, { resolve: (v: unknown) => void; reject: (e: unknown) => void; timer: NodeJS.Timeout }>();
+/** Verbs every window carries out, each for its own workspace and lists (`hive views install`,
+ *  `hive agents install`); the rest are for the window the user is at, which answers. */
+const EVERY_WINDOW = new Set(["views.rescan", "agents.rescan"]);
 function hcpCallRenderer(method: string, params: unknown, timeoutMs: number): Promise<unknown> {
-  const win = mainWindow;
-  if (!win || win.isDestroyed()) return Promise.reject(new HcpError("APP_NO_RENDERER", "hivemind window not open"));
+  const win = userWindow();
+  if (!win) return Promise.reject(new HcpError("APP_NO_RENDERER", "hivemind window not open"));
+  if (EVERY_WINDOW.has(method)) {
+    for (const other of openWindows()) {
+      if (other !== win) callWindow(other, method, params, timeoutMs).catch((e: unknown) => console.warn(`[hcp] ${method} in another window:`, e));
+    }
+  }
+  return callWindow(win, method, params, timeoutMs);
+}
+function callWindow(win: BrowserWindow, method: string, params: unknown, timeoutMs: number): Promise<unknown> {
   const id = randomUUID();
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -1858,9 +1863,9 @@ function startViewHost(): void {
   const totals = new Map<string, PresenceTotals>();
   const presence = new PresenceMonitor({
     idleSeconds: () => powerMonitor.getSystemIdleTime(),
-    focused: () => !!mainWindow && !mainWindow.isDestroyed() && mainWindow.isFocused(),
+    focused: () => openWindows().some((w) => w.isFocused()),
     dayOf: localDay,
-    onChange: (p) => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("presence:changed", p); },
+    onChange: (p) => broadcast("presence:changed", p),
     onTotals: (day, t) => totals.set(day, t),
   });
   const persistTotals = () => { for (const [day, t] of totals) ledger?.setPresenceTotals(day, t); totals.clear(); };
@@ -1897,7 +1902,8 @@ function startViewHost(): void {
     copy: (png) => clipboard.writeImage(nativeImage.createFromBuffer(Buffer.from(png))),
     chooseSavePath: async (name) => {
       const opts = { defaultPath: path.join(app.getPath("pictures"), name), filters: [{ name: "PNG image", extensions: ["png"] }] };
-      const r = mainWindow && !mainWindow.isDestroyed() ? await dialog.showSaveDialog(mainWindow, opts) : await dialog.showSaveDialog(opts);
+      const win = userWindow();
+      const r = win ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts);
       return r.canceled || !r.filePath ? null : r.filePath;
     },
   });
@@ -1915,11 +1921,12 @@ function startViewHost(): void {
 function startHcpControlPlane(): void {
   const userData = app.getPath("userData");
   const token = readOrCreateToken(userData);
-  const pushPipe = (src: string, dst: string | null, connected: boolean) => {
-    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("hcp:pipe", { src, dst, connected });
-  };
+  const pushPipe = (src: string, dst: string | null, connected: boolean) => broadcast("hcp:pipe", { src, dst, connected });
   const pushSpawn = (child: string, parent: string | null, connected: boolean) => {
-    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("hcp:spawn", { child, parent, connected });
+    // Kept for a window that opens late; a drop takes every wire touching `child`, as a window does.
+    if (connected && parent) spawnWires.set(child, parent);
+    else for (const [c, p] of spawnWires) if (c === child || p === child) spawnWires.delete(c);
+    broadcast("hcp:spawn", { child, parent, connected });
   };
   const _hcp = makeDispatch({
     agentOf: (bare) => hcpAgentOf.get(bare),
@@ -1951,9 +1958,7 @@ function startHcpControlPlane(): void {
     workspaces: workspaceStore(),
     shownWorkspace,
     launchOptions: (agentId) => getAppSettings().agents.options[agentId] ?? {},
-    announceSpawn: (spawn) => {
-      for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send("hcp:spawned", spawn);
-    },
+    announceSpawn: (spawn) => broadcast("hcp:spawned", spawn),
     status: hcpStatus,
     endSession,
     sessionHeld: (id) => hasSession(id) || hasRemotePty(id),
@@ -1977,7 +1982,7 @@ function startHcpControlPlane(): void {
   const server = startHcpServer(hcpSockPath(userData), {
     token,
     onListenError: (err: Error) => pushAppError(`Agent control plane is off: ${err.message}. \`hive ctl\` cannot reach this app.`, "hcp"),
-    rendererUp: () => !!mainWindow && !mainWindow.isDestroyed(),
+    rendererUp: () => openWindows().length > 0,
     dispatch,
     // Stream replay/resume for `hive ctl stream --lines/--since`: the recorder
     // is keyed by pty id, subscriptions by bare tile id.

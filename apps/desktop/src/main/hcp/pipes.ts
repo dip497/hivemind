@@ -45,6 +45,11 @@ export class PipeManager {
     if (set.size === 0) this.pipes.delete(src);
   }
 
+  /** Every pipe, as [src, dst]: what a window that opens late draws. */
+  edges(): Array<[string, string]> {
+    return [...this.pipes].flatMap(([src, dsts]) => [...dsts].map((dst): [string, string] => [src, dst]));
+  }
+
   /** Current destinations for src. */
   dests(src: string): string[] {
     return [...(this.pipes.get(src) ?? [])];

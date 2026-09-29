@@ -21,6 +21,8 @@ declare global {
       onHcpStatus: (cb: (e: HcpStatusEvent) => void) => () => void;
       /** Every agent session's status now — what a (re)loaded window starts from. */
       hcpStatusAll: () => Promise<Array<{ tileId: string; status: HcpStatusEvent["status"] }>>;
+      /** The agent pipes and spawn wires there are now — what a (re)loaded window starts from. */
+      hcpLinks: () => Promise<{ pipes: Array<{ src: string; dst: string }>; spawns: Array<{ parent: string; child: string }> }>;
       /** A background subsystem hit a non-fatal error → surface as a toast. */
       onAppError: (cb: (e: AppErrorEvent) => void) => () => void;
       onPtyData: (tileId: string, cb: (data: string) => void) => () => void;
@@ -34,6 +36,8 @@ declare global {
       ) => () => void;
       /** Path passed on the CLI (`hivemind .` / `hivemind /repo`), or null. */
       getLaunchTarget: () => Promise<string | null>;
+      /** Another window, on the workspace this one shows. */
+      newWindow: () => Promise<void>;
       /** A second `hivemind <path>` invocation asks the running window to switch. */
       onOpenProject: (cb: (path: string) => void) => () => void;
       onMenuNewIssue: (cb: () => void) => () => void;

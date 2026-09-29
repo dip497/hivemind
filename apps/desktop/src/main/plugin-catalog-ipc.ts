@@ -31,12 +31,12 @@ export interface AgentReview {
   install?: { url: string; command?: string };
 }
 
-export function installPluginCatalogIpc(getWindow: () => BrowserWindow | null): void {
+export function installPluginCatalogIpc(appWindowOf: (sender: Electron.WebContents) => BrowserWindow | null): void {
   let catalog: CatalogEntry[] = [];
   let pendingAgent: { token: string; dir: string } | null = null;
   const assertSender = (event: Electron.IpcMainInvokeEvent) => {
-    const win = getWindow();
-    if (!win || event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame) throw new Error("Only the workspace can install plugins");
+    const win = appWindowOf(event.sender);
+    if (!win || event.senderFrame !== win.webContents.mainFrame) throw new Error("Only the workspace can install plugins");
   };
 
   ipcMain.handle("plugins:catalog", async (event) => {

@@ -30,11 +30,14 @@ test("PipeManager: edges, self-loop refused, forget removes both directions", ()
   pm.connect("a", "c");
   pm.connect("x", "a");
   assert.deepEqual(pm.dests("a").sort(), ["b", "c"]);
+  // Every pipe, for a window that opens after they were drawn.
+  assert.deepEqual(pm.edges().sort(), [["a", "b"], ["a", "c"], ["x", "a"]]);
   pm.disconnect("a", "b");
   assert.deepEqual(pm.dests("a"), ["c"]);
   pm.forget("a"); // removes a→* AND *→a
   assert.deepEqual(pm.dests("a"), []);
   assert.deepEqual(pm.dests("x"), []);
+  assert.deepEqual(pm.edges(), []);
 });
 
 test("PipeManager: refuses cycles (direct + transitive)", () => {

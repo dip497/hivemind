@@ -88,3 +88,60 @@ test("a viewer that goes leaves every session it watched; those nobody watches n
   expect(r.count("shared")).toBe(1);
   expect(r.count("mine")).toBe(0);
 });
+
+/** A start the test finishes when it likes, counting how often it was asked for. */
+function laterStart(): { start: () => Promise<{ pid: number }>; finish: (pid: number) => void; fail: () => void; starts: () => number } {
+  let starts = 0;
+  let settle: { finish: (pid: number) => void; fail: () => void } | undefined;
+  return {
+    start: () => { starts++; return new Promise((resolve, reject) => { settle = { finish: (pid) => resolve({ pid }), fail: () => reject(new Error("no pty")) }; }); },
+    finish: (pid) => settle?.finish(pid),
+    fail: () => settle?.fail(),
+    starts: () => starts,
+  };
+}
+
+test("two viewers opening a session at once start it once: the second joins it, its screen first, and only the one that started it gives it its task", async () => {
+  const { relay: r } = relay();
+  const a = viewer(), b = viewer();
+  const s = laterStart();
+  const screen = laterScreen();
+  const opening = [r.open("t", a, s.start, () => screen.read), r.open("t", b, s.start, () => screen.read)];
+  // What the session prints while it starts reaches the one starting it.
+  r.push("t", "banner");
+  await tick();
+  s.finish(42);
+  await tick();
+  screen.answer("banner");
+  expect(await Promise.all(opening)).toEqual([{ pid: 42, joined: false }, { pid: 42, joined: true }]);
+  expect(s.starts()).toBe(1);
+  r.push("t", "live");
+  await tick();
+  expect(a.got).toEqual(["banner", "live"]);
+  expect(b.got).toEqual([`${RESET}banner`, "live"]);
+  // The one that started it opening it again (a remount) still gives it its task.
+  expect(await r.open("t", a, s.start, () => screen.read)).toEqual({ pid: 42, joined: false });
+  expect(s.starts()).toBe(1);
+});
+
+test("a start that fails, or finds no session, leaves no viewer behind, and the next open starts again; so does an exit", async () => {
+  const { relay: r } = relay();
+  const a = viewer(), b = viewer();
+  const s = laterStart();
+  const failing = r.open("t", a, s.start, () => null);
+  s.fail();
+  await expect(failing).rejects.toThrow("no pty");
+  expect(r.count("t")).toBe(0);
+  const missing = r.open("t", a, s.start, () => null);
+  s.finish(-1);
+  expect(await missing).toEqual({ pid: -1, joined: false });
+  expect(r.count("t")).toBe(0);
+  const running = r.open("t", a, s.start, () => null);
+  s.finish(7);
+  expect(await running).toEqual({ pid: 7, joined: false });
+  r.exit("t", { code: 0 });
+  const again = r.open("t", b, s.start, () => null);
+  s.finish(8);
+  expect(await again).toEqual({ pid: 8, joined: false });
+  expect(s.starts()).toBe(4);
+});

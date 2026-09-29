@@ -68,6 +68,11 @@ export function installWorkspaceStoreIpc(): void {
   });
 }
 
+/** The workspace the window with this page shows, or null. */
+export function workspaceShownBy(wc: WebContents): string | null {
+  return shown.get(wc.id)?.repo ?? null;
+}
+
 /** The workspace the window the user is at shows, and the frame the user is in there: the
  *  focused window's, else any window's. */
 export function shownWorkspace(): { repo: string; frame: string | null } | null {

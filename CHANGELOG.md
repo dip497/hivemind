@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- **New window** (in Open recent, Ctrl+R) opens another window on the project the current one shows. Both show the same terminals live, typing into either reaches the same session, and what an agent does through `hive ctl` (spawn, rename, close) shows in both. Closing one window leaves what the other shows running. A view or agent installed with `hive views install` or `hive agents install` appears in every window.
 - `hive ctl rename <tile> "name"` names a tile, and every window shows the new name at once; with no name, the tile is called by what its agent says it is doing again. An agent can name the workers it runs.
 - Fixed: `hive ctl close` on a tile that is not open answers not found (exit 5, `TILE_NOT_FOUND`), as `hive ctl send` does, instead of reporting it closed.
 - Fixed: `hive ctl list --frame <name>` answers not found (exit 5, `NOT_FOUND`) when no frame answers to the name, instead of listing every frame. So do `hive ctl spawn --frame` and `hive ctl open-tool --frame`, which used to open the tile somewhere else.

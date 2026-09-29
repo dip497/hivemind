@@ -308,7 +308,7 @@ test("a title read while the agent's manifest is broken shows up when the manife
   // meanwhile must not be lost — an idle agent never sets its title again, so putting the
   // manifest back has to be enough. Last in this file: it takes claude's manifest away.
   const r = hive(["ctl", "spawn", "--agent", "claude", "--prompt", "echo first", "--json"]);
-  expect(r.code, r.stderr).toBe(0);
+  expect(r.code, r.stdout + r.stderr).toBe(0);
   const tile: string = r.json.tileId;
   const nameOf = () => hive(["ctl", "list", "--json"]).json.frames.flatMap((f: any) => f.tiles).find((t: any) => t.tileId === tile)?.name;
   await expect.poll(nameOf, { timeout: 20_000 }).toBe("echo first");

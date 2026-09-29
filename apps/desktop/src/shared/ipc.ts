@@ -498,7 +498,7 @@ export interface HiveIpc {
     attachOnly?: boolean;
     /** With attachOnly: a running session only, not one saved before a reboot. */
     liveOnly?: boolean;
-  }): Promise<{ pid: number }>;
+  }): Promise<{ pid: number; /** Another window started it: this one only shows it. */ joined?: boolean }>;
   /** Install the agentic stack (hive skills + CLAUDE.md section) into a repo so
    *  a spawned agent can actually work issues with `hive`. Idempotent. */
   installAgentic(dir: string): Promise<{ ok: boolean }>;

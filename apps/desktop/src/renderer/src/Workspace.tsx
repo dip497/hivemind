@@ -840,6 +840,17 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     return off;
   }, [focusTile]);
 
+  // Agent links, from the host: the ones there are now (drawn before this window opened), then
+  // every change. The answer already counts any change pushed before it.
+  useEffect(() => {
+    let live = true;
+    void window.hive.hcpLinks().then(({ pipes: p, spawns }) => {
+      if (!live) return;
+      setPipes(p);
+      setSpawnLinks(spawns);
+    });
+    return () => { live = false; };
+  }, []);
   // HCP pipes → animated data-flow edges. Add on connect; on disconnect remove
   // the one edge (dst set) or all of src's edges (dst null).
   useEffect(() => {

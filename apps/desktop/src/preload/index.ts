@@ -29,6 +29,8 @@ const api: HiveIpc & {
   onMenuFocusTile: (cb: () => void) => () => void;
   onMenuShortcut: (cb: (action: string) => void) => () => void;
   getLaunchTarget: () => Promise<string | null>;
+  /** Another window, on the workspace this one shows. */
+  newWindow: () => Promise<void>;
   onOpenProject: (cb: (path: string) => void) => () => void;
   onBrowserPopup: (cb: (p: { fromId: number; url: string }) => void) => () => void;
   onPlanReviewOpen: (cb: (p: PlanReviewOpen) => void) => () => void;
@@ -39,6 +41,7 @@ const api: HiveIpc & {
   onHcpSpawned: (cb: (e: HcpSpawnedEvent) => void) => () => void;
   onHcpStatus: (cb: (e: HcpStatusEvent) => void) => () => void;
   hcpStatusAll: () => Promise<Array<{ tileId: string; status: HcpStatusEvent["status"] }>>;
+  hcpLinks: () => Promise<{ pipes: Array<{ src: string; dst: string }>; spawns: Array<{ parent: string; child: string }> }>;
   onAppError: (cb: (e: AppErrorEvent) => void) => () => void;
 } = {
   resolveProject: (rootHint) => ipcRenderer.invoke("resolveProject", rootHint),
@@ -276,6 +279,7 @@ const api: HiveIpc & {
   },
 
   getLaunchTarget: () => ipcRenderer.invoke("getLaunchTarget"),
+  newWindow: () => ipcRenderer.invoke("window:new"),
   onOpenProject: (cb: (path: string) => void) => {
     const listener = (_e: unknown, p: string) => cb(p);
     ipcRenderer.on("open-project", listener);
@@ -320,6 +324,7 @@ const api: HiveIpc & {
     return () => ipcRenderer.removeListener("hcp:pipe", listener);
   },
   hcpStatusAll: () => ipcRenderer.invoke("hcp:status-all"),
+  hcpLinks: () => ipcRenderer.invoke("hcp:links"),
   onHcpStatus: (cb: (e: HcpStatusEvent) => void) => {
     const listener = (_e: unknown, ev: HcpStatusEvent) => cb(ev);
     ipcRenderer.on("hcp:status", listener);

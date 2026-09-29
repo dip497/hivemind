@@ -203,7 +203,12 @@ exactly as today. They are ordered by dependency.
   it into what it has: the rebase the store runs on a window's write, run the other way, so an
   edit the window has not yet saved survives. Main ends a closed tile's session itself, so a
   close needs no window; a window that sees a tile closed closes it as its own × does, which
-  also ends a session still starting there.
+  also ends a session still starting there. With several windows, main holds one attach per
+  session and relays it to each window that shows it (`SessionRelay`), and a session is
+  started once however many windows mount it at once; the window that started it gives it its
+  first task, and a window that joins drops its copy, until R14 moves the first task into main.
+  What a window must draw from the start (pipes, spawn wires, statuses) it asks main for when it
+  mounts, then follows the pushes: a push sent before its listeners mount is lost.
 
 ### R6. One status per session, from its host
 

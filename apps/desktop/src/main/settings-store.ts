@@ -7,7 +7,7 @@
  * and patches through IPC; the CLI edits the file and calls `settings.reload`
  * over HCP.
  */
-import { ipcMain, type BrowserWindow } from "electron";
+import { ipcMain } from "electron";
 import { readFileSync } from "node:fs";
 import { mergeSettings, type Settings } from "@hivemind/core/settings-schema";
 import { patchSettingsFile, readSettings, settingsPath, updateSettings } from "@hivemind/core/settings";
@@ -117,7 +117,7 @@ function sanitizePatches(raw: unknown): { path: string; value: unknown }[] {
 }
 
 /** IPC surface + change broadcast to the window. */
-export function installSettingsIpc(getWindow: () => BrowserWindow | null): void {
+export function installSettingsIpc(tellWindows: (channel: string, settings: Settings) => void): void {
   ipcMain.on("settings:get-sync", (e) => { e.returnValue = getSettings(); });
   ipcMain.handle("settings:get", () => getSettings());
   ipcMain.handle("settings:replace", (_e, next: unknown) => replaceSettings(next));
@@ -126,5 +126,5 @@ export function installSettingsIpc(getWindow: () => BrowserWindow | null): void 
   // replace from a debounced UI would revert whatever else was written meanwhile).
   ipcMain.handle("settings:patch", (_e, patches: unknown) => patchSettings(sanitizePatches(patches)));
   ipcMain.handle("settings:path", () => settingsFile());
-  onSettingsChange((s) => { const w = getWindow(); if (w && !w.isDestroyed()) w.webContents.send("settings:changed", s); });
+  onSettingsChange((s) => tellWindows("settings:changed", s));
 }

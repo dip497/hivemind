@@ -157,10 +157,10 @@ export async function reviewViewDir(dir: string, staged: boolean) {
 }
 
 /** The renderer can install only a package it was shown for review. */
-export function installViewManagementIpc(getWindow: () => BrowserWindow | null): void {
+export function installViewManagementIpc(appWindowOf: (sender: Electron.WebContents) => BrowserWindow | null): void {
   const assertSender = (event: Electron.IpcMainInvokeEvent) => {
-    const win = getWindow();
-    if (!win || event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame) throw new Error("Only the workspace can manage extensions");
+    const win = appWindowOf(event.sender);
+    if (!win || event.senderFrame !== win.webContents.mainFrame) throw new Error("Only the workspace can manage extensions");
     return win;
   };
   ipcMain.handle("views:preview-install", async (event) => {

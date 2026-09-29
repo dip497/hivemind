@@ -1,17 +1,19 @@
-/** Ctrl+R — VS Code's Open Recent: the projects opened before, and a way to browse for another. */
-import { FolderOpen, History } from "lucide-react";
+/** Ctrl+R — VS Code's Open Recent: the projects opened before, a way to browse for another, and
+ *  another window on this one. */
+import { AppWindow, FolderOpen, History } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "./components/ui/dialog";
 import { MenuItem } from "./components/ui/menu-item";
 
 const base = (p: string) => p.split("/").filter(Boolean).pop() ?? p;
 const parent = (p: string) => p.split("/").slice(0, -1).join("/").replace(/^\/home\/[^/]+/, "~");
 
-export function RecentProjects({ open, recents, current, onOpen, onBrowse, onClose }: {
+export function RecentProjects({ open, recents, current, onOpen, onBrowse, onNewWindow, onClose }: {
   open: boolean;
   recents: string[];
   current: string | null;
   onOpen: (path: string) => void;
   onBrowse: () => void;
+  onNewWindow: () => void;
   onClose: () => void;
 }) {
   const others = recents.filter((p) => p !== current);
@@ -38,6 +40,9 @@ export function RecentProjects({ open, recents, current, onOpen, onBrowse, onClo
           <MenuItem autoFocus={others.length === 0} onClick={() => { onClose(); onBrowse(); }}>
             <FolderOpen /><span className="flex-1">Open folder…</span>
             <kbd className="font-mono text-[10.5px] text-[var(--color-fg2)]">Ctrl O</kbd>
+          </MenuItem>
+          <MenuItem data-new-window onClick={() => { onClose(); onNewWindow(); }}>
+            <AppWindow /><span className="flex-1">New window</span>
           </MenuItem>
         </div>
       </DialogContent>

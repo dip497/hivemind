@@ -845,7 +845,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
             if (cancelled) { releaseBoot(); return; }
           }
         }
-        const { pid } = attachedPid !== undefined ? { pid: attachedPid } : await window.hive.ptySpawn({
+        const { pid, joined } = attachedPid !== undefined ? { pid: attachedPid, joined: false } : await window.hive.ptySpawn({
           tileId: ptyId,
           cwd,
           cmd,
@@ -865,6 +865,8 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
           else if (!liveMounts.get(ptyId)) window.hive.ptyDetach(ptyId);
           return;
         }
+        // Another window started this session and gave it its task: this one only shows it.
+        if (joined) claimWork(tileId);
         // -1 is "no such session"; other negative pids are remote ones, negated on purpose.
         if (session && pid === -1) {
           term.writeln(`\x1b[2m[hivemind] could not open session ${session}: it has ended, or its machine is unreachable\x1b[0m`);
