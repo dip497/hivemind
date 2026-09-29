@@ -65,6 +65,16 @@ echo 'starting express'; echo 'opening window'`);
   expect(existsSync(join(process.env.HOME, ".hm-fake-gui-help-ran"))).toBe(false);
 });
 
+/** Is that process still running? A zombie is not: it is dead and only waits to be reaped,
+ *  which a container's PID 1 may never do, so its /proc entry alone proves nothing. */
+function running(pid: number): boolean {
+  try { process.kill(pid, 0); } catch { return false; }
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+    return stat.slice(stat.lastIndexOf(")") + 2, stat.lastIndexOf(")") + 3) !== "Z";
+  } catch { return true; } // no /proc (macOS): kill(pid, 0) said it is there
+}
+
 test.skipIf(!posix)("a probe that hangs is killed with everything it started", async () => {
   const pidFile = join(mkdtempSync(join(tmpdir(), "hm-pid-")), "bg");
   process.env.HM_PIDFILE = pidFile;
@@ -74,5 +84,5 @@ test.skipIf(!posix)("a probe that hangs is killed with everything it started", a
   expect(v.mismatch).toContain("did not finish");
   expect(Date.now() - t0).toBeLessThan(7000);
   await new Promise((r) => setTimeout(r, 200));
-  expect(existsSync(`/proc/${readFileSync(pidFile, "utf8").trim()}`)).toBe(false);
+  expect(running(Number(readFileSync(pidFile, "utf8").trim()))).toBe(false);
 }, 10000);
