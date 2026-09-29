@@ -155,3 +155,9 @@ None open. Two found while verifying R1 were fixed on 2026-09-29 (see the log).
   now skips that one value, and its key follows a switch to "no project" too. No regression
   test: the window is one render wide, and no test here can land inside it (there is no hook
   renderer in the unit tests); `init-workspace`, persistence, view and frame specs pass.
+- 2026-09-29 — Also fixed: `hive-agents`' "a probe that hangs is killed with everything it
+  started" failed wherever PID 1 does not reap orphans (this container), because a killed
+  child stays a zombie and its `/proc` entry remains; it now checks that the process is
+  running. CI now typechecks and unit-tests every package (`pnpm typecheck`, `pnpm test`), not
+  only the desktop. Stale e2e counts and a wrong `--user-data-dir` claim corrected in
+  `CLAUDE.md` and `apps/desktop/AGENTS.md`. Full e2e green: 147 passed, 10 skipped.
