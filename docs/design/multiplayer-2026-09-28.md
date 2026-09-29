@@ -193,6 +193,12 @@ exactly as today. They are ordered by dependency.
 - **Done when.** HCP `tile.list`, spawn, close and rename work with no window (the tile
   list built by one shared function from main's store and status store, which the window
   also uses); two windows on one workspace show the same terminals live.
+- **Decided while mapping it (2026-09-29).** "With no window" means these verbs never call a
+  renderer, shown by tests at the control plane's dispatch with a real store and no window.
+  An app that keeps running with no window open is R14's `hive host`: closing the last window
+  quits the app today. The in-process PTY path (`HIVEMIND_PTY_DAEMON=0`) stays one window: it
+  gives each mount a session of its own, and detaching from one kills it. The steps are in the
+  tracker (`docs/plans/multiplayer.md`).
 
 ### R6. One status per session, from its host
 
