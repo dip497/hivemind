@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 import { contextBridge, ipcRenderer, webUtils } from "electron";
-import type { HiveIpc, DiffScope, WorktreeCreateOpts, PlanReviewOpen, HcpCommand, HcpPipeEvent, HcpSpawnEvent, HcpStatusEvent, AppErrorEvent } from "../shared/ipc.js";
+import type { HiveIpc, DiffScope, WorktreeCreateOpts, PlanReviewOpen, HcpCommand, HcpPipeEvent, HcpSpawnEvent, HcpSpawnedEvent, HcpStatusEvent, AppErrorEvent } from "../shared/ipc.js";
 
 const api: HiveIpc & {
   /** The host OS, so the renderer can pick a default shell without an IPC
@@ -36,6 +36,7 @@ const api: HiveIpc & {
   onHcpCommand: (cb: (cmd: HcpCommand) => void) => () => void;
   onHcpPipe: (cb: (e: HcpPipeEvent) => void) => () => void;
   onHcpSpawn: (cb: (e: HcpSpawnEvent) => void) => () => void;
+  onHcpSpawned: (cb: (e: HcpSpawnedEvent) => void) => () => void;
   onHcpStatus: (cb: (e: HcpStatusEvent) => void) => () => void;
   hcpStatusAll: () => Promise<Array<{ tileId: string; status: HcpStatusEvent["status"] }>>;
   onAppError: (cb: (e: AppErrorEvent) => void) => () => void;
@@ -175,7 +176,7 @@ const api: HiveIpc & {
     ipcRenderer.on("workspace:changed", listener);
     return () => ipcRenderer.removeListener("workspace:changed", listener);
   },
-  workspaceShown: (repo) => ipcRenderer.send("workspace:shown", repo),
+  workspaceShown: (repo, frame) => ipcRenderer.send("workspace:shown", repo, frame),
   settingsGet: () => ipcRenderer.invoke("settings:get"),
   settingsSet: (p, v) => ipcRenderer.invoke("settings:set", p, v),
   settingsPatch: (patches) => ipcRenderer.invoke("settings:patch", patches),
@@ -307,6 +308,11 @@ const api: HiveIpc & {
     const listener = (_: unknown, e: HcpSpawnEvent) => cb(e);
     ipcRenderer.on("hcp:spawn", listener);
     return () => ipcRenderer.removeListener("hcp:spawn", listener);
+  },
+  onHcpSpawned: (cb: (e: HcpSpawnedEvent) => void) => {
+    const listener = (_: unknown, e: HcpSpawnedEvent) => cb(e);
+    ipcRenderer.on("hcp:spawned", listener);
+    return () => ipcRenderer.removeListener("hcp:spawned", listener);
   },
   onHcpPipe: (cb: (e: HcpPipeEvent) => void) => {
     const listener = (_e: unknown, ev: HcpPipeEvent) => cb(ev);

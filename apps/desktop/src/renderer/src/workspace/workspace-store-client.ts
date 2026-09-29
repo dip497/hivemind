@@ -124,9 +124,9 @@ export function onStoreChange(cb: (change: { repo: string; part: string }) => vo
   return b ? b.onWorkspaceChanged(cb) : () => {};
 }
 
-/** Tell main which workspace this window shows now (null: none). */
-export function showWorkspace(repo: string | null): void {
-  try { bridge()?.workspaceShown(repo); } catch { /* best-effort */ }
+/** Tell main which workspace this window shows now (null: none), and the frame the user is in. */
+export function showWorkspace(repo: string | null, frame: string | null): void {
+  try { bridge()?.workspaceShown(repo, frame); } catch { /* best-effort */ }
 }
 
 /** One view's layout stored for `repo`, or null. */

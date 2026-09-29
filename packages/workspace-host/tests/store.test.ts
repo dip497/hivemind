@@ -241,3 +241,20 @@ test("a tile closed by the control plane is gone after a restart, and stays clos
     { repo: "/a", part: "core", writer: "window:1" },
   ]);
 });
+
+test("a tile the control plane opens is kept, told with its writer, and stays when a window then writes what it read before", () => {
+  const told: unknown[] = [];
+  const s = new WorkspaceStore({ dir, onChange: (c) => told.push(c) });
+  s.setCore("/a", core("api"), { writer: "window:1" });
+  const read = s.getCore("/a");
+  const t2 = { id: "t2", kind: "shell", label: "shell #1" };
+  expect(s.addTile("/a", t2, { frame: "f1", name: "server" }, { writer: "control" })).toBe(true);
+  expect(s.addTile("/a", { ...t2, label: "again" }, {}, { writer: "control" })).toBe(false);
+  s.setCore("/a", core("moved"), { base: read, writer: "window:1" });
+  expect(restart().getCore("/a")).toEqual({ ...core("moved"), tiles: [...core("moved").tiles, t2], tileNames: { t2: "server" }, frameOf: { t1: "f1", t2: "f1" } });
+  expect(told).toEqual([
+    { repo: "/a", part: "core", writer: "window:1" },
+    { repo: "/a", part: "core", writer: "control" },
+    { repo: "/a", part: "core", writer: "window:1" },
+  ]);
+});

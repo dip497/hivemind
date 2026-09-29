@@ -21,6 +21,7 @@ import { Mailbox } from "../../src/main/hcp/mailbox.ts";
 import { SUBMIT_DELAY_MS } from "../../src/shared/agent-io.ts";
 import { WorkspaceStore } from "@hivemind/workspace-host/store";
 import { StatusStore } from "@hivemind/agent-host/status-store";
+import { REPO, workspaceDeps } from "./hcp-workspace.ts";
 
 test("PipeManager: edges, self-loop refused, forget removes both directions", () => {
   const pm = new PipeManager();
@@ -90,7 +91,7 @@ function fakeDeps(over: Partial<Parameters<typeof makeDispatch>[0]> = {}) {
   const deps = {
     turns,
     recorder,
-    callRenderer: async (_m: string, _p: unknown) => ({ tileId: "tile-x" }),
+    callRenderer: async () => { throw new Error("no window"); },
     reloadSettings: async () => ({ ok: true }),
     writeToTile: write,
     deliverToTile: (id: string, data: string, onSent?: () => void) => mailbox.deliver(id, data, onSent),
@@ -103,11 +104,7 @@ function fakeDeps(over: Partial<Parameters<typeof makeDispatch>[0]> = {}) {
     spawnEdge: () => {},
     setSupervise: () => {},
     awaitingApproval: () => {},
-    // No workspace open and no session known: a test that needs them passes its own.
-    workspaces: new WorkspaceStore({ dir: path.join(os.tmpdir(), "hcp-no-workspace") }),
-    shownWorkspace: () => null,
-    status: new StatusStore(),
-    endSession: () => {},
+    ...workspaceDeps(),
     ...over,
   };
   return { deps, turns, recorder, writes };
@@ -164,9 +161,9 @@ test("approval: no parent → fail-safe ask (falls through to human prompt)", as
 test("approval: worker awaits, parent approves 'always' → allow + cached (no second round-trip)", async () => {
   const { deps, writes } = fakeDeps();
   const { dispatch } = makeDispatch(deps);
-  // Spawn registers parentOf[tile-x] = parent (fake callRenderer returns tile-x).
-  await dispatch("tile.spawn_agent", { agent: "claude", callerTile: "parent", report: false });
-  const pending = dispatch("agent.await_approval", { callerTile: "tile-x", tool_name: "Bash", tool_input: { command: "rm -rf /tmp/x" } });
+  // The spawn makes `parent` the worker's parent.
+  const worker = ((await dispatch("tile.spawn_agent", { agent: "claude", callerTile: "parent", report: false })) as { tileId: string }).tileId;
+  const pending = dispatch("agent.await_approval", { callerTile: worker, tool_name: "Bash", tool_input: { command: "rm -rf /tmp/x" } });
   await new Promise((r) => setTimeout(r, 10));
   // The approval prompt is delivered into the PARENT's pty; pull the reqId out.
   const banner = writes.find(([id, data]) => id === "hm:parent" && data.includes("hive ctl approve"));
@@ -177,7 +174,7 @@ test("approval: worker awaits, parent approves 'always' → allow + cached (no s
   assert.equal((await pending as { decision: string }).decision, "allow");
   // Same worker+tool again → resolved from cache, no new banner to the parent.
   const before = writes.length;
-  const r2 = await dispatch("agent.await_approval", { callerTile: "tile-x", tool_name: "Bash", tool_input: { command: "echo hi" } });
+  const r2 = await dispatch("agent.await_approval", { callerTile: worker, tool_name: "Bash", tool_input: { command: "echo hi" } });
   assert.deepEqual(r2, { decision: "allow" });
   assert.equal(writes.length, before, "cached decision delivers no new approval prompt");
 });
@@ -185,8 +182,8 @@ test("approval: worker awaits, parent approves 'always' → allow + cached (no s
 test("approval: deny carries a reason back to the worker", async () => {
   const { deps, writes } = fakeDeps();
   const { dispatch } = makeDispatch(deps);
-  await dispatch("tile.spawn_agent", { agent: "claude", callerTile: "parent", report: false });
-  const pending = dispatch("agent.await_approval", { callerTile: "tile-x", tool_name: "Write", tool_input: { file_path: "/etc/passwd" } });
+  const worker = ((await dispatch("tile.spawn_agent", { agent: "claude", callerTile: "parent", report: false })) as { tileId: string }).tileId;
+  const pending = dispatch("agent.await_approval", { callerTile: worker, tool_name: "Write", tool_input: { file_path: "/etc/passwd" } });
   await new Promise((r) => setTimeout(r, 10));
   const reqId = writes.find(([id, d]) => id === "hm:parent" && d.includes("hive ctl approve"))![1].match(/hive ctl approve (\S+) /)![1];
   await dispatch("agent.approve", { reqId, decision: "deny", reason: "not that file" });
@@ -203,10 +200,10 @@ test("spawn supervise: records the broker policy (default set + 'all')", async (
   const supervised: Array<[string, string | null]> = [];
   const { deps } = fakeDeps({ setSupervise: (id: string, spec: string | null) => { supervised.push([id, spec]); } });
   const { dispatch } = makeDispatch(deps);
-  await dispatch("tile.spawn_agent", { agent: "claude", callerTile: "parent", supervise: true, report: false });
-  assert.deepEqual(supervised.at(-1), ["tile-x", "Bash,Edit,Write,MultiEdit,NotebookEdit,WebFetch"]);
-  await dispatch("tile.spawn_agent", { agent: "claude", callerTile: "parent", supervise: "all", report: false });
-  assert.deepEqual(supervised.at(-1), ["tile-x", "all"]);
+  const first = ((await dispatch("tile.spawn_agent", { agent: "claude", callerTile: "parent", supervise: true, report: false })) as { tileId: string }).tileId;
+  assert.deepEqual(supervised.at(-1), [first, "Bash,Edit,Write,MultiEdit,NotebookEdit,WebFetch"]);
+  const second = ((await dispatch("tile.spawn_agent", { agent: "claude", callerTile: "parent", supervise: "all", report: false })) as { tileId: string }).tileId;
+  assert.deepEqual(supervised.at(-1), [second, "all"]);
 });
 
 test("tile-id: toPtyId / toBareId are idempotent inverses", async () => {
@@ -218,16 +215,51 @@ test("tile-id: toPtyId / toBareId are idempotent inverses", async () => {
 });
 
 test("dispatch tile.spawn_agent: enforces MAX_SPAWN_DEPTH (anti-fork-bomb)", async () => {
-  let n = 0;
-  const { deps } = fakeDeps({ callRenderer: async () => ({ tileId: `t${++n}` }) });
+  const { deps } = fakeDeps();
   const { dispatch } = makeDispatch(deps);
-  await dispatch("tile.spawn_agent", {});                              // t1, depth 1 (user=0)
-  await dispatch("tile.spawn_agent", { callerTile: "t1" });            // t2, depth 2
-  await dispatch("tile.spawn_agent", { callerTile: "t2" });            // t3, depth 3
+  const t1 = ((await dispatch("tile.spawn_agent", {})) as { tileId: string }).tileId;                  // depth 1 (user=0)
+  const t2 = ((await dispatch("tile.spawn_agent", { callerTile: t1 })) as { tileId: string }).tileId;  // depth 2
+  const t3 = ((await dispatch("tile.spawn_agent", { callerTile: t2 })) as { tileId: string }).tileId;  // depth 3
   await assert.rejects(                                                // depth 4 > 3
-    dispatch("tile.spawn_agent", { callerTile: "t3" }),
+    dispatch("tile.spawn_agent", { callerTile: t3 }),
     (e: unknown) => (e as { code?: string })?.code === "DEPTH_EXCEEDED",
   );
+});
+
+test("dispatch tile.spawn_agent writes the tile in main: beside its caller, else where the user is, else loose; the windows hear of it first", async () => {
+  const ws = workspaceDeps();
+  ws.workspaces.setCore(REPO, {
+    frames: [{ id: "f1", title: "repo", workspacePath: REPO }, { id: "f2", title: "Notes" }],
+    tiles: [{ id: "tile-lead", kind: "claude", label: "claude #1" }],
+    frameOf: { "tile-lead": "f1" },
+  });
+  const heardFirst: boolean[] = [];
+  const { deps } = fakeDeps({
+    ...ws,
+    shownWorkspace: () => ({ repo: REPO, frame: "f2" }),
+    launchOptions: (id) => (id === "claude" ? { model: "opus" } : {}),
+    announceSpawn: (spawn) => { ws.announced.push(spawn); heardFirst.push(ws.workspaces.workspaceOf(spawn.tileId) === null); },
+  });
+  const { dispatch } = makeDispatch(deps);
+  const spawn = async (p: Record<string, unknown>) => ((await dispatch("tile.spawn_agent", { agent: "claude", ...p })) as { tileId: string }).tileId;
+  const tileOf = (id: string) => ws.workspaces.getCore(REPO)!.tiles.find((t) => t.id === id);
+  const frameOf = (id: string) => ws.workspaces.getCore(REPO)!.frameOf?.[id];
+
+  const worker = await spawn({ callerTile: "hm:tile-lead", prompt: "Review the auth module. Then fix it.", report: false });
+  assert.deepEqual(tileOf(worker), { id: worker, kind: "claude", label: "claude #2", cmd: "claude", args: ["--dangerously-skip-permissions", "--model", "opus"], task: "Review the auth module" });
+  assert.equal(frameOf(worker), "f1", "beside the agent that spawned it");
+  assert.deepEqual(ws.announced.at(-1), { tileId: worker, repo: REPO, prompt: "Review the auth module. Then fix it.", background: true });
+  assert.equal(frameOf(await spawn({})), "f2", "a caller in no tile: where the user is");
+  assert.equal(frameOf(await spawn({ callerTile: "hm:tile-lead", frame: "NOTES" })), "f2", "a frame named any way spawn takes");
+  await assert.rejects(spawn({ frame: "nothing" }), (e: unknown) => e instanceof HcpError && e.code === "NOT_FOUND");
+  assert.equal(ws.workspaces.getCore(REPO)!.tiles.length, 4, "a refused spawn opens nothing");
+  assert.deepEqual(heardFirst, [true, true, true], "the windows hear of each tile before it is written");
+
+  ws.workspaces.setCore("/bare", { frames: [], tiles: [] });
+  const loose = ((await makeDispatch(fakeDeps({ ...ws, shownWorkspace: () => ({ repo: "/bare", frame: null }) }).deps).dispatch("tile.spawn_agent", { agent: "claude" })) as { tileId: string }).tileId;
+  assert.deepEqual(ws.workspaces.getCore("/bare")?.frameOf, {}, "a workspace with no frame: loose, for the window to frame");
+  assert.ok(ws.workspaces.getCore("/bare")?.tiles.some((t) => t.id === loose));
+  await assert.rejects(makeDispatch(fakeDeps({ ...ws, shownWorkspace: () => null }).deps).dispatch("tile.spawn_agent", { agent: "claude" }), (e: unknown) => e instanceof HcpError && e.code === "NOT_FOUND");
 });
 
 test("dispatch tile.spawn_agent: rate-limited → RATE_LIMITED", async () => {
@@ -265,9 +297,9 @@ test("single-delivery ladder: an explicit hive_report suppresses that turn's aut
 test("forgetTile (pty-exit teardown) wakes a blocked hive_read instead of hanging it", async () => {
   const { deps } = fakeDeps();
   const { dispatch, forgetTile } = makeDispatch(deps);
-  await dispatch("tile.spawn_agent", { agent: "claude", callerTile: "hm:tile-p" });
-  const read = dispatch("agent.read", { tileId: "tile-x", timeoutMs: 60_000 });
-  forgetTile("tile-x"); // worker's pty exits (crash) → teardown must resolve the read now
+  const worker = ((await dispatch("tile.spawn_agent", { agent: "claude", callerTile: "hm:tile-p" })) as { tileId: string }).tileId;
+  const read = dispatch("agent.read", { tileId: worker, timeoutMs: 60_000 });
+  forgetTile(worker); // worker's pty exits (crash) → teardown must resolve the read now
   const r = (await read) as { finalStatus: string };
   assert.equal(r.finalStatus, "closed", "a crashed worker resolves the read immediately (and says it closed, not that it is still working)");
 });
@@ -275,9 +307,9 @@ test("forgetTile (pty-exit teardown) wakes a blocked hive_read instead of hangin
 test("forgetTile resolves a supervised worker's pending approval (deny), not leak it", async () => {
   const { deps } = fakeDeps();
   const { dispatch, forgetTile } = makeDispatch(deps);
-  await dispatch("tile.spawn_agent", { agent: "claude", supervise: true, callerTile: "hm:tile-p" });
-  const approval = dispatch("agent.await_approval", { callerTile: "hm:tile-x", tool_name: "Bash", tool_input: { command: "ls" } });
-  forgetTile("tile-x"); // worker crashed mid-approval
+  const worker = ((await dispatch("tile.spawn_agent", { agent: "claude", supervise: true, callerTile: "hm:tile-p" })) as { tileId: string }).tileId;
+  const approval = dispatch("agent.await_approval", { callerTile: `hm:${worker}`, tool_name: "Bash", tool_input: { command: "ls" } });
+  forgetTile(worker); // worker crashed mid-approval
   const r = (await approval) as { decision: string };
   assert.equal(r.decision, "deny", "a crashed worker's approval resolves deny, doesn't hang 20 min");
 });
@@ -319,7 +351,7 @@ test("dispatch tile.list needs no window: the caller's workspace, else the one t
   const status = new StatusStore();
   status.event("tile-a", { event: "input.requested", kind: "permission" });
   status.title("tile-a", "reviewing the API");
-  let shown: string | null = "/web";
+  let shown: { repo: string; frame: string | null } | null = { repo: "/web", frame: null };
   const { deps } = fakeDeps({ callRenderer: async () => { throw new Error("no window"); }, workspaces, status, shownWorkspace: () => shown });
   const { dispatch } = makeDispatch(deps);
   const api = {
@@ -375,19 +407,15 @@ test("dispatch views.rescan: asks the renderer to re-read the view packages and 
 
 test("tool.open: optional tools default off and recheck activation for every request", async () => {
   let enabled = false;
-  let calls = 0;
-  const { deps } = fakeDeps({
-    toolsSettings: () => ({ enabledPlugins: enabled ? ["hivemind/web"] : [], disabledTools: [] }),
-    callRenderer: async (method, params) => { calls++; assert.equal(method, "tool.open"); assert.deepEqual(params, { tool: "hivemind/web/browser", frame: undefined, url: "about:blank" }); return { tileId: "browser-1" }; },
-  });
+  const { deps } = fakeDeps({ toolsSettings: () => ({ enabledPlugins: enabled ? ["hivemind/web"] : [], disabledTools: [] }) });
   const { dispatch } = makeDispatch(deps);
   const request = { tool: "hivemind/web/browser", url: "about:blank" };
   await assert.rejects(dispatch("tool.open", request), { code: "UNAUTHORIZED" });
   enabled = true;
-  assert.deepEqual(await dispatch("tool.open", request), { tileId: "browser-1" });
+  const { tileId } = (await dispatch("tool.open", request)) as { tileId: string };
   enabled = false;
   await assert.rejects(dispatch("tool.open", request), { code: "UNAUTHORIZED" });
-  assert.equal(calls, 1);
+  assert.deepEqual(deps.workspaces.getCore(REPO)?.tiles, [{ id: tileId, kind: "browser", label: "Browser #1", url: "about:blank" }]);
 });
 
 test("tool.open: unknown tools, disabled contributions, invalid URLs and spawn floods are refused", async () => {
@@ -396,7 +424,6 @@ test("tool.open: unknown tools, disabled contributions, invalid URLs and spawn f
   const { deps } = fakeDeps({
     toolsSettings: () => ({ enabledPlugins: ["hivemind/web"], disabledTools }),
     spawnAllowed: () => spawn,
-    callRenderer: async () => { assert.fail("denied request reached renderer"); },
   });
   const { dispatch } = makeDispatch(deps);
   await assert.rejects(dispatch("tool.open", { tool: "unknown/browser" }), { code: "UNSUPPORTED" });
@@ -407,6 +434,7 @@ test("tool.open: unknown tools, disabled contributions, invalid URLs and spawn f
   await assert.rejects(dispatch("tool.open", { tool: "hivemind/web/browser" }), { code: "UNAUTHORIZED" });
   disabledTools = []; spawn = false;
   await assert.rejects(dispatch("tool.open", { tool: "hivemind/web/browser" }), { code: "RATE_LIMITED" });
+  assert.deepEqual(deps.workspaces.getCore(REPO)?.tiles, [], "no refused request opened a tile");
 });
 
 /** One JSON-RPC connection: `call` waits for its reply; notifications collect in `notes`. */

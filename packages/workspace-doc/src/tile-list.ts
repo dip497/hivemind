@@ -1,8 +1,9 @@
 /**
- * A workspace as the control plane lists it (docs/design/multiplayer-2026-09-28.md, R5): which
- * frame a name means, what a tile is called, and the tiles grouped by frame. One copy, used by
- * the window now and by main once the control plane's canvas verbs run there, so `hive ctl list`
- * and every surface that names a tile agree. No Node and no Loro: the window imports it.
+ * A workspace as the control plane reads it (docs/design/multiplayer-2026-09-28.md, R5): which
+ * frame a name means, which frame a new tile opens in, what a tile is called, and the tiles
+ * grouped by frame. One copy, used by the window and main, so `hive ctl list`, the control
+ * plane's spawns and every surface that names a tile agree. No Node and no Loro: the window
+ * imports it.
  */
 
 /** A frame, as far as the list reads it. */
@@ -92,6 +93,21 @@ export function frameFor<F extends FrameListing>(frames: readonly F[], query: st
   return frames.find((f) => f.title.toLowerCase() === q)
     ?? frames.find((f) => folder(f.worktreePath) === q || folder(f.workspacePath) === q)
     ?? frames.find((f) => f.title.toLowerCase().includes(q));
+}
+
+/**
+ * The frame a new tile opens in when none is named: the caller's (a worker lands beside the
+ * agent that spawned it), else the selected one, else the first top-level frame bound to a
+ * folder, else the first top-level one; none when there is none. A worktree's frame is never a
+ * fallback: an unselected spawn would land in a random worktree.
+ */
+export function defaultFrame<F extends FrameListing & { parentFrameId?: string }>(
+  frames: readonly F[], at: { caller?: string | null; selected?: string | null },
+): F | undefined {
+  const byId = (id: string | null | undefined) => (id ? frames.find((f) => f.id === id) : undefined);
+  return byId(at.caller) ?? byId(at.selected)
+    ?? frames.find((f) => !f.parentFrameId && f.workspacePath)
+    ?? frames.find((f) => !f.parentFrameId);
 }
 
 const repoOf = (f: FrameListing): string | null => f.worktreePath ?? f.workspacePath ?? null;

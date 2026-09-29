@@ -240,6 +240,17 @@ test("a tile the control plane closes straight after spawning it leaves the wind
   expect(hive(["ctl", "close", tile, "--json"])).toMatchObject({ code: 5, json: { code: "TILE_NOT_FOUND" } });
 });
 
+test("a worker spawned into a frame by its name opens there, and the window lays it out; a name no frame answers to is refused", async () => {
+  const [frame] = hive(["ctl", "frames", "--json"]).json.frames;
+  const spawned = hive(["ctl", "spawn", "--agent", "claude", "--frame", frame.title.toUpperCase(), "--name", "framed", "--prompt", "echo framed", "--json"]);
+  expect(spawned.code, spawned.stderr).toBe(0);
+  const tile: string = spawned.json.tileId;
+  expect(hive(["ctl", "list", "--frame", frame.id, "--json"]).json.frames[0].tiles.map((t: any) => t.tileId)).toContain(tile);
+  await expect.poll(placed).toContain(tile);
+  expect(hive(["ctl", "spawn", "--agent", "claude", "--frame", "no-such-frame", "--json"])).toMatchObject({ code: 5, json: { code: "NOT_FOUND" } });
+  hive(["ctl", "close", tile]);
+});
+
 test("an agent's past sessions are listed for its folder, and one can be continued", async () => {
   const id = "0d3c2a10-1111-4222-8333-444455556666";
   const proj = path.join(home, ".claude", "projects", "-repo");

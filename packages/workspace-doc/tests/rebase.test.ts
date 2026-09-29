@@ -3,7 +3,7 @@
 // write keeps its own changes and leaves everyone else's as they are.
 import { expect, test } from "bun:test";
 import { LoroDoc } from "loro-crdt";
-import { readCore, removeTile, writeCore, writeTileName } from "../src/core.ts";
+import { addTile, readCore, removeTile, writeCore, writeTileName } from "../src/core.ts";
 
 type Fields = Record<string, unknown>;
 const frame = (id: string, fields: Fields = {}) => ({ id, x: 0, y: 0, w: 400, h: 300, title: id, color: "#888", z: 1, ...fields });
@@ -79,4 +79,18 @@ test("a tile is taken out on its own, with its name, tabs and frame, leaving not
   expect(doc.getMovableList("order").toArray()).toEqual(["t2", "t3"]);
   expect(removeTile(doc, "t1")).toBeNull();
   expect(removeTile(doc, "gone")).toBeNull();
+});
+
+test("a tile is opened on its own, last, in its frame and with its name; one already there, or malformed, is not", () => {
+  const doc = new LoroDoc();
+  expect(addTile(doc, tile("t1"), { frame: "f1", name: "api" })).toBe(true);
+  expect(readCore(doc)).toEqual({ frames: [], tiles: [tile("t1")], tileNames: { t1: "api" }, editorTabs: {}, frameOf: { t1: "f1" } });
+  writeCore(doc, READ);
+  expect(addTile(doc, tile("t9", { task: "fix it" }))).toBe(true);
+  expect(addTile(doc, tile("t0"))).toBe(true);
+  expect(readCore(doc)).toEqual({ ...READ, tiles: [...READ.tiles, tile("t9", { task: "fix it" }), tile("t0")] });
+  expect(addTile(doc, tile("t2", { label: "again" }))).toBe(false);
+  expect(() => addTile(doc, { id: "t8" } as never)).toThrow(TypeError);
+  expect(() => addTile(doc, tile("t8", { frame: "f1" }))).toThrow(TypeError);
+  expect(readCore(doc)?.tiles.map((t) => t.id)).toEqual(["t1", "t2", "t3", "ed", "t9", "t0"]);
 });

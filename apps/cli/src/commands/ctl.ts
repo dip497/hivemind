@@ -97,9 +97,9 @@ const frames = sub("frames", "List canvas frames (id, title, repo, branch, tile 
 
 const openTool = sub("open-tool", "Open an enabled tool plugin", {
   tool: { type: "positional", required: true, description: "tool id (for example hivemind/web/browser)" },
-  frame: { type: "string", description: "target frame id (default: current selection)" },
+  frame: { type: "string", description: "target frame (id, repo name, or title; default: beside the calling agent, else the one selected); exit 5 when none answers to it" },
   url: { type: "string", description: "Browser URL: http, https, or about:blank" },
-}, (a) => hcpCall("tool.open", { tool: a.tool, frame: a.frame, url: a.url }));
+}, (a) => hcpCall("tool.open", { tool: a.tool, frame: a.frame, url: a.url, callerTile: ownTile() }));
 
 const spawn = sub("spawn", "Spawn an agent tile; prints { tileId, … }", {
   // Named, not listed: help is built before the agents on this machine are loaded, so a
@@ -108,7 +108,7 @@ const spawn = sub("spawn", "Spawn an agent tile; prints { tileId, … }", {
   agent: { type: "string", description: "agent id — `hive agents list` (default: your default agent, or the first one installed)" },
   prompt: { type: "string", description: "initial task" },
   name: { type: "string", description: "tile title" },
-  frame: { type: "string", description: "frame to spawn into (id, repo/worktree name, or title); default: the caller's frame" },
+  frame: { type: "string", description: "frame to spawn into (id, repo/worktree name, or title); default: the caller's frame, else the one selected; exit 5 when none answers to it" },
   mode: { type: "string", description: "claude permission mode" },
   model: { type: "string", description: "model override" },
   report: { type: "boolean", description: "worker auto-reports its finished reply to the caller (--no-report to disable)" },

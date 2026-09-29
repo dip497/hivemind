@@ -25,7 +25,7 @@
  * The work lives in extracted modules/hooks that destructure a `ctx` object —
  * keep it that way (this file was decomposed out of a 3147-LOC god component).
  */
-import { clearWork } from "./work-queue";
+import { clearWork, queueWork } from "./work-queue";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "./components/ui/button";
@@ -39,8 +39,6 @@ import { Wallpaper } from "./Wallpaper";
 import { CanvasOverlay } from "./CanvasOverlay";
 import { applyTheme, setPluginScene, setWallpaperActive } from "./theme-store";
 import { patchSettings, useSettings } from "./settings-store";
-import { BROWSER_TOOL_ID } from "@hivemind/core/tool-plugins";
-import { toolCreationAllowed } from "./tool-availability";
 import type { PinRect } from "./workspace/tile-surfaces";
 import { clampAnchor } from "./pin-anchor";
 import { pickEditorTile } from "./workspace/editor-target";
@@ -67,7 +65,7 @@ import { getAgents, AgentIcon, agentById, agentForCmd, useAgents } from "./agent
 import { useSpawn } from "./useSpawn";
 import { useFrameOps } from "./useFrameOps";
 import { useAgentAwareness } from "./useAgentAwareness";
-import { unmarkBackgroundTile } from "./worker-tiles";
+import { markBackgroundTile, unmarkBackgroundTile } from "./worker-tiles";
 import { useCanvasShortcuts } from "./useCanvasShortcuts";
 import { useNodeDragStop } from "./useNodeDragStop";
 import { GitCommitModal } from "./GitCommitModal";
@@ -393,18 +391,10 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   const coreSnap = useMemo(() => ({ frames, tileNames, tiles, editorTabs, frameOf }), [frames, tileNames, tiles, editorTabs, frameOf]);
   const geometry = useMemo(() => ({ positions, sizes, viewport }), [positions, sizes, viewport]);
   const { flush: flushCore } = useDebouncedSave(persistKey, coreSnap, useCallback((key: string, v: typeof coreSnap) => saveLayout(key, v), []));
-  // Until spawning runs in main (R5 step 4), a tile the control plane asks for is made here. It is
-  // saved as it first renders, not at the next debounced save, so a rename or close that follows
-  // at once finds it in main's store; the render comes after the spawn's answer, as ever, so its
-  // terminal starts once main has wired the spawn.
-  const saveCoreOnRender = useRef(false);
-  useEffect(() => {
-    if (!saveCoreOnRender.current) return;
-    saveCoreOnRender.current = false;
-    flushCore();
-  }, [coreSnap, flushCore]);
-  // Main acts on the workspace this window shows when the control plane's caller is in no tile.
-  useEffect(() => showWorkspace(persistKey), [persistKey]);
+  // Main acts on the workspace this window shows, in the frame the user is in, when the control
+  // plane's caller is in no tile.
+  const userFrame = selectedFrameId ?? (selectedTileId ? frameOf[selectedTileId] ?? null : null);
+  useEffect(() => showWorkspace(persistKey, userFrame), [persistKey, userFrame]);
   // Another writer changed this workspace's core layout (the control plane named or closed a
   // tile): write what this window has yet to save, which the store applies as this window's change
   // alone, then take the layout as stored, keeping what this window changed since. A tile that
@@ -688,13 +678,32 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   }, []);
 
   // Tile spawning + in-frame placement. See useSpawn.
-  const { spawnTile, spawnDefaultAgent, spawnAgent, spawnVis, spawnInto, frameOpen, openPlanReview, hcpSpawnAgent } = useSpawn({
+  const { spawnTile, spawnDefaultAgent, spawnAgent, spawnVis, spawnInto, frameOpen, openPlanReview, placeArrived } = useSpawn({
     repoPath,
     positionsRef, sizesRef, tilesRef, frameOfRef, framesRef, selectedFrameIdRef,
     selectedTileIdRef, repoPathRef, rootRef, lastActiveFrameRef, boardRef: board.objectsRef,
     setFrameOf, setPositions, setSelectedTileId, setFocusReq, setFrames,
     setSelectedFrameId, setTiles, setSpawnPick, focusTile, openFileInTile, renameTile,
   });
+  // Tiles the control plane opens: announced before they reach the layout (the prompt to start
+  // each with, and whether to bring it forward), then laid out as they arrive.
+  const arrivals = useRef(new Map<string, boolean>());
+  useEffect(() => {
+    const off = window.hive.onHcpSpawned(({ tileId, repo, prompt, background }) => {
+      if (repo !== persistKey) return;
+      if (prompt) queueWork(tileId, prompt);
+      if (background) markBackgroundTile(tileId);
+      arrivals.current.set(tileId, background);
+    });
+    return () => { off(); arrivals.current.clear(); };
+  }, [persistKey]);
+  useEffect(() => {
+    for (const [id, background] of arrivals.current) {
+      if (!tiles.some((t) => t.id === id)) continue;
+      arrivals.current.delete(id);
+      placeArrived(id, { background });
+    }
+  }, [tiles, placeArrived]);
   // A session already running on a machine (the frame's machine chip) opens as a terminal in that frame.
   useEffect(() => {
     const onOpen = (e: Event) => {
@@ -781,31 +790,13 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     return () => { offOpen(); offAbort(); };
   }, [openPlanReview, closeTile]);
 
-  // HCP control plane: main forwards a workspace verb (e.g. tile.spawn_agent
-  // from an agent's `hive ctl`). Execute it and reply with the result/error.
+  // HCP control plane: main forwards a verb only a window can carry out (focus a tile, open a
+  // review, a view's event). Execute it and reply with the result/error.
   useEffect(() => {
     const off = window.hive.onHcpCommand(async (cmd) => {
       try {
         const p = (cmd.params ?? {}) as Record<string, unknown>;
         switch (cmd.method) {
-          case "tool.open": {
-            if (p.tool !== BROWSER_TOOL_ID) throw new Error("Unsupported tool");
-            if (!toolCreationAllowed("browser")) throw new Error("Browser is disabled");
-            const selectedTile = selectedTileIdRef.current;
-            const frameId = typeof p.frame === "string" ? p.frame : selectedFrameIdRef.current ?? (selectedTile ? frameOfRef.current[selectedTile] ?? null : null);
-            if (frameId && !framesRef.current.some((frame) => frame.id === frameId)) throw new Error("Unknown frame id");
-            const tileId = spawnTile("browser", frameId, { url: typeof p.url === "string" ? p.url : undefined });
-            if (!tileId) throw new Error("Browser is disabled");
-            saveCoreOnRender.current = true;
-            await window.hive.hcpResult(cmd.id, true, { tileId });
-            break;
-          }
-          case "tile.spawn_agent": {
-            const tileId = hcpSpawnAgent(p as { agent?: string; prompt?: string; frame?: string; mode?: string; model?: string; callerTile?: string; background?: boolean; name?: string; resume?: string });
-            saveCoreOnRender.current = true;
-            await window.hive.hcpResult(cmd.id, true, { tileId });
-            break;
-          }
           case "view.emit": {
             const ev = p as { name: string; data: never; view?: string; from: "shell" | { tileId: string } };
             const active = activeViewIdRef.current ?? FALLBACK_VIEW_ID;
@@ -847,7 +838,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
       }
     });
     return off;
-  }, [hcpSpawnAgent, spawnTile, focusTile]);
+  }, [focusTile]);
 
   // HCP pipes → animated data-flow edges. Add on connect; on disconnect remove
   // the one edge (dst set) or all of src's edges (dst null).

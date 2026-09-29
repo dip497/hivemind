@@ -1941,6 +1941,10 @@ function startHcpControlPlane(): void {
       hcpStatus.event(tileId, waiting ? { event: "input.requested", kind: "approval" } : { event: "input.resolved" }),
     workspaces: workspaceStore(),
     shownWorkspace,
+    launchOptions: (agentId) => getAppSettings().agents.options[agentId] ?? {},
+    announceSpawn: (spawn) => {
+      for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send("hcp:spawned", spawn);
+    },
     status: hcpStatus,
     endSession,
   });

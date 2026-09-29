@@ -10,20 +10,18 @@ import { frameColorFor } from "./frame-color";
 import { nextSlotInFrame, FRAME_ROW_MAX, FRAME_GAP } from "./frame-layout";
 import { defaultSizeForKind, defaultTileSize, FRAME_PAD, FRAME_HEADER } from "./canvas-sizing";
 import { agentById } from "./agents";
-import { agentById as catalogAgentById, defaultAgent, spawnArgsFor, spawnLabelFor, type AgentProviderDef, type SpawnOptions } from "@hivemind/agents";
+import { agentById as catalogAgentById, agentLaunch, defaultAgent, nextOrdinal, type AgentProviderDef, type SpawnOptions } from "@hivemind/agents";
 import { AGENT_TILE_KIND } from "./tile-kinds";
 import { defaultShell, type FrameState, type TileInstance } from "./canvas-persistence";
 import { queueWork } from "./work-queue";
-import { markBackgroundTile } from "./worker-tiles";
 import type { TileKind } from "./tile-kinds";
 import { checkToolCreation } from "./tool-availability";
 import { checkAgentInstalled, noAgentInstalled } from "./agent-plugins";
 import { isRemote } from "../../shared/remote-uri";
 import { mintId } from "../../shared/tile-id";
 import { getSettings } from "./settings-store";
-import { promptTask, withResume } from "@hivemind/agents";
 import type { BoardObject } from "@hivemind/workspace-doc/shapes";
-import { frameFor } from "@hivemind/workspace-doc/tile-list";
+import { defaultFrame } from "@hivemind/workspace-doc/tile-list";
 import { isBox } from "./board-objects/board-model";
 
 /** Kinds that are one-per-frame (spawn → focus existing). claude/shell are not. */
@@ -75,19 +73,6 @@ export interface SpawnCtx {
   renameTile: (tileId: string, name: string) => void;
 }
 
-/** One past the highest ordinal already on the canvas for this label, so numbers neither repeat nor restart after a relaunch. */
-export function nextOrdinal(labels: readonly string[], labelFor: (n: number) => string): number {
-  const probe = 987654321;
-  const prefix = labelFor(probe).split(String(probe))[0]!;
-  let max = 0;
-  for (const label of labels) {
-    if (!label.startsWith(prefix)) continue;
-    const n = parseInt(label.slice(prefix.length), 10);
-    if (n > max) max = n;
-  }
-  return max + 1;
-}
-
 /** The user's saved options for this agent, with this launch's own choices on top.
  *  Read at spawn time: settings are rebuilt on every write, and as a hook dependency
  *  they rebuilt every spawn callback and every tile surface with it. */
@@ -108,13 +93,13 @@ export function useSpawn(ctx: SpawnCtx) {
 
   // Labels handed out whose tiles have not rendered yet: two spawns in one tick must not share a number.
   const issued = useRef<string[]>([]);
-  const ordinalLabel = useCallback((countAs: (n: number) => string, labelFor = countAs): string => {
+  const labelsInUse = useCallback((): string[] => {
     const shown = new Set(tilesRef.current.map((t) => t.label));
     issued.current = issued.current.filter((l) => !shown.has(l));
-    const label = labelFor(nextOrdinal([...shown, ...issued.current], countAs));
-    issued.current.push(label);
-    return label;
+    return [...shown, ...issued.current];
   }, [tilesRef]);
+  const issue = (label: string): string => { issued.current.push(label); return label; };
+  const ordinalLabel = useCallback((labelFor: (n: number) => string): string => issue(labelFor(nextOrdinal(labelsInUse(), labelFor))), [labelsInUse]);
 
   const placeInFrame = useCallback((id: string, frame: FrameState, opts?: { background?: boolean }) => {
     // CRITICAL: these MUST match the auto-fit derivation in `tileBox`
@@ -187,21 +172,12 @@ export function useSpawn(ctx: SpawnCtx) {
   // Returns the frame to open into — the active one, else the first existing,
   // else lazily creates a "base" workspace frame bound to the launch repo (so
   // the empty playground gets a real workspace the moment you open anything).
-  /** The frame a spawn lands in, without creating one. */
-  const pickFrame = useCallback((): FrameState | undefined => {
-    const sel = selectedFrameIdRef.current;
-    const selF = sel ? framesRef.current.find((f) => f.id === sel) : undefined;
-    if (selF) return selF;
-    // Prefer a workspace-bound TOP-LEVEL frame over an empty base — without
-    // this, a user-bound zone (e.g. "manageark") that wasn't created first
-    // would lose spawns to a stale base frame, and tiles would land off-screen
-    // relative to the visible workspace. Never auto-route into a worktree
-    // sub-frame (parentFrameId set) — those are spawned-into only on explicit
-    // selection, else an unselected spawn would land in a random worktree.
-    const bound = framesRef.current.find((f) => !f.parentFrameId && f.workspacePath);
-    if (bound) return bound;
-    return framesRef.current.find((f) => !f.parentFrameId);
-  }, []);
+  /** The frame a spawn lands in, without creating one: the selected one, else the first bound to
+   *  a folder, else the first (the control plane's spawns choose the same way, defaultFrame). */
+  const pickFrame = useCallback(
+    (): FrameState | undefined => defaultFrame(framesRef.current, { selected: selectedFrameIdRef.current }),
+    [],
+  );
 
   const ensureFrame = useCallback((): FrameState => {
     const existing = pickFrame();
@@ -285,11 +261,11 @@ export function useSpawn(ctx: SpawnCtx) {
       let cmd: string | undefined;
       let args: string[] | undefined;
       let label: string;
+      let task: string | undefined;
       if (def) {
-        const so = launchOptions(def.id, { mode: opts?.mode, ...(opts?.launch ?? {}) });
-        args = opts?.resume ? withResume(def, spawnArgsFor(def, so), opts.resume) : spawnArgsFor(def, so);
-        cmd = def.bin;
-        label = ordinalLabel((n) => spawnLabelFor(def, n, {}), (n) => spawnLabelFor(def, n, so));
+        const launch = agentLaunch(def, { options: launchOptions(def.id, { mode: opts?.mode, ...(opts?.launch ?? {}) }), labels: labelsInUse(), prompt: opts?.work, resume: opts?.resume });
+        ({ cmd, args, task } = launch);
+        label = issue(launch.label);
       } else if (kind === "shell" && opts?.session) {
         cmd = opts.session.cmd; args = opts.session.args;
         label = opts.session.label;
@@ -303,7 +279,7 @@ export function useSpawn(ctx: SpawnCtx) {
         label = kind === "editor" ? "Editor" : kind === "diff" ? "Diff" : "Issues";
       }
       placeInFrame(newId, frame);
-      setTiles((cur) => [...cur, { id: newId, kind, label, cmd, args, ...(kind === "browser" && opts?.url ? { url: opts.url } : {}), ...(kind === "shell" && opts?.session ? { session: opts.session.id } : {}), ...(kind === AGENT_TILE_KIND && opts?.work ? { task: promptTask(opts.work) } : {}) }]);
+      setTiles((cur) => [...cur, { id: newId, kind, label, cmd, args, ...(kind === "browser" && opts?.url ? { url: opts.url } : {}), ...(kind === "shell" && opts?.session ? { session: opts.session.id } : {}), ...(task ? { task } : {}) }]);
       // "Work on this": hand the fresh claude tile its prompt. It delivers it to
       // itself the first time it's ready (see work-queue).
       if (kind === AGENT_TILE_KIND && opts?.work) queueWork(newId, opts.work);
@@ -409,48 +385,13 @@ export function useSpawn(ctx: SpawnCtx) {
     [ensureFrame, placeInFrame],
   );
 
-  // HCP control-plane spawn: create an agent tile and return its id so the
-  // caller (main, via the renderer command channel) can drive it. Mirrors the
-  // claude/registry-agent branch of spawnTile, plus prompt delivery via the
-  // work queue. `agent` is a catalog id.
-  const hcpSpawnAgent = useCallback(
-    (opts: { agent?: string; prompt?: string; frame?: string; mode?: string; model?: string; callerTile?: string; background?: boolean; name?: string; resume?: string }): string => {
-      // Frame preference: explicit > the CALLER agent's frame (so a worker lands
-      // beside the agent that spawned it) > the active/first frame.
-      // The caller passes its HIVEMIND_TILE, which is the PTY id (`hm:<tileId>`
-      // for a persistent pty); frameOf is keyed by the bare tile id, so strip the
-      // `hm:` scope prefix before the lookup.
-      const callerTile = opts.callerTile?.startsWith("hm:") ? opts.callerTile.slice(3) : opts.callerTile;
-      const callerFrameId = callerTile ? frameOfRef.current[callerTile] : undefined;
-      // Resolve opts.frame (a frame id, a title, or the folder it runs in), most specific
-      // first. Falls through to the caller's frame, then ensureFrame().
-      const resolved = opts.frame ? frameFor(framesRef.current, opts.frame) : undefined;
-      const callerFrame = callerFrameId ? framesRef.current.find((f) => f.id === callerFrameId) : undefined;
-      const frame = resolved ?? callerFrame ?? ensureFrame();
-      const def = catalogAgentById(opts.agent) ?? defaultAgent();
-      // The control plane only sends a bare agent when the catalog has one — but the
-      // default can still be missing (nothing installed), and there is nothing to spawn into.
-      if (!def) { noAgentInstalled(); return ""; }
-      const newId = mintId(`tile-${def.id}`);
-      const so = launchOptions(def.id, { mode: opts.mode, model: opts.model });
-      // Main checked the id and that the agent can resume.
-      const args = opts.resume ? withResume(def, spawnArgsFor(def, so), opts.resume) : spawnArgsFor(def, so);
-      const cmd = def.bin;
-      const label = ordinalLabel((n) => spawnLabelFor(def, n, {}), (n) => spawnLabelFor(def, n, so));
-      // A spawner-chosen name ("reviewer") is what tells a dozen workers apart, so it
-      // ranks like a rename, above the title the agent sets itself. Main sanitizes it.
-      if (opts.name) renameTile(newId, opts.name);
-      // Background (workflow / report:false) workers: place WITHOUT stealing
-      // focus or centering the viewport, and mark them so useAgentAwareness skips
-      // their "finished" notification — they're gathered in bulk, not driven.
-      if (opts.background) markBackgroundTile(newId);
-      placeInFrame(newId, frame, { background: opts.background });
-      setTiles((cur) => [...cur, { id: newId, kind: AGENT_TILE_KIND, label, cmd, args, ...(opts.prompt ? { task: promptTask(opts.prompt) } : {}) }]);
-      if (opts.prompt) queueWork(newId, opts.prompt);
-      return newId;
-    },
-    [ensureFrame, placeInFrame, renameTile, tilesRef],
-  );
+  // A tile another writer opened (the control plane): lay it out in its frame, or, in a
+  // workspace with none, in the one a spawn here would make, and bring it forward unless it is a
+  // background worker.
+  const placeArrived = useCallback((id: string, opts: { background: boolean }) => {
+    const frame = framesRef.current.find((f) => f.id === frameOfRef.current[id]) ?? ensureFrame();
+    placeInFrame(id, frame, opts);
+  }, [ensureFrame, placeInFrame]);
 
-  return { placeInFrame, ensureFrame, spawnTile, spawnInto, spawnDefaultAgent, spawnAgent, spawnVis, frameOpen, openPlanReview, hcpSpawnAgent };
+  return { placeInFrame, ensureFrame, spawnTile, spawnInto, spawnDefaultAgent, spawnAgent, spawnVis, frameOpen, openPlanReview, placeArrived };
 }

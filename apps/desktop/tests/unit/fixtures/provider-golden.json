@@ -1072,7 +1072,7 @@
       }
     },
     "superviseSpawn": {
-      "tileId": "tile-x"
+      "tileId": "tile-claude-<minted>"
     },
     "status": [
       {
@@ -1245,7 +1245,7 @@
       }
     },
     "superviseSpawn": {
-      "tileId": "tile-x"
+      "tileId": "tile-codex-<minted>"
     },
     "status": [
       {
@@ -1357,7 +1357,7 @@
       }
     },
     "superviseSpawn": {
-      "tileId": "tile-x"
+      "tileId": "tile-droid-<minted>"
     },
     "status": [
       {
@@ -1488,7 +1488,7 @@
       }
     },
     "superviseSpawn": {
-      "tileId": "tile-x"
+      "tileId": "tile-kiro-<minted>"
     },
     "status": [
       {

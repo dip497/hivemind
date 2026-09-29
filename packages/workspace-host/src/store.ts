@@ -23,7 +23,7 @@
  * history lasts as long as the store does.
  */
 import { UndoManager, type LoroDoc } from "loro-crdt";
-import { hasCore, holdsTile, readCore, removeTile, writeCore, writeTileName } from "@hivemind/workspace-doc/core";
+import { addTile, hasCore, holdsTile, readCore, removeTile, writeCore, writeTileName } from "@hivemind/workspace-doc/core";
 import { readObjects, writeObjects } from "@hivemind/workspace-doc/objects";
 import { readView, writeView } from "@hivemind/workspace-doc/views";
 import { stampSchema } from "@hivemind/workspace-doc/schema";
@@ -112,6 +112,14 @@ export class WorkspaceStore {
     const repo = this.workspaceOf(tileId);
     if (repo !== null) this.write(repo, "core", LAYOUT, from, (doc) => writeTileName(doc, tileId, name));
     return repo;
+  }
+
+  /** Open `tile` in the workspace `repo`, in the frame `at.frame` (none: loose) and named
+   *  `at.name`. False when that workspace already holds a tile with its id. */
+  addTile(repo: string, tile: TileRecord, at: { frame?: string; name?: string } = {}, from: Writer = {}): boolean {
+    let added = false;
+    this.write(repo, "core", LAYOUT, from, (doc) => { added = addTile(doc, tile, at); });
+    return added;
   }
 
   /** Take the tile `tileId` out of the workspace that holds it. That workspace and what the tile

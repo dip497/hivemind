@@ -13,16 +13,16 @@ import { keyBytes, KEY_GAP_MS } from "../../shared/keys.js";
 import { HcpError } from "./protocol.js";
 import type { TurnTracker } from "./turn-tracker.js";
 import type { OutputRecorder } from "./output-recorder.js";
-import { toPtyId as ptyId, toBareId as bareOf } from "../../shared/tile-id.js";
+import { mintId, toPtyId as ptyId, toBareId as bareOf } from "../../shared/tile-id.js";
 import { labelOf as labelIn } from "./names.js";
-import { agentById, agentForCmd, agentOption, cleanName, isSessionId, spawnableAgents, workerAgents, type AgentProviderDef } from "@hivemind/agents";
+import { agentById, agentForCmd, agentLaunch, agentOption, cleanName, isSessionId, nextOrdinal, spawnableAgents, workerAgents, type AgentProviderDef, type SpawnOptions } from "@hivemind/agents";
 import { canListSessions, listSessions } from "@hivemind/agents/node";
 import { BROWSER_TOOL_ID, tileKindAvailability } from "@hivemind/core/tool-plugins";
 import type { ToolsSettings } from "@hivemind/core/settings-schema";
 import { SUBMIT_DELAY_MS } from "../../shared/agent-io.js";
 import { customDataProblem, isCustomEventName } from "@hivemind/view-sdk/protocol";
-import { AGENT_TILE_KIND, isTerminalKind, type CoreLayout, type TileRecord } from "@hivemind/workspace-doc/shapes";
-import { frameFor, listFrames, listTiles, type TileFacts } from "@hivemind/workspace-doc/tile-list";
+import { AGENT_TILE_KIND, isTerminalKind, type CoreLayout, type FrameRecord, type TileRecord } from "@hivemind/workspace-doc/shapes";
+import { defaultFrame, frameFor, listFrames, listTiles, type TileFacts } from "@hivemind/workspace-doc/tile-list";
 import type { WorkspaceStore } from "@hivemind/workspace-host/store";
 import type { StatusStore } from "@hivemind/agent-host/status-store";
 import { tileStatusOf } from "@hivemind/agent-host/tile-status";
@@ -171,10 +171,15 @@ export interface MethodDeps {
   awaitingApproval: (tileId: string, waiting: boolean) => void;
   /** The workspaces main has open. The canvas verbs read them, and write them as `control`;
    *  their windows follow. */
-  workspaces: Pick<WorkspaceStore, "workspaceOf" | "getCore" | "renameTile" | "removeTile">;
-  /** The workspace the window the user is at shows, if any: what a caller in no tile (a
-   *  terminal, a script) acts on. */
-  shownWorkspace: () => string | null;
+  workspaces: Pick<WorkspaceStore, "workspaceOf" | "getCore" | "addTile" | "renameTile" | "removeTile">;
+  /** The workspace the window the user is at shows, and the frame the user is in there, if
+   *  any: what a caller in no tile (a terminal, a script) acts on. */
+  shownWorkspace: () => { repo: string; frame: string | null } | null;
+  /** The launch options the user saved for an agent. */
+  launchOptions: (agentId: string) => SpawnOptions;
+  /** Tell the windows about a tile the control plane is opening, before it reaches the layout:
+   *  the prompt to start it with, and whether to bring it forward. */
+  announceSpawn: (spawn: { tileId: string; repo: string; prompt?: string; background: boolean }) => void;
   /** Every session's status, as its host reports it. */
   status: Pick<StatusStore, "get">;
   /** End the session a tile runs (by its pty id), as its window's kill does. */
@@ -315,15 +320,18 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     // name and tags every message this worker sends back. One printable line, capped like every
     // name, so a worker can't smuggle a paragraph (or ANSI) into the parent's terminal banner.
     const name = typeof opts.name === "string" ? cleanName(opts.name) : "";
-    const res = (await deps.callRenderer(
-      "tile.spawn_agent",
-      // `background` = a silent worker (report:false → gathered in bulk, e.g. a
-      // workflow worker). The renderer uses it to NOT steal focus / center the
-      // viewport on spawn and to suppress the per-worker "finished" notification.
-      { agent, prompt: opts.prompt, frame: opts.frame, mode, model: opts.model, callerTile: opts.callerTile, background: opts.report === false, name: name || undefined, resume },
-      RENDERER_TIMEOUT,
-    )) as { tileId?: string };
-    if (!res?.tileId) throw new HcpError("INTERNAL", "spawn returned no tileId");
+    const prompt = typeof opts.prompt === "string" && opts.prompt ? opts.prompt : undefined;
+    // The user's saved options for this agent, with this launch's own on top.
+    const options: SpawnOptions = { ...deps.launchOptions(def.id) };
+    if (mode) options.mode = String(mode);
+    if (opts.model) options.model = String(opts.model);
+    // `background` = a silent worker (report:false → gathered in bulk, e.g. a workflow worker):
+    // its window does not bring it forward, and does not announce each one finishing.
+    const tileId = openTile(opts.callerTile, opts.frame, (ws) => ({
+      id: mintId(`tile-${def.id}`), kind: AGENT_TILE_KIND,
+      ...agentLaunch(def, { options, labels: ws.tiles.map((t) => t.label), prompt, resume }),
+    }), { name, prompt, background: opts.report === false });
+    const res = { tileId };
     depthOf.set(res.tileId, childDepth);
     agentOfTile.set(res.tileId, agent);
     if (opts.callerTile) {
@@ -386,11 +394,37 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
   };
 
   // The workspace a canvas verb acts on: the one holding the caller's tile, else the one the
-  // user's window shows. With neither, an empty one.
-  const layoutFor = (callerTile: unknown): CoreLayout => {
+  // user's window shows (with the frame the user is in there); null with neither.
+  const workspaceFor = (callerTile: unknown): { repo: string; core: CoreLayout; frame: string | null } | null => {
     const held = typeof callerTile === "string" && callerTile ? deps.workspaces.workspaceOf(bareOf(callerTile)) : null;
-    const repo = held ?? deps.shownWorkspace();
-    return (repo === null ? null : deps.workspaces.getCore(repo)) ?? { frames: [], tiles: [] };
+    const shown = deps.shownWorkspace();
+    const repo = held ?? shown?.repo ?? null;
+    if (repo === null) return null;
+    return { repo, core: deps.workspaces.getCore(repo) ?? { frames: [], tiles: [] }, frame: shown?.repo === repo ? shown.frame : null };
+  };
+  const layoutFor = (callerTile: unknown): CoreLayout => workspaceFor(callerTile)?.core ?? { frames: [], tiles: [] };
+
+  // Where the control plane opens a tile, and tells the windows so: the workspace and frame (the
+  // one named, else beside the caller, else the one the user is in, else the first; none in a
+  // workspace with no frames, where the window that lays it out makes one).
+  const openTile = (
+    callerTile: unknown, named: unknown,
+    make: (ws: CoreLayout) => TileRecord, at: { name?: string; prompt?: string; background: boolean },
+  ): string => {
+    const ws = workspaceFor(callerTile);
+    if (!ws) throw new HcpError("NOT_FOUND", "no workspace is open: open one in the app first");
+    let frame: FrameRecord | undefined;
+    if (named != null && named !== "") {
+      frame = frameFor(ws.core.frames, String(named));
+      if (!frame) throw new HcpError("NOT_FOUND", `no frame answers to "${String(named)}"`);
+    } else {
+      const caller = typeof callerTile === "string" && callerTile ? ws.core.frameOf?.[bareOf(callerTile)] : undefined;
+      frame = defaultFrame(ws.core.frames, { caller, selected: ws.frame });
+    }
+    const tile = make(ws.core);
+    deps.announceSpawn({ tileId: tile.id, repo: ws.repo, prompt: at.prompt, background: at.background });
+    deps.workspaces.addTile(ws.repo, tile, { frame: frame?.id, name: at.name }, CONTROL);
+    return tile.id;
   };
 
   // What only the running app knows about a workspace's tiles, for the list.
@@ -733,7 +767,13 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
           if (!["http:", "https:"].includes(url.protocol) && p.url !== "about:blank") throw new HcpError("BAD_REQUEST", "URL must use http or https, or be about:blank");
         }
         if (!deps.spawnAllowed()) throw new HcpError("RATE_LIMITED", "spawn rate limit exceeded");
-        return await deps.callRenderer("tool.open", { tool: p.tool, frame: p.frame, url: p.url }, RENDERER_TIMEOUT);
+        const url = typeof p.url === "string" ? p.url : undefined;
+        const tileId = openTile(p.callerTile, p.frame, (ws) => ({
+          id: mintId("tile-browser"), kind: "browser",
+          label: `Browser #${nextOrdinal(ws.tiles.map((t) => t.label), (n) => `Browser #${n}`)}`,
+          ...(url ? { url } : {}),
+        }), { background: false });
+        return { tileId };
       }
       case "tile.list": {
         // One frame, named the way spawn names one; a name no frame answers to is refused.

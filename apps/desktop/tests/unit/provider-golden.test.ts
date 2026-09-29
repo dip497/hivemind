@@ -18,6 +18,7 @@ import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { composeResume, composeResumeFrom, hookPathsFor, providers as registry, renderHookDocument } from "@hivemind/agents/node";
 import { authoredDef, authoredAsset, useAuthoredAgents } from "./authored-agents.ts";
+import { workspaceDeps } from "./hcp-workspace.ts";
 import type { SpawnSpec } from "@hivemind/agent-host/pty-session-manager";
 import { deliversPromptViaArgv } from "../../src/shared/agent-io.ts";
 import { applyInitialPrompt, INITIAL_PROMPT_ENV } from "@hivemind/agent-host/initial-prompt";
@@ -99,7 +100,8 @@ function fakeDeps() {
   const mailbox = new Mailbox(() => true, SUBMIT_DELAY_MS);
   return {
     turns: new TurnTracker(), recorder: new OutputRecorder(),
-    callRenderer: async () => ({ tileId: "tile-x" }),
+    callRenderer: async () => { throw new Error("no window"); },
+    ...workspaceDeps(),
     writeToTile: () => true,
     deliverToTile: (id: string, data: string, onSent?: () => void) => mailbox.deliver(id, data, onSent),
     spawnAllowed: () => true, connect: () => true, disconnect: () => {}, forgetPipes: () => {}, spawnEdge: () => {}, setSupervise: () => {}, awaitingApproval: () => {},
@@ -127,7 +129,11 @@ async function capture(make = () => composeResume(CTX)) {
       const promptSpawn = resume.transformSpecOnSpawn(withPrompt, "tile-g");
       const exec = applyInitialPrompt(promptSpawn.args ?? [], promptSpawn.env ?? {});
       let supervise: unknown;
-      try { supervise = await dispatch("tile.spawn_agent", { agent: p.id, supervise: "all", callerTile: "parent", report: false }); }
+      // The id is minted fresh each time: the snapshot records that one was, in this agent's name.
+      try {
+        const { tileId } = (await dispatch("tile.spawn_agent", { agent: p.id, supervise: "all", callerTile: "parent", report: false })) as { tileId: string };
+        supervise = { tileId: tileId.replace(/-\d+$/, "-<minted>") };
+      }
       catch (e) { supervise = { error: (e as { code?: string }).code ?? String(e) }; }
       out[p.id] = {
         identify: { bare: identifyAgent(p.cmd), path: identifyAgent(`/usr/local/bin/${p.cmd} --x`) },

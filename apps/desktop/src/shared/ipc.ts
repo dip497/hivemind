@@ -256,9 +256,9 @@ export interface HiveIpc {
   workspaceRedoSync(repo: string): boolean | null;
   /** Another writer (the control plane, another window) changed a workspace. */
   onWorkspaceChanged(cb: (change: Pick<WorkspaceChange, "repo" | "part">) => void): () => void;
-  /** The workspace this window shows now (null: none), for the control plane to act on when its
-   *  caller is in no tile. */
-  workspaceShown(repo: string | null): void;
+  /** The workspace this window shows now (null: none), and the frame the user is in there, for
+   *  the control plane to act on when its caller is in no tile. */
+  workspaceShown(repo: string | null, frame: string | null): void;
 
   // ── settings.json (main owns it; see main/settings-store.ts) ──
   /** The whole settings object, synchronously (boot: no theme flash). */
@@ -585,6 +585,16 @@ export interface HcpSpawnEvent {
   child: string;
   parent: string | null;
   connected: boolean;
+}
+
+/** Pushed main→renderer as the control plane opens a tile (spawn, open-tool), before the tile
+ *  reaches the layout: the window that shows `repo` starts it with `prompt`, and brings it forward
+ *  unless it is a `background` worker. */
+export interface HcpSpawnedEvent {
+  tileId: string;
+  repo: string;
+  prompt?: string;
+  background: boolean;
 }
 
 /** Pushed main→renderer on every change to an agent session's status (the host's status

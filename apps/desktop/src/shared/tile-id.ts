@@ -15,9 +15,13 @@
 export const HM_PREFIX = "hm:";
 
 let lastMinted = 0;
-/** A fresh `<prefix>-<n>` id. The clock alone repeats within a millisecond, which a fanout of workers hits. */
+/**
+ * A fresh `<prefix>-<n>` id. The clock alone repeats within a millisecond, which a fanout of
+ * workers hits, and main and each window mint ids of their own: `n` is the clock's milliseconds
+ * times a thousand plus a random 0–999, and never less than one more than the last.
+ */
 export function mintId(prefix: string): string {
-  lastMinted = Math.max(Date.now(), lastMinted + 1);
+  lastMinted = Math.max(Date.now() * 1000 + Math.floor(Math.random() * 1000), lastMinted + 1);
   return `${prefix}-${lastMinted}`;
 }
 

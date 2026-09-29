@@ -2,7 +2,7 @@
 // tiles and frames as `hive ctl list` and `hive ctl frames` print them. What a tile is called is
 // owned by the desktop's tile-surfaces test; here it is only carried into the list.
 import { expect, test } from "bun:test";
-import { frameFor, listFrames, listTiles, type FrameListing, type TileListing } from "../src/tile-list.ts";
+import { defaultFrame, frameFor, listFrames, listTiles, type FrameListing, type TileListing } from "../src/tile-list.ts";
 
 const frame = (id: string, title: string, over: Partial<FrameListing> = {}): FrameListing => ({ id, title, ...over });
 const tile = (id: string, over: Partial<TileListing> = {}): TileListing => ({ id, kind: "shell", label: id, ...over });
@@ -19,6 +19,19 @@ test("a frame is found by its id, then its title in any case, then the folder it
   expect(frameFor(frames, "fix-login")?.id).toBe("f2");
   expect(frameFor(frames, "doc")?.id).toBe("web");
   expect(frameFor(frames, "nothing")).toBeUndefined();
+});
+
+test("a new tile opens beside its caller, else in the selected frame, else the first bound to a folder, else the first; never a worktree's unless asked", () => {
+  const frames = [
+    frame("wt", "Fix", { workspacePath: "/src/api", worktreePath: "/src/wt/fix", parentFrameId: "api" }),
+    frame("loose", "Notes"),
+    frame("api", "API", { workspacePath: "/src/api" }),
+  ];
+  expect(defaultFrame(frames, { caller: "wt", selected: "loose" })?.id).toBe("wt");
+  expect(defaultFrame(frames, { caller: "gone", selected: "loose" })?.id).toBe("loose");
+  expect(defaultFrame(frames, {})?.id).toBe("api");
+  expect(defaultFrame(frames.filter((f) => f.id !== "api"), {})?.id).toBe("loose");
+  expect(defaultFrame([frames[0]!], {})).toBeUndefined();
 });
 
 const ws = {

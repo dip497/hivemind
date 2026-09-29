@@ -15,6 +15,7 @@ import path from "node:path";
 import { StatusStore } from "@hivemind/agent-host/status-store";
 import { WorkspaceStore } from "@hivemind/workspace-host/store";
 import { labelOf } from "../../src/main/hcp/names.js";
+import { REPO, workspaceDeps } from "./hcp-workspace.ts";
 import { makeDispatch } from "../../src/main/hcp/methods.js";
 import { TurnTracker } from "../../src/main/hcp/turn-tracker.js";
 import { OutputRecorder } from "../../src/main/hcp/output-recorder.js";
@@ -69,18 +70,14 @@ test("a banner calls a tile what every surface does, on one line, with its id; a
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-test("tile.spawn_agent actually forwards `name` — it enumerates its params, and a dropped one is silent", async () => {
-  // v1.13.0 shipped `name` end-to-end EXCEPT here: the tile.spawn_agent case lists
-  // its params by hand, `name` wasn't in the list, and the feature was dead with no
-  // error anywhere. This asserts the wire, not the sanitizer.
-  const seen: Array<Record<string, unknown>> = [];
+test("tile.spawn_agent names the tile it opens: it enumerates its params, and a dropped one is silent", async () => {
+  // v1.13.0 shipped `name` end-to-end EXCEPT where spawn listed its params by hand: `name`
+  // wasn't in the list, and the feature was dead with no error anywhere.
+  const ws = workspaceDeps();
   const { dispatch } = makeDispatch({
     turns: new TurnTracker(),
     recorder: new OutputRecorder(),
-    callRenderer: async (_m: string, p: unknown) => {
-      seen.push(p as Record<string, unknown>);
-      return { tileId: "tile-w" };
-    },
+    callRenderer: async () => { throw new Error("no window"); },
     writeToTile: () => true,
     deliverToTile: () => true,
     spawnAllowed: () => true,
@@ -90,10 +87,12 @@ test("tile.spawn_agent actually forwards `name` — it enumerates its params, an
     spawnEdge: () => {},
     setSupervise: () => {},
     awaitingApproval: () => {},
+    ...ws,
   } as unknown as Parameters<typeof makeDispatch>[0]);
 
-  await dispatch("tile.spawn_agent", { agent: "pi", name: "student-fe", callerTile: "hm:tile-p" });
-  assert.equal(seen[0]?.name, "student-fe", "the renderer must receive the name: it names the tile, and every banner reads it from there");
+  const { tileId } = (await dispatch("tile.spawn_agent", { agent: "pi", name: "student-fe", callerTile: "hm:tile-p" })) as { tileId: string };
+  assert.equal(ws.workspaces.getCore(REPO)?.tileNames?.[tileId], "student-fe", "the tile is named");
+  assert.equal(labelOf(tileId, ws.workspaces, ws.status), `student-fe (${tileId})`, "and every report it sends back says so");
 });
 
 /** MIRROR of the sanitizer in methods.ts doSpawn. */

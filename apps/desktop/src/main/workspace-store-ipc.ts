@@ -16,8 +16,8 @@ import { app, BrowserWindow, ipcMain, type IpcMainEvent, type WebContents } from
 import { WorkspaceStore, type LegacyLayout, type ViewLayout } from "@hivemind/workspace-host/store";
 
 let store: WorkspaceStore | null = null;
-/** The workspace each window shows, by its web contents' id. */
-const shown = new Map<number, string>();
+/** The workspace each window shows, and the frame the user is in there, by its web contents' id. */
+const shown = new Map<number, { repo: string; frame: string | null }>();
 
 const writerOf = (wc: WebContents): string => `window:${wc.id}`;
 
@@ -60,16 +60,17 @@ export function installWorkspaceStoreIpc(): void {
   answer("workspace:set-objects-sync", (e, repo, objects) => s.setObjects(repo as string, objects, from(e)));
   answer("workspace:undo-sync", (e, repo) => s.undo(repo as string, from(e)));
   answer("workspace:redo-sync", (e, repo) => s.redo(repo as string, from(e)));
-  ipcMain.on("workspace:shown", (e, repo: unknown) => {
+  ipcMain.on("workspace:shown", (e, repo: unknown, frame: unknown) => {
     const id = e.sender.id;
     if (!shown.has(id)) e.sender.once("destroyed", () => shown.delete(id));
-    if (typeof repo === "string" && repo) shown.set(id, repo);
+    if (typeof repo === "string" && repo) shown.set(id, { repo, frame: typeof frame === "string" && frame ? frame : null });
     else shown.delete(id);
   });
 }
 
-/** The workspace the window the user is at shows: the focused window's, else any window's. */
-export function shownWorkspace(): string | null {
+/** The workspace the window the user is at shows, and the frame the user is in there: the
+ *  focused window's, else any window's. */
+export function shownWorkspace(): { repo: string; frame: string | null } | null {
   const focused = BrowserWindow.getFocusedWindow();
   const mine = focused ? shown.get(focused.webContents.id) : undefined;
   return mine ?? shown.values().next().value ?? null;

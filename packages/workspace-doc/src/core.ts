@@ -4,7 +4,8 @@
  * layout, as the window saves it, into the edits that make the document hold it, so a write
  * records only what changed and edits from two writers merge; given the layout the writer
  * started from, it writes only what the writer changed (rebase.ts). `readCore` builds it back;
- * `holdsTile` looks for one tile, `writeTileName` names it and `removeTile` takes it out.
+ * `holdsTile` looks for one tile, `addTile` opens one, `writeTileName` names it and `removeTile`
+ * takes it out.
  */
 import type { LoroDoc, LoroMap, LoroTree, LoroTreeNode, TreeID } from "loro-crdt";
 import { isMap, writeFields } from "./fields.js";
@@ -39,6 +40,28 @@ export function writeCore(doc: LoroDoc, value: unknown, base?: unknown): void {
   writeOrder(doc.getMovableList(ORDER), layout.tiles.map((t) => t.id));
   const meta = doc.getMap(META);
   if (meta.get("core") !== true) meta.set("core", true);
+}
+
+/**
+ * Open `tile`, last in the order, in the frame `at.frame` (none: loose) and named `at.name` (none:
+ * unnamed). False when `doc` already holds a tile with its id. A tile without an id or a kind, or
+ * one that sets a per-tile field itself, is refused, as `writeCore` refuses it.
+ */
+export function addTile(doc: LoroDoc, tile: TileRecord, at: { frame?: string; name?: string } = {}): boolean {
+  const [record] = firstOfEachId([tile], (t) => typeof t.kind === "string");
+  if (!record) throw new TypeError("workspace doc: a tile has an id and a kind");
+  for (const field of PER_TILE) {
+    if (field in record) throw new TypeError(`workspace doc: a tile may not set "${field}" itself; the layout's per-tile maps fill it`);
+  }
+  const tiles = doc.getMap(TILES);
+  const { id, ...fields } = record as Fields & { id: string };
+  if (tiles.get(id) !== undefined) return false;
+  stampSchema(doc);
+  writeFields(tiles.ensureMergeableMap(id), { ...fields, frame: at.frame, name: at.name || undefined });
+  doc.getMovableList(ORDER).push(id);
+  const meta = doc.getMap(META);
+  if (meta.get("core") !== true) meta.set("core", true);
+  return true;
 }
 
 /** Take the tile `tileId` out of the layout, with its name, tabs and frame. What it was, or null

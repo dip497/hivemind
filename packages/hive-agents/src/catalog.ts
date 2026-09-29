@@ -152,6 +152,36 @@ export function spawnLabelFor(def: AgentProviderDef, n: number, opts: SpawnOptio
   return def.spawnLabel ? def.spawnLabel(n, opts) : `${def.label} #${n}`;
 }
 
+/** One past the highest number `labels` give this label (`labelFor(n)`), so numbers neither repeat
+ *  nor restart after a relaunch. */
+export function nextOrdinal(labels: readonly string[], labelFor: (n: number) => string): number {
+  const probe = 987654321;
+  const prefix = labelFor(probe).split(String(probe))[0]!;
+  let max = 0;
+  for (const label of labels) {
+    if (!label.startsWith(prefix)) continue;
+    const n = parseInt(label.slice(prefix.length), 10);
+    if (n > max) max = n;
+  }
+  return max + 1;
+}
+
+/**
+ * A new tile for `def`: the program it runs, its arguments (for `options`, continuing session
+ * `resume` when given), the next label the workspace's `labels` leave free, and the task its
+ * first `prompt` gives it. Main's spawns and the window's make their tiles with it.
+ */
+export function agentLaunch(def: AgentProviderDef, launch: { options: SpawnOptions; labels: readonly string[]; prompt?: string; resume?: string }): { cmd: string; args: string[]; label: string; task?: string } {
+  const args = spawnArgsFor(def, launch.options);
+  const n = nextOrdinal(launch.labels, (k) => spawnLabelFor(def, k, {}));
+  return {
+    cmd: def.bin,
+    args: launch.resume ? withResume(def, args, launch.resume) : args,
+    label: spawnLabelFor(def, n, launch.options),
+    ...(launch.prompt ? { task: promptTask(launch.prompt) } : {}),
+  };
+}
+
 /** Every variable an installed agent says must not reach a terminal the host starts. */
 export function envToUnset(): string[] {
   return [...new Set(getCatalog().flatMap((d) => d.launch?.unsetEnv ?? []))];

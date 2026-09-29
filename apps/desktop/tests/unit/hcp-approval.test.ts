@@ -20,13 +20,7 @@ useAuthoredAgents();
 import { Mailbox } from "../../src/main/hcp/mailbox.js";
 import { TurnTracker } from "../../src/main/hcp/turn-tracker.js";
 import { OutputRecorder } from "../../src/main/hcp/output-recorder.js";
-import os from "node:os";
-import path from "node:path";
-import { StatusStore } from "@hivemind/agent-host/status-store";
-import { WorkspaceStore } from "@hivemind/workspace-host/store";
-
-// No workspace is open and no session known: a banner names its worker by id.
-const NOTHING_OPEN = { workspaces: new WorkspaceStore({ dir: path.join(os.tmpdir(), "hcp-no-workspace") }), status: new StatusStore(), shownWorkspace: () => null };
+import { workspaceDeps } from "./hcp-workspace.ts";
 
 test("an approval for a BUSY supervisor is held, then delivered when it hits its prompt", async () => {
   // The screenshot bug, end to end: the parent was mid-turn, so the approval banner was
@@ -37,7 +31,7 @@ test("an approval for a BUSY supervisor is held, then delivered when it hits its
   const { dispatch } = makeDispatch({
     turns: new TurnTracker(),
     recorder: new OutputRecorder(),
-    callRenderer: async () => ({ tileId: "tile-w" }),
+    callRenderer: async () => { throw new Error("no window"); },
     writeToTile: () => true,
     deliverToTile: (id: string, t: string, onSent?: () => void) => mailbox.deliver(id, t, onSent),
     spawnAllowed: () => true,
@@ -47,14 +41,14 @@ test("an approval for a BUSY supervisor is held, then delivered when it hits its
     spawnEdge: () => {},
     setSupervise: () => {},
     awaitingApproval: () => {},
-    ...NOTHING_OPEN,
+    ...workspaceDeps(),
   } as unknown as Parameters<typeof makeDispatch>[0]);
 
-  await dispatch("tile.spawn_agent", { agent: "claude", callerTile: "hm:tile-parent", supervise: true });
+  const worker = ((await dispatch("tile.spawn_agent", { agent: "claude", callerTile: "hm:tile-parent", supervise: true })) as { tileId: string }).tileId;
   mailbox.setBusy("hm:tile-parent"); // parent is mid-turn — its TUI can't take input
 
   const asked = dispatch("agent.await_approval", {
-    callerTile: "hm:tile-w", tool_name: "write", tool_input: { path: "/x.java" },
+    callerTile: `hm:${worker}`, tool_name: "write", tool_input: { path: "/x.java" },
   });
   await new Promise((r) => setTimeout(r, 50));
   assert.deepEqual(writes, [], "nothing typed into the busy supervisor");
@@ -74,7 +68,7 @@ test("approval with a dead supervisor resolves instead of hanging the worker", a
   const { dispatch } = makeDispatch({
     turns: new TurnTracker(),
     recorder: new OutputRecorder(),
-    callRenderer: async () => ({ tileId: "tile-w" }),
+    callRenderer: async () => { throw new Error("no window"); },
     writeToTile: () => false,
     deliverToTile: () => false, // parent's pty is gone
     spawnAllowed: () => true,
@@ -84,10 +78,10 @@ test("approval with a dead supervisor resolves instead of hanging the worker", a
     spawnEdge: () => {},
     setSupervise: () => {},
     awaitingApproval: () => {},
-    ...NOTHING_OPEN,
+    ...workspaceDeps(),
   } as unknown as Parameters<typeof makeDispatch>[0]);
-  await dispatch("tile.spawn_agent", { agent: "claude", callerTile: "hm:tile-parent", supervise: true });
-  const r = await dispatch("agent.await_approval", { callerTile: "hm:tile-w", tool_name: "write", tool_input: {} });
+  const worker = ((await dispatch("tile.spawn_agent", { agent: "claude", callerTile: "hm:tile-parent", supervise: true })) as { tileId: string }).tileId;
+  const r = await dispatch("agent.await_approval", { callerTile: `hm:${worker}`, tool_name: "write", tool_input: {} });
   assert.deepEqual(r, { decision: "ask" }, "resolves immediately — never blocks for 9 minutes on a corpse");
 });
 
@@ -99,7 +93,7 @@ test("a plain allow covers THIS call; only `always` is remembered", async () => 
   const { dispatch } = makeDispatch({
     turns: new TurnTracker(),
     recorder: new OutputRecorder(),
-    callRenderer: async () => ({ tileId: "tile-w" }),
+    callRenderer: async () => { throw new Error("no window"); },
     writeToTile: () => true,
     deliverToTile: (id: string, t: string, onSent?: () => void) => mailbox.deliver(id, t, onSent),
     spawnAllowed: () => true,
@@ -109,11 +103,11 @@ test("a plain allow covers THIS call; only `always` is remembered", async () => 
     spawnEdge: () => {},
     setSupervise: () => {},
     awaitingApproval: () => {},
-    ...NOTHING_OPEN,
+    ...workspaceDeps(),
   } as unknown as Parameters<typeof makeDispatch>[0]);
-  await dispatch("tile.spawn_agent", { agent: "claude", callerTile: "hm:tile-parent", supervise: true });
+  const worker = ((await dispatch("tile.spawn_agent", { agent: "claude", callerTile: "hm:tile-parent", supervise: true })) as { tileId: string }).tileId;
 
-  const ask = () => dispatch("agent.await_approval", { callerTile: "hm:tile-w", tool_name: "Edit", tool_input: { path: "/x.ts" } });
+  const ask = () => dispatch("agent.await_approval", { callerTile: `hm:${worker}`, tool_name: "Edit", tool_input: { path: "/x.ts" } });
   const reqIdOf = () => [...writes.join("").matchAll(/hive ctl approve (\S+) allow/g)].at(-1)?.[1];
 
   const first = ask();
@@ -139,7 +133,7 @@ test("spawning a pi worker with supervise is REFUSED — never silently ungated"
   const { dispatch } = makeDispatch({
     turns: new TurnTracker(),
     recorder: new OutputRecorder(),
-    callRenderer: async () => ({ tileId: "tile-w" }),
+    callRenderer: async () => { throw new Error("no window"); },
     writeToTile: () => true,
     deliverToTile: () => true,
     spawnAllowed: () => true,
@@ -149,7 +143,7 @@ test("spawning a pi worker with supervise is REFUSED — never silently ungated"
     spawnEdge: () => {},
     setSupervise: () => {},
     awaitingApproval: () => {},
-    ...NOTHING_OPEN,
+    ...workspaceDeps(),
   } as unknown as Parameters<typeof makeDispatch>[0]);
 
   await assert.rejects(
@@ -159,8 +153,8 @@ test("spawning a pi worker with supervise is REFUSED — never silently ungated"
   );
   // Unsupervised pi spawns normally — pi's whole point is an autonomous worker.
   const r = await dispatch("tile.spawn_agent", { agent: "pi", callerTile: "hm:tile-p" });
-  assert.deepEqual(r, { tileId: "tile-w" });
+  assert.match((r as { tileId: string }).tileId, /^tile-pi-/);
   // claude keeps supervise: its broker fails open to a real human permission prompt.
   const c = await dispatch("tile.spawn_agent", { agent: "claude", supervise: true, callerTile: "hm:tile-p" });
-  assert.deepEqual(c, { tileId: "tile-w" });
+  assert.match((c as { tileId: string }).tileId, /^tile-claude-/);
 });

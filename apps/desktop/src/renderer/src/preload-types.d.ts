@@ -1,4 +1,4 @@
-import type { HiveIpc, PlanReviewOpen, HcpCommand, HcpPipeEvent, HcpSpawnEvent, HcpStatusEvent, AppErrorEvent } from "../../shared/ipc";
+import type { HiveIpc, PlanReviewOpen, HcpCommand, HcpPipeEvent, HcpSpawnEvent, HcpSpawnedEvent, HcpStatusEvent, AppErrorEvent } from "../../shared/ipc";
 
 declare global {
   interface Window {
@@ -15,6 +15,8 @@ declare global {
       onHcpPipe: (cb: (e: HcpPipeEvent) => void) => () => void;
       /** An agent spawned another → draw/erase the dashed parentage wire. */
       onHcpSpawn: (cb: (e: HcpSpawnEvent) => void) => () => void;
+      /** The control plane is opening a tile: its prompt, and whether to bring it forward. */
+      onHcpSpawned: (cb: (e: HcpSpawnedEvent) => void) => () => void;
       /** An agent session's status changed (the host's status store). */
       onHcpStatus: (cb: (e: HcpStatusEvent) => void) => () => void;
       /** Every agent session's status now — what a (re)loaded window starts from. */
