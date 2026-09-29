@@ -84,7 +84,7 @@ Legend: ☐ not started · ◐ in progress · ☑ done (its "Done when" passes)
 | R12 | View protocol 1.5 | ☐ | |
 | R13 | Our relays, lookup and relay access (used only by choice) | ☐ | Before M1 ships |
 | R14 | Headless host: `hive host` | ☐ | After R1, R7, R10, R11 |
-| R15 | Canvas renders board objects | ☐ | After R2 |
+| R15 | Canvas renders board objects | ◐ | ☑ Step 1: `packages/workspace-doc/src/objects.ts` (`writeObjects` / `readObjects`: notes, checklists, text labels, arrows in `objects` by id; text as Loro text updated by a diff, so typing merges by character; a checklist's items as records by id plus `itemOrder`; a framed object's `x`, `y` relative to its frame; input checked, unknown fields kept), shapes in `shapes.ts`; `order.ts` and `input.ts` now shared with `core.ts`. 6 bun tests, plus board objects in the other-copy test; 16 mutations, each caught. ☐ Step 2: store API, sync IPC, undo/redo through Loro's `UndoManager` for board edits only (every other write committed as `sys:`). ☐ Step 3: the canvas renders, creates and edits them. ☐ Step 4: e2e, docs, push. |
 | R16 | Network profiles (Local network default), reach chooser, admission, update-check switch | ☐ | With R10 |
 
 ### Milestones (design §11)

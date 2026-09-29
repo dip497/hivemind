@@ -6,7 +6,9 @@ import os from "node:os";
 import path from "node:path";
 import { LoroDoc } from "loro-crdt";
 import { readCore, writeCore } from "../src/core.ts";
+import { readObjects, writeObjects } from "../src/objects.ts";
 import { readView, writeView } from "../src/views.ts";
+import { mulberry32 } from "./random.ts";
 
 type Fields = Record<string, unknown>;
 const frame = (id: string, fields: Fields = {}) => ({ id, x: 0, y: 0, w: 400, h: 300, title: id, color: "#888", z: 1, ...fields });
@@ -185,19 +187,12 @@ test("a document made by another copy of loro-crdt is read and written the same"
   fs.cpSync(path.join(path.dirname(require.resolve("loro-crdt/package.json")), "nodejs"), copy, { recursive: true });
   const { LoroDoc: OtherLoroDoc } = require(path.join(copy, "index.js")) as { LoroDoc: typeof LoroDoc };
   const doc = new OtherLoroDoc();
+  const board = [{ id: "c1", kind: "checklist", x: 0, y: 0, w: 240, h: 200, text: "today", items: [{ id: "i1", text: "ship", done: true }] }];
   writeCore(doc, LAYOUT);
   writeView(doc, "canvas", { v: 1, data: { positions: { t1: { x: 1, y: 2 } } } });
+  writeObjects(doc, board);
   expect(readCore(doc)).toEqual(LAYOUT);
   expect(readView(doc, "canvas")).toEqual({ v: 1, data: { positions: { t1: { x: 1, y: 2 } } } });
+  expect(readObjects(doc)).toEqual(board as never);
   fs.rmSync(copy, { recursive: true, force: true });
 });
-
-/** A small seeded generator, so a failing run can be replayed. */
-function mulberry32(seed: number): () => number {
-  return () => {
-    seed = (seed + 0x6d2b79f5) | 0;
-    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}

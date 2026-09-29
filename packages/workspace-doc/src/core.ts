@@ -4,8 +4,10 @@
  * layout, as the window saves it, into the edits that make the document hold it, so a write
  * records only what changed and edits from two writers merge; `readCore` builds it back.
  */
-import type { LoroDoc, LoroMap, LoroMovableList, LoroTree, LoroTreeNode, TreeID } from "loro-crdt";
+import type { LoroDoc, LoroMap, LoroTree, LoroTreeNode, TreeID } from "loro-crdt";
 import { isMap, writeFields } from "./fields.js";
+import { firstOfEachId, isObject, type Fields } from "./input.js";
+import { readOrder, writeOrder } from "./order.js";
 import { FRAMES, META, ORDER, TILES, stampSchema } from "./schema.js";
 import type { CoreLayout, FrameRecord, TileRecord } from "./shapes.js";
 
@@ -13,7 +15,6 @@ import type { CoreLayout, FrameRecord, TileRecord } from "./shapes.js";
 const PER_TILE = ["frame", "name", "tabs"] as const;
 
 type Layout = Required<CoreLayout>;
-type Fields = Record<string, unknown>;
 
 /**
  * Make `doc` hold the core layout `value`. Entries without an id (or a tile without a kind) are
@@ -40,7 +41,7 @@ export function readCore(doc: LoroDoc): CoreLayout | null {
   if (!hasCore(doc)) return null;
   const tiles = doc.getMap(TILES).toJSON() as Fields;
   const layout: Layout = { frames: readFrames(doc.getTree(FRAMES)), tiles: [], tileNames: {}, editorTabs: {}, frameOf: {} };
-  for (const id of readOrder(doc.getMovableList(ORDER), Object.keys(tiles))) {
+  for (const id of readOrder(doc.getMovableList(ORDER).toArray(), Object.keys(tiles))) {
     const record = tiles[id];
     if (!isObject(record)) continue;
     const { frame, name, tabs, ...fields } = record;
@@ -134,7 +135,7 @@ function readFrames(tree: LoroTree): FrameRecord[] {
   return frames;
 }
 
-// ── tiles and their order ───────────────────────────────────────────────────
+// ── tiles ───────────────────────────────────────────────────────────────────
 
 function writeTiles(tiles: LoroMap, layout: Layout): void {
   const open = new Set<string>();
@@ -150,38 +151,6 @@ function writeTiles(tiles: LoroMap, layout: Layout): void {
     });
   }
   for (const id of tiles.keys()) if (!open.has(id)) tiles.delete(id);
-}
-
-/** Make `order` hold exactly `ids`, moving an id that is already there rather than re-adding it. */
-function writeOrder(order: LoroMovableList, ids: string[]): void {
-  const current = order.toArray() as unknown[];
-  ids.forEach((id, index) => {
-    if (current[index] === id) return;
-    const from = current.indexOf(id, index + 1);
-    if (from >= 0) {
-      order.move(from, index);
-      current.splice(index, 0, ...current.splice(from, 1));
-    } else {
-      order.insert(index, id);
-      current.splice(index, 0, id);
-    }
-  });
-  if (current.length > ids.length) order.delete(ids.length, current.length - ids.length);
-}
-
-/**
- * The tile ids in order: each open tile once. A tile a merge left out of the order (or listed
- * twice) still reads back once; one the order lacks goes last, in id order.
- */
-function readOrder(order: LoroMovableList, tileIds: string[]): string[] {
-  const open = new Set(tileIds);
-  const ids: string[] = [];
-  const seen = new Set<string>();
-  for (const id of order.toArray()) {
-    if (typeof id === "string" && open.has(id) && !seen.has(id)) { seen.add(id); ids.push(id); }
-  }
-  for (const id of [...open].sort()) if (!seen.has(id)) ids.push(id);
-  return ids;
 }
 
 // ── input ───────────────────────────────────────────────────────────────────
@@ -204,22 +173,7 @@ function toLayout(value: unknown): Layout {
   };
 }
 
-/** The list's records with a non-empty string id that pass `keep`, the first of each id. */
-function firstOfEachId(list: unknown, keep: (record: Fields) => boolean): Fields[] {
-  if (!Array.isArray(list)) return [];
-  const seen = new Set<string>();
-  return list.filter((r): r is Fields => {
-    if (!isObject(r) || typeof r.id !== "string" || r.id.length === 0 || seen.has(r.id) || !keep(r)) return false;
-    seen.add(r.id);
-    return true;
-  });
-}
-
 function entries<T>(map: unknown, valid: (v: unknown) => v is T): Record<string, T> {
   if (!isObject(map)) return {};
   return Object.fromEntries(Object.entries(map).filter((entry): entry is [string, T] => valid(entry[1])));
-}
-
-function isObject(x: unknown): x is Fields {
-  return typeof x === "object" && x !== null && !Array.isArray(x);
 }

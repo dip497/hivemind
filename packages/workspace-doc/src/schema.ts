@@ -7,9 +7,11 @@
  *   tiles   Map          tile id → the tile's fields, plus its `frame`, `name` and `tabs`
  *   order   MovableList  tile ids in the order they were opened (the Windows view's tabs)
  *   views   Map          view id → { v, data }, each view's own layout
+ *   objects Map          board object id → its fields; `text` and `label` are texts, and a
+ *                        checklist has `items` (item id → { done, text }) and `itemOrder`
  *
- * The §8 containers without a writer yet, `objects` (board objects, M1) and `machines` (R9),
- * arrive with it: a root container added later needs no migration.
+ * The §8 container without a writer yet, `machines` (R9), arrives with it: a root container
+ * added later needs no migration.
  */
 import type { LoroDoc } from "loro-crdt";
 
@@ -18,6 +20,7 @@ export const FRAMES = "frames";
 export const TILES = "tiles";
 export const ORDER = "order";
 export const VIEWS = "views";
+export const OBJECTS = "objects";
 
 /** Bump only with a migration of the documents already on disk. */
 export const SCHEMA_VERSION = 1;

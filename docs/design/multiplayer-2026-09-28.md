@@ -116,10 +116,11 @@ exactly as today. They are ordered by dependency.
   is in the header, not in the document, which will be shared. The window still saves whole
   layouts; the document takes each as the edits that make it hold that layout (a frame
   dragged sets its `x` and `y`, a tile renamed its `name`, a frame nested in another is one
-  tree move), so edits made at once to different things merge. Schema in §8. A root container needs no migration when it is added, so
-  `objects` (M1) and `machines` (R9) arrive with their first writer.
+  tree move), so edits made at once to different things merge. Schema in §8. A root
+  container needs no migration when it is added, so `objects` (R15) and `machines` (R9)
+  arrive with their first writer.
 - **Waiting for a first caller.** Undo: the app has no canvas undo (only the editor's own),
-  so Loro's `UndoManager` (this peer's edits only) comes with ⌘Z on board objects (M1).
+  so Loro's `UndoManager` (this peer's edits only) comes with ⌘Z on board objects (R15).
   Update export and import come with sync (M1); the file is a snapshot. Whole layouts stay
   the way a window writes until there are several writers (R5): then each window writes from
   the document's current state (change events refresh it) or sends operations, or a window
@@ -138,7 +139,8 @@ exactly as today. They are ordered by dependency.
 - **Done when.** A layout round-trips through the document and through a restart; two
   in-process documents editing concurrently converge (fuzz test) with both sides' edits to
   different tiles and fields kept; a golden file pins the format; all e2e specs green.
-  (Undo reverting only local edits, and update round-trips, move to M1 with their callers.)
+  (Undo reverting only local edits moves to R15, and update round-trips to M1, with their
+  callers.)
 
 ### R3. Identity: devices, people, workspaces
 
@@ -716,9 +718,9 @@ root: Map
   tiles: Map       tileId → Map { the tile's fields as the window keeps them: kind, label, cmd, args, session, pinned, pinAnchor, …; frame, name, tabs; created{by, at} }
   objects: Map     objectId → Map {
                      kind: "note" | "checklist" | "text" | "arrow",
-                     frame?, rect{x,y,w,h}, z, color, created{by, at},
+                     frame?, x, y, w, h, z, color, created{by, at}    (x, y relative to the frame when in one)
                      text: LoroText                                   (note, text, checklist title)
-                     items: MovableList<Map { done, doneBy?, text: LoroText }>   (checklist)
+                     items: Map<itemId, Map { done, doneBy?, text: LoroText }>, itemOrder: MovableList<itemId>   (checklist)
                      from, to: { id, side } , label: LoroText         (arrow; ends are tiles, frames or objects)
                    }
   order: MovableList   tile ids for Windows-view tab order
@@ -727,7 +729,12 @@ root: Map
 
 R2 built `meta` (`schema`, `core`), `frames`, `tiles`, `order` and `views`. The rest comes
 with its first writer: the workspace's id, keys and owner and a record's `created` with
-identity (R3), `machines` and a frame's `machine` with R9, `objects` with M1.
+identity (R3), `machines` and a frame's `machine` with R9. R15 adds `objects`. A framed
+object's position is relative to its frame, so moving the frame does not rewrite it: undo
+(which puts a field back as it was) cannot then drop a note outside its frame, and a person
+moving a frame never overwrites another moving a note inside it. A checklist's items are
+records by id plus their order, as tiles are, so the document never holds a container made
+outside it.
 
 The **host record** is not in this document; it is published separately and signed by the
 workspace key (§5.8). The **access list** is a separate owner-only document (R11).
