@@ -97,12 +97,9 @@ Legend: ☐ not started · ◐ in progress · ☑ done (its "Done when" passes)
 
 **Before M5:** an Apple Developer Program membership and a Firebase project (design §12.4).
 
-### Known issues (found while verifying R1, not caused by it)
+### Known issues
 
-- **`settings.json` lock contention between the app and the CLI.** `toolbar-actions.spec.ts`
-  "CLI preferences persist…" failed once: `hive config set` found `settings.json.lock` held
-  ("the holder could not be read") while the app was running. It passes alone and in the other
-  full run. A short retry in the CLI on a held lock would cover it.
+None open. Two found while verifying R1 were fixed on 2026-09-29 (see the log).
 
 ## Decisions so far
 
@@ -142,3 +139,12 @@ Legend: ☐ not started · ◐ in progress · ☑ done (its "Done when" passes)
   test `windows-view.spec.ts` "a restored tab stays restored when the view switches at once"
   fails on the old code, and with either half of the fix undone. Full e2e green: 146 passed,
   10 skipped.
+- 2026-09-29 — Fixed the second: `toolbar-actions.spec.ts` failing on "settings.json is locked
+  by another writer (…; the holder could not be read)". Not contention: the app had quit in
+  the middle of a settings write, between creating the lock and writing its owner into it, and
+  a lock naming nobody is never broken. Now `@hivemind/core` publishes the lock with its token
+  already in it (a private file hard-linked into place), and the app waits (up to 6 s) for
+  settings writes still running before it exits, in both quit paths. Regression tests: a
+  settings writer killed at its first written byte (`ulimit -f 0`) no longer blocks the next
+  (`settings.test.ts`), and `settings-at-quit.spec.ts` quits while another writer holds the lock
+  and expects the change written. Both fail on the old code.

@@ -75,6 +75,23 @@ export async function patchSettingsPath(dotted: string, value: unknown): Promise
   return patchSettings([{ path: dotted, value }]);
 }
 
+/** Settings reads or writes still running. */
+export function settingsBusy(): boolean {
+  return coordinator.depth() > 0;
+}
+
+/**
+ * Settles once no settings read or write is running, or after `capMs`. The app waits for it
+ * before exiting: a write cut off by the exit loses the change it carried, and can leave
+ * settings.json's lock behind. The cap keeps a stuck writer from holding the quit.
+ */
+export async function settingsSettled(capMs: number): Promise<void> {
+  const deadline = Date.now() + capMs;
+  while (settingsBusy() && Date.now() < deadline) {
+    await Promise.race([coordinator.idle(), new Promise((r) => setTimeout(r, deadline - Date.now()))]);
+  }
+}
+
 /** Re-read the file (edited by the CLI) and broadcast. Queued behind any write
  *  or reload already in flight, so the value main ends up holding is the one
  *  read last, not the one that happened to finish first. */

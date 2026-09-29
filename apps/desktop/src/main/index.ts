@@ -110,7 +110,7 @@ import { OutputRecorder } from "./hcp/output-recorder.js";
 import { readOrCreateToken, hcpSockPath } from "@hivemind/agent-host/hooks/token";
 import { HcpError } from "./hcp/protocol.js";
 import { handleViewProtocol, listViewPackages, registerViewScheme, startViewWatchdog } from "./view-packages.js";
-import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, settingsFile } from "./settings-store.js";
+import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, settingsFile, settingsBusy, settingsSettled } from "./settings-store.js";
 import { flushWorkspaceStore, installWorkspaceStoreIpc } from "./workspace-store-ipc.js";
 import { patchSettingsExtras } from "@hivemind/core/settings";
 import { PipeManager } from "./hcp/pipes.js";
@@ -2042,9 +2042,27 @@ function forceExitAfterFlush(): void {
   } catch {
     /* best-effort */
   }
-  const t = setTimeout(() => app.exit(0), 150);
-  t.unref?.();
+  // A settings write still running (the window's last edit, sent as it closed) finishes
+  // first: app.exit would cut it off.
+  void settingsSettled(SETTINGS_QUIT_WAIT_MS).then(() => {
+    const t = setTimeout(() => app.exit(0), 150);
+    t.unref?.();
+  });
 }
+
+/** How long quitting waits for a settings write: a write that has to wait for another
+ *  writer's lock gives up after 5 s, so this is enough for it to finish either way. */
+const SETTINGS_QUIT_WAIT_MS = 6_000;
+
+// The normal quit (not daemon mode) waits for a settings write still running, once, then
+// quits again: exiting mid-write loses the change and can leave settings.json's lock behind.
+let settingsWaitedOnQuit = false;
+app.on("will-quit", (e) => {
+  if (settingsWaitedOnQuit || !settingsBusy()) return;
+  e.preventDefault();
+  settingsWaitedOnQuit = true;
+  void settingsSettled(SETTINGS_QUIT_WAIT_MS).then(() => app.quit());
+});
 
 // Linux: quit when last window closes (no menu-bar persistence like macOS).
 app.on("window-all-closed", () => {

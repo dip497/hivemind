@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -442,6 +443,32 @@ describe("a lock left by a process that is gone", () => {
     const started = Date.now();
     await patchSettingsFile([{ path: "agents.defaultAgent", value: "pi" }], file);
     expect(Date.now() - started).toBeGreaterThanOrEqual(2_000);
+    expect((await readSettings(file)).agents.defaultAgent).toBe("pi");
+    fs.rmSync(dir, { recursive: true, force: true });
+  }, 20_000);
+
+  // An app that quit in the middle of a write used to leave an empty lock, naming nobody, that
+  // no later writer could clear: every `hive config set` after it failed until the file was
+  // deleted by hand.
+  test.skipIf(process.platform === "win32")("a writer that dies while taking the lock leaves nothing that blocks the next one", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hm-lock-"));
+    const file = path.join(dir, "settings.json");
+    const writer = path.join(dir, "writer.ts");
+    fs.writeFileSync(writer, [
+      `import { patchSettingsFile } from ${JSON.stringify(path.join(import.meta.dir, "settings.ts"))};`,
+      `console.log("writing");`,
+      `await patchSettingsFile([{ path: "agents.defaultAgent", value: "codex" }]);`,
+      `console.log("wrote");`,
+    ].join("\n"));
+    // No file may grow past 0 bytes, so the writer dies at the first byte it writes: its lock token.
+    const run = spawnSync("sh", ["-c", 'ulimit -f 0; exec "$0" "$1"', process.execPath, writer], {
+      env: { ...process.env, HIVE_SETTINGS: file }, encoding: "utf8",
+    });
+    expect(run.stdout).toContain("writing");
+    expect(run.stdout).not.toContain("wrote");
+    expect(run.status).not.toBe(0);
+
+    await patchSettingsFile([{ path: "agents.defaultAgent", value: "pi" }], file);
     expect((await readSettings(file)).agents.defaultAgent).toBe("pi");
     fs.rmSync(dir, { recursive: true, force: true });
   }, 20_000);

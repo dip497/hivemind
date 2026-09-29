@@ -12,9 +12,10 @@
  * writes back a snapshot that predates someone else's change, silently
  * reverting it. Every mutation therefore goes through `updateSettings`, which
  * re-reads the file INSIDE a lock it holds across the read and the write:
- * `<file>.lock` created with O_EXCL (cross-process) plus an in-process promise
- * chain (same-process writers queue instead of interleaving). Callers pass a
- * mutation, never a snapshot — `patchSettingsFile` is the dotted-path form.
+ * `<file>.lock`, which appears with its owner's token already in it (see
+ * `createLock`), plus an in-process promise chain (same-process writers queue
+ * instead of interleaving). Callers pass a mutation, never a snapshot —
+ * `patchSettingsFile` is the dotted-path form.
  *
  * The lock is OWNERSHIP-SAFE: each acquisition writes a unique token and only
  * ever deletes a lock carrying that token, and a writer that cannot take the
@@ -129,24 +130,57 @@ async function acquire(lock: string): Promise<string> {
   const token = owner();
   let broke = false;
   for (;;) {
-    try {
-      const fh = await fs.open(lock, "wx");
-      await fh.writeFile(token);
-      await fh.close();
-      return token;
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
-      if (!broke && await isStale(lock)) { broke = await clearStale(lock); continue; }
-      if (Date.now() >= deadline) {
-        let holder: { pid: number; heldForMs: number } | undefined;
-        try {
-          const [pid, at] = (await fs.readFile(lock, "utf8")).trim().split(":");
-          if (pid && at) holder = { pid: Number(pid), heldForMs: Date.now() - Number(at) };
-        } catch { /* gone or unreadable: the message says so */ }
-        throw new SettingsLockError(lock, holder);
-      }
-      await sleep(LOCK_POLL_MS);
+    if (await createLock(lock, token)) return token;
+    if (!broke && await isStale(lock)) { broke = await clearStale(lock); continue; }
+    if (Date.now() >= deadline) {
+      let holder: { pid: number; heldForMs: number } | undefined;
+      try {
+        const [pid, at] = (await fs.readFile(lock, "utf8")).trim().split(":");
+        if (pid && at) holder = { pid: Number(pid), heldForMs: Date.now() - Number(at) };
+      } catch { /* gone or unreadable: the message says so */ }
+      throw new SettingsLockError(lock, holder);
     }
+    await sleep(LOCK_POLL_MS);
+  }
+}
+
+/** Errors from a filesystem that has no hard links (FAT, some network shares). */
+const NO_HARD_LINKS = new Set(["EPERM", "ENOTSUP", "EOPNOTSUPP", "ENOSYS"]);
+
+/**
+ * Create the lock with `token` already in it; false when someone else holds it. The token is
+ * written to a private file first and a hard link publishes it under the lock's name, which
+ * fails if the lock exists. So the lock is never there without its owner: a writer that dies
+ * at any point leaves no lock, or one naming a process that is gone, which `isStale` clears.
+ * Created empty and filled afterwards, a writer that died in between (an app quitting
+ * mid-write) left a lock naming nobody, and such a lock is never broken: every later write
+ * failed until someone deleted it by hand.
+ */
+async function createLock(lock: string, token: string): Promise<boolean> {
+  const draft = `${lock}.${process.pid}.${Math.random().toString(36).slice(2, 10)}`;
+  try {
+    await fs.writeFile(draft, token, { flag: "wx" });
+    await fs.link(draft, lock);
+    return true;
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code ?? "";
+    if (code === "EEXIST") return false;
+    if (NO_HARD_LINKS.has(code)) return createLockInPlace(lock, token);
+    throw e;
+  } finally {
+    await fs.rm(draft, { force: true }).catch(() => {});
+  }
+}
+
+/** Without hard links: create the lock, then write the token into it. */
+async function createLockInPlace(lock: string, token: string): Promise<boolean> {
+  try {
+    const fh = await fs.open(lock, "wx");
+    try { await fh.writeFile(token); } finally { await fh.close(); }
+    return true;
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "EEXIST") return false;
+    throw e;
   }
 }
 
