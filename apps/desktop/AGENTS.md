@@ -96,9 +96,12 @@ tile bodies live in the TileHost and are never remounted by a view.
   the handle class off the header.
 - Run e2e headless: `xvfb-run -a --server-args="-screen 0 1600x1000x24" npx playwright test …`
   (else Electron windows open on your desktop). `playwright.config.ts` isolates the
-  profile via a fresh `XDG_CONFIG_HOME` — main's `app.setName("hivemind-dev")` makes
-  userData ignore `--user-data-dir`, so without it every spec restores YOUR dev canvas
-  and spawns its agents. The suite is a gate: 76/76 (22 specs) must pass headless, `--retries=0`. Specs
+  profile via a fresh `XDG_CONFIG_HOME` per run: settings.json and the agents live there
+  whatever `--user-data-dir` says, and a spec launched without `--user-data-dir` uses its
+  `hivemind-dev` dir as userData — so without it every spec reads YOUR settings and agents,
+  and restores YOUR dev canvas. (`--user-data-dir` itself is honoured: the app's own files —
+  `workspaces/`, `hcp.token`, window state — land in it.) The suite is a gate: every spec
+  must pass headless, `--retries=0`. Specs
   assume the FRESH profile (Layers rail visible, no stored layout) and the real
   UI (the created issue opens in the peek; in-diff search is collapsed to its
   icon; the sonner toast stack covers the bottom-right corner; tree rows expose
