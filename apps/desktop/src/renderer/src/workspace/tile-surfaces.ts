@@ -16,7 +16,7 @@
  * the tile — see tile-host.tsx) and by every view via `TileSlot`.
  */
 import type { FrameState, TileInstance } from "../canvas-persistence";
-import { tileName } from "../tile-name";
+import { tileName } from "@hivemind/workspace-doc/tile-list";
 import { defaultShell } from "../canvas-persistence";
 import { identifyAgent } from "../agent-state";
 import type { TileKind } from "../tile-kinds";

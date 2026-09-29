@@ -113,6 +113,9 @@ test.afterAll(async () => {
   // outright rather than stall the worker teardown.
   const closed = await Promise.race([app?.close().then(() => true), new Promise<boolean>((r) => setTimeout(() => r(false), 10_000))]);
   if (!closed) { try { app?.process().kill("SIGKILL"); } catch { /* gone */ } }
+  // Closing, the app found its daemon gone and started another to let go of its tiles: reap
+  // that one too, or the next spec on this profile's socket runs in this spec's environment.
+  try { execSync(`pkill -f "out/main/pty-daemon.js ${process.env.XDG_CONFIG_HOME}/"`, { stdio: "ignore" }); } catch { /* none */ }
   // Stand-in agents this spec's tiles spawned (pattern anchored on the fixture
   // path + provider argv so it can never match an unrelated shell).
   try { execSync(`pkill -f "fixtures/fake-agent\\.cjs (claude|droid|cursor-agent|faux) "`, { stdio: "ignore" }); } catch { /* none */ }

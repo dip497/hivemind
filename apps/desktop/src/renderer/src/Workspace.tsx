@@ -32,7 +32,7 @@ import { Button } from "./components/ui/button";
 import { MenuItem } from "./components/ui/menu-item";
 import type { LayerTile, LayerFrame } from "./LayersPanel";
 import { statusOf, setHostedStatus, type TileStatusKind, subscribeTileStatus } from "./agent-status-bus";
-import { tileName } from "./tile-name";
+import { frameFor, listFrames, listTiles, tileName } from "@hivemind/workspace-doc/tile-list";
 import { cleanName } from "@hivemind/agents";
 import { frameAtPoint } from "./frame-layout";
 import { Wallpaper } from "./Wallpaper";
@@ -93,6 +93,8 @@ import { AGENT_TILE_KIND, isTerminalKind } from "./tile-kinds";
 import { endTileSession } from "./TerminalTile";
 
 const DEFAULT_VIEWPORT: Viewport = { x: 16, y: 24, zoom: 1 };
+/** The agent that runs in a tile, when one does. */
+const agentOfTile = (t: TileInstance): string | undefined => (t.kind === AGENT_TILE_KIND ? agentForCmd(t.cmd)?.id : undefined);
 
 interface Props {
   cwd: string;
@@ -346,13 +348,10 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     const { frames, terminals } = terminalsOnHost(hostId);
     return { frames: frames.size, terminals: terminals.length };
   }, [terminalsOnHost]);
-  // End them: kill each session on the machine, then close its tile. A tile showing someone
-  // else's job (`hive run`, another device) is only let go of — it is not ours to end.
+  // End them: closing a tile ends its session. A tile showing someone else's job (`hive run`,
+  // another device) is only let go of — it is not ours to end.
   const endTerminalsOn = useCallback((hostId: string) => {
-    for (const t of terminalsOnHost(hostId).terminals) {
-      if (!t.session) window.hive.ptyKill(`hm:${t.id}`);
-      closeTile(t.id);
-    }
+    for (const t of terminalsOnHost(hostId).terminals) closeTile(t.id);
   }, [terminalsOnHost, closeTile]);
   // The frame the user most recently touched (spawned into / dragged). The
   // collision-separation pass keeps THIS frame fixed and pushes neighbours.
@@ -509,7 +508,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
       const effRepo = owner?.worktreePath ?? owner?.workspacePath ?? repoPath ?? null;
       if ((t.kind === "editor" || t.kind === "diff") && !effRepo) continue;
       const kind: LayerTile["kind"] = t.kind === "shell" ? "terminal" : t.kind;
-      const agent = t.kind === AGENT_TILE_KIND ? agentForCmd(t.cmd)?.id : undefined;
+      const agent = agentOfTile(t);
       out.push({ id: t.id, kind, name: tileName(tileNames, agentTitles, t), frameId: fo[t.id] ?? null, agent });
     }
     return out;
@@ -590,7 +589,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     viewHost.viewEvents.setWorkspace(persistKey, tiles.map((t) => {
       const frame = frameOf[t.id] ? frames.find((f) => f.id === frameOf[t.id]) : undefined;
       const machine = frame ? frameMachine(machinesSnap, frame.workspacePath) : undefined;
-      const agent = t.kind === AGENT_TILE_KIND ? agentForCmd(t.cmd)?.id : undefined;
+      const agent = agentOfTile(t);
       return {
         id: t.id, frameId: frameOf[t.id] ?? null, kind: t.kind, name: tileNames[t.id] ?? t.label,
         ...(frame ? { frameTitle: frame.title } : {}), ...(agent ? { agent } : {}),
@@ -804,43 +803,10 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
             break;
           }
           case "tile.list": {
-            // Resolve an optional frame filter (id → title → path basename →
-            // title substring), same precedence as spawn's frame targeting.
-            const resolveFrameId = (q: string): string | undefined => {
-              const fs = framesRef.current;
-              const lq = q.toLowerCase();
-              const base = (pp?: string) => pp?.split("/").filter(Boolean).pop()?.toLowerCase();
-              return (
-                fs.find((f) => f.id === q) ??
-                fs.find((f) => f.title.toLowerCase() === lq) ??
-                fs.find((f) => base(f.worktreePath) === lq || base(f.workspacePath) === lq) ??
-                fs.find((f) => f.title.toLowerCase().includes(lq))
-              )?.id;
-            };
-            const filterId = p.frame ? resolveFrameId(String(p.frame)) : undefined;
-            const mapTile = (t: typeof tilesRef.current[number]) => ({
-              tileId: t.id, kind: t.kind, label: t.label, status: statusOf(t.id),
-              name: tileName(tileNamesRef.current, agentTitlesRef.current, t),
-              ...(t.kind === AGENT_TILE_KIND ? { agent: agentForCmd(t.cmd)?.id } : {}),
-            });
-            const groupOf = (f: FrameState) => ({
-              frameId: f.id,
-              title: f.title,
-              repo: f.worktreePath ?? f.workspacePath ?? null,
-              branch: f.branch ?? null,
-              tiles: tilesRef.current.filter((t) => frameOfRef.current[t.id] === f.id).map(mapTile),
-            });
-            if (filterId) {
-              const f = framesRef.current.find((fr) => fr.id === filterId)!;
-              await window.hive.hcpResult(cmd.id, true, { frames: [groupOf(f)], loose: [] });
-              break;
-            }
-            const frameIds = new Set(framesRef.current.map((f) => f.id));
-            const frames = framesRef.current.map(groupOf).filter((g) => g.tiles.length > 0);
-            const loose = tilesRef.current
-              .filter((t) => { const fid = frameOfRef.current[t.id]; return !fid || !frameIds.has(fid); })
-              .map(mapTile);
-            await window.hive.hcpResult(cmd.id, true, { frames, loose });
+            // Optionally one frame, named the way spawn names one.
+            const listed = { frames: framesRef.current, tiles: tilesRef.current, frameOf: frameOfRef.current, names: tileNamesRef.current };
+            const only = p.frame ? frameFor(listed.frames, String(p.frame)) : undefined;
+            await window.hive.hcpResult(cmd.id, true, listTiles(listed, { status: statusOf, titles: agentTitlesRef.current, agent: agentOfTile }, only));
             break;
           }
           case "view.emit": {
@@ -865,14 +831,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
             break;
           }
           case "tile.list_frames": {
-            const frames = framesRef.current.map((f) => ({
-              id: f.id,
-              title: f.title,
-              repo: f.worktreePath ?? f.workspacePath ?? null,
-              branch: f.branch ?? null,
-              tiles: tilesRef.current.filter((t) => frameOfRef.current[t.id] === f.id).length,
-            }));
-            await window.hive.hcpResult(cmd.id, true, { frames });
+            await window.hive.hcpResult(cmd.id, true, { frames: listFrames({ frames: framesRef.current, tiles: tilesRef.current, frameOf: frameOfRef.current }) });
             break;
           }
           case "tile.focus": {

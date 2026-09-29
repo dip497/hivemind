@@ -23,6 +23,7 @@ import { mintId } from "../../shared/tile-id";
 import { getSettings } from "./settings-store";
 import { promptTask, withResume } from "@hivemind/agents";
 import type { BoardObject } from "@hivemind/workspace-doc/shapes";
+import { frameFor } from "@hivemind/workspace-doc/tile-list";
 import { isBox } from "./board-objects/board-model";
 
 /** Kinds that are one-per-frame (spawn → focus existing). claude/shell are not. */
@@ -421,23 +422,9 @@ export function useSpawn(ctx: SpawnCtx) {
       // `hm:` scope prefix before the lookup.
       const callerTile = opts.callerTile?.startsWith("hm:") ? opts.callerTile.slice(3) : opts.callerTile;
       const callerFrameId = callerTile ? frameOfRef.current[callerTile] : undefined;
-      // Resolve opts.frame (a frame id, repo/worktree name, or title) most-
-      // specific → loosest: exact id → case-insensitive title → worktree/
-      // workspace path basename → case-insensitive title substring. Falls
-      // through to the caller's frame, then ensureFrame().
-      const resolveFrame = (q: string): FrameState | undefined => {
-        const fs = framesRef.current;
-        const byId = fs.find((f) => f.id === q);
-        if (byId) return byId;
-        const lq = q.toLowerCase();
-        const byTitle = fs.find((f) => f.title.toLowerCase() === lq);
-        if (byTitle) return byTitle;
-        const base = (p?: string) => p?.split("/").filter(Boolean).pop()?.toLowerCase();
-        const byPath = fs.find((f) => base(f.worktreePath) === lq || base(f.workspacePath) === lq);
-        if (byPath) return byPath;
-        return fs.find((f) => f.title.toLowerCase().includes(lq));
-      };
-      const resolved = opts.frame ? resolveFrame(opts.frame) : undefined;
+      // Resolve opts.frame (a frame id, a title, or the folder it runs in), most specific
+      // first. Falls through to the caller's frame, then ensureFrame().
+      const resolved = opts.frame ? frameFor(framesRef.current, opts.frame) : undefined;
       const callerFrame = callerFrameId ? framesRef.current.find((f) => f.id === callerFrameId) : undefined;
       const frame = resolved ?? callerFrame ?? ensureFrame();
       const def = catalogAgentById(opts.agent) ?? defaultAgent();
