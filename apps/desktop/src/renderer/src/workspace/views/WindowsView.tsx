@@ -100,8 +100,13 @@ export function WindowsView({ model, commands }: WorkspaceViewProps) {
     // above picks it) — clear so the fallback rule runs.
     if (id === selectedTileId) commands.selectTile(null);
   }, [setLayout, selectedTileId, commands]);
-  /** Rail click: a minimized tile restores + activates; a visible one activates. */
-  const restoreTab = useCallback((id: string) => commands.selectTile(id), [commands]);
+  /** Rail click: a minimized tile restores + activates; a visible one activates.
+   *  The restore happens here, with the click, and not only in the effect above:
+   *  a view switch before that effect's render would unmount the view first. */
+  const restoreTab = useCallback((id: string) => {
+    setLayout((l) => (l.minimized.includes(id) ? { ...l, minimized: l.minimized.filter((m) => m !== id) } : l));
+    commands.selectTile(id);
+  }, [setLayout, commands]);
   const focusFrame = useCallback((id: string) => {
     commands.selectFrame(id);
     commands.selectTile(null);

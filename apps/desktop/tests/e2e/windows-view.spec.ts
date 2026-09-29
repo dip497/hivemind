@@ -247,3 +247,34 @@ test("no pty exit fires for a tile while switching tabs away from and back to it
   const exited = await page.evaluate(() => (window as unknown as { __ptyExited: unknown[] }).__ptyExited);
   expect(exited).toEqual([]);
 });
+
+// Regression: a rail restore used to be applied by an effect after the click's render, so a view
+// switch landing before that render unmounted the view first, and the view saved the tab as
+// still minimized. It came back minimized as soon as the selection moved on.
+test("a restored tab stays restored when the view switches at once", async () => {
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "windows" } })));
+  const first = page.locator('[role="tab"]').first();
+  const name = await first.getAttribute("title");
+  expect(name).toBeTruthy();
+  const tab = page.locator(`[role="tab"][title=${JSON.stringify(name)}]`);
+  await first.hover();
+  await first.getByRole("button", { name: `Minimize ${name}` }).click();
+  await expect(tab).toHaveCount(0);
+
+  // Restore it from the rail and switch view in the same tick: the view unmounts before any
+  // render that follows the click.
+  await page.locator('aside[aria-label="Layers"]').getByRole("button", { name: name!, exact: true }).evaluate((row) => {
+    (row as HTMLElement).click();
+    window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "canvas" } }));
+  });
+  await page.waitForSelector(".react-flow");
+
+  // A new tile takes the selection, so only a restore that was kept puts the tab back.
+  const terminals = page.locator(".react-flow__node-terminal");
+  const before = await terminals.count();
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "shell" })));
+  await expect(terminals).toHaveCount(before + 1);
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "windows" } })));
+  await page.waitForSelector('[role="tablist"]');
+  await expect(tab).toHaveCount(1);
+});

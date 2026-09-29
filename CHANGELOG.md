@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: in the Windows view, a tab restored from the Layers rail no longer comes back minimized when the view is switched straight away. The restore happens with the click, and a view that closes before showing its last layout change still saves it.
 - The app now keeps each project's canvas and view layouts itself, in `workspaces/` under its data folder, instead of in the window's browser storage — the first step towards several windows, devices and people sharing one workspace. Layouts saved by an earlier version are imported the first time a project opens, and nothing newer is overwritten.
 
 ## [2026.9.8] — 2026-09-28

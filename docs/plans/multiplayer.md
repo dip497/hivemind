@@ -99,17 +99,6 @@ Legend: ☐ not started · ◐ in progress · ☑ done (its "Done when" passes)
 
 ### Known issues (found while verifying R1, not caused by it)
 
-- **The Windows view can drop a tab restore on an immediate view switch.** A rail click on a
-  minimized tab selects it, and `WindowsView.tsx` removes it from `minimized` in an effect
-  after that render. A view switch that lands before the effect's update renders unmounts
-  the view first; `useDebouncedSave`'s unmount flush then writes the last committed layout,
-  so the tab comes back minimized. Reproduced every time by clicking restore and switching
-  view in the same tick (with a 400 ms gap the restore is kept). It made `windows-view.spec.ts`
-  "every open tab's body stays mounted…" fail once in a full run (2 tabs, 3 terminals) and
-  the next test with it; the spec then passed 4 times (alone ×2, with its neighbours, after
-  the same 33 specs). localStorage behaves the same: the store only changes where the flushed
-  value lands. Fix direction: un-minimize in the restore handler, and have the hook flush the
-  latest state rather than the last committed one.
 - **`settings.json` lock contention between the app and the CLI.** `toolbar-actions.spec.ts`
   "CLI preferences persist…" failed once: `hive config set` found `settings.json.lock` held
   ("the holder could not be read") while the app was running. It passes alone and in the other
@@ -145,3 +134,11 @@ Legend: ☐ not started · ◐ in progress · ☑ done (its "Done when" passes)
   storage. `agent-plugin.spec.ts` now stubs `codex`, so it no longer needs a real Codex on the
   machine (it failed on one without it). Two intermittent failures outside R1 recorded under
   **Known issues**. R1 done.
+- 2026-09-29 — Fixed the first of those known issues: the Windows view lost a tab restored from
+  the rail when the view switched before the render that followed the click (a view unmounting
+  saved its last *rendered* layout). The restore now happens in the click handler
+  (`WindowsView.tsx`), and `useViewLayout`'s setter hands every new layout to the save at once
+  (`useDebouncedSave` returns `schedule`), so a view closing mid-edit keeps the edit. Regression
+  test `windows-view.spec.ts` "a restored tab stays restored when the view switches at once"
+  fails on the old code, and with either half of the fix undone. Full e2e green: 146 passed,
+  10 skipped.
