@@ -86,9 +86,15 @@ export function settingsBusy(): boolean {
  * settings.json's lock behind. The cap keeps a stuck writer from holding the quit.
  */
 export async function settingsSettled(capMs: number): Promise<void> {
-  const deadline = Date.now() + capMs;
-  while (settingsBusy() && Date.now() < deadline) {
-    await Promise.race([coordinator.idle(), new Promise((r) => setTimeout(r, deadline - Date.now()))]);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const capped = new Promise<true>((r) => { timer = setTimeout(() => r(true), capMs); });
+  try {
+    // Operations queued while waiting (the window's last edit, sent as it closed) are waited for too.
+    while (settingsBusy()) {
+      if (await Promise.race([coordinator.idle().then(() => false as const), capped])) return;
+    }
+  } finally {
+    clearTimeout(timer);
   }
 }
 
