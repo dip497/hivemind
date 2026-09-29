@@ -8,6 +8,7 @@ catalog:
   zod: 3.25.76
   yaml: 2.9.0
   gray-matter: 4.0.3
+  loro-crdt: 1.16.3
   citty: ^0.1.6
   chokidar: ^4.0.3
   simple-git: ^3.36.0

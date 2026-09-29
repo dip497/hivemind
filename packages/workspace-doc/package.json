@@ -1,0 +1,22 @@
+{
+  "name": "@hivemind/workspace-doc",
+  "version": "2026.9.8",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "loro-crdt": "catalog:"
+  },
+  "devDependencies": {
+    "@hivemind/tsconfig": "workspace:*",
+    "typescript": "catalog:"
+  },
+  "description": "A workspace's shared document: its schema, and how a layout is written into Loro and read back. No Node or Electron, so the desktop, the headless host and later the phone share it.",
+  "license": "MIT"
+}

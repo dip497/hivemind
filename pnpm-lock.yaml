@@ -81,6 +81,9 @@ catalogs:
     gray-matter:
       specifier: 4.0.3
       version: 4.0.3
+    loro-crdt:
+      specifier: 1.16.3
+      version: 1.16.3
     lucide-react:
       specifier: ^0.461.0
       version: 0.461.0
@@ -512,6 +515,19 @@ importers:
         version: 5.9.3
 
   packages/tsconfig: {}
+
+  packages/workspace-doc:
+    dependencies:
+      loro-crdt:
+        specifier: 'catalog:'
+        version: 1.16.3
+    devDependencies:
+      '@hivemind/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
 
   packages/workspace-host:
     devDependencies:
@@ -3580,6 +3596,9 @@ packages:
 
   lodash@4.18.1:
     resolution: {integrity: sha512-dMInicTPVE8d1e5otfwmmjlxkZoUpiVLwyeTdUsi/Caj/gfzzblBcCE5sRHV/AsjuCmxWrte2TNGSYuCeCq+0Q==}
+
+  loro-crdt@1.16.3:
+    resolution: {integrity: sha512-0FP3TsPTCIVLg7fbjh7cJTt3evpbFD/KRfnd4k9R3ZuDTzl83nuiYK/8LRxQ35xKzcHAcvMowoL9pecNDw1bkw==}
 
   lowercase-keys@2.0.0:
     resolution: {integrity: sha512-tqNXrS78oMOE73NMxK4EMLQsQowWf8jKooH9g7xPavRT706R6bkQJ6DY2Te7QukaZsulxa30wQ7bk0pm4XiHmA==}
@@ -7665,6 +7684,8 @@ snapshots:
   lodash-es@4.18.1: {}
 
   lodash@4.18.1: {}
+
+  loro-crdt@1.16.3: {}
 
   lowercase-keys@2.0.0: {}
 

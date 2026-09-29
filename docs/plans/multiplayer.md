@@ -26,6 +26,7 @@ here**, then reads the design section for the current item.
 pnpm typecheck                                  # every package
 pnpm -F @hivemind/desktop test:unit             # desktop unit tests (tsx --test)
 pnpm -F @hivemind/workspace-host test           # the workspace store (bun test)
+pnpm -F @hivemind/workspace-doc test            # the workspace document (bun test)
 git diff --check
 # e2e (needs Electron + xvfb; see apps/desktop/AGENTS.md and CLAUDE.md). Rebuild first:
 cd apps/desktop && pnpm exec electron-vite build
@@ -68,7 +69,7 @@ Legend: ☐ not started · ◐ in progress · ☑ done (its "Done when" passes)
 | # | Refactor | Status | Notes |
 |---|---|---|---|
 | R1 | Workspace store out of the renderer, into `packages/workspace-host` | ☑ | `packages/workspace-host/src`: `layout.ts` (shapes shared with the window, Node-free), `record-file.ts` (file format: hashed name, atomic 0600 writes, an unreadable file set aside), `store.ts` (checks input, writes each change through, `flush()` retries failed writes, legacy import fills only what is empty). Main: `main/workspace-store-ipc.ts` (sync IPC, flushed on quit). Window: `workspace/workspace-store-client.ts` decides where layouts live and imports a window's old localStorage once; `canvas-persistence.ts` and `view-layout-store.ts` only shape data. Proof: every new or changed test (10 store cases, 7 renderer persistence cases) shown to fail when its behaviour is broken; `shipped-persistence.spec.ts` restarts with the window's Local Storage deleted and fails if the window ignores the store; full e2e on the final build: two runs of 155, every spec passed in a full run, and each run had one intermittent failure outside R1 (see **Known issues**). `tile.list` without a window moved to R5. |
-| R2 | Store backed by a Loro document (schema incl. board objects) | ☐ | **Next** (R1 done). R3 and R4 can run beside it. |
+| R2 | Store backed by a Loro document (schema incl. board objects) | ◐ | ☑ Step 1: `packages/workspace-doc` (no Node, no Electron; `loro-crdt` 1.16.3): `shapes.ts` (types and guards the window may import: no Loro), `schema.ts` (root containers, schema 1), `fields.ts` (a record's fields in a Loro map: only changes recorded, nested objects as mergeable maps to a given depth, values kept as JSON keeps them, containers told by `kind()` not `instanceof`), `core.ts` (a whole layout written as edits: frames → Tree, tiles → mergeable records with `frame`/`name`/`tabs`, order → MovableList; read back), `views.ts` (`{ v, data }`, data merging two levels deep). 9 bun tests, each shown to fail when what it guards breaks (12 mutations). Costs on 100 tiles and 20 frames: a structural write 3.5–5 ms, a canvas move 0.5 ms, a shallow snapshot 1.7 ms. ☐ Step 2: the store backed by one document per workspace (file: header + shallow snapshot; v1 JSON files imported). ☐ Step 3: design text, e2e, push. |
 | R3 | Identity: device key, person key, workspace key, profile | ☐ | |
 | R4 | Daemon: size announcements, input lease, write attribution | ☐ | |
 | R5 | Main fans out to many clients; canvas verbs run in main | ☐ | After R1 |
@@ -155,6 +156,13 @@ None open. Two found while verifying R1 were fixed on 2026-09-29 (see the log).
   now skips that one value, and its key follows a switch to "no project" too. No regression
   test: the window is one render wide, and no test here can land inside it (there is no hook
   renderer in the unit tests); `init-workspace`, persistence, view and frame specs pass.
+- 2026-09-29 — R2 step 1: `@hivemind/workspace-doc`. Decisions: there is no canvas undo to
+  move (only the editor's own), so `UndoManager` arrives with its first caller, ⌘Z on board
+  objects (M1); incremental update export arrives with sync (M1); the store keeps whole-layout
+  writes, each diffed into per-field edits, so a writer must write from the document's current
+  state once there are several (R5: change events refresh a window, or it sends operations).
+  Found while measuring: readers that told containers apart with `instanceof` saw an empty
+  document made by another copy of loro-crdt; they read through `toJSON()` and `kind()` now.
 - 2026-09-29 — Also fixed: `hive-agents`' "a probe that hangs is killed with everything it
   started" failed wherever PID 1 does not reap orphans (this container), because a killed
   child stays a zombie and its `/proc` entry remains; it now checks that the process is
