@@ -148,3 +148,10 @@ None open. Two found while verifying R1 were fixed on 2026-09-29 (see the log).
   settings writer killed at its first written byte (`ulimit -f 0`) no longer blocks the next
   (`settings.test.ts`), and `settings-at-quit.spec.ts` quits while another writer holds the lock
   and expects the change written. Both fail on the old code.
+- 2026-09-29 — Fixed a quirk seen while reviewing the save hook: on a project switch,
+  `useDebouncedSave` queued the value rendered with the new key, which is still the old
+  project's (the Workspace and every view load the new project's layout on the next render),
+  so a window closing in between saved one project's layout under the other's name. The hook
+  now skips that one value, and its key follows a switch to "no project" too. No regression
+  test: the window is one render wide, and no test here can land inside it (there is no hook
+  renderer in the unit tests); `init-workspace`, persistence, view and frame specs pass.

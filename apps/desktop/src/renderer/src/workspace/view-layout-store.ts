@@ -42,7 +42,9 @@ export function saveViewLayout<T>(spec: ViewLayoutSpec<T>, repoPath: string | nu
  *
  * It saves `value` as it renders, and returns `schedule` for a value that has
  * not rendered yet: a state setter calls it, so an edit made just before the
- * component unmounts is kept even though React never renders it.
+ * component unmounts is kept even though React never renders it. The value an
+ * owner renders with a new key is not saved: every owner (the Workspace, a view)
+ * replaces it with the new key's own layout on the next render.
  */
 export function useDebouncedSave<T>(repoPath: string | null, value: T, write: (repoPath: string, value: T) => void, debounceMs = 250): (value: T) => void {
   const pending = useRef<{ key: string; value: T; timer: ReturnType<typeof setTimeout> } | null>(null);
@@ -66,10 +68,14 @@ export function useDebouncedSave<T>(repoPath: string | null, value: T, write: (r
     pending.current = { key, value: v, timer };
   });
   useEffect(() => {
+    const keyChanged = keyRef.current !== repoPath;
+    keyRef.current = repoPath;
     if (!repoPath) return;
     // A change of key with a write still pending → persist it under the old key first.
     if (pending.current && pending.current.key !== repoPath) flush.current();
-    keyRef.current = repoPath;
+    // The value rendered with a new key is still the old key's: its owner loads the new
+    // key's next. Saving it now would write one workspace's layout under another's name.
+    if (keyChanged) return;
     // Already scheduled by a setter before it rendered: keep that timer.
     if (pending.current && Object.is(pending.current.value, value)) return;
     schedule.current(value);

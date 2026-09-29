@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: switching projects in a window no longer queues the previous project's canvas or view layout to be saved under the new project's name. It was replaced a moment later, but a window closed in that moment saved the wrong layout over the new project's.
 - Fixed: a setting changed just before quitting is written before the app exits, and an app that quit in the middle of a settings write no longer leaves `settings.json.lock` behind. That lock named no owner, so no later writer could clear it, and every `hive config` or `hive theme` change failed with "locked by another writer" until the file was deleted by hand.
 - Fixed: in the Windows view, a tab restored from the Layers rail no longer comes back minimized when the view is switched straight away. The restore happens with the click, and a view that closes before showing its last layout change still saves it.
 - The app now keeps each project's canvas and view layouts itself, in `workspaces/` under its data folder, instead of in the window's browser storage — the first step towards several windows, devices and people sharing one workspace. Layouts saved by an earlier version are imported the first time a project opens, and nothing newer is overwritten.
