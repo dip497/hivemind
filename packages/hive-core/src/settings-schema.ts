@@ -512,7 +512,12 @@ function agentOptions(raw: Record<string, unknown>): Record<string, Record<strin
   const out: Record<string, Record<string, string>> = {};
   for (const [agent, opts] of Object.entries(raw).slice(0, 64)) {
     if (!AGENT_KEY_RE.test(agent) || !isObj(opts)) continue;
-    const kept = Object.entries(opts).slice(0, 16)
+    const normalized = { ...opts };
+    if ("permissions" in normalized && !("mode" in normalized)) {
+      normalized.mode = normalized.permissions;
+      delete normalized.permissions;
+    }
+    const kept = Object.entries(normalized).slice(0, 16)
       .filter((e): e is [string, string] => OPTION_KEY_RE.test(e[0]) && typeof e[1] === "string" && e[1].length > 0 && e[1].length <= 200);
     if (kept.length) out[agent] = Object.fromEntries(kept);
   }

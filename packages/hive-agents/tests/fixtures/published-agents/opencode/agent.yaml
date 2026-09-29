@@ -29,6 +29,8 @@ options:
   values:
     auto:
     - --auto
+    yolo:
+    - --auto
 - id: model
   label: Model
   flag: --model

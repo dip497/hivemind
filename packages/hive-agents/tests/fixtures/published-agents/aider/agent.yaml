@@ -18,6 +18,7 @@ options:
     label: "Approval"
     values:
       yes-always: ["--yes-always"]
+      yolo: ["--yes-always"]
     unattended: yes-always
 install:
   url: https://aider.chat/docs/install.html

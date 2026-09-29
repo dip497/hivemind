@@ -9,6 +9,9 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Agents can now launch in YOLO / skip-permissions mode across all providers; Antigravity (`agy`) now exposes its launch mode (`yolo`, `bypassPermissions`, `skip-permissions`, `acceptEdits`) and model options properly, with automatic alias normalization across agents.
+- The Add Machine dialog now features an (i) info button on hover explaining the purpose of adding a remote machine and the steps to connect it.
+
 ## [2026.9.5] — 2026-09-22
 
 - Terminal text is sharp again after the camera moves to a tile. Focusing a tile from Layers, Ctrl+1–9, Ctrl+Tab or a notification lands at exactly 100% instead of fitting a large tile below it, and a terminal no longer sits on a half pixel in an odd-sized window.

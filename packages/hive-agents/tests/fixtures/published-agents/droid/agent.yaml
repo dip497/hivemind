@@ -45,6 +45,10 @@ options:
 - id: mode
   label: Autonomy
   flag: --auto
+  values:
+    yolo:
+    - --auto
+    - high
   unattended: high
 install:
   url: https://docs.factory.ai/cli/getting-started/quickstart

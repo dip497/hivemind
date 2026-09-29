@@ -37,6 +37,9 @@ options:
   label: Approval
   flag: --ask-for-approval
   default: on-request
+  values:
+    yolo:
+      - --dangerously-bypass-approvals-and-sandbox
 - id: sandbox
   label: Sandbox
   flag: --sandbox

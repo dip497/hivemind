@@ -26,6 +26,21 @@ icon:
 install:
   url: https://antigravity.google/docs/cli/overview/
   command: "curl -fsSL https://antigravity.google/cli/install.sh | bash"
+options:
+  - id: mode
+    label: Permission mode
+    flag: --mode
+    values:
+      bypassPermissions:
+        - --dangerously-skip-permissions
+      yolo:
+        - --dangerously-skip-permissions
+      skip-permissions:
+        - --dangerously-skip-permissions
+    unattended: bypassPermissions
+  - id: model
+    label: Model
+    flag: --model
 detect:
   rules:
     - when:

@@ -3,23 +3,36 @@
 import type { AgentOption, AgentProviderDef, SpawnOptions } from "./types.js";
 
 export function agentOption(def: AgentProviderDef, id: string): AgentOption | undefined {
-  return def.options?.find((o) => o.id === id);
+  return def.options?.find((o) => o.id === id) ??
+    (id === "mode" ? def.options?.find((o) => o.id === "permissions") : id === "permissions" ? def.options?.find((o) => o.id === "mode") : undefined);
 }
 
 /** "default" means not chosen (`hive ctl spawn --mode default`). A value starting
  *  with "-" would read as another flag, so it is dropped. */
 function valueOf(o: AgentOption, opts: SpawnOptions): string | undefined {
-  const chosen = opts[o.id];
+  const chosen = opts[o.id] ?? (o.id === "mode" ? opts["permissions"] : o.id === "permissions" ? opts["mode"] : undefined);
   const v = chosen && chosen !== "default" ? chosen : o.default;
   return v && !v.startsWith("-") ? v : undefined;
 }
+
+const YOLO_MODE_ALIASES = ["yolo", "bypassPermissions", "skip-permissions", "skipPermissions", "skip_permissions", "always-approve", "yes-always"] as const;
 
 export function optionArgs(def: AgentProviderDef, opts: SpawnOptions): string[] {
   const args = [...(def.defaultArgs ?? [])];
   for (const o of def.options ?? []) {
     const v = valueOf(o, opts);
     // Own keys only: `--mode constructor` must not find Object.prototype.
-    const special = v && o.values && Object.hasOwn(o.values, v) ? o.values[v] : undefined;
+    let special = v && o.values && Object.hasOwn(o.values, v) ? o.values[v] : undefined;
+    if (!special && v && (o.id === "mode" || o.id === "permissions") && o.values) {
+      if (YOLO_MODE_ALIASES.includes(v as typeof YOLO_MODE_ALIASES[number])) {
+        for (const alias of YOLO_MODE_ALIASES) {
+          if (Object.hasOwn(o.values, alias)) {
+            special = o.values[alias];
+            break;
+          }
+        }
+      }
+    }
     const argv = v ? special ?? (o.flag ? [o.flag, v] : undefined) : undefined;
     if (argv) args.push(...argv);
   }

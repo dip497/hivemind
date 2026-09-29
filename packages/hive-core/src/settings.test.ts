@@ -264,6 +264,8 @@ describe("settings schema", () => {
     const off = mergeSettings({ v: 1, agents: { autoInstall: false, declined: ["aider", "../x", 3] } });
     expect(off.agents.autoInstall).toBe(false);
     expect(off.agents.declined).toEqual(["aider"]);
+    const legacyPermissions = mergeSettings({ v: 1, agents: { options: { antigravity: { permissions: "bypassPermissions" } } } });
+    expect(legacyPermissions.agents.options).toEqual({ antigravity: { mode: "bypassPermissions" } });
   });
 
   test("getPath/setPath: dotted access, immutable set, prototype keys refused", () => {

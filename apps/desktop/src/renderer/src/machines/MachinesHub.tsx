@@ -3,12 +3,13 @@
  * frame runs (machine → folder). The list is the same one `hive machine` edits.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ChevronRight, Folder, History, Loader2, Plus, RefreshCw, Server } from "lucide-react";
+import { ArrowLeft, ChevronRight, Folder, History, Info, Loader2, Plus, RefreshCw, Server } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Switch } from "../components/ui/switch";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../components/ui/tooltip";
 import type { MachineInfo, RemoteDirEntry } from "../../../shared/ipc";
 import { machineUri, posixJoin } from "../../../shared/remote-uri";
 import { errText, machineForRequest, statusOf, useMachines, type MachinesRequest } from "./store";
@@ -82,7 +83,39 @@ export function MachinesHub({ request, onClose, onPick, onRepoint, usageOf, onEn
           {view.kind !== "list" && !(picking?.machineId && view.kind === "browse") && (
             <Button variant="ghost" size="icon-sm" onClick={() => setView({ kind: "list" })} aria-label="back" className="-ml-1"><ArrowLeft /></Button>
           )}
-          <DialogTitle className="h-7 flex items-center">{title}</DialogTitle>
+          <DialogTitle className="h-7 flex items-center gap-1.5">
+            <span>{title}</span>
+            {view.kind === "add" && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    className="inline-flex items-center justify-center h-5 w-5 rounded text-[var(--color-fg3)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg3)] transition-colors cursor-pointer focus:outline-none focus:ring-1 focus:ring-[var(--color-line)]"
+                    aria-label="What a machine does and steps to add it"
+                  >
+                    <Info size={14} />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent
+                  side="bottom"
+                  align="start"
+                  className="max-w-[340px] p-3 text-[12px] bg-[var(--color-bg2)] text-[var(--color-fg)] border border-[var(--color-line)] shadow-xl rounded-lg space-y-2 z-[10001]"
+                >
+                  <div className="font-semibold text-[12.5px] text-[var(--color-fg)]">What does a machine do?</div>
+                  <p className="text-[11.5px] text-[var(--color-fg2)] leading-relaxed">
+                    A machine lets you run workspace frames, terminals, and AI coding agents directly on a remote server or devbox over SSH. Remote processes keep running even if your connection drops or Hivemind closes.
+                  </p>
+                  <div className="font-semibold text-[12px] text-[var(--color-fg)] pt-1 border-t border-[var(--color-line2)]">Steps to add:</div>
+                  <ol className="list-decimal list-inside space-y-1 text-[11px] text-[var(--color-fg2)] leading-relaxed">
+                    <li><strong className="text-[var(--color-fg)]">Host:</strong> Enter <span className="font-mono">user@hostname</span>, an IP, or an alias from your <span className="font-mono">~/.ssh/config</span>.</li>
+                    <li><strong className="text-[var(--color-fg)]">Name (optional):</strong> Set a friendly display name for your frames.</li>
+                    <li><strong className="text-[var(--color-fg)]">Authentication:</strong> Uses your existing SSH keys automatically, or click to enter a password.</li>
+                    <li><strong className="text-[var(--color-fg)]">Save:</strong> Click <span className="font-medium text-[var(--color-fg)]">Add</span> to test the SSH connection and save the machine.</li>
+                  </ol>
+                </TooltipContent>
+              </Tooltip>
+            )}
+          </DialogTitle>
         </header>
         {view.kind === "list" && (
           <MachineList

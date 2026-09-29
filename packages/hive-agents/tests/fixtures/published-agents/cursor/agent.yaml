@@ -29,6 +29,8 @@ options:
     - --auto-review
     force:
     - --force
+    yolo:
+    - --yolo
   unattended: force
 - id: model
   label: Model

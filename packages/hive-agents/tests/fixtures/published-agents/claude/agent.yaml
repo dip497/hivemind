@@ -45,6 +45,10 @@ options:
   values:
     bypassPermissions:
     - --dangerously-skip-permissions
+    yolo:
+    - --dangerously-skip-permissions
+    skip-permissions:
+    - --dangerously-skip-permissions
   unattended: bypassPermissions
 - id: model
   label: Model

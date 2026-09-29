@@ -25,6 +25,9 @@ options:
 - id: mode
   label: Approval
   flag: --approval-mode
+  values:
+    yolo:
+      - --yolo
   unattended: yolo
 install:
   url: https://geminicli.com/docs/get-started/installation/

@@ -89,6 +89,18 @@ describe("argv from chosen values", () => {
     expect(optionArgs(flagless, { mode: "anything-else" })).toEqual([]);
   });
 
+  test("mode option resolves common YOLO / bypassPermissions aliases", () => {
+    expect(optionArgs(def, { mode: "yolo" })).toEqual(["--dangerously-skip-permissions", "--sandbox", "workspace-write"]);
+    expect(optionArgs(def, { mode: "skip-permissions" })).toEqual(["--dangerously-skip-permissions", "--sandbox", "workspace-write"]);
+    expect(optionArgs(def, { permissions: "yolo" })).toEqual(["--dangerously-skip-permissions", "--sandbox", "workspace-write"]);
+  });
+
+  test("legacy permissions option id falls back to mode and vice-versa", () => {
+    const legacy = { ...def, options: [{ id: "permissions", label: "Permissions", values: { bypassPermissions: ["--dangerously-skip-permissions"] } }] } as AgentProviderDef;
+    expect(optionArgs(legacy, { mode: "yolo" })).toEqual(["--dangerously-skip-permissions"]);
+    expect(optionArgs(legacy, { permissions: "bypassPermissions" })).toEqual(["--dangerously-skip-permissions"]);
+  });
+
   test("offered choices include special values and the default even when discovery finds none", () => {
     expect(optionChoices(def.options![0]!, [])).toEqual(["bypassPermissions"]);
     expect(optionChoices(def.options![1]!, ["read-only"])).toEqual(["read-only", "workspace-write"]);

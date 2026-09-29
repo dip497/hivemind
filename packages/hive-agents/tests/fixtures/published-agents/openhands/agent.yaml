@@ -15,6 +15,7 @@ options:
     label: "Approval"
     values:
       always-approve: [ "--always-approve" ]
+      yolo: [ "--always-approve" ]
     unattended: always-approve
 install:
   url: https://docs.openhands.dev/openhands/usage/cli

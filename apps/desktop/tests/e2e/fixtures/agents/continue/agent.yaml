@@ -19,6 +19,7 @@ options:
     values:
       auto: [ "--auto" ]
       plan: [ "--readonly" ]
+      yolo: [ "--auto" ]
     unattended: auto
 install:
   url: https://github.com/continuedev/continue/tree/main/extensions/cli
