@@ -15,6 +15,9 @@ beforeEach(() => {
 afterEach(() => { fs.rmSync(tmp, { recursive: true, force: true }); });
 
 const core = (title: string) => ({ frames: [{ id: "f1", title }], tiles: [{ id: "t1", kind: "claude" }], tileNames: {}, editorTabs: {}, frameOf: { t1: "f1" } });
+const note = (text: string) => ({ id: "n1", kind: "note" as const, x: 10, y: 20, w: 200, h: 160, text });
+const list = (...items: string[]) =>
+  ({ id: "c1", kind: "checklist" as const, x: 0, y: 200, w: 240, h: 200, text: "today", items: items.map((text, i) => ({ id: `i${i + 1}`, text, done: false })) });
 const restart = () => new WorkspaceStore({ dir });
 
 // Repo "/work/api" is stored under the first 32 hex digits of sha256("/work/api"). Files already on
@@ -30,12 +33,15 @@ test("a workspace's layout is kept per repo and is there after a restart, as is 
   const s = new WorkspaceStore({ dir });
   s.setCore("/a", core("api"));
   s.setView("/a", "canvas", { v: 2, data: { positions: { t1: { x: 1, y: 2 } } } });
+  s.setObjects("/a", [note("ship it")]);
 
   const again = restart();
   expect(again.getCore("/a")).toEqual(core("api"));
   expect(again.getView("/a", "canvas")).toEqual({ v: 2, data: { positions: { t1: { x: 1, y: 2 } } } });
+  expect(again.getObjects("/a")).toEqual([note("ship it")]);
   expect(again.getView("/a", "windows")).toBeNull();
   expect(again.getCore("/b")).toBeNull();
+  expect(again.getObjects("/b")).toEqual([]);
 
   again.setCore("/a", core("renamed"));
   expect(restart().getCore("/a")).toEqual(core("renamed"));
@@ -128,6 +134,35 @@ test("an old entry that cannot be a layout is skipped and reported, and the rest
   expect(again.getView("/a", "canvas")).toEqual({ v: 1, data: 3 });
 });
 
+test("undo takes back board edits, one burst at a time, never the layout or a view; redo makes them again; both are saved", async () => {
+  const s = new WorkspaceStore({ dir });
+  s.setObjects("/a", [note("draft"), list("milk")]);
+  // A second later, so it is a step of its own: edits within a second of each other are one.
+  await Bun.sleep(1100);
+  s.setObjects("/a", [note("drafted"), list("milk", "eggs")]);
+  s.setObjects("/a", [note("drafted twice"), list("milk", "eggs")]);
+  s.setCore("/a", core("api"));
+  s.setView("/a", "canvas", { v: 1, data: { zoom: 2 } });
+
+  expect(s.undo("/a")).toBe(true);
+  expect(s.getObjects("/a")).toEqual([list("milk"), note("draft")]);
+  expect(restart().getObjects("/a")).toEqual([list("milk"), note("draft")]);
+  expect(s.redo("/a")).toBe(true);
+  expect(s.getObjects("/a")).toEqual([list("milk", "eggs"), note("drafted twice")]);
+  expect(s.undo("/a")).toBe(true);
+  expect(s.undo("/a")).toBe(true);
+  expect(s.getObjects("/a")).toEqual([]);
+  expect(s.undo("/a")).toBe(false);
+  expect(s.getCore("/a")).toEqual(core("api"));
+  expect(s.getView("/a", "canvas")).toEqual({ v: 1, data: { zoom: 2 } });
+
+  expect(s.redo("/a")).toBe(true);
+  expect(s.redo("/a")).toBe(true);
+  expect(s.redo("/a")).toBe(false);
+  expect(s.getObjects("/a")).toEqual([list("milk", "eggs"), note("drafted twice")]);
+  expect(restart().getObjects("/a")).toEqual([list("milk", "eggs"), note("drafted twice")]);
+});
+
 test("bad input is refused with a TypeError and stores nothing", () => {
   const s = new WorkspaceStore({ dir });
   const bad: Array<() => unknown> = [
@@ -136,6 +171,8 @@ test("bad input is refused with a TypeError and stores nothing", () => {
     () => s.getCore(undefined as never),
     () => s.setCore("/a", "not a layout"),
     () => s.setView("/a", "canvas", { data: {} } as never),
+    () => s.setObjects("/a", { n1: note("not a list") }),
+    () => s.undo(""),
     () => s.importLegacy("/a", 42 as never),
   ];
   for (const call of bad) expect(call).toThrow(TypeError);

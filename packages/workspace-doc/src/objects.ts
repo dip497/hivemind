@@ -5,6 +5,10 @@
  * is set only when it changed. Text is a Loro text updated by a diff, so two people typing in
  * one note both keep their characters. A checklist keeps each item as a record by id, plus
  * their order, so a reorder is a move and an item's tick and text merge on their own.
+ *
+ * An object's record, and an item's, is made fresh when it first appears, never as a mergeable
+ * container: its id is its creator's own, so nobody else makes it at once, and Loro's redo of a
+ * record taken back by undo wrote a mergeable record's text into it a second time.
  */
 import type { LoroDoc, LoroMap } from "loro-crdt";
 import { isContainer, isMap, writeFields } from "./fields.js";
@@ -34,8 +38,8 @@ export function writeObjects(doc: LoroDoc, value: unknown): void {
     const object = toBoardObject(entry);
     if (object === null || kept.has(object.id)) continue;
     kept.add(object.id);
-    if (objects.get(object.id) !== undefined && !isMap(objects.get(object.id))) objects.delete(object.id);
-    writeObject(objects.ensureMergeableMap(object.id), object);
+    const current = objects.get(object.id);
+    writeObject(isMap(current) ? current : objects.setContainer(object.id, newMap(objects)), object);
   }
   for (const id of objects.keys()) if (!kept.has(id)) objects.delete(id);
 }
@@ -79,14 +83,22 @@ function writeItems(record: LoroMap, items: ChecklistItem[] | undefined): void {
   if (record.get(ITEM_ORDER) !== undefined && !isContainer(record.get(ITEM_ORDER), "MovableList")) record.delete(ITEM_ORDER);
   const entries = record.ensureMergeableMap(ITEMS);
   for (const item of items) {
-    if (entries.get(item.id) !== undefined && !isMap(entries.get(item.id))) entries.delete(item.id);
-    const entry = entries.ensureMergeableMap(item.id);
+    const current = entries.get(item.id);
+    const entry = isMap(current) ? current : entries.setContainer(item.id, newMap(entries));
     writeFields(entry, { done: item.done }, 0, ITEM_CONTAINERS);
     writeText(entry, TEXT, item.text);
   }
   const listed = new Set(items.map((item) => item.id));
   for (const id of entries.keys()) if (!listed.has(id)) entries.delete(id);
   writeOrder(record.ensureMergeableMovableList(ITEM_ORDER), items.map((item) => item.id));
+}
+
+/**
+ * A new map made with the classes of `like`'s own copy of loro-crdt: a container made by another
+ * copy (two packages resolving two installs) does not fit into the document.
+ */
+function newMap(like: LoroMap): LoroMap {
+  return new (like.constructor as new () => LoroMap)();
 }
 
 /** A checklist's item records in order, as the window lists them; checked by `toBoardObject`. */

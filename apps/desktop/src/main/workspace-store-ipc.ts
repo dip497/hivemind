@@ -1,6 +1,6 @@
 /**
- * Main's side of the workspace store (docs/design/multiplayer-2026-09-28.md, R1): the app's one
- * `WorkspaceStore`, under `<userData>/workspaces`, and the synchronous IPC the window uses.
+ * Main's side of the workspace store (docs/design/multiplayer-2026-09-28.md, R1, R15): the app's
+ * one `WorkspaceStore`, under `<userData>/workspaces`, and the synchronous IPC the window uses.
  *
  * Only transport lives here. The store checks every argument and writes each change through,
  * so a handler forwards what it was sent and always answers: a synchronous request left
@@ -36,6 +36,10 @@ export function installWorkspaceStoreIpc(): void {
   answer("workspace:set-core-sync", (repo, core) => s.setCore(repo as string, core));
   answer("workspace:set-view-sync", (repo, viewId, layout) => s.setView(repo as string, viewId as string, layout as ViewLayout));
   answer("workspace:import-sync", (repo, legacy) => s.importLegacy(repo as string, legacy as LegacyLayout));
+  answer("workspace:objects-sync", (repo) => s.getObjects(repo as string));
+  answer("workspace:set-objects-sync", (repo, objects) => s.setObjects(repo as string, objects));
+  answer("workspace:undo-sync", (repo) => s.undo(repo as string));
+  answer("workspace:redo-sync", (repo) => s.redo(repo as string));
 }
 
 /** Retry writes that failed. Safe to call more than once, and before the store exists. */

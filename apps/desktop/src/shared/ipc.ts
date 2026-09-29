@@ -6,7 +6,7 @@ import type { ActivityLevel, ShareOutcome, ViewHistoryDay, ViewSession, ViewPres
 import type { NotificationSettings } from "./notification-settings.js";
 import type { ReviewComment } from "@hivemind/core/review";
 import type { LegacyLayout } from "@hivemind/workspace-host/layout";
-import type { CoreLayout, ViewLayout } from "@hivemind/workspace-doc/shapes";
+import type { BoardObject, CoreLayout, ViewLayout } from "@hivemind/workspace-doc/shapes";
 export type { NotificationSettings };
 
 // IssuePatch is owned by @hivemind/core/types (node-free) — re-export so renderer
@@ -245,6 +245,14 @@ export interface HiveIpc {
   workspaceSetViewSync(repo: string, viewId: string, layout: ViewLayout): void;
   /** Offer this window's old localStorage layout; the store keeps only what it lacks. */
   workspaceImportSync(repo: string, legacy: LegacyLayout): void;
+  /** The board's objects, a framed one's position relative to its frame; none when there are none. */
+  workspaceObjectsSync(repo: string): BoardObject[] | null;
+  /** Replace the board. Synchronous, so a write made while the window unloads is kept. */
+  workspaceSetObjectsSync(repo: string, objects: BoardObject[]): void;
+  /** Take back the last board edit; false when there is none. */
+  workspaceUndoSync(repo: string): boolean | null;
+  /** Make again the last board edit undo took back; false when there is none. */
+  workspaceRedoSync(repo: string): boolean | null;
 
   // ── settings.json (main owns it; see main/settings-store.ts) ──
   /** The whole settings object, synchronously (boot: no theme flash). */

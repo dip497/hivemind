@@ -26,6 +26,10 @@ const ls = new Map<string, string>();
     workspaceSetCoreSync: (repo: string, core: unknown) => store.setCore(repo, core),
     workspaceSetViewSync: (repo: string, viewId: string, layout: ViewLayout) => store.setView(repo, viewId, layout),
     workspaceImportSync: (repo: string, legacy: LegacyLayout) => store.importLegacy(repo, legacy),
+    workspaceObjectsSync: (repo: string) => store.getObjects(repo),
+    workspaceSetObjectsSync: (repo: string, objects: unknown) => store.setObjects(repo, objects),
+    workspaceUndoSync: (repo: string) => store.undo(repo),
+    workspaceRedoSync: (repo: string) => store.redo(repo),
   },
 };
 

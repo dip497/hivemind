@@ -1,9 +1,9 @@
 /**
- * Where a window's layouts live (docs/design/multiplayer-2026-09-28.md, R1).
+ * Where a window's layouts live (docs/design/multiplayer-2026-09-28.md, R1, R15).
  *
- * Main's workspace store owns every workspace's layout: the core blob (canvas-persistence.ts)
- * and each view's versioned layout (view-layout-store.ts). Those modules shape the data; this
- * one only moves it. Reads and writes reach main synchronously, so a window builds its first
+ * Main's workspace store owns every workspace's layout: the core blob (canvas-persistence.ts),
+ * each view's versioned layout (view-layout-store.ts) and the board's objects, which it can also
+ * undo and redo. Those modules shape the data; this one only moves it. Reads and writes reach main synchronously, so a window builds its first
  * state in one pass and a save made while it unloads is kept.
  *
  * Before the store, a window kept these in localStorage. The first read of a repo offers main
@@ -11,19 +11,23 @@
  * newer is overwritten. localStorage is left as it was, so an older version still finds it.
  *
  * Without the bridge (the renderer in a plain browser) localStorage is the store, under the
- * same keys. Everything here is best-effort: a failure reads as "nothing stored".
+ * same keys, with no undo. Everything here is best-effort: a failure reads as "nothing stored".
  */
-import { isViewLayout, type ViewLayout } from "@hivemind/workspace-doc/shapes";
+import { isViewLayout, type BoardObject, type ViewLayout } from "@hivemind/workspace-doc/shapes";
 import type { LegacyLayout } from "@hivemind/workspace-host/layout";
 import type { HiveIpc } from "../../../shared/ipc";
 
-const BRIDGE = ["workspaceCoreSync", "workspaceViewSync", "workspaceSetCoreSync", "workspaceSetViewSync", "workspaceImportSync"] as const;
+const BRIDGE = [
+  "workspaceCoreSync", "workspaceViewSync", "workspaceSetCoreSync", "workspaceSetViewSync", "workspaceImportSync",
+  "workspaceObjectsSync", "workspaceSetObjectsSync", "workspaceUndoSync", "workspaceRedoSync",
+] as const;
 type Bridge = Pick<HiveIpc, (typeof BRIDGE)[number]>;
 
 // The keys earlier versions wrote, and the store without the bridge.
 const coreKey = (repo: string): string => `hivemind:canvas-layout:${repo}`;
 const VIEW_PREFIX = "hivemind:view-layout:";
 const viewKey = (viewId: string, repo: string): string => `${VIEW_PREFIX}${viewId}:${repo}`;
+const boardKey = (repo: string): string => `hivemind:board:${repo}`;
 
 function bridge(): Bridge | null {
   const hive = globalThis.window?.hive as Partial<Record<(typeof BRIDGE)[number], unknown>> | undefined;
@@ -109,4 +113,31 @@ export function writeView(repo: string, viewId: string, layout: ViewLayout): voi
   const b = bridge();
   if (!b) return writeJson(viewKey(viewId, repo), layout);
   try { b.workspaceSetViewSync(repo, viewId, layout); } catch { /* best-effort */ }
+}
+
+/** The board stored for `repo`: its objects, a framed one's position relative to its frame. */
+export function readBoard(repo: string): BoardObject[] {
+  const b = bridge();
+  let stored: unknown = null;
+  if (!b) stored = readJson(boardKey(repo));
+  else {
+    try { stored = b.workspaceObjectsSync(repo); } catch { /* nothing stored */ }
+  }
+  return Array.isArray(stored) ? (stored as BoardObject[]) : [];
+}
+
+export function writeBoard(repo: string, objects: BoardObject[]): void {
+  const b = bridge();
+  if (!b) return writeJson(boardKey(repo), objects);
+  try { b.workspaceSetObjectsSync(repo, objects); } catch { /* best-effort */ }
+}
+
+/** Take back the last board edit. False when there is none, or no store to ask. */
+export function undoBoard(repo: string): boolean {
+  try { return bridge()?.workspaceUndoSync(repo) === true; } catch { return false; }
+}
+
+/** Make again the last board edit undo took back. False when there is none, or no store to ask. */
+export function redoBoard(repo: string): boolean {
+  try { return bridge()?.workspaceRedoSync(repo) === true; } catch { return false; }
 }
