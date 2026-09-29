@@ -11,6 +11,9 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 - `hive ctl rename <tile> "name"` names a tile, and every window shows the new name at once; with no name, the tile is called by what its agent says it is doing again. An agent can name the workers it runs.
 - Fixed: `hive ctl close` on a tile that is not open answers not found (exit 5, `TILE_NOT_FOUND`), as `hive ctl send` does, instead of reporting it closed.
+- Fixed: `hive ctl list --frame <name>` answers not found (exit 5, `NOT_FOUND`) when no frame answers to the name, instead of listing every frame.
+- Run inside an agent's tile, `hive ctl list` and `hive ctl frames` list that tile's workspace, even when the window has since switched to another project.
+- The messages hivemind types into an agent (a worker's report, an approval request, a piped reply) call the sending tile what the canvas calls it, down to its label ("claude #2") when it has no name or title, instead of only its id.
 - Fixed: closing a terminal or agent tile ends what runs in it, however you close it. Only the tile's own × did: closing one with ⌘W, in the Windows view, with `hive ctl close` or a workflow's `--close` left its process running in the background, unseen, with no tile left to reach it by.
 - Fixed: `hive ctl read` on a worker that is closed while it waits returns at once, with exit 5 and `finalStatus: "closed"`. It used to wait out its whole timeout and report `timeout`, which tells an orchestrator to read again.
 - Fixed: the canvas now draws the lines between agents that it was always meant to: an animated line from an agent whose output is piped into another, and a dashed one from an agent to each agent it started. Neither had ever shown, because the canvas only draws a line between tiles that have connection points, and tiles had none.

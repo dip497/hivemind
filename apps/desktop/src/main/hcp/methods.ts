@@ -1,12 +1,12 @@
 /**
  * HCP verb dispatch. Splits work by where it must run:
- *   - RENDERER verbs (tile.spawn_agent) delegate to `deps.callRenderer` — the
- *     request-id-correlated main→renderer channel (the plan-bridge pattern).
- *   - MAIN verbs (agent.send, agent.read) run here: send writes to the pty;
- *     read awaits the next turn and returns the reply the agent's plugin reported.
- *
- * Phase 1 surface: tile.spawn_agent, agent.send, agent.read. (tile.list/focus/
- * close, agent.status/stream, review.open, issue.* land in later phases.)
+ *   - RENDERER verbs (tile.spawn_agent, tile.focus, tool.open, review.open, view.emit) delegate
+ *     to `deps.callRenderer` — the request-id-correlated main→renderer channel (the
+ *     plan-bridge pattern).
+ *   - MAIN verbs run here: agent.send writes to the pty; agent.read awaits the next turn and
+ *     returns the reply the agent's plugin reported; the canvas verbs tile.list,
+ *     tile.list_frames, tile.rename and tile.close read and write main's workspace store, so
+ *     they need no window (docs/design/multiplayer-2026-09-28.md, R5).
  */
 import { randomUUID } from "node:crypto";
 import { keyBytes, KEY_GAP_MS } from "../../shared/keys.js";
@@ -14,14 +14,18 @@ import { HcpError } from "./protocol.js";
 import type { TurnTracker } from "./turn-tracker.js";
 import type { OutputRecorder } from "./output-recorder.js";
 import { toPtyId as ptyId, toBareId as bareOf } from "../../shared/tile-id.js";
-import { setName, labelOf } from "./names.js";
-import { agentById, agentOption, cleanName, isSessionId, spawnableAgents, workerAgents, type AgentProviderDef } from "@hivemind/agents";
+import { labelOf as labelIn } from "./names.js";
+import { agentById, agentForCmd, agentOption, cleanName, isSessionId, spawnableAgents, workerAgents, type AgentProviderDef } from "@hivemind/agents";
 import { canListSessions, listSessions } from "@hivemind/agents/node";
 import { BROWSER_TOOL_ID, tileKindAvailability } from "@hivemind/core/tool-plugins";
 import type { ToolsSettings } from "@hivemind/core/settings-schema";
 import { SUBMIT_DELAY_MS } from "../../shared/agent-io.js";
 import { customDataProblem, isCustomEventName } from "@hivemind/view-sdk/protocol";
-import { isTerminalKind, type TileRecord } from "@hivemind/workspace-doc/shapes";
+import { AGENT_TILE_KIND, isTerminalKind, type CoreLayout, type TileRecord } from "@hivemind/workspace-doc/shapes";
+import { frameFor, listFrames, listTiles, type TileFacts } from "@hivemind/workspace-doc/tile-list";
+import type { WorkspaceStore } from "@hivemind/workspace-host/store";
+import type { StatusStore } from "@hivemind/agent-host/status-store";
+import { tileStatusOf } from "@hivemind/agent-host/tile-status";
 
 /** `view.emit` rate: a steady 10 per second, bursts of 30. */
 export const EMIT_RATE = { perSecond: 10, burst: 30 };
@@ -165,15 +169,20 @@ export interface MethodDeps {
    *  to the renderer's status bus, or null to clear. */
   /** A supervised worker waits on its supervisor (true) or no longer does (false). */
   awaitingApproval: (tileId: string, waiting: boolean) => void;
-  /** Name a tile (an empty name takes its name away) in the open workspace that holds it; its
-   *  windows follow. False when none does. */
-  renameTile: (tileId: string, name: string) => boolean;
-  /** Take a tile out of the open workspace that holds it; its windows follow. What it was, or null
-   *  when none holds it. */
-  removeTile: (tileId: string) => TileRecord | null;
+  /** The workspaces main has open. The canvas verbs read them, and write them as `control`;
+   *  their windows follow. */
+  workspaces: Pick<WorkspaceStore, "workspaceOf" | "getCore" | "renameTile" | "removeTile">;
+  /** The workspace the window the user is at shows, if any: what a caller in no tile (a
+   *  terminal, a script) acts on. */
+  shownWorkspace: () => string | null;
+  /** Every session's status, as its host reports it. */
+  status: Pick<StatusStore, "get">;
   /** End the session a tile runs (by its pty id), as its window's kill does. */
   endSession: (ptyId: string) => void;
 }
+
+/** How the control plane writes a workspace: its windows hear of it, and it hears of none. */
+const CONTROL = { writer: "control" };
 
 const RENDERER_TIMEOUT = 15_000;
 const DEFAULT_READ_TIMEOUT = 120_000;
@@ -182,13 +191,15 @@ const REVIEW_TIMEOUT = 24 * 60 * 60 * 1000; // human review may take a long time
 export interface Dispatcher {
   /** Handle one HCP method call. */
   dispatch: (method: string, params: unknown) => Promise<unknown>;
-  /** Drop ALL per-tile HCP state for a tile that has gone away, WITHOUT the
-   *  renderer round-trip `tile.close` does. MUST be called on every pty-exit and
+  /** Drop ALL per-tile HCP state for a tile that has gone away, WITHOUT closing it
+   *  as `tile.close` does. MUST be called on every pty-exit and
    *  user-close path — otherwise the maps (parentOf/depthOf/sendSeq/approveCache/
    *  pendingApprovals) leak, a blocked agent.read/approval on the dead worker hangs
    *  its full timeout instead of resolving, and its UI "awaiting" status lingers.
    *  Idempotent — safe to call twice (e.g. tile.close then the resulting pty-exit). */
   forgetTile: (tileId: string) => void;
+  /** What the control plane's messages call a tile (names.ts). */
+  labelOf: (tileId: string) => string;
 }
 
 export function makeDispatch(deps: MethodDeps): Dispatcher {
@@ -315,7 +326,6 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     if (!res?.tileId) throw new HcpError("INTERNAL", "spawn returned no tileId");
     depthOf.set(res.tileId, childDepth);
     agentOfTile.set(res.tileId, agent);
-    if (name) setName(res.tileId, name);
     if (opts.callerTile) {
       const parentBare = bareOf(String(opts.callerTile));
       parentOf.set(res.tileId, parentBare);
@@ -352,7 +362,6 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     parentOf.delete(bare);
     for (const [child, parent] of parentOf) if (parent === bare) parentOf.delete(child);
     depthOf.delete(bare);
-    setName(bare, null);
     deps.setSupervise(bare, null);
     for (const [reqId, pend] of pendingApprovals) {
       if (pend.cacheKey.startsWith(`${bare}:`)) {
@@ -369,12 +378,35 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
   // not one it adopted (`hive run`, another device), which is someone else's job and keeps running.
   // Then its state here goes. Shared by the `tile.close` verb and workflow's `close_when_done`.
   const closeTile = async (tileId: string): Promise<unknown> => {
-    const closed = deps.removeTile(bareOf(tileId));
+    const closed = deps.workspaces.removeTile(bareOf(tileId), CONTROL)?.tile;
     if (!closed) throw new HcpError("TILE_NOT_FOUND", `no open workspace has tile ${bareOf(tileId)}`);
     if (isTerminalKind(closed.kind) && !closed.session) deps.endSession(ptyId(tileId));
     forgetTileState(tileId);
     return { ok: true };
   };
+
+  // The workspace a canvas verb acts on: the one holding the caller's tile, else the one the
+  // user's window shows. With neither, an empty one.
+  const layoutFor = (callerTile: unknown): CoreLayout => {
+    const held = typeof callerTile === "string" && callerTile ? deps.workspaces.workspaceOf(bareOf(callerTile)) : null;
+    const repo = held ?? deps.shownWorkspace();
+    return (repo === null ? null : deps.workspaces.getCore(repo)) ?? { frames: [], tiles: [] };
+  };
+
+  // What only the running app knows about a workspace's tiles, for the list.
+  const factsOf = (tiles: readonly TileRecord[]): TileFacts<TileRecord> => ({
+    status: (tileId) => {
+      const s = deps.status.get(tileId);
+      return s ? tileStatusOf(s).status : null;
+    },
+    titles: Object.fromEntries(tiles.flatMap((t) => {
+      const title = deps.status.get(t.id)?.title;
+      return title ? [[t.id, title]] : [];
+    })),
+    agent: (t) => (t.kind === AGENT_TILE_KIND ? agentForCmd(t.cmd)?.id : undefined),
+  });
+
+  const label = (tileId: string): string => labelIn(tileId, deps.workspaces, deps.status);
 
   const dispatch = async (method: string, rawParams: unknown): Promise<unknown> => {
     const p = (rawParams ?? {}) as Record<string, unknown>;
@@ -457,7 +489,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         if (!parent) throw new HcpError("TILE_NOT_FOUND", "no parent agent to report to");
         const message = String(p.message ?? "").trim();
         if (!message) throw new HcpError("BAD_REQUEST", "message required");
-        const banner = `\n[hive] report from ${labelOf(child)}:\n${message}\n`;
+        const banner = `\n[hive] report from ${label(child)}:\n${message}\n`;
         // Held if the parent is mid-turn — a report typed into a busy TUI never
         // gets read, and the worker thinks it delivered.
         if (!deps.deliverToTile(ptyId(parent), banner)) {
@@ -495,7 +527,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         const reqId = randomUUID();
         const summary = summarizeTool(tool, inp);
         const banner =
-          `\n[hive] APPROVAL — worker ${labelOf(worker)} wants to run ${tool}: ${summary}\n` +
+          `\n[hive] APPROVAL — worker ${label(worker)} wants to run ${tool}: ${summary}\n` +
           `Reply: hive ctl approve ${reqId} allow|deny|always|never  (allow = this call; always = this tool, for this worker)\n`;
         // Surface the pause in the UI: this worker is now waiting on its parent.
         deps.awaitingApproval(worker, true);
@@ -703,10 +735,17 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         if (!deps.spawnAllowed()) throw new HcpError("RATE_LIMITED", "spawn rate limit exceeded");
         return await deps.callRenderer("tool.open", { tool: p.tool, frame: p.frame, url: p.url }, RENDERER_TIMEOUT);
       }
-      case "tile.list":
-        return await deps.callRenderer("tile.list", { frame: p.frame }, RENDERER_TIMEOUT);
-      case "tile.list_frames":
-        return await deps.callRenderer("tile.list_frames", {}, RENDERER_TIMEOUT);
+      case "tile.list": {
+        // One frame, named the way spawn names one; a name no frame answers to is refused.
+        const ws = layoutFor(p.callerTile);
+        const only = p.frame ? frameFor(ws.frames, String(p.frame)) : undefined;
+        if (p.frame && !only) throw new HcpError("NOT_FOUND", `no frame answers to "${String(p.frame)}"`);
+        return listTiles({ frames: ws.frames, tiles: ws.tiles, frameOf: ws.frameOf ?? {}, names: ws.tileNames ?? {} }, factsOf(ws.tiles), only);
+      }
+      case "tile.list_frames": {
+        const ws = layoutFor(p.callerTile);
+        return { frames: listFrames({ frames: ws.frames, tiles: ws.tiles, frameOf: ws.frameOf ?? {} }) };
+      }
       // Community view packages are scanned when the registry loads; `hive
       // views install|remove` calls this so a running app picks the change
       // up without a restart (the renderer re-reads both roots and updates
@@ -734,8 +773,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         const tileId = bareOf(String(p.tileId ?? ""));
         if (!tileId) throw new HcpError("BAD_REQUEST", "tileId required");
         const name = cleanName(typeof p.name === "string" ? p.name : "");
-        if (!deps.renameTile(tileId, name)) throw new HcpError("TILE_NOT_FOUND", `no open workspace has tile ${tileId}`);
-        setName(tileId, name || null);
+        if (deps.workspaces.renameTile(tileId, name, CONTROL) === null) throw new HcpError("TILE_NOT_FOUND", `no open workspace has tile ${tileId}`);
         return { ok: true, name };
       }
 
@@ -778,5 +816,5 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     }
   };
 
-  return { dispatch, forgetTile: forgetTileState };
+  return { dispatch, forgetTile: forgetTileState, labelOf: label };
 }

@@ -32,7 +32,7 @@ import { Button } from "./components/ui/button";
 import { MenuItem } from "./components/ui/menu-item";
 import type { LayerTile, LayerFrame } from "./LayersPanel";
 import { statusOf, setHostedStatus, type TileStatusKind, subscribeTileStatus } from "./agent-status-bus";
-import { frameFor, listFrames, listTiles, tileName } from "@hivemind/workspace-doc/tile-list";
+import { tileName } from "@hivemind/workspace-doc/tile-list";
 import { cleanName } from "@hivemind/agents";
 import { frameAtPoint } from "./frame-layout";
 import { Wallpaper } from "./Wallpaper";
@@ -83,7 +83,7 @@ import {
   type SpawnOpts, type WorkspaceCommands, type WorkspaceViewModel,
 } from "./workspace/workspace-view";
 import { saveViewLayout, useDebouncedSave } from "./workspace/view-layout-store";
-import { onStoreChange } from "./workspace/workspace-store-client";
+import { onStoreChange, showWorkspace } from "./workspace/workspace-store-client";
 import { setViewMode, useViewMode } from "./workspace/view-mode-store";
 import { CANVAS_LAYOUT, loadCanvasLayout } from "./workspace/views/canvas-layout";
 import { CanvasRuntimeContext, type CanvasRuntime, type FocusModeReq, type FocusReq, type Viewport } from "./workspace/views/canvas-runtime";
@@ -176,8 +176,6 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
       return { ...m, [id]: trimmed };
     });
   }, []);
-  // Main prints the same names in the messages it types into agents.
-  useEffect(() => { window.hive.tileNames(tileNames); }, [tileNames]);
   // What each agent says it is doing, as the host reports it (its session record's title).
   // Not persisted here: the host keeps it. A name someone gave the tile takes precedence.
   const [agentTitles, setAgentTitles] = useState<Record<string, string>>({});
@@ -405,6 +403,8 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     saveCoreOnRender.current = false;
     flushCore();
   }, [coreSnap, flushCore]);
+  // Main acts on the workspace this window shows when the control plane's caller is in no tile.
+  useEffect(() => showWorkspace(persistKey), [persistKey]);
   // Another writer changed this workspace's core layout (the control plane named or closed a
   // tile): write what this window has yet to save, which the store applies as this window's change
   // alone, then take the layout as stored, keeping what this window changed since. A tile that
@@ -519,10 +519,6 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     }
     return out;
   }, [tiles, repoPath, frameOf, frames, tileNames, agentTitles, agentCatalog]);
-  const tileNamesRef = useRef(tileNames);
-  tileNamesRef.current = tileNames;
-  const agentTitlesRef = useRef(agentTitles);
-  agentTitlesRef.current = agentTitles;
 
   // ── active view (plugin) ───────────────────────────────────────────────────
   // The stored id (view-mode-store, shared with Settings ▸ View and ⌘E) is a
@@ -810,13 +806,6 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
             await window.hive.hcpResult(cmd.id, true, { tileId });
             break;
           }
-          case "tile.list": {
-            // Optionally one frame, named the way spawn names one.
-            const listed = { frames: framesRef.current, tiles: tilesRef.current, frameOf: frameOfRef.current, names: tileNamesRef.current };
-            const only = p.frame ? frameFor(listed.frames, String(p.frame)) : undefined;
-            await window.hive.hcpResult(cmd.id, true, listTiles(listed, { status: statusOf, titles: agentTitlesRef.current, agent: agentOfTile }, only));
-            break;
-          }
           case "view.emit": {
             const ev = p as { name: string; data: never; view?: string; from: "shell" | { tileId: string } };
             const active = activeViewIdRef.current ?? FALLBACK_VIEW_ID;
@@ -836,10 +825,6 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
             // `hive agents install|remove`
             const problems = await syncAgentPlugins(rootRef.current);
             await window.hive.hcpResult(cmd.id, true, { problems });
-            break;
-          }
-          case "tile.list_frames": {
-            await window.hive.hcpResult(cmd.id, true, { frames: listFrames({ frames: framesRef.current, tiles: tilesRef.current, frameOf: frameOfRef.current }) });
             break;
           }
           case "tile.focus": {

@@ -70,7 +70,7 @@ hive resolve "text"                     # expand @ID mentions to markdown links
 ## `hive ctl` — canvas
 
 ```text
-hive ctl list [--frame f]               # tiles grouped by frame, with status
+hive ctl list [--frame f]               # tiles grouped by frame, with status; exit 5 if no frame answers to f
 hive ctl frames                         # frames: id, title, repo, branch, tiles
 hive ctl spawn [--agent claude] [--prompt "…"] [--name "title"]
                [--frame id|repo|title] [--mode plan] [--model sonnet]
@@ -87,6 +87,9 @@ hive ctl rename <tileId> ["name"]       # no name: back to what its agent says i
 hive ctl connect <src> <dst>
 hive ctl disconnect <src> [<dst>]
 ```
+
+Run inside an agent's tile, `list` and `frames` answer for that tile's workspace; anywhere
+else, for the one the app's window shows. Neither needs the window: the app answers them itself.
 
 ## `hive ctl` — workflows, supervision, review
 

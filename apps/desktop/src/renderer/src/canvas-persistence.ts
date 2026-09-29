@@ -10,7 +10,7 @@
  * view's own layout blob (workspace/views/canvas-layout.ts), like every view's.
  */
 import { rebaseFields, rebaseRecords } from "@hivemind/workspace-doc/rebase";
-import type { TileRecord } from "@hivemind/workspace-doc/shapes";
+import type { FrameRecord, TileRecord } from "@hivemind/workspace-doc/shapes";
 import type { TileKind } from "./tile-kinds";
 import { readCore, rereadCore, writeCore } from "./workspace/workspace-store-client";
 
@@ -30,16 +30,12 @@ export function defaultShell(): { cmd: string; args: string[] } {
  *  tabbed editor, attached) on the canvas. */
 export const WORKBENCH_TILE_ID = "tile-workbench-1";
 
-/** A tile as the window keeps it, and the layout saves it (a plan review aside): TileRecord's
- *  fields, which the document and main read too, and the rest. */
+/** A tile as the window keeps it, and the layout saves it (a plan review aside): the layout's
+ *  record (TileRecord: its id, kind, label, what runs in it), and the rest. */
 export interface TileInstance extends TileRecord {
   kind: TileKind;
-  label: string;
-  /** claude / shell only. */
-  cmd?: string;
+  /** Agent and shell only: the program's arguments. */
   args?: string[];
-  /** Agent only: what it was started to do, from its first prompt. Shown until the agent says. */
-  task?: string;
   /** browser only — last/initial URL so the tile restores where it was. */
   url?: string;
   /** Pinned = the tile becomes a TRUE screen-fixed floating panel: its content is
@@ -60,30 +56,19 @@ export interface TileInstance extends TileRecord {
   review?: { requestId?: string; plan: string; cwd: string; hcpCmdId?: string; agentTileId?: string };
 }
 
-export interface FrameState {
-  id: string;
+/** A frame as the window keeps it: the layout's record (FrameRecord: its id, title and where its
+ *  tiles run), and its place on the canvas and what the window shows of it. */
+export interface FrameState extends FrameRecord {
   x: number;
   y: number;
   w: number;
   h: number;
-  title: string;
   color: string;
   z: number;
-  /** Bound git branch — tiles inside this frame run isolated on it. */
-  branch?: string;
-  /** Worktree dir for `branch`; tiles inside use it as their cwd. */
-  worktreePath?: string;
   /** Short HEAD sha of the bound worktree — shown in the worktree pill. */
   head?: string;
-  /** Workspace zone: an arbitrary repo folder. Tiles inside run in this repo
-   *  (cwd/repoPath) — lets multiple projects live on one canvas. */
-  workspacePath?: string;
   /** The `.hivemind` root for `workspacePath` (for Issues/diff/tree scope). */
   workspaceRoot?: string | null;
-  /** When set, this is a WORKTREE sub-frame nested inside the repo frame
-   *  `parentFrameId`. It carries {branch, worktreePath, head}; tiles inside
-   *  scope to the worktree. The parent stays the repo (workspace/base) zone. */
-  parentFrameId?: string;
 }
 
 // Persisted layout — survives app restarts. Keyed by repoPath so each

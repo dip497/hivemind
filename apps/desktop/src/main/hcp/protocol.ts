@@ -30,6 +30,8 @@ export type HcpErrorCode =
   | "RATE_LIMITED"
   | "DEPTH_EXCEEDED"
   | "TILE_NOT_FOUND"
+  /** Something else the caller named (a frame) is not there. */
+  | "NOT_FOUND"
   | "TIMEOUT"
   /** The target provider lacks the capability the verb needs (no turn signal →
    *  nothing to read/gather; no permission system → nothing to supervise). */

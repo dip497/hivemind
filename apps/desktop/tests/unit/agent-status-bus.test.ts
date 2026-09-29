@@ -1,26 +1,15 @@
-// The renderer's status bus: an agent tile's status is the host's; a tile's own reports cover
-// plain shells and how a process exited.
+// The renderer's status bus: an agent tile's status is the host's (read as a kind by
+// @hivemind/agent-host/tile-status, tested there); a tile's own reports cover plain shells and
+// how a process exited.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  clearStatus, publishStatus, setHostedStatus, setLabel, statusOf, subscribeStatus, tileStatusOf, type StatusEvent,
+  clearStatus, publishStatus, setHostedStatus, setLabel, statusOf, subscribeStatus, type StatusEvent,
 } from "../../src/renderer/src/agent-status-bus.ts";
 import type { SessionStatus } from "@hivemind/agent-host/status-store";
 
 const hosted = (over: Partial<SessionStatus>): SessionStatus =>
   ({ state: "idle", subagents: [], background: 0, compacting: false, source: "hooks", since: 0, ...over });
-
-test("the host's states read as the kinds tiles and views colour by", () => {
-  assert.equal(tileStatusOf(hosted({ state: "working" })).status, "working");
-  assert.equal(tileStatusOf(hosted({ state: "done", subagents: ["a"] })).status, "working", "subagents still running");
-  for (const [kind, status] of [["permission", "permission"], ["question", "question"], ["plan", "plan_review"], ["approval", "awaiting_approval"], ["other", "blocked"]] as const) {
-    assert.equal(tileStatusOf(hosted({ state: "waiting", kind })).status, status);
-  }
-  assert.deepEqual(tileStatusOf(hosted({ state: "done" })), { status: "idle" });
-  assert.deepEqual(tileStatusOf(hosted({ state: "limited" })), { status: "idle", detail: "usage limit reached" });
-  assert.deepEqual(tileStatusOf(hosted({ state: "interrupted" })), { status: "idle", detail: "interrupted", synthetic: true });
-  assert.equal(tileStatusOf(hosted({ state: "exited" })).status, "exited");
-});
 
 test("an agent tile follows the host; a relabel re-emits under the new name", () => {
   const seen: StatusEvent[] = [];

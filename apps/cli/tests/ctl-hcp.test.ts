@@ -41,7 +41,10 @@ beforeAll(async () => {
       const p = (params ?? {}) as Record<string, unknown>;
       calls.push({ method, params: p });
       switch (method) {
-        case "tile.list": return { frames: [{ id: "f1", tiles: [{ tileId: "w-1", status: "idle" }] }] };
+        case "tile.list":
+          if (p.frame === "nothing") throw new HcpError("NOT_FOUND", "no frame answers to \"nothing\"");
+          return { frames: [{ id: "f1", tiles: [{ tileId: "w-1", status: "idle" }] }] };
+        case "tile.list_frames": return { frames: [] };
         case "tile.spawn_agent": return { tileId: "w-2" };
         case "agent.report": return { delivered: true, parent: "p-1" };
         case "agent.read": {
@@ -69,11 +72,17 @@ afterAll(async () => {
 });
 
 describe("hive ctl over a real HCP socket", () => {
-  test("list --json prints the raw result on one line", async () => {
+  test("list --json prints the raw result on one line; list and frames ask about the caller's workspace", async () => {
     const r = await hive(["ctl", "list", "--json"], { env: env() });
     expect(r.code).toBe(0);
     expect(r.stdout.trim().split("\n")).toHaveLength(1);
     expect(r.json).toEqual({ frames: [{ id: "f1", tiles: [{ tileId: "w-1", status: "idle" }] }] });
+    expect(calls.findLast((c) => c.method === "tile.list")!.params).toEqual({ callerTile: "me-1" });
+    await hive(["ctl", "frames", "--json"], { env: env() });
+    expect(calls.findLast((c) => c.method === "tile.list_frames")!.params).toEqual({ callerTile: "me-1" });
+    const none = await hive(["ctl", "list", "--frame", "nothing", "--json"], { env: env() });
+    expect(none.code).toBe(5);
+    expect(none.json).toMatchObject({ ok: false, code: "NOT_FOUND" });
   });
 
   test("spawn forwards MCP-named params + callerTile from $HIVEMIND_TILE", async () => {

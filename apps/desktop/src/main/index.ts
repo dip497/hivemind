@@ -99,7 +99,6 @@ import { randomUUID } from "node:crypto";
 import { startHcpServer } from "./hcp/hcp-server.js";
 import { makeSpawnPacer } from "./spawn-pacer.js";
 import { makeDispatch, type Dispatcher } from "./hcp/methods.js";
-import { labelOf as hcpLabelOf, setNames as setHcpNames, setTitleSource } from "./hcp/names.js";
 import { Mailbox } from "./hcp/mailbox.js";
 import { TurnTracker } from "./hcp/turn-tracker.js";
 import { StatusStore, type ScreenState } from "@hivemind/agent-host/status-store";
@@ -111,7 +110,7 @@ import { readOrCreateToken, hcpSockPath } from "@hivemind/agent-host/hooks/token
 import { HcpError } from "./hcp/protocol.js";
 import { handleViewProtocol, listViewPackages, registerViewScheme, startViewWatchdog } from "./view-packages.js";
 import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, settingsFile, settingsBusy, settingsSettled } from "./settings-store.js";
-import { flushWorkspaceStore, installWorkspaceStoreIpc, workspaceStore } from "./workspace-store-ipc.js";
+import { flushWorkspaceStore, installWorkspaceStoreIpc, shownWorkspace, workspaceStore } from "./workspace-store-ipc.js";
 import { patchSettingsExtras } from "@hivemind/core/settings";
 import { PipeManager } from "./hcp/pipes.js";
 import { toBareId, toPtyId } from "../shared/tile-id.js";
@@ -1110,10 +1109,6 @@ const hcpTurns = new TurnTracker();
 // Every agent session's status, keyed by bare tile id: hooks first, the screen for agents
 // without them, exits and interrupt keys observed here. One push carries every change.
 const hcpStatus = new StatusStore();
-setTitleSource((tileId) => hcpStatus.get(tileId)?.title);
-ipcMain.on("tile:names", (_e, names: Record<string, string>) => {
-  if (names && typeof names === "object") setHcpNames(Object.fromEntries(Object.entries(names).filter(([, v]) => typeof v === "string").map(([k, v]) => [k, cleanName(v as string)])));
-});
 const SCREEN_STATES = new Set<ScreenState>(["idle", "working", "permission", "question", "blocked"]);
 hcpStatus.subscribe((change) => {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("hcp:status", change);
@@ -1944,8 +1939,9 @@ function startHcpControlPlane(): void {
     setSupervise: (id, spec) => { if (spec) hcpSupervise.set(id, spec); else hcpSupervise.delete(id); },
     awaitingApproval: (tileId, waiting) =>
       hcpStatus.event(tileId, waiting ? { event: "input.requested", kind: "approval" } : { event: "input.resolved" }),
-    renameTile: (tileId, name) => workspaceStore().renameTile(tileId, name, { writer: "control" }) !== null,
-    removeTile: (tileId) => workspaceStore().removeTile(tileId, { writer: "control" })?.tile ?? null,
+    workspaces: workspaceStore(),
+    shownWorkspace,
+    status: hcpStatus,
     endSession,
   });
   // Every verb routes through the boot scan first: spawn resolves the agent by id
@@ -2024,7 +2020,7 @@ function startHcpControlPlane(): void {
       if (!reply) return;
       // Tag the forward with its source so the receiving agent knows which worker reported.
       // The mailbox holds it until the destination is back at its prompt.
-      const banner = `\n[hive] from ${hcpLabelOf(bare)}:\n${reply}\n`;
+      const banner = `\n[hive] from ${_hcp.labelOf(bare)}:\n${reply}\n`;
       for (const dst of dests) hcpMailbox.deliver(toPtyId(dst), banner);
     },
   });

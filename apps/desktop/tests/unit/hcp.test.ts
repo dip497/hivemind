@@ -20,6 +20,7 @@ import { PipeManager } from "../../src/main/hcp/pipes.ts";
 import { Mailbox } from "../../src/main/hcp/mailbox.ts";
 import { SUBMIT_DELAY_MS } from "../../src/shared/agent-io.ts";
 import { WorkspaceStore } from "@hivemind/workspace-host/store";
+import { StatusStore } from "@hivemind/agent-host/status-store";
 
 test("PipeManager: edges, self-loop refused, forget removes both directions", () => {
   const pm = new PipeManager();
@@ -102,6 +103,11 @@ function fakeDeps(over: Partial<Parameters<typeof makeDispatch>[0]> = {}) {
     spawnEdge: () => {},
     setSupervise: () => {},
     awaitingApproval: () => {},
+    // No workspace open and no session known: a test that needs them passes its own.
+    workspaces: new WorkspaceStore({ dir: path.join(os.tmpdir(), "hcp-no-workspace") }),
+    shownWorkspace: () => null,
+    status: new StatusStore(),
+    endSession: () => {},
     ...over,
   };
   return { deps, turns, recorder, writes };
@@ -287,7 +293,7 @@ test("dispatch tile.close needs no window: the tile leaves its workspace, and th
   const ended: string[] = [];
   const { deps } = fakeDeps({
     callRenderer: async () => { throw new Error("no window"); },
-    removeTile: (tileId) => store.removeTile(tileId, { writer: "control" })?.tile ?? null,
+    workspaces: store,
     endSession: (ptyId) => void ended.push(ptyId),
   });
   const { dispatch } = makeDispatch(deps);
@@ -297,6 +303,42 @@ test("dispatch tile.close needs no window: the tile leaves its workspace, and th
   assert.deepEqual(store.getCore("/w")?.tiles, []);
   assert.equal(((await read) as { finalStatus: string }).finalStatus, "closed", "a read waiting on it is answered at once");
   await assert.rejects(dispatch("tile.close", { tileId: "tile-a" }), (e: unknown) => e instanceof HcpError && e.code === "TILE_NOT_FOUND");
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test("dispatch tile.list needs no window: the caller's workspace, else the one the user's window shows, with what the host knows of its tiles", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hcp-list-"));
+  const workspaces = new WorkspaceStore({ dir });
+  workspaces.setCore("/api", {
+    frames: [{ id: "f1", title: "API", workspacePath: "/src/api" }, { id: "f2", title: "Docs" }],
+    tiles: [{ id: "tile-a", kind: "claude", label: "claude #1", cmd: "claude" }, { id: "tile-s", kind: "shell", label: "shell #1" }],
+    tileNames: { "tile-s": "server" },
+    frameOf: { "tile-a": "f1", "tile-s": "f1" },
+  });
+  workspaces.setCore("/web", { frames: [{ id: "g1", title: "Web" }], tiles: [{ id: "tile-w", kind: "shell", label: "shell #1" }], frameOf: { "tile-w": "g1" } });
+  const status = new StatusStore();
+  status.event("tile-a", { event: "input.requested", kind: "permission" });
+  status.title("tile-a", "reviewing the API");
+  let shown: string | null = "/web";
+  const { deps } = fakeDeps({ callRenderer: async () => { throw new Error("no window"); }, workspaces, status, shownWorkspace: () => shown });
+  const { dispatch } = makeDispatch(deps);
+  const api = {
+    frameId: "f1", title: "API", repo: "/src/api", branch: null, tiles: [
+      { tileId: "tile-a", kind: "claude", label: "claude #1", status: "permission", name: "reviewing the API", agent: "claude" },
+      { tileId: "tile-s", kind: "shell", label: "shell #1", status: null, name: "server" },
+    ],
+  };
+  assert.deepEqual(await dispatch("tile.list", { callerTile: "hm:tile-s" }), { frames: [api], loose: [] });
+  assert.deepEqual(await dispatch("tile.list", {}), { frames: [{ frameId: "g1", title: "Web", repo: null, branch: null, tiles: [{ tileId: "tile-w", kind: "shell", label: "shell #1", status: null, name: "shell #1" }] }], loose: [] });
+  assert.deepEqual(await dispatch("tile.list_frames", { callerTile: "tile-a" }), { frames: [
+    { id: "f1", title: "API", repo: "/src/api", branch: null, tiles: 2 },
+    { id: "f2", title: "Docs", repo: null, branch: null, tiles: 0 },
+  ] });
+  // One frame, named any way spawn takes; a name no frame answers to is refused.
+  assert.deepEqual(await dispatch("tile.list", { callerTile: "tile-a", frame: "docs" }), { frames: [{ frameId: "f2", title: "Docs", repo: null, branch: null, tiles: [] }], loose: [] });
+  await assert.rejects(dispatch("tile.list", { callerTile: "tile-a", frame: "nothing" }), (e: unknown) => e instanceof HcpError && e.code === "NOT_FOUND");
+  shown = null; // no caller, and no window showing a workspace
+  assert.deepEqual(await dispatch("tile.list", {}), { frames: [], loose: [] });
   fs.rmSync(dir, { recursive: true, force: true });
 });
 

@@ -17,22 +17,38 @@ export function isViewLayout(x: unknown): x is ViewLayout {
 }
 
 /**
- * A frame as the window keeps it. The document reads `id` and `parentFrameId` (a frame nests
- * in its parent); every other field is kept as given.
+ * A frame as the window keeps it: a box on the canvas that groups tiles, and can bind them to a
+ * folder or a worktree. The document reads `id` and `parentFrameId` (a frame nests in its
+ * parent), the control plane its title and where its tiles run; every other field (its place,
+ * colour, a remote host) is the window's, kept as given.
  */
 export interface FrameRecord {
   id: string;
+  title: string;
+  /** The git branch its tiles run on, isolated in `worktreePath`. */
+  branch?: string;
+  /** The worktree for `branch`: its tiles' working folder. */
+  worktreePath?: string;
+  /** A folder its tiles run in, so several projects can share one canvas. */
+  workspacePath?: string;
+  /** Set on a worktree's frame, nested in the frame of the repository it belongs to. */
   parentFrameId?: string;
 }
 
 /**
- * A tile as the window keeps it. The document reads `id` and `kind`; every other field is kept
- * as given, except `frame`, `name` and `tabs`, which the document fills from the layout's
- * per-tile maps and a tile may not use itself.
+ * A tile as the window keeps it. The document reads `id` and `kind`, the control plane what it
+ * is called and what runs in it; every other field is the window's, kept as given, except
+ * `frame`, `name` and `tabs`, which the document fills from the layout's per-tile maps and a
+ * tile may not use itself.
  */
 export interface TileRecord {
   id: string;
   kind: string;
+  label: string;
+  /** Agent and shell only: the program it runs. */
+  cmd?: string;
+  /** Agent only: what it was started to do, from its first prompt. Shown until the agent says. */
+  task?: string;
   /** Terminal only: an existing session it shows (started by `hive run` or another device). It
    *  never starts one, and closing it only lets go. */
   session?: string;

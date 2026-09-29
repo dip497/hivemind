@@ -140,7 +140,6 @@ const api: HiveIpc & {
   ptySpawn: (opts) => ipcRenderer.invoke("ptySpawn", opts),
   ptyWrite: (tileId, data, paste) => ipcRenderer.send("ptyWrite", tileId, data, paste),
   ptyInterest: (tileId, shown) => ipcRenderer.send("ptyInterest", tileId, shown),
-  tileNames: (names) => ipcRenderer.send("tile:names", names),
   ptyResize: (tileId, cols, rows) => ipcRenderer.send("ptyResize", tileId, cols, rows),
   ptyKill: (tileId) => ipcRenderer.send("ptyKill", tileId),
   ptyDetach: (tileId) => ipcRenderer.send("ptyDetach", tileId),
@@ -176,6 +175,7 @@ const api: HiveIpc & {
     ipcRenderer.on("workspace:changed", listener);
     return () => ipcRenderer.removeListener("workspace:changed", listener);
   },
+  workspaceShown: (repo) => ipcRenderer.send("workspace:shown", repo),
   settingsGet: () => ipcRenderer.invoke("settings:get"),
   settingsSet: (p, v) => ipcRenderer.invoke("settings:set", p, v),
   settingsPatch: (patches) => ipcRenderer.invoke("settings:patch", patches),

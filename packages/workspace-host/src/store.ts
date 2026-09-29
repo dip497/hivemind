@@ -23,7 +23,7 @@
  * history lasts as long as the store does.
  */
 import { UndoManager, type LoroDoc } from "loro-crdt";
-import { hasCore, readCore, removeTile, writeCore, writeTileName } from "@hivemind/workspace-doc/core";
+import { hasCore, holdsTile, readCore, removeTile, writeCore, writeTileName } from "@hivemind/workspace-doc/core";
 import { readObjects, writeObjects } from "@hivemind/workspace-doc/objects";
 import { readView, writeView } from "@hivemind/workspace-doc/views";
 import { stampSchema } from "@hivemind/workspace-doc/schema";
@@ -99,30 +99,29 @@ export class WorkspaceStore {
     this.write(repo, "board", BOARD, from, (doc) => writeObjects(doc, objects));
   }
 
-  /**
-   * Name the tile `tileId` (an empty name takes its name away), in whichever workspace this store
-   * has open holds it: the control plane names a tile by its id alone. That workspace, or null.
-   */
-  renameTile(tileId: string, name: string, from: Writer = {}): string | null {
-    for (const repo of this.workspaces.keys()) {
-      let held = false;
-      this.write(repo, "core", LAYOUT, from, (doc) => { held = writeTileName(doc, tileId, name); });
-      if (held) return repo;
-    }
+  /** The workspace this store has open that holds the tile `tileId`, or null: the control plane
+   *  knows a tile by its id alone. */
+  workspaceOf(tileId: string): string | null {
+    for (const [repo, { doc }] of this.workspaces) if (holdsTile(doc, tileId)) return repo;
     return null;
   }
 
-  /**
-   * Take the tile `tileId` out of whichever workspace this store has open holds it (the control
-   * plane closes a tile by its id alone). That workspace and what the tile was, or null.
-   */
+  /** Name the tile `tileId` (an empty name takes its name away) in the workspace that holds it.
+   *  That workspace, or null. */
+  renameTile(tileId: string, name: string, from: Writer = {}): string | null {
+    const repo = this.workspaceOf(tileId);
+    if (repo !== null) this.write(repo, "core", LAYOUT, from, (doc) => writeTileName(doc, tileId, name));
+    return repo;
+  }
+
+  /** Take the tile `tileId` out of the workspace that holds it. That workspace and what the tile
+   *  was, or null. */
   removeTile(tileId: string, from: Writer = {}): { repo: string; tile: TileRecord } | null {
-    for (const repo of this.workspaces.keys()) {
-      let tile: TileRecord | null = null;
-      this.write(repo, "core", LAYOUT, from, (doc) => { tile = removeTile(doc, tileId); });
-      if (tile) return { repo, tile };
-    }
-    return null;
+    const repo = this.workspaceOf(tileId);
+    if (repo === null) return null;
+    let tile: TileRecord | null = null;
+    this.write(repo, "core", LAYOUT, from, (doc) => { tile = removeTile(doc, tileId); });
+    return tile && { repo, tile };
   }
 
   /** Take back the last board edit not yet taken back. False when there is none. */

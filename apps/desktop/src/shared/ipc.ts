@@ -256,6 +256,9 @@ export interface HiveIpc {
   workspaceRedoSync(repo: string): boolean | null;
   /** Another writer (the control plane, another window) changed a workspace. */
   onWorkspaceChanged(cb: (change: Pick<WorkspaceChange, "repo" | "part">) => void): () => void;
+  /** The workspace this window shows now (null: none), for the control plane to act on when its
+   *  caller is in no tile. */
+  workspaceShown(repo: string | null): void;
 
   // ── settings.json (main owns it; see main/settings-store.ts) ──
   /** The whole settings object, synchronously (boot: no theme flash). */
@@ -501,8 +504,6 @@ export interface HiveIpc {
   installAgentic(dir: string): Promise<{ ok: boolean }>;
   /** `paste`: a message handed to the TUI as one block, not keystrokes. */
   ptyWrite(tileId: string, data: string, paste?: boolean): void;
-  /** The names tiles were given (renames, spawners' names), whole, each time they change. */
-  tileNames(names: Record<string, string>): void;
   /** Whether any view shows this terminal: bytes reach the renderer only while one does. */
   ptyInterest(tileId: string, shown: boolean): void;
   ptyResize(tileId: string, cols: number, rows: number): void;

@@ -24,6 +24,7 @@ import type { HiveIpc } from "../../../shared/ipc";
 const BRIDGE = [
   "workspaceCoreSync", "workspaceViewSync", "workspaceSetCoreSync", "workspaceSetViewSync", "workspaceImportSync",
   "workspaceObjectsSync", "workspaceSetObjectsSync", "workspaceUndoSync", "workspaceRedoSync", "onWorkspaceChanged",
+  "workspaceShown",
 ] as const;
 type Bridge = Pick<HiveIpc, (typeof BRIDGE)[number]>;
 
@@ -121,6 +122,11 @@ export function writeCore(repo: string, core: unknown): void {
 export function onStoreChange(cb: (change: { repo: string; part: string }) => void): () => void {
   const b = bridge();
   return b ? b.onWorkspaceChanged(cb) : () => {};
+}
+
+/** Tell main which workspace this window shows now (null: none). */
+export function showWorkspace(repo: string | null): void {
+  try { bridge()?.workspaceShown(repo); } catch { /* best-effort */ }
 }
 
 /** One view's layout stored for `repo`, or null. */

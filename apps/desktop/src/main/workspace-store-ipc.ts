@@ -1,7 +1,8 @@
 /**
  * Main's side of the workspace store (docs/design/multiplayer-2026-09-28.md, R1, R5, R15): the
  * app's one `WorkspaceStore`, under `<userData>/workspaces`, the synchronous IPC the window uses,
- * and telling each window what another writer changed.
+ * telling each window what another writer changed, and knowing which workspace each window
+ * shows (for the control plane, when its caller is in no tile).
  *
  * Only transport lives here. The store checks every argument and writes each change through,
  * so a handler forwards what it was sent and always answers: a synchronous request left
@@ -15,6 +16,8 @@ import { app, BrowserWindow, ipcMain, type IpcMainEvent, type WebContents } from
 import { WorkspaceStore, type LegacyLayout, type ViewLayout } from "@hivemind/workspace-host/store";
 
 let store: WorkspaceStore | null = null;
+/** The workspace each window shows, by its web contents' id. */
+const shown = new Map<number, string>();
 
 const writerOf = (wc: WebContents): string => `window:${wc.id}`;
 
@@ -57,6 +60,19 @@ export function installWorkspaceStoreIpc(): void {
   answer("workspace:set-objects-sync", (e, repo, objects) => s.setObjects(repo as string, objects, from(e)));
   answer("workspace:undo-sync", (e, repo) => s.undo(repo as string, from(e)));
   answer("workspace:redo-sync", (e, repo) => s.redo(repo as string, from(e)));
+  ipcMain.on("workspace:shown", (e, repo: unknown) => {
+    const id = e.sender.id;
+    if (!shown.has(id)) e.sender.once("destroyed", () => shown.delete(id));
+    if (typeof repo === "string" && repo) shown.set(id, repo);
+    else shown.delete(id);
+  });
+}
+
+/** The workspace the window the user is at shows: the focused window's, else any window's. */
+export function shownWorkspace(): string | null {
+  const focused = BrowserWindow.getFocusedWindow();
+  const mine = focused ? shown.get(focused.webContents.id) : undefined;
+  return mine ?? shown.values().next().value ?? null;
 }
 
 /** Retry writes that failed. Safe to call more than once, and before the store exists. */

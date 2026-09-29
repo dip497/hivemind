@@ -4,7 +4,7 @@
  * layout, as the window saves it, into the edits that make the document hold it, so a write
  * records only what changed and edits from two writers merge; given the layout the writer
  * started from, it writes only what the writer changed (rebase.ts). `readCore` builds it back;
- * `writeTileName` names one tile and `removeTile` takes one out.
+ * `holdsTile` looks for one tile, `writeTileName` names it and `removeTile` takes it out.
  */
 import type { LoroDoc, LoroMap, LoroTree, LoroTreeNode, TreeID } from "loro-crdt";
 import { isMap, writeFields } from "./fields.js";
@@ -65,6 +65,11 @@ export function writeTileName(doc: LoroDoc, tileId: string, name: string): boole
   if (name) record.set("name", name);
   else record.delete("name");
   return true;
+}
+
+/** Does `doc` hold the tile `tileId`? */
+export function holdsTile(doc: LoroDoc, tileId: string): boolean {
+  return typeof tileId === "string" && isMap(doc.getMap(TILES).get(tileId));
 }
 
 /** Has a core layout ever been written to `doc`? */

@@ -20,6 +20,13 @@ useAuthoredAgents();
 import { Mailbox } from "../../src/main/hcp/mailbox.js";
 import { TurnTracker } from "../../src/main/hcp/turn-tracker.js";
 import { OutputRecorder } from "../../src/main/hcp/output-recorder.js";
+import os from "node:os";
+import path from "node:path";
+import { StatusStore } from "@hivemind/agent-host/status-store";
+import { WorkspaceStore } from "@hivemind/workspace-host/store";
+
+// No workspace is open and no session known: a banner names its worker by id.
+const NOTHING_OPEN = { workspaces: new WorkspaceStore({ dir: path.join(os.tmpdir(), "hcp-no-workspace") }), status: new StatusStore(), shownWorkspace: () => null };
 
 test("an approval for a BUSY supervisor is held, then delivered when it hits its prompt", async () => {
   // The screenshot bug, end to end: the parent was mid-turn, so the approval banner was
@@ -40,6 +47,7 @@ test("an approval for a BUSY supervisor is held, then delivered when it hits its
     spawnEdge: () => {},
     setSupervise: () => {},
     awaitingApproval: () => {},
+    ...NOTHING_OPEN,
   } as unknown as Parameters<typeof makeDispatch>[0]);
 
   await dispatch("tile.spawn_agent", { agent: "claude", callerTile: "hm:tile-parent", supervise: true });
@@ -76,6 +84,7 @@ test("approval with a dead supervisor resolves instead of hanging the worker", a
     spawnEdge: () => {},
     setSupervise: () => {},
     awaitingApproval: () => {},
+    ...NOTHING_OPEN,
   } as unknown as Parameters<typeof makeDispatch>[0]);
   await dispatch("tile.spawn_agent", { agent: "claude", callerTile: "hm:tile-parent", supervise: true });
   const r = await dispatch("agent.await_approval", { callerTile: "hm:tile-w", tool_name: "write", tool_input: {} });
@@ -100,6 +109,7 @@ test("a plain allow covers THIS call; only `always` is remembered", async () => 
     spawnEdge: () => {},
     setSupervise: () => {},
     awaitingApproval: () => {},
+    ...NOTHING_OPEN,
   } as unknown as Parameters<typeof makeDispatch>[0]);
   await dispatch("tile.spawn_agent", { agent: "claude", callerTile: "hm:tile-parent", supervise: true });
 
@@ -139,6 +149,7 @@ test("spawning a pi worker with supervise is REFUSED — never silently ungated"
     spawnEdge: () => {},
     setSupervise: () => {},
     awaitingApproval: () => {},
+    ...NOTHING_OPEN,
   } as unknown as Parameters<typeof makeDispatch>[0]);
 
   await assert.rejects(

@@ -31,6 +31,7 @@ const ls = new Map<string, string>();
     workspaceUndoSync: (repo: string) => store.undo(repo),
     workspaceRedoSync: (repo: string) => store.redo(repo),
     onWorkspaceChanged: () => () => {}, // no other writer here
+    workspaceShown: () => {},
   },
 };
 

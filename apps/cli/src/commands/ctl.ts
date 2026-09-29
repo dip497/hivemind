@@ -87,12 +87,13 @@ const tileArg = { tileId: { type: "positional", required: true, description: "ti
 
 // ── canvas ───────────────────────────────────────────────────────────────────
 
+// Inside a tile, its own workspace; anywhere else, the one the app's window shows.
 const list = sub("list", "List tiles on the canvas grouped by frame (with agent status)",
-  { frame: { type: "string", description: "filter to one frame (id, repo name, or title)" } },
-  (a) => hcpCall("tile.list", { frame: a.frame }));
+  { frame: { type: "string", description: "one frame (id, repo name, or title); exit 5 when none answers to it" } },
+  (a) => hcpCall("tile.list", { frame: a.frame, callerTile: ownTile() }));
 
 const frames = sub("frames", "List canvas frames (id, title, repo, branch, tile count)", {},
-  () => hcpCall("tile.list_frames", {}));
+  () => hcpCall("tile.list_frames", { callerTile: ownTile() }));
 
 const openTool = sub("open-tool", "Open an enabled tool plugin", {
   tool: { type: "positional", required: true, description: "tool id (for example hivemind/web/browser)" },
