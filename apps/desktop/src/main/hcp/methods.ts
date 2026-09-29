@@ -164,6 +164,9 @@ export interface MethodDeps {
    *  to the renderer's status bus, or null to clear. */
   /** A supervised worker waits on its supervisor (true) or no longer does (false). */
   awaitingApproval: (tileId: string, waiting: boolean) => void;
+  /** Name a tile (an empty name takes its name away) in the open workspace that holds it; its
+   *  windows follow. False when none does. */
+  renameTile: (tileId: string, name: string) => boolean;
 }
 
 const RENDERER_TIMEOUT = 15_000;
@@ -717,6 +720,16 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       // and push the result to the renderer (main owns the file while running).
       case "settings.reload":
         return await deps.reloadSettings();
+      case "tile.rename": {
+        // The name every surface shows, and the one main's messages call the tile by.
+        const tileId = bareOf(String(p.tileId ?? ""));
+        if (!tileId) throw new HcpError("BAD_REQUEST", "tileId required");
+        const name = cleanName(typeof p.name === "string" ? p.name : "");
+        if (!deps.renameTile(tileId, name)) throw new HcpError("TILE_NOT_FOUND", `no open workspace has tile ${tileId}`);
+        setName(tileId, name || null);
+        return { ok: true, name };
+      }
+
       case "tile.focus": {
         if (!p.tileId) throw new HcpError("BAD_REQUEST", "tileId required");
         return await deps.callRenderer("tile.focus", { tileId: p.tileId }, RENDERER_TIMEOUT);

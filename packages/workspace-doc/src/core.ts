@@ -2,12 +2,15 @@
  * The core layout in a workspace document (docs/design/multiplayer-2026-09-28.md §8): frames as
  * a tree, tiles as a map of records, their order as a movable list. `writeCore` turns a whole
  * layout, as the window saves it, into the edits that make the document hold it, so a write
- * records only what changed and edits from two writers merge; `readCore` builds it back.
+ * records only what changed and edits from two writers merge; given the layout the writer
+ * started from, it writes only what the writer changed (rebase.ts). `readCore` builds it back,
+ * and `writeTileName` names one tile.
  */
 import type { LoroDoc, LoroMap, LoroTree, LoroTreeNode, TreeID } from "loro-crdt";
 import { isMap, writeFields } from "./fields.js";
 import { firstOfEachId, isObject, type Fields } from "./input.js";
 import { readOrder, writeOrder } from "./order.js";
+import { rebaseCore } from "./rebase.js";
 import { FRAMES, META, ORDER, TILES, stampSchema } from "./schema.js";
 import type { CoreLayout, FrameRecord, TileRecord } from "./shapes.js";
 
@@ -16,19 +19,36 @@ const PER_TILE = ["frame", "name", "tabs"] as const;
 
 type Layout = Required<CoreLayout>;
 
+const NO_LAYOUT: Layout = { frames: [], tiles: [], tileNames: {}, editorTabs: {}, frameOf: {} };
+
 /**
  * Make `doc` hold the core layout `value`. Entries without an id (or a tile without a kind) are
  * dropped, and a repeated id keeps its first entry, as the window's own loader does. A layout
  * that is not an object, or a tile that sets a per-tile field itself, is refused.
+ *
+ * Given `base`, the layout `value` was made from (null: none was read), only what changed from
+ * it is written, and the rest stays as `doc` has it now: a write from an older reading never
+ * reverts an edit made since.
  */
-export function writeCore(doc: LoroDoc, value: unknown): void {
-  const layout = toLayout(value);
+export function writeCore(doc: LoroDoc, value: unknown, base?: unknown): void {
+  const next = toLayout(value);
+  const layout = base === undefined ? next : rebaseCore(base === null ? NO_LAYOUT : toLayout(base), next, (readCore(doc) as Layout | null) ?? NO_LAYOUT);
   stampSchema(doc);
   writeFrames(doc.getTree(FRAMES), layout.frames);
   writeTiles(doc.getMap(TILES), layout);
   writeOrder(doc.getMovableList(ORDER), layout.tiles.map((t) => t.id));
   const meta = doc.getMap(META);
   if (meta.get("core") !== true) meta.set("core", true);
+}
+
+/** Name the tile `tileId`, or take its name away with "". False when `doc` has no such tile. */
+export function writeTileName(doc: LoroDoc, tileId: string, name: string): boolean {
+  if (typeof tileId !== "string" || typeof name !== "string") throw new TypeError("workspace doc: a tile's id and name are strings");
+  const record = doc.getMap(TILES).get(tileId);
+  if (!isMap(record)) return false;
+  if (name) record.set("name", name);
+  else record.delete("name");
+  return true;
 }
 
 /** Has a core layout ever been written to `doc`? */

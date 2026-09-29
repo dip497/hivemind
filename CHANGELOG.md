@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- `hive ctl rename <tile> "name"` names a tile, and every window shows the new name at once; with no name, the tile is called by what its agent says it is doing again. An agent can name the workers it runs.
 - Fixed: closing a terminal or agent tile ends what runs in it, however you close it. Only the tile's own × did: closing one with ⌘W, in the Windows view, with `hive ctl close` or a workflow's `--close` left its process running in the background, unseen, with no tile left to reach it by.
 - Fixed: `hive ctl read` on a worker that is closed while it waits returns at once, with exit 5 and `finalStatus: "closed"`. It used to wait out its whole timeout and report `timeout`, which tells an orchestrator to read again.
 - Fixed: the canvas now draws the lines between agents that it was always meant to: an animated line from an agent whose output is piped into another, and a dashed one from an agent to each agent it started. Neither had ever shown, because the canvas only draws a line between tiles that have connection points, and tiles had none.

@@ -6,6 +6,10 @@
  * undo and redo. Those modules shape the data; this one only moves it. Reads and writes reach main synchronously, so a window builds its first
  * state in one pass and a save made while it unloads is kept.
  *
+ * Others write too (the control plane renames a tile, R5). A core layout is written with the one
+ * this window last read or wrote, so the store writes only what the window changed and never
+ * reverts theirs; `onStoreChange` says when they did, for the window to read again.
+ *
  * Before the store, a window kept these in localStorage. The first read of a repo offers main
  * what is there, and main keeps only what it lacks, so an upgrade loses nothing and nothing
  * newer is overwritten. localStorage is left as it was, so an older version still finds it.
@@ -19,7 +23,7 @@ import type { HiveIpc } from "../../../shared/ipc";
 
 const BRIDGE = [
   "workspaceCoreSync", "workspaceViewSync", "workspaceSetCoreSync", "workspaceSetViewSync", "workspaceImportSync",
-  "workspaceObjectsSync", "workspaceSetObjectsSync", "workspaceUndoSync", "workspaceRedoSync",
+  "workspaceObjectsSync", "workspaceSetObjectsSync", "workspaceUndoSync", "workspaceRedoSync", "onWorkspaceChanged",
 ] as const;
 type Bridge = Pick<HiveIpc, (typeof BRIDGE)[number]>;
 
@@ -83,18 +87,31 @@ function importOnce(b: Bridge, repo: string): void {
   try { b.workspaceImportSync(repo, legacy); } catch { /* the store stays as it was */ }
 }
 
+/** Per repo, the core layout this window last read or wrote: what its next write is made from. */
+const coreBase = new Map<string, unknown>();
+
 /** The core blob stored for `repo`, or null. */
 export function readCore(repo: string): unknown {
   const b = bridge();
   if (!b) return readJson(coreKey(repo));
   importOnce(b, repo);
-  try { return b.workspaceCoreSync(repo) ?? null; } catch { return null; }
+  let core: unknown = null;
+  try { core = b.workspaceCoreSync(repo) ?? null; } catch { /* nothing stored */ }
+  coreBase.set(repo, core);
+  return core;
 }
 
 export function writeCore(repo: string, core: unknown): void {
   const b = bridge();
   if (!b) return writeJson(coreKey(repo), core);
-  try { b.workspaceSetCoreSync(repo, core); } catch { /* best-effort */ }
+  try { b.workspaceSetCoreSync(repo, core, coreBase.get(repo)); } catch { /* best-effort */ }
+  coreBase.set(repo, core);
+}
+
+/** Another writer changed a workspace: the control plane, another window. None without the bridge. */
+export function onStoreChange(cb: (change: { repo: string; part: string }) => void): () => void {
+  const b = bridge();
+  return b ? b.onWorkspaceChanged(cb) : () => {};
 }
 
 /** One view's layout stored for `repo`, or null. */

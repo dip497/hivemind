@@ -209,6 +209,24 @@ test("a busy worker closed in the Windows view ends, and a read waiting on its r
   await toView("canvas");
 });
 
+test("a tile named by the control plane is named in the window at once; with no name it goes back to what it does", async () => {
+  const spawned = hive(["ctl", "spawn", "--agent", "claude", "--name", "before", "--prompt", "echo named", "--json"]);
+  expect(spawned.code, spawned.stderr).toBe(0);
+  const tile: string = spawned.json.tileId;
+  // The window saves a new tile a moment after it opens it; until spawning runs in main (R5), a
+  // rename that quick finds no such tile yet.
+  let renamed = hive(["ctl", "rename", tile, "after", "--json"]);
+  await expect.poll(() => (renamed = renamed.code === 5 ? hive(["ctl", "rename", tile, "after", "--json"]) : renamed).code, { timeout: 5_000 }).toBe(0);
+  expect(renamed.json).toEqual({ ok: true, name: "after" });
+  await expect(page.locator(".hm-layers").getByText("after", { exact: true })).toBeVisible();
+  const nameOf = () => hive(["ctl", "list", "--json"]).json.frames.flatMap((f: any) => f.tiles).find((t: any) => t.tileId === tile)?.name;
+  expect(nameOf()).toBe("after");
+  // No name: what its agent says it is doing, or what it was started to do.
+  expect(hive(["ctl", "rename", tile, "--json"]).json).toEqual({ ok: true, name: "" });
+  await expect.poll(nameOf).not.toBe("after");
+  expect(hive(["ctl", "rename", "tile-nowhere", "x", "--json"]).code).toBe(5);
+});
+
 test("an agent's past sessions are listed for its folder, and one can be continued", async () => {
   const id = "0d3c2a10-1111-4222-8333-444455556666";
   const proj = path.join(home, ".claude", "projects", "-repo");

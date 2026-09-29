@@ -23,13 +23,14 @@ const ls = new Map<string, string>();
   hive: {
     workspaceCoreSync: (repo: string) => store.getCore(repo),
     workspaceViewSync: (repo: string, viewId: string) => store.getView(repo, viewId),
-    workspaceSetCoreSync: (repo: string, core: unknown) => store.setCore(repo, core),
+    workspaceSetCoreSync: (repo: string, core: unknown, base?: unknown) => store.setCore(repo, core, { base }),
     workspaceSetViewSync: (repo: string, viewId: string, layout: ViewLayout) => store.setView(repo, viewId, layout),
     workspaceImportSync: (repo: string, legacy: LegacyLayout) => store.importLegacy(repo, legacy),
     workspaceObjectsSync: (repo: string) => store.getObjects(repo),
     workspaceSetObjectsSync: (repo: string, objects: unknown) => store.setObjects(repo, objects),
     workspaceUndoSync: (repo: string) => store.undo(repo),
     workspaceRedoSync: (repo: string) => store.redo(repo),
+    onWorkspaceChanged: () => () => {}, // no other writer here
   },
 };
 
@@ -64,4 +65,20 @@ test("saves go to the store and leave localStorage alone", () => {
   assert.deepEqual(new Map(ls), before);
   assert.deepEqual(titles(store.getCore("/new")), ["api"]);
   assert.deepEqual(store.getView("/new", "demo"), { v: 2, data: { a: 7 } });
+});
+
+test("a save from what the window last read or wrote keeps what another writer changed since", () => {
+  const layout = { frames: [frame("f1", "api")], tileNames: {}, tiles: [{ id: "t7", kind: "claude" as const, label: "Claude" }], editorTabs: {}, frameOf: { t7: "f1" } };
+  saveLayout("/shared", layout);
+  assert.equal(store.renameTile("t7", "reviewer", { writer: "control" }), "/shared");
+  const read = loadLayout("/shared"); // the window reads that name, and another comes after it
+  store.renameTile("t7", "lead", { writer: "control" });
+  saveLayout("/shared", { ...layout, tileNames: read.tileNames, frames: [frame("f1", "api, moved")] });
+  assert.deepEqual(store.getCore("/shared")?.tileNames, { t7: "lead" });
+  assert.deepEqual(titles(store.getCore("/shared")), ["api, moved"]);
+  // The window names it itself, then the other writer does, then the window saves again.
+  saveLayout("/shared", { ...layout, tileNames: { t7: "mine" }, frames: [frame("f1", "api, moved")] });
+  store.renameTile("t7", "theirs", { writer: "control" });
+  saveLayout("/shared", { ...layout, tileNames: { t7: "mine" }, frames: [frame("f1", "api, moved again")] });
+  assert.deepEqual(store.getCore("/shared")?.tileNames, { t7: "theirs" });
 });

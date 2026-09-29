@@ -5,7 +5,7 @@ import type { ViewManifest } from "@hivemind/view-sdk/manifest";
 import type { ActivityLevel, ShareOutcome, ViewHistoryDay, ViewSession, ViewPresence, ViewStatus } from "@hivemind/view-sdk/protocol";
 import type { NotificationSettings } from "./notification-settings.js";
 import type { ReviewComment } from "@hivemind/core/review";
-import type { LegacyLayout } from "@hivemind/workspace-host/layout";
+import type { LegacyLayout, WorkspaceChange } from "@hivemind/workspace-host/layout";
 import type { BoardObject, CoreLayout, ViewLayout } from "@hivemind/workspace-doc/shapes";
 export type { NotificationSettings };
 
@@ -239,8 +239,9 @@ export interface HiveIpc {
   workspaceCoreSync(repo: string): CoreLayout | null;
   /** One view's stored layout, or null. */
   workspaceViewSync(repo: string, viewId: string): ViewLayout | null;
-  /** Replace the core layout blob. Synchronous, so a write made while the window unloads is kept. */
-  workspaceSetCoreSync(repo: string, core: unknown): void;
+  /** Replace the core layout blob, made from `base` (what this window last read or wrote), so only
+   *  what it changed is written. Synchronous, so a write made while the window unloads is kept. */
+  workspaceSetCoreSync(repo: string, core: unknown, base?: unknown): void;
   /** Replace one view's layout. Synchronous for the same reason. */
   workspaceSetViewSync(repo: string, viewId: string, layout: ViewLayout): void;
   /** Offer this window's old localStorage layout; the store keeps only what it lacks. */
@@ -253,6 +254,8 @@ export interface HiveIpc {
   workspaceUndoSync(repo: string): boolean | null;
   /** Make again the last board edit undo took back; false when there is none. */
   workspaceRedoSync(repo: string): boolean | null;
+  /** Another writer (the control plane, another window) changed a workspace. */
+  onWorkspaceChanged(cb: (change: Pick<WorkspaceChange, "repo" | "part">) => void): () => void;
 
   // ── settings.json (main owns it; see main/settings-store.ts) ──
   /** The whole settings object, synchronously (boot: no theme flash). */

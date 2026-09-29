@@ -83,6 +83,7 @@ hive ctl stream <tileId> [--lines 40] [--since <offset>] [--timeout ms]
                        [--snapshot] [--json]        # NDJSON tail with byte offsets
 hive ctl focus <tileId>
 hive ctl close <tileId>
+hive ctl rename <tileId> ["name"]       # no name: back to what its agent says it is doing
 hive ctl connect <src> <dst>
 hive ctl disconnect <src> [<dst>]
 ```

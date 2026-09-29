@@ -164,13 +164,18 @@ const api: HiveIpc & {
   settingsSync: () => ipcRenderer.sendSync("settings:get-sync"),
   workspaceCoreSync: (repo) => ipcRenderer.sendSync("workspace:core-sync", repo),
   workspaceViewSync: (repo, viewId) => ipcRenderer.sendSync("workspace:view-sync", repo, viewId),
-  workspaceSetCoreSync: (repo, core) => { ipcRenderer.sendSync("workspace:set-core-sync", repo, core); },
+  workspaceSetCoreSync: (repo, core, base) => { ipcRenderer.sendSync("workspace:set-core-sync", repo, core, base); },
   workspaceSetViewSync: (repo, viewId, layout) => { ipcRenderer.sendSync("workspace:set-view-sync", repo, viewId, layout); },
   workspaceImportSync: (repo, legacy) => { ipcRenderer.sendSync("workspace:import-sync", repo, legacy); },
   workspaceObjectsSync: (repo) => ipcRenderer.sendSync("workspace:objects-sync", repo),
   workspaceSetObjectsSync: (repo, objects) => { ipcRenderer.sendSync("workspace:set-objects-sync", repo, objects); },
   workspaceUndoSync: (repo) => ipcRenderer.sendSync("workspace:undo-sync", repo),
   workspaceRedoSync: (repo) => ipcRenderer.sendSync("workspace:redo-sync", repo),
+  onWorkspaceChanged: (cb) => {
+    const listener = (_e: unknown, change: Parameters<typeof cb>[0]) => cb(change);
+    ipcRenderer.on("workspace:changed", listener);
+    return () => ipcRenderer.removeListener("workspace:changed", listener);
+  },
   settingsGet: () => ipcRenderer.invoke("settings:get"),
   settingsSet: (p, v) => ipcRenderer.invoke("settings:set", p, v),
   settingsPatch: (patches) => ipcRenderer.invoke("settings:patch", patches),

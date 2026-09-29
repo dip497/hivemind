@@ -82,6 +82,7 @@ import {
   type SpawnOpts, type WorkspaceCommands, type WorkspaceViewModel,
 } from "./workspace/workspace-view";
 import { saveViewLayout, useDebouncedSave } from "./workspace/view-layout-store";
+import { onStoreChange } from "./workspace/workspace-store-client";
 import { setViewMode, useViewMode } from "./workspace/view-mode-store";
 import { CANVAS_LAYOUT, loadCanvasLayout } from "./workspace/views/canvas-layout";
 import { CanvasRuntimeContext, type CanvasRuntime, type FocusModeReq, type FocusReq, type Viewport } from "./workspace/views/canvas-runtime";
@@ -413,7 +414,20 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   // touches just the canvas view's geometry blob.
   const coreSnap = useMemo(() => ({ frames, tileNames, tiles, editorTabs, frameOf }), [frames, tileNames, tiles, editorTabs, frameOf]);
   const geometry = useMemo(() => ({ positions, sizes, viewport }), [positions, sizes, viewport]);
-  useDebouncedSave(persistKey, coreSnap, useCallback((key: string, v: typeof coreSnap) => saveLayout(key, v), []));
+  const { flush: flushCore } = useDebouncedSave(persistKey, coreSnap, useCallback((key: string, v: typeof coreSnap) => saveLayout(key, v), []));
+  // Another writer changed this workspace's core layout (the control plane named a tile): write
+  // what this window has yet to save, which the store applies as this window's change alone, then
+  // read it again. A plan review is never saved, so it stays open.
+  useEffect(() => onStoreChange(({ repo, part }) => {
+    if (repo !== persistKey || part !== "core") return;
+    flushCore();
+    const next = loadLayout(repo);
+    setFrames(next.frames);
+    setTileNames(next.tileNames ?? {});
+    setTiles((cur) => [...(next.tiles ?? []), ...cur.filter((t) => t.kind === "planReview")]);
+    setEditorTabs(next.editorTabs ?? {});
+    setFrameOf(next.frameOf ?? {});
+  }), [persistKey, flushCore, setFrames, setTiles, setFrameOf]);
   useDebouncedSave(persistKey, geometry, useCallback((key: string, v: typeof geometry) => saveViewLayout(CANVAS_LAYOUT, key, v), []));
 
   // Viewport-focus request: resolve the target's CENTER from our own state

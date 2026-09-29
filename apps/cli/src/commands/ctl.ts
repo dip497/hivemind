@@ -166,6 +166,9 @@ const read = sub("read", "Wait for an agent's turn to finish and print its reply
 
 const focus = sub("focus", "Focus a tile", tileArg, (a) => hcpCall("tile.focus", { tileId: a.tileId }));
 const close = sub("close", "Close a tile", tileArg, (a) => hcpCall("tile.close", { tileId: a.tileId }));
+const rename = sub("rename", "Name a tile; with no name, take its name away",
+  { ...tileArg, name: { type: "positional", required: false, description: "the name every surface shows it by" } },
+  (a) => hcpCall("tile.rename", { tileId: a.tileId, name: a.name ?? "" }));
 
 const connect = sub("connect", "Pipe src agent's replies into dst agent's input",
   { src: { type: "positional", required: true }, dst: { type: "positional", required: true } },
@@ -347,7 +350,7 @@ export const ctlCmd = defineCommand({
   meta: { name: "ctl", description: "Drive the running hivemind app (spawn/send/read/stream/workflow/report) and the issue verbs agents use" },
   subCommands: {
     list, frames, "open-tool": openTool, spawn, sessions, send, keys, read, stream, workflow, approve, report, "open-review": openReview,
-    focus, close, connect, disconnect, view,
+    focus, close, rename, connect, disconnect, view,
     "set-state": setState, "add-comment": addComment, "mark-acceptance": markAcceptance,
     "delete-issue": deleteIssueCmd, "list-workspaces": listWorkspacesCmd,
   },

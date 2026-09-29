@@ -111,7 +111,7 @@ import { readOrCreateToken, hcpSockPath } from "@hivemind/agent-host/hooks/token
 import { HcpError } from "./hcp/protocol.js";
 import { handleViewProtocol, listViewPackages, registerViewScheme, startViewWatchdog } from "./view-packages.js";
 import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, settingsFile, settingsBusy, settingsSettled } from "./settings-store.js";
-import { flushWorkspaceStore, installWorkspaceStoreIpc } from "./workspace-store-ipc.js";
+import { flushWorkspaceStore, installWorkspaceStoreIpc, workspaceStore } from "./workspace-store-ipc.js";
 import { patchSettingsExtras } from "@hivemind/core/settings";
 import { PipeManager } from "./hcp/pipes.js";
 import { toBareId, toPtyId } from "../shared/tile-id.js";
@@ -1941,6 +1941,7 @@ function startHcpControlPlane(): void {
     setSupervise: (id, spec) => { if (spec) hcpSupervise.set(id, spec); else hcpSupervise.delete(id); },
     awaitingApproval: (tileId, waiting) =>
       hcpStatus.event(tileId, waiting ? { event: "input.requested", kind: "approval" } : { event: "input.resolved" }),
+    renameTile: (tileId, name) => workspaceStore().renameTile(tileId, name, { writer: "control" }) !== null,
   });
   // Every verb routes through the boot scan first: spawn resolves the agent by id
   // and other verbs read its capabilities, so none may run against a half-set catalog.

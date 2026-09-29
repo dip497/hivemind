@@ -194,3 +194,32 @@ test("a write the disk refuses is kept, reported, and written by flush once it c
   s.flush();
   expect(new WorkspaceStore({ dir: blockedDir }).getCore("/a")).toEqual(core("kept"));
 });
+
+test("each change is told, with who made it; a write that changes nothing is not", () => {
+  const told: unknown[] = [];
+  const s = new WorkspaceStore({ dir, onChange: (c) => told.push(c) });
+  s.setCore("/a", core("api"), { writer: "window:1" });
+  s.setCore("/a", core("api"), { writer: "window:1" });
+  s.setView("/a", "canvas", { v: 1, data: { positions: {} } }, { writer: "window:2" });
+  s.setObjects("/a", [note("ship it")], { writer: "window:1" });
+  s.undo("/a", { writer: "window:2" });
+  expect(s.renameTile("t1", "reviewer", { writer: "control" })).toBe("/a");
+  expect(told).toEqual([
+    { repo: "/a", part: "core", writer: "window:1" },
+    { repo: "/a", part: "view:canvas", writer: "window:2" },
+    { repo: "/a", part: "board", writer: "window:1" },
+    { repo: "/a", part: "board", writer: "window:2" },
+    { repo: "/a", part: "core", writer: "control" },
+  ]);
+});
+
+test("a tile named by the control plane keeps its name when a window then writes what it read before", () => {
+  const s = new WorkspaceStore({ dir });
+  s.setCore("/a", core("api"));
+  s.getCore("/b"); // another open workspace, without the tile
+  const read = s.getCore("/a");
+  expect(s.renameTile("t1", "reviewer")).toBe("/a");
+  expect(s.renameTile("nowhere", "x")).toBeNull();
+  s.setCore("/a", core("moved"), { base: read });
+  expect(restart().getCore("/a")).toEqual({ ...core("moved"), tileNames: { t1: "reviewer" } });
+});
