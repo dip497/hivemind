@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [2026.9.9] — 2026-09-29
+
 - Fixed: after an upgrade, agents the new version cannot load are repaired from the registry even when the first attempt fails or the workspace never settles. The check ran once per launch and counted a failed attempt as the run, and it waited for every restored tile to start — but an agent this version cannot load is a tile that may never start, so a machine could sit with every agent unavailable until it was restarted. It now waits at most a minute, tries again while an agent is still broken, and only stops asking once a check has actually succeeded.
 ## [2026.9.8] — 2026-09-28
 
@@ -1363,7 +1365,8 @@ World, and sandboxed community views), and the e2e/perf harnesses gate every cha
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.9.8...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.9.9...HEAD
+[2026.9.9]: https://github.com/dip497/hivemind/releases/tag/v2026.9.9
 [2026.9.8]: https://github.com/dip497/hivemind/releases/tag/v2026.9.8
 [2026.9.7]: https://github.com/dip497/hivemind/releases/tag/v2026.9.7
 [2026.9.6]: https://github.com/dip497/hivemind/releases/tag/v2026.9.6
