@@ -32,8 +32,8 @@ cd apps/desktop && pnpm exec electron-vite build
 unset ELECTRON_RUN_AS_NODE && xvfb-run -a --server-args="-screen 0 1600x1000x24" pnpm test:e2e --retries=0
 ```
 
-CI (`.github/workflows/ci.yml`) runs only the desktop typecheck and desktop unit tests, so
-the package tests and the e2e suite above are yours to run before pushing.
+CI (`.github/workflows/ci.yml`) typechecks and unit-tests every package, the store included;
+the e2e suite is yours to run before pushing.
 
 ## Working rules (every item)
 

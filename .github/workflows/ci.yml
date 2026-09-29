@@ -34,14 +34,19 @@ jobs:
       - name: pnpm install
         run: pnpm install --frozen-lockfile
 
-      - name: Typecheck
-        run: pnpm --filter @hivemind/desktop run typecheck
+      - name: Typecheck (every package)
+        run: pnpm typecheck
 
       - name: Build (renderer + main + CLI)
         run: pnpm -r --parallel build
 
       - name: Unit tests (desktop)
         run: pnpm --filter @hivemind/desktop run test:unit
+
+      - name: Unit tests (packages and CLI)
+        # Every package's own `bun test`: the workspace store, settings.json and its lock,
+        # agent discovery, the view SDK, the agent host, the CLI.
+        run: pnpm test
 
       - name: Installer platform matrix
         # Cheap guard on the install.sh ↔ release.yml contract: the asset names
