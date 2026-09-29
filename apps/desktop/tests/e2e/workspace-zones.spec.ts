@@ -1,8 +1,6 @@
-// Throwaway e2e: verify multi-workspace zones end-to-end via the
-// HIVEMIND_TEST_PICK_DIR seam (native folder dialog can't be driven headless).
-// Launch on repo A, add a frame, bind it to repo B, drag the Issues tile into
-// the zone, and assert it shows B's issue (not A's) — proving mkTile threads the
-// zone's `root`. Also assert the spawn picker appears with a zone present.
+// Multi-workspace zones end to end, through the HIVEMIND_TEST_PICK_DIR seam (the native
+// folder dialog can't be driven headless): launch on repo A, add a frame, bind it to
+// repo B, and spawn an agent into it.
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
 import path from "node:path";
 import fs from "node:fs/promises";
@@ -88,7 +86,7 @@ test.afterAll(async () => {
   if (bin) await fs.rm(bin, { recursive: true, force: true }).catch(() => {});
 });
 
-test("bind a frame to workspace B and the in-zone Issues tile shows B's issues", async () => {
+test("a frame bound to workspace B is named after it, and an agent spawned while it is the only frame lands inside it", async () => {
   // 1. Add a frame.
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:add-frame")));
   await page.waitForSelector(".react-flow__node-frame", { timeout: 6_000 });
@@ -104,11 +102,14 @@ test("bind a frame to workspace B and the in-zone Issues tile shows B's issues",
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:spawn-agent")));
   await page.waitForSelector(".react-flow__node-terminal", { timeout: 6_000 });
 
-  // The spawned terminal node is parented to the frame (react-flow nests a
-  // child node's DOM under the parent's). Assert it landed inside the frame.
-  const frameBox = await page.locator(".react-flow__node-frame").boundingBox();
-  const termBox = await page.locator(".react-flow__node-terminal").first().boundingBox();
-  expect(frameBox && termBox).toBeTruthy();
+  // The spawn flies the camera to the new tile (400 ms), so both boxes are read at one
+  // instant: read one call apart, they were taken under two camera positions, and a
+  // terminal inside the frame could read as outside it.
+  const [frameBox, termBox] = await page.evaluate(() =>
+    [".react-flow__node-frame", ".react-flow__node-terminal"].map((selector) => {
+      const { x, y, width } = document.querySelector(selector)!.getBoundingClientRect();
+      return { x, y, width };
+    }));
   // Terminal's top-left sits within the frame's bounds (it was placed at
   // frame.x+24, frame.y+48 and parented).
   expect(termBox!.x).toBeGreaterThanOrEqual(frameBox!.x - 4);
