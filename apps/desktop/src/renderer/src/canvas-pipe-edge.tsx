@@ -1,9 +1,10 @@
 /**
  * The animated "data flow" edge drawn between two agent tiles that are piped
  * (hive_connect) — a dot travels source → target, showing one agent's output
- * feeding another. Our tiles have no <Handle>s, so this is a FLOATING edge: the
- * endpoints are computed from node geometry (the react-flow floating-edges
- * pattern) rather than handle positions.
+ * feeding another. This is a FLOATING edge: the endpoints are computed from
+ * node geometry (the react-flow floating-edges pattern) rather than handle
+ * positions. A tile still carries a hidden handle of each kind (TileShell in
+ * canvas-nodes.tsx): without one, react-flow draws no edge at all.
  */
 import { BaseEdge, getBezierPath, useInternalNode, type EdgeProps, type InternalNode } from "@xyflow/react";
 

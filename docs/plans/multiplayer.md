@@ -102,15 +102,8 @@ Legend: ☐ not started · ◐ in progress · ☑ done (its "Done when" passes)
 
 ### Known issues
 
-- **Agent pipes and spawn wires are not drawn** (found in R15, older than it). `CanvasView`
-  builds react-flow edges for them (`canvas-pipe-edge.tsx`), and react-flow draws no edge
-  whose nodes have no connection handle (`getEdgePosition` in `@xyflow/system` returns
-  nothing, error 008); tiles have none. The board's arrows met the same wall and are drawn in
-  a layer of their own (`board-objects/Arrows.tsx`); moving pipes and wires to such a layer,
-  or giving tiles hidden handles, would draw them. Not fixed here: outside the multiplayer
-  work, and no test covers either edge.
-
-Two found while verifying R1 were fixed on 2026-09-29 (see the log).
+None open. Agent pipes and spawn wires not being drawn (found in R15) and two issues found while
+verifying R1 were fixed on 2026-09-29 (see the log).
 
 ## Decisions so far
 
@@ -212,3 +205,11 @@ Two found while verifying R1 were fixed on 2026-09-29 (see the log).
   re-reads on every new reading of its object. Also found, older than R15 and not fixed:
   agent pipes and spawn wires are never drawn (**Known issues**). Full e2e: 151 passed,
   10 skipped.
+- 2026-09-29 — Fixed that known issue: agent pipes and spawn wires are drawn. Every tile now
+  carries one hidden, non-connectable handle of each kind (`TileShell` in `canvas-nodes.tsx`);
+  the edges still find their ends on the tiles' borders (`canvas-pipe-edge.tsx`). They had
+  never shown since they were added: react-flow keeps a measured node's handles from its DOM
+  only, so declaring them in node data would not do. `agent-links.spec.ts` sends `hcp:spawn`
+  and `hcp:pipe` from main and checks each line runs from one tile's border to the other's
+  and goes when it ends. It fails without the handles, and when a pipe's end is ignored.
+  Full e2e: 152 passed, 10 skipped.
