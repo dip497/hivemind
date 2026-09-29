@@ -102,8 +102,14 @@ Legend: ☐ not started · ◐ in progress · ☑ done (its "Done when" passes)
 
 ### Known issues
 
-None open. Agent pipes and spawn wires not being drawn (found in R15) and two issues found while
-verifying R1 were fixed on 2026-09-29 (see the log).
+- **`hive ctl read` of a tile that is already gone waits out its timeout** (exit 4) instead of
+  failing at once. Main cannot yet tell a gone tile from one whose session has not started (a
+  terminal starts its session as it mounts, just after `spawn` returns). With R5 main knows the
+  tile list, and a read of a tile not on it can answer `TILE_NOT_FOUND`. A read already waiting
+  when its tile closes is answered `closed` (fixed 2026-09-29).
+
+Fixed on 2026-09-29 (see the log): closed tiles leaving their processes running, agent pipes and
+spawn wires not being drawn, and two issues found while verifying R1.
 
 ## Decisions so far
 
@@ -213,3 +219,17 @@ verifying R1 were fixed on 2026-09-29 (see the log).
   and `hcp:pipe` from main and checks each line runs from one tile's border to the other's
   and goes when it ends. It fails without the handles, and when a pipe's end is ignored.
   Full e2e: 152 passed, 10 skipped.
+- 2026-09-29 — Fixed, found while mapping R5: a tile closed any way but its own × left its
+  session running. With the PTY daemon on (the default), `closeTile` let the terminal unmount,
+  and an unmount detaches, because a project switch unmounts every tile and the daemon keeps
+  their sessions. Closing with ⌘W, in the Windows view, with `hive ctl close` or a workflow's
+  `--close` therefore left the process running, unseen, with nothing to reach it by. Now
+  `closeTile` tells the terminal (`endTileSession`), which kills its session as it unmounts, or
+  kills it directly when none is mounted; an adopted session is still only let go. Also, a kill
+  now runs main's exit teardown (a daemon tells its killer nothing), so a read or an approval
+  waiting on the tile is answered at once. And `hive ctl read` stops when main answers
+  `closed` (exit 5): its short polls used to go on to the full timeout and report `timeout`,
+  and the shipped skill says a timeout means "read again". `hcp-cross-provider.spec.ts` checks
+  that no process is left for a worker closed by `hive ctl close` or in the Windows view, and
+  that a read already waiting is told `closed` with exit 5. Each of the three fixes, undone,
+  fails it.

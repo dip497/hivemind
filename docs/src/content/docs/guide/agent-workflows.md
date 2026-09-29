@@ -54,7 +54,8 @@ Practical rules:
 
 - Keep `read --timeout` below your tool's Bash limit (default wait is 100 s, built from
   ≤ 10 s polls, so retrying is safe). A timeout exits 4 with `finalStatus:"timeout"`;
-  call `read` again to collect the turn.
+  call `read` again to collect the turn. A worker closed while you wait exits 5 with
+  `finalStatus:"closed"` at once: it is gone, so do not read it again.
 - `workflow --agent codex` exits 7 before spawning — codex has no turn signal; use
   claude, droid, pi, or kiro for workers.
 - `hive ctl stream <tile> --lines 40 --snapshot` shows a tile's screen (ANSI-stripped)

@@ -11,7 +11,7 @@
 // injection); the daemon lives under the isolated XDG profile and is reaped in
 // afterAll + global-teardown.
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
-import { execSync, spawnSync } from "node:child_process";
+import { execSync, spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -39,16 +39,34 @@ function onPath(bin: string): string {
   throw new Error(`${bin} not on PATH`);
 }
 
+const hiveEnv = (env: Record<string, string>) =>
+  ({ ...process.env, PATH: `${fakeBin}:${process.env.PATH}`, HIVE_HCP_SOCK: sock, HCP_TOKEN: token, ...env });
+function lastJson(stdout: string): any {
+  try { return JSON.parse(stdout.trim().split("\n").pop() || ""); } catch { return undefined; }
+}
+
 /** Run `hive …` exactly as an agent would: a subprocess with the HCP env. */
 function hive(args: string[], env: Record<string, string> = {}) {
-  const r = spawnSync(onPath("bun"), [CLI, ...args], {
-    encoding: "utf8",
-    timeout: 120_000,
-    env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH}`, HIVE_HCP_SOCK: sock, HCP_TOKEN: token, ...env },
+  const r = spawnSync(onPath("bun"), [CLI, ...args], { encoding: "utf8", timeout: 120_000, env: hiveEnv(env) });
+  return { code: r.status, stdout: r.stdout, stderr: r.stderr, json: lastJson(r.stdout) };
+}
+
+/** `hive …` left running, for a call that waits on what the test does next. */
+function hiveLater(args: string[]): Promise<{ code: number | null; json: any }> {
+  return new Promise((resolve) => {
+    const child = spawn(onPath("bun"), [CLI, ...args], { env: hiveEnv({}) });
+    let out = "";
+    child.stdout.on("data", (d) => { out += d; });
+    child.on("close", (code) => resolve({ code, json: lastJson(out) }));
   });
-  let json: any;
-  try { json = JSON.parse(r.stdout.trim().split("\n").pop() || ""); } catch { /* not json */ }
-  return { code: r.status, stdout: r.stdout, stderr: r.stderr, json };
+}
+
+/** The processes running for a tile: an agent and what it starts carry the tile's id. */
+function processesOf(tileId: string): string[] {
+  return fs.readdirSync("/proc").filter((pid) => {
+    if (!/^\d+$/.test(pid)) return false;
+    try { return fs.readFileSync(`/proc/${pid}/environ`, "utf8").split("\0").includes(`HIVEMIND_TILE=hm:${tileId}`); } catch { return false; }
+  });
 }
 
 test.beforeAll(async () => {
@@ -161,10 +179,31 @@ test("a droid worker reports back to the claude orchestrator with `hive ctl repo
   const list = hive(["ctl", "list", "--json"]);
   const ids = list.json.frames.flatMap((f: any) => f.tiles.map((t: any) => t.tileId));
   expect(ids).toEqual(expect.arrayContaining([orchestrator, worker]));
+  expect(processesOf(worker)).not.toEqual([]);
   expect(hive(["ctl", "close", worker, "--json"]).json).toEqual({ ok: true });
   await expect
     .poll(() => hive(["ctl", "list", "--json"]).json.frames.flatMap((f: any) => f.tiles.map((t: any) => t.tileId)), { timeout: 10_000 })
     .not.toContain(worker);
+  // Closed is ended: nothing is left running for it in the daemon.
+  await expect.poll(() => processesOf(worker), { timeout: 10_000 }).toEqual([]);
+});
+
+test("a busy worker closed in the Windows view ends, and a read waiting on its reply is told so at once", async () => {
+  const spawned = hive(["ctl", "spawn", "--agent", "claude", "--name", "closed-early", "--prompt", "sleep 60; echo late", "--json"]);
+  expect(spawned.code, spawned.stderr).toBe(0);
+  const worker: string = spawned.json.tileId;
+  await expect.poll(() => processesOf(worker).length, { timeout: 15_000 }).toBeGreaterThan(0);
+  const reading = hiveLater(["ctl", "read", worker, "--timeout", "30000", "--json"]);
+  await page.waitForTimeout(1_500); // the read is waiting before the tile goes
+  const toView = (mode: string) => page.evaluate((m) => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: m } })), mode);
+  await toView("windows");
+  const tab = page.getByRole("tab", { name: "closed-early" });
+  await tab.hover();
+  await tab.getByRole("button", { name: "Close closed-early", exact: true }).click();
+  // Told at once, and told it is gone (exit 5): reading it again would wait for nothing.
+  expect(await reading).toMatchObject({ code: 5, json: { finalStatus: "closed" } });
+  await expect.poll(() => processesOf(worker), { timeout: 10_000 }).toEqual([]);
+  await toView("canvas");
 });
 
 test("an agent's past sessions are listed for its folder, and one can be continued", async () => {

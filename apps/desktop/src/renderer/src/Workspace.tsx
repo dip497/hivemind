@@ -89,7 +89,8 @@ import { CanvasRuntimeContext, type CanvasRuntime, type FocusModeReq, type Focus
 import "./workspace/views";
 import { agentById as catalogAgentById, defaultAgent, preferredAgent } from "@hivemind/agents";
 import { notReady, noAgentInstalled, useAgentPresence } from "./agent-plugins";
-import { AGENT_TILE_KIND } from "./tile-kinds";
+import { AGENT_TILE_KIND, isTerminalKind } from "./tile-kinds";
+import { endTileSession } from "./TerminalTile";
 
 const DEFAULT_VIEWPORT: Viewport = { x: 16, y: 24, zoom: 1 };
 
@@ -257,6 +258,8 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   // Close a tile: drop the instance + everything keyed by it. The TileHost
   // unmounts its body (TerminalTile's cleanup kills/detaches the PTY).
   const closeTile = useCallback((id: string) => {
+    const closed = tilesRef.current.find((t) => t.id === id);
+    if (closed && isTerminalKind(closed.kind)) endTileSession(id, !!closed.session);
     unmarkBackgroundTile(id);
     clearWork(id); // a task queued for a tile that is gone has nowhere to land
     setTiles((ts) => ts.filter((t) => t.id !== id));
@@ -337,7 +340,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   // terminals in them.
   const terminalsOnHost = useCallback((hostId: string) => {
     const frames = new Set(framesRef.current.filter((f) => hostIdOfUri(f.workspacePath) === hostId).map((f) => f.id));
-    return { frames, terminals: tilesRef.current.filter((t) => (t.kind === "shell" || t.kind === AGENT_TILE_KIND) && frames.has(frameOfRef.current[t.id] ?? "")) };
+    return { frames, terminals: tilesRef.current.filter((t) => isTerminalKind(t.kind) && frames.has(frameOfRef.current[t.id] ?? "")) };
   }, [framesRef, tilesRef, frameOfRef]);
   const machineUsage = useCallback((hostId: string) => {
     const { frames, terminals } = terminalsOnHost(hostId);

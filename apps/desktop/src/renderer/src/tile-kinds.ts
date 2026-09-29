@@ -6,3 +6,6 @@
  *  place a provider's name appears as a literal outside its own def. */
 export const AGENT_TILE_KIND = "claude" as const;
 export type TileKind = typeof AGENT_TILE_KIND | "shell" | "editor" | "diff" | "issues" | "browser" | "planReview" | "workbench";
+
+/** A tile that runs in a terminal, an agent's or a shell: the kinds with a session. */
+export const isTerminalKind = (kind: TileKind): boolean => kind === AGENT_TILE_KIND || kind === "shell";

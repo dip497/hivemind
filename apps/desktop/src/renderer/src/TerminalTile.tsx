@@ -26,6 +26,7 @@ import { Input } from "./components/ui/input";
 import { Skeleton } from "./components/ui/skeleton";
 import { acquireBoot, bootPosition, cancelBoot, isRestored, subscribeBoot } from "./boot-queue";
 import { isRemote } from "../../shared/remote-uri";
+import { toPtyId } from "../../shared/tile-id";
 import { webUrlForInternalBrowser } from "./browser-open";
 import { useThemeField, useSurfacePolicy, getTheme, effectiveGlass, type ThemeState } from "./theme-store";
 import { terminalThemeFor } from "@hivemind/core/settings-schema";
@@ -93,6 +94,21 @@ const INTEREST_HIDE_MS = 1000;
 // so it follows the user's glass setting, not the per-view gate.
 /** Mounted tiles per session id: a persistent id is shared by a tile and its remount. */
 const liveMounts = new Map<string, number>();
+/** Each mounted terminal's "your tile is closing", by tile id. */
+const closing = new Map<string, Set<() => void>>();
+
+/**
+ * A tile is closing, however it is closed: end what runs in it. A mounted terminal kills its
+ * session as it unmounts, and kills what a spawn still in flight attaches to; with none mounted
+ * (a restored tile no view has shown yet) it is killed here. A session the tile adopted (`hive
+ * run`, another device) is someone else's job, and is only let go. Unmounting alone means
+ * nothing: a project switch unmounts every tile, and the daemon keeps their sessions.
+ */
+export function endTileSession(tileId: string, adopted: boolean): void {
+  const mounts = closing.get(tileId);
+  if (mounts?.size) for (const close of mounts) close();
+  else if (!adopted && window.hive.persistentPty) window.hive.ptyKill(toPtyId(tileId));
+}
 
 const IS_MAC = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform);
 const termThemeFor = (t: ThemeState) => withScrollbar(terminalThemeFor(t.terminal));
@@ -234,10 +250,10 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
   // path where its history lives — which is the correct semantics for
   // claude (its session JSONL is tied to that repo).
   const persistent = window.hive.persistentPty === true;
-  const ptyId = session ?? (persistent ? `hm:${tileId}` : `${tileId}-${reactId}`);
+  const ptyId = session ?? (persistent ? toPtyId(tileId) : `${tileId}-${reactId}`);
   useEffect(() => trackOpenSession(ptyId), [ptyId]);
-  // True only when the user clicks × (explicit close) — then we KILL even in
-  // persistent mode. App-close / view-cull unmounts leave it false → detach.
+  // True once the tile is closing (endTileSession) — then we KILL even in persistent
+  // mode. App-close / project-switch unmounts leave it false → detach.
   const killOnUnmountRef = useRef(false);
 
   // Agent/terminal status — driven by PTY activity, mutated imperatively via
@@ -448,6 +464,10 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     // registerWebglSlotClient() synchronously calls acquireWebgl, which reads it.
     let cancelled = false;
     liveMounts.set(ptyId, (liveMounts.get(ptyId) ?? 0) + 1);
+    const markClosing = () => { killOnUnmountRef.current = true; };
+    const closers = closing.get(tileId) ?? new Set<() => void>();
+    closers.add(markClosing);
+    closing.set(tileId, closers);
     let webgl: WebglAddon | undefined;
     let disposeDpr: (() => void) | undefined;
     // WebGL context-loss back-off (opencove pattern). The packaged app's GPU
@@ -1000,6 +1020,8 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       fitQueue.delete(fitKey);
       const left = (liveMounts.get(ptyId) ?? 1) - 1;
       if (left > 0) liveMounts.set(ptyId, left); else liveMounts.delete(ptyId);
+      closers.delete(markClosing);
+      if (closers.size === 0) closing.delete(tileId);
       if (fitRaf) cancelAnimationFrame(fitRaf);
       if (idleTimer.current) clearTimeout(idleTimer.current);
       if (agentPoll) clearInterval(agentPoll);
@@ -1262,11 +1284,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
           size="icon-micro"
           className="nodrag"
           aria-label="close tile"
-          onClick={() => {
-            // Explicit close kills the session even in persistent mode.
-            killOnUnmountRef.current = true;
-            onClose?.();
-          }}
+          onClick={() => onClose?.()}
           title="close tile"
         >
           ×

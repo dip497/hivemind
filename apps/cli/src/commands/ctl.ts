@@ -147,7 +147,7 @@ const keys = sub("keys", "Send key tokens to a tile's TUI (comma-separated, e.g.
 const READ_SLACK_MS = 5_000;
 const READ_DEFAULT_MS = 100_000; // under Claude Code's 120 s Bash default
 
-const read = sub("read", "Wait for an agent's turn to finish and print its reply (exit 4 on timeout)", {
+const read = sub("read", "Wait for an agent's turn to finish and print its reply (exit 4 on timeout, 5 if it closes)", {
   ...tileArg,
   timeout: { type: "string", description: `total wait in ms (default ${READ_DEFAULT_MS}); made of short HCP polls, never one long request` },
   poll: { type: "boolean", description: "don't wait: return the current turn state immediately (always exit 0)" },
@@ -156,7 +156,10 @@ const read = sub("read", "Wait for an agent's turn to finish and print its reply
   let last: unknown = null;
   for (const slice of readSchedule(total)) {
     last = await hcpCall("agent.read", { tileId: a.tileId, timeoutMs: slice }, slice + READ_SLACK_MS);
-    if ((last as { finalStatus?: string }).finalStatus === "turn") return last;
+    const status = (last as { finalStatus?: string }).finalStatus;
+    if (status === "turn") return last;
+    // Closed while we waited: no turn is coming, so the rest of the wait would be for nothing.
+    if (status === "closed") return { __exit: EXIT.notFound, result: last };
   }
   return a.poll ? last : { __exit: EXIT.timeout, result: last };
 });

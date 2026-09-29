@@ -45,7 +45,8 @@ description: Diagnose common errors.
 
 - `hive ctl read` waits 100 s by default in ≤ 10 s slices; keep the total under your
   tool's timeout. Exit 4 means the turn had not finished — call
-  again to collect it.
+  again to collect it. Exit 5 with `finalStatus: "closed"` means the tile was closed
+  while you waited; there is nothing left to read.
 - `hive ctl workflow --timeout` is per worker (default 600 000 ms); give the calling
   tool a timeout longer than the slowest worker.
 - `hive ctl open-review --timeout` defaults to a 24 h ceiling; set an explicit value

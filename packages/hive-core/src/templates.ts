@@ -263,6 +263,7 @@ hive ctl send <tileId> "Now cover the expired-token path too." --json
 hive ctl read <tileId> --timeout 90000 --json
 # → {"text":"…","finalStatus":"turn","truncated":false}
 # still working → exit 4 and {"text":null,"finalStatus":"timeout",…}; call again, nothing is lost.
+# closed while you waited → exit 5 and {"text":null,"finalStatus":"closed",…}; it is gone, do not read it again.
 hive ctl read <tileId> --poll --json              # never blocks: current state, exit 0
 hive ctl stream <tileId> --lines 40 --snapshot    # what is on its screen right now (ANSI-stripped)
 \`\`\`
@@ -404,7 +405,7 @@ Always check each result's \`status\` before trusting \`text\`. Give the Bash to
 \`\`\`bash
 hive ctl spawn --prompt "…" [--agent pi] [--name reviewer] [--frame repo] [--model opus] [--mode plan] [--supervise all] --json   # → {"tileId":"…"}
 hive ctl send <tileId> "next instruction"                     # a follow-up turn (typed + submitted for you)
-hive ctl read <tileId> --timeout 90000 --json                 # block for its reply: {"text","finalStatus":"turn"}; exit 4 + finalStatus "timeout" if still busy
+hive ctl read <tileId> --timeout 90000 --json                 # block for its reply: {"text","finalStatus":"turn"}; exit 4 + finalStatus "timeout" if still busy, exit 5 + "closed" if it closed
 hive ctl read <tileId> --poll --json                          # never blocks
 hive ctl keys <tileId> Down,Enter                             # drive its TUI picker (AskUserQuestion etc.)
 hive ctl list --json                                          # tiles grouped by frame, each with live status (working / idle / awaiting_approval / …)

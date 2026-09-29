@@ -1166,7 +1166,8 @@ const hcpMailbox = new Mailbox(hcpWriteToTile, SUBMIT_DELAY_MS);
 let hcpForgetTile: (tileId: string) => void = () => {};
 // The ONE teardown path for a tile whose pty has exited (crash, kill, or a
 // tile.close that killed it). Both the local and remote onExit handlers funnel
-// through here so no teardown path leaks HCP state — previously only the
+// through here, and so does a kill (ptyKill: a daemon tells its killer nothing
+// of the exit), so no teardown path leaks HCP state — previously only the
 // `tile.close` VERB cleaned the methods.ts maps, so a crashed/user-closed worker
 // leaked every per-tile map and left a blocked agent.read/approval hanging.
 const onPtyExit = (tileId: string): void => {
@@ -1359,6 +1360,8 @@ ipcMain.on("ptyResize", (_e, tileId: string, cols: number, rows: number) =>
 ipcMain.on("ptyKill", (_e, tileId: string) => {
   dropPtyRelay(tileId);
   if (hasRemotePty(tileId)) killRemotePty(tileId); else killPty(tileId);
+  // Anything waiting on the tile (a parent's read, an approval) is answered now, not at its timeout.
+  onPtyExit(tileId);
 });
 // Detach (window closed / tile unmounted): daemons keep the session alive,
 // local or remote; in-process PTYs treat it as a kill.
