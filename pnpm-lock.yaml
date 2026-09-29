@@ -224,6 +224,9 @@ importers:
       '@hivemind/view-sdk':
         specifier: workspace:*
         version: link:../../packages/hive-view-sdk
+      '@hivemind/workspace-doc':
+        specifier: workspace:*
+        version: link:../../packages/workspace-doc
       '@hivemind/workspace-host':
         specifier: workspace:*
         version: link:../../packages/workspace-host
@@ -314,6 +317,9 @@ importers:
       dompurify:
         specifier: ^3.4.15
         version: 3.4.15
+      loro-crdt:
+        specifier: 'catalog:'
+        version: 1.16.3
       lucide-react:
         specifier: 'catalog:'
         version: 0.461.0(react@19.3.0)
@@ -530,6 +536,13 @@ importers:
         version: 5.9.3
 
   packages/workspace-host:
+    dependencies:
+      '@hivemind/workspace-doc':
+        specifier: workspace:*
+        version: link:../workspace-doc
+      loro-crdt:
+        specifier: 'catalog:'
+        version: 1.16.3
     devDependencies:
       '@hivemind/tsconfig':
         specifier: workspace:*

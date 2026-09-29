@@ -43,14 +43,16 @@ every test passes the test-audit gate.
 
 - **One module, one job.** A module that shapes data does not also decide where it is kept:
   `canvas-persistence.ts` shapes the core blob, `workspace-store-client.ts` decides where it
-  lives, `record-file.ts` owns the file format, `store.ts` the rules.
+  lives, `doc-file.ts` owns the file format, `store.ts` the rules, `@hivemind/workspace-doc`
+  how a layout lives in the document.
 - **Logic in packages, adapters in the app.** Domain code lives in a package with no Electron
-  import (`packages/workspace-host`), so the headless host (R14) runs the same code. Electron
+  import (`packages/workspace-host`, `packages/workspace-doc`), so the headless host (R14)
+  runs the same code. Electron
   main and the window hold thin adapters.
 - **Input is checked once**, by the module that owns the data, whatever transport it came
   over. Adapters forward and always answer.
 - **A shape that crosses processes is defined once**, in a Node-free module of the package
-  that owns it (`@hivemind/workspace-host/layout`), and imported everywhere else.
+  that owns it (`@hivemind/workspace-doc/shapes`), and imported everywhere else.
 - **Nothing for tests alone**: no option, export, clock or hook that no production caller
   needs, and no API before its first production caller (change events wait for R5).
 - **Match the code around it**: relative imports end in `.js` inside packages, comments say
@@ -68,8 +70,8 @@ Legend: ☐ not started · ◐ in progress · ☑ done (its "Done when" passes)
 
 | # | Refactor | Status | Notes |
 |---|---|---|---|
-| R1 | Workspace store out of the renderer, into `packages/workspace-host` | ☑ | `packages/workspace-host/src`: `layout.ts` (shapes shared with the window, Node-free), `record-file.ts` (file format: hashed name, atomic 0600 writes, an unreadable file set aside), `store.ts` (checks input, writes each change through, `flush()` retries failed writes, legacy import fills only what is empty). Main: `main/workspace-store-ipc.ts` (sync IPC, flushed on quit). Window: `workspace/workspace-store-client.ts` decides where layouts live and imports a window's old localStorage once; `canvas-persistence.ts` and `view-layout-store.ts` only shape data. Proof: every new or changed test (10 store cases, 7 renderer persistence cases) shown to fail when its behaviour is broken; `shipped-persistence.spec.ts` restarts with the window's Local Storage deleted and fails if the window ignores the store; full e2e on the final build: two runs of 155, every spec passed in a full run, and each run had one intermittent failure outside R1 (see **Known issues**). `tile.list` without a window moved to R5. |
-| R2 | Store backed by a Loro document (schema incl. board objects) | ◐ | ☑ Step 1: `packages/workspace-doc` (no Node, no Electron; `loro-crdt` 1.16.3): `shapes.ts` (types and guards the window may import: no Loro), `schema.ts` (root containers, schema 1), `fields.ts` (a record's fields in a Loro map: only changes recorded, nested objects as mergeable maps to a given depth, values kept as JSON keeps them, containers told by `kind()` not `instanceof`), `core.ts` (a whole layout written as edits: frames → Tree, tiles → mergeable records with `frame`/`name`/`tabs`, order → MovableList; read back), `views.ts` (`{ v, data }`, data merging two levels deep). 9 bun tests, each shown to fail when what it guards breaks (12 mutations). Costs on 100 tiles and 20 frames: a structural write 3.5–5 ms, a canvas move 0.5 ms, a shallow snapshot 1.7 ms. ☐ Step 2: the store backed by one document per workspace (file: header + shallow snapshot; v1 JSON files imported). ☐ Step 3: design text, e2e, push. |
+| R1 | Workspace store out of the renderer, into `packages/workspace-host` | ☑ | `packages/workspace-host/src`: `layout.ts` (shapes shared with the window, Node-free), `record-file.ts` (file format: hashed name, atomic 0600 writes, an unreadable file set aside; R2 replaced it with `doc-file.ts` before either shipped), `store.ts` (checks input, writes each change through, `flush()` retries failed writes, legacy import fills only what is empty). Main: `main/workspace-store-ipc.ts` (sync IPC, flushed on quit). Window: `workspace/workspace-store-client.ts` decides where layouts live and imports a window's old localStorage once; `canvas-persistence.ts` and `view-layout-store.ts` only shape data. Proof: every new or changed test (10 store cases, 7 renderer persistence cases) shown to fail when its behaviour is broken; `shipped-persistence.spec.ts` restarts with the window's Local Storage deleted and fails if the window ignores the store; full e2e on the final build: two runs of 155, every spec passed in a full run, and each run had one intermittent failure outside R1 (see **Known issues**). `tile.list` without a window moved to R5. |
+| R2 | Store backed by a Loro document (schema incl. board objects) | ◐ | ☑ Step 1: `packages/workspace-doc` (no Node, no Electron; `loro-crdt` 1.16.3): `shapes.ts` (types and guards the window may import: no Loro), `schema.ts` (root containers, schema 1), `fields.ts` (a record's fields in a Loro map: only changes recorded, nested objects as mergeable maps to a given depth, values kept as JSON keeps them, containers told by `kind()` not `instanceof`), `core.ts` (a whole layout written as edits: frames → Tree, tiles → mergeable records with `frame`/`name`/`tabs`, order → MovableList; read back), `views.ts` (`{ v, data }`, data merging two levels deep). 9 bun tests, each shown to fail when what it guards breaks (12 mutations). Costs on 100 tiles and 20 frames: a structural write 3.5–5 ms, a canvas move 0.5 ms, a shallow snapshot 1.7 ms. ☑ Step 2: `WorkspaceStore` keeps its API and holds one document per repo, loaded on first use and written through on every change. `doc-file.ts` owns the file: `workspaces/<first 32 hex of sha256(repo)>.loro`, a header line (`{"format":"hivemind-workspace","v":1,"repo":…}`; the repo path stays out of the document, which will be shared) and then a Loro shallow snapshot; atomic 0600 writes; a file that is not this repo's document is set aside. R1's `.json` files are not read: R1 never reached `main` or a release (`install.sh --dev` builds `main`), so only this branch wrote them. The window's old localStorage layouts are still imported, checked by the document's writers; a refused entry is skipped and reported. `layout.ts` keeps only `LegacyLayout`. Desktop: `loro-crdt` is an app dependency, external in main's bundle; the window imports only `shapes` (no Loro in the renderer bundle). Proof: 12 store tests, 20 mutations each caught; a golden `.loro` fixture pins the name, the header and the schema (renaming a container fails it); `shipped-persistence.spec.ts` asks main's store over IPC instead of reading the file, and fails when the stored document is not loaded; the 28 layout-related e2e tests pass. ☐ Step 3: design text, full e2e, push. |
 | R3 | Identity: device key, person key, workspace key, profile | ☐ | |
 | R4 | Daemon: size announcements, input lease, write attribution | ☐ | |
 | R5 | Main fans out to many clients; canvas verbs run in main | ☐ | After R1 |
@@ -169,3 +171,9 @@ None open. Two found while verifying R1 were fixed on 2026-09-29 (see the log).
   running. CI now typechecks and unit-tests every package (`pnpm typecheck`, `pnpm test`), not
   only the desktop. Stale e2e counts and a wrong `--user-data-dir` claim corrected in
   `CLAUDE.md` and `apps/desktop/AGENTS.md`. Full e2e green: 147 passed, 10 skipped.
+- 2026-09-29 — R2 step 2: the store is backed by one Loro document per workspace
+  (`doc-file.ts`: header line, then a shallow snapshot, in `<hash>.loro`). Decisions: R1's JSON
+  files are not imported, because R1 never left this branch; a legacy entry that cannot be a
+  layout is skipped and reported, and the rest of the offer still comes across (the store no
+  longer checks views itself: `writeView` does). Found: Loro throws strings, not `Error`s, so
+  a warning built from `.message` read "undefined"; both warnings print the thrown value now.

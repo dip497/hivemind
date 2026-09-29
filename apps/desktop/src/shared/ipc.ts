@@ -5,7 +5,8 @@ import type { ViewManifest } from "@hivemind/view-sdk/manifest";
 import type { ActivityLevel, ShareOutcome, ViewHistoryDay, ViewSession, ViewPresence, ViewStatus } from "@hivemind/view-sdk/protocol";
 import type { NotificationSettings } from "./notification-settings.js";
 import type { ReviewComment } from "@hivemind/core/review";
-import type { LegacyLayout, ViewLayout } from "@hivemind/workspace-host/layout";
+import type { LegacyLayout } from "@hivemind/workspace-host/layout";
+import type { CoreLayout, ViewLayout } from "@hivemind/workspace-doc/shapes";
 export type { NotificationSettings };
 
 // IssuePatch is owned by @hivemind/core/types (node-free) — re-export so renderer
@@ -235,7 +236,7 @@ export interface ViewPackageInfo {
 export interface HiveIpc {
   // ── workspace layout (main owns it; see main/workspace-store-ipc.ts) ──
   /** The workspace's core layout blob (frames, tiles, membership, names, tabs), or null. */
-  workspaceCoreSync(repo: string): unknown;
+  workspaceCoreSync(repo: string): CoreLayout | null;
   /** One view's stored layout, or null. */
   workspaceViewSync(repo: string, viewId: string): ViewLayout | null;
   /** Replace the core layout blob. Synchronous, so a write made while the window unloads is kept. */

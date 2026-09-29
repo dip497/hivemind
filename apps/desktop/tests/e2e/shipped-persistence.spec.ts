@@ -29,12 +29,11 @@ test("open tiles restore after restart (same repo)", async () => {
   await page.waitForTimeout(400);
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "shell" })));
   await page.waitForSelector(".react-flow__node-terminal", { timeout: 6_000 });
-  // The window's debounced save reaches main's store, which writes it through to disk.
-  const stored = () => {
-    const d = path.join(ud, "workspaces");
-    return fs.existsSync(d) ? fs.readdirSync(d).filter((f) => f.endsWith(".json")).map((f) => fs.readFileSync(path.join(d, f), "utf8")).join("\n") : "";
-  };
-  await expect.poll(stored, { timeout: 5_000 }).toMatch(/"kind":"shell"/);
+  // The window's debounced save reaches main's store, which writes it to disk before answering.
+  await expect.poll(() => page.evaluate((r) => {
+    const saved = (window.hive.workspaceCoreSync(r) ?? {}) as { tiles?: { kind: string }[] };
+    return saved.tiles?.some((tile) => tile.kind === "shell") ?? false;
+  }, repo), { timeout: 5_000 }).toBe(true);
   await app.close();
   const windowStorage = path.join(ud, "Local Storage");
   expect(fs.existsSync(windowStorage)).toBe(true);

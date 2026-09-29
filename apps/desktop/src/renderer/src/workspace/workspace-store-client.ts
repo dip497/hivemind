@@ -13,7 +13,8 @@
  * Without the bridge (the renderer in a plain browser) localStorage is the store, under the
  * same keys. Everything here is best-effort: a failure reads as "nothing stored".
  */
-import { isViewLayout, type LegacyLayout, type ViewLayout } from "@hivemind/workspace-host/layout";
+import { isViewLayout, type ViewLayout } from "@hivemind/workspace-doc/shapes";
+import type { LegacyLayout } from "@hivemind/workspace-host/layout";
 import type { HiveIpc } from "../../../shared/ipc";
 
 const BRIDGE = ["workspaceCoreSync", "workspaceViewSync", "workspaceSetCoreSync", "workspaceSetViewSync", "workspaceImportSync"] as const;

@@ -30,9 +30,14 @@ export function writeCore(doc: LoroDoc, value: unknown): void {
   if (meta.get("core") !== true) meta.set("core", true);
 }
 
+/** Has a core layout ever been written to `doc`? */
+export function hasCore(doc: LoroDoc): boolean {
+  return doc.getMap(META).get("core") === true;
+}
+
 /** The core layout in `doc`, or null when none was ever written. */
 export function readCore(doc: LoroDoc): CoreLayout | null {
-  if (doc.getMap(META).get("core") !== true) return null;
+  if (!hasCore(doc)) return null;
   const tiles = doc.getMap(TILES).toJSON() as Fields;
   const layout: Layout = { frames: readFrames(doc.getTree(FRAMES)), tiles: [], tileNames: {}, editorTabs: {}, frameOf: {} };
   for (const id of readOrder(doc.getMovableList(ORDER), Object.keys(tiles))) {

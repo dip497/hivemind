@@ -10,6 +10,10 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test"
   },
+  "dependencies": {
+    "@hivemind/workspace-doc": "workspace:*",
+    "loro-crdt": "catalog:"
+  },
   "devDependencies": {
     "@hivemind/tsconfig": "workspace:*",
     "@types/node": "catalog:",
