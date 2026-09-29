@@ -52,8 +52,10 @@ import {
   type FrameState,
 } from "./canvas-persistence";
 import { useStateWithRef } from "./use-state-with-ref";
+import { useBoard } from "./board-objects/useBoard";
+import type { BoxKind, Point } from "./board-objects/board-model";
 import { markRestored, whenBootIdle } from "./boot-queue";
-import { defaultTileSize } from "./canvas-sizing";
+import { defaultTileSize, snapToGrid } from "./canvas-sizing";
 import { useWorktrees } from "./useWorktrees";
 // Loaded when it is first opened: the dialog (add form, machine list, folder picker) is not startup work.
 const MachinesHub = lazy(() => import("./machines/MachinesHub").then((m) => ({ default: m.MachinesHub })));
@@ -89,13 +91,6 @@ import { agentById as catalogAgentById, defaultAgent, preferredAgent } from "@hi
 import { notReady, noAgentInstalled, useAgentPresence } from "./agent-plugins";
 import { AGENT_TILE_KIND } from "./tile-kinds";
 
-// Snap on drop to an 8px grid (Figma's standard). The drop xyflow hands us is
-// raw cursor; rounding to 8px means the tile travels a few px from cursor to
-// grid — and because `.canvas-dragging` is removed SYNC on dragstop, the
-// `.react-flow__node` 280ms transition (Linear-app ease-out-quint) animates
-// that travel. THAT is the "smooth land" moment. Below ~4px the travel is too
-// small to read as motion.
-const SNAP_GRID: [number, number] = [8, 8];
 const DEFAULT_VIEWPORT: Viewport = { x: 16, y: 24, zoom: 1 };
 
 interface Props {
@@ -226,9 +221,8 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   const commitPosition = useCallback((id: string, x: number, y: number) => {
     // Snap on COMMIT (not during drag) — snapping during motion teleports the
     // tile in grid steps every pointermove → feels notchy. Snap only on release.
-    const g = SNAP_GRID[0];
-    const sx = Math.round(x / g) * g;
-    const sy = Math.round(y / g) * g;
+    const sx = snapToGrid(x);
+    const sy = snapToGrid(y);
     setPositions((p) => {
       const cur = p[id];
       if (cur && cur.x === sx && cur.y === sy) return p;
@@ -331,6 +325,14 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   // Explicit tile→frame membership (see PersistedLayout.frameOf). Authoritative
   // for auto-fit, parenting, and the chip strip — geometry never decides it.
   const [frameOf, setFrameOf, frameOfRef] = useStateWithRef<Record<string, string>>(initial.frameOf ?? {});
+  // The board's notes, checklists, text and arrows (board-objects/). One thing is selected at a
+  // time: an object or a tile.
+  const deselectTile = useCallback(() => setSelectedTileId(null), [setSelectedTileId]);
+  const board = useBoard({ persistKey, frames, framesRef, onSelect: deselectTile });
+  const boardRef = useRef(board);
+  boardRef.current = board;
+  const { select: selectObject, reload: reloadBoard } = board;
+  useEffect(() => { if (selectedTileId) selectObject(null); }, [selectedTileId, selectObject]);
   // What a machine is in use by, for the remove dialog: frames bound to a folder on it, and the
   // terminals in them.
   const terminalsOnHost = useCallback((hostId: string) => {
@@ -368,6 +370,16 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   const currentViewportRef = useRef<Viewport>(canvasInitial.viewport ?? DEFAULT_VIEWPORT);
   const [viewport, setViewport] = useState<Viewport>(canvasInitial.viewport ?? DEFAULT_VIEWPORT);
 
+  // A new box goes where the canvas says: under the pointer, or in the middle of the view when
+  // the pointer is elsewhere. "arrow" starts drawing one.
+  const canvasPointRef = useRef<(() => Point) | null>(null);
+  const { add: addBox, startArrow } = board;
+  const addBoard = useCallback((kind: BoxKind | "arrow") => {
+    if (kind === "arrow") { startArrow(); return; }
+    const at = canvasPointRef.current?.();
+    if (at) addBox(kind, at);
+  }, [addBox, startArrow]);
+
   // Reload when the repo changes — each repo has its own workspace + view
   // layouts. Skip on first mount (initial values already came from the memos).
   const lastRepoRef = useRef<string | null | undefined>(undefined);
@@ -387,8 +399,9 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     setTiles(next.tiles ?? []);
     setEditorTabs(next.editorTabs ?? {});
     setFrameOf(next.frameOf ?? {});
+    reloadBoard(persistKey, next.frames);
     if (nextCanvas.viewport) { currentViewportRef.current = nextCanvas.viewport; setViewport(nextCanvas.viewport); }
-  }, [persistKey]);
+  }, [persistKey, reloadBoard]);
 
   // Persist — trailing-debounced (250ms) so a drag's per-drop setPositions
   // doesn't JSON.stringify a blob on the main thread per commit; flushed on
@@ -433,9 +446,9 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   const {
     addFrame, updateFrameTitle, updateFrameColor, deleteFrame, arrangeFrame, moveFrame, bringFrameToFront,
   } = useFrameOps({
-    repoPath, positions, sizes, tiles, frameOf,
-    framesRef, tilesRef, frameOfRef, positionsRef, sizesRef, lastActiveFrameRef,
-    setFrames, setPositions, setSelectedFrameId, focusTile,
+    repoPath, positions, sizes, tiles, frameOf, boxes: board.objects,
+    framesRef, tilesRef, frameOfRef, positionsRef, sizesRef, lastActiveFrameRef, boardRef: board.objectsRef,
+    setFrames, setPositions, setSelectedFrameId, focusTile, shiftBoxes: board.shiftFrames, placeBoxes: board.place,
   });
 
   // Worktree + workspace-zone lifecycle (IPC, in-flight guard, detach confirm).
@@ -674,7 +687,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   const { spawnTile, spawnDefaultAgent, spawnAgent, spawnVis, spawnInto, frameOpen, openPlanReview, hcpSpawnAgent } = useSpawn({
     repoPath,
     positionsRef, sizesRef, tilesRef, frameOfRef, framesRef, selectedFrameIdRef,
-    selectedTileIdRef, repoPathRef, rootRef, lastActiveFrameRef,
+    selectedTileIdRef, repoPathRef, rootRef, lastActiveFrameRef, boardRef: board.objectsRef,
     setFrameOf, setPositions, setSelectedTileId, setFocusReq, setFrames,
     setSelectedFrameId, setTiles, setSpawnPick, focusTile, openFileInTile, renameTile,
   });
@@ -958,7 +971,8 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   useCanvasShortcuts({
     repoPath, spawnDefaultAgent, spawnSelectedAgent, spawnVis, spawnBrowser, addFrame, frameOpen, focusTile, closeTile,
     setSelectedTileId, setFocusModeReq, selectedTileIdRef, selectedFrameIdRef,
-    focusModeNonceRef, tilesRef,
+    focusModeNonceRef, tilesRef, boardRef, addBoard,
+    onCanvas: () => (activeViewIdRef.current ?? FALLBACK_VIEW_ID) === "canvas",
   });
 
   // Pin state derived from tiles. Pinning captures the tile's SCREEN rect so the
@@ -1033,6 +1047,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   const handleNodeDragStop = useNodeDragStop({
     framesRef, frameOfRef, sizesRef, tilesRef, lastActiveFrameRef,
     setPositions, setFrames, setFrameOf, parentFrameOf, moveFrame, commitPosition, clearDragging: noopClearDragging,
+    moveBox: board.moveTo, shiftBoxes: board.shiftFrames,
   });
   // Re-lay out, never remove. This used to clear every frame and tile, which left each agent
   // and terminal running in the daemon with no tile to reach it by. Now: tiles back to their
@@ -1105,7 +1120,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     selectedTileIdsRef, markSeen, toasts, dismissToast,
     frameTiles, updateFrameTitle, updateFrameColor, deleteFrame, arrangeFrame, bringFrameToFront,
     onAttachWorktree, onCreateWorktree, unbindBranch, bindWorkspace, unbindWorkspace,
-    pinnedIds, togglePin, onPinChange,
+    pinnedIds, togglePin, onPinChange, board, canvasPointRef,
     agentSel, setAgentSel, spawnAgent, spawnBrowser, onInitWorkspace,
     updateAvailable, updateStaged, onUpgrade: () => onUpgrade?.(), onRestart: () => onRestart?.(), upgrading,
   }), [
@@ -1113,7 +1128,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     selectedTileIdRef, selectedFrameIdRef, selectedTileIdsRef, markSeen, toasts, dismissToast, frameTiles,
     updateFrameTitle, updateFrameColor, deleteFrame, arrangeFrame, bringFrameToFront,
     onAttachWorktree, onCreateWorktree, unbindBranch, bindWorkspace, unbindWorkspace,
-    pinnedIds, togglePin, onPinChange, agentSel, spawnAgent, spawnBrowser, onInitWorkspace, updateAvailable, updateStaged, onUpgrade, onRestart, upgrading,
+    pinnedIds, togglePin, onPinChange, board, agentSel, spawnAgent, spawnBrowser, onInitWorkspace, updateAvailable, updateStaged, onUpgrade, onRestart, upgrading,
   ]);
 
   return (
@@ -1151,6 +1166,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
         onSpawnAgent={spawnAgent}
         onFrame={addFrame}
         onBrowser={spawnBrowser}
+        onBoard={activeViewId === "canvas" ? addBoard : undefined}
         updateAvailable={updateAvailable}
         updateStaged={updateStaged}
         onUpgrade={() => onUpgrade?.()}

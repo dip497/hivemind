@@ -21,7 +21,10 @@ const OUT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../ou
 // Re-baselined at the update flow: the toolbar says whether an update is waiting on the first
 // frame, so reading the installer's steps is on this path (~4 kB). The rest of the gap to the
 // previous baseline is growth nobody re-baselined; measured here so the margin means something.
-const ENTRY_BASELINE = 899_638;
+// Re-baselined for the board (R15, board-objects/): its notes, checklists and arrows are canvas
+// content drawn on the first frame with the tiles, and a note added with `8` takes the very next
+// key, so its code cannot wait for a chunk. ~30 kB of it, plus its icons (905 418 before).
+const ENTRY_BASELINE = 947_213;
 const ENTRY_MARGIN = 0.04;
 
 test("the default renderer path stays small, and three.js is gone from the build", (t) => {

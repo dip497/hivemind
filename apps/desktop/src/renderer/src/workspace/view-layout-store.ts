@@ -44,9 +44,12 @@ export function saveViewLayout<T>(spec: ViewLayoutSpec<T>, repoPath: string | nu
  * not rendered yet: a state setter calls it, so an edit made just before the
  * component unmounts is kept even though React never renders it. The value an
  * owner renders with a new key is not saved: every owner (the Workspace, a view)
- * replaces it with the new key's own layout on the next render.
+ * replaces it with the new key's own layout on the next render. `flush` writes
+ * what is pending now, for an owner that must read the store back after it (undo).
  */
-export function useDebouncedSave<T>(repoPath: string | null, value: T, write: (repoPath: string, value: T) => void, debounceMs = 250): (value: T) => void {
+export function useDebouncedSave<T>(
+  repoPath: string | null, value: T, write: (repoPath: string, value: T) => void, debounceMs = 250,
+): { schedule: (value: T) => void; flush: () => void } {
   const pending = useRef<{ key: string; value: T; timer: ReturnType<typeof setTimeout> } | null>(null);
   const writeRef = useRef(write);
   writeRef.current = write;
@@ -85,7 +88,7 @@ export function useDebouncedSave<T>(repoPath: string | null, value: T, write: (r
     window.addEventListener("beforeunload", f);
     return () => { window.removeEventListener("beforeunload", f); f(); };
   }, []);
-  return schedule.current;
+  return { schedule: schedule.current, flush: flush.current };
 }
 
 /**
@@ -110,7 +113,7 @@ export function useViewLayout<T>(spec: ViewLayoutSpec<T>, repoPath: string | nul
     setState(latest.current);
   }, [repoPath]);
   const write = useCallback((key: string, v: T) => saveViewLayout(specRef.current, key, v), []);
-  const schedule = useDebouncedSave(repoPath, state, write, debounceMs);
+  const { schedule } = useDebouncedSave(repoPath, state, write, debounceMs);
   const set = useCallback((action: SetStateAction<T>) => {
     const next = typeof action === "function" ? (action as (prev: T) => T)(latest.current) : action;
     if (Object.is(next, latest.current)) return;

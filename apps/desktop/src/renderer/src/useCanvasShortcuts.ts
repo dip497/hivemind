@@ -2,12 +2,15 @@
  * useCanvasShortcuts — wires the canvas keyboard shortcuts + the CommandPalette/
  * menu custom-event listeners (spawn-agent, canvas-toggle, add-frame,
  * frame-open, focus-tile). Lifted from Canvas.tsx; takes the spawn/frame actions
- * + selection refs as context. Number-row tool hotkeys, ⌘\/⌘B/T/D, "." focus,
- * Escape fit-all, F2 rename — with the same text-field guards.
+ * + selection refs as context. Number-row tool hotkeys, "." focus, Escape
+ * fit-all, F2 rename, and the board's keys (8 note, 9 checklist, ⌫ delete,
+ * ⌘D duplicate, ⌘Z / ⌘⇧Z undo and redo) — with the same text-field guards.
  */
 import { useEffect, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import { inEditable } from "./dom-focus";
 import type { TileInstance } from "./canvas-persistence";
+import type { Board } from "./board-objects/useBoard";
+import type { BoxKind } from "./board-objects/board-model";
 
 type FocusModeReq = { id: string | null; n: number } | null;
 
@@ -29,13 +32,18 @@ export interface CanvasShortcutsCtx {
   selectedFrameIdRef: MutableRefObject<string | null>;
   focusModeNonceRef: MutableRefObject<number>;
   tilesRef: MutableRefObject<TileInstance[]>;
+  /** The board as last rendered: the handler is installed once, so it reads through this. */
+  boardRef: MutableRefObject<Board>;
+  addBoard: (kind: BoxKind | "arrow") => void;
+  /** The board is the canvas's: its keys do nothing in another view. */
+  onCanvas: () => boolean;
 }
 
 export function useCanvasShortcuts(ctx: CanvasShortcutsCtx) {
   const {
     repoPath, spawnDefaultAgent, spawnSelectedAgent, spawnVis, spawnBrowser, addFrame, frameOpen, focusTile, closeTile,
     setSelectedTileId, setFocusModeReq, selectedTileIdRef, selectedFrameIdRef,
-    focusModeNonceRef, tilesRef,
+    focusModeNonceRef, tilesRef, boardRef, addBoard, onCanvas,
   } = ctx;
 
   useEffect(() => {
@@ -57,8 +65,19 @@ export function useCanvasShortcuts(ctx: CanvasShortcutsCtx) {
       // are NOT typing: inside a tile Ctrl +/−/0 size its font, and the shell's Ctrl+W deletes
       // a word — closing an agent by accident is not a shortcut.
       if (e.metaKey || e.ctrlKey) {
+        const key = e.key.toLowerCase();
         if (e.key === "e" || e.key === "E") { e.preventDefault(); window.dispatchEvent(new CustomEvent("hivemind:toggle-view-mode")); }
         else if (inEditable(e.target)) { /* the tile's */ }
+        // The board's history: undo and redo take back board edits only (the store's rule).
+        else if (onCanvas() && (key === "z" || key === "y")) {
+          e.preventDefault();
+          if (key === "y" || e.shiftKey) boardRef.current.redo();
+          else boardRef.current.undo();
+        }
+        else if (onCanvas() && key === "d" && boardRef.current.selectedId) {
+          e.preventDefault();
+          boardRef.current.duplicate(boardRef.current.selectedId);
+        }
         else if (e.key === "0") { e.preventDefault(); window.dispatchEvent(new CustomEvent("hivemind:zoom", { detail: "100" })); }
         else if (e.key === "=" || e.key === "+") { e.preventDefault(); window.dispatchEvent(new CustomEvent("hivemind:zoom", { detail: "in" })); }
         else if (e.key === "-") { e.preventDefault(); window.dispatchEvent(new CustomEvent("hivemind:zoom", { detail: "out" })); }
@@ -79,7 +98,18 @@ export function useCanvasShortcuts(ctx: CanvasShortcutsCtx) {
       // agent. Escape especially is load-bearing inside claude/droid's TUI. Now
       // any focused terminal/editor gets them; use ". "/Escape on the canvas by
       // clicking the background first (no tile selected).
+      // Drawing an arrow: Esc stops, wherever focus is.
+      if (e.key === "Escape" && boardRef.current.arrowFrom !== undefined) {
+        e.preventDefault();
+        boardRef.current.cancelArrow();
+        return;
+      }
       if (!inEditable(e.target)) {
+        if (e.key === "Escape" && boardRef.current.selectedId) {
+          e.preventDefault();
+          boardRef.current.select(null);
+          return;
+        }
         if (e.key === ".") {
           const id = selectedTileIdRef.current ?? selectedFrameIdRef.current;
           if (id) { e.preventDefault(); setFocusModeReq({ id, n: ++focusModeNonceRef.current }); }
@@ -95,6 +125,9 @@ export function useCanvasShortcuts(ctx: CanvasShortcutsCtx) {
       // Bare letter aliases were removed (a stray `a` spawned a claude session in
       // a dev tool). Numbers match the ToolIsland hint badges 1-6.
       if (inEditable(e.target)) return;
+      // Writing in a board object: its field may not have focus yet (a node just added is
+      // shown once measured), and a key typed meanwhile is text, never a tool.
+      if (boardRef.current.editingId) return;
       switch (e.key) {
         case "1": e.preventDefault(); spawnVis("shell"); break;
         case "2": e.preventDefault(); spawnSelectedAgent(); break;
@@ -103,6 +136,16 @@ export function useCanvasShortcuts(ctx: CanvasShortcutsCtx) {
         case "5": if (repoPath) { e.preventDefault(); spawnVis("issues"); } break;
         case "6": e.preventDefault(); addFrame(); break;
         case "7": e.preventDefault(); spawnBrowser(); break;
+        case "8": if (onCanvas() && !e.repeat) { e.preventDefault(); addBoard("note"); } break;
+        case "9": if (onCanvas() && !e.repeat) { e.preventDefault(); addBoard("checklist"); } break;
+        case "Backspace":
+        case "Delete": {
+          const sel = boardRef.current.selectedId;
+          if (!sel || !onCanvas()) return;
+          e.preventDefault();
+          boardRef.current.remove(sel);
+          break;
+        }
         case "F2": {
           const sel = selectedFrameIdRef.current;
           if (!sel) return;

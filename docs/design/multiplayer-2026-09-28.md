@@ -319,13 +319,47 @@ exactly as today. They are ordered by dependency.
 ### R15. The canvas renders board objects
 
 - **What.** The canvas node builder (`canvas-node-build.ts`) and node types
-  (`canvas-nodes.tsx`, today `frame` and `tile`) gain a third kind, **board object**, drawn
-  by plain React (no TileHost surface): sticky note, checklist, text label, arrow. Text
-  inside an object is edited in place; while it has focus, the canvas single-key shortcuts
-  (`1`–`7`) do not fire (`dom-focus.ts`). Objects nest in frames like tiles and move with
-  them.
-- **Files.** `canvas-node-build.ts`, `canvas-nodes.tsx`, new `board-objects/*.tsx`,
-  `useCanvasShortcuts.ts`, `dom-focus.ts`, `packages/workspace-doc` (object schema).
+  (`canvas-nodes.tsx`, today `frame` and `tile`) gain board objects, drawn by plain React (no
+  TileHost surface): sticky note, checklist and text label are nodes, one type per kind;
+  arrows are drawn in a layer of their own in the viewport, not as react-flow edges (an edge
+  needs a handle at each end, and tiles and frames have none). Text inside an object is
+  edited in place; while an object is being written in, the canvas single-key shortcuts do
+  not fire, even for a key typed before its field has focus. Objects nest in frames like
+  tiles and move with them.
+- **As built.**
+  - *Add:* `8` note, `9` checklist on the canvas, or the toolbar's **Board** menu (note,
+    checklist, text, arrow), shown in the Canvas view only. A note, checklist or text appears
+    centred at the pointer (the middle of the view when the pointer is elsewhere), ready to
+    type in, and in the frame it lands in.
+  - *Write:* the text is a draft in its field and reaches the board after 400 ms without
+    typing, when the field is left, or on `⌘Z`. In a checklist, `Enter` adds an item,
+    `Backspace` in an empty one removes it, the grip reorders and the box ticks.
+  - *Arrange:* a selected object shows resize handles and a bar (six note colours,
+    duplicate, delete); `⌘D` duplicates and `⌫` deletes, and deleting an object takes the
+    arrows that end on it. Dropped with its middle in a frame, an object joins it; the
+    frame's drag, arrange and auto-fit move it as they move tiles. A frame is never narrower
+    than an empty one, so its header fits beside a single note.
+  - *Arrows:* **Board → Arrow**, then a click on the start and one on the end (a tile, a
+    frame or an object); `Esc` stops. An arrow joins the sides its ends face each other on,
+    follows either end and takes a label on a double-click. Dragging one from a handle shown
+    on hover (§4.2 G, step 4) is not built: there is no handle to drag from yet.
+  - *Undo:* `⌘Z` and `⌘⇧Z` (or `⌘Y`) on the canvas take back and redo board edits only,
+    never tiles, frames or views (the store commits those as `sys:` and its `UndoManager`
+    excludes them). A step is one save of the board: the window saves 250 ms after the last
+    edit, and the store merges no steps (`mergeInterval: 0`). In a field the same keys save
+    what was typed first, so it is taken back as a step of its own.
+  - *Persist:* the board is saved with the workspace's layout, through the store (debounced,
+    flushed on unload and on a project switch), and placed by the workspace's frames when
+    it loads.
+- **Files.** `board-objects/`: `board-model.ts` (pure: where a box is kept and where it is
+  drawn, a new box, a copy, what a delete takes, an arrow's sides), `useBoard.ts` (a window's
+  board: selection, the object being written in, an arrow being drawn, saving, undo and redo
+  through the store), `board-context.ts`, `TextDraft.tsx`, `BoardNodes.tsx`, `Arrows.tsx`;
+  `canvas-node-build.ts`, `canvas-nodes.tsx`, `CanvasView.tsx`, `Workspace.tsx`,
+  `useCanvasShortcuts.ts`, `useFrameOps.ts`, `useNodeDragStop.ts`, `useSpawn.ts`,
+  `frame-layout.ts`, the toolbar (`standard-toolbar.tsx`, `host-chrome.tsx`, `board` in
+  `@hivemind/core`'s catalog); `packages/workspace-doc` (`objects.ts`, `shapes.ts`) and
+  `packages/workspace-host` (`store.ts`: objects, undo, redo).
 - **Done when.** Single user, no network: create, edit, resize, nest, undo, persist and
   delete each object kind; e2e covers typing in a note without triggering shortcuts.
 

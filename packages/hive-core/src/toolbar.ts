@@ -15,12 +15,12 @@
  */
 
 export type ToolbarActionId =
-  | "terminal" | "agent" | "explorer" | "diff" | "issues" | "frame" | "browser" | "theme";
+  | "terminal" | "agent" | "explorer" | "diff" | "issues" | "frame" | "browser" | "board" | "theme";
 
 export interface ToolbarAction {
   readonly id: ToolbarActionId;
   readonly label: string;
-  /** The hotkey hint the toolbar prints on the button (the number-row keys). */
+  /** The hotkey hint the toolbar prints on the button (the number-row keys); empty when no key opens it. */
   readonly hint: string;
 }
 
@@ -34,7 +34,8 @@ export const BUILTIN_TOOLBAR_ACTIONS: readonly ToolbarAction[] = Object.freeze([
   Object.freeze({ id: "issues", label: "Issues", hint: "5" }),
   Object.freeze({ id: "frame", label: "Frame", hint: "6" }),
   Object.freeze({ id: "browser", label: "Browser", hint: "7" }),
-  Object.freeze({ id: "theme", label: "Theme", hint: "8" }),
+  Object.freeze({ id: "board", label: "Board", hint: "8" }),
+  Object.freeze({ id: "theme", label: "Theme", hint: "" }),
 ] as const);
 
 /** The default order as bare ids. */

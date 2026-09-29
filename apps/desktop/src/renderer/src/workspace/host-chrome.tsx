@@ -21,6 +21,7 @@ import { StandardToolbar } from "./standard-toolbar";
 import { useToolEnabled } from "../tool-availability";
 import { openAppearanceSettings, useChromeState } from "./chrome-store";
 import type { ViewChrome } from "./workspace-view";
+import type { BoxKind } from "../board-objects/board-model";
 
 export interface HostChromeProps {
   chrome: ViewChrome;
@@ -32,6 +33,8 @@ export interface HostChromeProps {
   onSpawnAgent: (agent: { id: string; cmd: string; defaultArgs?: string[]; label: string }) => void;
   onFrame: () => void;
   onBrowser: () => void;
+  /** Add to the board; absent in views that do not draw it, which then show no Board action. */
+  onBoard?: (kind: BoxKind | "arrow") => void;
   updateAvailable: boolean;
   updateStaged: boolean;
   onUpgrade: () => void;
@@ -42,7 +45,9 @@ export interface HostChromeProps {
 export function HostChrome({ chrome, toolbar, ...island }: HostChromeProps) {
   const { suppressed } = useChromeState();
   const browserEnabled = useToolEnabled("browser");
-  const actions = useMemo(() => resolveToolbar(toolbar).filter((action) => action.id !== "browser" || browserEnabled), [toolbar, browserEnabled]);
+  const hasBoard = !!island.onBoard;
+  const actions = useMemo(() => resolveToolbar(toolbar).filter((action) =>
+    (action.id !== "browser" || browserEnabled) && (action.id !== "board" || hasBoard)), [toolbar, browserEnabled, hasBoard]);
   const [expanded, setExpanded] = useState(false);
   const placement = chrome.island === "top" ? "top-3" : "bottom-3";
   const hasActions = actions.length > 0;

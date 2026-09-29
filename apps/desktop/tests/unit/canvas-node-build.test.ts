@@ -1,7 +1,8 @@
 // buildBaseNodes is the pure react-flow node-array builder for the canvas view.
 // Covers: parents-before-children frame ordering, relative child positioning,
-// zIndex tiers, the shell-only tile data (bodies come from the TileHost), and
-// the editor/diff repo gate (shared with the surface builder via effectiveRepoOf).
+// zIndex tiers, the shell-only tile data (bodies come from the TileHost), the
+// editor/diff repo gate (shared with the surface builder via effectiveRepoOf),
+// and the board's boxes.
 // Repo SCOPING of tile bodies moved to tile-surfaces.test.ts.
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -12,7 +13,7 @@ const noop = () => {};
 function ctx(over: Partial<NodeBuildCtx>): NodeBuildCtx {
   return {
     repoPath: "/base/repo",
-    tiles: [], frames: [], frameOf: {}, pinnedIds: new Set(), sizes: {}, positions: {},
+    tiles: [], frames: [], frameOf: {}, pinnedIds: new Set(), sizes: {}, positions: {}, objects: [],
     frameTiles: new Map(),
     updateFrameTitle: noop, updateFrameColor: noop, deleteFrame: noop, arrangeFrame: noop,
     bringFrameToFront: noop, onAttachWorktree: noop, onCreateWorktree: noop, unbindBranch: noop,
@@ -99,4 +100,25 @@ test("a rebuild keeps the object of every node that did not change", () => {
   const moved = reuseNodes(prev, buildBaseNodes({ ...c, sizes: { b: { width: 900, height: 700 } } }));
   assert.equal(byId(moved, "a"), prev.get("a"));
   assert.notEqual(byId(moved, "b"), prev.get("b"));
+});
+
+test("a board box is a node of its kind, drawn RELATIVE to its frame and in front of the tiles; an arrow is no node", () => {
+  const nodes = buildBaseNodes(ctx({
+    frames: [frame({ id: "f", x: 100, y: 50 })],
+    tiles: [tile({ id: "sh" })],
+    objects: [
+      { id: "n1", kind: "note", frame: "f", x: 130, y: 90, w: 220, h: 180, z: 1, color: "yellow", text: "in the frame" },
+      { id: "t1", kind: "text", x: 10, y: 20, w: 320, h: 64, text: "loose" },
+      { id: "a1", kind: "arrow", from: { id: "n1", side: "right" }, to: { id: "sh", side: "left" }, label: "" },
+    ],
+  }));
+  const note = byId(nodes, "n1");
+  assert.equal(note.type, "note");
+  assert.equal(note.parentId, "f");
+  assert.deepEqual(note.position, { x: 30, y: 40 });
+  const z = (id: string) => (byId(nodes, id).style as { zIndex: number }).zIndex;
+  assert.ok(z("n1") > z("sh"), "a note is in front of the tiles");
+  assert.equal(byId(nodes, "t1").parentId, undefined);
+  assert.deepEqual(byId(nodes, "t1").position, { x: 10, y: 20 });
+  assert.equal(nodes.some((n) => n.id === "a1"), false);
 });

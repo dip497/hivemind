@@ -27,6 +27,7 @@ import { Button } from "./components/ui/button";
 import { clampAnchor } from "./pin-anchor";
 import { FrameNode, type FrameNodeData } from "./FrameNode";
 import { TileSlot } from "./workspace/tile-host";
+import { boardNodeTypes } from "./board-objects/BoardNodes";
 import type { PinRect } from "./workspace/tile-surfaces";
 
 export type { PinRect };
@@ -653,4 +654,5 @@ export const nodeTypes: NodeTypes = {
   browser: BrowserNode as unknown as NodeTypes[string],
   planReview: PlanReviewNode as unknown as NodeTypes[string],
   frame: FrameNodeWrapper as unknown as NodeTypes[string],
+  ...boardNodeTypes,
 };

@@ -134,13 +134,12 @@ test("an old entry that cannot be a layout is skipped and reported, and the rest
   expect(again.getView("/a", "canvas")).toEqual({ v: 1, data: 3 });
 });
 
-test("undo takes back board edits, one burst at a time, never the layout or a view; redo makes them again; both are saved", async () => {
+test("undo takes back board edits one write at a time, never the layout or a view; redo makes them again; both are saved", () => {
   const s = new WorkspaceStore({ dir });
+  // A window's first save of an empty board changes nothing, so it leaves nothing to take back.
+  s.setObjects("/a", []);
   s.setObjects("/a", [note("draft"), list("milk")]);
-  // A second later, so it is a step of its own: edits within a second of each other are one.
-  await Bun.sleep(1100);
-  s.setObjects("/a", [note("drafted"), list("milk", "eggs")]);
-  s.setObjects("/a", [note("drafted twice"), list("milk", "eggs")]);
+  s.setObjects("/a", [note("drafted"), list("milk", "eggs")]); // at once, and still a step of its own
   s.setCore("/a", core("api"));
   s.setView("/a", "canvas", { v: 1, data: { zoom: 2 } });
 
@@ -148,7 +147,7 @@ test("undo takes back board edits, one burst at a time, never the layout or a vi
   expect(s.getObjects("/a")).toEqual([list("milk"), note("draft")]);
   expect(restart().getObjects("/a")).toEqual([list("milk"), note("draft")]);
   expect(s.redo("/a")).toBe(true);
-  expect(s.getObjects("/a")).toEqual([list("milk", "eggs"), note("drafted twice")]);
+  expect(s.getObjects("/a")).toEqual([list("milk", "eggs"), note("drafted")]);
   expect(s.undo("/a")).toBe(true);
   expect(s.undo("/a")).toBe(true);
   expect(s.getObjects("/a")).toEqual([]);
@@ -159,8 +158,8 @@ test("undo takes back board edits, one burst at a time, never the layout or a vi
   expect(s.redo("/a")).toBe(true);
   expect(s.redo("/a")).toBe(true);
   expect(s.redo("/a")).toBe(false);
-  expect(s.getObjects("/a")).toEqual([list("milk", "eggs"), note("drafted twice")]);
-  expect(restart().getObjects("/a")).toEqual([list("milk", "eggs"), note("drafted twice")]);
+  expect(s.getObjects("/a")).toEqual([list("milk", "eggs"), note("drafted")]);
+  expect(restart().getObjects("/a")).toEqual([list("milk", "eggs"), note("drafted")]);
 });
 
 test("bad input is refused with a TypeError and stores nothing", () => {

@@ -1,9 +1,9 @@
 /**
  * useFrameOps — frame CRUD (add/title/color/delete/bring-to-front/move), the
  * opt-in arrange (Columns/Rows/Grid), and the reactive auto-fit effect that
- * derives every frame's geometry from its member tiles + nested child frames.
- * Lifted from Canvas.tsx; takes Canvas's state refs + setters + the state
- * values the auto-fit effect depends on.
+ * derives every frame's geometry from its member tiles, board boxes + nested
+ * child frames. Lifted from Canvas.tsx; takes Canvas's state refs + setters +
+ * the state values the auto-fit effect depends on.
  */
 import { mintId } from "../../shared/tile-id";
 import { useCallback, useEffect, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
@@ -12,6 +12,8 @@ import { computeFrameLayout, arrangeBoxes, FRAME_ROW_MAX, FRAME_GAP, type Arrang
 import { defaultSizeForKind, defaultTileSize, FRAME_PAD, FRAME_HEADER, FRAME_EMPTY_W, FRAME_EMPTY_H } from "./canvas-sizing";
 import type { FrameState, TileInstance } from "./canvas-persistence";
 import type { TileKind } from "./tile-kinds";
+import type { BoardObject } from "@hivemind/workspace-doc/shapes";
+import { isBox, type Point } from "./board-objects/board-model";
 
 export interface FrameOpsCtx {
   repoPath: string | null;
@@ -20,6 +22,8 @@ export interface FrameOpsCtx {
   sizes: Record<string, { width: number; height: number }>;
   tiles: TileInstance[];
   frameOf: Record<string, string>;
+  /** The board's objects, on the canvas: a frame holds its boxes as it holds its tiles. */
+  boxes: BoardObject[];
   // refs
   framesRef: MutableRefObject<FrameState[]>;
   tilesRef: MutableRefObject<TileInstance[]>;
@@ -27,18 +31,23 @@ export interface FrameOpsCtx {
   positionsRef: MutableRefObject<Record<string, { x: number; y: number }>>;
   sizesRef: MutableRefObject<Record<string, { width: number; height: number }>>;
   lastActiveFrameRef: MutableRefObject<string | null>;
+  boardRef: MutableRefObject<BoardObject[]>;
   // setters + actions
   setFrames: Dispatch<SetStateAction<FrameState[]>>;
   setPositions: Dispatch<SetStateAction<Record<string, { x: number; y: number }>>>;
   setSelectedFrameId: Dispatch<SetStateAction<string | null>>;
   focusTile: (id: string) => void;
+  /** Move the boxes in these frames with them. */
+  shiftBoxes: (shifts: ReadonlyMap<string, { dx: number; dy: number }>) => void;
+  /** Put boxes where an arrange placed them. */
+  placeBoxes: (positions: Readonly<Record<string, Point>>) => void;
 }
 
 export function useFrameOps(ctx: FrameOpsCtx) {
   const {
-    repoPath, positions, sizes, tiles, frameOf,
-    framesRef, tilesRef, frameOfRef, positionsRef, sizesRef, lastActiveFrameRef,
-    setFrames, setPositions, setSelectedFrameId, focusTile,
+    repoPath, positions, sizes, tiles, frameOf, boxes,
+    framesRef, tilesRef, frameOfRef, positionsRef, sizesRef, lastActiveFrameRef, boardRef,
+    setFrames, setPositions, setSelectedFrameId, focusTile, shiftBoxes, placeBoxes,
   } = ctx;
 
   const addFrame = useCallback(() => {
@@ -80,9 +89,9 @@ export function useFrameOps(ctx: FrameOpsCtx) {
     setFrames((fs) => fs.filter((f) => f.id !== id && f.parentFrameId !== id));
   }, [setFrames]);
 
-  // Opt-in "tidy": snap a frame's contents — its member tiles AND its worktree
-  // sub-frames — into Columns / Rows / Grid. A child frame moves with its member
-  // tiles (its geometry derives from them, like a drag).
+  // Opt-in "tidy": snap a frame's contents — its member tiles, board boxes AND its
+  // worktree sub-frames — into Columns / Rows / Grid. A child frame moves with its
+  // members (its geometry derives from them, like a drag).
   const arrangeFrame = useCallback((frameId: string, mode: ArrangeMode) => {
     const frame = framesRef.current.find((f) => f.id === frameId);
     if (!frame) return;
@@ -96,6 +105,12 @@ export function useFrameOps(ctx: FrameOpsCtx) {
       boxes.push({ id: t.id, x: p.x, y: p.y, w: s.width, h: s.height });
       directTiles.push(t.id);
     }
+    const directBoxes: string[] = [];
+    for (const o of boardRef.current) {
+      if (!isBox(o) || o.frame !== frameId) continue;
+      boxes.push({ id: o.id, x: o.x, y: o.y, w: o.w, h: o.h });
+      directBoxes.push(o.id);
+    }
     const childFrames = framesRef.current.filter((f) => f.parentFrameId === frameId);
     for (const cf of childFrames) boxes.push({ id: cf.id, x: cf.x, y: cf.y, w: cf.w, h: cf.h });
     if (boxes.length === 0) return;
@@ -105,6 +120,7 @@ export function useFrameOps(ctx: FrameOpsCtx) {
     });
     lastActiveFrameRef.current = frameId;
     const tileUpdates: Record<string, { x: number; y: number }> = {};
+    const boxUpdates: Record<string, Point> = {};
     const frameUpdates: Record<string, { x: number; y: number }> = {};
     for (const cf of childFrames) {
       const np = placed.get(cf.id);
@@ -116,19 +132,25 @@ export function useFrameOps(ctx: FrameOpsCtx) {
         const p = positionsRef.current[t.id];
         if (p) tileUpdates[t.id] = { x: p.x + dx, y: p.y + dy };
       }
+      for (const o of boardRef.current) if (isBox(o) && o.frame === cf.id) boxUpdates[o.id] = { x: o.x + dx, y: o.y + dy };
     }
     for (const tid of directTiles) {
       const np = placed.get(tid);
       if (np) tileUpdates[tid] = np;
     }
+    for (const id of directBoxes) {
+      const np = placed.get(id);
+      if (np) boxUpdates[id] = np;
+    }
     if (Object.keys(tileUpdates).length) setPositions((prev) => ({ ...prev, ...tileUpdates }));
+    if (Object.keys(boxUpdates).length) placeBoxes(boxUpdates);
     if (Object.keys(frameUpdates).length) {
       setFrames((fs) => fs.map((f) => (frameUpdates[f.id] ? { ...f, ...frameUpdates[f.id] } : f)));
     }
-  }, [framesRef, tilesRef, frameOfRef, positionsRef, sizesRef, lastActiveFrameRef, setPositions, setFrames]);
+  }, [framesRef, tilesRef, frameOfRef, positionsRef, sizesRef, lastActiveFrameRef, boardRef, setPositions, setFrames, placeBoxes]);
 
   // ── reactive frame auto-fit ───────────────────────────────────────────────
-  // Frame geometry is DERIVED from its member tiles, not stored-and-grown.
+  // Frame geometry is DERIVED from its member tiles and board boxes, not stored-and-grown.
   // Recompute on tile position/size/visibility/frameOf change (human-action
   // frequency, not per-frame). Membership is EXPLICIT (frameOf), not geometry.
   // `frames` is NOT a dep (updater reads `prev`) → never self-fires.
@@ -170,6 +192,12 @@ export function useFrameOps(ctx: FrameOpsCtx) {
       ids.push(tid);
       memberIds.set(fid, ids);
     }
+    for (const o of boxes) {
+      if (!isBox(o) || !o.frame) continue;
+      const arr = memberRects.get(o.frame) ?? [];
+      arr.push({ x: o.x, y: o.y, r: o.x + o.w, b: o.y + o.h });
+      memberRects.set(o.frame, arr);
+    }
 
     // Geometry is PURE: feed member rects to computeFrameLayout (nesting-aware).
     const { geometry, tileShift } = computeFrameLayout(
@@ -203,6 +231,9 @@ export function useFrameOps(ctx: FrameOpsCtx) {
       if (d.dx === 0 && d.dy === 0) continue;
       for (const tid of memberIds.get(fid) ?? []) tileShifts[tid] = d;
     }
+    // A frame's boxes move with it too, past the same dead-band.
+    const boxShifts = new Map([...tileShift].filter(([, d]) => Math.abs(d.dx) >= 2 || Math.abs(d.dy) >= 2));
+    if (boxShifts.size) shiftBoxes(boxShifts);
     const shiftIds = Object.keys(tileShifts);
     if (shiftIds.length) {
       setPositions((p) => {
@@ -220,7 +251,7 @@ export function useFrameOps(ctx: FrameOpsCtx) {
         return changed ? np : p;
       });
     }
-  }, [positions, sizes, tiles, repoPath, frameOf, framesRef, lastActiveFrameRef, setFrames, setPositions]);
+  }, [positions, sizes, tiles, repoPath, frameOf, boxes, framesRef, lastActiveFrameRef, setFrames, setPositions, shiftBoxes]);
 
   // Drag synced on stop (not per-tick); persist the final x/y to source-of-truth.
   const moveFrame = useCallback((id: string, x: number, y: number) => {

@@ -16,13 +16,15 @@
  *
  * Undo takes back board edits only, through Loro's UndoManager, which undoes this writer's own
  * edits: the layout, views and imports are committed under `sys:` and never undone (an undo
- * cannot bring back a closed tile's process). Edits made within a second of each other are one
- * step. The history lasts as long as the store does.
+ * cannot bring back a closed tile's process). Each board write is one step — the window writes a
+ * burst of typing as one — so edits made a moment apart are never taken back together. The
+ * history lasts as long as the store does.
  */
 import { UndoManager, type LoroDoc } from "loro-crdt";
 import { hasCore, readCore, writeCore } from "@hivemind/workspace-doc/core";
 import { readObjects, writeObjects } from "@hivemind/workspace-doc/objects";
 import { readView, writeView } from "@hivemind/workspace-doc/views";
+import { stampSchema } from "@hivemind/workspace-doc/schema";
 import type { BoardObject, CoreLayout, ViewLayout } from "@hivemind/workspace-doc/shapes";
 import type { LegacyLayout } from "./layout.js";
 import { readDoc, writeDoc } from "./doc-file.js";
@@ -133,7 +135,10 @@ export class WorkspaceStore {
     let workspace = this.workspaces.get(repo);
     if (!workspace) {
       const doc = readDoc(this.opts.dir, repo, this.warn);
-      workspace = { doc, history: new UndoManager(doc, { excludeOriginPrefixes: ["sys:"] }) };
+      // Stamped before the history starts: a stamp is nobody's edit, so no undo takes it back.
+      stampSchema(doc);
+      doc.commit();
+      workspace = { doc, history: new UndoManager(doc, { mergeInterval: 0, excludeOriginPrefixes: ["sys:"] }) };
       this.workspaces.set(repo, workspace);
     }
     return workspace;

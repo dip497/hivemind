@@ -314,7 +314,9 @@ function tileBox(f: FrameGeom, mem: MemberRect[] | undefined, k: FrameLayoutCons
   return {
     x: Math.round(minX - k.pad),
     y: Math.round(minY - k.header),
-    w: Math.round(maxR - minX + k.pad * 2),
+    // Never narrower than an empty frame: its header's chrome needs that much, and a small
+    // member (a sticky note) would otherwise squeeze it out of the frame.
+    w: Math.max(k.emptyW, Math.round(maxR - minX + k.pad * 2)),
     h: Math.round(maxB - minY + k.header + k.pad),
   };
 }

@@ -22,6 +22,8 @@ import { isRemote } from "../../shared/remote-uri";
 import { mintId } from "../../shared/tile-id";
 import { getSettings } from "./settings-store";
 import { promptTask, withResume } from "@hivemind/agents";
+import type { BoardObject } from "@hivemind/workspace-doc/shapes";
+import { isBox } from "./board-objects/board-model";
 
 /** Kinds that are one-per-frame (spawn → focus existing). claude/shell are not. */
 const SINGLETON_KINDS: ReadonlySet<TileKind> = new Set(["editor", "diff", "issues"]);
@@ -52,6 +54,8 @@ export interface SpawnCtx {
   repoPathRef: MutableRefObject<string | null>;
   rootRef: MutableRefObject<string | null>;
   lastActiveFrameRef: MutableRefObject<string | null>;
+  /** The board's objects: a new tile is placed around a frame's boxes as around its tiles. */
+  boardRef: MutableRefObject<BoardObject[]>;
   setFrameOf: Dispatch<SetStateAction<Record<string, string>>>;
   setPositions: Dispatch<SetStateAction<Record<string, { x: number; y: number }>>>;
   setSelectedTileId: Dispatch<SetStateAction<string | null>>;
@@ -96,7 +100,7 @@ export function useSpawn(ctx: SpawnCtx) {
   const {
     repoPath,
     positionsRef, sizesRef, tilesRef, frameOfRef, framesRef, selectedFrameIdRef,
-    selectedTileIdRef, repoPathRef, rootRef, lastActiveFrameRef,
+    selectedTileIdRef, repoPathRef, rootRef, lastActiveFrameRef, boardRef,
     setFrameOf, setPositions, setSelectedTileId, setFocusReq, setFrames,
     setSelectedFrameId, setTiles, setSpawnPick, focusTile, openFileInTile, renameTile,
   } = ctx;
@@ -145,6 +149,9 @@ export function useSpawn(ctx: SpawnCtx) {
     }
     for (const cf of framesRef.current) {
       if (cf.parentFrameId === frame.id) members.push({ id: cf.id, x: cf.x, y: cf.y, w: cf.w, h: cf.h });
+    }
+    for (const o of boardRef.current) {
+      if (isBox(o) && o.frame === frame.id) members.push({ id: o.id, x: o.x, y: o.y, w: o.w, h: o.h });
     }
     const me = sizeOf(id);
     const slot = nextSlotInFrame(

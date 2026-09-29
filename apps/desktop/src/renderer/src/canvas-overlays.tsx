@@ -233,9 +233,9 @@ export function CanvasEmptyState({
   // agent) sits above a quiet row of secondary surface links. Asymmetry +
   // clear weight reads as designed, not generated.
   const secondary = [
-    { label: "Open terminal", hint: "⌘T", action: onShowShell, disabled: false },
-    { label: "Open workbench", hint: "⌘B", action: onShowTree, disabled: !repoPath },
-    { label: "Open diff", hint: "⌘D", action: onShowDiff, disabled: !repoPath },
+    { label: "Open terminal", hint: "1", action: onShowShell, disabled: false },
+    { label: "Open workbench", hint: "3", action: onShowTree, disabled: !repoPath },
+    { label: "Open diff", hint: "4", action: onShowDiff, disabled: !repoPath },
     { label: "Machines", hint: "", action: () => openMachines({ kind: "manage" }), disabled: false },
   ];
   return (
@@ -263,7 +263,7 @@ export function CanvasEmptyState({
             <span className="block text-[13px] font-medium text-[var(--color-fg)]">{agentLabel ? `Start ${agentLabel}` : "Get an agent"}</span>
             <span className="block text-[11.5px] text-[var(--color-fg3)] leading-snug">{agentLabel ? "A dedicated session in its own tile" : "See which agents Hivemind works with, and how to install one"}</span>
           </span>
-          {agentLabel && <kbd className="font-mono text-[10px] text-[var(--color-fg3)] group-hover:text-[var(--color-fg2)] transition-colors shrink-0">⌘\</kbd>}
+          {agentLabel && <kbd className="font-mono text-[10px] text-[var(--color-fg3)] group-hover:text-[var(--color-fg2)] transition-colors shrink-0">2</kbd>}
         </button>
 
         {/* When launched in a non-hivemind folder, surface init right next to

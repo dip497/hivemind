@@ -124,6 +124,13 @@ test("flat: a lone frame fits its member-tile bbox (pad+header)", () => {
   assert.deepEqual(tileShift.get("a"), { dx: 0, dy: 0 });
 });
 
+test("flat: a frame around a small member (a sticky note) is still as wide as an empty one, for its header", () => {
+  const frames: FrameGeom[] = [{ id: "a", x: 0, y: 0, w: 460, h: 200 }];
+  const members = new Map([["a", [mem(100, 100, 220, 180)]]]);
+  const { geometry } = computeFrameLayout(frames, members, null, K);
+  assert.deepEqual(geometry.get("a"), { x: 72, y: 64, w: 460, h: 244 });
+});
+
 test("flat: an empty frame collapses to the placeholder at its origin", () => {
   const frames: FrameGeom[] = [{ id: "a", x: 300, y: 200, w: 800, h: 600 }];
   const { geometry } = computeFrameLayout(frames, new Map(), null, K);

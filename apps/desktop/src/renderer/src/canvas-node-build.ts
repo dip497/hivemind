@@ -1,14 +1,16 @@
 /**
  * canvas-node-build — the pure react-flow node-array builder for the CANVAS
  * view. Given the workspace model + canvas geometry, returns the Node[] (frames
- * first — parents before worktree children — then tiles, with relative nesting +
- * baked zIndex). Tile nodes carry SHELL data only (`CanvasTileNodeData`: id,
+ * first — parents before worktree children — then tiles, then the board's boxes,
+ * with relative nesting + baked zIndex). Tile nodes carry SHELL data only (`CanvasTileNodeData`: id,
  * resize, pin, close) — the body and its repo scoping are the tile surface's
  * (workspace/tile-surfaces.ts), rendered by the shared TileHost into the node's
  * `<TileSlot>`. No React: CanvasView calls it inside a useMemo.
  */
 import type { Node } from "@xyflow/react";
+import type { BoardObject } from "@hivemind/workspace-doc/shapes";
 import { defaultSizeForKind } from "./canvas-sizing";
+import { isBox } from "./board-objects/board-model";
 import type { FrameState, TileInstance } from "./canvas-persistence";
 import type { ArrangeMode } from "./frame-layout";
 import type { WorktreeEntry } from "../../shared/ipc";
@@ -26,6 +28,8 @@ export interface NodeBuildCtx {
   pinnedIds: Set<string>;
   sizes: Record<string, { width: number; height: number }>;
   positions: Record<string, { x: number; y: number }>;
+  /** The board's objects, on the canvas (board-objects/useBoard). */
+  objects: BoardObject[];
   frameTiles: Map<string, string[]>;
   updateFrameTitle: (id: string, title: string) => void;
   updateFrameColor: (id: string, color: string) => void;
@@ -55,7 +59,7 @@ const NODE_TYPE: Record<TileInstance["kind"], TileSurfaceType> = {
 
 export function buildBaseNodes(ctx: NodeBuildCtx): Node[] {
   const {
-    repoPath, tiles, frames, frameOf, pinnedIds, sizes, positions, frameTiles,
+    repoPath, tiles, frames, frameOf, pinnedIds, sizes, positions, objects, frameTiles,
     updateFrameTitle, updateFrameColor, deleteFrame, arrangeFrame, bringFrameToFront,
     onAttachWorktree, onCreateWorktree, unbindBranch, bindWorkspace, unbindWorkspace,
     closeTile, onNodeResizeCommit, onTogglePin, onPinChange,
@@ -174,6 +178,26 @@ export function buildBaseNodes(ctx: NodeBuildCtx): Node[] {
     const data: CanvasTileNodeData = { tileId: t.id, onClose: closeTile, onResize: onNodeResizeCommit };
     out.push(mkTile({ id: t.id, type: NODE_TYPE[t.kind], style: sized(t.id, w, h), data, dragHandle: ".tile-drag-handle" }, x, y));
     x += (sizes[t.id]?.width ?? w) + gap;
+  }
+
+  // The board's boxes (its arrows are drawn in a layer of their own, board-objects/Arrows.tsx):
+  // a box in a frame is drawn relative to it, like a tile, and moves with it. In front of the
+  // tiles (100), behind the selected one (1000).
+  for (const o of objects) {
+    if (!isBox(o)) continue;
+    const frame = o.frame ? frameById.get(o.frame) : undefined;
+    out.push({
+      id: o.id,
+      type: o.kind,
+      position: frame ? { x: o.x - frame.x, y: o.y - frame.y } : { x: o.x, y: o.y },
+      ...(frame ? { parentId: frame.id } : {}),
+      // Sized before it is measured, so it shows from its first frame: a box added to be
+      // written in must be able to take focus at once.
+      initialWidth: o.w,
+      initialHeight: o.h,
+      style: { width: o.w, height: o.h, zIndex: 150 + Math.min(Math.max(o.z ?? 0, 0), 750) },
+      data: { object: o },
+    });
   }
   return out;
 }

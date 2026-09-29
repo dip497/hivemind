@@ -18,6 +18,8 @@ import type { WorktreeEntry } from "../../../../shared/ipc";
 import type { ArrangeMode } from "../../frame-layout";
 import type { PinRect } from "../tile-surfaces";
 import type { Toast } from "../../useAgentAwareness";
+import type { Board } from "../../board-objects/useBoard";
+import type { Point } from "../../board-objects/board-model";
 
 export type Viewport = { x: number; y: number; zoom: number };
 export type FocusReq = { id: string; cx: number; cy: number; w: number; h: number; n: number; exact?: boolean } | null;
@@ -64,6 +66,11 @@ export interface CanvasRuntime {
   unbindBranch: (id: string) => void;
   bindWorkspace: (id: string) => void;
   unbindWorkspace: (id: string) => void;
+  // ── the board's notes, checklists, text and arrows (board-objects/) ──
+  board: Board;
+  /** Set by the canvas while it is mounted: where on it a new box goes (under the pointer, else
+   *  the middle of the pane). */
+  canvasPointRef: MutableRefObject<(() => Point) | null>;
   // ── pins ──
   pinnedIds: Set<string>;
   togglePin: (id: string, rect: PinRect) => void;

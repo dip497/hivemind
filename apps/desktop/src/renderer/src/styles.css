@@ -796,6 +796,17 @@ body.canvas-resizing .react-flow__node .react-flow__resize-control {
   --surface-3: oklch(0.23 0.005 250);    /* cards / tile chrome / popovers */
   --surface-4: oklch(0.27 0.005 250);    /* hover / active */
   --frame-fill: 7%;       /* frame-zone tint strength (FrameNode reads this) */
+  /* Sticky notes (board-objects/): paper colours under dark ink — the one place the board is
+     allowed to be bright, because a note is something a person put there to be seen. Six, so
+     notes can be sorted by colour; none sits on the warn hue a waiting agent owns. Read from
+     inline styles, so here and not in @theme, which keeps only what a class uses. */
+  --color-note-yellow: oklch(0.90 0.10 102);
+  --color-note-peach:  oklch(0.85 0.08 45);
+  --color-note-pink:   oklch(0.84 0.08 355);
+  --color-note-violet: oklch(0.82 0.07 300);
+  --color-note-blue:   oklch(0.84 0.06 235);
+  --color-note-green:  oklch(0.86 0.08 150);
+  --color-note-ink:    oklch(0.24 0.01 250);
 }
 
 /* The master switch. Recolor the panel TOKENS to translucent variants of the
@@ -1250,3 +1261,16 @@ html.glass-on .react-flow__node-browser {
    tracking than the same text over a solid one, because the backdrop moves and
    its local contrast is unpredictable. Only applies while glass is actually on. */
 html.glass-on .u-eyebrow { color: var(--color-fg); }
+
+/* Board objects (board-objects/): a selected one is outlined like a selected tile, and the field
+   you write in is the object itself, so it draws no focus ring of its own. */
+[data-board-object] textarea:focus-visible,
+[data-board-object] input:focus-visible,
+[data-arrow-label] input:focus-visible {
+  outline: none;
+}
+.react-flow__node .hm-board-selected {
+  outline: 2px solid var(--color-select);
+  outline-offset: 2px;
+  border-radius: 8px;
+}

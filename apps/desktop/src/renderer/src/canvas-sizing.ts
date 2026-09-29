@@ -43,6 +43,15 @@ export function defaultSizeForKind(kind: TileKind): { width: number; height: num
   }
 }
 
+// Snap on drop to an 8px grid (Figma's standard). The drop xyflow hands us is
+// raw cursor; rounding to 8px means the node travels a few px from cursor to
+// grid — and because `.canvas-dragging` is removed SYNC on dragstop, the
+// `.react-flow__node` 280ms transition (Linear-app ease-out-quint) animates
+// that travel. THAT is the "smooth land" moment. Below ~4px the travel is too
+// small to read as motion.
+const SNAP_GRID = 8;
+export const snapToGrid = (v: number): number => Math.round(v / SNAP_GRID) * SNAP_GRID;
+
 // Frame auto-fit geometry. Frames are sized to the bbox of their member tiles
 // + these paddings; an empty frame collapses to the placeholder so a bound
 // workspace zone stays a visible, droppable target with its header chrome.

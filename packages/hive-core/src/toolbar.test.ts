@@ -14,7 +14,8 @@ describe("toolbar catalog", () => {
       ["issues", "Issues", "5"],
       ["frame", "Frame", "6"],
       ["browser", "Browser", "7"],
-      ["theme", "Theme", "8"],
+      ["board", "Board", "8"],
+      ["theme", "Theme", ""],
     ]);
     expect(DEFAULT_TOOLBAR_ORDER).toEqual(BUILTIN_TOOLBAR_ACTIONS.map((a) => a.id));
     expect(new Set(DEFAULT_TOOLBAR_ORDER).size).toBe(DEFAULT_TOOLBAR_ORDER.length);
@@ -23,7 +24,7 @@ describe("toolbar catalog", () => {
   test("id guard + lookup", () => {
     expect(isToolbarActionId("browser")).toBe(true);
     for (const junk of ["Browser", "browse", "", null, 7, {}]) expect(isToolbarActionId(junk)).toBe(false);
-    expect(toolbarAction("theme")).toEqual({ id: "theme", label: "Theme", hint: "8" });
+    expect(toolbarAction("theme")).toEqual({ id: "theme", label: "Theme", hint: "" });
   });
 });
 

@@ -52,7 +52,7 @@ test.beforeAll(launch);
 test.afterAll(async () => { await app?.close(); fs.rmSync(root, { recursive: true, force: true }); });
 
 test("toolbar order, visibility and labels are per-view and keep live tools", async () => {
-  await expect.poll(order).toEqual(["terminal", "agent", "explorer", "diff", "issues", "frame", "theme"]);
+  await expect.poll(order).toEqual(["terminal", "agent", "explorer", "diff", "issues", "frame", "board", "theme"]);
   await expect(page.locator("[data-toolbar-label]")).toHaveCount(0);
   await page.getByTitle(/^Terminal  /).click();
   await page.waitForSelector(".xterm");
@@ -60,17 +60,17 @@ test("toolbar order, visibility and labels are per-view and keep live tools", as
   await settings();
   await page.getByRole("checkbox", { name: "Terminal", exact: true }).uncheck();
   await page.getByRole("checkbox", { name: "Show labels", exact: true }).check();
-  await page.getByRole("button", { name: "Move Theme up", exact: true }).click();
-  await page.getByRole("button", { name: "Move Theme up", exact: true }).click();
+  // Past Board and Browser (off, so not shown), to above Frame.
+  for (let i = 0; i < 3; i++) await page.getByRole("button", { name: "Move Theme up", exact: true }).click();
   await close();
-  await expect.poll(order).toEqual(["agent", "explorer", "diff", "issues", "theme", "frame"]);
-  await expect(page.locator("[data-toolbar-label]")).toHaveCount(6);
+  await expect.poll(order).toEqual(["agent", "explorer", "diff", "issues", "theme", "frame", "board"]);
+  await expect(page.locator("[data-toolbar-label]")).toHaveCount(7);
   expect(await page.locator(".xterm").evaluate((node, old) => node === old, original)).toBe(true);
   await toView("windows");
   await expect.poll(order).toEqual(["terminal", "agent", "explorer", "diff", "issues", "frame", "theme"]);
   await expect(page.locator("[data-toolbar-label]")).toHaveCount(0);
   await toView("canvas");
-  await expect.poll(order).toEqual(["agent", "explorer", "diff", "issues", "theme", "frame"]);
+  await expect.poll(order).toEqual(["agent", "explorer", "diff", "issues", "theme", "frame", "board"]);
   await original?.dispose();
 });
 
@@ -89,7 +89,7 @@ test("CLI preferences persist and an empty toolbar has no handle; Settings resto
   await expect(page.getByLabel("Display", { exact: true })).toHaveValue("hidden");
   await close();
   await page.getByRole("button", { name: "show tools", exact: true }).click();
-  await expect.poll(order).toEqual(["terminal", "agent", "explorer", "diff", "issues", "frame", "theme"]);
+  await expect.poll(order).toEqual(["terminal", "agent", "explorer", "diff", "issues", "frame", "board", "theme"]);
 });
 
 test("selecting Browser as the only shortcut cannot activate it", async () => {
