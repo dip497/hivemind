@@ -20,6 +20,7 @@ import type { PinRect } from "../tile-surfaces";
 import type { Toast } from "../../useAgentAwareness";
 import type { Board } from "../../board-objects/useBoard";
 import type { Point } from "../../board-objects/board-model";
+import type { Pins } from "../pins";
 
 export type Viewport = { x: number; y: number; zoom: number };
 export type FocusReq = { id: string; cx: number; cy: number; w: number; h: number; n: number; exact?: boolean } | null;
@@ -72,7 +73,8 @@ export interface CanvasRuntime {
    *  the middle of the pane). */
   canvasPointRef: MutableRefObject<(() => Point) | null>;
   // ── pins ──
-  pinnedIds: Set<string>;
+  /** Tiles pinned to this person's screen. */
+  pins: Pins;
   togglePin: (id: string, rect: PinRect) => void;
   onPinChange: (id: string, patch: { anchor?: { sx: number; sy: number }; size?: { w: number; h: number } }) => void;
   // ── tool island ──

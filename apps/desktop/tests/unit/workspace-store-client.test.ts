@@ -24,10 +24,10 @@ const ls = new Map<string, string>();
     workspaceCoreSync: (repo: string) => store.getCore(repo),
     workspaceViewSync: (repo: string, viewId: string) => store.getView(repo, viewId),
     workspaceSetCoreSync: (repo: string, core: unknown, base?: unknown) => store.setCore(repo, core, { base }),
-    workspaceSetViewSync: (repo: string, viewId: string, layout: ViewLayout) => store.setView(repo, viewId, layout),
+    workspaceSetViewSync: (repo: string, viewId: string, layout: ViewLayout, base?: unknown) => store.setView(repo, viewId, layout, { base }),
     workspaceImportSync: (repo: string, legacy: LegacyLayout) => store.importLegacy(repo, legacy),
     workspaceObjectsSync: (repo: string) => store.getObjects(repo),
-    workspaceSetObjectsSync: (repo: string, objects: unknown) => store.setObjects(repo, objects),
+    workspaceSetObjectsSync: (repo: string, objects: unknown, base?: unknown) => store.setObjects(repo, objects, { base }),
     workspaceUndoSync: (repo: string) => store.undo(repo),
     workspaceRedoSync: (repo: string) => store.redo(repo),
     onWorkspaceChanged: () => () => {}, // no other writer here
@@ -37,6 +37,10 @@ const ls = new Map<string, string>();
 
 const { loadLayout, reloadLayout, saveLayout } = await import("../../src/renderer/src/canvas-persistence.ts");
 const { loadViewLayout, saveViewLayout } = await import("../../src/renderer/src/workspace/view-layout-store.ts");
+const { CANVAS_CAMERA, CANVAS_LAYOUT, loadCanvasCamera, reloadCanvasLayout } = await import("../../src/renderer/src/workspace/views/canvas-layout.ts");
+const { WINDOWS_LAYOUT } = await import("../../src/renderer/src/workspace/views/windows-layout.ts");
+const { readBoard, writeBoard } = await import("../../src/renderer/src/workspace/workspace-store-client.ts");
+const { reloadBoardObjects } = await import("../../src/renderer/src/board-objects/useBoard.ts");
 
 after(() => fs.rmSync(dir, { recursive: true, force: true }));
 
@@ -123,4 +127,78 @@ test("what another writer changed comes in over what the window has not saved, w
     editorTabs: {},
     frameOf: { b1: "f1", b3: "f1" },
   });
+});
+
+const at = (x: number, y = 0) => ({ x, y });
+const places = (positions: Record<string, { x: number; y: number }>) => ({ positions, sizes: {} });
+const note = (id: string, text: string) => ({ id, kind: "note" as const, x: 0, y: 0, w: 200, h: 160, text });
+
+test("the canvas's places and the board are saved from what the window last read or wrote, so another window's change since stays", () => {
+  saveViewLayout(CANVAS_LAYOUT, "/views", places({ t1: at(0), t2: at(100) }));
+  store.setView("/views", "canvas", { v: 1, data: places({ t1: at(0), t2: at(150, 50) }) }, { base: store.getView("/views", "canvas"), writer: "window:9" });
+  saveViewLayout(CANVAS_LAYOUT, "/views", places({ t1: at(10, 10), t2: at(100) }));
+  assert.deepEqual(store.getView("/views", "canvas")?.data, places({ t1: at(10, 10), t2: at(150, 50) }));
+
+  writeBoard("/views", [note("n1", "draft")]);
+  store.setObjects("/views", [note("n1", "draft"), note("n2", "theirs")], { base: store.getObjects("/views"), writer: "window:9" });
+  writeBoard("/views", [note("n1", "drafted")]);
+  assert.deepEqual(readBoard("/views"), [note("n1", "drafted"), note("n2", "theirs")]);
+});
+
+test("another window's change to the canvas's places comes in over what the window has not saved, which stays", () => {
+  saveViewLayout(CANVAS_LAYOUT, "/places", { positions: { t1: at(0), t2: at(100) }, sizes: { t2: { width: 400, height: 300 } } });
+  // Since: another window moves t2 and places t3.
+  store.setView("/places", "canvas", { v: 1, data: { positions: { t1: at(0), t2: at(150, 50), t3: at(300) }, sizes: { t2: { width: 400, height: 300 } } } }, { base: store.getView("/places", "canvas"), writer: "window:9" });
+  // This window, not yet saved: t1 moved and t2 resized.
+  const stored = reloadCanvasLayout("/places");
+  assert.deepEqual(stored.positions({ t1: at(10, 10), t2: at(100) }), { t1: at(10, 10), t2: at(150, 50), t3: at(300) });
+  assert.deepEqual(stored.sizes({ t2: { width: 500, height: 300 } }), { t2: { width: 500, height: 300 } });
+});
+
+test("what is one person's own is kept on this device, starting from what the workspace held, and never written to it", () => {
+  // What the document held before these were one person's.
+  store.setView("/me", "windows", { v: 1, data: { minimized: ["t1"], activeTabId: "t2" } });
+  store.setView("/me", "canvas", { v: 1, data: { positions: {}, sizes: {}, viewport: { x: 1, y: 2, zoom: 0.5 } } });
+  store.setCore("/me", { frames: [], tiles: [{ id: "t1", kind: "shell", label: "sh", pinned: true, pinAnchor: { sx: 10, sy: 20 }, pinSize: { w: 300, h: 200 } }] });
+  const before = { windows: store.getView("/me", "windows"), canvas: store.getView("/me", "canvas") };
+
+  assert.deepEqual(loadViewLayout(WINDOWS_LAYOUT, "/me"), { minimized: ["t1"], activeTabId: "t2" });
+  assert.deepEqual(loadCanvasCamera("/me"), { x: 1, y: 2, zoom: 0.5 });
+  saveViewLayout(WINDOWS_LAYOUT, "/me", { minimized: [], activeTabId: "t3" });
+  saveViewLayout(CANVAS_CAMERA, "/me", { x: 5, y: 5, zoom: 1 });
+  assert.deepEqual(loadViewLayout(WINDOWS_LAYOUT, "/me"), { minimized: [], activeTabId: "t3" });
+  assert.deepEqual(loadCanvasCamera("/me"), { x: 5, y: 5, zoom: 1 });
+  assert.deepEqual({ windows: store.getView("/me", "windows"), canvas: store.getView("/me", "canvas") }, before);
+  assert.equal(store.getView("/me", CANVAS_CAMERA.viewId), null);
+
+  // A pin the tile carried is this device's to start from, and the window's next save takes it out of the workspace.
+  const read = loadLayout("/me");
+  assert.deepEqual(read.pins, { t1: { anchor: { sx: 10, sy: 20 }, size: { w: 300, h: 200 } } });
+  assert.deepEqual(read.tiles, [{ id: "t1", kind: "shell", label: "sh" }]);
+  saveLayout("/me", { frames: read.frames, tileNames: {}, tiles: read.tiles ?? [], editorTabs: {}, frameOf: {} });
+  assert.deepEqual(store.getCore("/me")?.tiles, [{ id: "t1", kind: "shell", label: "sh" }]);
+});
+
+test("another window's change to the board comes in over what the window has not saved, which stays", () => {
+  writeBoard("/board", [note("n1", "draft"), note("n2", "old")]);
+  store.setObjects("/board", [note("n1", "draft"), note("n3", "theirs")], { base: store.getObjects("/board"), writer: "window:9" });
+  // This window, not yet saved: n1 retyped. n2, deleted since, stays deleted.
+  const merged = reloadBoardObjects("/board", [])([note("n1", "drafted"), note("n2", "old")]);
+  assert.deepEqual(merged, [note("n1", "drafted"), note("n3", "theirs")]);
+});
+
+test("what the window reads is what its next save is made from", () => {
+  writeBoard("/read", [note("n1", "a")]);
+  store.setObjects("/read", [note("n1", "a"), note("n2", "b")], { base: store.getObjects("/read"), writer: "window:9" });
+  const board = readBoard("/read");
+  store.setObjects("/read", [note("n1", "a")], { base: store.getObjects("/read"), writer: "window:9" });
+  writeBoard("/read", board);
+  assert.deepEqual(readBoard("/read"), [note("n1", "a")], "n2, deleted after this window read it, stays deleted");
+
+  saveViewLayout(CANVAS_LAYOUT, "/read", places({ t1: at(0) }));
+  store.setView("/read", "canvas", { v: 1, data: places({ t1: at(0), t2: at(5) }) }, { base: store.getView("/read", "canvas"), writer: "window:9" });
+  const view = loadViewLayout(CANVAS_LAYOUT, "/read");
+  store.setView("/read", "canvas", { v: 1, data: places({ t1: at(0) }) }, { base: store.getView("/read", "canvas"), writer: "window:9" });
+  saveViewLayout(CANVAS_LAYOUT, "/read", view);
+  assert.deepEqual(store.getView("/read", "canvas")?.data, places({ t1: at(0) }), "t2, taken off after this window read it, stays off");
 });

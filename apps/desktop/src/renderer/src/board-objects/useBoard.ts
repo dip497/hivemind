@@ -6,12 +6,13 @@
  * to undo and redo board edits. What an edit does to the board is board-model's; this holds it.
  */
 import { useCallback, useMemo, useRef, useState, type MutableRefObject } from "react";
+import { rebaseRecords } from "@hivemind/workspace-doc/rebase";
 import type { BoardObject } from "@hivemind/workspace-doc/shapes";
 import { mintId } from "../../../shared/tile-id";
 import type { FrameState } from "../canvas-persistence";
 import { snapToGrid } from "../canvas-sizing";
 import { useDebouncedSave } from "../workspace/view-layout-store";
-import { readBoard, redoBoard, undoBoard, writeBoard } from "../workspace/workspace-store-client";
+import { readBoard, redoBoard, rereadBoard, undoBoard, writeBoard } from "../workspace/workspace-store-client";
 import {
   duplicateBox, facingSides, frameAt, frontZ, isBox, newBox, toCanvas, toStored, withoutObject,
   type BoxKind, type Point, type Rect,
@@ -52,6 +53,19 @@ export interface Board {
   redo: () => void;
   /** Show another workspace's board, placed by that workspace's frames. */
   reload: (persistKey: string | null, frames: FrameState[]) => void;
+  /** Another writer changed this board (another window): take it as stored, keeping what this
+   *  window changed since it last read or wrote. */
+  merge: () => void;
+}
+
+/**
+ * Another writer changed `repo`'s board: the board as stored, as an update of the window's own (in
+ * canvas coordinates, placed by `frames`), which keeps what the window changed since it last read
+ * or wrote, as `reloadLayout` does the core.
+ */
+export function reloadBoardObjects(repo: string, frames: FrameState[]): (mine: BoardObject[]) => BoardObject[] {
+  const { base, board } = rereadBoard(repo);
+  return (mine) => toCanvas(rebaseRecords(base, toStored(mine, frames), board), frames);
 }
 
 export function useBoard({ persistKey, frames, framesRef, onSelect }: {
@@ -216,6 +230,13 @@ export function useBoard({ persistKey, frames, framesRef, onSelect }: {
   const undo = useCallback(() => history(undoBoard), [history]);
   const redo = useCallback(() => history(redoBoard), [history]);
 
+  // What this window has yet to save is written first, so its base is what it last wrote.
+  const merge = useCallback(() => {
+    if (!persistKey) return;
+    flush();
+    set(reloadBoardObjects(persistKey, framesRef.current));
+  }, [persistKey, flush, set, framesRef]);
+
   const reload = useCallback((key: string | null, nextFrames: FrameState[]) => {
     const board = key ? toCanvas(readBoard(key), nextFrames) : [];
     latest.current = board;
@@ -228,10 +249,10 @@ export function useBoard({ persistKey, frames, framesRef, onSelect }: {
   return useMemo(() => ({
     objects, objectsRef: latest, selectedId, editingId, arrowFrom,
     select, edit, add, update, remove, duplicate, moveTo, resize, shiftFrames, place,
-    startArrow, pickArrowEnd, cancelArrow, undo, redo, reload,
+    startArrow, pickArrowEnd, cancelArrow, undo, redo, reload, merge,
   }), [
     objects, selectedId, editingId, arrowFrom,
     select, edit, add, update, remove, duplicate, moveTo, resize, shiftFrames, place,
-    startArrow, pickArrowEnd, cancelArrow, undo, redo, reload,
+    startArrow, pickArrowEnd, cancelArrow, undo, redo, reload, merge,
   ]);
 }

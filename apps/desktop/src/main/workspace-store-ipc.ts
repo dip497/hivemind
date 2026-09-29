@@ -54,10 +54,10 @@ export function installWorkspaceStoreIpc(): void {
   answer("workspace:core-sync", (_e, repo) => s.getCore(repo as string));
   answer("workspace:view-sync", (_e, repo, viewId) => s.getView(repo as string, viewId as string));
   answer("workspace:set-core-sync", (e, repo, core, base) => s.setCore(repo as string, core, { ...from(e), base }));
-  answer("workspace:set-view-sync", (e, repo, viewId, layout) => s.setView(repo as string, viewId as string, layout as ViewLayout, from(e)));
+  answer("workspace:set-view-sync", (e, repo, viewId, layout, base) => s.setView(repo as string, viewId as string, layout as ViewLayout, { ...from(e), base }));
   answer("workspace:import-sync", (_e, repo, legacy) => s.importLegacy(repo as string, legacy as LegacyLayout));
   answer("workspace:objects-sync", (_e, repo) => s.getObjects(repo as string));
-  answer("workspace:set-objects-sync", (e, repo, objects) => s.setObjects(repo as string, objects, from(e)));
+  answer("workspace:set-objects-sync", (e, repo, objects, base) => s.setObjects(repo as string, objects, { ...from(e), base }));
   answer("workspace:undo-sync", (e, repo) => s.undo(repo as string, from(e)));
   answer("workspace:redo-sync", (e, repo) => s.redo(repo as string, from(e)));
   ipcMain.on("workspace:shown", (e, repo: unknown, frame: unknown) => {

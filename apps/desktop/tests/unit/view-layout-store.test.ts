@@ -50,6 +50,6 @@ test("a blob at another version, or corrupt, starts fresh", () => {
 
 
 test("canvas layout: a fresh repo (no blobs at all) starts empty", () => {
-  assert.deepEqual(loadViewLayout(CANVAS_LAYOUT, "/fresh"), { positions: {}, sizes: {}, viewport: undefined });
+  assert.deepEqual(loadViewLayout(CANVAS_LAYOUT, "/fresh"), { positions: {}, sizes: {} });
 });
 

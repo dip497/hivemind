@@ -168,10 +168,10 @@ const api: HiveIpc & {
   workspaceCoreSync: (repo) => ipcRenderer.sendSync("workspace:core-sync", repo),
   workspaceViewSync: (repo, viewId) => ipcRenderer.sendSync("workspace:view-sync", repo, viewId),
   workspaceSetCoreSync: (repo, core, base) => { ipcRenderer.sendSync("workspace:set-core-sync", repo, core, base); },
-  workspaceSetViewSync: (repo, viewId, layout) => { ipcRenderer.sendSync("workspace:set-view-sync", repo, viewId, layout); },
+  workspaceSetViewSync: (repo, viewId, layout, base) => { ipcRenderer.sendSync("workspace:set-view-sync", repo, viewId, layout, base); },
   workspaceImportSync: (repo, legacy) => { ipcRenderer.sendSync("workspace:import-sync", repo, legacy); },
   workspaceObjectsSync: (repo) => ipcRenderer.sendSync("workspace:objects-sync", repo),
-  workspaceSetObjectsSync: (repo, objects) => { ipcRenderer.sendSync("workspace:set-objects-sync", repo, objects); },
+  workspaceSetObjectsSync: (repo, objects, base) => { ipcRenderer.sendSync("workspace:set-objects-sync", repo, objects, base); },
   workspaceUndoSync: (repo) => ipcRenderer.sendSync("workspace:undo-sync", repo),
   workspaceRedoSync: (repo) => ipcRenderer.sendSync("workspace:redo-sync", repo),
   onWorkspaceChanged: (cb) => {

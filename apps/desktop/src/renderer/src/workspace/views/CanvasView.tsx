@@ -132,7 +132,7 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
   const lastBuiltRef = useRef<ReadonlyMap<string, Node>>(new Map());
   const baseNodes: Node[] = useMemo(() => {
     const built = reuseNodes(lastBuiltRef.current, buildBaseNodes({
-    repoPath, tiles, frames, frameOf, pinnedIds: rt.pinnedIds, sizes: rt.sizes, positions: rt.positions,
+    repoPath, tiles, frames, frameOf, pins: rt.pins, sizes: rt.sizes, positions: rt.positions,
     objects: rt.board.objects, frameTiles: rt.frameTiles,
     updateFrameTitle: rt.updateFrameTitle, updateFrameColor: rt.updateFrameColor, deleteFrame: rt.deleteFrame,
     arrangeFrame: rt.arrangeFrame, bringFrameToFront: rt.bringFrameToFront,
@@ -143,7 +143,7 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
     lastBuiltRef.current = new Map(built.map((n) => [n.id, n]));
     return built;
   }, [
-    repoPath, tiles, frames, frameOf, rt.pinnedIds, rt.sizes, rt.positions, rt.board.objects, rt.frameTiles,
+    repoPath, tiles, frames, frameOf, rt.pins, rt.sizes, rt.positions, rt.board.objects, rt.frameTiles,
     rt.updateFrameTitle, rt.updateFrameColor, rt.deleteFrame, rt.arrangeFrame, rt.bringFrameToFront,
     rt.onAttachWorktree, rt.onCreateWorktree, rt.unbindBranch, rt.bindWorkspace, rt.unbindWorkspace,
     closeTile, rt.onNodeResizeCommit, rt.togglePin, rt.onPinChange,

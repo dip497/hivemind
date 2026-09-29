@@ -14,6 +14,7 @@ import type { LoroDoc, LoroMap } from "loro-crdt";
 import { isContainer, isMap, writeFields } from "./fields.js";
 import { firstOfEachId, isObject, type Fields } from "./input.js";
 import { readOrder, writeOrder } from "./order.js";
+import { rebaseRecords } from "./rebase.js";
 import { OBJECTS, stampSchema } from "./schema.js";
 import { BOARD_OBJECT_KINDS, SIDES, type BoardObject, type ChecklistItem } from "./shapes.js";
 
@@ -27,21 +28,36 @@ const ITEM_CONTAINERS: ReadonlySet<string> = new Set([TEXT]);
 
 /**
  * Make `doc` hold the board `value`. An object or checklist item without what its kind needs is
- * dropped, and a repeated id keeps its first entry; a board that is not a list is refused.
+ * dropped, and a repeated id keeps its first entry; a board that is not a list is refused. Given
+ * `base`, the board `value` was made from (null: none was read), only what changed from it is
+ * written, object by object and field by field, and the rest stays as `doc` has it now.
  */
-export function writeObjects(doc: LoroDoc, value: unknown): void {
-  if (!Array.isArray(value)) throw new TypeError("workspace doc: a board is a list of objects");
+export function writeObjects(doc: LoroDoc, value: unknown, base?: unknown): void {
+  const next = toBoard(value);
+  const board = base === undefined ? next : rebaseRecords(base === null ? [] : toBoard(base), next, readObjects(doc));
   stampSchema(doc);
   const objects = doc.getMap(OBJECTS);
   const kept = new Set<string>();
-  for (const entry of value) {
-    const object = toBoardObject(entry);
-    if (object === null || kept.has(object.id)) continue;
+  for (const object of board) {
     kept.add(object.id);
     const current = objects.get(object.id);
     writeObject(isMap(current) ? current : objects.setContainer(object.id, newMap(objects)), object);
   }
   for (const id of objects.keys()) if (!kept.has(id)) objects.delete(id);
+}
+
+/** The board's objects that have what their kind needs, the first of each id. */
+function toBoard(value: unknown): BoardObject[] {
+  if (!Array.isArray(value)) throw new TypeError("workspace doc: a board is a list of objects");
+  const seen = new Set<string>();
+  const board: BoardObject[] = [];
+  for (const entry of value) {
+    const object = toBoardObject(entry);
+    if (object === null || seen.has(object.id)) continue;
+    seen.add(object.id);
+    board.push(object);
+  }
+  return board;
 }
 
 /** The board in `doc`, in id order. A record a merge left without what its kind needs is skipped. */

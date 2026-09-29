@@ -8,29 +8,35 @@
  * added, removed, or change its schema without touching the core or any other
  * view. Each blob is `{ v, data }`; a blob at another version starts fresh.
  *
+ * A view's arrangement is the workspace's, shared by every window and (later) person on it; what
+ * is one person's own (a camera, the tab they are on) is marked `personal` and kept on this device.
+ *
  * Pure functions + one small hook. This module owns the versioning; where the
  * blobs are kept (main's workspace store) is workspace-store-client.ts.
  * Best-effort, same policy as canvas-persistence.
  */
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import { readView, writeView } from "./workspace-store-client";
+import { readPersonal, readView, writePersonal, writeView } from "./workspace-store-client";
 
 export interface ViewLayoutSpec<T> {
   viewId: string;
   version: number;
   /** Fresh state when nothing (current) is stored. */
   initial: () => T;
+  /** One person's, not the workspace's: kept on this device, never in the workspace document.
+   *  Until this device has its own, it starts from what the document held before (R5). */
+  personal?: boolean;
 }
 
 export function loadViewLayout<T>(spec: ViewLayoutSpec<T>, repoPath: string | null): T {
   if (!repoPath) return spec.initial();
-  const stored = readView(repoPath, spec.viewId);
+  const stored = (spec.personal ? readPersonal(repoPath, spec.viewId) : null) ?? readView(repoPath, spec.viewId);
   return stored && stored.v === spec.version ? (stored.data as T) : spec.initial();
 }
 
 export function saveViewLayout<T>(spec: ViewLayoutSpec<T>, repoPath: string | null, data: T): void {
   if (!repoPath) return;
-  writeView(repoPath, spec.viewId, { v: spec.version, data });
+  (spec.personal ? writePersonal : writeView)(repoPath, spec.viewId, { v: spec.version, data });
 }
 
 /**

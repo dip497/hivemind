@@ -6,9 +6,13 @@
  * undo and redo. Those modules shape the data; this one only moves it. Reads and writes reach main synchronously, so a window builds its first
  * state in one pass and a save made while it unloads is kept.
  *
- * Others write too (the control plane renames a tile, R5). A core layout is written with the one
- * this window last read or wrote, so the store writes only what the window changed and never
- * reverts theirs; `onStoreChange` says when they did, for the window to read again.
+ * Others write too (the control plane renames a tile, another window, R5). A core layout, a view's
+ * layout and the board are each written with the one this window last read or wrote, so the store
+ * writes only what the window changed and never reverts theirs; `onStoreChange` says when they
+ * did, for the window to read again.
+ *
+ * What is one person's own (where their camera is, the tab they are on, what they pinned to their
+ * screen) is kept on this device, in localStorage, and never in the workspace document.
  *
  * Before the store, a window kept these in localStorage. The first read of a repo offers main
  * what is there, and main keeps only what it lacks, so an upgrade loses nothing and nothing
@@ -33,6 +37,7 @@ const coreKey = (repo: string): string => `hivemind:canvas-layout:${repo}`;
 const VIEW_PREFIX = "hivemind:view-layout:";
 const viewKey = (viewId: string, repo: string): string => `${VIEW_PREFIX}${viewId}:${repo}`;
 const boardKey = (repo: string): string => `hivemind:board:${repo}`;
+const personalKey = (viewId: string, repo: string): string => `hivemind:personal:${viewId}:${repo}`;
 
 function bridge(): Bridge | null {
   const hive = globalThis.window?.hive as Partial<Record<(typeof BRIDGE)[number], unknown>> | undefined;
@@ -90,6 +95,14 @@ function importOnce(b: Bridge, repo: string): void {
 
 /** Per repo, the core layout this window last read or wrote: what its next write is made from. */
 const coreBase = new Map<string, unknown>();
+/** The same for each view's layout (per repo, then view) and for the board. */
+const viewBase = new Map<string, Map<string, ViewLayout | null>>();
+const boardBase = new Map<string, BoardObject[]>();
+const viewBaseOf = (repo: string): Map<string, ViewLayout | null> => {
+  let bases = viewBase.get(repo);
+  if (!bases) viewBase.set(repo, (bases = new Map()));
+  return bases;
+};
 
 /** The core blob stored for `repo`, or null. */
 export function readCore(repo: string): unknown {
@@ -138,13 +151,37 @@ export function readView(repo: string, viewId: string): ViewLayout | null {
     importOnce(b, repo);
     try { stored = b.workspaceViewSync(repo, viewId); } catch { /* nothing stored */ }
   }
-  return isViewLayout(stored) ? stored : null;
+  const layout = isViewLayout(stored) ? stored : null;
+  viewBaseOf(repo).set(viewId, layout);
+  return layout;
+}
+
+/**
+ * One view's layout stored for `repo` again, now that another writer changed it, and the one this
+ * window last read or wrote before (null: none): what the window's state was made from.
+ */
+export function rereadView(repo: string, viewId: string): { base: ViewLayout | null; view: ViewLayout | null } {
+  const base = viewBase.get(repo)?.get(viewId) ?? null;
+  return { base, view: readView(repo, viewId) };
 }
 
 export function writeView(repo: string, viewId: string, layout: ViewLayout): void {
   const b = bridge();
   if (!b) return writeJson(viewKey(viewId, repo), layout);
-  try { b.workspaceSetViewSync(repo, viewId, layout); } catch { /* best-effort */ }
+  const bases = viewBaseOf(repo);
+  try { b.workspaceSetViewSync(repo, viewId, layout, bases.get(viewId)); } catch { /* best-effort */ }
+  bases.set(viewId, layout);
+}
+
+/** One person's own state for a view in `repo` (a camera, the tab they are on), kept on this
+ *  device, or null. */
+export function readPersonal(repo: string, viewId: string): ViewLayout | null {
+  const stored = readJson(personalKey(viewId, repo));
+  return isViewLayout(stored) ? stored : null;
+}
+
+export function writePersonal(repo: string, viewId: string, layout: ViewLayout): void {
+  writeJson(personalKey(viewId, repo), layout);
 }
 
 /** The board stored for `repo`: its objects, a framed one's position relative to its frame. */
@@ -155,13 +192,23 @@ export function readBoard(repo: string): BoardObject[] {
   else {
     try { stored = b.workspaceObjectsSync(repo); } catch { /* nothing stored */ }
   }
-  return Array.isArray(stored) ? (stored as BoardObject[]) : [];
+  const board = Array.isArray(stored) ? (stored as BoardObject[]) : [];
+  boardBase.set(repo, board);
+  return board;
+}
+
+/** The board stored for `repo` again, now that another writer changed it, and the one this window
+ *  last read or wrote before (none: empty): what the window's board was made from. */
+export function rereadBoard(repo: string): { base: BoardObject[]; board: BoardObject[] } {
+  const base = boardBase.get(repo) ?? [];
+  return { base, board: readBoard(repo) };
 }
 
 export function writeBoard(repo: string, objects: BoardObject[]): void {
   const b = bridge();
   if (!b) return writeJson(boardKey(repo), objects);
-  try { b.workspaceSetObjectsSync(repo, objects); } catch { /* best-effort */ }
+  try { b.workspaceSetObjectsSync(repo, objects, boardBase.get(repo)); } catch { /* best-effort */ }
+  boardBase.set(repo, objects);
 }
 
 /** Take back the last board edit. False when there is none, or no store to ask. */

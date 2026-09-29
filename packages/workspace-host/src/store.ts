@@ -16,11 +16,12 @@
  * a moment after a change has it on disk. A write that fails stays pending: the repo's next
  * change or `flush()` writes it.
  *
- * Undo takes back board edits only, through Loro's UndoManager, which undoes this writer's own
- * edits: the layout, views and imports are committed under `sys:` and never undone (an undo
- * cannot bring back a closed tile's process). Each board write is one step — the window writes a
- * burst of typing as one — so edits made a moment apart are never taken back together. The
- * history lasts as long as the store does.
+ * Undo takes back board edits only, through Loro's UndoManager: the layout, views and imports are
+ * committed under `sys:` and never undone (an undo cannot bring back a closed tile's process).
+ * Each writer has a history of its own, so a window's ⌘Z takes back its own edit, never one
+ * another window made since. Each board write is one step — the window writes a burst of typing
+ * as one — so edits made a moment apart are never taken back together. A history lasts as long
+ * as the store does.
  */
 import { UndoManager, type LoroDoc } from "loro-crdt";
 import { addTile, hasCore, holdsTile, readCore, removeTile, writeCore, writeTileName } from "@hivemind/workspace-doc/core";
@@ -34,15 +35,17 @@ import { readDoc, writeDoc } from "./doc-file.js";
 export type { LegacyLayout, WorkspaceChange } from "./layout.js";
 export type { BoardObject, CoreLayout, ViewLayout } from "@hivemind/workspace-doc/shapes";
 
-/** Commit origins: undo skips every one that starts with `sys:`. */
-const BOARD = "board";
+/** Commit origins: undo skips every one that starts with `sys:`, and each writer's history skips
+ *  the others' board edits. The writer is encoded, so no writer's origin begins another's. */
+const boardOf = (writer: string): string => `board:${encodeURIComponent(writer)};`;
 const LAYOUT = "sys:layout";
 const VIEW = "sys:view";
 const IMPORT = "sys:import";
 
 interface Workspace {
   doc: LoroDoc;
-  history: UndoManager;
+  /** Each writer's board edits, by writer. */
+  histories: Map<string, UndoManager>;
 }
 
 /** Who writes: told with the change, so the others hear of it and the writer does not. */
@@ -90,13 +93,19 @@ export class WorkspaceStore {
     this.write(repo, "core", LAYOUT, from, (doc) => writeCore(doc, core, from.base));
   }
 
-  setView(repo: string, viewId: string, layout: ViewLayout, from: Writer = {}): void {
-    this.write(repo, `view:${viewId}`, VIEW, from, (doc) => writeView(doc, viewId, layout));
+  /** Make `layout` the view `viewId`'s layout. Given `base`, the one it was made from (null: none
+   *  was read), only what changed from it is written. */
+  setView(repo: string, viewId: string, layout: ViewLayout, from: Writer & { base?: unknown } = {}): void {
+    this.write(repo, `view:${viewId}`, VIEW, from, (doc) => writeView(doc, viewId, layout, from.base));
   }
 
-  /** Make `objects` the board. A malformed object is dropped; what is not a list is refused. */
-  setObjects(repo: string, objects: unknown, from: Writer = {}): void {
-    this.write(repo, "board", BOARD, from, (doc) => writeObjects(doc, objects));
+  /** Make `objects` the board. A malformed object is dropped; what is not a list is refused. Given
+   *  `base`, the board it was made from (null: none was read), only what changed from it is
+   *  written. */
+  setObjects(repo: string, objects: unknown, from: Writer & { base?: unknown } = {}): void {
+    const writer = from.writer ?? "";
+    this.history(repo, writer);
+    this.write(repo, "board", boardOf(writer), from, (doc) => writeObjects(doc, objects, from.base));
   }
 
   /** The workspace this store has open that holds the tile `tileId`, or null: the control plane
@@ -132,18 +141,14 @@ export class WorkspaceStore {
     return tile && { repo, tile };
   }
 
-  /** Take back the last board edit not yet taken back. False when there is none. */
+  /** Take back the writer's last board edit not yet taken back. False when there is none. */
   undo(repo: string, from: Writer = {}): boolean {
-    let did = false;
-    this.write(repo, "board", null, from, (_doc, history) => { did = history.undo(); });
-    return did;
+    return this.step(repo, from, (history) => history.undo());
   }
 
-  /** Make again the last board edit undo took back. False when there is none. */
+  /** Make again the writer's last board edit undo took back. False when there is none. */
   redo(repo: string, from: Writer = {}): boolean {
-    let did = false;
-    this.write(repo, "board", null, from, (_doc, history) => { did = history.redo(); });
-    return did;
+    return this.step(repo, from, (history) => history.redo());
   }
 
   /**
@@ -176,10 +181,35 @@ export class WorkspaceStore {
       // Stamped before the history starts: a stamp is nobody's edit, so no undo takes it back.
       stampSchema(doc);
       doc.commit();
-      workspace = { doc, history: new UndoManager(doc, { mergeInterval: 0, excludeOriginPrefixes: ["sys:"] }) };
+      workspace = { doc, histories: new Map() };
       this.workspaces.set(repo, workspace);
     }
     return workspace;
+  }
+
+  /** The writer's board history in `repo`, started before its first board edit. It skips every
+   *  other writer's edits, and theirs skip its. */
+  private history(repo: string, writer: string): UndoManager {
+    const { doc, histories } = this.workspace(repo);
+    let history = histories.get(writer);
+    if (!history) {
+      history = new UndoManager(doc, { mergeInterval: 0, excludeOriginPrefixes: ["sys:", ...[...histories.keys()].map(boardOf)] });
+      for (const other of histories.values()) other.addExcludeOriginPrefix(boardOf(writer));
+      histories.set(writer, history);
+    }
+    return history;
+  }
+
+  /** An undo or redo in the writer's history, committed as the writer's own board edit. */
+  private step(repo: string, from: Writer, move: (history: UndoManager) => boolean): boolean {
+    const writer = from.writer ?? "";
+    const history = this.history(repo, writer);
+    let did = false;
+    this.write(repo, "board", boardOf(writer), from, (doc) => {
+      doc.setNextCommitOrigin(boardOf(writer));
+      did = move(history);
+    });
+    return did;
   }
 
   private tryImport(repo: string, write: () => void): boolean {
@@ -199,16 +229,14 @@ export class WorkspaceStore {
   }
 
   /**
-   * Make an edit, commit it under `origin` (null: the edit commits itself, as undo does), and if
-   * it changed anything write the file and tell who listens. A write that changes nothing writes
-   * and tells nothing.
+   * Make an edit, commit it under `origin`, and if it changed anything write the file and tell who
+   * listens. A write that changes nothing writes and tells nothing.
    */
-  private write(repo: string, part: WorkspaceChange["part"], origin: string | null, from: Writer,
-    edit: (doc: LoroDoc, history: UndoManager) => void): void {
-    const { doc, history } = this.workspace(repo);
+  private write(repo: string, part: WorkspaceChange["part"], origin: string, from: Writer, edit: (doc: LoroDoc) => void): void {
+    const { doc } = this.workspace(repo);
     const before = JSON.stringify(doc.frontiers());
-    edit(doc, history);
-    if (origin !== null) doc.commit({ origin });
+    edit(doc);
+    doc.commit({ origin });
     if (JSON.stringify(doc.frontiers()) === before) return;
     this.persist(repo, doc);
     this.opts.onChange?.({ repo, part, writer: from.writer ?? "" });

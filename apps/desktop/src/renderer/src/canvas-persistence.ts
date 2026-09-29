@@ -12,6 +12,7 @@
 import { rebaseFields, rebaseRecords } from "@hivemind/workspace-doc/rebase";
 import type { FrameRecord, TileRecord } from "@hivemind/workspace-doc/shapes";
 import type { TileKind } from "./tile-kinds";
+import { pinsOfTiles, type LegacyPin, type Pins } from "./workspace/pins";
 import { readCore, rereadCore, writeCore } from "./workspace/workspace-store-client";
 
 /** On POSIX: `-i` keeps the shell interactive so it doesn't exit, `-l` sources
@@ -38,16 +39,6 @@ export interface TileInstance extends TileRecord {
   args?: string[];
   /** browser only — last/initial URL so the tile restores where it was. */
   url?: string;
-  /** Pinned = the tile becomes a TRUE screen-fixed floating panel: its content is
-   *  portaled out of react-flow's transformed viewport into a fixed full-window
-   *  layer, so it holds a constant screen position + size, unaffected by canvas
-   *  pan/zoom. `pinAnchor` is the panel's top-left in SCREEN pixels (viewport
-   *  coordinates); `pinSize` is its rendered size in SCREEN pixels (captured from
-   *  the tile's DOM rect at pin time). All three persist so a pinned tile comes
-   *  back pinned in place at the same size. */
-  pinned?: boolean;
-  pinAnchor?: { sx: number; sy: number };
-  pinSize?: { w: number; h: number };
   /** planReview only — the live plan handoff this tile is reviewing. Ephemeral:
    *  tied to a blocked agent hook, so planReview tiles are NEVER persisted (a
    *  reloaded requestId is dead — the hook already failed open). `requestId`
@@ -88,6 +79,9 @@ export interface PersistedLayout {
    *  membership from geometry avoids the bootstrap deadlock where a big tile
    *  whose center sits outside a collapsed frame never gets claimed. */
   frameOf?: Record<string, string>;
+  /** Pins the tiles carried while a pin was the workspace's (before R5): where this device's pins
+   *  start when it has none. Not saved: a pin is one person's now (workspace/pins.ts). */
+  pins?: Pins;
 }
 
 /** The fields a save snapshot must supply (everything the core round-trips). */
@@ -100,7 +94,9 @@ export function loadLayout(repoPath: string | null): PersistedLayout {
   // (welcome screen / e2e bootstrap) and persisting it leaks layouts across
   // unrelated sessions.
   if (!repoPath) return { frames: [], tileNames: {} };
-  return layoutOf(readCore(repoPath));
+  const stored = readCore(repoPath);
+  const tiles = (stored as { tiles?: unknown } | null)?.tiles;
+  return { ...layoutOf(stored), pins: pinsOfTiles(Array.isArray(tiles) ? tiles : []) };
 }
 
 /** What another writer changed, as the window takes it: each part of the layout as an update of
@@ -144,9 +140,17 @@ function layoutOf(stored: unknown): LayoutSnapshot {
     frames: Array.isArray(p.frames) ? p.frames : [],
     frameOf: p.frameOf ?? {},
     tileNames: p.tileNames ?? {},
-    tiles: Array.isArray(p.tiles) ? p.tiles : [],
+    tiles: Array.isArray(p.tiles) ? p.tiles.map(withoutPin) : [],
     editorTabs: p.editorTabs && typeof p.editorTabs === "object" && !Array.isArray(p.editorTabs) ? p.editorTabs : {},
   };
+}
+
+/** A tile without the pin it carried while a pin was the workspace's: the window's next save
+ *  takes it out of the document. */
+function withoutPin(tile: TileInstance & LegacyPin): TileInstance {
+  if (!("pinned" in tile || "pinAnchor" in tile || "pinSize" in tile)) return tile;
+  const { pinned: _pinned, pinAnchor: _anchor, pinSize: _size, ...rest } = tile;
+  return rest;
 }
 
 /** Write a layout snapshot for a repo (best-effort). The single writer — Canvas's

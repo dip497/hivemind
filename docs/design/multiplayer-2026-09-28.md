@@ -126,9 +126,9 @@ exactly as today. They are ordered by dependency.
   the document's current state (change events refresh it) or sends operations, or a window
   holding a stale layout would undo another's edit.
 - **Per-person state.** The canvas camera and the Windows view's active tab and minimized
-  tiles are in the view layouts the document holds. They are per-person (§8) and leave the
+  tiles were in the view layouts the document holds. They are per-person (§8) and left the
   document with R5, where two windows on one workspace would otherwise share a camera, and
-  so before M1 shares it with people.
+  so before M1 shares it with people; pins went with them (R5's decisions).
 - **Migration.** The window's old localStorage layouts are imported as in R1, each entry
   checked by the document's writers. R1's `.json` file shipped in no release (R1 and R2 go
   out together), so it is not read.
@@ -208,7 +208,11 @@ exactly as today. They are ordered by dependency.
   started once however many windows mount it at once; the window that started it gives it its
   first task, and a window that joins drops its copy, until R14 moves the first task into main.
   What a window must draw from the start (pipes, spawn wires, statuses) it asks main for when it
-  mounts, then follows the pushes: a push sent before its listeners mount is lost.
+  mounts, then follows the pushes: a push sent before its listeners mount is lost. A view's
+  layout and the board are written from what the window last read, as the core is, and merged
+  into another window's state; undo is per writer. One person's state (the camera, the Windows
+  view's tab and minimized tiles, pins) is kept by the window on this device, never in the
+  document, which is §8's "presence or local" for a single device until M1's presence.
 
 ### R6. One status per session, from its host
 

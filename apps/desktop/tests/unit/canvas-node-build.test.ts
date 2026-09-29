@@ -13,7 +13,7 @@ const noop = () => {};
 function ctx(over: Partial<NodeBuildCtx>): NodeBuildCtx {
   return {
     repoPath: "/base/repo",
-    tiles: [], frames: [], frameOf: {}, pinnedIds: new Set(), sizes: {}, positions: {}, objects: [],
+    tiles: [], frames: [], frameOf: {}, pins: {}, sizes: {}, positions: {}, objects: [],
     frameTiles: new Map(),
     updateFrameTitle: noop, updateFrameColor: noop, deleteFrame: noop, arrangeFrame: noop,
     bringFrameToFront: noop, onAttachWorktree: noop, onCreateWorktree: noop, unbindBranch: noop,
@@ -42,11 +42,11 @@ test("tile nodes carry SHELL data only — no body data (cwd/repoPath/root live 
   assert.equal(byId(nodes, "ed").type, "workbench", "editor kind renders as the workbench node type");
 });
 
-test("a framed tile is parented + positioned RELATIVE to its frame; pinned state flows from pinnedIds", () => {
+test("a framed tile is parented + positioned RELATIVE to its frame; where it is pinned comes from this person's pins", () => {
   const frames = [frame({ id: "wt", x: 100, y: 50 })];
   const nodes = buildBaseNodes(ctx({
-    frames, tiles: [tile({ id: "sh", pinned: true, pinAnchor: { sx: 1, sy: 2 } })],
-    frameOf: { sh: "wt" }, positions: { sh: { x: 130, y: 90 } }, pinnedIds: new Set(["sh"]),
+    frames, tiles: [tile({ id: "sh" })],
+    frameOf: { sh: "wt" }, positions: { sh: { x: 130, y: 90 } }, pins: { sh: { anchor: { sx: 1, sy: 2 }, size: { w: 300, h: 200 } } },
   }));
   const sh = byId(nodes, "sh");
   assert.equal(sh.parentId, "wt");
@@ -55,6 +55,7 @@ test("a framed tile is parented + positioned RELATIVE to its frame; pinned state
   const d = sh.data as Record<string, unknown>;
   assert.equal(d.pinned, true);
   assert.deepEqual(d.pinAnchor, { sx: 1, sy: 2 });
+  assert.deepEqual(d.pinSize, { w: 300, h: 200 });
 });
 
 test("frames emit PARENTS before worktree CHILDREN; child position is relative + zIndex tiers hold", () => {

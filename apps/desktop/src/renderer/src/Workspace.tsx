@@ -80,10 +80,11 @@ import {
   FALLBACK_VIEW_ID, getView, resolveChrome, resolveViewId, useViews,
   type SpawnOpts, type WorkspaceCommands, type WorkspaceViewModel,
 } from "./workspace/workspace-view";
-import { saveViewLayout, useDebouncedSave } from "./workspace/view-layout-store";
+import { saveViewLayout, useDebouncedSave, useViewLayout } from "./workspace/view-layout-store";
 import { onStoreChange, showWorkspace } from "./workspace/workspace-store-client";
 import { setViewMode, useViewMode } from "./workspace/view-mode-store";
-import { CANVAS_LAYOUT, loadCanvasLayout } from "./workspace/views/canvas-layout";
+import { CANVAS_CAMERA, CANVAS_LAYOUT, loadCanvasCamera, loadCanvasLayout, reloadCanvasLayout } from "./workspace/views/canvas-layout";
+import { PIN_SIZE, PINS } from "./workspace/pins";
 import { CanvasRuntimeContext, type CanvasRuntime, type FocusModeReq, type FocusReq, type Viewport } from "./workspace/views/canvas-runtime";
 // Registers the built-in view plugins (side effect) before the first render.
 import "./workspace/views";
@@ -142,6 +143,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     return layout;
   }, [persistKey]);
   const canvasInitial = useMemo(() => loadCanvasLayout(persistKey), [persistKey]);
+  const cameraInitial = useMemo(() => loadCanvasCamera(persistKey), [persistKey]);
 
   // All open tiles, every kind, as instances. Mirror to a ref so callbacks
   // declared before later state can read the latest list without re-creating.
@@ -225,6 +227,13 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
 
   // Tile positions (absolute world coords). Populated by drag-stop + placement.
   const [positions, setPositions, positionsRef] = useStateWithRef<Record<string, { x: number; y: number }>>(canvasInitial.positions);
+  // Tiles pinned to this person's screen: theirs, kept on this device (workspace/pins.ts).
+  const [pins, setPins] = useViewLayout(PINS, persistKey);
+  // Pins the tiles carried while a pin was the workspace's: where this device starts, when it has none.
+  useEffect(() => {
+    const carried = initial.pins ?? {};
+    if (Object.keys(carried).length > 0) setPins((own) => (Object.keys(own).length > 0 ? own : carried));
+  }, [initial, setPins]);
   const commitPosition = useCallback((id: string, x: number, y: number) => {
     // Snap on COMMIT (not during drag) — snapping during motion teleports the
     // tile in grid steps every pointermove → feels notchy. Snap only on release.
@@ -277,7 +286,8 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     setPositions(withoutKey(id));
     setSizes(withoutKey(id));
     setFrameOf(withoutKey(id));
-  }, []);
+    setPins(withoutKey(id));
+  }, [setPins]);
 
 
   // Frames — colored comment boxes for grouping, each optionally bound to a
@@ -346,8 +356,8 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   // Latest viewport mutated on every pan tick (cheap — ref, no re-render);
   // committed to state at onMoveEnd so the canvas-layout persist effect picks it
   // up. Reload restores via react-flow's defaultViewport.
-  const currentViewportRef = useRef<Viewport>(canvasInitial.viewport ?? DEFAULT_VIEWPORT);
-  const [viewport, setViewport] = useState<Viewport>(canvasInitial.viewport ?? DEFAULT_VIEWPORT);
+  const currentViewportRef = useRef<Viewport>(cameraInitial ?? DEFAULT_VIEWPORT);
+  const [viewport, setViewport] = useState<Viewport>(cameraInitial ?? DEFAULT_VIEWPORT);
 
   // A new box goes where the canvas says: under the pointer, or in the middle of the view when
   // the pointer is elsewhere. "arrow" starts drawing one.
@@ -371,6 +381,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     lastRepoRef.current = persistKey;
     const next = loadLayout(persistKey);
     const nextCanvas = loadCanvasLayout(persistKey);
+    const nextCamera = loadCanvasCamera(persistKey);
     setSizes(nextCanvas.sizes);
     setPositions(nextCanvas.positions);
     setFrames(next.frames);
@@ -379,17 +390,17 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     setEditorTabs(next.editorTabs ?? {});
     setFrameOf(next.frameOf ?? {});
     reloadBoard(persistKey, next.frames);
-    if (nextCanvas.viewport) { currentViewportRef.current = nextCanvas.viewport; setViewport(nextCanvas.viewport); }
+    if (nextCamera) { currentViewportRef.current = nextCamera; setViewport(nextCamera); }
   }, [persistKey, reloadBoard]);
 
   // Persist — trailing-debounced (250ms) so a drag's per-drop setPositions
   // doesn't JSON.stringify a blob on the main thread per commit; flushed on
   // repo switch (under the old key), unmount and beforeunload by
-  // useDebouncedSave (the ONE mechanism every layout blob uses). Two blobs, two
-  // triggers: the core blob rewrites on structural edits only — a pan/drop
-  // touches just the canvas view's geometry blob.
+  // useDebouncedSave (the ONE mechanism every layout blob uses). Three blobs, three
+  // triggers: the core blob rewrites on structural edits only, a drop touches just
+  // the canvas view's places, and a pan just this person's camera.
   const coreSnap = useMemo(() => ({ frames, tileNames, tiles, editorTabs, frameOf }), [frames, tileNames, tiles, editorTabs, frameOf]);
-  const geometry = useMemo(() => ({ positions, sizes, viewport }), [positions, sizes, viewport]);
+  const geometry = useMemo(() => ({ positions, sizes }), [positions, sizes]);
   const { flush: flushCore } = useDebouncedSave(persistKey, coreSnap, useCallback((key: string, v: typeof coreSnap) => saveLayout(key, v), []));
   // Main acts on the workspace this window shows, in the frame the user is in, when the control
   // plane's caller is in no tile.
@@ -399,18 +410,30 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   // tile): write what this window has yet to save, which the store applies as this window's change
   // alone, then take the layout as stored, keeping what this window changed since. A tile that
   // writer closed is closed here as its × closes it, which also ends a session still starting.
+  // The canvas's places and the board merge the same way (another window moved a tile, added a note).
+  const { flush: flushGeometry } = useDebouncedSave(persistKey, geometry, useCallback((key: string, v: typeof geometry) => saveViewLayout(CANVAS_LAYOUT, key, v), []));
+  const { merge: mergeBoard } = board;
   useEffect(() => onStoreChange(({ repo, part }) => {
-    if (repo !== persistKey || part !== "core") return;
-    flushCore();
-    const stored = reloadLayout(repo);
-    setFrames(stored.frames);
-    setTileNames(stored.tileNames);
-    setTiles(stored.tiles);
-    setEditorTabs(stored.editorTabs);
-    setFrameOf(stored.frameOf);
-    for (const id of stored.closed) closeTile(id);
-  }), [persistKey, flushCore, closeTile, setFrames, setTiles, setFrameOf]);
-  useDebouncedSave(persistKey, geometry, useCallback((key: string, v: typeof geometry) => saveViewLayout(CANVAS_LAYOUT, key, v), []));
+    if (repo !== persistKey) return;
+    if (part === "core") {
+      flushCore();
+      const stored = reloadLayout(repo);
+      setFrames(stored.frames);
+      setTileNames(stored.tileNames);
+      setTiles(stored.tiles);
+      setEditorTabs(stored.editorTabs);
+      setFrameOf(stored.frameOf);
+      for (const id of stored.closed) closeTile(id);
+    } else if (part === `view:${CANVAS_LAYOUT.viewId}`) {
+      flushGeometry();
+      const stored = reloadCanvasLayout(repo);
+      setPositions(stored.positions);
+      setSizes(stored.sizes);
+    } else if (part === "board") {
+      mergeBoard();
+    }
+  }), [persistKey, flushCore, flushGeometry, mergeBoard, closeTile, setFrames, setTiles, setFrameOf, setPositions, setSizes]);
+  useDebouncedSave(persistKey, viewport, useCallback((key: string, v: Viewport) => saveViewLayout(CANVAS_CAMERA, key, v), []));
 
   // Viewport-focus request: resolve the target's CENTER from our own state
   // (positions/sizes/frames) and hand absolute coords to <FocusOnTile>. Works
@@ -927,48 +950,46 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     onCanvas: () => (activeViewIdRef.current ?? FALLBACK_VIEW_ID) === "canvas",
   });
 
-  // Pin state derived from tiles. Pinning captures the tile's SCREEN rect so the
-  // floating panel opens where the tile is; unpinning keeps the anchor/size.
-  const pinnedIds = useMemo(() => new Set(tiles.filter((t) => t.pinned).map((t) => t.id)), [tiles]);
+  // Pinning captures the tile's SCREEN rect so the floating panel opens where the tile is.
+  const pinnedIds = useMemo(() => new Set(Object.keys(pins)), [pins]);
   const togglePin = useCallback((id: string, rect: PinRect) => {
-    setTiles((ts) => ts.map((t) => {
-      if (t.id !== id) return t;
-      if (t.pinned) return { ...t, pinned: false };
+    setPins((all) => {
+      if (all[id]) return withoutKey<(typeof all)[string]>(id)(all);
       const anchor = clampAnchor(
         { sx: rect.sx, sy: rect.sy },
         { w: rect.w, h: rect.h },
         { w: window.innerWidth, h: window.innerHeight },
       );
-      return { ...t, pinned: true, pinAnchor: anchor, pinSize: { w: rect.w, h: rect.h } };
-    }));
-  }, [setTiles]);
+      return { ...all, [id]: { anchor, size: { w: rect.w, h: rect.h } } };
+    });
+  }, [setPins]);
   const onPinChange = useCallback((id: string, patch: { anchor?: { sx: number; sy: number }; size?: { w: number; h: number } }) => {
-    setTiles((ts) => ts.map((t) => (t.id === id
-      ? { ...t, ...(patch.anchor ? { pinAnchor: patch.anchor } : {}), ...(patch.size ? { pinSize: patch.size } : {}) }
-      : t)));
-  }, [setTiles]);
+    setPins((all) => {
+      const pin = all[id];
+      return pin ? { ...all, [id]: { anchor: patch.anchor ?? pin.anchor, size: patch.size ?? pin.size } } : all;
+    });
+  }, [setPins]);
   // A pinned panel lives in SCREEN pixels — re-clamp every pin on window resize
   // so a shrunk window can't strand one off-screen (the anchor is persisted).
   useEffect(() => {
     const reclamp = () => {
       const win = { w: window.innerWidth, h: window.innerHeight };
-      setTiles((ts) => {
+      setPins((all) => {
         let moved = false;
-        const next = ts.map((t) => {
-          if (!t.pinned || !t.pinAnchor) return t;
-          const size = t.pinSize ?? { w: 380, h: 260 };
-          const c = clampAnchor(t.pinAnchor, size, win);
-          if (c.sx === t.pinAnchor.sx && c.sy === t.pinAnchor.sy) return t;
+        const next = { ...all };
+        for (const [id, pin] of Object.entries(all)) {
+          const c = clampAnchor(pin.anchor, pin.size ?? PIN_SIZE, win);
+          if (c.sx === pin.anchor.sx && c.sy === pin.anchor.sy) continue;
           moved = true;
-          return { ...t, pinAnchor: c };
-        });
-        return moved ? next : ts;
+          next[id] = { ...pin, anchor: c };
+        }
+        return moved ? next : all;
       });
     };
     reclamp(); // also rescues pins already stranded by a resize while closed
     window.addEventListener("resize", reclamp);
     return () => window.removeEventListener("resize", reclamp);
-  }, [setTiles]);
+  }, [setPins]);
 
   // Theme is a global app pref persisted by theme-store; push it into the DOM once.
   useEffect(() => { applyTheme(); }, []);
@@ -1072,7 +1093,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     selectedTileIdsRef, markSeen, toasts, dismissToast,
     frameTiles, updateFrameTitle, updateFrameColor, deleteFrame, arrangeFrame, bringFrameToFront,
     onAttachWorktree, onCreateWorktree, unbindBranch, bindWorkspace, unbindWorkspace,
-    pinnedIds, togglePin, onPinChange, board, canvasPointRef,
+    pins, togglePin, onPinChange, board, canvasPointRef,
     agentSel, setAgentSel, spawnAgent, spawnBrowser, onInitWorkspace,
     updateAvailable, updateStaged, onUpgrade: () => onUpgrade?.(), onRestart: () => onRestart?.(), upgrading,
   }), [
@@ -1080,7 +1101,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     selectedTileIdRef, selectedFrameIdRef, selectedTileIdsRef, markSeen, toasts, dismissToast, frameTiles,
     updateFrameTitle, updateFrameColor, deleteFrame, arrangeFrame, bringFrameToFront,
     onAttachWorktree, onCreateWorktree, unbindBranch, bindWorkspace, unbindWorkspace,
-    pinnedIds, togglePin, onPinChange, board, agentSel, spawnAgent, spawnBrowser, onInitWorkspace, updateAvailable, updateStaged, onUpgrade, onRestart, upgrading,
+    pins, togglePin, onPinChange, board, agentSel, spawnAgent, spawnBrowser, onInitWorkspace, updateAvailable, updateStaged, onUpgrade, onRestart, upgrading,
   ]);
 
   return (

@@ -4,6 +4,9 @@
 import { expect, test } from "bun:test";
 import { LoroDoc } from "loro-crdt";
 import { addTile, readCore, removeTile, writeCore, writeTileName } from "../src/core.ts";
+import { readObjects, writeObjects } from "../src/objects.ts";
+import { readView, writeView } from "../src/views.ts";
+import type { BoardObject } from "../src/shapes.ts";
 
 type Fields = Record<string, unknown>;
 const frame = (id: string, fields: Fields = {}) => ({ id, x: 0, y: 0, w: 400, h: 300, title: id, color: "#888", z: 1, ...fields });
@@ -93,4 +96,52 @@ test("a tile is opened on its own, last, in its frame and with its name; one alr
   expect(() => addTile(doc, { id: "t8" } as never)).toThrow(TypeError);
   expect(() => addTile(doc, tile("t8", { frame: "f1" }))).toThrow(TypeError);
   expect(readCore(doc)?.tiles.map((t) => t.id)).toEqual(["t1", "t2", "t3", "ed", "t9", "t0"]);
+});
+
+const at = (x: number, y = 0) => ({ x, y });
+const canvas = (positions: Fields, sizes: Fields = {}) => ({ v: 1, data: { positions, sizes } });
+
+test("a view written from an older reading changes what its writer changed, tile by tile, and keeps what others changed since", () => {
+  const doc = new LoroDoc();
+  const read = canvas({ t1: at(0), t2: at(100), t3: at(200) });
+  writeView(doc, "canvas", read);
+  // Another writer, since: moves t2 and places t4.
+  writeView(doc, "canvas", canvas({ t1: at(0), t2: at(150, 50), t3: at(200), t4: at(300) }));
+  // The window, still on what it read: moves t1, forgets t3 (closed) and sizes t1.
+  writeView(doc, "canvas", canvas({ t1: at(10, 10), t2: at(100) }, { t1: { width: 500, height: 300 } }), read);
+  expect(readView(doc, "canvas")).toEqual(canvas({ t1: at(10, 10), t2: at(150, 50), t4: at(300) }, { t1: { width: 500, height: 300 } }));
+  // A writer that read nothing keeps what is there.
+  writeView(doc, "canvas", canvas({ t5: at(400) }), null);
+  expect(Object.keys((readView(doc, "canvas")!.data as { positions: Fields }).positions).sort()).toEqual(["t1", "t2", "t4", "t5"]);
+});
+
+test("a view of another version, or whose data is not fields, is written as given", () => {
+  const doc = new LoroDoc();
+  const read = canvas({ t1: at(0) });
+  writeView(doc, "canvas", read);
+  writeView(doc, "canvas", canvas({ t1: at(0), t2: at(100) }));
+  writeView(doc, "canvas", { v: 2, data: { positions: {} } }, read);
+  expect(readView(doc, "canvas")).toEqual({ v: 2, data: { positions: {} } });
+  // A writer whose reading was of another version removed nothing from this one.
+  writeView(doc, "canvas", { v: 2, data: { positions: { t1: at(0), t2: at(100) } } });
+  writeView(doc, "canvas", { v: 2, data: { positions: { t1: at(5) } } }, canvas({ t1: at(0), t2: at(100) }));
+  expect(readView(doc, "canvas")).toEqual({ v: 2, data: { positions: { t1: at(5), t2: at(100) } } });
+  writeView(doc, "list", { v: 1, data: ["a", "b"] });
+  writeView(doc, "list", { v: 1, data: ["c"] }, { v: 1, data: ["a"] });
+  expect(readView(doc, "list")).toEqual({ v: 1, data: ["c"] });
+});
+
+const note = (id: string, text: string, fields: Fields = {}) => ({ id, kind: "note", x: 0, y: 0, w: 200, h: 160, color: "yellow", text, ...fields }) as BoardObject;
+const arrow = (id: string, from: string, to: string) => ({ id, kind: "arrow", from: { id: from, side: "right" }, to: { id: to, side: "left" }, label: "" }) as BoardObject;
+
+test("a board written from an older reading changes what its writer changed, field by field, and keeps what others changed since", () => {
+  const doc = new LoroDoc();
+  writeObjects(doc, [note("n1", "ship R15"), note("n2", "tests"), arrow("a1", "n1", "n2")]);
+  const read = readObjects(doc);
+  // Another writer, since: retypes n1, deletes n2 and adds n3.
+  writeObjects(doc, [note("n1", "ship R5"), arrow("a1", "n1", "n2"), note("n3", "docs")]);
+  // The window, still on what it read: moves n1, recolours n2 and deletes the arrow. n2, deleted
+  // since, stays deleted.
+  writeObjects(doc, [note("n1", "ship R15", { x: 40 }), note("n2", "tests", { color: "pink" })], read);
+  expect(readObjects(doc)).toEqual([note("n1", "ship R5", { x: 40 }), note("n3", "docs")]);
 });

@@ -7,10 +7,10 @@
  *
  * A read is the same merge the other way: the window takes the document as it is now, keeping
  * what it changed since its base and has not yet saved. It keeps each part of the layout apart,
- * so it merges them one by one.
+ * so it merges them one by one. A view's layout and the board are written and read the same way.
  */
-import type { Fields } from "./input.js";
-import type { CoreLayout } from "./shapes.js";
+import { isObject, type Fields } from "./input.js";
+import type { CoreLayout, ViewLayout } from "./shapes.js";
 
 type Layout = Required<CoreLayout>;
 
@@ -45,15 +45,33 @@ export function rebaseRecords<T extends { id: string }>(base: readonly T[], next
   return out;
 }
 
-/** Fields by name: those the writer changed from its base are its, the rest as they are now. */
-export function rebaseFields<T extends Fields>(base: T, next: T, current: T): T {
+/**
+ * Fields by name: those the writer changed from its base are its, the rest as they are now. With
+ * `depth` above 1, a changed field that holds fields on both sides merges the same way, a level
+ * down (a view's places, tile by tile).
+ */
+export function rebaseFields<T extends Fields>(base: T, next: T, current: T, depth = 1): T {
   const out: Fields = { ...current };
   for (const key of new Set([...Object.keys(base), ...Object.keys(next)])) {
     if (sameJson(base[key], next[key])) continue;
-    if (next[key] === undefined) delete out[key];
-    else out[key] = next[key];
+    const mine = next[key];
+    const now = current[key];
+    if (mine === undefined) delete out[key];
+    else if (depth > 1 && isObject(mine) && isObject(now)) out[key] = rebaseFields(isObject(base[key]) ? base[key] : {}, mine, now, depth - 1);
+    else out[key] = mine;
   }
   return out as T;
+}
+
+/**
+ * A view's layout (null: none read, or none stored): its data merged `depth` levels deep, as the
+ * document keeps it. A layout of another version than the one stored, or whose data is not
+ * fields, is the writer's as given.
+ */
+export function rebaseView(base: ViewLayout | null, next: ViewLayout, current: ViewLayout | null, depth: number): ViewLayout {
+  if (!current || current.v !== next.v || !isObject(next.data) || !isObject(current.data)) return next;
+  const before = base && base.v === next.v && isObject(base.data) ? base.data : {};
+  return { v: next.v, data: rebaseFields(before, next.data, current.data, depth) };
 }
 
 /** Equal as JSON keeps them: an object key by key in any order, a missing key as undefined. */

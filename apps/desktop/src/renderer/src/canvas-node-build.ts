@@ -16,6 +16,7 @@ import type { ArrangeMode } from "./frame-layout";
 import type { WorktreeEntry } from "../../shared/ipc";
 import { effectiveRepoOf, type PinRect, type TileSurfaceType } from "./workspace/tile-surfaces";
 import type { CanvasTileNodeData } from "./canvas-nodes";
+import type { Pins } from "./workspace/pins";
 
 const NO_TILES: string[] = [];
 
@@ -24,8 +25,8 @@ export interface NodeBuildCtx {
   tiles: TileInstance[];
   frames: FrameState[];
   frameOf: Record<string, string>;
-  /** Tile ids currently pinned (float above + viewport-fixed). */
-  pinnedIds: Set<string>;
+  /** Tiles pinned to this person's screen (float above + viewport-fixed), with where and how big. */
+  pins: Pins;
   sizes: Record<string, { width: number; height: number }>;
   positions: Record<string, { x: number; y: number }>;
   /** The board's objects, on the canvas (board-objects/useBoard). */
@@ -59,7 +60,7 @@ const NODE_TYPE: Record<TileInstance["kind"], TileSurfaceType> = {
 
 export function buildBaseNodes(ctx: NodeBuildCtx): Node[] {
   const {
-    repoPath, tiles, frames, frameOf, pinnedIds, sizes, positions, objects, frameTiles,
+    repoPath, tiles, frames, frameOf, pins, sizes, positions, objects, frameTiles,
     updateFrameTitle, updateFrameColor, deleteFrame, arrangeFrame, bringFrameToFront,
     onAttachWorktree, onCreateWorktree, unbindBranch, bindWorkspace, unbindWorkspace,
     closeTile, onNodeResizeCommit, onTogglePin, onPinChange,
@@ -84,13 +85,14 @@ export function buildBaseNodes(ctx: NodeBuildCtx): Node[] {
     // Pin controls live on EVERY tile's data (rendered by the node wrapper as a
     // corner badge; the floating panel when pinned). `onTogglePin`/`onPinChange`
     // are stable (useCallback); the wrapper supplies the id, so no per-build
-    // closure churns React.memo. Anchor/size come from the persisted
-    // TileInstance so a pinned panel restores at its saved screen spot + size.
+    // closure churns React.memo. Anchor/size come from this person's saved pin,
+    // so a pinned panel restores at its screen spot + size.
     const pinTile = tiles.find((t) => t.id === base.id);
+    const pin = pins[base.id];
     const pinData = {
-      pinned: pinnedIds.has(base.id),
-      pinAnchor: pinTile?.pinAnchor,
-      pinSize: pinTile?.pinSize,
+      pinned: !!pin,
+      pinAnchor: pin?.anchor,
+      pinSize: pin?.size,
       onTogglePin,
       onPinChange,
       // Every tile with its own header docks the pin button there (next to close),

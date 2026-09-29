@@ -243,13 +243,15 @@ export interface HiveIpc {
    *  what it changed is written. Synchronous, so a write made while the window unloads is kept. */
   workspaceSetCoreSync(repo: string, core: unknown, base?: unknown): void;
   /** Replace one view's layout. Synchronous for the same reason. */
-  workspaceSetViewSync(repo: string, viewId: string, layout: ViewLayout): void;
+  /** `base`: the layout this window last read or wrote (null: none): only what changed from it is written. */
+  workspaceSetViewSync(repo: string, viewId: string, layout: ViewLayout, base?: ViewLayout | null): void;
   /** Offer this window's old localStorage layout; the store keeps only what it lacks. */
   workspaceImportSync(repo: string, legacy: LegacyLayout): void;
   /** The board's objects, a framed one's position relative to its frame; none when there are none. */
   workspaceObjectsSync(repo: string): BoardObject[] | null;
   /** Replace the board. Synchronous, so a write made while the window unloads is kept. */
-  workspaceSetObjectsSync(repo: string, objects: BoardObject[]): void;
+  /** `base`: the board this window last read or wrote (null: none): only what changed from it is written. */
+  workspaceSetObjectsSync(repo: string, objects: BoardObject[], base?: BoardObject[] | null): void;
   /** Take back the last board edit; false when there is none. */
   workspaceUndoSync(repo: string): boolean | null;
   /** Make again the last board edit undo took back; false when there is none. */

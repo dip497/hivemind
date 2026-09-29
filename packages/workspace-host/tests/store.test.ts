@@ -162,6 +162,37 @@ test("undo takes back board edits one write at a time, never the layout or a vie
   expect(restart().getObjects("/a")).toEqual([list("milk", "eggs"), note("drafted")]);
 });
 
+test("each writer undoes and redoes its own board edits, never another's", () => {
+  const s = new WorkspaceStore({ dir });
+  s.setObjects("/a", [note("draft")], { writer: "window:1" });
+  s.setObjects("/a", [note("draft"), list("milk")], { writer: "window:12", base: [note("draft")] });
+  s.setObjects("/a", [note("drafted"), list("milk")], { writer: "window:1", base: [note("draft"), list("milk")] });
+  expect(s.undo("/a", { writer: "window:12" })).toBe(true);
+  expect(s.getObjects("/a")).toEqual([note("drafted")]);
+  expect(s.undo("/a", { writer: "window:12" })).toBe(false);
+  expect(s.undo("/a", { writer: "window:1" })).toBe(true);
+  expect(s.getObjects("/a")).toEqual([note("draft")]);
+  expect(s.redo("/a", { writer: "window:12" })).toBe(true);
+  expect(s.getObjects("/a")).toEqual([list("milk"), note("draft")]);
+  expect(s.undo("/a", { writer: "window:1" })).toBe(true);
+  expect(s.getObjects("/a")).toEqual([list("milk")]);
+});
+
+test("a view or a board another window changed keeps that change when a window then writes what it read before", () => {
+  const s = new WorkspaceStore({ dir });
+  const canvas = (positions: object) => ({ v: 1, data: { positions } });
+  s.setView("/a", "canvas", canvas({ t1: { x: 0, y: 0 }, t2: { x: 100, y: 0 } }), { writer: "window:1" });
+  s.setObjects("/a", [note("draft")], { writer: "window:1" });
+  const view = s.getView("/a", "canvas");
+  const board = s.getObjects("/a");
+  s.setView("/a", "canvas", canvas({ t1: { x: 0, y: 0 }, t2: { x: 150, y: 50 } }), { writer: "window:2", base: view });
+  s.setObjects("/a", [note("draft"), list("milk")], { writer: "window:2", base: board });
+  s.setView("/a", "canvas", canvas({ t1: { x: 10, y: 10 }, t2: { x: 100, y: 0 } }), { writer: "window:1", base: view });
+  s.setObjects("/a", [note("drafted")], { writer: "window:1", base: board });
+  expect(restart().getView("/a", "canvas")).toEqual(canvas({ t1: { x: 10, y: 10 }, t2: { x: 150, y: 50 } }));
+  expect(restart().getObjects("/a")).toEqual([list("milk"), note("drafted")]);
+});
+
 test("bad input is refused with a TypeError and stores nothing", () => {
   const s = new WorkspaceStore({ dir });
   const bad: Array<() => unknown> = [
@@ -202,13 +233,14 @@ test("each change is told, with who made it; a write that changes nothing is not
   s.setCore("/a", core("api"), { writer: "window:1" });
   s.setView("/a", "canvas", { v: 1, data: { positions: {} } }, { writer: "window:2" });
   s.setObjects("/a", [note("ship it")], { writer: "window:1" });
-  s.undo("/a", { writer: "window:2" });
+  s.undo("/a", { writer: "window:2" }); // nothing of its own to take back
+  s.undo("/a", { writer: "window:1" });
   expect(s.renameTile("t1", "reviewer", { writer: "control" })).toBe("/a");
   expect(told).toEqual([
     { repo: "/a", part: "core", writer: "window:1" },
     { repo: "/a", part: "view:canvas", writer: "window:2" },
     { repo: "/a", part: "board", writer: "window:1" },
-    { repo: "/a", part: "board", writer: "window:2" },
+    { repo: "/a", part: "board", writer: "window:1" },
     { repo: "/a", part: "core", writer: "control" },
   ]);
 });

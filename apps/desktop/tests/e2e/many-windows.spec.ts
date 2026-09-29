@@ -126,3 +126,113 @@ test("a second window on the workspace shows its terminals live and the wires dr
   for (const tile of [child, parent]) hive(["ctl", "close", tile]);
   fs.rmSync(elsewhere, { recursive: true, force: true });
 });
+
+/** Where `w` shows `tile` on the canvas (world coordinates, whatever that window's camera). */
+const placeIn = (w: Page, tile: string) => w.evaluate((id) => {
+  const m = /translate\(([-\d.]+)px, ?([-\d.]+)px\)/.exec((document.querySelector(`.react-flow__node[data-id="${id}"]`) as HTMLElement | null)?.style.transform ?? "");
+  return m ? { x: Math.round(Number(m[1])), y: Math.round(Number(m[2])) } : null;
+}, tile);
+const cameraOf = (w: Page) => w.evaluate(() => (document.querySelector(".react-flow__viewport") as HTMLElement | null)?.style.transform ?? "");
+const notes = (w: Page) => w.locator(".react-flow__node-note [data-board-text]").allTextContents();
+/** A point on `w`'s canvas with nothing on it, away from its chrome. */
+const emptySpot = (w: Page) => w.evaluate(() => {
+  const pane = document.querySelector(".react-flow__pane")!.getBoundingClientRect();
+  for (let y = pane.bottom - 140; y > pane.top + 100; y -= 30) {
+    for (let x = pane.left + 320; x < pane.right - 100; x += 30) {
+      if (document.elementFromPoint(x, y)?.classList.contains("react-flow__pane")) return { x, y };
+    }
+  }
+  return null;
+});
+
+/** Drag a tile by its header, with small steps: xyflow samples the pointer once a frame. Once the
+ *  camera is still: a new tile is flown to, and a press on a moving tile does not drag it. */
+async function dragTile(w: Page, tile: string, by: { x: number; y: number }): Promise<void> {
+  let last = "";
+  await expect.poll(async () => { const now = await cameraOf(w); const still = now === last; last = now; return still; }, { intervals: [250] }).toBe(true);
+  const node = w.locator(`.react-flow__node[data-id="${tile}"]`);
+  const hb = (await node.locator(".tile-drag-handle").first().boundingBox())!;
+  const from = { x: hb.x + Math.min(40, hb.width - 10), y: hb.y + hb.height / 2 };
+  await w.mouse.move(from.x, from.y);
+  await w.mouse.down();
+  for (let i = 1; i <= 30; i++) {
+    await w.mouse.move(from.x + (by.x * i) / 30, from.y + (by.y * i) / 30);
+    await w.waitForTimeout(20);
+    // xyflow marks the node while it drags: a swallowed press fails here, not as a 0 px move.
+    if (i === 4) await expect(node, "the drag never engaged").toHaveClass(/dragging/, { timeout: 2_000 });
+  }
+  await w.mouse.up();
+}
+
+test("two windows share where tiles and notes are, and each keeps its own camera, pins and undo", async () => {
+  const [second] = await Promise.all([app.waitForEvent("window"), page.evaluate(() => window.hive.newWindow())]);
+  await second.waitForSelector(".react-flow", { timeout: 15_000 });
+  const windows = [page, second];
+  const terminals = () => page.locator(".react-flow__node-terminal").evaluateAll((nodes) => nodes.map((n) => n.getAttribute("data-id")!));
+  const had = await terminals();
+  await page.locator('[data-toolbar-action="terminal"]').click();
+  await expect.poll(async () => (await terminals()).length).toBe(had.length + 1);
+  const shell = (await terminals()).find((id) => !had.includes(id))!;
+  for (const w of windows) await expect(w.locator(`.react-flow__node[data-id="${shell}"]`)).toHaveCount(1);
+
+  // Moved in one window, it moves in the other.
+  const was = await placeIn(second, shell);
+  const olderPlaces = await second.evaluate((r) => window.hive.workspaceViewSync(r, "canvas"), repo);
+  await dragTile(page, shell, { x: 160, y: 100 });
+  await expect.poll(() => placeIn(page, shell)).not.toEqual(was);
+  await expect.poll(() => placeIn(second, shell)).not.toEqual(was);
+  const moved = await placeIn(page, shell);
+  expect(await placeIn(second, shell)).toEqual(moved);
+  // A save from before the move (a window saving what it read then) keeps the move: main writes
+  // only what changed from that reading.
+  await second.evaluate(([r, v]) => window.hive.workspaceSetViewSync(r, "canvas", v as never, v as never), [repo, olderPlaces] as const);
+  await page.waitForTimeout(300);
+  for (const w of windows) expect(await placeIn(w, shell)).toEqual(moved);
+
+  // A camera is the window's: one panned leaves the other where it was, and stays out of the workspace.
+  const theirs = await cameraOf(second);
+  const mine = await cameraOf(page);
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:zoom", { detail: "in" })));
+  await expect.poll(() => cameraOf(page)).not.toBe(mine);
+  await page.waitForTimeout(800); // its save has landed
+  expect(await cameraOf(second)).toBe(theirs);
+  expect(await page.evaluate((r) => (window.hive.workspaceViewSync(r, "canvas") as { data?: { viewport?: unknown } } | null)?.data?.viewport, repo)).toBeUndefined();
+
+  // So is a pin: the tile floats on the screen of the window that pinned it.
+  await page.locator(`.react-flow__node[data-id="${shell}"]`).getByRole("button", { name: "Pin tile" }).click();
+  await expect(page.getByRole("button", { name: "Unpin tile" })).toHaveCount(1);
+  await page.waitForTimeout(500); // its save has landed
+  await expect(second.getByRole("button", { name: "Unpin tile" })).toHaveCount(0);
+  expect(await page.evaluate((r) => window.hive.workspaceViewSync(r, "pins"), repo)).toBeNull();
+  expect(await page.evaluate(([r, id]) => (window.hive.workspaceCoreSync(r) as { tiles: Array<{ id: string; pinned?: boolean }> }).tiles.find((t) => t.id === id)?.pinned, [repo, shell] as const)).toBeUndefined();
+  await page.getByRole("button", { name: "Unpin tile" }).click();
+
+  // A note written in either window shows in both; ⌘Z takes back the window's own, not the other's.
+  const zoomOut = (w: Page) => w.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:zoom", { detail: "out" })));
+  const note = async (w: Page, text: string) => {
+    for (let i = 0; i < 3; i++) await zoomOut(w);
+    await w.waitForTimeout(400);
+    const at = (await emptySpot(w))!;
+    await w.mouse.click(at.x, at.y); // the canvas has the keys, not the shell
+    await w.keyboard.press("8");
+    await w.keyboard.type(text);
+    await w.keyboard.press("Escape");
+    return at;
+  };
+  const olderBoard = await second.evaluate((r) => window.hive.workspaceObjectsSync(r), repo);
+  await note(page, "from the first");
+  for (const w of windows) await expect.poll(() => notes(w)).toEqual(["from the first"]);
+  // So does a save of the board from before the note.
+  await second.evaluate(([r, b]) => window.hive.workspaceSetObjectsSync(r, b as never, b as never), [repo, olderBoard] as const);
+  await page.waitForTimeout(300);
+  for (const w of windows) expect(await notes(w)).toEqual(["from the first"]);
+  await note(second, "from the second");
+  for (const w of windows) await expect.poll(async () => (await notes(w)).sort()).toEqual(["from the first", "from the second"]);
+  const off = (await emptySpot(page))!;
+  await page.mouse.click(off.x, off.y); // the canvas, off the note
+  await page.keyboard.press("Control+z");
+  for (const w of windows) await expect.poll(() => notes(w)).toEqual(["from the second"]);
+
+  await second.close();
+  hive(["ctl", "close", shell]);
+});
