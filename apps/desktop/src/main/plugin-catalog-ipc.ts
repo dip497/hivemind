@@ -102,18 +102,29 @@ export function installPluginCatalogIpc(getWindow: () => BrowserWindow | null): 
   });
 
   // Once per launch, asked for by the workspace once it is up, so the result has a listener.
-  let autoInstalled = false;
+  // A check that FAILED does not count: the registry is on the other side of someone's
+  // network, and latching a socket that closed mid-fetch leaves an agent this version cannot
+  // load broken until the app is restarted — which is exactly when nothing works.
+  let checkedCatalog = false;
+  let checking: Promise<{ added: Array<{ id: string; label: string; does: string[] }>; updated: Array<{ id: string; label: string }> }> | null = null;
   ipcMain.handle("agents:auto-install", async (event) => {
     assertSender(event);
-    if (autoInstalled) return { added: [], updated: [] };
-    autoInstalled = true;
-    try {
+    if (checkedCatalog) return { added: [], updated: [] };
+    if (checking) return checking; // a second ask while the first is in flight rides along
+    checking = (async () => {
       await applyShellEnvToProcess();
       const listed = await fetchCatalog();
       return { added: await autoInstallDetectedAgents(listed), updated: await autoUpdateCatalogAgents(listed) };
+    })();
+    try {
+      const out = await checking;
+      checkedCatalog = true;
+      return out;
     } catch (e) {
-      console.warn("[agents] catalog check skipped:", (e as Error).message);
+      console.warn("[agents] catalog check failed, will try again:", (e as Error).message);
       return { added: [], updated: [] };
+    } finally {
+      checking = null;
     }
   });
 
