@@ -101,8 +101,11 @@ test("a second window on the workspace shows its terminals live and the wires dr
   // It opens on the terminal as it is, and on the wire drawn before it opened.
   await expect.poll(() => screenOf(second, parent), { timeout: 15_000 }).toContain("early-words");
   await expect(second.locator(wire)).toHaveCount(1);
-  expect(hive(["ctl", "send", parent, 'echo live""-in-both']).code).toBe(0);
+  expect(hive(["ctl", "send", parent, 'sleep 3; echo live""-in-both']).code).toBe(0);
+  // One status for the agent in both, from its host: working while the turn runs, then not.
+  for (const w of windows) await expect(w.locator(".hm-layers").getByTitle("twin-parent · working")).toHaveCount(1);
   for (const w of windows) await expect.poll(() => screenOf(w, parent), { timeout: 15_000 }).toContain("live-in-both");
+  for (const w of windows) await expect(w.locator(".hm-layers").getByTitle("twin-parent · working")).toHaveCount(0);
 
   // Both windows are told of a spawn, mount it and draw its wire; its typed first task is typed once.
   const typed: string = hive(["ctl", "spawn", "--agent", "droid", "--name", "twin-typed", "--prompt", 'echo once""-only', "--no-report", "--json"], { HIVEMIND_TILE: `hm:${parent}` }).json.tileId;
