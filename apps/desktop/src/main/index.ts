@@ -57,7 +57,7 @@ import {
 } from "./remote/pty.js";
 import { readRemoteFile, writeRemoteFile } from "./remote/git.js";
 import { remoteConns } from "./remote/conn.js";
-import { findGitRoot, computeRepoPath } from "./workspace-paths.js";
+import { findGitRoot, computeRepoPath, projectDir } from "./workspace-paths.js";
 // tmux-style persistence is ON by default — terminal sessions live in a
 // detached daemon and survive the window closing. No user-facing flag.
 // `HIVEMIND_PTY_DAEMON=0` is an internal escape hatch (debugging / a hostile
@@ -472,7 +472,7 @@ function wrap<A extends unknown[], R>(
 
 // hive-core
 ipcMain.handle("resolveProject", wrap(async (e, rootHint?: string) => {
-  const cwd = rootHint ?? process.cwd();
+  const cwd = await projectDir(rootHint, process.cwd());
   const root = await findRoot(cwd);
   // The repo a frame's tiles run in. THREE cases, in priority order:
   //

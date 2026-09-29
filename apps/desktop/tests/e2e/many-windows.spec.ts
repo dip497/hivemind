@@ -23,6 +23,8 @@ let repo: string;
 let fakeBin: string;
 const home = fs.mkdtempSync(path.join(os.tmpdir(), "hm-windows-home-"));
 let hcp: Record<string, string> = {};
+/** The project the app opens with next, before this spec: a window it opens makes its own that. */
+let lastProject: string | null = null;
 
 function onPath(bin: string): string {
   for (const d of (process.env.PATH ?? "").split(":")) {
@@ -62,12 +64,15 @@ test.beforeAll(async () => {
   });
   page = await app.firstWindow();
   await page.waitForSelector(".react-flow", { timeout: 15_000 });
+  lastProject = await page.evaluate(() => localStorage.getItem("hivemind:last-project"));
   const userData = path.join(XDG, "hivemind-dev");
   await expect.poll(() => fs.existsSync(path.join(userData, "hcp.token")), { timeout: 20_000 }).toBe(true);
   hcp = { HIVE_HCP_SOCK: path.join(userData, "hcp.sock"), HCP_TOKEN: fs.readFileSync(path.join(userData, "hcp.token"), "utf8").trim() };
 });
 
 test.afterAll(async () => {
+  // The next spec on this profile opens the project it is started in, not this spec's (removed below).
+  await page?.evaluate((v) => { if (v === null) localStorage.removeItem("hivemind:last-project"); else localStorage.setItem("hivemind:last-project", v); }, lastProject).catch(() => {});
   // Reap this spec's daemon before closing the app (close() waits on child processes), and again
   // after: the closing app starts another to let go of its tiles.
   try { execSync(`pkill -f "out/main/pty-daemon.js ${XDG}/"`, { stdio: "ignore" }); } catch { /* none */ }

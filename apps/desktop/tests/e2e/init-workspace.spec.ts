@@ -88,3 +88,8 @@ test("Initialize workspace writes config + reveals New button", async () => {
   expect(md).toMatch(/id:\s*TST-1/);
   expect(md).toMatch(/title:\s*['"]?First issue after init/);
 });
+
+test("a project opened last and since moved or deleted opens as the folder the app was started in", async () => {
+  const gone = path.join(os.tmpdir(), "hivemind-gone-project-that-was-never-there");
+  expect(await page.evaluate((p) => window.hive.resolveProject(p), gone)).toMatchObject({ cwd: workspace });
+});

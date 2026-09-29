@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: when the project you had open last has since been moved or deleted, the app opens the folder it was started in, instead of an empty canvas in a folder that is gone, where no terminal or agent could start.
 - **New window** (in Open recent, Ctrl+R) opens another window on the project the current one shows. Both show the same terminals live, typing into either reaches the same session, and what an agent does through `hive ctl` (spawn, rename, close) shows in both. Closing one window leaves what the other shows running. A view or agent installed with `hive views install` or `hive agents install` appears in every window.
 - Two windows on one project share the canvas: a tile moved or resized, or a note written, in one shows in the other, and neither undoes the other's change when it saves. Each window keeps its own camera, Windows-view tab and pinned tiles, and `⌘Z` takes back that window's own board edits only. Where you left the camera and what you pinned are now kept on this computer rather than in the project's layout; they carry over from before.
 - `hive ctl rename <tile> "name"` names a tile, and every window shows the new name at once; with no name, the tile is called by what its agent says it is doing again. An agent can name the workers it runs.

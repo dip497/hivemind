@@ -280,3 +280,11 @@ spawn wires not being drawn, and two issues found while verifying R1.
   twice (a community view's) is written from a base but not merged live: no caller has two
   windows on one community view yet. Board undo per writer came with the second window: one
   history for the workspace let one window's ⌘Z take back another's note.
+- 2026-09-29 — Full e2e on the shared-layout commit: 157 passed, 10 skipped, 1 failed, the same
+  `zz-sixth-provider.spec.ts` lifecycle test as on the windows commit, on a quiet machine this
+  time. Root cause: `many-windows.spec.ts` opens a second window on its project, which Open
+  recent saves as the last project; the spec then deletes that folder, and every later spec on
+  the run's shared profile started on a folder that no longer existed, so its agents could not
+  start. Fixed twice: the spec leaves the last project as it found it, and the app opens the
+  folder it was started in when the last project is gone (`projectDir`, which also covers a
+  user who moved or deleted it).
