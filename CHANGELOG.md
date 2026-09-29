@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: memory the app held on to for good. Each window you closed kept its board undo history (and every one of them went on watching every later edit); every agent ever run kept its status, which each new window was then sent; and a machine's daemon kept the screen and title of every session that had ended, and told a desktop that connected later about them.
 - An agent running on another machine shows the status that machine sees, in every desktop watching it: one that connects while the agent is mid-turn shows it working at once, and a Ctrl+C typed in any of them ends the turn for all.
 - Fixed: when the project you had open last has since been moved or deleted, the app opens the folder it was started in, instead of an empty canvas in a folder that is gone, where no terminal or agent could start.
 - **New window** (in Open recent, Ctrl+R) opens another window on the project the current one shows. Both show the same terminals live, typing into either reaches the same session, and what an agent does through `hive ctl` (spawn, rename, close) shows in both. Closing one window leaves what the other shows running. A view or agent installed with `hive views install` or `hive agents install` appears in every window.

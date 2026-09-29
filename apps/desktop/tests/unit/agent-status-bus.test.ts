@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  clearStatus, publishStatus, setHostedStatus, setLabel, statusOf, subscribeStatus, type StatusEvent,
+  clearStatus, forgetStatus, publishStatus, setHostedStatus, setLabel, statusOf, subscribeStatus, type StatusEvent,
 } from "../../src/renderer/src/agent-status-bus.ts";
 import type { SessionStatus } from "@hivemind/agent-host/status-store";
 
@@ -42,4 +42,15 @@ test("a plain shell is what it says about itself; unmount keeps the host's statu
   setHostedStatus("a3", hosted({ state: "working" }));
   clearStatus("a3");
   assert.equal(statusOf("a3"), "working");
+});
+
+test("a tile closed for good keeps nothing, the host's status included, and is replayed to no one", () => {
+  setLabel("a4", "claude #4");
+  setHostedStatus("a4", hosted({ state: "working" }));
+  forgetStatus("a4");
+  assert.equal(statusOf("a4"), null);
+  const seen: StatusEvent[] = [];
+  const off = subscribeStatus((e) => { if (e.tileId === "a4") seen.push(e); });
+  assert.deepEqual(seen, []);
+  off();
 });

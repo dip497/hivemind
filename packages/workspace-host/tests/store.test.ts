@@ -178,6 +178,22 @@ test("each writer undoes and redoes its own board edits, never another's", () =>
   expect(s.getObjects("/a")).toEqual([list("milk")]);
 });
 
+test("a writer that is gone takes its board history with it; what it wrote stays, and the others keep theirs", () => {
+  const s = new WorkspaceStore({ dir });
+  s.getObjects("/b"); // another open workspace, where the writer never wrote
+  s.setObjects("/a", [note("draft")], { writer: "window:1" });
+  s.setObjects("/a", [note("draft"), list("milk")], { writer: "window:2", base: [note("draft")] });
+  s.setObjects("/c", [note("elsewhere")], { writer: "window:1" });
+  s.forgetWriter("window:1");
+  s.forgetWriter("window:9"); // never wrote: nothing to forget
+  expect(s.undo("/a", { writer: "window:1" })).toBe(false);
+  expect(s.undo("/c", { writer: "window:1" })).toBe(false);
+  expect(s.getObjects("/c")).toEqual([note("elsewhere")]);
+  expect(s.getObjects("/a")).toEqual([list("milk"), note("draft")]);
+  expect(s.undo("/a", { writer: "window:2" })).toBe(true);
+  expect(s.getObjects("/a")).toEqual([note("draft")]);
+});
+
 test("a view or a board another window changed keeps that change when a window then writes what it read before", () => {
   const s = new WorkspaceStore({ dir });
   const canvas = (positions: object) => ({ v: 1, data: { positions } });

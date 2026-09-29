@@ -8,8 +8,9 @@
  * so a handler forwards what it was sent and always answers: a synchronous request left
  * unanswered would hang the window. A window writes as `window:<its web contents' id>`, and
  * main's own writers (the control plane) as themselves; every window but the writer hears of a
- * change, and one not showing that workspace ignores it. `flushWorkspaceStore` retries failed
- * writes on quit, because `app.exit` skips every later handler.
+ * change, and one not showing that workspace ignores it. A window that closes is forgotten: what
+ * it showed, and its board history. `flushWorkspaceStore` retries failed writes on quit, because
+ * `app.exit` skips every later handler.
  */
 import path from "node:path";
 import { app, BrowserWindow, ipcMain, type IpcMainEvent, type WebContents } from "electron";
@@ -18,8 +19,23 @@ import { WorkspaceStore, type LegacyLayout, type ViewLayout } from "@hivemind/wo
 let store: WorkspaceStore | null = null;
 /** The workspace each window shows, and the frame the user is in there, by its web contents' id. */
 const shown = new Map<number, { repo: string; frame: string | null }>();
+/** Windows whose closing is watched, by their web contents' id. */
+const watched = new Set<number>();
 
 const writerOf = (wc: WebContents): string => `window:${wc.id}`;
+
+/** Forget a window once it closes: what it showed, and its board history (its id never comes back). */
+function watch(wc: WebContents): void {
+  const id = wc.id;
+  if (watched.has(id)) return;
+  watched.add(id);
+  const writer = writerOf(wc);
+  wc.once("destroyed", () => {
+    watched.delete(id);
+    shown.delete(id);
+    store?.forgetWriter(writer);
+  });
+}
 
 /** The app's one store: the window's, through the IPC below, and main's own writers'. */
 export function workspaceStore(): WorkspaceStore {
@@ -49,7 +65,7 @@ function answer(channel: string, run: (e: IpcMainEvent, ...args: unknown[]) => u
 
 export function installWorkspaceStoreIpc(): void {
   const s = workspaceStore();
-  const from = (e: IpcMainEvent) => ({ writer: writerOf(e.sender) });
+  const from = (e: IpcMainEvent) => { watch(e.sender); return { writer: writerOf(e.sender) }; };
   // Cast, not checked: the store refuses a bad argument with a TypeError.
   answer("workspace:core-sync", (_e, repo) => s.getCore(repo as string));
   answer("workspace:view-sync", (_e, repo, viewId) => s.getView(repo as string, viewId as string));
@@ -62,7 +78,7 @@ export function installWorkspaceStoreIpc(): void {
   answer("workspace:redo-sync", (e, repo) => s.redo(repo as string, from(e)));
   ipcMain.on("workspace:shown", (e, repo: unknown, frame: unknown) => {
     const id = e.sender.id;
-    if (!shown.has(id)) e.sender.once("destroyed", () => shown.delete(id));
+    watch(e.sender);
     if (typeof repo === "string" && repo) shown.set(id, { repo, frame: typeof frame === "string" && frame ? frame : null });
     else shown.delete(id);
   });

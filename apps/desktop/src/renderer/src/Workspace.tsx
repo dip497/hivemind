@@ -31,7 +31,7 @@ import { toast } from "sonner";
 import { Button } from "./components/ui/button";
 import { MenuItem } from "./components/ui/menu-item";
 import type { LayerTile, LayerFrame } from "./LayersPanel";
-import { statusOf, setHostedStatus, type TileStatusKind, subscribeTileStatus } from "./agent-status-bus";
+import { forgetStatus, statusOf, setHostedStatus, type TileStatusKind, subscribeTileStatus } from "./agent-status-bus";
 import { tileName } from "@hivemind/workspace-doc/tile-list";
 import { cleanName } from "@hivemind/agents";
 import { frameAtPoint } from "./frame-layout";
@@ -287,6 +287,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     setSizes(withoutKey(id));
     setFrameOf(withoutKey(id));
     setPins(withoutKey(id));
+    forgetStatus(id);
   }, [setPins]);
 
 

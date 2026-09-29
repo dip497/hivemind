@@ -126,6 +126,12 @@ export function clearStatus(tileId: string): void {
   emitted.delete(tileId);
 }
 
+/** The tile closed for good (its id never comes back): the host's status for it goes too. */
+export function forgetStatus(tileId: string): void {
+  clearStatus(tileId);
+  hosted.delete(tileId);
+}
+
 /** Last-known effective status of a tile, or null if none recorded. */
 export function statusOf(tileId: string): TileStatusKind | null {
   return effective(tileId)?.status ?? null;

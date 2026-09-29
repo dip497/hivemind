@@ -348,7 +348,9 @@ onAgentsReloaded = () => { for (const t of titles.recompute()) pushTitle(t.id, t
 const manager = new SessionManager(factory, {
   onOutput: (id) => screens.output(id),
   onTitle: (id, raw) => reportTitle(id, raw),
-  onEnd: (id) => { statuses?.exited(id); statuses?.forget(id); },
+  // An ended session is gone for good: its readings go with it, or a desktop that connects later
+  // is told of a screen nothing shows any more.
+  onEnd: (id) => { titles.forget(id); screens.forget(id); statuses?.exited(id); statuses?.forget(id); },
   idleMs: 8000, // exit 8s after the last session is killed/exits — no orphans
   onEmpty: () => {
     try {
@@ -515,7 +517,11 @@ const server = net.createServer((sock) => {
           onExit: (code, signal) => {
             outBuf.flush(msg.id);
             send({ t: "exit", id: msg.id, code, signal: signal ?? null });
-            if (viewers.get(msg.id) === viewer) viewers.delete(msg.id);
+            if (viewers.get(msg.id) !== viewer) return;
+            viewers.delete(msg.id);
+            outBuf.forget(msg.id);
+            behind.delete(msg.id);
+            lastSeq.delete(msg.id);
           },
         };
         viewers.set(msg.id, viewer);

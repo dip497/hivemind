@@ -238,6 +238,8 @@ test("a tile the control plane closes straight after spawning it leaves the wind
   await expect(page.locator(`.react-flow__node[data-id="${tile}"]`)).toHaveCount(0);
   await expect.poll(() => processesOf(tile), { timeout: 10_000 }).toEqual([]);
   expect(hive(["ctl", "close", tile, "--json"])).toMatchObject({ code: 5, json: { code: "TILE_NOT_FOUND" } });
+  // Nothing of it is kept: a window that opens now is not sent its status.
+  expect((await page.evaluate(() => window.hive.hcpStatusAll())).map((s) => s.tileId)).not.toContain(tile);
 });
 
 test("a worker spawned into a frame by its name opens there, and the window lays it out; a name no frame answers to is refused", async () => {

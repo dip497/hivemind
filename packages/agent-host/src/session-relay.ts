@@ -150,6 +150,7 @@ export class SessionRelay {
   /** The session ended: what is pending, then the exit, to every viewer. */
   exit(tileId: string, info: { code: number; signal?: number }): void {
     this.out.flush(tileId);
+    this.out.forget(tileId);
     for (const viewer of this.viewers.get(tileId)?.keys() ?? []) {
       if (viewer.alive()) viewer.exit(tileId, info);
     }

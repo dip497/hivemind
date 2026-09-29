@@ -20,8 +20,8 @@
  * committed under `sys:` and never undone (an undo cannot bring back a closed tile's process).
  * Each writer has a history of its own, so a window's ⌘Z takes back its own edit, never one
  * another window made since. Each board write is one step — the window writes a burst of typing
- * as one — so edits made a moment apart are never taken back together. A history lasts as long
- * as the store does.
+ * as one — so edits made a moment apart are never taken back together. A history lasts until its
+ * writer is gone (`forgetWriter`: a window closed).
  */
 import { UndoManager, type LoroDoc } from "loro-crdt";
 import { addTile, hasCore, holdsTile, readCore, removeTile, writeCore, writeTileName } from "@hivemind/workspace-doc/core";
@@ -139,6 +139,17 @@ export class WorkspaceStore {
     let tile: TileRecord | null = null;
     this.write(repo, "core", LAYOUT, from, (doc) => { tile = removeTile(doc, tileId); });
     return tile && { repo, tile };
+  }
+
+  /** A writer that is gone for good (a window closed): its board history in every workspace goes
+   *  with it. What it wrote stays. */
+  forgetWriter(writer: string): void {
+    for (const { histories } of this.workspaces.values()) {
+      const history = histories.get(writer);
+      if (!history) continue;
+      histories.delete(writer);
+      history.free();
+    }
   }
 
   /** Take back the writer's last board edit not yet taken back. False when there is none. */

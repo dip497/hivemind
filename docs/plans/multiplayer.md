@@ -291,3 +291,16 @@ spawn wires not being drawn, and two issues found while verifying R1.
 - 2026-09-29 — R6 (see the row). Full e2e on the R6 step 1 commit (`c6b34b7`): 159 passed, 10
   skipped. Decided: a shell's activity moves to M2 (why: the row). R6 is done; next by the
   order and the dependencies: R7 (intents), after R5.
+- 2026-09-29 — Leaks fixed (asked for by the maintainer). Each window's board history (R5 step
+  6c) outlived the window: 1,500 windows' histories held 1.68 GB against 34.5 MB freed, and every
+  live history observes every later edit; the store now forgets a writer (`forgetWriter`) when
+  its window closes. Main's status store never forgot a session, so every agent ever run stayed
+  and each window that opened was sent them all; a closed tile's status and agent now go when its
+  session ends (`endSession`). A machine's daemon kept ended sessions' screen and title readings
+  and told a desktop that connected later of a screen nothing shows; it forgets them when a session
+  ends, with each connection's sequence and typing marks. The relay forgets a session's typing
+  mark at its exit, and each window's status bus a closed tile's status. Not caught by a test,
+  being memory only: the daemon's title book entry (a later desktop is never sent an empty title),
+  the relay's typing mark, the window's own wiring of `forgetWriter` and of `forgetStatus`.
+  Bounded, not a leak: main's store keeps each project it has opened (tens at most), since the
+  control plane reads the workspaces of tiles that run in a project no window shows.

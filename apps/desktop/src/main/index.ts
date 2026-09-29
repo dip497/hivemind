@@ -1360,6 +1360,9 @@ function endSession(tileId: string): void {
   dropPtyRelay(tileId);
   if (hasRemotePty(tileId)) killRemotePty(tileId); else killPty(tileId);
   onPtyExit(tileId);
+  // Its tile is closing for good: nothing asks after its status or its agent again.
+  hcpStatus.forget(toBareId(tileId));
+  hcpAgentOf.delete(toBareId(tileId));
 }
 ipcMain.on("ptyKill", (_e, tileId: string) => endSession(tileId));
 // Detach (tile unmounted): the window stops watching; the last window to go lets go of the

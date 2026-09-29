@@ -101,15 +101,18 @@ test("standalone: hook events reach event viewers, requests are answered at once
 async function statusViewer(sock: string) {
   const c = net.connect(sock);
   const statuses = new Map<string, { state: string; source?: string | null; title?: string }>();
+  /** Every event's topic and session, as it came. */
+  const events: Array<{ topic: string; tileId?: string }> = [];
   c.on("data", makeLineDecoder((l) => {
     const m = JSON.parse(l) as ServerMsg;
+    if (m.t === "event") events.push({ topic: m.topic, tileId: (m.data as { tileId?: string } | null)?.tileId });
     if (m.t !== "event" || m.topic !== "agent.status") return;
     const { tileId, status } = m.data as { tileId: string; status: { state: string; source?: string | null; title?: string } };
     statuses.set(tileId, status);
   }));
   await new Promise((r) => c.once("connect", r));
   c.write(frame({ t: "hello", caps: ["events"] }));
-  return { c, stateOf: (id: string) => statuses.get(id)?.state, statusOf: (id: string) => statuses.get(id) };
+  return { c, events, stateOf: (id: string) => statuses.get(id)?.state, statusOf: (id: string) => statuses.get(id) };
 }
 const until = async (done: () => boolean) => { for (let t = 0; t < 5000 && !done(); t += 25) await wait(25); };
 
@@ -157,7 +160,13 @@ test("standalone: an agent that reports nothing is shown by what the machine rea
   await until(() => a.statusOf(id)?.state === "working" && a.statusOf(id)?.title === "Fixing the tests");
   assert.deepEqual({ ...a.statusOf(id) }, { ...a.statusOf(id), state: "working", source: "screen", title: "Fixing the tests" });
   a.c.write(frame({ t: "kill", id }));
+  await until(() => a.stateOf(id) === "exited");
+  // Ended, the session is gone for good: a desktop that connects now is told nothing of it.
+  const late = await statusViewer(d.sock);
+  await wait(500);
+  assert.deepEqual(late.events.filter((e) => e.tileId === id), []);
   a.c.destroy();
+  late.c.destroy();
 });
 
 test("inside the desktop the daemon leaves the control-plane socket to the app", { skip: !unix, timeout: 30000 }, async () => {
