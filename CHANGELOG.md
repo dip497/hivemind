@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: after an upgrade, agents the new version cannot load are repaired from the registry even when the first attempt fails or the workspace never settles. The check ran once per launch and counted a failed attempt as the run, and it waited for every restored tile to start — but an agent this version cannot load is a tile that may never start, so a machine could sit with every agent unavailable until it was restarted. It now waits at most a minute, tries again while an agent is still broken, and only stops asking once a check has actually succeeded.
 ## [2026.9.8] — 2026-09-28
 
 - **Breaking:** a supervisor's `allow` now covers the call it was asked about, and nothing more. Hivemind used to remember it for the rest of that worker's life for a list of file-touching tools, which is what `always` is for — and the list was one agent's tool names, so it fit some agents and not others. Answer `always` to remember a tool for that worker; the request says so.
