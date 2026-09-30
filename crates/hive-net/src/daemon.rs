@@ -5,8 +5,9 @@
 //!
 //! - main → daemon: `admit {devices}` (the devices the access lists let in, which the gate
 //!   enforces), `dial {req, peer, addrs, relay}` (a workspace's host, on `hive/ws/1`),
-//!   `send {conn, stream, data}`, `close {conn, reason?}`, `pair {req, peer, addrs, relay, hello}` (first
-//!   contact with a host) and `pair-reply {req, reply}` (the answer to someone's `pair-request`).
+//!   `send {conn, stream, data}`, `close {conn, reason?}`, `pair {req, peer, addrs, relay, hello}`
+//!   (first contact with a host) and `pair-reply {req, reply}` (the answer to someone's
+//!   `pair-request`). A host on another network is dialled through the relay its link names.
 //! - daemon → main: `ready {id, addrs, relay}`, `incoming {conn, peer}`, `dialed {req, conn}`,
 //!   `failed {req, error}`, `recv {conn, stream, data}`, `closed {conn, reason}`,
 //!   `pair-request {req, peer, hello}` and `paired {req, reply}`.
@@ -454,8 +455,9 @@ pub async fn run(socket: &Path, key: SecretKey, reach: Reach) -> Result<()> {
         }
     });
 
-    if matches!(reach, Reach::Relays(_)) {
-        endpoint.online().await;
+    // A relay that cannot be reached does not keep the app off the local network.
+    if !reach.relays.is_empty() {
+        let _ = tokio::time::timeout(Duration::from_secs(5), endpoint.online()).await;
     }
     let here = endpoint.addr();
     daemon.tell(ToMain::Ready {

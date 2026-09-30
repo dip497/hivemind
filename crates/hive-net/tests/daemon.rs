@@ -39,6 +39,11 @@ impl Drop for Main {
 
 impl Main {
     async fn start(root: &Path, name: &str) -> Main {
+        Self::start_with(root, name, &[]).await
+    }
+
+    /// A daemon started with `extra` arguments (a network profile).
+    async fn start_with(root: &Path, name: &str, extra: &[&str]) -> Main {
         let dir = root.join(name);
         fs::create_dir_all(dir.join("identity")).unwrap();
         let seed: String = (0..32)
@@ -55,6 +60,7 @@ impl Main {
                 "--identity",
                 dir.join("identity").to_str().unwrap(),
             ])
+            .args(extra)
             .stdout(Stdio::null())
             .stderr(Stdio::inherit())
             .spawn()
@@ -110,6 +116,29 @@ impl Main {
                 return Some(message);
             }
             self.held.push_back(message);
+        }
+    }
+
+    /// The next message of any of the kinds `ts`, waiting up to thirty seconds.
+    async fn next_of(&mut self, ts: &[&str]) -> Value {
+        let deadline = Instant::now() + Duration::from_secs(30);
+        loop {
+            if let Some(i) = self
+                .held
+                .iter()
+                .position(|m| ts.iter().any(|t| m["t"] == *t))
+            {
+                return self.held.remove(i).unwrap();
+            }
+            let left = deadline
+                .checked_duration_since(Instant::now())
+                .unwrap_or_else(|| panic!("no {ts:?} message"));
+            let frame = tokio::time::timeout(left, read_frame(&mut self.stream))
+                .await
+                .unwrap_or_else(|_| panic!("no {ts:?} message"))
+                .unwrap()
+                .unwrap();
+            self.held.push_back(serde_json::from_slice(&frame).unwrap());
         }
     }
 
@@ -315,5 +344,69 @@ async fn when_main_goes_the_daemon_closes_its_connections_so_the_other_side_hear
         assert!(Instant::now() < deadline, "the daemon outlived main");
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_device_on_the_local_network_reaches_a_host_elsewhere_through_the_relay_its_link_names() {
+    struct Relay(std::process::Child);
+    impl Drop for Relay {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+    let root = temp();
+    let mut relay = Relay(
+        std::process::Command::new(BIN)
+            .args(["serve", "--relay", "--bind", "127.0.0.1:0"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap(),
+    );
+    let mut line = String::new();
+    std::io::BufRead::read_line(
+        &mut std::io::BufReader::new(relay.0.stdout.take().unwrap()),
+        &mut line,
+    )
+    .unwrap();
+    let url = line
+        .trim()
+        .strip_prefix("relay serving on ")
+        .unwrap()
+        .to_string();
+    // Two networks that meet only at the relay: the host's profile names it; the guest is on its
+    // local network, whose profile names no relay, with mDNS off so nothing is found nearby.
+    let admin = iroh::SecretKey::from_bytes(&[7u8; 32]);
+    let profile = |name: &str, relays: &[&str]| {
+        let body = json!({
+            "v": 1, "name": name, "admin": admin.public().to_string(),
+            "relays": relays.iter().map(|u| json!({ "url": u })).collect::<Vec<_>>(),
+            "local": { "mdns": false },
+        })
+        .to_string();
+        let file = root.join(format!("{name}.json"));
+        let signed = hive_net::profile::sign(&body, &admin).unwrap();
+        fs::write(&file, serde_json::to_string(&signed).unwrap()).unwrap();
+        file
+    };
+    let (elsewhere, here) = (profile("elsewhere", &[&url]), profile("here", &[]));
+    let mut host =
+        Main::start_with(&root, "host", &["--profile", elsewhere.to_str().unwrap()]).await;
+    let mut guest = Main::start_with(&root, "guest", &["--profile", here.to_str().unwrap()]).await;
+    host.send(json!({ "t": "admit", "devices": [guest.id] }))
+        .await;
+
+    guest
+        .send(json!({ "t": "dial", "req": 1, "peer": host.id, "addrs": [], "relay": url }))
+        .await;
+    let dialed = guest.next_of(&["dialed", "failed"]).await;
+    assert_eq!(dialed["t"], "dialed", "{dialed}");
+    guest
+        .send(json!({ "t": "send", "conn": dialed["conn"], "stream": "api", "data": "hello" }))
+        .await;
+    assert_eq!(host.next("recv").await["data"], "hello");
+    drop(relay);
     fs::remove_dir_all(root).unwrap();
 }

@@ -14,6 +14,7 @@ these; the cases in `../conformance/` decide whether they do. Design:
 | `wire-protocol.md` | What any client speaks to the host (JSON-RPC 2.0) | 2 |
 | `workspace-api.md` | What a workspace's host is asked for, over any transport | 0.3 |
 | `identity.md` | Device, person and workspace keys, and device certificates | 0.1 |
+| `network-profile.md` | Where a network's servers are, signed by its admin | 0.1 |
 
 Versions are `major.minor`: a minor adds optional fields or enum values a reader may ignore; a
 major changes or removes something. Until 1.0 anything may change.

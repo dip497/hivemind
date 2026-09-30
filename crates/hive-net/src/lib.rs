@@ -3,11 +3,13 @@
 //! server roles anyone can run for their own devices (§13.4).
 
 pub mod daemon;
+pub mod doctor;
 pub mod frames;
 pub mod gate;
 pub mod key;
 pub mod net;
 pub mod pair;
 pub mod ping;
+pub mod profile;
 pub mod serve;
 pub mod ws;
