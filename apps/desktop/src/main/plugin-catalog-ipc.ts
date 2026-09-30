@@ -101,6 +101,8 @@ export function installPluginCatalogIpc(): void {
   handleEffect("agents:auto-install", () => ({ target: installedIds }), async () => {
     if (autoInstalled) return { added: [], updated: [] };
     autoInstalled = true;
+    // Settings → Network: with the update check off, the catalog is not asked either (R16).
+    if (!getSettings().network.updateCheck) return { added: [], updated: [] };
     try {
       await applyShellEnvToProcess();
       const listed = await fetchCatalog();

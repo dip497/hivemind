@@ -99,3 +99,11 @@ jobs:
         run: |
           cargo build --locked
           sudo HIVE_NET_BIN="$PWD/target/debug/hive-net" bash tests/two-machines.sh
+
+      - name: What leaves a device (network namespaces, nft)
+        # R16's "Done when": on the local network hive-net sends nothing off it; on a network
+        # someone runs, it talks to that network's relay and no one else. (The app's part runs
+        # where the app is built: `sudo bash scripts/traffic-test.sh`.)
+        run: |
+          command -v nft >/dev/null || sudo apt-get install -y nftables
+          sudo HIVE_NET_BIN="$PWD/target/debug/hive-net" bash ../../scripts/traffic-test.sh

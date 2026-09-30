@@ -83,7 +83,7 @@ export function NetworkPrefs() {
         <div className="settings-row">
           <div>
             <label htmlFor="update-check">Check for new versions</label>
-            <p>Asks GitHub now and then. Off, the app reaches nothing its network does not name.</p>
+            <p>Of the app (on GitHub) and of the agents it adds for you (in the plugin catalog), now and then. Off, the app reaches nothing its network does not name until you browse plugins yourself.</p>
           </div>
           <Switch id="update-check" checked={settings.updateCheck} onCheckedChange={(v) => patchSettings("network.updateCheck", v)} aria-label="Check for new versions" data-update-check />
         </div>
