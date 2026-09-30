@@ -4,7 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { CommunityLink, LIMITS, PROMPT_DECLINES_MAX, SHARE_DECLINES_MAX, type LinkDeps, type LinkServices } from "../../src/renderer/src/workspace/views/community/host-link";
 import { ViewEventHub } from "../../src/renderer/src/workspace/view-events";
-import type { ActivityLevel, ShareOutcome, ViewPresence } from "@hivemind/view-sdk/protocol";
+import type { ActivityLevel, ShareOutcome, ViewParticipant, ViewPresence } from "@hivemind/view-sdk/protocol";
 
 function harness(caps: LinkDeps["capabilities"] = [], tiles = ["t1", "t2"], services?: LinkServices) {
   const calls: string[] = [];
@@ -409,4 +409,49 @@ test("1.4: spawnAgent with a prompt needs workspace:prompt and a confirm; resume
   await settle();
   h.link.handle({ type: "command", name: "spawnAgent", args: ["claude", "f1", { resume: "s1" }] });
   assert.deepEqual(h.calls, ['spawnAgent("claude","f1",{"prompt":"sent one"})', 'spawnAgent("claude","f1",{"resume":"s1"})']);
+});
+
+test("1.5: participants: those here at once, then as they change, on the view's own tiles and frames only, told again as those change, and nothing once unsubscribed", () => {
+  let tell: (people: ViewParticipant[]) => void = () => {};
+  let subscribed = 0;
+  const priya = (more: Partial<ViewParticipant> = {}): ViewParticipant => ({ id: "c1", person: "p1", name: "Priya", color: "#ec4899", cursor: { tileId: "t1" }, selection: ["t1", "f1", "note-1"], ...more });
+  const tiles = ["t1", "t2"];
+  const h = harness([], tiles, { participants: { subscribe: (cb) => { subscribed++; tell = cb; cb([priya()]); return () => { subscribed--; tell = () => {}; }; } } });
+  h.link.handle({ type: "ready", v: 1 });
+  assert.ok(h.link.features.includes("participants"));
+  h.link.handle({ type: "subscribeParticipants" });
+  h.link.handle({ type: "subscribeParticipants" });
+  assert.equal(subscribed, 1);
+  const told = () => h.sent.filter((m) => (m as { type: string }).type === "participants").map((m) => (m as { participants: ViewParticipant[] }).participants);
+  assert.deepEqual(told(), [[priya({ selection: ["t1", "f1"] })]]);
+  // The same again (a pointer moving within its tile): nothing new to tell.
+  tell([priya()]);
+  assert.equal(told().length, 1);
+  // Over a board object the view does not have: pointing at nothing it knows.
+  tell([priya({ cursor: { tileId: "note-1" } })]);
+  assert.deepEqual(told().at(-1), [priya({ cursor: null, selection: ["t1", "f1"] })]);
+  // t1 closes: once the view hears so, what she selected is told again without it.
+  tiles.splice(0, 1);
+  h.link.send({ type: "structure", frames: [], tiles: [{ id: "t2", frameId: null, kind: "shell", name: "t2" }] });
+  assert.deepEqual(told().at(-1), [priya({ cursor: null, selection: ["f1"] })]);
+  h.link.handle({ type: "unsubscribeParticipants" });
+  assert.equal(subscribed, 0);
+  tell([]);
+  assert.equal(told().length, 3);
+  assert.equal(h.link.stats.refused, 0);
+});
+
+test("1.5: a rect for a tile the view was told of and that has closed since is dropped without a refusal; one for a tile never told of is refused", () => {
+  const tiles = ["t1", "t2"];
+  const h = harness([], tiles);
+  const rect = (tileId: string) => ({ tileId, x: 0, y: 0, w: 10, h: 10 });
+  h.link.handle({ type: "ready", v: 1 });
+  h.link.send({ type: "structure", frames: [], tiles: tiles.map((id) => ({ id, frameId: null, kind: "shell", name: id })) });
+  tiles.splice(0, 1);
+  h.link.handle({ type: "surfaceRects", rects: [rect("t1"), rect("t2")] });
+  assert.equal(h.link.stats.refused, 0);
+  assert.equal(h.events.at(-1), "rects:t2");
+  h.link.handle({ type: "surfaceRects", rects: [rect("t2"), rect("t9")] });
+  assert.equal(h.link.stats.refused, 1);
+  assert.equal(h.events.at(-1), "rects:t2");
 });

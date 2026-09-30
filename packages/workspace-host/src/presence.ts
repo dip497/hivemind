@@ -11,6 +11,9 @@ export interface PresenceState {
   color: string;
   /** Their pointer, in board coordinates; null when it is off the board. */
   cursor: { x: number; y: number } | null;
+  /** The tile, frame or board object their pointer is over: what a view that lays the board out
+   *  its own way shows them pointing at. */
+  over: string | null;
   /** The tiles and objects they have selected. */
   selection: string[];
 }
@@ -36,6 +39,7 @@ export function presenceOf(raw: unknown): PresenceState | null {
     name: typeof r.name === "string" ? r.name.slice(0, 64) : "",
     color: typeof r.color === "string" && /^#[0-9a-f]{6}$/i.test(r.color) ? r.color.toLowerCase() : "",
     cursor: cursor && num(cursor.x) && num(cursor.y) ? { x: cursor.x, y: cursor.y } : null,
+    over: typeof r.over === "string" && r.over.length > 0 && r.over.length <= 256 ? r.over : null,
     selection: Array.isArray(r.selection) ? r.selection.filter((s): s is string => typeof s === "string").slice(0, 100) : [],
   };
 }
@@ -66,7 +70,7 @@ export class PresenceHub {
     const out: Participant[] = [];
     for (const [id, p] of here) {
       if (now - p.at > QUIET_FOR_MS) here.delete(id);
-      else out.push({ id: p.id, person: p.person, name: p.name, color: p.color, cursor: p.cursor, selection: p.selection });
+      else out.push({ id: p.id, person: p.person, name: p.name, color: p.color, cursor: p.cursor, over: p.over, selection: p.selection });
     }
     return out;
   }

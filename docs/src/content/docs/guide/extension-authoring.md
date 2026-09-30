@@ -144,6 +144,23 @@ after three cancels the view's prompts are declined until it's reloaded. Text wi
 or zero-width characters is refused. A view never reads an agent's replies and never answers its
 permission prompts.
 
+### People and devices
+
+View protocol 1.5 tells a view who else is in a shared workspace, and what it is shown on:
+
+```ts
+if (hm.supports("participants")) hm.onParticipants((people) => {
+  // [{ id, person, name, color, cursor: { tileId } | null, selection: [tileId | frameId] }]
+});
+if (hm.device.compact) { /* a phone's screen: one column */ }
+if (hm.device.touch) { /* a finger: give what it taps room */ }
+```
+
+`cursor` is the tile someone's pointer is over, `selection` what they selected, both only of the
+view's own tiles and frames; the person at the view is never in the list. A view tests without the
+app against `fakeHost()` from `@hivemind/view-sdk/testing` (it comes with `hive views new`): it
+greets the view as the app does, and says what the app would refuse, and why.
+
 ## Permissions
 
 Declared in the manifest, refused at install if unknown:

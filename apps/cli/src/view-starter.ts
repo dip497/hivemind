@@ -6,7 +6,7 @@ import { agentPrompt } from "./view-prompt.js";
 
 /** Embedded by scripts/build.ts; a source checkout reads the package itself. */
 declare const HIVE_VIEW_SDK: Record<string, string> | undefined;
-export const SDK_FILES = ["index.ts", "protocol.ts", "manifest.ts", "client.ts"];
+export const SDK_FILES = ["index.ts", "protocol.ts", "manifest.ts", "client.ts", "testing.ts"];
 const sdkSources = (): Record<string, string> => typeof HIVE_VIEW_SDK === "object" ? HIVE_VIEW_SDK
   : Object.fromEntries(SDK_FILES.map((f) => [f, readFileSync(new URL(`../../../packages/hive-view-sdk/src/${f}`, import.meta.url), "utf8")]));
 
@@ -27,7 +27,7 @@ export function starterFiles(owner: string, name: string): Record<string, string
       compilerOptions: {
         target: "ES2022", module: "ESNext", moduleResolution: "Bundler", lib: ["ES2023", "DOM", "DOM.Iterable"],
         strict: true, noEmit: true, skipLibCheck: true, types: [],
-        paths: { "@hivemind/view-sdk": ["./types/view-sdk/index.ts"] },
+        paths: { "@hivemind/view-sdk": ["./types/view-sdk/index.ts"], "@hivemind/view-sdk/testing": ["./types/view-sdk/testing.ts"] },
       },
       include: ["src", "types"],
     }, null, 2) + "\n",

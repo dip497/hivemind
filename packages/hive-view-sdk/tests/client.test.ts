@@ -5,14 +5,14 @@ import { PORT_HANDSHAKE, type PluginMessage } from "../src/protocol.js";
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
-async function scriptedHost(capabilities: string[] = [], features?: string[]) {
+async function scriptedHost(capabilities: string[] = [], features?: string[], hello: Record<string, unknown> = {}) {
   const target = new EventTarget() as unknown as Window;
   const ch = new MessageChannel();
   const inbox: PluginMessage[] = [];
   ch.port1.onmessage = (e) => {
     inbox.push(e.data as PluginMessage);
     if ((e.data as PluginMessage).type === "ready") {
-      ch.port1.postMessage({ type: "hello", v: 1, pluginId: "p", capabilities, theme: { colors: { bg: "#000000" } }, layout: { saved: 1 }, viewport: { w: 800, h: 600 }, visible: true, ...(features ? { features } : {}) });
+      ch.port1.postMessage({ type: "hello", v: 1, pluginId: "p", capabilities, theme: { colors: { bg: "#000000" } }, layout: { saved: 1 }, viewport: { w: 800, h: 600 }, visible: true, ...(features ? { features } : {}), ...hello });
     }
   };
   ch.port1.start();
@@ -53,7 +53,9 @@ describe("view-sdk client", () => {
   });
 
   test("commands are gated by granted permissions; surface rects are deduplicated", async () => {
-    const { client, inbox } = await scriptedHost([]);
+    const { client, inbox, send } = await scriptedHost([]);
+    send({ type: "structure", frames: [], tiles: [{ id: "t1", frameId: null, kind: "shell", name: "sh" }] });
+    await tick();
     client.commands.selectTile("t1");
     expect(() => client.commands.addFrame()).toThrow(/workspace:spawn/);
     client.setSurfaceRects([{ tileId: "t1", x: 1.2, y: 2.7, w: 10, h: 10 }]);
@@ -65,6 +67,8 @@ describe("view-sdk client", () => {
 
   test("undock from the host drops the rect on the client and fires the event", async () => {
     const { client, inbox, send } = await scriptedHost();
+    send({ type: "structure", frames: [], tiles: ["t1", "t2"].map((id) => ({ id, frameId: null, kind: "shell", name: id })) });
+    await tick();
     client.setSurfaceRects([{ tileId: "t1", x: 0, y: 0, w: 10, h: 10, chrome: "none" }, { tileId: "t2", x: 20, y: 0, w: 10, h: 10 }]);
     const seen: string[] = [];
     client.on("undock", ({ tileId }) => seen.push(tileId));
@@ -203,5 +207,49 @@ describe("view-sdk client", () => {
     expect((await agents).map((a) => a.id)).toEqual(["claude"]);
     const p = await scriptedHost(["workspace:prompt"], ["prompt"]);
     await expect(p.client.prompt("t1", "bad\u001b")).rejects.toThrow(/control/);
+  });
+
+  test("1.5: a rect goes to the host once a structure names its tile, and leaves when none does", async () => {
+    const { client, inbox, send } = await scriptedHost();
+    const told = () => inbox.filter((m) => m.type === "surfaceRects").map((m) => (m as { rects: { tileId: string }[] }).rects.map((r) => r.tileId));
+    // Docked as a saved layout says: one tile is not heard of yet, the other is gone for good.
+    client.setSurfaceRects([{ tileId: "t1", x: 0, y: 0, w: 10, h: 10 }, { tileId: "gone", x: 20, y: 0, w: 10, h: 10 }]);
+    await tick();
+    expect(told()).toEqual([]);
+    send({ type: "structure", frames: [], tiles: [{ id: "t1", frameId: null, kind: "shell", name: "sh" }] });
+    await tick();
+    expect(told()).toEqual([["t1"]]);
+    // t1 closes: the host hears it is shown no more, without the view asking again.
+    send({ type: "structure", frames: [], tiles: [] });
+    await tick();
+    expect(told()).toEqual([["t1"], []]);
+  });
+
+  test("1.5: participants subscribe once and replay the latest to a late listener; a host without them is never asked", async () => {
+    const { client, inbox, send } = await scriptedHost([], ["participants"]);
+    const priya = { id: "c1", person: "p1", name: "Priya", color: "#ec4899", cursor: { tileId: "t1" }, selection: ["t1"] };
+    const first: string[][] = [];
+    const off = client.onParticipants((ps) => first.push(ps.map((p) => p.name)));
+    send({ type: "participants", participants: [priya] });
+    await tick();
+    const late: string[][] = [];
+    const off2 = client.onParticipants((ps) => late.push(ps.map((p) => p.name)));
+    expect(first).toEqual([["Priya"]]);
+    expect(late).toEqual([["Priya"]]);
+    off(); off2();
+    await tick();
+    expect(inbox.filter((m) => m.type === "subscribeParticipants")).toHaveLength(1);
+    expect(inbox.filter((m) => m.type === "unsubscribeParticipants")).toHaveLength(1);
+    const older = await scriptedHost();
+    older.client.onParticipants(() => {});
+    await tick();
+    expect(older.inbox.map((m) => m.type)).toEqual(["ready"]);
+  });
+
+  test("1.5: the device is the host's, and a desktop's from a host that predates it", async () => {
+    const phone = await scriptedHost([], [], { device: { touch: true, compact: true } });
+    expect(phone.client.device).toEqual({ touch: true, compact: true });
+    const older = await scriptedHost();
+    expect(older.client.device).toEqual({ touch: false, compact: false });
   });
 });

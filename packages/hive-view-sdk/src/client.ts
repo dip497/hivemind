@@ -7,6 +7,7 @@
  *   const off = hm.subscribeStatus(tileId, (s) => paint(tileId, s));
  *   hm.commands.selectTile(tileId);
  *   hm.setSurfaceRects([{ tileId, x, y, w, h }]);   // a live terminal appears here
+ *   hm.onParticipants((people) => ring(people));      // 1.5: who else is here, and on what
  *
  * The host hands the MessagePort over with a `PORT_HANDSHAKE` window message
  * right after the iframe loads; `connect()` resolves once `hello` arrives.
@@ -14,7 +15,7 @@
 import {
   COMMAND_PERMISSION, PORT_HANDSHAKE, PROTOCOL_VERSION, STATUS_TONES, customNameMatches, parseHostMessage, promptProblem,
   type ActivityLevel, type PromptOutcome, type ViewAgent, type ViewAgentStatus, type ViewSession, type CommandName, type HostMessage, type PluginMessage, type RequestErrorCode, type ShareOutcome, type StatusTone, type SurfaceRect,
-  type ViewCommands, type ViewEvent, type ViewEventKind, type ViewFeature, type ViewHistoryDay, type ViewPermission, type ViewPresence, type ViewRect, type ViewStatus, type ViewTheme,
+  type ViewCommands, type ViewDevice, type ViewEvent, type ViewEventKind, type ViewFeature, type ViewHistoryDay, type ViewParticipant, type ViewPermission, type ViewPresence, type ViewRect, type ViewStatus, type ViewTheme,
 } from "./protocol.js";
 
 /** A request the host refused or could not answer (`UNSUPPORTED` when it lacks the feature). */
@@ -45,6 +46,8 @@ export interface ViewClient {
   /** Latest viewport size / visibility as told by the host. */
   readonly viewport: { w: number; h: number };
   readonly visible: boolean;
+  /** 1.5: what the view is shown on. A host that predates it is a desktop's: no touch, not compact. */
+  readonly device: ViewDevice;
   on<K extends keyof EventMap>(event: K, cb: (payload: EventMap[K]) => void): () => void;
   /** Per-tile status. Subscribes on first listener, unsubscribes on last. */
   subscribeStatus(tileId: string, cb: (status: ViewStatus, info?: StatusInfo) => void): () => void;
@@ -59,6 +62,9 @@ export interface ViewClient {
   activity(tileId: string, cb: (level: ActivityLevel) => void): () => void;
   /** 1.3: whether the user is at the machine. The latest state replays to a new listener. */
   onPresence(cb: (presence: ViewPresence) => void): () => void;
+  /** 1.5: everyone else in the workspace — who, their colour, the tile their pointer is over and
+   *  what they selected, of this view's. On every change; the latest replays to a new listener. */
+  onParticipants(cb: (participants: ViewParticipant[]) => void): () => void;
   /** 1.3: per-tile status intervals for a local day (YYYY-MM-DD). */
   history(day: string): Promise<ViewHistoryDay>;
   /** 1.3: ask the user to copy or save this PNG; resolves with what they chose. */
@@ -73,7 +79,8 @@ export interface ViewClient {
   prompt(tileId: string, text: string): Promise<PromptOutcome>;
   /** Typed commands; one the manifest did not request throws locally. */
   readonly commands: ViewCommands;
-  /** The hole-punch — deduplicated: identical rects are not re-sent. */
+  /** The hole-punch — deduplicated: identical rects are not re-sent. A rect goes to the host once
+   *  a `structure` has named its tile, and leaves when one no longer does. */
   setSurfaceRects(rects: SurfaceRect[]): void;
   /** The host asked to reveal a tile; answer with where it is (or null). */
   onReveal(handler: (tileId: string) => ViewRect | null | Promise<ViewRect | null>): () => void;
@@ -128,10 +135,16 @@ class Client implements ViewClient {
   private activitySyncQueued = false;
   private presenceCbs = new Set<(p: ViewPresence) => void>();
   private presence: ViewPresence | null = null;
+  private participantCbs = new Set<(p: ViewParticipant[]) => void>();
+  private participants: ViewParticipant[] | null = null;
   private requests = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void; timer?: ReturnType<typeof setTimeout> }>();
   private nextRequest = 1;
   private revealHandler: ((tileId: string) => ViewRect | null | Promise<ViewRect | null>) | null = null;
-  private lastRects = "";
+  /** The rects the view asked for, and the tiles the host has named (the last `structure`). */
+  private wantedRects: SurfaceRect[] = [];
+  private tiles = new Set<string>();
+  /** What the host was last told: nothing, at first. */
+  private lastRects = "[]";
   private frameTimer: ReturnType<typeof setTimeout> | null = null;
   private lastReportedFrames = 0;
   private layoutTimer: ReturnType<typeof setTimeout> | null = null;
@@ -160,7 +173,12 @@ class Client implements ViewClient {
 
   private dispatch(m: HostMessage) {
     switch (m.type) {
-      case "structure": case "names": case "selection": this.emit(m.type, m); break;
+      case "structure":
+        this.tiles = new Set(m.tiles.map((t) => t.id));
+        this.sendRects();
+        this.emit(m.type, m);
+        break;
+      case "names": case "selection": this.emit(m.type, m); break;
       case "status": {
         const info: StatusInfo | undefined = m.since === undefined && m.agent === undefined ? undefined : {
           ...(m.since === undefined ? {} : { since: m.since }), ...(m.exact === undefined ? {} : { exact: m.exact }), ...(m.agent ? { agent: m.agent } : {}),
@@ -183,6 +201,10 @@ class Client implements ViewClient {
         this.presence = m.presence;
         for (const cb of this.presenceCbs) cb(m.presence);
         break;
+      case "participants":
+        this.participants = m.participants;
+        for (const cb of this.participantCbs) cb(m.participants);
+        break;
       case "response": {
         const r = this.requests.get(m.requestId);
         if (!r) break;
@@ -195,7 +217,9 @@ class Client implements ViewClient {
       case "visibility": this.visible = m.visible; this.emit("visibility", { visible: m.visible }); break;
       case "theme": this.emit("theme", m.theme); break;
       case "undock": {
-        try { const kept = (JSON.parse(this.lastRects || "[]") as SurfaceRect[]).filter((r) => r.tileId !== m.tileId); this.lastRects = JSON.stringify(kept); } catch { this.lastRects = ""; }
+        // The host has let go of it already: forget it without telling the host again.
+        this.wantedRects = this.wantedRects.filter((r) => r.tileId !== m.tileId);
+        this.lastRects = JSON.stringify(this.shownRects());
         this.emit("undock", { tileId: m.tileId });
         break;
       }
@@ -233,6 +257,7 @@ class Client implements ViewClient {
   }
 
   get features(): readonly ViewFeature[] { return this.hello.features ?? []; }
+  get device(): ViewDevice { return { touch: this.hello.device?.touch === true, compact: this.hello.device?.compact === true }; }
   supports(feature: ViewFeature): boolean { return this.features.includes(feature); }
 
   onEvents(kinds: readonly ViewEventKind[], cb: (event: ViewEvent) => void, opts: { replaySince?: number } = {}): () => void {
@@ -311,6 +336,16 @@ class Client implements ViewClient {
     };
   }
 
+  onParticipants(cb: (participants: ViewParticipant[]) => void): () => void {
+    if (!this.supports("participants")) return () => {};
+    this.participantCbs.add(cb);
+    if (this.participantCbs.size === 1) this.send({ type: "subscribeParticipants" });
+    else if (this.participants) cb(this.participants);
+    return () => {
+      if (this.participantCbs.delete(cb) && this.participantCbs.size === 0) { this.participants = null; this.send({ type: "unsubscribeParticipants" }); }
+    };
+  }
+
   private need(p: ViewPermission, what: string) {
     if (!this.capabilities.includes(p)) throw new Error(`hivemind: ${what} needs permission "${p}" — add it to hivemind-view.json`);
   }
@@ -370,11 +405,21 @@ class Client implements ViewClient {
   }
 
   setSurfaceRects(rects: SurfaceRect[]) {
-    const norm = rects.map((r) => ({ tileId: r.tileId, x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.w), h: Math.round(r.h), ...(r.chrome ? { chrome: r.chrome } : {}) }));
-    const key = JSON.stringify(norm);
+    this.wantedRects = rects.map((r) => ({ tileId: r.tileId, x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.w), h: Math.round(r.h), ...(r.chrome ? { chrome: r.chrome } : {}) }));
+    this.sendRects();
+  }
+
+  // A tile the host has not named (one from a saved layout that is gone, or not heard of yet) is
+  // held back: the host refuses a rect for a tile it does not have, and enough refusals disable
+  // the view.
+  private shownRects(): SurfaceRect[] { return this.wantedRects.filter((r) => this.tiles.has(r.tileId)); }
+
+  private sendRects() {
+    const rects = this.shownRects();
+    const key = JSON.stringify(rects);
     if (key === this.lastRects) return;
     this.lastRects = key;
-    this.send({ type: "surfaceRects", rects: norm });
+    this.send({ type: "surfaceRects", rects });
   }
 
   onReveal(handler: (tileId: string) => ViewRect | null | Promise<ViewRect | null>) {

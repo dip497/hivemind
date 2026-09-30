@@ -6,7 +6,7 @@ import { PresenceHub, presenceOf, QUIET_FOR_MS, type Participant } from "../src/
 
 afterEach(() => setSystemTime());
 
-const at = (id: string, person: string, x: number): Participant => ({ id, person, name: person, color: "", cursor: { x, y: 0 }, selection: [] });
+const at = (id: string, person: string, x: number): Participant => ({ id, person, name: person, color: "", cursor: { x, y: 0 }, over: null, selection: [] });
 
 test("one participant per connection, as they last said; leaving takes them out of one workspace, or of all", () => {
   const hub = new PresenceHub();
@@ -34,10 +34,11 @@ test("one who has said nothing for a minute is gone", () => {
   expect(hub.people("/a").map((p) => p.id)).toEqual(["peer:d"]);
 });
 
-test("what a client sends is bounded: a long name cut, a colour that is not one dropped, a cursor that is not a point off the board", () => {
-  expect(presenceOf({ name: "x".repeat(100), color: "#ABCDEF", cursor: { x: 1, y: 2 }, selection: ["t1", 2, "t2"] }))
-    .toEqual({ name: "x".repeat(64), color: "#abcdef", cursor: { x: 1, y: 2 }, selection: ["t1", "t2"] });
-  expect(presenceOf({ name: 7, color: "red; background: url(x)", cursor: { x: Infinity, y: 0 }, selection: Array.from({ length: 150 }, (_, i) => `t${i}`) }))
-    .toEqual({ name: "", color: "", cursor: null, selection: Array.from({ length: 100 }, (_, i) => `t${i}`) });
+test("what a client sends is bounded: a long name cut, a colour that is not one dropped, a cursor that is not a point off the board, over nothing that is not an id", () => {
+  expect(presenceOf({ name: "x".repeat(100), color: "#ABCDEF", cursor: { x: 1, y: 2 }, over: "tile-1", selection: ["t1", 2, "t2"] }))
+    .toEqual({ name: "x".repeat(64), color: "#abcdef", cursor: { x: 1, y: 2 }, over: "tile-1", selection: ["t1", "t2"] });
+  expect(presenceOf({ name: 7, color: "red; background: url(x)", cursor: { x: Infinity, y: 0 }, over: "t".repeat(257), selection: Array.from({ length: 150 }, (_, i) => `t${i}`) }))
+    .toEqual({ name: "", color: "", cursor: null, over: null, selection: Array.from({ length: 100 }, (_, i) => `t${i}`) });
+  expect(presenceOf({ over: 7 })?.over).toBeNull();
   expect(presenceOf("here")).toBeNull();
 });

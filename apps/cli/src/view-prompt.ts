@@ -107,6 +107,20 @@ something else focuses it — return a rect, or \`null\` if you can't show it.
 **Persistence** — \`hm.setLayout(data)\` stores an opaque blob (≤64 KB) under your view's id; it
 comes back as \`hm.hello.layout\`. That is your only storage.
 
+**People here** (check \`hm.supports("participants")\` first) — in a workspace shared with others,
+\`hm.onParticipants((people) => …)\` gives everyone else there as they come, go, point and select:
+\`{ id, person, name, color, cursor: { tileId } | null, selection: string[] }\`. \`cursor\` is the tile
+their pointer is over and \`selection\` what they selected, only ever of your tiles and frames. Draw
+them in their \`color\`; the person at your view is never in the list.
+
+**The device** — \`hm.device\` is \`{ touch, compact }\`: give a finger room when \`touch\`, one column
+when \`compact\` (a phone's screen).
+
+**Testing** — \`import { fakeHost } from "@hivemind/view-sdk/testing"\` gives your tests a host with no
+app: \`const hm = await fakeHost({ capabilities, device }).connect()\`, then \`host.send(...)\` what the
+app would, and read \`host.commands\`, \`host.rects\` and \`host.refused\` (what the app would refuse,
+and why).
+
 **Animation** — call \`hm.reportFrame()\` on each frame you draw, so the host knows you are
 animating. Stop drawing when \`visible\` is false.
 

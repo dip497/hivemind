@@ -1,7 +1,7 @@
 {
   "name": "@hivemind/view-sdk",
   "version": "2026.9.8",
-  "description": "Write a hivemind workspace view as a sandboxed plugin: protocol v1 types, validators, and a typed client.",
+  "description": "Write a hivemind workspace view as a sandboxed plugin: protocol v1 types, validators, a typed client, and a fake host for a view's tests.",
   "license": "MIT",
   "type": "module",
   "main": "./src/index.ts",
@@ -9,7 +9,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./protocol": "./src/protocol.ts",
-    "./manifest": "./src/manifest.ts"
+    "./manifest": "./src/manifest.ts",
+    "./testing": "./src/testing.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

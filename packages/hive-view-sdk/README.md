@@ -53,6 +53,32 @@ hm.commands.spawnAgent("claude", frameId, { resume: past[0].id }); // continue o
 await hm.prompt(tileId, "run the tests");         // "workspace:prompt": the user reads it and sends or cancels
 ```
 
+Protocol 1.5 adds the people a workspace is shared with, and the device a view is on
+(`has.has("participants")`; `hm.device` is always there):
+
+```ts
+hm.onParticipants((people) => ring(people));     // { id, person, name, color, cursor: { tileId } | null, selection }
+if (hm.device.compact) oneColumn();               // a phone's screen; hm.device.touch: a finger, give it room
+```
+
+`cursor` is the tile someone's pointer is over and `selection` what they selected, only ever of the
+view's own tiles and frames; the person at the view is never among them. A surface rect goes to the
+host once a `structure` has named its tile (a docked tile from a saved layout that is gone stays
+held back), and leaves when one no longer does.
+
+Test a view without the app against the fake host in `@hivemind/view-sdk/testing`: it greets the
+view as the app does, checks what the view sends by the app's rules and says why it would refuse
+the rest.
+
+```ts
+import { fakeHost } from "@hivemind/view-sdk/testing";
+const host = fakeHost({ capabilities: ["workspace:spawn"], device: { touch: true, compact: true } });
+const hm = await host.connect();                  // or host.handshake(window) before the page's own connect()
+host.send({ type: "structure", frames: [], tiles: [{ id: "t1", frameId: null, kind: "shell", name: "sh" }] });
+await host.settle();
+host.commands; host.rects; host.refused;          // what the app would run, show, and refuse (and why)
+```
+
 `closeTile` needs `"permissions": ["workspace:close"]`; `spawnTile` / `spawnVis` /
 `spawnClaude` / `addFrame` / `spawnAgent` need `"workspace:spawn"`; `renameTile` /
 `openFolder` need `"workspace:edit"`; `prompt`, and `spawnAgent` with a `prompt`, need

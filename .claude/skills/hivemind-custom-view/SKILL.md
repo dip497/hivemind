@@ -195,6 +195,19 @@ A prompt is the one way a view makes an agent act, so the host shows the full te
 Cancel; three cancels decline the view's prompts until it reloads. Never retry a cancel. A view
 never gets an agent's replies, answers its permission prompts, or sees a title the agent wrote.
 
+## Protocol 1.5: people, the device, and a host for your tests
+
+| You want | Write | Notes |
+| --- | --- | --- |
+| Who else is in a shared workspace | `hm.onParticipants((people) => …)` | feature `participants`; `{ id, person, name, color, cursor: { tileId } \| null, selection }`, never the person at your view |
+| Lay out for a phone or a finger | `hm.device` → `{ touch, compact }` | always there: a desktop's from an older host |
+| Test without the app | `fakeHost()` from `@hivemind/view-sdk/testing` | `host.send(...)`, then `host.commands`, `host.rects`, `host.refused` (the app's reasons) |
+
+`cursor` is the tile someone's pointer is over and `selection` what they selected, only ever of
+your tiles and frames: ring them in the person's `color`, never in a status colour. A surface
+rect waits for a `structure` naming its tile, so a docked tile restored from your layout that no
+longer exists is never sent — the host would count it as a refusal.
+
 ## Permissions: ask for nothing
 
 The base set — projection, status, selection, reveal, surfaces, layout — needs no

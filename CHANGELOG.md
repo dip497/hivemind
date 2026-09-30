@@ -9,6 +9,9 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- New: views can show who else is in a workspace you share (view protocol 1.5): each person's name and colour, the tile their pointer is over and what they selected, as they move. A view also learns whether it is on a touch screen or a phone's, and `hive views new` comes with a fake host to test a view without the app, which says what the app would refuse and why.
+- Fixed: switching a shared workspace from the canvas to another view no longer looks, to the people in it, as if you left. What you select there still shows to them.
+- Fixed: a view that restored a docked terminal whose tile is gone, or kept one for a tile closed a moment before, was counted as misbehaving and could be switched off. It now waits until the tile is there.
 - Fixed: a workspace shared with several people no longer weighs on the host. Every terminal tile redrew each time someone moved their pointer (four people pointing kept the window at a full core), an open People list was read again on every move, and each terminal's output went to each guest as a message of its own. Now where people are is told at most every 50 ms, a moment's output reaches a guest as one message, and the network daemon sends it in one write.
 - Fixed: when the computer you joined a workspace on goes away and comes back, its terminals show live again in your window, and a keyboard you held is shown as back with its host.
 - Fixed: quitting the app, or leaving a workspace joined from elsewhere, logged an error from the network daemon's connection closing.

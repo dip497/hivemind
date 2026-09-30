@@ -173,6 +173,7 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
       onError: (message) => console.warn(`[hivemind] view "${pkg.id}": ${message}`),
       services: viewLinkServices({
         layoutKey: () => layoutKeyRef.current,
+        repo: () => repoRef.current,
         share,
         frameFolder: (frameId) => {
           const f = framesRef.current.find((x) => x.id === frameId);
@@ -214,6 +215,8 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
         type: "hello", v: PROTOCOL_VERSION, pluginId: pkg.id, capabilities,
         theme: readTheme(), layout: loadViewLayout(layoutSpec(pkg.id), layoutKey),
         viewport: box(), visible: !document.hidden, features: link.features,
+        // A desktop: whether its pointer is a finger, never a phone's screen.
+        device: { touch: matchMedia("(pointer: coarse)").matches, compact: false },
       });
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [ready]);

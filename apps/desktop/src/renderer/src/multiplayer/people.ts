@@ -26,6 +26,11 @@ export function colorFor(personId: string): string {
   return PROFILE_COLORS[parseInt(personId.slice(0, 8), 16) % PROFILE_COLORS.length]!.value;
 }
 
+/** The colour someone is drawn in: theirs, or the one they get for not choosing. */
+export function colorOf(p: { person: string; color: string }): string {
+  return p.color || colorFor(p.person);
+}
+
 /** The letters of a name an avatar shows: a first and last initial, or the first two letters. */
 export function initialsOf(name: string): string {
   const words = name.trim().split(/\s+/).filter(Boolean);

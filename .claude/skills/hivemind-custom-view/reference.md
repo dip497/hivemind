@@ -26,10 +26,12 @@ one wins.
 | `presence` (1.3) | `presence {state, since, focused}` | After `subscribePresence`; on change |
 | `response` (1.3) | `requestId`, `ok`, `result \| error {code}` | The answer to `request`; codes `UNSUPPORTED`, `BAD_REQUEST`, `BUSY`, `DECLINED`, `INTERNAL` |
 | `status` (1.4) | `agent? {state, waitingFor?, subagents, background, compacting, source?}` | On agent tiles; `state`: idle, working, waiting, done, failed, interrupted, limited, exited |
+| `hello` (1.5) | `device? {touch, compact}` | What the view is on; `hm.device` reads a desktop's from a host that predates it |
+| `participants` (1.5) | `participants [{id, person, name, color, cursor: {tileId} \| null, selection}]` | After `subscribeParticipants`; everyone else here, on each change of who, the tile their pointer is over or their selection — only of your tiles and frames |
 
 `hello.features` (1.3) lists what the host wired: `since`, `events`, `activity`, `presence`,
-`history`, `share`; 1.4 adds `agentStatus`, `agents`, `sessions`, `prompt`. A host that predates
-1.3 sends none.
+`history`, `share`; 1.4 adds `agentStatus`, `agents`, `sessions`, `prompt`; 1.5 adds
+`participants`. A host that predates 1.3 sends none.
 
 `ViewEvent` kinds: `turn {inferred?, outcome? (1.4): done | failed | interrupted | limited}`, `needsInput {reason: permission | question | review |
 approval | input}`, `subagents {active}`, `tileOpened {frameId, tileKind, agent?, spawnedBy?}`,
@@ -60,9 +62,13 @@ compute one from a theme token yourself.
 | `subscribePresence` / `unsubscribePresence` (1.3) | — | |
 | `request` (1.3) | `requestId`, `name: history \| share`, `args` | `history [{day}]`; `share [{png: ArrayBuffer, suggestedName?}]` — the one non-JSON value |
 | `request` (1.4) | `name: agents \| sessions \| prompt` | `agents [{}]` → `{agents}`; `sessions [{agent, frameId}]` → `{sessions: [{id, updated?, prompt?}]}`; `prompt [{tileId, text}]` → `{outcome: sent \| cancelled}` |
+| `subscribeParticipants` / `unsubscribeParticipants` (1.5) | — | `onParticipants()` handles both ends |
 
 Sending a 1.3 message to a host that did not advertise the feature is a refusal, like an
-unknown message; the SDK never does.
+unknown message; the SDK never does. What a host refuses is `refusal()` in `protocol.ts`, for
+the app and for the fake host in `@hivemind/view-sdk/testing` alike. A surface rect for a tile
+the host never named in a `structure` is one; the SDK (1.5) holds such a rect back until a
+`structure` names its tile, so a docked tile from a saved layout that is gone never trips it.
 
 ## Commands and their permissions
 

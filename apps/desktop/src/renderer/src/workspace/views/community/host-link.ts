@@ -7,17 +7,17 @@
  *
  * Disable rules (any one trips it, `onDisable(reason)` fires once):
  *   • ≥ LIMITS.malformed refused messages (malformed, unknown, before `ready`,
- *     a command without its permission, a command naming a tile that does not
- *     exist);
+ *     and what the protocol's `refusal` refuses: a command without its
+ *     permission, one naming a tile that does not exist, …);
  *   • > LIMITS.messagesPerSecond inbound messages in one second (a flood);
  *   • > LIMITS.longTaskMsPerWindow ms of main-thread long tasks attributed to
  *     the plugin's iframe within LIMITS.windowMs (a runaway render loop). The
  *     component feeds these in from a PerformanceObserver.
  */
 import {
-  ACTIVITY_MIN_INTERVAL_MS, COMMAND_PERMISSION, EVENT_REPLAY_MAX, PROTOCOL_VERSION, customNameMatches, parsePluginMessage,
-  type ActivityLevel, type HostMessage, type PluginMessage, type RequestErrorCode, type ShareOutcome, type SurfaceRect, type ViewEvent,
-  type ViewEventKind, type ViewFeature, type ViewHistoryDay, type ViewPermission, type ViewPresence, type ViewRect,
+  ACTIVITY_MIN_INTERVAL_MS, EVENT_REPLAY_MAX, PROTOCOL_VERSION, customNameMatches, parsePluginMessage, refusal,
+  type ActivityLevel, type CommandName, type HostMessage, type HostScope, type PluginMessage, type RequestErrorCode, type ShareOutcome, type SurfaceRect, type ViewEvent,
+  type ViewEventKind, type ViewFeature, type ViewHistoryDay, type ViewParticipant, type ViewPermission, type ViewPresence, type ViewRect,
   type ViewAgent, type ViewAgentStatus, type ViewSession, type ViewStatus,
 } from "@hivemind/view-sdk/protocol";
 import type { WorkspaceCommands } from "../../workspace-view";
@@ -53,9 +53,14 @@ export interface LinkServices {
   confirmPrompt?: (req: { agent: string | null; tileId?: string; frameId: string | null; text: string }) => Promise<boolean>;
   /** Type a confirmed prompt into an agent tile. Rejects with `{ code: "BAD_REQUEST" }` for a tile that is not one. */
   sendPrompt?: (tileId: string, text: string) => Promise<void>;
+  /** 1.5: everyone else in the workspace, whatever they point at and select; the current ones now,
+   *  then each change. The link keeps to the view's own tiles and frames. */
+  participants?: { subscribe(cb: (people: ViewParticipant[]) => void): () => void };
 }
 
 export const SHARE_DECLINES_MAX = 3;
+/** Tiles announced to a view that the link remembers, newest kept. */
+const ANNOUNCED_KEPT = 4096;
 export const PROMPT_DECLINES_MAX = 3;
 
 export function linkFeatures(s: LinkServices): ViewFeature[] {
@@ -70,6 +75,7 @@ export function linkFeatures(s: LinkServices): ViewFeature[] {
   if (s.agents) f.push("agents");
   if (s.sessions) f.push("sessions");
   if (s.confirmPrompt && s.sendPrompt) f.push("prompt");
+  if (s.participants) f.push("participants");
   return f;
 }
 
@@ -130,12 +136,22 @@ export class CommunityLink {
   private shareDeclines = 0;
   private promptPending = false;
   private promptDeclines = 0;
+  /** Every tile a `structure` named to the view, lately: a rect for one closed since is a race. */
+  private announced = new Set<string>();
+  private readonly scope: HostScope;
+  private participantsUnsub: (() => void) | null = null;
+  private people: ViewParticipant[] | null = null;
+  private lastParticipants = "";
 
   constructor(private deps: LinkDeps) {
     this.now = deps.now ?? (() => performance.now());
     this.services = deps.services ?? {};
     this.schedule = deps.schedule ?? ((fn, ms) => setTimeout(fn, ms));
     this.features = linkFeatures(this.services);
+    this.scope = {
+      capabilities: deps.capabilities, features: this.features,
+      hasTile: (id) => deps.hasTile(id), hasFrame: (id) => deps.hasFrame(id), announced: (id) => this.announced.has(id),
+    };
   }
 
   /** The view's document was hidden or shown: activity pauses while hidden and catches up after. */
@@ -156,6 +172,11 @@ export class CommunityLink {
   send(msg: HostMessage): void {
     if (this.stats.disabled || !this.port) return;
     try { this.port.postMessage(msg); } catch { /* port gone */ }
+    if (msg.type !== "structure") return;
+    for (const t of msg.tiles) { this.announced.delete(t.id); this.announced.add(t.id); }
+    for (const id of this.announced) { if (this.announced.size <= ANNOUNCED_KEPT) break; this.announced.delete(id); }
+    // What others select is kept to the tiles the view knows, which just changed.
+    this.sendParticipants();
   }
 
   /** Ask the plugin where a tile is (its rect in the plugin viewport, or null). */
@@ -186,6 +207,7 @@ export class CommunityLink {
     if (this.services.activity && this.watched.size) this.services.activity.watch(this, []);
     this.watched.clear();
     this.presenceUnsub?.(); this.presenceUnsub = null;
+    this.participantsUnsub?.(); this.participantsUnsub = null;
     for (const u of this.statusUnsubs.values()) u();
     this.statusUnsubs.clear();
     this.stats.statusSubscriptions = 0;
@@ -222,11 +244,15 @@ export class CommunityLink {
       this.deps.onReady();
       return;
     }
+    if (m.type === "ready") { this.refuse("duplicate ready"); return; }
+    const no = refusal(m, this.scope);
+    if (no) {
+      this.refuse(no.why);
+      if (!no.partly) return;
+    }
     switch (m.type) {
-      case "ready": this.refuse("duplicate ready"); return;
       case "command": this.command(m.name, m.args); return;
       case "subscribeStatus": {
-        if (!this.deps.hasTile(m.tileId)) { this.refuse(`subscribeStatus: unknown tile ${m.tileId}`); return; }
         if (this.statusUnsubs.has(m.tileId)) return;
         const tileId = m.tileId;
         let bucket: ViewStatus | null = null;
@@ -252,12 +278,7 @@ export class CommunityLink {
         this.stats.statusSubscriptions = this.statusUnsubs.size;
         return;
       }
-      case "surfaceRects": {
-        const rects = m.rects.filter((r) => this.deps.hasTile(r.tileId));
-        if (rects.length !== m.rects.length) this.refuse("surfaceRects: unknown tile");
-        this.deps.onSurfaceRects(rects);
-        return;
-      }
+      case "surfaceRects": this.deps.onSurfaceRects(m.rects.filter((r) => this.deps.hasTile(r.tileId))); return;
       case "revealed": {
         const cb = this.reveals.get(m.requestId);
         if (!cb) { this.refuse(`revealed: unknown requestId ${m.requestId}`); return; }
@@ -272,18 +293,38 @@ export class CommunityLink {
       case "unsubscribeEvents": this.eventUnsub?.(); this.eventUnsub = null; this.eventSub = null; return;
       case "watchActivity": this.watchActivity(m.tileIds); return;
       case "subscribePresence": {
-        if (!this.services.presence) { this.refuse("subscribePresence: not supported"); return; }
-        if (!this.presenceUnsub) this.presenceUnsub = this.services.presence.subscribe((presence) => this.send({ type: "presence", presence }));
+        if (!this.presenceUnsub) this.presenceUnsub = this.services.presence!.subscribe((presence) => this.send({ type: "presence", presence }));
         return;
       }
       case "unsubscribePresence": this.presenceUnsub?.(); this.presenceUnsub = null; return;
+      case "subscribeParticipants": {
+        if (!this.participantsUnsub) this.participantsUnsub = this.services.participants!.subscribe((people) => { this.people = people; this.sendParticipants(); });
+        return;
+      }
+      case "unsubscribeParticipants":
+        this.participantsUnsub?.(); this.participantsUnsub = null;
+        this.people = null; this.lastParticipants = "";
+        return;
       case "request": this.request(m); return;
     }
   }
 
+  /** Everyone else here as the view may see them, on its own tiles and frames: sent when that changes. */
+  private sendParticipants() {
+    if (!this.people) return;
+    const participants = this.people.map((p) => ({
+      ...p,
+      cursor: p.cursor && this.deps.hasTile(p.cursor.tileId) ? p.cursor : null,
+      selection: p.selection.filter((id) => this.deps.hasTile(id) || this.deps.hasFrame(id)),
+    }));
+    const key = JSON.stringify(participants);
+    if (key === this.lastParticipants) return;
+    this.lastParticipants = key;
+    this.send({ type: "participants", participants });
+  }
+
   private subscribeEvents(kinds: ViewEventKind[], custom: string[], replaySince: number | undefined) {
-    const events = this.services.events;
-    if (!events) { this.refuse("subscribeEvents: not supported"); return; }
+    const events = this.services.events!;
     const sub = { kinds: new Set(kinds), custom };
     this.eventSub = sub;
     const wants = (e: ViewEvent) => sub.kinds.has(e.kind) && (e.kind !== "custom" || customNameMatches(sub.custom, e.name));
@@ -310,10 +351,8 @@ export class CommunityLink {
   }
 
   private watchActivity(tileIds: string[]) {
-    const activity = this.services.activity;
-    if (!activity) { this.refuse("watchActivity: not supported"); return; }
+    const activity = this.services.activity!;
     const known = tileIds.filter((id) => this.deps.hasTile(id));
-    if (known.length !== tileIds.length) this.refuse("watchActivity: unknown tile");
     const next = new Set(known);
     for (const id of next) if (!this.watched.has(id)) this.activityPending[id] = activity.level(id);
     for (const id of Object.keys(this.activityPending)) if (!next.has(id)) delete this.activityPending[id];
@@ -421,29 +460,23 @@ export class CommunityLink {
     if (this.statusUnsubs.delete(tileId)) this.stats.statusSubscriptions = this.statusUnsubs.size;
   }
 
-  private command(name: keyof typeof COMMAND_PERMISSION, args: unknown[]) {
-    const need = COMMAND_PERMISSION[name];
-    if (need && !this.deps.capabilities.includes(need)) { this.refuse(`${name} needs permission "${need}"`); return; }
+  /** A command `refusal` let through: its permission is granted and what it names is there. */
+  private command(name: CommandName, args: unknown[]) {
     const c = this.deps.commands;
-    const tile = (id: unknown) => (id === null || this.deps.hasTile(id as string) ? true : (this.refuse(`${name}: unknown tile ${String(id)}`), false));
-    const frame = (id: unknown) => (id === null || this.deps.hasFrame(id as string) ? true : (this.refuse(`${name}: unknown frame ${String(id)}`), false));
     switch (name) {
-      case "selectTile": if (tile(args[0])) c.selectTile(args[0] as string | null); return;
-      case "selectFrame": if (frame(args[0])) c.selectFrame(args[0] as string | null); return;
-      case "focusTile": if (tile(args[0])) c.focusTile(args[0] as string, args[1] as { exact?: boolean } | undefined); return;
-      case "closeTile": if (tile(args[0])) c.closeTile(args[0] as string); return;
+      case "selectTile": c.selectTile(args[0] as string | null); return;
+      case "selectFrame": c.selectFrame(args[0] as string | null); return;
+      case "focusTile": c.focusTile(args[0] as string, args[1] as { exact?: boolean } | undefined); return;
+      case "closeTile": c.closeTile(args[0] as string); return;
       case "spawnTile":
         if (!SPAWNABLE.includes(args[0] as string)) { this.refuse(`spawnTile: unknown kind ${String(args[0])}`); return; }
-        if (frame(args[1])) c.spawnTile(args[0] as TileKind, args[1] as string | null);
+        c.spawnTile(args[0] as TileKind, args[1] as string | null);
         return;
       case "spawnVis": c.spawnVis(args[0] as "tree" | "shell" | "diff" | "issues"); return;
       case "spawnClaude": c.spawnClaude(); return;
       case "addFrame": c.addFrame(); return;
       case "spawnAgent": {
         const opts = args[2] as { prompt?: string; name?: string; resume?: string } | undefined;
-        if (opts?.prompt !== undefined && !this.deps.capabilities.includes("workspace:prompt")) { this.refuse('spawnAgent with a prompt needs permission "workspace:prompt"'); return; }
-        if (opts?.resume !== undefined && !this.deps.capabilities.includes("workspace:sessions")) { this.refuse('spawnAgent with resume needs permission "workspace:sessions"'); return; }
-        if (!frame(args[1])) return;
         const go = () => {
           if (!c.spawnAgent(args[0] as string | null, args[1] as string | null, opts)) this.refuse(`spawnAgent: no agent ${String(args[0] ?? "installed")}`);
         };
@@ -459,8 +492,8 @@ export class CommunityLink {
           .finally(() => { this.promptPending = false; });
         return;
       }
-      case "renameTile": if (tile(args[0])) c.renameTile(args[0] as string, args[1] as string); return;
-      case "openFolder": if (frame(args[0])) c.openFolder(args[0] as string); return;
+      case "renameTile": c.renameTile(args[0] as string, args[1] as string); return;
+      case "openFolder": c.openFolder(args[0] as string); return;
     }
   }
 }

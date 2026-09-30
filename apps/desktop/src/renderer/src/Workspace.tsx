@@ -75,6 +75,7 @@ import { useGitPush, useGitPull } from "./queries";
 import { createTileSurfaceBuilder } from "./workspace/tile-surfaces";
 import { TileHost } from "./workspace/tile-host";
 import { ViewHost } from "./workspace/view-host";
+import { SayHere } from "./multiplayer/presence";
 import { HostChrome } from "./workspace/host-chrome";
 import { loadCommunityViews } from "./workspace/views/community/registry";
 import { syncAgentPlugins } from "./agent-plugins";
@@ -1071,6 +1072,13 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     openFileInTile, openUrlInBrowser, openFileFromTerminal, closeTabInTile, closeTile, renameTile, togglePin,
   ]);
 
+  // What the person here has selected, for the others in the workspace to see, whichever view
+  // shows it (M1).
+  const presenceSelection = useMemo(
+    () => [selectedTileId, selectedFrameId, board.selectedId].filter((id): id is string => !!id),
+    [selectedTileId, selectedFrameId, board.selectedId],
+  );
+
   // ── what the active view receives ─────────────────────────────────────────
   const links = useMemo(() => ({ pipes, spawnLinks }), [pipes, spawnLinks]);
   const model: WorkspaceViewModel = useMemo(() => ({
@@ -1143,6 +1151,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
         onSwitch={switchView}
         onRetry={() => { setViewFailure(null); setViewAttempt((n) => n + 1); }}
       />
+      {repoPath && <SayHere repo={repoPath} selection={presenceSelection} />}
       {/* Reset transient toolbar expansion on view/placement changes without
           touching live tile bodies. Settings lives above this in App. */}
       <HostChrome

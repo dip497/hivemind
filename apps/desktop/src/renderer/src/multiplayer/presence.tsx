@@ -1,17 +1,18 @@
 /**
- * Who else is in this workspace, and where (M1; design §4.2 C). The window says where its person's
- * pointer is on the board and what they have selected (`presence.set`): again whenever either
- * changes, at most every 50 ms, and every 20 s while nothing does, so the host does not take them
- * for gone; and that they left when it stops showing the workspace. It hears who is there
- * (`presence.changed`). Others' pointers are drawn on the canvas with their names, what they have
- * selected is ringed in their colour, and their faces sit by Share. The person here is never
- * shown to themselves, whichever of their windows they are at.
+ * Who else is in this workspace, and where (M1; design §4.2 C). The window says its person is in
+ * the workspace it shows, whichever view shows it (`presence.set`): what they have selected and,
+ * on the canvas, where their pointer is and what it is over; again whenever that changes, at most
+ * every 50 ms, and every 20 s while nothing does, so the host does not take them for gone; and
+ * that they left when it stops showing the workspace. It hears who is there (`presence.changed`).
+ * Others' pointers are drawn on the canvas with their names, what they have selected is ringed in
+ * their colour, their faces sit by Share, and a community view is told of them (protocol 1.5).
+ * The person here is never shown to themselves, whichever of their windows they are at.
  */
 import { useEffect, useMemo, useRef, useSyncExternalStore, type RefObject } from "react";
 import { useInternalNode, useReactFlow, useStore, ViewportPortal } from "@xyflow/react";
 import type { Participant, PresenceState } from "@hivemind/workspace-host/presence";
 import { useSettings } from "../settings-store";
-import { colorFor, initialsOf } from "./people";
+import { colorOf, initialsOf } from "./people";
 
 const SEND_EVERY_MS = 50;
 const STILL_HERE_EVERY_MS = 20_000;
@@ -72,60 +73,106 @@ export function useFacesHere(repo: string | null): Face[] {
   return useSyncExternalStore(subscribe, () => (repo ? faces.get(repo) ?? NO_FACES : NO_FACES));
 }
 
-const colorOf = (p: Pick<Participant, "person" | "color">): string => p.color || colorFor(p.person);
+/** Who else is in `repo`, now and whenever that changes, for what is not a component (a view's
+ *  host). Returns the unsubscribe. */
+export function watchPeopleHere(repo: string, cb: (people: Participant[]) => void): () => void {
+  let told: Participant[] | null = null;
+  const pass = (): void => {
+    const now = others.get(repo) ?? NOBODY;
+    if (now !== told) cb((told = now));
+  };
+  const off = subscribe(pass);
+  pass();
+  return off;
+}
+
+/** Where someone points: what the canvas adds to what a window says. */
+type Pointing = Omit<PresenceState, "name" | "color" | "selection">;
+/** Where this window's person points on the board of a workspace, while the canvas shows it. */
+const pointers = new Map<string, () => Pointing>();
+/** Each workspace this window says it is in: say it again soon. */
+const sayers = new Map<string, () => void>();
+const NOWHERE: Pointing = { cursor: null, over: null };
 
 /**
- * Inside the canvas: says where this window's person is on the board of `repo` (the pointer over
- * `pane`, and `selection`), and draws everyone else's.
+ * Says this window's person is in `repo`, whichever view shows it: their name and colour, what
+ * they have selected (`selection`) and, while the canvas shows it, where they point. Again at most
+ * every 50 ms as that changes, and every 20 s while it does not; and that they left, when the
+ * window stops showing the workspace.
  */
-export function PresenceLayer({ repo, pane, selection }: { repo: string; pane: RefObject<HTMLElement | null>; selection: string[] }) {
-  const { screenToFlowPosition } = useReactFlow();
+export function SayHere({ repo, selection }: { repo: string; selection: string[] }): null {
   const { profile } = useSettings();
-  const people = usePeopleHere(repo);
+  const whoAmI = useSyncExternalStore(subscribe, () => me);
   const said = useRef<Pick<PresenceState, "name" | "color" | "selection">>({ name: "", color: "", selection: [] });
   const soon = useRef<() => void>(() => {});
 
   useEffect(() => {
-    const el = pane.current;
-    if (!el) return undefined;
-    let pointer: { x: number; y: number } | null = null;
     let timer: ReturnType<typeof setTimeout> | null = null;
     let sentAt = 0;
     const send = (): void => {
       if (timer) clearTimeout(timer);
       timer = null;
       sentAt = Date.now();
-      window.hive.boardPresenceSet(repo, { ...said.current, cursor: pointer ? screenToFlowPosition(pointer) : null });
+      window.hive.boardPresenceSet(repo, { ...said.current, ...(pointers.get(repo)?.() ?? NOWHERE) });
     };
     soon.current = () => { timer ??= setTimeout(send, Math.max(0, SEND_EVERY_MS - (Date.now() - sentAt))); };
-    const move = (e: PointerEvent): void => { pointer = { x: e.clientX, y: e.clientY }; soon.current(); };
-    const leave = (): void => { pointer = null; soon.current(); };
+    sayers.set(repo, () => soon.current());
     const gone = (): void => window.hive.boardPresenceSet(repo, null);
-    el.addEventListener("pointermove", move, { passive: true });
-    el.addEventListener("pointerleave", leave);
     window.addEventListener("pagehide", gone);
     // A host reconnected to has forgotten this window: say where it is again.
     const offBack = window.hive.onSharedStatus((ws, s) => { if (`hive://${ws}` === repo && s.state === "connected") send(); });
     const still = setInterval(send, STILL_HERE_EVERY_MS);
     send();
     return () => {
+      sayers.delete(repo);
       offBack();
-      el.removeEventListener("pointermove", move);
-      el.removeEventListener("pointerleave", leave);
       window.removeEventListener("pagehide", gone);
       clearInterval(still);
       if (timer) clearTimeout(timer);
       soon.current = () => {};
       gone();
     };
-  }, [repo, pane, screenToFlowPosition]);
+  }, [repo]);
 
-  const name = profile.name || me?.suggestedName || "";
+  const name = profile.name || whoAmI?.suggestedName || "";
   const selected = selection.join("\n");
   useEffect(() => {
     said.current = { name, color: profile.color, selection: selected ? selected.split("\n") : [] };
     soon.current();
   }, [name, profile.color, selected]);
+  return null;
+}
+
+/**
+ * Inside the canvas: where this window's person points on the board of `repo` (the pointer over
+ * `pane`, and what it is over), for `SayHere` to say; and everyone else's pointers and selections.
+ */
+export function PresenceLayer({ repo, pane }: { repo: string; pane: RefObject<HTMLElement | null> }) {
+  const { screenToFlowPosition } = useReactFlow();
+  const people = usePeopleHere(repo);
+
+  useEffect(() => {
+    const el = pane.current;
+    if (!el) return undefined;
+    let pointer: { x: number; y: number } | null = null;
+    let over: string | null = null;
+    const moved = (): void => sayers.get(repo)?.();
+    const move = (e: PointerEvent): void => {
+      pointer = { x: e.clientX, y: e.clientY };
+      over = (e.target as Element | null)?.closest?.(".react-flow__node")?.getAttribute("data-id") ?? null;
+      moved();
+    };
+    const leave = (): void => { pointer = null; over = null; moved(); };
+    el.addEventListener("pointermove", move, { passive: true });
+    el.addEventListener("pointerleave", leave);
+    pointers.set(repo, () => ({ cursor: pointer ? screenToFlowPosition(pointer) : null, over }));
+    return () => {
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerleave", leave);
+      pointers.delete(repo);
+      moved();
+    };
+  }, [repo, pane, screenToFlowPosition]);
 
   const [panX, panY, zoom] = useStore((s) => s.transform);
   const rings = useMemo(() => people.flatMap((p) => p.selection.map((id) => ({ id, p }))), [people]);

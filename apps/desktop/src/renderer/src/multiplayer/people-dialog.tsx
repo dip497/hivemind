@@ -11,7 +11,7 @@ import { Users } from "lucide-react";
 import type { SharedPerson } from "../../../shared/ipc";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../components/ui/dialog";
 import { Button } from "../components/ui/button";
-import { ROLE_LABELS, colorFor, initialsOf } from "./people";
+import { ROLE_LABELS, colorOf, initialsOf } from "./people";
 import { useFacesHere } from "./presence";
 
 const ROLES = ["view", "edit", "terminals", "agents"] as const;
@@ -65,7 +65,7 @@ export function PeopleDialog({ repo, open, onClose }: { repo: string; open: bool
         <ul className="flex flex-col gap-1">
           {people?.map((p) => (
             <li key={p.person} className="flex items-center gap-2.5 rounded-md px-1 py-1.5" data-shared-person={p.person} data-present={p.present}>
-              <span className="grid size-7 shrink-0 place-items-center rounded-full text-[11px] font-semibold text-white" style={{ background: p.color || colorFor(p.person) }}>
+              <span className="grid size-7 shrink-0 place-items-center rounded-full text-[11px] font-semibold text-white" style={{ background: colorOf(p) }}>
                 {initialsOf(p.name)}
               </span>
               <span className="min-w-0 flex-1">

@@ -3,12 +3,15 @@
  * session statuses, the activity and presence stores main updates, and the LinkServices a community view's
  * host link reads. Started once; it runs whatever view is active.
  */
-import type { ActivityLevel, ShareOutcome, TurnOutcome, ViewAgent, ViewAgentStatus, ViewPresence } from "@hivemind/view-sdk/protocol";
+import type { ActivityLevel, ShareOutcome, TurnOutcome, ViewAgent, ViewAgentStatus, ViewParticipant, ViewPresence } from "@hivemind/view-sdk/protocol";
+import type { Participant } from "@hivemind/workspace-host/presence";
 import { canListSessions, defaultAgent, spawnableAgents, agentById as catalogAgentById } from "@hivemind/agents";
 import type { SessionStatus } from "@hivemind/agent-host/status-store";
 import { subscribeHostedStatus, subscribeStatus } from "../agent-status-bus";
 import { agentMissing } from "../agent-plugins";
 import { AGENT_TILE_KIND } from "../tile-kinds";
+import { watchPeopleHere } from "../multiplayer/presence";
+import { colorOf } from "../multiplayer/people";
 import { ViewEventHub } from "./view-events";
 import type { LinkServices } from "./views/community/host-link";
 import type { HcpStatusEvent } from "../../../shared/ipc";
@@ -119,11 +122,18 @@ export function viewAgents(): ViewAgent[] {
   }));
 }
 
+/** Someone else in the workspace as a view is told of them: pointing at what their pointer is over. */
+const viewParticipant = (p: Participant): ViewParticipant => ({
+  id: p.id, person: p.person, name: p.name, color: colorOf(p), cursor: p.over ? { tileId: p.over } : null, selection: p.selection,
+});
+
 const coded = (code: "UNSUPPORTED" | "BAD_REQUEST", message: string) => Object.assign(new Error(message), { code });
 
 /** What a community view's host link may read. `share` and `confirmPrompt` show the host's confirm. */
 export function viewLinkServices(opts: {
   layoutKey: () => string | null;
+  /** The workspace the view shows, or null (a transient one). */
+  repo: () => string | null;
   share: (png: ArrayBuffer, suggestedName?: string) => Promise<ShareOutcome>;
   /** The local folder a frame is bound to, or null (none, or on another machine). */
   frameFolder: (frameId: string) => string | null;
@@ -155,5 +165,12 @@ export function viewLinkServices(opts: {
       return window.hive.viewHistory(key, day);
     },
     share: opts.share,
+    participants: {
+      subscribe: (cb) => {
+        const repo = opts.repo();
+        if (!repo) { cb([]); return () => {}; }
+        return watchPeopleHere(repo, (people) => cb(people.map(viewParticipant)));
+      },
+    },
   };
 }

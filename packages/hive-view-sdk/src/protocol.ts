@@ -101,7 +101,7 @@ export interface ViewTheme {
 
 /** What a host implements beyond 1.2, sent in `hello.features`. A host that predates 1.3 sends
  *  none, so read the field (`hm.hello.features ?? []`), never probe for a client method. */
-export const VIEW_FEATURES = ["since", "events", "activity", "presence", "history", "share", "agentStatus", "agents", "sessions", "prompt"] as const;
+export const VIEW_FEATURES = ["since", "events", "activity", "presence", "history", "share", "agentStatus", "agents", "sessions", "prompt", /** 1.5 */ "participants"] as const;
 export type ViewFeature = (typeof VIEW_FEATURES)[number];
 
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [k: string]: JsonValue };
@@ -200,10 +200,33 @@ export interface ViewHistoryDay {
 export type RequestErrorCode = "UNSUPPORTED" | "BAD_REQUEST" | "BUSY" | "DECLINED" | "INTERNAL";
 export type ShareOutcome = "copied" | "saved" | "cancelled";
 
+// ── protocol 1.5 (additive) ─────────────────────────────────────────────────
+
+/** What the view is shown on, in `hello.device`: `touch`, the pointer is a finger, so what it
+ *  taps needs room; `compact`, a phone's screen, so one column. A host that predates 1.5 sends
+ *  none: read `hm.device`, which is then a desktop's. */
+export interface ViewDevice { touch: boolean; compact: boolean }
+
+/** Someone else in the workspace, after `subscribeParticipants` (feature `participants`): another
+ *  person, or this person at another device. Never the person at this view. */
+export interface ViewParticipant {
+  /** Theirs while they are here: one per window or device. */
+  id: string;
+  /** Their person, the same at each of their devices: one face per person. */
+  person: string;
+  name: string;
+  /** `#rrggbb`: the colour the app draws them in. */
+  color: string;
+  /** The tile their pointer is over, when it is one of this view's. */
+  cursor: { tileId: string } | null;
+  /** What they have selected of this view's tiles and frames. */
+  selection: string[];
+}
+
 // ── host → plugin ───────────────────────────────────────────────────────────
 
 export type HostMessage =
-  | { type: "hello"; v: number; pluginId: string; capabilities: ViewPermission[]; theme: ViewTheme; layout: unknown; viewport: { w: number; h: number }; visible: boolean; /** 1.3 */ features?: ViewFeature[] }
+  | { type: "hello"; v: number; pluginId: string; capabilities: ViewPermission[]; theme: ViewTheme; layout: unknown; viewport: { w: number; h: number }; visible: boolean; /** 1.3 */ features?: ViewFeature[]; /** 1.5 */ device?: ViewDevice }
   /** Frames / tiles / membership (+ the current names). Structural only. */
   | { type: "structure"; frames: ViewFrame[]; tiles: ViewTile[]; /** 1.2 */ links?: ViewLinks }
   /** Display names changed (renames, agent titles) — nothing structural did. */
@@ -219,6 +242,9 @@ export type HostMessage =
   | { type: "activity"; levels: Record<string, ActivityLevel> }
   /** 1.3, after `subscribePresence`: on change. */
   | { type: "presence"; presence: ViewPresence }
+  /** 1.5, after `subscribeParticipants`: everyone else here, whenever who, their pointer's tile or
+   *  their selection changes. */
+  | { type: "participants"; participants: ViewParticipant[] }
   /** 1.3: the answer to a `request`. */
   | { type: "response"; requestId: number; ok: true; result: unknown }
   | { type: "response"; requestId: number; ok: false; error: { code: RequestErrorCode; message: string } }
@@ -290,6 +316,9 @@ export type PluginMessage =
   | { type: "watchActivity"; tileIds: string[] }
   | { type: "subscribePresence" }
   | { type: "unsubscribePresence" }
+  /** 1.5 */
+  | { type: "subscribeParticipants" }
+  | { type: "unsubscribeParticipants" }
   /** 1.3: answered by one `response` with the same id. The share buffer is the one non-JSON value. */
   | { type: "request"; requestId: number; name: "history"; args: [{ day: string }] }
   | { type: "request"; requestId: number; name: "share"; args: [{ png: ArrayBuffer; suggestedName?: string }] }
@@ -390,6 +419,10 @@ const isId = (v: unknown): v is string => typeof v === "string" && v.length > 0 
 const isIdOrNull = (v: unknown): v is string | null => v === null || isId(v);
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const isRect = (v: unknown): v is ViewRect => isObj(v) && isNum(v.x) && isNum(v.y) && isNum(v.w) && isNum(v.h);
+const isParticipant = (v: unknown): v is ViewParticipant => isObj(v) && isId(v.id) && isId(v.person)
+  && typeof v.name === "string" && typeof v.color === "string"
+  && (v.cursor === null || (isObj(v.cursor) && isId(v.cursor.tileId)))
+  && Array.isArray(v.selection) && v.selection.every(isId);
 
 const COMMAND_ARGS: Record<CommandName, (args: unknown[]) => boolean> = {
   selectTile: (a) => a.length === 1 && isIdOrNull(a[0]),
@@ -468,6 +501,8 @@ export function parsePluginMessage(raw: unknown): ParseResult<PluginMessage> {
     case "unsubscribeEvents":
     case "subscribePresence":
     case "unsubscribePresence":
+    case "subscribeParticipants":
+    case "unsubscribeParticipants":
       return { ok: true, msg: { type: raw.type } };
     case "watchActivity": {
       if (!Array.isArray(raw.tileIds) || raw.tileIds.length > ACTIVITY_MAX_TILES || !raw.tileIds.every(isId)) return bad(`tileIds must be at most ${ACTIVITY_MAX_TILES} tile ids`);
@@ -506,6 +541,62 @@ export function parsePluginMessage(raw: unknown): ParseResult<PluginMessage> {
   }
 }
 
+/** What a host has told a view, for `refusal`: what it granted and wired, the tiles and frames
+ *  there are now, and whether it ever announced a tile (in a `structure`). */
+export interface HostScope {
+  capabilities: readonly ViewPermission[];
+  features: readonly ViewFeature[];
+  hasTile(id: string): boolean;
+  hasFrame(id: string): boolean;
+  announced(tileId: string): boolean;
+}
+
+/** The feature a subscription needs. */
+const SUBSCRIPTION_FEATURE: Partial<Record<PluginMessage["type"], ViewFeature>> = {
+  subscribeEvents: "events", watchActivity: "activity", subscribePresence: "presence", subscribeParticipants: "participants",
+};
+
+/** Host side: why a well-formed message from a view is refused, or null when it is taken. A command
+ *  the manifest did not ask for, one that names a tile or frame that is not there, a status for no
+ *  tile, a subscription to a feature the host did not wire. Surface rects and watched tiles that
+ *  are not there are refused and the rest of them `partly` taken, except a rect for a tile the host
+ *  announced and has closed since: the view had not heard yet. The app's host and the fake one
+ *  (`@hivemind/view-sdk/testing`) refuse alike. */
+export function refusal(m: PluginMessage, host: HostScope): { why: string; partly: boolean } | null {
+  const feature = SUBSCRIPTION_FEATURE[m.type];
+  if (feature && !host.features.includes(feature)) return { why: `${m.type}: not supported`, partly: false };
+  const why = refused(m, host);
+  return why ? { why, partly: m.type === "surfaceRects" || m.type === "watchActivity" } : null;
+}
+
+function refused(m: PluginMessage, host: HostScope): string | null {
+  switch (m.type) {
+    case "command": {
+      const need = COMMAND_PERMISSION[m.name];
+      if (need && !host.capabilities.includes(need)) return `${m.name} needs permission "${need}"`;
+      const [a0, a1, a2] = m.args;
+      const tile = (id: unknown) => (id === null || host.hasTile(id as string) ? null : `${m.name}: unknown tile ${String(id)}`);
+      const frame = (id: unknown) => (id === null || host.hasFrame(id as string) ? null : `${m.name}: unknown frame ${String(id)}`);
+      switch (m.name) {
+        case "selectTile": case "focusTile": case "closeTile": case "renameTile": return tile(a0);
+        case "selectFrame": case "openFolder": return frame(a0);
+        case "spawnTile": return frame(a1);
+        case "spawnAgent": {
+          const opts = a2 as { prompt?: string; resume?: string } | undefined;
+          if (opts?.prompt !== undefined && !host.capabilities.includes("workspace:prompt")) return 'spawnAgent with a prompt needs permission "workspace:prompt"';
+          if (opts?.resume !== undefined && !host.capabilities.includes("workspace:sessions")) return 'spawnAgent with resume needs permission "workspace:sessions"';
+          return frame(a1);
+        }
+        default: return null;
+      }
+    }
+    case "subscribeStatus": return host.hasTile(m.tileId) ? null : `subscribeStatus: unknown tile ${m.tileId}`;
+    case "surfaceRects": return m.rects.every((r) => host.hasTile(r.tileId) || host.announced(r.tileId)) ? null : "surfaceRects: unknown tile";
+    case "watchActivity": return m.tileIds.every((id) => host.hasTile(id)) ? null : "watchActivity: unknown tile";
+    default: return null;
+  }
+}
+
 /** Plugin side: validate a message received from the host (lenient on extras). */
 export function parseHostMessage(raw: unknown): ParseResult<HostMessage> {
   if (!isObj(raw) || typeof raw.type !== "string") return { ok: false, reason: "not an object with a string type" };
@@ -535,6 +626,9 @@ export function parseHostMessage(raw: unknown): ParseResult<HostMessage> {
     case "presence":
       return isObj(raw.presence) && ["active", "idle", "away"].includes(raw.presence.state as string) && isNum(raw.presence.since)
         ? { ok: true, msg: raw as unknown as HostMessage } : bad("bad presence");
+    case "participants":
+      return Array.isArray(raw.participants) && raw.participants.every(isParticipant)
+        ? { ok: true, msg: raw as unknown as HostMessage } : bad("participants must be an array of participants");
     case "response":
       return isNum(raw.requestId) && typeof raw.ok === "boolean" && (raw.ok || isObj(raw.error))
         ? { ok: true, msg: raw as unknown as HostMessage } : bad("bad response");
