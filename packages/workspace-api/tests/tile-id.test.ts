@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mintId } from "../../src/shared/tile-id.js";
+import { mintId } from "../src/tile-id.ts";
 
 test("ids minted in the same millisecond stay distinct", () => {
   const ids = Array.from({ length: 50 }, () => mintId("tile-pi"));

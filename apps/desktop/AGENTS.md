@@ -10,20 +10,25 @@ The Electron canvas app. Three processes: **main** (Node — IPC, PTY, git, fs),
 src/main/      Node main process — owns IPC, PTY daemon, git, fs, windows
   index.ts        every ipcMain.handle/on channel; the IPC choke point
   daemon-client.ts / pty-host.ts   daemon vs in-process PTY transports
-  git-adapter.ts  git ops (simple-git + raw spawn); rawGit() is the low-level seam
-  remote/         ssh2 transport — conn (pool) · pty · fs (SFTP) · exec · git · known-hosts
+  remote/         a machine's pty over ssh, its saved logins, the Machines hub
   claude-resume.ts  session-id binding + shq() POSIX escaper (reused by remote)
 src/preload/index.ts   window.hive bridge (1:1 with shared/ipc.ts HiveIpc)
 src/shared/     types shared main↔renderer
   ipc.ts          HiveIpc interface — the contract
-  remote-uri.ts   machine:// and ssh:// URI parse/format (pure, shared)
 src/renderer/src/   React app (see "Renderer" below)
 tests/unit/     node:test (pure logic)   tests/e2e/  Playwright
 
-packages/agent-host/src/   the host, shared with the `hive` CLI
+packages/host/src/   the workspace API answered on this machine (R14): what main and the
+                     dev-bridge serve (its tests: tsx --test)
+  domains.ts · store.ts · terminals.ts · plans.ts · presence.ts · agents.ts
+  git-adapter.ts  git ops (simple-git + raw spawn); rawGit() is the low-level seam
+  remote/         ssh transport — conn (pool) · fs · exec · git · ssh · targets · catalog
+packages/agent-host/src/   the agents' side, shared with the `hive` CLI
   pty-daemon.ts   detached node-pty + headless-xterm snapshots (persistence)
   shell-env.ts    PATH/token patching so claude/gh/git resolve
   hooks/          the hook scripts it writes for agents
+packages/hive-core/src/remote-uri.ts   machine:// and ssh:// URI parse/format (pure, shared)
+packages/workspace-api/src/tile-id.ts  bare ↔ `hm:` tile ids (pure, shared)
 ```
 
 ## Renderer: the Workspace + view plugins
@@ -74,7 +79,7 @@ backend helper branches once on `isRemote()`:
 - fs → `fileRead`/`fileWrite` route to SFTP; remote paths use a POSIX traversal
   guard, never `path.resolve` (that mangles the URI).
 
-One pooled `ssh2.Client` per host (`remote/conn.ts`) shared by PTY + SFTP + git.
+One pooled ssh connection per host (`@hivemind/host/remote/conn`) shared by PTY + files + git.
 Full design + edge cases: `docs/design/remote-frames.md`.
 
 ## Persistence & PTYs

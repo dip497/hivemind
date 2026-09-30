@@ -5,8 +5,8 @@
 import fsp from "node:fs/promises";
 import { text, written } from "@hivemind/workspace-api/protocol";
 import type { Domain } from "@hivemind/workspace-api/server";
-import { isRemote } from "../../shared/remote-uri.js";
-import { readRemoteFile, writeRemoteFile } from "../remote/git.js";
+import { isRemote } from "@hivemind/core/remote-uri";
+import { readRemoteFile, writeRemoteFile } from "./remote/git.js";
 import { fileIn, remoteRel, resolveInRepo } from "./repo-paths.js";
 
 export const files: Domain<"file.read" | "file.write"> = {

@@ -32,15 +32,15 @@ import { TILE_SESSIONS_DIR, listSessions, writeTrackedSession } from "@hivemind/
 import { agentAllowedIn, loadAgents, toWire } from "@hivemind/agents/load";
 import * as ptyHost from "./pty-host.js";
 import * as ptyDaemon from "./daemon-client.js";
-import { isRemote } from "../shared/remote-uri.js";
+import { isRemote } from "@hivemind/core/remote-uri";
 import { savedAuth } from "./remote/saved-hosts.js";
 import { addMachine, checkMachine, editMachine, initMachines, installOnMachine, machineSessions, reconnectMachineHost, removeMachine, setMachinePassword, snapshot as machinesSnapshot, updateMachine } from "./remote/machines.js";
-import { remoteTarget } from "./remote/targets.js";
+import { remoteTarget } from "@hivemind/host/remote/targets";
 import {
   spawnRemotePty, writeRemotePty, resizeRemotePty, killRemotePty, hasRemotePty, screenRemotePty, remoteKeepsScreen,
   pauseRemotePty, resumeRemotePty, detachRemotePty, setRemoteEventSink,
 } from "./remote/pty.js";
-import { remoteConns } from "./remote/conn.js";
+import { remoteConns } from "@hivemind/host/remote/conn";
 import { findGitRoot, computeRepoPath, projectDir } from "./workspace-paths.js";
 // tmux-style persistence is ON by default — terminal sessions live in a
 // detached daemon and survive the window closing. No user-facing flag.
@@ -84,19 +84,19 @@ import { elsewhere, mayWriteShared } from "./shared-workspaces.js";
 import { appWindowOf, broadcast, openWindows, registerWindow, userWindow } from "./windows.js";
 import { patchSettingsExtras } from "@hivemind/core/settings";
 import { PipeManager } from "./hcp/pipes.js";
-import { toBareId, toPtyId } from "../shared/tile-id.js";
+import { toBareId, toPtyId } from "@hivemind/workspace-api/tile-id";
 import { SUBMIT_DELAY_MS } from "../shared/agent-io.js";
 import { INITIAL_PROMPT_ENV } from "@hivemind/agent-host/initial-prompt";
 import { WorkspaceServer, named, type Connection } from "@hivemind/workspace-api/server";
-import { workspaceDomains } from "./workspace/domains.js";
-import { agents } from "./workspace/agents.js";
-import { Terminals, type SessionOutput } from "./workspace/terminals.js";
-import { Layouts, type Shown } from "./workspace/store.js";
-import { presence } from "./workspace/presence.js";
-import { Plans } from "./workspace/plans.js";
+import { workspaceDomains } from "@hivemind/host/domains";
+import { agents } from "@hivemind/host/agents";
+import { Terminals, type SessionOutput } from "@hivemind/host/terminals";
+import { Layouts, type Shown } from "@hivemind/host/store";
+import { presence } from "@hivemind/host/presence";
+import { Plans } from "@hivemind/host/plans";
 import type { TerminalOpts } from "@hivemind/workspace-api/terminals";
 import { serveWorkspaceApi } from "./workspace-ipc.js";
-import { fileIn } from "./workspace/repo-paths.js";
+import { fileIn } from "@hivemind/host/repo-paths";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -1017,7 +1017,7 @@ const onPtyExit = (tileId: string): void => {
 };
 
 // ── terminals ─────────────────────────────────────────────────
-// Every session's output to every window that shows it (workspace/terminals.ts, on
+// Every session's output to every window that shows it (@hivemind/host/terminals, on
 // @hivemind/agent-host/session-relay): main holds one attach per session, and a window that mounts
 // a tile another window already shows joins it, its screen first. How a session runs is main's:
 // the daemon or this process, or ssh for a remote frame.

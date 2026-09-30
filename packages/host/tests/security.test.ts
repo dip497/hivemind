@@ -12,7 +12,7 @@ import { shq } from "@hivemind/agents/node";
 import { Intents } from "@hivemind/workspace-host/intents";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import { WorkspaceServer } from "@hivemind/workspace-api/server";
-import { workspaceDomains } from "../../src/main/workspace/domains.ts";
+import { workspaceDomains } from "../src/domains.ts";
 
 const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "hm-security-")));
 after(() => fs.rmSync(tmp, { recursive: true, force: true }));

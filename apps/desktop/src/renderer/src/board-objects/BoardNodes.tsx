@@ -10,7 +10,7 @@ import { NodeResizer, type NodeTypes } from "@xyflow/react";
 import { Check, Copy, GripVertical, Plus, Trash2 } from "lucide-react";
 import type { ChecklistItem, ChecklistObject, NoteObject, TextObject } from "@hivemind/workspace-doc/shapes";
 import { Button } from "../components/ui/button";
-import { mintId } from "../../../shared/tile-id";
+import { mintId } from "@hivemind/workspace-api/tile-id";
 import { BOX_SIZE, NOTE_COLORS, type BoxObject, type NoteColor } from "./board-model";
 import { useBoardContext } from "./board-context";
 import { TextArea, TextLine } from "./TextDraft";

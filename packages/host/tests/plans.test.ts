@@ -1,4 +1,4 @@
-// Plans agents hand off for review (workspace/plans.ts, M2): every client is told of each one, and
+// Plans agents hand off for review (plans.ts, M2): every client is told of each one, and
 // one that asks later finds those of its workspace waiting; the first answer is the one the agent
 // gets, and everyone is told who gave it, while a later one changes nothing and hears who was
 // first; an answer about another tile's plan answers nothing; a plan whose agent stops waiting is
@@ -12,7 +12,7 @@ import { Intents, type Actor } from "@hivemind/workspace-host/intents";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server";
 import type { EventMessage } from "@hivemind/workspace-api/protocol";
-import { Plans } from "../../src/main/workspace/plans.ts";
+import { Plans } from "../src/plans.ts";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hm-plans-"));
 after(() => fs.rmSync(tmp, { recursive: true, force: true }));

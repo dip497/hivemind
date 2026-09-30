@@ -10,7 +10,7 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Switch } from "../components/ui/switch";
 import type { MachineInfo, RemoteDirEntry } from "../../../shared/ipc";
-import { machineUri, posixJoin } from "../../../shared/remote-uri";
+import { machineUri, posixJoin } from "@hivemind/core/remote-uri";
 import { errText, machineForRequest, statusOf, useMachines, type MachinesRequest } from "./store";
 import { AttentionNote, MachineDot, statusWords } from "./status";
 

@@ -1,4 +1,4 @@
-// Presence on a host (workspace/presence.ts): a window's participant is the person at this
+// Presence on a host (presence.ts): a window's participant is the person at this
 // machine, a peer's the person its device is, whatever name either sends; every client is told who
 // is in the workspace as it changes, at once after a quiet spell and at most every 50 ms while
 // people move; one who says they left, or whose connection goes, is gone from it, and the others
@@ -14,7 +14,7 @@ import type { Participant } from "@hivemind/workspace-host/presence";
 import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server";
 import type { EventMessage } from "@hivemind/workspace-api/protocol";
 import type { Actor } from "@hivemind/workspace-host/intents";
-import { PRESENCE_EVERY_MS, presence } from "../../src/main/workspace/presence.ts";
+import { PRESENCE_EVERY_MS, presence } from "../src/presence.ts";
 
 const ME = "a".repeat(64);
 const PRIYA = "b".repeat(64);

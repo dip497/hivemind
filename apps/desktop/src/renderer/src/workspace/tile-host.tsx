@@ -41,7 +41,7 @@ import { TileErrorBoundary } from "../TileErrorBoundary";
 import type { TerminalTileData, TileSurface, TileSurfaceSpec } from "./tile-surfaces";
 import { LinkBanner } from "../machines/LinkBanner";
 import { BrowserSkeleton, DiffSkeleton, EditorSkeleton } from "./tile-skeletons";
-import { isRemote } from "../../../shared/remote-uri";
+import { isRemote } from "@hivemind/core/remote-uri";
 import { defaultSizeForKind } from "../canvas-sizing";
 import type { TileKind } from "../tile-kinds";
 

@@ -1,4 +1,4 @@
-// Terminals on the host (workspace/terminals.ts): what reaches the session's process for what
+// Terminals on the host (terminals.ts): what reaches the session's process for what
 // each client asks, which starts and ends are recorded as someone's intent, and what a client
 // that goes lets go of. The backend here stands in for the process layer and records each call.
 import { test, after } from "node:test";
@@ -10,7 +10,7 @@ import { Intents } from "@hivemind/workspace-host/intents";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server";
 import type { EventMessage } from "@hivemind/workspace-api/protocol";
-import { PAUSE_MAX_MS, Terminals, type SessionOutput } from "../../src/main/workspace/terminals.ts";
+import { PAUSE_MAX_MS, Terminals, type SessionOutput } from "../src/terminals.ts";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hm-terminals-"));
 after(() => fs.rmSync(tmp, { recursive: true, force: true }));

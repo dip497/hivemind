@@ -2,7 +2,7 @@
  * The workspace store on Electron (docs/design/multiplayer-2026-09-28.md, R1, R5, R15, R8): the
  * app's one `WorkspaceStore`, under `<userData>/workspaces`, and the synchronous channels a
  * window reads and writes it on, so it builds its first state in one pass and a save made while
- * it unloads is kept. What each channel answers is the workspace API's (`workspace/store.ts`), as
+ * it unloads is kept. What each channel answers is the workspace API's (`@hivemind/host/store`), as
  * the window's own connection: a window writes as itself, and every other window is told of its
  * change (`store.changed`). A channel always answers, null for what the API refuses, because a
  * synchronous request left unanswered would hang the window. `flushWorkspaceStore` retries failed
@@ -14,7 +14,7 @@ import type { Connection } from "@hivemind/workspace-api/server";
 import { WorkspaceStore, type WorkspaceChange } from "@hivemind/workspace-host/store";
 import { answer } from "./app-ipc.js";
 import { machineIdentity } from "./identity.js";
-import type { Layouts } from "./workspace/store.js";
+import type { Layouts } from "@hivemind/host/store";
 
 let store: WorkspaceStore | null = null;
 let shared: WorkspaceStore | null = null;

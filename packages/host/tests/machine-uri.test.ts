@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { bindToMachine, machineHostId, machineUri, parseMachineUri, parseRemote, sshTargetOf, sshUri, unbindFromMachine } from "../../src/shared/remote-uri.ts";
-import { needsAttention } from "../../src/main/remote/ssh.ts";
+import { bindToMachine, machineHostId, machineUri, parseMachineUri, parseRemote, sshTargetOf, sshUri, unbindFromMachine } from "@hivemind/core/remote-uri";
+import { needsAttention } from "../src/remote/ssh.ts";
 
 test("a folder on a saved machine is named by the machine's id; its path is the rest", () => {
   assert.equal(machineUri("m_3f9a0c12b7de", "/srv/app"), "machine://m_3f9a0c12b7de/srv/app");

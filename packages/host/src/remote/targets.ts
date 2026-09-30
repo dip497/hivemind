@@ -1,5 +1,5 @@
 /** Where a remote folder is, to reach it (R9): Electron-free, so git and files can ask too. */
-import { parseMachineUri, parseRemote, sshUri, type RemoteTarget } from "../../shared/remote-uri.js";
+import { parseMachineUri, parseRemote, sshUri, type RemoteTarget } from "@hivemind/core/remote-uri";
 import { machines } from "./catalog.js";
 
 /** One on a saved machine (machine://) at the machine's saved address, an ssh uri as written.

@@ -62,8 +62,8 @@ import { frameMachine, placeOf, useMachines, type MachinesRequest } from "./mach
 import { rebindFrames } from "./machines/frame-binding";
 import type { MachineInfo, SessionSummary } from "../../shared/ipc";
 import type { PlanReview } from "@hivemind/workspace-api/plans";
-import { toBareId } from "../../shared/tile-id";
-import { isRemote } from "../../shared/remote-uri";
+import { toBareId } from "@hivemind/workspace-api/tile-id";
+import { isRemote } from "@hivemind/core/remote-uri";
 import { getAgents, AgentIcon, agentById, agentForCmd, useAgents } from "./agents";
 import { useSpawn } from "./useSpawn";
 import { useFrameOps } from "./useFrameOps";

@@ -9,13 +9,13 @@ import os from "node:os";
 import path from "node:path";
 import { app } from "electron";
 import * as nodePty from "@lydell/node-pty";
-import { parseRemote, type RemoteTarget } from "../../shared/remote-uri.js";
+import { parseRemote, type RemoteTarget } from "@hivemind/core/remote-uri";
 import { pasteText } from "@hivemind/agent-host/paste";
 import { shq } from "@hivemind/agents/node";
-import { remoteConns } from "./conn.js";
+import { remoteConns } from "@hivemind/host/remote/conn";
 import { DaemonEndpoint, type EndpointState } from "@hivemind/agent-host/daemon-endpoint";
 import { acceptRemoteEvent } from "./events.js";
-import { ASKPASS_SCRIPT, bridgeRemoteCommand, needsAttention, openBridge, probeCommand, probeRemote, sshCommand, type SshPaths } from "./ssh.js";
+import { ASKPASS_SCRIPT, bridgeRemoteCommand, needsAttention, openBridge, probeCommand, probeRemote, sshCommand, type SshPaths } from "@hivemind/host/remote/ssh";
 
 interface SpawnOpts {
   tileId: string;

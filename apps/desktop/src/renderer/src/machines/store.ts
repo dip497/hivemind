@@ -1,7 +1,7 @@
 /** Live machines + per-host connection state, pushed from main; one subscription for the whole renderer. */
 import { useSyncExternalStore } from "react";
 import type { MachineInfo, MachineStatus, MachinesSnapshot } from "../../../shared/ipc";
-import { isRemote, parseMachineUri, parseRemote } from "../../../shared/remote-uri";
+import { isRemote, parseMachineUri, parseRemote } from "@hivemind/core/remote-uri";
 
 let snap: MachinesSnapshot = { machines: [], status: {} };
 const listeners = new Set<() => void>();

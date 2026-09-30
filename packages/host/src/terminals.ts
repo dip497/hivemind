@@ -25,7 +25,7 @@ import { fields, flag, text, texts, whole, written } from "@hivemind/workspace-a
 import { emit, named, type Connection, type Domain } from "@hivemind/workspace-api/server";
 import type { TerminalOpts } from "@hivemind/workspace-api/terminals";
 import type { EventParams } from "@hivemind/workspace-api/methods";
-import { toBareId } from "../../shared/tile-id.js";
+import { toBareId } from "@hivemind/workspace-api/tile-id";
 import { Keyboards, isHost } from "./keyboard.js";
 
 /** Where a session's output and exit go, as its backend runs it. */

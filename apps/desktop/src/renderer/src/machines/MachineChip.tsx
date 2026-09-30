@@ -8,7 +8,7 @@ import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { FolderOpen, Loader2, RefreshCw, Server, Settings2, SquareTerminal, Unplug } from "lucide-react";
 import type { SessionSummary } from "../../../shared/ipc";
-import { parseRemote, remoteBasename, remotePath, sshTargetOf, REMOTE_SCHEME } from "../../../shared/remote-uri";
+import { parseRemote, remoteBasename, remotePath, sshTargetOf, REMOTE_SCHEME } from "@hivemind/core/remote-uri";
 import { GONE_MACHINE, errText, openMachines, placeOf, statusOf, useMachines, type Place } from "./store";
 
 /** What a frame's machine is called: its saved name, else the host an ssh folder is on, else

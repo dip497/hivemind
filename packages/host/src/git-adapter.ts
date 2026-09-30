@@ -10,7 +10,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { simpleGit, type SimpleGit } from "simple-git";
 import { applyShellEnvToProcess } from "@hivemind/agent-host/shell-env";
-import { isRemote } from "../shared/remote-uri.js";
+import { isRemote } from "@hivemind/core/remote-uri";
 import { runRemoteGit, readRemoteFile, writeRemoteFile } from "./remote/git.js";
 import { DIFF_MAX_FILE_BYTES, OVERSIZE_SENTINEL } from "@hivemind/workspace-api/git";
 import type {

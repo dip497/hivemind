@@ -13,7 +13,7 @@ import { parseSync, serveReplica } from "@hivemind/workspace-host/doc-sync";
 import { servePeer, type TextChannel } from "@hivemind/workspace-api/peers";
 import type { WorkspaceServer } from "@hivemind/workspace-api/server";
 import { onWorkspaceChange, workspaceStore } from "./workspace-store-ipc.js";
-import { toBareId } from "../shared/tile-id.js";
+import { toBareId } from "@hivemind/workspace-api/tile-id";
 
 /** A link's named stream as a channel of text frames. */
 export const streamOf = (link: Link, stream: string): TextChannel => ({

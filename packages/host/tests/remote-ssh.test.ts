@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { bridgeRemoteCommand, sshCommand } from "../../src/main/remote/ssh.ts";
-import type { RemoteTarget } from "../../src/shared/remote-uri.ts";
+import { bridgeRemoteCommand, sshCommand } from "../src/remote/ssh.ts";
+import type { RemoteTarget } from "@hivemind/core/remote-uri";
 
 const target = (over: Partial<RemoteTarget> = {}): RemoteTarget => ({ host: "gpu", port: 2222, user: "me", path: "/srv", hostId: "me@gpu:2222", ...over });
 const paths = { knownHosts: "/cfg/hivemind/known_hosts", controlDir: "/run/user/1/hivemind-ssh-1", askpass: "/cfg/hivemind/hive-askpass" };

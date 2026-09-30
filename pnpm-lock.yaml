@@ -224,6 +224,9 @@ importers:
       '@hivemind/core':
         specifier: workspace:*
         version: link:../../packages/hive-core
+      '@hivemind/host':
+        specifier: workspace:*
+        version: link:../../packages/host
       '@hivemind/view-sdk':
         specifier: workspace:*
         version: link:../../packages/hive-view-sdk
@@ -522,6 +525,43 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 22.19.19
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
+  packages/host:
+    dependencies:
+      '@hivemind/agent-host':
+        specifier: workspace:*
+        version: link:../agent-host
+      '@hivemind/agents':
+        specifier: workspace:*
+        version: link:../hive-agents
+      '@hivemind/core':
+        specifier: workspace:*
+        version: link:../hive-core
+      '@hivemind/workspace-api':
+        specifier: workspace:*
+        version: link:../workspace-api
+      '@hivemind/workspace-doc':
+        specifier: workspace:*
+        version: link:../workspace-doc
+      '@hivemind/workspace-host':
+        specifier: workspace:*
+        version: link:../workspace-host
+      simple-git:
+        specifier: 'catalog:'
+        version: 3.36.0
+    devDependencies:
+      '@hivemind/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      '@types/node':
+        specifier: 'catalog:'
+        version: 22.19.19
+      tsx:
+        specifier: ^4.23.15
+        version: 4.23.15
       typescript:
         specifier: 'catalog:'
         version: 5.9.3

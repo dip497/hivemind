@@ -28,7 +28,7 @@ import { cssColorToHexString } from "../../css-color";
 import { CommunityLink } from "./host-link";
 import { ShareDialog, type ShareChoice } from "./ShareDialog";
 import { PromptDialog, type PromptAsk } from "./PromptDialog";
-import { isRemote } from "../../../../../shared/remote-uri";
+import { isRemote } from "@hivemind/core/remote-uri";
 import { agentById as catalogAgentById, defaultAgent } from "@hivemind/agents";
 import { AGENT_TILE_KIND } from "../../../tile-kinds";
 import { viewLinkServices } from "../../view-services";

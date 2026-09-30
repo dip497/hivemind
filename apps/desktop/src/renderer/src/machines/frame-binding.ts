@@ -4,7 +4,7 @@
  * R9, or a host saved as a machine since — is bound to that machine; one on a machine removed goes
  * back to its address, so it still runs there and can be saved as a machine again.
  */
-import { bindToMachine, unbindFromMachine, type BindableMachine } from "../../../shared/remote-uri";
+import { bindToMachine, unbindFromMachine, type BindableMachine } from "@hivemind/core/remote-uri";
 
 interface Bound { workspacePath?: string; worktreePath?: string }
 

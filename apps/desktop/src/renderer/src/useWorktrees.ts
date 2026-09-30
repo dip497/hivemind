@@ -7,10 +7,10 @@
  * in-flight-create guard, and the destructive-detach confirm. Canvas passes its
  * state refs + setters as context and wires the returned handlers into FrameNode.
  */
-import { mintId } from "../../shared/tile-id";
+import { mintId } from "@hivemind/workspace-api/tile-id";
 import { useCallback, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import { frameColorFor } from "./frame-color";
-import { remoteBasename } from "../../shared/remote-uri";
+import { remoteBasename } from "@hivemind/core/remote-uri";
 import { nextSlotInFrame, FRAME_ROW_MAX, FRAME_GAP } from "./frame-layout";
 import { defaultSizeForKind, FRAME_PAD, FRAME_HEADER, FRAME_EMPTY_W, FRAME_EMPTY_H } from "./canvas-sizing";
 import type { FrameState, TileInstance } from "./canvas-persistence";

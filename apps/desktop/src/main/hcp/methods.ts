@@ -13,7 +13,7 @@ import { keyBytes, KEY_GAP_MS } from "../../shared/keys.js";
 import { HcpError, type HcpCall } from "./protocol.js";
 import type { TurnTracker } from "./turn-tracker.js";
 import type { OutputRecorder } from "./output-recorder.js";
-import { mintId, toPtyId as ptyId, toBareId as bareOf } from "../../shared/tile-id.js";
+import { mintId, toPtyId as ptyId, toBareId as bareOf } from "@hivemind/workspace-api/tile-id";
 import { labelOf as labelIn } from "./names.js";
 import { agentById, agentForCmd, agentLaunch, agentOption, cleanName, isSessionId, nextOrdinal, spawnableAgents, workerAgents, type AgentProviderDef, type SpawnOptions } from "@hivemind/agents";
 import { canListSessions, listSessions } from "@hivemind/agents/node";
@@ -219,7 +219,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
   const emitBucket = tokenBucket(EMIT_RATE);
   const sendMark = new Map<string, number>();
 
-  // Bare↔pty id mapping lives in shared/tile-id (imported as ptyId/bareOf). The
+  // Bare↔pty id mapping lives in @hivemind/workspace-api/tile-id (imported as ptyId/bareOf). The
   // pty, recorder, turn-tracker and HIVEMIND_TILE are keyed by the pty id; the
   // control surface uses the bare id.
 

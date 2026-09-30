@@ -1,4 +1,4 @@
-// The workspace store through the workspace API (workspace/store.ts): each client writes as
+// The workspace store through the workspace API (store.ts): each client writes as
 // itself, so its undo takes back its own board edits only; it is told of every other writer's
 // change and never of its own; a workspace it may only read takes no write, and the client is told
 // to read the part again; and it says which workspace it shows, until it goes.
@@ -13,7 +13,7 @@ import { Intents } from "@hivemind/workspace-host/intents";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server";
 import type { EventMessage } from "@hivemind/workspace-api/protocol";
-import { Layouts } from "../../src/main/workspace/store.ts";
+import { Layouts } from "../src/store.ts";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hm-layouts-"));
 after(() => fs.rmSync(tmp, { recursive: true, force: true }));

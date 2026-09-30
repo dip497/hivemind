@@ -16,6 +16,7 @@
     "./templates": "./src/templates.ts",
     "./views": "./src/views.ts",
     "./review": "./src/review.ts",
+    "./remote-uri": "./src/remote-uri.ts",
     "./settings-schema": "./src/settings-schema.ts",
     "./settings": "./src/settings.ts",
     "./packages": "./src/packages.ts",

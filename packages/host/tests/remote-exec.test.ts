@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-const { remoteGit, ConcurrencyLimiter } = await import("../../src/main/remote/exec.ts");
+const { remoteGit, ConcurrencyLimiter } = await import("../src/remote/exec.ts");
 
 test("remoteGit builds `git -C <path>` with all args single-quote escaped", () => {
   assert.equal(

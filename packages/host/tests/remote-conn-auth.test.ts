@@ -3,7 +3,7 @@
 // a restored remote tile fails with "All configured authentication methods failed".
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { RemoteConnectionManager } from "../../src/main/remote/conn.ts";
+import { RemoteConnectionManager } from "../src/remote/conn.ts";
 
 test("in-memory auth wins over the resolver", () => {
   const m = new RemoteConnectionManager();

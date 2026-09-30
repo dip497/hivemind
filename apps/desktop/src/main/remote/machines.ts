@@ -14,13 +14,13 @@ import {
   PUBLISHED_PLATFORMS, installCopyCommand, installFetchCommand, localPlatform, machinesPath, newMachineId,
   releaseAssetUrl, validateLabel, validateTarget, type Machine, type ProbeResult,
 } from "@hivemind/core";
-import { machineHostId, parseRemote, sshUri, type RemoteTarget } from "../../shared/remote-uri.js";
+import { machineHostId, parseRemote, sshUri, type RemoteTarget } from "@hivemind/core/remote-uri";
 import type { MachineAddRequest, MachineAddResult, MachineInfo, MachineProbe, MachineState, MachineStatus, MachinesSnapshot, SessionSummary } from "../../shared/ipc.js";
 import type { SessionInfo } from "@hivemind/agent-host/pty-protocol";
-import { remoteConns } from "./conn.js";
-import { machines as catalog, onMachinesChange } from "./catalog.js";
-import { remoteTarget } from "./targets.js";
-import { needsAttention, probeCommand, probeRemote } from "./ssh.js";
+import { remoteConns } from "@hivemind/host/remote/conn";
+import { machines as catalog, onMachinesChange } from "@hivemind/host/remote/catalog";
+import { remoteTarget } from "@hivemind/host/remote/targets";
+import { needsAttention, probeCommand, probeRemote } from "@hivemind/host/remote/ssh";
 import { closeIdle, endpointFor, hostConnected, hostFailure, hostServingTiles, readyEndpoints, reconnectHost, resetHost, setHostPaused, setRemoteStatusSink, sshPaths } from "./pty.js";
 import { forgetSavedHost, passwordState, saveHost } from "./saved-hosts.js";
 

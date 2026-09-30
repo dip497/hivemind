@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { Catalog } from "../../src/main/remote/catalog.ts";
+import { Catalog } from "../src/remote/catalog.ts";
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hmcat-"));
 after(() => fs.rmSync(dir, { recursive: true, force: true }));

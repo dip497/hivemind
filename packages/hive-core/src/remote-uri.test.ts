@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 const {
   isRemote, parseRemote, formatRemote, withRemotePath, remoteDisplay,
   remoteBasename, posixJoin, hostIdOf,
-} = await import("../../src/shared/remote-uri.ts");
+} = await import("./remote-uri.ts");
 
 test("isRemote distinguishes a folder on a machine or an ssh host from local paths", () => {
   assert.equal(isRemote("ssh://h/x"), true);

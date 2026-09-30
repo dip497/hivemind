@@ -1,5 +1,5 @@
 // A client over a stream holds the layouts it opened (StoreReplica), against the host's store as
-// the app serves it (workspace/store.ts on a WorkspaceStore). The transport here answers a moment
+// the app serves it (store.ts on a WorkspaceStore). The transport here answers a moment
 // later, and lets every other call overtake the one before it, as requests over HTTP can: what a
 // client holds is tested with its answers still on the way, and arriving out of order.
 import { test, after } from "node:test";
@@ -15,7 +15,7 @@ import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server
 import { WorkspaceClient } from "@hivemind/workspace-api/client";
 import { StoreReplica } from "@hivemind/workspace-api/store-replica";
 import type { EventMessage } from "@hivemind/workspace-api/protocol";
-import { Layouts } from "../../src/main/workspace/store.ts";
+import { Layouts } from "../src/store.ts";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hm-replica-"));
 after(() => fs.rmSync(tmp, { recursive: true, force: true }));

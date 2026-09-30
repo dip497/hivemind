@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { gitDiff } from "../../src/main/git-adapter.js";
+import { gitDiff } from "../src/git-adapter.ts";
 
 /** A branch whose only change is reindentation: the switch must hide it, and
  *  must not hand the same cache key to the diff renderer for both answers. */

@@ -26,7 +26,7 @@ import {
   worktreeList,
   worktreePrune,
   worktreeRemove,
-} from "../git-adapter.js";
+} from "./git-adapter.js";
 import { allInRepo, fileIn, inRepo } from "./repo-paths.js";
 
 type GitMethod = Extract<Method, `git.${string}` | `worktree.${string}`>;

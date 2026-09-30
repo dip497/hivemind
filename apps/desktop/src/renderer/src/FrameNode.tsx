@@ -15,7 +15,7 @@ import { MenuItem } from "./components/ui/menu-item";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { WorktreePicker } from "./WorktreePicker";
 import { useGitBranch } from "./queries";
-import { isRemote, remoteBasename, remoteDisplay } from "../../shared/remote-uri";
+import { isRemote, remoteBasename, remoteDisplay } from "@hivemind/core/remote-uri";
 import { frameMachine, useMachines } from "./machines/store";
 import { MachineChip } from "./machines/MachineChip";
 import { useAgents } from "./agents";

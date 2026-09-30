@@ -4,7 +4,7 @@
  * fs and git run through here; interactive PTYs go through remote/pty.ts.
  */
 import { spawn } from "node:child_process";
-import type { RemoteTarget } from "../../shared/remote-uri.js";
+import type { RemoteTarget } from "@hivemind/core/remote-uri";
 import { RemoteFs, type ExecResult } from "./fs.js";
 import { ConcurrencyLimiter } from "./exec.js";
 import { sshCommand, type SshPaths } from "./ssh.js";

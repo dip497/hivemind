@@ -5,7 +5,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { MAX_EDIT_BYTES, RemoteFs, type RunRemote } from "../../src/main/remote/fs.ts";
+import { MAX_EDIT_BYTES, RemoteFs, type RunRemote } from "../src/remote/fs.ts";
 
 const unix = process.platform !== "win32";
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "hrfs-"));

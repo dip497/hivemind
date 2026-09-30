@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import { Duplex, PassThrough } from "node:stream";
 import path from "node:path";
 import { PROBE, parseProbe, shq, type ProbeResult } from "@hivemind/core";
-import type { RemoteTarget } from "../../shared/remote-uri.js";
+import type { RemoteTarget } from "@hivemind/core/remote-uri";
 import { BRIDGE_READY } from "@hivemind/agent-host/pty-protocol";
 import type { HostAuth } from "./conn.js";
 

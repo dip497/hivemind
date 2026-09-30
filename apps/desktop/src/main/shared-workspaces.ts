@@ -18,7 +18,7 @@ import type { Answer, EventMessage } from "@hivemind/workspace-api/protocol";
 import type { Elsewhere } from "./workspace-ipc.js";
 import { streamOf } from "./peers-host.js";
 import { onWorkspaceChange, sharedStore } from "./workspace-store-ipc.js";
-import { toBareId } from "../shared/tile-id.js";
+import { toBareId } from "@hivemind/workspace-api/tile-id";
 
 /** Where the connection to a workspace's host is. */
 export type SharedState = "connecting" | "connected" | "reconnecting" | "offline" | "left" | "removed";

@@ -1,4 +1,4 @@
-// One keyboard per terminal (workspace/keyboard.ts through workspace/terminals.ts, M2): until the
+// One keyboard per terminal (keyboard.ts through terminals.ts, M2): until the
 // host gives it away its own windows type and a guest's keys never reach the session; a guest who
 // asks is heard by the host's windows showing it; given the keyboard, the guest alone types and
 // sizes the session, and everyone is told who holds it; it comes back to the host when taken,
@@ -13,7 +13,7 @@ import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server";
 import type { EventMessage } from "@hivemind/workspace-api/protocol";
 import type { Actor } from "@hivemind/workspace-host/intents";
-import { Terminals } from "../../src/main/workspace/terminals.ts";
+import { Terminals } from "../src/terminals.ts";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hm-keyboard-"));
 after(() => fs.rmSync(tmp, { recursive: true, force: true }));

@@ -5,7 +5,7 @@
  */
 import path from "node:path";
 import { ApiError } from "@hivemind/workspace-api/protocol";
-import { isRemote } from "../../shared/remote-uri.js";
+import { isRemote } from "@hivemind/core/remote-uri";
 
 const escapes = (rel: string): never => {
   throw new ApiError("BAD_REQUEST", `path escapes repo: ${rel}`);

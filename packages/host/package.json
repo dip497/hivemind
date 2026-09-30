@@ -1,0 +1,30 @@
+{
+  "name": "@hivemind/host",
+  "version": "2026.9.8",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "@hivemind/agent-host": "workspace:*",
+    "@hivemind/agents": "workspace:*",
+    "@hivemind/core": "workspace:*",
+    "@hivemind/workspace-api": "workspace:*",
+    "@hivemind/workspace-doc": "workspace:*",
+    "@hivemind/workspace-host": "workspace:*",
+    "simple-git": "catalog:"
+  },
+  "devDependencies": {
+    "@hivemind/tsconfig": "workspace:*",
+    "@types/node": "catalog:",
+    "tsx": "^4.23.15",
+    "typescript": "catalog:"
+  },
+  "description": "A workspace's host: the workspace API answered on this machine, domain by domain. The desktop app, its dev-bridge and the headless `hive host` serve these same domains.",
+  "license": "MIT"
+}

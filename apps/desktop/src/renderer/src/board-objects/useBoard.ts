@@ -8,7 +8,7 @@
 import { useCallback, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { rebaseBoard } from "@hivemind/workspace-doc/rebase";
 import type { BoardObject } from "@hivemind/workspace-doc/shapes";
-import { mintId } from "../../../shared/tile-id";
+import { mintId } from "@hivemind/workspace-api/tile-id";
 import type { FrameState } from "../canvas-persistence";
 import { snapToGrid } from "../canvas-sizing";
 import { useDebouncedSave } from "../workspace/view-layout-store";

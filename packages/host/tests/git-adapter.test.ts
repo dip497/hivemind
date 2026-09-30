@@ -8,7 +8,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync, mkdirSync, appendFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { gitStatus, gitListFiles, gitCommit, gitPull } from "../../src/main/git-adapter.ts";
+import { gitStatus, gitListFiles, gitCommit, gitPull } from "../src/git-adapter.ts";
 
 function git(cwd: string, ...args: string[]): void {
   execFileSync("git", args, { cwd, stdio: "pipe" });

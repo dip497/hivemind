@@ -221,7 +221,7 @@ test("spawn supervise: records the broker policy (default set + 'all')", async (
 });
 
 test("tile-id: toPtyId / toBareId are idempotent inverses", async () => {
-  const { toPtyId, toBareId } = await import("../../src/shared/tile-id.ts");
+  const { toPtyId, toBareId } = await import("@hivemind/workspace-api/tile-id");
   assert.equal(toPtyId("tile-a"), "hm:tile-a");
   assert.equal(toPtyId("hm:tile-a"), "hm:tile-a"); // idempotent
   assert.equal(toBareId("hm:tile-a"), "tile-a");

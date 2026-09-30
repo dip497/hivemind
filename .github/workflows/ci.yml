@@ -56,8 +56,9 @@ jobs:
         run: pnpm --filter @hivemind/desktop run test:unit
 
       - name: Unit tests (packages and CLI)
-        # Every package's own `bun test`: the workspace store, settings.json and its lock,
-        # agent discovery, the view SDK, the agent host, the CLI.
+        # Every package's own tests: the workspace store, settings.json and its lock, agent
+        # discovery, the view SDK, the agent host, the CLI (`bun test`), and the host's domains
+        # (under Node, as the app runs them).
         run: pnpm test
 
       - name: Installer platform matrix

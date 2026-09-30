@@ -10,7 +10,7 @@ import { oneOf, text, written } from "@hivemind/workspace-api/protocol";
 import type { Connection, Domain } from "@hivemind/workspace-api/server";
 import type { EventParams } from "@hivemind/workspace-api/methods";
 import type { Answerer, PlanReview } from "@hivemind/workspace-api/plans";
-import { toBareId } from "../../shared/tile-id.js";
+import { toBareId } from "@hivemind/workspace-api/tile-id";
 
 export interface PlansOptions {
   /** Tell every client. */

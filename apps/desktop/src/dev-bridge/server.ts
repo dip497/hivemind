@@ -46,14 +46,14 @@ import { findRoot } from "@hivemind/core";
 import { Intents } from "@hivemind/workspace-host/intents";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server";
-import { workspaceDomains } from "../main/workspace/domains";
-import { Layouts } from "../main/workspace/store";
+import { workspaceDomains } from "@hivemind/host/domains";
+import { Layouts } from "@hivemind/host/store";
 import { WorkspaceStore } from "@hivemind/workspace-host/store";
 import { machineKeys } from "@hivemind/workspace-host/keyring";
 import { computeRepoPath, findGitRoot, projectDir } from "../main/workspace-paths";
-import { agents } from "../main/workspace/agents";
+import { agents } from "@hivemind/host/agents";
 import { spawnPty, writePty, resizePty, killPty, pausePty, resumePty, detachPty } from "../main/pty-host";
-import { Terminals } from "../main/workspace/terminals";
+import { Terminals } from "@hivemind/host/terminals";
 import { watchRepo } from "../main/fs-watcher";
 import { applyShellEnvToProcess } from "@hivemind/agent-host/shell-env";
 
