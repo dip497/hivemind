@@ -8,6 +8,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { WorkspaceStore } from "@hivemind/workspace-host/store";
+import { newSeed } from "@hivemind/workspace-host/identity";
 import { Intents } from "@hivemind/workspace-host/intents";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server";
@@ -30,7 +31,7 @@ async function until(check: () => boolean, ms = 3_000): Promise<void> {
 function host() {
   const dir = path.join(tmp, `host-${hosts++}`);
   let server: WorkspaceServer;
-  const store = new WorkspaceStore({ dir, onChange: (c) => server.publishTo((conn) => !layouts.made(conn, c), "store.changed", { repo: c.repo, part: c.part }) });
+  const store = new WorkspaceStore({ dir, person: newSeed(), onChange: (c) => server.publishTo((conn) => !layouts.made(conn, c), "store.changed", { repo: c.repo, part: c.part }) });
   const layouts = new Layouts(() => store);
   server = new WorkspaceServer([layouts.domain], new Intents(new AuditLog({ file: path.join(dir, "audit.jsonl") })));
   /** A client over a stream: every answer and every event arrives later, every other call

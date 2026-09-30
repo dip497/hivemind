@@ -61,6 +61,35 @@ function setAside(file: string, repo: string, e: unknown, warn: (message: string
   return new LoroDoc();
 }
 
+/** The keys (repos) of the documents stored in `dir`, read from their headers; a file that is not
+ *  one is skipped. */
+export function storedKeys(dir: string): string[] {
+  let names: string[];
+  try {
+    names = fs.readdirSync(dir).filter((n) => n.endsWith(".loro"));
+  } catch {
+    return [];
+  }
+  const keys: string[] = [];
+  for (const name of names) {
+    try {
+      const fd = fs.openSync(path.join(dir, name), "r");
+      try {
+        const head = Buffer.alloc(4096);
+        const n = fs.readSync(fd, head, 0, head.length, 0);
+        const end = head.subarray(0, n).indexOf(NEWLINE);
+        const header = JSON.parse(head.subarray(0, end).toString("utf8")) as { format?: unknown; v?: unknown; repo?: unknown };
+        if (header.format === FORMAT && header.v === VERSION && typeof header.repo === "string") keys.push(header.repo);
+      } finally {
+        fs.closeSync(fd);
+      }
+    } catch {
+      /* not one of ours */
+    }
+  }
+  return keys;
+}
+
 /** Replace the stored document: a private temp file renamed over the old one. Throws when it cannot. */
 export function writeDoc(dir: string, repo: string, doc: LoroDoc): void {
   const file = workspaceFile(dir, repo);

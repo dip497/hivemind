@@ -11,6 +11,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@hivemind/core": "workspace:*",
     "@hivemind/workspace-doc": "workspace:*",
     "loro-crdt": "catalog:"
   },
@@ -19,6 +20,6 @@
     "@types/node": "catalog:",
     "typescript": "catalog:"
   },
-  "description": "Owns a workspace's shared state — layout now, the multiplayer document later — for the desktop app and the headless host.",
+  "description": "Owns a workspace's shared state \u2014 layout now, the multiplayer document later \u2014 for the desktop app and the headless host.",
   "license": "MIT"
 }

@@ -565,6 +565,9 @@ importers:
 
   packages/workspace-host:
     dependencies:
+      '@hivemind/core':
+        specifier: workspace:*
+        version: link:../hive-core
       '@hivemind/workspace-doc':
         specifier: workspace:*
         version: link:../workspace-doc

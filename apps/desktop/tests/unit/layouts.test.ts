@@ -7,6 +7,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { WorkspaceStore } from "@hivemind/workspace-host/store";
+import { newSeed } from "@hivemind/workspace-host/identity";
 import { Intents } from "@hivemind/workspace-host/intents";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server";
@@ -19,7 +20,7 @@ const note = (id: string, text: string) => ({ id, kind: "note" as const, x: 0, y
 
 function host() {
   let server: WorkspaceServer;
-  const store = new WorkspaceStore({ dir: tmp, onChange: (c) => server.publishTo((conn) => !layouts.made(conn, c), "store.changed", { repo: c.repo, part: c.part }) });
+  const store = new WorkspaceStore({ dir: tmp, person: newSeed(), onChange: (c) => server.publishTo((conn) => !layouts.made(conn, c), "store.changed", { repo: c.repo, part: c.part }) });
   const layouts = new Layouts(() => store);
   server = new WorkspaceServer([layouts.domain], new Intents(new AuditLog({ file: path.join(tmp, "audit.jsonl") })));
   const client = () => {

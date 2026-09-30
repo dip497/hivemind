@@ -40,6 +40,14 @@ export interface Ownership {
   workspacePublicKey: string;
 }
 
+/** Whose the workspace is, as its document says; null when it does not say. */
+export function readOwnership(doc: LoroDoc): Ownership | null {
+  const meta = doc.getMap(META);
+  const [workspaceId, owner, workspacePublicKey] = [meta.get("workspaceId"), meta.get("owner"), meta.get("workspacePublicKey")];
+  if (typeof workspaceId !== "string" || typeof owner !== "string" || typeof workspacePublicKey !== "string") return null;
+  return { workspaceId, owner, workspacePublicKey };
+}
+
 /** Record whose the workspace is, as `ownership()` says, on a document that does not say yet. One
  *  that does keeps what it says: it is someone's, and stays theirs. */
 export function stampOwnership(doc: LoroDoc, ownership: () => Ownership): void {

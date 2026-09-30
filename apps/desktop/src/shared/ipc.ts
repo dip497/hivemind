@@ -228,6 +228,18 @@ export interface HiveIpc {
   /** This device's id and the id of the person it is, made the first time they are asked for,
    *  and the name to offer while the profile has none (git's `user.name`, else the account's). */
   identity(): Promise<{ deviceId: string; personId: string; suggestedName: string }>;
+  // ── sharing and joining (M1) ──────────────────────────────
+  /** An invite link to the workspace `repo` for `role`, for `expiresIn` ms, used once unless `reusable`. */
+  share(repo: string, role: "view" | "edit" | "terminals", expiresIn: number, reusable: boolean): Promise<string>;
+  /** What an invite link offers, to show before joining; null when the text is not one. */
+  joinPreview(text: string): Promise<{ workspace: string; host: string } | null>;
+  /** Ask the host a link names to let this person in: the role they were given, or why not. */
+  join(text: string): Promise<{ ok: true; role: string; workspace: string } | { ok: false; error: string }>;
+  /** Someone asks to join a workspace shared from here; answer with `answerJoin`. */
+  onJoinRequest(cb: (r: { req: number; profile: { name: string; color: string }; role: string; workspace: string }) => void): () => void;
+  answerJoin(req: number, allow: boolean): void;
+  /** Who is on the workspace `repo`'s access list. */
+  people(repo: string): Promise<Array<{ person: string; role: string; grantedAt: number; expires: number | null; devices: string[] }>>;
   // ── app version + self-update ─────────────────────────────
   /** This app's version string (from apps/desktop/package.json). */
   getAppVersion(): Promise<string>;

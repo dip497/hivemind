@@ -10,6 +10,7 @@ import os from "node:os";
 import path from "node:path";
 import { StatusStore } from "@hivemind/agent-host/status-store";
 import { WorkspaceStore } from "@hivemind/workspace-host/store";
+import { newSeed } from "@hivemind/workspace-host/identity";
 import { Intents, type AuditRecord } from "@hivemind/workspace-host/intents";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import type { HcpSpawnedEvent } from "../../src/shared/ipc.ts";
@@ -23,7 +24,7 @@ export const REPO = "/work/repo";
 
 export function workspaceDeps() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hcp-ws-"));
-  const workspaces = new WorkspaceStore({ dir });
+  const workspaces = new WorkspaceStore({ dir, person: newSeed() });
   const audit = path.join(dir, "audit.jsonl");
   workspaces.setCore(REPO, { frames: [{ id: "f1", title: "repo", workspacePath: REPO }], tiles: [] });
   const announced: HcpSpawnedEvent[] = [];

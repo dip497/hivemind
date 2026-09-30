@@ -1,12 +1,14 @@
 import * as SettingsDialog from "@radix-ui/react-dialog";
 import { ThemePanel } from "./ThemePanel";
 import { RecentProjects } from "./RecentProjects";
+import { ShareDialog, ROLE_LABELS } from "./multiplayer/share-dialog";
+import { JoinDialog } from "./multiplayer/join-dialog";
 import { setWorkspaceOccluded } from "./workspace-occlusion";
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { UPDATE_START, UPDATE_STEPS, updateProgress, type UpdateProgress } from "../../shared/update-progress";
-import { Bell, ChevronRight, ExternalLink, Loader2, Plus, Settings, X, Palette, PanelsTopLeft, Puzzle, Bot, Keyboard, Info } from "lucide-react";
+import { Bell, ChevronRight, ExternalLink, Loader2, Plus, Settings, Share2, X, Palette, PanelsTopLeft, Puzzle, Bot, Keyboard, Info } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Label } from "./components/ui/label";
@@ -197,6 +199,20 @@ export function App() {
   const [newOpen, setNewOpen] = useState(false);
   // Ctrl+O / Ctrl+R on the canvas (useCanvasShortcuts): VS Code's Open Folder and Open Recent.
   const [recentOpen, setRecentOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [joinOpen, setJoinOpen] = useState(false);
+  // Someone asks to join a workspace shared from here: the person here lets them in, or not.
+  useEffect(() => window.hive.onJoinRequest((r) => {
+    const who = r.profile.name || "Someone";
+    const id = toast(`${who} wants to join ${r.workspace} as ${ROLE_LABELS[r.role] ?? r.role}`, {
+      duration: Infinity,
+      action: { label: "Allow", onClick: () => window.hive.answerJoin(r.req, true) },
+      cancel: { label: "Deny", onClick: () => window.hive.answerJoin(r.req, false) },
+      onDismiss: () => window.hive.answerJoin(r.req, false),
+      className: "hm-join-request",
+    });
+    return id;
+  }), []);
   useEffect(() => {
     const onFolder = () => void pickFolder();
     const onRecent = () => setRecentOpen(true);
@@ -394,6 +410,19 @@ export function App() {
           upgrading={update.upgrading}
         />
         <div className="absolute top-0 right-0 z-40 flex items-start gap-2 px-3 py-2.5 pointer-events-none">
+          {repoPath && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setShareOpen(true)}
+              className="pointer-events-auto"
+              title="Invite people to this workspace"
+              data-share
+            >
+              <Share2 aria-hidden />
+              <span>Share</span>
+            </Button>
+          )}
           {root && (
             <Button
               variant="secondary"
@@ -432,7 +461,10 @@ export function App() {
         onBrowse={() => void pickFolder()}
         onNewWindow={() => void window.hive.newWindow()}
         onClose={() => setRecentOpen(false)}
+        onJoin={() => setJoinOpen(true)}
       />
+      {repoPath && <ShareDialog repo={repoPath} open={shareOpen} onClose={() => setShareOpen(false)} />}
+      <JoinDialog open={joinOpen} onClose={() => setJoinOpen(false)} />
       <NewIssueModal
         root={root}
         open={newOpen}

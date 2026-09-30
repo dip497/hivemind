@@ -10,8 +10,9 @@
  * Each workspace's list is a Loro document of its own (`<dir>`, one file per workspace), so the
  * owner's devices can merge grants made on either (M3).
  */
+import { createHash, randomBytes } from "node:crypto";
 import { LoroDoc } from "loro-crdt";
-import { readDoc, writeDoc } from "./doc-file.js";
+import { readDoc, storedKeys, writeDoc } from "./doc-file.js";
 import { certificateVerifies, idOf, signWith, verifies, type DeviceCertificate, type Seed } from "./identity.js";
 
 /** Roles (design §6), least to most. The owner is not a role that can be granted. */
@@ -68,6 +69,21 @@ export interface Person {
   /** The ids of the devices they have shown certificates for, sorted. */
   devices: string[];
 }
+
+/** The roles an invite link can carry: never "agents" (design §6). */
+export const LINK_ROLES = ["view", "edit", "terminals"] as const;
+export type LinkRole = (typeof LINK_ROLES)[number];
+
+/** An invite as the owner's devices keep it: the secret itself is never stored, only its hash. */
+interface Invite {
+  role: LinkRole;
+  /** ms since the epoch. */
+  expires: number;
+  reusable: boolean;
+  used: boolean;
+}
+
+const hashOf = (secret: string): string => createHash("sha256").update(secret).digest("hex");
 
 export interface AccessListsOptions {
   /** One file per workspace; created (0700) on the first write. */
@@ -146,6 +162,59 @@ export class AccessLists {
       out.push({ person, role: g.role, grantedAt: g.grantedAt, expires: g.expires, devices: certs.filter((c) => c.person === person).map((c) => c.device).sort() });
     }
     return out;
+  }
+
+  /** A new invite to `workspace` (the repo `repo` here) for `role`, for `expiresIn` ms, used once
+   *  unless `reusable`: its secret, which only the link carries. */
+  invite(workspace: string, repo: string, role: LinkRole, expiresIn: number, reusable = false): string {
+    if (!isHex(workspace, 16)) throw new TypeError("access: a workspace is named by its 16-byte id in hex");
+    if (!LINK_ROLES.includes(role)) throw new TypeError(`access: an invite cannot carry ${String(role)}`);
+    if (!(expiresIn > 0)) throw new TypeError("access: an invite expires after it is made");
+    const secret = randomBytes(32).toString("hex");
+    const invite: Invite = { role, expires: Date.now() + expiresIn, reusable, used: false };
+    this.edit(workspace, (doc) => {
+      doc.getMap("meta").set("repo", repo);
+      doc.getMap("invites").set(hashOf(secret), invite);
+    });
+    return secret;
+  }
+
+  /** The role an invite with `secret` to `workspace` offers now: null when there is none, it has
+   *  expired, or it was used. */
+  offered(workspace: string, secret: unknown): LinkRole | null {
+    if (typeof secret !== "string" || !isHex(workspace, 16)) return null;
+    const invite = this.doc(workspace).getMap("invites").get(hashOf(secret)) as Invite | undefined;
+    if (!invite || invite.used || !(invite.expires > Date.now()) || !LINK_ROLES.includes(invite.role)) return null;
+    return invite.role;
+  }
+
+  /** Use the invite with `secret`: it offers nothing more unless it is reusable. */
+  redeem(workspace: string, secret: string): void {
+    const key = hashOf(secret);
+    const invite = this.doc(workspace).getMap("invites").get(key) as Invite | undefined;
+    if (!invite || invite.reusable) return;
+    this.edit(workspace, (doc) => doc.getMap("invites").set(key, { ...invite, used: true }));
+  }
+
+  /** The repo here that `workspace` is, as its first invite recorded. */
+  repoOf(workspace: string): string | null {
+    const repo = this.doc(workspace).getMap("meta").get("repo");
+    return typeof repo === "string" ? repo : null;
+  }
+
+  /** The workspaces with a list here. */
+  workspaces(): string[] {
+    return storedKeys(this.opts.dir).filter((k) => isHex(k, 16));
+  }
+
+  /** Every device any list admits now: the people's, and the owner's own. */
+  admitted(): string[] {
+    const out = new Set<string>();
+    for (const ws of this.workspaces()) {
+      const certs = Object.values(this.doc(ws).getMap("devices").toJSON() as Record<string, DeviceCertificate>);
+      for (const cert of certs) if (this.accessOf(ws, cert.device)) out.add(cert.device);
+    }
+    return [...out].sort();
   }
 
   /** The person's grant in `workspace` if it verifies and holds now. A grant that does not

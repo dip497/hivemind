@@ -20,6 +20,7 @@ import { PipeManager } from "../../src/main/hcp/pipes.ts";
 import { Mailbox } from "../../src/main/hcp/mailbox.ts";
 import { SUBMIT_DELAY_MS } from "../../src/shared/agent-io.ts";
 import { WorkspaceStore } from "@hivemind/workspace-host/store";
+import { newSeed } from "@hivemind/workspace-host/identity";
 import { StatusStore } from "@hivemind/agent-host/status-store";
 import { REPO, workspaceDeps, PERSON, fromTile } from "./hcp-workspace.ts";
 
@@ -329,7 +330,7 @@ test("forgetTile resolves a supervised worker's pending approval (deny), not lea
 
 test("dispatch tile.close needs no window: the tile leaves its workspace, and the session it runs ends, not one it adopted", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hcp-close-"));
-  const store = new WorkspaceStore({ dir });
+  const store = new WorkspaceStore({ dir, person: newSeed() });
   store.setCore("/w", { frames: [], tiles: [
     { id: "tile-a", kind: "claude", label: "a" },
     { id: "tile-s", kind: "shell", label: "s", session: "hive-run-1" }, // `hive run`'s session, shown here
@@ -353,7 +354,7 @@ test("dispatch tile.close needs no window: the tile leaves its workspace, and th
 
 test("dispatch tile.list needs no window: the caller's workspace, else the one the user's window shows, with what the host knows of its tiles", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hcp-list-"));
-  const workspaces = new WorkspaceStore({ dir });
+  const workspaces = new WorkspaceStore({ dir, person: newSeed() });
   workspaces.setCore("/api", {
     frames: [{ id: "f1", title: "API", workspacePath: "/src/api" }, { id: "f2", title: "Docs" }],
     tiles: [{ id: "tile-a", kind: "claude", label: "claude #1", cmd: "claude" }, { id: "tile-s", kind: "shell", label: "shell #1" }],

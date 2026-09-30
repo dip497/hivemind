@@ -7,9 +7,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { WorkspaceStore, type LegacyLayout, type ViewLayout } from "@hivemind/workspace-host/store";
+import { newSeed } from "@hivemind/workspace-host/identity";
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ws-client-"));
-const store = new WorkspaceStore({ dir });
+const store = new WorkspaceStore({ dir, person: newSeed() });
 const ls = new Map<string, string>();
 
 (globalThis as unknown as { window: unknown }).window = {

@@ -18,6 +18,11 @@ export function machineIdentity(): MachineKeys {
   return keys;
 }
 
+/** The name others see: the profile's, or while it has none, the one offered for it. */
+export async function displayName(profileName: string): Promise<string> {
+  return profileName || (await suggestedName());
+}
+
 /** The name to offer while the profile has none: git's global `user.name`, else this machine's
  *  account name. */
 function suggestedName(): Promise<string> {

@@ -465,7 +465,6 @@ export function mergeSettings(raw: unknown, base: Settings = DEFAULT_SETTINGS): 
   }
   const plugins = isObj(p.plugins) ? p.plugins : {};
   const agents = isObj(p.agents) ? p.agents : {};
-  const profile = isObj(p.profile) ? p.profile : {};
   const toolsIn = isObj(p.tools) ? p.tools : {};
   const tools = {
     enabledPlugins: idList(toolsIn.enabledPlugins, PLUGIN_ID_RE, base.tools.enabledPlugins),
@@ -488,10 +487,17 @@ export function mergeSettings(raw: unknown, base: Settings = DEFAULT_SETTINGS): 
       fromCatalog: (Array.isArray(agents.fromCatalog) ? agents.fromCatalog : base.agents.fromCatalog)
         .filter((x): x is string => typeof x === "string" && AGENT_KEY_RE.test(x)).slice(0, 200),
     },
-    profile: {
-      name: profileName(profile.name, base.profile.name),
-      color: typeof profile.color === "string" && PROFILE_COLOR_RE.test(profile.color) ? profile.color.toLowerCase() : base.profile.color,
-    },
+    profile: profileOf(p.profile, base.profile),
+  };
+}
+
+/** A profile as others see it, from anything (settings.json, or someone asking to join): its
+ *  fields checked, and what does not pass kept as `base` has it. */
+export function profileOf(raw: unknown, base: ProfileSettings = DEFAULT_SETTINGS.profile): ProfileSettings {
+  const p = isObj(raw) ? raw : {};
+  return {
+    name: profileName(p.name, base.name),
+    color: typeof p.color === "string" && PROFILE_COLOR_RE.test(p.color) ? p.color.toLowerCase() : base.color,
   };
 }
 

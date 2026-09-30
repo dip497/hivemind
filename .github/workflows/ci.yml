@@ -43,6 +43,17 @@ jobs:
       - name: Unit tests (desktop)
         run: pnpm --filter @hivemind/desktop run test:unit
 
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            crates/hive-net/target
+          key: hive-net-${{ runner.os }}-${{ hashFiles('crates/hive-net/Cargo.lock') }}
+
+      - name: Build hive-net (the daemon client's tests run it)
+        run: rustup update stable --no-self-update && rustup default stable && cargo build --locked --manifest-path crates/hive-net/Cargo.toml
+
       - name: Unit tests (packages and CLI)
         # Every package's own `bun test`: the workspace store, settings.json and its lock,
         # agent discovery, the view SDK, the agent host, the CLI.

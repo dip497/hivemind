@@ -31,7 +31,7 @@ import { UndoManager, type LoroDoc } from "loro-crdt";
 import { addTile, hasCore, holdsTile, readCore, removeTile, writeCore, writeTileName } from "@hivemind/workspace-doc/core";
 import { readObjects, writeObjects } from "@hivemind/workspace-doc/objects";
 import { readView, readViews, writeView } from "@hivemind/workspace-doc/views";
-import { stampOwnership, stampSchema } from "@hivemind/workspace-doc/schema";
+import { readOwnership, stampOwnership, stampSchema, type Ownership } from "@hivemind/workspace-doc/schema";
 import type { BoardObject, CoreLayout, TileRecord, ViewLayout } from "@hivemind/workspace-doc/shapes";
 import type { LegacyLayout, WorkspaceChange } from "./layout.js";
 import { readDoc, writeDoc } from "./doc-file.js";
@@ -90,6 +90,11 @@ export class WorkspaceStore {
   /** Every view's layout, by view id. A fresh copy each call. */
   getViews(repo: string): Record<string, ViewLayout> {
     return readViews(this.workspace(repo).doc);
+  }
+
+  /** Whose the workspace `repo` is: its id, its owner and its workspace key (R3). */
+  ownership(repo: string): Ownership | null {
+    return readOwnership(this.workspace(repo).doc);
   }
 
   /** The board's objects, or none. A fresh copy each call. */

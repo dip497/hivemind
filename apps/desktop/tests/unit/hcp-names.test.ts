@@ -14,6 +14,7 @@ import os from "node:os";
 import path from "node:path";
 import { StatusStore } from "@hivemind/agent-host/status-store";
 import { WorkspaceStore } from "@hivemind/workspace-host/store";
+import { newSeed } from "@hivemind/workspace-host/identity";
 import { labelOf } from "../../src/main/hcp/names.js";
 import { REPO, workspaceDeps, PERSON } from "./hcp-workspace.ts";
 import { makeDispatch } from "../../src/main/hcp/methods.js";
@@ -50,7 +51,7 @@ test("a turn with neither transcript nor text yields nothing (no empty banner)",
 
 test("a banner calls a tile what every surface does, on one line, with its id; a tile no workspace holds, by its id", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hcp-names-"));
-  const workspaces = new WorkspaceStore({ dir });
+  const workspaces = new WorkspaceStore({ dir, person: newSeed() });
   workspaces.setCore("/w", { frames: [], tiles: [
     { id: "tile-a", kind: "claude", label: "claude #1" },
     { id: "tile-b", kind: "claude", label: "claude #2", task: "fix the flaky test" },

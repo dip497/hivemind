@@ -179,6 +179,16 @@ const api: HiveIpc & {
   setBrowserCdpEnabled: (enabled) => ipcRenderer.invoke("setBrowserCdpEnabled", enabled),
   relaunchApp: () => ipcRenderer.invoke("relaunchApp"),
   identity: () => ipcRenderer.invoke("identity:get"),
+  share: (repo, role, expiresIn, reusable) => ipcRenderer.invoke("net:share", repo, role, expiresIn, reusable),
+  joinPreview: (text) => ipcRenderer.invoke("net:join-preview", text),
+  join: (text) => ipcRenderer.invoke("net:join", text),
+  onJoinRequest: (cb) => {
+    const h = (_e: Electron.IpcRendererEvent, r: Parameters<typeof cb>[0]) => cb(r);
+    ipcRenderer.on("net:join-request", h);
+    return () => { ipcRenderer.removeListener("net:join-request", h); };
+  },
+  answerJoin: (req, allow) => ipcRenderer.send("net:join-answer", req, allow),
+  people: (repo) => ipcRenderer.invoke("net:people", repo),
   getAppVersion: () => ipcRenderer.invoke("getAppVersion"),
   settingsSync: () => ipcRenderer.sendSync("settings:get-sync"),
   workspaceCoreSync: (repo) => ipcRenderer.sendSync("workspace:core-sync", repo),

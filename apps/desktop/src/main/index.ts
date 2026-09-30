@@ -78,6 +78,7 @@ import { handleViewProtocol, listViewPackages, registerViewScheme, startViewWatc
 import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, settingsFile, settingsBusy, settingsSettled } from "./settings-store.js";
 import { flushWorkspaceStore, installWorkspaceStoreIpc, workspaceStore } from "./workspace-store-ipc.js";
 import { installIdentityIpc } from "./identity.js";
+import { installNetworkIpc, stopNetwork } from "./network.js";
 import { appWindowOf, broadcast, openWindows, registerWindow, userWindow } from "./windows.js";
 import { patchSettingsExtras } from "@hivemind/core/settings";
 import { PipeManager } from "./hcp/pipes.js";
@@ -1303,6 +1304,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     handleViewProtocol();
     installSettingsIpc(broadcast);
     installIdentityIpc();
+    installNetworkIpc();
     installWorkspaceStoreIpc(layouts, workspaceIpc.connect, (change) =>
       workspaceServer.publishTo((c) => !layouts.made(c, change), "store.changed", { repo: change.repo, part: change.part }));
     void initMachines({
@@ -1907,6 +1909,7 @@ app.on("before-quit", () => {
   // (app.quit / Cmd+Q / playwright's app.close). Daemon mode force-exits after
   // flushing storage; legacy mode reaps in-process PTYs and quits normally.
   flushWorkspaceStore();
+  stopNetwork();
   if (PERSIST_PTY) {
     forceExitAfterFlush();
     return;

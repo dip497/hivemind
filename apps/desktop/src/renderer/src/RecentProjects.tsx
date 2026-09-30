@@ -1,13 +1,13 @@
 /** Ctrl+R — VS Code's Open Recent: the projects opened before, a way to browse for another, and
  *  another window on this one. */
-import { AppWindow, FolderOpen, History } from "lucide-react";
+import { AppWindow, FolderOpen, History, LogIn } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "./components/ui/dialog";
 import { MenuItem } from "./components/ui/menu-item";
 
 const base = (p: string) => p.split("/").filter(Boolean).pop() ?? p;
 const parent = (p: string) => p.split("/").slice(0, -1).join("/").replace(/^\/home\/[^/]+/, "~");
 
-export function RecentProjects({ open, recents, current, onOpen, onBrowse, onNewWindow, onClose }: {
+export function RecentProjects({ open, recents, current, onOpen, onBrowse, onNewWindow, onClose, onJoin }: {
   open: boolean;
   recents: string[];
   current: string | null;
@@ -15,6 +15,8 @@ export function RecentProjects({ open, recents, current, onOpen, onBrowse, onNew
   onBrowse: () => void;
   onNewWindow: () => void;
   onClose: () => void;
+  /** Join a workspace someone shared. */
+  onJoin: () => void;
 }) {
   const others = recents.filter((p) => p !== current);
   return (
@@ -43,6 +45,9 @@ export function RecentProjects({ open, recents, current, onOpen, onBrowse, onNew
           </MenuItem>
           <MenuItem data-new-window onClick={() => { onClose(); onNewWindow(); }}>
             <AppWindow /><span className="flex-1">New window</span>
+          </MenuItem>
+          <MenuItem data-join onClick={() => { onClose(); onJoin(); }}>
+            <LogIn /><span className="flex-1">Join a shared workspace…</span>
           </MenuItem>
         </div>
       </DialogContent>
