@@ -535,8 +535,6 @@ export interface HiveIpc {
    *  and current URL) so the main process can attach the debugger AND write the
    *  discovery file the `hive-browser` skill reads. Called on dom-ready + on nav. */
   browserRegister(tileId: string, webContentsId: number, frameId: string | null, url: string): void;
-  /** Tile unmounted — drop the guest mapping. */
-  browserUnregister(tileId: string): void;
   /** Send a raw Chrome DevTools Protocol command to the tile's guest page
    *  (auto-attaches on first use). Navigate / click / read DOM / screenshot /
    *  evaluate — the surface an agent uses to "use" the browser. */

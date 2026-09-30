@@ -13,7 +13,9 @@ import path from "node:path";
  * an arbitrary path from a URL), and (d) lets us stamp a strict CSP on every
  * response so plugin code cannot reach the network or embed anything.
  */
-import { app, net, protocol, dialog, ipcMain, type BrowserWindow, type WebFrameMain } from "electron";
+import { app, net, protocol, dialog, type BrowserWindow, type WebFrameMain } from "electron";
+import { handle } from "./app-ipc.js";
+import { appWindowOf } from "./windows.js";
 import { pathToFileURL } from "node:url";
 import { listInstalledViews, readViewPackage, installView, removeView, type InstalledView } from "@hivemind/core/views";
 import { ENTRY_PAGE, SDK_PATH, VIEW_SCHEME, entryPage, entryUrl, withImportMap, mimeFor, newNonce, pluginCsp, resolvePackageFile } from "./view-package-files.js";
@@ -157,22 +159,16 @@ export async function reviewViewDir(dir: string, staged: boolean) {
 }
 
 /** The renderer can install only a package it was shown for review. */
-export function installViewManagementIpc(appWindowOf: (sender: Electron.WebContents) => BrowserWindow | null): void {
-  const assertSender = (event: Electron.IpcMainInvokeEvent) => {
-    const win = appWindowOf(event.sender);
-    if (!win || event.senderFrame !== win.webContents.mainFrame) throw new Error("Only the workspace can manage extensions");
-    return win;
-  };
-  ipcMain.handle("views:preview-install", async (event) => {
-    const win = assertSender(event);
+export function installViewManagementIpc(): void {
+  handle("views:preview-install", async (event) => {
+    const win = appWindowOf(event.sender)!; // the gate answers app windows only
     if (pending?.staged) await rm(pending.dir, { recursive: true, force: true }).catch(() => {});
     pending = null;
     const result = await dialog.showOpenDialog(win, { title: "Choose a view extension", buttonLabel: "Review extension", properties: ["openDirectory"] });
     if (result.canceled || !result.filePaths[0]) return null;
     return reviewViewDir(result.filePaths[0], false);
   });
-  ipcMain.handle("views:install", async (event, token: string) => {
-    assertSender(event);
+  handle("views:install", async (_event, token: string) => {
     if (!pending || token !== pending.token) throw new Error("Choose the extension folder again");
     const candidate = pending;
     pending = null;
@@ -182,8 +178,7 @@ export function installViewManagementIpc(appWindowOf: (sender: Electron.WebConte
       await installView(candidate.dir);
     } finally { if (candidate.staged) await rm(candidate.dir, { recursive: true, force: true }).catch(() => {}); }
   });
-  ipcMain.handle("views:remove", async (event, id: string) => {
-    assertSender(event);
+  handle("views:remove", async (_event, id: string) => {
     if (typeof id !== "string") throw new Error("Invalid extension ID");
     await removeView(id);
   });

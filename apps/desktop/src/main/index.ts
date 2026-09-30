@@ -4,7 +4,7 @@ import { recoverOnProcessLoss } from "./recover";
 import desktopPkg from "../../package.json" with { type: "json" };
 import { installPluginCatalogIpc } from "./plugin-catalog-ipc.js";
 /** Electron main process — owns the BrowserWindow + IPC + PtyHost + git/worktree. */
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, net, powerMonitor, protocol, screen, session, shell, webContents, type WebContents } from "electron";
+import { app, BrowserWindow, clipboard, dialog, Menu, nativeImage, net, powerMonitor, protocol, screen, session, shell, webContents, type WebContents } from "electron";
 import { isDay, promptProblem } from "@hivemind/view-sdk/protocol";
 import { ActivityMeter } from "./pty-activity.js";
 import { POLL_MS as PRESENCE_POLL_MS, PresenceMonitor, localDay, type PresenceTotals } from "./presence.js";
@@ -98,6 +98,7 @@ import { randomUUID } from "node:crypto";
 import { startHcpServer } from "./hcp/hcp-server.js";
 import { makeSpawnPacer } from "./spawn-pacer.js";
 import { makeDispatch, type Dispatcher } from "./hcp/methods.js";
+import { handle, on } from "./app-ipc.js";
 import { Intents } from "@hivemind/workspace-host/intents";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import { Mailbox } from "./hcp/mailbox.js";
@@ -424,6 +425,12 @@ async function createWindow(target: string | null = cliLaunchTarget): Promise<vo
     webPreferences.contextIsolation = true;
   });
   wc.on("did-attach-webview", (_e, guest) => {
+    // One of this window's browser pages: the only kind a browser tile may register.
+    const pages = browserPages.get(wc) ?? new Set<number>();
+    browserPages.set(wc, pages);
+    const pageId = guest.id;
+    pages.add(pageId);
+    guest.once("destroyed", () => { pages.delete(pageId); forgetBrowserPage(pageId); });
     guest.setWindowOpenHandler(({ url }) => {
       // A link/popup (target=_blank, window.open) inside a BrowserTile guest →
       // hand it back to the host renderer so the owning tile opens it as a NEW
@@ -473,7 +480,7 @@ function wrap<A extends unknown[], R>(
 }
 
 // hive-core
-ipcMain.handle("resolveProject", wrap(async (e, rootHint?: string) => {
+handle("resolveProject", wrap(async (e, rootHint?: string) => {
   const cwd = await projectDir(rootHint, process.cwd());
   const root = await findRoot(cwd);
   // The repo a frame's tiles run in. THREE cases, in priority order:
@@ -512,6 +519,8 @@ ipcMain.handle("resolveProject", wrap(async (e, rootHint?: string) => {
 // sees. The guest auto-attaches on the first command and stays attached.
 interface BrowserGuest { webContentsId: number; frameId: string | null; url: string }
 const browserGuests = new Map<string, BrowserGuest>();
+/** Each app window's browser pages (its <webview> guests), by id, as they attach. */
+const browserPages = new WeakMap<WebContents, Set<number>>();
 
 // Discovery file the `hive-browser` skill reads so a spawned agent can find the
 // right tab to drive: which BrowserTile lives in which frame, its current URL
@@ -536,14 +545,19 @@ async function writeBrowserTargets(): Promise<void> {
   await fsp.writeFile(browserTargetsPath(), JSON.stringify(doc, null, 2)).catch(() => {});
 }
 
-ipcMain.on("browser:register", (_e, tileId: string, webContentsId: number, frameId: string | null, url: string) => {
-  browserGuests.set(tileId, { webContentsId, frameId: frameId ?? null, url: url ?? "" });
+// A browser tile names the page it shows: one of its own window's browser pages, never another
+// window's nor a window itself, which the debugger below would then drive.
+on("browser:register", (e, tileId: unknown, webContentsId: unknown, frameId: unknown, url: unknown) => {
+  if (typeof tileId !== "string" || typeof webContentsId !== "number" || !browserPages.get(e.sender)?.has(webContentsId)) return;
+  browserGuests.set(tileId, { webContentsId, frameId: typeof frameId === "string" ? frameId : null, url: typeof url === "string" ? url : "" });
   void writeBrowserTargets();
 });
-ipcMain.on("browser:unregister", (_e, tileId: string) => {
-  browserGuests.delete(tileId);
-  void writeBrowserTargets();
-});
+/** A page that has gone takes its tile's registration with it (the tile closed, or its tab did). */
+function forgetBrowserPage(pageId: number): void {
+  let gone = false;
+  for (const [tileId, g] of browserGuests) if (g.webContentsId === pageId) { browserGuests.delete(tileId); gone = true; }
+  if (gone) void writeBrowserTargets();
+}
 
 function browserGuestFor(tileId: string): Electron.WebContents | null {
   const g = browserGuests.get(tileId);
@@ -552,7 +566,7 @@ function browserGuestFor(tileId: string): Electron.WebContents | null {
   return guest && !guest.isDestroyed() ? guest : null;
 }
 
-ipcMain.handle(
+handle(
   "browserCdp",
   wrap(async (_e, tileId: string, method: string, params?: Record<string, unknown>) => {
     const guest = browserGuestFor(tileId);
@@ -577,12 +591,12 @@ ipcMain.handle(
 // Agent-browser settings for the in-app toggle. `active` = is the bridge live
 // THIS session (the switch was applied at launch); `enabled` = the persisted
 // choice. They differ between toggling and relaunching, which the UI surfaces.
-ipcMain.handle("getBrowserSettings", () => ({
+handle("getBrowserSettings", () => ({
   active: process.env.HIVEMIND_BROWSER_CDP === "1",
   enabled: readSettings().browserCdp === true,
   port: process.env.HIVEMIND_BROWSER_CDP_PORT ?? "9333",
 }));
-ipcMain.handle("setBrowserCdpEnabled", wrap(async (_e, enabled: boolean) => {
+handle("setBrowserCdpEnabled", wrap(async (_e, enabled: boolean) => {
   await writeSettings({ browserCdp: !!enabled });
   return { ok: true as const };
 }));
@@ -591,8 +605,8 @@ ipcMain.handle("setBrowserCdpEnabled", wrap(async (_e, enabled: boolean) => {
 // The persisted blob lives in settings.json; this module owns the read + the
 // in-memory cache the per-notice OS-popup gate reads. The renderer caches its
 // own snapshot on load + on every change here (pushed back via the setter).
-ipcMain.handle("getNotificationSettings", () => getNotificationSettings());
-ipcMain.handle("setNotificationSettings", wrap(async (_e, s: unknown) => {
+handle("getNotificationSettings", () => getNotificationSettings());
+handle("setNotificationSettings", wrap(async (_e, s: unknown) => {
   await setNotificationSettings(normalizeNotificationSettings(s));
   return { ok: true as const };
 }));
@@ -615,7 +629,7 @@ function resolveLauncherPath(): string | null {
   }
   return null;
 }
-ipcMain.handle("relaunchApp", () => {
+handle("relaunchApp", () => {
   const launcher = resolveLauncherPath();
   if (launcher) app.relaunch({ execPath: launcher, args: [] });
   else app.relaunch();
@@ -623,7 +637,7 @@ ipcMain.handle("relaunchApp", () => {
 });
 
 // ── app version + self-update ─────────────────────────────────────────────
-ipcMain.handle("getAppVersion", () => app.getVersion());
+handle("getAppVersion", () => app.getVersion());
 
 // Strict "is `latest` newer than `current`" over dotted numeric versions.
 // Tolerant of differing segment counts and non-numeric junk (→ 0).
@@ -652,7 +666,7 @@ function stagedVersion(current: string): string | null {
   } catch { return null; }
 }
 
-ipcMain.handle("checkForUpdate", async () => {
+handle("checkForUpdate", async () => {
   const current = app.getVersion();
   const staged = stagedVersion(current);
   // Test seam: the update affordances are driven by what GitHub answers, which an e2e cannot
@@ -714,7 +728,7 @@ ipcMain.handle("checkForUpdate", async () => {
 // `relaunchApp()` (which goes through the launcher, applying the staged build).
 // The bare-CLI `upgrade` arg path still uses runUpgradeAndExit (it runs in a
 // real terminal, so inherited stdio + exit is correct there).
-ipcMain.handle("runUpgrade", () => new Promise<{ ok: boolean; code: number | null }>((resolve) => {
+handle("runUpgrade", () => new Promise<{ ok: boolean; code: number | null }>((resolve) => {
   // Test seam (non-packaged only, as above): replay the installer's lines instead of running
   // it, so an e2e can drive what the user reads without downloading a release.
   const scripted = !app.isPackaged && process.env.HIVEMIND_TEST_UPDATE;
@@ -747,16 +761,16 @@ ipcMain.handle("runUpgrade", () => new Promise<{ ok: boolean; code: number | nul
 
 // The repo passed on the CLI (`hivemind .`), or null for a bare launch (then
 // the renderer falls back to its persisted last-project).
-ipcMain.handle("getLaunchTarget", (e) => launchTargets.get(e.sender) ?? null);
+handle("getLaunchTarget", (e) => launchTargets.get(e.sender) ?? null);
 // A New Window command: another window on the workspace the asking one shows.
-ipcMain.handle("window:new", (e) => createWindow(workspaceShownBy(e.sender)));
+handle("window:new", (e) => createWindow(workspaceShownBy(e.sender)));
 
 // findGitRoot + computeRepoPath now live in ./workspace-paths (pure + tested).
 
 // Folder picker for "Open project". Returns the selected absolute path or
 // null if the user cancelled. Renderer then invokes `resolveProject` with
 // that path as the hint, which rebuilds root/repoPath for the new workspace.
-ipcMain.handle("pickProjectFolder", async () => {
+handle("pickProjectFolder", async () => {
   // Test seam: e2e can't drive a native folder dialog, so return a fixed dir
   // when HIVEMIND_TEST_PICK_DIR is set. Gated to non-packaged builds — in a
   // shipped binary a user's `.bashrc` or hostile process must not be able to
@@ -776,7 +790,7 @@ ipcMain.handle("pickProjectFolder", async () => {
 // Initialize a .hivemind/ workspace in `dir` (no terminal needed). Mirrors
 // `hive init --prefix`. Returns the new root path. Renderer then re-resolves
 // the project so the New-issue button + board light up.
-ipcMain.handle(
+handle(
   "initWorkspace",
   wrap(async (_e, dir: string, prefixRaw: string) => {
     const prefix = String(prefixRaw).toUpperCase();
@@ -809,7 +823,7 @@ async function installAgenticStack(dir: string): Promise<void> {
 
 // Ensure the agentic stack exists for an already-initialized workspace (called
 // before "Work on this" + manually via the workspace switcher). dir = repo dir.
-ipcMain.handle(
+handle(
   "installAgentic",
   wrap(async (_e, dir: string) => {
     const root = await findRoot(dir);
@@ -822,33 +836,33 @@ ipcMain.handle(
     return { ok: true as const };
   }),
 );
-ipcMain.handle("listIssues", wrap(async (_e, root: string) => listIssues(root)));
+handle("listIssues", wrap(async (_e, root: string) => listIssues(root)));
 // ── cross-repo: registry + transfer + links ─────────────────────────────
-ipcMain.handle("listWorkspaces", wrap(async () => listWorkspaces({ persistPrune: true })));
-ipcMain.handle(
+handle("listWorkspaces", wrap(async () => listWorkspaces({ persistPrune: true })));
+handle(
   "resolveIssueRoot",
   wrap(async (_e, id: string) => ({ root: await resolveRootForIssue(id) })),
 );
-ipcMain.handle(
+handle(
   "moveIssue",
   wrap(async (_e, root: string, id: string, destPrefix: string, mode: "move" | "copy") =>
     transferIssue(root, id, String(destPrefix).toUpperCase(), { mode, actor: "ui" }),
   ),
 );
-ipcMain.handle(
+handle(
   "linkIssue",
   wrap(async (_e, root: string, id: string, otherId: string, type: LinkType) =>
     linkIssues(root, id, otherId, type, "ui"),
   ),
 );
-ipcMain.handle(
+handle(
   "unlinkIssue",
   wrap(async (_e, root: string, id: string, otherId: string) => ({
     removed: await unlinkIssues(root, id, otherId, "ui"),
   })),
 );
-ipcMain.handle("readIssue", wrap(async (_e, root: string, id: string) => readIssue(root, id)));
-ipcMain.handle(
+handle("readIssue", wrap(async (_e, root: string, id: string) => readIssue(root, id)));
+handle(
   "updateIssueState",
   wrap(async (_e, root: string, id: string, state: IssueState, note?: string) => {
     // Route through core (like createIssue/updateIssue/commentOnIssue) instead
@@ -859,7 +873,7 @@ ipcMain.handle(
     return issue;
   })
 );
-ipcMain.handle(
+handle(
   "createIssue",
   wrap(async (_e, root: string, opts: Parameters<typeof createIssue>[1]) => {
     const issue = await createIssue(root, opts);
@@ -867,7 +881,7 @@ ipcMain.handle(
     return issue;
   })
 );
-ipcMain.handle(
+handle(
   "updateIssue",
   wrap(async (_e, root: string, id: string, patch: IssuePatch) => {
     const issue = await updateIssue(root, id, patch, "ui");
@@ -875,7 +889,7 @@ ipcMain.handle(
     return issue;
   })
 );
-ipcMain.handle(
+handle(
   "commentOnIssue",
   wrap(async (_e, root: string, id: string, message: string) => {
     const issue = await commentOnIssue(root, id, message, "ui");
@@ -883,54 +897,54 @@ ipcMain.handle(
     return issue;
   })
 );
-ipcMain.handle("deleteIssue", wrap(async (_e, root: string, id: string) => {
+handle("deleteIssue", wrap(async (_e, root: string, id: string) => {
   await deleteIssueCore(root, id);
   await writeAgentContext(root);
 }));
 
 // review comments — the workspace owns them, so the CLI and an agent see the
 // same list the diff tile is showing.
-ipcMain.handle("reviewList", wrap(async (_e, repoPath: string) =>
+handle("reviewList", wrap(async (_e, repoPath: string) =>
   readComments(await reviewRoot(repoPath))));
-ipcMain.handle("reviewSave", wrap(async (_e, repoPath: string, comments: unknown) =>
+handle("reviewSave", wrap(async (_e, repoPath: string, comments: unknown) =>
   writeComments(await reviewRoot(repoPath), normalizeComments(comments))));
 
 // git
-ipcMain.handle("gitStatus", wrap((_e, repoPath: string) => gitStatus(repoPath)));
-ipcMain.handle("gitListFiles", wrap((_e, repoPath: string) => gitListFiles(repoPath)));
-ipcMain.handle("gitListBranches", wrap((_e, repoPath: string) => gitListBranches(repoPath)));
+handle("gitStatus", wrap((_e, repoPath: string) => gitStatus(repoPath)));
+handle("gitListFiles", wrap((_e, repoPath: string) => gitListFiles(repoPath)));
+handle("gitListBranches", wrap((_e, repoPath: string) => gitListBranches(repoPath)));
 // Each `file`/`files` IPC arg is verified to stay inside `repoPath` before
 // reaching git-adapter — git-adapter joins them onto repoPath for `fs.rm`,
 // `fs.writeFile`, and `git show :path`, so an unguarded `../etc/passwd` arg
 // would otherwise read or clobber arbitrary disk locations (P0 from review).
-ipcMain.handle("gitDiff", wrap((_e, repoPath: string, scope: DiffScope, file?: string) =>
+handle("gitDiff", wrap((_e, repoPath: string, scope: DiffScope, file?: string) =>
   gitDiff(repoPath, scope, file == null ? file : assertInRepo(repoPath, file))
 ));
-ipcMain.handle(
+handle(
   "gitFileContents",
   wrap((_e, repoPath: string, file: string, rev: "HEAD" | "INDEX" | "WORKING") =>
     gitFileContents(repoPath, assertInRepo(repoPath, file), rev))
 );
-ipcMain.handle("gitStage", wrap((_e, repoPath: string, files: string[]) =>
+handle("gitStage", wrap((_e, repoPath: string, files: string[]) =>
   gitStage(repoPath, assertAllInRepo(repoPath, files))
 ));
-ipcMain.handle("gitUnstage", wrap((_e, repoPath: string, files: string[]) =>
+handle("gitUnstage", wrap((_e, repoPath: string, files: string[]) =>
   gitUnstage(repoPath, assertAllInRepo(repoPath, files))
 ));
-ipcMain.handle("gitDiscard", wrap((_e, repoPath: string, files: string[]) =>
+handle("gitDiscard", wrap((_e, repoPath: string, files: string[]) =>
   gitDiscard(repoPath, assertAllInRepo(repoPath, files))
 ));
-ipcMain.handle("gitCommit", wrap((_e, repoPath: string, message: string, allowEmpty?: boolean) =>
+handle("gitCommit", wrap((_e, repoPath: string, message: string, allowEmpty?: boolean) =>
   gitCommit(repoPath, message, allowEmpty)
 ));
-ipcMain.handle("gitPush", wrap((_e, repoPath: string, setUpstream?: boolean) =>
+handle("gitPush", wrap((_e, repoPath: string, setUpstream?: boolean) =>
   gitPush(repoPath, setUpstream)
 ));
-ipcMain.handle("gitPull", wrap((_e, repoPath: string) => gitPull(repoPath)));
-ipcMain.handle("gitConflictedFile", wrap((_e, repoPath: string, file: string) =>
+handle("gitPull", wrap((_e, repoPath: string) => gitPull(repoPath)));
+handle("gitConflictedFile", wrap((_e, repoPath: string, file: string) =>
   gitConflictedFile(repoPath, assertInRepo(repoPath, file))
 ));
-ipcMain.handle("gitWriteResolved", wrap((_e, repoPath: string, file: string, contents: string) =>
+handle("gitWriteResolved", wrap((_e, repoPath: string, file: string, contents: string) =>
   gitWriteResolved(repoPath, assertInRepo(repoPath, file), contents)
 ));
 
@@ -968,12 +982,12 @@ function assertAllInRepo(repoPath: string, paths: readonly string[]): string[] {
   for (const p of paths) resolveInRepo(repoPath, p);
   return paths.slice();
 }
-ipcMain.handle("fileRead", wrap((_e, repoPath: string, relPath: string) =>
+handle("fileRead", wrap((_e, repoPath: string, relPath: string) =>
   isRemote(repoPath)
     ? readRemoteFile(repoPath, assertRemoteRel(relPath))
     : fsp.readFile(resolveInRepo(repoPath, relPath), "utf8")
 ));
-ipcMain.handle("fileWrite", wrap((_e, repoPath: string, relPath: string, contents: string) =>
+handle("fileWrite", wrap((_e, repoPath: string, relPath: string, contents: string) =>
   isRemote(repoPath)
     ? writeRemoteFile(repoPath, assertRemoteRel(relPath), contents)
     : fsp.writeFile(resolveInRepo(repoPath, relPath), contents, "utf8")
@@ -998,7 +1012,7 @@ const OPENABLE_EXT = new Set([
 // workspace via realpath — rejects absolute/`..`/symlink escapes; (2) ALLOWLIST
 // viewable extensions — never hands an executable/installer/shortcut to the OS
 // opener; (3) extensionless files (Makefile, LICENSE) only when NOT executable.
-ipcMain.handle("openPathInApp", wrap(async (_e, repoPath: string, target: string) => {
+handle("openPathInApp", wrap(async (_e, repoPath: string, target: string) => {
   if (!target) return { ok: false, error: "no target" };
   let t = target.trim();
   if (t.startsWith("file://")) {
@@ -1052,7 +1066,7 @@ async function writeDiagLog(line: string): Promise<void> {
     await fsp.appendFile(file, `${new Date().toISOString()} ${line}\n`, "utf8");
   } catch { /* diagnostics must never break the app */ }
 }
-ipcMain.handle("diagLog", async (_e, line: string) => { await writeDiagLog(line); });
+handle("diagLog", async (_e, line: string) => { await writeDiagLog(line); });
 
 // ── remote (SSH) frames ─────────────────────────────────────────────────
 // Probe + auth-register a host, returning its home dir (the connectivity check
@@ -1070,22 +1084,22 @@ remoteConns.setAuthResolver((hostId) => {
   return saved.auth;
 });
 // Machines: the catalog `hive machine` edits, plus each host's live state.
-ipcMain.handle("machines:get", wrap(async () => machinesSnapshot()));
-ipcMain.handle("machines:add", wrap(async (_e, req: MachineAddRequest) => addMachine(req)));
-ipcMain.handle("machines:check", wrap(async (_e, id: string) => checkMachine(String(id))));
-ipcMain.handle("machines:install", wrap(async (_e, id: string) => installOnMachine(String(id))));
-ipcMain.handle("machines:update", wrap(async (_e, id: string, patch: { label?: string; enabled?: boolean }) => updateMachine(String(id), patch ?? {})));
-ipcMain.handle("machines:edit", wrap(async (_e, id: string, patch: { target: string; label?: string; password?: string }) => editMachine(String(id), {
+handle("machines:get", wrap(async () => machinesSnapshot()));
+handle("machines:add", wrap(async (_e, req: MachineAddRequest) => addMachine(req)));
+handle("machines:check", wrap(async (_e, id: string) => checkMachine(String(id))));
+handle("machines:install", wrap(async (_e, id: string) => installOnMachine(String(id))));
+handle("machines:update", wrap(async (_e, id: string, patch: { label?: string; enabled?: boolean }) => updateMachine(String(id), patch ?? {})));
+handle("machines:edit", wrap(async (_e, id: string, patch: { target: string; label?: string; password?: string }) => editMachine(String(id), {
   target: String(patch?.target ?? ""),
   ...(typeof patch?.label === "string" ? { label: patch.label } : {}),
   ...(typeof patch?.password === "string" && patch.password ? { password: patch.password } : {}),
 })));
-ipcMain.handle("machines:remove", wrap(async (_e, id: string) => removeMachine(String(id))));
-ipcMain.handle("machines:set-password", wrap(async (_e, id: string, password: string) => setMachinePassword(String(id), String(password))));
-ipcMain.handle("machines:sessions", wrap(async (_e, uri: string | null) => machineSessions(uri ? String(uri) : null)));
-ipcMain.handle("machines:reconnect", wrap(async (_e, hostId: string) => { reconnectMachineHost(String(hostId)); }));
+handle("machines:remove", wrap(async (_e, id: string) => removeMachine(String(id))));
+handle("machines:set-password", wrap(async (_e, id: string, password: string) => setMachinePassword(String(id), String(password))));
+handle("machines:sessions", wrap(async (_e, uri: string | null) => machineSessions(uri ? String(uri) : null)));
+handle("machines:reconnect", wrap(async (_e, hostId: string) => { reconnectMachineHost(String(hostId)); }));
 // List a remote directory for the folder picker. `dir` empty → the host's home.
-ipcMain.handle("sshListDir", wrap(async (_e, uri: string, dir: string) => {
+handle("sshListDir", wrap(async (_e, uri: string, dir: string) => {
   const target = parseRemote(uri);
   const fs = await remoteConns.fs(target);
   const start = dir && dir.trim() ? dir : await fs.home();
@@ -1095,14 +1109,14 @@ ipcMain.handle("sshListDir", wrap(async (_e, uri: string, dir: string) => {
 }));
 
 // worktree
-ipcMain.handle("worktreeList", wrap((_e, repoPath: string) => worktreeList(repoPath)));
-ipcMain.handle("worktreeCreate", wrap((_e, repoPath: string, opts: WorktreeCreateOpts) =>
+handle("worktreeList", wrap((_e, repoPath: string) => worktreeList(repoPath)));
+handle("worktreeCreate", wrap((_e, repoPath: string, opts: WorktreeCreateOpts) =>
   worktreeCreate(repoPath, opts)
 ));
-ipcMain.handle("worktreeRemove", wrap((_e, repoPath: string, wtPath: string, force?: boolean) =>
+handle("worktreeRemove", wrap((_e, repoPath: string, wtPath: string, force?: boolean) =>
   worktreeRemove(repoPath, wtPath, force)
 ));
-ipcMain.handle("worktreePrune", wrap((_e, repoPath: string) => worktreePrune(repoPath)));
+handle("worktreePrune", wrap((_e, repoPath: string) => worktreePrune(repoPath)));
 
 // PTY
 // Sliding-window spawn rate-limit (see ptySpawn handler): over the limit a spawn waits
@@ -1260,7 +1274,7 @@ const hcpAgentOf = new Map<string, string>();
 // by id once the scan has set the catalog.
 let agentsScanned: Promise<void> = Promise.resolve();
 
-ipcMain.handle("ptySpawn", wrap(async (e, opts: Parameters<typeof spawnPty>[0]) => {
+handle("ptySpawn", wrap(async (e, opts: Parameters<typeof spawnPty>[0]) => {
   const spawning = agentForCmd(opts.cmd);
   // An agent a repository ships runs in that repository, not wherever a tile happens to be.
   if (spawning && !agentAllowedIn(spawning, opts.cwd)) {
@@ -1316,7 +1330,7 @@ async function startSession(opts: Parameters<typeof spawnPty>[0]): Promise<{ pid
 }
 // Renderer back-pressure (TerminalTile flow control): pause/resume reading the
 // child's output on the transport that owns this tile. See PTY_PAUSE_MAX_MS.
-ipcMain.on("ptyFlow", (_e, tileId: string, paused: boolean) => {
+on("ptyFlow", (_e, tileId: string, paused: boolean) => {
   const prev = ptyPauseTimers.get(tileId);
   if (prev) { clearTimeout(prev); ptyPauseTimers.delete(tileId); }
   setPtyPaused(tileId, paused);
@@ -1327,7 +1341,7 @@ ipcMain.on("ptyFlow", (_e, tileId: string, paused: boolean) => {
     }, PTY_PAUSE_MAX_MS));
   }
 });
-ipcMain.on("ptyWrite", (e, tileId: string, data: string, paste?: boolean) => {
+on("ptyWrite", (e, tileId: string, data: string, paste?: boolean) => {
   // Only a person's keystrokes take this handler — programmatic writes go through the
   // mailbox — so an interrupt key here is the user stopping the agent's turn.
   hcpStatus.input(toBareId(tileId), data);
@@ -1337,19 +1351,19 @@ ipcMain.on("ptyWrite", (e, tileId: string, data: string, paste?: boolean) => {
   ptyRelay.markInput(tileId);
   writePty(tileId, data, paste);
 });
-ipcMain.handle("hcp:status-all", () => hcpStatus.all());
+handle("hcp:status-all", () => hcpStatus.all());
 // The agent links there are now, for a window that opens (or reloads) after they were drawn;
 // every change after this answer is pushed (`hcp:pipe`, `hcp:spawn`).
-ipcMain.handle("hcp:links", () => ({
+handle("hcp:links", () => ({
   pipes: hcpPipes.edges().map(([src, dst]) => ({ src, dst })),
   spawns: [...spawnWires].map(([child, parent]) => ({ parent, child })),
 }));
 // Whether any view of the asking window shows the tile. Hidden, the window is sent nothing for it
 // while the host keeps its screen; shown again, the screen, then live bytes.
-ipcMain.on("ptyInterest", (e, tileId: string, shown: boolean) => {
+on("ptyInterest", (e, tileId: string, shown: boolean) => {
   ptyRelay.show(tileId, viewerOf(e.sender), shown, screenOf(tileId));
 });
-ipcMain.on("ptyResize", (e, tileId: string, cols: number, rows: number) => {
+on("ptyResize", (e, tileId: string, cols: number, rows: number) => {
   // While several windows show a session, the one that typed last sizes it.
   const typer = lastTyper.get(tileId);
   if (typer !== undefined && typer !== e.sender.id && ptyRelay.count(tileId) > 1) return;
@@ -1366,10 +1380,10 @@ function endSession(tileId: string): void {
   hcpStatus.forget(toBareId(tileId));
   hcpAgentOf.delete(toBareId(tileId));
 }
-ipcMain.on("ptyKill", (_e, tileId: string) => endSession(tileId));
+on("ptyKill", (_e, tileId: string) => endSession(tileId));
 // Detach (tile unmounted): the window stops watching; the last window to go lets go of the
 // session (daemons keep it alive, local or remote; in-process PTYs treat it as a kill).
-ipcMain.on("ptyDetach", (e, tileId: string) => {
+on("ptyDetach", (e, tileId: string) => {
   if (ptyRelay.leave(tileId, viewerOf(e.sender)) === 0) detachSession(tileId);
 });
 
@@ -1523,9 +1537,9 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
       listLocalSessions: () => (PERSIST_PTY ? ptyDaemon.listSessions() : Promise.resolve([])),
       version: app.getVersion(),
     }).catch((e: unknown) => console.warn("[machines] init failed:", e));
-    installViewManagementIpc(appWindowOf);
-    installPluginCatalogIpc(appWindowOf);
-    ipcMain.handle("views:list", wrap(async (_e, repoRoot: string | null) => listViewPackages(repoRoot ? String(repoRoot) : null)));
+    installViewManagementIpc();
+    installPluginCatalogIpc();
+    handle("views:list", wrap(async (_e, repoRoot: string | null) => listViewPackages(repoRoot ? String(repoRoot) : null)));
 
     // A repo's agents belong to that repo. Opening a second workspace must not take the
     // first one's agents out of the catalog (its tiles still spawn through it), and a
@@ -1558,7 +1572,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     }).catch((e: unknown) => {
       console.warn("[agents] manifest scan failed:", e);
     });
-    ipcMain.handle("agents:list", wrap(async (_e, repoRoot: string | null) => {
+    handle("agents:list", wrap(async (_e, repoRoot: string | null) => {
       const { defs, loaded, shadowed } = await scanAgents(repoRoot ? String(repoRoot) : undefined);
       // Main resolves providers too (spawn, HCP), so a rescan refreshes this process as well.
       // The reply stays scoped to the workspace that asked: other repos' agents are in
@@ -1569,16 +1583,16 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     // Switched-off agents are not in the catalog but still have a card.
     const knownDef = (id: string) => agentById(id) ?? lastLoaded.find((a) => a.id === id && a.def)?.def;
     // Detection must see the PATH tiles launch with, which the login shell supplies.
-    ipcMain.handle("agents:option-choices", wrap(async (_e, id: string) => {
+    handle("agents:option-choices", wrap(async (_e, id: string) => {
       await applyShellEnvToProcess();
       const def = knownDef(String(id));
       return def ? discoverOptions(def) : {};
     }));
-    ipcMain.handle("agents:presence", wrap(async () => {
+    handle("agents:presence", wrap(async () => {
       await applyShellEnvToProcess();
       return Object.fromEntries(getCatalog().map((d) => [d.id, agentPresence(d)]));
     }));
-    ipcMain.handle("agents:verify", wrap(async (_e, id: string) => {
+    handle("agents:verify", wrap(async (_e, id: string) => {
       await applyShellEnvToProcess();
       const def = knownDef(String(id));
       return def ? verifyAgent(def) : { path: null };
@@ -1648,7 +1662,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
       const e = path.extname(f).toLowerCase();
       return VIDEO_EXT.has(e) ? "video" : IMAGE_EXT.has(e) ? "image" : null;
     };
-    ipcMain.handle("wallpaper:import", (_e, srcPath: unknown) => {
+    handle("wallpaper:import", (_e, srcPath: unknown) => {
       try {
         const src = path.resolve(String(srcPath));
         if (!existsSync(src) || !statSync(src).isFile()) return null;
@@ -1706,7 +1720,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     // safe unique name, and return its hivemedia:// URL + classification. Returns
     // null if the user cancels.
     const MEDIA_VIDEO_EXT = new Set(["webm", "mp4", "mov"]);
-    ipcMain.handle("media:pick", async (_e, slotRaw: unknown) => {
+    handle("media:pick", async (_e, slotRaw: unknown) => {
       // Slot key → a per-slot filename PREFIX: "background", or "overlay:<id>" — one of
       // many stacked overlays, each its OWN slot so a new/replaced overlay only prunes
       // ITS file, never a sibling's. The id is sanitized (it names a file + a prune glob).
@@ -1802,7 +1816,7 @@ function startPlanReviewBridge(): void {
     });
   });
 }
-ipcMain.handle(
+handle(
   "plan-review:decide",
   wrap(async (_e, requestId: string, decision: "allow" | "deny", feedback?: string) => {
     const reply = planReplies.get(requestId);
@@ -1841,7 +1855,7 @@ function callWindow(win: BrowserWindow, method: string, params: unknown, timeout
     win.webContents.send("hcp:command", { id, method, params });
   });
 }
-ipcMain.handle(
+handle(
   "hcp:result",
   wrap(async (_e, id: string, ok: boolean, result: unknown, errorMessage?: string) => {
     const p = pendingHcp.get(id);
@@ -1884,18 +1898,18 @@ function startViewHost(): void {
   app.on("browser-window-blur", () => presence.evaluate());
   app.on("before-quit", () => { presence.evaluate(); persistTotals(); ledger?.stop(); });
 
-  ipcMain.on("viewLedger:append", (_e, lines: unknown) => { if (Array.isArray(lines)) ledger?.append(lines.slice(0, 10_000)); });
-  ipcMain.handle("viewLedger:snapshot", () => ledger?.snapshot() ?? []);
-  ipcMain.handle("viewLedger:history", (_e, layoutKey: unknown, day: unknown) => {
+  on("viewLedger:append", (_e, lines: unknown) => { if (Array.isArray(lines)) ledger?.append(lines.slice(0, 10_000)); });
+  handle("viewLedger:snapshot", () => ledger?.snapshot() ?? []);
+  handle("viewLedger:history", (_e, layoutKey: unknown, day: unknown) => {
     if (typeof layoutKey !== "string" || !isDay(day)) throw new Error("bad history request");
     if (!ledger) throw new Error("the status ledger is off");
     persistTotals();
     return ledger.history(layoutKey, day);
   });
-  ipcMain.on("ptyActivity:watch", (_e, ids: unknown) => {
+  on("ptyActivity:watch", (_e, ids: unknown) => {
     if (Array.isArray(ids)) ptyActivity.setWatched(ids.filter((x): x is string => typeof x === "string").slice(0, 1024));
   });
-  ipcMain.handle("presence:now", () => presence.current);
+  handle("presence:now", () => presence.current);
 
   const share = new ViewShare({
     reencode: (bytes) => {
@@ -1912,12 +1926,12 @@ function startViewHost(): void {
       return r.canceled || !r.filePath ? null : r.filePath;
     },
   });
-  ipcMain.handle("viewShare:prepare", (_e, png: unknown) => {
+  handle("viewShare:prepare", (_e, png: unknown) => {
     const buf = png instanceof ArrayBuffer ? png : ArrayBuffer.isView(png) ? png.buffer.slice(png.byteOffset, png.byteOffset + png.byteLength) as ArrayBuffer : null;
     if (!buf) throw new Error("not an image");
     return share.prepare(buf);
   });
-  ipcMain.handle("viewShare:commit", (_e, token: unknown, action: unknown, name: unknown) => {
+  handle("viewShare:commit", (_e, token: unknown, action: unknown, name: unknown) => {
     if (typeof token !== "string" || (action !== "copy" && action !== "save" && action !== "cancel")) throw new Error("bad share request");
     return share.commit(token, action, typeof name === "string" ? name : "");
   });
@@ -1974,13 +1988,13 @@ function startHcpControlPlane(): void {
   const dispatch: Dispatcher["dispatch"] = (method, params, call) => agentsScanned.then(() => _hcp.dispatch(method, params, call));
   // View protocol 1.4: a folder's past sessions, without what the agent wrote; a prompt the user
   // confirmed, delivered like `hive ctl send` (held while the agent is mid-turn).
-  ipcMain.handle("view:sessions", async (_e, agentId: unknown, cwd: unknown) => {
+  handle("view:sessions", async (_e, agentId: unknown, cwd: unknown) => {
     const def = typeof agentId === "string" ? agentById(agentId) : undefined;
     if (!def || typeof cwd !== "string" || !path.isAbsolute(cwd)) throw new Error("bad sessions request");
     const rows = await listSessions(def, { cwd, limit: 100 });
     return rows.map((s) => ({ id: s.id, ...(s.updated ? { updated: s.updated } : {}), ...(s.prompt ? { prompt: s.prompt } : {}) }));
   });
-  ipcMain.handle("view:prompt", async (_e, tileId: unknown, text: unknown) => {
+  handle("view:prompt", async (_e, tileId: unknown, text: unknown) => {
     if (typeof tileId !== "string" || promptProblem(text)) throw new Error("bad prompt");
     await dispatch("agent.send", { tileId, text }, { actor: { kind: "person" } }); // the person at the window
   });

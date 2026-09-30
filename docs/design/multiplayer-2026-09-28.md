@@ -260,6 +260,11 @@ exactly as today. They are ordered by dependency.
   every process of the user can read the install's token, so a tile token makes the actor right
   and does not wall an agent off; on one machine the boundary is the OS user. Hook notifications
   stay unauthenticated until peers (M1) need them not to be.
+- **Decided while building it, step 3a (2026-09-30).** The window's channels are registered in one
+  module that answers only the main frame of one of the app's windows, so a page a tile shows (a
+  browser tile's webview, a view's iframe) or any other window reaches none of them, whatever it
+  is given. A browser tile's registration names a page of its own window, so the debugger main
+  drives for it is always a browser page's.
 
 ### R8. A workspace API that is not Electron IPC
 

@@ -13,7 +13,8 @@
  * `app.exit` skips every later handler.
  */
 import path from "node:path";
-import { app, BrowserWindow, ipcMain, type IpcMainEvent, type WebContents } from "electron";
+import { app, BrowserWindow, type IpcMainEvent, type WebContents } from "electron";
+import { answer, on } from "./app-ipc.js";
 import { WorkspaceStore, type LegacyLayout, type ViewLayout } from "@hivemind/workspace-host/store";
 
 let store: WorkspaceStore | null = null;
@@ -51,18 +52,6 @@ export function workspaceStore(): WorkspaceStore {
   }));
 }
 
-/** Answer a synchronous request with what `run` returns, or null when it throws. */
-function answer(channel: string, run: (e: IpcMainEvent, ...args: unknown[]) => unknown): void {
-  ipcMain.on(channel, (e, ...args: unknown[]) => {
-    try {
-      e.returnValue = run(e, ...args) ?? null;
-    } catch (err) {
-      console.warn(`[workspace-store] ${channel}:`, err);
-      e.returnValue = null;
-    }
-  });
-}
-
 export function installWorkspaceStoreIpc(): void {
   const s = workspaceStore();
   const from = (e: IpcMainEvent) => { watch(e.sender); return { writer: writerOf(e.sender) }; };
@@ -76,7 +65,7 @@ export function installWorkspaceStoreIpc(): void {
   answer("workspace:set-objects-sync", (e, repo, objects, base) => s.setObjects(repo as string, objects, { ...from(e), base }));
   answer("workspace:undo-sync", (e, repo) => s.undo(repo as string, from(e)));
   answer("workspace:redo-sync", (e, repo) => s.redo(repo as string, from(e)));
-  ipcMain.on("workspace:shown", (e, repo: unknown, frame: unknown) => {
+  on("workspace:shown", (e, repo: unknown, frame: unknown) => {
     const id = e.sender.id;
     watch(e.sender);
     if (typeof repo === "string" && repo) shown.set(id, { repo, frame: typeof frame === "string" && frame ? frame : null });

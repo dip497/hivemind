@@ -7,7 +7,7 @@
  * and patches through IPC; the CLI edits the file and calls `settings.reload`
  * over HCP.
  */
-import { ipcMain } from "electron";
+import { answer, handle } from "./app-ipc.js";
 import { readFileSync } from "node:fs";
 import { mergeSettings, type Settings } from "@hivemind/core/settings-schema";
 import { patchSettingsFile, readSettings, settingsPath, updateSettings } from "@hivemind/core/settings";
@@ -118,13 +118,13 @@ function sanitizePatches(raw: unknown): { path: string; value: unknown }[] {
 
 /** IPC surface + change broadcast to the window. */
 export function installSettingsIpc(tellWindows: (channel: string, settings: Settings) => void): void {
-  ipcMain.on("settings:get-sync", (e) => { e.returnValue = getSettings(); });
-  ipcMain.handle("settings:get", () => getSettings());
-  ipcMain.handle("settings:replace", (_e, next: unknown) => replaceSettings(next));
-  ipcMain.handle("settings:set", (_e, dotted: unknown, value: unknown) => patchSettingsPath(String(dotted), value));
+  answer("settings:get-sync", () => getSettings());
+  handle("settings:get", () => getSettings());
+  handle("settings:replace", (_e, next: unknown) => replaceSettings(next));
+  handle("settings:set", (_e, dotted: unknown, value: unknown) => patchSettingsPath(String(dotted), value));
   // Batched dotted-path patches — what the renderer sends now (a full-object
   // replace from a debounced UI would revert whatever else was written meanwhile).
-  ipcMain.handle("settings:patch", (_e, patches: unknown) => patchSettings(sanitizePatches(patches)));
-  ipcMain.handle("settings:path", () => settingsFile());
+  handle("settings:patch", (_e, patches: unknown) => patchSettings(sanitizePatches(patches)));
+  handle("settings:path", () => settingsFile());
   onSettingsChange((s) => tellWindows("settings:changed", s));
 }

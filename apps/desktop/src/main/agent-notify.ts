@@ -17,7 +17,8 @@
  * alive while the window is unfocused/minimized, so transitions are still
  * detected and forwarded when you're away — which is exactly when you need this.
  */
-import { Notification, app, ipcMain, type BrowserWindow } from "electron";
+import { Notification, app, type BrowserWindow } from "electron";
+import { on } from "./app-ipc.js";
 import type { AgentNotice } from "../shared/ipc.js";
 import { shouldNotify } from "../shared/notification-settings.js";
 import { getNotificationSettings } from "./notification-settings-store.js";
@@ -26,8 +27,8 @@ import { composeNotice } from "./agent-notify-core.js";
 export { composeNotice } from "./agent-notify-core.js";
 
 /** Register the `notify:agent` IPC → native Notification bridge. `getWin` is
- *  read lazily so it survives window recreation. Returns a disposer. */
-export function registerAgentNotifications(getWin: () => BrowserWindow | null): () => void {
+ *  read lazily so it survives window recreation. */
+export function registerAgentNotifications(getWin: () => BrowserWindow | null): void {
   const onNotice = (_e: unknown, raw: unknown): void => {
     const rec = raw as AgentNotice | null;
     if (!rec || (rec.kind !== "needs" && rec.kind !== "done" && rec.kind !== "error")) return;
@@ -59,6 +60,5 @@ export function registerAgentNotifications(getWin: () => BrowserWindow | null): 
     try { app.dock?.bounce?.(critical ? "critical" : "informational"); } catch { /* macOS only */ }
   };
 
-  ipcMain.on("notify:agent", onNotice);
-  return () => { ipcMain.removeListener("notify:agent", onNotice); };
+  on("notify:agent", onNotice);
 }

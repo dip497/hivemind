@@ -3,7 +3,8 @@
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import path from "node:path";
-import { app, ipcMain, type BrowserWindow } from "electron";
+import { app } from "electron";
+import { handle } from "./app-ipc.js";
 import { appMeetsMinVersion, catalogAgentNeedsUpdate, fetchCatalog, stageEntry, type CatalogEntry } from "@hivemind/core/plugin-catalog";
 import { installAgent, readAgentManifest, removeAgent, userAgentsDir, AGENT_MANIFEST_FILE } from "@hivemind/agents/load";
 import { findBin, verifyAgent } from "@hivemind/agents/discover";
@@ -31,16 +32,10 @@ export interface AgentReview {
   install?: { url: string; command?: string };
 }
 
-export function installPluginCatalogIpc(appWindowOf: (sender: Electron.WebContents) => BrowserWindow | null): void {
+export function installPluginCatalogIpc(): void {
   let catalog: CatalogEntry[] = [];
   let pendingAgent: { token: string; dir: string } | null = null;
-  const assertSender = (event: Electron.IpcMainInvokeEvent) => {
-    const win = appWindowOf(event.sender);
-    if (!win || event.senderFrame !== win.webContents.mainFrame) throw new Error("Only the workspace can install plugins");
-  };
-
-  ipcMain.handle("plugins:catalog", async (event) => {
-    assertSender(event);
+  handle("plugins:catalog", async () => {
     catalog = await fetchCatalog();
     return catalog;
   });
@@ -49,8 +44,7 @@ export function installPluginCatalogIpc(appWindowOf: (sender: Electron.WebConten
   // their own, so "is there an update" was unanswerable for them and the button never
   // appeared — but every file is pinned by hash, which answers it exactly: a manifest whose
   // bytes differ from the listed hash is a copy of something that has since changed.
-  ipcMain.handle("plugins:outdated", async (event) => {
-    assertSender(event);
+  handle("plugins:outdated", async () => {
     const out: string[] = [];
     for (const entry of catalog) {
       if (entry.type !== "agent") continue;
@@ -64,8 +58,7 @@ export function installPluginCatalogIpc(appWindowOf: (sender: Electron.WebConten
     return out;
   });
 
-  ipcMain.handle("plugins:review", async (event, type: string, id: string) => {
-    assertSender(event);
+  handle("plugins:review", async (_event, type: string, id: string) => {
     const entry = catalog.find((e) => e.type === type && e.id === id);
     if (!entry) throw new Error("That plugin is not in the catalog. Refresh and try again.");
     // Refuse before downloading: a plugin that needs a newer Hivemind fails at use, and by
@@ -103,8 +96,7 @@ export function installPluginCatalogIpc(appWindowOf: (sender: Electron.WebConten
 
   // Once per launch, asked for by the workspace once it is up, so the result has a listener.
   let autoInstalled = false;
-  ipcMain.handle("agents:auto-install", async (event) => {
-    assertSender(event);
+  handle("agents:auto-install", async () => {
     if (autoInstalled) return { added: [], updated: [] };
     autoInstalled = true;
     try {
@@ -117,13 +109,11 @@ export function installPluginCatalogIpc(appWindowOf: (sender: Electron.WebConten
     }
   });
 
-  ipcMain.handle("agents:remove", async (event, id: string) => {
-    assertSender(event);
+  handle("agents:remove", async (_event, id: string) => {
     await removeInstalledAgent(String(id));
   });
 
-  ipcMain.handle("plugins:install-agent", async (event, token: string) => {
-    assertSender(event);
+  handle("plugins:install-agent", async (_event, token: string) => {
     if (!pendingAgent || pendingAgent.token !== token) throw new Error("Review the agent again before installing it.");
     const { dir } = pendingAgent;
     pendingAgent = null;

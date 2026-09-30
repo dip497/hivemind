@@ -157,7 +157,6 @@ const api: HiveIpc & {
 
   browserRegister: (tileId, webContentsId, frameId, url) =>
     ipcRenderer.send("browser:register", tileId, webContentsId, frameId, url),
-  browserUnregister: (tileId) => ipcRenderer.send("browser:unregister", tileId),
   browserCdp: (tileId, method, params) =>
     ipcRenderer.invoke("browserCdp", tileId, method, params),
   getBrowserSettings: () => ipcRenderer.invoke("getBrowserSettings"),
