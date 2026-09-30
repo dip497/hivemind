@@ -8,8 +8,8 @@ import { normalizeComments, readComments, reviewRoot, writeComments } from "@hiv
 
 export const reviews: Domain<"review.list" | "review.save"> = {
   answers: {
-    "review.list": async (repo) => readComments(await reviewRoot(text(repo, "repo"))),
-    "review.save": async (repo, comments) => {
+    "review.list": async (_, repo) => readComments(await reviewRoot(text(repo, "repo"))),
+    "review.save": async (_, repo, comments) => {
       const r = text(repo, "repo");
       // Saving replaces every comment: what is not a list would save none.
       if (!Array.isArray(comments)) throw new ApiError("BAD_REQUEST", "comments must be a list");

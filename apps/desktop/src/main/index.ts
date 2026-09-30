@@ -85,6 +85,8 @@ import { SUBMIT_DELAY_MS } from "../shared/agent-io.js";
 import { INITIAL_PROMPT_ENV } from "@hivemind/agent-host/initial-prompt";
 import { WorkspaceServer, named } from "@hivemind/workspace-api/server";
 import { workspaceDomains } from "./workspace/domains.js";
+import { agents } from "./workspace/agents.js";
+import { serveWorkspaceApi } from "./workspace-ipc.js";
 import { fileIn } from "./workspace/repo-paths.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -269,6 +271,7 @@ async function createWindow(target: string | null = cliLaunchTarget): Promise<vo
   // win.webContents throws "Object has been destroyed".
   const wc = win.webContents;
   registerWindow(win);
+  workspaceIpc.connect(win.webContents);
   launchTargets.set(wc, target);
 
   attachWinStateSaver(win);
@@ -808,11 +811,20 @@ handle(
   "resolveIssueRoot",
   wrap(async (_e, id: string) => ({ root: await resolveRootForIssue(id) })),
 );
-// git and worktrees, files, issues and review comments: the workspace API (R8), one channel for
-// every method, answered as the person at the window. Its answer is a result or an error with a
-// code; it never throws.
-const workspaceServer = new WorkspaceServer(workspaceDomains, hostIntents());
-handle("workspace", (_e, method: unknown, params: unknown) => workspaceServer.answer(method, params, PERSON));
+// The workspace API (R8): git and worktrees, files, issues, review comments, and agents' status
+// and links. Each window is a connection to it (workspace-ipc.ts), which is answered as the person
+// at the window, and sent its events.
+const workspaceServer = new WorkspaceServer([
+  ...workspaceDomains,
+  agents({
+    statuses: () => hcpStatus.all(),
+    links: () => ({
+      pipes: hcpPipes.edges().map(([src, dst]) => ({ src, dst })),
+      spawns: [...spawnWires].map(([child, parent]) => ({ parent, child })),
+    }),
+  }),
+], hostIntents(), (m) => console.warn(`[workspace] ${m}`));
+const workspaceIpc = serveWorkspaceApi(workspaceServer);
 
 // Files the terminal will hand to the OS opener — a VIEWABLE allowlist, not a
 // denylist, so executables / installers / shortcuts (.exe .desktop .lnk .msi
@@ -945,7 +957,7 @@ const hcpTurns = new TurnTracker();
 const hcpStatus = new StatusStore();
 const SCREEN_STATES = new Set<ScreenState>(["idle", "working", "permission", "question", "blocked"]);
 hcpStatus.subscribe((change) => {
-  broadcast("hcp:status", change);
+  workspaceServer.publish("status.changed", change);
 });
 // A lost SubagentStop (the subagent errored, the turn was interrupted, the session compacted)
 // would pin a tile's subagents forever: once the last subagent edge is this old, the host
@@ -1168,13 +1180,6 @@ on("ptyWrite", (e, tileId: string, data: string, paste?: boolean) => {
   ptyRelay.markInput(tileId);
   writePty(tileId, data, paste);
 });
-handle("hcp:status-all", () => hcpStatus.all());
-// The agent links there are now, for a window that opens (or reloads) after they were drawn;
-// every change after this answer is pushed (`hcp:pipe`, `hcp:spawn`).
-handle("hcp:links", () => ({
-  pipes: hcpPipes.edges().map(([src, dst]) => ({ src, dst })),
-  spawns: [...spawnWires].map(([child, parent]) => ({ parent, child })),
-}));
 // Whether any view of the asking window shows the tile. Hidden, the window is sent nothing for it
 // while the host keeps its screen; shown again, the screen, then live bytes.
 on("ptyInterest", (e, tileId: string, shown: boolean) => {
@@ -1777,12 +1782,12 @@ function startViewHost(): void {
 function startHcpControlPlane(): void {
   const userData = app.getPath("userData");
   const token = readOrCreateToken(userData);
-  const pushPipe = (src: string, dst: string | null, connected: boolean) => broadcast("hcp:pipe", { src, dst, connected });
+  const pushPipe = (src: string, dst: string | null, connected: boolean) => workspaceServer.publish("link.pipe", { src, dst, connected });
   const pushSpawn = (child: string, parent: string | null, connected: boolean) => {
     // Kept for a window that opens late; a drop takes every wire touching `child`, as a window does.
     if (connected && parent) spawnWires.set(child, parent);
     else for (const [c, p] of spawnWires) if (c === child || p === child) spawnWires.delete(c);
-    broadcast("hcp:spawn", { child, parent, connected });
+    workspaceServer.publish("link.spawn", { child, parent, connected });
   };
   const _hcp = makeDispatch({
     agentOf: (bare) => hcpAgentOf.get(bare),
@@ -1814,7 +1819,7 @@ function startHcpControlPlane(): void {
     workspaces: workspaceStore(),
     shownWorkspace,
     launchOptions: (agentId) => getAppSettings().agents.options[agentId] ?? {},
-    announceSpawn: (spawn) => { controlSpawned.add(spawn.tileId); broadcast("hcp:spawned", spawn); },
+    announceSpawn: (spawn) => { controlSpawned.add(spawn.tileId); workspaceServer.publish("tile.opened", spawn); },
     status: hcpStatus,
     endSession,
     sessionHeld: (id) => hasSession(id) || hasRemotePty(id),

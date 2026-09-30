@@ -11,6 +11,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@hivemind/agent-host": "workspace:*",
     "@hivemind/core": "workspace:*",
     "@hivemind/workspace-host": "workspace:*"
   },

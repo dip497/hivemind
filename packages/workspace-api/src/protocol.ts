@@ -17,6 +17,9 @@ export interface ErrorBody { code: ErrorCode; message: string }
 /** What a host answers a call with. */
 export type Answer = { result: unknown } | { error: ErrorBody };
 
+/** What a host sends a client unasked, over the connection the client holds open. */
+export interface EventMessage { event: string; params: unknown[] }
+
 /** A call that failed, with its code: what a handler throws to refuse, and what a client throws. */
 export class ApiError extends Error {
   constructor(readonly code: ErrorCode, message: string) {

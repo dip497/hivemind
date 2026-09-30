@@ -20,12 +20,26 @@ every call, and a method that returns nothing answers `{"result": null}`. `code`
 | `UNKNOWN_METHOD` | No such method on this host. |
 | `FAILED` | It ran and failed: git refused, a file could not be written. `message` says why, ending in the system's code when there is one (`… (ENOENT)`). |
 
+A **notice** is a call that asks for no answer, `{method, params}` sent one way: the hot path (a
+keystroke, a resize, flow control) and what a client tells the host about itself. A host never
+answers a notice; one that is unknown or fails is logged on the host.
+
+An **event** is what a host sends a client unasked: `{event, params}`, with a dotted name and
+positional params like a call. A client holds a **connection** open to the host; each event goes
+to every connection, or to those it concerns (a terminal's output to the clients that show it),
+from when the connection opens until it closes. When it closes, the host lets go of what it held
+for it.
+
 ## Transports
 
-| Transport | Caller | A call | Its answer |
-|---|---|---|---|
-| Electron IPC | the app's windows | `invoke("workspace", method, params)`, from the main frame of an app window (from anywhere else it is rejected) | the answer |
-| HTTP | the dev-bridge's page | `POST /workspace`, body `{"method", "params"}`, header `x-hive-token` | 200 with the answer; 401 without the token |
+| Transport | Caller | Its connection | A call | A notice | Events |
+|---|---|---|---|---|---|
+| Electron IPC | the app's windows | the window, from when it opens until it closes | `invoke("workspace", method, params)` → the answer | `send("workspace:notice", method, params)` | `workspace:event`, one `{event, params}` each |
+| HTTP | the dev-bridge's page | its event stream: `GET /workspace/events?token=…`, whose first event, `connection`, carries `{id}` | `POST /workspace`, body `{"method", "params"}` → 200 with the answer | `POST /workspace/notice`, same body → 204 | the stream's `data:` lines, one `{event, params}` each |
+
+Over Electron only the main frame of an app window is heard; anything else is rejected. Over HTTP
+every request carries the token (`x-hive-token`, or `token` on the stream) and a call or notice
+names its connection (`x-hive-connection`): 401 without the token, 400 without a connection.
 
 ## Who asks, and the audit log
 
@@ -95,9 +109,21 @@ given the reciprocal). `other` and `prefix` may name another workspace of the
 host's. A change is signed `ui` in the issue's activity, whoever calls: who asked is in the audit
 log.
 
+| `status.all` | | `[{tileId, status}]`, every agent session's status (`spec/status.md`) | read |
+| `link.list` | | `{pipes: [{src, dst}], spawns: [{parent, child}]}` | read |
+
 A diff's `scope` is one of `{"kind": "working", "staged"?}`, `{"kind": "branch", "base"?,
 "head"?}` (what `head`, HEAD by default, adds since it left `base`), `{"kind": "unpushed",
 "base"?}` and `{"kind": "commit", "sha"}`, each with `ignoreWhitespace`?.
+
+## Events
+
+| Event | Params | Sent |
+|---|---|---|
+| `status.changed` | `{seq, tileId, status}` | to every client, on each change to an agent session's status |
+| `link.pipe` | `{src, dst, connected}` (`dst` null: every pipe from `src`) | to every client, as a pipe between agents is connected or cut |
+| `link.spawn` | `{child, parent, connected}` (`parent` null: every wire touching `child`) | to every client, as an agent spawns another, or the tile goes |
+| `tile.opened` | `{tileId, repo, prompt?, background}` | to every client, as the control plane opens a tile, before it reaches the layout: a client showing `repo` starts it |
 
 ## Implementations
 

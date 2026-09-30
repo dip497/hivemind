@@ -17,7 +17,9 @@ after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 // Review comments of a repo with no workspace go under the config dir: keep them in this test's.
 process.env.XDG_CONFIG_HOME = path.join(tmp, "config");
 const server = new WorkspaceServer(workspaceDomains, new Intents(new AuditLog({ file: path.join(tmp, "audit.jsonl") })));
-const ask = (method: string, ...params: unknown[]) => server.answer(method, params, { kind: "person" });
+/** The app's window, as a connection: the person at this machine. */
+const window = { actor: { kind: "person" } as const, send: () => {}, closed: new AbortController().signal };
+const ask = (method: string, ...params: unknown[]) => server.answer(method, params, window);
 async function result<T>(method: string, ...params: unknown[]): Promise<T> {
   const answer = await ask(method, ...params);
   if ("error" in answer) throw new Error(`${method}: ${answer.error.code} ${answer.error.message}`);

@@ -527,6 +527,9 @@ importers:
 
   packages/workspace-api:
     dependencies:
+      '@hivemind/agent-host':
+        specifier: workspace:*
+        version: link:../agent-host
       '@hivemind/core':
         specifier: workspace:*
         version: link:../hive-core

@@ -2,10 +2,15 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { HiveIpc, PlanReviewOpen, HcpCommand, HcpPipeEvent, HcpSpawnEvent, HcpSpawnedEvent, HcpStatusEvent, AppErrorEvent } from "../shared/ipc.js";
 import { WorkspaceClient } from "@hivemind/workspace-api/client";
-import type { Answer } from "@hivemind/workspace-api/protocol";
+import type { Answer, EventMessage } from "@hivemind/workspace-api/protocol";
 
-/** The workspace API (R8), over the one channel main answers it on. */
-const workspace = new WorkspaceClient({ call: (method, params) => ipcRenderer.invoke("workspace", method, params) as Promise<Answer> });
+/** The workspace API (R8): this window's connection to main, which answers its calls on one
+ *  channel, takes its notices on another, and sends it events on a third. */
+const workspace = new WorkspaceClient({
+  call: (method, params) => ipcRenderer.invoke("workspace", method, params) as Promise<Answer>,
+  notice: (method, params) => ipcRenderer.send("workspace:notice", method, params),
+  events: (listener) => { ipcRenderer.on("workspace:event", (_e, message: EventMessage) => listener(message)); },
+});
 
 const api: HiveIpc & {
   /** The host OS, so the renderer can pick a default shell without an IPC
@@ -298,28 +303,12 @@ const api: HiveIpc & {
     ipcRenderer.on("hcp:command", listener);
     return () => ipcRenderer.removeListener("hcp:command", listener);
   },
-  onHcpSpawn: (cb: (e: HcpSpawnEvent) => void) => {
-    const listener = (_: unknown, e: HcpSpawnEvent) => cb(e);
-    ipcRenderer.on("hcp:spawn", listener);
-    return () => ipcRenderer.removeListener("hcp:spawn", listener);
-  },
-  onHcpSpawned: (cb: (e: HcpSpawnedEvent) => void) => {
-    const listener = (_: unknown, e: HcpSpawnedEvent) => cb(e);
-    ipcRenderer.on("hcp:spawned", listener);
-    return () => ipcRenderer.removeListener("hcp:spawned", listener);
-  },
-  onHcpPipe: (cb: (e: HcpPipeEvent) => void) => {
-    const listener = (_e: unknown, ev: HcpPipeEvent) => cb(ev);
-    ipcRenderer.on("hcp:pipe", listener);
-    return () => ipcRenderer.removeListener("hcp:pipe", listener);
-  },
-  hcpStatusAll: () => ipcRenderer.invoke("hcp:status-all"),
-  hcpLinks: () => ipcRenderer.invoke("hcp:links"),
-  onHcpStatus: (cb: (e: HcpStatusEvent) => void) => {
-    const listener = (_e: unknown, ev: HcpStatusEvent) => cb(ev);
-    ipcRenderer.on("hcp:status", listener);
-    return () => ipcRenderer.removeListener("hcp:status", listener);
-  },
+  onHcpSpawn: (cb) => workspace.on("link.spawn", cb),
+  onHcpSpawned: (cb) => workspace.on("tile.opened", cb),
+  onHcpPipe: (cb) => workspace.on("link.pipe", cb),
+  hcpStatusAll: () => workspace.call("status.all"),
+  hcpLinks: () => workspace.call("link.list"),
+  onHcpStatus: (cb) => workspace.on("status.changed", cb),
   onAppError: (cb: (e: AppErrorEvent) => void) => {
     const listener = (_e: unknown, ev: AppErrorEvent) => cb(ev);
     ipcRenderer.on("app:error", listener);

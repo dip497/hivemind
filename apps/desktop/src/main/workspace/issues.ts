@@ -30,31 +30,31 @@ const between = (id: unknown, other: unknown) => (named(id) && named(other) ? `$
 
 export const issues: Domain<IssueMethod> = {
   answers: {
-    "issue.list": (root) => listIssues(rootOf(root)),
-    "issue.read": (root, id) => readIssue(rootOf(root), idOf(id)),
-    "issue.create": (root, issue) => {
+    "issue.list": (_, root) => listIssues(rootOf(root)),
+    "issue.read": (_, root, id) => readIssue(rootOf(root), idOf(id)),
+    "issue.create": (_, root, issue) => {
       const r = rootOf(root);
       return changed(r, createIssue(r, shaped(NewIssueZ, issue, "issue")));
     },
-    "issue.update": (root, id, patch) => {
+    "issue.update": (_, root, id, patch) => {
       const r = rootOf(root);
       return changed(r, updateIssue(r, idOf(id), shaped(IssuePatchZ, patch, "patch"), "ui"));
     },
-    "issue.setState": (root, id, state, note) => {
+    "issue.setState": (_, root, id, state, note) => {
       const r = rootOf(root);
       return changed(r, updateIssue(r, idOf(id), { state: shaped(IssueStateZ, state, "state") }, "ui", note == null ? undefined : written(note, "note")));
     },
-    "issue.comment": (root, id, message) => {
+    "issue.comment": (_, root, id, message) => {
       const r = rootOf(root);
       return changed(r, commentOnIssue(r, idOf(id), text(message, "message"), "ui"));
     },
-    "issue.delete": (root, id) => {
+    "issue.delete": (_, root, id) => {
       const r = rootOf(root);
       return changed(r, deleteIssue(r, idOf(id)));
     },
-    "issue.link": (root, id, other, type) => linkIssues(rootOf(root), idOf(id), text(other, "other"), shaped(LinkTypeZ, type, "type"), "ui"),
-    "issue.unlink": async (root, id, other) => ({ removed: await unlinkIssues(rootOf(root), idOf(id), text(other, "other"), "ui") }),
-    "issue.move": (root, id, prefix, mode) =>
+    "issue.link": (_, root, id, other, type) => linkIssues(rootOf(root), idOf(id), text(other, "other"), shaped(LinkTypeZ, type, "type"), "ui"),
+    "issue.unlink": async (_, root, id, other) => ({ removed: await unlinkIssues(rootOf(root), idOf(id), text(other, "other"), "ui") }),
+    "issue.move": (_, root, id, prefix, mode) =>
       transferIssue(rootOf(root), idOf(id), text(prefix, "prefix").toUpperCase(), { mode: oneOf(mode, "mode", ["move", "copy"] as const), actor: "ui" }),
   },
   effects: {

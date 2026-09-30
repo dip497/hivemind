@@ -45,8 +45,9 @@ import { fileURLToPath } from "node:url";
 import { findRoot } from "@hivemind/core";
 import { Intents } from "@hivemind/workspace-host/intents";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
-import { WorkspaceServer } from "@hivemind/workspace-api/server";
+import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server";
 import { workspaceDomains } from "../main/workspace/domains";
+import { agents } from "../main/workspace/agents";
 import { spawnPty, writePty, resizePty, killPty, pausePty, resumePty } from "../main/pty-host";
 import { applyShellEnvToProcess } from "@hivemind/agent-host/shell-env";
 import chokidar from "chokidar";
@@ -74,11 +75,18 @@ const PROTECTED_METHODS = new Set([
 ]);
 
 // The workspace API (R8): the same server main answers the app's windows with, as the person at
-// this machine, and recorded in the dev app's audit log. Every call needs the token.
-const workspaceServer = new WorkspaceServer(workspaceDomains, new Intents(new AuditLog({
+// this machine, and recorded in the dev app's audit log. A page connects by opening its event
+// stream (GET /workspace/events), which names its connection; its calls and notices name that
+// connection. Every one needs the token. No control plane runs here, so no agent has a status.
+const workspaceServer = new WorkspaceServer([
+  ...workspaceDomains,
+  agents({ statuses: () => [], links: () => ({ pipes: [], spawns: [] }) }),
+], new Intents(new AuditLog({
   file: path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config"), "hivemind-dev", "audit.jsonl"),
   onWarn: (m) => console.warn(`[audit] ${m}`),
-})));
+})), (m) => console.warn(`[workspace] ${m}`));
+/** Each page's connection, by the id its event stream was given. */
+const workspaceConnections = new Map<string, Connection>();
 
 // Set (not Map<"global", Response>) — previously a second SSE subscriber
 // would clobber the first because both wrote to ptyStreams.get("global").
@@ -140,17 +148,42 @@ const PREVIEW_SCRIPT = `
     if (ct.includes("application/json")) return r.json();
     return undefined;
   }
-  // The workspace API: one call, its answer a result or an error with a code.
+  // The workspace API: this page's connection is its event stream, which names it; a call's
+  // answer is a result or an error with a code; a notice is answered with nothing.
+  const workspaceListeners = {};
+  const connection = tokenP.then((token) => new Promise((resolve) => {
+    const es = new EventSource(BRIDGE + "/workspace/events?token=" + encodeURIComponent(token));
+    es.addEventListener("connection", (ev) => resolve(JSON.parse(ev.data).id));
+    es.onmessage = (ev) => {
+      const { event, params } = JSON.parse(ev.data);
+      for (const cb of workspaceListeners[event] || []) {
+        try { cb(...params); } catch (e) { console.error("[workspace] a listener for " + event + " failed:", e); }
+      }
+    };
+  }));
+  async function workspaceHeaders() {
+    return { ...(await authHeaders()), "x-hive-connection": await connection };
+  }
   async function api(method, ...params) {
     const r = await fetch(BRIDGE + "/workspace", {
       method: "POST",
-      headers: await authHeaders(),
+      headers: await workspaceHeaders(),
       body: JSON.stringify({ method, params }),
     });
     if (!r.ok) throw new Error(await r.text());
     const answer = await r.json();
     if (answer.error) throw Object.assign(new Error(answer.error.message), { code: answer.error.code });
     return answer.result;
+  }
+  function apiNotice(method, ...params) {
+    workspaceHeaders().then((headers) => fetch(BRIDGE + "/workspace/notice", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ method, params }),
+    })).catch((e) => console.error("[workspace] " + method + ":", e));
+  }
+  function onEvent(event, cb) {
+    return subscribe(workspaceListeners, event, cb);
   }
   function notify(method) {
     return async (...args) => fetch(BRIDGE + "/notify/" + method, {
@@ -199,6 +232,12 @@ const PREVIEW_SCRIPT = `
     reviewSave:        (r,c) => api("review.save", r, c),
     fileRead:          (r,f) => api("file.read", r, f),
     fileWrite:         (r,f,c) => api("file.write", r, f, c),
+    hcpStatusAll:      () => api("status.all"),
+    hcpLinks:          () => api("link.list"),
+    onHcpStatus:       (cb) => onEvent("status.changed", cb),
+    onHcpPipe:         (cb) => onEvent("link.pipe", cb),
+    onHcpSpawn:        (cb) => onEvent("link.spawn", cb),
+    onHcpSpawned:      (cb) => onEvent("tile.opened", cb),
     gitStatus:         (r) => api("git.status", r),
     gitListFiles:      (r) => api("git.listFiles", r),
     gitListBranches:   (r) => api("git.listBranches", r),
@@ -305,7 +344,7 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse): Prom
     res.end(PREVIEW_SCRIPT);
     return;
   }
-  if (req.method === "GET" && !url.pathname.startsWith("/rpc/") && !url.pathname.startsWith("/notify/") && !url.pathname.startsWith("/events/")) {
+  if (req.method === "GET" && !url.pathname.startsWith("/rpc/") && !url.pathname.startsWith("/notify/") && !url.pathname.startsWith("/events/") && !url.pathname.startsWith("/workspace/")) {
     return serveStatic(url, res);
   }
 
@@ -334,9 +373,34 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse): Prom
     return;
   }
 
-  if (req.method === "POST" && url.pathname === "/workspace") {
+  if (req.method === "GET" && url.pathname === "/workspace/events") {
+    const token = url.searchParams.get("token");
+    if (!token || !timingSafeEq(token, AUTH_TOKEN)) {
+      res.writeHead(401).end("unauthorized: token missing or wrong");
+      return;
+    }
+    const id = randomBytes(16).toString("hex");
+    const gone = new AbortController();
+    const connection: Connection = {
+      actor: { kind: "person" },
+      send: (message) => { if (!res.writableEnded) res.write(`data: ${JSON.stringify(message)}\n\n`); },
+      closed: gone.signal,
+    };
+    res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
+    res.write(`event: connection\ndata: ${JSON.stringify({ id })}\n\n`);
+    workspaceConnections.set(id, connection);
+    workspaceServer.connect(connection);
+    req.on("close", () => { workspaceConnections.delete(id); gone.abort(); });
+    return;
+  }
+  if (req.method === "POST" && (url.pathname === "/workspace" || url.pathname === "/workspace/notice")) {
     if (!checkToken(req)) {
       res.writeHead(401).end("unauthorized: x-hive-token missing or wrong");
+      return;
+    }
+    const from = workspaceConnections.get(String(req.headers["x-hive-connection"]));
+    if (!from) {
+      res.writeHead(400).end("no connection: open GET /workspace/events and name it in x-hive-connection");
       return;
     }
     let call: { method?: unknown; params?: unknown };
@@ -346,7 +410,12 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse): Prom
       res.writeHead(400).end("a call is JSON: { method, params }");
       return;
     }
-    const answer = await workspaceServer.answer(call.method, call.params, { kind: "person" });
+    if (url.pathname === "/workspace/notice") {
+      workspaceServer.notice(call.method, call.params, from);
+      res.writeHead(204).end();
+      return;
+    }
+    const answer = await workspaceServer.answer(call.method, call.params, from);
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify(answer));
     return;

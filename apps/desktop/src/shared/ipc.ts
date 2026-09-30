@@ -479,42 +479,14 @@ export interface HcpCommand {
   params: unknown;
 }
 
-/** Pushed main→renderer when an agent pipe is created/removed, so the canvas can
- *  draw/erase the animated "data flow" edge. `dst` is null when ALL of src's
- *  pipes were removed. */
-export interface HcpPipeEvent {
-  src: string;
-  dst: string | null;
-  connected: boolean;
-}
-
-/** Pushed main→renderer when an agent SPAWNS another agent (tile.spawn_agent /
- *  workflow), so the canvas can draw a persistent parentage "wire" from parent to
- *  child — ALWAYS, independent of the report/data pipe (`hcp:pipe`). `parent` is
- *  null with connected:false to drop every spawn link touching `child` (on close). */
-export interface HcpSpawnEvent {
-  child: string;
-  parent: string | null;
-  connected: boolean;
-}
-
-/** Pushed main→renderer as the control plane opens a tile (spawn, open-tool), before the tile
- *  reaches the layout: the window that shows `repo` starts it with `prompt`, and brings it forward
- *  unless it is a `background` worker. */
-export interface HcpSpawnedEvent {
-  tileId: string;
-  repo: string;
-  prompt?: string;
-  background: boolean;
-}
-
-/** Pushed main→renderer on every change to an agent session's status (the host's status
- *  store: packages/agent-host/src/status-store.ts). `tileId` is the bare tile id. */
-export interface HcpStatusEvent {
-  seq: number;
-  tileId: string;
-  status: SessionStatus;
-}
+// Agents' status and links: the workspace API's `status.changed`, `link.pipe`, `link.spawn` and
+// `tile.opened` events, under the names the window has always used.
+export type {
+  PipeChange as HcpPipeEvent,
+  SpawnChange as HcpSpawnEvent,
+  TileOpened as HcpSpawnedEvent,
+  StatusChange as HcpStatusEvent,
+} from "@hivemind/workspace-api/agents";
 
 /** Where a tile's current status began, as main remembers it across a renderer reload. */
 export interface LedgerSince { id: string; bucket: ViewStatus; since: number; exact: boolean }

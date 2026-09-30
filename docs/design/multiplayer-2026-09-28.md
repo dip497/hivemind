@@ -303,6 +303,14 @@ exactly as today. They are ordered by dependency.
   and the file cannot drift apart; a field it does not know is dropped, so a caller cannot sign
   an issue's activity with a name of its choosing. Until M1 names people, every change through the
   API is signed `ui` there, and who asked is the audit log's to say.
+- **Decided while building it, step 3a (2026-09-30).** A client holds a connection to the host,
+  and a transport makes one per client: over Electron a window, from when it opens (not from its
+  first call, so it misses no event) until it closes; over the dev-bridge's HTTP, the page's
+  event stream, which names it, since a request alone names no one. Every handler is given the
+  connection its call came over, so a domain can keep what a client holds (a terminal it shows)
+  and let go of it when the connection goes (`gone`). The hot path is a notice, which is never
+  answered, so a keystroke costs one message; an event carries positional params like a call.
+  The window keeps its names (`onHcpStatus`, `hcpLinks`) as the client's.
 
 ### R9. Machines by id, not by ssh uri
 

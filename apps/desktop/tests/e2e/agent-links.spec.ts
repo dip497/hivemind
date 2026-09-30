@@ -1,7 +1,7 @@
 // Agent wiring on the canvas: a pipe (hive_connect) is an animated line from the agent whose
 // output feeds another to that agent, and a spawn wire a dashed line from an agent to the one it
-// spawned. Both reach the window from main (`hcp:pipe`, `hcp:spawn`), which is where this starts
-// them, between two shells on a fresh repo and profile.
+// spawned. Both reach the window from main as workspace API events (`link.pipe`, `link.spawn`),
+// which is where this starts them, between two shells on a fresh repo and profile.
 import { test, expect, _electron as electron } from "@playwright/test";
 import { execSync } from "node:child_process";
 import fs from "node:fs";
@@ -35,11 +35,11 @@ test("a pipe and a spawn wire are drawn from one tile to the other, and go when 
   await newTerminal.click();
   await expect(terminals).toHaveCount(2);
   const [a, b] = await terminals.evaluateAll((nodes) => nodes.map((n) => n.getAttribute("data-id")!));
-  const send = (channel: string, event: object) =>
-    app.evaluate(({ BrowserWindow }, [c, e]) => BrowserWindow.getAllWindows()[0]!.webContents.send(c, e), [channel, event] as const);
+  const send = (event: string, change: object) =>
+    app.evaluate(({ BrowserWindow }, [e, c]) => BrowserWindow.getAllWindows()[0]!.webContents.send("workspace:event", { event: e, params: [c] }), [event, change] as const);
 
-  await send("hcp:spawn", { parent: a, child: b, connected: true });
-  await send("hcp:pipe", { src: a, dst: b, connected: true });
+  await send("link.spawn", { parent: a, child: b, connected: true });
+  await send("link.pipe", { src: a, dst: b, connected: true });
 
   // Each line starts on the edge of one tile and ends on the edge of the other.
   const ends = (selector: string) => page.evaluate(({ selector, a, b }) => {
@@ -60,10 +60,10 @@ test("a pipe and a spawn wire are drawn from one tile to the other, and go when 
   await expect.poll(() => ends(".react-flow__edge-spawn")).toEqual({ fromA: true, toB: true });
   await expect.poll(() => ends(".react-flow__edge-dataflow")).toEqual({ fromA: true, toB: true });
 
-  await send("hcp:pipe", { src: a, dst: b, connected: false });
+  await send("link.pipe", { src: a, dst: b, connected: false });
   await expect(page.locator(".react-flow__edge-dataflow")).toHaveCount(0);
   await expect(page.locator(".react-flow__edge-spawn")).toHaveCount(1);
-  await send("hcp:spawn", { child: b, connected: false });
+  await send("link.spawn", { child: b, connected: false });
   await expect(page.locator(".react-flow__edge-spawn")).toHaveCount(0);
   await app.close();
 });

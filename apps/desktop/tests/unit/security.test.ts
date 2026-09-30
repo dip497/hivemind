@@ -17,8 +17,9 @@ import { workspaceDomains } from "../../src/main/workspace/domains.ts";
 const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "hm-security-")));
 after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 const server = new WorkspaceServer(workspaceDomains, new Intents(new AuditLog({ file: path.join(tmp, "audit.jsonl") })));
-/** A call as the app's window makes it; the answer as it comes back. */
-const ask = (method: string, ...params: unknown[]) => server.answer(method, params, { kind: "person" });
+/** The app's window, as a connection: the person at this machine. */
+const window = { actor: { kind: "person" } as const, send: () => {}, closed: new AbortController().signal };
+const ask = (method: string, ...params: unknown[]) => server.answer(method, params, window);
 const codeOf = async (method: string, ...params: unknown[]) => {
   const answer = await ask(method, ...params);
   return "error" in answer ? answer.error.code : "answered";

@@ -77,29 +77,29 @@ function worktreeOptsOf(value: unknown): WorktreeCreateOpts {
 
 export const git: Domain<GitMethod> = {
   answers: {
-    "git.status": (repo) => gitStatus(repoOf(repo)),
-    "git.listFiles": (repo) => gitListFiles(repoOf(repo)),
-    "git.listBranches": (repo) => gitListBranches(repoOf(repo)),
-    "git.diff": (repo, scope, file) => {
+    "git.status": (_, repo) => gitStatus(repoOf(repo)),
+    "git.listFiles": (_, repo) => gitListFiles(repoOf(repo)),
+    "git.listBranches": (_, repo) => gitListBranches(repoOf(repo)),
+    "git.diff": (_, repo, scope, file) => {
       const r = repoOf(repo);
       return gitDiff(r, scopeOf(scope), file == null ? undefined : fileOf(r, file));
     },
-    "git.fileContents": (repo, file, rev) => {
+    "git.fileContents": (_, repo, file, rev) => {
       const r = repoOf(repo);
       return gitFileContents(r, fileOf(r, file), oneOf(rev, "rev", ["HEAD", "INDEX", "WORKING"] as const));
     },
-    "git.stage": (repo, files) => { const r = repoOf(repo); return gitStage(r, filesOf(r, files)); },
-    "git.unstage": (repo, files) => { const r = repoOf(repo); return gitUnstage(r, filesOf(r, files)); },
-    "git.discard": (repo, files) => { const r = repoOf(repo); return gitDiscard(r, filesOf(r, files)); },
-    "git.commit": (repo, message, allowEmpty) => gitCommit(repoOf(repo), text(message, "message"), flag(allowEmpty, "allowEmpty")),
-    "git.push": (repo, setUpstream) => gitPush(repoOf(repo), flag(setUpstream, "setUpstream")),
-    "git.pull": (repo) => gitPull(repoOf(repo)),
-    "git.conflictedFile": (repo, file) => { const r = repoOf(repo); return gitConflictedFile(r, fileOf(r, file)); },
-    "git.writeResolved": (repo, file, contents) => { const r = repoOf(repo); return gitWriteResolved(r, fileOf(r, file), written(contents, "contents")); },
-    "worktree.list": (repo) => worktreeList(repoOf(repo)),
-    "worktree.create": (repo, opts) => worktreeCreate(repoOf(repo), worktreeOptsOf(opts)),
-    "worktree.remove": (repo, worktree, force) => worktreeRemove(repoOf(repo), notOption(worktree, "worktree"), flag(force, "force")),
-    "worktree.prune": (repo) => worktreePrune(repoOf(repo)),
+    "git.stage": (_, repo, files) => { const r = repoOf(repo); return gitStage(r, filesOf(r, files)); },
+    "git.unstage": (_, repo, files) => { const r = repoOf(repo); return gitUnstage(r, filesOf(r, files)); },
+    "git.discard": (_, repo, files) => { const r = repoOf(repo); return gitDiscard(r, filesOf(r, files)); },
+    "git.commit": (_, repo, message, allowEmpty) => gitCommit(repoOf(repo), text(message, "message"), flag(allowEmpty, "allowEmpty")),
+    "git.push": (_, repo, setUpstream) => gitPush(repoOf(repo), flag(setUpstream, "setUpstream")),
+    "git.pull": (_, repo) => gitPull(repoOf(repo)),
+    "git.conflictedFile": (_, repo, file) => { const r = repoOf(repo); return gitConflictedFile(r, fileOf(r, file)); },
+    "git.writeResolved": (_, repo, file, contents) => { const r = repoOf(repo); return gitWriteResolved(r, fileOf(r, file), written(contents, "contents")); },
+    "worktree.list": (_, repo) => worktreeList(repoOf(repo)),
+    "worktree.create": (_, repo, opts) => worktreeCreate(repoOf(repo), worktreeOptsOf(opts)),
+    "worktree.remove": (_, repo, worktree, force) => worktreeRemove(repoOf(repo), notOption(worktree, "worktree"), flag(force, "force")),
+    "worktree.prune": (_, repo) => worktreePrune(repoOf(repo)),
   },
   effects: {
     "git.stage": (repo, files) => ({ target: named(repo), detail: howMany(files, "file") }),

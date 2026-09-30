@@ -11,12 +11,12 @@ import { fileIn, remoteRel, resolveInRepo } from "./repo-paths.js";
 
 export const files: Domain<"file.read" | "file.write"> = {
   answers: {
-    "file.read": (repo, file) => {
+    "file.read": (_, repo, file) => {
       const r = text(repo, "repo");
       const f = text(file, "file");
       return isRemote(r) ? readRemoteFile(r, remoteRel(f)) : fsp.readFile(resolveInRepo(r, f), "utf8");
     },
-    "file.write": (repo, file, contents) => {
+    "file.write": (_, repo, file, contents) => {
       const r = text(repo, "repo");
       const f = text(file, "file");
       const body = written(contents, "contents");

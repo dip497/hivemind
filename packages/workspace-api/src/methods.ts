@@ -6,6 +6,7 @@ import type { Issue, IssuePatch, IssueState, IssueSummary, LinkType, NewIssue } 
 import type { LinkResult, TransferResult } from "@hivemind/core/cross-repo";
 import type { ReviewComment } from "@hivemind/core/review";
 import type { DiffPayload, DiffScope, GitBranchList, GitRevision, GitStatusSnapshot, WorktreeCreateOpts, WorktreeEntry } from "./git.js";
+import type { Links, PipeChange, SpawnChange, StatusChange, TileOpened } from "./agents.js";
 
 export interface WorkspaceMethods {
   "git.status": (repo: string) => GitStatusSnapshot;
@@ -49,8 +50,27 @@ export interface WorkspaceMethods {
   "review.list": (repo: string) => ReviewComment[];
   /** Replace the repo's review comments. */
   "review.save": (repo: string, comments: ReviewComment[]) => void;
+  /** Every agent session's status there is. Each change after it is a `status.changed` event. */
+  "status.all": () => Array<{ tileId: string; status: StatusChange["status"] }>;
+  /** Every link between agents there is. Each change after it is a `link.pipe` or `link.spawn` event. */
+  "link.list": () => Links;
+}
+
+/** What a client tells a host and asks no answer to: a host never answers a notice. */
+export interface WorkspaceNotices {}
+
+/** What a host sends each client it holds a connection to, unasked. */
+export interface WorkspaceEvents {
+  "status.changed": (change: StatusChange) => void;
+  "link.pipe": (change: PipeChange) => void;
+  "link.spawn": (change: SpawnChange) => void;
+  "tile.opened": (tile: TileOpened) => void;
 }
 
 export type Method = keyof WorkspaceMethods;
 export type Params<M extends Method> = Parameters<WorkspaceMethods[M]>;
 export type Result<M extends Method> = ReturnType<WorkspaceMethods[M]>;
+export type Notice = keyof WorkspaceNotices;
+export type NoticeParams<N extends Notice> = Parameters<WorkspaceNotices[N]>;
+export type Event = keyof WorkspaceEvents;
+export type EventParams<E extends Event> = Parameters<WorkspaceEvents[E]>;
