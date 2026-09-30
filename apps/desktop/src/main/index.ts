@@ -108,7 +108,7 @@ import { SessionRelay, type ReadScreen, type Viewer } from "@hivemind/agent-host
 import { ipcPath, upgradeCommand, windowsStartMenuShortcut } from "./platform.js";
 import { SubagentReaper } from "./hcp/subagent-reaper.js";
 import { OutputRecorder } from "./hcp/output-recorder.js";
-import { readOrCreateToken, hcpSockPath } from "@hivemind/agent-host/hooks/token";
+import { holderOf, readOrCreateToken, hcpSockPath } from "@hivemind/agent-host/hooks/token";
 import { HcpError } from "./hcp/protocol.js";
 import { handleViewProtocol, listViewPackages, registerViewScheme, startViewWatchdog } from "./view-packages.js";
 import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, settingsFile, settingsBusy, settingsSettled } from "./settings-store.js";
@@ -1971,7 +1971,7 @@ function startHcpControlPlane(): void {
   });
   // Every verb routes through the boot scan first: spawn resolves the agent by id
   // and other verbs read its capabilities, so none may run against a half-set catalog.
-  const dispatch: Dispatcher["dispatch"] = (method, params) => agentsScanned.then(() => _hcp.dispatch(method, params));
+  const dispatch: Dispatcher["dispatch"] = (method, params, call) => agentsScanned.then(() => _hcp.dispatch(method, params, call));
   // View protocol 1.4: a folder's past sessions, without what the agent wrote; a prompt the user
   // confirmed, delivered like `hive ctl send` (held while the agent is mid-turn).
   ipcMain.handle("view:sessions", async (_e, agentId: unknown, cwd: unknown) => {
@@ -1982,11 +1982,15 @@ function startHcpControlPlane(): void {
   });
   ipcMain.handle("view:prompt", async (_e, tileId: unknown, text: unknown) => {
     if (typeof tileId !== "string" || promptProblem(text)) throw new Error("bad prompt");
-    await dispatch("agent.send", { tileId, text });
+    await dispatch("agent.send", { tileId, text }, { actor: { kind: "person" } }); // the person at the window
   });
   hcpForgetTile = _hcp.forgetTile; // wire the pty-exit teardown to the dispatch's per-tile cleanup
   const server = startHcpServer(hcpSockPath(userData), {
-    token,
+    // The app's own token is the person's; each agent's is its tile's (hooks/token.ts).
+    authenticate: (t) => {
+      const holder = holderOf(token, t);
+      return !holder ? null : "tile" in holder ? { kind: "tile", tile: toBareId(holder.tile) } : { kind: "person" };
+    },
     onListenError: (err: Error) => pushAppError(`Agent control plane is off: ${err.message}. \`hive ctl\` cannot reach this app.`, "hcp"),
     rendererUp: () => openWindows().length > 0,
     dispatch,

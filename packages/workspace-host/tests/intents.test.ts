@@ -4,7 +4,7 @@ import { test, expect, beforeEach, afterEach } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { Intents } from "../src/intents.ts";
+import { Intents, Refused } from "../src/intents.ts";
 import { AuditLog } from "../src/audit-log.ts";
 
 let tmp: string;
@@ -43,6 +43,23 @@ test("an intent that fails is recorded with its error's code, and the error reac
     // Nothing was opened, so there is no tile to name.
     { at: expect.any(String), actor: agent, verb: "tile.spawn_agent", outcome: "error", code: "RATE_LIMITED" },
     { at: expect.any(String), actor: agent, verb: "tile.close", target: "tile-gone", outcome: "error" },
+  ]);
+});
+
+test("an intent only one tile may ask for is refused to any other tile, which is recorded, and it never runs; that tile and a person may", async () => {
+  const intents = new Intents(new AuditLog({ file }));
+  const worker = { kind: "tile" as const, tile: "tile-worker" };
+  let ran = 0;
+  const answer = { verb: "agent.approve", target: "tile-worker", detail: "allow", onlyBy: "tile-lead" };
+  await expect(intents.perform(worker, answer, () => { ran++; })).rejects.toBeInstanceOf(Refused);
+  expect(ran).toBe(0);
+  await intents.perform({ kind: "tile", tile: "tile-lead" }, answer, () => { ran++; });
+  await intents.perform({ kind: "person" }, answer, () => { ran++; });
+  expect(ran).toBe(2);
+  expect(lines()).toEqual([
+    { at: expect.any(String), actor: worker, verb: "agent.approve", target: "tile-worker", detail: "allow", outcome: "refused" },
+    { at: expect.any(String), actor: { kind: "tile", tile: "tile-lead" }, verb: "agent.approve", target: "tile-worker", detail: "allow", outcome: "ok" },
+    { at: expect.any(String), actor: { kind: "person" }, verb: "agent.approve", target: "tile-worker", detail: "allow", outcome: "ok" },
   ]);
 });
 

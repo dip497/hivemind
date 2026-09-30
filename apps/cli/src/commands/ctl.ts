@@ -210,7 +210,7 @@ const approve = sub("approve", "Answer a supervised worker's approval request", 
 
 const report = sub("report", "Deliver a message to the tile that spawned you (the parent agent)", {
   message: { type: "positional", required: true },
-  tile: { type: "string", description: "report on behalf of this tile (default: $HIVEMIND_TILE — set inside every spawned agent)" },
+  tile: { type: "string", description: "report on behalf of this tile, from a terminal (default: $HIVEMIND_TILE — set inside every spawned agent, which reports only as itself)" },
 }, (a) => {
   const callerTile = a.tile || ownTile();
   if (!callerTile) throw new UsageError("not inside a hivemind agent tile ($HIVEMIND_TILE unset) — pass --tile <tileId>");

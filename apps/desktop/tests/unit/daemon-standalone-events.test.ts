@@ -8,6 +8,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { frame, makeLineDecoder, type ServerMsg } from "@hivemind/agent-host/pty-protocol";
+import { tileToken } from "@hivemind/agent-host/hooks/token";
 
 const unix = process.platform !== "win32";
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -75,9 +76,9 @@ test("standalone: hook events reach event viewers, requests are answered at once
   assert.equal(pushes.length, 1, "same session again within the window, and an event not asked for: no push");
   assert.equal(events.length, 3, "viewers get every valid event, nothing else");
 
-  const init = (id: string) => ({ jsonrpc: "2.0", id: `${id}-init`, method: "initialize", params: { token } });
-  const ask = async (id: string, method: string, params: unknown) => {
-    const got = await hook(d.hcp, [init(id), { jsonrpc: "2.0", id, method, params }], true, 2);
+  const init = (id: string, as: string) => ({ jsonrpc: "2.0", id: `${id}-init`, method: "initialize", params: { token: as } });
+  const ask = async (id: string, method: string, params: unknown, as = token) => {
+    const got = await hook(d.hcp, [init(id, as), { jsonrpc: "2.0", id, method, params }], true, 2);
     return got.trim().split("\n").map((l) => JSON.parse(l)).find((m: { id: string }) => m.id === id);
   };
   const started = Date.now();
@@ -93,6 +94,10 @@ test("standalone: hook events reach event viewers, requests are answered at once
   assert.deepEqual(events.at(-1), { t: "event", topic: "agent.reply", data: { tileId: "tile-1", text: "the reply" } });
   await wait(200);
   assert.equal(pushes.length, before);
+  // An agent here reports with the token its tile was given, which the machine knows too; one it
+  // did not give is refused.
+  assert.deepEqual(await ask("r2", "agent.reply", { tileId: "hm:tile-1", text: "again" }, tileToken(token, "hm:tile-1")), { jsonrpc: "2.0", id: "r2", result: { ok: true } });
+  assert.equal((await ask("r3", "agent.reply", { tileId: "hm:tile-1", text: "forged" }, "hm:tile-1.forged")).error.data.code, "UNAUTHORIZED");
   viewer.destroy();
   srv.close();
 });

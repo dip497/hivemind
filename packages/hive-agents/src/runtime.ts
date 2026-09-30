@@ -34,7 +34,8 @@ export interface RuntimePaths {
   execPath: string;
   /** Control plane, when the daemon has one. */
   hcpSock?: string;
-  hcpToken?: string;
+  /** The token a tile's agent is given: its own, which names the tile. */
+  hcpToken?: (tile: string) => string;
   /** The SDK an agent's plugin loads, in its hook scripts or inside the agent itself. */
   sdk?: string;
   /** Where per-tile session records live. */

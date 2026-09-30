@@ -17,7 +17,7 @@
       "env": {
         "HIVE_AGENT_DEPTH": "1",
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
-        "HCP_TOKEN": "golden-token",
+        "HCP_TOKEN": "golden-token:tile-g",
         "HIVEMIND_TILE": "tile-g",
         "HIVE_AGENT_ID": "claude",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",
@@ -227,7 +227,7 @@
         "HIVE_AGENT_DEPTH": "1",
         "HIVE_SUPERVISE": "all",
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
-        "HCP_TOKEN": "golden-token",
+        "HCP_TOKEN": "golden-token:tile-g",
         "HIVEMIND_TILE": "tile-g",
         "HIVE_AGENT_ID": "claude",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",
@@ -456,7 +456,7 @@
       "env": {
         "HIVE_AGENT_DEPTH": "1",
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
-        "HCP_TOKEN": "golden-token",
+        "HCP_TOKEN": "golden-token:tile-g",
         "HIVEMIND_TILE": "tile-g",
         "HIVE_AGENT_ID": "claude",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",
@@ -665,7 +665,7 @@
       "env": {
         "HIVE_AGENT_DEPTH": "1",
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
-        "HCP_TOKEN": "golden-token",
+        "HCP_TOKEN": "golden-token:tile-g",
         "HIVEMIND_TILE": "tile-g",
         "HIVE_AGENT_ID": "claude",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",
@@ -874,7 +874,7 @@
       "env": {
         "HIVE_AGENT_DEPTH": "1",
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
-        "HCP_TOKEN": "golden-token",
+        "HCP_TOKEN": "golden-token:tile-g",
         "HIVEMIND_TILE": "tile-g",
         "HIVE_AGENT_ID": "claude",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",
@@ -1121,7 +1121,7 @@
       "env": {
         "HIVE_AGENT_DEPTH": "1",
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
-        "HCP_TOKEN": "golden-token",
+        "HCP_TOKEN": "golden-token:tile-g",
         "HIVEMIND_TILE": "tile-g",
         "HIVE_AGENT_ID": "codex",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",
@@ -1147,7 +1147,7 @@
         "HIVE_AGENT_DEPTH": "1",
         "HIVE_SUPERVISE": "all",
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
-        "HCP_TOKEN": "golden-token",
+        "HCP_TOKEN": "golden-token:tile-g",
         "HIVEMIND_TILE": "tile-g",
         "HIVE_AGENT_ID": "codex",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",
@@ -1189,7 +1189,7 @@
       "env": {
         "HIVE_AGENT_DEPTH": "1",
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
-        "HCP_TOKEN": "golden-token",
+        "HCP_TOKEN": "golden-token:tile-g",
         "HIVEMIND_TILE": "tile-g",
         "HIVE_AGENT_ID": "codex",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",
@@ -1214,7 +1214,7 @@
       "env": {
         "HIVE_AGENT_DEPTH": "1",
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
-        "HCP_TOKEN": "golden-token",
+        "HCP_TOKEN": "golden-token:tile-g",
         "HIVEMIND_TILE": "tile-g",
         "HIVE_AGENT_ID": "codex",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",
@@ -1237,7 +1237,7 @@
       "env": {
         "HIVE_AGENT_DEPTH": "1",
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
-        "HCP_TOKEN": "golden-token",
+        "HCP_TOKEN": "golden-token:tile-g",
         "HIVEMIND_TILE": "tile-g",
         "HIVE_AGENT_ID": "codex",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",
@@ -1282,7 +1282,7 @@
       "env": {
         "HIVE_AGENT_DEPTH": "1",
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
-        "HCP_TOKEN": "golden-token",
+        "HCP_TOKEN": "golden-token:tile-g",
         "HIVEMIND_TILE": "tile-g",
         "HIVE_AGENT_ID": "droid",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",
@@ -1297,7 +1297,7 @@
         "HIVE_AGENT_DEPTH": "1",
         "HIVE_SUPERVISE": "all",
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
-        "HCP_TOKEN": "golden-token",
+        "HCP_TOKEN": "golden-token:tile-g",
         "HIVEMIND_TILE": "tile-g",
         "HIVE_AGENT_ID": "droid",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",
@@ -1317,7 +1317,7 @@
       "env": {
         "HIVE_AGENT_DEPTH": "1",
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
-        "HCP_TOKEN": "golden-token",
+        "HCP_TOKEN": "golden-token:tile-g",
         "HIVEMIND_TILE": "tile-g",
         "HIVE_AGENT_ID": "droid",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",
@@ -1334,7 +1334,7 @@
       "env": {
         "HIVE_AGENT_DEPTH": "1",
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
-        "HCP_TOKEN": "golden-token",
+        "HCP_TOKEN": "golden-token:tile-g",
         "HIVEMIND_TILE": "tile-g",
         "HIVE_AGENT_ID": "droid",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",
@@ -1348,7 +1348,7 @@
       "env": {
         "HIVE_AGENT_DEPTH": "1",
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
-        "HCP_TOKEN": "golden-token",
+        "HCP_TOKEN": "golden-token:tile-g",
         "HIVEMIND_TILE": "tile-g",
         "HIVE_AGENT_ID": "droid",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",
@@ -1394,7 +1394,7 @@
       "env": {
         "HIVE_AGENT_DEPTH": "1",
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
-        "HCP_TOKEN": "golden-token",
+        "HCP_TOKEN": "golden-token:tile-g",
         "HIVEMIND_TILE": "tile-g",
         "HIVE_AGENT_ID": "kiro",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",
@@ -1413,7 +1413,7 @@
         "HIVE_AGENT_DEPTH": "1",
         "HIVE_SUPERVISE": "all",
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
-        "HCP_TOKEN": "golden-token",
+        "HCP_TOKEN": "golden-token:tile-g",
         "HIVEMIND_TILE": "tile-g",
         "HIVE_AGENT_ID": "kiro",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",
@@ -1441,7 +1441,7 @@
       "env": {
         "HIVE_AGENT_DEPTH": "1",
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
-        "HCP_TOKEN": "golden-token",
+        "HCP_TOKEN": "golden-token:tile-g",
         "HIVEMIND_TILE": "tile-g",
         "HIVE_AGENT_ID": "kiro",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",
@@ -1461,7 +1461,7 @@
       "env": {
         "HIVE_AGENT_DEPTH": "1",
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
-        "HCP_TOKEN": "golden-token",
+        "HCP_TOKEN": "golden-token:tile-g",
         "HIVEMIND_TILE": "tile-g",
         "HIVE_AGENT_ID": "kiro",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",
@@ -1479,7 +1479,7 @@
       "env": {
         "HIVE_AGENT_DEPTH": "1",
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
-        "HCP_TOKEN": "golden-token",
+        "HCP_TOKEN": "golden-token:tile-g",
         "HIVEMIND_TILE": "tile-g",
         "HIVE_AGENT_ID": "kiro",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",
@@ -1528,7 +1528,7 @@
       "env": {
         "HIVE_AGENT_DEPTH": "1",
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
-        "HCP_TOKEN": "golden-token",
+        "HCP_TOKEN": "golden-token:tile-g",
         "HIVEMIND_TILE": "tile-g",
         "HIVE_AGENT_ID": "pi",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",
@@ -1545,7 +1545,7 @@
         "HIVE_AGENT_DEPTH": "1",
         "HIVE_SUPERVISE": "all",
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
-        "HCP_TOKEN": "golden-token",
+        "HCP_TOKEN": "golden-token:tile-g",
         "HIVEMIND_TILE": "tile-g",
         "HIVE_AGENT_ID": "pi",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",
@@ -1569,7 +1569,7 @@
       "env": {
         "HIVE_AGENT_DEPTH": "1",
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
-        "HCP_TOKEN": "golden-token",
+        "HCP_TOKEN": "golden-token:tile-g",
         "HIVEMIND_TILE": "tile-g",
         "HIVE_AGENT_ID": "pi",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",
@@ -1587,7 +1587,7 @@
       "env": {
         "HIVE_AGENT_DEPTH": "1",
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
-        "HCP_TOKEN": "golden-token",
+        "HCP_TOKEN": "golden-token:tile-g",
         "HIVEMIND_TILE": "tile-g",
         "HIVE_AGENT_ID": "pi",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",
@@ -1603,7 +1603,7 @@
       "env": {
         "HIVE_AGENT_DEPTH": "1",
         "HIVE_HCP_SOCK": "/x/ud/hcp.sock",
-        "HCP_TOKEN": "golden-token",
+        "HCP_TOKEN": "golden-token:tile-g",
         "HIVEMIND_TILE": "tile-g",
         "HIVE_AGENT_ID": "pi",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",

@@ -34,7 +34,7 @@ import { SDK_FILE, sdkSource } from "@hivemind/agent-sdk";
 import { ScreenWatcher } from "./screen-status.js";
 import { StatusStore } from "./status-store.js";
 import { cleanName } from "@hivemind/agents";
-import { readOrCreateToken, hcpSockPath } from "./hooks/token.js";
+import { holderOf, readOrCreateToken, hcpSockPath, tileToken } from "./hooks/token.js";
 
 // Lazy: node-pty must never be evaluated inside the compiled `hive` (see bun-pty.ts).
 const spawnPty: (file: string, args: string[] | string, opts: { cwd: string; cols: number; rows: number; name: string; env: Record<string, string> }) => {
@@ -129,7 +129,7 @@ try { fs.writeFileSync(eventHookPath, agentEventHookSource()); } catch { /* best
 const sdkPath = path.join(userDataDir, SDK_FILE);
 try { fs.writeFileSync(sdkPath, sdkSource()); } catch { /* best-effort */ }
 const hcpSock = hcpSockPath(userDataDir);
-const hcpToken = readOrCreateToken(userDataDir);
+const installToken = readOrCreateToken(userDataDir);
 
 // Provider-owned assets + config-home overlays (an extension, a private config home,
 // a hook script of its own, …): every catalogued provider's `prepare()` runs here and
@@ -154,7 +154,7 @@ const providerCtx = {
   eventHookPath,
   sdkPath,
   hcpSock,
-  hcpToken,
+  hcpToken: (tile: string) => tileToken(installToken, tile),
 };
 let providerPaths: Record<string, Record<string, string>> = {};
 // Rebound by a rescan; the manager reads them through these variables.
@@ -259,7 +259,7 @@ function registerSnapshots(): SnapshotEntry[] {
   for (const entry of listSnapshotFiles(sessionsDir)) {
     manager.restoreLazySnapshot(entry.id, () => {
       const snap = readSnapshot(entry.file, entry.id);
-      return snap ? rehydrateSnapshot(snap, hcpToken) : undefined;
+      return snap ? rehydrateSnapshot(snap, tileToken(installToken, entry.id)) : undefined;
     });
     entries.push(entry);
   }
@@ -655,7 +655,7 @@ if (STANDALONE) {
         return;
       }
       if (m.method === "initialize") {
-        if (params.token !== hcpToken) return answer(m.id, { error: { code: -32000, message: "bad or missing token", data: { code: "UNAUTHORIZED" } } });
+        if (!holderOf(installToken, params.token)) return answer(m.id, { error: { code: -32000, message: "bad or missing token", data: { code: "UNAUTHORIZED" } } });
         authed = true;
         return answer(m.id, { result: { protocolVersion: 2, capabilities: { status: false } } });
       }

@@ -199,10 +199,11 @@ test("a droid worker reports back to the claude orchestrator with `hive ctl repo
   // Closed is ended: nothing is left running for it in the daemon, and the window keeps nothing of it.
   await expect.poll(() => processesOf(worker), { timeout: 10_000 }).toEqual([]);
   await expect.poll(placed).not.toContain(worker);
-  // Each was done by someone the app's audit log names: the report by the worker, from its own
-  // tile; the send and the close by the person at this terminal.
+  // Each was done by someone the app's audit log names: the report by the worker, with the token
+  // its tile was given; the spawn (for the orchestrator), the send and the close by the person at
+  // this terminal, with the app's.
   expect(audited().filter((l) => l.target === worker || l.actor.tile === worker)).toEqual([
-    { actor: { kind: "tile", tile: orchestrator }, verb: "tile.spawn_agent", target: worker, outcome: "ok" },
+    { actor: { kind: "person" }, verb: "tile.spawn_agent", target: worker, outcome: "ok" },
     { actor: { kind: "tile", tile: worker }, verb: "agent.report", target: orchestrator, outcome: "ok" },
     { actor: { kind: "person" }, verb: "agent.send", target: worker, outcome: "ok" },
     { actor: { kind: "person" }, verb: "tile.close", target: worker, outcome: "ok" },

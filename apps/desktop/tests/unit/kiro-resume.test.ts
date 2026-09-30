@@ -18,7 +18,7 @@ const reqFor = (deps: Record<string, string | undefined>, tileId = "") => ({
   paths: {
     private: "/x", execPath: deps.execPath ?? "", tileSessionsDir: deps.tileSessionsDir ?? "/x/sessions",
     home: "/home/u", ...(deps.kiroHome ? { homeReady: true } : {}),
-    ...(deps.hcpSock ? { hcpSock: deps.hcpSock, hcpToken: deps.hcpToken ?? "tok" } : {}),
+    ...(deps.hcpSock ? { hcpSock: deps.hcpSock, hcpToken: (tile: string) => `${deps.hcpToken ?? "tok"}:${tile}` } : {}),
     hooks: hookPathsFor(kiroDef, { ...deps, execPath: deps.execPath ?? "", tileSessionsDir: deps.tileSessionsDir ?? "/x/sessions" }),
   },
 });
@@ -98,7 +98,7 @@ test("transformSpecOnSpawn selects --agent hivemind after chat + injects KIRO_HO
   assert.deepEqual(out.args, ["chat", "--agent", KIRO_HIVEMIND_AGENT]);
   assert.equal(out.env?.KIRO_HOME, "/x/kiro-home");
   assert.equal(out.env?.HIVE_HCP_SOCK, "/x/hcp.sock");
-  assert.equal(out.env?.HCP_TOKEN, "tok");
+  assert.equal(out.env?.HCP_TOKEN, "tok:tile-7"); // the token this tile was given, not another's
   assert.equal(out.env?.HIVEMIND_TILE, "tile-7");
 });
 

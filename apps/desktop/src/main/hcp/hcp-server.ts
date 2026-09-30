@@ -10,15 +10,17 @@
 import net from "node:net";
 import fs from "node:fs";
 import { randomUUID } from "node:crypto";
-import { HCP_VERSION, HcpError, RPC, takeLines, type RpcId } from "./protocol.js";
+import { HCP_VERSION, HcpError, RPC, takeLines, type HcpCall, type RpcId } from "./protocol.js";
+import type { Actor } from "@hivemind/workspace-host/intents";
 
 export interface HcpServerDeps {
-  token: string;
+  /** Who holds a token: the person, a tile, or null for one this app does not know. */
+  authenticate: (token: unknown) => Actor | null;
   /** The socket could not be opened (e.g. a userData path too long for a unix socket),
    *  so the app can say so instead of looking like it is simply not running. */
   onListenError?: (err: Error) => void;
   rendererUp: () => boolean;
-  dispatch: (method: string, params: unknown) => Promise<unknown>;
+  dispatch: (method: string, params: unknown, call: HcpCall) => Promise<unknown>;
   /** A hook's `agent.event`, or anything a remote machine's daemon passes on. */
   onEvent: (method: string, params: unknown) => void;
   /** agent.stream catch-up: the recorder's ANSI-stripped text for a tile — the last
@@ -67,7 +69,9 @@ export function startHcpServer(sockPath: string, deps: HcpServerDeps): HcpServer
   const server = net.createServer((conn) => {
     conn.setEncoding("utf8");
     let buf = "";
-    let authed = false;
+    let actor: Actor | null = null;
+    // A request still running when its caller goes (a hook that gave up waiting) is told so.
+    const gone = new AbortController();
     const mySubs = new Set<string>();
     let statusOff: (() => void) | undefined;
     const write = (m: Record<string, unknown>) => { try { conn.write(JSON.stringify({ jsonrpc: "2.0", ...m }) + "\n"); } catch { /* gone */ } };
@@ -89,7 +93,7 @@ export function startHcpServer(sockPath: string, deps: HcpServerDeps): HcpServer
         handle(msg);
       }
     });
-    conn.on("close", () => { for (const id of mySubs) subs.delete(id); statusOff?.(); });
+    conn.on("close", () => { for (const id of mySubs) subs.delete(id); statusOff?.(); gone.abort(); });
     conn.on("error", () => { /* client gone; close handler sweeps subs */ });
 
     function handle(m: { jsonrpc?: unknown; id?: RpcId; method?: unknown; params?: unknown }): void {
@@ -103,15 +107,15 @@ export function startHcpServer(sockPath: string, deps: HcpServerDeps): HcpServer
 
       if (id === null) {
         // A notification: a hook reporting. No reply, whatever happens.
-        if (HOOK_NOTIFICATIONS.has(m.method) || authed) { try { deps.onEvent(m.method, m.params); } catch { /* ignore */ } }
+        if (HOOK_NOTIFICATIONS.has(m.method) || actor) { try { deps.onEvent(m.method, m.params); } catch { /* ignore */ } }
         return;
       }
       if (m.method === "initialize") {
-        if (params.token !== deps.token) return fail(RPC.hcp, "bad or missing token", "UNAUTHORIZED");
-        authed = true;
+        actor = deps.authenticate(params.token);
+        if (!actor) return fail(RPC.hcp, "bad or missing token", "UNAUTHORIZED");
         return reply({ protocolVersion: HCP_VERSION, rendererUp: deps.rendererUp(), capabilities: { status: !!deps.status } });
       }
-      if (!authed) return fail(RPC.hcp, "call initialize with the token first", "UNAUTHORIZED");
+      if (!actor) return fail(RPC.hcp, "call initialize with the token first", "UNAUTHORIZED");
 
       switch (m.method) {
         case "agent.stream/subscribe": {
@@ -151,7 +155,7 @@ export function startHcpServer(sockPath: string, deps: HcpServerDeps): HcpServer
           statusOff = undefined;
           return reply(null);
       }
-      deps.dispatch(m.method, params).then(reply, (e) => {
+      deps.dispatch(m.method, params, { actor, signal: gone.signal }).then(reply, (e) => {
         const err = e instanceof HcpError ? e : new HcpError("INTERNAL", (e as Error)?.message ?? String(e));
         fail(err.code === "UNKNOWN_METHOD" ? RPC.method : RPC.hcp, err.message, err.code);
       });

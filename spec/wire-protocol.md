@@ -8,7 +8,11 @@ agent the host started, else `<config>/hivemind/hcp.sock` and `hcp.token`.
 ## Connection
 
 1. `initialize {"token"}` → `{"protocolVersion": 2, "rendererUp", "capabilities": {"status"}}`.
-   Every other request before it is refused with `UNAUTHORIZED`.
+   Every other request before it is refused with `UNAUTHORIZED`. The token says who calls: the
+   host's own (`hcp.token`) is the person at the machine; an agent the host started is given one
+   of its own, `<tile>.<MAC>`, which names its tile. A call made with a tile's token is that
+   tile's: a `callerTile` naming another tile is refused with `UNAUTHORIZED`, and one naming none
+   is taken as the tile's own. The person may name any tile.
 2. Requests and notifications, in any order. A hook's `agent.event` notification needs no
    `initialize` (see `hook-protocol.md`).
 
@@ -33,7 +37,13 @@ agent the host started, else `<config>/hivemind/hcp.sock` and `hcp.token`.
 ## Methods
 
 The verbs `hive ctl` uses — `tile.spawn_agent`, `agent.send`, `agent.read`, `agent.report`,
-`agent.approve`, `workflow.run`, … — take and return the shapes `hive ctl --json` prints.
+`agent.approve`, `workflow.run`, … — take and return the shapes `hive ctl --json` prints. The
+host records each one with an effect in its audit log (`audit.jsonl` beside `hcp.token`): who
+asked, what, of what, and whether it happened.
+
+`agent.approve` is answered by the tile the approval was asked of, or with the host's own token;
+from any other tile, the worker's own included, it is refused with `UNAUTHORIZED`. An approval
+ends when the connection that asked for it closes, and an answer after that gets `BAD_REQUEST`.
 
 `agent.sessions {"agent", "cwd"?, "limit"?}` → `{"agent", "resumable", "sessions": [{"id",
 "cwd"?, "title"?, "updated"?}]}`, newest first; only sessions started in `cwd` when it is given.

@@ -9,7 +9,7 @@ import { useAuthoredAgents } from "./authored-agents.ts";
 useAuthoredAgents();
 import { TurnTracker } from "../../src/main/hcp/turn-tracker.js";
 import { OutputRecorder } from "../../src/main/hcp/output-recorder.js";
-import { REPO, workspaceDeps } from "./hcp-workspace.ts";
+import { REPO, workspaceDeps, PERSON } from "./hcp-workspace.ts";
 
 /** What the worker a spawn with `params` opens runs with: its arguments, as written into the
  *  workspace. */
@@ -31,7 +31,7 @@ async function spawnedArgs(params: Record<string, unknown>, agentInstalled?: () 
     awaitingApproval: () => {},
     ...ws,
   } as unknown as Parameters<typeof makeDispatch>[0]);
-  const { tileId } = (await dispatch("tile.spawn_agent", { callerTile: "hm:tile-p", ...params })) as { tileId: string };
+  const { tileId } = (await dispatch("tile.spawn_agent", { callerTile: "hm:tile-p", ...params }, PERSON)) as { tileId: string };
   return (ws.workspaces.getCore(REPO)?.tiles.find((t) => t.id === tileId) as { args?: string[] } | undefined)?.args;
 }
 

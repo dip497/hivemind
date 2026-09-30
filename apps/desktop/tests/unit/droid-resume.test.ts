@@ -13,7 +13,7 @@ const droidDef = _bundled("droid");
 const isDroid = (spec: { cmd: string }) => specIsAgent(droidDef, spec);
 const pathsOf = (deps: Record<string, string | undefined>) => ({
   private: "/x", execPath: deps.execPath ?? "", tileSessionsDir: "/x/sessions", home: "/home/u",
-  ...(deps.hcpSock ? { hcpSock: deps.hcpSock, hcpToken: deps.hcpToken ?? "tok" } : {}),
+  ...(deps.hcpSock ? { hcpSock: deps.hcpSock, hcpToken: (tile: string) => `${deps.hcpToken ?? "tok"}:${tile}` } : {}),
   hooks: hookPathsFor(droidDef, { ...deps, execPath: deps.execPath ?? "", tileSessionsDir: "/x/sessions" }),
 });
 const droidHooksSettings = (deps: Record<string, string | undefined>) => {
@@ -93,7 +93,7 @@ test("transformSpecOnSpawn injects FACTORY_HOME_OVERRIDE + HCP env for THIS tile
   const out = transformSpecOnSpawn({ cwd: "/w", cmd: "droid", args: [] }, "tile-7");
   assert.equal(out.env?.FACTORY_HOME_OVERRIDE, "/x/droid-home");
   assert.equal(out.env?.HIVE_HCP_SOCK, "/x/hcp.sock");
-  assert.equal(out.env?.HCP_TOKEN, "tok");
+  assert.equal(out.env?.HCP_TOKEN, "tok:tile-7"); // the token this tile was given, not another's
   assert.equal(out.env?.HIVEMIND_TILE, "tile-7");
   assert.deepEqual(out.args, []); // no arg change — hooks come from the home file
 });

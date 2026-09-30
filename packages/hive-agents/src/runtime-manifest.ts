@@ -54,7 +54,7 @@ function resolve(
     if (key.startsWith("hook:")) { const h = req.paths.hooks[key.slice(5)]; return h ? put(h.path) : whole; }
     switch (key) {
       case "hcpSock": return req.paths.hcpSock ? put(req.paths.hcpSock!) : whole;
-      case "hcpToken": return req.paths.hcpToken ? put(req.paths.hcpToken!) : whole;
+      case "hcpToken": return req.paths.hcpToken && req.tileId ? put(req.paths.hcpToken(req.tileId)) : whole;
       case "tileId": return put(req.tileId);
       case "agentId": return put(def.id);
       case "cwd": return put(req.cwd);
@@ -81,7 +81,7 @@ const perTileName = (name: string, tileId: string): string => {
 function hcpEnv(def: AgentProviderDef, req: LaunchRequest): Record<string, string> {
   return {
     HIVE_HCP_SOCK: req.paths.hcpSock!,
-    HCP_TOKEN: req.paths.hcpToken!,
+    HCP_TOKEN: req.paths.hcpToken!(req.tileId), // its own: the calls it makes are known to be this tile's
     HIVEMIND_TILE: req.tileId, // the agent's own `hive ctl` calls attribute to this tile
     HIVE_AGENT_ID: def.id, // signs the Activity rows it writes
     HIVE_AGENT_DEPTH: req.env.HIVE_AGENT_DEPTH ?? "0",

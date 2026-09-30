@@ -423,7 +423,7 @@ Spawn (or \`workflow\`) with \`--supervise all\` and YOU are the gatekeeper for 
 Reply: hive ctl approve <reqId> allow|deny|always|never
 \`\`\`
 
-\`allow\` / \`deny\` decide this call; \`always\` / \`never\` also remember it for that worker+tool. Add \`--reason "…"\` on a deny so the worker can adapt. It fails safe: unanswered prompts fall back to the human. \`hive ctl list --json\` shows workers stuck in \`awaiting_approval\`.
+\`allow\` / \`deny\` decide this call; \`always\` / \`never\` also remember it for that worker+tool. Add \`--reason "…"\` on a deny so the worker can adapt. Only you, the agent it asked, or the person can answer it: never the worker. It fails safe: unanswered prompts fall back to the human, and an answer to one that has already fallen back is refused (exit 2). \`hive ctl list --json\` shows workers stuck in \`awaiting_approval\`.
 
 ## Human sign-off mid-run
 

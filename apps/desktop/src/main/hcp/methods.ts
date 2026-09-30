@@ -10,7 +10,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { keyBytes, KEY_GAP_MS } from "../../shared/keys.js";
-import { HcpError } from "./protocol.js";
+import { HcpError, type HcpCall } from "./protocol.js";
 import type { TurnTracker } from "./turn-tracker.js";
 import type { OutputRecorder } from "./output-recorder.js";
 import { mintId, toPtyId as ptyId, toBareId as bareOf } from "../../shared/tile-id.js";
@@ -24,7 +24,7 @@ import { customDataProblem, isCustomEventName } from "@hivemind/view-sdk/protoco
 import { AGENT_TILE_KIND, isTerminalKind, type CoreLayout, type FrameRecord, type TileRecord } from "@hivemind/workspace-doc/shapes";
 import { defaultFrame, frameFor, listFrames, listTiles, type TileFacts } from "@hivemind/workspace-doc/tile-list";
 import type { WorkspaceStore } from "@hivemind/workspace-host/store";
-import type { Actor, Intent, Intents } from "@hivemind/workspace-host/intents";
+import { Refused, type Intent, type Intents } from "@hivemind/workspace-host/intents";
 import type { StatusStore } from "@hivemind/agent-host/status-store";
 import { tileStatusOf } from "@hivemind/agent-host/tile-status";
 
@@ -199,8 +199,8 @@ const DEFAULT_READ_TIMEOUT = 120_000;
 const REVIEW_TIMEOUT = 24 * 60 * 60 * 1000; // human review may take a long time
 
 export interface Dispatcher {
-  /** Handle one HCP method call. */
-  dispatch: (method: string, params: unknown) => Promise<unknown>;
+  /** Handle one HCP method call, made by `call.actor`. */
+  dispatch: (method: string, params: unknown, call: HcpCall) => Promise<unknown>;
   /** Drop ALL per-tile HCP state for a tile that has gone away, WITHOUT closing it
    *  as `tile.close` does. MUST be called on every pty-exit and
    *  user-close path — otherwise the maps (parentOf/depthOf/sendSeq/approveCache/
@@ -246,7 +246,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
   // Agent-supervised approvals (HCP Phase 6). A supervised worker's PreToolUse
   // broker hook calls `agent.await_approval` (held here until the parent answers
   // via `agent.approve`). `approveCache` remembers always/never per worker+tool.
-  const pendingApprovals = new Map<string, { resolve: (d: { decision: "allow" | "deny"; reason?: string }) => void; timer: ReturnType<typeof setTimeout>; cacheKey: string; worker: string }>();
+  const pendingApprovals = new Map<string, { resolve: (d: { decision: "allow" | "deny"; reason?: string }) => void; timer: ReturnType<typeof setTimeout>; cacheKey: string; worker: string; supervisor: string }>();
   const approveCache = new Map<string, "allow" | "deny">();
 
   const armRead = (tileId: string) => {
@@ -447,14 +447,12 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
 
   const label = (tileId: string): string => labelIn(tileId, deps.workspaces, deps.status);
 
-  // Who a call comes from: the tile it says it runs in, else a person at a terminal. Taken as
-  // said until each tile has a token of its own (R7 step 2).
-  const actorOf = (p: Record<string, unknown>): Actor =>
-    typeof p.callerTile === "string" && p.callerTile ? { kind: "tile", tile: bareOf(p.callerTile) } : { kind: "person" };
-  // A verb with an effect is carried out through the intents, which record it. The others read,
-  // are a hook reporting, or only move a window's view.
-  const effect = <R>(p: Record<string, unknown>, intent: Intent<R>, run: () => Promise<R>): Promise<R> =>
-    deps.intents.perform(actorOf(p), intent, run);
+  // A verb with an effect is carried out through the intents, which check it against the policy
+  // and record it. The others read, are a hook reporting, or only move a window's view.
+  const effect = <R>(call: HcpCall, intent: Intent<R>, run: () => Promise<R>): Promise<R> =>
+    deps.intents.perform(call.actor, intent, run).catch((e: unknown) => {
+      throw e instanceof Refused ? new HcpError("UNAUTHORIZED", e.message) : e;
+    });
   const tileOf = (id: unknown): string | undefined => (typeof id === "string" && id ? bareOf(id) : undefined);
   // A pipe, or every pipe out of a tile: `src->dst`, `src->*`.
   const pipeOf = (src: unknown, dst: unknown): string | undefined => {
@@ -469,7 +467,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
   // the workflow gathers them itself, so their replies don't also spam the
   // orchestrator's terminal. The orchestrator's `hive ctl workflow` call blocks until
   // this returns (`hive ctl workflow` blocks with a matching client ceiling).
-  const runWorkflow = async (p: Record<string, unknown>): Promise<unknown> => {
+  const runWorkflow = async (p: Record<string, unknown>, call: HcpCall): Promise<unknown> => {
     const shape = String(p.shape ?? "fanout");
     const caller = p.callerTile != null ? String(p.callerTile) : undefined;
     const agent = p.agent != null ? String(p.agent) : await deps.defaultAgentId?.();
@@ -497,7 +495,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     const runWorker = async (label: string, prompt: string): Promise<WR> => {
       let tileId: string;
       try {
-        tileId = await effect(p, { verb: "tile.spawn_agent", target: (id) => id }, () =>
+        tileId = await effect(call, { verb: "tile.spawn_agent", target: (id) => id }, () =>
           spawnRetry({ agent, prompt, frame, model, callerTile: caller, report: false, supervise, name: label }));
       } catch (e) {
         return { item: label, tileId: null, status: "error", text: (e as Error).message };
@@ -508,7 +506,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       const text = rec?.text && rec.text.length > 0 ? rec.text : null;
       const status: WR["status"] = !rec ? "timeout" : rec.seq === -1 ? "error" : "turn";
       if (closeWhenDone && status === "turn") {
-        try { await effect(p, { verb: "tile.close", target: tileId }, () => closeTile(tileId)); } catch { /* best-effort */ }
+        try { await effect(call, { verb: "tile.close", target: tileId }, () => closeTile(tileId)); } catch { /* best-effort */ }
       }
       return { item: label, tileId, status, text };
     };
@@ -570,15 +568,23 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     throw new HcpError("BAD_REQUEST", `unknown workflow shape '${shape}' (expected fanout | pipeline | mapreduce)`);
   };
 
-  const dispatch = async (method: string, rawParams: unknown): Promise<unknown> => {
-    const p = (rawParams ?? {}) as Record<string, unknown>;
+  const dispatch = async (method: string, rawParams: unknown, call: HcpCall): Promise<unknown> => {
+    let p = (rawParams ?? {}) as Record<string, unknown>;
+    // A tile speaks for itself: the caller a call names is the tile its token names. Naming
+    // another is refused (and recorded); a call that names none is its tile's all the same. A
+    // person may act for any tile.
+    if (call.actor.kind === "tile") {
+      const named = tileOf(p.callerTile);
+      if (named && named !== call.actor.tile) return effect(call, { verb: method, target: named, onlyBy: named }, async () => undefined);
+      if (!named) p = { ...p, callerTile: ptyId(call.actor.tile) }; // as `hive ctl` names it: $HIVEMIND_TILE
+    }
     switch (method) {
       case "tile.spawn_agent":
         // Anti-fork-bomb depth + rate gates, parent/auto-report/supervision
         // wiring, and the read-epoch arm all live in doSpawn (shared with
         // workflow.run). AUTO-REPORT is on unless report:false; the read epoch is
         // armed so a follow-up agent.read waits for THIS agent's first turn.
-        return effect(p, { verb: method, target: (r) => r.tileId }, async () => ({
+        return effect(call, { verb: method, target: (r) => r.tileId }, async () => ({
           tileId: await doSpawn({
             agent: p.agent, name: p.name, prompt: p.prompt, frame: p.frame, mode: p.mode, model: p.model,
             callerTile: p.callerTile, report: p.report, supervise: p.supervise, resume: p.resume,
@@ -595,7 +601,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       }
 
       case "agent.send":
-        return effect(p, { verb: method, target: tileOf(p.tileId) }, async () => {
+        return effect(call, { verb: method, target: tileOf(p.tileId) }, async () => {
           const tileId = String(p.tileId ?? "");
           const text = String(p.text ?? "");
           if (!tileId) throw new HcpError("BAD_REQUEST", "tileId required");
@@ -621,7 +627,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         });
 
       case "agent.send_keys":
-        return effect(p, { verb: method, target: tileOf(p.tileId) }, async () => {
+        return effect(call, { verb: method, target: tileOf(p.tileId) }, async () => {
           // Send a sequence of symbolic keys to a tile's TUI (e.g. answer a native
           // AskUserQuestion picker: ["Down","Enter"]). Each token maps via KEYMAP
           // (arrows/enter/esc/…) or is sent as literal text. Staggered so the TUI
@@ -644,7 +650,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         });
 
       case "agent.report":
-        return effect(p, { verb: method, target: (r) => r.parent }, async () => {
+        return effect(call, { verb: method, target: (r) => r.parent }, async () => {
           // A spawned worker pushes a result back to the agent that spawned it.
           // The caller passes its OWN tile id (HIVEMIND_TILE); we look up its
           // parent and deliver the message into the parent's terminal (typed +
@@ -690,7 +696,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         if (!parent) return { decision: "ask" }; // no supervisor → fall back to human prompt
         // Asking is the effect: the question is typed into the supervisor's terminal, and the
         // worker waits for the answer.
-        return effect(p, { verb: method, target: parent, detail: tool.slice(0, 128) }, async () => {
+        return effect(call, { verb: method, target: parent, detail: tool.slice(0, 128) }, async () => {
           const inp = (p.tool_input ?? {}) as Record<string, unknown>;
           const reqId = randomUUID();
           const summary = summarizeTool(tool, inp);
@@ -702,7 +708,8 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
           return await new Promise((resolve) => {
             const done = (decision: "ask") => {
               const pend = pendingApprovals.get(reqId);
-              if (pend) clearTimeout(pend.timer);
+              if (!pend) return; // answered already
+              clearTimeout(pend.timer);
               pendingApprovals.delete(reqId);
               deps.awaitingApproval(worker, false);
               resolve({ decision }); // no answer → "ask" (claude: human prompt; pi: blocks)
@@ -716,7 +723,12 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
             // that waited 8 minutes must not then get 1 to be answered.
             const ceiling = setTimeout(() => done("ask"), APPROVAL_MAX_WAIT_MS);
             ceiling.unref?.();
-            pendingApprovals.set(reqId, { resolve, timer: ceiling, cacheKey, worker });
+            pendingApprovals.set(reqId, { resolve, timer: ceiling, cacheKey, worker, supervisor: parent });
+            // A hook that stopped waiting (it gave up and asked the agent's own prompt) has no use
+            // for an answer: the question ends with it, and an answer after that is told so
+            // rather than told it worked.
+            if (call.signal?.aborted) return done("ask");
+            call.signal?.addEventListener("abort", () => done("ask"), { once: true });
             const armAnswerTimeout = () => {
               const pend = pendingApprovals.get(reqId);
               if (!pend) return; // already answered
@@ -734,14 +746,15 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       case "agent.approve": {
         // The supervising agent answers an approval request (by reqId). always /
         // never also remember the decision for this worker+tool (no more
-        // round-trips for it).
+        // round-trips for it). Only the supervisor it was asked of may answer it, or a
+        // person: never the worker itself, nor another worker.
         const reqId = String(p.reqId ?? "");
         const decision = String(p.decision ?? "");
         const pend = pendingApprovals.get(reqId);
         const d = decision === "allow" || decision === "always" ? "allow" : decision === "deny" || decision === "never" ? "deny" : null;
-        return effect(p, { verb: method, target: pend?.worker, detail: d ? decision : undefined }, async () => {
+        return effect(call, { verb: method, target: pend?.worker, detail: d ? decision : undefined, onlyBy: pend?.supervisor }, async () => {
           const reason = p.reason != null ? String(p.reason) : undefined;
-          if (!pend) throw new HcpError("BAD_REQUEST", `no pending approval ${reqId} (expired or already answered)`);
+          if (!pend) throw new HcpError("BAD_REQUEST", `no approval ${reqId} is waiting: it was answered, ran out of time, or its worker stopped waiting`);
           if (!d) throw new HcpError("BAD_REQUEST", "decision must be allow | deny | always | never");
           if (decision === "always") approveCache.set(pend.cacheKey, "allow");
           if (decision === "never") approveCache.set(pend.cacheKey, "deny");
@@ -792,11 +805,11 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       }
 
       case "workflow.run":
-        return effect(p, { verb: "workflow.run" }, () => runWorkflow(p));
+        return effect(call, { verb: "workflow.run" }, () => runWorkflow(p, call));
 
       // ── canvas verbs (renderer) ──────────────────────────────────────────
       case "tool.open":
-        return effect(p, { verb: method, target: (r) => r.tileId }, async () => {
+        return effect(call, { verb: method, target: (r) => r.tileId }, async () => {
           if (p.tool !== BROWSER_TOOL_ID) throw new HcpError("UNSUPPORTED", "Unknown tool id");
           const availability = tileKindAvailability("browser", deps.toolsSettings?.() ?? { enabledPlugins: [], disabledTools: [] });
           if (!availability?.available) throw new HcpError("UNAUTHORIZED", "Browser is disabled; enable it in Settings under Tools");
@@ -839,18 +852,18 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       // its registry — the switcher and ⌘E order follow, an active view that
       // vanished falls back to the canvas).
       case "views.rescan":
-        return effect(p, { verb: method }, () => deps.callRenderer("views.rescan", {}, RENDERER_TIMEOUT));
+        return effect(call, { verb: method }, () => deps.callRenderer("views.rescan", {}, RENDERER_TIMEOUT));
       // `hive agents install|remove` calls this so a running app picks the change
       // up without a restart. The renderer owns the workspace root, so it runs
       // the scan (through main, which refreshes its own catalog on the way).
       case "agents.rescan":
-        return effect(p, { verb: method }, () => deps.callRenderer("agents.rescan", {}, RENDERER_TIMEOUT));
+        return effect(call, { verb: method }, () => deps.callRenderer("agents.rescan", {}, RENDERER_TIMEOUT));
       // `hive config set` / `hive theme use` edited settings.json: re-read it
       // and push the result to the renderer (main owns the file while running).
       case "settings.reload":
-        return effect(p, { verb: method }, () => deps.reloadSettings());
+        return effect(call, { verb: method }, () => deps.reloadSettings());
       case "tile.rename":
-        return effect(p, { verb: method, target: tileOf(p.tileId) }, async () => {
+        return effect(call, { verb: method, target: tileOf(p.tileId) }, async () => {
           // The name every surface shows, and the one main's messages call the tile by.
           const tileId = bareOf(String(p.tileId ?? ""));
           if (!tileId) throw new HcpError("BAD_REQUEST", "tileId required");
@@ -864,7 +877,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         return await deps.callRenderer("tile.focus", { tileId: p.tileId }, RENDERER_TIMEOUT);
       }
       case "tile.close":
-        return effect(p, { verb: method, target: tileOf(p.tileId) }, async () => {
+        return effect(call, { verb: method, target: tileOf(p.tileId) }, async () => {
           if (!p.tileId) throw new HcpError("BAD_REQUEST", "tileId required");
           // closeTile drops ALL per-tile state (pipes/turns/recorder/epochs/parent/
           // depth/supervision) + resolves any in-flight approvals for the worker.
@@ -875,14 +888,14 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         // Open a plan-review tile and BLOCK until the human decides. The
         // renderer doesn't reply on open — the tile resolves this caller via
         // hcpResult on the decision, which is why the timeout is generous.
-        return effect(p, { verb: method }, async () => {
+        return effect(call, { verb: method }, async () => {
           if (!p.plan) throw new HcpError("BAD_REQUEST", "plan required");
           return await deps.callRenderer("review.open", { plan: p.plan, cwd: p.cwd ?? "" }, REVIEW_TIMEOUT);
         });
 
       // ── pipes (main) ─────────────────────────────────────────────────────
       case "tile.connect":
-        return effect(p, { verb: method, target: pipeOf(p.srcTileId, p.dstTileId) }, async () => {
+        return effect(call, { verb: method, target: pipeOf(p.srcTileId, p.dstTileId) }, async () => {
           const src = String(p.srcTileId ?? "");
           const dst = String(p.dstTileId ?? "");
           if (!src || !dst) throw new HcpError("BAD_REQUEST", "srcTileId and dstTileId required");
@@ -890,7 +903,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
           return { ok: true };
         });
       case "tile.disconnect":
-        return effect(p, { verb: method, target: pipeOf(p.srcTileId, p.dstTileId) }, async () => {
+        return effect(call, { verb: method, target: pipeOf(p.srcTileId, p.dstTileId) }, async () => {
           const src = String(p.srcTileId ?? "");
           if (!src) throw new HcpError("BAD_REQUEST", "srcTileId required");
           deps.disconnect(src, p.dstTileId ? String(p.dstTileId) : undefined);

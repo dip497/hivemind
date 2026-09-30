@@ -32,7 +32,7 @@ beforeAll(async () => {
   xdg = fixtureXDG(["claude", "codex"]);
   sock = path.join(dir, "hcp.sock");
   server = startHcpServer(sock, {
-    token: TOKEN,
+    authenticate: (t) => (t === TOKEN ? { kind: "person" } : null),
     rendererUp: () => true,
     onEvent: () => {},
     replay: (tileId, o) => (typeof o.lines === "number" ? rec.tail(tileId, o.lines) : rec.since(tileId, o.since ?? 0)),

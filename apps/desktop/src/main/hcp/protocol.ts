@@ -3,14 +3,24 @@
  * unix socket (spec/wire-protocol.md).
  *
  *   - Clients (`hive ctl`, an agent plugin's scripts, the pi extension) call `initialize`
- *     with the capability token once per connection, then make requests.
+ *     with the capability token once per connection, then make requests. The token says who
+ *     calls: the app's own is the person at this machine, a tile's agent is given its own.
  *   - A hook reports with the `agent.event` notification and disconnects. It needs no token:
  *     the socket is the owner's alone, and an event is a fact, not a command.
  *   - Streams (`agent.stream/subscribe`, `status/subscribe`) answer with a result, then send
  *     notifications until unsubscribed or disconnected.
  */
+import type { Actor } from "@hivemind/workspace-host/intents";
 
 export const HCP_VERSION = 2;
+
+/** One request as the dispatch sees it: who made it, and whether they are still there. */
+export interface HcpCall {
+  /** Known from the token the connection introduced itself with. */
+  actor: Actor;
+  /** Aborted when the caller's connection closes: nobody waits for the answer any more. */
+  signal?: AbortSignal;
+}
 
 export type RpcId = string | number;
 export type RpcRequest = { jsonrpc: "2.0"; id: RpcId; method: string; params?: unknown };

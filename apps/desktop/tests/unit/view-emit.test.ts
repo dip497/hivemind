@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { EMIT_RATE, makeDispatch, parseEmit, tokenBucket } from "../../src/main/hcp/methods.ts";
+import { PERSON } from "./hcp-workspace.ts";
 
 test("parseEmit: a dotted name, plain JSON within limits, and who sent it", () => {
   assert.deepEqual(parseEmit({ name: "ci.build", data: { state: "failed" } }), { name: "ci.build", data: { state: "failed" }, from: "shell" });
@@ -26,8 +27,8 @@ test("tokenBucket: a burst, then the steady rate", () => {
 test("view.emit is validated in main, then handed to the renderer", async () => {
   const calls: Array<[string, unknown]> = [];
   const d = makeDispatch({ callRenderer: async (m: string, p: unknown) => { calls.push([m, p]); return { ok: true, delivered: false }; } } as unknown as Parameters<typeof makeDispatch>[0]);
-  assert.deepEqual(await d.dispatch("view.emit", { name: "ci.build", data: [1] }), { ok: true, delivered: false });
+  assert.deepEqual(await d.dispatch("view.emit", { name: "ci.build", data: [1] }, PERSON), { ok: true, delivered: false });
   assert.deepEqual(calls, [["view.emit", { name: "ci.build", data: [1], from: "shell" }]]);
-  await assert.rejects(d.dispatch("view.emit", { name: "Bad" }), (e: { code?: string }) => e.code === "BAD_REQUEST");
+  await assert.rejects(d.dispatch("view.emit", { name: "Bad" }, PERSON), (e: { code?: string }) => e.code === "BAD_REQUEST");
   assert.equal(calls.length, 1);
 });

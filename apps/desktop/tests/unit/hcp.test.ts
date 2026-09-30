@@ -21,7 +21,7 @@ import { Mailbox } from "../../src/main/hcp/mailbox.ts";
 import { SUBMIT_DELAY_MS } from "../../src/shared/agent-io.ts";
 import { WorkspaceStore } from "@hivemind/workspace-host/store";
 import { StatusStore } from "@hivemind/agent-host/status-store";
-import { REPO, workspaceDeps } from "./hcp-workspace.ts";
+import { REPO, workspaceDeps, PERSON, fromTile } from "./hcp-workspace.ts";
 
 test("PipeManager: edges, self-loop refused, forget removes both directions", () => {
   const pm = new PipeManager();
@@ -116,7 +116,7 @@ function fakeDeps(over: Partial<Parameters<typeof makeDispatch>[0]> = {}) {
 test("dispatch agent.send: writes text + carriage return", async () => {
   const { deps, writes } = fakeDeps();
   const { dispatch } = makeDispatch(deps);
-  const r = await dispatch("agent.send", { tileId: "t1", text: "hello" });
+  const r = await dispatch("agent.send", { tileId: "t1", text: "hello" }, PERSON);
   assert.deepEqual(r, { ok: true });
   // Text is typed immediately; Enter follows as a SEPARATE keystroke a tick later
   // (claude's TUI drops a newline bundled with the text). Writes target the pty
@@ -129,10 +129,10 @@ test("dispatch agent.send: writes text + carriage return", async () => {
 test("dispatch agent.read: returns the reply the agent's plugin reported for the turn", async () => {
   const { deps, turns } = fakeDeps({ sessionHeld: (id) => id === "hm:t1" });
   const { dispatch } = makeDispatch(deps);
-  await dispatch("agent.send", { tileId: "t1", text: "go" });
-  const read = dispatch("agent.read", { tileId: "t1", timeoutMs: 1000 });
+  await dispatch("agent.send", { tileId: "t1", text: "go" }, PERSON);
+  const read = dispatch("agent.read", { tileId: "t1", timeoutMs: 1000 }, PERSON);
   // The plugin reports under the PTY id (HIVEMIND_TILE = hm:<tileId>): the reply, then the turn.
-  await dispatch("agent.reply", { tileId: "hm:t1", text: "the reply" });
+  await dispatch("agent.reply", { tileId: "hm:t1", text: "the reply" }, PERSON);
   turns.recordTurn("hm:t1");
   assert.deepEqual(await read, { text: "the reply", finalStatus: "turn", truncated: false });
 });
@@ -142,15 +142,15 @@ test("dispatch agent.read: a tile nothing knows of is not found at once; one ope
   deps.workspaces.addTile(REPO, { id: "tile-new", kind: "claude", label: "claude #1" });
   const { dispatch } = makeDispatch(deps);
   const started = Date.now();
-  await assert.rejects(dispatch("agent.read", { tileId: "tile-gone", timeoutMs: 5_000 }), (e: unknown) => e instanceof HcpError && e.code === "TILE_NOT_FOUND");
+  await assert.rejects(dispatch("agent.read", { tileId: "tile-gone", timeoutMs: 5_000 }, PERSON), (e: unknown) => e instanceof HcpError && e.code === "TILE_NOT_FOUND");
   assert.ok(Date.now() - started < 1_000, "answered at once, not at the timeout");
-  assert.deepEqual(await dispatch("agent.read", { tileId: "tile-new", timeoutMs: 50 }), { text: null, finalStatus: "timeout", truncated: false, note: "agent still working — no completed turn within timeout" });
+  assert.deepEqual(await dispatch("agent.read", { tileId: "tile-new", timeoutMs: 50 }, PERSON), { text: null, finalStatus: "timeout", truncated: false, note: "agent still working — no completed turn within timeout" });
 });
 
 test("dispatch agent.send_keys: maps symbolic tokens to terminal bytes", async () => {
   const { deps, writes } = fakeDeps();
   const { dispatch } = makeDispatch(deps);
-  const r = await dispatch("agent.send_keys", { tileId: "t1", keys: ["Down", "Enter"] });
+  const r = await dispatch("agent.send_keys", { tileId: "t1", keys: ["Down", "Enter"] }, PERSON);
   assert.deepEqual(r, { ok: true, keys: 2 });
   // First key writes immediately; the rest are staggered. Wait out the gap.
   await new Promise((res) => setTimeout(res, 120));
@@ -160,14 +160,14 @@ test("dispatch agent.send_keys: maps symbolic tokens to terminal bytes", async (
 test("dispatch agent.send_keys: unknown tokens pass through as literal text", async () => {
   const { deps, writes } = fakeDeps();
   const { dispatch } = makeDispatch(deps);
-  await dispatch("agent.send_keys", { tileId: "t1", keys: ["2"] });
+  await dispatch("agent.send_keys", { tileId: "t1", keys: ["2"] }, PERSON);
   assert.deepEqual(writes, [["hm:t1", "2"]]);
 });
 
 test("approval: no parent → fail-safe ask (falls through to human prompt)", async () => {
   const { deps } = fakeDeps();
   const { dispatch } = makeDispatch(deps);
-  const r = await dispatch("agent.await_approval", { callerTile: "orphan", tool_name: "Bash", tool_input: { command: "ls" } });
+  const r = await dispatch("agent.await_approval", { callerTile: "orphan", tool_name: "Bash", tool_input: { command: "ls" } }, PERSON);
   assert.deepEqual(r, { decision: "ask" });
 });
 
@@ -175,19 +175,19 @@ test("approval: worker awaits, parent approves 'always' → allow + cached (no s
   const { deps, writes } = fakeDeps();
   const { dispatch } = makeDispatch(deps);
   // The spawn makes `parent` the worker's parent.
-  const worker = ((await dispatch("tile.spawn_agent", { agent: "claude", callerTile: "parent", report: false })) as { tileId: string }).tileId;
-  const pending = dispatch("agent.await_approval", { callerTile: worker, tool_name: "Bash", tool_input: { command: "rm -rf /tmp/x" } });
+  const worker = ((await dispatch("tile.spawn_agent", { agent: "claude", callerTile: "parent", report: false }, PERSON)) as { tileId: string }).tileId;
+  const pending = dispatch("agent.await_approval", { callerTile: worker, tool_name: "Bash", tool_input: { command: "rm -rf /tmp/x" } }, PERSON);
   await new Promise((r) => setTimeout(r, 10));
   // The approval prompt is delivered into the PARENT's pty; pull the reqId out.
   const banner = writes.find(([id, data]) => id === "hm:parent" && data.includes("hive ctl approve"));
   assert.ok(banner, "approval banner delivered to parent");
   const reqId = banner![1].match(/hive ctl approve (\S+) /)![1];
-  const ar = await dispatch("agent.approve", { reqId, decision: "always" });
+  const ar = await dispatch("agent.approve", { reqId, decision: "always" }, PERSON);
   assert.deepEqual(ar, { ok: true, decision: "allow" });
   assert.equal((await pending as { decision: string }).decision, "allow");
   // Same worker+tool again → resolved from cache, no new banner to the parent.
   const before = writes.length;
-  const r2 = await dispatch("agent.await_approval", { callerTile: worker, tool_name: "Bash", tool_input: { command: "echo hi" } });
+  const r2 = await dispatch("agent.await_approval", { callerTile: worker, tool_name: "Bash", tool_input: { command: "echo hi" } }, PERSON);
   assert.deepEqual(r2, { decision: "allow" });
   assert.equal(writes.length, before, "cached decision delivers no new approval prompt");
 });
@@ -195,27 +195,27 @@ test("approval: worker awaits, parent approves 'always' → allow + cached (no s
 test("approval: deny carries a reason back to the worker", async () => {
   const { deps, writes } = fakeDeps();
   const { dispatch } = makeDispatch(deps);
-  const worker = ((await dispatch("tile.spawn_agent", { agent: "claude", callerTile: "parent", report: false })) as { tileId: string }).tileId;
-  const pending = dispatch("agent.await_approval", { callerTile: worker, tool_name: "Write", tool_input: { file_path: "/etc/passwd" } });
+  const worker = ((await dispatch("tile.spawn_agent", { agent: "claude", callerTile: "parent", report: false }, PERSON)) as { tileId: string }).tileId;
+  const pending = dispatch("agent.await_approval", { callerTile: worker, tool_name: "Write", tool_input: { file_path: "/etc/passwd" } }, PERSON);
   await new Promise((r) => setTimeout(r, 10));
   const reqId = writes.find(([id, d]) => id === "hm:parent" && d.includes("hive ctl approve"))![1].match(/hive ctl approve (\S+) /)![1];
-  await dispatch("agent.approve", { reqId, decision: "deny", reason: "not that file" });
+  await dispatch("agent.approve", { reqId, decision: "deny", reason: "not that file" }, PERSON);
   assert.deepEqual(await pending, { decision: "deny", reason: "not that file" });
 });
 
 test("approval: stale/unknown reqId → BAD_REQUEST", async () => {
   const { deps } = fakeDeps();
   const { dispatch } = makeDispatch(deps);
-  await assert.rejects(dispatch("agent.approve", { reqId: "nope", decision: "allow" }), (e: { code?: string }) => e.code === "BAD_REQUEST");
+  await assert.rejects(dispatch("agent.approve", { reqId: "nope", decision: "allow" }, PERSON), (e: { code?: string }) => e.code === "BAD_REQUEST");
 });
 
 test("spawn supervise: records the broker policy (default set + 'all')", async () => {
   const supervised: Array<[string, string | null]> = [];
   const { deps } = fakeDeps({ setSupervise: (id: string, spec: string | null) => { supervised.push([id, spec]); } });
   const { dispatch } = makeDispatch(deps);
-  const first = ((await dispatch("tile.spawn_agent", { agent: "claude", callerTile: "parent", supervise: true, report: false })) as { tileId: string }).tileId;
+  const first = ((await dispatch("tile.spawn_agent", { agent: "claude", callerTile: "parent", supervise: true, report: false }, PERSON)) as { tileId: string }).tileId;
   assert.deepEqual(supervised.at(-1), [first, "Bash,Edit,Write,MultiEdit,NotebookEdit,WebFetch"]);
-  const second = ((await dispatch("tile.spawn_agent", { agent: "claude", callerTile: "parent", supervise: "all", report: false })) as { tileId: string }).tileId;
+  const second = ((await dispatch("tile.spawn_agent", { agent: "claude", callerTile: "parent", supervise: "all", report: false }, PERSON)) as { tileId: string }).tileId;
   assert.deepEqual(supervised.at(-1), [second, "all"]);
 });
 
@@ -230,11 +230,11 @@ test("tile-id: toPtyId / toBareId are idempotent inverses", async () => {
 test("dispatch tile.spawn_agent: enforces MAX_SPAWN_DEPTH (anti-fork-bomb)", async () => {
   const { deps } = fakeDeps();
   const { dispatch } = makeDispatch(deps);
-  const t1 = ((await dispatch("tile.spawn_agent", {})) as { tileId: string }).tileId;                  // depth 1 (user=0)
-  const t2 = ((await dispatch("tile.spawn_agent", { callerTile: t1 })) as { tileId: string }).tileId;  // depth 2
-  const t3 = ((await dispatch("tile.spawn_agent", { callerTile: t2 })) as { tileId: string }).tileId;  // depth 3
+  const t1 = ((await dispatch("tile.spawn_agent", {}, PERSON)) as { tileId: string }).tileId;                  // depth 1 (user=0)
+  const t2 = ((await dispatch("tile.spawn_agent", { callerTile: t1 }, PERSON)) as { tileId: string }).tileId;  // depth 2
+  const t3 = ((await dispatch("tile.spawn_agent", { callerTile: t2 }, PERSON)) as { tileId: string }).tileId;  // depth 3
   await assert.rejects(                                                // depth 4 > 3
-    dispatch("tile.spawn_agent", { callerTile: t3 }),
+    dispatch("tile.spawn_agent", { callerTile: t3 }, PERSON),
     (e: unknown) => (e as { code?: string })?.code === "DEPTH_EXCEEDED",
   );
 });
@@ -254,7 +254,7 @@ test("dispatch tile.spawn_agent writes the tile in main: beside its caller, else
     announceSpawn: (spawn) => { ws.announced.push(spawn); heardFirst.push(ws.workspaces.workspaceOf(spawn.tileId) === null); },
   });
   const { dispatch } = makeDispatch(deps);
-  const spawn = async (p: Record<string, unknown>) => ((await dispatch("tile.spawn_agent", { agent: "claude", ...p })) as { tileId: string }).tileId;
+  const spawn = async (p: Record<string, unknown>) => ((await dispatch("tile.spawn_agent", { agent: "claude", ...p }, PERSON)) as { tileId: string }).tileId;
   const tileOf = (id: string) => ws.workspaces.getCore(REPO)!.tiles.find((t) => t.id === id);
   const frameOf = (id: string) => ws.workspaces.getCore(REPO)!.frameOf?.[id];
 
@@ -269,16 +269,16 @@ test("dispatch tile.spawn_agent writes the tile in main: beside its caller, else
   assert.deepEqual(heardFirst, [true, true, true], "the windows hear of each tile before it is written");
 
   ws.workspaces.setCore("/bare", { frames: [], tiles: [] });
-  const loose = ((await makeDispatch(fakeDeps({ ...ws, shownWorkspace: () => ({ repo: "/bare", frame: null }) }).deps).dispatch("tile.spawn_agent", { agent: "claude" })) as { tileId: string }).tileId;
+  const loose = ((await makeDispatch(fakeDeps({ ...ws, shownWorkspace: () => ({ repo: "/bare", frame: null }) }).deps).dispatch("tile.spawn_agent", { agent: "claude" }, PERSON)) as { tileId: string }).tileId;
   assert.deepEqual(ws.workspaces.getCore("/bare")?.frameOf, {}, "a workspace with no frame: loose, for the window to frame");
   assert.ok(ws.workspaces.getCore("/bare")?.tiles.some((t) => t.id === loose));
-  await assert.rejects(makeDispatch(fakeDeps({ ...ws, shownWorkspace: () => null }).deps).dispatch("tile.spawn_agent", { agent: "claude" }), (e: unknown) => e instanceof HcpError && e.code === "NOT_FOUND");
+  await assert.rejects(makeDispatch(fakeDeps({ ...ws, shownWorkspace: () => null }).deps).dispatch("tile.spawn_agent", { agent: "claude" }, PERSON), (e: unknown) => e instanceof HcpError && e.code === "NOT_FOUND");
 });
 
 test("dispatch tile.spawn_agent: rate-limited → RATE_LIMITED", async () => {
   const { deps } = fakeDeps({ spawnAllowed: () => false });
   await assert.rejects(
-    makeDispatch(deps).dispatch("tile.spawn_agent", { agent: "claude" }),
+    makeDispatch(deps).dispatch("tile.spawn_agent", { agent: "claude" }, PERSON),
     (e: unknown) => (e as { code?: string })?.code === "RATE_LIMITED",
   );
 });
@@ -310,8 +310,8 @@ test("single-delivery ladder: an explicit hive_report suppresses that turn's aut
 test("forgetTile (pty-exit teardown) wakes a blocked hive_read instead of hanging it", async () => {
   const { deps } = fakeDeps();
   const { dispatch, forgetTile } = makeDispatch(deps);
-  const worker = ((await dispatch("tile.spawn_agent", { agent: "claude", callerTile: "hm:tile-p" })) as { tileId: string }).tileId;
-  const read = dispatch("agent.read", { tileId: worker, timeoutMs: 60_000 });
+  const worker = ((await dispatch("tile.spawn_agent", { agent: "claude", callerTile: "hm:tile-p" }, PERSON)) as { tileId: string }).tileId;
+  const read = dispatch("agent.read", { tileId: worker, timeoutMs: 60_000 }, PERSON);
   forgetTile(worker); // worker's pty exits (crash) → teardown must resolve the read now
   const r = (await read) as { finalStatus: string };
   assert.equal(r.finalStatus, "closed", "a crashed worker resolves the read immediately (and says it closed, not that it is still working)");
@@ -320,8 +320,8 @@ test("forgetTile (pty-exit teardown) wakes a blocked hive_read instead of hangin
 test("forgetTile resolves a supervised worker's pending approval (deny), not leak it", async () => {
   const { deps } = fakeDeps();
   const { dispatch, forgetTile } = makeDispatch(deps);
-  const worker = ((await dispatch("tile.spawn_agent", { agent: "claude", supervise: true, callerTile: "hm:tile-p" })) as { tileId: string }).tileId;
-  const approval = dispatch("agent.await_approval", { callerTile: `hm:${worker}`, tool_name: "Bash", tool_input: { command: "ls" } });
+  const worker = ((await dispatch("tile.spawn_agent", { agent: "claude", supervise: true, callerTile: "hm:tile-p" }, PERSON)) as { tileId: string }).tileId;
+  const approval = dispatch("agent.await_approval", { callerTile: `hm:${worker}`, tool_name: "Bash", tool_input: { command: "ls" } }, PERSON);
   forgetTile(worker); // worker crashed mid-approval
   const r = (await approval) as { decision: string };
   assert.equal(r.decision, "deny", "a crashed worker's approval resolves deny, doesn't hang 20 min");
@@ -342,12 +342,12 @@ test("dispatch tile.close needs no window: the tile leaves its workspace, and th
     endSession: (ptyId) => void ended.push(ptyId),
   });
   const { dispatch } = makeDispatch(deps);
-  const read = dispatch("agent.read", { tileId: "tile-a", timeoutMs: 5_000 });
-  for (const tileId of ["hm:tile-a", "tile-s", "tile-e"]) assert.deepEqual(await dispatch("tile.close", { tileId }), { ok: true });
+  const read = dispatch("agent.read", { tileId: "tile-a", timeoutMs: 5_000 }, PERSON);
+  for (const tileId of ["hm:tile-a", "tile-s", "tile-e"]) assert.deepEqual(await dispatch("tile.close", { tileId }, PERSON), { ok: true });
   assert.deepEqual(ended, ["hm:tile-a"]);
   assert.deepEqual(store.getCore("/w")?.tiles, []);
   assert.equal(((await read) as { finalStatus: string }).finalStatus, "closed", "a read waiting on it is answered at once");
-  await assert.rejects(dispatch("tile.close", { tileId: "tile-a" }), (e: unknown) => e instanceof HcpError && e.code === "TILE_NOT_FOUND");
+  await assert.rejects(dispatch("tile.close", { tileId: "tile-a" }, PERSON), (e: unknown) => e instanceof HcpError && e.code === "TILE_NOT_FOUND");
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -373,17 +373,17 @@ test("dispatch tile.list needs no window: the caller's workspace, else the one t
       { tileId: "tile-s", kind: "shell", label: "shell #1", status: null, name: "server" },
     ],
   };
-  assert.deepEqual(await dispatch("tile.list", { callerTile: "hm:tile-s" }), { frames: [api], loose: [] });
-  assert.deepEqual(await dispatch("tile.list", {}), { frames: [{ frameId: "g1", title: "Web", repo: null, branch: null, tiles: [{ tileId: "tile-w", kind: "shell", label: "shell #1", status: null, name: "shell #1" }] }], loose: [] });
-  assert.deepEqual(await dispatch("tile.list_frames", { callerTile: "tile-a" }), { frames: [
+  assert.deepEqual(await dispatch("tile.list", { callerTile: "hm:tile-s" }, PERSON), { frames: [api], loose: [] });
+  assert.deepEqual(await dispatch("tile.list", {}, PERSON), { frames: [{ frameId: "g1", title: "Web", repo: null, branch: null, tiles: [{ tileId: "tile-w", kind: "shell", label: "shell #1", status: null, name: "shell #1" }] }], loose: [] });
+  assert.deepEqual(await dispatch("tile.list_frames", { callerTile: "tile-a" }, PERSON), { frames: [
     { id: "f1", title: "API", repo: "/src/api", branch: null, tiles: 2 },
     { id: "f2", title: "Docs", repo: null, branch: null, tiles: 0 },
   ] });
   // One frame, named any way spawn takes; a name no frame answers to is refused.
-  assert.deepEqual(await dispatch("tile.list", { callerTile: "tile-a", frame: "docs" }), { frames: [{ frameId: "f2", title: "Docs", repo: null, branch: null, tiles: [] }], loose: [] });
-  await assert.rejects(dispatch("tile.list", { callerTile: "tile-a", frame: "nothing" }), (e: unknown) => e instanceof HcpError && e.code === "NOT_FOUND");
+  assert.deepEqual(await dispatch("tile.list", { callerTile: "tile-a", frame: "docs" }, PERSON), { frames: [{ frameId: "f2", title: "Docs", repo: null, branch: null, tiles: [] }], loose: [] });
+  await assert.rejects(dispatch("tile.list", { callerTile: "tile-a", frame: "nothing" }, PERSON), (e: unknown) => e instanceof HcpError && e.code === "NOT_FOUND");
   shown = null; // no caller, and no window showing a workspace
-  assert.deepEqual(await dispatch("tile.list", {}), { frames: [], loose: [] });
+  assert.deepEqual(await dispatch("tile.list", {}, PERSON), { frames: [], loose: [] });
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -414,7 +414,7 @@ test("dispatch views.rescan: asks the renderer to re-read the view packages and 
   const calls: string[] = [];
   const { deps } = fakeDeps({ callRenderer: async (m: string) => { calls.push(m); return { registered: ["orbit"], refused: { greedy: "unknown permission" } }; } });
   const { dispatch } = makeDispatch(deps);
-  assert.deepEqual(await dispatch("views.rescan", {}), { registered: ["orbit"], refused: { greedy: "unknown permission" } });
+  assert.deepEqual(await dispatch("views.rescan", {}, PERSON), { registered: ["orbit"], refused: { greedy: "unknown permission" } });
   assert.deepEqual(calls, ["views.rescan"]);
 });
 
@@ -423,11 +423,11 @@ test("tool.open: optional tools default off and recheck activation for every req
   const { deps } = fakeDeps({ toolsSettings: () => ({ enabledPlugins: enabled ? ["hivemind/web"] : [], disabledTools: [] }) });
   const { dispatch } = makeDispatch(deps);
   const request = { tool: "hivemind/web/browser", url: "about:blank" };
-  await assert.rejects(dispatch("tool.open", request), { code: "UNAUTHORIZED" });
+  await assert.rejects(dispatch("tool.open", request, PERSON), { code: "UNAUTHORIZED" });
   enabled = true;
-  const { tileId } = (await dispatch("tool.open", request)) as { tileId: string };
+  const { tileId } = (await dispatch("tool.open", request, PERSON)) as { tileId: string };
   enabled = false;
-  await assert.rejects(dispatch("tool.open", request), { code: "UNAUTHORIZED" });
+  await assert.rejects(dispatch("tool.open", request, PERSON), { code: "UNAUTHORIZED" });
   assert.deepEqual(deps.workspaces.getCore(REPO)?.tiles, [{ id: tileId, kind: "browser", label: "Browser #1", url: "about:blank" }]);
 });
 
@@ -439,14 +439,14 @@ test("tool.open: unknown tools, disabled contributions, invalid URLs and spawn f
     spawnAllowed: () => spawn,
   });
   const { dispatch } = makeDispatch(deps);
-  await assert.rejects(dispatch("tool.open", { tool: "unknown/browser" }), { code: "UNSUPPORTED" });
+  await assert.rejects(dispatch("tool.open", { tool: "unknown/browser" }, PERSON), { code: "UNSUPPORTED" });
   for (const url of ["javascript:alert(1)", "file:///etc/passwd", "broken", 123]) {
-    await assert.rejects(dispatch("tool.open", { tool: "hivemind/web/browser", url }), { code: "BAD_REQUEST" });
+    await assert.rejects(dispatch("tool.open", { tool: "hivemind/web/browser", url }, PERSON), { code: "BAD_REQUEST" });
   }
   disabledTools = ["hivemind/web/browser"];
-  await assert.rejects(dispatch("tool.open", { tool: "hivemind/web/browser" }), { code: "UNAUTHORIZED" });
+  await assert.rejects(dispatch("tool.open", { tool: "hivemind/web/browser" }, PERSON), { code: "UNAUTHORIZED" });
   disabledTools = []; spawn = false;
-  await assert.rejects(dispatch("tool.open", { tool: "hivemind/web/browser" }), { code: "RATE_LIMITED" });
+  await assert.rejects(dispatch("tool.open", { tool: "hivemind/web/browser" }, PERSON), { code: "RATE_LIMITED" });
   assert.deepEqual(deps.workspaces.getCore(REPO)?.tiles, [], "no refused request opened a tile");
 });
 
@@ -476,27 +476,54 @@ async function session(sock: string) {
   };
 }
 
-test("hcp-server: nothing before initialize with the token; then methods, and our error codes in data", async () => {
+/** Tokens a test server knows: "secret" is the person's, "t1-token" the agent's in tile t1. */
+const knownTokens = (t: unknown) => (t === "secret" ? PERSON.actor : t === "t1-token" ? fromTile("t1").actor : null);
+
+test("hcp-server: nothing before initialize with a token it knows; then methods, made by whoever the token names, and our error codes in data", async () => {
   const sock = tmpSock();
   const srv = startHcpServer(sock, {
-    token: "secret", rendererUp: () => true, onEvent: () => {},
-    dispatch: async (method, params) => { if (method === "boom") throw new HcpError("TILE_NOT_FOUND", "no such tile"); return { echoed: method, params }; },
+    authenticate: knownTokens, rendererUp: () => true, onEvent: () => {},
+    dispatch: async (method, params, call) => { if (method === "boom") throw new HcpError("TILE_NOT_FOUND", "no such tile"); return { echoed: method, params, by: call.actor }; },
   });
   await new Promise((r) => setTimeout(r, 50));
   const s = await session(sock);
   assert.equal((await s.call("x.y")).error.data.code, "UNAUTHORIZED", "nothing before initialize");
   assert.equal((await s.call("initialize", { token: "wrong" })).error.code, -32000);
+  assert.equal((await s.call("x.y")).error.data.code, "UNAUTHORIZED", "nor after a token it does not know");
   assert.deepEqual((await s.call("initialize", { token: "secret" })).result, { protocolVersion: 2, rendererUp: true, capabilities: { status: false } });
-  assert.deepEqual((await s.call("x.y", { a: 1 })).result, { echoed: "x.y", params: { a: 1 } });
+  assert.deepEqual((await s.call("x.y", { a: 1 })).result, { echoed: "x.y", params: { a: 1 }, by: { kind: "person" } });
   assert.deepEqual((await s.call("boom")).error, { code: -32000, message: "no such tile", data: { code: "TILE_NOT_FOUND" } });
+  const agent = await session(sock);
+  await agent.call("initialize", { token: "t1-token" });
+  assert.deepEqual((await agent.call("x.y")).result.by, { kind: "tile", tile: "t1" });
   s.close();
+  agent.close();
+  srv.close();
+});
+
+test("hcp-server: a call still running when its caller goes is told that nobody waits for it any more", async () => {
+  const sock = tmpSock();
+  let told = false;
+  const srv = startHcpServer(sock, {
+    authenticate: knownTokens, rendererUp: () => true, onEvent: () => {},
+    dispatch: (_method, _params, call) => new Promise((resolve) => call.signal?.addEventListener("abort", () => { told = true; resolve(null); })),
+  });
+  await new Promise((r) => setTimeout(r, 50));
+  const s = await session(sock);
+  await s.call("initialize", { token: "t1-token" });
+  void s.call("agent.await_approval", { tool_name: "Bash" });
+  await new Promise((r) => setTimeout(r, 50));
+  assert.equal(told, false, "not while it waits");
+  s.close();
+  for (let i = 0; i < 100 && !told; i++) await new Promise((r) => setTimeout(r, 10));
+  assert.equal(told, true);
   srv.close();
 });
 
 test("hcp-server: a hook's agent.event needs no token; any other unauthenticated notification is dropped", async () => {
   const sock = tmpSock();
   const got: unknown[] = [];
-  const srv = startHcpServer(sock, { token: "secret", rendererUp: () => true, dispatch: async () => ({}), onEvent: (m, p) => { got.push([m, p]); } });
+  const srv = startHcpServer(sock, { authenticate: knownTokens, rendererUp: () => true, dispatch: async () => ({}), onEvent: (m, p) => { got.push([m, p]); } });
   await new Promise((r) => setTimeout(r, 50));
   const s = await session(sock);
   s.notify("agent.event", { tileId: "hm:t1", event: "turn.ended" });
@@ -512,13 +539,13 @@ test("hcp-server: agent.stream/subscribe replays what the recorder holds, then l
   const rec = new OutputRecorder();
   rec.record("t", "a\nb\n");
   const srv = startHcpServer(sock, {
-    token: "k", rendererUp: () => true, onEvent() {}, dispatch: async () => ({}),
+    authenticate: knownTokens, rendererUp: () => true, onEvent() {}, dispatch: async () => ({}),
     replay: (id, o) => (typeof o.lines === "number" ? rec.tail(id, o.lines) : rec.since(id, o.since ?? 0)),
     offsetOf: (id) => rec.mark(id),
   });
   await new Promise((r) => setTimeout(r, 50));
   const s = await session(sock);
-  await s.call("initialize", { token: "k" });
+  await s.call("initialize", { token: "secret" });
   const sub = await s.call("agent.stream/subscribe", { tileId: "t", lines: 1 });
   assert.equal(sub.result.offset, 4);
   const subscriptionId = sub.result.subscriptionId;
@@ -542,10 +569,10 @@ test("hcp-server: status/subscribe — the whole picture without a cursor, only 
   const store = new StatusStore();
   store.event("hm:a", { event: "turn.started" });
   const sock = tmpSock();
-  const srv = startHcpServer(sock, { token: "k", rendererUp: () => true, onEvent: () => {}, dispatch: async () => ({}), status: store });
+  const srv = startHcpServer(sock, { authenticate: knownTokens, rendererUp: () => true, onEvent: () => {}, dispatch: async () => ({}), status: store });
   await new Promise((r) => setTimeout(r, 50));
   const s = await session(sock);
-  await s.call("initialize", { token: "k" });
+  await s.call("initialize", { token: "secret" });
   const first = await s.call("status/subscribe", {});
   assert.equal(first.result.cursor, 1);
   assert.equal(first.result.snapshot[0].status.state, "working");

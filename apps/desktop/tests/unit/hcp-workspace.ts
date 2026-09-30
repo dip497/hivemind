@@ -13,6 +13,11 @@ import { WorkspaceStore } from "@hivemind/workspace-host/store";
 import { Intents, type AuditRecord } from "@hivemind/workspace-host/intents";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import type { HcpSpawnedEvent } from "../../src/shared/ipc.ts";
+import type { HcpCall } from "../../src/main/hcp/protocol.ts";
+
+/** Who makes a test's call: the person at a terminal, or the agent in a tile. */
+export const PERSON: HcpCall = { actor: { kind: "person" } };
+export const fromTile = (tile: string): HcpCall => ({ actor: { kind: "tile", tile } });
 
 export const REPO = "/work/repo";
 

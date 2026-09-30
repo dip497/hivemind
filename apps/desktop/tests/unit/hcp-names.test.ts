@@ -15,7 +15,7 @@ import path from "node:path";
 import { StatusStore } from "@hivemind/agent-host/status-store";
 import { WorkspaceStore } from "@hivemind/workspace-host/store";
 import { labelOf } from "../../src/main/hcp/names.js";
-import { REPO, workspaceDeps } from "./hcp-workspace.ts";
+import { REPO, workspaceDeps, PERSON } from "./hcp-workspace.ts";
 import { makeDispatch } from "../../src/main/hcp/methods.js";
 import { TurnTracker } from "../../src/main/hcp/turn-tracker.js";
 import { OutputRecorder } from "../../src/main/hcp/output-recorder.js";
@@ -90,7 +90,7 @@ test("tile.spawn_agent names the tile it opens: it enumerates its params, and a 
     ...ws,
   } as unknown as Parameters<typeof makeDispatch>[0]);
 
-  const { tileId } = (await dispatch("tile.spawn_agent", { agent: "pi", name: "student-fe", callerTile: "hm:tile-p" })) as { tileId: string };
+  const { tileId } = (await dispatch("tile.spawn_agent", { agent: "pi", name: "student-fe", callerTile: "hm:tile-p" }, PERSON)) as { tileId: string };
   assert.equal(ws.workspaces.getCore(REPO)?.tileNames?.[tileId], "student-fe", "the tile is named");
   assert.equal(labelOf(tileId, ws.workspaces, ws.status), `student-fe (${tileId})`, "and every report it sends back says so");
 });

@@ -18,7 +18,7 @@ import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { composeResume, composeResumeFrom, hookPathsFor, providers as registry, renderHookDocument } from "@hivemind/agents/node";
 import { authoredDef, authoredAsset, useAuthoredAgents } from "./authored-agents.ts";
-import { workspaceDeps } from "./hcp-workspace.ts";
+import { workspaceDeps, PERSON } from "./hcp-workspace.ts";
 import type { SpawnSpec } from "@hivemind/agent-host/pty-session-manager";
 import { deliversPromptViaArgv } from "../../src/shared/agent-io.ts";
 import { applyInitialPrompt, INITIAL_PROMPT_ENV } from "@hivemind/agent-host/initial-prompt";
@@ -46,7 +46,7 @@ const CTX = {
   eventHookPath: "/x/ud/hcp-event-hook.cjs",
   sdkPath: "/x/ud/hive-sdk.cjs",
   hcpSock: "/x/ud/hcp.sock",
-  hcpToken: "golden-token",
+  hcpToken: (tile: string) => `golden-token:${tile}`,
   // Provider-private paths, as each provider's prepare() would return them.
   // What the daemon hands each agent after it has prepared: its own directory, and for an
   // agent with a private configuration home, that the overlay was seeded.
@@ -131,7 +131,7 @@ async function capture(make = () => composeResume(CTX)) {
       let supervise: unknown;
       // The id is minted fresh each time: the snapshot records that one was, in this agent's name.
       try {
-        const { tileId } = (await dispatch("tile.spawn_agent", { agent: p.id, supervise: "all", callerTile: "parent", report: false })) as { tileId: string };
+        const { tileId } = (await dispatch("tile.spawn_agent", { agent: p.id, supervise: "all", callerTile: "parent", report: false }, PERSON)) as { tileId: string };
         supervise = { tileId: tileId.replace(/-\d+$/, "-<minted>") };
       }
       catch (e) { supervise = { error: (e as { code?: string }).code ?? String(e) }; }

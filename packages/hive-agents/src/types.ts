@@ -374,7 +374,8 @@ export interface ProviderSpawnContext {
   /** The SDK a plugin's own hook scripts load (`HIVE_SDK`). */
   sdkPath?: string;
   hcpSock?: string;
-  hcpToken?: string;
+  /** The control-plane token a tile's agent is given: its own, which names the tile. */
+  hcpToken?: (tile: string) => string;
   /** Provider-private paths, keyed by provider id — whatever that provider's
    *  `prepare()` returned at daemon start (an extension file, a config-home
    *  overlay, its own hook script). Opaque to everything but the owning

@@ -249,6 +249,17 @@ exactly as today. They are ordered by dependency.
   never holds an effect back: a line that cannot be written is reported, and the effect happens.
   Until each tile has a token of its own the actor is what the call says; `hive ctl` names its
   tile on every call.
+- **Decided while building it, step 2 (2026-09-30).** A tile's token is the tile's id and a MAC of
+  it under the install's token (`<tile>.<HMAC-SHA256>`): the host checks it without storing
+  anything, a session restored after a restart is given the same one, and it names its tile, so
+  no client had to change. A tile acts only as itself; the person (the install's token) may act
+  for any tile. The policy starts with one rule, `onlyBy`: an intent only one tile may ask for is
+  refused to any other and recorded as `refused` (an approval's answer is its supervisor's;
+  speaking as a tile is that tile's). A question is tied to the connection that asked it, so an
+  answer after the asker gave up is refused rather than reported as done. What this does not do:
+  every process of the user can read the install's token, so a tile token makes the actor right
+  and does not wall an agent off; on one machine the boundary is the OS user. Hook notifications
+  stay unauthenticated until peers (M1) need them not to be.
 
 ### R8. A workspace API that is not Electron IPC
 

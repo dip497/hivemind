@@ -37,7 +37,7 @@ const pathsFor = (deps: Record<string, string | undefined>): RuntimePaths => ({
   execPath: deps.execPath!,
   tileSessionsDir: deps.tileSessionsDir!,
   home: deps.home ?? "/home/u",
-  ...(deps.hcpSock ? { hcpSock: deps.hcpSock, hcpToken: "tok" } : {}),
+  ...(deps.hcpSock ? { hcpSock: deps.hcpSock, hcpToken: () => "tok" } : {}),
   hooks: hookPathsFor(claudeDef, { ...deps, execPath: deps.execPath!, tileSessionsDir: deps.tileSessionsDir! }),
 });
 const trackerSettings = (deps: Record<string, string | undefined>, tileId: string, supervise?: string): string =>
