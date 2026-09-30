@@ -17,6 +17,7 @@
     "test:unit": "tsx --test tests/unit/*.test.ts",
     "test:e2e": "electron-vite build && playwright test",
     "test:e2e:nb": "playwright test",
+    "test:e2e:harness": "playwright test -c playwright.harness.config.ts",
     "test:e2e:diff": "playwright test shipped-features.spec.ts",
     "test:e2e:issues": "playwright test issues-tile.spec.ts issue-create.spec.ts init-workspace.spec.ts",
     "test:e2e:canvas": "playwright test resize.spec.ts tile-move.spec.ts frame.spec.ts frame-contains-tile.spec.ts",

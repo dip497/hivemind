@@ -1,12 +1,13 @@
 // Regression: the Issues tile on the canvas (board-lite). Seeds a real
 // .hivemind workspace + one issue, opens the tile, and verifies the card,
 // per-card state dropdown, "work" button, and click→peek all render.
-import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
+import { launchWindow, type AppWindow } from "./helpers/window";
 import path from "node:path";
 import fs from "node:fs/promises";
 import os from "node:os";
 
-let app: ElectronApplication;
+let app: AppWindow;
 let page: Page;
 let workspace: string;
 
@@ -39,11 +40,8 @@ Make it go.
     "utf8",
   );
 
-  app = await electron.launch({
-    args: [path.join(process.cwd(), "out/main/index.js"), "--no-sandbox", `--user-data-dir=/tmp/hm-issues-ud-${Date.now()}`],
-    cwd: workspace,
-  });
-  page = await app.firstWindow();
+  app = await launchWindow({ cwd: workspace, args: [`--user-data-dir=/tmp/hm-issues-ud-${Date.now()}`] });
+  page = app.page;
   await page.waitForLoadState("domcontentloaded");
   await page.waitForSelector(".react-flow", { timeout: 15_000 });
   await page.waitForTimeout(400);

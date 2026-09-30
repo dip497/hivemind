@@ -9,7 +9,8 @@
 //   5. Assert the markdown file appears on disk at `.hivemind/issues/XX-1.md`
 //      with the expected frontmatter (id, title, state, etc).
 //   6. Assert the issue shows up in the renderer (Board view card).
-import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
+import { launchWindow, type AppWindow } from "./helpers/window";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import fs from "node:fs/promises";
@@ -19,7 +20,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const APP_DIR = path.resolve(__dirname, "../..");
 
-let app: ElectronApplication;
+let app: AppWindow;
 let page: Page;
 let workspace: string;
 
@@ -34,15 +35,8 @@ test.beforeAll(async () => {
     "utf8",
   );
 
-  app = await electron.launch({
-    args: [
-      path.join(APP_DIR, "out/main/index.js"),
-      "--no-sandbox",
-      `--user-data-dir=/tmp/hivemind-ud-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-    ],
-    cwd: workspace,
-  });
-  page = await app.firstWindow();
+  app = await launchWindow({ cwd: workspace, args: [`--user-data-dir=/tmp/hivemind-ud-${Date.now()}-${Math.random().toString(36).slice(2)}`] });
+  page = app.page;
   page.on("console", (m) => console.log(`[r.${m.type()}]`, m.text()));
   page.on("pageerror", (e) => console.log("[r.pageerror]", e.message));
   await page.waitForLoadState("domcontentloaded");

@@ -3,7 +3,8 @@
 // the bounding box of the tiles inside (auto-fit), and an empty frame collapses
 // to a placeholder. So there is no resize-handle test anymore; we assert the
 // empty frame renders at the collapsed placeholder size + still moves.
-import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
+import { launchWindow, type AppWindow } from "./helpers/window";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -11,19 +12,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const APP_DIR = path.resolve(__dirname, "../..");
 
-let app: ElectronApplication;
+let app: AppWindow;
 let page: Page;
 
 test.beforeAll(async () => {
-  app = await electron.launch({
-    args: [
-      path.join(APP_DIR, "out/main/index.js"),
-      "--no-sandbox",
-      `--user-data-dir=/tmp/hivemind-ud-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-    ],
-    cwd: APP_DIR,
-  });
-  page = await app.firstWindow();
+  app = await launchWindow({ cwd: APP_DIR, args: [`--user-data-dir=/tmp/hivemind-ud-${Date.now()}-${Math.random().toString(36).slice(2)}`] });
+  page = app.page;
   page.on("console", (m) => console.log(`[renderer.${m.type()}]`, m.text()));
   await page.waitForLoadState("domcontentloaded");
   await page.waitForSelector(".react-flow", { timeout: 10_000 });

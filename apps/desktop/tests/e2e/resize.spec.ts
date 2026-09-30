@@ -9,7 +9,8 @@
 //   both miss this. The same test ran via hivectl.mjs CDP showed
 //   pointerdown but never pointerup → resize never committed. Playwright
 //   bypasses that.
-import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
+import { launchWindow, type AppWindow } from "./helpers/window";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -17,21 +18,14 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const APP_DIR = path.resolve(__dirname, "../..");
 
-let app: ElectronApplication;
+let app: AppWindow;
 let page: Page;
 
 test.beforeAll(async () => {
-  app = await electron.launch({
-    args: [
-      path.join(APP_DIR, "out/main/index.js"),
-      "--no-sandbox",
-      // Isolated userData so localStorage (hivemind:last-project) from other
-      // specs doesn't auto-reopen a stale workspace.
-      `--user-data-dir=/tmp/hivemind-ud-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-    ],
-    cwd: APP_DIR,
-  });
-  page = await app.firstWindow();
+  // Isolated userData so localStorage (hivemind:last-project) from other
+  // specs doesn't auto-reopen a stale workspace.
+  app = await launchWindow({ cwd: APP_DIR, args: [`--user-data-dir=/tmp/hivemind-ud-${Date.now()}-${Math.random().toString(36).slice(2)}`] });
+  page = app.page;
   // Echo renderer console to test runner stdout so [resize] logs surface.
   page.on("console", (m) => console.log(`[renderer.${m.type()}]`, m.text()));
   page.on("pageerror", (e) => console.log("[renderer.error]", e.message));

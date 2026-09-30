@@ -331,6 +331,15 @@ exactly as today. They are ordered by dependency.
   not a window: the store's history per writer then works for any client. The dev-bridge's page
   became a bundled TypeScript client so it can use the package's client and replica rather than
   a copy of them in a string.
+- **Decided while building it, step 5 (2026-09-30).** The local socket main was to serve for
+  the API goes with R10: hive-net is its first caller, and until then it would be an API no one
+  calls. The transport the harness runs over is the dev-bridge's (one connection per page, its
+  event stream; calls and notices naming it), which is the shape a stream carries anyway. The
+  harness is the same specs, not copies: a spec launches its window through one helper, which is
+  the app or, in the harness, Chromium on the dev-bridge; a spec that needs Electron's main
+  cannot be in it. So R8's "done when" holds for the canvas (tile-move, resize, frame), a
+  terminal (keyboard-gate, and terminal-io, written for it: keys to the shell, output to the
+  window), git and files (editor, shipped-features) and issues (issue-create, issues-tile).
 
 ### R9. Machines by id, not by ssh uri
 

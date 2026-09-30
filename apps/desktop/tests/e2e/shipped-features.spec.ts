@@ -2,13 +2,14 @@
 // agent status indicator, perf motion-aware compositing, MiniMap opt-in, and
 // the CommandDialog a11y fix. Launches against a throwaway git repo fixture so
 // diff content is deterministic (real changes + a branch base).
-import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
+import { launchWindow, type AppWindow } from "./helpers/window";
 import { execSync } from "node:child_process";
 import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-let app: ElectronApplication;
+let app: AppWindow;
 let page: Page;
 let repo: string;
 const consoleErrors: string[] = [];
@@ -32,11 +33,8 @@ test.beforeAll(async () => {
   writeFileSync(path.join(repo, "src/app.ts"), Array.from({ length: 120 }, (_, i) => `export const fn${i} = () => ${i === 3 ? 999 : i % 4 === 0 ? i + 1000 : i};`).join("\n") + "\n");
   writeFileSync(path.join(repo, "src/new.ts"), "export const fresh = true;\n");
 
-  app = await electron.launch({
-    args: [path.join(process.cwd(), "out/main/index.js"), "--no-sandbox", `--user-data-dir=/tmp/hm-ud-${Date.now()}-${Math.random().toString(36).slice(2)}`],
-    cwd: repo,
-  });
-  page = await app.firstWindow();
+  app = await launchWindow({ cwd: repo, args: [`--user-data-dir=/tmp/hm-ud-${Date.now()}-${Math.random().toString(36).slice(2)}`] });
+  page = app.page;
   page.on("console", (m) => { if (m.type() === "error") consoleErrors.push(m.text().slice(0, 200)); });
   page.on("pageerror", (e) => consoleErrors.push("PAGEERROR: " + e.message));
   await page.waitForLoadState("domcontentloaded");

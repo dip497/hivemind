@@ -106,6 +106,11 @@ tile bodies live in the TileHost and are never remounted by a view.
   UI (the created issue opens in the peek; in-diff search is collapsed to its
   icon; the sonner toast stack covers the bottom-right corner; tree rows expose
   the file name only as their accessible name) — wait on state, never on time.
+- The harness (`pnpm test:e2e:harness`, `playwright.harness.config.ts`) runs the canvas, terminal,
+  git and issue specs against the renderer in Chromium over the dev-bridge instead of Electron.
+  A spec in it launches through `tests/e2e/helpers/window.ts` and asks only the window
+  (`window.hive`), never Electron's main. Set `HIVE_HARNESS_CHROMIUM` to a Chromium binary when
+  Playwright's own is not installed (in the cloud containers: `/opt/pw-browsers/chromium`).
 - Perf: `scripts/perf-canvas-effects.mjs` is the reproducible workload for canvas
   changes. The view harness (`perf-views.mjs`) went with the World view it measured;
   a scene-view gate would have to be rewritten against a community view.

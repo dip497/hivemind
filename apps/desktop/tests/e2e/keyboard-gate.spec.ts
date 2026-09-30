@@ -1,22 +1,20 @@
 // PROBE: an unselected tile must not receive keystrokes (tile-locked blocks the
 // mouse; xterm disableStdin + blur must block the keyboard). Temporary.
-import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
+import { launchWindow, type AppWindow } from "./helpers/window";
 import { execSync } from "node:child_process";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-let app: ElectronApplication;
+let app: AppWindow;
 let page: Page;
 
 test.beforeAll(async () => {
   const repo = mkdtempSync(path.join(tmpdir(), "hm-kbd-"));
   execSync("git init -q -b main", { cwd: repo });
-  app = await electron.launch({
-    args: [path.join(process.cwd(), "out/main/index.js"), "--no-sandbox", `--user-data-dir=/tmp/hm-kbd-ud-${Date.now()}`],
-    cwd: repo,
-  });
-  page = await app.firstWindow();
+  app = await launchWindow({ cwd: repo, args: [`--user-data-dir=/tmp/hm-kbd-ud-${Date.now()}`] });
+  page = app.page;
   await page.waitForLoadState("domcontentloaded");
   await page.waitForSelector(".react-flow", { timeout: 15_000 });
   await page.waitForTimeout(400);
