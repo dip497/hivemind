@@ -13,6 +13,7 @@ import { app, type IpcMainEvent, type WebContents } from "electron";
 import type { Connection } from "@hivemind/workspace-api/server";
 import { WorkspaceStore, type WorkspaceChange } from "@hivemind/workspace-host/store";
 import { answer } from "./app-ipc.js";
+import { machineIdentity } from "./identity.js";
 import type { Layouts } from "./workspace/store.js";
 
 let store: WorkspaceStore | null = null;
@@ -23,6 +24,7 @@ let tell: (change: WorkspaceChange) => void = () => {};
 export function workspaceStore(): WorkspaceStore {
   return (store ??= new WorkspaceStore({
     dir: path.join(app.getPath("userData"), "workspaces"),
+    person: machineIdentity().person,
     onWarn: (m) => console.warn(`[workspace-store] ${m}`),
     onChange: (change) => tell(change),
   }));

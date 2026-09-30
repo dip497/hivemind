@@ -1,12 +1,24 @@
 // Settings → Profile (R3, spec/identity.md): this computer's device and person ids, made the first
 // time they are asked for, kept in <userData>/identity readable by the user alone, and the same
-// after a restart; the name offered is git's; a name and colour chosen land in settings.json.
+// after a restart; the workspace the window shows is that person's; the name offered is git's; a
+// name and colour chosen land in settings.json.
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { readDoc } from "../../../../packages/workspace-host/src/doc-file";
 
 const HEX_ID = /^[0-9a-f]{64}$/;
+
+/** Whose each workspace document in `dir` says it is. */
+function owners(dir: string): unknown[] {
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir).filter((f) => f.endsWith(".loro")).map((f) => {
+    const bytes = fs.readFileSync(path.join(dir, f));
+    const { repo } = JSON.parse(bytes.subarray(0, bytes.indexOf(0x0a)).toString("utf8")) as { repo: string };
+    return readDoc(dir, repo, (m) => { throw new Error(m); }).getMap("meta").get("owner");
+  });
+}
 
 test("Profile shows this computer's ids, the same after a restart, and saves the name and colour chosen", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "hm-profile-"));
@@ -35,6 +47,8 @@ test("Profile shows this computer's ids, the same after a restart, and saves the
     const dir = path.join(config, "hivemind-dev", "identity");
     expect(fs.statSync(dir).mode & 0o777).toBe(0o700);
     for (const f of ["device.key", "person.key", "device.cert"]) expect(fs.statSync(path.join(dir, f)).mode & 0o777).toBe(0o600);
+    // The workspace the window shows is this person's.
+    await expect.poll(() => owners(path.join(config, "hivemind-dev", "workspaces"))).toEqual([first.person]);
 
     const name = page.locator("#profile-name");
     await expect(name).toHaveAttribute("placeholder", "Priya From Git");

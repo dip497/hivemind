@@ -5,9 +5,13 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { WorkspaceStore } from "../src/store.ts";
+import { readDoc } from "../src/doc-file.ts";
+import { idOf, newSeed, workspaceSeed } from "../src/identity.ts";
 
 let tmp: string;
 let dir: string;
+/** This machine's person key, the same across the store's restarts. */
+const person = newSeed();
 beforeEach(() => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ws-store-"));
   dir = path.join(tmp, "workspaces");
@@ -18,7 +22,7 @@ const core = (title: string) => ({ frames: [{ id: "f1", title }], tiles: [{ id: 
 const note = (text: string) => ({ id: "n1", kind: "note" as const, x: 10, y: 20, w: 200, h: 160, text });
 const list = (...items: string[]) =>
   ({ id: "c1", kind: "checklist" as const, x: 0, y: 200, w: 240, h: 200, text: "today", items: items.map((text, i) => ({ id: `i${i + 1}`, text, done: false })) });
-const restart = () => new WorkspaceStore({ dir });
+const restart = () => new WorkspaceStore({ dir, person });
 
 // Repo "/work/api" is stored under the first 32 hex digits of sha256("/work/api"). Files already on
 // users' disks are found by this name, so it is spelled out here rather than computed.
@@ -30,7 +34,7 @@ const header = (fields: object) => Buffer.from(`${JSON.stringify(fields)}\n`);
 const document = FIXTURE.subarray(FIXTURE.indexOf(0x0a) + 1);
 
 test("a workspace's layout is kept per repo and is there after a restart, as is a change made after it", () => {
-  const s = new WorkspaceStore({ dir });
+  const s = new WorkspaceStore({ dir, person });
   s.setCore("/a", core("api"));
   s.setView("/a", "canvas", { v: 2, data: { positions: { t1: { x: 1, y: 2 } } } });
   s.setView("/a", "windows", { v: 1, data: { tab: "t1" } });
@@ -51,7 +55,7 @@ test("a workspace's layout is kept per repo and is there after a restart, as is 
 });
 
 test("what callers give and get are copies, so changing one changes nothing stored", () => {
-  const s = new WorkspaceStore({ dir });
+  const s = new WorkspaceStore({ dir, person });
   const given = core("api");
   s.setCore("/a", given);
   given.frames[0]!.title = "changed after set";
@@ -64,7 +68,7 @@ test("what callers give and get are copies, so changing one changes nothing stor
 test("a document the first version of the format wrote, under its hashed name, loads", () => {
   fs.mkdirSync(dir);
   fs.writeFileSync(path.join(dir, `${API}.loro`), FIXTURE);
-  const s = new WorkspaceStore({ dir });
+  const s = new WorkspaceStore({ dir, person });
   expect(s.getCore("/work/api")).toEqual({
     frames: [{ id: "repo", title: "api", workspacePath: "/work/api" }, { id: "wt", title: "fix", parentFrameId: "repo", branch: "fix" }],
     tiles: [{ id: "t1", kind: "claude", label: "Claude" }, { id: "ed", kind: "editor", label: "Editor" }],
@@ -75,8 +79,41 @@ test("a document the first version of the format wrote, under its hashed name, l
   expect(s.getView("/work/api", "canvas")).toEqual({ v: 2, data: { positions: { t1: { x: 10, y: 20 } }, viewport: { x: 0, y: 0, zoom: 1.5 } } });
 });
 
+/** What the document on disk for `repo` says of whose it is. */
+function ownership(repo: string) {
+  const meta = readDoc(dir, repo, (m) => { throw new Error(m); }).getMap("meta");
+  return { workspaceId: meta.get("workspaceId"), owner: meta.get("owner"), workspacePublicKey: meta.get("workspacePublicKey") };
+}
+
+test("each workspace says whose it is: an id of its own, this person, and the workspace key they derive; kept from then on", () => {
+  const s = new WorkspaceStore({ dir, person });
+  s.setCore("/a", core("api"));
+  s.setObjects("/b", [note("ship it")]);
+  const a = ownership("/a");
+  expect(a.workspaceId).toMatch(/^[0-9a-f]{32}$/);
+  expect(ownership("/b").workspaceId).not.toBe(a.workspaceId);
+  expect(a.owner).toBe(idOf(person));
+  expect(a.workspacePublicKey).toBe(idOf(workspaceSeed(person, a.workspaceId as string)));
+  restart().setCore("/a", core("api, again"));
+  expect(ownership("/a")).toEqual(a);
+});
+
+test("a workspace from before workspaces had owners is this person's from its next write; one that says whose it is stays theirs", () => {
+  fs.mkdirSync(dir);
+  fs.writeFileSync(path.join(dir, `${API}.loro`), FIXTURE);
+  const s = new WorkspaceStore({ dir, person });
+  s.setView("/work/api", "windows", { v: 1, data: { tab: "t1" } });
+  const mine = ownership("/work/api");
+  expect(mine.owner).toBe(idOf(person));
+  expect(mine.workspaceId).toMatch(/^[0-9a-f]{32}$/);
+  expect(restart().getCore("/work/api")?.tileNames).toEqual({ t1: "reviewer" });
+  // The same document on a machine holding another person's key.
+  new WorkspaceStore({ dir, person: newSeed() }).setView("/work/api", "windows", { v: 1, data: { tab: "ed" } });
+  expect(ownership("/work/api")).toEqual(mine);
+});
+
 test("files are private, leave no temp files, and stay inside the directory whatever the repo", () => {
-  const s = new WorkspaceStore({ dir });
+  const s = new WorkspaceStore({ dir, person });
   s.setCore("/a", core("x"));
   s.setCore("../../escape", core("y"));
   const files = fs.readdirSync(dir);
@@ -97,7 +134,7 @@ test.each([
   fs.mkdirSync(dir);
   fs.writeFileSync(path.join(dir, `${API}.loro`), content);
   const warnings: string[] = [];
-  const s = new WorkspaceStore({ dir, onWarn: (m) => warnings.push(m) });
+  const s = new WorkspaceStore({ dir, person, onWarn: (m) => warnings.push(m) });
 
   expect(s.getCore("/work/api")).toBeNull();
   expect(warnings).toHaveLength(1);
@@ -110,7 +147,7 @@ test.each([
 });
 
 test("an old layout is imported only where the store has nothing, and never replaces what it has", () => {
-  const s = new WorkspaceStore({ dir });
+  const s = new WorkspaceStore({ dir, person });
   s.importLegacy("/a", { core: core("old"), views: { canvas: { v: 2, data: 1 } } });
   expect(s.getCore("/a")).toEqual(core("old"));
   expect(s.getView("/a", "canvas")).toEqual({ v: 2, data: 1 });
@@ -127,7 +164,7 @@ test("an old layout is imported only where the store has nothing, and never repl
 
 test("an old entry that cannot be a layout is skipped and reported, and the rest still comes across", () => {
   const warnings: string[] = [];
-  const s = new WorkspaceStore({ dir, onWarn: (m) => warnings.push(m) });
+  const s = new WorkspaceStore({ dir, person, onWarn: (m) => warnings.push(m) });
   s.importLegacy("/a", { core: ["not", "a", "layout"], views: { bogus: { nope: true }, canvas: { v: 1, data: 3 } } });
 
   expect(warnings).toHaveLength(2);
@@ -138,7 +175,7 @@ test("an old entry that cannot be a layout is skipped and reported, and the rest
 });
 
 test("undo takes back board edits one write at a time, never the layout or a view; redo makes them again; both are saved", () => {
-  const s = new WorkspaceStore({ dir });
+  const s = new WorkspaceStore({ dir, person });
   // A window's first save of an empty board changes nothing, so it leaves nothing to take back.
   s.setObjects("/a", []);
   s.setObjects("/a", [note("draft"), list("milk")]);
@@ -166,7 +203,7 @@ test("undo takes back board edits one write at a time, never the layout or a vie
 });
 
 test("each writer undoes and redoes its own board edits, never another's", () => {
-  const s = new WorkspaceStore({ dir });
+  const s = new WorkspaceStore({ dir, person });
   s.setObjects("/a", [note("draft")], { writer: "window:1" });
   s.setObjects("/a", [note("draft"), list("milk")], { writer: "window:12", base: [note("draft")] });
   s.setObjects("/a", [note("drafted"), list("milk")], { writer: "window:1", base: [note("draft"), list("milk")] });
@@ -182,7 +219,7 @@ test("each writer undoes and redoes its own board edits, never another's", () =>
 });
 
 test("a writer that is gone takes its board history with it; what it wrote stays, and the others keep theirs", () => {
-  const s = new WorkspaceStore({ dir });
+  const s = new WorkspaceStore({ dir, person });
   s.getObjects("/b"); // another open workspace, where the writer never wrote
   s.setObjects("/a", [note("draft")], { writer: "window:1" });
   s.setObjects("/a", [note("draft"), list("milk")], { writer: "window:2", base: [note("draft")] });
@@ -198,7 +235,7 @@ test("a writer that is gone takes its board history with it; what it wrote stays
 });
 
 test("a view or a board another window changed keeps that change when a window then writes what it read before", () => {
-  const s = new WorkspaceStore({ dir });
+  const s = new WorkspaceStore({ dir, person });
   const canvas = (positions: object) => ({ v: 1, data: { positions } });
   s.setView("/a", "canvas", canvas({ t1: { x: 0, y: 0 }, t2: { x: 100, y: 0 } }), { writer: "window:1" });
   s.setObjects("/a", [note("draft")], { writer: "window:1" });
@@ -213,7 +250,7 @@ test("a view or a board another window changed keeps that change when a window t
 });
 
 test("bad input is refused with a TypeError and stores nothing", () => {
-  const s = new WorkspaceStore({ dir });
+  const s = new WorkspaceStore({ dir, person });
   const bad: Array<() => unknown> = [
     () => s.setCore("", core("x")),
     () => s.setCore(42 as never, core("x")),
@@ -234,7 +271,7 @@ test("a write the disk refuses is kept, reported, and written by flush once it c
   fs.writeFileSync(blocker, "a file where the store's directory should be");
   const blockedDir = path.join(blocker, "workspaces");
   const warnings: string[] = [];
-  const s = new WorkspaceStore({ dir: blockedDir, onWarn: (m) => warnings.push(m) });
+  const s = new WorkspaceStore({ dir: blockedDir, person, onWarn: (m) => warnings.push(m) });
 
   s.setCore("/a", core("kept"));
   expect(warnings).toHaveLength(1);
@@ -242,12 +279,12 @@ test("a write the disk refuses is kept, reported, and written by flush once it c
 
   fs.rmSync(blocker);
   s.flush();
-  expect(new WorkspaceStore({ dir: blockedDir }).getCore("/a")).toEqual(core("kept"));
+  expect(new WorkspaceStore({ dir: blockedDir, person }).getCore("/a")).toEqual(core("kept"));
 });
 
 test("each change is told, with who made it; a write that changes nothing is not", () => {
   const told: unknown[] = [];
-  const s = new WorkspaceStore({ dir, onChange: (c) => told.push(c) });
+  const s = new WorkspaceStore({ dir, person, onChange: (c) => told.push(c) });
   s.setCore("/a", core("api"), { writer: "window:1" });
   s.setCore("/a", core("api"), { writer: "window:1" });
   s.setView("/a", "canvas", { v: 1, data: { positions: {} } }, { writer: "window:2" });
@@ -265,7 +302,7 @@ test("each change is told, with who made it; a write that changes nothing is not
 });
 
 test("a tile named by the control plane keeps its name when a window then writes what it read before", () => {
-  const s = new WorkspaceStore({ dir });
+  const s = new WorkspaceStore({ dir, person });
   s.setCore("/a", core("api"));
   s.getCore("/b"); // another open workspace, without the tile
   const read = s.getCore("/a");
@@ -277,7 +314,7 @@ test("a tile named by the control plane keeps its name when a window then writes
 
 test("a tile closed by the control plane is gone after a restart, and stays closed when a window then writes what it read before", () => {
   const told: unknown[] = [];
-  const s = new WorkspaceStore({ dir, onChange: (c) => told.push(c) });
+  const s = new WorkspaceStore({ dir, person, onChange: (c) => told.push(c) });
   s.getCore("/b"); // another open workspace, without the tile
   s.setCore("/a", core("api"), { writer: "window:1" });
   const read = s.getCore("/a");
@@ -295,7 +332,7 @@ test("a tile closed by the control plane is gone after a restart, and stays clos
 
 test("a tile the control plane opens is kept, told with its writer, and stays when a window then writes what it read before", () => {
   const told: unknown[] = [];
-  const s = new WorkspaceStore({ dir, onChange: (c) => told.push(c) });
+  const s = new WorkspaceStore({ dir, person, onChange: (c) => told.push(c) });
   s.setCore("/a", core("api"), { writer: "window:1" });
   const read = s.getCore("/a");
   const t2 = { id: "t2", kind: "shell", label: "shell #1" };

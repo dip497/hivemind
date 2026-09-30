@@ -49,6 +49,7 @@ import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server
 import { workspaceDomains } from "../main/workspace/domains";
 import { Layouts } from "../main/workspace/store";
 import { WorkspaceStore } from "@hivemind/workspace-host/store";
+import { machineKeys } from "@hivemind/workspace-host/keyring";
 import { computeRepoPath, findGitRoot, projectDir } from "../main/workspace-paths";
 import { agents } from "../main/workspace/agents";
 import { spawnPty, writePty, resizePty, killPty, pausePty, resumePty, detachPty } from "../main/pty-host";
@@ -100,9 +101,11 @@ const terminals = new Terminals({
     screen: () => null,
   },
 });
-// Layouts in a store of the bridge's own: the dev app's is in use while it runs.
+// Layouts in a store of the bridge's own, and keys of its own: the dev app's are in use while it runs.
+const BRIDGE_DIR = path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config"), "hivemind-dev", "bridge");
 const store = new WorkspaceStore({
-  dir: path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config"), "hivemind-dev", "bridge", "workspaces"),
+  dir: path.join(BRIDGE_DIR, "workspaces"),
+  person: machineKeys(path.join(BRIDGE_DIR, "identity"), (m) => console.warn(`[identity] ${m}`)).person,
   onWarn: (m) => console.warn(`[workspace-store] ${m}`),
   onChange: (change) => workspaceServer.publishTo((c) => !layouts.made(c, change), "store.changed", { repo: change.repo, part: change.part }),
 });

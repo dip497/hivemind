@@ -11,6 +11,10 @@
  * is written, so a window writing from an older reading never reverts another's edit. Each change
  * is told, with its writer, to whoever listens (main, which tells the other windows).
  *
+ * Each workspace says whose it is (R3): a document that does not say yet is stamped, when the store
+ * opens it, with a new workspace id, this machine's person as its owner and the public half of the
+ * workspace key, and it is on disk with the next write.
+ *
  * Reads are synchronous: a repo's document is loaded on first use, then served from memory.
  * Every change is written through at once (the window already debounces), so an app that exits
  * a moment after a change has it on disk. A write that fails stays pending: the repo's next
@@ -27,10 +31,11 @@ import { UndoManager, type LoroDoc } from "loro-crdt";
 import { addTile, hasCore, holdsTile, readCore, removeTile, writeCore, writeTileName } from "@hivemind/workspace-doc/core";
 import { readObjects, writeObjects } from "@hivemind/workspace-doc/objects";
 import { readView, readViews, writeView } from "@hivemind/workspace-doc/views";
-import { stampSchema } from "@hivemind/workspace-doc/schema";
+import { stampOwnership, stampSchema } from "@hivemind/workspace-doc/schema";
 import type { BoardObject, CoreLayout, TileRecord, ViewLayout } from "@hivemind/workspace-doc/shapes";
 import type { LegacyLayout, WorkspaceChange } from "./layout.js";
 import { readDoc, writeDoc } from "./doc-file.js";
+import { idOf, newWorkspaceId, workspaceSeed, type Seed } from "./identity.js";
 
 export type { LegacyLayout, WorkspaceChange } from "./layout.js";
 export type { BoardObject, CoreLayout, ViewLayout } from "@hivemind/workspace-doc/shapes";
@@ -56,6 +61,9 @@ export interface Writer {
 export interface WorkspaceStoreOptions {
   /** Directory with one file per workspace; created (0700) on the first write. */
   dir: string;
+  /** The person key this machine holds. A workspace whose document does not say whose it is yet is
+   *  this person's: it is made here, or was before workspaces had owners. */
+  person: Seed;
   /** Hears what the embedder should log: a file set aside, a failed write, an import skipped. */
   onWarn?: (message: string) => void;
   /** Hears each write that changed something, and who wrote it. */
@@ -194,8 +202,13 @@ export class WorkspaceStore {
     let workspace = this.workspaces.get(repo);
     if (!workspace) {
       const doc = readDoc(this.opts.dir, repo, this.warn);
-      // Stamped before the history starts: a stamp is nobody's edit, so no undo takes it back.
+      // Stamped before the history starts: a stamp is nobody's edit, so no undo takes it back. It
+      // is on disk with the next write.
       stampSchema(doc);
+      stampOwnership(doc, () => {
+        const workspaceId = newWorkspaceId();
+        return { workspaceId, owner: idOf(this.opts.person), workspacePublicKey: idOf(workspaceSeed(this.opts.person, workspaceId)) };
+      });
       doc.commit();
       workspace = { doc, histories: new Map() };
       this.workspaces.set(repo, workspace);

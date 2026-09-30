@@ -178,6 +178,14 @@ exactly as today. They are ordered by dependency.
   eight Settings offers by the person's id, so it is the same on each of their devices. A name
   has no control characters, line breaks or bidirectional overrides, which would let it show as
   someone else's.
+- **Decided while building it, step 3 (2026-09-30).** A workspace's document says whose it is in
+  `meta`: `workspaceId`, `owner` (the person key) and `workspacePublicKey`. The store stamps a
+  document that does not say yet when it opens it, with a new id and the person key its machine
+  holds, and it is on disk with the next write, so a workspace made before this is its owner's
+  from the next change to it. One that says whose it is keeps what it says: a copy on another
+  person's machine stays the owner's. The stamp is nobody's edit, so undo never takes it back.
+  Each store has a person key: main's is this machine's, and the dev-bridge's is its own. A
+  record's `created{by, at}` waits for the first thing that shows it.
 
 ### R4. Daemon: size authority, input lease, attribution
 
@@ -891,9 +899,10 @@ root: Map
   views: Map       viewId → Map { v, data } (each view's own layout; data merges two levels deep)
 ```
 
-R2 built `meta` (`schema`, `core`), `frames`, `tiles`, `order` and `views`. The rest comes
-with its first writer: the workspace's id, keys and owner and a record's `created` with
-identity (R3), `machines` and a frame's `machine` with R9. R15 adds `objects`. A framed
+R2 built `meta` (`schema`, `core`), `frames`, `tiles`, `order` and `views`; R3 added the
+workspace's id, owner and public key to `meta`. The rest comes with its first writer or reader:
+a record's `created` with the first thing that shows who made it (M1), `meta.name` with the
+share sheet (M1), `machines` and a frame's `machine` with R9. R15 adds `objects`. A framed
 object's position is relative to its frame, so moving the frame does not rewrite it: undo
 (which puts a field back as it was) cannot then drop a note outside its frame, and a person
 moving a frame never overwrites another moving a note inside it. A checklist's items are

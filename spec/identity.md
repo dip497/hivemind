@@ -16,7 +16,10 @@ key in lowercase hex, 64 characters, which for a device is its iroh `EndpointId`
   (RFC 5869; no salt is the same as 32 zero bytes). Every device holding the owner's person key
   derives the same one; no one else can. It signs where the workspace is hosted.
 
-A workspace's id is 16 random bytes in lowercase hex, made once, when the workspace is.
+A workspace's id is 16 random bytes in lowercase hex, made once, when the workspace is. Its
+document says whose it is, in its `meta` map: `workspaceId`, `owner` (the owner's person key) and
+`workspacePublicKey` (the workspace key's public half), written by the owner's device the first
+time it writes the document and never changed after.
 
 ## Device certificate
 
