@@ -161,6 +161,23 @@ exactly as today. They are ordered by dependency.
   `settings-store.ts` (profile), Settings → Profile panel.
 - **Done when.** Keys survive restarts and upgrades; a device certificate verifies; the same
   workspace key is derived on two devices of one person and on no one else's.
+- **Decided while building it, step 1 (2026-09-30).** The formats are `spec/identity.md`, held to
+  `conformance/identity.json`, whose vectors were made with the Rust Ed25519 and HKDF iroh uses,
+  so hive-net (R10) is held to the same ones. A workspace key's HKDF has no salt and the info
+  `hive-workspace` followed by the workspace's id; a device certificate signs a tag, the person's
+  key, the device's key and when, as a big-endian u64 of milliseconds.
+- **Decided while building it, step 2 (2026-09-30).** Keys are kept in files, not the OS keychain:
+  `<userData>/identity`, 0700, with `device.key`, `person.key` and `device.cert`, 0600 each
+  (`packages/workspace-host/src/keyring.ts`, used by `main/identity.ts`). An unsigned macOS build
+  is a new app to the keychain on every upgrade, and Linux without a secret service has none, so
+  a keychain would not keep the keys through upgrades; it comes with signed builds. A key is made
+  anew only when there is none, or the file there cannot be read as a key, which is set aside
+  and said, since a new key makes the machine someone new. The profile is `profile.name` and
+  `profile.color` (`#rrggbb`) in settings.json, each empty until chosen: a name left empty is
+  git's global `user.name`, else the account's name, and a colour not chosen is picked from the
+  eight Settings offers by the person's id, so it is the same on each of their devices. A name
+  has no control characters, line breaks or bidirectional overrides, which would let it show as
+  someone else's.
 
 ### R4. Daemon: size authority, input lease, attribution
 

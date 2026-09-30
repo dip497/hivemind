@@ -224,6 +224,10 @@ export interface HiveIpc {
   removeViewPackage(id: string): Promise<void>;
   /** Main's watchdog saw a plugin frame peg a core for several samples. */
   onViewRunaway(cb: (e: { id: string; cpuPct: number }) => void): () => void;
+  // ── identity (R3) ─────────────────────────────────────────
+  /** This device's id and the id of the person it is, made the first time they are asked for,
+   *  and the name to offer while the profile has none (git's `user.name`, else the account's). */
+  identity(): Promise<{ deviceId: string; personId: string; suggestedName: string }>;
   // ── app version + self-update ─────────────────────────────
   /** This app's version string (from apps/desktop/package.json). */
   getAppVersion(): Promise<string>;

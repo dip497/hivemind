@@ -209,6 +209,24 @@ describe("settings schema", () => {
     expect("extra" in s).toBe(false);
   });
 
+  test("profile: a name and colour are kept as given and cleared by empty; a bad one keeps what was there", () => {
+    expect(mergeSettings({}).profile).toEqual({ name: "", color: "" });
+    const set = mergeSettings({ profile: { name: "  Priya Shah  ", color: "#3B82F6" } });
+    expect(set.profile).toEqual({ name: "Priya Shah", color: "#3b82f6" });
+    // A patch of one field keeps the other.
+    expect(mergeSettings({ profile: { color: "#10b981" } }, set).profile).toEqual({ name: "Priya Shah", color: "#10b981" });
+    // Too long, a line break, a control character, a right-to-left override that makes it read as someone else's.
+    for (const name of ["x".repeat(65), "Priya\nShah", "Priya\u0007", "\u202eahS ayirP", 7]) {
+      expect(mergeSettings({ profile: { name } }, set).profile.name).toBe("Priya Shah");
+    }
+    for (const color of ["blue", "#3b82f", "#3b82f6ff", "oklch(0.7 0.1 200)", null]) {
+      expect(mergeSettings({ profile: { color } }, set).profile.color).toBe("#3b82f6");
+    }
+    expect(mergeSettings({ profile: { name: "", color: "" } }, set).profile).toEqual({ name: "", color: "" });
+    // An emoji joined by a zero-width joiner is a name, not a trick.
+    expect(mergeSettings({ profile: { name: "Priya \u{1F469}\u200D\u{1F4BB}" } }).profile.name).toBe("Priya \u{1F469}\u200D\u{1F4BB}");
+  });
+
   test("flatten/nest round-trips an appearance", () => {
     const a = applyPreset({ ...DEFAULT_APPEARANCE, radius: 8, glass: { ...DEFAULT_APPEARANCE.glass, contentGlass: true }, wallpaper: { kind: "video", videoSrc: "hm-media://v/x", brightness: 0.6 } }, PRESETS.nord!);
     expect(nestAppearance(flattenAppearance(a))).toEqual(a);

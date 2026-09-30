@@ -178,6 +178,7 @@ const api: HiveIpc & {
   getBrowserSettings: () => ipcRenderer.invoke("getBrowserSettings"),
   setBrowserCdpEnabled: (enabled) => ipcRenderer.invoke("setBrowserCdpEnabled", enabled),
   relaunchApp: () => ipcRenderer.invoke("relaunchApp"),
+  identity: () => ipcRenderer.invoke("identity:get"),
   getAppVersion: () => ipcRenderer.invoke("getAppVersion"),
   settingsSync: () => ipcRenderer.sendSync("settings:get-sync"),
   workspaceCoreSync: (repo) => ipcRenderer.sendSync("workspace:core-sync", repo),

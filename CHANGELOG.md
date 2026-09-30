@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- **Settings → Profile**: the name and colour the people you work with will see, and the ids this computer is known by. Left empty, the name is your git `user.name`. The app makes this computer's keys the first time they are needed and keeps them in `identity` in its data folder, readable by you only.
 - Fixed: in a git repository without a `.hivemind` folder, files changed outside the app (by an agent, in a terminal, in your editor) never refreshed the diff tile, the editor or the file tree.
 - Fixed: every git, worktree, file, issue and review request is now checked where it comes in. A diff asked for a commit named like an option (`--output=<file>`) had git write the diff to that file, anywhere you can write, and staging a file named like an option (`--all`) staged everything; a file outside the repo, or a name git would read as an option, is now refused. Saving a repo's review comments with something that is not a list of them is refused; it used to delete them all. A failed git, file, issue or review action says what went wrong, without "Error invoking remote method" in front of it.
 - The audit log also records what you do in the app's windows: files you save, git operations (stage, commit, push, worktrees…), issues, settings (which ones, never their values), installs, machines, plan decisions, and the terminals and agents you start and end. A plan review opened with `hive ctl open-review` is recorded with your decision.

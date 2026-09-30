@@ -293,6 +293,14 @@ export interface AgentsSettings {
   /** Agents that came from the plugin catalog, so their page can say where they are from. */
   fromCatalog: string[];
 }
+/** Who you are to the people you work with (R3): the name and colour they see beside your cursor
+ *  and your edits. Each is empty until chosen. */
+export interface ProfileSettings {
+  /** Trimmed, at most 64 characters, no control characters. */
+  name: string;
+  /** `#rrggbb`, lowercase. */
+  color: string;
+}
 export interface Settings {
   v: 1;
   appearance: Appearance;
@@ -300,6 +308,7 @@ export interface Settings {
   plugins: PluginsSettings;
   tools: ToolsSettings;
   agents: AgentsSettings;
+  profile: ProfileSettings;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -312,6 +321,7 @@ export const DEFAULT_SETTINGS: Settings = {
   // Empty = "the agent catalog's default" — hive-core does not depend on
   // @hivemind/agents, and the renderer resolves an unknown id to defaultAgent().
   agents: { disabled: [], defaultAgent: "", options: {}, autoInstall: true, declined: [], fromCatalog: [] },
+  profile: { name: "", color: "" },
 };
 
 // ── validation / merge ───────────────────────────────────────────────────────
@@ -455,6 +465,7 @@ export function mergeSettings(raw: unknown, base: Settings = DEFAULT_SETTINGS): 
   }
   const plugins = isObj(p.plugins) ? p.plugins : {};
   const agents = isObj(p.agents) ? p.agents : {};
+  const profile = isObj(p.profile) ? p.profile : {};
   const toolsIn = isObj(p.tools) ? p.tools : {};
   const tools = {
     enabledPlugins: idList(toolsIn.enabledPlugins, PLUGIN_ID_RE, base.tools.enabledPlugins),
@@ -477,7 +488,23 @@ export function mergeSettings(raw: unknown, base: Settings = DEFAULT_SETTINGS): 
       fromCatalog: (Array.isArray(agents.fromCatalog) ? agents.fromCatalog : base.agents.fromCatalog)
         .filter((x): x is string => typeof x === "string" && AGENT_KEY_RE.test(x)).slice(0, 200),
     },
+    profile: {
+      name: profileName(profile.name, base.profile.name),
+      color: typeof profile.color === "string" && PROFILE_COLOR_RE.test(profile.color) ? profile.color.toLowerCase() : base.profile.color,
+    },
   };
+}
+
+/** Empty, to clear it, or a hex colour. */
+const PROFILE_COLOR_RE = /^(#[0-9a-fA-F]{6})?$/;
+
+/** A name as others see it: trimmed, at most 64 characters, with no control characters, line
+ *  breaks or bidirectional overrides (which would let a name show as something it is not). Empty
+ *  clears it; anything else keeps the name before. */
+function profileName(v: unknown, def: string): string {
+  if (typeof v !== "string") return def;
+  const name = v.trim();
+  return name.length <= 64 && !/[\p{Cc}\u2028\u2029\u202a-\u202e\u2066-\u2069]/u.test(name) ? name : def;
 }
 
 /** An agent's id, which may carry a HiveHub scope — unlike the option ids inside it. */
