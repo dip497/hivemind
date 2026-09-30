@@ -9,26 +9,9 @@ import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Section } from "./appearance-controls";
 import { patchSettings, useSettings } from "./settings-store";
+import { PROFILE_COLORS, colorFor } from "./multiplayer/people";
 
 type Identity = Awaited<ReturnType<typeof window.hive.identity>>;
-
-/** The colours a person can be: distinct from one another, and legible on a dark or a light theme. */
-const PROFILE_COLORS: readonly { name: string; value: string }[] = [
-  { name: "Red", value: "#ef4444" },
-  { name: "Orange", value: "#f97316" },
-  { name: "Yellow", value: "#eab308" },
-  { name: "Green", value: "#22c55e" },
-  { name: "Teal", value: "#14b8a6" },
-  { name: "Blue", value: "#3b82f6" },
-  { name: "Violet", value: "#8b5cf6" },
-  { name: "Pink", value: "#ec4899" },
-];
-
-/** The colour of a person who has not chosen one: picked by their id, so it is the same on each of
- *  their devices. */
-function colorFor(personId: string): string {
-  return PROFILE_COLORS[parseInt(personId.slice(0, 8), 16) % PROFILE_COLORS.length]!.value;
-}
 
 export function ProfilePrefs() {
   const { profile } = useSettings();

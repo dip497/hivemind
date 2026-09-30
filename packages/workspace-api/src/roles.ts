@@ -24,6 +24,8 @@ const LEAST: Record<string, Role> = {
   "issue.list": "view",
   "issue.read": "view",
   "review.list": "view",
+  // Being there: where one's pointer is, and what one has selected.
+  "presence.set": "view",
   // Watching terminals.
   "terminal.show": "view",
   "terminal.flow": "view",

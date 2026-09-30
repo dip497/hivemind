@@ -1,7 +1,8 @@
 // The workspace API between devices (peers.ts, spec/workspace-api.md "Peers"): a peer's calls run
 // as that peer, with the workspace it names by id read as its repo here; what its role does not
-// allow is FORBIDDEN and never runs; it hears only the events about its workspace's tiles and is
-// refused any other tile; a call waiting when the connection goes fails, and the host lets go.
+// allow is FORBIDDEN and never runs; it hears only the events about its workspace (its tiles, its
+// files, who is in it) and is refused any other tile; a call waiting when the connection goes
+// fails, and the host lets go.
 import { test, expect, beforeEach, afterEach } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -32,6 +33,7 @@ const domain = {
   effects: { "git.commit": () => ({}), "terminal.open": () => ({}) },
   notices: {
     "terminal.show": (from: Connection, tile: unknown) => { ran.push({ what: "terminal.show", by: from.actor, args: [tile] }); },
+    "presence.set": (from: Connection, repo: unknown) => { ran.push({ what: "presence.set", by: from.actor, args: [repo] }); },
   },
   gone: (c: Connection) => gone.push(c),
 };
@@ -82,26 +84,32 @@ test("a peer's calls run as the peer, with the workspace it names read as its re
   expect(await code(driver.client.call("git.commit", workspaceUrl(W), "m"))).toBe("FORBIDDEN");
 });
 
-test("a peer hears only the events about its workspace's tiles, and is refused a tile outside it", async () => {
+test("a peer hears only the events about its workspace, and is refused a tile outside it", async () => {
   const { server, client } = connect("view");
   const heard: string[] = [];
   client.on("terminal.data", (tile, data) => heard.push(`${tile}:${data}`));
   client.on("file.changed", (repo) => heard.push(`changed ${repo}`));
   client.on("store.changed", () => heard.push("store"));
+  client.on("presence.changed", (repo, people) => heard.push(`here ${repo}: ${people.map((p) => p.name).join()}`));
   await client.call("file.read", workspaceUrl(W), "a.ts"); // connected
   server.publish("terminal.data", "in-1", "hello");
   server.publish("terminal.data", "out-1", "secret");
   server.publish("file.changed", REPO, { paths: ["a.ts"] });
   server.publish("file.changed", "/work/other", { paths: [".env"] });
   server.publish("store.changed", { repo: REPO, part: "core" });
+  const someone = (name: string) => ({ id: "window:1", person: "o".repeat(64), name, color: "", cursor: null, selection: [] });
+  server.publish("presence.changed", REPO, [someone("Ana")]);
+  server.publish("presence.changed", "/work/other", [someone("Bo")]);
   await Bun.sleep(10);
-  expect(heard).toEqual(["in-1:hello", `changed ${workspaceUrl(W)}`]);
+  expect(heard).toEqual(["in-1:hello", `changed ${workspaceUrl(W)}`, `here ${workspaceUrl(W)}: Ana`]);
 
   ran.length = 0;
   client.notice("terminal.show", "out-1", true);
   client.notice("terminal.show", "in-1", true);
+  // Being there is anyone's with access.
+  client.notice("presence.set", workspaceUrl(W), { name: "Priya", color: "", cursor: null, selection: [] });
   await Bun.sleep(10);
-  expect(ran.map((r) => r.args[0])).toEqual(["in-1"]);
+  expect(ran.map((r) => r.args[0])).toEqual(["in-1", REPO]);
 });
 
 test("a call waiting when the connection goes fails, and the host lets go of the peer", async () => {

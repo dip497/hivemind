@@ -10,6 +10,7 @@ import type { Links, PipeChange, SpawnChange, StatusChange, TileOpened } from ".
 import type { ActivityLevels, ExitInfo, TerminalOpts } from "./terminals.js";
 import type { BoardObject, CoreLayout, ViewLayout } from "@hivemind/workspace-doc/shapes";
 import type { LegacyLayout, WorkspaceChange } from "@hivemind/workspace-host/layout";
+import type { Participant, PresenceState } from "@hivemind/workspace-host/presence";
 
 /** A workspace's layouts as a client that holds them opens it. */
 export interface StoreSnapshot {
@@ -106,6 +107,9 @@ export interface WorkspaceNotices {
   "terminal.watchActivity": (tiles: string[]) => void;
   /** The workspace the client shows now (null: none), and the frame its user is in there. */
   "store.shown": (repo: string | null, frame: string | null) => void;
+  /** Where the client's person is in the workspace `repo`: their pointer and selection; null:
+   *  they left it. */
+  "presence.set": (repo: string, state: PresenceState | null) => void;
 }
 
 /** What a host sends each client it holds a connection to, unasked. */
@@ -124,6 +128,8 @@ export interface WorkspaceEvents {
   "file.changed": (repo: string, change: { paths: string[] }) => void;
   /** Another writer changed a workspace's layouts: `part` is `core`, `board` or `view:<id>`. */
   "store.changed": (change: Pick<WorkspaceChange, "repo" | "part">) => void;
+  /** Who is in the workspace `repo` now, each as they last said (`presence.set`). */
+  "presence.changed": (repo: string, people: Participant[]) => void;
 }
 
 export type Method = keyof WorkspaceMethods;

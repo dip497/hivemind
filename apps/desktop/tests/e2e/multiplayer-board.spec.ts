@@ -1,6 +1,6 @@
 // The workspace over the network (M1, design §4.2 C and G): a guest who joined opens the host's
 // workspace and sees its tiles; a note either writes reaches the other; a guest who may only view
-// sees the host's changes and writes nothing to the host.
+// sees the host's changes and writes nothing to the host; and each sees where the other is.
 import { test, expect, type ElectronApplication, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -72,4 +72,31 @@ test("a guest who may only view sees the host's changes and writes nothing to th
   await note(guest, "not mine to write");
   await host.waitForTimeout(1500);
   expect(await notes(host)).toEqual(["from the host"]);
+});
+
+test("each sees where the other is: the guest's pointer, named, and the tile they selected on the host's board; the host's face on the guest's", async () => {
+  test.skip(!hiveNetBuilt(), "build hive-net first: cargo build in crates/hive-net");
+  const { host, guest } = await sharedWorkspace("view");
+  await guest.evaluate(() => window.hive.settingsSet("profile.name", "Priya Raman"));
+  const [me, them] = [await guest.evaluate(() => window.hive.identity()), await host.evaluate(() => window.hive.identity())];
+
+  const board = (await guest.locator(".react-flow__pane").boundingBox())!;
+  await guest.mouse.move(board.x + board.width / 2, board.y + board.height / 2);
+  await guest.mouse.move(board.x + board.width / 2 + 30, board.y + board.height / 2 + 20, { steps: 3 });
+  const cursor = host.locator(`[data-presence-cursor="${me.personId}"]`);
+  await expect(cursor).toContainText("Priya Raman", { timeout: 10_000 });
+  await expect(guest.locator(`[data-people-here] [data-person="${them.personId}"]`)).toBeVisible();
+  // Nobody is shown to themselves.
+  await expect(guest.locator("[data-presence-cursor]")).toHaveCount(0);
+  await expect(host.locator(`[data-people-here] [data-person="${them.personId}"]`)).toHaveCount(0);
+
+  const tile = (await tiles(guest)).find((id) => !id!.startsWith("frame-"))!;
+  await guest.locator(`.react-flow__node[data-id="${tile}"]`).click({ position: { x: 60, y: 14 } });
+  await expect(host.locator(`[data-presence-selection="${tile}"]`)).toBeVisible({ timeout: 10_000 });
+
+  // Off the board, the pointer goes; the person stays until they leave.
+  const faces = (await guest.locator("[data-people-here]").boundingBox())!;
+  await guest.mouse.move(faces.x + faces.width / 2, faces.y + faces.height / 2, { steps: 3 });
+  await expect(cursor).toHaveCount(0, { timeout: 10_000 });
+  await expect(host.locator(`[data-people-here] [data-person="${me.personId}"]`)).toBeVisible();
 });

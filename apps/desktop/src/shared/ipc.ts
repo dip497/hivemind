@@ -6,6 +6,7 @@ import type { ActivityLevel, ShareOutcome, ViewHistoryDay, ViewSession, ViewPres
 import type { NotificationSettings } from "./notification-settings.js";
 import type { ReviewComment } from "@hivemind/core/review";
 import type { LegacyLayout, WorkspaceChange } from "@hivemind/workspace-host/layout";
+import type { Participant, PresenceState } from "@hivemind/workspace-host/presence";
 import type { BoardObject, CoreLayout, ViewLayout } from "@hivemind/workspace-doc/shapes";
 export type { NotificationSettings };
 
@@ -172,6 +173,11 @@ export interface HiveIpc {
   /** The workspace this window shows now (null: none), and the frame the user is in there, for
    *  the control plane to act on when its caller is in no tile. */
   workspaceShown(repo: string | null, frame: string | null): void;
+  /** Where this window's person is in the workspace `repo` (M1): their pointer on the board and
+   *  what they have selected; null: they left it. */
+  boardPresenceSet(repo: string, state: PresenceState | null): void;
+  /** Who is in a workspace now, each as they last said, as it changes: every workspace's. */
+  onBoardPresence(cb: (repo: string, people: Participant[]) => void): () => void;
 
   // ── settings.json (main owns it; see main/settings-store.ts) ──
   /** The whole settings object, synchronously (boot: no theme flash). */

@@ -1,4 +1,4 @@
-# Workspace API (0.2)
+# Workspace API (0.3)
 
 What a workspace's host is asked for, and what it answers. The host is the machine the
 workspace's repo is on; today its callers are the app's windows and the dev-bridge, and later a
@@ -60,7 +60,9 @@ peer's role on the workspace (design §6) before it runs, and one the role does 
 `FORBIDDEN` (a notice is dropped): reads and watching terminals are anyone's with access; the
 board's edits need *Can edit board*; typing into and resizing a terminal, *Can use terminals*;
 opening and closing tiles, *Can drive agents*; anything else is the owner's. A peer is sent only
-the events about its workspace's tiles, and a tile outside the workspace is refused to it.
+the events about its workspace's tiles, and a tile outside the workspace is refused to it. A
+peer's `presence.set` is its person's (the device's certificate names them), whatever name it
+sends, and one participant per device.
 
 ## Params a host refuses
 
@@ -157,6 +159,7 @@ layout the store cannot hold is `BAD_REQUEST`.
 | `terminal.detach` | `tile` | the client shows it no more; a session no client shows is let go of (a daemon keeps it running, one the host runs itself ends) |
 | `terminal.watchActivity` | `tiles` | the terminals whose activity the client is sent (`terminal.activity`), at most 1024 |
 | `store.shown` | `repo` or null, `frame` or null | the workspace the client shows now, and the frame its user is in there (the control plane opens a tile there) |
+| `presence.set` | `repo`, `{name, color, cursor, selection}` or null | where the client's person is in the workspace: `cursor` `{x, y}` in board coordinates (null: off the board), `selection` the ids they have selected (at most 100); null: they left it. Never stored: it lasts until the connection closes, they leave, or a minute passes without another |
 
 A diff's `scope` is one of `{"kind": "working", "staged"?}`, `{"kind": "branch", "base"?,
 "head"?}` (what `head`, HEAD by default, adds since it left `base`), `{"kind": "unpushed",
@@ -175,6 +178,7 @@ A diff's `scope` is one of `{"kind": "working", "staged"?}`, `{"kind": "branch",
 | `terminal.activity` | `{[tile]: 0..3}` | to every client, as watched terminals' output gets busier or quieter |
 | `file.changed` | `repo`, `{paths}` | to each client watching the repo (the app's window watches the one it opens), at most one every 300 ms |
 | `store.changed` | `{repo, part}` (`core`, `board` or `view:<id>`) | to every client but the one whose write it was, on each change to a workspace's layouts |
+| `presence.changed` | `repo`, `[{id, person, name, color, cursor, selection}]` | to every client, as someone in the workspace moves, selects, arrives or leaves: everyone there now, one per connection (`id`), `person` their key |
 
 ## A client that holds the layouts
 

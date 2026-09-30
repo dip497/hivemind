@@ -2,6 +2,7 @@ import * as SettingsDialog from "@radix-ui/react-dialog";
 import { ThemePanel } from "./ThemePanel";
 import { RecentProjects } from "./RecentProjects";
 import { ShareDialog, ROLE_LABELS } from "./multiplayer/share-dialog";
+import { PeopleHere } from "./multiplayer/presence";
 import { setWorkspaceOccluded } from "./workspace-occlusion";
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -408,7 +409,9 @@ export function App() {
           upgrading={update.upgrading}
         />
         <div className="absolute top-0 right-0 z-40 flex items-start gap-2 px-3 py-2.5 pointer-events-none">
-          {repoPath && (
+          {repoPath && <PeopleHere repo={repoPath} />}
+          {/* A workspace joined from elsewhere is its owner's to share. */}
+          {repoPath && !repoPath.startsWith("hive://") && (
             <Button
               variant="secondary"
               size="sm"

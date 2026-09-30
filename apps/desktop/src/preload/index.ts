@@ -202,6 +202,8 @@ const api: HiveIpc & {
   workspaceRedoSync: (repo) => ipcRenderer.sendSync("workspace:redo-sync", repo),
   onWorkspaceChanged: (cb) => workspace.on("store.changed", cb),
   workspaceShown: (repo, frame) => workspace.notice("store.shown", repo, frame),
+  boardPresenceSet: (repo, state) => workspace.notice("presence.set", repo, state),
+  onBoardPresence: (cb) => workspace.on("presence.changed", cb),
   settingsGet: () => ipcRenderer.invoke("settings:get"),
   settingsSet: (p, v) => ipcRenderer.invoke("settings:set", p, v),
   settingsPatch: (patches) => ipcRenderer.invoke("settings:patch", patches),

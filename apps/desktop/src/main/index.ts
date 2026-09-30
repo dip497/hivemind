@@ -77,7 +77,7 @@ import { HcpError } from "./hcp/protocol.js";
 import { handleViewProtocol, listViewPackages, registerViewScheme, startViewWatchdog } from "./view-packages.js";
 import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, settingsFile, settingsBusy, settingsSettled } from "./settings-store.js";
 import { flushWorkspaceStore, installWorkspaceStoreIpc, storeFor, workspaceStore } from "./workspace-store-ipc.js";
-import { installIdentityIpc } from "./identity.js";
+import { installIdentityIpc, machineIdentity } from "./identity.js";
 import { installNetworkIpc, openJoined, stopNetwork } from "./network.js";
 import { elsewhere } from "./shared-workspaces.js";
 import { appWindowOf, broadcast, openWindows, registerWindow, userWindow } from "./windows.js";
@@ -91,6 +91,7 @@ import { workspaceDomains } from "./workspace/domains.js";
 import { agents } from "./workspace/agents.js";
 import { Terminals, type SessionOutput } from "./workspace/terminals.js";
 import { Layouts, type Shown } from "./workspace/store.js";
+import { presence } from "./workspace/presence.js";
 import type { TerminalOpts } from "@hivemind/workspace-api/terminals";
 import { serveWorkspaceApi } from "./workspace-ipc.js";
 import { fileIn } from "./workspace/repo-paths.js";
@@ -1137,9 +1138,9 @@ async function startSession(opts: TerminalOpts, out: SessionOutput): Promise<{ p
 const layouts = new Layouts(storeFor);
 
 // The workspace API (R8): git and worktrees, files, issues, review comments, agents' status and
-// links, terminals and the store. Each window is a connection to it (workspace-ipc.ts), which is
+// links, terminals, the store and who is where on it (M1). Each window is a connection to it (workspace-ipc.ts), which is
 // answered as the person at the window, and sent its events.
-const workspaceServer = new WorkspaceServer([
+const workspaceServer: WorkspaceServer = new WorkspaceServer([
   ...workspaceDomains,
   layouts.domain,
   agents({
@@ -1150,6 +1151,7 @@ const workspaceServer = new WorkspaceServer([
     }),
   }),
   terminals.domain,
+  presence(() => workspaceServer, () => machineIdentity().personId),
 ], hostIntents(), (m) => console.warn(`[workspace] ${m}`));
 const workspaceIpc = serveWorkspaceApi(workspaceServer, elsewhere);
 

@@ -34,6 +34,7 @@ import { CanvasEmptyState, Toasts } from "../../canvas-overlays";
 import { nodeTypes, PinnedLayerContext } from "../../canvas-nodes";
 import { pipeEdgeTypes } from "../../canvas-pipe-edge";
 import { ArrowDraft, BoardArrows, BoardPointer } from "../../board-objects/Arrows";
+import { PresenceLayer } from "../../multiplayer/presence";
 import { BoardContext } from "../../board-objects/board-context";
 import { isBoxType } from "../../board-objects/board-model";
 import { useOnViewportChange } from "@xyflow/react";
@@ -152,6 +153,11 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
   // currently-selected tile so other nodes keep their object identity →
   // React.memo skips them. Frames keep their own z stacking.
   const selectedObjectId = rt.board.selectedId;
+  // What the person here has selected, for the others in the workspace to see (M1).
+  const selection = useMemo(
+    () => [selectedTileId, model.selectedFrameId, selectedObjectId].filter((id): id is string => !!id),
+    [selectedTileId, model.selectedFrameId, selectedObjectId],
+  );
   const nodes: Node[] = useMemo(() => {
     // No selection (the common case): baseNodes already carries every node's
     // zIndex (tiles 100 via mkTile, frames their own), so return it VERBATIM —
@@ -612,6 +618,7 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
           <ViewportSnap req={snapReq} activeRef={inMomentumRef} />
           <ViewportMirror target={currentViewportRef} />
           <BoardPointer target={rt.canvasPointRef} pane={flowWrapRef} />
+          {repoPath && <PresenceLayer repo={repoPath} pane={flowWrapRef} selection={selection} />}
           <BoardArrows />
           <ArrowDraft />
 
