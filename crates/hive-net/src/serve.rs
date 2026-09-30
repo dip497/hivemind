@@ -1,12 +1,15 @@
-//! The server roles (§13.4), which anyone can run for their own devices: for now the relay, which
-//! carries traffic between devices that cannot reach each other directly. It serves plain HTTP;
-//! TLS comes with the network profiles that name it (R16).
+//! The server roles (§13.4), which anyone can run for their own devices: the relay, which carries
+//! traffic between devices that cannot reach each other directly, admitting the devices the
+//! network's access role allows when it runs beside one (`access.rs`). It serves plain HTTP; TLS
+//! for a relay on the internet comes with R13.
 
-use std::net::SocketAddr;
+use std::{net::SocketAddr, sync::Arc};
 
 use anyhow::Result;
 use iroh::RelayUrl;
 use iroh_relay::server::{RelayConfig, Server, ServerConfig};
+
+use crate::access::Service;
 
 /// A relay, serving on `addr`; it stops when dropped.
 pub struct Relay {
@@ -14,9 +17,14 @@ pub struct Relay {
 }
 
 impl Relay {
-    pub async fn spawn(addr: SocketAddr) -> Result<Self> {
+    /// A relay on `addr`, for every device, or for those `access` allows.
+    pub async fn spawn(addr: SocketAddr, access: Option<Service>) -> Result<Self> {
         let mut config = ServerConfig::default();
-        config.relay = Some(RelayConfig::new(addr));
+        let mut relay = RelayConfig::new(addr);
+        if let Some(access) = access {
+            relay.access = Arc::new(access);
+        }
+        config.relay = Some(relay);
         Ok(Self {
             server: Server::spawn(config).await?,
         })

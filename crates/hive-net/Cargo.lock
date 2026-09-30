@@ -1103,13 +1103,20 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
+ "bytes",
  "hex",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
  "iroh",
  "iroh-mdns-address-lookup",
  "iroh-relay",
  "rand",
+ "reqwest",
+ "rustls",
  "serde",
  "serde_json",
+ "sha2",
  "tokio",
 ]
 
