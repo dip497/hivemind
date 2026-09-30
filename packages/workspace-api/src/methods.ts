@@ -7,7 +7,7 @@ import type { LinkResult, TransferResult } from "@hivemind/core/cross-repo";
 import type { ReviewComment } from "@hivemind/core/review";
 import type { DiffPayload, DiffScope, GitBranchList, GitRevision, GitStatusSnapshot, WorktreeCreateOpts, WorktreeEntry } from "./git.js";
 import type { Links, PipeChange, SpawnChange, StatusChange, TileOpened } from "./agents.js";
-import type { ActivityLevels, ExitInfo, TerminalOpts } from "./terminals.js";
+import type { ActivityLevels, ExitInfo, TerminalOpts, Typist } from "./terminals.js";
 import type { BoardObject, CoreLayout, ViewLayout } from "@hivemind/workspace-doc/shapes";
 import type { LegacyLayout, WorkspaceChange } from "@hivemind/workspace-host/layout";
 import type { Participant, PresenceState } from "@hivemind/workspace-host/presence";
@@ -105,6 +105,12 @@ export interface WorkspaceNotices {
   "terminal.detach": (tile: string) => void;
   /** The terminals whose activity the client wants (`terminal.activity`). */
   "terminal.watchActivity": (tiles: string[]) => void;
+  /** Ask for the terminal's keyboard: whoever holds it is asked (M2). */
+  "terminal.keyboard.ask": (tile: string) => void;
+  /** Give the terminal's keyboard, which the client holds (or the host does), to `to`, who asked. */
+  "terminal.keyboard.give": (tile: string, to: string) => void;
+  /** Take the terminal's keyboard back: the host's. */
+  "terminal.keyboard.take": (tile: string) => void;
   /** The workspace the client shows now (null: none), and the frame its user is in there. */
   "store.shown": (repo: string | null, frame: string | null) => void;
   /** Where the client's person is in the workspace `repo`: their pointer and selection; null:
@@ -124,6 +130,12 @@ export interface WorkspaceEvents {
   "terminal.exit": (tile: string, info: ExitInfo) => void;
   /** Changes in watched terminals' activity. */
   "terminal.activity": (levels: ActivityLevels) => void;
+  /** Who holds a terminal's keyboard now: null while the host does. */
+  "terminal.keyboard": (tile: string, holder: Typist | null) => void;
+  /** Someone asks for the keyboard the client holds (or the host's windows, while the host does). */
+  "terminal.keyboard.asked": (tile: string, asker: Typist) => void;
+  /** A terminal's size changed: a client whose own differs draws it at this size. */
+  "terminal.size": (tile: string, cols: number, rows: number) => void;
   /** Files changed in a repo the client watches (at most one event every 300 ms). */
   "file.changed": (repo: string, change: { paths: string[] }) => void;
   /** Another writer changed a workspace's layouts: `part` is `core`, `board` or `view:<id>`. */

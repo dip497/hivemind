@@ -8,10 +8,11 @@ import path from "node:path";
 export const HIVE_NET = path.resolve("../../crates/hive-net/target/debug/hive-net");
 export const hiveNetBuilt = (): boolean => fs.existsSync(HIVE_NET);
 
-/** Start the app as person `name` (their data under `root/name`), with `cwd` as its project. */
-export async function person(root: string, name: string, cwd: string, apps: ElectronApplication[]): Promise<Page> {
+/** Start the app as person `name` (their data under `root/name`), with `cwd` as its project, and
+ *  `more` in its environment. */
+export async function person(root: string, name: string, cwd: string, apps: ElectronApplication[], more: Record<string, string> = {}): Promise<Page> {
   const config = path.join(root, name);
-  const env = { ...process.env, XDG_CONFIG_HOME: config, HIVE_SETTINGS: path.join(config, "settings.json"), HIVEMIND_HIVE_NET: HIVE_NET } as Record<string, string>;
+  const env = { ...process.env, XDG_CONFIG_HOME: config, HIVE_SETTINGS: path.join(config, "settings.json"), HIVEMIND_HIVE_NET: HIVE_NET, ...more } as Record<string, string>;
   delete env.ELECTRON_RUN_AS_NODE;
   const app = await electron.launch({ args: [path.resolve("out/main/index.js"), "--no-sandbox"], cwd, env });
   apps.push(app);
@@ -66,17 +67,20 @@ export async function note(w: Page, text: string): Promise<void> {
 }
 
 /** A host with a shell tile in the workspace `api`, shared for `role` with a guest who joined and
- *  opened it: both see the same tiles. */
-export async function sharedWorkspace(root: string, apps: ElectronApplication[], role: "view" | "edit") {
+ *  opened it: both see the same tiles. Both apps have `env` in their environment; with `names`,
+ *  each is named so before the invite. */
+export async function sharedWorkspace(root: string, apps: ElectronApplication[], role: "view" | "edit" | "terminals", { env = {}, names }: { env?: Record<string, string>; names?: { host: string; guest: string } } = {}) {
   const repo = path.join(root, "api");
   fs.mkdirSync(repo);
   execFileSync("git", ["init", "-q"], { cwd: repo });
-  const host = await person(root, "host", repo, apps);
+  const host = await person(root, "host", repo, apps, env);
+  if (names) await host.evaluate((n) => window.hive.settingsSet("profile.name", n), names.host);
   await host.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "shell" })));
   await expect.poll(async () => (await tiles(host)).length).toBeGreaterThan(0);
   const guestDir = path.join(root, "elsewhere");
   fs.mkdirSync(guestDir);
-  const guest = await person(root, "guest", guestDir, apps);
+  const guest = await person(root, "guest", guestDir, apps, env);
+  if (names) await guest.evaluate((n) => window.hive.settingsSet("profile.name", n), names.guest);
   const link = await share(host, role);
   await join(guest, host, link);
   await guest.locator("[data-join-open]").click();

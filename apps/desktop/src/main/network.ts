@@ -150,6 +150,15 @@ export function network(): Promise<HiveNet> {
   return current;
 }
 
+/** The name `person` joined a workspace shared from here with; "" when there is none. */
+export function personName(person: string): string {
+  for (const ws of accessLists().workspaces()) {
+    const found = accessLists().people(ws).find((p) => p.person === person);
+    if (found?.name) return found.name;
+  }
+  return "";
+}
+
 /** Stop the daemon (the app is quitting). */
 export function stopNetwork(): void {
   void current?.then((n) => n.stop(), () => {});

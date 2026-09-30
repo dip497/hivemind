@@ -164,6 +164,12 @@ const api: HiveIpc & {
   ptyKill: (tile) => workspace.notice("terminal.close", tile),
   ptyDetach: (tile) => workspace.notice("terminal.detach", tile),
   ptyFlow: (tile, paused) => workspace.notice("terminal.flow", tile, paused),
+  keyboardAsk: (tile) => workspace.notice("terminal.keyboard.ask", tile),
+  keyboardGive: (tile, to) => workspace.notice("terminal.keyboard.give", tile, to),
+  keyboardTake: (tile) => workspace.notice("terminal.keyboard.take", tile),
+  onKeyboard: (cb) => workspace.on("terminal.keyboard", cb),
+  onKeyboardAsked: (cb) => workspace.on("terminal.keyboard.asked", cb),
+  onTerminalSize: (cb) => workspace.on("terminal.size", cb),
   persistentPty: process.env.HIVEMIND_PTY_DAEMON !== "0",
 
   notifyAgent: (notice) => ipcRenderer.send("notify:agent", notice),

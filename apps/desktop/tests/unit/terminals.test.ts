@@ -55,6 +55,8 @@ function host(opts: { askedByHost?: (bare: string) => boolean } = {}) {
   const notice = (from: Connection, method: string, ...params: unknown[]) => server.notice(method, params, from);
   return { terminals, calls, outputs, client, audited, open, notice };
 }
+/** What a client was sent of its sessions' output and exits (the session's size aside). */
+const output = (c: { received: EventMessage[] }) => c.received.filter((m) => m.event === "terminal.data" || m.event === "terminal.exit");
 
 test("a session is started once, by the first client to open it; every client showing it is sent its output and its exit", async () => {
   const h = host();
@@ -65,7 +67,7 @@ test("a session is started once, by the first client to open it; every client sh
   h.outputs.get("hm:t1")!.exit(0);
   await new Promise((r) => setTimeout(r, 50)); // the relay's batching
   for (const c of [a, b]) {
-    assert.deepEqual(c.received, [
+    assert.deepEqual(output(c), [
       { event: "terminal.data", params: ["hm:t1", "hello"] },
       { event: "terminal.exit", params: ["hm:t1", { code: 0, signal: undefined }] },
     ]);
@@ -138,6 +140,6 @@ test("a client that goes lets go of what it showed: a session nobody else shows 
   assert.deepEqual(h.calls.filter((c) => c.startsWith("detach")), ["detach hm:t1"]);
   h.outputs.get("hm:t2")!.data("still here");
   await new Promise((r) => setTimeout(r, 50));
-  assert.deepEqual(b.received, [{ event: "terminal.data", params: ["hm:t2", "still here"] }]);
-  assert.deepEqual(a.received, []);
+  assert.deepEqual(output(b), [{ event: "terminal.data", params: ["hm:t2", "still here"] }]);
+  assert.deepEqual(output(a), []);
 });

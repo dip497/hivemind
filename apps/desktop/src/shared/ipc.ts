@@ -57,6 +57,7 @@ export type {
   WorktreeEntry,
 } from "@hivemind/workspace-api/git";
 import type { DiffPayload, DiffScope, GitBranchList, GitStatusSnapshot, WorktreeCreateOpts, WorktreeEntry } from "@hivemind/workspace-api/git";
+import type { Typist } from "@hivemind/workspace-api/terminals";
 
 // ── machines (saved ssh hosts, shared with `hive machine`) ────────────────
 /** One remote directory entry for the folder picker / tree. */
@@ -493,6 +494,18 @@ export interface HiveIpc {
    *  it on xterm's write-queue watermarks so a flood (`cat hugefile`, a runaway
    *  build log) can't outrun the parser and balloon renderer memory. */
   ptyFlow(tileId: string, paused: boolean): void;
+  /** Ask for a terminal's keyboard (M2): whoever holds it is asked. */
+  keyboardAsk(tileId: string): void;
+  /** Give a terminal's keyboard, held here (or its host's, from a host's window), to `to`, who asked. */
+  keyboardGive(tileId: string, to: string): void;
+  /** Take a terminal's keyboard back: its host's windows only. */
+  keyboardTake(tileId: string): void;
+  /** Who holds a terminal's keyboard now: null while its host does. */
+  onKeyboard(cb: (tileId: string, holder: Typist | null) => void): () => void;
+  /** Someone asks this window for a terminal's keyboard, which it holds (or its host does). */
+  onKeyboardAsked(cb: (tileId: string, asker: Typist) => void): () => void;
+  /** A terminal's session took a size: a window whose own differs draws it at that size. */
+  onTerminalSize(cb: (tileId: string, cols: number, rows: number) => void): () => void;
   /** True when HIVEMIND_PTY_DAEMON=1 — terminals persist across window close. */
   persistentPty: boolean;
 

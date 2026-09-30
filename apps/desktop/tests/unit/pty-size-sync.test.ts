@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { nextPtySize } from "../../src/renderer/src/pty-size-sync";
+import { drawnSize, nextPtySize, scaleToFit } from "../../src/renderer/src/pty-size-sync";
 
 test("sends the size when the pty has never been told one", () => {
   assert.deepEqual(nextPtySize(null, 170, 44), { cols: 170, rows: 44 });
@@ -31,3 +31,31 @@ test("never resizes a session to nothing while the host is unlaid-out", () => {
     assert.equal(nextPtySize({ cols: 106, rows: 30 }, cols as number, rows as number), null);
   }
 });
+
+// Two windows showing one session, of different sizes (R4's "Done when"): the one whose size the
+// session has fills its tile; the other draws the session at that size, letterboxed or scaled down.
+test("a window whose size the session took draws what fits its tile, even while its next size is on the way", () => {
+  const own = { cols: 120, rows: 40 };
+  assert.equal(drawnSize(own, [{ cols: 100, rows: 30 }, own], { cols: 100, rows: 30 }), own);
+  assert.equal(drawnSize(own, [own], own), own);
+});
+
+test("a window whose size the session did not take draws the session at the size it was given", () => {
+  const given = { cols: 100, rows: 30 };
+  assert.deepEqual(drawnSize({ cols: 120, rows: 40 }, [{ cols: 120, rows: 40 }], given), given);
+  assert.deepEqual(drawnSize({ cols: 80, rows: 24 }, [], given), given);
+  // As wide as this window asked, but not as tall: still someone else's size.
+  assert.deepEqual(drawnSize({ cols: 100, rows: 40 }, [{ cols: 100, rows: 40 }], given), given);
+});
+
+test("with no size heard, a window draws what fits its tile", () => {
+  const own = { cols: 80, rows: 24 };
+  assert.equal(drawnSize(own, [], null), own);
+});
+
+test("a session larger than the tile is scaled down to fit it, by the tighter of its two sides; a smaller one is letterboxed", () => {
+  assert.equal(scaleToFit({ cols: 100, rows: 30 }, { cols: 200, rows: 40 }), 0.5);
+  assert.equal(scaleToFit({ cols: 100, rows: 30 }, { cols: 120, rows: 60 }), 0.5);
+  assert.equal(scaleToFit({ cols: 100, rows: 30 }, { cols: 80, rows: 24 }), 1);
+});
+

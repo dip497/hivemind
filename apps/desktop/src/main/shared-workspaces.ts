@@ -18,6 +18,7 @@ import type { Answer, EventMessage } from "@hivemind/workspace-api/protocol";
 import type { Elsewhere } from "./workspace-ipc.js";
 import { streamOf } from "./peers-host.js";
 import { onWorkspaceChange, sharedStore } from "./workspace-store-ipc.js";
+import { toBareId } from "../shared/tile-id.js";
 
 /** Where the connection to a workspace's host is. */
 export type SharedState = "connecting" | "connected" | "reconnecting" | "offline" | "left" | "removed";
@@ -129,16 +130,26 @@ export function mayWriteShared(workspace: string): boolean {
   return !!entry && mayEdit(entry.status.access);
 }
 
+/** A terminal a window opens in a workspace shared from elsewhere is shown, never started there,
+ *  unless its host lets this person drive agents (M2): the session is the host's, and a guest's
+ *  window attaches to it. */
+function attaching(method: unknown, params: unknown[], access: Access): unknown[] {
+  if (method !== "terminal.open" || access === "agents" || access === "owner") return params;
+  const [opts, ...rest] = params;
+  return [{ ...(opts as object), attachOnly: true }, ...rest];
+}
+
 /** The workspace a window's call is about, when it is one shared from elsewhere. */
 function workspaceOf(method: unknown, params: unknown): string | null {
   if (typeof method !== "string" || !Array.isArray(params)) return null;
   const [first] = params as unknown[];
   const named = idOf(first) ?? idOf((first as { cwd?: unknown } | null)?.cwd);
   if (named) return named;
-  // A tile's methods name the tile: it is shared from elsewhere when a replica holds it.
+  // A tile's methods name the tile (a terminal's, its session: `hm:<tile>`): it is shared from
+  // elsewhere when a replica holds it.
   if (typeof first === "string" || typeof (first as { tileId?: unknown } | null)?.tileId === "string") {
     const tile = typeof first === "string" ? first : (first as { tileId: string }).tileId;
-    return idOf(sharedStore().workspaceOf(tile));
+    return idOf(sharedStore().workspaceOf(toBareId(tile)));
   }
   return null;
 }
@@ -150,9 +161,9 @@ export const elsewhere: Elsewhere = {
     if (typeof method === "string" && method.startsWith("store.")) return null;
     const ws = workspaceOf(method, params);
     if (!ws) return null;
-    const api = open.get(ws)?.api;
-    if (!api) return Promise.resolve({ error: { code: "FAILED", message: "not connected to this workspace's host" } });
-    return api.call(method as string, params as unknown[]);
+    const entry = open.get(ws);
+    if (!entry?.api) return Promise.resolve({ error: { code: "FAILED", message: "not connected to this workspace's host" } });
+    return entry.api.call(method as string, attaching(method, params as unknown[], entry.status.access));
   },
   notice(method, params): boolean {
     if (typeof method === "string" && method.startsWith("store.")) return false;

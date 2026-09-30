@@ -4,15 +4,13 @@
  * be reached, with the last board shown; and how it ended (left, or removed), when what is shown
  * is the last copy, which is only read. Leave is here.
  */
-import { useEffect, useState } from "react";
 import { LogOut } from "lucide-react";
 import type { SharedStatus } from "../../../shared/ipc";
 import { Button } from "../components/ui/button";
 import { ROLE_LABELS } from "./people";
+import { joinedId, useShown, type Shared } from "./shown";
 
-type Status = { names: { workspace: string; host: string } } & SharedStatus;
-
-function says(s: Status): string {
+function says(s: Shared): string {
   const { workspace, host } = s.names;
   switch (s.state) {
     case "connecting": return `Connecting to ${host}'s hivemind…`;
@@ -33,18 +31,10 @@ const TONE: Record<SharedStatus["state"], string> = {
   removed: "border-[var(--color-err)] text-[var(--color-err)]",
 };
 
-export function SharedBanner({ repo }: { repo: string }) {
-  const workspace = repo.slice("hive://".length);
-  const [status, setStatus] = useState<Status | null>(null);
-  useEffect(() => {
-    let live = true;
-    void window.hive.sharedStatus(workspace).then((s) => { if (live) setStatus(s); }, () => {});
-    const off = window.hive.onSharedStatus((ws, s) => {
-      if (ws === workspace) setStatus((prev) => (prev ? { ...prev, ...s } : prev));
-    });
-    return () => { live = false; off(); };
-  }, [workspace]);
-  if (!status) return null;
+export function SharedBanner() {
+  const { repo, shared: status } = useShown();
+  const workspace = joinedId(repo);
+  if (!workspace || !status) return null;
   const ended = status.state === "left" || status.state === "removed";
   return (
     <div

@@ -85,6 +85,7 @@ const intents = new Intents(new AuditLog({
 const terminals = new Terminals({
   intents,
   relay: { record: () => {}, screenPrefix: "\x1bc" },
+  publish: (event, ...params) => workspaceServer.publish(event, ...params),
   onError: (m) => console.warn(`[terminals] ${m}`),
   backend: {
     start: async (opts, out) => {

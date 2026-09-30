@@ -13,6 +13,7 @@ import { parseSync, serveReplica } from "@hivemind/workspace-host/doc-sync";
 import { servePeer, type TextChannel } from "@hivemind/workspace-api/peers";
 import type { WorkspaceServer } from "@hivemind/workspace-api/server";
 import { onWorkspaceChange, workspaceStore } from "./workspace-store-ipc.js";
+import { toBareId } from "../shared/tile-id.js";
 
 /** A link's named stream as a channel of text frames. */
 export const streamOf = (link: Link, stream: string): TextChannel => ({
@@ -55,7 +56,8 @@ export function servePeerLink(link: Link, lists: AccessLists, server: WorkspaceS
       actor: { kind: "peer", person, device: link.peer, access },
       workspace: hello.workspace,
       repo,
-      holds: (tile) => store.workspaceOf(tile) === repo,
+      // A terminal is named by its session (`hm:<tile>`), the document by the tile.
+      holds: (tile) => store.workspaceOf(toBareId(tile)) === repo,
     });
     const entry: Served = { workspace: hello.workspace, person, link };
     served.add(entry);

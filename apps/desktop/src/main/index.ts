@@ -78,7 +78,7 @@ import { handleViewProtocol, listViewPackages, registerViewScheme, startViewWatc
 import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, settingsFile, settingsBusy, settingsSettled } from "./settings-store.js";
 import { flushWorkspaceStore, installWorkspaceStoreIpc, storeFor, workspaceStore } from "./workspace-store-ipc.js";
 import { installIdentityIpc, machineIdentity } from "./identity.js";
-import { installNetworkIpc, openJoined, stopNetwork } from "./network.js";
+import { installNetworkIpc, openJoined, personName, stopNetwork } from "./network.js";
 import { elsewhere, mayWriteShared } from "./shared-workspaces.js";
 import { appWindowOf, broadcast, openWindows, registerWindow, userWindow } from "./windows.js";
 import { patchSettingsExtras } from "@hivemind/core/settings";
@@ -1056,6 +1056,11 @@ const terminals = new Terminals({
     hidden: () => BrowserWindow.getAllWindows().every((w) => w.isDestroyed() || w.isMinimized() || !w.isVisible()),
   },
   askedByHost: (bare) => controlSpawned.delete(bare),
+  // Who holds each terminal's keyboard, and each session's size, told to every client (M2).
+  publish: (event, ...params) => workspaceServer.publish(event, ...params),
+  who: (c) => c.actor.kind === "peer"
+    ? { person: c.actor.person, name: personName(c.actor.person) }
+    : { person: machineIdentity().personId, name: getAppSettings().profile.name || os.userInfo().username },
   watchActivity: (tiles) => ptyActivity.setWatched(tiles),
   onError: (m) => console.warn(`[terminals] ${m}`),
   backend: {

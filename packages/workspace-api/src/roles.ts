@@ -26,9 +26,10 @@ const LEAST: Record<string, Role> = {
   "review.list": "view",
   // Being there: where one's pointer is, and what one has selected.
   "presence.set": "view",
-  // Watching terminals.
+  // Watching terminals, and no longer watching one.
   "terminal.show": "view",
   "terminal.flow": "view",
+  "terminal.detach": "view",
   "terminal.watchActivity": "view",
   // Editing the board.
   "store.setCore": "edit",
@@ -36,9 +37,12 @@ const LEAST: Record<string, Role> = {
   "store.setObjects": "edit",
   "store.undo": "edit",
   "store.redo": "edit",
-  // Typing into a terminal (with the keyboard handed over, R4) and sizing it.
+  // Typing into a terminal (with the keyboard handed over, R4) and sizing it; asking for its
+  // keyboard, and handing on one held. Taking it back is the host's.
   "terminal.write": "terminals",
   "terminal.resize": "terminals",
+  "terminal.keyboard.ask": "terminals",
+  "terminal.keyboard.give": "terminals",
   // Starting and ending what runs on the host.
   "terminal.open": "agents",
   "terminal.close": "agents",

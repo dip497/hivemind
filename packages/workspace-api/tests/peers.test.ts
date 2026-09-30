@@ -34,6 +34,9 @@ const domain = {
   notices: {
     "terminal.show": (from: Connection, tile: unknown) => { ran.push({ what: "terminal.show", by: from.actor, args: [tile] }); },
     "presence.set": (from: Connection, repo: unknown) => { ran.push({ what: "presence.set", by: from.actor, args: [repo] }); },
+    ...Object.fromEntries(["terminal.detach", "terminal.keyboard.ask", "terminal.keyboard.give", "terminal.keyboard.take"].map((what) => [
+      what, (from: Connection, tile: unknown) => { ran.push({ what, by: from.actor, args: [tile] }); },
+    ])),
   },
   gone: (c: Connection) => gone.push(c),
 };
@@ -110,6 +113,42 @@ test("a peer hears only the events about its workspace, and is refused a tile ou
   client.notice("presence.set", workspaceUrl(W), { name: "Priya", color: "", cursor: null, selection: [] });
   await Bun.sleep(10);
   expect(ran.map((r) => r.args[0])).toEqual(["in-1", REPO]);
+});
+
+test("a terminal's keyboard: one who may use terminals asks for it and hands it on, for the workspace's terminals only; taking it back is the host's; one who only watches may stop", async () => {
+  const typist = connect("terminals");
+  for (const [method, ...params] of [
+    ["terminal.keyboard.ask", "in-1"], ["terminal.keyboard.ask", "out-1"],
+    ["terminal.keyboard.give", "in-1", "peer:someone"], ["terminal.keyboard.give", "out-1", "peer:someone"],
+    ["terminal.keyboard.take", "in-1"],
+  ] as const) typist.client.notice(method as never, ...(params as never[]));
+  await Bun.sleep(10);
+  expect(ran.map((r) => `${r.what} ${String(r.args[0])}`)).toEqual(["terminal.keyboard.ask in-1", "terminal.keyboard.give in-1"]);
+
+  const viewer = connect("view");
+  viewer.client.notice("terminal.keyboard.ask", "in-1");
+  viewer.client.notice("terminal.detach", "in-1");
+  viewer.client.notice("terminal.detach", "out-1");
+  await Bun.sleep(10);
+  expect(ran.map((r) => `${r.what} ${String(r.args[0])}`)).toEqual(["terminal.detach in-1"]);
+});
+
+test("a peer hears who holds a terminal's keyboard, who asks for it and the terminal's size, for its workspace's terminals only", async () => {
+  const { server, client } = connect("terminals");
+  const heard: string[] = [];
+  client.on("terminal.keyboard", (tile, holder) => heard.push(`${tile} held by ${holder?.name ?? "the host"}`));
+  client.on("terminal.keyboard.asked", (tile, asker) => heard.push(`${tile} asked by ${asker.name}`));
+  client.on("terminal.size", (tile, cols, rows) => heard.push(`${tile} ${cols}x${rows}`));
+  await client.call("file.read", workspaceUrl(W), "a.ts"); // connected
+  const ana = { id: "peer:a", person: "a".repeat(64), name: "Ana" };
+  for (const tile of ["in-1", "out-1"]) {
+    server.publish("terminal.keyboard", tile, ana);
+    server.publish("terminal.keyboard.asked", tile, ana);
+    server.publish("terminal.size", tile, 100, 30);
+    server.publish("terminal.keyboard", tile, null);
+  }
+  await Bun.sleep(10);
+  expect(heard).toEqual(["in-1 held by Ana", "in-1 asked by Ana", "in-1 100x30", "in-1 held by the host"]);
 });
 
 test("a call waiting when the connection goes fails, and the host lets go of the peer", async () => {

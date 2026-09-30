@@ -6,7 +6,7 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { registerFileLinks } from "./terminal-file-links";
 import { installCrispDpr } from "./terminal-dpr";
-import { nextPtySize, type PtySize } from "./pty-size-sync";
+import { drawnSize, nextPtySize, scaleToFit, type PtySize } from "./pty-size-sync";
 import { oscColorReply } from "./osc-color";
 import { patchTerminalMouseWithRetry } from "./terminal-mouse-patch";
 import { wantsDomRenderer } from "./terminal-renderer-policy";
@@ -36,6 +36,7 @@ import { SURFACE_ADOPTED, SURFACE_PARKED } from "./workspace/tile-host";
 import { statusColor } from "./workspace/tile-status-bucket";
 import { defaultAgent } from "@hivemind/agents";
 import { useAgentsScanned } from "./agent-plugins";
+import { KeyboardChip, KeyboardPill, useTerminalKeyboard, type TerminalKeyboard } from "./multiplayer/keyboard";
 
 /** Open a terminal link in the OS browser. window.open is intercepted by main's
  *  setWindowOpenHandler → shell.openExternal (and the in-app navigation denied),
@@ -191,7 +192,8 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
   // so the pty is kept in step from here after every fit — see pty-size-sync.ts.
   const sentSizeRef = useRef<PtySize | null>(null);
   const syncSizeRef = useRef<(() => void) | null>(null);
-  const fitRef = useRef<FitAddon | null>(null);
+  /** Fits the terminal to its tile (or draws it at the size another gave the session). */
+  const fitRef = useRef<{ fit(): void } | null>(null);
   const webglRef = useRef<WebglAddon | null>(null);
   // Live `selected` for the WebGL slot manager's priority() (read outside render).
   const selectedRef = useRef(selected);
@@ -252,6 +254,14 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
   const persistent = window.hive.persistentPty === true;
   const ptyId = session ?? (persistent ? toPtyId(tileId) : `${tileId}-${reactId}`);
   useEffect(() => trackOpenSession(ptyId), [ptyId]);
+  // One keyboard per terminal (M2): who has it, whether this window's keys reach the session, and
+  // the size the session was given. Heard before the session is opened, which tells it both.
+  const kb = useTerminalKeyboard(ptyId);
+  const kbRef = useRef<TerminalKeyboard>(kb);
+  kbRef.current = kb;
+  // What fits this tile, and the sizes this window last asked the session to take (drawnSize).
+  const ownSizeRef = useRef<PtySize | null>(null);
+  const askedRef = useRef<PtySize[]>([]);
   // True once the tile is closing (endTileSession) — then we KILL even in persistent
   // mode. App-close / project-switch unmounts leave it false → detach.
   const killOnUnmountRef = useRef(false);
@@ -407,18 +417,35 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       (path) => openInEditorRef.current?.(path),
     );
     const fit = new FitAddon();
-    fitRef.current = fit;
     term.loadAddon(fit);
     term.open(host);
     // The screen as text for tests: a WebGL terminal renders none into the DOM.
     (host as HTMLElement & { __hmScreen?: () => string }).__hmScreen = readScreen;
-    fit.fit();
+    if (term.element) term.element.style.transformOrigin = "0 0";
+    /** Fit the grid to the tile; or, while the session has a size someone else gave it, draw it
+     *  at that size: letterboxed, or scaled down to fit when it is the larger. */
+    const fitTerm = (): void => {
+      const own = fit.proposeDimensions();
+      if (!own) return;
+      ownSizeRef.current = own;
+      const drawn = drawnSize(own, askedRef.current, kbRef.current.size);
+      if (drawn === own) fit.fit();
+      else if (term.cols !== drawn.cols || term.rows !== drawn.rows) term.resize(drawn.cols, drawn.rows);
+      const scale = scaleToFit(own, drawn);
+      if (term.element) term.element.style.transform = scale < 1 ? `scale(${scale})` : "";
+    };
+    fitRef.current = { fit: fitTerm };
+    fitTerm();
     termRef.current = term;
-    /** Push the grid's size to the pty when the pty does not already have it. */
+    /** Ask the session to take this tile's size, when it has not been asked already. Only while
+     *  this window's keys reach it: the keyboard's holder sizes a session (R4). */
     const syncPtySize = (): void => {
-      const next = nextPtySize(sentSizeRef.current, term.cols, term.rows);
+      const own = ownSizeRef.current;
+      if (!own || !kbRef.current.mayType) return;
+      const next = nextPtySize(sentSizeRef.current, own.cols, own.rows);
       if (!next) return;
       sentSizeRef.current = next;
+      askedRef.current = [...askedRef.current.slice(-2), next];
       window.hive.ptyResize(ptyId, next.cols, next.rows);
     };
     syncSizeRef.current = syncPtySize;
@@ -671,7 +698,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
         .then(() => {
           if (cancelled) return;
           try {
-            fit.fit();
+            fitTerm();
             syncPtySize();
             webgl?.clearTextureAtlas();
             term.refresh(0, term.rows - 1);
@@ -734,6 +761,9 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       setStatus("exited", { exitCode: code, detail });
     });
     term.onData((d) => {
+      // Someone else has the keyboard: this window's keys (and its terminal's replies) are not the
+      // session's. The pill says who has it.
+      if (!kbRef.current.mayType) return;
       if (exited) {
         // After exit, swallow chars except Enter (which respawns). Avoids
         // confusing dead-term input.
@@ -776,6 +806,13 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
         return false;
       }
       if (!(e.ctrlKey || e.metaKey)) return true;
+      // Ctrl/⌘⇧K: the host takes back the keyboard a guest has. Here, not among the app's keys:
+      // an editor keeps it for deleting a line.
+      if (e.shiftKey && !e.altKey && e.key.toLowerCase() === "k" && kbRef.current.mayTake) {
+        window.hive.keyboardTake(ptyId);
+        e.preventDefault();
+        return false;
+      }
       // Font zoom: Ctrl/Cmd +/−/0 adjusts THIS tile's font (per-tile). The apply
       // effect below pushes the new size into xterm.
       if (handleFontKey(e, fontCtlRef.current)) {
@@ -882,7 +919,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
         // / oversized inside the actual tile, and the replayed snapshot wraps at
         // the stale width — "text looks bigger after restart". Pushing our dims
         // explicitly every spawn reflows claude (SIGWINCH) to the true tile size.
-        try { fit.fit(); } catch { /* torn down */ }
+        try { fitTerm(); } catch { /* torn down */ }
         syncPtySize();
         term.writeln(`\x1b[2m[hivemind] spawned ${cmd} (pid ${pid})\x1b[0m`);
         if (bootRelease) { bootAt = Date.now(); bootCap = setTimeout(releaseBoot, BOOT_CAP_MS); }
@@ -964,7 +1001,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     let fitRaf = 0;
     const doFit = () => {
       try {
-        fit.fit();
+        fitTerm();
         syncPtySize();
         // Anchor to the bottom after a resize so the LATEST output + prompt
         // stay visible. xterm's reflow can otherwise leave the viewport
@@ -1128,6 +1165,22 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     } catch { /* torn down */ }
   }, [font.size]);
 
+  // The session was given a size: draw it again, at this window's size or at the one given.
+  useEffect(() => {
+    try { fitRef.current?.fit(); } catch { /* torn down */ }
+  }, [kb.size?.cols, kb.size?.rows]);
+  // The keyboard moved. Keys reaching the session again (it was given to this window, or came
+  // back to its host): this window asks for its size again, to be the session's. Keys no longer
+  // reaching it: the sizes it asked for are not the session's any more.
+  const typedBefore = useRef(kb.mayType);
+  useEffect(() => {
+    if (typedBefore.current === kb.mayType) return;
+    typedBefore.current = kb.mayType;
+    if (kb.mayType) sentSizeRef.current = null;
+    else askedRef.current = [];
+    try { fitRef.current?.fit(); syncSizeRef.current?.(); } catch { /* torn down */ }
+  }, [kb.mayType]);
+
   // ── CRISP FIT-TO-SCREEN OVERLAY ───────────────────────────────────────────
   // Move the LIVE .xterm node into the fullscreen glass panel and back, WITHOUT
   // recreating the terminal: the xterm buffer + PTY are independent of the DOM
@@ -1227,6 +1280,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
             </>
           );
         })()}
+        <KeyboardChip tile={ptyId} name={name?.trim() || "Terminal"} kb={kb} />
         {/* Font / scale / fullscreen controls — revealed only on header hover
             (group-hover). Two SEPARATE controls: font size (A−/A+, density only)
             and whole-tile scale (−/+, grows the node box + font in proportion). */}
@@ -1303,6 +1357,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
           rows scale) on resize down AND up instead of being clipped. */}
       <div className="hm-term-host relative flex-1 min-h-0 min-w-0 overflow-hidden bg-[var(--color-terminal-bg)] p-1.5">
         <div ref={hostRef} className="w-full h-full overflow-hidden" />
+        {selected && <KeyboardPill tile={ptyId} kb={kb} />}
         {bootWait !== null && (
           <div role="status" aria-label="Waiting to start" className="absolute inset-1.5 z-10 flex flex-col gap-2 bg-[var(--color-terminal-bg)] p-2">
             <Skeleton className="h-2.5 w-7/12" />

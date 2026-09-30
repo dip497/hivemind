@@ -7,9 +7,12 @@
  * in this process or over ssh, is the host's (`SessionBackend`). Electron-free: main and the
  * dev-bridge each build one over their own backend.
  *
- * A keystroke, a resize, flow control and whether a client shows a session are notices. While
- * several clients show a session, the one that typed last sizes it (the last to type wins, until
- * R4 gives a terminal one keyboard at a time). A pause is a short lease: see PAUSE_MAX_MS.
+ * A keystroke, a resize, flow control and whether a client shows a session are notices. Who may
+ * type is the terminal's keyboard's (`keyboard.ts`, M2): the host's windows until it is given to
+ * a guest, and then the guest's alone. Among the host's windows the one that typed last sizes a
+ * session; a guest holding its keyboard sizes it. Every client is told a session's size when it
+ * changes, so one whose own differs draws it at that size. A pause is a short lease: see
+ * PAUSE_MAX_MS.
  *
  * Starting a session is the intent of whoever opens it, unless the host asked for it itself (a
  * control-plane spawn) or the client only shows one the host holds; ending one is the intent of
@@ -21,7 +24,9 @@ import type { Intents } from "@hivemind/workspace-host/intents";
 import { fields, flag, text, texts, whole, written } from "@hivemind/workspace-api/protocol";
 import { emit, named, type Connection, type Domain } from "@hivemind/workspace-api/server";
 import type { TerminalOpts } from "@hivemind/workspace-api/terminals";
+import type { EventParams } from "@hivemind/workspace-api/methods";
 import { toBareId } from "../../shared/tile-id.js";
+import { Keyboards, isHost } from "./keyboard.js";
 
 /** Where a session's output and exit go, as its backend runs it. */
 export interface SessionOutput {
@@ -61,6 +66,10 @@ export interface TerminalsOptions {
   watchActivity?(tiles: string[]): void;
   /** An end that failed, which no client is told of. */
   onError?(message: string): void;
+  /** Tell every client (who holds a keyboard, a session's size). */
+  publish?<E extends "terminal.keyboard" | "terminal.size">(event: E, ...params: EventParams<E>): void;
+  /** Who is at a client, for the keyboard's holder and whoever asks for it. */
+  who?(connection: Connection): { person: string; name: string };
 }
 
 /** A pause is a short lease, not a latch: a session paused when its program exits would lose
@@ -73,7 +82,8 @@ const ENDED_KEPT = 512;
 type TerminalMethod = "terminal.open";
 type TerminalNotice =
   | "terminal.write" | "terminal.show" | "terminal.resize" | "terminal.flow"
-  | "terminal.close" | "terminal.detach" | "terminal.watchActivity";
+  | "terminal.close" | "terminal.detach" | "terminal.watchActivity"
+  | "terminal.keyboard.ask" | "terminal.keyboard.give" | "terminal.keyboard.take";
 
 export class Terminals {
   readonly domain: Domain<TerminalMethod, TerminalNotice>;
@@ -84,9 +94,20 @@ export class Terminals {
   private readonly pauses = new Map<string, ReturnType<typeof setTimeout>>();
   /** Sessions ended here, the latest last. */
   private readonly ended = new Set<string>();
+  /** The clients that opened each session. */
+  private readonly openers = new Map<string, Set<Connection>>();
+  /** Each session's size, as last given: whoever opens it is told. */
+  private readonly sizes = new Map<string, { cols: number; rows: number }>();
+  private readonly keyboards: Keyboards;
 
   constructor(private readonly opts: TerminalsOptions) {
     this.relay = new SessionRelay(opts.relay);
+    this.keyboards = new Keyboards({
+      publish: (event, ...params) => opts.publish?.(event, ...params),
+      tell: (to, event, ...params) => emit(to, event, ...params),
+      who: (c) => opts.who?.(c) ?? { person: "", name: "" },
+      hostWindows: (tile) => [...(this.openers.get(tile) ?? [])].filter((c) => isHost(c) && !c.closed.aborted),
+    });
     const tileOf = (v: unknown) => text(v, "tile");
     this.domain = {
       answers: {
@@ -107,8 +128,13 @@ export class Terminals {
           if (this.relay.leave(t, this.viewerOf(from)) === 0) this.letGo(t);
         },
         "terminal.watchActivity": (_, tiles) => opts.watchActivity?.(texts(tiles, "tiles").slice(0, 1024)),
+        "terminal.keyboard.ask": (from, tile) => this.keyboards.ask(tileOf(tile), from),
+        "terminal.keyboard.give": (from, tile, to) => this.keyboards.give(tileOf(tile), from, text(to, "to")),
+        "terminal.keyboard.take": (from, tile) => this.keyboards.take(tileOf(tile), from),
       },
       gone: (connection) => {
+        this.keyboards.gone(connection);
+        for (const opened of this.openers.values()) opened.delete(connection);
         const viewer = this.viewers.get(connection);
         if (!viewer) return;
         for (const tile of this.relay.leaveAll(viewer)) this.letGo(tile);
@@ -138,19 +164,40 @@ export class Terminals {
     const start = () => opts.attachOnly || this.opts.askedByHost?.(bare)
       ? run()
       : this.opts.intents.perform(from.actor, { verb: "terminal.open", target: bare, detail: named(path.basename(opts.cmd)) }, run);
+    let opened = this.openers.get(tile);
+    if (!opened) this.openers.set(tile, (opened = new Set()));
+    opened.add(from);
+    // A session the host starts takes the size it is opened at, until someone sizes it.
+    if (!this.sizes.has(tile) && isHost(from) && !opts.attachOnly) this.sizes.set(tile, { cols: opts.cols, rows: opts.rows });
+    // Whoever opens it is told who holds its keyboard, when someone other than the host does, and
+    // its size.
+    const holder = this.keyboards.holder(tile);
+    if (holder) emit(from, "terminal.keyboard", tile, holder);
+    const size = this.sizes.get(tile);
+    if (size) emit(from, "terminal.size", tile, size.cols, size.rows);
     return this.relay.open(tile, this.viewerOf(from), start, () => this.opts.backend.screen(tile));
   }
 
   private write(tile: string, data: string, paste: boolean | undefined, from: Connection): void {
-    this.typers.set(tile, from);
+    if (!this.keyboards.mayType(tile, from)) return;
+    this.keyboards.typed(tile, from);
+    // Among the host's windows, the last to type sizes the session; a guest does while they hold
+    // its keyboard.
+    if (isHost(from)) this.typers.set(tile, from);
     if (this.opts.backend.echoes(tile)) this.relay.markInput(tile);
     this.opts.backend.write(tile, data, paste);
   }
 
   private resize(tile: string, cols: number, rows: number, from: Connection): void {
-    const typer = this.typers.get(tile);
-    if (typer !== undefined && typer !== from && this.relay.count(tile) > 1) return;
+    const sizes = this.keyboards.sizes(tile, from);
+    if (sizes === false) return;
+    if (sizes === "host") {
+      const typer = this.typers.get(tile);
+      if (typer !== undefined && typer !== from && this.relay.count(tile) > 1) return;
+    }
     this.opts.backend.resize(tile, cols, rows);
+    this.sizes.set(tile, { cols, rows });
+    this.opts.publish?.("terminal.size", tile, cols, rows);
   }
 
   private flow(tile: string, paused: boolean): void {
@@ -182,6 +229,9 @@ export class Terminals {
   private drop(tile: string): void {
     this.relay.forget(tile);
     this.typers.delete(tile);
+    this.openers.delete(tile);
+    this.sizes.delete(tile);
+    this.keyboards.forget(tile);
     const lease = this.pauses.get(tile);
     if (lease) { clearTimeout(lease); this.pauses.delete(tile); }
   }

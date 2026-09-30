@@ -1,4 +1,4 @@
-# Workspace API (0.3)
+# Workspace API (0.4)
 
 What a workspace's host is asked for, and what it answers. The host is the machine the
 workspace's repo is on; today its callers are the app's windows and the dev-bridge, and later a
@@ -58,9 +58,12 @@ A peer names the workspace by its id, `hive://<workspaceId>`, wherever a call ta
 `cwd` inside it); the host reads that as its repo. Each call and notice is checked against the
 peer's role on the workspace (design §6) before it runs, and one the role does not allow is
 `FORBIDDEN` (a notice is dropped): reads and watching terminals are anyone's with access; the
-board's edits need *Can edit board*; typing into and resizing a terminal, *Can use terminals*;
-opening and closing tiles, *Can drive agents*; anything else is the owner's. A peer is sent only
-the events about its workspace's tiles, and a tile outside the workspace is refused to it. A
+board's edits need *Can edit board*; typing into and resizing a terminal, and asking for its
+keyboard or handing it on, *Can use terminals*; opening and closing tiles, *Can drive agents*;
+anything else is the owner's (taking a keyboard back among them). A peer's `terminal.open` of a
+session already running shows it (`attachOnly`), whatever its role. A peer is sent only the
+events about its workspace's tiles, and a tile outside the workspace is refused to it. A
+terminal is named by its session, `hm:<tile>`; the tile is the workspace's. A
 peer's `presence.set` is its person's (the device's certificate names them), whatever name it
 sends, and one participant per device.
 
@@ -151,9 +154,12 @@ layout the store cannot hold is `BAD_REQUEST`.
 
 | Notice | Params | What it does |
 |---|---|---|
-| `terminal.write` | `tile`, `data`, `paste`? | types `data` (`paste`: hands it over as one block) |
+| `terminal.write` | `tile`, `data`, `paste`? | types `data` (`paste`: hands it over as one block), when the client has the terminal's keyboard: the host's own clients until it is given away, and then its holder alone |
+| `terminal.keyboard.ask` | `tile` | asks for the terminal's keyboard: its holder is sent `terminal.keyboard.asked` (the host's clients showing it, while the host holds it) |
+| `terminal.keyboard.give` | `tile`, `to` | hands the keyboard the client holds (or the host's, from a host's client) to `to`, the id of one who asked; everyone is told (`terminal.keyboard`). It comes back to the host when the host takes it, when its holder goes, and after five minutes without their typing |
+| `terminal.keyboard.take` | `tile` | the host takes the keyboard back |
 | `terminal.show` | `tile`, `shown` | whether any of the client's views shows it: it is sent the output only while one does, and the screen again when one shows it after none did |
-| `terminal.resize` | `tile`, `cols`, `rows` | sizes it; while several clients show it, only the one that typed last may |
+| `terminal.resize` | `tile`, `cols`, `rows` | sizes it, when the client may: the keyboard's holder, while a guest holds it; otherwise, among the host's own clients showing it, the one that typed last |
 | `terminal.flow` | `tile`, `paused` | stops reading its output while the client catches up; a pause ends on its own after 120 ms unless asked for again |
 | `terminal.close` | `tile` | ends the session for good; recorded (target the tile) unless it had already ended |
 | `terminal.detach` | `tile` | the client shows it no more; a session no client shows is let go of (a daemon keeps it running, one the host runs itself ends) |
@@ -176,6 +182,9 @@ A diff's `scope` is one of `{"kind": "working", "staged"?}`, `{"kind": "branch",
 | `terminal.data` | `tile`, `data` | to each client that shows the terminal, its output in batches; a screen the host sends in place of what the client shows starts with `ESC c` |
 | `terminal.exit` | `tile`, `{code, signal?}` | to each client that showed it, as its session ends |
 | `terminal.activity` | `{[tile]: 0..3}` | to every client, as watched terminals' output gets busier or quieter |
+| `terminal.keyboard` | `tile`, `{id, person, name}` or null | to every client, as a terminal's keyboard changes hands (null: back with the host); to a client that opens the terminal while someone else holds it |
+| `terminal.keyboard.asked` | `tile`, `{id, person, name}` | to the keyboard's holder, as someone asks for it: `id` is who to give it to |
+| `terminal.size` | `tile`, `cols`, `rows` | to every client, as a terminal's session takes a size, and to one that opens it: a client whose own differs draws it at this size |
 | `file.changed` | `repo`, `{paths}` | to each client watching the repo (the app's window watches the one it opens), at most one every 300 ms |
 | `store.changed` | `{repo, part}` (`core`, `board` or `view:<id>`) | to every client but the one whose write it was, on each change to a workspace's layouts |
 | `presence.changed` | `repo`, `[{id, person, name, color, cursor, selection}]` | to every client, as someone in the workspace moves, selects, arrives or leaves: everyone there now, one per connection (`id`), `person` their key |

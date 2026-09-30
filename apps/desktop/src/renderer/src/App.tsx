@@ -4,6 +4,7 @@ import { RecentProjects } from "./RecentProjects";
 import { ROLE_LABELS } from "./multiplayer/people";
 import { PeopleHere } from "./multiplayer/presence";
 import { SharedBanner } from "./multiplayer/shared-banner";
+import { ShownWorkspaceProvider } from "./multiplayer/shown";
 import { setWorkspaceOccluded } from "./workspace-occlusion";
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -397,110 +398,112 @@ export function App() {
   }
 
   return (
-    <div className="h-screen w-screen overflow-hidden bg-[var(--color-bg)]">
-      {/* Canvas-only workspace. The canvas is full-bleed; floating chrome sits
-          on top — frame = workspace, so the per-Frame "+ workspace" bind is the
-          canonical add-a-workspace action; Open/Init/Recents live in the sidebar. */}
-      <div className="fixed inset-0 z-30 bg-[var(--color-bg)]">
-        <Workspace
-          cwd={cwd}
-          repoPath={repoPath}
-          root={root}
-          onInitWorkspace={!root ? openInit : undefined}
-          updateAvailable={update.status?.updateAvailable === true}
-          updateStaged={!!update.status?.staged}
-          onUpgrade={update.upgrade}
-          onRestart={update.restart}
-          upgrading={update.upgrading}
-        />
-        <div className="absolute top-0 right-0 z-40 flex items-start gap-2 px-3 py-2.5 pointer-events-none">
-          {repoPath?.startsWith("hive://") && <SharedBanner repo={repoPath} />}
-          {repoPath && <PeopleHere repo={repoPath} onManage={repoPath.startsWith("hive://") ? undefined : () => setPeopleOpen(true)} />}
-          {/* A workspace joined from elsewhere is its owner's to share. */}
-          {repoPath && !repoPath.startsWith("hive://") && (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setShareOpen(true)}
-              className="pointer-events-auto"
-              title="Invite people to this workspace"
-              data-share
-            >
-              <Share2 aria-hidden />
-              <span>Share</span>
-            </Button>
-          )}
-          {root && (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setNewOpen(true)}
-              className="pointer-events-auto"
-              title="New issue (⌘N)"
-            >
-              <Plus aria-hidden />
-              <span>New issue</span>
-              <kbd className="font-mono text-[9.5px] ml-0.5">⌘N</kbd>
-            </Button>
-          )}
-          <Button
-            variant="secondary"
-            size="icon"
-            onClick={() => setSettingsOpen(true)}
-            className="pointer-events-auto relative"
-            title={update.status?.updateAvailable ? "Settings — update available" : "Settings"}
-            aria-label="settings"
-          >
-            <Settings aria-hidden />
-            {update.status?.updateAvailable && (
-              <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-[var(--color-warn)] ring-2 ring-[var(--color-bg2)]" aria-hidden />
+    <ShownWorkspaceProvider repo={repoPath}>
+      <div className="h-screen w-screen overflow-hidden bg-[var(--color-bg)]">
+        {/* Canvas-only workspace. The canvas is full-bleed; floating chrome sits
+            on top — frame = workspace, so the per-Frame "+ workspace" bind is the
+            canonical add-a-workspace action; Open/Init/Recents live in the sidebar. */}
+        <div className="fixed inset-0 z-30 bg-[var(--color-bg)]">
+          <Workspace
+            cwd={cwd}
+            repoPath={repoPath}
+            root={root}
+            onInitWorkspace={!root ? openInit : undefined}
+            updateAvailable={update.status?.updateAvailable === true}
+            updateStaged={!!update.status?.staged}
+            onUpgrade={update.upgrade}
+            onRestart={update.restart}
+            upgrading={update.upgrading}
+          />
+          <div className="absolute top-0 right-0 z-40 flex items-start gap-2 px-3 py-2.5 pointer-events-none">
+            <SharedBanner />
+            {repoPath && <PeopleHere repo={repoPath} onManage={repoPath.startsWith("hive://") ? undefined : () => setPeopleOpen(true)} />}
+            {/* A workspace joined from elsewhere is its owner's to share. */}
+            {repoPath && !repoPath.startsWith("hive://") && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setShareOpen(true)}
+                className="pointer-events-auto"
+                title="Invite people to this workspace"
+                data-share
+              >
+                <Share2 aria-hidden />
+                <span>Share</span>
+              </Button>
             )}
-          </Button>
+            {root && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setNewOpen(true)}
+                className="pointer-events-auto"
+                title="New issue (⌘N)"
+              >
+                <Plus aria-hidden />
+                <span>New issue</span>
+                <kbd className="font-mono text-[9.5px] ml-0.5">⌘N</kbd>
+              </Button>
+            )}
+            <Button
+              variant="secondary"
+              size="icon"
+              onClick={() => setSettingsOpen(true)}
+              className="pointer-events-auto relative"
+              title={update.status?.updateAvailable ? "Settings — update available" : "Settings"}
+              aria-label="settings"
+            >
+              <Settings aria-hidden />
+              {update.status?.updateAvailable && (
+                <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-[var(--color-warn)] ring-2 ring-[var(--color-bg2)]" aria-hidden />
+              )}
+            </Button>
+          </div>
         </div>
-      </div>
 
-      <IssuePeek root={peekRoot ?? root} id={peekId} onClose={() => setPeekId(null)} />
-      <RecentProjects
-        open={recentOpen}
-        recents={recents}
-        current={repoPath}
-        onOpen={openRecent}
-        onBrowse={() => void pickFolder()}
-        onNewWindow={() => void window.hive.newWindow()}
-        onClose={() => setRecentOpen(false)}
-      />
-      <Suspense fallback={null}>
-        {repoPath && shareOpen && <ShareDialog repo={repoPath} open onClose={() => setShareOpen(false)} onPeople={() => { setShareOpen(false); setPeopleOpen(true); }} />}
-        {repoPath && peopleOpen && !repoPath.startsWith("hive://") && <PeopleDialog repo={repoPath} open onClose={() => setPeopleOpen(false)} />}
-      </Suspense>
-      <NewIssueModal
-        root={root}
-        open={newOpen}
-        onOpenChange={setNewOpen}
-        onCreated={setPeekId}
-      />
-      <InitWorkspacePrompt
-        open={initOpen}
-        onOpenChange={setInitOpen}
-        dir={repoPath ?? cwd}
-        suggested={suggestedPrefix}
-        pending={initing}
-        onConfirm={doInitWorkspace}
-      />
-      <ThemePanel />
-      <SettingsModal
-        open={settingsOpen}
-        onOpenChange={setSettingsOpen}
-        version={update.version}
-        update={update.status}
-        checking={update.checking}
-        onCheck={(opts) => { void update.check(opts); }}
-        onUpgrade={update.upgrade}
-        upgrading={update.upgrading}
-        progress={update.progress}
-        onRestart={update.restart}
-      />
-    </div>
+        <IssuePeek root={peekRoot ?? root} id={peekId} onClose={() => setPeekId(null)} />
+        <RecentProjects
+          open={recentOpen}
+          recents={recents}
+          current={repoPath}
+          onOpen={openRecent}
+          onBrowse={() => void pickFolder()}
+          onNewWindow={() => void window.hive.newWindow()}
+          onClose={() => setRecentOpen(false)}
+        />
+        <Suspense fallback={null}>
+          {repoPath && shareOpen && <ShareDialog repo={repoPath} open onClose={() => setShareOpen(false)} onPeople={() => { setShareOpen(false); setPeopleOpen(true); }} />}
+          {repoPath && peopleOpen && !repoPath.startsWith("hive://") && <PeopleDialog repo={repoPath} open onClose={() => setPeopleOpen(false)} />}
+        </Suspense>
+        <NewIssueModal
+          root={root}
+          open={newOpen}
+          onOpenChange={setNewOpen}
+          onCreated={setPeekId}
+        />
+        <InitWorkspacePrompt
+          open={initOpen}
+          onOpenChange={setInitOpen}
+          dir={repoPath ?? cwd}
+          suggested={suggestedPrefix}
+          pending={initing}
+          onConfirm={doInitWorkspace}
+        />
+        <ThemePanel />
+        <SettingsModal
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+          version={update.version}
+          update={update.status}
+          checking={update.checking}
+          onCheck={(opts) => { void update.check(opts); }}
+          onUpgrade={update.upgrade}
+          upgrading={update.upgrading}
+          progress={update.progress}
+          onRestart={update.restart}
+        />
+      </div>
+    </ShownWorkspaceProvider>
   );
 }
 

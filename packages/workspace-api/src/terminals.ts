@@ -26,3 +26,11 @@ export interface ExitInfo { code: number; signal?: number }
 
 /** How busy each watched terminal's output is, 0 (quiet) to 3. Only changes are sent. */
 export type ActivityLevels = Record<string, 0 | 1 | 2 | 3>;
+
+/** Someone at a client, as the others see them: who holds a terminal's keyboard, or asks for it. */
+export interface Typist {
+  /** Their client's id: one per window, or per peer device. */
+  id: string;
+  person: string;
+  name: string;
+}
