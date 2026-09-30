@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { SessionManager, type ManagedPty, type SessionClient, type SpawnSpec } from "../../src/main/pty-session-manager.ts";
+import { SessionManager, type ManagedPty, type SessionClient, type SpawnSpec } from "@hivemind/agent-host/pty-session-manager";
 
 class FakePty implements ManagedPty {
   readonly pid = 4242;

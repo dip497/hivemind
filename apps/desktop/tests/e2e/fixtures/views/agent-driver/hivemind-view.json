@@ -1,0 +1,8 @@
+{
+  "id": "agent-driver",
+  "name": "Agent Driver",
+  "version": "0.1.0",
+  "entry": "main.js",
+  "protocol": 1,
+  "permissions": ["workspace:spawn", "workspace:prompt", "workspace:sessions"]
+}

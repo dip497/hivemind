@@ -18,6 +18,8 @@
 export interface HookScript {
   path: string;
   arg?: string;
+  /** Put in front of the command: a plugin script is told where the SDK and sockets are. */
+  env?: Readonly<Record<string, string>>;
 }
 
 /** Paths the daemon owns. A runtime may point at these; it never invents one. */
@@ -33,6 +35,8 @@ export interface RuntimePaths {
   /** Control plane, when the daemon has one. */
   hcpSock?: string;
   hcpToken?: string;
+  /** The SDK an agent's plugin loads, in its hook scripts or inside the agent itself. */
+  sdk?: string;
   /** Where per-tile session records live. */
   tileSessionsDir: string;
   /** The user's home, for an agent whose CLI keeps its own configuration there. */
@@ -93,13 +97,17 @@ export const NO_PLAN: LaunchPlan = Object.freeze({});
  * disk and what reaches a command line. Anything outside the contract is dropped rather
  * than corrected, so a mistake shows up as a missing argument, never as a surprising one.
  */
+export const MAX_ARG = 64 * 1024;
+
 export function validatePlan(plan: LaunchPlan): LaunchPlan {
   const out: LaunchPlan = {};
   const files = Object.entries(plan.files ?? {}).filter(([name, body]) =>
     /^[A-Za-z0-9][\w.-]{0,127}$/.test(name) && typeof body === "string" && body.length <= 2 << 20);
   if (files.length) out.files = Object.fromEntries(files);
+  // ponytail: one inline hooks document can pass 4 KiB; 64 KiB stays under Linux's 128 KiB per
+  // argument. Past that, hand the agent a settings file path instead.
   const clean = (args: readonly string[] | undefined): string[] =>
-    (args ?? []).filter((a) => typeof a === "string" && a.length > 0 && a.length <= 4096 && !a.includes("\0"));
+    (args ?? []).filter((a) => typeof a === "string" && a.length > 0 && a.length <= MAX_ARG && !a.includes("\0"));
   for (const key of ["argsBefore", "args"] as const) {
     const args = clean(plan[key]);
     if (args.length) out[key] = args;

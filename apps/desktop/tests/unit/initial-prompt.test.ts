@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { applyInitialPrompt, INITIAL_PROMPT_ENV, stripInitialPrompt, deliversPromptViaArgv } from "../../src/shared/agent-io.ts";
+import { deliversPromptViaArgv } from "../../src/shared/agent-io.ts";
+import { applyInitialPrompt, INITIAL_PROMPT_ENV, stripInitialPrompt } from "@hivemind/agent-host/initial-prompt";
 import { useAuthoredAgents } from "./authored-agents.ts";
 
 // promptDelivery is a catalog capability: load the published fixtures.

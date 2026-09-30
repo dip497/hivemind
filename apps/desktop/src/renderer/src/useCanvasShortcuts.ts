@@ -1,6 +1,6 @@
 /**
  * useCanvasShortcuts — wires the canvas keyboard shortcuts + the CommandPalette/
- * menu custom-event listeners (spawn-claude, canvas-toggle, add-frame,
+ * menu custom-event listeners (spawn-agent, canvas-toggle, add-frame,
  * frame-open, focus-tile). Lifted from Canvas.tsx; takes the spawn/frame actions
  * + selection refs as context. Number-row tool hotkeys, ⌘\/⌘B/T/D, "." focus,
  * Escape fit-all, F2 rename — with the same text-field guards.
@@ -13,7 +13,7 @@ type FocusModeReq = { id: string | null; n: number } | null;
 
 export interface CanvasShortcutsCtx {
   repoPath: string | null;
-  spawnClaude: (mode?: string, work?: string) => void;
+  spawnDefaultAgent: (mode?: string, work?: string) => void;
   /** Spawn the tool island's currently-selected agent (claude/codex/opencode). */
   spawnSelectedAgent: () => void;
   spawnVis: (which: "tree" | "shell" | "diff" | "issues") => void;
@@ -33,7 +33,7 @@ export interface CanvasShortcutsCtx {
 
 export function useCanvasShortcuts(ctx: CanvasShortcutsCtx) {
   const {
-    repoPath, spawnClaude, spawnSelectedAgent, spawnVis, spawnBrowser, addFrame, frameOpen, focusTile, closeTile,
+    repoPath, spawnDefaultAgent, spawnSelectedAgent, spawnVis, spawnBrowser, addFrame, frameOpen, focusTile, closeTile,
     setSelectedTileId, setFocusModeReq, selectedTileIdRef, selectedFrameIdRef,
     focusModeNonceRef, tilesRef,
   } = ctx;
@@ -42,7 +42,7 @@ export function useCanvasShortcuts(ctx: CanvasShortcutsCtx) {
     const onSpawn = (e: Event) => {
       const d = (e as CustomEvent).detail;
       const obj = d && typeof d === "object" ? (d as { mode?: string; work?: string }) : undefined;
-      spawnClaude(obj?.mode, obj?.work);
+      spawnDefaultAgent(obj?.mode, obj?.work);
     };
     const onToggle = (e: Event) => {
       const which = (e as CustomEvent<"tree" | "shell" | "diff" | "issues">).detail;
@@ -153,7 +153,7 @@ export function useCanvasShortcuts(ctx: CanvasShortcutsCtx) {
       setSelectedTileId(id);
       focusTile(id);
     };
-    window.addEventListener("hivemind:spawn-claude", onSpawn);
+    window.addEventListener("hivemind:spawn-agent", onSpawn);
     window.addEventListener("hivemind:canvas-toggle", onToggle as EventListener);
     window.addEventListener("hivemind:add-frame", onAddFrame);
     window.addEventListener("hivemind:frame-open", onFrameOpen as EventListener);
@@ -162,7 +162,7 @@ export function useCanvasShortcuts(ctx: CanvasShortcutsCtx) {
     window.addEventListener("hivemind:shortcut", onShortcut);
     window.addEventListener("keydown", onKey);
     return () => {
-      window.removeEventListener("hivemind:spawn-claude", onSpawn);
+      window.removeEventListener("hivemind:spawn-agent", onSpawn);
       window.removeEventListener("hivemind:canvas-toggle", onToggle as EventListener);
       window.removeEventListener("hivemind:add-frame", onAddFrame);
       window.removeEventListener("hivemind:frame-open", onFrameOpen as EventListener);

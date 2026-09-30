@@ -65,7 +65,7 @@ import {
 import { DiffReviewPanel } from "./DiffReviewPanel";
 import { newCid, formatCommentMessage, formatReviewMessage, type ReviewComment } from "./diff-comments";
 import { HeaderPinButton, type PinRect } from "./canvas-nodes";
-import { loadComments, saveComments, deliverToClaude } from "./code/review-store";
+import { loadComments, saveComments, deliverToAgent } from "./code/review-store";
 
 interface Props {
   repoPath: string;
@@ -670,11 +670,11 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
   // Send review comments to claude via the target picker (Canvas routes the
   // event). Formatting is shared with the Workbench diff (diff-comments).
   const sendComment = useCallback((c: ReviewComment) => {
-    deliverToClaude(formatCommentMessage(c));
+    deliverToAgent(formatCommentMessage(c));
   }, []);
   const sendReview = useCallback(() => {
     const msg = formatReviewMessage(comments);
-    if (msg) deliverToClaude(msg);
+    if (msg) deliverToAgent(msg);
   }, [comments]);
 
   const loading = mode === "working" ? workingItems.isLoading : revItems.isLoading;

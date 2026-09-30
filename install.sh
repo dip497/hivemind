@@ -104,6 +104,8 @@ fi
 # one. Swap it in now, before launch (this process is the fresh start).
 if [ -d "${appdir}.staged" ]; then
   rm -rf "$appdir" && mv "${appdir}.staged" "$appdir" && echo "hivemind: applied staged upgrade" >&2
+  # The version is only installed once it is the one that starts.
+  [ -f "$APP_DIR/.staged-version" ] && mv "$APP_DIR/.staged-version" "$APP_DIR/.installed-version"
 fi
 #
 # APPDIR must be exported explicitly: the bundled AppRun auto-detects APPDIR by
@@ -155,6 +157,32 @@ EOF
   command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "$data_dir/applications" >/dev/null 2>&1 || true
   command -v gtk-update-icon-cache >/dev/null 2>&1 && gtk-update-icon-cache -f -t "$data_dir/icons/hicolor" >/dev/null 2>&1 || true
   ok "installed desktop entry + icon ($desk_dst)"
+}
+
+# The tag of the latest release, without asking the API for it: the /releases/latest URL
+# redirects to /releases/tag/<tag>, and a redirect is served by the website, which has no
+# hourly limit. The API is the fallback — its 403 is that limit for this address (60 an hour,
+# shared by everyone behind it), which is not a network fault and must not be reported as one.
+LATEST_ERROR="could not resolve the latest release"
+latest_tag() {
+  local url tag code body
+  LATEST_ERROR="could not resolve the latest release of $REPO"
+  url=$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest" 2>/dev/null || true)
+  tag=${url##*/tag/}
+  case "$tag" in
+    v[0-9]*|[0-9]*) printf '%s\n' "$tag"; return 0 ;;
+  esac
+  body=$(curl -sS -H 'Cache-Control: no-cache' -w '\n%{http_code}' \
+    "https://api.github.com/repos/$REPO/releases/latest?nocache=$(date +%s)" 2>/dev/null || true)
+  code=$(printf '%s' "$body" | tail -n1)
+  tag=$(printf '%s' "$body" | grep -oE '"tag_name":[[:space:]]*"[^"]+"' | sed -E 's/.*"([^"]+)".*/\1/' | head -1)
+  if [ -n "$tag" ]; then printf '%s\n' "$tag"; return 0; fi
+  case "$code" in
+    403|429) LATEST_ERROR="github is rate-limiting this address (60 api requests an hour, shared). Wait, or install a known version: HIVEMIND_VERSION=vX.Y.Z" ;;
+    "") LATEST_ERROR="could not reach github.com — check your network" ;;
+    *) LATEST_ERROR="github answered $code asking for the latest release of $REPO" ;;
+  esac
+  return 1
 }
 
 # Is a packaged hivemind instance live right now? Matches the bundled Electron /
@@ -382,10 +410,7 @@ install_prebuilt() {
     TAG="$HIVEMIND_VERSION"
   else
     say "resolving latest release of $REPO"
-    TAG=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" \
-      | grep -oE '"tag_name":\s*"[^"]+"' \
-      | sed -E 's/.*"([^"]+)".*/\1/' | head -1) \
-      || die "could not reach github.com api — check your network"
+    TAG=$(latest_tag) || die "$LATEST_ERROR"
     [ -n "$TAG" ] || die "no published releases yet for $REPO. Try --dev to build from source."
   fi
   say "target version: $TAG"
@@ -395,7 +420,12 @@ install_prebuilt() {
   # aborts on the SUID-sandbox error; re-running the installer should repair
   # that to the --no-sandbox wrapper even when the version hasn't changed.
   INSTALLED_FILE="$APP_DIR/.installed-version"
-  if [ -f "$INSTALLED_FILE" ] && [ "$(cat "$INSTALLED_FILE")" = "$TAG" ]; then
+  STAGED_FILE="$APP_DIR/.staged-version"
+  if [ -f "$STAGED_FILE" ] && [ "$(cat "$STAGED_FILE")" = "$TAG" ] && [ -d "$APP_DIR/hivemind-extracted.staged" ]; then
+    ok "$TAG is downloaded already — restart hivemind to finish"
+    return 0
+  fi
+  if [ -f "$INSTALLED_FILE" ] && [ "$(cat "$INSTALLED_FILE")" = "$TAG" ] && [ ! -d "$APP_DIR/hivemind-extracted.staged" ]; then
     if [ "$OS_KIND" = "mac" ]; then
       # Nothing to heal on macOS (no AppImage, no AppRun) — just make sure the
       # launcher + ~/Applications alias exist and point at the current bundle.
@@ -509,6 +539,7 @@ install_prebuilt() {
       # ~/.local/share, not the running process).
       write_launcher "$APP_DIR/hivemind-extracted/AppRun"
       install_desktop_entry "$APP_DIR/hivemind-extracted.staged"
+      STAGED=1
       warn "hivemind is running — upgrade STAGED. Quit & reopen hivemind to apply it. Your canvas + sessions are safe; nothing is lost."
     fi
   else
@@ -519,8 +550,16 @@ install_prebuilt() {
                # short-circuiting on "already on $TAG".
   fi
 
-  echo "$TAG" > "$INSTALLED_FILE"
-  ok "installed $TAG"
+  # What `.installed-version` says is what runs: a build waiting for a restart is
+  # recorded apart, so a later run offers to finish it instead of finding nothing to do.
+  if [ "${STAGED:-0}" = 1 ]; then
+    echo "$TAG" > "$APP_DIR/.staged-version"
+    ok "downloaded $TAG — restart hivemind to finish"
+  else
+    rm -f "$APP_DIR/.staged-version"
+    echo "$TAG" > "$INSTALLED_FILE"
+    ok "installed $TAG"
+  fi
 }
 
 # ── DEV path (source build) ───────────────────────────────────────────────

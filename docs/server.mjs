@@ -6,6 +6,7 @@
 import { createServer } from "node:http";
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { extname, join, normalize } from "node:path";
+import { downloadFor } from "./downloads.mjs";
 
 const ROOT = new URL("./dist/", import.meta.url).pathname;
 const PORT = Number(process.env.PORT ?? 8080);
@@ -16,7 +17,9 @@ const TYPES = {
   ".json": "application/json; charset=utf-8", ".svg": "image/svg+xml",
   ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp",
   ".ico": "image/x-icon", ".woff2": "font/woff2", ".txt": "text/plain; charset=utf-8",
-  ".xml": "application/xml", ".md": "text/markdown; charset=utf-8", ".webm": "video/webm", ".mp4": "video/mp4", ".map": "application/json",
+  ".xml": "application/xml", ".md": "text/markdown; charset=utf-8",
+  // The installers are served to be read as much as piped: a browser shows them as text.
+  ".sh": "text/plain; charset=utf-8", ".ps1": "text/plain; charset=utf-8", ".webm": "video/webm", ".mp4": "video/mp4", ".map": "application/json",
 };
 
 /** Hashed filenames never change content; everything else is re-fetched or checked. */
@@ -42,6 +45,18 @@ function resolve(urlPath) {
 }
 
 createServer((req, res) => {
+  // A download link points here and is sent on to the current release, so the link in a
+  // README, a chat message or a bookmark keeps working without anyone editing it.
+  // /download is the short URL people share; the section that downloads it lives on the home page.
+  if (/^\/download\/?$/.test((req.url ?? "").split("?")[0])) {
+    res.writeHead(302, { location: "/#download", "cache-control": "public, max-age=300" });
+    return res.end();
+  }
+  const to = downloadFor(req.url ?? "/");
+  if (to) {
+    res.writeHead(302, { location: to, "cache-control": "public, max-age=300" });
+    return res.end();
+  }
   const hit = resolve(req.url ?? "/");
   if (!hit) {
     const notFound = join(ROOT, "404.html");

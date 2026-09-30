@@ -6,7 +6,8 @@
 import { getCatalog, agentForCmd } from "./catalog.js";
 import { manifestRuntime, transformsFor } from "./runtime-manifest.js";
 import { homePaths } from "./home-overlay.js";
-import type { RuntimePaths } from "./runtime.js";
+import type { HookScript, RuntimePaths } from "./runtime.js";
+import { SDK_ENV } from "@hivemind/agent-sdk";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import nodePath from "node:path";
@@ -20,6 +21,7 @@ export * from "./session.js";
 export * from "./runtime.js";
 export * from "./runtime-manifest.js";
 export * from "./hooks.js";
+export * from "./events.js";
 export * from "./home-overlay.js";
 
 /** Where an agent's own files live: one directory each, handed out by the daemon so a
@@ -28,16 +30,12 @@ const privateDir = (userDataDir: string, id: string): string => nodePath.join(us
 
 /** What the daemon owns and a runtime may point at. Hook scripts are ours: every agent
  *  wires up the same ones, each in its own configuration format. */
-const runtimePaths = (p: DaemonPaths, dir: string): RuntimePaths => ({
+const runtimePaths = (def: AgentProviderDef, p: DaemonPaths, dir: string): RuntimePaths => ({
   private: dir,
-  hooks: {
-    tracker: { path: p.trackerPath, arg: p.tileSessionsDir },
-    stop: { path: p.stopHookPath, arg: p.hcpSock },
-    userPrompt: { path: p.userpromptHookPath, arg: p.hcpSock },
-    notification: { path: p.notificationHookPath, arg: p.hcpSock },
-  },
+  hooks: hookScripts(def, dir, p),
   execPath: p.execPath,
   ...(p.hcpSock ? { hcpSock: p.hcpSock } : {}),
+  ...(p.sdkPath ? { sdk: p.sdkPath } : {}),
   tileSessionsDir: p.tileSessionsDir,
   home: homedir(),
 });
@@ -45,20 +43,35 @@ const runtimePaths = (p: DaemonPaths, dir: string): RuntimePaths => ({
 const agentDir = (def: AgentProviderDef, ctx: Parameters<NonNullable<AgentNodeParts["resume"]>>[0]): string =>
   ctx.providers?.[def.id]?.privateDir ?? privateDir(nodePath.dirname(ctx.tileSessionsDir), def.id);
 
-/** Our hook scripts, and the ones an agent ships as assets, with what each is called with. An entry
- *  missing here is an event the manifest asked for that this daemon cannot wire — the renderer drops it. */
-export function hookPathsFor(def: AgentProviderDef, ctx: Parameters<NonNullable<AgentNodeParts["resume"]>>[0]): Record<string, { path: string; arg: string }> {
-  return {
-    ...(ctx.trackerPath ? { tracker: { path: ctx.trackerPath, arg: ctx.tileSessionsDir } } : {}),
-    ...(ctx.planHookPath && ctx.planBridgeSock ? { plan: { path: ctx.planHookPath, arg: ctx.planBridgeSock } } : {}),
-    ...(ctx.approvalHookPath && ctx.hcpSock ? { approval: { path: ctx.approvalHookPath, arg: ctx.hcpSock } } : {}),
-    ...(ctx.stopHookPath && ctx.hcpSock ? { stop: { path: ctx.stopHookPath, arg: ctx.hcpSock } } : {}),
-    ...(ctx.subagentHookPath && ctx.hcpSock ? { subagent: { path: ctx.subagentHookPath, arg: ctx.hcpSock } } : {}),
-    ...(ctx.notificationHookPath && ctx.hcpSock ? { notification: { path: ctx.notificationHookPath, arg: ctx.hcpSock } } : {}),
-    ...(ctx.userpromptHookPath && ctx.hcpSock ? { userPrompt: { path: ctx.userpromptHookPath, arg: ctx.hcpSock } } : {}),
-    ...Object.fromEntries((def.assets ?? []).filter((a) => a.hook && ctx.hcpSock)
-      .map((a) => [a.hook!, { path: nodePath.join(agentDir(def, ctx), a.name), arg: ctx.hcpSock! }])),
+/** What the scripts need from the daemon; any of it may be missing, which leaves those hooks unwired. */
+interface ScriptPaths {
+  trackerPath?: string;
+  tileSessionsDir: string;
+  eventHookPath?: string;
+  sdkPath?: string;
+  planBridgeSock?: string;
+  hcpSock?: string;
+}
+
+/** Our two scripts — the session tracker and the generic event reporter — and the ones the agent
+ *  ships as assets, which run with the SDK. An entry missing here is an event the manifest asked
+ *  for that this daemon cannot wire — the renderer drops it. */
+function hookScripts(def: AgentProviderDef, dir: string, p: ScriptPaths): Record<string, HookScript> {
+  const sdkEnv: Record<string, string> = {
+    ...(p.sdkPath ? { [SDK_ENV.sdk]: p.sdkPath } : {}),
+    ...(p.hcpSock ? { [SDK_ENV.sock]: p.hcpSock } : {}),
+    ...(p.planBridgeSock ? { [SDK_ENV.planSock]: p.planBridgeSock } : {}),
   };
+  return {
+    ...(p.trackerPath ? { tracker: { path: p.trackerPath, arg: p.tileSessionsDir } } : {}),
+    ...(p.eventHookPath && p.hcpSock ? { event: { path: p.eventHookPath, arg: p.hcpSock } } : {}),
+    ...Object.fromEntries((def.assets ?? []).filter((a) => a.hook && p.sdkPath && p.hcpSock)
+      .map((a) => [a.hook!, { path: nodePath.join(dir, a.name), env: sdkEnv }])),
+  };
+}
+
+export function hookPathsFor(def: AgentProviderDef, ctx: Parameters<NonNullable<AgentNodeParts["resume"]>>[0]): Record<string, HookScript> {
+  return hookScripts(def, agentDir(def, ctx), ctx);
 }
 
 /** An agent whose manifest describes everything it needs — no module of ours involved.
@@ -69,7 +82,7 @@ function partsFromManifest(def: AgentProviderDef): AgentNodeParts | undefined {
   return {
     prepare: (p) => {
       const dir = privateDir(p.userDataDir, def.id);
-      const files = runtime.install?.(runtimePaths(p, dir)).files ?? {};
+      const files = runtime.install?.(runtimePaths(def, p, dir)).files ?? {};
       if (Object.keys(files).length) {
         mkdirSync(dir, { recursive: true });
         for (const [name, body] of Object.entries(files)) writeFileSync(nodePath.join(dir, name), body);
@@ -84,9 +97,10 @@ function partsFromManifest(def: AgentProviderDef): AgentNodeParts | undefined {
       execPath: ctx.execPath,
       ...(ctx.hcpSock ? { hcpSock: ctx.hcpSock } : {}),
       ...(ctx.hcpToken ? { hcpToken: ctx.hcpToken } : {}),
+      ...(ctx.sdkPath ? { sdk: ctx.sdkPath } : {}),
       tileSessionsDir: ctx.tileSessionsDir,
       home: homedir(),
-    }, { ...(ctx.legacyMapFile ? { legacyMapFile: ctx.legacyMapFile } : {}) }),
+    }),
   };
 }
 

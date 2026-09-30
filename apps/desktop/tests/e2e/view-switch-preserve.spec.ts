@@ -141,7 +141,7 @@ test("a minimized tab keeps its surface alive (parked, not unmounted) and comes 
   expect(await probe("#hm-tile-park .xterm")).toBe("kept");
   // Restore from the rail → adopted by the tab body again.
   const rail = page.locator('aside[aria-label="Layers"]');
-  await rail.locator("button", { hasText: /shell/i }).first().click();
+  await rail.locator('[role="button"]', { hasText: /shell/i }).first().click();
   await expect(page.locator('[role="tab"]')).toHaveCount(1);
   expect(await probe('[data-tile-id] .xterm')).toBe("kept");
   await toView("canvas");

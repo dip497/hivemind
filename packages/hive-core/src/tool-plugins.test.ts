@@ -112,7 +112,5 @@ describe("tile-kind availability", () => {
     expect(tileKindAvailability("browser", off.tools)?.available).toBe(false);
     const on = mergeSettings({ ...DEFAULT_SETTINGS, tools: { enabledPlugins: [BROWSER_PLUGIN_ID], disabledTools: [] } });
     expect(tileKindAvailability("browser", on.tools)?.available).toBe(true);
-    // The migration constant in settings-schema must stay the same plugin id.
-    expect(mergeSettings({ v: 1 }).tools.enabledPlugins).toEqual([BROWSER_PLUGIN_ID]);
   });
 });

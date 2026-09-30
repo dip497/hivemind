@@ -60,21 +60,6 @@ test("evict removes a tile's tracked file", () => {
   }
 });
 
-test("falls back to the legacy shared map when no per-tile file exists", () => {
-  const dir = freshDir();
-  try {
-    const legacy = path.join(dir, "tile-sessions.json");
-    writeFileSync(legacy, JSON.stringify({ "tile-old": "sess-legacy" }));
-    // per-tile file wins when present…
-    writeTrackedSession(dir, "tile-new", "sess-new");
-    assert.equal(readTrackedSession(dir, "tile-new", legacy), "sess-new");
-    // …legacy map used only when the per-tile file is absent
-    assert.equal(readTrackedSession(dir, "tile-old", legacy), "sess-legacy");
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
 test("CONCURRENT trackers (multiple frames on restart) all persist — no lost updates", async () => {
   const dir = freshDir();
   const trackerPath = path.join(dir, "tracker.cjs");

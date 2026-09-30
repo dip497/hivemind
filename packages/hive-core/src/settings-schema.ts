@@ -11,7 +11,6 @@
  * cache, not configuration.
  */
 
-import { BROWSER_PLUGIN_ID } from "./tool-plugins.js";
 import { isToolbarActionId, type ToolbarActionId, type ToolbarPreferences } from "./toolbar.js";
 
 // ── appearance ────────────────────────────────────────────────────────────────
@@ -301,8 +300,6 @@ export interface Settings {
   plugins: PluginsSettings;
   tools: ToolsSettings;
   agents: AgentsSettings;
-  /** Set once the renderer's pre-2.0 localStorage keys were imported. */
-  migrated: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -310,13 +307,11 @@ export const DEFAULT_SETTINGS: Settings = {
   appearance: DEFAULT_APPEARANCE,
   views: { defaultView: "canvas", chrome: {}, toolbars: {} },
   plugins: { disabled: [] },
-  // Fresh install: no tool plugin is on. A file that predates this section is
-  // migrated in mergeSettings so an existing user keeps their Browser tile.
+  // Fresh install: no tool plugin is on.
   tools: { enabledPlugins: [], disabledTools: [] },
   // Empty = "the agent catalog's default" — hive-core does not depend on
   // @hivemind/agents, and the renderer resolves an unknown id to defaultAgent().
   agents: { disabled: [], defaultAgent: "", options: {}, autoInstall: true, declined: [], fromCatalog: [] },
-  migrated: false,
 };
 
 // ── validation / merge ───────────────────────────────────────────────────────
@@ -416,27 +411,11 @@ function idList(raw: unknown, re: RegExp, fallback: readonly string[], max = 200
   return out;
 }
 
-/** A settings FILE written before the `tools` section existed. Such a user had
- *  the Browser tile unconditionally, so leaving them with a disabled plugin
- *  would silently remove a tool they use: they get `hivemind/web` enabled. A
- *  MISSING file is not this case — a fresh install starts with everything off.
+/** Validate + fill a parsed settings.json (any junk) into a Settings.
  *
- *  `isLoad` is the whole safety of this: a PATCH (`mergeSettings(partial, cur)`)
- *  also carries `v: 1` and usually no `tools` key, and treating that as a legacy
- *  file would re-enable the Browser every time a user who had switched it OFF
- *  changed anything else. A load is identified by its base being the defaults —
- *  patches always pass the settings they are patching. */
-function migratedTools(raw: Record<string, unknown>, isLoad: boolean): ToolsSettings | null {
-  if (!isLoad || raw.v !== 1 || "tools" in raw) return null;
-  return { enabledPlugins: [BROWSER_PLUGIN_ID], disabledTools: [] };
-}
-
-/** Validate + fill a parsed settings.json (any version, any junk) into a Settings.
- *
- *  Two callers with different meanings share this function: a LOAD (a file just
- *  parsed from disk, no base — the defaults fill the gaps) and a PATCH (a partial
- *  object merged onto the settings already in hand, base given). Only a load may
- *  run the pre-`tools` migration; see `migratedTools`. */
+ *  Two callers share this function: a LOAD (a file just parsed from disk, no base — the
+ *  defaults fill the gaps) and a PATCH (a partial object merged onto the settings already in
+ *  hand, base given). */
 export function mergeSettings(raw: unknown, base: Settings = DEFAULT_SETTINGS): Settings {
   const p = isObj(raw) ? raw : {};
   const views = isObj(p.views) ? p.views : {};
@@ -477,7 +456,7 @@ export function mergeSettings(raw: unknown, base: Settings = DEFAULT_SETTINGS): 
   const plugins = isObj(p.plugins) ? p.plugins : {};
   const agents = isObj(p.agents) ? p.agents : {};
   const toolsIn = isObj(p.tools) ? p.tools : {};
-  const tools = migratedTools(p, base === DEFAULT_SETTINGS) ?? {
+  const tools = {
     enabledPlugins: idList(toolsIn.enabledPlugins, PLUGIN_ID_RE, base.tools.enabledPlugins),
     disabledTools: idList(toolsIn.disabledTools, TOOL_ID_RE, base.tools.disabledTools),
   };
@@ -491,16 +470,13 @@ export function mergeSettings(raw: unknown, base: Settings = DEFAULT_SETTINGS): 
       disabled: (Array.isArray(agents.disabled) ? agents.disabled : base.agents.disabled)
         .filter((x): x is string => typeof x === "string").slice(0, 200),
       defaultAgent: str(agents.defaultAgent, base.agents.defaultAgent, 64),
-      options: isObj(agents.options) ? agentOptions(agents.options)
-        : "model" in agents || "permissionMode" in agents ? legacyClaudeOptions(agents.model, agents.permissionMode)
-        : base.agents.options,
+      options: isObj(agents.options) ? agentOptions(agents.options) : base.agents.options,
       autoInstall: bool(agents.autoInstall, base.agents.autoInstall),
       declined: (Array.isArray(agents.declined) ? agents.declined : base.agents.declined)
         .filter((x): x is string => typeof x === "string" && AGENT_KEY_RE.test(x)).slice(0, 200),
       fromCatalog: (Array.isArray(agents.fromCatalog) ? agents.fromCatalog : base.agents.fromCatalog)
         .filter((x): x is string => typeof x === "string" && AGENT_KEY_RE.test(x)).slice(0, 200),
     },
-    migrated: bool(p.migrated, base.migrated),
   };
 }
 
@@ -522,50 +498,6 @@ function agentOptions(raw: Record<string, unknown>): Record<string, Record<strin
     if (kept.length) out[agent] = Object.fromEntries(kept);
   }
   return out;
-}
-
-/** The old global model and permission mode only ever reached claude. */
-function legacyClaudeOptions(model: unknown, mode: unknown): Record<string, Record<string, string>> {
-  const claude: Record<string, string> = {};
-  if (typeof model === "string" && model && model !== "default") claude.model = model;
-  if (typeof mode === "string" && mode && mode !== "default") claude.mode = mode;
-  return Object.keys(claude).length ? { claude } : {};
-}
-
-// ── pre-2.0 localStorage → settings ─────────────────────────────────────────
-
-/** The renderer's old flat theme blob (`hivemind:theme`) + the other keys it
- *  kept. Everything optional; unknown fields are ignored. */
-export interface LegacyRendererState {
-  theme?: unknown;
-  viewMode?: string | null;
-  agentSel?: string | null;
-  claudeMode?: string | null;
-  claudeModel?: string | null;
-}
-
-export function migrateLegacy(legacy: LegacyRendererState, base: Settings = DEFAULT_SETTINGS): Settings {
-  const t = isObj(legacy.theme) ? legacy.theme : {};
-  const appearance = mergeAppearance({
-    glass: { enabled: t.glass, contentGlass: t.contentGlass, opacity: t.opacity, blur: t.blur, contentOpacity: t.contentOpacity, animate: t.animate },
-    wallpaper: { kind: t.wallpaper, videoSrc: t.videoSrc, imageSrc: t.imageSrc, brightness: t.videoBrightness },
-    accent: t.accent,
-    overlayMedia: Array.isArray(t.overlayMedia) ? t.overlayMedia : isObj(t.overlayMedia) ? [t.overlayMedia] : [],
-  }, base.appearance);
-  return mergeSettings({
-    ...base,
-    appearance,
-    views: { ...base.views, defaultView: legacy.viewMode ?? base.views.defaultView },
-    agents: {
-      disabled: base.agents.disabled,
-      defaultAgent: legacy.agentSel ?? base.agents.defaultAgent,
-      options: legacyClaudeOptions(legacy.claudeModel, legacy.claudeMode),
-      autoInstall: base.agents.autoInstall,
-      declined: base.agents.declined,
-      fromCatalog: base.agents.fromCatalog,
-    },
-    migrated: true,
-  }, base);
 }
 
 // ── the renderer's flat theme view ──────────────────────────────────────────

@@ -13,6 +13,7 @@
  *
  * An agent is one directory: its `agent.yaml` and the files that manifest names.
  */
+import type { AgentEventName, InputKind, TurnOutcome } from "./events.js";
 
 /** "blocked" = needs the human (approval or question). */
 export type AgentState = "idle" | "working" | "blocked";
@@ -109,7 +110,37 @@ export interface SessionFind {
   skipWhen?: Record<string, unknown>;
 }
 
+/** How to list the agent's sessions. With `args`, its CLI prints a JSON array of records and
+ *  the paths point into each one. Without, the sessions are the files its store keeps
+ *  (`resume.find` or `resume.exists`), and `lines` says how many of each file's first lines to
+ *  read: a field comes from the first of them that has it. */
+export interface SessionList {
+  args?: string[];
+  idPath?: string;
+  lines?: number;
+  cwdPath?: string;
+  /** In order of preference. May be what the agent wrote. */
+  titlePath?: string | string[];
+  /** Where the user's own first prompt is, as opposed to a title the agent wrote. */
+  promptPath?: string | string[];
+  /** Epoch milliseconds or an ISO date. */
+  updatedPath?: string;
+}
+
+/** One of an agent's sessions, as the host lists them. */
+export interface SessionInfo {
+  id: string;
+  cwd?: string;
+  title?: string;
+  /** The first line of the user's first prompt. */
+  prompt?: string;
+  /** Epoch milliseconds. */
+  updated?: number;
+}
+
 export interface AgentSession {
+  /** The agent's own listing of its sessions, when it has one. */
+  list?: SessionList;
   /** Give a fresh session an id we choose, so a restore can ask for it by name. */
   bind?: {
     /** Tokens placed before the tile's own; `{newId}` is the generated id. */
@@ -131,6 +162,10 @@ export interface AgentSession {
     };
     /** Nothing known: a best-effort argument rather than a fresh session. */
     fallback?: string[];
+    /** Where a session is kept, `{id}` for its id and one `*` for a directory whose name the
+     *  host does not know (a whole path segment). A session not there is not
+     *  resumed; the tile starts fresh under the same id instead. */
+    exists?: string;
     /** Where the resume goes: `before` the tile's own arguments, `beforeLaunch` after them
      *  but ahead of what the launch adds, or last of all (the default). */
     position?: "before" | "beforeLaunch" | "after";
@@ -166,8 +201,15 @@ export interface AgentHome {
 
 /** One hook of ours, wired into an agent's own configuration format. */
 export interface AgentHookEntry {
-  /** Which of Hivemind's hook scripts (`tracker`, `stop`, `userPrompt`, …). */
-  hook: string;
+  /** Which of Hivemind's hook scripts (`tracker`, `plan`, `approval`, …). Exactly one of
+   *  `hook` and `emit`. */
+  hook?: string;
+  /** The canonical event this native event reports; rendered as the generic `event` script. */
+  emit?: AgentEventName;
+  /** `turn.ended` only: how the turn ended (default `done`). */
+  outcome?: TurnOutcome;
+  /** `input.requested` only: what the agent is waiting for (default `other`). */
+  kind?: InputKind;
   /** Seconds, in the agent's own hook contract. */
   timeout?: number;
   /** Which tools it applies to; `supervise` derives it from the supervision policy. */
@@ -192,6 +234,12 @@ export interface AgentHooks {
   arg?: string;
   /** Or written to this asset name instead. */
   file?: string;
+  /** The document's syntax: JSON (the default), or a TOML inline table for a CLI whose
+   *  configuration is TOML (`-c hooks={events}`). */
+  format?: "json" | "toml";
+  /** The commands name no tile: for an agent that asks its user to trust each distinct hook
+   *  command once, so every tile runs the same commands and the tile rides the spawn env. */
+  stable?: boolean;
 }
 
 /** A file an agent needs on disk before it runs: a bridge extension, a hook script, a
@@ -201,8 +249,10 @@ export interface AgentAsset {
   name: string;
   /** The file beside the manifest whose contents are written. */
   file: string;
-  /** A hook this script is: `events` may name it like one of ours, and it runs with the control-plane socket. */
+  /** A hook this script is: `events` may name it like one of ours, and it runs with the SDK. */
   hook?: string;
+  /** The canonical events this script reports — what the agent can be relied on for. */
+  produces?: AgentEventName[];
 }
 
 /** What a launch needs beyond the command itself. */
@@ -220,6 +270,10 @@ export interface AgentLaunch {
   requiresHome?: boolean;
   /** Extra environment; values take the same placeholders. */
   env?: Record<string, string>;
+  /** Variables this CLI sets in the processes it starts that must not reach a terminal the
+   *  host starts — a marker that makes a child think it runs inside this CLI. Removed from
+   *  every terminal, since the host itself may have been started from inside one. */
+  unsetEnv?: string[];
 }
 
 export interface AgentProviderDef {
@@ -251,6 +305,8 @@ export interface AgentProviderDef {
   options?: readonly AgentOption[];
   /** Where to get the CLI when this machine does not have it. Shown, never run. */
   install?: AgentInstall;
+  /** The oldest Hivemind that can run it, as the catalog lists it. */
+  minAppVersion?: string;
   /** Where this CLI keeps its sessions, so a restore can find the one for a cwd. */
   session?: AgentSession;
   /** How this CLI is told to call our hooks. */
@@ -272,6 +328,9 @@ export interface AgentProviderDef {
   titles?: readonly string[];
   /** The tile label for the n-th spawn (default `"<label> #<n>"`). */
   spawnLabel?: (n: number, opts: SpawnOptions) => string;
+  /** Startup screens the host may answer because the launch flags already answered them
+   *  (see ManifestSpawn.dismiss). `keys` are the tokens `hive ctl keys` takes. */
+  dismiss?: ReadonlyArray<{ match: (screen: string) => boolean; keys: readonly string[] }>;
 }
 
 // ── daemon-side ──────────────────────────────────────────────────────────────
@@ -308,14 +367,12 @@ export interface ProviderSpawnContext {
   execPath: string;
   trackerPath: string;
   tileSessionsDir: string;
-  legacyMapFile?: string;
-  planHookPath?: string;
+  /** The plan-review socket a plugin's script reaches through the SDK. */
   planBridgeSock?: string;
-  stopHookPath?: string;
-  approvalHookPath?: string;
-  subagentHookPath?: string;
-  notificationHookPath?: string;
-  userpromptHookPath?: string;
+  /** The generic script every `emit` entry runs. */
+  eventHookPath?: string;
+  /** The SDK a plugin's own hook scripts load (`HIVE_SDK`). */
+  sdkPath?: string;
   hcpSock?: string;
   hcpToken?: string;
   /** Provider-private paths, keyed by provider id — whatever that provider's
@@ -334,9 +391,9 @@ export interface DaemonPaths {
   execPath: string;
   trackerPath: string;
   tileSessionsDir: string;
-  stopHookPath: string;
-  userpromptHookPath: string;
-  notificationHookPath: string;
+  eventHookPath?: string;
+  sdkPath?: string;
+  planBridgeSock?: string;
   hcpSock: string;
 }
 

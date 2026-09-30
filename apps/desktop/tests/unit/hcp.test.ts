@@ -1,4 +1,4 @@
-/** HCP core — protocol framing, transcript parse, turn tracker, recorder,
+/** HCP core — protocol framing, turn tracker, recorder,
  *  method dispatch, and an end-to-end server round-trip (token + event). */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -6,8 +6,7 @@ import net from "node:net";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { takeLines, HCP_MAX_LINE } from "../../src/main/hcp/protocol.ts";
-import { readLastAssistantMessage } from "../../src/main/hcp/transcript.ts";
+import { takeLines, HCP_MAX_LINE, HcpError } from "../../src/main/hcp/protocol.ts";
 import { TurnTracker } from "../../src/main/hcp/turn-tracker.ts";
 import { OutputRecorder, stripAnsi } from "../../src/main/hcp/output-recorder.ts";
 import { makeDispatch } from "../../src/main/hcp/methods.ts";
@@ -51,30 +50,17 @@ test("takeLines: splits complete lines, keeps remainder, rejects overlong", () =
   assert.throws(() => takeLines("x".repeat(HCP_MAX_LINE + 1)));
 });
 
-test("transcript: extracts the last assistant text block", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tx-"));
-  const f = path.join(dir, "t.jsonl");
-  fs.writeFileSync(
-    f,
-    [
-      JSON.stringify({ type: "user", message: { role: "user", content: "hi" } }),
-      JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "first" }] } }),
-      JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", name: "x" }] } }),
-      JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "FINAL answer" }] } }),
-      "",
-    ].join("\n"),
-  );
-  assert.equal(readLastAssistantMessage(f), "FINAL answer");
-  assert.equal(readLastAssistantMessage(path.join(dir, "missing.jsonl")), null);
-});
-
 test("TurnTracker: waitForTurn resolves on next turn, times out otherwise", async () => {
   const tt = new TurnTracker();
   const epoch = tt.currentSeq("t1");
   const p = tt.waitForTurn("t1", epoch, 1000);
-  tt.recordTurn("t1", "/tmp/x.jsonl");
+  tt.recordReply("t1", "the reply");
+  tt.recordTurn("t1");
   const rec = await p;
-  assert.equal(rec?.transcriptPath, "/tmp/x.jsonl");
+  assert.equal(rec?.text, "the reply");
+  // A reply belongs to one turn: the next turn without one carries none.
+  tt.recordTurn("t1");
+  assert.equal((await tt.waitForTurn("t1", rec!.seq, 10))?.text, null);
   // Already-past turn resolves immediately.
   assert.ok(await tt.waitForTurn("t1", -1, 1000));
   // No turn → timeout → null.
@@ -114,7 +100,7 @@ function fakeDeps(over: Partial<Parameters<typeof makeDispatch>[0]> = {}) {
     forgetPipes: () => {},
     spawnEdge: () => {},
     setSupervise: () => {},
-    pushWait: () => {},
+    awaitingApproval: () => {},
     ...over,
   };
   return { deps, turns, recorder, writes };
@@ -133,16 +119,14 @@ test("dispatch agent.send: writes text + carriage return", async () => {
   assert.deepEqual(writes, [["hm:t1", "hello"], ["hm:t1", "\r"]]);
 });
 
-test("dispatch agent.read: returns transcript reply after a turn", async () => {
+test("dispatch agent.read: returns the reply the agent's plugin reported for the turn", async () => {
   const { deps, turns } = fakeDeps();
   const { dispatch } = makeDispatch(deps);
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tx2-"));
-  const f = path.join(dir, "t.jsonl");
-  fs.writeFileSync(f, JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "the reply" }] } }));
   await dispatch("agent.send", { tileId: "t1", text: "go" });
   const read = dispatch("agent.read", { tileId: "t1", timeoutMs: 1000 });
-  // The Stop hook records the turn under the PTY id (HIVEMIND_TILE = hm:<tileId>).
-  turns.recordTurn("hm:t1", f);
+  // The plugin reports under the PTY id (HIVEMIND_TILE = hm:<tileId>): the reply, then the turn.
+  await dispatch("agent.reply", { tileId: "hm:t1", text: "the reply" });
+  turns.recordTurn("hm:t1");
   assert.deepEqual(await read, { text: "the reply", finalStatus: "turn", truncated: false });
 });
 
@@ -249,108 +233,14 @@ test("dispatch tile.spawn_agent: rate-limited → RATE_LIMITED", async () => {
 
 const tmpSock = () => path.join(fs.mkdtempSync(path.join(os.tmpdir(), "hcp-")), "hcp.sock");
 
-function rpc(sock: string, msg: unknown): Promise<any> {
-  return new Promise((resolve, reject) => {
-    const c = net.connect(sock, () => c.write(JSON.stringify(msg) + "\n"));
-    c.setEncoding("utf8");
-    let buf = "";
-    c.on("data", (d) => {
-      buf += d;
-      let nl: number;
-      while ((nl = buf.indexOf("\n")) >= 0) {
-        const line = buf.slice(0, nl); buf = buf.slice(nl + 1);
-        const m = JSON.parse(line);
-        if (m.t === "hello") continue; // skip greeting
-        resolve(m); c.end();
-      }
-    });
-    c.on("error", reject);
-  });
-}
-
-test("hcp-server: token gate + dispatch + hook event", async () => {
-  const sock = tmpSock();
-  let evented: any = null;
-  const srv = startHcpServer(sock, {
-    token: "secret",
-    rendererUp: () => true,
-    dispatch: async (method, params) => ({ echoed: method, params }),
-    onEvent: (topic, data) => { evented = { topic, data }; },
-  });
-  await new Promise((r) => setTimeout(r, 50));
-
-  // Good token → res ok.
-  const ok = await rpc(sock, { t: "req", id: "1", method: "x.y", params: { a: 1 }, token: "secret" });
-  assert.equal(ok.ok, true);
-  assert.deepEqual(ok.result, { echoed: "x.y", params: { a: 1 } });
-
-  // Bad token → UNAUTHORIZED.
-  const bad = await rpc(sock, { t: "req", id: "2", method: "x.y", token: "wrong" });
-  assert.equal(bad.ok, false);
-  assert.equal(bad.error.code, "UNAUTHORIZED");
-
-  // Hook event (no reply) reaches onEvent.
-  await new Promise<void>((resolve) => {
-    const c = net.connect(sock, () => { c.write(JSON.stringify({ t: "event", topic: "turn", data: { tileId: "t1" } }) + "\n"); c.end(); resolve(); });
-  });
-  await new Promise((r) => setTimeout(r, 50));
-  assert.deepEqual(evented, { topic: "turn", data: { tileId: "t1" } });
-  srv.close();
-});
-
-test("hcp-server: agent.stream subscription receives broadcast chunks", async () => {
-  const sock = tmpSock();
-  const srv = startHcpServer(sock, {
-    token: "secret",
-    rendererUp: () => true,
-    dispatch: async () => ({}),
-    onEvent: () => {},
-  });
-  await new Promise((r) => setTimeout(r, 50));
-
-  const got: Array<{ seq: number; chunk: string }> = [];
-  let acked = false;
-  await new Promise<void>((resolve, reject) => {
-    const c = net.connect(sock, () =>
-      c.write(JSON.stringify({ t: "sub", id: "s1", topic: "agent.stream", params: { tileId: "t1" }, token: "secret" }) + "\n"),
-    );
-    c.setEncoding("utf8");
-    let buf = "";
-    c.on("data", (d) => {
-      buf += d;
-      let nl: number;
-      while ((nl = buf.indexOf("\n")) >= 0) {
-        const line = buf.slice(0, nl); buf = buf.slice(nl + 1);
-        const m = JSON.parse(line);
-        if (m.t === "hello") continue;
-        if (m.t === "res" && m.id === "s1") {
-          acked = m.ok === true;
-          srv.broadcast("t2", "ignored"); // wrong tile — must NOT arrive
-          srv.broadcast("t1", "hello ");
-          srv.broadcast("t1", "world");
-        }
-        if (m.t === "evt" && m.subId === "s1") {
-          got.push(m.data);
-          if (got.length === 2) { c.end(); resolve(); }
-        }
-      }
-    });
-    c.on("error", reject);
-  });
-
-  assert.equal(acked, true);
-  assert.deepEqual(got, [{ seq: 1, chunk: "hello " }, { seq: 2, chunk: "world" }]);
-  srv.close();
-});
-
 test("recordTurn reports whether a blocking reader took the turn (auto-report dedup)", () => {
   const tt = new TurnTracker();
   // A parent's hive_read is blocked on the worker's next turn.
   const reader = tt.waitForTurn("hm:worker", tt.currentSeq("hm:worker"), 2000);
   // Worker finishes → the reader takes it, so the auto-report must stand down.
-  assert.equal(tt.recordTurn("hm:worker", null, "reply"), true);
+  assert.equal(tt.recordTurn("hm:worker", "reply"), true);
   // No one waiting → the auto-report is the delivery channel, so it must fire.
-  assert.equal(tt.recordTurn("hm:lonely", null, "reply"), false);
+  assert.equal(tt.recordTurn("hm:lonely", "reply"), false);
   return reader; // settle the promise
 });
 
@@ -360,9 +250,9 @@ test("single-delivery ladder: an explicit hive_report suppresses that turn's aut
   tt.markReported("hm:worker");
   // Turn ends. recordTurn must report the reply was already delivered (by the explicit
   // report) so the auto-report banner stands down — no duplicate, no spurious turn.
-  assert.equal(tt.recordTurn("hm:worker", null, "raw turn text"), true);
+  assert.equal(tt.recordTurn("hm:worker", "raw turn text"), true);
   // The flag is per-turn: a later turn with no explicit report auto-reports normally.
-  assert.equal(tt.recordTurn("hm:worker", null, "next turn"), false);
+  assert.equal(tt.recordTurn("hm:worker", "next turn"), false);
 });
 
 test("forgetTile (pty-exit teardown) wakes a blocked hive_read instead of hanging it", async () => {
@@ -408,37 +298,6 @@ test("OutputRecorder.tail: last N ANSI-stripped lines, trailing newline not a li
   assert.equal(rec.tail("t", 1), "four");
 });
 
-test("hcp-server: agent.stream sub with lines/since replays first and stamps offsets", async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hcp-replay-"));
-  const sock = path.join(dir, "s.sock");
-  const rec = new OutputRecorder();
-  rec.record("t", "a\nb\n");
-  const srv = startHcpServer(sock, {
-    token: "k", rendererUp: () => true, onEvent() {}, dispatch: async () => ({}),
-    replay: (id, o) => (typeof o.lines === "number" ? rec.tail(id, o.lines) : rec.since(id, o.since ?? 0)),
-    offsetOf: (id) => rec.mark(id),
-  });
-  const got: unknown[] = [];
-  await new Promise<void>((resolve) => {
-    const c = net.connect(sock, () => c.write(JSON.stringify({ t: "sub", id: "s1", topic: "agent.stream", params: { tileId: "t", lines: 1 }, token: "k" }) + "\n"));
-    let buf = "";
-    c.setEncoding("utf8");
-    c.on("data", (d: string) => {
-      buf += d;
-      for (const line of buf.split("\n").slice(0, -1)) got.push(JSON.parse(line));
-      buf = buf.slice(buf.lastIndexOf("\n") + 1);
-      if (got.length >= 3) { srv.broadcast("t", "c\n"); }
-      if (got.length >= 4) { c.end(); resolve(); }
-    });
-  });
-  const [, res, replay, live] = got as Array<Record<string, unknown>>;
-  assert.deepEqual(res, { t: "res", id: "s1", ok: true, result: { subscriptionId: "s1", offset: 4 } });
-  assert.deepEqual(replay, { t: "evt", subId: "s1", topic: "agent.stream", data: { seq: 0, chunk: "b\n", offset: 4, replay: true } });
-  assert.equal((live.data as { chunk: string }).chunk, "c\n");
-  srv.close();
-  fs.rmSync(dir, { recursive: true, force: true });
-});
-
 test("dispatch views.rescan: asks the renderer to re-read the view packages and returns its registry", async () => {
   const calls: string[] = [];
   const { deps } = fakeDeps({ callRenderer: async (m: string) => { calls.push(m); return { registered: ["orbit"], refused: { greedy: "unknown permission" } }; } });
@@ -481,4 +340,112 @@ test("tool.open: unknown tools, disabled contributions, invalid URLs and spawn f
   await assert.rejects(dispatch("tool.open", { tool: "hivemind/web/browser" }), { code: "UNAUTHORIZED" });
   disabledTools = []; spawn = false;
   await assert.rejects(dispatch("tool.open", { tool: "hivemind/web/browser" }), { code: "RATE_LIMITED" });
+});
+
+/** One JSON-RPC connection: `call` waits for its reply; notifications collect in `notes`. */
+async function session(sock: string) {
+  const c = net.connect(sock);
+  const lines: any[] = [];
+  let buf = "";
+  c.setEncoding("utf8");
+  c.on("data", (d: string) => { buf += d; let nl; while ((nl = buf.indexOf("\n")) >= 0) { lines.push(JSON.parse(buf.slice(0, nl))); buf = buf.slice(nl + 1); } });
+  await new Promise((r) => c.once("connect", r));
+  let n = 0;
+  const until = async (pred: (l: any) => boolean) => {
+    for (let i = 0; i < 200 && !lines.some(pred); i++) await new Promise((r) => setTimeout(r, 10));
+    return lines.find(pred);
+  };
+  return {
+    call: async (method: string, params?: unknown) => {
+      const id = ++n;
+      c.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n");
+      return until((l) => l.id === id);
+    },
+    notify: (method: string, params?: unknown) => c.write(JSON.stringify({ jsonrpc: "2.0", method, params }) + "\n"),
+    notes: (method: string) => lines.filter((l) => l.method === method),
+    until,
+    close: () => c.destroy(),
+  };
+}
+
+test("hcp-server: nothing before initialize with the token; then methods, and our error codes in data", async () => {
+  const sock = tmpSock();
+  const srv = startHcpServer(sock, {
+    token: "secret", rendererUp: () => true, onEvent: () => {},
+    dispatch: async (method, params) => { if (method === "boom") throw new HcpError("TILE_NOT_FOUND", "no such tile"); return { echoed: method, params }; },
+  });
+  await new Promise((r) => setTimeout(r, 50));
+  const s = await session(sock);
+  assert.equal((await s.call("x.y")).error.data.code, "UNAUTHORIZED", "nothing before initialize");
+  assert.equal((await s.call("initialize", { token: "wrong" })).error.code, -32000);
+  assert.deepEqual((await s.call("initialize", { token: "secret" })).result, { protocolVersion: 2, rendererUp: true, capabilities: { status: false } });
+  assert.deepEqual((await s.call("x.y", { a: 1 })).result, { echoed: "x.y", params: { a: 1 } });
+  assert.deepEqual((await s.call("boom")).error, { code: -32000, message: "no such tile", data: { code: "TILE_NOT_FOUND" } });
+  s.close();
+  srv.close();
+});
+
+test("hcp-server: a hook's agent.event needs no token; any other unauthenticated notification is dropped", async () => {
+  const sock = tmpSock();
+  const got: unknown[] = [];
+  const srv = startHcpServer(sock, { token: "secret", rendererUp: () => true, dispatch: async () => ({}), onEvent: (m, p) => { got.push([m, p]); } });
+  await new Promise((r) => setTimeout(r, 50));
+  const s = await session(sock);
+  s.notify("agent.event", { tileId: "hm:t1", event: "turn.ended" });
+  s.notify("agent.reply", { tileId: "hm:t1", text: "forged" });
+  await new Promise((r) => setTimeout(r, 50));
+  assert.deepEqual(got, [["agent.event", { tileId: "hm:t1", event: "turn.ended" }]]);
+  s.close();
+  srv.close();
+});
+
+test("hcp-server: agent.stream/subscribe replays what the recorder holds, then live chunks for that tile only", async () => {
+  const sock = tmpSock();
+  const rec = new OutputRecorder();
+  rec.record("t", "a\nb\n");
+  const srv = startHcpServer(sock, {
+    token: "k", rendererUp: () => true, onEvent() {}, dispatch: async () => ({}),
+    replay: (id, o) => (typeof o.lines === "number" ? rec.tail(id, o.lines) : rec.since(id, o.since ?? 0)),
+    offsetOf: (id) => rec.mark(id),
+  });
+  await new Promise((r) => setTimeout(r, 50));
+  const s = await session(sock);
+  await s.call("initialize", { token: "k" });
+  const sub = await s.call("agent.stream/subscribe", { tileId: "t", lines: 1 });
+  assert.equal(sub.result.offset, 4);
+  const subscriptionId = sub.result.subscriptionId;
+  srv.broadcast("other", "ignored");
+  srv.broadcast("t", "c\n");
+  await s.until((l) => l.method === "agent.stream" && l.params.seq === 1);
+  assert.deepEqual(s.notes("agent.stream").map((n) => n.params), [
+    { subscriptionId, seq: 0, chunk: "b\n", offset: 4, replay: true },
+    { subscriptionId, seq: 1, chunk: "c\n", offset: 4 },
+  ]);
+  await s.call("agent.stream/unsubscribe", { subscriptionId });
+  srv.broadcast("t", "d\n");
+  await new Promise((r) => setTimeout(r, 30));
+  assert.equal(s.notes("agent.stream").length, 2);
+  s.close();
+  srv.close();
+});
+
+test("hcp-server: status/subscribe — the whole picture without a cursor, only what changed with one, then live", async () => {
+  const { StatusStore } = await import("@hivemind/agent-host/status-store");
+  const store = new StatusStore();
+  store.event("hm:a", { event: "turn.started" });
+  const sock = tmpSock();
+  const srv = startHcpServer(sock, { token: "k", rendererUp: () => true, onEvent: () => {}, dispatch: async () => ({}), status: store });
+  await new Promise((r) => setTimeout(r, 50));
+  const s = await session(sock);
+  await s.call("initialize", { token: "k" });
+  const first = await s.call("status/subscribe", {});
+  assert.equal(first.result.cursor, 1);
+  assert.equal(first.result.snapshot[0].status.state, "working");
+  store.event("hm:a", { event: "turn.ended" });
+  await s.until((l) => l.method === "status/changed");
+  assert.deepEqual(s.notes("status/changed")[0].params, { seq: 2, tileId: "hm:a", status: store.get("hm:a") });
+  const resumed = await s.call("status/subscribe", { since: 1 });
+  assert.deepEqual(resumed.result.changes.map((ch: any) => ch.seq), [2]);
+  s.close();
+  srv.close();
 });

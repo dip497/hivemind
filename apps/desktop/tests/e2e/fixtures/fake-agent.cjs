@@ -11,9 +11,10 @@
  *   - droid:  `$FACTORY_HOME_OVERRIDE/.factory/hooks.json` (top-level event keys),
  *     the initial prompt typed into its stdin once the tile reads idle.
  *   - faux:   `$FAUX_HOOKS` (the throwaway sixth provider's node half), argv prompt.
- *   - codex (or any other name): no hooks — a raw-tier stand-in with no turn signal.
+ *   - cursor-agent (or any other name): no hooks — a raw-tier stand-in with no turn signal.
  * Each turn: fire UserPromptSubmit → run the snippet → append the reply to a
- * transcript JSONL (Claude/droid shape) → fire Stop with `transcript_path`.
+ * transcript JSONL (Claude/droid shape) → fire Stop with `transcript_path` and, as
+ * claude does, `last_assistant_message`.
  * Follow-up prompts arrive as stdin lines (`hive ctl send` types text + Enter).
  * Lines starting with "[hive]" are control-plane deliveries (reports, approvals):
  * echoed, never executed.
@@ -29,6 +30,8 @@ const readline = require("node:readline");
 const [, , provider, ...args] = process.argv;
 const tile = process.env.HIVEMIND_TILE || "no-tile";
 const sessionId = `fake-${provider}-${process.pid}`;
+// The session a restore or a `--resume` asked for, for a turn to echo back.
+process.env.FAKE_RESUMED = args.includes("--resume") ? args[args.indexOf("--resume") + 1] || "" : "";
 
 // ── hook lookup (per provider) ────────────────────────────────────────────────
 function hooksTable() {
@@ -49,7 +52,7 @@ function hooksTable() {
     if (!file) return {};
     try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return {}; }
   }
-  // "codex" and any other name: a raw-tier runtime — no hooks at all. Turns
+  // "cursor-agent" and any other name: a raw-tier runtime — no hooks at all. Turns
   // never reach the control plane, which is exactly what the no-turn-signal
   // path under test must surface instead of timing out.
   return {};
@@ -62,10 +65,8 @@ function fire(event, payload) {
   return true;
 }
 
-// ── transcript (must live under a root the app trusts: <userData>/droid-home) ─
-// The socket path hivemind injects is <userData>/hcp.sock, so the isolated
-// profile's droid-home overlay is derivable for BOTH providers — no writes
-// outside the test profile.
+// ── transcript (inside the isolated test profile, derived from the socket path
+// hivemind injects: <userData>/hcp.sock) — droid's plugin reads its reply from here.
 const userData = path.dirname(process.env.HIVE_HCP_SOCK || path.join(require("node:os").tmpdir(), "x"));
 const transcriptDir = path.join(userData, "droid-home", "fake-transcripts");
 fs.mkdirSync(transcriptDir, { recursive: true });
@@ -86,6 +87,8 @@ function positionalPrompt() {
 // ── one turn ──────────────────────────────────────────────────────────────────
 function turn(prompt) {
   process.stdout.write(`\n[${provider}] ▶ ${prompt}\n`);
+  // Like claude: the window title says what the turn is doing, behind a status glyph.
+  process.stdout.write(`\x1b]0;✳ ${prompt}\x07`);
   fire("UserPromptSubmit", { session_id: sessionId, prompt });
   const r = spawnSync("bash", ["-c", prompt], { encoding: "utf8", env: process.env, timeout: 60_000 });
   const reply = ((r.stdout || "") + (r.status ? `\n[exit ${r.status}] ${r.stderr || ""}` : "")).trim() || "(no output)";
@@ -94,7 +97,7 @@ function turn(prompt) {
     JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: reply }] } }) + "\n",
   );
   process.stdout.write(`${reply}\n`);
-  fire("Stop", { session_id: sessionId, transcript_path: transcriptPath, stop_hook_active: false });
+  fire("Stop", { session_id: sessionId, transcript_path: transcriptPath, stop_hook_active: false, last_assistant_message: reply });
   process.stdout.write(`${provider}> `);
 }
 

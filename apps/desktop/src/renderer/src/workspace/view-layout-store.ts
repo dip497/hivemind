@@ -6,8 +6,7 @@
  * object placements). That state is stored apart from the workspace core blob
  * (frames / tiles / membership / names — canvas-persistence.ts) so a view can be
  * added, removed, or change its schema without touching the core or any other
- * view. Each blob is `{ v, data }`; a version mismatch hands the raw payload to
- * the view's `migrate`, which returns the new shape or null (= start fresh).
+ * view. Each blob is `{ v, data }`; a blob at another version starts fresh.
  *
  * Pure functions + one small hook. Best-effort storage (private mode / quota →
  * silently no-op), same policy as canvas-persistence.
@@ -22,26 +21,17 @@ interface Envelope { v: number; data: unknown }
 export interface ViewLayoutSpec<T> {
   viewId: string;
   version: number;
-  /** Fresh state when nothing is stored and no legacy source applies. */
+  /** Fresh state when nothing (current) is stored. */
   initial: () => T;
-  /** Bring an older `{v, data}` payload (or a null = no blob at all, so the
-   *  view can import from a pre-plugin legacy key for `repoPath`) to the current
-   *  shape. Return null to fall back to `initial()`. Throwing is treated as null. */
-  migrate?: (data: unknown, fromVersion: number | null, repoPath: string) => T | null;
 }
 
 export function loadViewLayout<T>(spec: ViewLayoutSpec<T>, repoPath: string | null): T {
   if (typeof window === "undefined" || !repoPath) return spec.initial();
-  const tryMigrate = (data: unknown, from: number | null): T => {
-    try { return spec.migrate?.(data, from, repoPath) ?? spec.initial(); } catch { return spec.initial(); }
-  };
   try {
     const raw = window.localStorage.getItem(VIEW_LAYOUT_KEY(spec.viewId, repoPath));
-    if (!raw) return tryMigrate(null, null);
+    if (!raw) return spec.initial();
     const env = JSON.parse(raw) as Partial<Envelope>;
-    if (typeof env.v !== "number") return tryMigrate(null, null);
-    if (env.v === spec.version) return env.data as T;
-    return tryMigrate(env.data, env.v);
+    return env.v === spec.version ? (env.data as T) : spec.initial();
   } catch {
     return spec.initial();
   }

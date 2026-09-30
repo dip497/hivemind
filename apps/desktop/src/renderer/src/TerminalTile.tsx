@@ -12,9 +12,13 @@ import { patchTerminalMouseWithRetry } from "./terminal-mouse-patch";
 import { wantsDomRenderer } from "./terminal-renderer-policy";
 import { registerWebglSlotClient, unregisterWebglSlotClient, reconcileWebglSlots } from "./webgl-slots";
 import { useTileFont, FontScaleControl, handleFontKey } from "./tile-font";
-import { identifyAgent, detectTileStatus, stabilizeClaudeStatus, normalizeAgentTitle, type TileStatus } from "./agent-state";
-import { registerClaude, unregisterClaude, shouldDeliver, peekWork, claimWork, clearWork, type SendToClaudeDetail } from "./claude-bus";
-import { publishStatus, clearStatus, noteOutput, revalidate, type TileStatusKind } from "./agent-status-bus";
+import { identifyAgent } from "./agent-state";
+import { agentById } from "@hivemind/agents";
+import { registerAgentTile, unregisterAgentTile, shouldDeliver, type SendToAgentDetail } from "./agent-send";
+import { peekWork, claimWork } from "./work-queue";
+import { publishStatus, clearStatus, setLabel, statusOf, subscribeTileStatus, type TileStatusKind } from "./agent-status-bus";
+import { mayDismiss, newDismissState } from "./dismiss-startup";
+import { keyBytes, KEY_GAP_MS } from "../../shared/keys";
 import { SUBMIT_DELAY_MS, SPAWN_SUBMIT_RETRY_MS, deliversPromptViaArgv } from "../../shared/agent-io";
 import { Pencil, GripVertical } from "lucide-react";
 import { Button } from "./components/ui/button";
@@ -29,7 +33,7 @@ import { FullscreenShell, useReparentFullscreen } from "./tile-fullscreen";
 import { HeaderPinButton, type PinRect } from "./canvas-nodes";
 import { SURFACE_ADOPTED, SURFACE_PARKED } from "./workspace/tile-host";
 import { statusColor } from "./workspace/tile-status-bucket";
-import { agentById, defaultAgent, taskFromTitle } from "@hivemind/agents";
+import { defaultAgent } from "@hivemind/agents";
 import { useAgentsScanned } from "./agent-plugins";
 
 /** Open a terminal link in the OS browser. window.open is intercepted by main's
@@ -80,6 +84,8 @@ const BOOT_SETTLE_MS = 1500;
 const BOOT_MIN_MS = 8000;
 /** ...or after this, whatever it is doing: one slow agent must not stall the rest. */
 const BOOT_CAP_MS = 12_000;
+/** How long a terminal no view shows keeps its stream before it stops receiving bytes. */
+const INTEREST_HIDE_MS = 1000;
 
 // The terminal palette comes from settings.appearance.terminal (the ubuntu
 // preset is the historical Ubuntu / GNOME Terminal palette, byte-identical —
@@ -126,13 +132,11 @@ interface Props {
   session?: string;
   /** Display label for the canvas session chip / toasts (e.g. "claude #2"). */
   label?: string;
-  /** Display name: user rename ?? agent OSC title ?? auto label. Resolved by
-   *  Canvas, so it already reflects claude's live session title. */
+  /** What the tile is called (tile-name.ts): its name, then what it is doing. */
   name?: string;
+  /** The name alone (a given one, else the label): what a rename edits. */
+  given?: string;
   onRename?: (id: string, name: string) => void;
-  /** Report this agent's live OSC window title (claude's task summary) so Canvas
-   *  can show it as the session name. */
-  onAgentTitle?: (id: string, title: string) => void;
   /** Open URL targets in the frame's browser tile instead of the OS browser. */
   onOpenInBrowser?: (url: string) => void;
   /** Open text file paths in the frame's editor tile instead of the OS app. */
@@ -149,7 +153,7 @@ interface Props {
   onTogglePin?: (id: string, rect: PinRect) => void;
 }
 
-export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onRename, onAgentTitle, onOpenInBrowser, onOpenInEditor, onClose, selected, pinned, onTogglePin }: Props) {
+export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, given, onRename, onOpenInBrowser, onOpenInEditor, onClose, selected, pinned, onTogglePin }: Props) {
   // Editable header name: starts in display mode; double-click opens input.
   // Persists via onRename → Canvas tileNames → LAYOUT_KEY localStorage.
   const [editing, setEditing] = useState(false);
@@ -245,37 +249,24 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
   /** Wrapper around the status dot+label — hidden entirely while idle. */
   const statusWrapRef = useRef<HTMLSpanElement>(null);
 
-  // null = plain shell. `isClaude` keeps a bare/`latest` send-to-agent on the
+  // null = plain shell. `isDefaultAgent` keeps a bare/`latest` send-to-agent on the
   // default provider's tiles, never another runtime's. The default may not exist
   // (nothing installed), in which case no tile is the default one.
   // Read after the first agent scan: before it, every restored agent tile would look like a shell.
   const agentsScanned = useAgentsScanned();
   const agent = identifyAgent(cmd);
-  const isClaude = agent === defaultAgent()?.id;
-  // NOTE: we deliberately DON'T seed claude's hook-driven turn state on mount.
-  // liveTurn is authoritative ONLY once a real UserPromptSubmit/Stop hook fires.
-  // An earlier version seeded "idle" here to suppress the stale-replayed-buffer
-  // "working" on restart — but that idle seed HARD-overrode the scrape, so a
-  // claude process WITHOUT the hooks (any session already running before the
-  // hooks were injected) got stuck reading idle while actually working. Now
-  // hook-less sessions fall back to the scrape; only a real hook overrides it.
-  // The label shown on canvas chips / toasts / notifications. `name` already
-  // resolves user-rename ?? agent OSC title ?? auto label (Canvas), so the
-  // session title claude writes flows through here. Kept in a ref so the
-  // long-lived status effect always publishes the CURRENT label.
+  const isDefaultAgent = agent === defaultAgent()?.id;
+  // The label shown on canvas chips / toasts / notifications: the tile's name (tile-name.ts).
+  // Kept in a ref so the long-lived status effect always publishes the CURRENT label.
   const effLabel = name?.trim() || label || agent || cmd.split("/").slice(-1)[0] || "shell";
   const chipLabelRef = useRef(effLabel);
   const lastStatusRef = useRef<TileStatusKind | null>(null);
-  // When the session name changes (claude wrote a new title, or a rename), keep
-  // the ref current and re-publish the last status under the new label so the
-  // chip / toast / pending notification re-label without waiting for the next
-  // status transition.
+  // A new session name (the agent wrote a title, or a rename) re-labels its chips, toasts and
+  // any pending notification at once.
   useEffect(() => {
     chipLabelRef.current = effLabel;
-    if ((agent || lastStatusRef.current === "exited") && lastStatusRef.current) {
-      publishStatus({ tileId, label: effLabel, status: lastStatusRef.current });
-    }
-  }, [effLabel, agent, tileId]);
+    setLabel(tileId, effLabel);
+  }, [effLabel, tileId]);
 
   useEffect(() => {
     if (!agentsScanned) return;
@@ -290,11 +281,11 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
       permission: ["approve?", true],
       question: ["input?", true],
       blocked: ["blocked", true],
+      plan_review: ["review?", true],
+      awaiting_approval: ["approval?", true],
     };
-    const setStatus = (
-      s: "working" | "idle" | "exited" | "permission" | "question" | "blocked",
-      extra?: { exitCode?: number; detail?: string },
-    ) => {
+    /** The header chip. An agent tile's follows the bus (the host's status); a shell's its own activity. */
+    const paint = (s: TileStatusKind, extra?: { exitCode?: number; detail?: string }) => {
       const dot = dotRef.current;
       const label = labelRef.current;
       if (!dot || !label) return;
@@ -317,13 +308,13 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
       label.textContent = text;
       label.style.color = color;
       lastStatusRef.current = s;
-      // Broadcast to the Canvas (chips / toasts / done-unseen). Only agent tiles
-      // and exits are interesting — a plain shell's working/idle churn is noise.
-      // exitCode/detail ride along on an `exited` so the awareness layer can
-      // tell a crash (non-zero → error toast) from a clean close and show the code.
-      if (agent || s === "exited") {
-        publishStatus({ tileId, label: chipLabelRef.current, status: s, ...extra });
-      }
+    };
+    const offStatus = agent ? subscribeTileStatus(tileId, (e) => paint(e.status, e.status === "exited" ? e : undefined)) : undefined;
+    /** What the tile itself knows: a shell's activity, and how any process exited — the code
+     *  and detail let the awareness layer tell a crash from a clean close. */
+    const setStatus = (s: "working" | "idle" | "exited", extra?: { exitCode?: number; detail?: string }) => {
+      paint(s, extra);
+      if (s === "exited") publishStatus({ tileId, label: chipLabelRef.current, status: s, ...extra });
     };
     const markActivity = () => {
       setStatus("working");
@@ -331,7 +322,9 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
       idleTimer.current = setTimeout(() => setStatus("idle"), 1500);
     };
 
-    // The viewport as text, for the agent's detect rules (working / approval / question / idle).
+    // The viewport as text, for tests (a WebGL terminal renders none into the DOM).
+    // Startup screens the manifest says the launch flags already answered (see dismiss-startup).
+    const dismissState = newDismissState(Date.now());
     const readScreen = (): string => {
       const buf = term.buffer.active;
       const out: string[] = [];
@@ -575,17 +568,35 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
     const hostShown = () => {
       try { return host.checkVisibility({ visibilityProperty: true }); } catch { return true; }
     };
+    // Bytes reach this terminal only while a view shows it (see main's ptyInterest). A tile
+    // scrolled past or switched away from for a moment keeps its stream; one gone longer is
+    // sent its screen as the host keeps it when it comes back.
+    let interested = true;
+    let loseInterest: ReturnType<typeof setTimeout> | undefined;
+    const reconcileInterest = () => {
+      if (!parked && inViewport) {
+        if (loseInterest) { clearTimeout(loseInterest); loseInterest = undefined; }
+        if (!interested) { interested = true; window.hive.ptyInterest(ptyId, true); }
+        return;
+      }
+      if (!interested || loseInterest) return;
+      loseInterest = setTimeout(() => { loseInterest = undefined; interested = false; window.hive.ptyInterest(ptyId, false); }, INTEREST_HIDE_MS);
+    };
+    // A remount (a view switch) picks the stream back up if main had stopped sending it.
+    window.hive.ptyInterest(ptyId, true);
     const io = new IntersectionObserver(
       (entries) => {
         const v = !!entries[entries.length - 1]?.isIntersecting;
-        if (v !== inViewport) { inViewport = v; reconcileWebglSlots(); }
+        if (v !== inViewport) { inViewport = v; reconcileWebglSlots(); reconcileInterest(); }
       },
       { threshold: 0.01 },
     );
     io.observe(host);
+    reconcileInterest();
     const surfaceEl = host.closest(".hm-tile-surface");
     const onAdopted = () => {
       parked = false;
+      reconcileInterest();
       // No explicit refit: the park freezes the surface at its last slot size,
       // so adopting into a different-size slot fires the ResizeObserver below
       // (one fit per tile), and adopting into a same-size slot needs none. A
@@ -596,6 +607,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
     };
     const onParked = (e: Event) => {
       parked = true;
+      reconcileInterest();
       reconcileWebglSlots();
       // Parked at a size other than the slot we just left (a dock pane hands
       // the tile back at its arranging view's size): fit NOW, hidden, so the
@@ -621,34 +633,11 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
       wantsDom: () => wantsDomRenderer({ now: Date.now(), webglCooldownUntil }),
     });
 
-    // Agents set the terminal window title (OSC 0/2) to a live task summary —
-    // claude's "session name". Surface it to Canvas as this tile's name. Skip
-    // plain shells, whose titles are noisy "user@host:cwd" chrome.
-    //
-    // THROTTLED: claude rewrites its window title repeatedly while working. The
-    // canvas node-data memo keys on agentTitles, so an un-throttled stream churns
-    // the whole canvas while you're typing into a working tile → input jank /
-    // focus loss + lag. Collapse to one trailing update per window; the name is
-    // cosmetic so a fraction-of-a-second delay is invisible.
-    let titleTimer: ReturnType<typeof setTimeout> | undefined;
-    let pendingTitle: string | null = null;
-    const offTitle = agent
-      ? term.onTitleChange((t) => {
-          const title = taskFromTitle(agentById(agent), normalizeAgentTitle(t));
-          if (!title) return;
-          pendingTitle = title;
-          if (titleTimer) return;
-          titleTimer = setTimeout(() => {
-            titleTimer = undefined;
-            if (pendingTitle) onAgentTitle?.(tileId, pendingTitle);
-          }, 600);
-        })
-      : undefined;
 
     let exited = false;
     let unsubData: (() => void) | undefined;
     let unsubExit: (() => void) | undefined;
-    let unsubClaude: (() => void) | undefined;
+    let unsubAgentSend: (() => void) | undefined;
 
     // Rebuild the glyph atlas once the web font is truly loaded. xterm measures
     // the font at open(); "JetBrains Mono" loads async (web font), so the first
@@ -705,15 +694,9 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
         if (flowPaused && flowPending <= FLOW_LOW_CHARS) releaseFlowPause();
       });
       if (flowPending >= FLOW_HIGH_CHARS) requestFlowPause();
-      // Agent tiles get authoritative state from the screen poll (mark dirty so
-      // the next poll tick actually scans); plain shells use the cheap heuristic.
-      if (agent) {
-        agentDirty = true;
-        // Ground-truth liveness: a working agent streams output. noteOutput keeps
-        // a "working" status honored; its absence lets the status bus decay a
-        // stuck "working" (missed Stop hook / frozen replayed buffer) to idle.
-        noteOutput(tileId);
-      } else markActivity();
+      // An agent tile's status comes from the host; a plain shell uses the cheap heuristic.
+      if (agent) agentDirty = true;
+      else markActivity();
     });
     unsubExit = window.hive.onPtyExit(ptyId, ({ code, signal }) => {
       releaseBoot();
@@ -741,6 +724,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
         }
         return;
       }
+      dismissState.touched = true; // the person is driving now: nothing is sent for them
       window.hive.ptyWrite(ptyId, d);
     });
     term.onResize(() => syncPtySize());
@@ -790,12 +774,12 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
       return true;
     });
     // Cross-tile bus: if this PTY is a claude session, accept ADDRESSED text
-    // (see claude-bus.ts). Registering makes this the "latest" claude so a
+    // (see agent-send.ts). Registering makes this the latest agent tile so a
     // bare/`latest` send lands here only — no more broadcast to every agent.
-    if (isClaude) {
-      registerClaude(tileId);
+    if (isDefaultAgent) {
+      registerAgentTile(tileId);
       const onSend = (e: Event) => {
-        const detail = (e as CustomEvent<string | SendToClaudeDetail>).detail;
+        const detail = (e as CustomEvent<string | SendToAgentDetail>).detail;
         const { deliver, text } = shouldDeliver(tileId, detail);
         // Type the text, THEN press Enter as a SEPARATE keystroke a tick later.
         // A single "text\n" write reaches claude's TUI before it has staged the
@@ -805,10 +789,10 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
           setTimeout(() => window.hive.ptyWrite(ptyId, "\r"), SUBMIT_DELAY_MS);
         }
       };
-      window.addEventListener("hivemind:send-to-claude", onSend as EventListener);
-      unsubClaude = () => {
-        unregisterClaude(tileId);
-        window.removeEventListener("hivemind:send-to-claude", onSend as EventListener);
+      window.addEventListener("hivemind:send-to-agent", onSend as EventListener);
+      unsubAgentSend = () => {
+        unregisterAgentTile(tileId);
+        window.removeEventListener("hivemind:send-to-agent", onSend as EventListener);
       };
     }
 
@@ -880,13 +864,8 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
         syncPtySize();
         term.writeln(`\x1b[2m[hivemind] spawned ${cmd} (pid ${pid})\x1b[0m`);
         if (bootRelease) { bootAt = Date.now(); bootCap = setTimeout(releaseBoot, BOOT_CAP_MS); }
-        setStatus("idle");
+        if (!agent) setStatus("idle");
         if (agent && !agentPoll) {
-          // Stabilizer state for claude's between-tool idle blip (see
-          // stabilizeClaudeStatus). Tracks the previous reported status and the
-          // last time work was seen, across poll ticks.
-          let lastReported: TileStatus = "idle";
-          const lastWorkingAt = { t: null as number | null };
           // Queued-prompt ("Work on this" / workflow) delivery: deliver EXACTLY
           // ONCE, when the agent's screen has SETTLED (boot/splash output stopped
           // = it's at a ready input prompt), then consume it. Delivering on the
@@ -896,17 +875,41 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
           // "settled" signal = N consecutive QUIET ticks (no new pty output) —
           // robust for any agent (claude/codex/droid/…), not tied to scrape status.
           let workQuietTicks = 0;
+          let workTicks = 0;
           const WORK_SETTLE_TICKS = 2; // ~2.4s of quiet after boot → ready prompt
+          // An agent that never goes quiet — one that keeps a tip, a clock or a spinner
+          // ticking in its composer — would hold the task for ever. Deliver anyway once it
+          // has had this long to boot, as long as it is not waiting on the user.
+          const WORK_DEADLINE_TICKS = 8;
+          void window.hive.diagLog?.(`[work-poll] start tile=${tileId} agent=${agent} peek=${!!peekWork(tileId)}`);
           agentPoll = setInterval(() => {
             // One-shot delivery — runs BEFORE the agentDirty early-return so it can
             // fire while the agent is quiet (the exact "ready" moment). claimWork
             // consumes, so the prompt can never be submitted twice.
+            // A screen this agent opens before it will take anything, which our own launch
+            // flags already answered: skip it once so the tile reaches its prompt.
+            const toDismiss = agentById(agent)?.dismiss;
+            if (toDismiss?.length && mayDismiss(dismissState, Date.now())) {
+              const screen = readScreen();
+              const hit = toDismiss.find((d) => d.match(screen));
+              if (hit) {
+                dismissState.left--;
+                hit.keys.forEach((k, i) => setTimeout(() => window.hive.ptyWrite(ptyId, keyBytes(k)), KEY_GAP_MS * i));
+              }
+            }
             if (agent && peekWork(tileId)) {
-              if (agentDirty) workQuietTicks = 0; else workQuietTicks++;
-              if (workQuietTicks >= WORK_SETTLE_TICKS) {
+              // Quiet alone is not ready: a first run can open a trust or update chooser and
+              // sit there, and a task typed into a chooser picks an option instead. Only a
+              // screen that WAITS holds the task back — a booting agent has no status yet, and
+              // its own splash can read as working; neither means a chooser is up.
+              const st = statusOf(tileId);
+              const waiting = st === "blocked" || st === "permission" || st === "question";
+              workTicks++;
+              if (agentDirty || waiting) workQuietTicks = 0; else workQuietTicks++;
+              if (!waiting && (workQuietTicks >= WORK_SETTLE_TICKS || workTicks >= WORK_DEADLINE_TICKS)) {
                 const work = claimWork(tileId);
                 if (work) {
-                  window.hive.ptyWrite(ptyId, work);
+                  window.hive.ptyWrite(ptyId, work, true); // a prompt is pasted, not typed
                   setTimeout(() => window.hive.ptyWrite(ptyId, "\r"), SUBMIT_DELAY_MS);
                   // Backstop: a fresh claude TUI can drop that first Enter, leaving
                   // the prompt typed-but-unsubmitted (the "I had to press Enter"
@@ -914,33 +917,13 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
                   // i.e. it never submitted. If the first Enter landed, the agent is
                   // "working" by now and this no-ops (no stray empty submit).
                   setTimeout(() => {
-                    if (lastReported === "idle") window.hive.ptyWrite(ptyId, "\r");
+                    if (statusOf(tileId) === "idle") window.hive.ptyWrite(ptyId, "\r");
                   }, SPAWN_SUBMIT_RETRY_MS);
                   void window.hive.diagLog?.(`[work-deliver] tile=${tileId} agent=${agent} settled`);
                 }
               }
             }
-            // Re-evaluate the bus status every tick (even with no new output) so
-            // the time-based staleness gate can decay a stuck "working" (missed
-            // Stop hook / frozen replayed buffer) to idle on its own.
-            if (agent) revalidate(tileId);
-            // Keep scanning even while the window is hidden/minimized — that is
-            // exactly when an OS notification matters. Cost is bounded by
-            // agentDirty: a quiet, hidden tile never materializes its viewport.
-            if (!agentDirty) return; // no output since last scan → nothing changed
             agentDirty = false;
-            try {
-              const raw = detectTileStatus(agent, readScreen());
-              // Anti-flicker for the between-tool idle blip — applied to EVERY
-              // agent, not just claude. A momentary idle during work used to
-              // publish straight through for non-claude agents, and Canvas
-              // re-derives "finished" from working→idle → a spurious done toast
-              // + OS notification on the flicker. Debounce uniformly here so the
-              // published status is the single source the rest of the app trusts.
-              const next = stabilizeClaudeStatus(lastReported, raw, Date.now(), lastWorkingAt);
-              lastReported = next;
-              setStatus(next);
-            } catch { /* buffer not ready */ }
           }, 1200);
         }
       } catch (e) {
@@ -1022,15 +1005,16 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
       if (agentPoll) clearInterval(agentPoll);
       unsubData?.();
       unsubExit?.();
-      unsubClaude?.();
-      offTitle?.dispose();
+      unsubAgentSend?.();
       inputEl?.removeEventListener("blur", onInputBlur);
-      if (titleTimer) clearTimeout(titleTimer);
-      clearWork(tileId);
+      offStatus?.();
       clearStatus(tileId);
-      clearWork(tileId);
+      // The queued task is NOT dropped here: a body unmounts on a view switch, on a park,
+      // and twice on every mount in development — the task belongs to the tile, and the
+      // tile is still open. Closing one drops it (Workspace.closeTile).
       ro.disconnect();
       io.disconnect();
+      if (loseInterest) clearTimeout(loseInterest);
       surfaceEl?.removeEventListener(SURFACE_ADOPTED, onAdopted);
       surfaceEl?.removeEventListener(SURFACE_PARKED, onParked);
       // Unregister from the slot manager — this releases our WebGL slot (disposes
@@ -1171,7 +1155,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
             onBlur={() => { onRename?.(tileId, draft); setEditing(false); }}
             onKeyDown={(e) => {
               if (e.key === "Enter") { onRename?.(tileId, draft); setEditing(false); }
-              if (e.key === "Escape") { setDraft(name ?? ""); setEditing(false); }
+              if (e.key === "Escape") { setDraft(given ?? name ?? ""); setEditing(false); }
             }}
             font="mono"
             className="nodrag w-32"
@@ -1180,7 +1164,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
         ) : (
           <>
             <button
-              onDoubleClick={() => { setDraft(name ?? "Terminal"); setEditing(true); }}
+              onDoubleClick={() => { setDraft(given ?? name ?? "Terminal"); setEditing(true); }}
               // No `nodrag` here: it would force drag-suppression on the WHOLE
               // width the name occupies (most of the header) — which is exactly
               // where users grab the tile to drag. xyflow's drag has a movement
@@ -1195,7 +1179,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, onR
             <Button
               variant="ghost"
               size="icon-micro"
-              onClick={() => { setDraft(name ?? "Terminal"); setEditing(true); }}
+              onClick={() => { setDraft(given ?? name ?? "Terminal"); setEditing(true); }}
               reveal="hidden"
               className="nodrag"
               aria-label="rename tile"

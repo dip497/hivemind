@@ -22,8 +22,9 @@
  * between two views), it parks in a hidden layer FROZEN at its last slot size —
  * never `display:none` / 0×0 (xterm's fit addon computes garbage) and never
  * full-window (every parked terminal would reflow + resize its PTY). A body is
- * only mounted once a slot has adopted its element, so first mounts happen at
- * real size, exactly once.
+ * mounted once a slot has adopted its element, so first mounts happen at real
+ * size, exactly once — except a terminal no view claims: after a short grace it
+ * mounts in the park at its kind's default size, so its session runs unseen.
  *
  * Known limit: an Electron `<webview>` reloads its page once when its DOM node is
  * reparented (Chromium guest re-attach). React state (tabs, address, history) is
@@ -41,6 +42,8 @@ import type { TerminalTileData, TileSurface, TileSurfaceSpec } from "./tile-surf
 import { LinkBanner } from "../machines/LinkBanner";
 import { BrowserSkeleton, DiffSkeleton, EditorSkeleton } from "./tile-skeletons";
 import { isRemote } from "../../../shared/remote-uri";
+import { defaultSizeForKind } from "../canvas-sizing";
+import type { TileKind } from "../tile-kinds";
 
 const BrowserTile = lazy(() => import("../BrowserTile").then((m) => ({ default: m.BrowserTile })));
 const DiffTile = lazy(() => import("../DiffTile").then((m) => ({ default: m.DiffTile })));
@@ -156,10 +159,11 @@ export function TileBody(props: TileBodyProps): ReactNode {
 
 const PARK_ID = "hm-tile-park";
 const surfaces = new Map<string, HTMLDivElement>();
-/** Tiles whose element has been adopted by a slot at least once. A body is
- *  mounted only from then on (see SurfacePortal), so its first mount — xterm
- *  open + fit + ptySpawn, a `<webview>` guest — happens at the slot's real
- *  size and exactly once. Cleared when the tile closes. */
+/** Tiles whose element has been adopted by a slot at least once, or mounted
+ *  unseen (see mountUnseen). A body is mounted only from then on (see
+ *  SurfacePortal), so its first mount — xterm open + fit + ptySpawn, a
+ *  `<webview>` guest — happens at a real size and exactly once. Cleared when
+ *  the tile closes. */
 const adoptedOnce = new Set<string>();
 /** Bumped on every adoption, so a park queued before a re-adoption is dropped. */
 const adoptGen = new Map<string, number>();
@@ -263,6 +267,22 @@ function dropSurface(tileId: string) {
   stableSize.delete(tileId);
 }
 
+/** How long a terminal waits for a view to show it before it starts unseen. */
+export const UNSEEN_MOUNT_MS = 1500;
+
+/** A terminal no view shows still has to run — an agent started while another view
+ *  is active, a worker spawned by another agent. Mount its body in the park at its
+ *  kind's default size; the first slot that shows it adopts it and refits once. */
+function mountUnseen(tileId: string, kind: TileKind) {
+  if (adoptedOnce.has(tileId)) return;
+  const { width, height } = defaultSizeForKind(kind);
+  const el = surfaceEl(tileId);
+  if (el.parentElement !== park()) return;
+  el.style.cssText = `position:absolute;left:0;top:0;width:${width}px;height:${height}px;display:flex;flex-direction:column;`;
+  adoptedOnce.add(tileId);
+  notifyAdopted();
+}
+
 /** True when a live surface exists for this tile (test/diagnostic hook). */
 export function hasSurface(tileId: string): boolean {
   return surfaces.has(tileId);
@@ -282,6 +302,12 @@ const SurfacePortal = memo(function SurfacePortal({ surface, selected }: { surfa
   // body opened at park size and resized a frame later.) Once adopted, the
   // body stays mounted for the tile's life, parked or not.
   const ready = useAdopted(surface.id);
+  const terminal = surface.type === "terminal";
+  useEffect(() => {
+    if (ready || !terminal) return;
+    const t = setTimeout(() => mountUnseen(surface.id, surface.kind), UNSEEN_MOUNT_MS);
+    return () => clearTimeout(t);
+  }, [ready, terminal, surface.id, surface.kind]);
   if (!ready) return null;
   // `surfaceEl` is idempotent — the same element for the same id, forever — so
   // this portal's container never changes and React reconciles in place.

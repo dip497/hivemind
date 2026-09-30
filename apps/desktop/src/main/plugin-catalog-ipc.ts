@@ -1,10 +1,10 @@
 /** Browse and install from the plugin catalog. Every download is hash-verified into a
  *  staging folder, then goes through the same review as a folder the user picked. */
-import { readFile, rm } from "node:fs/promises";
+import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { app, ipcMain, type BrowserWindow } from "electron";
-import { appMeetsMinVersion, fetchCatalog, stageEntry, type CatalogEntry } from "@hivemind/core/plugin-catalog";
+import { appMeetsMinVersion, catalogAgentNeedsUpdate, fetchCatalog, stageEntry, type CatalogEntry } from "@hivemind/core/plugin-catalog";
 import { installAgent, readAgentManifest, removeAgent, userAgentsDir, AGENT_MANIFEST_FILE } from "@hivemind/agents/load";
 import { findBin, verifyAgent } from "@hivemind/agents/discover";
 import { getSettings, patchSettingsPath } from "./settings-store.js";
@@ -12,7 +12,7 @@ import { existsSync } from "node:fs";
 import { agentDisclosures, isGenericRuntime } from "@hivemind/agents";
 import { newNonce } from "./view-package-files.js";
 import { reviewViewDir } from "./view-packages.js";
-import { applyShellEnvToProcess } from "./shell-env.js";
+import { applyShellEnvToProcess } from "@hivemind/agent-host/shell-env";
 
 export interface AgentReview {
   token: string;
@@ -102,17 +102,29 @@ export function installPluginCatalogIpc(getWindow: () => BrowserWindow | null): 
   });
 
   // Once per launch, asked for by the workspace once it is up, so the result has a listener.
-  let autoInstalled = false;
+  // A check that FAILED does not count: the registry is on the other side of someone's
+  // network, and latching a socket that closed mid-fetch leaves an agent this version cannot
+  // load broken until the app is restarted — which is exactly when nothing works.
+  let checkedCatalog = false;
+  let checking: Promise<{ added: Array<{ id: string; label: string; does: string[] }>; updated: Array<{ id: string; label: string }> }> | null = null;
   ipcMain.handle("agents:auto-install", async (event) => {
     assertSender(event);
-    if (autoInstalled) return [];
-    autoInstalled = true;
-    try {
+    if (checkedCatalog) return { added: [], updated: [] };
+    if (checking) return checking; // a second ask while the first is in flight rides along
+    checking = (async () => {
       await applyShellEnvToProcess();
-      return await autoInstallDetectedAgents();
+      const listed = await fetchCatalog();
+      return { added: await autoInstallDetectedAgents(listed), updated: await autoUpdateCatalogAgents(listed) };
+    })();
+    try {
+      const out = await checking;
+      checkedCatalog = true;
+      return out;
     } catch (e) {
-      console.warn("[agents] catalog check skipped:", (e as Error).message);
-      return [];
+      console.warn("[agents] catalog check failed, will try again:", (e as Error).message);
+      return { added: [], updated: [] };
+    } finally {
+      checking = null;
     }
   });
 
@@ -136,10 +148,10 @@ export function installPluginCatalogIpc(getWindow: () => BrowserWindow | null): 
  *  hashes, the manifest validates as untrusted, it names the CLI that was found, and that CLI
  *  answers `--version` like one. Disclosures don't block:
  *  catalog agents are reviewed by pull request before they are listed, and the notice tells the user what each can do. */
-export async function autoInstallDetectedAgents(): Promise<Array<{ id: string; label: string; does: string[] }>> {
+export async function autoInstallDetectedAgents(listed?: CatalogEntry[]): Promise<Array<{ id: string; label: string; does: string[] }>> {
   const settings = getSettings().agents;
   if (!settings.autoInstall) return [];
-  const entries = (await fetchCatalog()).filter((e) => e.type === "agent" && e.bin
+  const entries = (listed ?? await fetchCatalog()).filter((e) => e.type === "agent" && e.bin
     && !settings.declined.includes(e.id)
     && !existsSync(path.join(userAgentsDir(), e.id))
     // The index names the command; a runtime that runs anything proves nothing about the agent.
@@ -168,10 +180,56 @@ export async function autoInstallDetectedAgents(): Promise<Array<{ id: string; l
   return added;
 }
 
-/** Where an agent came from, so its page can say so. */
+/** Where an agent came from, so its page can say so, and the manifest the catalog put there,
+ *  so an update can tell a copy nobody touched from one someone edited. */
 async function noteCatalogAgent(id: string): Promise<void> {
   const from = getSettings().agents.fromCatalog;
   if (!from.includes(id)) await patchSettingsPath("agents.fromCatalog", [...from, id]);
+  const dir = path.join(userAgentsDir(), id);
+  await writeFile(path.join(dir, CATALOG_MARK), sha256(await readFile(path.join(dir, AGENT_MANIFEST_FILE))));
+}
+
+const CATALOG_MARK = ".catalog-sha256";
+const sha256 = (body: Buffer): string => createHash("sha256").update(body).digest("hex");
+
+/** Catalog agents brought up to what the catalog lists now: a new Hivemind changes what its
+ *  agents' manifests must say, and an agent left behind would stop working. A copy the catalog
+ *  installed and nobody has edited since, or one this app refuses to load at all — an agent
+ *  that does nothing cannot be made worse. The copy it replaces is kept in `agents-previous/`. */
+export async function autoUpdateCatalogAgents(listed: CatalogEntry[]): Promise<Array<{ id: string; label: string }>> {
+  const settings = getSettings().agents;
+  if (!settings.autoInstall) return [];
+  const updated: Array<{ id: string; label: string }> = [];
+  for (const entry of listed) {
+    if (entry.type !== "agent") continue;
+    const dir = path.join(userAgentsDir(), entry.id);
+    let have: string;
+    try { have = sha256(await readFile(path.join(dir, AGENT_MANIFEST_FILE))); } catch { continue; }
+    const recorded = await readFile(path.join(dir, CATALOG_MARK), "utf8").then((s) => s.trim(), () => null);
+    const installed = await readAgentManifest(path.join(dir, AGENT_MANIFEST_FILE), { source: "user" });
+    if (!catalogAgentNeedsUpdate(entry, {
+      fromCatalog: settings.fromCatalog.includes(entry.id), manifestSha: have, recordedSha: recorded,
+      appVersion: app.getVersion(), broken: !!installed.error,
+    })) continue;
+    let stage: string | null = null;
+    try {
+      stage = await stageEntry(entry);
+      const read = await readAgentManifest(path.join(stage, AGENT_MANIFEST_FILE), { source: "user" });
+      if (read.error || !read.def || read.def.id !== entry.id) continue;
+      const kept = path.join(path.dirname(userAgentsDir()), "agents-previous", entry.id);
+      await rm(kept, { recursive: true, force: true });
+      await mkdir(path.dirname(kept), { recursive: true });
+      await cp(dir, kept, { recursive: true });
+      await installAgent(stage);
+      await noteCatalogAgent(entry.id);
+      updated.push({ id: entry.id, label: read.def.label });
+    } catch (e) {
+      console.warn(`[agents] could not update ${entry.id} from the catalog:`, (e as Error).message);
+    } finally {
+      if (stage) await rm(stage, { recursive: true, force: true }).catch(() => {});
+    }
+  }
+  return updated;
 }
 
 /** Remove an agent you installed; a catalog agent removed this way is never re-added. */

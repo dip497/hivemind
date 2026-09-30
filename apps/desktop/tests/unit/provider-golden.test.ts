@@ -16,10 +16,11 @@ import os from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { composeResume, composeResumeFrom, providers as registry, renderHookDocument } from "@hivemind/agents/node";
+import { composeResume, composeResumeFrom, hookPathsFor, providers as registry, renderHookDocument } from "@hivemind/agents/node";
 import { authoredDef, authoredAsset, useAuthoredAgents } from "./authored-agents.ts";
-import type { SpawnSpec } from "../../src/main/pty-session-manager.ts";
-import { deliversPromptViaArgv, applyInitialPrompt, INITIAL_PROMPT_ENV } from "../../src/shared/agent-io.ts";
+import type { SpawnSpec } from "@hivemind/agent-host/pty-session-manager";
+import { deliversPromptViaArgv } from "../../src/shared/agent-io.ts";
+import { applyInitialPrompt, INITIAL_PROMPT_ENV } from "@hivemind/agent-host/initial-prompt";
 import { identifyAgent, detectTileStatus, type Agent } from "../../src/renderer/src/agent-state.ts";
 import { makeDispatch } from "../../src/main/hcp/methods.ts";
 import { TurnTracker } from "../../src/main/hcp/turn-tracker.ts";
@@ -40,14 +41,9 @@ const CTX = {
   execPath: "/x/electron",
   trackerPath: "/x/ud/tile-session-tracker.cjs",
   tileSessionsDir: "/x/ud/tile-sessions",
-  legacyMapFile: "/x/ud/tile-sessions.json",
-  planHookPath: "/x/ud/plan-review-hook.cjs",
   planBridgeSock: "/x/ud/plan-bridge.sock",
-  stopHookPath: "/x/ud/hcp-stop-hook.cjs",
-  approvalHookPath: "/x/ud/hcp-approval-hook.cjs",
-  subagentHookPath: "/x/ud/hcp-subagent-hook.cjs",
-  notificationHookPath: "/x/ud/hcp-notification-hook.cjs",
-  userpromptHookPath: "/x/ud/hcp-userprompt-hook.cjs",
+  eventHookPath: "/x/ud/hcp-event-hook.cjs",
+  sdkPath: "/x/ud/hive-sdk.cjs",
   hcpSock: "/x/ud/hcp.sock",
   hcpToken: "golden-token",
   // Provider-private paths, as each provider's prepare() would return them.
@@ -56,7 +52,7 @@ const CTX = {
   providers: {
     pi: { privateDir: "/x/ud/agents/pi" },
     droid: { privateDir: "/x/ud/agents/droid", homeReady: "1" },
-    kiro: { privateDir: "/x/ud/agents/kiro", homeReady: "1", kiroApprovalHookPath: "/x/ud/hcp-kiro-approval-hook.cjs" },
+    kiro: { privateDir: "/x/ud/agents/kiro", homeReady: "1" },
   },
 };
 
@@ -83,7 +79,7 @@ const SCREENS: Record<Agent, string[]> = {
   kiro: ["Allow this tool to run?\nAllow  Deny\nEnter to select", "do you want to proceed?\n❯ yes", "● Editing file…\nesc to cancel", "kiro is working…", "> "],
   pi: ["out\nWorking...", "❯ ", ""],
   // Recognised-but-unspawnable (scrape-only) agents are not providers.
-  gemini: [], cursor: [], antigravity: [], cline: [], opencode: [], copilot: [], kimi: [], amp: [], grok: [], hermes: [],
+  cursor: [], antigravity: [], cline: [], opencode: [], copilot: [], kimi: [], amp: [], grok: [], hermes: [],
 };
 
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
@@ -106,16 +102,19 @@ function fakeDeps() {
     callRenderer: async () => ({ tileId: "tile-x" }),
     writeToTile: () => true,
     deliverToTile: (id: string, data: string, onSent?: () => void) => mailbox.deliver(id, data, onSent),
-    spawnAllowed: () => true, connect: () => true, disconnect: () => {}, forgetPipes: () => {}, spawnEdge: () => {}, setSupervise: () => {}, pushWait: () => {},
+    spawnAllowed: () => true, connect: () => true, disconnect: () => {}, forgetPipes: () => {}, spawnEdge: () => {}, setSupervise: () => {}, awaitingApproval: () => {},
   };
 }
 
-async function capture(resume = composeResume(CTX)) {
-  // Restore transforms scan the user's session stores under $HOME (codex / pi /
-  // droid): point HOME at an empty dir so the snapshot is machine-independent.
+async function capture(make = () => composeResume(CTX)) {
+  // Restore transforms read the user's session stores under $HOME: point HOME at a dir
+  // holding only the one session the restores name, so the snapshot is machine-independent.
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "golden-home-"));
+  fs.mkdirSync(path.join(home, ".claude", "projects", "-repo"), { recursive: true });
+  fs.writeFileSync(path.join(home, ".claude", "projects", "-repo", "sess-1.jsonl"), "{}\n");
   const prevHome = process.env.HOME;
   process.env.HOME = home;
+  const resume = make();
   try {
     const { dispatch } = makeDispatch(fakeDeps());
     const out: Record<string, unknown> = {};
@@ -149,11 +148,7 @@ async function capture(resume = composeResume(CTX)) {
         paths: {
           private: "/x/ud/agents/droid", execPath: CTX.execPath, tileSessionsDir: CTX.tileSessionsDir, home: "/home/u",
           hcpSock: CTX.hcpSock,
-          hooks: {
-            stop: { path: CTX.stopHookPath, arg: CTX.hcpSock },
-            userPrompt: { path: CTX.userpromptHookPath, arg: CTX.hcpSock },
-            notification: { path: CTX.notificationHookPath, arg: CTX.hcpSock },
-          },
+          hooks: hookPathsFor(authoredDef("droid"), CTX),
         },
       })!),
       "kiro-home/.kiro/agents/hivemind.json": JSON.parse(renderHookDocument(authoredDef("kiro"), {
@@ -161,12 +156,7 @@ async function capture(resume = composeResume(CTX)) {
         paths: {
           private: "/x/ud/agents/kiro", execPath: CTX.execPath, tileSessionsDir: CTX.tileSessionsDir, home: "/home/u",
           hcpSock: CTX.hcpSock,
-          hooks: {
-            tracker: { path: CTX.trackerPath, arg: CTX.tileSessionsDir },
-            stop: { path: CTX.stopHookPath, arg: CTX.hcpSock },
-            userPrompt: { path: CTX.userpromptHookPath, arg: CTX.hcpSock },
-            kiroApproval: { path: CTX.providers.kiro.kiroApprovalHookPath, arg: CTX.hcpSock },
-          },
+          hooks: hookPathsFor(authoredDef("kiro"), CTX),
         },
       })!),
     };
@@ -174,6 +164,8 @@ async function capture(resume = composeResume(CTX)) {
       // The same files the daemon reads from an installed agent's dir — here, the fixtures.
       "hive-pi-ext.mjs": sha(authoredAsset("pi", "hive-pi-ext.mjs")),
       "hcp-kiro-approval-hook.cjs": sha(authoredAsset("kiro", "hcp-kiro-approval-hook.cjs")),
+      ...Object.fromEntries(["hive-turn-end.cjs", "hive-plan-review.cjs", "hive-approve.cjs"].map((f) => [`claude/${f}`, sha(authoredAsset("claude", f))])),
+      ...Object.fromEntries(["hive-turn-end.cjs", "hive-notify.cjs"].map((f) => [`droid/${f}`, sha(authoredAsset("droid", f))])),
     };
     return out;
   } finally {
@@ -199,7 +191,7 @@ test("provider golden: spawn/restore/retry transforms, injected files, assets, d
 
 test("provider transforms are order-independent: reversed composition matches the golden outputs", async () => {
   const forward = JSON.parse(JSON.stringify(await capture())) as Record<string, unknown>;
-  const reversed = JSON.parse(JSON.stringify(await capture(composeResumeFrom([...registry()].reverse(), CTX)))) as Record<string, unknown>;
+  const reversed = JSON.parse(JSON.stringify(await capture(() => composeResumeFrom([...registry()].reverse(), CTX)))) as Record<string, unknown>;
   for (const key of Object.keys(forward)) {
     const f = forward[key] as Record<string, unknown>, r = reversed[key] as Record<string, unknown>;
     if (f && typeof f === "object") for (const sub of Object.keys(f)) assert.deepEqual(r[sub], f[sub], `order-dependent output at ${key}.${sub} — a provider transform touched a spec it does not own`);

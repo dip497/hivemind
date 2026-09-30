@@ -116,6 +116,77 @@ export function taskFromTitle(def: AgentProviderDef | undefined, title: string):
   return title;
 }
 
+/** How long a tile's name may be, whoever gives it: a person, a spawner or the agent. */
+export const NAME_MAX = 80;
+
+/** A name as one printable line: whitespace collapsed, control characters dropped, capped. */
+export function cleanName(raw: string): string {
+  return Array.from((raw ?? "").replace(/\s+/g, " ")).filter((ch) => ch >= " " && ch !== "\x7f").join("").trim().slice(0, NAME_MAX).trim();
+}
+
+/** What an agent's window title (OSC 0/2) says it is doing, or "" when it says nothing a tile
+ *  should be called by. A leading status glyph (a spinner, a bullet) is the agent's own status
+ *  display, not part of the name; the manifest's `titles` pick the task out of the rest. */
+export function agentTitle(def: AgentProviderDef | undefined, raw: string): string {
+  return taskFromTitle(def, cleanName(raw).replace(STATUS_GLYPHS, ""));
+}
+
+/** Leading status glyphs agents animate in their titles: the Braille block (spinners), circle
+ *  and half-circle frames, stars and bullets. Status is shown from the agent's state, not here. */
+const STATUS_GLYPHS = /^[\s\u2800-\u28ff\u25cb-\u25d7\u2605\u2606\u2726-\u274b·•∙‣⁃*◆◇◦◌]+/u;
+
+/** How long a task line may be: a glance, not a sentence. */
+const TASK_MAX = 40;
+
+/** A task line from the prompt a tile was started with: its first clause, without links or
+ *  markdown, cut at a word within TASK_MAX. What a tile shows until its agent says more. */
+export function promptTask(prompt: string): string {
+  const line = (prompt ?? "").replace(/https?:\/\/\S+/g, "").replace(/[`*_#>\[\]]/g, "").split("\n").map((l) => l.trim()).find(Boolean) ?? "";
+  const clause = cleanName(line.split(/(?<=[.!?;:])\s|\s[—–-]\s/)[0] ?? "").replace(/[.!?;:]$/, "");
+  if (clause.length <= TASK_MAX) return clause;
+  const cut = clause.slice(0, TASK_MAX + 1);
+  return `${cut.slice(0, cut.lastIndexOf(" ") > 20 ? cut.lastIndexOf(" ") : TASK_MAX).trim()}…`;
+}
+
 export function spawnLabelFor(def: AgentProviderDef, n: number, opts: SpawnOptions): string {
   return def.spawnLabel ? def.spawnLabel(n, opts) : `${def.label} #${n}`;
+}
+
+/** Every variable an installed agent says must not reach a terminal the host starts. */
+export function envToUnset(): string[] {
+  return [...new Set(getCatalog().flatMap((d) => d.launch?.unsetEnv ?? []))];
+}
+
+/** A session id goes on a command line. Anything that is not shaped like one — a path, a
+ *  sentence, a secret that happened to sit in the field a manifest named — never does. */
+const SESSION_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+export const isSessionId = (v: unknown): v is string => typeof v === "string" && SESSION_ID_RE.test(v);
+
+/** A launch that continues session `id`: the agent's resume tokens, where its manifest puts them. */
+export function withResume(def: AgentProviderDef, args: readonly string[], id: string): string[] {
+  const resume = def.session?.resume;
+  if (!resume) return [...args];
+  const tokens = resume.args.map((t) => t.replace(/\{id\}/g, id));
+  return resume.position === "before" ? [...tokens, ...args] : [...args, ...tokens];
+}
+
+/** Whether an agent's manifest says how to list its sessions. */
+export function canListSessions(def: AgentProviderDef): boolean {
+  const s = def.session;
+  return !!(s?.list || s?.resume?.find || s?.resume?.exists);
+}
+
+/** A version a plugin may require: up to three dot-separated numbers. */
+export const MIN_APP_VERSION_RE = /^\d{1,4}(\.\d{1,4}){0,2}$/;
+
+/** Is this app new enough for that plugin? Numeric compare, missing parts are zero. */
+export function appMeetsMinVersion(appVersion: string, min: string | undefined): boolean {
+  if (!min) return true;
+  const parts = (v: string): number[] => v.split(".").map((n) => Number.parseInt(n, 10) || 0);
+  const have = parts(appVersion), want = parts(min);
+  for (let i = 0; i < Math.max(have.length, want.length); i++) {
+    const a = have[i] ?? 0, b = want[i] ?? 0;
+    if (a !== b) return a > b;
+  }
+  return true;
 }

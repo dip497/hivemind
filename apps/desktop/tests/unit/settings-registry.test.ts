@@ -72,7 +72,7 @@ test("page ids resolve: fixed, per plugin, and old links", () => {
   assert.equal(resolveSettingsPage("agents"), "agents");
   assert.deepEqual(pluginPage("agent:claude"), { kind: "agent", pluginId: "claude" });
   assert.deepEqual(pluginPage("tool:hivemind/web"), { kind: "tool", pluginId: "hivemind/web" });
-  assert.equal(resolveSettingsPage("extensions"), "installed", "the old Extensions page lands on Installed");
+  assert.equal(resolveSettingsPage("extensions"), null, "an unknown page id resolves to nothing");
   assert.equal(resolveSettingsPage("agent:"), null);
   assert.equal(resolveSettingsPage("nope"), null);
 });

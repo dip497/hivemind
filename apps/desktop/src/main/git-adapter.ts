@@ -9,7 +9,7 @@ import { spawn } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { simpleGit, type SimpleGit } from "simple-git";
-import { applyShellEnvToProcess } from "./shell-env.js";
+import { applyShellEnvToProcess } from "@hivemind/agent-host/shell-env";
 import { isRemote } from "../shared/remote-uri.js";
 import { runRemoteGit, readRemoteFile, writeRemoteFile } from "./remote/git.js";
 import { DIFF_MAX_FILE_BYTES, OVERSIZE_SENTINEL } from "../shared/ipc.js";

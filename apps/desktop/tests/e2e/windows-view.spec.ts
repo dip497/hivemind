@@ -67,7 +67,7 @@ test("minimize hides the tab but keeps it in the graph rail; restore brings it b
   // But the tile is still listed in the Layers rail (aside[aria-label="Layers"]).
   const rail = page.locator('aside[aria-label="Layers"]');
   await expect(rail).toBeVisible();
-  const railRow = rail.locator("button", { hasText: /shell/i }).first();
+  const railRow = rail.locator('[role="button"]', { hasText: /shell/i }).first();
   await railRow.click();
   // Restored → back as a tab, selected again.
   await expect(page.locator('[role="tab"]')).toHaveCount(1);

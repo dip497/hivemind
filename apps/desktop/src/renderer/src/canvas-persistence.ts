@@ -3,24 +3,11 @@
  * EVERY view shares: frames (identity + bindings + their canvas rect, see
  * FrameState), open tiles, tile→frame membership, user renames, editor tabs.
  * Pure (no React): load returns a PersistedLayout, save serializes a snapshot.
- * Migrations from the pre-unification shapes live here too, isolated so they're
- * unit-testable. Workspace.tsx owns the React state; this module owns how it
- * sleeps + wakes.
- *
- * Since blob version 2 the CANVAS VIEW's geometry (tile positions / sizes /
- * viewport) is OWNED by the canvas view's own versioned layout blob
- * (workspace/views/canvas-layout.ts) like every other view's arrangement state.
- * A pre-v2 blob's inline geometry is read once so the canvas store can import it
- * (that import is the migration). The v2 writer still MIRRORS the geometry into
- * this blob (`legacy` below) so a pre-v2 build pointed at the same profile —
- * a downgrade, or the AppImage sharing a dev profile — keeps every tile where
- * it was instead of collapsing to the default row. Drop the mirror one release
- * after v2 ships.
+ * Workspace.tsx owns the React state; this module owns how it sleeps + wakes.
+ * The canvas view's geometry (tile positions / sizes / viewport) is the canvas
+ * view's own layout blob (workspace/views/canvas-layout.ts), like every view's.
  */
 import type { TileKind } from "./tile-kinds";
-import { frameColorFor, isGeneratedFrameColor } from "./frame-color";
-import { binOf } from "@hivemind/agents";
-import { AGENT_TILE_KIND } from "./tile-kinds";
 
 /** On POSIX: `-i` keeps the shell interactive so it doesn't exit, `-l` sources
  *  the login profile (PATH includes ~/.local/bin → claude resolves). Windows
@@ -45,6 +32,8 @@ export interface TileInstance {
   /** claude / shell only. */
   cmd?: string;
   args?: string[];
+  /** Agent only: what it was started to do, from its first prompt. Shown until the agent says. */
+  task?: string;
   /** browser only — last/initial URL so the tile restores where it was. */
   url?: string;
   /** Terminal only: an existing daemon session it shows (started by `hive run` or another device); never spawns one. */
@@ -93,20 +82,10 @@ export interface FrameState {
   parentFrameId?: string;
 }
 
-// Legacy persisted shapes (pre-unification) — migrated to TileInstance[] on load.
-type LegacyVisibility = { tree: boolean; shell: boolean; diff: boolean; issues: boolean };
-interface LegacyExtraTerm { id: string; label: string; cmd: string; args: string[]; }
-
 // Persisted layout — survives app restarts. Keyed by repoPath (or a sentinel
 // for the no-repo case) so each project's canvas comes back the way the user
 // left it. Stored as a single JSON blob per repo to avoid N localStorage keys.
 export interface PersistedLayout {
-  /** Blob schema version. Absent = v1 (geometry still inline). */
-  version?: number;
-  /** Canvas geometry. Read from a pre-v2 blob for migration; since v2 only a
-   *  downgrade-safety MIRROR of the canvas view's own blob (never read by v2+). */
-  sizes: Record<string, { width: number; height: number }>;
-  positions: Record<string, { x: number; y: number }>;
   frames: FrameState[];
   /** User-renamed tile labels (per tile id). */
   tileNames?: Record<string, string>;
@@ -115,136 +94,40 @@ export interface PersistedLayout {
   tiles?: TileInstance[];
   /** Repo-relative paths open as tabs, keyed by editor tile id. */
   editorTabs?: Record<string, string[]>;
-  // ── legacy (pre tile-unification) — read for migration, never written. ──
-  vis?: LegacyVisibility;
-  extras?: LegacyExtraTerm[];
-  legacyEditorTabs?: string[];
   /** EXPLICIT tile→frame membership. Authoritative — frame geometry is derived
    *  from this, NOT the reverse. Set when a tile is spawned into or dropped
    *  inside a frame; cleared when dropped outside all frames. Decoupling
    *  membership from geometry avoids the bootstrap deadlock where a big tile
    *  whose center sits outside a collapsed frame never gets claimed. */
   frameOf?: Record<string, string>;
-  /** Canvas viewport — same migration/mirror status as `positions`. */
-  viewport?: { x: number; y: number; zoom: number };
 }
 
-/** Current core blob schema. v2 = geometry moved out to the canvas view store. */
-export const LAYOUT_VERSION = 2;
-
-/** The fields a save snapshot must supply (everything the core round-trips),
- *  plus the optional downgrade mirror of the canvas geometry (see header). */
+/** The fields a save snapshot must supply (everything the core round-trips). */
 export type LayoutSnapshot = Required<
   Pick<PersistedLayout, "frames" | "tileNames" | "tiles" | "editorTabs" | "frameOf">
-> & { legacy?: Pick<PersistedLayout, "sizes" | "positions" | "viewport"> };
+>;
 
 export const LAYOUT_KEY = (repoPath: string | null) =>
   `hivemind:canvas-layout:${repoPath ?? "__global__"}`;
 
-// One-time cleanup: an earlier version persisted the no-repo case under
-// `__global__`, which leaked test/welcome layouts across unrelated sessions.
-// We never persist there anymore — wipe any stale value on startup so old
-// installs don't carry forward phantom frames.
-if (typeof window !== "undefined") {
-  try {
-    window.localStorage.removeItem("hivemind:canvas-layout:__global__");
-  } catch { /* private mode etc — ignore */ }
-}
-
 export function loadLayout(repoPath: string | null): PersistedLayout {
-  if (typeof window === "undefined") return { sizes: {}, positions: {}, frames: [] };
   // Only persist when we have a real repo — the no-repo case is transient
   // (welcome screen / e2e bootstrap) and persisting it leaks layouts across
   // unrelated sessions.
-  if (!repoPath) return { sizes: {}, positions: {}, frames: [], tileNames: {} };
+  if (typeof window === "undefined" || !repoPath) return { frames: [], tileNames: {} };
   try {
     const raw = window.localStorage.getItem(LAYOUT_KEY(repoPath));
-    if (!raw) return { sizes: {}, positions: {}, frames: [], tileNames: {} };
+    if (!raw) return { frames: [], tileNames: {} };
     const p = JSON.parse(raw) as Partial<PersistedLayout>;
-    // Backfill `z` for frames persisted before z existed, and migrate frames
-    // still on the pre-randomization default accent to a distinct hashed color
-    // (a user's explicit pick via the header swatch is anything else, so it's
-    // preserved).
-    const frames = Array.isArray(p.frames)
-      ? p.frames.map((f, i) => ({
-          ...f,
-          z: typeof f.z === "number" ? f.z : i,
-          // Colours the app generated re-derive from the current palette; a chosen one is kept.
-          color: isGeneratedFrameColor(f.color) ? frameColorFor(f.id) : f.color,
-        })) as FrameState[]
-      : [];
-    const positions = p.positions ?? {};
-    const sizes = p.sizes ?? {};
-    // Migration: layouts saved before explicit `frameOf` existed have no
-    // membership map. Seed it ONCE from geometry (tile center inside the
-    // topmost frame) — a one-time snapshot, not a runtime feedback loop. After
-    // this, membership is tracked explicitly on drop/spawn.
-    let frameOf = p.frameOf;
-    if (!frameOf && frames.length > 0) {
-      frameOf = {};
-      const sorted = [...frames].sort((a, b) => b.z - a.z);
-      for (const [tid, pos] of Object.entries(positions)) {
-        const s = sizes[tid] ?? { width: 700, height: 480 };
-        const cx = pos.x + s.width / 2;
-        const cy = pos.y + s.height / 2;
-        const owner = sorted.find((f) => cx >= f.x && cx <= f.x + f.w && cy >= f.y && cy <= f.y + f.h);
-        if (owner) frameOf[tid] = owner.id;
-      }
-    }
-    // Tiles: new format persists a `tiles` array. Old layouts persisted
-    // `vis` (singleton editor/diff/issues) + `extras` (instanced claude/shell)
-    // + a single `editorTabs` array — migrate them to instances, REUSING the
-    // canonical fixed ids so the saved sizes/positions/frameOf keep resolving.
-    let tiles: TileInstance[];
-    let editorTabs: Record<string, string[]>;
-    if (Array.isArray(p.tiles)) {
-      tiles = p.tiles;
-      editorTabs = (p.editorTabs && typeof p.editorTabs === "object" && !Array.isArray(p.editorTabs))
-        ? (p.editorTabs as Record<string, string[]>)
-        : {};
-    } else {
-      tiles = [];
-      editorTabs = {};
-      for (const e of Array.isArray(p.extras) ? p.extras : []) {
-        // Legacy (v1) extras: only the original default agent's command was an agent tile.
-        // The literal, not the catalog: those layouts predate the catalog, and whichever
-        // agent is the default today — or whether any is installed — must not reinterpret
-        // what the old file meant.
-        const kind: TileKind = binOf(e.cmd) === AGENT_TILE_KIND ? AGENT_TILE_KIND : "shell";
-        tiles.push({ id: e.id, kind, label: e.label, cmd: e.cmd, args: e.args });
-      }
-      const v = p.vis;
-      if (v?.tree) {
-        tiles.push({ id: WORKBENCH_TILE_ID, kind: "editor", label: "Editor" });
-        const legacyTabs = Array.isArray(p.editorTabs)
-          ? (p.editorTabs as unknown as string[])
-          : Array.isArray((p as { fileTiles?: { file: string }[] }).fileTiles)
-            ? (p as { fileTiles: { file: string }[] }).fileTiles.map((f) => f.file)
-            : [];
-        if (legacyTabs.length) editorTabs[WORKBENCH_TILE_ID] = legacyTabs;
-      }
-      if (v?.shell) {
-        const sh = defaultShell();
-        tiles.push({ id: "tile-terminal-1", kind: "shell", label: "shell", cmd: sh.cmd, args: sh.args });
-      }
-      if (v?.diff) tiles.push({ id: "tile-diff-1", kind: "diff", label: "Diff" });
-      if (v?.issues) tiles.push({ id: "tile-issues-1", kind: "issues", label: "Issues" });
-    }
     return {
-      version: typeof p.version === "number" ? p.version : 1,
-      sizes,
-      positions,
-      frames,
-      frameOf,
+      frames: Array.isArray(p.frames) ? p.frames : [],
+      frameOf: p.frameOf,
       tileNames: p.tileNames ?? {},
-      tiles,
-      editorTabs,
-      viewport: p.viewport && typeof p.viewport.x === "number" && typeof p.viewport.y === "number"
-        ? { x: p.viewport.x, y: p.viewport.y, zoom: Number(p.viewport.zoom) || 1 }
-        : undefined,
+      tiles: Array.isArray(p.tiles) ? p.tiles : [],
+      editorTabs: p.editorTabs && typeof p.editorTabs === "object" && !Array.isArray(p.editorTabs) ? p.editorTabs : {},
     };
   } catch {
-    return { sizes: {}, positions: {}, frames: [], tileNames: {} };
+    return { frames: [], tileNames: {} };
   }
 }
 
@@ -255,12 +138,9 @@ export function saveLayout(repoPath: string | null, snap: LayoutSnapshot): void 
   if (typeof window === "undefined" || !repoPath) return;
   // planReview tiles are ephemeral (tied to a live, blocked agent hook) — drop
   // them so a reload doesn't resurrect a dead review with a stale requestId.
-  const { legacy, ...core } = snap;
-  const persisted = core.tiles
-    ? { ...core, tiles: core.tiles.filter((t) => t.kind !== "planReview") }
-    : core;
+  const persisted = { ...snap, tiles: snap.tiles.filter((t) => t.kind !== "planReview") };
   try {
-    window.localStorage.setItem(LAYOUT_KEY(repoPath), JSON.stringify({ version: LAYOUT_VERSION, ...legacy, ...persisted }));
+    window.localStorage.setItem(LAYOUT_KEY(repoPath), JSON.stringify(persisted));
   } catch {
     // QuotaExceeded / private-mode etc — swallow; layout is best-effort.
   }

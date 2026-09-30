@@ -1,6 +1,6 @@
 {
   "name": "@hivemind/cli",
-  "version": "2026.9.5",
+  "version": "2026.9.9",
   "private": true,
   "type": "module",
   "bin": {
@@ -14,8 +14,10 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@hivemind/agent-host": "workspace:*",
     "@hivemind/agents": "workspace:*",
     "@hivemind/core": "workspace:*",
+    "@hivemind/view-sdk": "workspace:*",
     "citty": "catalog:",
     "yaml": "catalog:",
     "zod": "catalog:"

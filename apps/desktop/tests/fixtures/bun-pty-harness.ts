@@ -1,5 +1,5 @@
 // Run under bun by tests/unit/bun-pty.test.ts; prints one JSON line of observations.
-import { spawn } from "../../src/main/bun-pty.ts";
+import { spawn } from "@hivemind/agent-host/bun-pty";
 
 const p = spawn("bash", ["--norc", "--noprofile"], { cwd: "/tmp", cols: 80, rows: 24, env: { ...(process.env as Record<string, string>), PS1: "$ " } });
 let out = "";

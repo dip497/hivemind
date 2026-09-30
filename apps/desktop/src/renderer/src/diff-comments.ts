@@ -21,9 +21,6 @@ export interface ReviewComment {
   replies?: ReviewReply[];
 }
 
-/** Old single-line shape persisted before ranges/threads landed. */
-type LegacyComment = { file: string; line: number; side: AnnotationSide; body: string; author: string; at: string };
-
 let cidSeq = 0;
 export const newCid = (): string => `c-${Date.now().toString(36)}-${(cidSeq++).toString(36)}`;
 
@@ -48,27 +45,4 @@ export function formatReviewMessage(comments: ReviewComment[]): string | null {
     })
     .join("\n");
   return `Code review — ${open.length} unresolved comment${open.length > 1 ? "s" : ""} to address:\n${lines}`;
-}
-
-/** Migrate persisted comments (old single-line → range) so existing reviews
- *  survive the upgrade. Tolerant of garbage input → []. */
-export function normalizeComments(raw: unknown): ReviewComment[] {
-  if (!Array.isArray(raw)) return [];
-  return raw.map((c): ReviewComment => {
-    const o = c as Partial<ReviewComment> & Partial<LegacyComment>;
-    const start = o.startLine ?? o.line ?? 1;
-    const end = o.endLine ?? o.line ?? start;
-    return {
-      id: o.id ?? newCid(),
-      file: o.file ?? "",
-      startLine: start,
-      endLine: end,
-      side: (o.side ?? "additions") as AnnotationSide,
-      body: o.body ?? "",
-      author: o.author ?? "you",
-      at: o.at ?? "",
-      resolved: o.resolved ?? false,
-      replies: o.replies ?? [],
-    };
-  });
 }

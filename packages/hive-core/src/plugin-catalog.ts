@@ -6,6 +6,8 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { MIN_APP_VERSION_RE, appMeetsMinVersion } from "@hivemind/agents";
+import { AGENT_MANIFEST_FILE } from "@hivemind/agents/load";
 
 export const DEFAULT_PLUGIN_INDEX = "https://hivehub.griiken.workers.dev/api/v1/index.json";
 
@@ -85,7 +87,7 @@ export function parseCatalog(raw: unknown): CatalogEntry[] {
     if (p.source !== undefined && (typeof p.source !== "string" || !/^https:\/\/[^\s?#]+$/.test(p.source) || p.source.includes(".."))) {
       throw new Error(`${at}.source must be an https base URL`);
     }
-    if (p.minAppVersion !== undefined && (typeof p.minAppVersion !== "string" || !/^\d{1,4}(\.\d{1,4}){0,2}$/.test(p.minAppVersion))) {
+    if (p.minAppVersion !== undefined && (typeof p.minAppVersion !== "string" || !MIN_APP_VERSION_RE.test(p.minAppVersion))) {
       throw new Error(`${at}.minAppVersion must look like 1.2.3`);
     }
     if (p.icon !== undefined && (typeof p.icon !== "object" || p.icon === null || JSON.stringify(p.icon).length > 4096)) {
@@ -188,16 +190,25 @@ export async function stageEntry(entry: CatalogEntry, indexUrl = catalogIndexUrl
   }
 }
 
-/** Is this app new enough for that plugin? Numeric compare, missing parts are zero — a
- *  plugin that needs a Hivemind you do not have must say so before it is downloaded,
- *  not fail once it is installed. */
-export function appMeetsMinVersion(appVersion: string, min: string | undefined): boolean {
-  if (!min) return true;
-  const parts = (v: string): number[] => v.split(".").map((n) => Number.parseInt(n, 10) || 0);
-  const have = parts(appVersion), want = parts(min);
-  for (let i = 0; i < Math.max(have.length, want.length); i++) {
-    const a = have[i] ?? 0, b = want[i] ?? 0;
-    if (a !== b) return a > b;
-  }
-  return true;
+// A plugin that needs a Hivemind you do not have must say so before it is downloaded,
+// not fail once it is installed.
+export { appMeetsMinVersion };
+
+/** Whether an installed agent should become the catalog's current one. Two cases: it is
+ *  `broken` — this app refuses its manifest, so it is doing nothing at all and the catalog's
+ *  copy can only be better — or the catalog put it there and nobody edited it since
+ *  (`recordedSha` is the manifest hash the catalog installed, null for an install from before
+ *  that was recorded). Either way this app must be able to run what the catalog lists. */
+export function catalogAgentNeedsUpdate(entry: CatalogEntry, installed: {
+  fromCatalog: boolean; manifestSha: string; recordedSha: string | null; appVersion: string;
+  /** The installed manifest does not load in this app. */
+  broken?: boolean;
+}): boolean {
+  if (entry.type !== "agent") return false;
+  if (!appMeetsMinVersion(installed.appVersion, entry.minAppVersion)) return false;
+  if (installed.broken) return true;
+  if (!installed.fromCatalog) return false;
+  const want = entry.files.find((f) => f.path === AGENT_MANIFEST_FILE)?.sha256;
+  if (!want || want === installed.manifestSha) return false;
+  return installed.recordedSha === null || installed.recordedSha === installed.manifestSha;
 }

@@ -25,16 +25,6 @@ interface SavedRow {
   encPassword?: string;
 }
 
-/** What the renderer sees — never the password itself, just whether one exists. */
-export interface SavedHostPublic {
-  hostId: string;
-  host: string;
-  port: number;
-  user: string;
-  hasPassword: boolean;
-  hasKey: boolean;
-}
-
 function load(): SavedRow[] {
   try {
     const v = JSON.parse(readFileSync(STORE, "utf8"));
@@ -52,17 +42,6 @@ function persist(rows: SavedRow[]): void {
   } catch {
     /* best-effort */
   }
-}
-
-export function listSavedHosts(): SavedHostPublic[] {
-  return load().map((r) => ({
-    hostId: r.hostId,
-    host: r.host,
-    port: r.port,
-    user: r.user,
-    hasPassword: !!r.encPassword,
-    hasKey: !!r.privateKeyPath,
-  }));
 }
 
 /** Upsert a saved host; false when a password was given but no keychain could hold it. */

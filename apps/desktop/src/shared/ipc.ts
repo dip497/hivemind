@@ -1,6 +1,8 @@
+import type { SessionStatus } from "@hivemind/agent-host/status-store";
 /** Typed contract for IPC between main and renderer. */
 import type { Issue, IssueSummary, IssueState, AcceptanceItem, Assignee, LinkType, IssuePatch } from "@hivemind/core/types";
 import type { ViewManifest } from "@hivemind/view-sdk/manifest";
+import type { ActivityLevel, ShareOutcome, ViewHistoryDay, ViewSession, ViewPresence, ViewStatus } from "@hivemind/view-sdk/protocol";
 import type { NotificationSettings } from "./notification-settings.js";
 import type { ReviewComment } from "@hivemind/core/review";
 export type { NotificationSettings };
@@ -208,9 +210,13 @@ export interface UpdateStatus {
    *  False on offline / timeout / rate-limit — the renderer must NOT treat a
    *  false-ok result as "up to date" or persist it over a known-good state. */
   ok: boolean;
+  /** A version already downloaded and waiting for a restart to become the one that
+   *  runs (the installer could not replace a live app), when it is newer than this one.
+   *  Restarting is then the whole of what is left to do — never another download. */
+  staged: string | null;
 }
 
-import type { LegacyRendererState, Settings } from "@hivemind/core/settings-schema";
+import type { Settings } from "@hivemind/core/settings-schema";
 import type { CatalogEntry } from "@hivemind/core/plugin-catalog";
 
 /** One community view package as the main process sees it (see main/view-packages.ts). */
@@ -239,8 +245,6 @@ export interface HiveIpc {
   settingsPatch(patches: readonly { path: string; value: unknown }[]): Promise<Settings>;
   /** Whole-object write (a theme import). Merged onto the file under the same lock. */
   settingsReplace(next: Settings): Promise<Settings>;
-  /** One-time import of the renderer's pre-2.0 localStorage keys. */
-  settingsMigrate(legacy: LegacyRendererState): Promise<Settings>;
   settingsPath(): Promise<string>;
   onSettingsChanged(cb: (s: Settings) => void): () => void;
   // ── community views ───────────────────────────────────────
@@ -273,7 +277,8 @@ export interface HiveIpc {
   /** Remove an agent you installed; a catalog one is then never added automatically again. */
   removeAgent(id: string): Promise<void>;
   /** Add catalog agents whose CLI was found; what was added and what each can do. Runs once per launch. */
-  autoInstallAgents(): Promise<Array<{ id: string; label: string; does: string[] }>>;
+  /** Catalog agents found on this machine and added, and ones brought up to the catalog. */
+  autoInstallAgents(): Promise<{ added: Array<{ id: string; label: string; does: string[] }>; updated: Array<{ id: string; label: string }> }>;
   installViewPackage(token: string): Promise<void>;
   removeViewPackage(id: string): Promise<void>;
   /** Main's watchdog saw a plugin frame peg a core for several samples. */
@@ -415,6 +420,21 @@ export interface HiveIpc {
   machineUpdate(id: string, patch: { label?: string; enabled?: boolean }): Promise<void>;
   /** Change where a machine is (tested before it is saved). `oldHostId`: re-point the frames that ran there. */
   machineEdit(id: string, patch: { target: string; label?: string; password?: string }): Promise<{ machine: MachineInfo; oldHostId: string }>;
+  /** View protocol 1.3: status ledger lines (see workspace/view-events.ts). */
+  viewLedgerAppend(lines: unknown[]): void;
+  viewLedgerSnapshot(): Promise<LedgerSince[]>;
+  viewHistory(layoutKey: string, day: string): Promise<ViewHistoryDay>;
+  /** View protocol 1.4: an agent's past sessions in a folder (id, time, the user's first prompt). */
+  viewSessions(agent: string, cwd: string): Promise<ViewSession[]>;
+  /** View protocol 1.4: type a prompt the user confirmed into an agent tile and submit it. */
+  viewPrompt(tileId: string, text: string): Promise<void>;
+  /** Bare tile ids whose output level someone watches (main samples only these). */
+  ptyActivityWatch(tileIds: string[]): void;
+  onPtyActivity(cb: (levels: Record<string, ActivityLevel>) => void): () => void;
+  presenceNow(): Promise<ViewPresence>;
+  onPresence(cb: (p: ViewPresence) => void): () => void;
+  viewSharePrepare(png: ArrayBuffer): Promise<SharePrepared>;
+  viewShareCommit(token: string, action: "copy" | "save" | "cancel", suggestedName: string): Promise<ShareOutcome>;
   machineRemove(id: string): Promise<void>;
   /** Store a password for a machine; false when the OS keychain is unavailable (kept in memory only). */
   machineSetPassword(id: string, password: string): Promise<boolean>;
@@ -454,7 +474,12 @@ export interface HiveIpc {
   /** Install the agentic stack (hive skills + CLAUDE.md section) into a repo so
    *  a spawned agent can actually work issues with `hive`. Idempotent. */
   installAgentic(dir: string): Promise<{ ok: boolean }>;
-  ptyWrite(tileId: string, data: string): void;
+  /** `paste`: a message handed to the TUI as one block, not keystrokes. */
+  ptyWrite(tileId: string, data: string, paste?: boolean): void;
+  /** The names tiles were given (renames, spawners' names), whole, each time they change. */
+  tileNames(names: Record<string, string>): void;
+  /** Whether any view shows this terminal: bytes reach the renderer only while one does. */
+  ptyInterest(tileId: string, shown: boolean): void;
   ptyResize(tileId: string, cols: number, rows: number): void;
   ptyKill(tileId: string): void;
   /** Window closed / tile unmounted: keep the session alive (daemon mode) or
@@ -536,46 +561,19 @@ export interface HcpSpawnEvent {
   connected: boolean;
 }
 
-/** Pushed main→renderer when a tile enters/leaves a control-plane "wait" state
- *  (e.g. a supervised worker blocked on its parent's approval). `status` is a
- *  TileStatusKind string, or null to clear. The renderer forwards it to the
- *  agent-status bus as an override. */
-export interface HcpWaitEvent {
+/** Pushed main→renderer on every change to an agent session's status (the host's status
+ *  store: packages/agent-host/src/status-store.ts). `tileId` is the bare tile id. */
+export interface HcpStatusEvent {
+  seq: number;
   tileId: string;
-  status: string | null;
+  status: SessionStatus;
 }
 
-/** Pushed main→renderer when a tile gains/loses in-flight Task subagents (from
- *  the injected SubagentStart/SubagentStop hooks). `busy` true keeps the tile
- *  reading "working" while subagents run — including BACKGROUND agents, where the
- *  main loop returns to the idle prompt and the screen-scrape would read "idle".
- *  Deterministic and correctly attributed (the hook fires in the parent session).
- *  `tileId` is the bare tile id (the status-bus key). */
-export interface HcpSubagentEvent {
-  tileId: string;
-  busy: boolean;
-}
+/** Where a tile's current status began, as main remembers it across a renderer reload. */
+export interface LedgerSince { id: string; bucket: ViewStatus; since: number; exact: boolean }
 
-/** Pushed main→renderer when claude's `Notification` hook reports a "needs you"
- *  state (permission / interactive question). Deterministic + version-proof
- *  (claude's own signal, not a scraped UI string). SOFT: the renderer lifts an
- *  idle tile to this status and auto-clears it when the scrape shows work
- *  resumed, so it can't get stuck. `tileId` is the bare tile id. */
-export interface HcpNotifyEvent {
-  tileId: string;
-  status: "permission" | "question";
-}
-
-/** Pushed main→renderer with claude's HOOK-DRIVEN turn state: `working` on
- *  UserPromptSubmit (turn start), `idle` on Stop (turn end). This is the
- *  deterministic, version-proof replacement for the working/idle screen-scrape —
- *  it can't be fooled by spinner-glyph/wording changes, focus/scroll, or stale
- *  buffer replay on restart (no hook has fired → the tile stays idle). The scrape
- *  remains the fallback for non-claude agents. `tileId` is the bare tile id. */
-export interface HcpTurnStateEvent {
-  tileId: string;
-  state: "working" | "idle";
-}
+/** A PNG a view asked to share, checked and re-encoded by main, awaiting the user's choice. */
+export interface SharePrepared { token: string; preview: string; width: number; height: number }
 
 /** Pushed main→renderer when an agent hands off a plan (PreToolUse/ExitPlanMode).
  *  The renderer opens a PlanReviewTile and later calls `planReviewDecide`. */

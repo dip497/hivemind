@@ -50,7 +50,7 @@ Before running `./scripts/release.sh`:
 - [ ] All e2e tests green locally: `cd apps/desktop && unset ELECTRON_RUN_AS_NODE && xvfb-run -a --server-args="-screen 0 1600x1000x24" pnpm test:e2e --retries=0` (99 tests across 29 specs, all must pass; the profile is isolated per run — see apps/desktop/AGENTS.md). **Run this on a quiet machine.** The suite takes 13-16 minutes and launches Electron ~30 times; at system load 25-30 on 16 CPUs a rotating handful of specs fails on cold-boot and timing, every one of which passes in isolation. Check `uptime` first — a red run on a loaded box is not evidence of a regression.
 - [ ] Canvas perf unchanged within noise vs the previous release: `apps/desktop/scripts/perf-canvas-effects.mjs`. Measure on a real display with the backend recorded — **absolute FPS, frame-time and latency gates are not valid under xvfb**, which renders on the llvmpipe CPU rasterizer; see `docs/design/performance-native-2026-09-09.md`. On a live desktop a capped run can read ~1 FPS for anything that moves while the page's main thread sits idle — each present waiting on a vsync that does not arrive. Run the A/B uncapped (`PERF_EXTRA_ARGS="--disable-gpu-vsync --disable-frame-rate-limit"`) and check the recorded `session.type` — after a reboot the desktop may be Wayland, not the X display you expect (`docs/design/perf-streaming-2026-09-11.md`).
 - [ ] Unit tests green: `pnpm test:unit` from `apps/desktop`.
-- [ ] Installer tests green: `bash scripts/install-plan-test.sh` + `bash scripts/install-macos-test.sh` (the second drives the real Darwin helpers with `ditto`/`xattr` shimmed, so the mac path is covered without a mac). The first asserts the release-asset names install.sh asks for match what release.yml uploads — a rename on either side breaks every install.
+- [ ] Installer tests green: `bash scripts/install-plan-test.sh` + `bash scripts/install-macos-test.sh` + `bash scripts/install-staged-test.sh`. The first asserts the release-asset names install.sh asks for match what release.yml uploads — a rename on either side breaks every install. The second drives the real Darwin helpers with `ditto`/`xattr` shimmed, so the mac path is covered without a mac. The third drives an upgrade taken while the app is live: what `.installed-version` says has to be the version that runs, or a re-run finds nothing to do and leaves the user on the old build.
 - [ ] CHANGELOG `[Unreleased]` section has at least one entry describing the user-visible change.
 - [ ] No uncommitted changes (`git status` clean).
 
@@ -87,3 +87,43 @@ a newer app says so with `minAppVersion`. A change that breaks any of them, the 
 
 If you (Claude) made any change that ships to users — code, dependency, install behavior, `hive ctl` surface — append a one-line entry to `CHANGELOG.md` under `## [Unreleased]` BEFORE handing the session back. The maintainer can then cut a release with `./scripts/release.sh` and the changelog is ready.
 <!-- release:end -->
+
+
+<!-- hivemind:agentic:start -->
+## Agentic mode — the `hive` CLI
+
+This workspace tracks issues under `.hivemind/` and is driven through the **`hive`
+CLI** (on PATH). Use it from Bash — there is no MCP server. Every command takes
+`--json` for machine-readable output; every id from another registered repo
+resolves automatically.
+
+- `hive show <id> --json` — load an issue (title, description, `acceptanceCriteria`, activity).
+- `hive list --state todo --json` — issue summaries, filterable by state / label / assignee.
+- `hive ctl set-state <id> in_progress --note "…"` — backlog | todo | in_progress | in_review | done | cancelled
+- `hive ctl add-comment <id> "…"` · `hive ctl mark-acceptance <id> <index>` (0-based; `--undone` reopens)
+- `hive update <id> --title … --assignee claude --assignee-type agent` · `hive new "Title" --parent <id>`
+- `hive ctl delete-issue <id>` — destructive; only on an explicit ask.
+
+### Execution contract (REQUIRED)
+
+When the user asks you to work on an issue (e.g. `PAY-42`):
+
+1. `hive show PAY-42 --json` → load context.
+2. Claim it: `hive ctl set-state PAY-42 in_progress` + `hive update PAY-42 --assignee claude --assignee-type agent`.
+3. Plan briefly (one comment via `hive ctl add-comment`).
+4. Execute. Tick each criterion as you go (`hive ctl mark-acceptance PAY-42 <n>`).
+5. Comment progress at meaningful checkpoints (file:line refs).
+6. **Every session MUST end with `hive ctl set-state`** — `in_review` (done, awaiting review),
+   `done` (only with explicit authority), `in_progress` (will resume), or `cancelled` with `--note`.
+
+Do not exit a session silently.
+
+### Multi-agent control plane (when running inside hivemind)
+
+If `$HIVEMIND_TILE` is set you are an agent tile and can drive the canvas with
+`hive ctl`: spawn and coordinate other agents, read their replies, run
+fanout / pipeline / mapreduce workflows, supervise + approve, and report back to
+the agent that spawned you. The `hivemind` skill in `.claude/skills/hivemind/`
+has the exact commands; `hive ctl --help` lists them.
+
+<!-- hivemind:agentic:end -->

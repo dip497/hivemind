@@ -9,18 +9,21 @@ The Electron canvas app. Three processes: **main** (Node — IPC, PTY, git, fs),
 ```
 src/main/      Node main process — owns IPC, PTY daemon, git, fs, windows
   index.ts        every ipcMain.handle/on channel; the IPC choke point
-  pty-daemon.ts   detached node-pty + headless-xterm snapshots (persistence)
   daemon-client.ts / pty-host.ts   daemon vs in-process PTY transports
   git-adapter.ts  git ops (simple-git + raw spawn); rawGit() is the low-level seam
   remote/         ssh2 transport — conn (pool) · pty · fs (SFTP) · exec · git · known-hosts
   claude-resume.ts  session-id binding + shq() POSIX escaper (reused by remote)
-  shell-env.ts    PATH/token patching so claude/gh/git resolve
 src/preload/index.ts   window.hive bridge (1:1 with shared/ipc.ts HiveIpc)
 src/shared/     types shared main↔renderer
   ipc.ts          HiveIpc interface — the contract
   remote-uri.ts   ssh:// URI parse/format (pure, shared)
 src/renderer/src/   React app (see "Renderer" below)
 tests/unit/     node:test (pure logic)   tests/e2e/  Playwright
+
+packages/agent-host/src/   the host, shared with the `hive` CLI
+  pty-daemon.ts   detached node-pty + headless-xterm snapshots (persistence)
+  shell-env.ts    PATH/token patching so claude/gh/git resolve
+  hooks/          the hook scripts it writes for agents
 ```
 
 ## Renderer: the Workspace + view plugins
@@ -75,7 +78,7 @@ Full design + edge cases: `docs/design/remote-frames.md`.
 
 ## Persistence & PTYs
 
-PTYs survive window close via a detached daemon (`pty-daemon.ts`); claude is
+PTYs survive window close via a detached daemon (`packages/agent-host/src/pty-daemon.ts`); claude is
 `--session-id`-bound at spawn and `--resume`d after reboot. State persists
 per-repo in `localStorage`: the core blob (`canvas-persistence.ts`, v2) plus one
 versioned blob per view (`workspace/view-layout-store.ts`), all migrated on

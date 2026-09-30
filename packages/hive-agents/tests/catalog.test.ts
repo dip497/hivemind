@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { getCatalog, agentById, agentForCmd, identifyProvider, spawnableAgents, workerAgents, detectStatus, taskFromTitle, setCatalog } from "../src/index.js";
+import { agentTitle, cleanName, NAME_MAX, promptTask, getCatalog, agentById, agentForCmd, identifyProvider, spawnableAgents, workerAgents, detectStatus, taskFromTitle, setCatalog } from "../src/index.js";
 import { providers, providerFor, nodePartsFor, composeResume } from "../src/node.js";
 import { authoredDefs } from "./authored.js";
 
@@ -29,8 +29,8 @@ describe("agent catalog", () => {
   test("spawnable vs worker sets follow the declared capabilities", () => {
     expect(spawnableAgents().map((d) => d.id)).toEqual(getCatalog().filter((d) => d.enabled).map((d) => d.id));
     expect(workerAgents().map((d) => d.id)).toEqual(getCatalog().filter((d) => d.enabled && d.caps.turnSignal).map((d) => d.id));
-    for (const id of ["claude", "droid", "pi", "kiro"]) expect(workerAgents().map((d) => d.id)).toContain(id);
-    expect(workerAgents().map((d) => d.id)).not.toContain("codex");
+    for (const id of ["claude", "codex", "droid", "pi", "kiro"]) expect(workerAgents().map((d) => d.id)).toContain(id);
+    expect(workerAgents().map((d) => d.id)).not.toContain("cursor");
     for (const d of getCatalog()) if (!d.caps.turnSignal) expect(d.note).toBeTruthy();
   });
   test("drift guard: what the daemon builds agrees with what each def declares", () => {
@@ -62,5 +62,23 @@ describe("agent catalog", () => {
     expect(taskFromTitle(agentById("claude"), "Claude Code")).toBe("");
     expect(taskFromTitle(agentById("claude"), "Fix the flaky test")).toBe("Fix the flaky test");
     expect(taskFromTitle(undefined, "a (b) [c] $d")).toBe("a (b) [c] $d");
+  });
+  test("names are one printable line, capped; an agent's title loses its status glyph and generic titles", () => {
+    expect(cleanName("  Fixing\tthe\nflaky   test ")).toBe("Fixing the flaky test");
+    expect(cleanName("\x1b]0;hi\x07")).toBe("]0;hi");
+    expect(cleanName("x".repeat(120)).length).toBe(NAME_MAX);
+    expect(agentTitle(agentById("claude"), "✳ Fix the bug")).toBe("Fix the bug");
+    expect(agentTitle(agentById("claude"), "✳ Claude Code")).toBe("");
+    expect(agentTitle(undefined, "   ")).toBe("");
+    for (const frame of ["⠋", "⠹", "◐", "◓", "✻", "·"]) expect(agentTitle(undefined, `${frame} Fix it`)).toBe("Fix it");
+    expect(agentTitle(undefined, "[ ! ] Action Required")).toBe("[ ! ] Action Required");
+  });
+  test("a prompt's task line: its first clause, no links or markdown, cut at a word", () => {
+    expect(promptTask("Fix the flaky login test. Then run the suite.")).toBe("Fix the flaky login test");
+    expect(promptTask("## Review https://github.com/x/y/pull/3 — carefully")).toBe("Review");
+    expect(promptTask("\n\n  `echo` titled\nmore")).toBe("echo titled");
+    const long = promptTask("Refactor the authentication middleware so that every request carries a verified session");
+    expect(long.endsWith("…")).toBe(true);
+    expect(long.length).toBeLessThanOrEqual(41);
   });
 });

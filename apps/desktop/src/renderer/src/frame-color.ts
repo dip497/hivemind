@@ -42,15 +42,3 @@ export const FRAME_SWATCHES: readonly { name: string; value: string }[] = [
   { name: "Rose", value: identity(336) },
   { name: "Slate", value: "oklch(0.66 0.012 250)" },
 ];
-
-/**
- * The pre-randomization default every frame used to be stamped with. Persisted
- * frames carrying this exact value are migrated to a hashed color on load (a
- * user who picked their own color via the header swatch keeps it).
- */
-export const LEGACY_FRAME_COLOR = "var(--color-brand)";
-
-/** A colour this app generated automatically in an earlier version — not one a person chose. */
-export function isGeneratedFrameColor(color: string): boolean {
-  return color === LEGACY_FRAME_COLOR || /^oklch\(0\.7 0\.14 \d+(\.\d+)?\)$/.test(color);
-}

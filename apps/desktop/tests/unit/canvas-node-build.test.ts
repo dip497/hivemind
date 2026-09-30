@@ -13,7 +13,7 @@ function ctx(over: Partial<NodeBuildCtx>): NodeBuildCtx {
   return {
     repoPath: "/base/repo",
     tiles: [], frames: [], frameOf: {}, pinnedIds: new Set(), sizes: {}, positions: {},
-    frameTiles: new Map(), framesChipNames: {},
+    frameTiles: new Map(),
     updateFrameTitle: noop, updateFrameColor: noop, deleteFrame: noop, arrangeFrame: noop,
     bringFrameToFront: noop, onAttachWorktree: noop, onCreateWorktree: noop, unbindBranch: noop,
     bindWorkspace: noop, unbindWorkspace: noop, closeTile: noop, onNodeResizeCommit: noop,

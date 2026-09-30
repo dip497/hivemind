@@ -121,6 +121,41 @@ field reference; `claude/agent.yaml` in the published fixtures is the richest ex
    what `hive ctl spawn --model/--mode` set.
 4. `detect` — ordered rules over the rendered screen; the first match wins.
 5. `icon` — shapes, not SVG markup; `viewBox` + `path`/`rect`/`circle`/`ellipse`.
+6. `hooks.events` — map each native hook event to a **canonical event** with `emit:`, not to
+   a script. The vocabulary is `session.started`, `session.ready`, `session.ended`,
+   `turn.started`, `turn.ended` (+ `outcome: done | failed | interrupted | limited`),
+   `input.requested` (+ `kind: permission | question | plan | approval | other`),
+   `input.resolved`, `subagent.started`, `subagent.stopped`, `compacting.started`,
+   `compacting.ended` — specified in `spec/agent-event.schema.json`, and how they fold into a
+   status in `spec/status.md`. Use the agent's own `matcher` to split one native event
+   (Claude's `StopFailure` with `matcher: rate_limit` → `outcome: limited`). Map
+   `input.resolved` too (e.g. `PostToolUse`), or a tile answered in the agent stays
+   "needs you" until the turn ends. One generic script reports
+   them and never forwards text the agent wrote. Map an event only after seeing the real
+   binary fire it, and inject per launch — never write the user's global config.
+
+   Anything data cannot say is a script **the plugin ships**, never code in the host: list it
+   in `assets` with a `hook:` name (and `produces:` for the events it reports), and name that
+   hook in `events`. It loads the host's SDK — `const hive = require(process.env.HIVE_SDK)` —
+   for `payload()`, `emit()`, `reportReply()`, `requestApproval()` and `openPlanReview()`
+   (`packages/agent-sdk`, wire format in `spec/hook-protocol.md`). The reply `hive ctl read`
+   returns comes only from `reportReply` — from the payload if the agent puts it there
+   (Claude's `last_assistant_message`), else from the agent's own transcript (Droid). An agent
+   whose hook config is a file of its own shape uses `{emit:turn.ended}` / `{hookCmd:<name>}`
+   placeholders inside that asset.
+
+   ```yaml
+   events:
+     UserPromptSubmit: { emit: turn.started }
+     Stop: { hook: turnEnd }          # the plugin's script: reportReply, then emit turn.ended
+     StopFailure: { emit: turn.ended, outcome: failed }
+     PermissionRequest: { emit: input.requested, kind: permission }
+   assets:
+   - { name: hive-turn-end.cjs, file: hive-turn-end.cjs, hook: turnEnd, produces: [turn.ended] }
+   ```
+
+   An app older than `emit` refuses such a manifest, so publishing one needs the registry to
+   carry a `minAppVersion` for agents.
 
 **Try it before you publish**: drop the folder into
 `~/.config/hivemind/agents/<id>/` (or run `hive agents install ./<id>`) — the running

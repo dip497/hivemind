@@ -45,7 +45,7 @@ test.beforeAll(async () => {
   repoB = await seedRepo("BBB", "beta-task");
     // Own config dir: a view another spec persisted must not become this spec's startup view.
   xdg = await fs.mkdtemp(path.join(os.tmpdir(), "hm-ws-xdg-"));
-  // spawn-claude must clear the installed check and start SOMETHING harmless: a stub claude,
+  // spawn-agent must clear the installed check and start SOMETHING harmless: a stub agent,
   // kept first on PATH by skipping the login-shell env that would bury it.
   seedAgents(xdg);
   bin = await fs.mkdtemp(path.join(os.tmpdir(), "hm-ws-bin-"));
@@ -101,7 +101,7 @@ test("bind a frame to workspace B and the in-zone Issues tile shows B's issues",
 
   // 3. frame = workspace: with a single frame, spawning goes straight into it
   //    (no picker until 2+ frames exist) → a claude tile lands INSIDE the frame.
-  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:spawn-claude")));
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:spawn-agent")));
   await page.waitForSelector(".react-flow__node-terminal", { timeout: 6_000 });
 
   // The spawned terminal node is parented to the frame (react-flow nests a

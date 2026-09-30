@@ -69,7 +69,7 @@ test("focusing a terminal from Layers lands at exactly 100% on whole pixels, so 
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.setContentSize(1301, 901));
   for (let i = 0; i < 3; i++) await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:zoom", { detail: "out" })));
   await expect.poll(zoom).toBeLessThan(0.95);
-  await page.locator(".hm-layers button", { hasText: /shell/ }).first().click();
+  await page.locator(".hm-layers [role=\"button\"]", { hasText: /shell/ }).first().click();
   const at = () => page.evaluate(() => {
     const r = document.querySelector(".hm-node-selected .xterm canvas, .hm-node-selected .xterm .xterm-screen")?.getBoundingClientRect();
     return r ? [r.x, r.y] : null;

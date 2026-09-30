@@ -318,3 +318,27 @@
 }
 .theme-panel .settings-row { gap: 16px; }
 .theme-panel .settings-slider { grid-template-columns: minmax(0, 1fr) 150px; }
+
+/* Update progress: a bar that says work is happening, and how far along it is. The four
+ * installer steps are known (check, download, install, done), so it fills to the step rather
+ * than sweeping forever — a download that stalls stops moving, which is the truth. */
+.hm-update-bar {
+  position: relative; height: 3px; border-radius: 999px; overflow: hidden;
+  background: color-mix(in oklab, var(--color-fg3) 30%, transparent);
+}
+.hm-update-bar > span {
+  display: block; height: 100%; border-radius: inherit;
+  background: var(--color-accent, var(--color-ok));
+  transition: width 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* While a step runs, a sheen crosses the filled part: the installer reports steps, not bytes. */
+.hm-update-bar[data-busy="1"] > span::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--color-bg) 55%, transparent), transparent);
+  animation: hm-update-sheen 1.15s ease-in-out infinite;
+}
+@keyframes hm-update-sheen { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+@media (prefers-reduced-motion: reduce) {
+  .hm-update-bar > span { transition: none; }
+  .hm-update-bar[data-busy="1"] > span::after { animation: none; }
+}

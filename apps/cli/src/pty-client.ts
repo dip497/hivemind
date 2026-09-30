@@ -1,7 +1,7 @@
 /** Client for the PTY daemon socket; the protocol is imported from the desktop, never copied. */
 import net from "node:net";
 import path from "node:path";
-import { frame, makeLineDecoder, type ClientMsg, type ServerMsg, type SessionInfo } from "../../desktop/src/main/pty-protocol.js";
+import { frame, makeLineDecoder, type ClientMsg, type ServerMsg, type SessionInfo } from "@hivemind/agent-host/pty-protocol";
 import { ipcPath } from "@hivemind/core";
 import { configDir, win32UserDataDir } from "./hcp.js";
 
@@ -89,8 +89,7 @@ export async function listSessions(socket: string): Promise<SessionInfo[]> {
   try {
     c.send({ t: "list", reqId: "ls", detail: true });
     const r = await c.next((m): m is Extract<ServerMsg, { t: "sessions" }> => m.t === "sessions");
-    // Older daemons answer with ids only.
-    return r.detail ?? r.ids.map((id) => ({ id, state: "live" as const, cmd: "?", args: [], cwd: "?", pid: null, viewers: 0, cols: 0, rows: 0 }));
+    return r.detail ?? [];
   } finally { c.close(); }
 }
 

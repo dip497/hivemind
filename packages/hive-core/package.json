@@ -1,6 +1,6 @@
 {
   "name": "@hivemind/core",
-  "version": "2026.9.5",
+  "version": "2026.9.9",
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
@@ -29,6 +29,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@hivemind/agents": "workspace:*",
     "@hivemind/view-sdk": "workspace:*",
     "gray-matter": "catalog:",
     "yaml": "catalog:",

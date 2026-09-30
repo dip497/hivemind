@@ -1,0 +1,42 @@
+# The live site (hivemind.griiken.com) is Cloud Run, and it used to move only when someone ran
+# internal/scripts/deploy-site.sh by hand — so main and the site drifted apart. Deploy on merge.
+name: Deploy site to Cloud Run
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - ".github/workflows/site.yml"
+  workflow_dispatch:
+
+# One deploy at a time; never cancel a live one.
+concurrency:
+  group: site-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # The deploy credential is a repo secret, so a fork skips this instead of failing red.
+    if: ${{ github.repository == 'dip497/hivemind' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy hivemind-site
+        run: gcloud run deploy hivemind-site --source . --region europe-west1 --allow-unauthenticated --quiet
+        working-directory: docs
+
+      - name: The service answers
+        run: |
+          url=$(gcloud run services describe hivemind-site --region europe-west1 --format='value(status.url)')
+          code=$(curl -sS -o /dev/null -w '%{http_code}' "$url")
+          echo "$url → $code"
+          [ "$code" = 200 ]

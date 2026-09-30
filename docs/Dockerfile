@@ -18,6 +18,8 @@ FROM node:22-alpine
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build /app/dist ./dist
-COPY server.mjs ./
+# Everything the server imports, or the container exits before it listens and Cloud Run can
+# only say "the container failed to listen on PORT".
+COPY server.mjs downloads.mjs ./
 EXPOSE 8080
 CMD ["node", "server.mjs"]

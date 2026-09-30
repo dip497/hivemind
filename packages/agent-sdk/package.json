@@ -1,0 +1,22 @@
+{
+  "name": "@hivemind/agent-sdk",
+  "version": "2026.9.9",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@hivemind/tsconfig": "workspace:*",
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  },
+  "description": "What an agent plugin's hook scripts use to report to the Hivemind host.",
+  "license": "MIT"
+}

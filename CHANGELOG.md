@@ -9,9 +9,62 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
-- Agents whose CLIs live in user-install dirs (`~/.npm-global/bin`, `~/.local/bin`, `~/bin`) are now found even when Hivemind's PATH missed them: those dirs are rescued into every lookup and spawn, a failed check re-interrogates the login shell once before giving up, and Settings ▸ Agents shows where Hivemind looked when a CLI is reported missing.
-- Agents can now launch in YOLO / skip-permissions mode across all providers; Antigravity (`agy`) now exposes its launch mode (`yolo`, `bypassPermissions`, `skip-permissions`, `acceptEdits`) and model options properly, with automatic alias normalization across agents.
-- The Add Machine dialog now features an (i) info button on hover explaining the purpose of adding a remote machine and the steps to connect it.
+## [2026.9.9] — 2026-09-29
+
+- Fixed: after an upgrade, agents the new version cannot load are repaired from the registry even when the first attempt fails or the workspace never settles. The check ran once per launch and counted a failed attempt as the run, and it waited for every restored tile to start — but an agent this version cannot load is a tile that may never start, so a machine could sit with every agent unavailable until it was restarted. It now waits at most a minute, tries again while an agent is still broken, and only stops asking once a check has actually succeeded.
+## [2026.9.8] — 2026-09-28
+
+- **Breaking:** a supervisor's `allow` now covers the call it was asked about, and nothing more. Hivemind used to remember it for the rest of that worker's life for a list of file-touching tools, which is what `always` is for — and the list was one agent's tool names, so it fit some agents and not others. Answer `always` to remember a tool for that worker; the request says so.
+- Internal: the module that routed "send this to an agent" and held a spawned tile's task was still named after the one agent that existed when it was written. It is two modules now, named after what they do, and a test keeps a provider's name out of any file or exported name in the apps.
+- A first Codex tile starts working instead of waiting: it opens its hook review before it will take anything, although the flags it is started with already tell it to run those hooks, so Hivemind skips that one screen (Esc — its own "skip", which trusts nothing and writes nothing to your Codex config). A manifest says which screen and which key; the host sends it only at the start of a session, at most twice, and never once you have typed into the tile.
+- Codex tiles report again: it runs no hook it has not been told to trust, so on a fresh install none of ours ran — no turn signals, no approval events, `hive ctl read` timing out on a worker that had already answered, and a supervised worker waiting on an answer that never came. Tiles Hivemind starts now waive that review, which the agent's install review states, because it waives the review of the hooks in your own Codex config too.
+- Codex tiles: the wheel scrolls them again (its fullscreen transcript took the wheel and did nothing with it — tiles now start in its scrollback mode, `/tui` switches back), a tile no longer announces "needs your input" every few seconds while it works (what it prints is no longer read as what it asks — only its own chooser and footer are), and its first-run hook review is recognised as waiting for you.
+- A task queued for an agent is held until the agent is at its own prompt: a first run that opens a trust or update chooser used to have the task typed into it, which picked an option instead of starting the work.
+- Fixed: a task given to an agent when it starts — or any message sent to one with `hive ctl send`, a worker's report, an approval request — is now handed to its TUI as a paste instead of as keystrokes. A multi-line task used to submit its first line on its own, leaving the rest as a draft, and an agent that guards against input it cannot parse in time exited instead of starting.
+- Fixed: a terminal restored after a restart took no mouse at all — clicking and scrolling inside an agent did nothing, while typing and its output kept working, until the tile was resized. The replay restored the mouse tracking an agent had turned on but not the coordinate encoding it asked for, so its clicks were answered in a dialect it does not read.
+- Machines nothing runs on sit at the foot of the Layers rail instead of after the tiles, so the last of them is never below the fold: the tile list scrolls above them, and the machines scroll inside their own block (at most 40% of the rail).
+- A tile is called what it is doing: the agent's own task line, with the spawn label (`claude #3`) kept only until it says one. A name you give the tile yourself still wins over both.
+- A tile's name no longer carries the permission mode it was started in (`claude #1 · auto · …` is now `claude #1 · …`): the name says what the agent is doing, and the mode is already shown as state. `spawn.labelMode` is gone from the manifest format; a manifest that still declares it is accepted and ignored, so no agent needs republishing.
+- Installing and upgrading resolve the latest release from GitHub's `releases/latest` redirect instead of its API, so a shared address that has used up the 60 API requests an hour no longer fails with a 403; the API is the fallback, and its rate limit is now named in the error instead of blaming the network. The in-app update check does the same.
+
+## [2026.9.7] — 2026-09-28
+
+- The site downloads Hivemind instead of handing you GitHub's release page: hivemind.griiken.com/download has the command for the computer you are on, first, and a file for anyone who would rather have the file. Every download link points at the current release without naming a version, so a link in a README or a message keeps working — the release publishes `hivemind-linux-x86_64.AppImage`, `hivemind-macos-arm64.zip` and `hivemind-windows-x64.zip` under those names as well.
+- Updating says where it is: the button names the step it is on (looking, downloading, installing) with a bar that fills to it, and when the app was open while it downloaded, it says **Restart to finish** instead of offering the same update again. Asking again while a download waits no longer refetches it.
+- An update taken while the app is open is no longer recorded as installed before it runs. A version that was downloaded but never started left `hivemind upgrade` saying "already on this version — nothing to do", so the old build kept running with nothing left to try.
+- Checking for a new version never reads a cached answer, so a release published a moment ago is found instead of the one before it.
+
+- Tiles get their names back after an agent's plugin is installed or repaired, without restarting anything: what each agent said it was doing is kept even while the host had no manifest to read it, and an agent installed while sessions run takes effect within a second or two instead of at the next spawn.
+- An agent this Hivemind cannot load is repaired from the catalog on the next start, whatever installed it — an agent from a release before manifests changed showed as "Unavailable" with a generic icon until you reinstalled it by hand. The copy it replaces is kept in `agents-previous/`.
+
+## [2026.9.6] — 2026-09-27
+
+- **Breaking:** agent manifests are `manifestVersion: 2`; a version 1 manifest is refused. Agents Hivemind installed from the catalog update themselves on the next start (the copy they replace is kept in `agents-previous/`); one you installed from a folder or edited needs reinstalling. A manifest may name the oldest Hivemind it needs (`minAppVersion`), and the catalog keeps it from older apps.
+- Codex tiles no longer open on Codex's update prompt, and its hooks review reads as waiting for you instead of idle. Update Codex from a terminal.
+- A terminal shown again after it was hidden no longer prints stray `62;190m`-style fragments or doubled lines: its output is cut only where an escape sequence ends.
+- A newly started agent no longer reads "working" until its first turn when its startup screen looked busy.
+- Views can see what each agent is doing (why it is waiting, how its turn ended, its subagents), which agents are installed, and a folder's past sessions to continue one, and can give an agent an instruction you read and send in the app first (view protocol 1.4, `workspace:sessions` and `workspace:prompt`).
+- **Breaking:** a view that starts an agent with a first prompt needs the `workspace:prompt` permission, and you confirm the prompt before the agent gets it.
+- Agents and terminals started while a view other than the canvas is showing now run right away. They used to wait, with no status, until a view showed them — including workers another agent started with `hive ctl spawn`.
+- Agent manifests can map a native hook to a canonical event with `emit:` (turn started/ended, input requested/resolved, subagents, compacting) instead of naming a script. The vocabulary and how it becomes a status are specified in `spec/`, with shared test cases in `conformance/`.
+- **Breaking:** agent plugins report through their own scripts and the new agent SDK instead of hook scripts built into the app, and the app no longer reads agent transcripts. Update the Claude, Droid, Kiro and Pi plugins to their latest versions; until then `hive ctl read` gets no reply from them.
+- A restored agent whose session is gone starts fresh under the same id straight away, instead of trying to resume it and failing first. An agent's manifest says where its sessions are kept (`session.resume.exists`).
+- **Breaking:** the control-plane socket speaks JSON-RPC 2.0 (`spec/wire-protocol.md`): a client calls `initialize` with the token, then any method; statuses and a tile's output are `status/subscribe` and `agent.stream/subscribe`. `hive ctl` is unchanged; a script that spoke the old line format must move. `hive push --events` takes `input.requested` and `turn.ended`.
+- An agent's status comes from one place for every surface — tiles, the layers panel, views, notifications: its hooks once they report, its screen until then or when it has none. Pressing Esc or Ctrl+C during a turn shows the turn interrupted, and a usage limit or a failed turn says so.
+- Terminals no view shows cost the window nothing: they receive no output until shown, and then open on their current screen. Agents' screens are read where they run, not in the window.
+- An agent's manifest can list environment variables that must not reach a terminal (`launch.unsetEnv`); Claude's plugin lists the marker that turned transcript saving off when Hivemind was started from inside Claude Code.
+- Codex reports its turns, questions, subagents and replies, so `hive ctl read` and workflows work with Codex workers. The first Codex tile asks you once, in Codex's own hooks review, to trust Hivemind's hooks.
+- OpenCode and Hermes report their turns, replies, questions and approvals, so `hive ctl read` and workflows work with them too. The first Hermes tile asks you once, in Hermes itself, to allow each of Hivemind's hooks; your Hermes configuration is used as it is, with the hooks added.
+- `hive ctl sessions <agent>` lists an agent's past sessions started in the current folder (`--all` for every folder) with their titles, and `hive ctl spawn --resume <id>` continues one in a new tile. Claude, Codex, Droid, Pi, Cursor and OpenCode can be listed; an agent's plugin says how (`session.list`).
+- OpenCode and Hermes tiles continue their session after a restart, and so does any agent whose hooks report the session they are in.
+- The Gemini plugin is gone: Gemini CLI has been replaced by Antigravity, whose plugin stays on the screen reading because its hooks can only be set in your own configuration.
+- A tile is called the same thing everywhere — header, Layers, tabs, views, toasts, notifications, `hive ctl list`, the messages agents send each other and the window title: its name (the one you or its spawner gave it, else its label), then what it is doing — `reviewer · Fix the login test`. What it is doing is what its agent says, else the first line of the prompt it was started with; renaming a tile changes the name and keeps the task. The agent's title comes from where it runs, so it stays current for tiles no view shows and clears when the agent goes back to a generic title or exits.
+- **Breaking:** the app no longer reads what builds older than this release stored: pre-2.0 settings kept in the window, canvas layouts from before per-view layouts, the old tile and frame formats, review comments kept in the window, the pre-rename app profile and the old saved-SSH-hosts list. Workspaces are migrated instead: a workspace's `.hivemind/config.yaml` now records its format, and the first time this build opens an older one it rewrites old activity timestamps to UTC once.
+- Views can now show how long each agent has been waiting, react to turns finishing and agents needing you, see how busy each terminal is and whether you're at the computer, summarise a whole day, and hand you an image to copy or save (view protocol 1.3). Scripts and git hooks can announce things to the open view with `hive ctl view emit <name> [json]`.
+- A new `+` button in the Layers rail opens another folder as its own workspace frame alongside the current project.
+- Right-clicking a tile in the Layers rail now offers Rename and Close tile, and running/exited agents get a hover `×` to close straight from the sidebar — same close as the canvas and tab strip.
+- Spawning an agent from the rail's frame menu now offers its launch modes inline (`Spawn agent ▸ Claude ▸ Permission mode: bypassPermissions` → `claude --dangerously-skip-permissions`), without changing the saved defaults.
+- Agents spawned by a desktop-launched app find user-installed harness binaries again: the missing `~/.local/bin`, `~/.npm-global/bin` and `~/bin` are prepended to `PATH` when absent, so a broken same-named system snap shim no longer shadows them.
 
 ## [2026.9.5] — 2026-09-22
 
@@ -1312,7 +1365,11 @@ World, and sandboxed community views), and the e2e/perf harnesses gate every cha
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.9.5...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.9.9...HEAD
+[2026.9.9]: https://github.com/dip497/hivemind/releases/tag/v2026.9.9
+[2026.9.8]: https://github.com/dip497/hivemind/releases/tag/v2026.9.8
+[2026.9.7]: https://github.com/dip497/hivemind/releases/tag/v2026.9.7
+[2026.9.6]: https://github.com/dip497/hivemind/releases/tag/v2026.9.6
 [2026.9.5]: https://github.com/dip497/hivemind/releases/tag/v2026.9.5
 [2026.9.4]: https://github.com/dip497/hivemind/releases/tag/v2026.9.4
 [2026.9.3]: https://github.com/dip497/hivemind/releases/tag/v2026.9.3

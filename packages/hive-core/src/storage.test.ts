@@ -18,6 +18,7 @@ import {
   serializeIssue,
   writeConfig,
   writeIssue,
+  WORKSPACE_FORMAT,
 } from "./storage.js";
 import type { Issue } from "./types.js";
 
@@ -323,7 +324,7 @@ describe("parseSections", () => {
     // reach the acceptanceCriteria section, and the real description must NOT
     // include the checklist lines.
     const s = parseSections(
-      "## Description\n\nReal desc text.\n\nAcceptance criteria:\n- [ ] first\n- [x] second\n\n## Activity\n\n- 2026-05-17 10:00 · ui · created",
+      "## Description\n\nReal desc text.\n\nAcceptance criteria:\n- [ ] first\n- [x] second\n\n## Activity\n\n- 2026-05-17T10:00:00.000Z · ui · created",
     );
     expect(s.description).toBe("Real desc text.");
     expect(s.acceptanceCriteria).toEqual([
@@ -350,11 +351,11 @@ describe("parseSections", () => {
   });
   test("activity entries parsed", () => {
     const s = parseSections(
-      "## Activity\n\n- 2026-05-17 10:00 · sarah · created\n- 2026-05-17 11:00 · claude · changed state"
+      "## Activity\n\n- 2026-05-17T10:00:00.000Z · sarah · created\n- 2026-05-17T11:00:00.000Z · claude · changed state"
     );
     expect(s.activity).toEqual([
-      { at: "2026-05-17T10:00:00.000Z", rawAt: "2026-05-17 10:00", who: "sarah", message: "created" },
-      { at: "2026-05-17T11:00:00.000Z", rawAt: "2026-05-17 11:00", who: "claude", message: "changed state" },
+      { at: "2026-05-17T10:00:00.000Z", who: "sarah", message: "created" },
+      { at: "2026-05-17T11:00:00.000Z", who: "claude", message: "changed state" },
     ]);
   });
 });
@@ -408,8 +409,10 @@ describe("appendActivity", () => {
     expect(back.sections.activity[0]?.at).toBe(at);
     expect(new Date(back.sections.activity[0]!.at).getTime()).toBe(fixed.getTime());
   });
-  test("legacy `YYYY-MM-DD HH:MM` activity rows round-trip without churn", async () => {
+  test("a format-1 workspace is brought to format 2 once: activity rows rewritten to ISO, nothing else", async () => {
     const root = await mkRoot();
+    const cfgFile = path.join(root, "config.yaml");
+    await fs.writeFile(cfgFile, "prefix: PAY\nnext_id: 2\nagents: {}\n");
     const md = `---
 id: PAY-1
 title: T
@@ -422,41 +425,27 @@ created: "2026-05-17T10:00:00Z"
 updated: "2026-05-17T10:00:00Z"
 ---
 
+## Description
+
+- 2026-05-17 10:00 · a note that only looks like a row
+
 ## Activity
 
 - 2026-05-17 10:00 · ui · created
+- 2026-05-18T09:00:00.000Z · claude · already ISO
 `;
     await fs.writeFile(issuePath(root, "PAY-1"), md, "utf8");
     const issue = await readIssue(root, "PAY-1");
-    // After writeIssue the legacy timestamp tokens must NOT have been
-    // rewritten to ISO — that would produce noisy diffs on every first
-    // updateIssue after upgrade.
-    await writeIssue(issue);
+    expect(issue.sections.activity.map((e) => e.at)).toEqual(["2026-05-17T10:00:00.000Z", "2026-05-18T09:00:00.000Z"]);
     const after = await fs.readFile(issuePath(root, "PAY-1"), "utf8");
-    expect(after).toMatch(/- 2026-05-17 10:00 · ui · created/);
-    expect(after).not.toMatch(/2026-05-17T10:00:00\.000Z · ui · created/);
+    expect(after).toContain("- 2026-05-17T10:00:00.000Z · ui · created");
+    expect(after).toContain("- 2026-05-17 10:00 · a note that only looks like a row");
+    expect((await readConfig(root)).format).toBe(WORKSPACE_FORMAT);
   });
-  test("legacy `YYYY-MM-DD HH:MM` activity timestamps are normalized to ISO-Z for `at`", async () => {
+  test("a workspace written by a newer build is refused, not misread", async () => {
     const root = await mkRoot();
-    const md = `---
-id: PAY-1
-title: T
-state: todo
-parent: null
-labels: []
-assignee: null
-github: null
-created: "2026-05-17T10:00:00Z"
-updated: "2026-05-17T10:00:00Z"
----
-
-## Activity
-
-- 2026-05-17 10:00 · ui · created
-`;
-    await fs.writeFile(issuePath(root, "PAY-1"), md, "utf8");
-    const issue = await readIssue(root, "PAY-1");
-    expect(issue.sections.activity[0]?.at).toBe("2026-05-17T10:00:00.000Z");
+    await fs.writeFile(path.join(root, "config.yaml"), `prefix: PAY\nnext_id: 1\nagents: {}\nformat: ${WORKSPACE_FORMAT + 1}\n`);
+    await expect(listIssues(root)).rejects.toThrow(/newer hivemind/);
   });
 });
 
@@ -537,7 +526,7 @@ describe("createIssue / updateIssue (CLI + UI write path)", () => {
     const act = issue.sections.activity[0]!;
     expect(act.who).toBe("cli:alice");
     expect(act.message).toBe("created");
-    // ISO-Z, not the legacy "YYYY-MM-DD HH:MM" form.
+    // ISO-Z.
     expect(act.at).toMatch(/T.*Z$/);
   });
 

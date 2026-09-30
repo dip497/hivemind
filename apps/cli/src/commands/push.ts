@@ -7,7 +7,7 @@ import { err, ok } from "../format.js";
 import { EXIT } from "../hcp.js";
 import { defaultSocket } from "../pty-client.js";
 
-const TOPICS = ["notification", "turn"];
+const TOPICS = ["input.requested", "turn.ended"];
 const socketArg = { socket: { type: "string", description: "daemon socket whose machine this configures (default: this machine's)" } } as const;
 const file = (sock?: unknown) => path.join(path.dirname(String(sock || defaultSocket())), "push.json");
 
@@ -30,7 +30,7 @@ const setCmd = defineCommand({
   meta: { name: "set", description: "Push to this URL (e.g. https://ntfy.sh/<your-topic>)" },
   args: {
     url: { type: "positional", required: true },
-    events: { type: "string", description: `comma-separated: ${TOPICS.join(",")} (default: notification — an agent needs input)` },
+    events: { type: "string", description: `comma-separated: ${TOPICS.join(",")} (default: input.requested — an agent needs you)` },
     ...socketArg,
     json: { type: "boolean" },
   },
@@ -38,7 +38,7 @@ const setCmd = defineCommand({
     const ctx = { json: !!args.json };
     const url = String(args.url);
     if (!validUrl(url)) return err(ctx, "usage", "the push URL must be http:// or https://", EXIT.usage);
-    const events = args.events ? String(args.events).split(",").map((e) => e.trim()).filter(Boolean) : ["notification"];
+    const events = args.events ? String(args.events).split(",").map((e) => e.trim()).filter(Boolean) : ["input.requested"];
     const bad = events.filter((e) => !TOPICS.includes(e));
     if (bad.length) return err(ctx, "usage", `unknown event ${bad.join(", ")} — use ${TOPICS.join(", ")}`, EXIT.usage);
     const p = file(args.socket);

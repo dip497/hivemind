@@ -58,7 +58,11 @@ export type SpawnOpts = {
   url?: string;
   /** Editor tiles: the file the fresh (or reused) editor should open. */
   file?: string;
+  /** Per-spawn launch options beyond `mode` (agent-option id → chosen value),
+   *  merged over the user's saved options for this one launch. */
+  launch?: Partial<Record<string, string>>;
   agent?: { id: string; cmd: string; args?: string[]; label: string };
+  resume?: string;
 };
 
 /** What a view may ask the runtime to do. Everything here is view-agnostic. */
@@ -71,10 +75,12 @@ export interface WorkspaceCommands {
   closeTile: (id: string) => void;
   spawnTile: (kind: TileKind, frameId: string | null, opts?: SpawnOpts) => string | undefined;
   spawnVis: (which: "tree" | "shell" | "diff" | "issues") => void;
+  /** Protocol name since 1.0: it starts the DEFAULT agent, whichever that is. 1.2 views use
+   *  `spawnAgent(null, frameId)` instead. */
   spawnClaude: () => void;
   addFrame: () => void;
   /** Start an agent by catalog id (null = the user's default); false when no such agent is installed. */
-  spawnAgent: (agent: string | null, frameId: string | null, opts?: { prompt?: string; name?: string }) => boolean;
+  spawnAgent: (agent: string | null, frameId: string | null, opts?: { prompt?: string; name?: string; resume?: string }) => boolean;
   /** Rename a tile; "" goes back to its own name. */
   renameTile: (id: string, name: string) => void;
   /** Ask the user for a folder to bind the frame to. */

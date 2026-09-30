@@ -9,7 +9,7 @@
  */
 import { ipcMain, type BrowserWindow } from "electron";
 import { readFileSync } from "node:fs";
-import { mergeSettings, migrateLegacy, type LegacyRendererState, type Settings } from "@hivemind/core/settings-schema";
+import { mergeSettings, type Settings } from "@hivemind/core/settings-schema";
 import { patchSettingsFile, readSettings, settingsPath, updateSettings } from "@hivemind/core/settings";
 import { createSettingsCoordinator } from "./settings-coordinator.js";
 
@@ -82,18 +82,6 @@ export async function reloadSettings(): Promise<Settings> {
   return coordinator.reload();
 }
 
-/** One-time import of the renderer's pre-2.0 localStorage keys.
- *
- *  The migration is computed INSIDE the lock, against the file as it is at that
- *  moment: deriving it from main's snapshot and then writing the result would
- *  overwrite whatever the CLI wrote in between. The `migrated` guard is checked
- *  in there too, so a second window racing the same migration is a no-op rather
- *  than a second import. */
-export async function migrateFromRenderer(legacy: LegacyRendererState): Promise<Settings> {
-  if (getSettings().migrated) return getSettings(); // cheap out before taking the lock
-  return coordinator.mutate(() => updateSettings((cur) => (cur.migrated ? cur : migrateLegacy(legacy, cur)), settingsFile()));
-}
-
 /** Validate the renderer's patch list: dotted paths + JSON values only. */
 function sanitizePatches(raw: unknown): { path: string; value: unknown }[] {
   if (!Array.isArray(raw)) return [];
@@ -114,7 +102,6 @@ export function installSettingsIpc(getWindow: () => BrowserWindow | null): void 
   // Batched dotted-path patches — what the renderer sends now (a full-object
   // replace from a debounced UI would revert whatever else was written meanwhile).
   ipcMain.handle("settings:patch", (_e, patches: unknown) => patchSettings(sanitizePatches(patches)));
-  ipcMain.handle("settings:migrate", (_e, legacy: unknown) => migrateFromRenderer((legacy ?? {}) as LegacyRendererState));
   ipcMain.handle("settings:path", () => settingsFile());
   onSettingsChange((s) => { const w = getWindow(); if (w && !w.isDestroyed()) w.webContents.send("settings:changed", s); });
 }

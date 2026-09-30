@@ -1,13 +1,15 @@
 # Codex — built-in provider manifest.
 # Authoring format for the def half. See packages/hive-agents/src/manifest.ts.
-manifestVersion: 1
+manifestVersion: 2
+# Written for the agent host that shipped in this release.
+minAppVersion: '2026.9.6'
 id: codex
 label: Codex
 bin: codex
 enabled: true
 caps:
   promptDelivery: typed
-  turnSignal: false
+  turnSignal: true
   resume: cwd
   supervise: human
   blockedDetection: true
@@ -47,16 +49,53 @@ options:
 install:
   url: https://developers.openai.com/codex/cli
   command: "npm install -g @openai/codex"
+spawn:
+  # It opens its hook review before it will take a task, although the launch flags below
+  # already tell it to run those hooks: the screen's answer changes nothing, so skip it. Esc
+  # is its own "skip" — it trusts nothing and writes nothing.
+  dismiss:
+  - when:
+      all:
+      - line:
+        - contains: hooks need review
+      - line:
+        - contains: trust all and continue
+    keys:
+    - Escape
 detect:
+  # Only the live prompt area says what the agent is waiting for: its own streamed output
+  # quotes files and plans full of "do you want … yes", and a screen-wide match reads those
+  # as a question and notifies for each one.
+  scope:
+    kind: tail
+    n: 20
   rules:
+  # What it is WAITING on is its own chooser or its own footer, on one line. Matching the
+  # words a question is made of ("do you want", "[y/n]", "yes") anywhere on the screen read
+  # the output it was streaming back as a question, over and over.
   - when:
       any:
-      - contains: press enter to confirm or esc to cancel
-      - contains: enter to submit answer
-      - contains: allow command?
-      - contains: '[y/n]'
-      - contains: yes (y)
-      - helper: hasConfirmationPrompt
+      - seq:
+        - any: ["\u203a", ">"]
+        - run: space
+          min: 1
+        - run: digit
+          min: 1
+        - lit: '.'
+        - run: space
+          min: 1
+        at: start
+      - line:
+        - contains: press enter to confirm or esc to cancel
+      - line:
+        - contains: enter to submit answer
+      - line:
+        - contains: allow command?
+      # Its hook review, which a first tile in a new profile always lands on.
+      - line:
+        - contains: hook needs review
+      - line:
+        - contains: hooks need review
     then: blocked
   - when:
       helper: hasInterruptPattern
@@ -67,8 +106,6 @@ detect:
       - containsCS: Working (
     then: working
   default: idle
-note: scrape-only status and no turn signal — drive it by hand on the canvas; `hive ctl read` / `hive
-  ctl workflow` cannot gather from it.
 session:
   resume:
     args:
@@ -81,3 +118,67 @@ session:
       idPath: payload.id
       require:
         type: session_meta
+# Codex runs a hook only once its user has trusted that exact command (it asks in the tile, once).
+# So the commands are the same in every tile, and the tile is read from the spawn environment.
+hooks:
+  arg: -c
+  format: toml
+  stable: true
+  template: 'hooks={events}'
+  events:
+    SessionStart:
+      emit: session.started
+      timeout: 10
+    SessionEnd:
+      emit: session.ended
+      timeout: 3
+    UserPromptSubmit:
+      emit: turn.started
+      timeout: 10
+    Stop:
+      hook: turnEnd
+      timeout: 10
+    Interrupt:
+      emit: turn.ended
+      outcome: interrupted
+      timeout: 3
+    PermissionRequest:
+      emit: input.requested
+      kind: permission
+      timeout: 10
+    PostToolUse:
+      emit: input.resolved
+      timeout: 10
+    SubagentStart:
+      emit: subagent.started
+      timeout: 10
+    SubagentStop:
+      emit: subagent.stopped
+      timeout: 10
+    PreCompact:
+      emit: compacting.started
+      timeout: 10
+    PostCompact:
+      emit: compacting.ended
+      timeout: 10
+assets:
+- name: hive-turn-end.cjs
+  file: hive-turn-end.cjs
+  hook: turnEnd
+  produces: [turn.ended]
+# A tile Hivemind starts must not open on Codex's own update prompt, where a message sent to the
+# tile would answer it; the user updates Codex from a terminal instead.
+launch:
+  hcp: true
+  args:
+  - -c
+  - check_for_update_on_startup=false
+  # Its fullscreen transcript takes the wheel for itself and then does nothing with it, so a
+  # tile cannot be scrolled at all. In scrollback mode the terminal keeps the wheel and the
+  # transcript lands in the tile's own scrollback. `/tui` switches it back.
+  - -c
+  - tui.fullscreen_transcript=false
+  # It runs no hook it has not been told to trust, one screen at a time, and the hooks here
+  # are the ones this manifest just wrote. Without this it reports nothing: no turn, no
+  # approval, no status — and a supervised worker waits on an answer that never comes.
+  - --dangerously-bypass-hook-trust

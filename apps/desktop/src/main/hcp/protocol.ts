@@ -1,44 +1,26 @@
 /**
- * Hivemind Control Plane (HCP) wire protocol. NDJSON over a 0600 unix socket —
- * one JSON object per line, `t` discriminator. Same house style as the pty
- * daemon (pty-protocol.ts) and plan-bridge.
+ * Hivemind Control Plane (HCP) wire protocol: JSON-RPC 2.0, one message per line, over a 0600
+ * unix socket (spec/wire-protocol.md).
  *
- * Two kinds of client:
- *   - DRIVERS (`hive ctl`, the pi extension) open a connection and issue `req`s, each
- *     correlated by `id`, getting one `res` back. They may `sub`scribe to event
- *     topics (Phase 2: agent.stream) and get `evt`s.
- *   - HOOKS (the injected Stop hook) fire one `event` and disconnect — no reply.
- *
- * Every driver `req` carries the capability `token` (minted by main, injected
- * into spawned agents' env). Hook `event`s are unauthenticated by token but the
- * 0600 socket already gates them to same-uid processes.
+ *   - Clients (`hive ctl`, an agent plugin's scripts, the pi extension) call `initialize`
+ *     with the capability token once per connection, then make requests.
+ *   - A hook reports with the `agent.event` notification and disconnects. It needs no token:
+ *     the socket is the owner's alone, and an event is a fact, not a command.
+ *   - Streams (`agent.stream/subscribe`, `status/subscribe`) answer with a result, then send
+ *     notifications until unsubscribed or disconnected.
  */
 
-export const HCP_VERSION = 1;
+export const HCP_VERSION = 2;
 
-/** Driver → server. */
-export type HcpReq = {
-  t: "req";
-  id: string;
-  method: string;
-  params?: unknown;
-  token?: string;
-};
-export type HcpSub = { t: "sub"; id: string; topic: string; params?: unknown; token?: string };
-export type HcpUnsub = { t: "unsub"; id: string };
-/** Hook → server, fire-and-forget (e.g. the Stop hook reporting a finished turn). */
-export type HcpEventIn = { t: "event"; topic: string; data?: unknown };
+export type RpcId = string | number;
+export type RpcRequest = { jsonrpc: "2.0"; id: RpcId; method: string; params?: unknown };
+export type RpcNotification = { jsonrpc: "2.0"; method: string; params?: unknown };
+export type RpcResponse =
+  | { jsonrpc: "2.0"; id: RpcId | null; result: unknown }
+  | { jsonrpc: "2.0"; id: RpcId | null; error: { code: number; message: string; data?: { code: HcpErrorCode } } };
 
-export type HcpClientMsg = HcpReq | HcpSub | HcpUnsub | HcpEventIn;
-
-/** Server → driver. */
-export type HcpRes =
-  | { t: "res"; id: string; ok: true; result: unknown }
-  | { t: "res"; id: string; ok: false; error: { code: HcpErrorCode; message: string } };
-export type HcpEvtOut = { t: "evt"; subId: string; topic: string; data: unknown };
-export type HcpHello = { t: "hello"; version: number; rendererUp: boolean };
-
-export type HcpServerMsg = HcpRes | HcpEvtOut | HcpHello;
+/** JSON-RPC's reserved codes, and the one server-defined code that carries ours in `data.code`. */
+export const RPC = { parse: -32700, invalid: -32600, method: -32601, hcp: -32000 } as const;
 
 export type HcpErrorCode =
   | "BAD_REQUEST"

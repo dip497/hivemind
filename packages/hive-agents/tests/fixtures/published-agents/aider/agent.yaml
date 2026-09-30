@@ -1,5 +1,7 @@
 # Aider — a catalog agent. Launch only: no status reading, resume or turn reports.
-manifestVersion: 1
+manifestVersion: 2
+# Written for the agent host that shipped in this release.
+minAppVersion: '2026.9.6'
 id: aider
 label: "Aider"
 bin: aider

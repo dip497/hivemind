@@ -10,8 +10,8 @@ import { readFileSync } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { app } from "electron";
-import { type ServerMsg, type SessionInfo, SOCKET_NAME, frame, makeLineDecoder } from "./pty-protocol.js";
-import { DaemonEndpoint, type Callbacks } from "./daemon-endpoint.js";
+import { type ServerMsg, type SessionInfo, SOCKET_NAME, frame, makeLineDecoder } from "@hivemind/agent-host/pty-protocol";
+import { DaemonEndpoint, type Callbacks } from "@hivemind/agent-host/daemon-endpoint";
 import { ipcPath } from "./platform.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -148,7 +148,10 @@ async function doConnect(): Promise<net.Socket> {
   throw new Error("pty-daemon unreachable");
 }
 
-const local = new DaemonEndpoint({ connect: doConnect });
+let eventSink: ((topic: string, data: unknown) => void) | null = null;
+/** Where this computer's daemon's events go: its sessions' screen readings. */
+export function setDaemonEventSink(fn: (topic: string, data: unknown) => void): void { eventSink = fn; }
+const local = new DaemonEndpoint({ connect: doConnect, onEvent: (topic, data) => eventSink?.(topic, data) });
 
 export async function spawnPty(opts: SpawnOpts & { attachOnly?: boolean; liveOnly?: boolean }, cb: Callbacks): Promise<{ pid: number }> {
   const r = await local.spawn({ ...opts, noSpawn: opts.attachOnly, liveOnly: opts.attachOnly && opts.liveOnly }, cb);
@@ -163,8 +166,14 @@ export function listSessions(): Promise<SessionInfo[]> {
 export function hasSession(tileId: string): boolean {
   return local.has(tileId);
 }
-export function writePty(tileId: string, data: string): void {
-  local.write(tileId, data);
+/** Ask for the session's screen now; false when this client does not hold the session. */
+export function screenPty(tileId: string, cb: (replay: string | null) => void): boolean {
+  if (!local.has(tileId)) return false;
+  local.screen(tileId, cb);
+  return true;
+}
+export function writePty(tileId: string, data: string, paste?: boolean): void {
+  local.write(tileId, data, paste);
 }
 export function resizePty(tileId: string, cols: number, rows: number): void {
   local.resize(tileId, cols, rows);

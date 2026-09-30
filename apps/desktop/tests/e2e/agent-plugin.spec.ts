@@ -23,7 +23,7 @@ fs.writeFileSync(path.join(BIN, "claude"), "#!/bin/sh\n[ \"$1\" = --version ] &&
 const ENV = { ...process.env, XDG_CONFIG_HOME: XDG, PATH: `${BIN}${path.delimiter}${process.env.PATH}` } as Record<string, string>;
 
 /** A complete provider, written the way a user would write one. */
-const ACME = `manifestVersion: 1
+const ACME = `manifestVersion: 2
 id: acme
 label: Acme Coder
 bin: acme-coder

@@ -4,7 +4,7 @@ import { Duplex, PassThrough } from "node:stream";
 import path from "node:path";
 import { PROBE, parseProbe, shq, type ProbeResult } from "@hivemind/core";
 import type { RemoteTarget } from "../../shared/remote-uri.js";
-import { BRIDGE_READY } from "../pty-protocol.js";
+import { BRIDGE_READY } from "@hivemind/agent-host/pty-protocol";
 import type { HostAuth } from "./conn.js";
 
 export interface SshPaths {

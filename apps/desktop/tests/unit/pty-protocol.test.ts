@@ -3,7 +3,7 @@
 // skipped, and a UTF-8 sequence split across two socket reads is not mangled.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { makeLineDecoder, frame } from "../../src/main/pty-protocol.ts";
+import { makeLineDecoder, frame } from "@hivemind/agent-host/pty-protocol";
 
 test("reassembles a line split across chunks and splits many lines in one chunk", () => {
   const lines: string[] = [];
@@ -40,7 +40,7 @@ test("hundreds of small frames in one chunk decode in order (linear-time path)",
 });
 
 test("a line split across many reads is found once, whole — and scanning stays linear", async () => {
-  const { makeLineDecoder } = await import("../../src/main/pty-protocol.js");
+  const { makeLineDecoder } = await import("@hivemind/agent-host/pty-protocol");
   const lines: string[] = [];
   const feed = makeLineDecoder((l) => lines.push(l));
   const payload = "x".repeat(200_000);

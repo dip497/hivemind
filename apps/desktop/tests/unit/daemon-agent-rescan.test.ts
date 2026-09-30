@@ -8,7 +8,7 @@ import net from "node:net";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { frame, makeLineDecoder, type ClientMsg, type ServerMsg } from "../../src/main/pty-protocol.ts";
+import { frame, makeLineDecoder, type ClientMsg, type ServerMsg } from "@hivemind/agent-host/pty-protocol";
 
 const unix = process.platform !== "win32";
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -18,7 +18,7 @@ const bin = path.join(dir, "bin");
 const sock = path.join(dir, "d.sock");
 const PROBE_ID = "probe";
 const cli = path.join(bin, "probe-cli");
-const manifest = `manifestVersion: 1
+const manifest = `manifestVersion: 2
 id: ${PROBE_ID}
 label: "Probe"
 bin: probe-cli
@@ -41,7 +41,7 @@ before(async () => {
   fs.mkdirSync(bin);
   // The script prints what the manifest's launch.env injected, so the output IS the proof.
   fs.writeFileSync(cli, "#!/bin/sh\necho PROBE=$HM_PROBE_ID\nsleep 30\n", { mode: 0o755 });
-  daemon = spawn(process.execPath, ["--import", "tsx", path.join(here, "../../src/main/pty-daemon.ts"), sock], {
+  daemon = spawn(process.execPath, ["--import", "tsx", path.join(here, "../../../../packages/agent-host/src/pty-daemon.ts"), sock], {
     stdio: "ignore",
     env: { ...process.env, XDG_CONFIG_HOME: xdg },
   });

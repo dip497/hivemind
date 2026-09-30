@@ -15,18 +15,29 @@
 import { shq } from "./shq.js";
 import type { AgentHookEntry, AgentHooks, AgentProviderDef } from "./types.js";
 import type { HookScript, LaunchRequest } from "./runtime.js";
+import { EVENT_ENV, EVENT_HOOK } from "./events.js";
 
-/** Hooks that need more than the tile's name in front of the command. */
-const ENV_PREFIX: Record<string, (req: LaunchRequest) => Record<string, string>> = {
-  // The broker double-checks the policy itself and falls back to the normal prompt.
-  approval: (req): Record<string, string> => (req.supervise ? { HIVE_SUPERVISE: req.supervise } : {}),
-};
+/** What the generic script reports for an `emit` entry. */
+function emitEnv(entry: AgentHookEntry | undefined): Record<string, string> {
+  if (!entry?.emit) return {};
+  return {
+    [EVENT_ENV.event]: entry.emit,
+    ...(entry.outcome ? { [EVENT_ENV.outcome]: entry.outcome } : {}),
+    ...(entry.kind ? { [EVENT_ENV.kind]: entry.kind } : {}),
+  };
+}
 
-/** The variables one of our hooks runs with, attributed to a tile. */
-function hookEnv(name: string, req: LaunchRequest): Record<string, string> {
+/** The variables a hook runs with, attributed to a tile. */
+function hookEnv(hook: HookScript, req: LaunchRequest, entry?: AgentHookEntry): Record<string, string> {
   // A document written once for every tile of an agent cannot name one of them; those hooks
   // are attributed by the spawn environment instead, which carries the same tile id.
-  return { ...(req.tileId ? { HIVEMIND_TILE: req.tileId } : {}), ...(ENV_PREFIX[name]?.(req) ?? {}) };
+  return {
+    ...(req.tileId ? { HIVEMIND_TILE: req.tileId } : {}),
+    // A plugin's approval script double-checks the policy itself.
+    ...(req.supervise && hook.env ? { HIVE_SUPERVISE: req.supervise } : {}),
+    ...hook.env,
+    ...emitEnv(entry),
+  };
 }
 
 /** Single-quote for a PowerShell literal — the only escape inside one is a doubled quote. */
@@ -60,11 +71,12 @@ function win32HookCommand(env: Record<string, string>, hook: HookScript, req: La
   return `${exe} -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand ${Buffer.from(script, "utf16le").toString("base64")}`;
 }
 
-/** The command line the daemon runs for one of its own hooks, attributed to a tile. */
-export function hookCommand(name: string, hook: HookScript, req: LaunchRequest): string {
-  const env = hookEnv(name, req);
+/** The command line the daemon runs for one of its own hooks, attributed to a tile. It starts
+ *  with `env` so it runs the same whether the agent hands it to a shell or splits it into argv. */
+export function hookCommand(hook: HookScript, req: LaunchRequest, entry?: AgentHookEntry): string {
+  const env = hookEnv(hook, req, entry);
   if ((req.platform ?? process.platform) === "win32") return win32HookCommand(env, hook, req);
-  const parts = Object.entries(env).map(([k, v]) => `${k}=${shq(v)}`);
+  const parts = ["env", ...Object.entries(env).map(([k, v]) => `${k}=${shq(v)}`)];
   parts.push("ELECTRON_RUN_AS_NODE=1", shq(req.paths.execPath), shq(hook.path));
   if (hook.arg) parts.push(shq(hook.arg));
   return parts.join(" ");
@@ -103,10 +115,11 @@ function entryFor(
   req: LaunchRequest,
 ): { body: Record<string, unknown>; matcher?: string } | undefined {
   if (entry.when === "supervised" && !req.supervise) return undefined;
-  const hook = req.paths.hooks[entry.hook];
+  const name = entry.emit ? EVENT_HOOK : entry.hook ?? "";
+  const hook = req.paths.hooks[name];
   if (!hook) return undefined; // the daemon does not have this script: the event is not wired
   const matcher = matcherFor(entry, req);
-  const values = { command: hookCommand(entry.hook, hook, req), timeout: entry.timeout, matcher };
+  const values = { command: hookCommand(hook, req, entry), timeout: entry.timeout, matcher };
   return { body: fill(hooks.entry ?? DEFAULT_ENTRY, values), ...(matcher ? { matcher } : {}) };
 }
 
@@ -126,11 +139,22 @@ export function renderHookEvents(hooks: AgentHooks, req: LaunchRequest): Record<
   return Object.keys(out).length ? out : undefined;
 }
 
+/** A value as a TOML inline value: tables `{k=v,...}`, arrays, and strings in TOML's
+ *  basic-string escapes (a subset JSON also uses, so JSON.stringify writes them). */
+function toTomlInline(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(toTomlInline).join(",")}]`;
+  if (v && typeof v === "object") {
+    return `{${Object.entries(v).map(([k, x]) => `${/^[A-Za-z0-9_-]+$/.test(k) ? k : JSON.stringify(k)}=${toTomlInline(x)}`).join(",")}}`;
+  }
+  return JSON.stringify(v);
+}
+
 /** The whole document, in the shape the agent's own configuration wants. */
 export function renderHookDocument(def: AgentProviderDef, req: LaunchRequest): string | undefined {
   if (!def.hooks) return undefined;
-  const events = renderHookEvents(def.hooks, req);
+  // Commands every tile shares carry no tile id; the tile is in the spawn environment.
+  const events = renderHookEvents(def.hooks, def.hooks.stable ? { ...req, tileId: "", supervise: undefined } : req);
   if (!events) return undefined;
   const template = def.hooks.template ?? "{events}";
-  return template.replace("{events}", JSON.stringify(events));
+  return template.replace("{events}", def.hooks.format === "toml" ? toTomlInline(events) : JSON.stringify(events));
 }

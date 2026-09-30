@@ -1,6 +1,8 @@
 # OpenClaw — built-in provider manifest.
 # Authoring format for the def half. See packages/hive-agents/src/manifest.ts.
-manifestVersion: 1
+manifestVersion: 2
+# Written for the agent host that shipped in this release.
+minAppVersion: '2026.9.6'
 id: openclaw
 label: OpenClaw
 bin: openclaw

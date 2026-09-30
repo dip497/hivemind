@@ -10,8 +10,8 @@ const plat = `${process.platform}-${process.arch}`;
 
 function ptyAddon(): string | undefined {
   try {
-    const fromDesktop = createRequire(path.join(import.meta.dir, "..", "..", "desktop", "package.json"));
-    const platMain = createRequire(fromDesktop.resolve("@lydell/node-pty")).resolve(`@lydell/node-pty-${plat}`);
+    const fromHost = createRequire(path.join(import.meta.dir, "..", "..", "..", "packages", "agent-host", "package.json"));
+    const platMain = createRequire(fromHost.resolve("@lydell/node-pty")).resolve(`@lydell/node-pty-${plat}`);
     const addon = path.join(path.dirname(platMain), "..", "prebuilds", plat, "pty.node");
     return fs.existsSync(addon) ? addon : undefined;
   } catch {

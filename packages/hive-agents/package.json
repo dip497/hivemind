@@ -1,6 +1,6 @@
 {
   "name": "@hivemind/agents",
-  "version": "2026.9.5",
+  "version": "2026.9.9",
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
@@ -24,6 +24,7 @@
     "typescript": "catalog:"
   },
   "dependencies": {
+    "@hivemind/agent-sdk": "workspace:*",
     "yaml": "catalog:"
   },
   "description": "Agent provider manifests for Hivemind — the declarative format and its validator.",

@@ -54,7 +54,6 @@ export interface CanvasRuntime {
   dismissToast: (id: string) => void;
   // ── frame / worktree ops for FrameNode headers ──
   frameTiles: Map<string, string[]>;
-  framesChipNames: Record<string, string>;
   updateFrameTitle: (id: string, title: string) => void;
   updateFrameColor: (id: string, color: string) => void;
   deleteFrame: (id: string) => void;

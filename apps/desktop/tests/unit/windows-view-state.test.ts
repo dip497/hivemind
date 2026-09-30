@@ -15,45 +15,14 @@ const store = new Map<string, string>();
 };
 
 const {
-  loadViewMode, saveViewMode, loadMinimized, saveMinimized, MINIMIZED_KEY, nextActiveTab,
+  nextActiveTab,
 } = await import("../../src/renderer/src/windows-view-state.ts");
 
 beforeEach(() => store.clear());
 
-test("viewMode is unset by default and round-trips any view id through storage", () => {
-  assert.equal(loadViewMode(), null);
-  saveViewMode("windows");
-  assert.equal(loadViewMode(), "windows");
-  saveViewMode("mars-base");
-  assert.equal(loadViewMode(), "mars-base");
-});
-
 // Validation against the registered plugins is resolveViewId's job (see
 // workspace-view.test.ts) — the raw pref stays a plain string so a plugin can
 // be added or removed without a storage migration.
-
-test("minimized set is per-repo and round-trips", () => {
-  const repoA = "/tmp/a";
-  const repoB = "/tmp/b";
-  saveMinimized(repoA, new Set(["t1", "t2"]));
-  saveMinimized(repoB, new Set(["t9"]));
-  assert.deepEqual([...loadMinimized(repoA)].sort(), ["t1", "t2"]);
-  assert.deepEqual([...loadMinimized(repoB)], ["t9"]);
-  // Distinct keys → no cross-repo leak.
-  assert.notEqual(MINIMIZED_KEY(repoA), MINIMIZED_KEY(repoB));
-});
-
-test("no-repo minimized set never touches storage", () => {
-  saveMinimized(null, new Set(["x"]));
-  assert.equal(store.size, 0);
-  assert.deepEqual([...loadMinimized(null)], []);
-});
-
-test("loadMinimized tolerates malformed json → empty set", () => {
-  const repo = "/tmp/bad";
-  store.set(MINIMIZED_KEY(repo), "{not json");
-  assert.deepEqual([...loadMinimized(repo)], []);
-});
 
 test("nextActiveTab keeps a still-visible current tab", () => {
   assert.equal(nextActiveTab("b", ["a", "b", "c"]), "b");

@@ -15,8 +15,6 @@
  * I/O, no renderer imports, no knowledge of how a tile is built.
  */
 import { createToolRegistry, type RegisteredCommand, type RegisteredTool, type ToolAvailability, type ToolPluginContribution } from "./tool-registry.js";
-// Type-only: erased at compile time, so the runtime edge stays one-way
-// (settings-schema → tool-plugins, for the migration constant).
 import type { ToolsSettings } from "./settings-schema.js";
 
 /** The bundled web plugin: the Browser tile, off unless enabled. */

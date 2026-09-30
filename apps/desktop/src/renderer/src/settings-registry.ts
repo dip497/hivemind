@@ -42,14 +42,10 @@ export function pluginPage(id: string): { kind: PluginPageKind; pluginId: string
   return (PLUGIN_PAGE_KINDS as readonly string[]).includes(kind!) && pluginId ? { kind: kind as PluginPageKind, pluginId } : null;
 }
 
-/** Old page ids still sent by `hivemind:open-settings` callers and saved links. */
-const ALIASES: Record<string, string> = { extensions: "installed" };
-
 export function resolveSettingsPage(id: string): string | null {
-  const real = ALIASES[id] ?? id;
-  return SETTINGS_PAGE_IDS.includes(real) || pluginPage(real) ? real : null;
+  return SETTINGS_PAGE_IDS.includes(id) || pluginPage(id) ? id : null;
 }
 
 export function settingsPage(id: string): SettingsPageDef | undefined {
-  return SETTINGS_PAGES.find((p) => p.id === (ALIASES[id] ?? id));
+  return SETTINGS_PAGES.find((p) => p.id === id);
 }

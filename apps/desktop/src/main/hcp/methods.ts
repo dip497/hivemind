@@ -3,23 +3,54 @@
  *   - RENDERER verbs (tile.spawn_agent) delegate to `deps.callRenderer` — the
  *     request-id-correlated main→renderer channel (the plan-bridge pattern).
  *   - MAIN verbs (agent.send, agent.read) run here: send writes to the pty;
- *     read awaits the next Stop-hook turn and returns the transcript reply, with
- *     a buffered-output timeout fallback.
+ *     read awaits the next turn and returns the reply the agent's plugin reported.
  *
  * Phase 1 surface: tile.spawn_agent, agent.send, agent.read. (tile.list/focus/
  * close, agent.status/stream, review.open, issue.* land in later phases.)
  */
 import { randomUUID } from "node:crypto";
+import { keyBytes, KEY_GAP_MS } from "../../shared/keys.js";
 import { HcpError } from "./protocol.js";
 import type { TurnTracker } from "./turn-tracker.js";
 import type { OutputRecorder } from "./output-recorder.js";
-import { readLastAssistantMessage } from "./transcript.js";
 import { toPtyId as ptyId, toBareId as bareOf } from "../../shared/tile-id.js";
 import { setName, labelOf } from "./names.js";
-import { agentById, agentOption, spawnableAgents, workerAgents, type AgentProviderDef } from "@hivemind/agents";
+import { agentById, agentOption, cleanName, isSessionId, spawnableAgents, workerAgents, type AgentProviderDef } from "@hivemind/agents";
+import { canListSessions, listSessions } from "@hivemind/agents/node";
 import { BROWSER_TOOL_ID, tileKindAvailability } from "@hivemind/core/tool-plugins";
 import type { ToolsSettings } from "@hivemind/core/settings-schema";
 import { SUBMIT_DELAY_MS } from "../../shared/agent-io.js";
+import { customDataProblem, isCustomEventName } from "@hivemind/view-sdk/protocol";
+
+/** `view.emit` rate: a steady 10 per second, bursts of 30. */
+export const EMIT_RATE = { perSecond: 10, burst: 30 };
+
+/** Validate `view.emit` params; throws BAD_REQUEST with the reason. */
+export function parseEmit(p: Record<string, unknown>): { name: string; data: unknown; view?: string; from: "shell" | { tileId: string } } {
+  if (!isCustomEventName(p.name)) throw new HcpError("BAD_REQUEST", "name must be dotted lowercase words (a-z, 0-9, -), at most 64 characters, not under hive. or hm.");
+  const data = p.data === undefined ? null : p.data;
+  const problem = customDataProblem(data);
+  if (problem) throw new HcpError("BAD_REQUEST", problem);
+  if (p.view !== undefined && (typeof p.view !== "string" || p.view.length === 0 || p.view.length > 256)) throw new HcpError("BAD_REQUEST", "view must be a view id");
+  const caller = typeof p.callerTile === "string" && p.callerTile ? bareOf(p.callerTile) : null;
+  return { name: p.name, data, ...(p.view ? { view: p.view as string } : {}), from: caller ? { tileId: caller } : "shell" };
+}
+
+/** A token bucket: `take()` is false once the burst is spent until it refills. */
+export function tokenBucket(rate: { perSecond: number; burst: number }, now: () => number = () => Date.now()) {
+  let tokens = rate.burst;
+  let last = now();
+  return {
+    take(): boolean {
+      const t = now();
+      tokens = Math.min(rate.burst, tokens + ((t - last) / 1000) * rate.perSecond);
+      last = t;
+      if (tokens < 1) return false;
+      tokens -= 1;
+      return true;
+    },
+  };
+}
 
 /** Max agent-spawn depth (user = 0). Bounds recursive agent-spawns-agent fan-out
  *  alongside the rate cap — the review flagged this gate as specified-but-unenforced. */
@@ -50,33 +81,8 @@ const WORKFLOW_MAX_CONCURRENCY = 12;
 const WORKFLOW_SPAWN_RETRY_MS = 1500;
 const WORKFLOW_SPAWN_RETRIES = 6;
 
-/** Symbolic key → terminal bytes, for driving a worker's TUI (e.g. answering a
- *  native AskUserQuestion picker). A raw ESC byte can't be expressed through a
- *  plain-text param from a tool call, so agent.send_keys maps tokens here; any
- *  unknown token is sent as literal text (so digits / words type themselves). */
-const KEYMAP: Record<string, string> = {
-  up: "\x1b[A", down: "\x1b[B", right: "\x1b[C", left: "\x1b[D",
-  enter: "\r", return: "\r", esc: "\x1b", escape: "\x1b",
-  tab: "\t", space: " ", backspace: "\x7f", del: "\x1b[3~", delete: "\x1b[3~",
-  home: "\x1b[H", end: "\x1b[F", pageup: "\x1b[5~", pagedown: "\x1b[6~",
-};
-/** Gap between successive keys, so a TUI registers each (e.g. arrow THEN enter)
- *  rather than processing a bundled write at once — mirrors SUBMIT_DELAY_MS. */
-const KEY_GAP_MS = 40;
 
-/** Tools where a plain `allow` is remembered for the rest of that worker's life
- *  (see `agent.approve`). File-touching tools only — approving them one call at a
- *  time is pure friction. Bash is deliberately ABSENT: each command is a distinct
- *  action, so a cached allow there would be a blanket shell. Names are lowercased
- *  before lookup — claude says "Edit"/"Write", pi says "edit"/"write". */
-const STICKY_ALLOW = new Set(["edit", "write", "read", "multiedit", "notebookedit", "webfetch"]);
 
-/** Whether a plain `allow` on this approveCache key (`<worker>:<tool>`) should be
- *  remembered. The worker id contains no ":" (it's `tile-<kind>-<ts>`), so the tool
- *  is the last segment; case is normalized (claude "Edit" vs pi "edit"). */
-export function stickyAllow(cacheKey: string): boolean {
-  return STICKY_ALLOW.has((cacheKey.split(":").pop() ?? "").toLowerCase());
-}
 
 /** Whether a provider can be supervised is declared in its catalog def
  *  (`caps.supervise`). A runtime with no permission system of its own has
@@ -156,7 +162,8 @@ export interface MethodDeps {
   setSupervise: (tileId: string, spec: string | null) => void;
   /** Push a control-plane "wait" status for a tile (e.g. "awaiting_approval")
    *  to the renderer's status bus, or null to clear. */
-  pushWait: (tileId: string, status: string | null) => void;
+  /** A supervised worker waits on its supervisor (true) or no longer does (false). */
+  awaitingApproval: (tileId: string, waiting: boolean) => void;
 }
 
 const RENDERER_TIMEOUT = 15_000;
@@ -179,6 +186,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
   // Per-tile read epoch: set at spawn/send so agent.read waits for the turn that
   // FOLLOWS the prompt we just delivered (not a stale earlier turn).
   const sendSeq = new Map<string, number>();
+  const emitBucket = tokenBucket(EMIT_RATE);
   const sendMark = new Map<string, number>();
 
   // Bare↔pty id mapping lives in shared/tile-id (imported as ptyId/bareOf). The
@@ -236,7 +244,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
   // workflow workers pass report:false and gather via waitForTurn instead.
   const doSpawn = async (opts: {
     agent?: unknown; prompt?: unknown; frame?: unknown; mode?: unknown; model?: unknown;
-    callerTile?: unknown; report?: unknown; supervise?: unknown; name?: unknown;
+    callerTile?: unknown; report?: unknown; supervise?: unknown; name?: unknown; resume?: unknown;
   }): Promise<string> => {
     const callerDepth = opts.callerTile ? (depthOf.get(bareOf(String(opts.callerTile))) ?? 0) : 0;
     const childDepth = callerDepth + 1;
@@ -278,16 +286,21 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     // mode — unless the caller chose one, or it is supervised (its broker hook
     // only fires while permissions are not skipped).
     const mode = opts.mode != null ? opts.mode : sup ? undefined : agentOption(def, "mode")?.unattended;
+    const resume = opts.resume != null ? String(opts.resume) : undefined;
+    if (resume !== undefined) {
+      if (!def.session?.resume) throw new HcpError("UNSUPPORTED", `${def.label} cannot resume a session`);
+      if (!isSessionId(resume)) throw new HcpError("BAD_REQUEST", "resume must be a session id");
+    }
     // A spawner-chosen display name ("reviewer", "test-writer") — becomes the tile
-    // label and tags every message this worker sends back. Bounded so a worker
-    // can't smuggle a whole paragraph (or ANSI) into the parent's terminal banner.
-    const name = typeof opts.name === "string" ? opts.name.replace(/[\p{C}]/gu, "").trim().slice(0, 40) : "";
+    // name and tags every message this worker sends back. One printable line, capped like every
+    // name, so a worker can't smuggle a paragraph (or ANSI) into the parent's terminal banner.
+    const name = typeof opts.name === "string" ? cleanName(opts.name) : "";
     const res = (await deps.callRenderer(
       "tile.spawn_agent",
       // `background` = a silent worker (report:false → gathered in bulk, e.g. a
       // workflow worker). The renderer uses it to NOT steal focus / center the
       // viewport on spawn and to suppress the per-worker "finished" notification.
-      { agent, prompt: opts.prompt, frame: opts.frame, mode, model: opts.model, callerTile: opts.callerTile, background: opts.report === false, name: name || undefined },
+      { agent, prompt: opts.prompt, frame: opts.frame, mode, model: opts.model, callerTile: opts.callerTile, background: opts.report === false, name: name || undefined, resume },
       RENDERER_TIMEOUT,
     )) as { tileId?: string };
     if (!res?.tileId) throw new HcpError("INTERNAL", "spawn returned no tileId");
@@ -340,7 +353,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       }
     }
     for (const key of approveCache.keys()) if (key.startsWith(`${bare}:`)) approveCache.delete(key);
-    deps.pushWait(bare, null);
+    deps.awaitingApproval(bare, false);
   };
 
   // Close a tile: ask the renderer to remove it, then drop its state. Shared by the
@@ -361,9 +374,18 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         // armed so a follow-up agent.read waits for THIS agent's first turn.
         const tileId = await doSpawn({
           agent: p.agent, name: p.name, prompt: p.prompt, frame: p.frame, mode: p.mode, model: p.model,
-          callerTile: p.callerTile, report: p.report, supervise: p.supervise,
+          callerTile: p.callerTile, report: p.report, supervise: p.supervise, resume: p.resume,
         });
         return { tileId };
+      }
+
+      case "agent.sessions": {
+        const def = agentById(String(p.agent ?? ""));
+        if (!def) throw new HcpError("BAD_REQUEST", `unknown agent '${String(p.agent ?? "")}'`);
+        if (!canListSessions(def)) throw new HcpError("UNSUPPORTED", `${def.label} does not say where its sessions are, so they cannot be listed`);
+        const limit = typeof p.limit === "number" && p.limit > 0 ? Math.min(p.limit, 500) : undefined;
+        const sessions = await listSessions(def, { ...(typeof p.cwd === "string" ? { cwd: p.cwd } : {}), ...(limit ? { limit } : {}) });
+        return { agent: def.id, resumable: !!def.session?.resume, sessions };
       }
 
       case "agent.send": {
@@ -403,7 +425,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         if (!keys.length) throw new HcpError("BAD_REQUEST", "keys required");
         const pid = ptyId(tileId);
         armRead(tileId); // keys can submit a prompt; a following read wants the turn they cause
-        const bytesOf = (k: string) => KEYMAP[k.toLowerCase()] ?? k;
+        const bytesOf = keyBytes;
         const ok = deps.writeToTile(pid, bytesOf(keys[0]!));
         if (!ok) throw new HcpError("TILE_NOT_FOUND", `no live agent for tile ${tileId}`);
         for (let i = 1; i < keys.length; i++) {
@@ -436,6 +458,15 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         return { delivered: true, parent };
       }
 
+      case "agent.reply": {
+        // The agent's plugin hands over this turn's reply before it reports the turn end.
+        const tileId = String(p.tileId ?? "");
+        const text = typeof p.text === "string" ? p.text : "";
+        if (!tileId || !text) throw new HcpError("BAD_REQUEST", "tileId and text required");
+        deps.turns.recordReply(ptyId(tileId), text);
+        return { ok: true };
+      }
+
       case "agent.await_approval": {
         // Called by a SUPERVISED worker's PreToolUse broker hook before a tool
         // runs. Resolve from the remember-cache, else ask the parent and BLOCK
@@ -453,15 +484,15 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         const summary = summarizeTool(tool, inp);
         const banner =
           `\n[hive] APPROVAL — worker ${labelOf(worker)} wants to run ${tool}: ${summary}\n` +
-          `Reply: hive ctl approve ${reqId} allow|deny|always|never\n`;
+          `Reply: hive ctl approve ${reqId} allow|deny|always|never  (allow = this call; always = this tool, for this worker)\n`;
         // Surface the pause in the UI: this worker is now waiting on its parent.
-        deps.pushWait(worker, "awaiting_approval");
+        deps.awaitingApproval(worker, true);
         return await new Promise((resolve) => {
           const done = (decision: "ask") => {
             const pend = pendingApprovals.get(reqId);
             if (pend) clearTimeout(pend.timer);
             pendingApprovals.delete(reqId);
-            deps.pushWait(worker, null);
+            deps.awaitingApproval(worker, false);
             resolve({ decision }); // no answer → "ask" (claude: human prompt; pi: blocks)
           };
           // Two timers, never both live. Until the banner is DELIVERED, only the
@@ -502,19 +533,9 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         else throw new HcpError("BAD_REQUEST", "decision must be allow | deny | always | never");
         if (decision === "always") approveCache.set(pend.cacheKey, "allow");
         if (decision === "never") approveCache.set(pend.cacheKey, "deny");
-        // A plain `allow` STICKS for the file-touching tools. Approving "edit" once
-        // and then being re-asked on every subsequent edit stalls the worker ~9min
-        // per file and burns a parent turn each time — the supervisor ends up
-        // rubber-stamping, which is worse than not supervising at all.
-        // BASH IS EXEMPT: every command is a different action ("ls" ≠ "rm -rf /"),
-        // so caching an allow there would hand the worker a blanket shell. Bash
-        // (and anything else) still re-asks unless the parent says `always`.
-        if (decision === "allow" && stickyAllow(pend.cacheKey)) {
-          approveCache.set(pend.cacheKey, "allow");
-        }
         clearTimeout(pend.timer);
         pendingApprovals.delete(reqId);
-        deps.pushWait(pend.worker, null); // resolved → clear the "waiting" status
+        deps.awaitingApproval(pend.worker, false); // resolved → clear the "waiting" status
         pend.resolve({ decision: d, reason });
         return { ok: true, decision: d };
       }
@@ -542,25 +563,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         // Consume this turn: without advancing the epoch the NEXT read returns the same
         // turn instantly, so a poll loop can never tell a new answer from the old one.
         if (rec) sendSeq.set(pid, rec.seq);
-        if (rec && typeof rec.text === "string" && rec.text.length > 0) {
-          // pi inline-reply path: pi has no transcript file — its lifecycle-bridge
-          // extension carries the finished reply on the turn event itself.
-          return { text: rec.text, finalStatus: "turn", truncated: false };
-        }
-        if (rec?.transcriptPath) {
-          // Clean reply from the session transcript JSONL (NOT screen-scrape).
-          // The Stop hook can fire a beat before the assistant's final message is
-          // flushed to the transcript file, so a first read returns null on a
-          // genuinely-completed turn (the observed `text:null` + finalStatus:turn).
-          // Retry a few times over ~0.5s to let the flush land before giving up.
-          let text = readLastAssistantMessage(rec.transcriptPath);
-          for (let i = 0; text == null && i < 4; i++) {
-            await new Promise<void>((r) => { const t = setTimeout(r, 130); t.unref?.(); });
-            text = readLastAssistantMessage(rec.transcriptPath);
-          }
-          if (text != null) return { text, finalStatus: "turn", truncated: false };
-          return { text: null, finalStatus: "turn", truncated: false, note: "turn completed but its transcript was unreadable" };
-        }
+        if (rec && typeof rec.text === "string" && rec.text.length > 0) return { text: rec.text, finalStatus: "turn", truncated: false };
         if (rec) return { text: null, finalStatus: "turn", truncated: false, note: "turn completed but carried no readable reply" };
         // No completed turn within the timeout. Report status honestly instead of
         // scraping the raw ANSI terminal buffer (which returned garbled bytes, not
@@ -573,7 +576,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         // Multi-agent orchestration. Fan a list of items out to visible worker
         // tiles (or chain them as a pipeline), await each worker's turn
         // deterministically via the turn-tracker (NOT screen-scrape), and return
-        // the aggregated transcript replies. Workers are spawned report:false —
+        // the aggregated replies. Workers are spawned report:false —
         // the workflow gathers them itself, so their replies don't also spam the
         // orchestrator's terminal. The orchestrator's `hive ctl workflow` call blocks until
         // this returns (`hive ctl workflow` blocks with a matching client ceiling).
@@ -598,7 +601,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         const fill = (tmpl: string, item: string) => tmpl.replace(/\{item\}/g, item);
 
         // Spawn one worker (retrying through transient rate-limits), await its
-        // turn, read the clean transcript reply. Returns a per-worker result.
+        // turn, take its reply. Returns a per-worker result.
         type WR = { item: string; tileId: string | null; status: "turn" | "timeout" | "error"; text: string | null };
         const runWorker = async (label: string, prompt: string): Promise<WR> => {
           let tileId: string;
@@ -610,11 +613,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
           const pid = ptyId(tileId);
           const afterSeq = sendSeq.get(pid) ?? deps.turns.currentSeq(pid);
           const rec = await deps.turns.waitForTurn(pid, afterSeq, perTurnMs);
-          // Same two carriers agent.read handles: an inline reply (pi's bridge sends the
-          // text on the turn event) or a transcript path (claude/droid).
-          const text = rec?.text && rec.text.length > 0
-            ? rec.text
-            : rec?.transcriptPath ? readLastAssistantMessage(rec.transcriptPath) : null;
+          const text = rec?.text && rec.text.length > 0 ? rec.text : null;
           const status: WR["status"] = !rec ? "timeout" : rec.seq === -1 ? "error" : "turn";
           if (closeWhenDone && status === "turn") { try { await closeTile(tileId); } catch { /* best-effort */ } }
           return { item: label, tileId, status, text };
@@ -701,6 +700,12 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       // up without a restart (the renderer re-reads both roots and updates
       // its registry — the switcher and ⌘E order follow, an active view that
       // vanished falls back to the canvas).
+      // `hive ctl view emit`: a named JSON event for the active view (protocol 1.3).
+      case "view.emit": {
+        const ev = parseEmit(p as Record<string, unknown>);
+        if (!emitBucket.take()) throw new HcpError("RATE_LIMITED", `at most ${EMIT_RATE.perSecond} view events a second`);
+        return await deps.callRenderer("view.emit", ev, RENDERER_TIMEOUT);
+      }
       case "views.rescan":
         return await deps.callRenderer("views.rescan", {}, RENDERER_TIMEOUT);
       // `hive agents install|remove` calls this so a running app picks the change

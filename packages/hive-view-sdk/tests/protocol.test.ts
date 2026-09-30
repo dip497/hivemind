@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { LAYOUT_MAX_BYTES, MAX_SURFACE_RECTS, NAME_MAX, PROMPT_MAX, parseHostMessage, parsePluginMessage } from "../src/protocol.js";
+import {
+  ACTIVITY_MAX_TILES, CUSTOM_DATA_MAX_BYTES, LAYOUT_MAX_BYTES, MAX_SURFACE_RECTS, NAME_MAX, PROMPT_MAX, SHARE_MAX_BYTES,
+  customDataProblem, customNameMatches, isCustomEventName, isDay, parseHostMessage, parsePluginMessage, promptProblem,
+} from "../src/protocol.js";
 import { validateViewManifest, viewHost } from "../src/manifest.js";
 
 describe("parsePluginMessage", () => {
@@ -87,6 +90,81 @@ describe("parseHostMessage", () => {
   });
 });
 
+describe("protocol 1.3", () => {
+  test("accepts the new plugin messages", () => {
+    const ok = [
+      { type: "subscribeEvents", kinds: ["turn", "custom"], custom: ["ci.build", "git.*"], replaySince: 0 },
+      { type: "subscribeEvents", kinds: [] },
+      { type: "unsubscribeEvents" },
+      { type: "watchActivity", tileIds: ["t1", "t2"] },
+      { type: "watchActivity", tileIds: [] },
+      { type: "subscribePresence" },
+      { type: "unsubscribePresence" },
+      { type: "request", requestId: 1, name: "history", args: [{ day: "2026-09-23" }] },
+      { type: "request", requestId: 2, name: "share", args: [{ png: new ArrayBuffer(8), suggestedName: "review-card" }] },
+    ];
+    for (const m of ok) expect(parsePluginMessage(m).ok, JSON.stringify(m)).toBe(true);
+  });
+
+  test("refuses malformed 1.3 messages", () => {
+    const bad: unknown[] = [
+      { type: "subscribeEvents", kinds: ["status"] },
+      { type: "subscribeEvents", kinds: ["custom"], custom: ["Bad Name"] },
+      { type: "subscribeEvents", kinds: ["custom"], custom: Array.from({ length: 33 }, (_, i) => `n${i}`) },
+      { type: "subscribeEvents", kinds: ["turn"], replaySince: "yesterday" },
+      { type: "watchActivity", tileIds: Array.from({ length: ACTIVITY_MAX_TILES + 1 }, (_, i) => `t${i}`) },
+      { type: "watchActivity", tileIds: [""] },
+      { type: "request", requestId: 1, name: "history", args: [{ day: "2026-02-30" }] },
+      { type: "request", requestId: 1, name: "history", args: [] },
+      { type: "request", requestId: 1, name: "agentRead", args: [{}] },
+      { type: "request", requestId: 1, name: "share", args: [{ png: "data:image/png;base64,AAAA" }] },
+      { type: "request", requestId: 1, name: "share", args: [{ png: new ArrayBuffer(SHARE_MAX_BYTES + 1) }] },
+      { type: "request", requestId: 1, name: "share", args: [{ png: new ArrayBuffer(8), suggestedName: "../../x" }] },
+    ];
+    for (const m of bad) expect(parsePluginMessage(m).ok, JSON.stringify(m)?.slice(0, 80)).toBe(false);
+  });
+
+  test("de-duplicates subscription lists", () => {
+    const r = parsePluginMessage({ type: "subscribeEvents", kinds: ["turn", "turn"], custom: ["a", "a"] });
+    expect(r.ok && r.msg).toEqual({ type: "subscribeEvents", kinds: ["turn"], custom: ["a"] });
+  });
+
+  test("host messages: status carries since, and the new streams validate their shape", () => {
+    expect(parseHostMessage({ type: "status", tileId: "t", status: "blocked", since: 5, exact: false }).ok).toBe(true);
+    expect(parseHostMessage({ type: "status", tileId: "t", status: "blocked", since: "5" }).ok).toBe(false);
+    expect(parseHostMessage({ type: "events", events: [{ kind: "turn", seq: 1, at: 1, tileId: "t" }] }).ok).toBe(true);
+    expect(parseHostMessage({ type: "events", events: [{ kind: "stdout", at: 1 }] }).ok).toBe(false);
+    expect(parseHostMessage({ type: "activity", levels: { t: 3 } }).ok).toBe(true);
+    expect(parseHostMessage({ type: "activity", levels: { t: 1024 } }).ok).toBe(false);
+    expect(parseHostMessage({ type: "presence", presence: { state: "away", since: 1, focused: false } }).ok).toBe(true);
+    expect(parseHostMessage({ type: "response", requestId: 1, ok: false, error: { code: "BUSY", message: "" } }).ok).toBe(true);
+    expect(parseHostMessage({ type: "response", requestId: 1, ok: false }).ok).toBe(false);
+  });
+
+  test("custom event names, patterns and payloads", () => {
+    for (const n of ["ci", "ci.build", "deploy-prod.done", "a1.b2"]) expect(isCustomEventName(n), n).toBe(true);
+    for (const n of ["", "CI", "ci.", ".ci", "ci..b", "1ci", "hive.x", "hm.x", "x".repeat(65), 5]) expect(isCustomEventName(n), String(n)).toBe(false);
+    expect(customNameMatches(["ci.*"], "ci.build")).toBe(true);
+    expect(customNameMatches(["ci.*"], "cix.build")).toBe(false);
+    expect(customNameMatches(["ci"], "ci.build")).toBe(false);
+    expect(customDataProblem({ state: "failed", n: [1, 2] })).toBeNull();
+    expect(customDataProblem(null)).toBeNull();
+    expect(customDataProblem({ n: Infinity })).toMatch(/plain JSON/);
+    expect(customDataProblem({ d: new Date() })).toMatch(/plain JSON/);
+    expect(customDataProblem("x".repeat(CUSTOM_DATA_MAX_BYTES))).toMatch(/exceeds/);
+    let deep: unknown = 1;
+    for (let i = 0; i < 9; i++) deep = [deep];
+    expect(customDataProblem(deep)).toMatch(/deeper/);
+  });
+
+  test("isDay is a real calendar date", () => {
+    expect(isDay("2026-09-23")).toBe(true);
+    expect(isDay("2024-02-29")).toBe(true);
+    expect(isDay("2026-02-29")).toBe(false);
+    expect(isDay("2026-9-23")).toBe(false);
+  });
+});
+
 describe("validateViewManifest", () => {
   const good = { id: "orbit", name: "Orbit", version: "0.1.0", entry: "index.html", permissions: [] };
   test("accepts a minimal manifest and fills defaults", () => {
@@ -133,5 +211,38 @@ describe("validateViewManifest", () => {
   test("known permissions are kept, de-duplicated", () => {
     const r = validateViewManifest({ ...good, permissions: ["workspace:close", "workspace:close"] });
     expect(r.ok && r.manifest.permissions).toEqual(["workspace:close"]);
+  });
+});
+
+describe("protocol 1.4", () => {
+  test("a prompt a view wrote: text only, no keystrokes, nothing hidden", () => {
+    expect(promptProblem("run the tests\n\tthen report")).toBeNull();
+    for (const bad of ["", "   ", "ok\r", "a\u001b[2Jb", "x\u0085", "safe\u202eevil", "zero\u200bwidth", "x".repeat(PROMPT_MAX + 1), 42]) {
+      expect(promptProblem(bad)).not.toBeNull();
+    }
+  });
+
+  test("requests: agents, sessions, prompt; spawnAgent carries a checked resume and prompt", () => {
+    expect(parsePluginMessage({ type: "request", requestId: 1, name: "agents", args: [{}] }).ok).toBe(true);
+    expect(parsePluginMessage({ type: "request", requestId: 2, name: "sessions", args: [{ agent: "claude", frameId: "f1" }] }).ok).toBe(true);
+    expect(parsePluginMessage({ type: "request", requestId: 3, name: "sessions", args: [{ agent: "claude" }] }).ok).toBe(false);
+    expect(parsePluginMessage({ type: "request", requestId: 4, name: "prompt", args: [{ tileId: "t1", text: "go" }] }).ok).toBe(true);
+    expect(parsePluginMessage({ type: "request", requestId: 5, name: "prompt", args: [{ tileId: "t1", text: "go\r" }] }).ok).toBe(false);
+    const spawn = (o: unknown) => parsePluginMessage({ type: "command", name: "spawnAgent", args: ["claude", "f1", o] }).ok;
+    expect(spawn({ resume: "0d3c2a10-1111-4222-8333-444455556666" })).toBe(true);
+    expect(spawn({ resume: "../etc" })).toBe(false);
+    expect(spawn({ resume: "--help" })).toBe(false);
+    expect(spawn({ prompt: "a\u001bb" })).toBe(false);
+  });
+
+  test("a status may carry the agent's own; a malformed one is refused", () => {
+    const agent = { state: "waiting", waitingFor: "question", subagents: 2, background: 0, compacting: false, source: "hooks" };
+    expect(parseHostMessage({ type: "status", tileId: "t1", status: "blocked", agent }).ok).toBe(true);
+    expect(parseHostMessage({ type: "status", tileId: "t1", status: "blocked", agent: { state: "thinking", subagents: 0 } }).ok).toBe(false);
+  });
+
+  test("manifests may ask for the 1.4 permissions", () => {
+    const m = { id: "board", name: "Board", version: "1.0.0", entry: "main.js", protocol: 1, permissions: ["workspace:prompt", "workspace:sessions"] };
+    expect(validateViewManifest(m).ok).toBe(true);
   });
 });

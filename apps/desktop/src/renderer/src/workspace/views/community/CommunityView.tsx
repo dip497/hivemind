@@ -26,6 +26,14 @@ import { ACCENTS, effectiveGlass, getTheme, useSurfacePolicy } from "../../../th
 import { loadViewLayout, saveViewLayout, type ViewLayoutSpec } from "../../view-layout-store";
 import { cssColorToHexString } from "../../css-color";
 import { CommunityLink } from "./host-link";
+import { ShareDialog, type ShareChoice } from "./ShareDialog";
+import { PromptDialog, type PromptAsk } from "./PromptDialog";
+import { isRemote } from "../../../../../shared/remote-uri";
+import { agentById as catalogAgentById, defaultAgent } from "@hivemind/agents";
+import { AGENT_TILE_KIND } from "../../../tile-kinds";
+import { viewLinkServices } from "../../view-services";
+import type { SharePrepared } from "../../../../../shared/ipc";
+import type { ShareOutcome } from "@hivemind/view-sdk/protocol";
 import { disableCommunityView } from "./registry";
 import { edgeBandClip } from "./edge-band";
 
@@ -58,7 +66,7 @@ function readTheme(): ViewTheme {
 
 /** Plugin layout blobs are opaque to the host: `{ v: 1, data: <whatever the plugin sent> }`. */
 function layoutSpec(pluginId: string): ViewLayoutSpec<unknown> {
-  return { viewId: pluginId, version: 1, initial: () => null, migrate: () => null };
+  return { viewId: pluginId, version: 1, initial: () => null };
 }
 
 /** The host for one package. Rendered through the lazy wrapper in registry.ts
@@ -91,6 +99,10 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
     tilesRef.current = tiles;
     const framesRef = useRef(frames);
     framesRef.current = frames;
+    const layerTilesRef = useRef(layerTiles);
+    layerTilesRef.current = layerTiles;
+    const repoRef = useRef(model.repoPath);
+    repoRef.current = model.repoPath;
 
     // ── the link: created once per mount, attached when the iframe loads ─────
     // Plugin messages arrive one task each, so "selectTile(null)" + "rects: []"
@@ -112,6 +124,33 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
       });
     };
     useEffect(() => () => { if (batchRaf.current) cancelAnimationFrame(batchRaf.current); }, []);
+    const layoutKeyRef = useRef(layoutKey);
+    layoutKeyRef.current = layoutKey;
+    // A share waits here for the user's choice in the host dialog.
+    const [shareImage, setShareImage] = useState<SharePrepared | null>(null);
+    const shareAnswer = useRef<((c: ShareChoice) => void) | null>(null);
+    const share = async (png: ArrayBuffer, suggestedName?: string): Promise<ShareOutcome> => {
+      const prepared = await window.hive.viewSharePrepare(png);
+      const choice = await new Promise<ShareChoice>((resolve) => { shareAnswer.current = resolve; setShareImage(prepared); });
+      shareAnswer.current = null;
+      setShareImage(null);
+      return window.hive.viewShareCommit(prepared.token, choice, suggestedName ?? manifest.name);
+    };
+    // A prompt the view wrote waits here for the user to read it and send or cancel it.
+    const [promptAsk, setPromptAsk] = useState<PromptAsk | null>(null);
+    const promptAnswer = useRef<((send: boolean) => void) | null>(null);
+    const confirmPrompt = async (req: { agent: string | null; tileId?: string; frameId: string | null; text: string }): Promise<boolean> => {
+      const tile = req.tileId ? layerTilesRef.current.find((t) => t.id === req.tileId) : undefined;
+      const frameId = tile?.frameId ?? req.frameId;
+      const frame = frameId ? framesRef.current.find((f) => f.id === frameId) : undefined;
+      const agentId = tile?.agent ?? req.agent;
+      const agent = (agentId ? catalogAgentById(agentId) : defaultAgent())?.label ?? "an agent";
+      const where = tile ? `To the tile “${tile.name}”` : `A new ${agent} tile${frame ? ` in “${frame.title}”` : ""}`;
+      const send = await new Promise<boolean>((resolve) => { promptAnswer.current = resolve; setPromptAsk({ viewName: manifest.name, agent, where, text: req.text }); });
+      promptAnswer.current = null;
+      setPromptAsk(null);
+      return send;
+    };
     const link = useMemo(() => new CommunityLink({
       pluginId: pkg.id,
       capabilities,
@@ -120,6 +159,8 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
           const name = k as keyof WorkspaceViewProps["commands"];
           // Status subscriptions are not state changes — keep them immediate.
           if (name === "subscribeTileStatus" || name === "tileStatus") return commandsRef.current[name];
+          // Its answer (was the agent found?) is what the link checks, so it cannot wait for the batch.
+          if (name === "spawnAgent") return (...args: Parameters<WorkspaceViewProps["commands"]["spawnAgent"]>) => commandsRef.current.spawnAgent(...args);
           return (...args: unknown[]) => enqueue(() => (commandsRef.current[name] as (...a: unknown[]) => void)(...args));
         },
       }),
@@ -130,6 +171,18 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
       onLayout: (data) => saveViewLayout(layoutSpec(pkg.id), layoutKey, data),
       onFramesDrawn: () => { /* read from stats by the test seam / perf harness */ },
       onError: (message) => console.warn(`[hivemind] view "${pkg.id}": ${message}`),
+      services: viewLinkServices({
+        layoutKey: () => layoutKeyRef.current,
+        share,
+        frameFolder: (frameId) => {
+          const f = framesRef.current.find((x) => x.id === frameId);
+          // Same rule as a tile's working directory: the frame's own folder, else the workspace's.
+          const folder = f ? f.worktreePath ?? f.workspacePath ?? repoRef.current : null;
+          return folder && !isRemote(folder) ? folder : null;
+        },
+        isAgentTile: (tileId) => tilesRef.current.some((t) => t.id === tileId && t.kind === AGENT_TILE_KIND),
+        confirmPrompt,
+      }),
       onDisable: (reason) => {
         toast.error(`The ${manifest.name} view was disabled: ${reason}. Switched back to Canvas — your tiles are untouched.`);
         disableCommunityView(pkg.id, reason);
@@ -137,7 +190,7 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }), []);
     linkRef.current = link;
-    useEffect(() => () => link.dispose(), [link]);
+    useEffect(() => () => { shareAnswer.current?.("cancel"); promptAnswer.current?.(false); link.dispose(); }, [link]);
 
     const onLoad = useCallback(() => {
       const win = iframeRef.current?.contentWindow;
@@ -160,7 +213,7 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
       send({
         type: "hello", v: PROTOCOL_VERSION, pluginId: pkg.id, capabilities,
         theme: readTheme(), layout: loadViewLayout(layoutSpec(pkg.id), layoutKey),
-        viewport: box(), visible: !document.hidden,
+        viewport: box(), visible: !document.hidden, features: link.features,
       });
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [ready]);
@@ -227,7 +280,7 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
       if (!el) return;
       const ro = new ResizeObserver(() => { if (linkRef.current?.stats.ready) send({ type: "resize", ...box() }); });
       ro.observe(el);
-      const onVis = () => send({ type: "visibility", visible: !document.hidden });
+      const onVis = () => { linkRef.current?.setVisible(!document.hidden); send({ type: "visibility", visible: !document.hidden }); };
       document.addEventListener("visibilitychange", onVis);
       // Any appearance change (a preset from Settings, `hive theme use`, a
       // slider) lands on <html>'s style/class; coalesce to one theme message.
@@ -324,6 +377,8 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
             </div>
           ))}
         </div>
+        <ShareDialog viewName={manifest.name} image={shareImage} onChoose={(c) => shareAnswer.current?.(c)} />
+        <PromptDialog ask={promptAsk} onChoose={(send) => promptAnswer.current?.(send)} />
         {!ready && (
           <div className="pointer-events-none absolute inset-0 grid place-items-center text-[12px] text-[var(--color-fg3)]">
             Loading {manifest.name}…

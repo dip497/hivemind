@@ -7,7 +7,7 @@ import net from "node:net";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { frame, makeLineDecoder, type ServerMsg } from "../../src/main/pty-protocol.ts";
+import { frame, makeLineDecoder, type ServerMsg } from "@hivemind/agent-host/pty-protocol";
 
 const unix = process.platform !== "win32";
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -21,25 +21,25 @@ async function startDaemon(standalone: boolean) {
   dirs.push(dir);
   const sock = path.join(dir, "d.sock");
   const env = { ...process.env, ...(standalone ? { HIVEMIND_DAEMON_STANDALONE: "1" } : {}) };
-  daemons.push(spawn(process.execPath, ["--import", "tsx", path.join(here, "../../src/main/pty-daemon.ts"), sock], { stdio: "ignore", env }));
+  daemons.push(spawn(process.execPath, ["--import", "tsx", path.join(here, "../../../../packages/agent-host/src/pty-daemon.ts"), sock], { stdio: "ignore", env }));
   for (let i = 0; i < 100 && !fs.existsSync(sock); i++) await wait(100);
   await wait(300);
   return { dir, sock, hcp: path.join(dir, "hcp.sock") };
 }
 
-/** One line to the control-plane socket, as a hook does; resolves with the reply line if any. */
-function hook(hcp: string, msg: unknown, awaitReply = false): Promise<string> {
+/** Lines to the control-plane socket, as a hook does; resolves with what came back once `replies` lines have. */
+function hook(hcp: string, msg: unknown, awaitReply = false, replies = 1): Promise<string> {
   return new Promise((resolve, reject) => {
     const c = net.connect(hcp);
     let got = "";
     c.on("error", reject);
-    c.on("data", (d) => { got += d; });
+    c.on("data", (d) => { got += d; if (got.split("\n").length > replies) c.end(); });
     c.on("close", () => resolve(got));
-    c.on("connect", () => { c.write(`${JSON.stringify(msg)}\n`); if (!awaitReply) c.end(); });
+    c.on("connect", () => { c.write((Array.isArray(msg) ? msg : [msg]).map((m) => `${JSON.stringify(m)}\n`).join("")); if (!awaitReply) c.end(); });
   });
 }
 
-test("standalone: hook events reach event viewers, requests are refused at once, pushes are sent and throttled", { skip: !unix, timeout: 60000 }, async () => {
+test("standalone: hook events reach event viewers, requests are answered at once, pushes are sent and throttled", { skip: !unix, timeout: 60000 }, async () => {
   const pushes: { body: string; title?: string }[] = [];
   const srv = http.createServer((req, res) => {
     let body = "";
@@ -50,7 +50,8 @@ test("standalone: hook events reach event viewers, requests are refused at once,
   const port = (srv.address() as net.AddressInfo).port;
 
   const d = await startDaemon(true);
-  fs.writeFileSync(path.join(d.dir, "push.json"), JSON.stringify({ url: `http://127.0.0.1:${port}/t`, events: ["notification"] }));
+  fs.writeFileSync(path.join(d.dir, "push.json"), JSON.stringify({ url: `http://127.0.0.1:${port}/t`, events: ["input.requested"] }));
+  const token = fs.readFileSync(path.join(d.dir, "hcp.token"), "utf8").trim();
   const viewer = net.connect(d.sock);
   const events: ServerMsg[] = [];
   viewer.on("data", makeLineDecoder((l) => { const m = JSON.parse(l) as ServerMsg; if (m.t === "event") events.push(m); }));
@@ -58,24 +59,39 @@ test("standalone: hook events reach event viewers, requests are refused at once,
   viewer.write(frame({ t: "hello", caps: ["events"] }));
   await wait(200);
 
-  await hook(d.hcp, { t: "event", topic: "notification", data: { tileId: "tile-1", notificationType: "permission_prompt" } });
+  const needsYou = { tileId: "tile-1", event: "input.requested", kind: "permission" };
+  await hook(d.hcp, { jsonrpc: "2.0", method: "agent.event", params: needsYou });
   for (let t = 0; t < 5000 && (events.length === 0 || pushes.length === 0); t += 25) await wait(25);
-  assert.deepEqual(events[0], { t: "event", topic: "notification", data: { tileId: "tile-1", notificationType: "permission_prompt" } });
+  assert.deepEqual(events[0], { t: "event", topic: "agent.event", data: needsYou });
   assert.equal(pushes.length, 1);
   assert.match(pushes[0]!.body, /needs your input/);
   assert.match(pushes[0]!.title ?? "", /^hivemind - /);
 
-  await hook(d.hcp, { t: "event", topic: "notification", data: { tileId: "tile-1" } });
-  await hook(d.hcp, { t: "event", topic: "turn", data: { tileId: "tile-1" } });
+  await hook(d.hcp, { jsonrpc: "2.0", method: "agent.event", params: needsYou });
+  await hook(d.hcp, { jsonrpc: "2.0", method: "agent.event", params: { tileId: "tile-1", event: "turn.ended" } });
+  await hook(d.hcp, { jsonrpc: "2.0", method: "agent.event", params: { tileId: "tile-1", event: "not.an.event" } });
   await wait(500);
-  assert.equal(pushes.length, 1, "same session again within the window, and a topic not asked for: no push");
-  assert.equal(events.length, 3, "viewers still get every event");
+  assert.equal(pushes.length, 1, "same session again within the window, and an event not asked for: no push");
+  assert.equal(events.length, 3, "viewers get every valid event, nothing else");
 
+  const init = (id: string) => ({ jsonrpc: "2.0", id: `${id}-init`, method: "initialize", params: { token } });
+  const ask = async (id: string, method: string, params: unknown) => {
+    const got = await hook(d.hcp, [init(id), { jsonrpc: "2.0", id, method, params }], true, 2);
+    return got.trim().split("\n").map((l) => JSON.parse(l)).find((m: { id: string }) => m.id === id);
+  };
   const started = Date.now();
-  const reply = await hook(d.hcp, { t: "req", id: "a1", method: "agent.await_approval", token: "x", params: {} }, true);
+  const approval = await ask("a1", "agent.await_approval", {});
   assert.ok(Date.now() - started < 2000, "an approval request never waits");
-  assert.deepEqual(JSON.parse(reply), { t: "res", id: "a1", ok: false, error: { code: "UNAVAILABLE", message: "no desktop on this machine" } });
+  assert.deepEqual(approval, { jsonrpc: "2.0", id: "a1", error: { code: -32000, message: "no desktop on this machine", data: { code: "UNAVAILABLE" } } });
   assert.equal(fs.statSync(d.hcp).mode & 0o777, 0o600);
+
+  // A reply is answered at once and goes to the desktops watching, never to push.
+  const before = pushes.length;
+  assert.deepEqual(await ask("r1", "agent.reply", { tileId: "tile-1", text: "the reply" }), { jsonrpc: "2.0", id: "r1", result: { ok: true } });
+  for (let t = 0; t < 3000 && !events.some((e) => (e as { topic?: string }).topic === "agent.reply"); t += 25) await wait(25);
+  assert.deepEqual(events.at(-1), { t: "event", topic: "agent.reply", data: { tileId: "tile-1", text: "the reply" } });
+  await wait(200);
+  assert.equal(pushes.length, before);
   viewer.destroy();
   srv.close();
 });

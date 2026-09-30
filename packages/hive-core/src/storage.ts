@@ -128,6 +128,7 @@ export async function readConfig(root: string): Promise<Config> {
         obj.agents && typeof obj.agents === "object" && !Array.isArray(obj.agents)
           ? (obj.agents as Config["agents"])
           : {},
+      ...(typeof obj.format === "number" && Number.isInteger(obj.format) && obj.format > 0 ? { format: obj.format } : {}),
     };
     const final = ConfigZ.safeParse(repaired);
     if (!final.success) {
@@ -191,6 +192,7 @@ const allocChains = new Map<string, Promise<unknown>>();
 
 /** Reserve and increment the next ID atomically (serialized read-modify-write). */
 export async function allocateId(root: string): Promise<{ id: string; cfg: Config }> {
+  await ensureWorkspaceCurrent(root);
   const prev = allocChains.get(root) ?? Promise.resolve();
   const run = prev.then(async () => {
     const cfg = await readConfig(root);
@@ -221,6 +223,70 @@ export async function allocateId(root: string): Promise<{ id: string; cfg: Confi
 // escape `.hivemind/issues/` and the resulting `fs.unlink`/`fs.writeFile` /
 // `fs.readFile` is bounded. (Defense-in-depth — IPC validates separately.)
 const ISSUE_ID_RE = /^[A-Z][A-Z0-9]{1,9}-\d+(\.\d+)*$/;
+// ── workspace format ──────────────────────────────────────────────
+
+/** The on-disk format this build reads and writes. A workspace written at an earlier format is
+ *  brought up to this one, step by step, the first time a process touches it; the step is
+ *  recorded in config.yaml, so it runs once per workspace. */
+export const WORKSPACE_FORMAT = 2;
+
+const MIGRATIONS: ReadonlyArray<{ to: number; run: (root: string) => Promise<void> }> = [
+  { to: 2, run: isoActivityTimestamps },
+];
+
+const current = new Map<string, Promise<void>>();
+
+/** Bring the workspace to WORKSPACE_FORMAT if it is behind (once per process per root). */
+export function ensureWorkspaceCurrent(root: string): Promise<void> {
+  let p = current.get(root);
+  if (!p) {
+    p = migrateWorkspace(root).catch((e: unknown) => { current.delete(root); throw e; });
+    current.set(root, p);
+  }
+  return p;
+}
+
+async function migrateWorkspace(root: string): Promise<void> {
+  // Serialized with ID allocation: both rewrite config.yaml.
+  const prev = allocChains.get(root) ?? Promise.resolve();
+  const run = prev.then(async () => {
+    let cfg: Config;
+    try { cfg = await readConfig(root); } catch { return; } // not a workspace (yet)
+    const from = cfg.format ?? 1;
+    if (from > WORKSPACE_FORMAT) {
+      throw new HiveError("newer_workspace", `${root} was written by a newer hivemind (format ${from}; this one reads ${WORKSPACE_FORMAT}) — update hivemind`);
+    }
+    for (const m of MIGRATIONS) {
+      if (m.to <= from) continue;
+      await m.run(root);
+      await writeConfig(root, { ...(await readConfig(root)), format: m.to });
+    }
+  });
+  allocChains.set(root, run.catch(() => {}));
+  return run;
+}
+
+/** Format 2: activity rows carry a full ISO-8601 UTC timestamp. Format 1 wrote
+ *  `YYYY-MM-DD HH:MM` (UTC, no zone), which readers took for local time. Only rows inside an
+ *  issue's `## Activity` section are touched, and a file is written only if one changed. */
+async function isoActivityTimestamps(root: string): Promise<void> {
+  const OLD = /^(\s*-\s+)(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2})(\s+·\s)/;
+  for (const file of await walk(path.join(root, "issues"), ".md")) {
+    const raw = await fs.readFile(file, "utf8");
+    let inActivity = false;
+    let changed = false;
+    const lines = raw.split("\n").map((line) => {
+      if (/^##\s/.test(line)) inActivity = /^##\s+Activity\s*$/.test(line);
+      if (!inActivity) return line;
+      const m = OLD.exec(line);
+      if (!m) return line;
+      changed = true;
+      return `${m[1]}${m[2]}T${m[3]}:00.000Z${m[4]}${line.slice(m[0].length)}`;
+    });
+    if (changed) await fs.writeFile(file, lines.join("\n"));
+  }
+}
+
 export function assertValidIssueId(id: string): void {
   if (!ISSUE_ID_RE.test(id)) {
     throw new HiveError("invalid_arg", `invalid issue id: ${id}`);
@@ -243,6 +309,7 @@ export function issuePath(root: string, id: string): string {
 /** Read an issue file by id (throws HiveError if missing). */
 export async function readIssue(root: string, id: string): Promise<Issue> {
   const p = issuePath(root, id);
+  await ensureWorkspaceCurrent(root);
   let raw: string;
   try {
     raw = await fs.readFile(p, "utf8");
@@ -322,6 +389,7 @@ export async function deleteIssueFile(root: string, id: string): Promise<void> {
  * full parse; used by `list` and by chokidar-fed UI queries.
  */
 export async function listIssues(root: string): Promise<IssueSummary[]> {
+  await ensureWorkspaceCurrent(root);
   const issuesDir = path.join(root, "issues");
   const files = await walk(issuesDir, ".md");
   const out: IssueSummary[] = [];
@@ -466,32 +534,15 @@ function parseAcceptance(text: string): AcceptanceItem[] {
   return items;
 }
 
-// Activity line: either the new ISO form (`2026-05-27T09:55:00.000Z`, single
-// non-whitespace token) OR the legacy 2-token form (`2026-05-27 09:55`). The
-// timestamp is the first capture, who is the second, message the rest.
-const ACT_RE = /^-\s+(\S+(?:\s\S+)?)\s+·\s+(\S+)\s+·\s+(.+)$/;
+// Activity line: `- <ISO-8601 timestamp> · <who> · <message>`.
+const ACT_RE = /^-\s+(\S+)\s+·\s+(\S+)\s+·\s+(.+)$/;
 function parseActivity(text: string): ActivityEntry[] {
   const out: ActivityEntry[] = [];
   for (const line of text.split("\n")) {
     const m = ACT_RE.exec(line.trim());
-    if (m) {
-      const raw = m[1]!;
-      // Preserve the on-disk form so serializeSections can round-trip without
-      // rewriting every legacy `YYYY-MM-DD HH:MM` row to ISO on the next
-      // update (would create huge noisy diffs across the workspace).
-      out.push({ at: normalizeActivityTs(raw), rawAt: raw, who: m[2]!, message: m[3]! });
-    }
+    if (m) out.push({ at: m[1]!, who: m[2]!, message: m[3]! });
   }
   return out;
-}
-
-/** Convert legacy `YYYY-MM-DD HH:MM` (UTC, stored without Z) into a full ISO
- *  with Z so renderers parse it as UTC, not local. ISO inputs pass through. */
-function normalizeActivityTs(raw: string): string {
-  if (/^\d{4}-\d{2}-\d{2}T/.test(raw)) return raw; // already ISO
-  const m = /^(\d{4}-\d{2}-\d{2})\s(\d{2}:\d{2})$/.exec(raw);
-  if (m) return `${m[1]}T${m[2]}:00.000Z`;
-  return raw;
 }
 
 export function serializeSections(s: IssueSections): string {
@@ -502,9 +553,7 @@ export function serializeSections(s: IssueSections): string {
     parts.push(`## Acceptance criteria\n\n${lines.join("\n")}`);
   }
   if (s.activity.length > 0) {
-    // Prefer `rawAt` (preserved from disk) so loaded-then-rewritten issues
-    // keep their legacy timestamp form. New entries (no rawAt) emit ISO-Z.
-    const lines = s.activity.map((e) => `- ${e.rawAt ?? e.at} · ${e.who} · ${e.message}`);
+    const lines = s.activity.map((e) => `- ${e.at} · ${e.who} · ${e.message}`);
     parts.push(`## Activity\n\n${lines.join("\n")}`);
   }
   if (s.extra.trim()) parts.push(s.extra.trim());
@@ -513,13 +562,8 @@ export function serializeSections(s: IssueSections): string {
 
 /** Append an activity line. Mutates the issue and returns it.
  *
- * `at` is stored as a full ISO-8601 timestamp WITH the `Z` (UTC) suffix.
- * Older versions stored a truncated `YYYY-MM-DD HH:MM` form, which JS
- * `new Date(str)` parses as local time — that misrendered every activity
- * row by the user's TZ offset (e.g. IST +5:30 showed every entry as "5h
- * ago" the moment it was written). Full ISO removes the ambiguity. The
- * parser accepts the legacy format for backward compatibility (existing
- * notes on disk keep loading).
+ * `at` is stored as a full ISO-8601 timestamp WITH the `Z` (UTC) suffix, so every reader
+ * parses it as UTC.
  */
 export function appendActivity(issue: Issue, who: string, message: string, at?: Date): Issue {
   const ts = (at ?? new Date()).toISOString();

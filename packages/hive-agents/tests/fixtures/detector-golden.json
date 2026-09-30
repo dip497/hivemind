@@ -1,22 +1,21 @@
 {
   "screens": 8041,
-  "corpus": "b23129464fa2a8e5cc7a9e0a0252f77ef04792a33074a76f23a534c4257b4a09",
+  "corpus": "c1843d3564e92c1c3c117fd0a5cd796d2a3f9a035b5921c0e7723efd6c7a9beb",
   "detectors": {
-    "amp": "3c99881396231473851f98c0e67a9a4af0b7129eb4e25c25b046c970e43022f7",
-    "antigravity": "19902e3f542ded4bdb750f6c14858e1e890c988060ea77403e7cf970656051e6",
-    "claude": "34d77cee193615405360ddba04d5e82f45ac97446bb4793e22e2e341160eda48",
-    "cline": "3945958076f834868106b0559ac9776db22d1d86bcb5ba7a1b48ba22a6b74c0d",
-    "codex": "958f57ceb80cd8aaae2b897c432a44c56f7bf7fcfd595afe6c494d9529400d47",
-    "copilot": "ea9bd8a765ba9ed133e1932991e8dc4a99beb1d5e9e54cd6afc2bdf9fd286fc4",
-    "cursor": "a6cf550a95e20658e646d8e9f5029a063b49639bfafb0d81fc85911b7aacac2e",
-    "droid": "f5f5390c24c28fddd3cc0935e41d4694defc962398e4269bf2a604f7a0161953",
-    "gemini": "d781d331b4086a3eecde076f5661eb8e63b587a1a903598a96104440f6fcde6b",
-    "grok": "e35082558b172b7cc234f97a8e8c8783e40df3020a339ff64c698f55752a2bdf",
-    "hermes": "badf9ca7a67d986f52cbc66dd21d2e08019cce803e447cf6b584a100d32df630",
-    "kimi": "f7c939308facadec5c40fa8f924a7faac4d9c43609808fc38849ff63b2647142",
-    "kiro": "879e816df8e40b55130e586022b93f4d857dfc73400826df7104df3e7755e0f8",
-    "opencode": "70ca77385bc8ae3d3b1204b3fc6bb7d8f300802c45b42b0844b03505f6e0048c",
-    "pi": "8181dd2b88e1ad71e9ec6231fbb6442510367c1810405156867d924f9fdd511c"
+    "amp": "2d3f59c15791c209220dc11ae3071fd80f1f66bcbaaf6ee19527a81bfdd1cecc",
+    "antigravity": "de7af2604c87cbff6dde17c73f1c3e6c3ff707c77064d006d3205219b8f3a79c",
+    "claude": "23ea489301de055520a157e69afa876454c079e97314b659f479f3982b22cd27",
+    "cline": "c37d229a68cd6fb24aebc066a4685861b094c817dbbf632ef4aff6114f7881eb",
+    "codex": "e1277b8187ec1ea63ceacbdd5ad05e5ac53ef1f774db4ce38f9a3ecfc54f636c",
+    "copilot": "18b783764d495e4b96d8e232cc23a60f71b6948b5037a474d821065027d33082",
+    "cursor": "9912f55b60f95261fada04b45758765bdae5605250ef497940bbb205e528403d",
+    "droid": "a7258362b0ec0dcaa5127cde9e0bda471ef66a6f3e82b5e52a2e23d7f9464431",
+    "grok": "31ebded6803309aef90eee888a209bb75fcc008b58887b0de1d29f6915cd3a89",
+    "hermes": "036ea5b217251a725118c98a61af18c4e2e4f393b5a798e10094c72676f6aebd",
+    "kimi": "6632a635f6ed462efdff216581a85e4f713781e24fdbc40bf2535ddb57f19a59",
+    "kiro": "7bb4828a38c016aeda7abfb8625d4178dfa1f8bac6a8ba48fc4b40fe51e745a2",
+    "opencode": "3cb4d2413369ab4f6d0e63beb6d22cc69765811f7a62b6bdcd65ae0709a8ce3d",
+    "pi": "dfd3b32da13a37172eb0902a0d33cba0a4d46b687e3a3f6d7c7c373e3d706d76"
   },
   "spawn": {
     "aider": [
@@ -167,9 +166,7 @@
         "opts": {
           "mode": "bypassPermissions"
         },
-        "args": [
-          "--yes-always"
-        ],
+        "args": [],
         "label": "Aider #2"
       },
       {
@@ -177,9 +174,7 @@
           "mode": "bypassPermissions",
           "model": "default"
         },
-        "args": [
-          "--yes-always"
-        ],
+        "args": [],
         "label": "Aider #2"
       },
       {
@@ -189,8 +184,7 @@
         },
         "args": [
           "--model",
-          "opus",
-          "--yes-always"
+          "opus"
         ],
         "label": "Aider #2"
       },
@@ -201,8 +195,7 @@
         },
         "args": [
           "--model",
-          "gpt-5",
-          "--yes-always"
+          "gpt-5"
         ],
         "label": "Aider #2"
       },
@@ -247,9 +240,7 @@
         "opts": {
           "mode": "yolo"
         },
-        "args": [
-          "--yes-always"
-        ],
+        "args": [],
         "label": "Aider #2"
       },
       {
@@ -257,9 +248,7 @@
           "mode": "yolo",
           "model": "default"
         },
-        "args": [
-          "--yes-always"
-        ],
+        "args": [],
         "label": "Aider #2"
       },
       {
@@ -269,8 +258,7 @@
         },
         "args": [
           "--model",
-          "opus",
-          "--yes-always"
+          "opus"
         ],
         "label": "Aider #2"
       },
@@ -281,8 +269,7 @@
         },
         "args": [
           "--model",
-          "gpt-5",
-          "--yes-always"
+          "gpt-5"
         ],
         "label": "Aider #2"
       },
@@ -586,20 +573,14 @@
         "opts": {
           "model": "opus"
         },
-        "args": [
-          "--model",
-          "opus"
-        ],
+        "args": [],
         "label": "Antigravity #2"
       },
       {
         "opts": {
           "model": "gpt-5"
         },
-        "args": [
-          "--model",
-          "gpt-5"
-        ],
+        "args": [],
         "label": "Antigravity #2"
       },
       {
@@ -622,10 +603,7 @@
           "mode": "default",
           "model": "opus"
         },
-        "args": [
-          "--model",
-          "opus"
-        ],
+        "args": [],
         "label": "Antigravity #2"
       },
       {
@@ -633,20 +611,14 @@
           "mode": "default",
           "model": "gpt-5"
         },
-        "args": [
-          "--model",
-          "gpt-5"
-        ],
+        "args": [],
         "label": "Antigravity #2"
       },
       {
         "opts": {
           "mode": "plan"
         },
-        "args": [
-          "--mode",
-          "plan"
-        ],
+        "args": [],
         "label": "Antigravity #2"
       },
       {
@@ -654,10 +626,7 @@
           "mode": "plan",
           "model": "default"
         },
-        "args": [
-          "--mode",
-          "plan"
-        ],
+        "args": [],
         "label": "Antigravity #2"
       },
       {
@@ -665,12 +634,7 @@
           "mode": "plan",
           "model": "opus"
         },
-        "args": [
-          "--mode",
-          "plan",
-          "--model",
-          "opus"
-        ],
+        "args": [],
         "label": "Antigravity #2"
       },
       {
@@ -678,22 +642,14 @@
           "mode": "plan",
           "model": "gpt-5"
         },
-        "args": [
-          "--mode",
-          "plan",
-          "--model",
-          "gpt-5"
-        ],
+        "args": [],
         "label": "Antigravity #2"
       },
       {
         "opts": {
           "mode": "acceptEdits"
         },
-        "args": [
-          "--mode",
-          "acceptEdits"
-        ],
+        "args": [],
         "label": "Antigravity #2"
       },
       {
@@ -701,10 +657,7 @@
           "mode": "acceptEdits",
           "model": "default"
         },
-        "args": [
-          "--mode",
-          "acceptEdits"
-        ],
+        "args": [],
         "label": "Antigravity #2"
       },
       {
@@ -712,12 +665,7 @@
           "mode": "acceptEdits",
           "model": "opus"
         },
-        "args": [
-          "--mode",
-          "acceptEdits",
-          "--model",
-          "opus"
-        ],
+        "args": [],
         "label": "Antigravity #2"
       },
       {
@@ -725,21 +673,14 @@
           "mode": "acceptEdits",
           "model": "gpt-5"
         },
-        "args": [
-          "--mode",
-          "acceptEdits",
-          "--model",
-          "gpt-5"
-        ],
+        "args": [],
         "label": "Antigravity #2"
       },
       {
         "opts": {
           "mode": "bypassPermissions"
         },
-        "args": [
-          "--dangerously-skip-permissions"
-        ],
+        "args": [],
         "label": "Antigravity #2"
       },
       {
@@ -747,9 +688,7 @@
           "mode": "bypassPermissions",
           "model": "default"
         },
-        "args": [
-          "--dangerously-skip-permissions"
-        ],
+        "args": [],
         "label": "Antigravity #2"
       },
       {
@@ -757,11 +696,7 @@
           "mode": "bypassPermissions",
           "model": "opus"
         },
-        "args": [
-          "--dangerously-skip-permissions",
-          "--model",
-          "opus"
-        ],
+        "args": [],
         "label": "Antigravity #2"
       },
       {
@@ -769,21 +704,14 @@
           "mode": "bypassPermissions",
           "model": "gpt-5"
         },
-        "args": [
-          "--dangerously-skip-permissions",
-          "--model",
-          "gpt-5"
-        ],
+        "args": [],
         "label": "Antigravity #2"
       },
       {
         "opts": {
           "mode": "ask"
         },
-        "args": [
-          "--mode",
-          "ask"
-        ],
+        "args": [],
         "label": "Antigravity #2"
       },
       {
@@ -791,10 +719,7 @@
           "mode": "ask",
           "model": "default"
         },
-        "args": [
-          "--mode",
-          "ask"
-        ],
+        "args": [],
         "label": "Antigravity #2"
       },
       {
@@ -802,12 +727,7 @@
           "mode": "ask",
           "model": "opus"
         },
-        "args": [
-          "--mode",
-          "ask",
-          "--model",
-          "opus"
-        ],
+        "args": [],
         "label": "Antigravity #2"
       },
       {
@@ -815,21 +735,14 @@
           "mode": "ask",
           "model": "gpt-5"
         },
-        "args": [
-          "--mode",
-          "ask",
-          "--model",
-          "gpt-5"
-        ],
+        "args": [],
         "label": "Antigravity #2"
       },
       {
         "opts": {
           "mode": "yolo"
         },
-        "args": [
-          "--dangerously-skip-permissions"
-        ],
+        "args": [],
         "label": "Antigravity #2"
       },
       {
@@ -837,9 +750,7 @@
           "mode": "yolo",
           "model": "default"
         },
-        "args": [
-          "--dangerously-skip-permissions"
-        ],
+        "args": [],
         "label": "Antigravity #2"
       },
       {
@@ -847,11 +758,7 @@
           "mode": "yolo",
           "model": "opus"
         },
-        "args": [
-          "--dangerously-skip-permissions",
-          "--model",
-          "opus"
-        ],
+        "args": [],
         "label": "Antigravity #2"
       },
       {
@@ -859,21 +766,14 @@
           "mode": "yolo",
           "model": "gpt-5"
         },
-        "args": [
-          "--dangerously-skip-permissions",
-          "--model",
-          "gpt-5"
-        ],
+        "args": [],
         "label": "Antigravity #2"
       },
       {
         "opts": {
           "mode": "high"
         },
-        "args": [
-          "--mode",
-          "high"
-        ],
+        "args": [],
         "label": "Antigravity #2"
       },
       {
@@ -881,10 +781,7 @@
           "mode": "high",
           "model": "default"
         },
-        "args": [
-          "--mode",
-          "high"
-        ],
+        "args": [],
         "label": "Antigravity #2"
       },
       {
@@ -892,12 +789,7 @@
           "mode": "high",
           "model": "opus"
         },
-        "args": [
-          "--mode",
-          "high",
-          "--model",
-          "opus"
-        ],
+        "args": [],
         "label": "Antigravity #2"
       },
       {
@@ -905,12 +797,7 @@
           "mode": "high",
           "model": "gpt-5"
         },
-        "args": [
-          "--mode",
-          "high",
-          "--model",
-          "gpt-5"
-        ],
+        "args": [],
         "label": "Antigravity #2"
       }
     ],
@@ -1285,7 +1172,7 @@
           "--permission-mode",
           "plan"
         ],
-        "label": "claude #2 · plan"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1296,7 +1183,7 @@
           "--permission-mode",
           "plan"
         ],
-        "label": "claude #2 · plan"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1309,7 +1196,7 @@
           "--model",
           "opus"
         ],
-        "label": "claude #2 · plan"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1322,7 +1209,7 @@
           "--model",
           "gpt-5"
         ],
-        "label": "claude #2 · plan"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1332,7 +1219,7 @@
           "--permission-mode",
           "acceptEdits"
         ],
-        "label": "claude #2 · acceptEdits"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1343,7 +1230,7 @@
           "--permission-mode",
           "acceptEdits"
         ],
-        "label": "claude #2 · acceptEdits"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1356,7 +1243,7 @@
           "--model",
           "opus"
         ],
-        "label": "claude #2 · acceptEdits"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1369,7 +1256,7 @@
           "--model",
           "gpt-5"
         ],
-        "label": "claude #2 · acceptEdits"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1378,7 +1265,7 @@
         "args": [
           "--dangerously-skip-permissions"
         ],
-        "label": "claude #2 · bypassPermissions"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1388,7 +1275,7 @@
         "args": [
           "--dangerously-skip-permissions"
         ],
-        "label": "claude #2 · bypassPermissions"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1400,7 +1287,7 @@
           "--model",
           "opus"
         ],
-        "label": "claude #2 · bypassPermissions"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1412,7 +1299,7 @@
           "--model",
           "gpt-5"
         ],
-        "label": "claude #2 · bypassPermissions"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1422,7 +1309,7 @@
           "--permission-mode",
           "ask"
         ],
-        "label": "claude #2 · ask"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1433,7 +1320,7 @@
           "--permission-mode",
           "ask"
         ],
-        "label": "claude #2 · ask"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1446,7 +1333,7 @@
           "--model",
           "opus"
         ],
-        "label": "claude #2 · ask"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1459,16 +1346,17 @@
           "--model",
           "gpt-5"
         ],
-        "label": "claude #2 · ask"
+        "label": "claude #2"
       },
       {
         "opts": {
           "mode": "yolo"
         },
         "args": [
-          "--dangerously-skip-permissions"
+          "--permission-mode",
+          "yolo"
         ],
-        "label": "claude #2 · yolo"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1476,9 +1364,10 @@
           "model": "default"
         },
         "args": [
-          "--dangerously-skip-permissions"
+          "--permission-mode",
+          "yolo"
         ],
-        "label": "claude #2 · yolo"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1486,11 +1375,12 @@
           "model": "opus"
         },
         "args": [
-          "--dangerously-skip-permissions",
+          "--permission-mode",
+          "yolo",
           "--model",
           "opus"
         ],
-        "label": "claude #2 · yolo"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1498,11 +1388,12 @@
           "model": "gpt-5"
         },
         "args": [
-          "--dangerously-skip-permissions",
+          "--permission-mode",
+          "yolo",
           "--model",
           "gpt-5"
         ],
-        "label": "claude #2 · yolo"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1512,7 +1403,7 @@
           "--permission-mode",
           "high"
         ],
-        "label": "claude #2 · high"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1523,7 +1414,7 @@
           "--permission-mode",
           "high"
         ],
-        "label": "claude #2 · high"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1536,7 +1427,7 @@
           "--model",
           "opus"
         ],
-        "label": "claude #2 · high"
+        "label": "claude #2"
       },
       {
         "opts": {
@@ -1549,7 +1440,7 @@
           "--model",
           "gpt-5"
         ],
-        "label": "claude #2 · high"
+        "label": "claude #2"
       }
     ],
     "cline": [
@@ -1706,9 +1597,7 @@
         "opts": {
           "mode": "bypassPermissions"
         },
-        "args": [
-          "--auto-approve"
-        ],
+        "args": [],
         "label": "Cline #2"
       },
       {
@@ -1716,9 +1605,7 @@
           "mode": "bypassPermissions",
           "model": "default"
         },
-        "args": [
-          "--auto-approve"
-        ],
+        "args": [],
         "label": "Cline #2"
       },
       {
@@ -1728,8 +1615,7 @@
         },
         "args": [
           "--model",
-          "opus",
-          "--auto-approve"
+          "opus"
         ],
         "label": "Cline #2"
       },
@@ -1740,8 +1626,7 @@
         },
         "args": [
           "--model",
-          "gpt-5",
-          "--auto-approve"
+          "gpt-5"
         ],
         "label": "Cline #2"
       },
@@ -1786,9 +1671,7 @@
         "opts": {
           "mode": "yolo"
         },
-        "args": [
-          "--auto-approve"
-        ],
+        "args": [],
         "label": "Cline #2"
       },
       {
@@ -1796,9 +1679,7 @@
           "mode": "yolo",
           "model": "default"
         },
-        "args": [
-          "--auto-approve"
-        ],
+        "args": [],
         "label": "Cline #2"
       },
       {
@@ -1808,8 +1689,7 @@
         },
         "args": [
           "--model",
-          "opus",
-          "--auto-approve"
+          "opus"
         ],
         "label": "Cline #2"
       },
@@ -1820,8 +1700,7 @@
         },
         "args": [
           "--model",
-          "gpt-5",
-          "--auto-approve"
+          "gpt-5"
         ],
         "label": "Cline #2"
       },
@@ -2084,7 +1963,8 @@
           "mode": "bypassPermissions"
         },
         "args": [
-          "--dangerously-bypass-approvals-and-sandbox",
+          "--ask-for-approval",
+          "bypassPermissions",
           "--sandbox",
           "workspace-write"
         ],
@@ -2096,7 +1976,8 @@
           "model": "default"
         },
         "args": [
-          "--dangerously-bypass-approvals-and-sandbox",
+          "--ask-for-approval",
+          "bypassPermissions",
           "--sandbox",
           "workspace-write"
         ],
@@ -2110,7 +1991,8 @@
         "args": [
           "--model",
           "opus",
-          "--dangerously-bypass-approvals-and-sandbox",
+          "--ask-for-approval",
+          "bypassPermissions",
           "--sandbox",
           "workspace-write"
         ],
@@ -2124,7 +2006,8 @@
         "args": [
           "--model",
           "gpt-5",
-          "--dangerously-bypass-approvals-and-sandbox",
+          "--ask-for-approval",
+          "bypassPermissions",
           "--sandbox",
           "workspace-write"
         ],
@@ -2190,7 +2073,8 @@
           "mode": "yolo"
         },
         "args": [
-          "--dangerously-bypass-approvals-and-sandbox",
+          "--ask-for-approval",
+          "yolo",
           "--sandbox",
           "workspace-write"
         ],
@@ -2202,7 +2086,8 @@
           "model": "default"
         },
         "args": [
-          "--dangerously-bypass-approvals-and-sandbox",
+          "--ask-for-approval",
+          "yolo",
           "--sandbox",
           "workspace-write"
         ],
@@ -2216,7 +2101,8 @@
         "args": [
           "--model",
           "opus",
-          "--dangerously-bypass-approvals-and-sandbox",
+          "--ask-for-approval",
+          "yolo",
           "--sandbox",
           "workspace-write"
         ],
@@ -2230,7 +2116,8 @@
         "args": [
           "--model",
           "gpt-5",
-          "--dangerously-bypass-approvals-and-sandbox",
+          "--ask-for-approval",
+          "yolo",
           "--sandbox",
           "workspace-write"
         ],
@@ -2446,9 +2333,7 @@
         "opts": {
           "mode": "bypassPermissions"
         },
-        "args": [
-          "--auto"
-        ],
+        "args": [],
         "label": "Continue #2"
       },
       {
@@ -2456,9 +2341,7 @@
           "mode": "bypassPermissions",
           "model": "default"
         },
-        "args": [
-          "--auto"
-        ],
+        "args": [],
         "label": "Continue #2"
       },
       {
@@ -2468,8 +2351,7 @@
         },
         "args": [
           "--model",
-          "opus",
-          "--auto"
+          "opus"
         ],
         "label": "Continue #2"
       },
@@ -2480,8 +2362,7 @@
         },
         "args": [
           "--model",
-          "gpt-5",
-          "--auto"
+          "gpt-5"
         ],
         "label": "Continue #2"
       },
@@ -2526,9 +2407,7 @@
         "opts": {
           "mode": "yolo"
         },
-        "args": [
-          "--auto"
-        ],
+        "args": [],
         "label": "Continue #2"
       },
       {
@@ -2536,9 +2415,7 @@
           "mode": "yolo",
           "model": "default"
         },
-        "args": [
-          "--auto"
-        ],
+        "args": [],
         "label": "Continue #2"
       },
       {
@@ -2548,8 +2425,7 @@
         },
         "args": [
           "--model",
-          "opus",
-          "--auto"
+          "opus"
         ],
         "label": "Continue #2"
       },
@@ -2560,8 +2436,7 @@
         },
         "args": [
           "--model",
-          "gpt-5",
-          "--auto"
+          "gpt-5"
         ],
         "label": "Continue #2"
       },
@@ -2772,7 +2647,8 @@
           "mode": "bypassPermissions"
         },
         "args": [
-          "--yolo"
+          "--mode",
+          "bypassPermissions"
         ],
         "label": "Copilot #2"
       },
@@ -2782,7 +2658,8 @@
           "model": "default"
         },
         "args": [
-          "--yolo"
+          "--mode",
+          "bypassPermissions"
         ],
         "label": "Copilot #2"
       },
@@ -2794,7 +2671,8 @@
         "args": [
           "--model",
           "opus",
-          "--yolo"
+          "--mode",
+          "bypassPermissions"
         ],
         "label": "Copilot #2"
       },
@@ -2806,7 +2684,8 @@
         "args": [
           "--model",
           "gpt-5",
-          "--yolo"
+          "--mode",
+          "bypassPermissions"
         ],
         "label": "Copilot #2"
       },
@@ -2862,7 +2741,8 @@
           "mode": "yolo"
         },
         "args": [
-          "--yolo"
+          "--mode",
+          "yolo"
         ],
         "label": "Copilot #2"
       },
@@ -2872,7 +2752,8 @@
           "model": "default"
         },
         "args": [
-          "--yolo"
+          "--mode",
+          "yolo"
         ],
         "label": "Copilot #2"
       },
@@ -2884,7 +2765,8 @@
         "args": [
           "--model",
           "opus",
-          "--yolo"
+          "--mode",
+          "yolo"
         ],
         "label": "Copilot #2"
       },
@@ -2896,7 +2778,8 @@
         "args": [
           "--model",
           "gpt-5",
-          "--yolo"
+          "--mode",
+          "yolo"
         ],
         "label": "Copilot #2"
       },
@@ -3072,9 +2955,7 @@
         "opts": {
           "mode": "bypassPermissions"
         },
-        "args": [
-          "--yolo"
-        ],
+        "args": [],
         "label": "Crush #2"
       },
       {
@@ -3082,9 +2963,7 @@
           "mode": "bypassPermissions",
           "model": "default"
         },
-        "args": [
-          "--yolo"
-        ],
+        "args": [],
         "label": "Crush #2"
       },
       {
@@ -3092,9 +2971,7 @@
           "mode": "bypassPermissions",
           "model": "opus"
         },
-        "args": [
-          "--yolo"
-        ],
+        "args": [],
         "label": "Crush #2"
       },
       {
@@ -3102,9 +2979,7 @@
           "mode": "bypassPermissions",
           "model": "gpt-5"
         },
-        "args": [
-          "--yolo"
-        ],
+        "args": [],
         "label": "Crush #2"
       },
       {
@@ -3378,7 +3253,8 @@
           "mode": "bypassPermissions"
         },
         "args": [
-          "--yolo"
+          "--mode",
+          "bypassPermissions"
         ],
         "label": "Cursor #2"
       },
@@ -3388,7 +3264,8 @@
           "model": "default"
         },
         "args": [
-          "--yolo"
+          "--mode",
+          "bypassPermissions"
         ],
         "label": "Cursor #2"
       },
@@ -3398,7 +3275,8 @@
           "model": "opus"
         },
         "args": [
-          "--yolo",
+          "--mode",
+          "bypassPermissions",
           "--model",
           "opus"
         ],
@@ -3410,7 +3288,8 @@
           "model": "gpt-5"
         },
         "args": [
-          "--yolo",
+          "--mode",
+          "bypassPermissions",
           "--model",
           "gpt-5"
         ],
@@ -3468,7 +3347,8 @@
           "mode": "yolo"
         },
         "args": [
-          "--yolo"
+          "--mode",
+          "yolo"
         ],
         "label": "Cursor #2"
       },
@@ -3478,7 +3358,8 @@
           "model": "default"
         },
         "args": [
-          "--yolo"
+          "--mode",
+          "yolo"
         ],
         "label": "Cursor #2"
       },
@@ -3488,7 +3369,8 @@
           "model": "opus"
         },
         "args": [
-          "--yolo",
+          "--mode",
+          "yolo",
           "--model",
           "opus"
         ],
@@ -3500,7 +3382,8 @@
           "model": "gpt-5"
         },
         "args": [
-          "--yolo",
+          "--mode",
+          "yolo",
           "--model",
           "gpt-5"
         ],
@@ -3704,7 +3587,7 @@
         },
         "args": [
           "--auto",
-          "high"
+          "bypassPermissions"
         ],
         "label": "Droid #2"
       },
@@ -3715,7 +3598,7 @@
         },
         "args": [
           "--auto",
-          "high"
+          "bypassPermissions"
         ],
         "label": "Droid #2"
       },
@@ -3726,7 +3609,7 @@
         },
         "args": [
           "--auto",
-          "high"
+          "bypassPermissions"
         ],
         "label": "Droid #2"
       },
@@ -3737,7 +3620,7 @@
         },
         "args": [
           "--auto",
-          "high"
+          "bypassPermissions"
         ],
         "label": "Droid #2"
       },
@@ -3790,7 +3673,7 @@
         },
         "args": [
           "--auto",
-          "high"
+          "yolo"
         ],
         "label": "Droid #2"
       },
@@ -3801,7 +3684,7 @@
         },
         "args": [
           "--auto",
-          "high"
+          "yolo"
         ],
         "label": "Droid #2"
       },
@@ -3812,7 +3695,7 @@
         },
         "args": [
           "--auto",
-          "high"
+          "yolo"
         ],
         "label": "Droid #2"
       },
@@ -3823,7 +3706,7 @@
         },
         "args": [
           "--auto",
-          "high"
+          "yolo"
         ],
         "label": "Droid #2"
       },
@@ -3869,351 +3752,6 @@
           "high"
         ],
         "label": "Droid #2"
-      }
-    ],
-    "gemini": [
-      {
-        "opts": {},
-        "args": [],
-        "label": "Gemini #2"
-      },
-      {
-        "opts": {
-          "model": "default"
-        },
-        "args": [],
-        "label": "Gemini #2"
-      },
-      {
-        "opts": {
-          "model": "opus"
-        },
-        "args": [
-          "--model",
-          "opus"
-        ],
-        "label": "Gemini #2"
-      },
-      {
-        "opts": {
-          "model": "gpt-5"
-        },
-        "args": [
-          "--model",
-          "gpt-5"
-        ],
-        "label": "Gemini #2"
-      },
-      {
-        "opts": {
-          "mode": "default"
-        },
-        "args": [],
-        "label": "Gemini #2"
-      },
-      {
-        "opts": {
-          "mode": "default",
-          "model": "default"
-        },
-        "args": [],
-        "label": "Gemini #2"
-      },
-      {
-        "opts": {
-          "mode": "default",
-          "model": "opus"
-        },
-        "args": [
-          "--model",
-          "opus"
-        ],
-        "label": "Gemini #2"
-      },
-      {
-        "opts": {
-          "mode": "default",
-          "model": "gpt-5"
-        },
-        "args": [
-          "--model",
-          "gpt-5"
-        ],
-        "label": "Gemini #2"
-      },
-      {
-        "opts": {
-          "mode": "plan"
-        },
-        "args": [
-          "--approval-mode",
-          "plan"
-        ],
-        "label": "Gemini #2"
-      },
-      {
-        "opts": {
-          "mode": "plan",
-          "model": "default"
-        },
-        "args": [
-          "--approval-mode",
-          "plan"
-        ],
-        "label": "Gemini #2"
-      },
-      {
-        "opts": {
-          "mode": "plan",
-          "model": "opus"
-        },
-        "args": [
-          "--model",
-          "opus",
-          "--approval-mode",
-          "plan"
-        ],
-        "label": "Gemini #2"
-      },
-      {
-        "opts": {
-          "mode": "plan",
-          "model": "gpt-5"
-        },
-        "args": [
-          "--model",
-          "gpt-5",
-          "--approval-mode",
-          "plan"
-        ],
-        "label": "Gemini #2"
-      },
-      {
-        "opts": {
-          "mode": "acceptEdits"
-        },
-        "args": [
-          "--approval-mode",
-          "acceptEdits"
-        ],
-        "label": "Gemini #2"
-      },
-      {
-        "opts": {
-          "mode": "acceptEdits",
-          "model": "default"
-        },
-        "args": [
-          "--approval-mode",
-          "acceptEdits"
-        ],
-        "label": "Gemini #2"
-      },
-      {
-        "opts": {
-          "mode": "acceptEdits",
-          "model": "opus"
-        },
-        "args": [
-          "--model",
-          "opus",
-          "--approval-mode",
-          "acceptEdits"
-        ],
-        "label": "Gemini #2"
-      },
-      {
-        "opts": {
-          "mode": "acceptEdits",
-          "model": "gpt-5"
-        },
-        "args": [
-          "--model",
-          "gpt-5",
-          "--approval-mode",
-          "acceptEdits"
-        ],
-        "label": "Gemini #2"
-      },
-      {
-        "opts": {
-          "mode": "bypassPermissions"
-        },
-        "args": [
-          "--yolo"
-        ],
-        "label": "Gemini #2"
-      },
-      {
-        "opts": {
-          "mode": "bypassPermissions",
-          "model": "default"
-        },
-        "args": [
-          "--yolo"
-        ],
-        "label": "Gemini #2"
-      },
-      {
-        "opts": {
-          "mode": "bypassPermissions",
-          "model": "opus"
-        },
-        "args": [
-          "--model",
-          "opus",
-          "--yolo"
-        ],
-        "label": "Gemini #2"
-      },
-      {
-        "opts": {
-          "mode": "bypassPermissions",
-          "model": "gpt-5"
-        },
-        "args": [
-          "--model",
-          "gpt-5",
-          "--yolo"
-        ],
-        "label": "Gemini #2"
-      },
-      {
-        "opts": {
-          "mode": "ask"
-        },
-        "args": [
-          "--approval-mode",
-          "ask"
-        ],
-        "label": "Gemini #2"
-      },
-      {
-        "opts": {
-          "mode": "ask",
-          "model": "default"
-        },
-        "args": [
-          "--approval-mode",
-          "ask"
-        ],
-        "label": "Gemini #2"
-      },
-      {
-        "opts": {
-          "mode": "ask",
-          "model": "opus"
-        },
-        "args": [
-          "--model",
-          "opus",
-          "--approval-mode",
-          "ask"
-        ],
-        "label": "Gemini #2"
-      },
-      {
-        "opts": {
-          "mode": "ask",
-          "model": "gpt-5"
-        },
-        "args": [
-          "--model",
-          "gpt-5",
-          "--approval-mode",
-          "ask"
-        ],
-        "label": "Gemini #2"
-      },
-      {
-        "opts": {
-          "mode": "yolo"
-        },
-        "args": [
-          "--yolo"
-        ],
-        "label": "Gemini #2"
-      },
-      {
-        "opts": {
-          "mode": "yolo",
-          "model": "default"
-        },
-        "args": [
-          "--yolo"
-        ],
-        "label": "Gemini #2"
-      },
-      {
-        "opts": {
-          "mode": "yolo",
-          "model": "opus"
-        },
-        "args": [
-          "--model",
-          "opus",
-          "--yolo"
-        ],
-        "label": "Gemini #2"
-      },
-      {
-        "opts": {
-          "mode": "yolo",
-          "model": "gpt-5"
-        },
-        "args": [
-          "--model",
-          "gpt-5",
-          "--yolo"
-        ],
-        "label": "Gemini #2"
-      },
-      {
-        "opts": {
-          "mode": "high"
-        },
-        "args": [
-          "--approval-mode",
-          "high"
-        ],
-        "label": "Gemini #2"
-      },
-      {
-        "opts": {
-          "mode": "high",
-          "model": "default"
-        },
-        "args": [
-          "--approval-mode",
-          "high"
-        ],
-        "label": "Gemini #2"
-      },
-      {
-        "opts": {
-          "mode": "high",
-          "model": "opus"
-        },
-        "args": [
-          "--model",
-          "opus",
-          "--approval-mode",
-          "high"
-        ],
-        "label": "Gemini #2"
-      },
-      {
-        "opts": {
-          "mode": "high",
-          "model": "gpt-5"
-        },
-        "args": [
-          "--model",
-          "gpt-5",
-          "--approval-mode",
-          "high"
-        ],
-        "label": "Gemini #2"
       }
     ],
     "grok": [
@@ -4717,9 +4255,7 @@
         "opts": {
           "mode": "bypassPermissions"
         },
-        "args": [
-          "--yolo"
-        ],
+        "args": [],
         "label": "Hermes #2"
       },
       {
@@ -4727,9 +4263,7 @@
           "mode": "bypassPermissions",
           "model": "default"
         },
-        "args": [
-          "--yolo"
-        ],
+        "args": [],
         "label": "Hermes #2"
       },
       {
@@ -4739,8 +4273,7 @@
         },
         "args": [
           "--model",
-          "opus",
-          "--yolo"
+          "opus"
         ],
         "label": "Hermes #2"
       },
@@ -4751,8 +4284,7 @@
         },
         "args": [
           "--model",
-          "gpt-5",
-          "--yolo"
+          "gpt-5"
         ],
         "label": "Hermes #2"
       },
@@ -5028,9 +4560,7 @@
         "opts": {
           "mode": "bypassPermissions"
         },
-        "args": [
-          "--yolo"
-        ],
+        "args": [],
         "label": "Kimi #2"
       },
       {
@@ -5038,9 +4568,7 @@
           "mode": "bypassPermissions",
           "model": "default"
         },
-        "args": [
-          "--yolo"
-        ],
+        "args": [],
         "label": "Kimi #2"
       },
       {
@@ -5050,8 +4578,7 @@
         },
         "args": [
           "--model",
-          "opus",
-          "--yolo"
+          "opus"
         ],
         "label": "Kimi #2"
       },
@@ -5062,8 +4589,7 @@
         },
         "args": [
           "--model",
-          "gpt-5",
-          "--yolo"
+          "gpt-5"
         ],
         "label": "Kimi #2"
       },
@@ -6140,9 +5666,7 @@
         "opts": {
           "mode": "bypassPermissions"
         },
-        "args": [
-          "--auto"
-        ],
+        "args": [],
         "label": "opencode #2"
       },
       {
@@ -6150,9 +5674,7 @@
           "mode": "bypassPermissions",
           "model": "default"
         },
-        "args": [
-          "--auto"
-        ],
+        "args": [],
         "label": "opencode #2"
       },
       {
@@ -6161,7 +5683,6 @@
           "model": "opus"
         },
         "args": [
-          "--auto",
           "--model",
           "opus"
         ],
@@ -6173,7 +5694,6 @@
           "model": "gpt-5"
         },
         "args": [
-          "--auto",
           "--model",
           "gpt-5"
         ],
@@ -6220,9 +5740,7 @@
         "opts": {
           "mode": "yolo"
         },
-        "args": [
-          "--auto"
-        ],
+        "args": [],
         "label": "opencode #2"
       },
       {
@@ -6230,9 +5748,7 @@
           "mode": "yolo",
           "model": "default"
         },
-        "args": [
-          "--auto"
-        ],
+        "args": [],
         "label": "opencode #2"
       },
       {
@@ -6241,7 +5757,6 @@
           "model": "opus"
         },
         "args": [
-          "--auto",
           "--model",
           "opus"
         ],
@@ -6253,7 +5768,6 @@
           "model": "gpt-5"
         },
         "args": [
-          "--auto",
           "--model",
           "gpt-5"
         ],
@@ -6421,9 +5935,7 @@
         "opts": {
           "mode": "bypassPermissions"
         },
-        "args": [
-          "--always-approve"
-        ],
+        "args": [],
         "label": "OpenHands #2"
       },
       {
@@ -6431,9 +5943,7 @@
           "mode": "bypassPermissions",
           "model": "default"
         },
-        "args": [
-          "--always-approve"
-        ],
+        "args": [],
         "label": "OpenHands #2"
       },
       {
@@ -6441,9 +5951,7 @@
           "mode": "bypassPermissions",
           "model": "opus"
         },
-        "args": [
-          "--always-approve"
-        ],
+        "args": [],
         "label": "OpenHands #2"
       },
       {
@@ -6451,9 +5959,7 @@
           "mode": "bypassPermissions",
           "model": "gpt-5"
         },
-        "args": [
-          "--always-approve"
-        ],
+        "args": [],
         "label": "OpenHands #2"
       },
       {
@@ -6491,9 +5997,7 @@
         "opts": {
           "mode": "yolo"
         },
-        "args": [
-          "--always-approve"
-        ],
+        "args": [],
         "label": "OpenHands #2"
       },
       {
@@ -6501,9 +6005,7 @@
           "mode": "yolo",
           "model": "default"
         },
-        "args": [
-          "--always-approve"
-        ],
+        "args": [],
         "label": "OpenHands #2"
       },
       {
@@ -6511,9 +6013,7 @@
           "mode": "yolo",
           "model": "opus"
         },
-        "args": [
-          "--always-approve"
-        ],
+        "args": [],
         "label": "OpenHands #2"
       },
       {
@@ -6521,9 +6021,7 @@
           "mode": "yolo",
           "model": "gpt-5"
         },
-        "args": [
-          "--always-approve"
-        ],
+        "args": [],
         "label": "OpenHands #2"
       },
       {
@@ -7020,7 +6518,8 @@
           "mode": "bypassPermissions"
         },
         "args": [
-          "--yolo"
+          "--approval-mode",
+          "bypassPermissions"
         ],
         "label": "Qwen Code #2"
       },
@@ -7030,7 +6529,8 @@
           "model": "default"
         },
         "args": [
-          "--yolo"
+          "--approval-mode",
+          "bypassPermissions"
         ],
         "label": "Qwen Code #2"
       },
@@ -7042,7 +6542,8 @@
         "args": [
           "--model",
           "opus",
-          "--yolo"
+          "--approval-mode",
+          "bypassPermissions"
         ],
         "label": "Qwen Code #2"
       },
@@ -7054,7 +6555,8 @@
         "args": [
           "--model",
           "gpt-5",
-          "--yolo"
+          "--approval-mode",
+          "bypassPermissions"
         ],
         "label": "Qwen Code #2"
       },
@@ -7110,7 +6612,8 @@
           "mode": "yolo"
         },
         "args": [
-          "--yolo"
+          "--approval-mode",
+          "yolo"
         ],
         "label": "Qwen Code #2"
       },
@@ -7120,7 +6623,8 @@
           "model": "default"
         },
         "args": [
-          "--yolo"
+          "--approval-mode",
+          "yolo"
         ],
         "label": "Qwen Code #2"
       },
@@ -7132,7 +6636,8 @@
         "args": [
           "--model",
           "opus",
-          "--yolo"
+          "--approval-mode",
+          "yolo"
         ],
         "label": "Qwen Code #2"
       },
@@ -7144,7 +6649,8 @@
         "args": [
           "--model",
           "gpt-5",
-          "--yolo"
+          "--approval-mode",
+          "yolo"
         ],
         "label": "Qwen Code #2"
       },

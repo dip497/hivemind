@@ -2,8 +2,7 @@
  * settings-store (renderer) — the live mirror of main's settings.json.
  *
  * Boot: ONE synchronous IPC read so the first paint already has the theme
- * (no flash), and a one-time import of the pre-2.0 localStorage keys into the
- * file (main marks `migrated`). Every change — ours, the CLI's via
+ * (no flash). Every change — ours, the CLI's via
  * `settings.reload`, another window's — arrives back on `settings:changed`.
  * Falls back to an in-memory store outside Electron (unit tests, the dev bridge).
  *
@@ -29,18 +28,6 @@ function boot(): Settings {
 let state: Settings = boot();
 const listeners = new Set<() => void>();
 function emit() { for (const l of listeners) l(); }
-
-// One-time migration of what the renderer used to keep in localStorage. The
-// keys are left in place (harmless; a downgrade still reads them).
-if (typeof window !== "undefined" && hive?.settingsMigrate && !state.migrated) {
-  const ls = (k: string) => { try { return window.localStorage.getItem(k); } catch { return null; } };
-  let theme: unknown;
-  try { theme = JSON.parse(ls("hivemind:theme") ?? "null"); } catch { theme = null; }
-  void hive.settingsMigrate({
-    theme, viewMode: ls("hivemind:view-mode"), agentSel: ls("hivemind:agent-sel"), claudeMode: ls("hivemind:claude-mode"), claudeModel: ls("hivemind:claude-model"),
-    // An edit made while the migration was in flight must survive its reply.
-  }).then((s) => { state = withPending(mergeSettings(s)); emit(); }).catch(() => {});
-}
 
 // Patches applied locally but not yet confirmed by main: newest value per path,
 // each tagged with the revision of the edit that produced it. The revision — not

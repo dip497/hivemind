@@ -2,7 +2,7 @@
  * useSpawn — tile spawning + in-frame placement, lifted from Canvas.tsx. Owns:
  * placeInFrame (slot packing + auto-grow), ensureFrame (resolve/lazily-create
  * the target frame), spawnTile (the single-source create path), and the
- * spawnInto/spawnClaude/spawnVis/frameOpen wrappers. Canvas passes its state
+ * spawnInto/spawnDefaultAgent/spawnVis/frameOpen wrappers. Canvas passes its state
  * refs + setters as context; the handlers read/update them exactly as before.
  */
 import { useCallback, useEffect, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
@@ -13,7 +13,7 @@ import { agentById } from "./agents";
 import { agentById as catalogAgentById, defaultAgent, spawnArgsFor, spawnLabelFor, type AgentProviderDef, type SpawnOptions } from "@hivemind/agents";
 import { AGENT_TILE_KIND } from "./tile-kinds";
 import { defaultShell, type FrameState, type TileInstance } from "./canvas-persistence";
-import { queueWork } from "./claude-bus";
+import { queueWork } from "./work-queue";
 import { markBackgroundTile } from "./worker-tiles";
 import type { TileKind } from "./tile-kinds";
 import { checkToolCreation } from "./tool-availability";
@@ -21,6 +21,7 @@ import { checkAgentInstalled, noAgentInstalled } from "./agent-plugins";
 import { isRemote } from "../../shared/remote-uri";
 import { mintId } from "../../shared/tile-id";
 import { getSettings } from "./settings-store";
+import { promptTask, withResume } from "@hivemind/agents";
 
 /** Kinds that are one-per-frame (spawn → focus existing). claude/shell are not. */
 const SINGLETON_KINDS: ReadonlySet<TileKind> = new Set(["editor", "diff", "issues"]);
@@ -28,7 +29,11 @@ const SINGLETON_KINDS: ReadonlySet<TileKind> = new Set(["editor", "diff", "issue
 type FocusReq = { id: string; cx: number; cy: number; w: number; h: number; n: number; exact?: boolean } | null;
 type SpawnOpts = {
   mode?: string; work?: string; url?: string; file?: string;
+  /** Per-spawn launch options beyond `mode` (agent-option id → value). */
+  launch?: Partial<Record<string, string>>;
   agent?: { id: string; cmd: string; args?: string[]; label: string };
+  /** An agent tile that continues this session instead of starting one. */
+  resume?: string;
   /** A terminal that shows this existing daemon session instead of starting its own. */
   session?: { id: string; cmd: string; args?: string[]; label: string };
 };
@@ -237,26 +242,11 @@ export function useSpawn(ctx: SpawnCtx) {
         return copy;
       });
     }
-    // Sync the ref NOW so an immediately-following placeInFrame / doSpawnClaude
+    // Sync the ref NOW so an immediately-following placeInFrame / a spawn
     // (both read framesRef) see the new frame before the next render commits.
     if (!framesRef.current.length) framesRef.current = [frame];
     return frame;
   }, []);
-
-  // Wrap legacy loose tiles on mount: layouts persisted before frame=workspace
-  // landed have positions but no frames → create the base frame sized to their
-  // bounding box so they visually live INSIDE the workspace (and the slot
-  // scanner sees them as occupied, so new spawns land in free slots).
-  const wrapOnceRef = useRef(false);
-  useEffect(() => {
-    if (wrapOnceRef.current) return;
-    if (!repoPath) return;
-    if (framesRef.current.length > 0) { wrapOnceRef.current = true; return; }
-    if (Object.keys(positionsRef.current).length === 0) return;
-    wrapOnceRef.current = true;
-    ensureFrame();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [repoPath]);
 
   // Create a tile of `kind` inside `targetFrameId` (or the resolved active
   // frame). claude/shell are unlimited per frame; editor/diff/issues are
@@ -288,8 +278,8 @@ export function useSpawn(ctx: SpawnCtx) {
       let args: string[] | undefined;
       let label: string;
       if (def) {
-        const so = launchOptions(def.id, { mode: opts?.mode });
-        args = spawnArgsFor(def, so);
+        const so = launchOptions(def.id, { mode: opts?.mode, ...(opts?.launch ?? {}) });
+        args = opts?.resume ? withResume(def, spawnArgsFor(def, so), opts.resume) : spawnArgsFor(def, so);
         cmd = def.bin;
         label = ordinalLabel((n) => spawnLabelFor(def, n, {}), (n) => spawnLabelFor(def, n, so));
       } else if (kind === "shell" && opts?.session) {
@@ -305,9 +295,9 @@ export function useSpawn(ctx: SpawnCtx) {
         label = kind === "editor" ? "Editor" : kind === "diff" ? "Diff" : "Issues";
       }
       placeInFrame(newId, frame);
-      setTiles((cur) => [...cur, { id: newId, kind, label, cmd, args, ...(kind === "browser" && opts?.url ? { url: opts.url } : {}), ...(kind === "shell" && opts?.session ? { session: opts.session.id } : {}) }]);
+      setTiles((cur) => [...cur, { id: newId, kind, label, cmd, args, ...(kind === "browser" && opts?.url ? { url: opts.url } : {}), ...(kind === "shell" && opts?.session ? { session: opts.session.id } : {}), ...(kind === AGENT_TILE_KIND && opts?.work ? { task: promptTask(opts.work) } : {}) }]);
       // "Work on this": hand the fresh claude tile its prompt. It delivers it to
-      // itself the first time it's ready (see claude-bus queueWork/claimWork).
+      // itself the first time it's ready (see work-queue).
       if (kind === AGENT_TILE_KIND && opts?.work) queueWork(newId, opts.work);
       // An editor spawned to show a specific file (a path clicked in a terminal,
       // a "reveal in editor") carries it in `opts.file`: the id was minted here,
@@ -352,7 +342,7 @@ export function useSpawn(ctx: SpawnCtx) {
   }, [spawnInto]);
 
   // Back-compat thin wrappers for the many existing call sites.
-  const spawnClaude = useCallback(
+  const spawnDefaultAgent = useCallback(
     (mode?: string, work?: string) => spawnInto(AGENT_TILE_KIND, { mode, work }),
     [spawnInto],
   );
@@ -363,12 +353,12 @@ export function useSpawn(ctx: SpawnCtx) {
 
   // Open a tile INSIDE a specific frame (the frame's launcher toolbar) — always
   // targets that frame, no picker. Same one-per-frame rule via spawnTile.
-  const frameOpen = useCallback((frameId: string, kind: string) => {
+  const frameOpen = useCallback((frameId: string, kind: string, launch?: SpawnOpts["launch"]) => {
     // A registry agent (codex / opencode / …) opens as an agent-terminal tile
     // carrying its binary + default flags.
     const agent = agentById(kind);
     if (agent) {
-      spawnTile(AGENT_TILE_KIND, frameId, { agent: { id: agent.id, cmd: agent.cmd, args: agent.defaultArgs, label: agent.label } });
+      spawnTile(AGENT_TILE_KIND, frameId, { agent: { id: agent.id, cmd: agent.cmd, args: agent.defaultArgs, label: agent.label }, launch });
       return;
     }
     const k: TileKind =
@@ -414,9 +404,9 @@ export function useSpawn(ctx: SpawnCtx) {
   // HCP control-plane spawn: create an agent tile and return its id so the
   // caller (main, via the renderer command channel) can drive it. Mirrors the
   // claude/registry-agent branch of spawnTile, plus prompt delivery via the
-  // claude-bus work queue. `agent` is a catalog id.
+  // work queue. `agent` is a catalog id.
   const hcpSpawnAgent = useCallback(
-    (opts: { agent?: string; prompt?: string; frame?: string; mode?: string; model?: string; callerTile?: string; background?: boolean; name?: string }): string => {
+    (opts: { agent?: string; prompt?: string; frame?: string; mode?: string; model?: string; callerTile?: string; background?: boolean; name?: string; resume?: string }): string => {
       // Frame preference: explicit > the CALLER agent's frame (so a worker lands
       // beside the agent that spawned it) > the active/first frame.
       // The caller passes its HIVEMIND_TILE, which is the PTY id (`hm:<tileId>`
@@ -449,7 +439,8 @@ export function useSpawn(ctx: SpawnCtx) {
       if (!def) { noAgentInstalled(); return ""; }
       const newId = mintId(`tile-${def.id}`);
       const so = launchOptions(def.id, { mode: opts.mode, model: opts.model });
-      const args = spawnArgsFor(def, so);
+      // Main checked the id and that the agent can resume.
+      const args = opts.resume ? withResume(def, spawnArgsFor(def, so), opts.resume) : spawnArgsFor(def, so);
       const cmd = def.bin;
       const label = ordinalLabel((n) => spawnLabelFor(def, n, {}), (n) => spawnLabelFor(def, n, so));
       // A spawner-chosen name ("reviewer") is what tells a dozen workers apart, so it
@@ -460,12 +451,12 @@ export function useSpawn(ctx: SpawnCtx) {
       // their "finished" notification — they're gathered in bulk, not driven.
       if (opts.background) markBackgroundTile(newId);
       placeInFrame(newId, frame, { background: opts.background });
-      setTiles((cur) => [...cur, { id: newId, kind: AGENT_TILE_KIND, label, cmd, args }]);
+      setTiles((cur) => [...cur, { id: newId, kind: AGENT_TILE_KIND, label, cmd, args, ...(opts.prompt ? { task: promptTask(opts.prompt) } : {}) }]);
       if (opts.prompt) queueWork(newId, opts.prompt);
       return newId;
     },
     [ensureFrame, placeInFrame, renameTile, tilesRef],
   );
 
-  return { placeInFrame, ensureFrame, spawnTile, spawnInto, spawnClaude, spawnAgent, spawnVis, frameOpen, openPlanReview, hcpSpawnAgent };
+  return { placeInFrame, ensureFrame, spawnTile, spawnInto, spawnDefaultAgent, spawnAgent, spawnVis, frameOpen, openPlanReview, hcpSpawnAgent };
 }

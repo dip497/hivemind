@@ -16,7 +16,7 @@ test("the built app frosts the chrome and keeps tiles clear", async () => {
   fs.mkdirSync(config, { recursive: true });
   fs.mkdirSync(path.join(dir, "home"));
   fs.writeFileSync(path.join(config, "settings.json"), JSON.stringify({
-    v: 1, migrated: true, appearance: { glass: { enabled: true, contentGlass: true, blur: 21 } },
+    v: 1, appearance: { glass: { enabled: true, contentGlass: true, blur: 21 } },
   }));
   const app = await electron.launch({
     args: [path.join(APP_DIR, "out/main/index.js"), "--no-sandbox", `--user-data-dir=${dir}/ud`],

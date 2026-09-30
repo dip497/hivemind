@@ -12,7 +12,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { stickyAllow, makeDispatch } from "../../src/main/hcp/methods.js";
+import { makeDispatch } from "../../src/main/hcp/methods.js";
 import { useAuthoredAgents } from "./authored-agents.ts";
 
 // Spawn/supervise policy reads the live catalog: load the published fixtures.
@@ -39,7 +39,7 @@ test("an approval for a BUSY supervisor is held, then delivered when it hits its
     forgetPipes: () => {},
     spawnEdge: () => {},
     setSupervise: () => {},
-    pushWait: () => {},
+    awaitingApproval: () => {},
   } as unknown as Parameters<typeof makeDispatch>[0]);
 
   await dispatch("tile.spawn_agent", { agent: "claude", callerTile: "hm:tile-parent", supervise: true });
@@ -75,30 +75,55 @@ test("approval with a dead supervisor resolves instead of hanging the worker", a
     forgetPipes: () => {},
     spawnEdge: () => {},
     setSupervise: () => {},
-    pushWait: () => {},
+    awaitingApproval: () => {},
   } as unknown as Parameters<typeof makeDispatch>[0]);
   await dispatch("tile.spawn_agent", { agent: "claude", callerTile: "hm:tile-parent", supervise: true });
   const r = await dispatch("agent.await_approval", { callerTile: "hm:tile-w", tool_name: "write", tool_input: {} });
   assert.deepEqual(r, { decision: "ask" }, "resolves immediately — never blocks for 9 minutes on a corpse");
 });
 
-test("a plain allow sticks for file-touching tools", () => {
-  assert.equal(stickyAllow("tile-claude-1:Edit"), true);
-  assert.equal(stickyAllow("tile-claude-1:Write"), true);
-  assert.equal(stickyAllow("tile-claude-1:MultiEdit"), true);
-  // pi lowercases its tool names; claude capitalizes. Both must hit.
-  assert.equal(stickyAllow("tile-claude-1:edit"), true);
-  assert.equal(stickyAllow("tile-claude-1:write"), true);
-});
+test("a plain allow covers THIS call; only `always` is remembered", async () => {
+  // The supervisor's own words decide. Nothing upgrades "allow" into "always" on its
+  // behalf — not for a tool that writes files, not for any tool.
+  const writes: string[] = [];
+  const mailbox = new Mailbox((_id, d) => { writes.push(d); return true; }, 1);
+  const { dispatch } = makeDispatch({
+    turns: new TurnTracker(),
+    recorder: new OutputRecorder(),
+    callRenderer: async () => ({ tileId: "tile-w" }),
+    writeToTile: () => true,
+    deliverToTile: (id: string, t: string, onSent?: () => void) => mailbox.deliver(id, t, onSent),
+    spawnAllowed: () => true,
+    connect: () => true,
+    disconnect: () => {},
+    forgetPipes: () => {},
+    spawnEdge: () => {},
+    setSupervise: () => {},
+    awaitingApproval: () => {},
+  } as unknown as Parameters<typeof makeDispatch>[0]);
+  await dispatch("tile.spawn_agent", { agent: "claude", callerTile: "hm:tile-parent", supervise: true });
 
-test("a plain allow NEVER sticks for bash — each command is a different action", () => {
-  assert.equal(stickyAllow("tile-claude-1:Bash"), false);
-  assert.equal(stickyAllow("tile-claude-1:bash"), false);
-  // Nor for anything we haven't explicitly vetted.
-  assert.equal(stickyAllow("tile-claude-1:SomeNewMcpTool"), false);
-  assert.equal(stickyAllow(""), false);
-});
+  const ask = () => dispatch("agent.await_approval", { callerTile: "hm:tile-w", tool_name: "Edit", tool_input: { path: "/x.ts" } });
+  const reqIdOf = () => [...writes.join("").matchAll(/hive ctl approve (\S+) allow/g)].at(-1)?.[1];
 
+  const first = ask();
+  await new Promise((r) => setTimeout(r, 300));
+  await dispatch("agent.approve", { reqId: reqIdOf(), decision: "allow" });
+  assert.deepEqual(await first, { decision: "allow", reason: undefined });
+
+  // Same worker, same tool: it is asked again, because "allow" was about that one call.
+  const before = writes.length;
+  const second = ask();
+  await new Promise((r) => setTimeout(r, 300));
+  assert.ok(writes.length > before, "the supervisor is asked a second time");
+  await dispatch("agent.approve", { reqId: reqIdOf(), decision: "always" });
+  assert.deepEqual(await second, { decision: "allow", reason: undefined });
+
+  // Now it is remembered: the third call resolves without troubling the supervisor.
+  const quiet = writes.length;
+  assert.deepEqual(await ask(), { decision: "allow" });
+  assert.equal(writes.length, quiet, "nothing was asked");
+});
 
 test("spawning a pi worker with supervise is REFUSED — never silently ungated", async () => {
   const { dispatch } = makeDispatch({
@@ -113,7 +138,7 @@ test("spawning a pi worker with supervise is REFUSED — never silently ungated"
     forgetPipes: () => {},
     spawnEdge: () => {},
     setSupervise: () => {},
-    pushWait: () => {},
+    awaitingApproval: () => {},
   } as unknown as Parameters<typeof makeDispatch>[0]);
 
   await assert.rejects(

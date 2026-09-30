@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { appMeetsMinVersion, fetchCatalog, noteInstall, parseCatalog, stageEntry, type CatalogEntry } from "./plugin-catalog.js";
+import { appMeetsMinVersion, catalogAgentNeedsUpdate, fetchCatalog, noteInstall, parseCatalog, stageEntry, type CatalogEntry } from "./plugin-catalog.js";
 
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
 
@@ -147,4 +147,29 @@ describe("telling the registry an install happened", () => {
     const seen = await withFetch(() => noteInstall(entry("@a/b"), "file:///tmp/index.json"));
     expect(seen).toEqual([]);
   });
+});
+
+test("an installed agent follows the catalog only while it is the catalog's own, untouched copy", () => {
+  const entry = parseCatalog({ version: 1, plugins: [{ id: "claude", type: "agent", name: "Claude", description: "d", author: "a",
+    version: "1.0.0", path: "agents/claude", minAppVersion: "2026.9.6", files: [{ path: "agent.yaml", sha256: "b".repeat(64) }] }] })[0]!;
+  const old = "a".repeat(64);
+  const base = { fromCatalog: true, manifestSha: old, recordedSha: old, appVersion: "2026.9.6" };
+  expect(catalogAgentNeedsUpdate(entry, base)).toBe(true);
+  expect(catalogAgentNeedsUpdate(entry, { ...base, recordedSha: null })).toBe(true); // installed before this was recorded
+  expect(catalogAgentNeedsUpdate(entry, { ...base, recordedSha: "c".repeat(64) })).toBe(false); // edited since
+  expect(catalogAgentNeedsUpdate(entry, { ...base, fromCatalog: false })).toBe(false); // the user's own
+  expect(catalogAgentNeedsUpdate(entry, { ...base, appVersion: "2026.9.5" })).toBe(false); // needs a newer app
+  expect(catalogAgentNeedsUpdate(entry, { ...base, manifestSha: "b".repeat(64) })).toBe(false); // already current
+});
+
+test("an agent this app cannot load is repaired from the catalog, however it was installed", () => {
+  const entry = parseCatalog({ version: 1, plugins: [{ id: "claude", type: "agent", name: "Claude", description: "d", author: "a",
+    version: "1.0.0", path: "agents/claude", minAppVersion: "2026.9.7", files: [{ path: "agent.yaml", sha256: "b".repeat(64) }] }] })[0]!;
+  // Installed by an older app, so nothing recorded it and it is not in fromCatalog — and its
+  // manifest is one this app refuses. It does nothing as it is, so the catalog's copy wins.
+  const broken = { fromCatalog: false, manifestSha: "a".repeat(64), recordedSha: null, appVersion: "2026.9.7", broken: true };
+  expect(catalogAgentNeedsUpdate(entry, broken)).toBe(true);
+  expect(catalogAgentNeedsUpdate(entry, { ...broken, broken: false })).toBe(false);
+  // Still never onto an app too old to run what the catalog lists.
+  expect(catalogAgentNeedsUpdate(entry, { ...broken, appVersion: "2026.9.6" })).toBe(false);
 });
