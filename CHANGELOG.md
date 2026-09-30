@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- New: when an agent hands off a plan in a workspace you share, the review opens beside the agent for everyone there, on every window. Anyone who may drive agents can approve it or ask for changes; the first answer is the one the agent gets, and everyone else is told who answered ("Priya approved the plan"). Others read the plan without the buttons.
 - New: in a workspace you share, the people you let in watch its terminals live, and those who may use terminals can type into one once you hand them its keyboard. A terminal's title bar says who has its keyboard; a guest clicks into it and **Ask for keyboard**; you are asked (**Give** / **Not now**), and while they have it only their keys reach it and it takes their size, which your window draws scaled to your tile. **Take back** (or Ctrl/⌘⇧K in the terminal) returns it to you at once; it also comes back by itself after five minutes of their not typing, and when they leave.
 - Fixed: two windows showing one terminal at different sizes drew it wrapped at the wrong width in the window that did not size it. That window now draws it at the size it has, letterboxed or scaled down to fit.
 - Fixed: two people writing in the same sticky note, checklist, text or arrow label at once no longer lose each other's words: what each typed is merged into the text as it is when they pause, where one of them used to put back the whole text they had.

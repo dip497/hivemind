@@ -28,8 +28,8 @@ export function ReachChooser({ onChosen, onCancel, current }: { onChosen: (net: 
           Local network — no servers; only devices here
         </Button>
       )}
-      <Button size="sm" variant="ghost" className="h-auto justify-start whitespace-normal py-1.5 text-left" disabled={current?.builtin === "hosted"} onClick={() => void use("hosted")} data-use-network="hosted">
-        Use hivemind's servers — free, nothing to set up. They forward encrypted traffic and help devices find each other; they never see your work.
+      <Button size="sm" variant="ghost" className="h-auto justify-start whitespace-normal text-left" disabled={current?.builtin === "hosted"} onClick={() => void use("hosted")} data-use-network="hosted">
+        <span className="py-1.5">Use hivemind's servers — free, nothing to set up. They forward encrypted traffic and help devices find each other; they never see your work.</span>
       </Button>
       <div className="flex flex-col gap-1">
         <span>Use my own servers — paste the network link from its admin:</span>

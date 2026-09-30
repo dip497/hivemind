@@ -128,7 +128,7 @@ export function PresenceLayer({ repo, pane, selection }: { repo: string; pane: R
           style={{ transform: `translate(${p.cursor.x}px, ${p.cursor.y}px) scale(${1 / zoom})`, transformOrigin: "0 0", zIndex: 10_000, color: colorOf(p) }}
         >
           <svg width={16} height={20} viewBox="0 0 16 20" aria-hidden className="block drop-shadow">
-            <path d="M1 1 L1 16 L5 12 L8 19 L11 18 L8 11 L14 11 Z" fill="currentColor" stroke="white" strokeWidth={1.2} strokeLinejoin="round" />
+            <path d="M1 1 L1 16 L5 12 L8 19 L11 18 L8 11 L14 11 Z" fill="currentColor" stroke="var(--color-fg)" strokeWidth={1.2} strokeLinejoin="round" />
           </svg>
           <span className="ml-3 -mt-1 block w-max max-w-[180px] truncate rounded px-1.5 py-0.5 text-[11px] font-medium text-white" style={{ background: colorOf(p) }}>
             {p.name || "Someone"}

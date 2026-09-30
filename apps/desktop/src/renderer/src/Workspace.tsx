@@ -60,6 +60,8 @@ import { useWorktrees } from "./useWorktrees";
 const MachinesHub = lazy(() => import("./machines/MachinesHub").then((m) => ({ default: m.MachinesHub })));
 import { frameMachine, hostIdOfUri, useMachines, type MachinesRequest } from "./machines/store";
 import type { SessionSummary } from "../../shared/ipc";
+import type { PlanReview } from "@hivemind/workspace-api/plans";
+import { toBareId } from "../../shared/tile-id";
 import { isRemote } from "../../shared/remote-uri";
 import { getAgents, AgentIcon, agentById, agentForCmd, useAgents } from "./agents";
 import { useSpawn } from "./useSpawn";
@@ -802,17 +804,31 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     spawnTile("browser", sourceFrameId ?? null, { url });
   }, [focusTile, spawnTile]);
 
-  // Plan review: an agent hit ExitPlanMode → main's plan-bridge pushed the plan.
+  // Plan review: an agent hit ExitPlanMode and waits on a person (M2). Every window showing the
+  // agent opens the review beside it, on every machine the workspace is shared with, and the ones
+  // waiting when it opens; once anyone answers, or the agent stops waiting, it closes, and the
+  // others are told who answered.
   useEffect(() => {
-    const offOpen = window.hive.onPlanReviewOpen((p) => {
-      openPlanReview({ requestId: p.requestId, plan: p.plan, cwd: p.cwd, agentTileId: p.tileId });
+    if (!persistKey) return undefined;
+    let live = true;
+    let me: string | null = null;
+    const opened = (r: PlanReview): void => {
+      const agent = toBareId(r.tileId);
+      if (!tilesRef.current.some((t) => t.id === agent)) return;
+      if (tilesRef.current.some((t) => t.kind === "planReview" && t.review?.requestId === r.requestId)) return;
+      openPlanReview({ requestId: r.requestId, plan: r.plan, cwd: r.cwd, agentTileId: r.tileId });
+    };
+    void window.hive.identity().then((id) => { me = id?.personId ?? null; }, () => {});
+    void window.hive.planReviews(persistKey).then((all) => { if (live) all.forEach(opened); }, () => {});
+    const offOpen = window.hive.onPlanReview(opened);
+    const offDecided = window.hive.onPlanDecided((d) => {
+      const tile = tilesRef.current.find((t) => t.kind === "planReview" && t.review?.requestId === d.requestId);
+      if (!tile) return;
+      closeTile(tile.id);
+      if (d.by && d.by.person !== me) toast(`${d.by.name || "Someone"} ${d.decision === "allow" ? "approved the plan" : "asked for changes to the plan"}`);
     });
-    const offAbort = window.hive.onPlanReviewAbort((requestId) => {
-      const tile = tilesRef.current.find((t) => t.kind === "planReview" && t.review?.requestId === requestId);
-      if (tile) closeTile(tile.id);
-    });
-    return () => { offOpen(); offAbort(); };
-  }, [openPlanReview, closeTile]);
+    return () => { live = false; offOpen(); offDecided(); };
+  }, [persistKey, openPlanReview, closeTile]);
 
   // HCP control plane: main forwards a verb only a window can carry out (focus a tile, open a
   // review, a view's event). Execute it and reply with the result/error.

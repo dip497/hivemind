@@ -36,7 +36,7 @@ export interface PeerOf {
 const refused = (message: string): Answer => ({ error: { code: "FORBIDDEN", message } });
 
 /** Methods and notices whose first param names a tile. */
-const BY_TILE = /^terminal\.(write|show|resize|flow|close|detach|keyboard\.(ask|give|take))$/;
+const BY_TILE = /^(terminal\.(write|show|resize|flow|close|detach|keyboard\.(ask|give|take))|plan\.decide)$/;
 
 /** The tiles an event concerns: it goes to a peer only when each is in its workspace. */
 function tilesOf(event: EventMessage): string[] | null {
@@ -56,6 +56,9 @@ function tilesOf(event: EventMessage): string[] | null {
       return [String((p as Record<string, unknown>)?.parent), String((p as Record<string, unknown>)?.child)];
     case "tile.opened":
       return [String((p as Record<string, unknown>)?.id)];
+    case "plan.review":
+    case "plan.decided":
+      return [String((p as Record<string, unknown>)?.tileId)];
     default:
       return null;
   }

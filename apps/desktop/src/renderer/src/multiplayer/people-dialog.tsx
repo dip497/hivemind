@@ -59,7 +59,7 @@ export function PeopleDialog({ repo, open, onClose }: { repo: string; open: bool
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) { onClose(); setRemoving(null); setGranting(null); setError(null); } }}>
       <DialogContent className="sm:max-w-[520px]" data-people-dialog>
-        <DialogTitle className="flex items-center gap-2"><Users size={15} /> People</DialogTitle>
+        <DialogTitle className="flex items-center"><Users size={15} className="mr-2" /> People</DialogTitle>
         <DialogDescription>Everyone you let into this workspace, and what they can do.</DialogDescription>
         {people?.length === 0 && <p className="text-[12px] text-[var(--color-fg3)]">Nobody here yet. Share the link.</p>}
         <ul className="flex flex-col gap-1">

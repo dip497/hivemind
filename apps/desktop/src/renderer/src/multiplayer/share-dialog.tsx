@@ -46,7 +46,7 @@ export function ShareDialog({ repo, open, onClose, onPeople }: { repo: string; o
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) { onClose(); setLink(null); setError(null); } }}>
       <DialogContent className="sm:max-w-[460px]" data-share-dialog>
-        <DialogTitle className="flex items-center gap-2"><Share2 size={15} /> Invite people to {name}</DialogTitle>
+        <DialogTitle className="flex items-center"><Share2 size={15} className="mr-2" /> Invite people to {name}</DialogTitle>
         <DialogDescription>
           {net && net.builtin !== "local" ? `Works for people on this network, and through ${net.profile.name}'s servers.` : "Works for people on this network."} You are asked before anyone joins.
         </DialogDescription>

@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 import { contextBridge, ipcRenderer, webUtils } from "electron";
-import type { HiveIpc, PlanReviewOpen, HcpCommand, HcpPipeEvent, HcpSpawnEvent, HcpSpawnedEvent, HcpStatusEvent, AppErrorEvent } from "../shared/ipc.js";
+import type { HiveIpc, HcpCommand, HcpPipeEvent, HcpSpawnEvent, HcpSpawnedEvent, HcpStatusEvent, AppErrorEvent } from "../shared/ipc.js";
 import { WorkspaceClient } from "@hivemind/workspace-api/client";
 import type { Answer, EventMessage } from "@hivemind/workspace-api/protocol";
 
@@ -67,8 +67,6 @@ const api: HiveIpc & {
   newWindow: () => Promise<void>;
   onOpenProject: (cb: (path: string) => void) => () => void;
   onBrowserPopup: (cb: (p: { fromId: number; url: string }) => void) => () => void;
-  onPlanReviewOpen: (cb: (p: PlanReviewOpen) => void) => () => void;
-  onPlanReviewAbort: (cb: (requestId: string) => void) => () => void;
   onHcpCommand: (cb: (cmd: HcpCommand) => void) => () => void;
   onHcpPipe: (cb: (e: HcpPipeEvent) => void) => () => void;
   onHcpSpawn: (cb: (e: HcpSpawnEvent) => void) => () => void;
@@ -314,19 +312,11 @@ const api: HiveIpc & {
     return () => ipcRenderer.removeListener("open-project", listener);
   },
 
-  // Plan review: an agent handed off a plan → open the in-canvas review.
-  planReviewDecide: (requestId, decision, feedback) =>
-    ipcRenderer.invoke("plan-review:decide", requestId, decision, feedback),
-  onPlanReviewOpen: (cb: (p: PlanReviewOpen) => void) => {
-    const listener = (_e: unknown, p: PlanReviewOpen) => cb(p);
-    ipcRenderer.on("plan-review:open", listener);
-    return () => ipcRenderer.removeListener("plan-review:open", listener);
-  },
-  onPlanReviewAbort: (cb: (requestId: string) => void) => {
-    const listener = (_e: unknown, id: string) => cb(id);
-    ipcRenderer.on("plan-review:abort", listener);
-    return () => ipcRenderer.removeListener("plan-review:abort", listener);
-  },
+  // Plan review: an agent handed off a plan → open the in-canvas review (M2: to every client).
+  planReviews: (repo) => workspace.call("plan.list", repo),
+  planReviewDecide: (tile, requestId, decision, feedback) => workspace.call("plan.decide", tile, requestId, decision, feedback),
+  onPlanReview: (cb) => workspace.on("plan.review", cb),
+  onPlanDecided: (cb) => workspace.on("plan.decided", cb),
 
   // HCP control plane: main pushes a canvas verb → renderer executes → replies.
   hcpResult: (id, ok, result, errorMessage) =>

@@ -8,6 +8,7 @@ import type { ReviewComment } from "@hivemind/core/review";
 import type { DiffPayload, DiffScope, GitBranchList, GitRevision, GitStatusSnapshot, WorktreeCreateOpts, WorktreeEntry } from "./git.js";
 import type { Links, PipeChange, SpawnChange, StatusChange, TileOpened } from "./agents.js";
 import type { ActivityLevels, ExitInfo, TerminalOpts, Typist } from "./terminals.js";
+import type { Answerer, PlanDecided, PlanReview } from "./plans.js";
 import type { BoardObject, CoreLayout, ViewLayout } from "@hivemind/workspace-doc/shapes";
 import type { LegacyLayout, WorkspaceChange } from "@hivemind/workspace-host/layout";
 import type { Participant, PresenceState } from "@hivemind/workspace-host/presence";
@@ -68,6 +69,12 @@ export interface WorkspaceMethods {
   /** Show a terminal: the first to open a session starts it; one that opens it after joins it,
    *  its screen first. `joined`: another client started it. Its output and exit are events. */
   "terminal.open": (opts: TerminalOpts) => { pid: number; joined: boolean };
+  /** The plans the agents of `repo` are waiting on a person for (M2). Each after it is a
+   *  `plan.review` event, and each answer a `plan.decided`. */
+  "plan.list": (repo: string) => PlanReview[];
+  /** Answer the plan `requestId` the agent in `tile` handed off: the first answer is the one the
+   *  agent gets. `answered` false: someone answered first (`by`), or it is no longer waited on. */
+  "plan.decide": (tile: string, requestId: string, decision: "allow" | "deny", feedback?: string) => { answered: boolean; by: Answerer | null };
   /** A workspace's layouts, for a client that holds them: every read after it answers from what
    *  it holds, and each `store.changed` says what to read again. */
   "store.open": (repo: string) => StoreSnapshot;
@@ -136,6 +143,10 @@ export interface WorkspaceEvents {
   "terminal.keyboard.asked": (tile: string, asker: Typist) => void;
   /** A terminal's size changed: a client whose own differs draws it at this size. */
   "terminal.size": (tile: string, cols: number, rows: number) => void;
+  /** An agent handed off a plan for review (M2). */
+  "plan.review": (review: PlanReview) => void;
+  /** A plan was answered, and by whom; or its agent stopped waiting (`decision` null). */
+  "plan.decided": (decided: PlanDecided) => void;
   /** Files changed in a repo the client watches (at most one event every 300 ms). */
   "file.changed": (repo: string, change: { paths: string[] }) => void;
   /** Another writer changed a workspace's layouts: `part` is `core`, `board` or `view:<id>`. */

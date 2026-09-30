@@ -1,21 +1,26 @@
 /**
  * PlanReviewTile — the in-canvas plan review surface. Opened automatically when
  * an agent hands off a plan (the injected PreToolUse/ExitPlanMode hook → main's
- * plan-bridge → "plan-review:open"). The agent is BLOCKED on the hook connection
- * until the user decides here:
+ * plan-bridge → the workspace API's `plan.review`, to every window showing the
+ * agent, on every machine the workspace is shared with). The agent is BLOCKED on
+ * the hook connection until someone who may drive agents decides here:
  *   - Approve plan      → resolve `allow`; the agent exits plan mode and executes.
  *   - Request changes   → resolve `deny` + feedback markdown; the agent stays in
  *                         plan mode and revises (feedback becomes
  *                         `permissionDecisionReason`).
+ * The first answer is the one the agent gets. A guest who may not drive agents
+ * reads the plan and cannot answer it.
  *
  * The tile is a thin shell: header + decision plumbing. PlanReviewBody owns the
  * block rendering + annotation engine + the Approve/Request-changes actions.
  */
 import { useState } from "react";
+import { toast } from "sonner";
 import { GripVertical } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { useTileFont, FontStepper, handleFontKey } from "./tile-font";
 import { PlanReviewBody } from "./plan-review/PlanReviewBody";
+import { joinedId, useShown } from "./multiplayer/shown";
 
 interface Props {
   /** Set when the review came from the plan-bridge hook (PreToolUse). */
@@ -24,15 +29,18 @@ interface Props {
   hcpCmdId?: string;
   plan: string;
   cwd: string;
-  /** The agent tile that produced this plan (reserved for future labeling). */
+  /** The agent tile that produced this plan: whose plan an answer is to. */
   agentTileId?: string;
   /** Remove the tile from the canvas after a decision (or external abort). */
   onClose?: () => void;
 }
 
-export function PlanReviewTile({ requestId, hcpCmdId, plan, cwd, onClose }: Props) {
+export function PlanReviewTile({ requestId, hcpCmdId, plan, cwd, agentTileId, onClose }: Props) {
   const font = useTileFont(`plan:${requestId ?? hcpCmdId ?? "x"}`, 13);
   const [sent, setSent] = useState(false);
+  // In a workspace joined from elsewhere, answering is driving the host's agents.
+  const { repo, shared } = useShown();
+  const mayDecide = !joinedId(repo) || shared?.access === "agents";
 
   const decide = async (decision: "allow" | "deny", feedback?: string) => {
     if (sent) return;
@@ -40,7 +48,10 @@ export function PlanReviewTile({ requestId, hcpCmdId, plan, cwd, onClose }: Prop
     try {
       // HCP review.open → resolve the blocked caller; else the plan-bridge hook.
       if (hcpCmdId) await window.hive.hcpResult(hcpCmdId, true, { decision, feedback });
-      else if (requestId) await window.hive.planReviewDecide(requestId, decision, feedback);
+      else if (requestId && agentTileId) {
+        const { answered, by } = await window.hive.planReviewDecide(agentTileId, requestId, decision, feedback);
+        if (!answered && by) toast(`${by.name || "Someone"} answered the plan first`);
+      }
     } catch {
       /* main gone — the hook fails open on its side, nothing to recover here */
     }
@@ -65,15 +76,15 @@ export function PlanReviewTile({ requestId, hcpCmdId, plan, cwd, onClose }: Prop
           variant="ghost"
           size="icon-2xs"
           className="nodrag"
-          aria-label="dismiss plan review (approves the plan)"
-          title="dismiss (approves)"
-          onClick={() => decide("allow")}
+          aria-label={mayDecide ? "dismiss plan review (approves the plan)" : "close plan review"}
+          title={mayDecide ? "dismiss (approves)" : "close"}
+          onClick={() => (mayDecide ? void decide("allow") : onClose?.())}
         >
           <svg viewBox="0 0 14 14" aria-hidden><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
         </Button>
       </div>
 
-      <PlanReviewBody plan={plan} fontScale={font.size / 13} sent={sent} onDecide={decide} />
+      <PlanReviewBody plan={plan} fontScale={font.size / 13} sent={sent} onDecide={mayDecide ? decide : null} />
     </div>
   );
 }

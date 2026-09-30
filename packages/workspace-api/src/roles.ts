@@ -43,7 +43,10 @@ const LEAST: Record<string, Role> = {
   "terminal.resize": "terminals",
   "terminal.keyboard.ask": "terminals",
   "terminal.keyboard.give": "terminals",
-  // Starting and ending what runs on the host.
+  // Seeing the plans agents wait on a person for; answering one, and starting and ending what
+  // runs on the host, is driving agents.
+  "plan.list": "view",
+  "plan.decide": "agents",
   "terminal.open": "agents",
   "terminal.close": "agents",
 };

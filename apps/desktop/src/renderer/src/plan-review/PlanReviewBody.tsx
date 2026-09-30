@@ -39,7 +39,8 @@ export function PlanReviewBody({
   plan: string;
   fontScale: number;
   sent: boolean;
-  onDecide: (decision: "allow" | "deny", feedback?: string) => void;
+  /** null: this person may read the plan, not answer it. */
+  onDecide: ((decision: "allow" | "deny", feedback?: string) => void) | null;
 }) {
   const blocks = useMemo(() => parsePlanToBlocks(plan), [plan]);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
@@ -87,6 +88,7 @@ export function PlanReviewBody({
   };
 
   const requestChanges = () => {
+    if (!onDecide) return;
     if (annotations.length > 0) { onDecide("deny", exportAnnotations(blocks, annotations)); return; }
     setFreeText(""); // nothing marked → let them type plain feedback
   };
@@ -153,26 +155,34 @@ export function PlanReviewBody({
         </div>
 
         <div className="p-2 border-t border-[var(--color-line)] flex flex-col gap-1.5">
-          <Button
-            variant="outline"
-            disabled={sent}
-            onClick={requestChanges}
-            className="nodrag"
-          >
-            <MessageSquare /> Request changes{count > 0 ? ` (${count})` : ""}
-          </Button>
-          <Button
-            disabled={sent}
-            onClick={() => onDecide("allow")}
-            className="nodrag"
-          >
-            <Check /> Approve plan
-          </Button>
+          {onDecide ? (
+            <>
+              <Button
+                variant="outline"
+                disabled={sent}
+                onClick={requestChanges}
+                className="nodrag"
+              >
+                <MessageSquare /> Request changes{count > 0 ? ` (${count})` : ""}
+              </Button>
+              <Button
+                disabled={sent}
+                onClick={() => onDecide("allow")}
+                className="nodrag"
+              >
+                <Check /> Approve plan
+              </Button>
+            </>
+          ) : (
+            <p className="px-1 text-[11px] leading-relaxed text-[var(--color-fg3)]" data-plan-read-only>
+              Someone who can drive agents answers this plan.
+            </p>
+          )}
         </div>
       </aside>
 
       {/* No marks → plain feedback box overlay. */}
-      {freeText !== null && (
+      {freeText !== null && onDecide && (
         <div className="absolute inset-0 z-50 bg-black/40 grid place-items-center p-6" onMouseDown={() => setFreeText(null)}>
           <div className="w-[440px] max-w-full bg-[var(--color-bg2)] border border-[var(--color-line)] rounded-xl p-3 flex flex-col gap-2" onMouseDown={(e) => e.stopPropagation()}>
             <span className="text-[12px] font-semibold text-[var(--color-fg)]">Request changes</span>

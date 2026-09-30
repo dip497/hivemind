@@ -29,6 +29,8 @@ const domain = {
     "store.setCore": (from: Connection, repo: unknown) => { ran.push({ what: "store.setCore", by: from.actor, args: [repo] }); },
     "git.commit": (from: Connection, repo: unknown) => { ran.push({ what: "git.commit", by: from.actor, args: [repo] }); return { sha: "x" }; },
     "terminal.open": (from: Connection, opts: unknown) => { ran.push({ what: "terminal.open", by: from.actor, args: [opts] }); return { pid: 1, joined: false }; },
+    "plan.list": (from: Connection, repo: unknown) => { ran.push({ what: "plan.list", by: from.actor, args: [repo] }); return []; },
+    "plan.decide": (from: Connection, tile: unknown) => { ran.push({ what: "plan.decide", by: from.actor, args: [tile] }); return { answered: true, by: null }; },
   },
   effects: { "git.commit": () => ({}), "terminal.open": () => ({}) },
   notices: {
@@ -149,6 +151,28 @@ test("a peer hears who holds a terminal's keyboard, who asks for it and the term
   }
   await Bun.sleep(10);
   expect(heard).toEqual(["in-1 held by Ana", "in-1 asked by Ana", "in-1 100x30", "in-1 held by the host"]);
+});
+
+test("a plan an agent waits on: anyone with access sees those of the workspace; one who drives agents answers one of its tiles, and hears of its plans only", async () => {
+  const typist = connect("terminals");
+  expect(await typist.client.call("plan.list", workspaceUrl(W))).toEqual([]);
+  expect(ran).toEqual([{ what: "plan.list", by: typist.actor, args: [REPO] }]);
+  expect(await code(typist.client.call("plan.decide", "in-1", "r1", "allow"))).toBe("FORBIDDEN");
+
+  const driver = connect("agents");
+  await driver.client.call("plan.decide", "in-1", "r1", "allow");
+  expect(await code(driver.client.call("plan.decide", "out-1", "r2", "allow"))).toBe("FORBIDDEN");
+  expect(ran.map((r) => `${r.what} ${String(r.args[0])}`)).toEqual(["plan.decide in-1"]);
+
+  const heard: string[] = [];
+  driver.client.on("plan.review", (r) => heard.push(`review ${r.tileId}`));
+  driver.client.on("plan.decided", (d) => heard.push(`decided ${d.tileId}`));
+  for (const tileId of ["in-1", "out-1"]) {
+    driver.server.publish("plan.review", { requestId: "r", tileId, plan: "# Plan", cwd: REPO });
+    driver.server.publish("plan.decided", { requestId: "r", tileId, decision: "allow", by: null });
+  }
+  await Bun.sleep(10);
+  expect(heard).toEqual(["review in-1", "decided in-1"]);
 });
 
 test("a call waiting when the connection goes fails, and the host lets go of the peer", async () => {

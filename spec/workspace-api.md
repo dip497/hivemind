@@ -59,7 +59,8 @@ A peer names the workspace by its id, `hive://<workspaceId>`, wherever a call ta
 peer's role on the workspace (design §6) before it runs, and one the role does not allow is
 `FORBIDDEN` (a notice is dropped): reads and watching terminals are anyone's with access; the
 board's edits need *Can edit board*; typing into and resizing a terminal, and asking for its
-keyboard or handing it on, *Can use terminals*; opening and closing tiles, *Can drive agents*;
+keyboard or handing it on, *Can use terminals*; answering an agent's plan, and opening and closing
+tiles, *Can drive agents*;
 anything else is the owner's (taking a keyboard back among them). A peer's `terminal.open` of a
 session already running shows it (`attachOnly`), whatever its role. A peer is sent only the
 events about its workspace's tiles, and a tile outside the workspace is refused to it. A
@@ -130,6 +131,8 @@ log.
 | `status.all` | | `[{tileId, status}]`, every agent session's status (`spec/status.md`) | read |
 | `link.list` | | `{pipes: [{src, dst}], spawns: [{parent, child}]}` | read |
 | `terminal.open` | `{tileId, cwd, cmd, args?, cols, rows, env?, initialPrompt?, attachOnly?, liveOnly?}` | `{pid, joined}`: the first client to open a session starts it; one that opens it after joins it (`joined`), sent the host's screen of it first | target the tile, detail the program, when it starts a session the host did not ask for itself and the client did not only attach to |
+| `plan.list` | `repo` | the plans the workspace's agents wait on a person for: `[{requestId, tileId, plan, cwd}]`; each after it is a `plan.review` event | |
+| `plan.decide` | `tile`, `requestId`, `"allow"` or `"deny"`, `feedback`? | `{answered, by}`: the first answer is the one the agent gets; a later one, or one about another tile's plan, answers nothing (`by`: who answered first) | target the agent's tile, detail the answer |
 
 | `store.open` | `repo` | `{core, views: {[viewId]: layout}, objects}`: a workspace's layouts, for a client that holds them | read |
 | `store.core` | `repo` | the core layout (frames, tiles, their names), or null | read |
@@ -185,6 +188,8 @@ A diff's `scope` is one of `{"kind": "working", "staged"?}`, `{"kind": "branch",
 | `terminal.keyboard` | `tile`, `{id, person, name}` or null | to every client, as a terminal's keyboard changes hands (null: back with the host); to a client that opens the terminal while someone else holds it |
 | `terminal.keyboard.asked` | `tile`, `{id, person, name}` | to the keyboard's holder, as someone asks for it: `id` is who to give it to |
 | `terminal.size` | `tile`, `cols`, `rows` | to every client, as a terminal's session takes a size, and to one that opens it: a client whose own differs draws it at this size |
+| `plan.review` | `{requestId, tileId, plan, cwd}` | to every client, as an agent hands off a plan: it waits until someone who may drive agents answers it |
+| `plan.decided` | `{requestId, tileId, decision, by}` | to every client, as a plan is answered (`by`: `{person, name}`), or its agent stops waiting (`decision` and `by` null) |
 | `file.changed` | `repo`, `{paths}` | to each client watching the repo (the app's window watches the one it opens), at most one every 300 ms |
 | `store.changed` | `{repo, part}` (`core`, `board` or `view:<id>`) | to every client but the one whose write it was, on each change to a workspace's layouts |
 | `presence.changed` | `repo`, `[{id, person, name, color, cursor, selection}]` | to every client, as someone in the workspace moves, selects, arrives or leaves: everyone there now, one per connection (`id`), `person` their key |

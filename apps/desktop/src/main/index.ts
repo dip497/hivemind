@@ -86,12 +86,13 @@ import { PipeManager } from "./hcp/pipes.js";
 import { toBareId, toPtyId } from "../shared/tile-id.js";
 import { SUBMIT_DELAY_MS } from "../shared/agent-io.js";
 import { INITIAL_PROMPT_ENV } from "@hivemind/agent-host/initial-prompt";
-import { WorkspaceServer, named } from "@hivemind/workspace-api/server";
+import { WorkspaceServer, named, type Connection } from "@hivemind/workspace-api/server";
 import { workspaceDomains } from "./workspace/domains.js";
 import { agents } from "./workspace/agents.js";
 import { Terminals, type SessionOutput } from "./workspace/terminals.js";
 import { Layouts, type Shown } from "./workspace/store.js";
 import { presence } from "./workspace/presence.js";
+import { Plans } from "./workspace/plans.js";
 import type { TerminalOpts } from "@hivemind/workspace-api/terminals";
 import { serveWorkspaceApi } from "./workspace-ipc.js";
 import { fileIn } from "./workspace/repo-paths.js";
@@ -1043,6 +1044,12 @@ let agentsScanned: Promise<void> = Promise.resolve();
  *  the window's intent. */
 const controlSpawned = new Set<string>();
 
+/** Who is at a client of this host, as the others are told: a peer is the person its certificate
+ *  names, under the name they joined with; a window is the person at this machine. */
+const whoIs = (c: Connection): { person: string; name: string } => c.actor.kind === "peer"
+  ? { person: c.actor.person, name: personName(c.actor.person) }
+  : { person: machineIdentity().personId, name: getAppSettings().profile.name || os.userInfo().username };
+
 const terminals = new Terminals({
   intents: hostIntents(),
   relay: {
@@ -1058,9 +1065,7 @@ const terminals = new Terminals({
   askedByHost: (bare) => controlSpawned.delete(bare),
   // Who holds each terminal's keyboard, and each session's size, told to every client (M2).
   publish: (event, ...params) => workspaceServer.publish(event, ...params),
-  who: (c) => c.actor.kind === "peer"
-    ? { person: c.actor.person, name: personName(c.actor.person) }
-    : { person: machineIdentity().personId, name: getAppSettings().profile.name || os.userInfo().username },
+  who: whoIs,
   watchActivity: (tiles) => ptyActivity.setWatched(tiles),
   onError: (m) => console.warn(`[terminals] ${m}`),
   backend: {
@@ -1147,6 +1152,13 @@ async function startSession(opts: TerminalOpts, out: SessionOutput): Promise<{ p
 const layouts = new Layouts(storeFor, (repo) => !repo.startsWith("hive://") || mayWriteShared(repo.slice("hive://".length)));
 
 // The workspace API (R8): git and worktrees, files, issues, review comments, agents' status and
+/** Plans agents hand off, told to every client, answered by one who may drive agents (M2). */
+const plans = new Plans({
+  publish: (event, ...params) => workspaceServer.publish(event, ...params),
+  who: whoIs,
+  repoOf: (bare) => workspaceStore().workspaceOf(bare),
+});
+
 // links, terminals, the store and who is where on it (M1). Each window is a connection to it (workspace-ipc.ts), which is
 // answered as the person at the window, and sent its events.
 const workspaceServer: WorkspaceServer = new WorkspaceServer([
@@ -1160,6 +1172,7 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
     }),
   }),
   terminals.domain,
+  plans.domain,
   presence(() => workspaceServer, () => machineIdentity().personId),
 ], hostIntents(), (m) => console.warn(`[workspace] ${m}`));
 const workspaceIpc = serveWorkspaceApi(workspaceServer, elsewhere);
@@ -1583,43 +1596,27 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
 
 // ── plan review bridge ───────────────────────────────────────────────────────
 // The injected PreToolUse(ExitPlanMode) hook connects to this unix socket when
-// an agent hands off a plan. We hold the hook connection (via `reply`) until the
-// renderer resolves it through "plan-review:decide". Socket path mirrors the one
-// the daemon injects into the hook command (both derive from userData).
-const planReplies = new Map<string, { tile: string; reply: PlanRequest["reply"] }>();
+// an agent hands off a plan. We hold the hook connection (via `reply`) until
+// someone who may drive agents answers it over the workspace API (`plans.ts`:
+// every window and every peer of the workspace is told). Socket path mirrors the
+// one the daemon injects into the hook command (both derive from userData).
 function startPlanReviewBridge(): void {
   const sock = ipcPath(app.getPath("userData"), "plan-bridge.sock");
-  startPlanBridge(sock, (req) => {
-    const win = userWindow();
-    if (!win) { req.reply("allow"); return; } // fail-open: no UI
+  startPlanBridge(sock, (req: PlanRequest) => {
+    if (openWindows().length === 0) { req.reply("allow"); return; } // fail-open: no UI
     // The agent waits on a person: that is its status until the review is answered or dropped.
     const bare = toBareId(req.tileId);
     hcpStatus.event(bare, { event: "input.requested", kind: "plan" });
-    planReplies.set(req.requestId, {
-      tile: bare,
-      reply: (decision, feedback) => {
-        hcpStatus.event(bare, { event: "input.resolved" });
-        req.reply(decision, feedback);
-      },
+    plans.ask({ requestId: req.requestId, tileId: req.tileId, plan: req.plan, cwd: req.cwd }, (decision, feedback) => {
+      hcpStatus.event(bare, { event: "input.resolved" });
+      req.reply(decision, feedback);
     });
     req.onAbort(() => {
       hcpStatus.event(bare, { event: "input.resolved" });
-      planReplies.delete(req.requestId);
-      broadcast("plan-review:abort", req.requestId);
-    });
-    win.webContents.send("plan-review:open", {
-      requestId: req.requestId, tileId: req.tileId, plan: req.plan, cwd: req.cwd,
+      plans.drop(req.requestId);
     });
   });
 }
-handleEffect(
-  "plan-review:decide",
-  (requestId, decision) => ({ target: planReplies.get(String(requestId))?.tile, detail: decision === "allow" || decision === "deny" ? decision : undefined }),
-  wrap(async (_e, requestId: string, decision: "allow" | "deny", feedback?: string) => {
-    const pending = planReplies.get(requestId);
-    if (pending) { pending.reply(decision, feedback); planReplies.delete(requestId); }
-  }),
-);
 
 // ── HCP: the control plane ───────────────────────────────────────────────────
 // A 0600 unix socket where `hive ctl` (and any driver) drives the running app: spawn

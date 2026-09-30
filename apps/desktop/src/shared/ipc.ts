@@ -58,6 +58,7 @@ export type {
 } from "@hivemind/workspace-api/git";
 import type { DiffPayload, DiffScope, GitBranchList, GitStatusSnapshot, WorktreeCreateOpts, WorktreeEntry } from "@hivemind/workspace-api/git";
 import type { Typist } from "@hivemind/workspace-api/terminals";
+import type { Answerer, PlanDecided, PlanReview } from "@hivemind/workspace-api/plans";
 
 // ── machines (saved ssh hosts, shared with `hive machine`) ────────────────
 /** One remote directory entry for the folder picker / tree. */
@@ -535,13 +536,21 @@ export interface HiveIpc {
   /** Restart the app so a settings change that needs a fresh launch takes hold. */
   relaunchApp(): Promise<void>;
 
-  /** Resolve a blocked plan-review hook. allow → the agent proceeds with the
-   *  plan; deny + feedback → the agent stays in plan mode and revises. */
+  /** The plans the agents of `repo` wait on a person for (M2): each opens beside its agent. */
+  planReviews(repo: string): Promise<PlanReview[]>;
+  /** Answer the plan `requestId` the agent in `tileId` handed off: allow → the agent proceeds with
+   *  the plan; deny + feedback → it stays in plan mode and revises. The first answer is the one it
+   *  gets: `answered` false, someone else's came first (`by`). */
   planReviewDecide(
+    tileId: string,
     requestId: string,
     decision: "allow" | "deny",
     feedback?: string,
-  ): Promise<void>;
+  ): Promise<{ answered: boolean; by: Answerer | null }>;
+  /** An agent handed off a plan: every window, on every machine the workspace is shared with. */
+  onPlanReview(cb: (review: PlanReview) => void): () => void;
+  /** A plan was answered, and by whom; or its agent stopped waiting (`decision` null). */
+  onPlanDecided(cb: (decided: PlanDecided) => void): () => void;
 
   /** Reply to a main→renderer HCP command (a control-plane verb that needs the
    *  canvas, e.g. tile.spawn_agent). `id` correlates with the pushed command. */
@@ -571,17 +580,6 @@ export interface LedgerSince { id: string; bucket: ViewStatus; since: number; ex
 /** A PNG a view asked to share, checked and re-encoded by main, awaiting the user's choice. */
 export interface SharePrepared { token: string; preview: string; width: number; height: number }
 
-/** Pushed main→renderer when an agent hands off a plan (PreToolUse/ExitPlanMode).
- *  The renderer opens a PlanReviewTile and later calls `planReviewDecide`. */
-export interface PlanReviewOpen {
-  requestId: string;
-  /** The agent tile that produced the plan (so the review opens beside it). */
-  tileId: string;
-  /** The plan markdown (Claude Code's `tool_input.plan`). */
-  plan: string;
-  /** The agent's cwd at handoff. */
-  cwd: string;
-}
 
 /** A notable agent-status transition worth a native OS notification. */
 export interface AgentNotice {
