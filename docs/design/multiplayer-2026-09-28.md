@@ -311,6 +311,17 @@ exactly as today. They are ordered by dependency.
   and let go of it when the connection goes (`gone`). The hot path is a notice, which is never
   answered, so a keystroke costs one message; an event carries positional params like a call.
   The window keeps its names (`onHcpStatus`, `hcpLinks`) as the client's.
+- **Decided while building it, step 3b (2026-09-30).** What a terminal session is to the API
+  (who shows it, who sizes it, how long a pause lasts, which start or end is someone's intent) is
+  one Electron-free module; how a session runs is the host's (`SessionBackend`): main's is the
+  daemon, this process or ssh, with the control plane's taps on output, keystrokes and ends, and
+  the dev-bridge's is this process. So a phone or a peer later is one more viewer, not another
+  copy of the rules. Opening a terminal is a method, since the client waits for its pid;
+  everything a client does to one after that is a notice. A terminal's audit verbs are
+  `terminal.open` and `terminal.close`, recorded under the same rules R7 set for `ptySpawn` and
+  `ptyKill`. File changes are events over the connection that watches the repo; the window's
+  watch still starts where it did, so no new watchers appear, and a peer will ask for one with a
+  `file.watch` when it needs it.
 
 ### R9. Machines by id, not by ssh uri
 

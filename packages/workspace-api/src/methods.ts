@@ -7,6 +7,7 @@ import type { LinkResult, TransferResult } from "@hivemind/core/cross-repo";
 import type { ReviewComment } from "@hivemind/core/review";
 import type { DiffPayload, DiffScope, GitBranchList, GitRevision, GitStatusSnapshot, WorktreeCreateOpts, WorktreeEntry } from "./git.js";
 import type { Links, PipeChange, SpawnChange, StatusChange, TileOpened } from "./agents.js";
+import type { ActivityLevels, ExitInfo, TerminalOpts } from "./terminals.js";
 
 export interface WorkspaceMethods {
   "git.status": (repo: string) => GitStatusSnapshot;
@@ -54,10 +55,31 @@ export interface WorkspaceMethods {
   "status.all": () => Array<{ tileId: string; status: StatusChange["status"] }>;
   /** Every link between agents there is. Each change after it is a `link.pipe` or `link.spawn` event. */
   "link.list": () => Links;
+  /** Show a terminal: the first to open a session starts it; one that opens it after joins it,
+   *  its screen first. `joined`: another client started it. Its output and exit are events. */
+  "terminal.open": (opts: TerminalOpts) => { pid: number; joined: boolean };
 }
 
 /** What a client tells a host and asks no answer to: a host never answers a notice. */
-export interface WorkspaceNotices {}
+export interface WorkspaceNotices {
+  /** Keystrokes; `paste`: one block handed to the program, not keys. */
+  "terminal.write": (tile: string, data: string, paste?: boolean) => void;
+  /** Whether any of the client's views shows the terminal: it is sent its output only while one
+   *  does, and its screen when one shows it again. */
+  "terminal.show": (tile: string, shown: boolean) => void;
+  /** While several clients show a session, only the one that typed last sizes it. */
+  "terminal.resize": (tile: string, cols: number, rows: number) => void;
+  /** Stop reading the session's output while the client catches up; a pause lasts a moment
+   *  unless it is asked for again. */
+  "terminal.flow": (tile: string, paused: boolean) => void;
+  /** End the session for good. */
+  "terminal.close": (tile: string) => void;
+  /** The client shows the terminal no more; a session nobody shows is let go of (a daemon keeps
+   *  it running). */
+  "terminal.detach": (tile: string) => void;
+  /** The terminals whose activity the client wants (`terminal.activity`). */
+  "terminal.watchActivity": (tiles: string[]) => void;
+}
 
 /** What a host sends each client it holds a connection to, unasked. */
 export interface WorkspaceEvents {
@@ -65,6 +87,14 @@ export interface WorkspaceEvents {
   "link.pipe": (change: PipeChange) => void;
   "link.spawn": (change: SpawnChange) => void;
   "tile.opened": (tile: TileOpened) => void;
+  /** A terminal's output, to the clients that show it. */
+  "terminal.data": (tile: string, data: string) => void;
+  /** A terminal's session ended, to the clients that showed it. */
+  "terminal.exit": (tile: string, info: ExitInfo) => void;
+  /** Changes in watched terminals' activity. */
+  "terminal.activity": (levels: ActivityLevels) => void;
+  /** Files changed in a repo the client watches (at most one event every 300 ms). */
+  "file.changed": (repo: string, change: { paths: string[] }) => void;
 }
 
 export type Method = keyof WorkspaceMethods;

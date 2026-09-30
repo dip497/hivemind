@@ -1,12 +1,13 @@
 /**
- * chokidar watcher per repo. Coalesces filesystem events and forwards a
- * single `fs:changed:<repoPath>` IPC event so the renderer can invalidate
- * TanStack Query keys without flooding.
+ * chokidar watcher per repo. Coalesces filesystem events and sends each client watching the repo
+ * one `file.changed` event of the workspace API at a time, so the renderer can invalidate TanStack
+ * Query keys without flooding. A client watches until its connection closes. Electron-free.
  */
 import chokidar, { type FSWatcher } from "chokidar";
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
 import path from "node:path";
-import type { WebContents } from "electron";
+import { emit, type Connection } from "@hivemind/workspace-api/server";
 
 /** What git ignores in `repoPath` (build output, venvs, caches), as repo-relative paths;
  *  an ignored directory is one entry. Null when git cannot say (not a repo). */
@@ -33,21 +34,29 @@ export function underIgnored(repoPath: string, p: string, ignored: Set<string>):
 
 interface Active {
   watcher: FSWatcher;
-  webContents: Set<WebContents>;
+  clients: Set<Connection>;
   flush: NodeJS.Timeout | null;
   pending: Set<string>;
 }
 
 const active = new Map<string, Active>();
 
-export function watchRepo(repoPath: string, wc: WebContents): void {
+/** `client` is sent the changes in `repoPath` until its connection closes. */
+export function watchRepo(repoPath: string, client: Connection): void {
+  if (client.closed.aborted) return;
   let entry = active.get(repoPath);
   if (entry) {
-    entry.webContents.add(wc);
+    if (!entry.clients.has(client)) {
+      entry.clients.add(client);
+      client.closed.addEventListener("abort", () => unwatch(repoPath, client), { once: true });
+    }
     return;
   }
   // The tree itself is added once git has said what it ignores: a Rust `target/` or a
   // venv is tens of thousands of files, each an lstat at startup and an inotify watch.
+  // Until then only these are watched, and only those that exist: chokidar (4.0.3) watches a
+  // missing path through its parent, and a repo whose `.hivemind` was missing then never had its
+  // tree watched when it was added. The tree covers the rest once added.
   let ignoredByGit: Set<string> | null = null;
   const watcher = chokidar.watch(
     [
@@ -56,7 +65,7 @@ export function watchRepo(repoPath: string, wc: WebContents): void {
       path.join(repoPath, ".git", "MERGE_HEAD"),
       path.join(repoPath, ".git", "ORIG_HEAD"),
       path.join(repoPath, ".hivemind"),
-    ],
+    ].filter((p) => existsSync(p)),
     {
       ignored: (p: string) => {
         // .hivemind/ may be gitignored, but issue changes arrive through it.
@@ -101,11 +110,12 @@ export function watchRepo(repoPath: string, wc: WebContents): void {
   });
   entry = {
     watcher,
-    webContents: new Set([wc]),
+    clients: new Set([client]),
     flush: null,
     pending: new Set(),
   };
   active.set(repoPath, entry);
+  client.closed.addEventListener("abort", () => unwatch(repoPath, client), { once: true });
 
   const trigger = (p: string) => {
     entry!.pending.add(p);
@@ -114,9 +124,7 @@ export function watchRepo(repoPath: string, wc: WebContents): void {
       const paths = Array.from(entry!.pending);
       entry!.pending.clear();
       entry!.flush = null;
-      for (const w of entry!.webContents) {
-        if (!w.isDestroyed()) w.send(`fs:changed:${repoPath}`, { paths });
-      }
+      for (const client of entry!.clients) emit(client, "file.changed", repoPath, { paths });
     }, 300);
   };
   watcher.on("add", trigger).on("change", trigger).on("unlink", trigger);
@@ -127,11 +135,11 @@ export function watchRepo(repoPath: string, wc: WebContents): void {
   });
 }
 
-export function unwatch(repoPath: string, wc: WebContents): void {
+function unwatch(repoPath: string, client: Connection): void {
   const entry = active.get(repoPath);
   if (!entry) return;
-  entry.webContents.delete(wc);
-  if (entry.webContents.size === 0) {
+  entry.clients.delete(client);
+  if (entry.clients.size === 0) {
     // chokidar v3+ .close() returns a Promise that can reject with the same
     // EACCES/ELOOP/ENOENT errors that plague .add() (see chokidar #1378).
     // Catch them — by this point the entry is already removed from `active`,
@@ -142,10 +150,6 @@ export function unwatch(repoPath: string, wc: WebContents): void {
     entry.pending.clear();
     active.delete(repoPath);
   }
-}
-
-export function unwatchAll(wc: WebContents): void {
-  for (const repo of Array.from(active.keys())) unwatch(repo, wc);
 }
 
 /** Test/diagnostic helper — returns the set of repo paths currently watched. */

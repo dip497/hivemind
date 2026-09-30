@@ -12,6 +12,30 @@ const workspace = new WorkspaceClient({
   events: (listener) => { ipcRenderer.on("workspace:event", (_e, message: EventMessage) => listener(message)); },
 });
 
+/** Listeners for an event that names what it is about first (a terminal, a repo), by that name:
+ *  one listener on the client for each, however many tiles listen. */
+function byKey<E extends "terminal.data" | "terminal.exit" | "file.changed">(event: E) {
+  type Rest = E extends "terminal.data" ? string : E extends "terminal.exit" ? { code: number; signal?: number } : { paths: string[] };
+  const listeners = new Map<string, Set<(value: Rest) => void>>();
+  workspace.on(event, ((key: string, value: Rest) => {
+    for (const cb of listeners.get(key) ?? []) cb(value);
+  }) as never);
+  return {
+    on: (key: string, cb: (value: Rest) => void): (() => void) => {
+      let set = listeners.get(key);
+      if (!set) listeners.set(key, (set = new Set()));
+      set.add(cb);
+      return () => {
+        set!.delete(cb);
+        if (set!.size === 0 && listeners.get(key) === set) listeners.delete(key);
+      };
+    },
+  };
+}
+const terminalData = byKey("terminal.data");
+const terminalExit = byKey("terminal.exit");
+const fileChanged = byKey("file.changed");
+
 const api: HiveIpc & {
   /** The host OS, so the renderer can pick a default shell without an IPC
    *  round-trip (it needs this while building the very first canvas). */
@@ -111,12 +135,8 @@ const api: HiveIpc & {
   viewHistory: (layoutKey, day) => ipcRenderer.invoke("viewLedger:history", layoutKey, day),
   viewSessions: (agent, cwd) => ipcRenderer.invoke("view:sessions", agent, cwd),
   viewPrompt: (tileId, text) => ipcRenderer.invoke("view:prompt", tileId, text),
-  ptyActivityWatch: (tileIds) => ipcRenderer.send("ptyActivity:watch", tileIds),
-  onPtyActivity: (cb) => {
-    const listener = (_e: unknown, levels: Parameters<typeof cb>[0]) => cb(levels);
-    ipcRenderer.on("ptyActivity:levels", listener);
-    return () => ipcRenderer.removeListener("ptyActivity:levels", listener);
-  },
+  ptyActivityWatch: (tiles) => workspace.notice("terminal.watchActivity", tiles),
+  onPtyActivity: (cb) => workspace.on("terminal.activity", cb),
   presenceNow: () => ipcRenderer.invoke("presence:now"),
   onPresence: (cb) => {
     const listener = (_e: unknown, p: Parameters<typeof cb>[0]) => cb(p);
@@ -137,13 +157,13 @@ const api: HiveIpc & {
   worktreeRemove: (repo, worktree, force) => workspace.call("worktree.remove", repo, worktree, force),
   worktreePrune: (repo) => workspace.call("worktree.prune", repo),
 
-  ptySpawn: (opts) => ipcRenderer.invoke("ptySpawn", opts),
-  ptyWrite: (tileId, data, paste) => ipcRenderer.send("ptyWrite", tileId, data, paste),
-  ptyInterest: (tileId, shown) => ipcRenderer.send("ptyInterest", tileId, shown),
-  ptyResize: (tileId, cols, rows) => ipcRenderer.send("ptyResize", tileId, cols, rows),
-  ptyKill: (tileId) => ipcRenderer.send("ptyKill", tileId),
-  ptyDetach: (tileId) => ipcRenderer.send("ptyDetach", tileId),
-  ptyFlow: (tileId, paused) => ipcRenderer.send("ptyFlow", tileId, paused),
+  ptySpawn: (opts) => workspace.call("terminal.open", opts),
+  ptyWrite: (tile, data, paste) => workspace.notice("terminal.write", tile, data, paste),
+  ptyInterest: (tile, shown) => workspace.notice("terminal.show", tile, shown),
+  ptyResize: (tile, cols, rows) => workspace.notice("terminal.resize", tile, cols, rows),
+  ptyKill: (tile) => workspace.notice("terminal.close", tile),
+  ptyDetach: (tile) => workspace.notice("terminal.detach", tile),
+  ptyFlow: (tile, paused) => workspace.notice("terminal.flow", tile, paused),
   persistentPty: process.env.HIVEMIND_PTY_DAEMON !== "0",
 
   notifyAgent: (notice) => ipcRenderer.send("notify:agent", notice),
@@ -217,24 +237,9 @@ const api: HiveIpc & {
     return () => ipcRenderer.removeListener("browser:popup", listener);
   },
 
-  onPtyData: (tileId, cb) => {
-    const ch = `pty:data:${tileId}`;
-    const listener = (_e: unknown, data: string) => cb(data);
-    ipcRenderer.on(ch, listener);
-    return () => ipcRenderer.removeListener(ch, listener);
-  },
-  onPtyExit: (tileId, cb) => {
-    const ch = `pty:exit:${tileId}`;
-    const listener = (_e: unknown, info: { code: number; signal?: number }) => cb(info);
-    ipcRenderer.on(ch, listener);
-    return () => ipcRenderer.removeListener(ch, listener);
-  },
-  onFsChanged: (repoPath, cb) => {
-    const ch = `fs:changed:${repoPath}`;
-    const listener = (_e: unknown, info: { paths: string[] }) => cb(info);
-    ipcRenderer.on(ch, listener);
-    return () => ipcRenderer.removeListener(ch, listener);
-  },
+  onPtyData: terminalData.on,
+  onPtyExit: terminalExit.on,
+  onFsChanged: fileChanged.on,
 
   // Global accelerator bridge — main intercepts Ctrl+N before the DOM (xterm
   // would otherwise eat it) and re-emits as IPC. Renderer re-dispatches as the

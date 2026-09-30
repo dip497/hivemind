@@ -48,9 +48,10 @@ import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server";
 import { workspaceDomains } from "../main/workspace/domains";
 import { agents } from "../main/workspace/agents";
-import { spawnPty, writePty, resizePty, killPty, pausePty, resumePty } from "../main/pty-host";
+import { spawnPty, writePty, resizePty, killPty, pausePty, resumePty, detachPty } from "../main/pty-host";
+import { Terminals } from "../main/workspace/terminals";
+import { watchRepo } from "../main/fs-watcher";
 import { applyShellEnvToProcess } from "@hivemind/agent-host/shell-env";
-import chokidar from "chokidar";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -64,42 +65,50 @@ const RENDERER_DIST = path.resolve(__dirname, "..", "..", "out", "renderer");
 
 // Per-process auth token printed on startup. Renderer's preload.js fetches
 // `/auth-token` (LOCAL only — same-origin) once and includes it on every
-// /rpc/ and /notify/ call. Defeats CSRF-style "any local origin can spawn
-// arbitrary processes" attacks (REVIEW.md CR-01).
+// call. Defeats CSRF-style "any local origin can spawn arbitrary processes"
+// attacks (REVIEW.md CR-01).
 const AUTH_TOKEN = randomBytes(32).toString("hex");
-
-// Methods exposed via RPC. ptySpawn is the most dangerous (arbitrary command
-// execution) so we require the auth token on it AND any other write methods.
-const PROTECTED_METHODS = new Set([
-  "ptySpawn",
-]);
 
 // The workspace API (R8): the same server main answers the app's windows with, as the person at
 // this machine, and recorded in the dev app's audit log. A page connects by opening its event
 // stream (GET /workspace/events), which names its connection; its calls and notices name that
 // connection. Every one needs the token. No control plane runs here, so no agent has a status.
+const intents = new Intents(new AuditLog({
+  file: path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config"), "hivemind-dev", "audit.jsonl"),
+  onWarn: (m) => console.warn(`[audit] ${m}`),
+}));
+// Terminals run in this process (no daemon): one a page lets go of ends.
+const terminals = new Terminals({
+  intents,
+  relay: { record: () => {}, screenPrefix: "\x1bc" },
+  onError: (m) => console.warn(`[terminals] ${m}`),
+  backend: {
+    start: async (opts, out) => {
+      if (!ptySpawnAllowed()) throw new Error(`terminal rate limit: ${PTY_SPAWN_LIMIT} starts / ${PTY_SPAWN_WINDOW_MS / 1000}s exceeded`);
+      return spawnPty(opts, { onData: (data) => out.data(data), onExit: (code, signal) => out.exit(code, signal) });
+    },
+    write: writePty,
+    echoes: () => true,
+    resize: resizePty,
+    pause: pausePty,
+    resume: resumePty,
+    kill: killPty,
+    detach: detachPty,
+    screen: () => null,
+  },
+});
 const workspaceServer = new WorkspaceServer([
   ...workspaceDomains,
   agents({ statuses: () => [], links: () => ({ pipes: [], spawns: [] }) }),
-], new Intents(new AuditLog({
-  file: path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config"), "hivemind-dev", "audit.jsonl"),
-  onWarn: (m) => console.warn(`[audit] ${m}`),
-})), (m) => console.warn(`[workspace] ${m}`));
+  terminals.domain,
+], intents, (m) => console.warn(`[workspace] ${m}`));
 /** Each page's connection, by the id its event stream was given. */
 const workspaceConnections = new Map<string, Connection>();
 
-// Set (not Map<"global", Response>) — previously a second SSE subscriber
-// would clobber the first because both wrote to ptyStreams.get("global").
-// Real bug: open the renderer in a second tab and the first tab's terminals
-// went silent. Set lets every subscriber receive every event; per-tab
-// filtering happens client-side via the tileId in the payload.
-const ptyStreams = new Set<http.ServerResponse>();
-const fsStreams = new Set<http.ServerResponse>();
-
-// ── ptySpawn rate limit ─────────────────────────────────────────
+// ── terminal start rate limit ───────────────────────────────────
 // Defense in depth: even with AUTH_TOKEN + loopback-only binding, a
-// misbehaving same-origin script could open ptySpawn in a loop and fork-bomb
-// the host. 20 spawns / 60s window is generous for any human-driven UI but
+// misbehaving same-origin script could start terminals in a loop and fork-bomb
+// the host. 20 starts / 60s window is generous for any human-driven UI but
 // catches runaway loops.
 const PTY_SPAWN_LIMIT = 20;
 const PTY_SPAWN_WINDOW_MS = 60_000;
@@ -113,11 +122,6 @@ function ptySpawnAllowed(): boolean {
   if (ptySpawnTimestamps.length >= PTY_SPAWN_LIMIT) return false;
   ptySpawnTimestamps.push(now);
   return true;
-}
-
-function sse(res: http.ServerResponse, event: string, data: unknown): void {
-  res.write(`event: ${event}\n`);
-  res.write(`data: ${JSON.stringify(data)}\n\n`);
 }
 
 const PREVIEW_SCRIPT = `
@@ -185,32 +189,6 @@ const PREVIEW_SCRIPT = `
   function onEvent(event, cb) {
     return subscribe(workspaceListeners, event, cb);
   }
-  function notify(method) {
-    return async (...args) => fetch(BRIDGE + "/notify/" + method, {
-      method: "POST",
-      headers: await authHeaders(),
-      body: JSON.stringify(args),
-    });
-  }
-  // SSE event subscriptions.
-  const ptyEvents = {};
-  const fsEvents = {};
-  const ptyES = new EventSource(BRIDGE + "/events/pty");
-  ptyES.onmessage = (ev) => {
-    try {
-      const { tileId, kind, payload } = JSON.parse(ev.data);
-      const list = ptyEvents[tileId + ":" + kind];
-      if (list) for (const cb of list) cb(payload);
-    } catch (e) { console.error(e); }
-  };
-  const fsES = new EventSource(BRIDGE + "/events/fs");
-  fsES.onmessage = (ev) => {
-    try {
-      const { repoPath, payload } = JSON.parse(ev.data);
-      const list = fsEvents[repoPath];
-      if (list) for (const cb of list) cb(payload);
-    } catch (e) { console.error(e); }
-  };
   function subscribe(map, key, cb) {
     if (!map[key]) map[key] = [];
     map[key].push(cb);
@@ -255,50 +233,31 @@ const PREVIEW_SCRIPT = `
     worktreeCreate:    (r,o) => api("worktree.create", r, o),
     worktreeRemove:    (r,p,f) => api("worktree.remove", r, p, f),
     worktreePrune:     (r) => api("worktree.prune", r),
-    ptySpawn:          (o) => call("ptySpawn", o),
-    ptyWrite:          notify("ptyWrite"),
-    ptyResize:         notify("ptyResize"),
-    ptyKill:           notify("ptyKill"),
-    ptyFlow:           notify("ptyFlow"),
-    onPtyData:         (tileId, cb) => subscribe(ptyEvents, tileId + ":data", cb),
-    onPtyExit:         (tileId, cb) => subscribe(ptyEvents, tileId + ":exit", cb),
-    onFsChanged:       (repoPath, cb) => subscribe(fsEvents, repoPath, cb),
+    ptySpawn:          (o) => api("terminal.open", o),
+    ptyWrite:          (t,d,p) => apiNotice("terminal.write", t, d, p),
+    ptyInterest:       (t,s) => apiNotice("terminal.show", t, s),
+    ptyResize:         (t,c,r) => apiNotice("terminal.resize", t, c, r),
+    ptyKill:           (t) => apiNotice("terminal.close", t),
+    ptyDetach:         (t) => apiNotice("terminal.detach", t),
+    ptyFlow:           (t,p) => apiNotice("terminal.flow", t, p),
+    ptyActivityWatch:  (ts) => apiNotice("terminal.watchActivity", ts),
+    onPtyActivity:     (cb) => onEvent("terminal.activity", cb),
+    onPtyData:         (tile, cb) => onEvent("terminal.data", (t, d) => { if (t === tile) cb(d); }),
+    onPtyExit:         (tile, cb) => onEvent("terminal.exit", (t, e) => { if (t === tile) cb(e); }),
+    onFsChanged:       (repo, cb) => onEvent("file.changed", (r, c) => { if (r === repo) cb(c); }),
   };
   console.info("[hivemind] dev-bridge installed at " + BRIDGE);
 })();
 `;
 
 const RPC: Record<string, (...args: unknown[]) => Promise<unknown> | unknown> = {
-  resolveProject: async (rootHint?: string) => {
-    const cwd = rootHint ? path.resolve(String(rootHint)) : REPO_PATH;
+  resolveProject: async (rootHint?: unknown) => {
+    const cwd = typeof rootHint === "string" && rootHint ? path.resolve(rootHint) : REPO_PATH;
     const root = await findRoot(cwd);
     return { root, cwd };
   },
-  ptySpawn: async (opts: Parameters<typeof spawnPty>[0]) => {
-    if (!ptySpawnAllowed()) {
-      throw new Error(
-        `ptySpawn rate limit: ${PTY_SPAWN_LIMIT} spawns / ${PTY_SPAWN_WINDOW_MS / 1000}s exceeded`,
-      );
-    }
-    return spawnPty(opts, {
-      onData: (data) => {
-        for (const stream of ptyStreams)
-          sse(stream, "message", { tileId: opts.tileId, kind: "data", payload: data });
-      },
-      onExit: (code, signal) => {
-        for (const stream of ptyStreams)
-          sse(stream, "message", { tileId: opts.tileId, kind: "exit", payload: { code, signal } });
-      },
-    });
-  },
 };
 
-const NOTIFY: Record<string, (...args: unknown[]) => void> = {
-  ptyWrite: (tileId: string, data: string) => writePty(tileId, data),
-  ptyResize: (tileId: string, cols: number, rows: number) => resizePty(tileId, cols, rows),
-  ptyKill: (tileId: string) => killPty(tileId),
-  ptyFlow: (tileId: string, paused: boolean) => (paused ? pausePty(tileId) : resumePty(tileId)),
-};
 
 /** Constant-time equality to avoid token-leak via timing. */
 function timingSafeEq(a: string, b: string): boolean {
@@ -344,33 +303,8 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse): Prom
     res.end(PREVIEW_SCRIPT);
     return;
   }
-  if (req.method === "GET" && !url.pathname.startsWith("/rpc/") && !url.pathname.startsWith("/notify/") && !url.pathname.startsWith("/events/") && !url.pathname.startsWith("/workspace/")) {
+  if (req.method === "GET" && !url.pathname.startsWith("/rpc/") && !url.pathname.startsWith("/workspace/")) {
     return serveStatic(url, res);
-  }
-
-  // SSE: pty events.
-  if (url.pathname === "/events/pty") {
-    res.writeHead(200, {
-      "content-type": "text/event-stream",
-      "cache-control": "no-cache",
-      connection: "keep-alive",
-    });
-    res.write(": connected\n\n");
-    ptyStreams.add(res);
-    req.on("close", () => ptyStreams.delete(res));
-    return;
-  }
-  // SSE: fs events.
-  if (url.pathname === "/events/fs") {
-    res.writeHead(200, {
-      "content-type": "text/event-stream",
-      "cache-control": "no-cache",
-      connection: "keep-alive",
-    });
-    res.write(": connected\n\n");
-    fsStreams.add(res);
-    req.on("close", () => fsStreams.delete(res));
-    return;
   }
 
   if (req.method === "GET" && url.pathname === "/workspace/events") {
@@ -390,6 +324,7 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse): Prom
     res.write(`event: connection\ndata: ${JSON.stringify({ id })}\n\n`);
     workspaceConnections.set(id, connection);
     workspaceServer.connect(connection);
+    watchRepo(REPO_PATH, connection);
     req.on("close", () => { workspaceConnections.delete(id); gone.abort(); });
     return;
   }
@@ -427,7 +362,7 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse): Prom
       res.writeHead(404).end(`unknown RPC method: ${method}`);
       return;
     }
-    if (PROTECTED_METHODS.has(method) && !checkToken(req)) {
+    if (!checkToken(req)) {
       res.writeHead(401).end("unauthorized: x-hive-token missing or wrong");
       return;
     }
@@ -443,28 +378,6 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse): Prom
     }
     return;
   }
-  if (req.method === "POST" && url.pathname.startsWith("/notify/")) {
-    const method = url.pathname.slice(8);
-    const fn = NOTIFY[method];
-    if (!fn) {
-      res.writeHead(404).end(`unknown notify method: ${method}`);
-      return;
-    }
-    if (PROTECTED_METHODS.has(method) && !checkToken(req)) {
-      res.writeHead(401).end("unauthorized");
-      return;
-    }
-    const body = await readBody(req);
-    try {
-      const args = JSON.parse(body) as unknown[];
-      fn(...args);
-      res.writeHead(204).end();
-    } catch (e) {
-      res.writeHead(500).end((e as Error).message);
-    }
-    return;
-  }
-
   res.writeHead(404).end("not found");
 }
 
@@ -511,41 +424,6 @@ async function serveStatic(url: URL, res: http.ServerResponse): Promise<void> {
   }
 }
 
-// chokidar watcher that forwards fs:changed events to /events/fs subscribers.
-const watcher = chokidar.watch(
-  [
-    path.join(REPO_PATH, ".git", "HEAD"),
-    path.join(REPO_PATH, ".git", "index"),
-    path.join(REPO_PATH, ".git", "MERGE_HEAD"),
-    path.join(REPO_PATH, ".hivemind"),
-    REPO_PATH,
-  ],
-  {
-    ignored: (p: string) =>
-      p.includes("/node_modules/") ||
-      p.includes("/.git/objects/") ||
-      p.includes("/.git/logs/") ||
-      p.includes("/dist/") ||
-      p.includes("/out/") ||
-      p.includes("/.turbo/"),
-    ignoreInitial: true,
-    awaitWriteFinish: { stabilityThreshold: 200, pollInterval: 50 },
-  }
-);
-let pending = new Set<string>();
-let flush: NodeJS.Timeout | null = null;
-const triggerFs = (p: string) => {
-  pending.add(p);
-  if (flush) clearTimeout(flush);
-  flush = setTimeout(() => {
-    const paths = Array.from(pending);
-    pending = new Set();
-    flush = null;
-    for (const s of fsStreams) sse(s, "message", { repoPath: REPO_PATH, payload: { paths } });
-  }, 300);
-};
-watcher.on("add", triggerFs).on("change", triggerFs).on("unlink", triggerFs);
-
 // Patch PATH from the user's login shell (matches main process behavior so
 // pty.spawn("claude") works the same whether launched via Electron or HTTP).
 void applyShellEnvToProcess();
@@ -564,7 +442,6 @@ server.listen(PORT, HOST, () => {
 
 process.on("SIGINT", () => {
   console.log("\nshutting down dev-bridge");
-  void watcher.close();
   server.close();
   process.exit(0);
 });

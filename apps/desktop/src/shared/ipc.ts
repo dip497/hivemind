@@ -539,9 +539,3 @@ export interface AppErrorEvent {
   /** Which subsystem surfaced it — shown as muted context (e.g. "pty-daemon"). */
   source: string;
 }
-
-export type IpcChannel =
-  | keyof HiveIpc
-  | `pty:data:${string}`
-  | `pty:exit:${string}`
-  | `fs:changed:${string}`;

@@ -50,6 +50,12 @@ export function shaped<T>(schema: { safeParse(value: unknown): { success: true; 
   throw new ApiError("BAD_REQUEST", why);
 }
 
+/** A param that must be a whole number, at least `min`. */
+export function whole(value: unknown, name: string, min = 0): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < min) throw new ApiError("BAD_REQUEST", `${name} must be a whole number of at least ${min}`);
+  return value;
+}
+
 /** A param that must be a list of text. */
 export function texts(value: unknown, name: string): string[] {
   if (!Array.isArray(value) || !value.every((v) => typeof v === "string" && v)) throw new ApiError("BAD_REQUEST", `${name} must be a list of text`);

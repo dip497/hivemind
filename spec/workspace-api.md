@@ -111,6 +111,22 @@ log.
 
 | `status.all` | | `[{tileId, status}]`, every agent session's status (`spec/status.md`) | read |
 | `link.list` | | `{pipes: [{src, dst}], spawns: [{parent, child}]}` | read |
+| `terminal.open` | `{tileId, cwd, cmd, args?, cols, rows, env?, initialPrompt?, attachOnly?, liveOnly?}` | `{pid, joined}`: the first client to open a session starts it; one that opens it after joins it (`joined`), sent the host's screen of it first | target the tile, detail the program, when it starts a session the host did not ask for itself and the client did not only attach to |
+
+A terminal is named by its session id, `hm:<tile>`; the audit log names it by its tile. `pid` is -1
+when `attachOnly` finds no session.
+
+## Notices
+
+| Notice | Params | What it does |
+|---|---|---|
+| `terminal.write` | `tile`, `data`, `paste`? | types `data` (`paste`: hands it over as one block) |
+| `terminal.show` | `tile`, `shown` | whether any of the client's views shows it: it is sent the output only while one does, and the screen again when one shows it after none did |
+| `terminal.resize` | `tile`, `cols`, `rows` | sizes it; while several clients show it, only the one that typed last may |
+| `terminal.flow` | `tile`, `paused` | stops reading its output while the client catches up; a pause ends on its own after 120 ms unless asked for again |
+| `terminal.close` | `tile` | ends the session for good; recorded (target the tile) unless it had already ended |
+| `terminal.detach` | `tile` | the client shows it no more; a session no client shows is let go of (a daemon keeps it running, one the host runs itself ends) |
+| `terminal.watchActivity` | `tiles` | the terminals whose activity the client is sent (`terminal.activity`), at most 1024 |
 
 A diff's `scope` is one of `{"kind": "working", "staged"?}`, `{"kind": "branch", "base"?,
 "head"?}` (what `head`, HEAD by default, adds since it left `base`), `{"kind": "unpushed",
@@ -124,9 +140,14 @@ A diff's `scope` is one of `{"kind": "working", "staged"?}`, `{"kind": "branch",
 | `link.pipe` | `{src, dst, connected}` (`dst` null: every pipe from `src`) | to every client, as a pipe between agents is connected or cut |
 | `link.spawn` | `{child, parent, connected}` (`parent` null: every wire touching `child`) | to every client, as an agent spawns another, or the tile goes |
 | `tile.opened` | `{tileId, repo, prompt?, background}` | to every client, as the control plane opens a tile, before it reaches the layout: a client showing `repo` starts it |
+| `terminal.data` | `tile`, `data` | to each client that shows the terminal, its output in batches; a screen the host sends in place of what the client shows starts with `ESC c` |
+| `terminal.exit` | `tile`, `{code, signal?}` | to each client that showed it, as its session ends |
+| `terminal.activity` | `{[tile]: 0..3}` | to every client, as watched terminals' output gets busier or quieter |
+| `file.changed` | `repo`, `{paths}` | to each client watching the repo (the app's window watches the one it opens), at most one every 300 ms |
 
 ## Implementations
 
 TypeScript: `packages/workspace-api` (the methods' types, a client over any transport, and the
 server that answers them); the host's domains in `apps/desktop/src/main/workspace/` (git and
-worktrees, files, issues, reviews), which the app's main process and the dev-bridge both serve.
+worktrees, files, issues, reviews, agents, terminals), which the app's main process and the
+dev-bridge both serve, each over its own way of running a session.

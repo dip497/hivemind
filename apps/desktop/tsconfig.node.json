@@ -13,6 +13,7 @@
     "src/main/**/*",
     "src/preload/**/*",
     "src/shared/**/*",
+    "src/dev-bridge/**/*",
     "electron.vite.config.ts"
   ],
   "exclude": ["node_modules", "out", "dist"]

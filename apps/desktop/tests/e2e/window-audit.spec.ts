@@ -107,8 +107,8 @@ test("a terminal the window starts is recorded, and so is its end; showing it ag
   await page.mouse.move(900, 600);
   await page.keyboard.press("1");
   const tile = (await page.locator(".react-flow__node-terminal").first().getAttribute("data-id"))!;
-  const started = () => audited().filter((l) => l.verb === "ptySpawn" && l.target === tile);
-  await expect.poll(started, { timeout: 20_000 }).toEqual([{ actor: person, verb: "ptySpawn", target: tile, detail: expect.any(String), outcome: "ok" }]);
+  const started = () => audited().filter((l) => l.verb === "terminal.open" && l.target === tile);
+  await expect.poll(started, { timeout: 20_000 }).toEqual([{ actor: person, verb: "terminal.open", target: tile, detail: expect.any(String), outcome: "ok" }]);
   // A second window shows the same session: it joins it, and starts nothing.
   await page.evaluate(() => window.hive.newWindow());
   await expect.poll(() => app.windows().length, { timeout: 15_000 }).toBe(2);
@@ -118,9 +118,9 @@ test("a terminal the window starts is recorded, and so is its end; showing it ag
   expect(started()).toHaveLength(1);
 
   await page.evaluate((pty) => window.hive.ptyKill(pty), `hm:${tile}`);
-  await expect.poll(() => audited().filter((l) => l.verb === "ptyKill"), { timeout: 10_000 }).toEqual([{ actor: person, verb: "ptyKill", target: tile, outcome: "ok" }]);
+  await expect.poll(() => audited().filter((l) => l.verb === "terminal.close"), { timeout: 10_000 }).toEqual([{ actor: person, verb: "terminal.close", target: tile, outcome: "ok" }]);
   // A window that follows an end already made (another window's, the control plane's) ends nothing.
   await page.evaluate((pty) => window.hive.ptyKill(pty), `hm:${tile}`);
   await page.waitForTimeout(300);
-  expect(audited().filter((l) => l.verb === "ptyKill")).toHaveLength(1);
+  expect(audited().filter((l) => l.verb === "terminal.close")).toHaveLength(1);
 });
