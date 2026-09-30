@@ -47,6 +47,7 @@ let processPatched = false;
  *  AND inside an ENOENT retry — second call is a no-op when patched.
  *  Returns the env map for tests; production callers can ignore the return. */
 export async function applyShellEnvToProcess(): Promise<Record<string, string>> {
+  rescueProcessEnv();
   if (process.env.HIVEMIND_SHELL_ENV === "0") {
     processPatched = true;
     return { ...process.env } as Record<string, string>;
@@ -56,7 +57,22 @@ export async function applyShellEnvToProcess(): Promise<Record<string, string>> 
     processPatched = true;
     mergeIntoProcessEnv(result.env);
   }
+  // The merge overwrote PATH with the shell's value — re-apply the rescue on
+  // top of it (idempotent: dirs already present are left in place).
+  rescueProcessEnv();
   return result.env;
+}
+
+/** Re-interrogate the login shell NOW and overwrite process.env.PATH with what
+ *  it reports. For the "Check again" path: the user just installed an agent and
+ *  the one-shot patch would otherwise serve a stale PATH forever. */
+export async function refreshShellEnv(): Promise<void> {
+  if (process.env.HIVEMIND_SHELL_ENV === "0") return;
+  rescueProcessEnv();
+  cache = null;
+  const env = await resolveShellEnv();
+  mergeIntoProcessEnv(env.env);
+  rescueProcessEnv();
 }
 
 async function resolveShellEnv(): Promise<CachedResult> {
@@ -211,21 +227,34 @@ const ELECTRON_INTERNAL_ENV = ["ELECTRON_RUN_AS_NODE", "ELECTRON_NO_ATTACH_CONSO
 export function sanitizeShellEnv(env: Record<string, string>, unset: Iterable<string> = []): Record<string, string> {
   for (const k of ELECTRON_INTERNAL_ENV) delete env[k];
   for (const k of unset) delete env[k];
-  // A desktop-launched app gets the system PATH, without the directories user-level CLI
-  // installs write to, so a bare agent command can resolve to a same-named system launcher.
-  // Missing ones are prepended; existing entries never move.
-  if (env.PATH?.includes("/") && env.PATH.includes(":")) {
-    const home = env.HOME;
-    if (home) {
-      const rescue = [
-        path.join(home, ".local", "bin"),
-        path.join(home, ".npm-global", "bin"), // npm i -g default prefix
-        path.join(home, "bin"),
-      ];
-      const have = new Set(env.PATH.split(":"));
-      const missing = rescue.filter((d) => !have.has(d));
-      if (missing.length) env.PATH = `${[...missing, env.PATH].join(":")}`;
-    }
-  }
+  const p = rescuePath(env.PATH, env.HOME);
+  if (p) env.PATH = p;
   return env;
+}
+
+/** Harness location rescue: when hivemind is desktop-launched it inherits
+ *  /etc/environment's PATH, and login-shell rc guards can drop user install
+ *  dirs even when the shell resolves — so bare agent commands in npm-global
+ *  prefixes are invisible to lookup. Prepend the dirs user-level installs
+ *  actually write to when missing; existing entries never move, so a
+ *  correctly resolved PATH is untouched. Applied BOTH to tile spawn envs
+ *  (sanitizeShellEnv) and to process.env (rescueProcessEnv) — the latter is
+ *  what every `findBin`/probe/exec in main reads. */
+const RESCUE_DIRS = [".local/bin", ".npm-global/bin", "bin"] as const;
+
+function rescuePath(p: string | undefined, home: string | undefined): string | undefined {
+  if (!home || !p?.includes(":")) return p;
+  const have = new Set(p.split(":"));
+  const missing = RESCUE_DIRS.map((d) => path.join(home, d)).filter((d) => !have.has(d));
+  return missing.length ? [...missing, p].join(":") : p;
+}
+
+/** The rescue applied to process.env itself — `findBin` and every agent probe
+ *  in main read it directly, so an env with HIVEMIND_SHELL_ENV=0 (CI/e2e,
+ *  launcher-controlled PATH) stays untouched and everything else gets the
+ *  user-install dirs even before the login shell has answered. */
+function rescueProcessEnv(): void {
+  if (process.env.HIVEMIND_SHELL_ENV === "0") return;
+  const p = rescuePath(process.env.PATH, process.env.HOME);
+  if (p) process.env.PATH = p;
 }

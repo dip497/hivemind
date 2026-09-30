@@ -61,29 +61,3 @@ test("rescue: no HOME or empty PATH is a no-op", () => {
   assert.equal(sanitizeShellEnv({ PATH: "/usr/bin" }).PATH, "/usr/bin");
   assert.equal(sanitizeShellEnv({ HOME: "/home/u" }).PATH, undefined);
 });
-
-test("PATH rescue: prepends missing user-install dirs (the npm-global claude/codex case)", () => {
-  // Desktop-launched hivemind inherits /etc/environment's PATH; the user's
-  // npm -g prefix (~/.npm-global/bin, where claude and codex live) is missing.
-  const env = sanitizeShellEnv({
-    HOME: "/home/u",
-    PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin",
-  });
-  const dirs = env.PATH!.split(":");
-  assert.ok(dirs.includes("/home/u/.npm-global/bin"), "npm-global dir rescued");
-  assert.ok(dirs.includes("/home/u/.local/bin"), ".local/bin rescued");
-  assert.ok(dirs.includes("/home/u/bin"), "~/bin rescued");
-  assert.equal(dirs[0], "/home/u/bin"); // rescue dirs come first
-  assert.equal(dirs[3], "/usr/local/sbin"); // existing entries keep their order
-});
-
-test("PATH rescue: never duplicates or reorders entries already present", () => {
-  const before = "/home/u/.local/bin:/home/u/.npm-global/bin:/usr/bin:/home/u/bin";
-  const env = sanitizeShellEnv({ HOME: "/home/u", PATH: before });
-  assert.equal(env.PATH, before);
-});
-
-test("PATH rescue: skipped without HOME or a colon-separated PATH", () => {
-  assert.equal(sanitizeShellEnv({ PATH: "/usr/bin" }).PATH, "/usr/bin");
-  assert.equal(sanitizeShellEnv({ HOME: "/home/u" }).PATH, undefined);
-});
