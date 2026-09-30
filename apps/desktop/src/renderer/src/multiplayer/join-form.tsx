@@ -5,7 +5,7 @@
  */
 import { useEffect, useState } from "react";
 import { Button } from "../components/ui/button";
-import { ROLE_LABELS } from "./share-dialog";
+import { ROLE_LABELS } from "./people";
 
 const WHY: Record<string, string> = {
   expired: "This invite has expired or was used. Ask for a new one.",

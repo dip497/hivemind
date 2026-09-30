@@ -24,7 +24,10 @@ const OUT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../ou
 // Re-baselined for the board (R15, board-objects/): its notes, checklists and arrows are canvas
 // content drawn on the first frame with the tiles, and a note added with `8` takes the very next
 // key, so its code cannot wait for a chunk. ~30 kB of it, plus its icons (905 418 before).
-const ENTRY_BASELINE = 947_213;
+// Re-baselined for multiplayer (M1): others' pointers and faces, and the banner over a workspace
+// joined from elsewhere, are drawn on the first frame; Share, People, joining and the reach
+// chooser load when opened (they had been on this path, 989 290 bytes, which this test caught).
+const ENTRY_BASELINE = 972_156;
 const ENTRY_MARGIN = 0.04;
 
 test("the default renderer path stays small, and three.js is gone from the build", (t) => {

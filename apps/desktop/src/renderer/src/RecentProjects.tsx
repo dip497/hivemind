@@ -1,10 +1,11 @@
 /** Ctrl+R — VS Code's Open Recent: the projects opened before, the workspaces shared with this
  *  person (M1), a way to browse for another, and another window on this one. */
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { AppWindow, FolderOpen, History, LogIn, Users } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "./components/ui/dialog";
 import { MenuItem } from "./components/ui/menu-item";
-import { JoinForm } from "./multiplayer/join-form";
+// Joining loads when its page is opened.
+const JoinForm = lazy(() => import("./multiplayer/join-form").then((m) => ({ default: m.JoinForm })));
 
 const base = (p: string) => p.split("/").filter(Boolean).pop() ?? p;
 const parent = (p: string) => p.split("/").slice(0, -1).join("/").replace(/^\/home\/[^/]+/, "~");
@@ -34,7 +35,9 @@ export function RecentProjects({ open, recents, current, onOpen, onBrowse, onNew
           <DialogTitle className="h-7 flex items-center">{joining ? "Join a shared workspace" : "Open recent"}</DialogTitle>
         </header>
         {joining ? (
-          <JoinForm onOpen={(workspace) => { onClose(); setJoining(false); onOpen(`hive://${workspace}`); }} />
+          <Suspense fallback={null}>
+            <JoinForm onOpen={(workspace) => { onClose(); setJoining(false); onOpen(`hive://${workspace}`); }} />
+          </Suspense>
         ) : (
         <div className="flex flex-col px-2 pb-2" data-recent-projects>
           {others.map((p, i) => (

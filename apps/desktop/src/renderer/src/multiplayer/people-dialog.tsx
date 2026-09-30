@@ -11,8 +11,7 @@ import { Users } from "lucide-react";
 import type { SharedPerson } from "../../../shared/ipc";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../components/ui/dialog";
 import { Button } from "../components/ui/button";
-import { ROLE_LABELS } from "./share-dialog";
-import { colorFor, initialsOf } from "./people";
+import { ROLE_LABELS, colorFor, initialsOf } from "./people";
 import { usePeopleHere } from "./presence";
 
 const ROLES = ["view", "edit", "terminals", "agents"] as const;

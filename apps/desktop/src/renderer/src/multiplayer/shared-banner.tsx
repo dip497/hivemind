@@ -8,7 +8,7 @@ import { useEffect, useState } from "react";
 import { LogOut } from "lucide-react";
 import type { SharedStatus } from "../../../shared/ipc";
 import { Button } from "../components/ui/button";
-import { ROLE_LABELS } from "./share-dialog";
+import { ROLE_LABELS } from "./people";
 
 type Status = { names: { workspace: string; host: string } } & SharedStatus;
 

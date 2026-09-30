@@ -5,14 +5,13 @@
 import { useEffect, useState } from "react";
 import type { NetworkProfile } from "@hivemind/workspace-host/network-profile";
 import { ReachChooser } from "./reach-chooser";
+import { ROLE_LABELS } from "./people";
 import { Check, Copy, Share2, Users } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../components/ui/dialog";
 import { Button } from "../components/ui/button";
 
 type LinkRole = "view" | "edit" | "terminals";
-export const ROLE_LABELS: Record<string, string> = {
-  view: "Can view", edit: "Can edit board", terminals: "Can use terminals", agents: "Can drive agents", owner: "Owner",
-};
+
 const EXPIRIES: Array<[string, number]> = [["1 hour", 3_600_000], ["24 hours", 86_400_000], ["7 days", 604_800_000]];
 
 export function ShareDialog({ repo, open, onClose, onPeople }: { repo: string; open: boolean; onClose: () => void; onPeople: () => void }) {

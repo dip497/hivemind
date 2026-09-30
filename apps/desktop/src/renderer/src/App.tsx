@@ -1,9 +1,8 @@
 import * as SettingsDialog from "@radix-ui/react-dialog";
 import { ThemePanel } from "./ThemePanel";
 import { RecentProjects } from "./RecentProjects";
-import { ShareDialog, ROLE_LABELS } from "./multiplayer/share-dialog";
+import { ROLE_LABELS } from "./multiplayer/people";
 import { PeopleHere } from "./multiplayer/presence";
-import { PeopleDialog } from "./multiplayer/people-dialog";
 import { SharedBanner } from "./multiplayer/shared-banner";
 import { setWorkspaceOccluded } from "./workspace-occlusion";
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
@@ -32,6 +31,9 @@ import { useExpandedGroups, useSettingsNav } from "./settings-nav";
 import { getNotificationSettings, setNotificationSettingsCache, subscribeNotificationSettings, saveNotificationSettings } from "./notification-settings";
 import type { NotificationSettings } from "../../shared/ipc";
 const SettingsPages = lazy(() => import("./settings-panels"));
+// Sharing's dialogs load when opened: they are nothing the first frame draws.
+const ShareDialog = lazy(() => import("./multiplayer/share-dialog").then((m) => ({ default: m.ShareDialog })));
+const PeopleDialog = lazy(() => import("./multiplayer/people-dialog").then((m) => ({ default: m.PeopleDialog })));
 
 // Last 8 opened folders, most recent first. Persisted via localStorage —
 // mirrors VSCode's "Open Recent" (Ctrl+R) behavior at workspace granularity.
@@ -467,8 +469,10 @@ export function App() {
         onNewWindow={() => void window.hive.newWindow()}
         onClose={() => setRecentOpen(false)}
       />
-      {repoPath && <ShareDialog repo={repoPath} open={shareOpen} onClose={() => setShareOpen(false)} onPeople={() => { setShareOpen(false); setPeopleOpen(true); }} />}
-      {repoPath && !repoPath.startsWith("hive://") && <PeopleDialog repo={repoPath} open={peopleOpen} onClose={() => setPeopleOpen(false)} />}
+      <Suspense fallback={null}>
+        {repoPath && shareOpen && <ShareDialog repo={repoPath} open onClose={() => setShareOpen(false)} onPeople={() => { setShareOpen(false); setPeopleOpen(true); }} />}
+        {repoPath && peopleOpen && !repoPath.startsWith("hive://") && <PeopleDialog repo={repoPath} open onClose={() => setPeopleOpen(false)} />}
+      </Suspense>
       <NewIssueModal
         root={root}
         open={newOpen}

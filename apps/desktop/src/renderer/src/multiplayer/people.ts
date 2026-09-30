@@ -1,8 +1,13 @@
 /**
  * A person as the people they work with see them (R3, M1): the colours a person can be, the one a
  * person who has not chosen gets (picked by their id, so it is the same on each of their devices
- * and to everyone who sees them), and the letters their avatar shows.
+ * and to everyone who sees them), the letters their avatar shows, and what each role is called.
  */
+
+/** What each role on a workspace is called (design §6). */
+export const ROLE_LABELS: Record<string, string> = {
+  view: "Can view", edit: "Can edit board", terminals: "Can use terminals", agents: "Can drive agents", owner: "Owner",
+};
 
 /** Distinct from one another, and legible on a dark or a light theme. */
 export const PROFILE_COLORS: readonly { name: string; value: string }[] = [
