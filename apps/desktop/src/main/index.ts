@@ -98,9 +98,8 @@ import { randomUUID } from "node:crypto";
 import { startHcpServer } from "./hcp/hcp-server.js";
 import { makeSpawnPacer } from "./spawn-pacer.js";
 import { makeDispatch, type Dispatcher } from "./hcp/methods.js";
-import { handle, on } from "./app-ipc.js";
-import { Intents } from "@hivemind/workspace-host/intents";
-import { AuditLog } from "@hivemind/workspace-host/audit-log";
+import { handle, handleEffect, on, performed } from "./app-ipc.js";
+import { hostIntents } from "./audit.js";
 import { Mailbox } from "./hcp/mailbox.js";
 import { TurnTracker } from "./hcp/turn-tracker.js";
 import { StatusStore, isSessionStatus, type ScreenState } from "@hivemind/agent-host/status-store";
@@ -451,6 +450,15 @@ async function createWindow(target: string | null = cliLaunchTarget): Promise<vo
 
 // ── IPC handlers ──────────────────────────────────────────────
 
+// What a window's effect acts on, for the audit log (app-ipc.ts): text only, never what was written.
+const str = (v: unknown): string | undefined => (typeof v === "string" && v ? v : undefined);
+/** A file in a repo (a local path or an ssh:// one). */
+const fileIn = (repo: unknown, rel: unknown): string | undefined =>
+  typeof repo === "string" && typeof rel === "string" && repo && rel
+    ? (isRemote(repo) ? `${repo.replace(/\/+$/, "")}/${rel}` : path.resolve(repo, rel))
+    : undefined;
+const howMany = (xs: unknown, one: string): string | undefined => (Array.isArray(xs) ? `${xs.length} ${one}${xs.length === 1 ? "" : "s"}` : undefined);
+
 /**
  * Wrap an ipcMain.handle callback so thrown errors are normalized into a
  * `[handler] message (code)` form. Electron's default invoke-error wrapping
@@ -566,8 +574,9 @@ function browserGuestFor(tileId: string): Electron.WebContents | null {
   return guest && !guest.isDestroyed() ? guest : null;
 }
 
-handle(
+handleEffect(
   "browserCdp",
+  (tileId, method) => ({ target: str(tileId), detail: str(method) }),
   wrap(async (_e, tileId: string, method: string, params?: Record<string, unknown>) => {
     const guest = browserGuestFor(tileId);
     if (!guest) throw new Error(`no browser tile registered for ${tileId}`);
@@ -596,7 +605,7 @@ handle("getBrowserSettings", () => ({
   enabled: readSettings().browserCdp === true,
   port: process.env.HIVEMIND_BROWSER_CDP_PORT ?? "9333",
 }));
-handle("setBrowserCdpEnabled", wrap(async (_e, enabled: boolean) => {
+handleEffect("setBrowserCdpEnabled", (enabled) => ({ detail: enabled ? "on" : "off" }), wrap(async (_e, enabled: boolean) => {
   await writeSettings({ browserCdp: !!enabled });
   return { ok: true as const };
 }));
@@ -606,7 +615,7 @@ handle("setBrowserCdpEnabled", wrap(async (_e, enabled: boolean) => {
 // in-memory cache the per-notice OS-popup gate reads. The renderer caches its
 // own snapshot on load + on every change here (pushed back via the setter).
 handle("getNotificationSettings", () => getNotificationSettings());
-handle("setNotificationSettings", wrap(async (_e, s: unknown) => {
+handleEffect("setNotificationSettings", () => ({}), wrap(async (_e, s: unknown) => {
   await setNotificationSettings(normalizeNotificationSettings(s));
   return { ok: true as const };
 }));
@@ -728,7 +737,7 @@ handle("checkForUpdate", async () => {
 // `relaunchApp()` (which goes through the launcher, applying the staged build).
 // The bare-CLI `upgrade` arg path still uses runUpgradeAndExit (it runs in a
 // real terminal, so inherited stdio + exit is correct there).
-handle("runUpgrade", () => new Promise<{ ok: boolean; code: number | null }>((resolve) => {
+handleEffect("runUpgrade", () => ({}), () => new Promise<{ ok: boolean; code: number | null }>((resolve) => {
   // Test seam (non-packaged only, as above): replay the installer's lines instead of running
   // it, so an e2e can drive what the user reads without downloading a release.
   const scripted = !app.isPackaged && process.env.HIVEMIND_TEST_UPDATE;
@@ -790,8 +799,9 @@ handle("pickProjectFolder", async () => {
 // Initialize a .hivemind/ workspace in `dir` (no terminal needed). Mirrors
 // `hive init --prefix`. Returns the new root path. Renderer then re-resolves
 // the project so the New-issue button + board light up.
-handle(
+handleEffect(
   "initWorkspace",
+  (dir, prefix) => ({ target: str(dir), detail: str(prefix)?.toUpperCase() }),
   wrap(async (_e, dir: string, prefixRaw: string) => {
     const prefix = String(prefixRaw).toUpperCase();
     if (!/^[A-Z][A-Z0-9]{1,9}$/.test(prefix)) {
@@ -823,8 +833,9 @@ async function installAgenticStack(dir: string): Promise<void> {
 
 // Ensure the agentic stack exists for an already-initialized workspace (called
 // before "Work on this" + manually via the workspace switcher). dir = repo dir.
-handle(
+handleEffect(
   "installAgentic",
+  (dir) => ({ target: str(dir) }),
   wrap(async (_e, dir: string) => {
     const root = await findRoot(dir);
     // No-op (don't throw) when the dir has no .hivemind workspace. This handler
@@ -843,27 +854,31 @@ handle(
   "resolveIssueRoot",
   wrap(async (_e, id: string) => ({ root: await resolveRootForIssue(id) })),
 );
-handle(
+handleEffect(
   "moveIssue",
+  (_root, id, prefix, mode) => ({ target: str(id), detail: `${mode === "copy" ? "copy" : "move"} to ${String(prefix).toUpperCase()}` }),
   wrap(async (_e, root: string, id: string, destPrefix: string, mode: "move" | "copy") =>
     transferIssue(root, id, String(destPrefix).toUpperCase(), { mode, actor: "ui" }),
   ),
 );
-handle(
+handleEffect(
   "linkIssue",
+  (_root, id, other, type) => ({ target: str(id) && str(other) ? `${id}->${other}` : undefined, detail: str(type) }),
   wrap(async (_e, root: string, id: string, otherId: string, type: LinkType) =>
     linkIssues(root, id, otherId, type, "ui"),
   ),
 );
-handle(
+handleEffect(
   "unlinkIssue",
+  (_root, id, other) => ({ target: str(id) && str(other) ? `${id}->${other}` : undefined }),
   wrap(async (_e, root: string, id: string, otherId: string) => ({
     removed: await unlinkIssues(root, id, otherId, "ui"),
   })),
 );
 handle("readIssue", wrap(async (_e, root: string, id: string) => readIssue(root, id)));
-handle(
+handleEffect(
   "updateIssueState",
+  (_root, id, state) => ({ target: str(id), detail: str(state) }),
   wrap(async (_e, root: string, id: string, state: IssueState, note?: string) => {
     // Route through core (like createIssue/updateIssue/commentOnIssue) instead
     // of hand-rolling the state change + a divergent activity string. The note,
@@ -873,31 +888,34 @@ handle(
     return issue;
   })
 );
-handle(
+handleEffect(
   "createIssue",
+  () => ({ target: (issue: { id?: string } | undefined) => issue?.id }),
   wrap(async (_e, root: string, opts: Parameters<typeof createIssue>[1]) => {
     const issue = await createIssue(root, opts);
     await writeAgentContext(root);
     return issue;
   })
 );
-handle(
+handleEffect(
   "updateIssue",
+  (_root, id) => ({ target: str(id) }),
   wrap(async (_e, root: string, id: string, patch: IssuePatch) => {
     const issue = await updateIssue(root, id, patch, "ui");
     await writeAgentContext(root);
     return issue;
   })
 );
-handle(
+handleEffect(
   "commentOnIssue",
+  (_root, id) => ({ target: str(id) }),
   wrap(async (_e, root: string, id: string, message: string) => {
     const issue = await commentOnIssue(root, id, message, "ui");
     await writeAgentContext(root);
     return issue;
   })
 );
-handle("deleteIssue", wrap(async (_e, root: string, id: string) => {
+handleEffect("deleteIssue", (_root, id) => ({ target: str(id) }), wrap(async (_e, root: string, id: string) => {
   await deleteIssueCore(root, id);
   await writeAgentContext(root);
 }));
@@ -906,7 +924,7 @@ handle("deleteIssue", wrap(async (_e, root: string, id: string) => {
 // same list the diff tile is showing.
 handle("reviewList", wrap(async (_e, repoPath: string) =>
   readComments(await reviewRoot(repoPath))));
-handle("reviewSave", wrap(async (_e, repoPath: string, comments: unknown) =>
+handleEffect("reviewSave", (repo) => ({ target: str(repo) }), wrap(async (_e, repoPath: string, comments: unknown) =>
   writeComments(await reviewRoot(repoPath), normalizeComments(comments))));
 
 // git
@@ -925,26 +943,26 @@ handle(
   wrap((_e, repoPath: string, file: string, rev: "HEAD" | "INDEX" | "WORKING") =>
     gitFileContents(repoPath, assertInRepo(repoPath, file), rev))
 );
-handle("gitStage", wrap((_e, repoPath: string, files: string[]) =>
+handleEffect("gitStage", (repo, files) => ({ target: str(repo), detail: howMany(files, "file") }), wrap((_e, repoPath: string, files: string[]) =>
   gitStage(repoPath, assertAllInRepo(repoPath, files))
 ));
-handle("gitUnstage", wrap((_e, repoPath: string, files: string[]) =>
+handleEffect("gitUnstage", (repo, files) => ({ target: str(repo), detail: howMany(files, "file") }), wrap((_e, repoPath: string, files: string[]) =>
   gitUnstage(repoPath, assertAllInRepo(repoPath, files))
 ));
-handle("gitDiscard", wrap((_e, repoPath: string, files: string[]) =>
+handleEffect("gitDiscard", (repo, files) => ({ target: str(repo), detail: howMany(files, "file") }), wrap((_e, repoPath: string, files: string[]) =>
   gitDiscard(repoPath, assertAllInRepo(repoPath, files))
 ));
-handle("gitCommit", wrap((_e, repoPath: string, message: string, allowEmpty?: boolean) =>
+handleEffect("gitCommit", (repo) => ({ target: str(repo) }), wrap((_e, repoPath: string, message: string, allowEmpty?: boolean) =>
   gitCommit(repoPath, message, allowEmpty)
 ));
-handle("gitPush", wrap((_e, repoPath: string, setUpstream?: boolean) =>
+handleEffect("gitPush", (repo, upstream) => ({ target: str(repo), detail: upstream ? "set upstream" : undefined }), wrap((_e, repoPath: string, setUpstream?: boolean) =>
   gitPush(repoPath, setUpstream)
 ));
-handle("gitPull", wrap((_e, repoPath: string) => gitPull(repoPath)));
+handleEffect("gitPull", (repo) => ({ target: str(repo) }), wrap((_e, repoPath: string) => gitPull(repoPath)));
 handle("gitConflictedFile", wrap((_e, repoPath: string, file: string) =>
   gitConflictedFile(repoPath, assertInRepo(repoPath, file))
 ));
-handle("gitWriteResolved", wrap((_e, repoPath: string, file: string, contents: string) =>
+handleEffect("gitWriteResolved", (repo, file) => ({ target: fileIn(repo, file) }), wrap((_e, repoPath: string, file: string, contents: string) =>
   gitWriteResolved(repoPath, assertInRepo(repoPath, file), contents)
 ));
 
@@ -987,7 +1005,7 @@ handle("fileRead", wrap((_e, repoPath: string, relPath: string) =>
     ? readRemoteFile(repoPath, assertRemoteRel(relPath))
     : fsp.readFile(resolveInRepo(repoPath, relPath), "utf8")
 ));
-handle("fileWrite", wrap((_e, repoPath: string, relPath: string, contents: string) =>
+handleEffect("fileWrite", (repo, rel) => ({ target: fileIn(repo, rel) }), wrap((_e, repoPath: string, relPath: string, contents: string) =>
   isRemote(repoPath)
     ? writeRemoteFile(repoPath, assertRemoteRel(relPath), contents)
     : fsp.writeFile(resolveInRepo(repoPath, relPath), contents, "utf8")
@@ -1012,7 +1030,7 @@ const OPENABLE_EXT = new Set([
 // workspace via realpath — rejects absolute/`..`/symlink escapes; (2) ALLOWLIST
 // viewable extensions — never hands an executable/installer/shortcut to the OS
 // opener; (3) extensionless files (Makefile, LICENSE) only when NOT executable.
-handle("openPathInApp", wrap(async (_e, repoPath: string, target: string) => {
+handleEffect("openPathInApp", (repo, target) => ({ target: fileIn(repo, target) }), wrap(async (_e, repoPath: string, target: string) => {
   if (!target) return { ok: false, error: "no target" };
   let t = target.trim();
   if (t.startsWith("file://")) {
@@ -1085,19 +1103,19 @@ remoteConns.setAuthResolver((hostId) => {
 });
 // Machines: the catalog `hive machine` edits, plus each host's live state.
 handle("machines:get", wrap(async () => machinesSnapshot()));
-handle("machines:add", wrap(async (_e, req: MachineAddRequest) => addMachine(req)));
-handle("machines:check", wrap(async (_e, id: string) => checkMachine(String(id))));
-handle("machines:install", wrap(async (_e, id: string) => installOnMachine(String(id))));
-handle("machines:update", wrap(async (_e, id: string, patch: { label?: string; enabled?: boolean }) => updateMachine(String(id), patch ?? {})));
-handle("machines:edit", wrap(async (_e, id: string, patch: { target: string; label?: string; password?: string }) => editMachine(String(id), {
+handleEffect("machines:add", (req) => ({ target: str(req?.target) }), wrap(async (_e, req: MachineAddRequest) => addMachine(req)));
+handleEffect("machines:check", (id) => ({ target: str(id) }), wrap(async (_e, id: string) => checkMachine(String(id))));
+handleEffect("machines:install", (id) => ({ target: str(id) }), wrap(async (_e, id: string) => installOnMachine(String(id))));
+handleEffect("machines:update", (id) => ({ target: str(id) }), wrap(async (_e, id: string, patch: { label?: string; enabled?: boolean }) => updateMachine(String(id), patch ?? {})));
+handleEffect("machines:edit", (id, patch) => ({ target: str(id), detail: str(patch?.target) }), wrap(async (_e, id: string, patch: { target: string; label?: string; password?: string }) => editMachine(String(id), {
   target: String(patch?.target ?? ""),
   ...(typeof patch?.label === "string" ? { label: patch.label } : {}),
   ...(typeof patch?.password === "string" && patch.password ? { password: patch.password } : {}),
 })));
-handle("machines:remove", wrap(async (_e, id: string) => removeMachine(String(id))));
-handle("machines:set-password", wrap(async (_e, id: string, password: string) => setMachinePassword(String(id), String(password))));
+handleEffect("machines:remove", (id) => ({ target: str(id) }), wrap(async (_e, id: string) => removeMachine(String(id))));
+handleEffect("machines:set-password", (id) => ({ target: str(id) }), wrap(async (_e, id: string, password: string) => setMachinePassword(String(id), String(password))));
 handle("machines:sessions", wrap(async (_e, uri: string | null) => machineSessions(uri ? String(uri) : null)));
-handle("machines:reconnect", wrap(async (_e, hostId: string) => { reconnectMachineHost(String(hostId)); }));
+handleEffect("machines:reconnect", (id) => ({ target: str(id) }), wrap(async (_e, hostId: string) => { reconnectMachineHost(String(hostId)); }));
 // List a remote directory for the folder picker. `dir` empty → the host's home.
 handle("sshListDir", wrap(async (_e, uri: string, dir: string) => {
   const target = parseRemote(uri);
@@ -1110,13 +1128,13 @@ handle("sshListDir", wrap(async (_e, uri: string, dir: string) => {
 
 // worktree
 handle("worktreeList", wrap((_e, repoPath: string) => worktreeList(repoPath)));
-handle("worktreeCreate", wrap((_e, repoPath: string, opts: WorktreeCreateOpts) =>
+handleEffect("worktreeCreate", (repo, opts) => ({ target: str(repo), detail: str(opts?.branch) }), wrap((_e, repoPath: string, opts: WorktreeCreateOpts) =>
   worktreeCreate(repoPath, opts)
 ));
-handle("worktreeRemove", wrap((_e, repoPath: string, wtPath: string, force?: boolean) =>
+handleEffect("worktreeRemove", (_repo, wt) => ({ target: str(wt) }), wrap((_e, repoPath: string, wtPath: string, force?: boolean) =>
   worktreeRemove(repoPath, wtPath, force)
 ));
-handle("worktreePrune", wrap((_e, repoPath: string) => worktreePrune(repoPath)));
+handleEffect("worktreePrune", (repo) => ({ target: str(repo) }), wrap((_e, repoPath: string) => worktreePrune(repoPath)));
 
 // PTY
 // Sliding-window spawn rate-limit (see ptySpawn handler): over the limit a spawn waits
@@ -1283,7 +1301,13 @@ handle("ptySpawn", wrap(async (e, opts: Parameters<typeof spawnPty>[0]) => {
   { const d = spawning; if (d) hcpAgentOf.set(toBareId(opts.tileId), d.id); else hcpAgentOf.delete(toBareId(opts.tileId)); }
   // A session main already holds (another window shows it, or this one remounted it) is joined,
   // its screen first: joining starts no process, and whoever started it gave it its first task.
-  return ptyRelay.open(opts.tileId, viewerOf(e.sender), () => startSession(opts), () => screenOf(opts.tileId));
+  // Starting a session is the window's intent; joining one, reattaching to one after a restart,
+  // or starting the one a control-plane spawn (recorded as that) asked for is not.
+  const bare = toBareId(opts.tileId);
+  const start = () => ("attachOnly" in opts && opts.attachOnly) || controlSpawned.delete(bare)
+    ? startSession(opts)
+    : performed({ verb: "ptySpawn", target: bare, detail: str(path.basename(String(opts.cmd ?? ""))) }, () => startSession(opts));
+  return ptyRelay.open(opts.tileId, viewerOf(e.sender), start, () => screenOf(opts.tileId));
 }));
 /** Start (or, with a daemon, attach to) the session a tile runs. */
 async function startSession(opts: Parameters<typeof spawnPty>[0]): Promise<{ pid: number }> {
@@ -1372,7 +1396,16 @@ on("ptyResize", (e, tileId: string, cols: number, rows: number) => {
 /** End a tile's session. A daemon tells its killer nothing of the exit, so its teardown runs
  *  here: anything waiting on the tile (a parent's read, an approval) is answered now, not at its
  *  timeout. */
+/** Tiles the control plane spawned whose session no window has started yet. */
+const controlSpawned = new Set<string>();
+/** Sessions ended here, the latest last: a tile's id never comes back, so a few hundred do. */
+const endedSessions = new Set<string>();
 function endSession(tileId: string): void {
+  const bare = toBareId(tileId);
+  controlSpawned.delete(bare);
+  endedSessions.delete(bare);
+  endedSessions.add(bare);
+  if (endedSessions.size > 512) endedSessions.delete(endedSessions.values().next().value!);
   dropPtyRelay(tileId);
   if (hasRemotePty(tileId)) killRemotePty(tileId); else killPty(tileId);
   onPtyExit(tileId);
@@ -1380,7 +1413,14 @@ function endSession(tileId: string): void {
   hcpStatus.forget(toBareId(tileId));
   hcpAgentOf.delete(toBareId(tileId));
 }
-on("ptyKill", (_e, tileId: string) => endSession(tileId));
+// The window closed a tile. When another writer closed it (the control plane, another window),
+// this window follows, which also ends a session it was still starting; the session had ended, so
+// that is not an effect of its own.
+on("ptyKill", (_e, tileId: string) => {
+  if (typeof tileId !== "string") return;
+  if (endedSessions.has(toBareId(tileId))) { endSession(tileId); return; }
+  void performed({ verb: "ptyKill", target: toBareId(tileId) }, () => endSession(tileId)).catch((err: unknown) => console.warn("[ipc] ptyKill:", err));
+});
 // Detach (tile unmounted): the window stops watching; the last window to go lets go of the
 // session (daemons keep it alive, local or remote; in-process PTYs treat it as a kill).
 on("ptyDetach", (e, tileId: string) => {
@@ -1793,7 +1833,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
 // an agent hands off a plan. We hold the hook connection (via `reply`) until the
 // renderer resolves it through "plan-review:decide". Socket path mirrors the one
 // the daemon injects into the hook command (both derive from userData).
-const planReplies = new Map<string, PlanRequest["reply"]>();
+const planReplies = new Map<string, { tile: string; reply: PlanRequest["reply"] }>();
 function startPlanReviewBridge(): void {
   const sock = ipcPath(app.getPath("userData"), "plan-bridge.sock");
   startPlanBridge(sock, (req) => {
@@ -1802,9 +1842,12 @@ function startPlanReviewBridge(): void {
     // The agent waits on a person: that is its status until the review is answered or dropped.
     const bare = toBareId(req.tileId);
     hcpStatus.event(bare, { event: "input.requested", kind: "plan" });
-    planReplies.set(req.requestId, (decision, feedback) => {
-      hcpStatus.event(bare, { event: "input.resolved" });
-      req.reply(decision, feedback);
+    planReplies.set(req.requestId, {
+      tile: bare,
+      reply: (decision, feedback) => {
+        hcpStatus.event(bare, { event: "input.resolved" });
+        req.reply(decision, feedback);
+      },
     });
     req.onAbort(() => {
       hcpStatus.event(bare, { event: "input.resolved" });
@@ -1816,11 +1859,12 @@ function startPlanReviewBridge(): void {
     });
   });
 }
-handle(
+handleEffect(
   "plan-review:decide",
+  (requestId, decision) => ({ target: planReplies.get(String(requestId))?.tile, detail: decision === "allow" || decision === "deny" ? decision : undefined }),
   wrap(async (_e, requestId: string, decision: "allow" | "deny", feedback?: string) => {
-    const reply = planReplies.get(requestId);
-    if (reply) { reply(decision, feedback); planReplies.delete(requestId); }
+    const pending = planReplies.get(requestId);
+    if (pending) { pending.reply(decision, feedback); planReplies.delete(requestId); }
   }),
 );
 
@@ -1977,11 +2021,11 @@ function startHcpControlPlane(): void {
     workspaces: workspaceStore(),
     shownWorkspace,
     launchOptions: (agentId) => getAppSettings().agents.options[agentId] ?? {},
-    announceSpawn: (spawn) => broadcast("hcp:spawned", spawn),
+    announceSpawn: (spawn) => { controlSpawned.add(spawn.tileId); broadcast("hcp:spawned", spawn); },
     status: hcpStatus,
     endSession,
     sessionHeld: (id) => hasSession(id) || hasRemotePty(id),
-    intents: new Intents(new AuditLog({ file: path.join(userData, "audit.jsonl"), onWarn: (m) => console.warn(`[audit] ${m}`) })),
+    intents: hostIntents(),
   });
   // Every verb routes through the boot scan first: spawn resolves the agent by id
   // and other verbs read its capabilities, so none may run against a half-set catalog.

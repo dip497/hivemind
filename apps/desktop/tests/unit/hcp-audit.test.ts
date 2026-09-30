@@ -27,7 +27,8 @@ function dispatcher() {
   const { dispatch } = makeDispatch({
     turns,
     recorder: new OutputRecorder(),
-    callRenderer: async () => { throw new Error("no window"); },
+    // The window answers a review with its decision; for anything else there is no window.
+    callRenderer: async (m: string) => { if (m === "review.open") return { decision: "allow" }; throw new Error("no window"); },
     reloadSettings: async () => ({ ok: true }),
     toolsSettings: () => ({ enabledPlugins: ["hivemind/web"], disabledTools: [] }),
     writeToTile: write,
@@ -66,7 +67,7 @@ test("each verb with an effect is recorded with who asked, what, of what and how
   // With no window to carry them out these fail, and are recorded as asked all the same.
   await assert.rejects(dispatch("views.rescan", {}, PERSON));
   await assert.rejects(dispatch("agents.rescan", {}, PERSON));
-  await assert.rejects(dispatch("review.open", { plan: "ship it" }, PERSON));
+  await dispatch("review.open", { plan: "ship it" }, PERSON);
   // Reads, a window's focus, a view's event and a hook's reply change nothing here.
   await dispatch("tile.list", {}, LEAD);
   await dispatch("tile.list_frames", {}, PERSON);
@@ -90,7 +91,7 @@ test("each verb with an effect is recorded with who asked, what, of what and how
     { actor: person, verb: "settings.reload", outcome: "ok" },
     { actor: person, verb: "views.rescan", outcome: "error" },
     { actor: person, verb: "agents.rescan", outcome: "error" },
-    { actor: person, verb: "review.open", outcome: "error" },
+    { actor: person, verb: "review.open", detail: "allow", outcome: "ok" },
     { actor: lead, verb: "tile.close", target: w, outcome: "ok" },
     { actor: person, verb: "tile.close", target: "tile-ghost", outcome: "error", code: "TILE_NOT_FOUND" },
   ]);

@@ -7,7 +7,7 @@
  * and patches through IPC; the CLI edits the file and calls `settings.reload`
  * over HCP.
  */
-import { answer, handle } from "./app-ipc.js";
+import { answer, handle, handleEffect } from "./app-ipc.js";
 import { readFileSync } from "node:fs";
 import { mergeSettings, type Settings } from "@hivemind/core/settings-schema";
 import { patchSettingsFile, readSettings, settingsPath, updateSettings } from "@hivemind/core/settings";
@@ -105,6 +105,13 @@ export async function reloadSettings(): Promise<Settings> {
   return coordinator.reload();
 }
 
+/** The settings a patch list changes, for the audit log: their paths, never their values. */
+function settingPaths(raw: unknown): string | undefined {
+  const paths = [...new Set(sanitizePatches(raw).map((p) => p.path))];
+  if (!paths.length) return undefined;
+  return paths.length > 5 ? `${paths.slice(0, 5).join(", ")} and ${paths.length - 5} more` : paths.join(", ");
+}
+
 /** Validate the renderer's patch list: dotted paths + JSON values only. */
 function sanitizePatches(raw: unknown): { path: string; value: unknown }[] {
   if (!Array.isArray(raw)) return [];
@@ -120,11 +127,11 @@ function sanitizePatches(raw: unknown): { path: string; value: unknown }[] {
 export function installSettingsIpc(tellWindows: (channel: string, settings: Settings) => void): void {
   answer("settings:get-sync", () => getSettings());
   handle("settings:get", () => getSettings());
-  handle("settings:replace", (_e, next: unknown) => replaceSettings(next));
-  handle("settings:set", (_e, dotted: unknown, value: unknown) => patchSettingsPath(String(dotted), value));
+  handleEffect("settings:replace", () => ({}), (_e, next: unknown) => replaceSettings(next));
+  handleEffect("settings:set", (dotted) => ({ target: typeof dotted === "string" ? dotted : undefined }), (_e, dotted: unknown, value: unknown) => patchSettingsPath(String(dotted), value));
   // Batched dotted-path patches — what the renderer sends now (a full-object
   // replace from a debounced UI would revert whatever else was written meanwhile).
-  handle("settings:patch", (_e, patches: unknown) => patchSettings(sanitizePatches(patches)));
+  handleEffect("settings:patch", (patches) => ({ target: settingPaths(patches) }), (_e, patches: unknown) => patchSettings(sanitizePatches(patches)));
   handle("settings:path", () => settingsFile());
   onSettingsChange((s) => tellWindows("settings:changed", s));
 }

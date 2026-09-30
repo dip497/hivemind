@@ -887,8 +887,13 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       case "review.open":
         // Open a plan-review tile and BLOCK until the human decides. The
         // renderer doesn't reply on open — the tile resolves this caller via
-        // hcpResult on the decision, which is why the timeout is generous.
-        return effect(call, { verb: method }, async () => {
+        // hcpResult on the decision, which is why the timeout is generous. The decision it
+        // comes back with is recorded.
+        const decided = (r: unknown) => {
+          const decision = (r as { decision?: unknown } | null)?.decision;
+          return decision === "allow" || decision === "deny" ? decision : undefined;
+        };
+        return effect(call, { verb: method, detail: decided }, async () => {
           if (!p.plan) throw new HcpError("BAD_REQUEST", "plan required");
           return await deps.callRenderer("review.open", { plan: p.plan, cwd: p.cwd ?? "" }, REVIEW_TIMEOUT);
         });

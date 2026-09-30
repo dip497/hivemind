@@ -14,7 +14,7 @@ import path from "node:path";
  * response so plugin code cannot reach the network or embed anything.
  */
 import { app, net, protocol, dialog, type BrowserWindow, type WebFrameMain } from "electron";
-import { handle } from "./app-ipc.js";
+import { handle, handleEffect } from "./app-ipc.js";
 import { appWindowOf } from "./windows.js";
 import { pathToFileURL } from "node:url";
 import { listInstalledViews, readViewPackage, installView, removeView, type InstalledView } from "@hivemind/core/views";
@@ -141,7 +141,7 @@ export function startViewWatchdog(win: BrowserWindow): () => void {
 }
 
 /** The one package under review. Re-read before installing, so changed permissions need review again. */
-let pending: { token: string; dir: string; manifest: string; staged: boolean } | null = null;
+let pending: { token: string; dir: string; id: string; manifest: string; staged: boolean } | null = null;
 
 /** Review a view folder: the native picker's choice, or a verified catalog download (`staged`). */
 export async function reviewViewDir(dir: string, staged: boolean) {
@@ -154,7 +154,7 @@ export async function reviewViewDir(dir: string, staged: boolean) {
   if (["canvas", "windows", "world"].includes(pkg.id)) throw new Error("This extension uses a built-in view ID");
   const existing = (await listInstalledViews()).find((view) => view.id === pkg.id);
   const token = newNonce();
-  pending = { token, dir: pkg.dir, manifest: JSON.stringify(pkg.manifest), staged };
+  pending = { token, dir: pkg.dir, id: pkg.id, manifest: JSON.stringify(pkg.manifest), staged };
   return { token, package: { ...pkg, url: null }, replacesVersion: existing ? existing.manifest?.version ?? "unknown" : null };
 }
 
@@ -168,7 +168,7 @@ export function installViewManagementIpc(): void {
     if (result.canceled || !result.filePaths[0]) return null;
     return reviewViewDir(result.filePaths[0], false);
   });
-  handle("views:install", async (_event, token: string) => {
+  handleEffect("views:install", (token) => ({ target: pending && token === pending.token ? pending.id : undefined }), async (_event, token: string) => {
     if (!pending || token !== pending.token) throw new Error("Choose the extension folder again");
     const candidate = pending;
     pending = null;
@@ -178,7 +178,7 @@ export function installViewManagementIpc(): void {
       await installView(candidate.dir);
     } finally { if (candidate.staged) await rm(candidate.dir, { recursive: true, force: true }).catch(() => {}); }
   });
-  handle("views:remove", async (_event, id: string) => {
+  handleEffect("views:remove", (id) => ({ target: typeof id === "string" ? id : undefined }), async (_event, id: string) => {
     if (typeof id !== "string") throw new Error("Invalid extension ID");
     await removeView(id);
   });

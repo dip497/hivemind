@@ -4,7 +4,7 @@ import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { app } from "electron";
-import { handle } from "./app-ipc.js";
+import { handle, handleEffect } from "./app-ipc.js";
 import { appMeetsMinVersion, catalogAgentNeedsUpdate, fetchCatalog, stageEntry, type CatalogEntry } from "@hivemind/core/plugin-catalog";
 import { installAgent, readAgentManifest, removeAgent, userAgentsDir, AGENT_MANIFEST_FILE } from "@hivemind/agents/load";
 import { findBin, verifyAgent } from "@hivemind/agents/discover";
@@ -34,7 +34,7 @@ export interface AgentReview {
 
 export function installPluginCatalogIpc(): void {
   let catalog: CatalogEntry[] = [];
-  let pendingAgent: { token: string; dir: string } | null = null;
+  let pendingAgent: { token: string; dir: string; id: string } | null = null;
   handle("plugins:catalog", async () => {
     catalog = await fetchCatalog();
     return catalog;
@@ -82,7 +82,7 @@ export function installPluginCatalogIpc(): void {
       ...Object.values(o.values ?? {}).map((argv) => argv.join(" ")),
     ]))];
     if (pendingAgent) await rm(pendingAgent.dir, { recursive: true, force: true }).catch(() => {});
-    pendingAgent = { token: newNonce(), dir };
+    pendingAgent = { token: newNonce(), dir, id: def.id };
     const review: AgentReview = {
       token: pendingAgent.token, id: def.id, label: def.label, bin: def.bin,
       command: [def.bin, ...(def.defaultArgs ?? [])].join(" "), flags,
@@ -96,7 +96,9 @@ export function installPluginCatalogIpc(): void {
 
   // Once per launch, asked for by the workspace once it is up, so the result has a listener.
   let autoInstalled = false;
-  handle("agents:auto-install", async () => {
+  // What it installed or updated, if anything, is the person's standing choice (agents.autoInstall) carried out.
+  const installedIds = (r: { added: Array<{ id: string }>; updated: Array<{ id: string }> }) => [...r.added, ...r.updated].map((a) => a.id).join(", ") || undefined;
+  handleEffect("agents:auto-install", () => ({ target: installedIds }), async () => {
     if (autoInstalled) return { added: [], updated: [] };
     autoInstalled = true;
     try {
@@ -109,11 +111,11 @@ export function installPluginCatalogIpc(): void {
     }
   });
 
-  handle("agents:remove", async (_event, id: string) => {
+  handleEffect("agents:remove", (id) => ({ target: typeof id === "string" ? id : undefined }), async (_event, id: string) => {
     await removeInstalledAgent(String(id));
   });
 
-  handle("plugins:install-agent", async (_event, token: string) => {
+  handleEffect("plugins:install-agent", (token) => ({ target: pendingAgent && pendingAgent.token === token ? pendingAgent.id : undefined }), async (_event, token: string) => {
     if (!pendingAgent || pendingAgent.token !== token) throw new Error("Review the agent again before installing it.");
     const { dir } = pendingAgent;
     pendingAgent = null;

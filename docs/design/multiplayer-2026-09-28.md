@@ -265,6 +265,13 @@ exactly as today. They are ordered by dependency.
   browser tile's webview, a view's iframe) or any other window reaches none of them, whatever it
   is given. A browser tile's registration names a page of its own window, so the debugger main
   drives for it is always a browser page's.
+- **Decided while building it, step 3b (2026-09-30).** The window's effects are intents of the
+  person at the window, named by their channel (`fileWrite`, `gitCommit`, `machines:add`), so the
+  log reads in the words of each surface. An effect is one on the workspace or the machine: tiles,
+  files, git, issues, settings, installs and machines. The app's own presentation and bookkeeping
+  (windows, wallpaper, diagnostics, notifications, a browser page's registration) are not. A
+  session is an intent when a window starts it; one it joins, or reattaches to after a restart,
+  starts nothing and is not.
 
 ### R8. A workspace API that is not Electron IPC
 

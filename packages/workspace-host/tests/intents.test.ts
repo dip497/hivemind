@@ -23,13 +23,16 @@ test("an intent that is carried out is recorded with who asked, what, of what, a
   const intents = new Intents(new AuditLog({ file }));
   const r = await intents.perform(agent, { verb: "agent.approve", target: "tile-codex-2", detail: "allow" }, () => ({ ok: true }));
   expect(r).toEqual({ ok: true });
-  // An intent that opens a tile is recorded against the tile it opened.
+  // An intent that opens a tile is recorded against the tile it opened, one that ends in a
+  // decision with the decision.
   await intents.perform({ kind: "person" }, { verb: "tile.spawn_agent", target: (res: { tileId: string }) => res.tileId }, async () => ({ tileId: "tile-codex-3" }));
+  await intents.perform(agent, { verb: "review.open", detail: (res: { decision: string }) => res.decision }, async () => ({ decision: "deny" }));
 
-  const [approve, spawn] = lines();
+  const [approve, spawn, review] = lines();
   expect(approve).toEqual({ at: expect.any(String), actor: agent, verb: "agent.approve", target: "tile-codex-2", detail: "allow", outcome: "ok" });
   expect(Number.isNaN(Date.parse(approve.at))).toBe(false);
   expect(spawn).toEqual({ at: expect.any(String), actor: { kind: "person" }, verb: "tile.spawn_agent", target: "tile-codex-3", outcome: "ok" });
+  expect(review).toEqual({ at: expect.any(String), actor: agent, verb: "review.open", detail: "deny", outcome: "ok" });
 });
 
 test("an intent that fails is recorded with its error's code, and the error reaches the caller", async () => {
@@ -38,11 +41,13 @@ test("an intent that fails is recorded with its error's code, and the error reac
   const spawn = intents.perform(agent, { verb: "tile.spawn_agent", target: (res: { tileId: string }) => res.tileId }, async (): Promise<{ tileId: string }> => { throw refused; });
   await expect(spawn).rejects.toBe(refused);
   await expect(intents.perform(agent, { verb: "tile.close", target: "tile-gone" }, () => { throw new Error("no code"); })).rejects.toThrow("no code");
+  await expect(intents.perform(agent, { verb: "review.open", detail: (res: { decision: string }) => res.decision }, (): { decision: string } => { throw new Error("no window"); })).rejects.toThrow();
 
   expect(lines()).toEqual([
-    // Nothing was opened, so there is no tile to name.
+    // Nothing was opened, so there is no tile to name; nothing was decided, so no decision.
     { at: expect.any(String), actor: agent, verb: "tile.spawn_agent", outcome: "error", code: "RATE_LIMITED" },
     { at: expect.any(String), actor: agent, verb: "tile.close", target: "tile-gone", outcome: "error" },
+    { at: expect.any(String), actor: agent, verb: "review.open", outcome: "error" },
   ]);
 });
 

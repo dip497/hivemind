@@ -23,8 +23,9 @@ export interface Intent<R = unknown> {
    *  from what it returns. */
   target?: string | ((result: R) => string | undefined);
   /** What it says that the verb and the target do not: an approval's decision, the tool an
-   *  approval is asked for. Never what someone wrote. */
-  detail?: string;
+   *  approval is asked for; for one that ends in a decision (a review), the decision, read from
+   *  what it returns. Never what someone wrote. */
+  detail?: string | ((result: R) => string | undefined);
   /** The one tile that may ask for it, when only one may: the supervisor an approval was asked
    *  of, the tile a call names as its caller. */
   onlyBy?: string;
@@ -59,10 +60,11 @@ export class Intents {
    *  what it throws; throws `Refused` for what the policy does not allow. */
   async perform<R>(actor: Actor, intent: Intent<R>, run: () => R | Promise<R>): Promise<R> {
     const at = new Date().toISOString();
-    const record = (target: string | undefined, end: Pick<AuditRecord, "outcome" | "code">): void =>
-      this.audit.write({ at, actor, verb: intent.verb, ...(target ? { target } : {}), ...(intent.detail ? { detail: intent.detail } : {}), ...end });
+    const asked = (v: Intent<R>["target"]) => (typeof v === "string" ? v : undefined);
+    const record = (target: string | undefined, detail: string | undefined, end: Pick<AuditRecord, "outcome" | "code">): void =>
+      this.audit.write({ at, actor, verb: intent.verb, ...(target ? { target } : {}), ...(detail ? { detail } : {}), ...end });
     if (intent.onlyBy !== undefined && actor.kind === "tile" && actor.tile !== intent.onlyBy) {
-      record(typeof intent.target === "string" ? intent.target : undefined, { outcome: "refused" });
+      record(asked(intent.target), asked(intent.detail), { outcome: "refused" });
       throw new Refused(`${intent.verb} is for ${intent.onlyBy} to ask, or a person at this machine, not ${actor.tile}`);
     }
     let result: R;
@@ -70,10 +72,11 @@ export class Intents {
       result = await run();
     } catch (e) {
       const code = (e as { code?: unknown } | null)?.code;
-      record(typeof intent.target === "string" ? intent.target : undefined, { outcome: "error", ...(typeof code === "string" && code ? { code } : {}) });
+      record(asked(intent.target), asked(intent.detail), { outcome: "error", ...(typeof code === "string" && code ? { code } : {}) });
       throw e;
     }
-    record(typeof intent.target === "function" ? intent.target(result) : intent.target, { outcome: "ok" });
+    const of = (v: Intent<R>["target"]) => (typeof v === "function" ? v(result) : v);
+    record(of(intent.target), of(intent.detail), { outcome: "ok" });
     return result;
   }
 }
