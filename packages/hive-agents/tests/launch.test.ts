@@ -1,12 +1,14 @@
 // A new agent tile, as main's spawns and the window's make it (catalog.ts: nextOrdinal, agentLaunch).
-import { afterEach, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, expect, test } from "bun:test";
 import { agentById, agentLaunch, nextOrdinal, setCatalog } from "../src/index.js";
 import type { SpawnOptions } from "../src/types.js";
 import { authoredDefs } from "./authored.js";
 
 const CATALOG = authoredDefs();
-setCatalog(CATALOG);
+// The catalog is the process's: seeded for this file's tests, and left empty, as it was found.
+beforeAll(() => setCatalog(CATALOG));
 afterEach(() => setCatalog(CATALOG));
+afterAll(() => setCatalog([]));
 
 test("a label's number is one past the highest in use, whatever else is there", () => {
   const f = (n: number) => `claude #${n}`;

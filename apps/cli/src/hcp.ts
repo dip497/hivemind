@@ -157,6 +157,15 @@ function open(first: { id: string; method: string; params: unknown }, onMessage:
   return c;
 }
 
+/** A call names the tile it comes from when it runs in one: the app records that tile as who
+ *  asked. A call that names a tile itself (`report --tile`) keeps it. */
+function fromOwnTile(params: unknown): unknown {
+  const tile = ownTile();
+  if (!tile || !params || typeof params !== "object" || Array.isArray(params)) return params;
+  const named = params as { callerTile?: unknown };
+  return { ...named, callerTile: named.callerTile ?? tile };
+}
+
 /** One request. `timeoutMs` is the WIRE ceiling for this single round trip —
  *  keep it short and loop (see `read`), never one long request: the caller's
  *  own tool timeout (Claude Code's Bash tool: 120 s) is usually the tighter
@@ -170,7 +179,7 @@ export function hcpCall(method: string, params: unknown, timeoutMs = 30_000): Pr
     const timer = setTimeout(() => fail(new HcpCliError("TIMEOUT", `HCP request timed out after ${timeoutMs} ms`, EXIT.timeout)), timeoutMs);
     function ok(v: unknown) { if (settled) return; settled = true; clearTimeout(timer); try { c.end(); } catch { /* */ } resolve(v); }
     function fail(e: Error) { if (settled) return; settled = true; clearTimeout(timer); try { c.destroy(); } catch { /* */ } reject(e); }
-    const c = open({ id, method, params }, (m) => {
+    const c = open({ id, method, params: fromOwnTile(params) }, (m) => {
       if (m.id !== id) return;
       if (m.error) fail(rpcError(m)); else ok(m.result);
     }, (e) => fail(e ?? unavailable("HCP connection closed")));

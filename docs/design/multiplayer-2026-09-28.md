@@ -240,6 +240,15 @@ exactly as today. They are ordered by dependency.
   `hive host`), `main/hcp/methods.ts`, IPC handlers in `main/index.ts`.
 - **Done when.** Every side-effecting IPC and HCP method is routed through it; the audit
   log (`<userData>/audit.jsonl`) records actor, intent, outcome.
+- **Decided while building it (2026-09-30).** An intent's verb is the control-plane method's
+  name, so the log reads in the words of `hive ctl`. A line holds `at` (when it was asked; it is
+  written when it ends), `actor` (a tile, or a person at this machine), `verb`, `target` (a tile, a
+  pipe, the tile a spawn opened), `detail` (an approval's decision, the tool it asks about; never
+  what someone wrote), and `outcome` (`ok` or `error`, with the error's code). A failure is
+  recorded; a question the worker's standing answer settles is not, since nobody is asked. The log
+  never holds an effect back: a line that cannot be written is reported, and the effect happens.
+  Until each tile has a token of its own the actor is what the call says; `hive ctl` names its
+  tile on every call.
 
 ### R8. A workspace API that is not Electron IPC
 

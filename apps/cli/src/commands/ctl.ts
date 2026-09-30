@@ -90,16 +90,16 @@ const tileArg = { tileId: { type: "positional", required: true, description: "ti
 // Inside a tile, its own workspace; anywhere else, the one the app's window shows.
 const list = sub("list", "List tiles on the canvas grouped by frame (with agent status)",
   { frame: { type: "string", description: "one frame (id, repo name, or title); exit 5 when none answers to it" } },
-  (a) => hcpCall("tile.list", { frame: a.frame, callerTile: ownTile() }));
+  (a) => hcpCall("tile.list", { frame: a.frame }));
 
 const frames = sub("frames", "List canvas frames (id, title, repo, branch, tile count)", {},
-  () => hcpCall("tile.list_frames", { callerTile: ownTile() }));
+  () => hcpCall("tile.list_frames", {}));
 
 const openTool = sub("open-tool", "Open an enabled tool plugin", {
   tool: { type: "positional", required: true, description: "tool id (for example hivemind/web/browser)" },
   frame: { type: "string", description: "target frame (id, repo name, or title; default: beside the calling agent, else the one selected); exit 5 when none answers to it" },
   url: { type: "string", description: "Browser URL: http, https, or about:blank" },
-}, (a) => hcpCall("tool.open", { tool: a.tool, frame: a.frame, url: a.url, callerTile: ownTile() }));
+}, (a) => hcpCall("tool.open", { tool: a.tool, frame: a.frame, url: a.url }));
 
 const spawn = sub("spawn", "Spawn an agent tile; prints { tileId, … }", {
   // Named, not listed: help is built before the agents on this machine are loaded, so a
@@ -118,7 +118,7 @@ const spawn = sub("spawn", "Spawn an agent tile; prints { tileId, … }", {
   await ensureAgentCatalog(); // --agent may name an agent added from a manifest
   return hcpCall("tile.spawn_agent", {
     agent: resolveAgent(a.agent), prompt: a.prompt, name: a.name, frame: a.frame, mode: a.mode, model: a.model,
-    report: boolFlag(a.report), supervise: a.supervise, callerTile: ownTile(), resume: a.resume,
+    report: boolFlag(a.report), supervise: a.supervise, resume: a.resume,
   });
 });
 
@@ -195,7 +195,7 @@ const workflow = sub("workflow", "Run a multi-agent workflow (fanout | pipeline 
   close: { type: "boolean", description: "close worker tiles after collecting their replies" },
 }, async (a) => {
   await ensureAgentCatalog();
-  const { params, ceilingMs } = workflowParams(a, ownTile());
+  const { params, ceilingMs } = workflowParams(a);
   return hcpCall("workflow.run", params, ceilingMs);
 });
 
@@ -331,7 +331,7 @@ const viewEmit = defineCommand({
       const ev = emitArgs(args.name, args.payload, () => fs.readFileSync(0, "utf8"));
       let r: EmitResult;
       try {
-        r = await hcpCall("view.emit", { ...ev, ...(args.view ? { view: String(args.view) } : {}), callerTile: ownTile() }) as EmitResult;
+        r = await hcpCall("view.emit", { ...ev, ...(args.view ? { view: String(args.view) } : {}) }) as EmitResult;
       } catch (e) {
         if (e instanceof HcpCliError && e.code === "UNKNOWN_METHOD") throw new HcpCliError("UNKNOWN_METHOD", "this Hivemind predates view events (needs view protocol 1.3)", e.exit);
         throw e;

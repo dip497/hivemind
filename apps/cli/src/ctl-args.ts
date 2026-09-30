@@ -86,7 +86,7 @@ export interface WorkflowFlags {
 /** `ctl workflow` flags → the `workflow.run` params + the wire ceiling. The
  *  ceiling sits ABOVE the worst-case server-side run (workers are concurrent,
  *  so per-turn × units is a safe over-estimate), capped at 24 h. */
-export function workflowParams(f: WorkflowFlags, callerTile?: string): { params: Record<string, unknown>; ceilingMs: number } {
+export function workflowParams(f: WorkflowFlags): { params: Record<string, unknown>; ceilingMs: number } {
   const shape = f.shape ?? "fanout";
   if (!["fanout", "pipeline", "mapreduce"].includes(shape)) throw new UsageError(`--shape must be fanout | pipeline | mapreduce (got ${shape})`);
   const items = splitDouble(f.items);
@@ -102,7 +102,6 @@ export function workflowParams(f: WorkflowFlags, callerTile?: string): { params:
     max_concurrent: f["max-concurrent"] != null ? intFlag(f["max-concurrent"], "max-concurrent", 6) : undefined,
     timeout_ms: f.timeout != null ? perTurn : undefined,
     close_when_done: f.close || undefined,
-    callerTile,
   };
   const units = (items?.length ?? 0) + (stages?.length ?? 0) + 2;
   const ceilingMs = Math.min(24 * 60 * 60 * 1000, perTurn * units + 30_000);

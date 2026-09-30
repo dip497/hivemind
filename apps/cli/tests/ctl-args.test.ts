@@ -44,8 +44,8 @@ describe("flag parsing", () => {
 
 describe("workflowParams", () => {
   test("fanout → workflow.run params with the MCP field names", () => {
-    const { params, ceilingMs } = workflowParams({ shape: "fanout", items: "x || y", prompt: "do {item}", close: true }, "tile-1");
-    expect(params).toMatchObject({ shape: "fanout", items: ["x", "y"], prompt: "do {item}", agent: "claude", close_when_done: true, callerTile: "tile-1" });
+    const { params, ceilingMs } = workflowParams({ shape: "fanout", items: "x || y", prompt: "do {item}", close: true });
+    expect(params).toMatchObject({ shape: "fanout", items: ["x", "y"], prompt: "do {item}", agent: "claude", close_when_done: true });
     expect(params.timeout_ms).toBeUndefined();
     expect(ceilingMs).toBe(600_000 * 4 + 30_000);
   });

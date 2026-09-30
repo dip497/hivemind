@@ -30,6 +30,7 @@ const home = fs.mkdtempSync(path.join(os.tmpdir(), "hm-xprov-home-"));
 let sock: string;
 let token: string;
 let orchestrator: string;
+let userData: string;
 
 function onPath(bin: string): string {
   for (const d of (process.env.PATH ?? "").split(":")) {
@@ -69,6 +70,10 @@ function processesOf(tileId: string): string[] {
   });
 }
 
+/** What the app's audit log says was done, without when. */
+const audited = () =>
+  fs.readFileSync(path.join(userData, "audit.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => { const { at: _at, ...rest } = JSON.parse(l); return rest; });
+
 /** The tiles the canvas has a place for, as main's store keeps them for this workspace. */
 const placed = () => page.evaluate((r) => Object.keys((window.hive.workspaceViewSync(r, "canvas") as { data?: { positions?: object } } | null)?.data?.positions ?? {}), repo);
 
@@ -100,7 +105,7 @@ test.beforeAll(async () => {
   await page.waitForSelector(".react-flow", { timeout: 15_000 });
 
   // The control-plane socket + token live in the (isolated) userData dir.
-  const userData = path.join(process.env.XDG_CONFIG_HOME!, "hivemind-dev");
+  userData = path.join(process.env.XDG_CONFIG_HOME!, "hivemind-dev");
   sock = path.join(userData, "hcp.sock");
   const tokenFile = path.join(userData, "hcp.token");
   await expect.poll(() => fs.existsSync(sock) && fs.existsSync(tokenFile), { timeout: 20_000 }).toBe(true);
@@ -194,6 +199,14 @@ test("a droid worker reports back to the claude orchestrator with `hive ctl repo
   // Closed is ended: nothing is left running for it in the daemon, and the window keeps nothing of it.
   await expect.poll(() => processesOf(worker), { timeout: 10_000 }).toEqual([]);
   await expect.poll(placed).not.toContain(worker);
+  // Each was done by someone the app's audit log names: the report by the worker, from its own
+  // tile; the send and the close by the person at this terminal.
+  expect(audited().filter((l) => l.target === worker || l.actor.tile === worker)).toEqual([
+    { actor: { kind: "tile", tile: orchestrator }, verb: "tile.spawn_agent", target: worker, outcome: "ok" },
+    { actor: { kind: "tile", tile: worker }, verb: "agent.report", target: orchestrator, outcome: "ok" },
+    { actor: { kind: "person" }, verb: "agent.send", target: worker, outcome: "ok" },
+    { actor: { kind: "person" }, verb: "tile.close", target: worker, outcome: "ok" },
+  ]);
 });
 
 test("a busy worker closed in the Windows view ends, and a read waiting on its reply is told so at once", async () => {

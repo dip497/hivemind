@@ -1,12 +1,14 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import { agentTitle, cleanName, NAME_MAX, promptTask, getCatalog, agentById, agentForCmd, identifyProvider, spawnableAgents, workerAgents, detectStatus, taskFromTitle, setCatalog } from "../src/index.js";
 import { providers, providerFor, nodePartsFor, composeResume } from "../src/node.js";
 import { authoredDefs } from "./authored.js";
 
 // The published fixtures stand in for a machine that has installed every agent.
 const CATALOG = authoredDefs();
-setCatalog(CATALOG);
+// The catalog is the process's: seeded for this file's tests, and left empty, as it was found.
+beforeAll(() => setCatalog(CATALOG));
 afterEach(() => setCatalog(CATALOG));
+afterAll(() => setCatalog([]));
 
 describe("agent catalog", () => {
   test("ids and binaries are unique; every def declares every capability", () => {

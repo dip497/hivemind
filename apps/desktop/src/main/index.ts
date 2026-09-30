@@ -98,6 +98,8 @@ import { randomUUID } from "node:crypto";
 import { startHcpServer } from "./hcp/hcp-server.js";
 import { makeSpawnPacer } from "./spawn-pacer.js";
 import { makeDispatch, type Dispatcher } from "./hcp/methods.js";
+import { Intents } from "@hivemind/workspace-host/intents";
+import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import { Mailbox } from "./hcp/mailbox.js";
 import { TurnTracker } from "./hcp/turn-tracker.js";
 import { StatusStore, isSessionStatus, type ScreenState } from "@hivemind/agent-host/status-store";
@@ -1965,6 +1967,7 @@ function startHcpControlPlane(): void {
     status: hcpStatus,
     endSession,
     sessionHeld: (id) => hasSession(id) || hasRemotePty(id),
+    intents: new Intents(new AuditLog({ file: path.join(userData, "audit.jsonl"), onWarn: (m) => console.warn(`[audit] ${m}`) })),
   });
   // Every verb routes through the boot scan first: spawn resolves the agent by id
   // and other verbs read its capabilities, so none may run against a half-set catalog.

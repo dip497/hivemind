@@ -100,6 +100,15 @@ describe("hive ctl over a real HCP socket", () => {
     expect(calls.findLast((c) => c.method === "agent.report")!.params.callerTile).toBe("other");
   });
 
+  test("every call names the tile it runs in, which the app records as who asked; outside a tile none is named", async () => {
+    await hive(["ctl", "send", "w-1", "hi", "--json"], { env: env() });
+    expect(calls.findLast((c) => c.method === "agent.send")!.params).toEqual({ tileId: "w-1", text: "hi", callerTile: "me-1" });
+    await hive(["ctl", "close", "w-1", "--json"], { env: env() });
+    expect(calls.findLast((c) => c.method === "tile.close")!.params).toEqual({ tileId: "w-1", callerTile: "me-1" });
+    await hive(["ctl", "send", "w-1", "hi", "--json"], { env: { ...env(), HIVEMIND_TILE: undefined } });
+    expect(calls.findLast((c) => c.method === "agent.send")!.params).toEqual({ tileId: "w-1", text: "hi" });
+  });
+
   test("bad token → exit 6 UNAUTHORIZED; unknown tile → exit 5; bad request → exit 2", async () => {
     const bad = await hive(["ctl", "list", "--json"], { env: { ...env(), HCP_TOKEN: "wrong" } });
     expect(bad.code).toBe(6);

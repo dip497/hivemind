@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- The app keeps an audit log, `audit.jsonl` in its data folder, readable by you only: one line for each thing an agent or a `hive ctl` command had the app do (spawn, send, send keys, report, ask for and give an approval, rename, close, connect, run a workflow, and the rest), with who asked for it (the tile it came from, or you at a terminal), what it acted on, when, and whether it happened. It starts a new file past 5 MB and keeps the one before. `hive ctl`, run in a tile, now always says which tile it comes from.
 - Fixed: memory the app held on to for good. Each window you closed kept its board undo history (and every one of them went on watching every later edit); every agent ever run kept its status, which each new window was then sent; and a machine's daemon kept the screen and title of every session that had ended, and told a desktop that connected later about them.
 - An agent running on another machine shows the status that machine sees, in every desktop watching it: one that connects while the agent is mid-turn shows it working at once, and a Ctrl+C typed in any of them ends the turn for all.
 - Fixed: when the project you had open last has since been moved or deleted, the app opens the folder it was started in, instead of an empty canvas in a folder that is gone, where no terminal or agent could start.

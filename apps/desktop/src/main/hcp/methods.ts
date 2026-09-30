@@ -24,6 +24,7 @@ import { customDataProblem, isCustomEventName } from "@hivemind/view-sdk/protoco
 import { AGENT_TILE_KIND, isTerminalKind, type CoreLayout, type FrameRecord, type TileRecord } from "@hivemind/workspace-doc/shapes";
 import { defaultFrame, frameFor, listFrames, listTiles, type TileFacts } from "@hivemind/workspace-doc/tile-list";
 import type { WorkspaceStore } from "@hivemind/workspace-host/store";
+import type { Actor, Intent, Intents } from "@hivemind/workspace-host/intents";
 import type { StatusStore } from "@hivemind/agent-host/status-store";
 import { tileStatusOf } from "@hivemind/agent-host/tile-status";
 
@@ -186,6 +187,8 @@ export interface MethodDeps {
   endSession: (ptyId: string) => void;
   /** Whether main holds a session by this pty id (a window showed it, here or remote). */
   sessionHeld: (ptyId: string) => boolean;
+  /** Carries out every verb with an effect, and records it in the audit log (R7). */
+  intents: Pick<Intents, "perform">;
 }
 
 /** How the control plane writes a workspace: its windows hear of it, and it hears of none. */
@@ -444,20 +447,143 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
 
   const label = (tileId: string): string => labelIn(tileId, deps.workspaces, deps.status);
 
+  // Who a call comes from: the tile it says it runs in, else a person at a terminal. Taken as
+  // said until each tile has a token of its own (R7 step 2).
+  const actorOf = (p: Record<string, unknown>): Actor =>
+    typeof p.callerTile === "string" && p.callerTile ? { kind: "tile", tile: bareOf(p.callerTile) } : { kind: "person" };
+  // A verb with an effect is carried out through the intents, which record it. The others read,
+  // are a hook reporting, or only move a window's view.
+  const effect = <R>(p: Record<string, unknown>, intent: Intent<R>, run: () => Promise<R>): Promise<R> =>
+    deps.intents.perform(actorOf(p), intent, run);
+  const tileOf = (id: unknown): string | undefined => (typeof id === "string" && id ? bareOf(id) : undefined);
+  // A pipe, or every pipe out of a tile: `src->dst`, `src->*`.
+  const pipeOf = (src: unknown, dst: unknown): string | undefined => {
+    const from = tileOf(src);
+    return from && `${from}->${tileOf(dst) ?? "*"}`;
+  };
+
+  // Multi-agent orchestration. Fan a list of items out to visible worker
+  // tiles (or chain them as a pipeline), await each worker's turn
+  // deterministically via the turn-tracker (NOT screen-scrape), and return
+  // the aggregated replies. Workers are spawned report:false —
+  // the workflow gathers them itself, so their replies don't also spam the
+  // orchestrator's terminal. The orchestrator's `hive ctl workflow` call blocks until
+  // this returns (`hive ctl workflow` blocks with a matching client ceiling).
+  const runWorkflow = async (p: Record<string, unknown>): Promise<unknown> => {
+    const shape = String(p.shape ?? "fanout");
+    const caller = p.callerTile != null ? String(p.callerTile) : undefined;
+    const agent = p.agent != null ? String(p.agent) : await deps.defaultAgentId?.();
+    if (!agent) throw new HcpError("BAD_REQUEST", "no agent installed — install one from Settings ▸ Plugins");
+    {
+      const def = agentById(agent);
+      if (!def || !def.enabled) throw new HcpError("BAD_REQUEST", `unknown agent '${agent}' — spawnable: ${spawnableAgents().map((d) => d.id).join(", ")}`);
+      if (!def.caps.turnSignal) throw new HcpError("UNSUPPORTED", `workflow.run: ${def.id} has no turn signal, so its workers' replies cannot be gathered (${def.note ?? "scrape-only status"}) — use a worker runtime: ${workerAgents().map((d) => d.id).join(", ")}`);
+    }
+    const frame = p.frame != null ? String(p.frame) : undefined;
+    // claude-only model alias applied to every worker in the fleet.
+    const model = p.model != null ? String(p.model) : undefined;
+    const supervise = p.supervise;
+    const perTurnMs = typeof p.timeout_ms === "number" ? p.timeout_ms : WORKFLOW_DEFAULT_TIMEOUT_MS;
+    const maxConc = Math.max(1, Math.min(Number(p.max_concurrent ?? WORKFLOW_DEFAULT_CONCURRENCY), WORKFLOW_MAX_CONCURRENCY));
+    const closeWhenDone = p.close_when_done === true;
+
+    const delay = (ms: number) => new Promise<void>((r) => { const t = setTimeout(r, ms); t.unref?.(); });
+    const fill = (tmpl: string, item: string) => tmpl.replace(/\{item\}/g, item);
+
+    // Spawn one worker (retrying through transient rate-limits), await its
+    // turn, take its reply. Returns a per-worker result. Its spawn and its close
+    // are the caller's intents, as they would be asked one by one.
+    type WR = { item: string; tileId: string | null; status: "turn" | "timeout" | "error"; text: string | null };
+    const runWorker = async (label: string, prompt: string): Promise<WR> => {
+      let tileId: string;
+      try {
+        tileId = await effect(p, { verb: "tile.spawn_agent", target: (id) => id }, () =>
+          spawnRetry({ agent, prompt, frame, model, callerTile: caller, report: false, supervise, name: label }));
+      } catch (e) {
+        return { item: label, tileId: null, status: "error", text: (e as Error).message };
+      }
+      const pid = ptyId(tileId);
+      const afterSeq = sendSeq.get(pid) ?? deps.turns.currentSeq(pid);
+      const rec = await deps.turns.waitForTurn(pid, afterSeq, perTurnMs);
+      const text = rec?.text && rec.text.length > 0 ? rec.text : null;
+      const status: WR["status"] = !rec ? "timeout" : rec.seq === -1 ? "error" : "turn";
+      if (closeWhenDone && status === "turn") {
+        try { await effect(p, { verb: "tile.close", target: tileId }, () => closeTile(tileId)); } catch { /* best-effort */ }
+      }
+      return { item: label, tileId, status, text };
+    };
+    async function spawnRetry(opts: Parameters<typeof doSpawn>[0]): Promise<string> {
+      for (let i = 0; ; i++) {
+        try { return await doSpawn(opts); }
+        catch (e) {
+          if (e instanceof HcpError && e.code === "RATE_LIMITED" && i < WORKFLOW_SPAWN_RETRIES) { await delay(WORKFLOW_SPAWN_RETRY_MS); continue; }
+          throw e;
+        }
+      }
+    }
+    // Fixed-size worker pool: at most `n` runWorker calls live at once.
+    const pool = async <T, R>(xs: T[], n: number, fn: (x: T, i: number) => Promise<R>): Promise<R[]> => {
+      const out = new Array<R>(xs.length);
+      let next = 0;
+      const slot = async () => {
+        for (;;) {
+          const i = next++;
+          if (i >= xs.length) return;
+          out[i] = await fn(xs[i]!, i);
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(n, xs.length) }, slot));
+      return out;
+    };
+
+    if (shape === "fanout" || shape === "mapreduce") {
+      const items = Array.isArray(p.items) ? p.items.map(String) : [];
+      if (!items.length) throw new HcpError("BAD_REQUEST", "items required (a non-empty array) for fanout/mapreduce");
+      const prompt = String(p.prompt ?? "");
+      if (!prompt) throw new HcpError("BAD_REQUEST", "prompt required for fanout/mapreduce");
+      const results = await pool(items, maxConc, (it) => runWorker(it, fill(prompt, it)));
+      if (shape === "fanout") return { shape, items: results };
+      // mapreduce: feed every worker's output into one reducer tile.
+      const reduceTmpl = String(p.reduce_prompt ?? "");
+      if (!reduceTmpl) throw new HcpError("BAD_REQUEST", "reduce_prompt required for mapreduce");
+      const joined = results.map((r) => `## ${r.item}\n${r.text ?? "(no output)"}`).join("\n\n");
+      const reducer = await runWorker("(reduce)", reduceTmpl.replace(/\{results\}/g, joined));
+      return { shape, items: results, reduced: reducer.text, reducerStatus: reducer.status };
+    }
+
+    if (shape === "pipeline") {
+      // Sequential chain: each stage's prompt may reference {input} (the prior
+      // stage's reply). Stops the chain on a timeout/error stage.
+      const stages = Array.isArray(p.stages) ? p.stages.map(String) : [];
+      if (!stages.length) throw new HcpError("BAD_REQUEST", "stages required (a non-empty array) for pipeline");
+      const steps: WR[] = [];
+      let prev: string | null = p.input != null ? String(p.input) : null;
+      for (let s = 0; s < stages.length; s++) {
+        const r = await runWorker(`stage ${s + 1}`, stages[s]!.replace(/\{input\}/g, prev ?? ""));
+        steps.push(r);
+        if (r.status !== "turn") break; // dead chain — surface the partial run
+        prev = r.text;
+      }
+      return { shape, steps, output: prev };
+    }
+
+    throw new HcpError("BAD_REQUEST", `unknown workflow shape '${shape}' (expected fanout | pipeline | mapreduce)`);
+  };
+
   const dispatch = async (method: string, rawParams: unknown): Promise<unknown> => {
     const p = (rawParams ?? {}) as Record<string, unknown>;
     switch (method) {
-      case "tile.spawn_agent": {
+      case "tile.spawn_agent":
         // Anti-fork-bomb depth + rate gates, parent/auto-report/supervision
         // wiring, and the read-epoch arm all live in doSpawn (shared with
         // workflow.run). AUTO-REPORT is on unless report:false; the read epoch is
         // armed so a follow-up agent.read waits for THIS agent's first turn.
-        const tileId = await doSpawn({
-          agent: p.agent, name: p.name, prompt: p.prompt, frame: p.frame, mode: p.mode, model: p.model,
-          callerTile: p.callerTile, report: p.report, supervise: p.supervise, resume: p.resume,
-        });
-        return { tileId };
-      }
+        return effect(p, { verb: method, target: (r) => r.tileId }, async () => ({
+          tileId: await doSpawn({
+            agent: p.agent, name: p.name, prompt: p.prompt, frame: p.frame, mode: p.mode, model: p.model,
+            callerTile: p.callerTile, report: p.report, supervise: p.supervise, resume: p.resume,
+          }),
+        }));
 
       case "agent.sessions": {
         const def = agentById(String(p.agent ?? ""));
@@ -468,75 +594,78 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         return { agent: def.id, resumable: !!def.session?.resume, sessions };
       }
 
-      case "agent.send": {
-        const tileId = String(p.tileId ?? "");
-        const text = String(p.text ?? "");
-        if (!tileId) throw new HcpError("BAD_REQUEST", "tileId required");
-        const submit = p.submit !== false; // default: press Enter
-        const pid = ptyId(tileId);
-        // With submit (the default) this is a MESSAGE: deliver via the mailbox, which
-        // types text-then-Enter as separate writes (a bundled newline is dropped by
-        // claude's TUI) and, crucially, HOLDS it if the target agent is mid-turn —
-        // otherwise it strands in the composer, unsubmitted and unread.
-        // submit:false is a raw paste into the composer, which is only meaningful
-        // right now, so it stays an immediate write.
-        let ok: boolean;
-        if (submit) {
-          const sent = holdUntilSent(pid);
-          ok = deps.deliverToTile(pid, text, () => { armRead(tileId); sent(); });
-          if (!ok) sent();
-        } else {
-          armRead(tileId); // a raw paste is written immediately, so now IS delivery
-          ok = deps.writeToTile(pid, text);
-        }
-        if (!ok) throw new HcpError("TILE_NOT_FOUND", `no live agent for tile ${tileId}`);
-        return { ok: true };
-      }
+      case "agent.send":
+        return effect(p, { verb: method, target: tileOf(p.tileId) }, async () => {
+          const tileId = String(p.tileId ?? "");
+          const text = String(p.text ?? "");
+          if (!tileId) throw new HcpError("BAD_REQUEST", "tileId required");
+          const submit = p.submit !== false; // default: press Enter
+          const pid = ptyId(tileId);
+          // With submit (the default) this is a MESSAGE: deliver via the mailbox, which
+          // types text-then-Enter as separate writes (a bundled newline is dropped by
+          // claude's TUI) and, crucially, HOLDS it if the target agent is mid-turn —
+          // otherwise it strands in the composer, unsubmitted and unread.
+          // submit:false is a raw paste into the composer, which is only meaningful
+          // right now, so it stays an immediate write.
+          let ok: boolean;
+          if (submit) {
+            const sent = holdUntilSent(pid);
+            ok = deps.deliverToTile(pid, text, () => { armRead(tileId); sent(); });
+            if (!ok) sent();
+          } else {
+            armRead(tileId); // a raw paste is written immediately, so now IS delivery
+            ok = deps.writeToTile(pid, text);
+          }
+          if (!ok) throw new HcpError("TILE_NOT_FOUND", `no live agent for tile ${tileId}`);
+          return { ok: true };
+        });
 
-      case "agent.send_keys": {
-        // Send a sequence of symbolic keys to a tile's TUI (e.g. answer a native
-        // AskUserQuestion picker: ["Down","Enter"]). Each token maps via KEYMAP
-        // (arrows/enter/esc/…) or is sent as literal text. Staggered so the TUI
-        // registers each key — a bundled arrow+enter write can miss the move.
-        const tileId = String(p.tileId ?? "");
-        if (!tileId) throw new HcpError("BAD_REQUEST", "tileId required");
-        const raw = p.keys;
-        const keys = Array.isArray(raw) ? raw.map(String) : raw != null ? [String(raw)] : [];
-        if (!keys.length) throw new HcpError("BAD_REQUEST", "keys required");
-        const pid = ptyId(tileId);
-        armRead(tileId); // keys can submit a prompt; a following read wants the turn they cause
-        const bytesOf = keyBytes;
-        const ok = deps.writeToTile(pid, bytesOf(keys[0]!));
-        if (!ok) throw new HcpError("TILE_NOT_FOUND", `no live agent for tile ${tileId}`);
-        for (let i = 1; i < keys.length; i++) {
-          const b = bytesOf(keys[i]!);
-          setTimeout(() => deps.writeToTile(pid, b), KEY_GAP_MS * i);
-        }
-        return { ok: true, keys: keys.length };
-      }
+      case "agent.send_keys":
+        return effect(p, { verb: method, target: tileOf(p.tileId) }, async () => {
+          // Send a sequence of symbolic keys to a tile's TUI (e.g. answer a native
+          // AskUserQuestion picker: ["Down","Enter"]). Each token maps via KEYMAP
+          // (arrows/enter/esc/…) or is sent as literal text. Staggered so the TUI
+          // registers each key — a bundled arrow+enter write can miss the move.
+          const tileId = String(p.tileId ?? "");
+          if (!tileId) throw new HcpError("BAD_REQUEST", "tileId required");
+          const raw = p.keys;
+          const keys = Array.isArray(raw) ? raw.map(String) : raw != null ? [String(raw)] : [];
+          if (!keys.length) throw new HcpError("BAD_REQUEST", "keys required");
+          const pid = ptyId(tileId);
+          armRead(tileId); // keys can submit a prompt; a following read wants the turn they cause
+          const bytesOf = keyBytes;
+          const ok = deps.writeToTile(pid, bytesOf(keys[0]!));
+          if (!ok) throw new HcpError("TILE_NOT_FOUND", `no live agent for tile ${tileId}`);
+          for (let i = 1; i < keys.length; i++) {
+            const b = bytesOf(keys[i]!);
+            setTimeout(() => deps.writeToTile(pid, b), KEY_GAP_MS * i);
+          }
+          return { ok: true, keys: keys.length };
+        });
 
-      case "agent.report": {
-        // A spawned worker pushes a result back to the agent that spawned it.
-        // The caller passes its OWN tile id (HIVEMIND_TILE); we look up its
-        // parent and deliver the message into the parent's terminal (typed +
-        // Enter, like agent.send) so the parent reads it on its next turn.
-        const child = bareOf(String(p.callerTile ?? ""));
-        const parent = parentOf.get(child);
-        if (!parent) throw new HcpError("TILE_NOT_FOUND", "no parent agent to report to");
-        const message = String(p.message ?? "").trim();
-        if (!message) throw new HcpError("BAD_REQUEST", "message required");
-        const banner = `\n[hive] report from ${label(child)}:\n${message}\n`;
-        // Held if the parent is mid-turn — a report typed into a busy TUI never
-        // gets read, and the worker thinks it delivered.
-        if (!deps.deliverToTile(ptyId(parent), banner)) {
-          throw new HcpError("TILE_NOT_FOUND", `parent agent ${parent} is gone — report not delivered`);
-        }
-        // Single-delivery ladder: the worker authored its own summary this turn, so
-        // when its turn ends, DON'T also auto-forward the raw turn (that would be a
-        // second message the parent re-processes). recordTurn reads + clears this.
-        deps.turns.markReported(ptyId(child));
-        return { delivered: true, parent };
-      }
+      case "agent.report":
+        return effect(p, { verb: method, target: (r) => r.parent }, async () => {
+          // A spawned worker pushes a result back to the agent that spawned it.
+          // The caller passes its OWN tile id (HIVEMIND_TILE); we look up its
+          // parent and deliver the message into the parent's terminal (typed +
+          // Enter, like agent.send) so the parent reads it on its next turn.
+          const child = bareOf(String(p.callerTile ?? ""));
+          const parent = parentOf.get(child);
+          if (!parent) throw new HcpError("TILE_NOT_FOUND", "no parent agent to report to");
+          const message = String(p.message ?? "").trim();
+          if (!message) throw new HcpError("BAD_REQUEST", "message required");
+          const banner = `\n[hive] report from ${label(child)}:\n${message}\n`;
+          // Held if the parent is mid-turn — a report typed into a busy TUI never
+          // gets read, and the worker thinks it delivered.
+          if (!deps.deliverToTile(ptyId(parent), banner)) {
+            throw new HcpError("TILE_NOT_FOUND", `parent agent ${parent} is gone — report not delivered`);
+          }
+          // Single-delivery ladder: the worker authored its own summary this turn, so
+          // when its turn ends, DON'T also auto-forward the raw turn (that would be a
+          // second message the parent re-processes). recordTurn reads + clears this.
+          deps.turns.markReported(ptyId(child));
+          return { delivered: true, parent };
+        });
 
       case "agent.reply": {
         // The agent's plugin hands over this turn's reply before it reports the turn end.
@@ -559,42 +688,46 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         if (cached) return { decision: cached };
         const parent = parentOf.get(worker);
         if (!parent) return { decision: "ask" }; // no supervisor → fall back to human prompt
-        const inp = (p.tool_input ?? {}) as Record<string, unknown>;
-        const reqId = randomUUID();
-        const summary = summarizeTool(tool, inp);
-        const banner =
-          `\n[hive] APPROVAL — worker ${label(worker)} wants to run ${tool}: ${summary}\n` +
-          `Reply: hive ctl approve ${reqId} allow|deny|always|never  (allow = this call; always = this tool, for this worker)\n`;
-        // Surface the pause in the UI: this worker is now waiting on its parent.
-        deps.awaitingApproval(worker, true);
-        return await new Promise((resolve) => {
-          const done = (decision: "ask") => {
-            const pend = pendingApprovals.get(reqId);
-            if (pend) clearTimeout(pend.timer);
-            pendingApprovals.delete(reqId);
-            deps.awaitingApproval(worker, false);
-            resolve({ decision }); // no answer → "ask" (claude: human prompt; pi: blocks)
-          };
-          // Two timers, never both live. Until the banner is DELIVERED, only the
-          // ceiling runs — a supervisor that never returns to its prompt (dead,
-          // wedged) can't hang the worker or leak the pending entry forever. On
-          // delivery, swap the ceiling for the answer clock: it starts WHEN THE
-          // PARENT ACTUALLY SEES THE REQUEST, not when the worker asked — the banner
-          // may have been held minutes while the parent was mid-turn, and a request
-          // that waited 8 minutes must not then get 1 to be answered.
-          const ceiling = setTimeout(() => done("ask"), APPROVAL_MAX_WAIT_MS);
-          ceiling.unref?.();
-          pendingApprovals.set(reqId, { resolve, timer: ceiling, cacheKey, worker });
-          const armAnswerTimeout = () => {
-            const pend = pendingApprovals.get(reqId);
-            if (!pend) return; // already answered
-            clearTimeout(pend.timer); // drop the ceiling
-            const t = setTimeout(() => done("ask"), APPROVAL_TIMEOUT_MS);
-            t.unref?.();
-            pend.timer = t;
-          };
-          const delivered = deps.deliverToTile(ptyId(parent), banner, armAnswerTimeout);
-          if (!delivered) done("ask"); // parent's pty is gone → don't hang the worker
+        // Asking is the effect: the question is typed into the supervisor's terminal, and the
+        // worker waits for the answer.
+        return effect(p, { verb: method, target: parent, detail: tool.slice(0, 128) }, async () => {
+          const inp = (p.tool_input ?? {}) as Record<string, unknown>;
+          const reqId = randomUUID();
+          const summary = summarizeTool(tool, inp);
+          const banner =
+            `\n[hive] APPROVAL — worker ${label(worker)} wants to run ${tool}: ${summary}\n` +
+            `Reply: hive ctl approve ${reqId} allow|deny|always|never  (allow = this call; always = this tool, for this worker)\n`;
+          // Surface the pause in the UI: this worker is now waiting on its parent.
+          deps.awaitingApproval(worker, true);
+          return await new Promise((resolve) => {
+            const done = (decision: "ask") => {
+              const pend = pendingApprovals.get(reqId);
+              if (pend) clearTimeout(pend.timer);
+              pendingApprovals.delete(reqId);
+              deps.awaitingApproval(worker, false);
+              resolve({ decision }); // no answer → "ask" (claude: human prompt; pi: blocks)
+            };
+            // Two timers, never both live. Until the banner is DELIVERED, only the
+            // ceiling runs — a supervisor that never returns to its prompt (dead,
+            // wedged) can't hang the worker or leak the pending entry forever. On
+            // delivery, swap the ceiling for the answer clock: it starts WHEN THE
+            // PARENT ACTUALLY SEES THE REQUEST, not when the worker asked — the banner
+            // may have been held minutes while the parent was mid-turn, and a request
+            // that waited 8 minutes must not then get 1 to be answered.
+            const ceiling = setTimeout(() => done("ask"), APPROVAL_MAX_WAIT_MS);
+            ceiling.unref?.();
+            pendingApprovals.set(reqId, { resolve, timer: ceiling, cacheKey, worker });
+            const armAnswerTimeout = () => {
+              const pend = pendingApprovals.get(reqId);
+              if (!pend) return; // already answered
+              clearTimeout(pend.timer); // drop the ceiling
+              const t = setTimeout(() => done("ask"), APPROVAL_TIMEOUT_MS);
+              t.unref?.();
+              pend.timer = t;
+            };
+            const delivered = deps.deliverToTile(ptyId(parent), banner, armAnswerTimeout);
+            if (!delivered) done("ask"); // parent's pty is gone → don't hang the worker
+          });
         });
       }
 
@@ -604,20 +737,20 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         // round-trips for it).
         const reqId = String(p.reqId ?? "");
         const decision = String(p.decision ?? "");
-        const reason = p.reason != null ? String(p.reason) : undefined;
         const pend = pendingApprovals.get(reqId);
-        if (!pend) throw new HcpError("BAD_REQUEST", `no pending approval ${reqId} (expired or already answered)`);
-        let d: "allow" | "deny";
-        if (decision === "allow" || decision === "always") d = "allow";
-        else if (decision === "deny" || decision === "never") d = "deny";
-        else throw new HcpError("BAD_REQUEST", "decision must be allow | deny | always | never");
-        if (decision === "always") approveCache.set(pend.cacheKey, "allow");
-        if (decision === "never") approveCache.set(pend.cacheKey, "deny");
-        clearTimeout(pend.timer);
-        pendingApprovals.delete(reqId);
-        deps.awaitingApproval(pend.worker, false); // resolved → clear the "waiting" status
-        pend.resolve({ decision: d, reason });
-        return { ok: true, decision: d };
+        const d = decision === "allow" || decision === "always" ? "allow" : decision === "deny" || decision === "never" ? "deny" : null;
+        return effect(p, { verb: method, target: pend?.worker, detail: d ? decision : undefined }, async () => {
+          const reason = p.reason != null ? String(p.reason) : undefined;
+          if (!pend) throw new HcpError("BAD_REQUEST", `no pending approval ${reqId} (expired or already answered)`);
+          if (!d) throw new HcpError("BAD_REQUEST", "decision must be allow | deny | always | never");
+          if (decision === "always") approveCache.set(pend.cacheKey, "allow");
+          if (decision === "never") approveCache.set(pend.cacheKey, "deny");
+          clearTimeout(pend.timer);
+          pendingApprovals.delete(reqId);
+          deps.awaitingApproval(pend.worker, false); // resolved → clear the "waiting" status
+          pend.resolve({ decision: d, reason });
+          return { ok: true, decision: d };
+        });
       }
 
       case "agent.read": {
@@ -658,131 +791,31 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         return { text: null, finalStatus: "timeout", truncated: false, note: "agent still working — no completed turn within timeout" };
       }
 
-      case "workflow.run": {
-        // Multi-agent orchestration. Fan a list of items out to visible worker
-        // tiles (or chain them as a pipeline), await each worker's turn
-        // deterministically via the turn-tracker (NOT screen-scrape), and return
-        // the aggregated replies. Workers are spawned report:false —
-        // the workflow gathers them itself, so their replies don't also spam the
-        // orchestrator's terminal. The orchestrator's `hive ctl workflow` call blocks until
-        // this returns (`hive ctl workflow` blocks with a matching client ceiling).
-        const shape = String(p.shape ?? "fanout");
-        const caller = p.callerTile != null ? String(p.callerTile) : undefined;
-        const agent = p.agent != null ? String(p.agent) : await deps.defaultAgentId?.();
-        if (!agent) throw new HcpError("BAD_REQUEST", "no agent installed — install one from Settings ▸ Plugins");
-        {
-          const def = agentById(agent);
-          if (!def || !def.enabled) throw new HcpError("BAD_REQUEST", `unknown agent '${agent}' — spawnable: ${spawnableAgents().map((d) => d.id).join(", ")}`);
-          if (!def.caps.turnSignal) throw new HcpError("UNSUPPORTED", `workflow.run: ${def.id} has no turn signal, so its workers' replies cannot be gathered (${def.note ?? "scrape-only status"}) — use a worker runtime: ${workerAgents().map((d) => d.id).join(", ")}`);
-        }
-        const frame = p.frame != null ? String(p.frame) : undefined;
-        // claude-only model alias applied to every worker in the fleet.
-        const model = p.model != null ? String(p.model) : undefined;
-        const supervise = p.supervise;
-        const perTurnMs = typeof p.timeout_ms === "number" ? p.timeout_ms : WORKFLOW_DEFAULT_TIMEOUT_MS;
-        const maxConc = Math.max(1, Math.min(Number(p.max_concurrent ?? WORKFLOW_DEFAULT_CONCURRENCY), WORKFLOW_MAX_CONCURRENCY));
-        const closeWhenDone = p.close_when_done === true;
-
-        const delay = (ms: number) => new Promise<void>((r) => { const t = setTimeout(r, ms); t.unref?.(); });
-        const fill = (tmpl: string, item: string) => tmpl.replace(/\{item\}/g, item);
-
-        // Spawn one worker (retrying through transient rate-limits), await its
-        // turn, take its reply. Returns a per-worker result.
-        type WR = { item: string; tileId: string | null; status: "turn" | "timeout" | "error"; text: string | null };
-        const runWorker = async (label: string, prompt: string): Promise<WR> => {
-          let tileId: string;
-          try {
-            tileId = await spawnRetry({ agent, prompt, frame, model, callerTile: caller, report: false, supervise, name: label });
-          } catch (e) {
-            return { item: label, tileId: null, status: "error", text: (e as Error).message };
-          }
-          const pid = ptyId(tileId);
-          const afterSeq = sendSeq.get(pid) ?? deps.turns.currentSeq(pid);
-          const rec = await deps.turns.waitForTurn(pid, afterSeq, perTurnMs);
-          const text = rec?.text && rec.text.length > 0 ? rec.text : null;
-          const status: WR["status"] = !rec ? "timeout" : rec.seq === -1 ? "error" : "turn";
-          if (closeWhenDone && status === "turn") { try { await closeTile(tileId); } catch { /* best-effort */ } }
-          return { item: label, tileId, status, text };
-        };
-        async function spawnRetry(opts: Parameters<typeof doSpawn>[0]): Promise<string> {
-          for (let i = 0; ; i++) {
-            try { return await doSpawn(opts); }
-            catch (e) {
-              if (e instanceof HcpError && e.code === "RATE_LIMITED" && i < WORKFLOW_SPAWN_RETRIES) { await delay(WORKFLOW_SPAWN_RETRY_MS); continue; }
-              throw e;
-            }
-          }
-        }
-        // Fixed-size worker pool: at most `n` runWorker calls live at once.
-        const pool = async <T, R>(xs: T[], n: number, fn: (x: T, i: number) => Promise<R>): Promise<R[]> => {
-          const out = new Array<R>(xs.length);
-          let next = 0;
-          const slot = async () => {
-            for (;;) {
-              const i = next++;
-              if (i >= xs.length) return;
-              out[i] = await fn(xs[i]!, i);
-            }
-          };
-          await Promise.all(Array.from({ length: Math.min(n, xs.length) }, slot));
-          return out;
-        };
-
-        if (shape === "fanout" || shape === "mapreduce") {
-          const items = Array.isArray(p.items) ? p.items.map(String) : [];
-          if (!items.length) throw new HcpError("BAD_REQUEST", "items required (a non-empty array) for fanout/mapreduce");
-          const prompt = String(p.prompt ?? "");
-          if (!prompt) throw new HcpError("BAD_REQUEST", "prompt required for fanout/mapreduce");
-          const results = await pool(items, maxConc, (it) => runWorker(it, fill(prompt, it)));
-          if (shape === "fanout") return { shape, items: results };
-          // mapreduce: feed every worker's output into one reducer tile.
-          const reduceTmpl = String(p.reduce_prompt ?? "");
-          if (!reduceTmpl) throw new HcpError("BAD_REQUEST", "reduce_prompt required for mapreduce");
-          const joined = results.map((r) => `## ${r.item}\n${r.text ?? "(no output)"}`).join("\n\n");
-          const reducer = await runWorker("(reduce)", reduceTmpl.replace(/\{results\}/g, joined));
-          return { shape, items: results, reduced: reducer.text, reducerStatus: reducer.status };
-        }
-
-        if (shape === "pipeline") {
-          // Sequential chain: each stage's prompt may reference {input} (the prior
-          // stage's reply). Stops the chain on a timeout/error stage.
-          const stages = Array.isArray(p.stages) ? p.stages.map(String) : [];
-          if (!stages.length) throw new HcpError("BAD_REQUEST", "stages required (a non-empty array) for pipeline");
-          const steps: WR[] = [];
-          let prev: string | null = p.input != null ? String(p.input) : null;
-          for (let s = 0; s < stages.length; s++) {
-            const r = await runWorker(`stage ${s + 1}`, stages[s]!.replace(/\{input\}/g, prev ?? ""));
-            steps.push(r);
-            if (r.status !== "turn") break; // dead chain — surface the partial run
-            prev = r.text;
-          }
-          return { shape, steps, output: prev };
-        }
-
-        throw new HcpError("BAD_REQUEST", `unknown workflow shape '${shape}' (expected fanout | pipeline | mapreduce)`);
-      }
+      case "workflow.run":
+        return effect(p, { verb: "workflow.run" }, () => runWorkflow(p));
 
       // ── canvas verbs (renderer) ──────────────────────────────────────────
-      case "tool.open": {
-        if (p.tool !== BROWSER_TOOL_ID) throw new HcpError("UNSUPPORTED", "Unknown tool id");
-        const availability = tileKindAvailability("browser", deps.toolsSettings?.() ?? { enabledPlugins: [], disabledTools: [] });
-        if (!availability?.available) throw new HcpError("UNAUTHORIZED", "Browser is disabled; enable it in Settings under Tools");
-        if (p.frame !== undefined && (typeof p.frame !== "string" || !p.frame || p.frame.length > 256)) throw new HcpError("BAD_REQUEST", "frame must be an id");
-        if (p.url !== undefined) {
-          if (typeof p.url !== "string" || p.url.length > 8192) throw new HcpError("BAD_REQUEST", "Invalid URL");
-          let url: URL;
-          try { url = new URL(p.url); } catch { throw new HcpError("BAD_REQUEST", "Invalid URL"); }
-          if (!["http:", "https:"].includes(url.protocol) && p.url !== "about:blank") throw new HcpError("BAD_REQUEST", "URL must use http or https, or be about:blank");
-        }
-        if (!deps.spawnAllowed()) throw new HcpError("RATE_LIMITED", "spawn rate limit exceeded");
-        const url = typeof p.url === "string" ? p.url : undefined;
-        const tileId = openTile(p.callerTile, p.frame, (ws) => ({
-          id: mintId("tile-browser"), kind: "browser",
-          label: `Browser #${nextOrdinal(ws.tiles.map((t) => t.label), (n) => `Browser #${n}`)}`,
-          ...(url ? { url } : {}),
-        }), { background: false });
-        return { tileId };
-      }
+      case "tool.open":
+        return effect(p, { verb: method, target: (r) => r.tileId }, async () => {
+          if (p.tool !== BROWSER_TOOL_ID) throw new HcpError("UNSUPPORTED", "Unknown tool id");
+          const availability = tileKindAvailability("browser", deps.toolsSettings?.() ?? { enabledPlugins: [], disabledTools: [] });
+          if (!availability?.available) throw new HcpError("UNAUTHORIZED", "Browser is disabled; enable it in Settings under Tools");
+          if (p.frame !== undefined && (typeof p.frame !== "string" || !p.frame || p.frame.length > 256)) throw new HcpError("BAD_REQUEST", "frame must be an id");
+          if (p.url !== undefined) {
+            if (typeof p.url !== "string" || p.url.length > 8192) throw new HcpError("BAD_REQUEST", "Invalid URL");
+            let url: URL;
+            try { url = new URL(p.url); } catch { throw new HcpError("BAD_REQUEST", "Invalid URL"); }
+            if (!["http:", "https:"].includes(url.protocol) && p.url !== "about:blank") throw new HcpError("BAD_REQUEST", "URL must use http or https, or be about:blank");
+          }
+          if (!deps.spawnAllowed()) throw new HcpError("RATE_LIMITED", "spawn rate limit exceeded");
+          const url = typeof p.url === "string" ? p.url : undefined;
+          const tileId = openTile(p.callerTile, p.frame, (ws) => ({
+            id: mintId("tile-browser"), kind: "browser",
+            label: `Browser #${nextOrdinal(ws.tiles.map((t) => t.label), (n) => `Browser #${n}`)}`,
+            ...(url ? { url } : {}),
+          }), { background: false });
+          return { tileId };
+        });
       case "tile.list": {
         // One frame, named the way spawn names one; a name no frame answers to is refused.
         const ws = layoutFor(p.callerTile);
@@ -794,70 +827,75 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         const ws = layoutFor(p.callerTile);
         return { frames: listFrames({ frames: ws.frames, tiles: ws.tiles, frameOf: ws.frameOf ?? {} }) };
       }
-      // Community view packages are scanned when the registry loads; `hive
-      // views install|remove` calls this so a running app picks the change
-      // up without a restart (the renderer re-reads both roots and updates
-      // its registry — the switcher and ⌘E order follow, an active view that
-      // vanished falls back to the canvas).
       // `hive ctl view emit`: a named JSON event for the active view (protocol 1.3).
       case "view.emit": {
         const ev = parseEmit(p as Record<string, unknown>);
         if (!emitBucket.take()) throw new HcpError("RATE_LIMITED", `at most ${EMIT_RATE.perSecond} view events a second`);
         return await deps.callRenderer("view.emit", ev, RENDERER_TIMEOUT);
       }
+      // Community view packages are scanned when the registry loads; `hive
+      // views install|remove` calls this so a running app picks the change
+      // up without a restart (the renderer re-reads both roots and updates
+      // its registry — the switcher and ⌘E order follow, an active view that
+      // vanished falls back to the canvas).
       case "views.rescan":
-        return await deps.callRenderer("views.rescan", {}, RENDERER_TIMEOUT);
+        return effect(p, { verb: method }, () => deps.callRenderer("views.rescan", {}, RENDERER_TIMEOUT));
       // `hive agents install|remove` calls this so a running app picks the change
       // up without a restart. The renderer owns the workspace root, so it runs
       // the scan (through main, which refreshes its own catalog on the way).
       case "agents.rescan":
-        return await deps.callRenderer("agents.rescan", {}, RENDERER_TIMEOUT);
+        return effect(p, { verb: method }, () => deps.callRenderer("agents.rescan", {}, RENDERER_TIMEOUT));
       // `hive config set` / `hive theme use` edited settings.json: re-read it
       // and push the result to the renderer (main owns the file while running).
       case "settings.reload":
-        return await deps.reloadSettings();
-      case "tile.rename": {
-        // The name every surface shows, and the one main's messages call the tile by.
-        const tileId = bareOf(String(p.tileId ?? ""));
-        if (!tileId) throw new HcpError("BAD_REQUEST", "tileId required");
-        const name = cleanName(typeof p.name === "string" ? p.name : "");
-        if (deps.workspaces.renameTile(tileId, name, CONTROL) === null) throw new HcpError("TILE_NOT_FOUND", `no open workspace has tile ${tileId}`);
-        return { ok: true, name };
-      }
+        return effect(p, { verb: method }, () => deps.reloadSettings());
+      case "tile.rename":
+        return effect(p, { verb: method, target: tileOf(p.tileId) }, async () => {
+          // The name every surface shows, and the one main's messages call the tile by.
+          const tileId = bareOf(String(p.tileId ?? ""));
+          if (!tileId) throw new HcpError("BAD_REQUEST", "tileId required");
+          const name = cleanName(typeof p.name === "string" ? p.name : "");
+          if (deps.workspaces.renameTile(tileId, name, CONTROL) === null) throw new HcpError("TILE_NOT_FOUND", `no open workspace has tile ${tileId}`);
+          return { ok: true, name };
+        });
 
       case "tile.focus": {
         if (!p.tileId) throw new HcpError("BAD_REQUEST", "tileId required");
         return await deps.callRenderer("tile.focus", { tileId: p.tileId }, RENDERER_TIMEOUT);
       }
-      case "tile.close": {
-        if (!p.tileId) throw new HcpError("BAD_REQUEST", "tileId required");
-        // closeTile drops ALL per-tile state (pipes/turns/recorder/epochs/parent/
-        // depth/supervision) + resolves any in-flight approvals for the worker.
-        return await closeTile(String(p.tileId));
-      }
+      case "tile.close":
+        return effect(p, { verb: method, target: tileOf(p.tileId) }, async () => {
+          if (!p.tileId) throw new HcpError("BAD_REQUEST", "tileId required");
+          // closeTile drops ALL per-tile state (pipes/turns/recorder/epochs/parent/
+          // depth/supervision) + resolves any in-flight approvals for the worker.
+          return await closeTile(String(p.tileId));
+        });
 
-      case "review.open": {
+      case "review.open":
         // Open a plan-review tile and BLOCK until the human decides. The
         // renderer doesn't reply on open — the tile resolves this caller via
         // hcpResult on the decision, which is why the timeout is generous.
-        if (!p.plan) throw new HcpError("BAD_REQUEST", "plan required");
-        return await deps.callRenderer("review.open", { plan: p.plan, cwd: p.cwd ?? "" }, REVIEW_TIMEOUT);
-      }
+        return effect(p, { verb: method }, async () => {
+          if (!p.plan) throw new HcpError("BAD_REQUEST", "plan required");
+          return await deps.callRenderer("review.open", { plan: p.plan, cwd: p.cwd ?? "" }, REVIEW_TIMEOUT);
+        });
 
       // ── pipes (main) ─────────────────────────────────────────────────────
-      case "tile.connect": {
-        const src = String(p.srcTileId ?? "");
-        const dst = String(p.dstTileId ?? "");
-        if (!src || !dst) throw new HcpError("BAD_REQUEST", "srcTileId and dstTileId required");
-        if (!deps.connect(src, dst)) throw new HcpError("BAD_REQUEST", "cannot pipe a tile to itself or create a cycle");
-        return { ok: true };
-      }
-      case "tile.disconnect": {
-        const src = String(p.srcTileId ?? "");
-        if (!src) throw new HcpError("BAD_REQUEST", "srcTileId required");
-        deps.disconnect(src, p.dstTileId ? String(p.dstTileId) : undefined);
-        return { ok: true };
-      }
+      case "tile.connect":
+        return effect(p, { verb: method, target: pipeOf(p.srcTileId, p.dstTileId) }, async () => {
+          const src = String(p.srcTileId ?? "");
+          const dst = String(p.dstTileId ?? "");
+          if (!src || !dst) throw new HcpError("BAD_REQUEST", "srcTileId and dstTileId required");
+          if (!deps.connect(src, dst)) throw new HcpError("BAD_REQUEST", "cannot pipe a tile to itself or create a cycle");
+          return { ok: true };
+        });
+      case "tile.disconnect":
+        return effect(p, { verb: method, target: pipeOf(p.srcTileId, p.dstTileId) }, async () => {
+          const src = String(p.srcTileId ?? "");
+          if (!src) throw new HcpError("BAD_REQUEST", "srcTileId required");
+          deps.disconnect(src, p.dstTileId ? String(p.dstTileId) : undefined);
+          return { ok: true };
+        });
 
       default:
         throw new HcpError("UNKNOWN_METHOD", `unknown method: ${method}`);
