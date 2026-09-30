@@ -30,6 +30,9 @@ pnpm -F @hivemind/workspace-doc test            # the workspace document (bun te
 git diff --check
 # e2e (needs Electron + xvfb; see apps/desktop/AGENTS.md and CLAUDE.md). Rebuild first:
 cd apps/desktop && pnpm exec electron-vite build
+# a step: only the specs it touches
+unset ELECTRON_RUN_AS_NODE && xvfb-run -a --server-args="-screen 0 1600x1000x24" pnpm exec playwright test <spec>.spec.ts --retries=0
+# an item done (and before a release): the whole suite, about ten minutes
 unset ELECTRON_RUN_AS_NODE && xvfb-run -a --server-args="-screen 0 1600x1000x24" pnpm test:e2e --retries=0
 ```
 
@@ -61,6 +64,11 @@ every test passes the test-audit gate.
   test-audit skill): one owner test per contract at the strongest boundary, a literal spelled
   out only when it is the contract, and each new test shown to fail when the behaviour it
   guards is broken.
+- **E2e cadence** (the maintainer's ask, 2026-09-30; it replaces one full run per step): a step
+  runs the typecheck, the unit and package tests, and only the e2e specs it touches. Mutation
+  checks run in unit tests where they can; through the e2e (a rebuild each) only for wiring
+  nothing else reaches, in one batch. The whole suite runs once per item, when it is done, and
+  before a release.
 
 ## Status
 
@@ -345,3 +353,5 @@ spawn wires not being drawn, and two issues found while verifying R1.
   a count's wording; a created issue, a workspace's prefix or a setting not named) and 3 in unit
   tests (a detail read from the result ignored, or guessed on a failure; a review's decision not
   recorded). Next by the order: R8 (a workspace API that is not Electron IPC), after R7.
+  Full e2e on the 3b commit (`1b6e10b`): 164 passed, 10 skipped. From here the whole suite runs
+  once per item, not per step (see **Working rules**).
