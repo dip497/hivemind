@@ -57,3 +57,27 @@ jobs:
         # Runs install.sh's Darwin helpers against a fake .app (ditto/xattr/pkill
         # shimmed), so the mac install/uninstall path is covered on this ubuntu box.
         run: bash scripts/install-macos-test.sh
+
+  hive-net:
+    # The Rust network crate (R10): its CLI end to end, on the local network and through a relay.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: crates/hive-net
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust (stable)
+        run: rustup update stable --no-self-update && rustup default stable
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            crates/hive-net/target
+          key: hive-net-${{ runner.os }}-${{ hashFiles('crates/hive-net/Cargo.lock') }}
+
+      - name: Test
+        run: cargo test --locked

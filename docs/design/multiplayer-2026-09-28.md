@@ -393,6 +393,18 @@ exactly as today. They are ordered by dependency.
   `hive-net serve --relay` and directly; two machines on one Wi-Fi with no internet find
   and connect to each other in local mode; release artifacts include it; installer tests
   green.
+- **Decided while building it, step 1 (2026-09-30).** `crates/hive-net` is a crate of its own
+  (its own `Cargo.lock`, like `crates/agent-host`) on iroh 1.3 and `iroh-mdns-address-lookup`
+  0.6. It reads the device key the app keeps (`<userData>/identity/device.key`) and never makes
+  one, so making keys has one owner (`keyring.ts`), which `hive host` will use too. A device is
+  reached in one of two ways until profiles (R16) choose: on the local network (no relays;
+  devices found by mDNS under the service name `hivemind`, so only hivemind's), or through the
+  relays named, where a device elsewhere is dialled by its id and the relay it uses, as there is
+  no lookup server before R13. `hive/ping/1` says whether a device answers, in how long, and
+  whether directly; whether it stays open to anyone, like pairing, is R11's to decide. `serve
+  --relay` embeds iroh's relay over plain HTTP: the devices' traffic through it is end-to-end
+  encrypted QUIC either way, and TLS for a relay on the internet comes with R13. The local socket
+  to main waits for its first caller, M1's `hive/ws/1`.
 
 ### R11. Access list and audit
 
@@ -873,6 +885,7 @@ Rules:
 | `hive/pty/1` | Terminal streams (R4 protocol over QUIC) | one uni stream per subscribed session out; one bi stream per lease in |
 | `hive/fs/1` | File + git operations for frames on this machine | request/response; large files as chunked streams |
 | `hive/view/1` | View protocol for remote view hosts (phone) | the existing view messages over a bi stream |
+| `hive/ping/1` | Whether a device answers, and how (directly or through a relay) | one bi stream: 16 random bytes, echoed |
 
 All ALPNs except `hive/pair/1` are rejected in `after_handshake` unless the peer's
 `EndpointId` is on the ACL (R11). Versioned by ALPN suffix; a peer offers every version it
