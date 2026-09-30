@@ -87,6 +87,13 @@ test("the log is private to its user and appends one line per intent", async () 
   if (process.platform !== "win32") expect(fs.statSync(file).mode & 0o777).toBe(0o600);
 });
 
+test("a log whose directory is not there yet makes it, private to its user", async () => {
+  const deep = path.join(tmp, "profile", "audit.jsonl");
+  await new Intents(new AuditLog({ file: deep })).perform(agent, { verb: "agent.send" }, () => undefined);
+  expect(fs.readFileSync(deep, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l).verb)).toEqual(["agent.send"]);
+  if (process.platform !== "win32") expect(fs.statSync(path.dirname(deep)).mode & 0o777).toBe(0o700);
+});
+
 test("past 5 MB the log moves to audit.jsonl.1, replacing the older one, and starts again", async () => {
   const log = new AuditLog({ file });
   const intents = new Intents(log);

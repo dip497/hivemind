@@ -70,11 +70,14 @@ test("each effect the window asks for is recorded as the person's, with what it 
     await h.listIssues(root);
     await h.readIssue(root, first.id);
     await h.fileRead(repo, "a.txt");
-    // One that is refused is recorded as asked, and as failed.
+    // One that is refused is recorded as asked, and as failed; a git one with its code, and the
+    // window is told why.
     const escaped = await h.fileWrite(repo, "../escaped.txt", "x").then(() => "written", () => "refused");
-    return { first: first.id, second: second.id, worktree: wt.path, escaped };
+    const outside = await h.gitStage(repo, ["../escaped.txt"]).then(() => "staged", (e: Error) => e.message);
+    return { first: first.id, second: second.id, worktree: wt.path, escaped, outside };
   }, { repo });
   expect(done.escaped).toBe("refused");
+  expect(done.outside).toContain("path escapes repo: ../escaped.txt");
 
   expect(audited().slice(before)).toEqual([
     { actor: person, verb: "initWorkspace", target: repo, detail: "AUD", outcome: "ok" },
@@ -87,16 +90,17 @@ test("each effect the window asks for is recorded as the person's, with what it 
     { actor: person, verb: "unlinkIssue", target: `${done.first}->${done.second}`, outcome: "ok" },
     { actor: person, verb: "deleteIssue", target: done.second, outcome: "ok" },
     { actor: person, verb: "fileWrite", target: path.join(repo, "a.txt"), outcome: "ok" },
-    { actor: person, verb: "gitStage", target: repo, detail: "1 file", outcome: "ok" },
-    { actor: person, verb: "gitUnstage", target: repo, detail: "1 file", outcome: "ok" },
-    { actor: person, verb: "gitStage", target: repo, detail: "1 file", outcome: "ok" },
-    { actor: person, verb: "gitCommit", target: repo, outcome: "ok" },
-    { actor: person, verb: "worktreeCreate", target: repo, detail: "audit-branch", outcome: "ok" },
-    { actor: person, verb: "worktreeRemove", target: done.worktree, outcome: "ok" },
-    { actor: person, verb: "worktreePrune", target: repo, outcome: "ok" },
+    { actor: person, verb: "git.stage", target: repo, detail: "1 file", outcome: "ok" },
+    { actor: person, verb: "git.unstage", target: repo, detail: "1 file", outcome: "ok" },
+    { actor: person, verb: "git.stage", target: repo, detail: "1 file", outcome: "ok" },
+    { actor: person, verb: "git.commit", target: repo, outcome: "ok" },
+    { actor: person, verb: "worktree.create", target: repo, detail: "audit-branch", outcome: "ok" },
+    { actor: person, verb: "worktree.remove", target: done.worktree, outcome: "ok" },
+    { actor: person, verb: "worktree.prune", target: repo, outcome: "ok" },
     { actor: person, verb: "reviewSave", target: repo, outcome: "ok" },
     { actor: person, verb: "settings:set", target: "agents.autoInstall", outcome: "ok" },
     { actor: person, verb: "fileWrite", target: path.join(root, "escaped.txt"), outcome: "error" },
+    { actor: person, verb: "git.stage", target: repo, detail: "1 file", outcome: "error", code: "BAD_REQUEST" },
   ]);
 });
 

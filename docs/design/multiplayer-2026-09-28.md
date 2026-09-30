@@ -284,6 +284,17 @@ exactly as today. They are ordered by dependency.
   `packages/workspace-api` (types + client).
 - **Done when.** The renderer runs against the stream transport in a test harness with the
   same e2e results for canvas, terminals, git and issues.
+- **Decided while building it, step 1 (2026-09-30).** The protocol is `spec/workspace-api.md`: a
+  call `{method, params}`, an answer `{result}` or `{error: {code, message}}`, the codes
+  `BAD_REQUEST`, `UNKNOWN_METHOD` and `FAILED`. A host answers every call and never throws, so a
+  client on any transport gets the same answer; the method's name is its audit verb. A method's
+  handler takes its params as they were sent and checks them itself, so the checks sit where every
+  transport's calls come in, not in the adapter behind it (the worktree checks moved there from
+  `git-adapter.ts`); what an effect acts on is named from the params before they are checked, so
+  only from text. Each domain is one Electron-free module (`src/main/workspace-git.ts`) that main
+  and the dev-bridge both serve, so the dev-bridge can no longer drift from main's checks, and
+  there is one channel (`workspace`) instead of one per method. The window's `window.hive` keeps
+  its names (`gitStage`) as the client's: the renderer does not change.
 
 ### R9. Machines by id, not by ssh uri
 

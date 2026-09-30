@@ -68,25 +68,6 @@ const ptyMod = PERSIST_PTY ? ptyDaemon : ptyHost;
 const { spawnPty, writePty, resizePty, killPty, detachPty, hasSession, pausePty, resumePty } = ptyMod;
 const killAllPtys = ptyMod.killAll;
 import { applyShellEnvToProcess } from "@hivemind/agent-host/shell-env";
-import {
-  gitCommit,
-  gitConflictedFile,
-  gitDiff,
-  gitDiscard,
-  gitFileContents,
-  gitListFiles,
-  gitListBranches,
-  gitPush,
-  gitPull,
-  gitStage,
-  gitStatus,
-  gitUnstage,
-  gitWriteResolved,
-  worktreeCreate,
-  worktreeList,
-  worktreePrune,
-  worktreeRemove,
-} from "./git-adapter.js";
 import { unwatchAll, watchRepo } from "./fs-watcher.js";
 import { registerAgentNotifications } from "./agent-notify.js";
 import { getNotificationSettings, setNotificationSettings } from "./notification-settings-store.js";
@@ -98,7 +79,7 @@ import { randomUUID } from "node:crypto";
 import { startHcpServer } from "./hcp/hcp-server.js";
 import { makeSpawnPacer } from "./spawn-pacer.js";
 import { makeDispatch, type Dispatcher } from "./hcp/methods.js";
-import { handle, handleEffect, on, performed } from "./app-ipc.js";
+import { PERSON, handle, handleEffect, on, performed } from "./app-ipc.js";
 import { hostIntents } from "./audit.js";
 import { Mailbox } from "./hcp/mailbox.js";
 import { TurnTracker } from "./hcp/turn-tracker.js";
@@ -119,10 +100,9 @@ import { PipeManager } from "./hcp/pipes.js";
 import { toBareId, toPtyId } from "../shared/tile-id.js";
 import { SUBMIT_DELAY_MS } from "../shared/agent-io.js";
 import { INITIAL_PROMPT_ENV } from "@hivemind/agent-host/initial-prompt";
-import type {
-  DiffScope,
-  WorktreeCreateOpts,
-} from "../shared/ipc.js";
+import { WorkspaceServer, named } from "@hivemind/workspace-api/server";
+import { git } from "./workspace-git.js";
+import { fileIn, remoteRel, resolveInRepo } from "./repo-paths.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -450,14 +430,6 @@ async function createWindow(target: string | null = cliLaunchTarget): Promise<vo
 
 // ── IPC handlers ──────────────────────────────────────────────
 
-// What a window's effect acts on, for the audit log (app-ipc.ts): text only, never what was written.
-const str = (v: unknown): string | undefined => (typeof v === "string" && v ? v : undefined);
-/** A file in a repo (a local path or an ssh:// one). */
-const fileIn = (repo: unknown, rel: unknown): string | undefined =>
-  typeof repo === "string" && typeof rel === "string" && repo && rel
-    ? (isRemote(repo) ? `${repo.replace(/\/+$/, "")}/${rel}` : path.resolve(repo, rel))
-    : undefined;
-const howMany = (xs: unknown, one: string): string | undefined => (Array.isArray(xs) ? `${xs.length} ${one}${xs.length === 1 ? "" : "s"}` : undefined);
 
 /**
  * Wrap an ipcMain.handle callback so thrown errors are normalized into a
@@ -576,7 +548,7 @@ function browserGuestFor(tileId: string): Electron.WebContents | null {
 
 handleEffect(
   "browserCdp",
-  (tileId, method) => ({ target: str(tileId), detail: str(method) }),
+  (tileId, method) => ({ target: named(tileId), detail: named(method) }),
   wrap(async (_e, tileId: string, method: string, params?: Record<string, unknown>) => {
     const guest = browserGuestFor(tileId);
     if (!guest) throw new Error(`no browser tile registered for ${tileId}`);
@@ -801,7 +773,7 @@ handle("pickProjectFolder", async () => {
 // the project so the New-issue button + board light up.
 handleEffect(
   "initWorkspace",
-  (dir, prefix) => ({ target: str(dir), detail: str(prefix)?.toUpperCase() }),
+  (dir, prefix) => ({ target: named(dir), detail: named(prefix)?.toUpperCase() }),
   wrap(async (_e, dir: string, prefixRaw: string) => {
     const prefix = String(prefixRaw).toUpperCase();
     if (!/^[A-Z][A-Z0-9]{1,9}$/.test(prefix)) {
@@ -835,7 +807,7 @@ async function installAgenticStack(dir: string): Promise<void> {
 // before "Work on this" + manually via the workspace switcher). dir = repo dir.
 handleEffect(
   "installAgentic",
-  (dir) => ({ target: str(dir) }),
+  (dir) => ({ target: named(dir) }),
   wrap(async (_e, dir: string) => {
     const root = await findRoot(dir);
     // No-op (don't throw) when the dir has no .hivemind workspace. This handler
@@ -856,21 +828,21 @@ handle(
 );
 handleEffect(
   "moveIssue",
-  (_root, id, prefix, mode) => ({ target: str(id), detail: `${mode === "copy" ? "copy" : "move"} to ${String(prefix).toUpperCase()}` }),
+  (_root, id, prefix, mode) => ({ target: named(id), detail: `${mode === "copy" ? "copy" : "move"} to ${String(prefix).toUpperCase()}` }),
   wrap(async (_e, root: string, id: string, destPrefix: string, mode: "move" | "copy") =>
     transferIssue(root, id, String(destPrefix).toUpperCase(), { mode, actor: "ui" }),
   ),
 );
 handleEffect(
   "linkIssue",
-  (_root, id, other, type) => ({ target: str(id) && str(other) ? `${id}->${other}` : undefined, detail: str(type) }),
+  (_root, id, other, type) => ({ target: named(id) && named(other) ? `${id}->${other}` : undefined, detail: named(type) }),
   wrap(async (_e, root: string, id: string, otherId: string, type: LinkType) =>
     linkIssues(root, id, otherId, type, "ui"),
   ),
 );
 handleEffect(
   "unlinkIssue",
-  (_root, id, other) => ({ target: str(id) && str(other) ? `${id}->${other}` : undefined }),
+  (_root, id, other) => ({ target: named(id) && named(other) ? `${id}->${other}` : undefined }),
   wrap(async (_e, root: string, id: string, otherId: string) => ({
     removed: await unlinkIssues(root, id, otherId, "ui"),
   })),
@@ -878,7 +850,7 @@ handleEffect(
 handle("readIssue", wrap(async (_e, root: string, id: string) => readIssue(root, id)));
 handleEffect(
   "updateIssueState",
-  (_root, id, state) => ({ target: str(id), detail: str(state) }),
+  (_root, id, state) => ({ target: named(id), detail: named(state) }),
   wrap(async (_e, root: string, id: string, state: IssueState, note?: string) => {
     // Route through core (like createIssue/updateIssue/commentOnIssue) instead
     // of hand-rolling the state change + a divergent activity string. The note,
@@ -899,7 +871,7 @@ handleEffect(
 );
 handleEffect(
   "updateIssue",
-  (_root, id) => ({ target: str(id) }),
+  (_root, id) => ({ target: named(id) }),
   wrap(async (_e, root: string, id: string, patch: IssuePatch) => {
     const issue = await updateIssue(root, id, patch, "ui");
     await writeAgentContext(root);
@@ -908,14 +880,14 @@ handleEffect(
 );
 handleEffect(
   "commentOnIssue",
-  (_root, id) => ({ target: str(id) }),
+  (_root, id) => ({ target: named(id) }),
   wrap(async (_e, root: string, id: string, message: string) => {
     const issue = await commentOnIssue(root, id, message, "ui");
     await writeAgentContext(root);
     return issue;
   })
 );
-handleEffect("deleteIssue", (_root, id) => ({ target: str(id) }), wrap(async (_e, root: string, id: string) => {
+handleEffect("deleteIssue", (_root, id) => ({ target: named(id) }), wrap(async (_e, root: string, id: string) => {
   await deleteIssueCore(root, id);
   await writeAgentContext(root);
 }));
@@ -924,90 +896,23 @@ handleEffect("deleteIssue", (_root, id) => ({ target: str(id) }), wrap(async (_e
 // same list the diff tile is showing.
 handle("reviewList", wrap(async (_e, repoPath: string) =>
   readComments(await reviewRoot(repoPath))));
-handleEffect("reviewSave", (repo) => ({ target: str(repo) }), wrap(async (_e, repoPath: string, comments: unknown) =>
+handleEffect("reviewSave", (repo) => ({ target: named(repo) }), wrap(async (_e, repoPath: string, comments: unknown) =>
   writeComments(await reviewRoot(repoPath), normalizeComments(comments))));
 
-// git
-handle("gitStatus", wrap((_e, repoPath: string) => gitStatus(repoPath)));
-handle("gitListFiles", wrap((_e, repoPath: string) => gitListFiles(repoPath)));
-handle("gitListBranches", wrap((_e, repoPath: string) => gitListBranches(repoPath)));
-// Each `file`/`files` IPC arg is verified to stay inside `repoPath` before
-// reaching git-adapter — git-adapter joins them onto repoPath for `fs.rm`,
-// `fs.writeFile`, and `git show :path`, so an unguarded `../etc/passwd` arg
-// would otherwise read or clobber arbitrary disk locations (P0 from review).
-handle("gitDiff", wrap((_e, repoPath: string, scope: DiffScope, file?: string) =>
-  gitDiff(repoPath, scope, file == null ? file : assertInRepo(repoPath, file))
-));
-handle(
-  "gitFileContents",
-  wrap((_e, repoPath: string, file: string, rev: "HEAD" | "INDEX" | "WORKING") =>
-    gitFileContents(repoPath, assertInRepo(repoPath, file), rev))
-);
-handleEffect("gitStage", (repo, files) => ({ target: str(repo), detail: howMany(files, "file") }), wrap((_e, repoPath: string, files: string[]) =>
-  gitStage(repoPath, assertAllInRepo(repoPath, files))
-));
-handleEffect("gitUnstage", (repo, files) => ({ target: str(repo), detail: howMany(files, "file") }), wrap((_e, repoPath: string, files: string[]) =>
-  gitUnstage(repoPath, assertAllInRepo(repoPath, files))
-));
-handleEffect("gitDiscard", (repo, files) => ({ target: str(repo), detail: howMany(files, "file") }), wrap((_e, repoPath: string, files: string[]) =>
-  gitDiscard(repoPath, assertAllInRepo(repoPath, files))
-));
-handleEffect("gitCommit", (repo) => ({ target: str(repo) }), wrap((_e, repoPath: string, message: string, allowEmpty?: boolean) =>
-  gitCommit(repoPath, message, allowEmpty)
-));
-handleEffect("gitPush", (repo, upstream) => ({ target: str(repo), detail: upstream ? "set upstream" : undefined }), wrap((_e, repoPath: string, setUpstream?: boolean) =>
-  gitPush(repoPath, setUpstream)
-));
-handleEffect("gitPull", (repo) => ({ target: str(repo) }), wrap((_e, repoPath: string) => gitPull(repoPath)));
-handle("gitConflictedFile", wrap((_e, repoPath: string, file: string) =>
-  gitConflictedFile(repoPath, assertInRepo(repoPath, file))
-));
-handleEffect("gitWriteResolved", (repo, file) => ({ target: fileIn(repo, file) }), wrap((_e, repoPath: string, file: string, contents: string) =>
-  gitWriteResolved(repoPath, assertInRepo(repoPath, file), contents)
-));
+// git and worktrees: the workspace API (R8), one channel for every method, answered as the person
+// at the window. Its answer is a result or an error with a code; it never throws.
+const workspaceServer = new WorkspaceServer([git], hostIntents());
+handle("workspace", (_e, method: unknown, params: unknown) => workspaceServer.answer(method, params, PERSON));
 
-// plain filesystem (editor tile) — resolve relPath against repoPath and reject
-// any path that escapes the repo root (path traversal / absolute-path attack).
-function resolveInRepo(repoPath: string, relPath: string): string {
-  const root = path.resolve(repoPath);
-  const abs = path.resolve(root, relPath);
-  if (abs !== root && !abs.startsWith(root + path.sep)) {
-    throw new Error(`path escapes repo: ${relPath}`);
-  }
-  return abs;
-}
-// Remote (ssh://) traversal guard: paths are POSIX-relative to the remote repo;
-// reject absolutes + `..` segments so a renderer can't escape the repo root.
-function assertRemoteRel(relPath: string): string {
-  const norm = relPath.replace(/\\/g, "/");
-  if (norm.startsWith("/") || norm.split("/").includes("..")) {
-    throw new Error(`path escapes repo: ${relPath}`);
-  }
-  return relPath;
-}
-// Variant for git CLI args: validates the path stays inside repoPath but
-// returns the ORIGINAL relPath (git commands receive paths relative to the
-// repo, not absolute). Throws on escape so callers fail-loud at the IPC
-// boundary. Use for every file/files arg that flows from the renderer into
-// a git-adapter function (which then hands them to `git` or `fs`).
-function assertInRepo(repoPath: string, relPath: string): string {
-  if (isRemote(repoPath)) return assertRemoteRel(relPath);
-  resolveInRepo(repoPath, relPath);
-  return relPath;
-}
-function assertAllInRepo(repoPath: string, paths: readonly string[]): string[] {
-  if (isRemote(repoPath)) return paths.map(assertRemoteRel);
-  for (const p of paths) resolveInRepo(repoPath, p);
-  return paths.slice();
-}
+// plain filesystem (editor tile): a path outside the repo is refused (repo-paths.ts).
 handle("fileRead", wrap((_e, repoPath: string, relPath: string) =>
   isRemote(repoPath)
-    ? readRemoteFile(repoPath, assertRemoteRel(relPath))
+    ? readRemoteFile(repoPath, remoteRel(relPath))
     : fsp.readFile(resolveInRepo(repoPath, relPath), "utf8")
 ));
 handleEffect("fileWrite", (repo, rel) => ({ target: fileIn(repo, rel) }), wrap((_e, repoPath: string, relPath: string, contents: string) =>
   isRemote(repoPath)
-    ? writeRemoteFile(repoPath, assertRemoteRel(relPath), contents)
+    ? writeRemoteFile(repoPath, remoteRel(relPath), contents)
     : fsp.writeFile(resolveInRepo(repoPath, relPath), contents, "utf8")
 ));
 
@@ -1103,19 +1008,19 @@ remoteConns.setAuthResolver((hostId) => {
 });
 // Machines: the catalog `hive machine` edits, plus each host's live state.
 handle("machines:get", wrap(async () => machinesSnapshot()));
-handleEffect("machines:add", (req) => ({ target: str(req?.target) }), wrap(async (_e, req: MachineAddRequest) => addMachine(req)));
-handleEffect("machines:check", (id) => ({ target: str(id) }), wrap(async (_e, id: string) => checkMachine(String(id))));
-handleEffect("machines:install", (id) => ({ target: str(id) }), wrap(async (_e, id: string) => installOnMachine(String(id))));
-handleEffect("machines:update", (id) => ({ target: str(id) }), wrap(async (_e, id: string, patch: { label?: string; enabled?: boolean }) => updateMachine(String(id), patch ?? {})));
-handleEffect("machines:edit", (id, patch) => ({ target: str(id), detail: str(patch?.target) }), wrap(async (_e, id: string, patch: { target: string; label?: string; password?: string }) => editMachine(String(id), {
+handleEffect("machines:add", (req) => ({ target: named(req?.target) }), wrap(async (_e, req: MachineAddRequest) => addMachine(req)));
+handleEffect("machines:check", (id) => ({ target: named(id) }), wrap(async (_e, id: string) => checkMachine(String(id))));
+handleEffect("machines:install", (id) => ({ target: named(id) }), wrap(async (_e, id: string) => installOnMachine(String(id))));
+handleEffect("machines:update", (id) => ({ target: named(id) }), wrap(async (_e, id: string, patch: { label?: string; enabled?: boolean }) => updateMachine(String(id), patch ?? {})));
+handleEffect("machines:edit", (id, patch) => ({ target: named(id), detail: named(patch?.target) }), wrap(async (_e, id: string, patch: { target: string; label?: string; password?: string }) => editMachine(String(id), {
   target: String(patch?.target ?? ""),
   ...(typeof patch?.label === "string" ? { label: patch.label } : {}),
   ...(typeof patch?.password === "string" && patch.password ? { password: patch.password } : {}),
 })));
-handleEffect("machines:remove", (id) => ({ target: str(id) }), wrap(async (_e, id: string) => removeMachine(String(id))));
-handleEffect("machines:set-password", (id) => ({ target: str(id) }), wrap(async (_e, id: string, password: string) => setMachinePassword(String(id), String(password))));
+handleEffect("machines:remove", (id) => ({ target: named(id) }), wrap(async (_e, id: string) => removeMachine(String(id))));
+handleEffect("machines:set-password", (id) => ({ target: named(id) }), wrap(async (_e, id: string, password: string) => setMachinePassword(String(id), String(password))));
 handle("machines:sessions", wrap(async (_e, uri: string | null) => machineSessions(uri ? String(uri) : null)));
-handleEffect("machines:reconnect", (id) => ({ target: str(id) }), wrap(async (_e, hostId: string) => { reconnectMachineHost(String(hostId)); }));
+handleEffect("machines:reconnect", (id) => ({ target: named(id) }), wrap(async (_e, hostId: string) => { reconnectMachineHost(String(hostId)); }));
 // List a remote directory for the folder picker. `dir` empty → the host's home.
 handle("sshListDir", wrap(async (_e, uri: string, dir: string) => {
   const target = parseRemote(uri);
@@ -1125,16 +1030,6 @@ handle("sshListDir", wrap(async (_e, uri: string, dir: string) => {
   const entries = await fs.readdir(real);
   return { dir: real, entries };
 }));
-
-// worktree
-handle("worktreeList", wrap((_e, repoPath: string) => worktreeList(repoPath)));
-handleEffect("worktreeCreate", (repo, opts) => ({ target: str(repo), detail: str(opts?.branch) }), wrap((_e, repoPath: string, opts: WorktreeCreateOpts) =>
-  worktreeCreate(repoPath, opts)
-));
-handleEffect("worktreeRemove", (_repo, wt) => ({ target: str(wt) }), wrap((_e, repoPath: string, wtPath: string, force?: boolean) =>
-  worktreeRemove(repoPath, wtPath, force)
-));
-handleEffect("worktreePrune", (repo) => ({ target: str(repo) }), wrap((_e, repoPath: string) => worktreePrune(repoPath)));
 
 // PTY
 // Sliding-window spawn rate-limit (see ptySpawn handler): over the limit a spawn waits
@@ -1306,7 +1201,7 @@ handle("ptySpawn", wrap(async (e, opts: Parameters<typeof spawnPty>[0]) => {
   const bare = toBareId(opts.tileId);
   const start = () => ("attachOnly" in opts && opts.attachOnly) || controlSpawned.delete(bare)
     ? startSession(opts)
-    : performed({ verb: "ptySpawn", target: bare, detail: str(path.basename(String(opts.cmd ?? ""))) }, () => startSession(opts));
+    : performed({ verb: "ptySpawn", target: bare, detail: named(path.basename(String(opts.cmd ?? ""))) }, () => startSession(opts));
   return ptyRelay.open(opts.tileId, viewerOf(e.sender), start, () => screenOf(opts.tileId));
 }));
 /** Start (or, with a daemon, attach to) the session a tile runs. */

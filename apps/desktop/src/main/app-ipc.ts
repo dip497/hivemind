@@ -8,14 +8,12 @@
  */
 import { ipcMain, type IpcMainEvent, type IpcMainInvokeEvent } from "electron";
 import type { Actor, Intent } from "@hivemind/workspace-host/intents";
+import type { Asks } from "@hivemind/workspace-api/server";
 import { appWindowOf } from "./windows.js";
 import { hostIntents } from "./audit.js";
 
 /** Who calls from the app's windows. */
-const PERSON: Actor = { kind: "person" };
-
-/** What a window's effect acts on, named from its call's arguments. */
-export type Asks = Omit<Intent<any>, "verb">;
+export const PERSON: Actor = { kind: "person" };
 
 /** The call comes from the main frame of one of the app's windows. */
 function fromAppWindow(e: IpcMainEvent | IpcMainInvokeEvent): boolean {

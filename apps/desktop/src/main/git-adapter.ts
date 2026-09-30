@@ -12,7 +12,7 @@ import { simpleGit, type SimpleGit } from "simple-git";
 import { applyShellEnvToProcess } from "@hivemind/agent-host/shell-env";
 import { isRemote } from "../shared/remote-uri.js";
 import { runRemoteGit, readRemoteFile, writeRemoteFile } from "./remote/git.js";
-import { DIFF_MAX_FILE_BYTES, OVERSIZE_SENTINEL } from "../shared/ipc.js";
+import { DIFF_MAX_FILE_BYTES, OVERSIZE_SENTINEL } from "@hivemind/workspace-api/git";
 import type {
   DiffPayload,
   DiffScope,
@@ -22,7 +22,7 @@ import type {
   GitStatusSnapshot,
   WorktreeCreateOpts,
   WorktreeEntry,
-} from "../shared/ipc.js";
+} from "@hivemind/workspace-api/git";
 
 const instances = new Map<string, SimpleGit>();
 function repo(p: string): SimpleGit {
@@ -538,9 +538,8 @@ export async function gitFileContents(
 
 export async function gitStage(repoPath: string, files: string[]): Promise<void> {
   if (files.length === 0) return;
-  // Remote has no simple-git; route through rawGit (which is remote-aware).
-  if (isRemote(repoPath)) { await rawGit(repoPath, ["add", "--", ...files]); return; }
-  await repo(repoPath).add(files);
+  // `--`: a file named like an option (`--all`) is still a file.
+  await rawGit(repoPath, ["add", "--", ...files]);
 }
 export async function gitUnstage(repoPath: string, files: string[]): Promise<void> {
   if (files.length === 0) return;
@@ -684,31 +683,8 @@ export async function worktreeCreate(
   repoPath: string,
   opts: WorktreeCreateOpts
 ): Promise<{ path: string; branch: string }> {
-  // Validate renderer-supplied args — they reach `git` as positionals/values.
-  // A bad branch name can't shell-inject (spawn is execFile-style) but CAN be a
-  // git ARG injection, and an absolute/`..` path or a leading-dash sparse entry
-  // escapes the repo / is read as a flag. Reject all of those.
-  if (
-    !opts.branch ||
-    !/^[A-Za-z0-9._/-]+$/.test(opts.branch) ||
-    opts.branch.startsWith("-") ||
-    opts.branch.includes("..")
-  ) {
-    throw new Error(`invalid branch name: ${JSON.stringify(opts.branch)}`);
-  }
-  if (opts.path !== undefined && (path.isAbsolute(opts.path) || opts.path.split(/[/\\]/).includes(".."))) {
-    throw new Error("worktree path must be relative to the repo and contain no '..'");
-  }
-  const assertSafeList = (xs: string[] | undefined, label: string) => {
-    for (const x of xs ?? []) {
-      if (x.startsWith("-") || path.isAbsolute(x) || x.split(/[/\\]/).includes("..")) {
-        throw new Error(`invalid ${label} entry: ${JSON.stringify(x)}`);
-      }
-    }
-  };
-  assertSafeList(opts.sparse, "sparse");
-  assertSafeList(opts.includeFiles, "includeFiles");
-
+  // The params were checked where the call came in (workspace-git.ts): a branch or
+  // a sparse entry git would read as an option, a path outside the repo.
   // Submodule guard — git worktree does NOT support submodules.
   try {
     const sm = await fs.readFile(path.join(repoPath, ".gitmodules"), "utf8");

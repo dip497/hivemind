@@ -1,6 +1,11 @@
 /// <reference lib="dom" />
 import { contextBridge, ipcRenderer, webUtils } from "electron";
-import type { HiveIpc, DiffScope, WorktreeCreateOpts, PlanReviewOpen, HcpCommand, HcpPipeEvent, HcpSpawnEvent, HcpSpawnedEvent, HcpStatusEvent, AppErrorEvent } from "../shared/ipc.js";
+import type { HiveIpc, PlanReviewOpen, HcpCommand, HcpPipeEvent, HcpSpawnEvent, HcpSpawnedEvent, HcpStatusEvent, AppErrorEvent } from "../shared/ipc.js";
+import { WorkspaceClient } from "@hivemind/workspace-api/client";
+import type { Answer } from "@hivemind/workspace-api/protocol";
+
+/** The workspace API (R8), over the one channel main answers it on. */
+const workspace = new WorkspaceClient({ call: (method, params) => ipcRenderer.invoke("workspace", method, params) as Promise<Answer> });
 
 const api: HiveIpc & {
   /** The host OS, so the renderer can pick a default shell without an IPC
@@ -70,25 +75,19 @@ const api: HiveIpc & {
   reviewList: (repoPath) => ipcRenderer.invoke("reviewList", repoPath),
   reviewSave: (repoPath, comments) => ipcRenderer.invoke("reviewSave", repoPath, comments),
 
-  gitStatus: (repoPath) => ipcRenderer.invoke("gitStatus", repoPath),
-  gitListFiles: (repoPath) => ipcRenderer.invoke("gitListFiles", repoPath),
-  gitListBranches: (repoPath) => ipcRenderer.invoke("gitListBranches", repoPath),
-  gitDiff: (repoPath, scope: DiffScope, file?: string) =>
-    ipcRenderer.invoke("gitDiff", repoPath, scope, file),
-  gitFileContents: (repoPath, file, rev) =>
-    ipcRenderer.invoke("gitFileContents", repoPath, file, rev),
-  gitStage: (repoPath, files) => ipcRenderer.invoke("gitStage", repoPath, files),
-  gitUnstage: (repoPath, files) => ipcRenderer.invoke("gitUnstage", repoPath, files),
-  gitDiscard: (repoPath, files) => ipcRenderer.invoke("gitDiscard", repoPath, files),
-  gitCommit: (repoPath, message, allowEmpty) =>
-    ipcRenderer.invoke("gitCommit", repoPath, message, allowEmpty),
-  gitPush: (repoPath, setUpstream) =>
-    ipcRenderer.invoke("gitPush", repoPath, setUpstream),
-  gitPull: (repoPath) => ipcRenderer.invoke("gitPull", repoPath),
-  gitConflictedFile: (repoPath, file) =>
-    ipcRenderer.invoke("gitConflictedFile", repoPath, file),
-  gitWriteResolved: (repoPath, file, contents) =>
-    ipcRenderer.invoke("gitWriteResolved", repoPath, file, contents),
+  gitStatus: (repo) => workspace.call("git.status", repo),
+  gitListFiles: (repo) => workspace.call("git.listFiles", repo),
+  gitListBranches: (repo) => workspace.call("git.listBranches", repo),
+  gitDiff: (repo, scope, file) => workspace.call("git.diff", repo, scope, file),
+  gitFileContents: (repo, file, rev) => workspace.call("git.fileContents", repo, file, rev),
+  gitStage: (repo, files) => workspace.call("git.stage", repo, files),
+  gitUnstage: (repo, files) => workspace.call("git.unstage", repo, files),
+  gitDiscard: (repo, files) => workspace.call("git.discard", repo, files),
+  gitCommit: (repo, message, allowEmpty) => workspace.call("git.commit", repo, message, allowEmpty),
+  gitPush: (repo, setUpstream) => workspace.call("git.push", repo, setUpstream),
+  gitPull: (repo) => workspace.call("git.pull", repo),
+  gitConflictedFile: (repo, file) => workspace.call("git.conflictedFile", repo, file),
+  gitWriteResolved: (repo, file, contents) => workspace.call("git.writeResolved", repo, file, contents),
 
   fileRead: (repoPath, relPath) => ipcRenderer.invoke("fileRead", repoPath, relPath),
   fileWrite: (repoPath, relPath, contents) =>
@@ -134,12 +133,10 @@ const api: HiveIpc & {
   machineReconnect: (hostId) => ipcRenderer.invoke("machines:reconnect", hostId),
   sshListDir: (uri, dir) => ipcRenderer.invoke("sshListDir", uri, dir),
 
-  worktreeList: (repoPath) => ipcRenderer.invoke("worktreeList", repoPath),
-  worktreeCreate: (repoPath, opts: WorktreeCreateOpts) =>
-    ipcRenderer.invoke("worktreeCreate", repoPath, opts),
-  worktreeRemove: (repoPath, wtPath, force) =>
-    ipcRenderer.invoke("worktreeRemove", repoPath, wtPath, force),
-  worktreePrune: (repoPath) => ipcRenderer.invoke("worktreePrune", repoPath),
+  worktreeList: (repo) => workspace.call("worktree.list", repo),
+  worktreeCreate: (repo, opts) => workspace.call("worktree.create", repo, opts),
+  worktreeRemove: (repo, worktree, force) => workspace.call("worktree.remove", repo, worktree, force),
+  worktreePrune: (repo) => workspace.call("worktree.prune", repo),
 
   ptySpawn: (opts) => ipcRenderer.invoke("ptySpawn", opts),
   ptyWrite: (tileId, data, paste) => ipcRenderer.send("ptyWrite", tileId, data, paste),

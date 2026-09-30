@@ -1,0 +1,23 @@
+{
+  "name": "@hivemind/workspace-api",
+  "version": "2026.9.8",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@hivemind/workspace-host": "workspace:*"
+  },
+  "devDependencies": {
+    "@hivemind/tsconfig": "workspace:*",
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  },
+  "description": "The workspace API: what a workspace's host is asked for, by a window, a peer or another device, over any transport.",
+  "license": "MIT"
+}

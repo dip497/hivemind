@@ -1,11 +1,12 @@
 /**
  * Dev HTTP bridge — exposes the SAME main-process adapters (hive-core,
- * git-adapter, pty-host) over HTTP so the renderer can be driven by
- * /gsd-browser without packaging Electron.
+ * the workspace API's server, pty-host) over HTTP so the renderer can be
+ * driven by /gsd-browser without packaging Electron.
  *
  * Nothing here is mocked. The handlers import the same files Electron
  * loads in production; the only difference is the transport (HTTP/SSE
- * instead of Electron IPC).
+ * instead of Electron IPC). The workspace API (git, worktrees) is the same
+ * server main answers with, at POST /workspace.
  *
  * MUST run under Node (via tsx) — NOT bun. bun's loader silently swallows
  * @lydell/node-pty output on Linux (PTYs spawn but stdout never reaches
@@ -54,24 +55,10 @@ import {
   type IssueState,
 } from "@hivemind/core";
 import type { IssuePatch } from "@hivemind/core/storage";
-import {
-  gitCommit,
-  gitConflictedFile,
-  gitDiff,
-  gitDiscard,
-  gitFileContents,
-  gitListFiles,
-  gitPush,
-  gitPull,
-  gitStage,
-  gitStatus,
-  gitUnstage,
-  gitWriteResolved,
-  worktreeCreate,
-  worktreeList,
-  worktreePrune,
-  worktreeRemove,
-} from "../main/git-adapter";
+import { Intents } from "@hivemind/workspace-host/intents";
+import { AuditLog } from "@hivemind/workspace-host/audit-log";
+import { WorkspaceServer } from "@hivemind/workspace-api/server";
+import { git } from "../main/workspace-git";
 import { spawnPty, writePty, resizePty, killPty, pausePty, resumePty } from "../main/pty-host";
 import { applyShellEnvToProcess } from "@hivemind/agent-host/shell-env";
 import chokidar from "chokidar";
@@ -79,6 +66,7 @@ import chokidar from "chokidar";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 import { randomBytes } from "node:crypto";
+import * as os from "node:os";
 
 const REPO_PATH = process.argv[2] ? path.resolve(process.argv[2]) : process.cwd();
 const PORT = Number(process.env.HIVE_BRIDGE_PORT ?? 5180);
@@ -100,17 +88,14 @@ const PROTECTED_METHODS = new Set([
   "deleteIssue",
   "commentOnIssue",
   "updateIssueState",
-  "gitStage",
-  "gitUnstage",
-  "gitDiscard",
-  "gitCommit",
-  "gitPush",
-  "gitPull",
-  "gitWriteResolved",
-  "worktreeCreate",
-  "worktreeRemove",
-  "worktreePrune",
 ]);
+
+// The workspace API (R8): the same server main answers the app's windows with, as the person at
+// this machine, and recorded in the dev app's audit log. Every call needs the token.
+const workspaceServer = new WorkspaceServer([git], new Intents(new AuditLog({
+  file: path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config"), "hivemind-dev", "audit.jsonl"),
+  onWarn: (m) => console.warn(`[audit] ${m}`),
+})));
 
 // Set (not Map<"global", Response>) — previously a second SSE subscriber
 // would clobber the first because both wrote to ptyStreams.get("global").
@@ -172,6 +157,18 @@ const PREVIEW_SCRIPT = `
     if (ct.includes("application/json")) return r.json();
     return undefined;
   }
+  // The workspace API: one call, its answer a result or an error with a code.
+  async function api(method, ...params) {
+    const r = await fetch(BRIDGE + "/workspace", {
+      method: "POST",
+      headers: await authHeaders(),
+      body: JSON.stringify({ method, params }),
+    });
+    if (!r.ok) throw new Error(await r.text());
+    const answer = await r.json();
+    if (answer.error) throw Object.assign(new Error(answer.error.message), { code: answer.error.code });
+    return answer.result;
+  }
   function notify(method) {
     return async (...args) => fetch(BRIDGE + "/notify/" + method, {
       method: "POST",
@@ -212,22 +209,23 @@ const PREVIEW_SCRIPT = `
     updateIssue:       (r,i,p) => call("updateIssue", r, i, p),
     commentOnIssue:    (r,i,m) => call("commentOnIssue", r, i, m),
     deleteIssue:       (r,i) => call("deleteIssue", r, i),
-    gitStatus:         (r) => call("gitStatus", r),
-    gitListFiles:      (r) => call("gitListFiles", r),
-    gitDiff:           (r,s,f) => call("gitDiff", r, s, f),
-    gitFileContents:   (r,f,v) => call("gitFileContents", r, f, v),
-    gitStage:          (r,f) => call("gitStage", r, f),
-    gitUnstage:        (r,f) => call("gitUnstage", r, f),
-    gitDiscard:        (r,f) => call("gitDiscard", r, f),
-    gitCommit:         (r,m,a) => call("gitCommit", r, m, a),
-    gitPush:           (r,u) => call("gitPush", r, u),
-    gitPull:           (r) => call("gitPull", r),
-    gitConflictedFile: (r,f) => call("gitConflictedFile", r, f),
-    gitWriteResolved:  (r,f,c) => call("gitWriteResolved", r, f, c),
-    worktreeList:      (r) => call("worktreeList", r),
-    worktreeCreate:    (r,o) => call("worktreeCreate", r, o),
-    worktreeRemove:    (r,p,f) => call("worktreeRemove", r, p, f),
-    worktreePrune:     (r) => call("worktreePrune", r),
+    gitStatus:         (r) => api("git.status", r),
+    gitListFiles:      (r) => api("git.listFiles", r),
+    gitListBranches:   (r) => api("git.listBranches", r),
+    gitDiff:           (r,s,f) => api("git.diff", r, s, f),
+    gitFileContents:   (r,f,v) => api("git.fileContents", r, f, v),
+    gitStage:          (r,f) => api("git.stage", r, f),
+    gitUnstage:        (r,f) => api("git.unstage", r, f),
+    gitDiscard:        (r,f) => api("git.discard", r, f),
+    gitCommit:         (r,m,a) => api("git.commit", r, m, a),
+    gitPush:           (r,u) => api("git.push", r, u),
+    gitPull:           (r) => api("git.pull", r),
+    gitConflictedFile: (r,f) => api("git.conflictedFile", r, f),
+    gitWriteResolved:  (r,f,c) => api("git.writeResolved", r, f, c),
+    worktreeList:      (r) => api("worktree.list", r),
+    worktreeCreate:    (r,o) => api("worktree.create", r, o),
+    worktreeRemove:    (r,p,f) => api("worktree.remove", r, p, f),
+    worktreePrune:     (r) => api("worktree.prune", r),
     ptySpawn:          (o) => call("ptySpawn", o),
     ptyWrite:          notify("ptyWrite"),
     ptyResize:         notify("ptyResize"),
@@ -277,23 +275,6 @@ const RPC: Record<string, (...args: unknown[]) => Promise<unknown> | unknown> = 
     await writeAgentContext(root);
     return null;
   },
-  gitStatus: (r: string) => gitStatus(r),
-  gitListFiles: (r: string) => gitListFiles(r),
-  gitDiff: (r: string, s: Parameters<typeof gitDiff>[1], f?: string) => gitDiff(r, s, f),
-  gitFileContents: (r: string, f: string, v: "HEAD" | "INDEX" | "WORKING") =>
-    gitFileContents(r, f, v),
-  gitStage: (r: string, f: string[]) => gitStage(r, f),
-  gitUnstage: (r: string, f: string[]) => gitUnstage(r, f),
-  gitDiscard: (r: string, f: string[]) => gitDiscard(r, f),
-  gitCommit: (r: string, m: string, a?: boolean) => gitCommit(r, m, a),
-  gitPush: (r: string, u?: boolean) => gitPush(r, u),
-  gitPull: (r: string) => gitPull(r),
-  gitConflictedFile: (r: string, f: string) => gitConflictedFile(r, f),
-  gitWriteResolved: (r: string, f: string, c: string) => gitWriteResolved(r, f, c),
-  worktreeList: (r: string) => worktreeList(r),
-  worktreeCreate: (r: string, o: Parameters<typeof worktreeCreate>[1]) => worktreeCreate(r, o),
-  worktreeRemove: (r: string, p: string, f?: boolean) => worktreeRemove(r, p, f),
-  worktreePrune: (r: string) => worktreePrune(r),
   ptySpawn: async (opts: Parameters<typeof spawnPty>[0]) => {
     if (!ptySpawnAllowed()) {
       throw new Error(
@@ -393,6 +374,23 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse): Prom
     return;
   }
 
+  if (req.method === "POST" && url.pathname === "/workspace") {
+    if (!checkToken(req)) {
+      res.writeHead(401).end("unauthorized: x-hive-token missing or wrong");
+      return;
+    }
+    let call: { method?: unknown; params?: unknown };
+    try {
+      call = JSON.parse(await readBody(req)) ?? {};
+    } catch {
+      res.writeHead(400).end("a call is JSON: { method, params }");
+      return;
+    }
+    const answer = await workspaceServer.answer(call.method, call.params, { kind: "person" });
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify(answer));
+    return;
+  }
   if (req.method === "POST" && url.pathname.startsWith("/rpc/")) {
     const method = url.pathname.slice(5);
     const fn = RPC[method];
