@@ -4,7 +4,7 @@
 
 use anyhow::Result;
 use iroh::{
-    endpoint::{presets, RelayMode},
+    endpoint::{presets, EndpointHooks, RelayMode},
     Endpoint, RelayUrl, SecretKey,
 };
 use iroh_mdns_address_lookup::MdnsAddressLookup;
@@ -24,9 +24,33 @@ pub enum Reach {
 
 /// This device's endpoint, answering `alpns`.
 pub async fn endpoint(key: SecretKey, reach: &Reach, alpns: Vec<Vec<u8>>) -> Result<Endpoint> {
-    let builder = Endpoint::builder(presets::Minimal)
-        .secret_key(key)
-        .alpns(alpns);
+    bind(
+        Endpoint::builder(presets::Minimal)
+            .secret_key(key)
+            .alpns(alpns),
+        reach,
+    )
+    .await
+}
+
+/// This device's endpoint, answering `alpns` for the devices `gate` admits.
+pub async fn endpoint_with(
+    key: SecretKey,
+    reach: &Reach,
+    alpns: Vec<Vec<u8>>,
+    gate: impl EndpointHooks + 'static,
+) -> Result<Endpoint> {
+    bind(
+        Endpoint::builder(presets::Minimal)
+            .secret_key(key)
+            .alpns(alpns)
+            .hooks(gate),
+        reach,
+    )
+    .await
+}
+
+async fn bind(builder: iroh::endpoint::Builder, reach: &Reach) -> Result<Endpoint> {
     let builder = match reach {
         Reach::Local => builder
             .relay_mode(RelayMode::Disabled)

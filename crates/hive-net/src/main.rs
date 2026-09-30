@@ -4,6 +4,7 @@
 //!   hive-net run                   answer pings until stopped
 //!   hive-net ping <id>             ping a device by its id
 //!   hive-net serve --relay         run a relay for your devices
+//!   hive-net daemon --socket <path>  the app's network (`daemon.rs`); main starts it
 //!
 //! Options: `--identity <dir>` (default: the app's), `--relay <url>` (repeatable: reach devices
 //! through these relays rather than on the local network), `--addr <ip:port>` (ping: where the
@@ -23,7 +24,7 @@ use iroh::{protocol::Router, EndpointAddr, EndpointId, RelayUrl, TransportAddr};
 /// How long a ping waits for its answer.
 const PING_TIMEOUT: Duration = Duration::from_secs(10);
 
-const USAGE: &str = "usage: hive-net id | run | ping <id> | serve --relay  [--identity <dir>] [--relay <url>]... [--addr <ip:port>]... [--bind <ip:port>]";
+const USAGE: &str = "usage: hive-net id | run | ping <id> | serve --relay | daemon --socket <path>  [--identity <dir>] [--relay <url>]... [--addr <ip:port>]... [--bind <ip:port>]";
 
 #[derive(Default)]
 struct Args {
@@ -34,6 +35,7 @@ struct Args {
     addrs: Vec<SocketAddr>,
     bind: Option<SocketAddr>,
     relay_role: bool,
+    socket: Option<PathBuf>,
 }
 
 fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args> {
@@ -50,6 +52,7 @@ fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args> {
                 .push(RelayUrl::from_str(&value(&mut argv, &arg)?)?),
             "--addr" => args.addrs.push(value(&mut argv, &arg)?.parse()?),
             "--bind" => args.bind = Some(value(&mut argv, &arg)?.parse()?),
+            "--socket" => args.socket = Some(value(&mut argv, &arg)?.into()),
             flag if flag.starts_with("--") => bail!("unknown option {flag}\n{USAGE}"),
             _ if args.command.is_empty() => args.command = arg,
             _ if args.target.is_none() => args.target = Some(arg),
@@ -124,6 +127,10 @@ async fn run(args: Args) -> Result<()> {
             };
             println!("{id} answered in {} ms, {how}", answer.rtt.as_millis());
             endpoint.close().await;
+        }
+        "daemon" => {
+            let socket = args.socket.clone().context(USAGE)?;
+            hive_net::daemon::run(&socket, args.device_key()?, args.reach()).await?;
         }
         "serve" if args.relay_role => {
             let relay =

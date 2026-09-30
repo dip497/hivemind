@@ -1107,6 +1107,7 @@ dependencies = [
  "iroh-mdns-address-lookup",
  "iroh-relay",
  "rand",
+ "serde",
  "serde_json",
  "tokio",
 ]
