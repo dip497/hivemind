@@ -15,7 +15,7 @@ import { Keyboard } from "lucide-react";
 import type { Typist } from "@hivemind/workspace-api/terminals";
 import type { PtySize } from "../pty-size-sync";
 import { Button } from "../components/ui/button";
-import { usePeopleHere } from "./presence";
+import { useFacesHere } from "./presence";
 import { joinedId, useShown } from "./shown";
 
 interface Heard {
@@ -95,7 +95,7 @@ export interface TerminalKeyboard {
 export function useTerminalKeyboard(tile: string): TerminalKeyboard {
   const { repo, shared } = useShown();
   const joined = joinedId(repo);
-  const others = usePeopleHere(repo).length > 0;
+  const others = useFacesHere(repo).length > 0;
   const now = useSyncExternalStore(useCallback((l: () => void) => subscribe(tile, l), [tile]), () => heard.get(tile) ?? NOTHING);
   const { holder, size } = now;
   if (joined) {

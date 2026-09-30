@@ -166,11 +166,23 @@ export class HiveNet {
     });
   }
 
+  private corked = false;
+
+  /** Messages told in one turn go to the daemon in one write: a moment's frames to every peer are
+   *  one system call, not one each. */
   private tell(message: Message): void {
     if (this.stopped) return;
     const body = Buffer.from(JSON.stringify(message), "utf8");
     const head = Buffer.alloc(4);
     head.writeUInt32BE(body.length);
+    if (!this.corked) {
+      this.corked = true;
+      this.socket.cork();
+      process.nextTick(() => {
+        this.corked = false;
+        this.socket.uncork();
+      });
+    }
     this.socket.write(Buffer.concat([head, body]));
   }
 
@@ -181,6 +193,15 @@ export class HiveNet {
   }
 
   private async read(frames: AsyncGenerator<Message>): Promise<void> {
+    try {
+      await this.take(frames);
+    } catch {
+      // The socket was destroyed while it was read (`stop`), or failed: gone either way.
+    }
+    this.gone("hive-net's socket closed");
+  }
+
+  private async take(frames: AsyncGenerator<Message>): Promise<void> {
     for await (const m of frames) {
       switch (m.t) {
         case "incoming":
@@ -212,7 +233,6 @@ export class HiveNet {
         }
       }
     }
-    this.gone("hive-net's socket closed");
   }
 
   private gone(why: string): void {

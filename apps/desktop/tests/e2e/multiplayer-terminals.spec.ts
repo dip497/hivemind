@@ -2,12 +2,14 @@
 // watches the host's shell live, and their keys do not reach it; they ask for the keyboard and the
 // host gives it; then they type into the host's shell, which takes their size while the host's
 // window draws it at that size; the host takes it back, and the guest's keys stop reaching it.
+// When the host goes away and comes back, the guest's terminal shows the host's shell again, live,
+// and the keyboard the guest held is the host's again.
 import { test, expect, type ElectronApplication, type Page } from "@playwright/test";
 import { execSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { hiveNetBuilt, sharedWorkspace } from "./helpers/multiplayer";
+import { hiveNetBuilt, person, sharedWorkspace } from "./helpers/multiplayer";
 
 let root: string;
 const apps: ElectronApplication[] = [];
@@ -95,3 +97,29 @@ test("a guest watches the host's shell; given the keyboard they type into it and
   expect(fs.existsSync(`${repo}/guest-after`)).toBe(false);
   expect(fs.existsSync(`${repo}/host-while-lent`)).toBe(false);
 });
+
+test("the host goes away and comes back: the guest's terminal shows the host's shell again, live, and the keyboard they held is the host's", async () => {
+  test.skip(!hiveNetBuilt(), "build hive-net first: cargo build in crates/hive-net");
+  test.setTimeout(180_000); // the guest dials again with back-off while the host is away
+  const { host, guest, repo } = await sharedWorkspace(root, apps, "terminals", { env: DAEMON, names: { host: "Adarsh", guest: "Priya" } });
+  await run(host, `echo before > ${repo}/before`, `${repo}/before`, /^before$/);
+  await clickInto(guest);
+  await guest.locator("[data-keyboard-pill-ask]").click();
+  await host.locator("[data-sonner-toast]", { hasText: "Priya asks for the keyboard" }).getByRole("button", { name: "Give" }).click();
+  await expect(holder(guest)).toHaveAttribute("data-keyboard-holder", "You");
+
+  // The host quits; its terminals run on in its pty daemon. (Not `close()`: the daemon holds the
+  // app's output pipes, which that waits on.)
+  const gone = apps.shift()!;
+  const pid = gone.process().pid!;
+  await gone.evaluate(({ app }) => app.quit()).catch(() => {});
+  await expect.poll(() => { try { process.kill(pid, 0); return true; } catch { return false; } }, { timeout: 20_000 }).toBe(false);
+  await expect(guest.locator("[data-shared-banner]")).toHaveAttribute("data-state", /reconnecting|offline/, { timeout: 15_000 });
+  const back = await person(root, "host", repo, apps, DAEMON);
+  await expect(guest.locator("[data-shared-banner]")).toHaveAttribute("data-state", "connected", { timeout: 40_000 });
+  await expect(holder(guest)).toHaveAttribute("data-keyboard-holder", "Adarsh", { timeout: 10_000 });
+  await run(back, `echo back > ${repo}/back`, `${repo}/back`, /^back$/);
+  await back.keyboard.type("echo shown-$((20+22))\n");
+  await expect.poll(() => screen(guest), { timeout: 15_000 }).toContain("shown-42");
+});
+

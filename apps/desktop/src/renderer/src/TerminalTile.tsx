@@ -37,6 +37,7 @@ import { statusColor } from "./workspace/tile-status-bucket";
 import { defaultAgent } from "@hivemind/agents";
 import { useAgentsScanned } from "./agent-plugins";
 import { KeyboardChip, KeyboardPill, useTerminalKeyboard, type TerminalKeyboard } from "./multiplayer/keyboard";
+import { useShown } from "./multiplayer/shown";
 
 /** Open a terminal link in the OS browser. window.open is intercepted by main's
  *  setWindowOpenHandler → shell.openExternal (and the in-app navigation denied),
@@ -262,6 +263,11 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
   // What fits this tile, and the sizes this window last asked the session to take (drawnSize).
   const ownSizeRef = useRef<PtySize | null>(null);
   const askedRef = useRef<PtySize[]>([]);
+  // In a workspace joined from elsewhere: whether the session is shown from its host now, and how
+  // to show it again once the connection to the host is back (the host let go of it as it went).
+  const { shared } = useShown();
+  const attachedRef = useRef(false);
+  const reattachRef = useRef<(() => void) | null>(null);
   // True once the tile is closing (endTileSession) — then we KILL even in persistent
   // mode. App-close / project-switch unmounts leave it false → detach.
   const killOnUnmountRef = useRef(false);
@@ -631,6 +637,17 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     };
     // A remount (a view switch) picks the stream back up if main had stopped sending it.
     window.hive.ptyInterest(ptyId, true);
+    // Back in touch with the host of a workspace joined from elsewhere: show its session again,
+    // from the host's screen, at this window's size if its keys reach it.
+    reattachRef.current = () => {
+      attachedRef.current = true;
+      exited = false;
+      window.hive.ptySpawn({ tileId: ptyId, cwd, cmd, args: args ?? [], cols: term.cols, rows: term.rows, attachOnly: true })
+        .then(({ pid }) => { if (pid === -1) attachedRef.current = false; }, () => { attachedRef.current = false; });
+      if (interested) window.hive.ptyInterest(ptyId, true);
+      sentSizeRef.current = null;
+      syncPtySize();
+    };
     const io = new IntersectionObserver(
       (entries) => {
         const v = !!entries[entries.length - 1]?.isIntersecting;
@@ -882,6 +899,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
             if (cancelled) { releaseBoot(); return; }
           }
         }
+        attachedRef.current = true;
         const { pid, joined } = attachedPid !== undefined ? { pid: attachedPid, joined: false } : await window.hive.ptySpawn({
           tileId: ptyId,
           cwd,
@@ -905,8 +923,13 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
         // Another window started this session and gave it its task: this one only shows it.
         if (joined) claimWork(tileId);
         // -1 is "no such session"; other negative pids are remote ones, negated on purpose.
-        if (session && pid === -1) {
-          term.writeln(`\x1b[2m[hivemind] could not open session ${session}: it has ended, or its machine is unreachable\x1b[0m`);
+        if (pid === -1) {
+          // An adopted session that is gone; or, in a workspace joined from elsewhere, one its host
+          // is not running.
+          term.writeln(session
+            ? `\x1b[2m[hivemind] could not open session ${session}: it has ended, or its machine is unreachable\x1b[0m`
+            : "\x1b[2m[hivemind] this terminal is not running on the machine it belongs to\x1b[0m");
+          attachedRef.current = false;
           exited = true;
           setStatus("exited");
           return;
@@ -986,6 +1009,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
           }, 1200);
         }
       } catch (e) {
+        attachedRef.current = false;
         releaseBoot();
         term.writeln(`\x1b[31m[hivemind] spawn failed: ${(e as Error).message}\x1b[0m`);
         exited = true;
@@ -1164,6 +1188,16 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       term.refresh(0, term.rows - 1);
     } catch { /* torn down */ }
   }, [font.size]);
+
+  // A workspace joined from elsewhere: once the connection to its host is back, the session is
+  // shown again (the host let go of it as the connection went); until then it is not.
+  const joined = !!shared;
+  const connected = shared?.state === "connected";
+  useEffect(() => {
+    if (!joined) return;
+    if (!connected) attachedRef.current = false;
+    else if (!attachedRef.current) reattachRef.current?.();
+  }, [joined, connected]);
 
   // The session was given a size: draw it again, at this window's size or at the one given.
   useEffect(() => {

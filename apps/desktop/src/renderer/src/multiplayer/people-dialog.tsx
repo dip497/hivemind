@@ -12,7 +12,7 @@ import type { SharedPerson } from "../../../shared/ipc";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../components/ui/dialog";
 import { Button } from "../components/ui/button";
 import { ROLE_LABELS, colorFor, initialsOf } from "./people";
-import { usePeopleHere } from "./presence";
+import { useFacesHere } from "./presence";
 
 const ROLES = ["view", "edit", "terminals", "agents"] as const;
 const messageOf = (e: unknown): string => (e instanceof Error ? e.message : String(e)).replace(/^Error invoking remote method '[^']+': (Error: )?(people: )?/, "");
@@ -32,7 +32,7 @@ export function PeopleDialog({ repo, open, onClose }: { repo: string; open: bool
   const [granting, setGranting] = useState<SharedPerson | null>(null);
   const load = useCallback(() => window.hive.people(repo).then(setPeople, (e: unknown) => setError(messageOf(e))), [repo]);
   // Who is here changes as people come and go: read the list again.
-  const here = usePeopleHere(repo);
+  const here = useFacesHere(repo);
   useEffect(() => { if (open) void load(); }, [open, load, here]);
 
   const run = async (what: () => Promise<void>): Promise<boolean> => {

@@ -1,7 +1,11 @@
 /**
  * The workspace API between devices (M1; spec/workspace-api.md, "Peers"): over a channel of text
  * frames (a `hive/ws/1` connection's `api` stream), a call is `{id, method, params}`, its answer
- * `{id, result}` or `{id, error}`, a notice has no `id`, and events are `{event, params}`.
+ * `{id, result}` or `{id, error}`, a notice has no `id`, and events are `{event, params}`. The
+ * events of one moment go as one frame, a list of them: ten terminals' output is one frame, not
+ * ten; and while events stream, a peer is sent a frame at most every 25 ms (M2's load gate), the
+ * first after a quiet spell at once, so a keystroke's echo is not held. An answer goes after the
+ * events before it.
  *
  * `servePeer` is the host's side: each call is checked against the peer's role (`roles.ts`) before
  * the host answers it, the workspace named by its id is read as its repo here, a tile outside the
@@ -64,6 +68,17 @@ function tilesOf(event: EventMessage): string[] | null {
   }
 }
 
+/** While events stream to a peer, a frame at most this often. */
+export const PEER_FRAME_MS = 25;
+
+/** Each event as JSON, once for however many peers it goes to. */
+const encoded = new WeakMap<EventMessage, string>();
+function json(event: EventMessage): string {
+  let text = encoded.get(event);
+  if (text === undefined) encoded.set(event, (text = JSON.stringify(event)));
+  return text;
+}
+
 /** Serve the workspace API to a peer over `channel`, from `server`. */
 export function servePeer(server: WorkspaceServer, channel: TextChannel, peer: PeerOf): void {
   const url = workspaceUrl(peer.workspace);
@@ -89,11 +104,29 @@ export function servePeer(server: WorkspaceServer, channel: TextChannel, peer: P
     return event;
   };
   const gone = new AbortController();
+  let queued: EventMessage[] = [];
+  let sentAt = -Infinity;
+  let due: ReturnType<typeof setTimeout> | "now" | null = null;
+  const flush = (): void => {
+    if (due !== null && due !== "now") clearTimeout(due);
+    due = null;
+    if (queued.length === 0) return;
+    sentAt = Date.now();
+    const events = queued;
+    queued = [];
+    channel.send(events.length === 1 ? json(events[0]!) : `[${events.map(json).join(",")}]`);
+  };
   const connection: Connection = {
     actor: peer.actor,
     send: (event) => {
       const out = outbound(event);
-      if (out) channel.send(JSON.stringify(out));
+      if (!out) return;
+      queued.push(out);
+      if (due !== null) return;
+      // With whatever else this moment brings: at once after a quiet spell, else when it is time.
+      const wait = PEER_FRAME_MS - (Date.now() - sentAt);
+      if (wait > 0) due = setTimeout(flush, wait);
+      else { due = "now"; queueMicrotask(flush); }
     },
     closed: gone.signal,
   };
@@ -124,7 +157,10 @@ export function servePeer(server: WorkspaceServer, channel: TextChannel, peer: P
       return;
     }
     const id = m.id;
-    void (why ? Promise.resolve(refused(why)) : server.answer(m.method, params, connection)).then((answer) => channel.send(JSON.stringify({ id, ...answer })));
+    void (why ? Promise.resolve(refused(why)) : server.answer(m.method, params, connection)).then((answer) => {
+      flush();
+      channel.send(JSON.stringify({ id, ...answer }));
+    });
   });
 }
 
@@ -134,13 +170,7 @@ export function peerTransport(channel: TextChannel): ClientTransport {
   let next = 1;
   const waiting = new Map<number, (answer: Answer) => void>();
   const listeners = new Set<(message: EventMessage) => void>();
-  channel.on((text) => {
-    let m: Record<string, unknown>;
-    try {
-      m = JSON.parse(text) as Record<string, unknown>;
-    } catch {
-      return;
-    }
+  const take = (m: Record<string, unknown>): void => {
     if (typeof m.id === "number") {
       const done = waiting.get(m.id);
       waiting.delete(m.id);
@@ -148,6 +178,16 @@ export function peerTransport(channel: TextChannel): ClientTransport {
     } else if (typeof m.event === "string" && Array.isArray(m.params)) {
       for (const l of listeners) l({ event: m.event, params: m.params });
     }
+  };
+  channel.on((text) => {
+    let m: unknown;
+    try {
+      m = JSON.parse(text);
+    } catch {
+      return;
+    }
+    // One moment's events come as a list.
+    for (const one of Array.isArray(m) ? m : [m]) if (one && typeof one === "object") take(one as Record<string, unknown>);
   });
   let gone: string | null = null;
   const goneAnswer = (): Answer => ({ error: { code: "FAILED", message: `the host is gone (${gone})` } });

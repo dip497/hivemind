@@ -66,7 +66,7 @@ test("until the host gives it away, its windows type and a guest's keys never re
   assert.deepEqual([tile, asker.person, asker.name], ["hm:t1", PRIYA, "Priya"]);
   // Given it: everyone is told; only the guest types now, and the guest's size is the session's.
   h.notice(win, "terminal.keyboard.give", "hm:t1", asker.id);
-  for (const c of [win, guest]) assert.deepEqual(h.told(c, "terminal.keyboard"), [["hm:t1", asker]]);
+  for (const c of [win, guest]) assert.deepEqual(h.told(c, "terminal.keyboard"), [["hm:t1", null], ["hm:t1", asker]]);
   h.calls.length = 0;
   h.notice(win, "terminal.resize", "hm:t1", 200, 50);
   h.notice(win, "terminal.write", "hm:t1", "host keys\r");
@@ -114,11 +114,12 @@ test("whoever opens a session is told who holds its keyboard and its size; back 
   const h = host();
   const win = h.client({ kind: "person" });
   await h.open(win, true);
-  // A guest who opens it later is told the size the host started it at, and no holder: the host's.
+  // A guest who opens it later is told the size the host started it at, and that the host holds
+  // its keyboard: one coming back may have missed it being taken back.
   const guest = h.client(guestActor);
   await h.open(guest);
   assert.deepEqual(h.told(guest, "terminal.size"), [["hm:t1", 80, 24]]);
-  assert.deepEqual(h.told(guest, "terminal.keyboard"), []);
+  assert.deepEqual(h.told(guest, "terminal.keyboard"), [["hm:t1", null]]);
 
   h.notice(guest, "terminal.keyboard.ask", "hm:t1");
   const asker = (h.told(win, "terminal.keyboard.asked")[0] as [string, { id: string }])[1];

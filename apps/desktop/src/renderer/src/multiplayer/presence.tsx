@@ -16,12 +16,17 @@ import { colorFor, initialsOf } from "./people";
 const SEND_EVERY_MS = 50;
 const STILL_HERE_EVERY_MS = 20_000;
 const NOBODY: Participant[] = [];
+/** Someone else in a workspace, one per person, as their face shows them. */
+export type Face = Pick<Participant, "person" | "name" | "color">;
+const NO_FACES: Face[] = [];
 
 /** This person, once the app has said who that is; null where no app answers (a browser). */
 let me: { personId: string; suggestedName: string } | null = null;
-/** Who is in each workspace, as last heard, and who of them is someone else. */
+/** Who is in each workspace, as last heard, and who of them is someone else; and their faces,
+ *  which change only when someone arrives, leaves or is renamed, not as they move. */
 const heard = new Map<string, Participant[]>();
 const others = new Map<string, Participant[]>();
+const faces = new Map<string, Face[]>();
 const listeners = new Set<() => void>();
 let listening = false;
 
@@ -31,6 +36,8 @@ function sift(repo: string): boolean {
   const prev = others.get(repo);
   if (prev && JSON.stringify(prev) === JSON.stringify(next)) return false;
   others.set(repo, next);
+  const nextFaces = [...new Map(next.map((p) => [p.person, { person: p.person, name: p.name, color: p.color }])).values()];
+  if (JSON.stringify(nextFaces) !== JSON.stringify(faces.get(repo) ?? NO_FACES)) faces.set(repo, nextFaces);
   return true;
 }
 const tell = (): void => { for (const l of listeners) l(); };
@@ -54,12 +61,18 @@ const subscribe = (l: () => void): (() => void) => {
   return () => { listeners.delete(l); };
 };
 
-/** Who else is in the workspace `repo` now. */
+/** Who else is in the workspace `repo` now, where they are and what they have selected: changes
+ *  as they move. */
 export function usePeopleHere(repo: string | null): Participant[] {
   return useSyncExternalStore(subscribe, () => (repo ? others.get(repo) ?? NOBODY : NOBODY));
 }
 
-const colorOf = (p: Participant): string => p.color || colorFor(p.person);
+/** The faces of everyone else in `repo`, one per person: changes only as people come and go. */
+export function useFacesHere(repo: string | null): Face[] {
+  return useSyncExternalStore(subscribe, () => (repo ? faces.get(repo) ?? NO_FACES : NO_FACES));
+}
+
+const colorOf = (p: Pick<Participant, "person" | "color">): string => p.color || colorFor(p.person);
 
 /**
  * Inside the canvas: says where this window's person is on the board of `repo` (the pointer over
@@ -114,28 +127,36 @@ export function PresenceLayer({ repo, pane, selection }: { repo: string; pane: R
     soon.current();
   }, [name, profile.color, selected]);
 
-  const zoom = useStore((s) => s.transform[2]);
+  const [panX, panY, zoom] = useStore((s) => s.transform);
   const rings = useMemo(() => people.flatMap((p) => p.selection.map((id) => ({ id, p }))), [people]);
   if (people.length === 0) return null;
   return (
-    <ViewportPortal>
-      {rings.map(({ id, p }) => <SelectionRing key={`${p.id}:${id}`} id={id} who={p} />)}
-      {people.map((p) => p.cursor && (
-        <div
-          key={p.id}
-          data-presence-cursor={p.person}
-          className="pointer-events-none absolute left-0 top-0"
-          style={{ transform: `translate(${p.cursor.x}px, ${p.cursor.y}px) scale(${1 / zoom})`, transformOrigin: "0 0", zIndex: 10_000, color: colorOf(p) }}
-        >
-          <svg width={16} height={20} viewBox="0 0 16 20" aria-hidden className="block drop-shadow">
-            <path d="M1 1 L1 16 L5 12 L8 19 L11 18 L8 11 L14 11 Z" fill="currentColor" stroke="var(--color-fg)" strokeWidth={1.2} strokeLinejoin="round" />
-          </svg>
-          <span className="ml-3 -mt-1 block w-max max-w-[180px] truncate rounded px-1.5 py-0.5 text-[11px] font-medium text-white" style={{ background: colorOf(p) }}>
-            {p.name || "Someone"}
-          </span>
-        </div>
-      ))}
-    </ViewportPortal>
+    <>
+      {rings.length > 0 && (
+        <ViewportPortal>
+          {rings.map(({ id, p }) => <SelectionRing key={`${p.id}:${id}`} id={id} who={p} />)}
+        </ViewportPortal>
+      )}
+      {/* Pointers over the board rather than in it: a pointer that moves repaints this layer only,
+          not the board of a hundred tiles under it. No shadow filter: it is repainted each move. */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden" style={{ contain: "strict", zIndex: 10_000 }}>
+        {people.map((p) => p.cursor && (
+          <div
+            key={p.id}
+            data-presence-cursor={p.person}
+            className="absolute left-0 top-0"
+            style={{ transform: `translate(${p.cursor.x * zoom + panX}px, ${p.cursor.y * zoom + panY}px)`, color: colorOf(p) }}
+          >
+            <svg width={16} height={20} viewBox="0 0 16 20" aria-hidden className="block">
+              <path d="M1 1 L1 16 L5 12 L8 19 L11 18 L8 11 L14 11 Z" fill="currentColor" stroke="var(--color-fg)" strokeWidth={1.2} strokeLinejoin="round" />
+            </svg>
+            <span className="ml-3 -mt-1 block w-max max-w-[180px] truncate rounded px-1.5 py-0.5 text-[11px] font-medium text-white" style={{ background: colorOf(p) }}>
+              {p.name || "Someone"}
+            </span>
+          </div>
+        ))}
+      </div>
+    </>
   );
 }
 
@@ -162,8 +183,7 @@ function SelectionRing({ id, who }: { id: string; who: Participant }) {
 /** The faces of everyone else in `repo`, one per person, by Share; `onManage`, when given, opens
  *  the People panel from them. */
 export function PeopleHere({ repo, onManage }: { repo: string; onManage?: () => void }) {
-  const people = usePeopleHere(repo);
-  const persons = useMemo(() => [...new Map(people.map((p) => [p.person, p])).values()], [people]);
+  const persons = useFacesHere(repo);
   if (persons.length === 0) return null;
   return (
     <div

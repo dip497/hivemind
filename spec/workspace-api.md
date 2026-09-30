@@ -64,7 +64,10 @@ tiles, *Can drive agents*;
 anything else is the owner's (taking a keyboard back among them). A peer's `terminal.open` of a
 session already running shows it (`attachOnly`), whatever its role. A peer is sent only the
 events about its workspace's tiles, and a tile outside the workspace is refused to it. A
-terminal is named by its session, `hm:<tile>`; the tile is the workspace's. A
+terminal is named by its session, `hm:<tile>`; the tile is the workspace's. Events reach a peer
+in frames of one event, or of a list of the events of one moment; while they stream, a frame at
+most every 25 ms, the first after a quiet spell at once. An answer comes after the events sent
+before it. A
 peer's `presence.set` is its person's (the device's certificate names them), whatever name it
 sends, and one participant per device.
 
@@ -192,7 +195,7 @@ A diff's `scope` is one of `{"kind": "working", "staged"?}`, `{"kind": "branch",
 | `plan.decided` | `{requestId, tileId, decision, by}` | to every client, as a plan is answered (`by`: `{person, name}`), or its agent stops waiting (`decision` and `by` null) |
 | `file.changed` | `repo`, `{paths}` | to each client watching the repo (the app's window watches the one it opens), at most one every 300 ms |
 | `store.changed` | `{repo, part}` (`core`, `board` or `view:<id>`) | to every client but the one whose write it was, on each change to a workspace's layouts |
-| `presence.changed` | `repo`, `[{id, person, name, color, cursor, selection}]` | to every client, as someone in the workspace moves, selects, arrives or leaves: everyone there now, one per connection (`id`), `person` their key |
+| `presence.changed` | `repo`, `[{id, person, name, color, cursor, selection}]` | to every client, as someone in the workspace moves, selects, arrives or leaves (at once after a quiet spell, and at most every 50 ms): everyone there now, one per connection (`id`), `person` their key |
 
 ## A client that holds the layouts
 

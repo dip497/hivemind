@@ -40,7 +40,7 @@ use tokio::{
 };
 
 use crate::{
-    frames::{read_frame, write_frame},
+    frames::{framed, read_frame, write_frame},
     gate::Gate,
     net::{self, Reach},
     pair,
@@ -173,31 +173,48 @@ impl Daemon {
         let daemon = self.clone();
         let writers = streams.clone();
         tokio::spawn(async move {
-            while let Some((stream, bytes)) = queue.recv().await {
-                let mut open = writers.lock().await;
-                if !open.contains_key(&stream) {
-                    if !dialled {
-                        eprintln!(
-                            "hive-net: no stream {stream} on connection {conn}; frame dropped"
-                        );
-                        continue;
-                    }
-                    match connection.open_bi().await {
-                        Ok((mut send, recv)) => {
-                            if write_frame(&mut send, stream.as_bytes()).await.is_err() {
-                                continue;
-                            }
-                            open.insert(stream.clone(), send);
-                            let reader = daemon.clone();
-                            let name = stream.clone();
-                            tokio::spawn(async move { reader.read_stream(conn, name, recv).await });
+            while let Some(first) = queue.recv().await {
+                // What main sent meanwhile goes in the same write, each stream's frames in order:
+                // one packet for a moment's frames, not one for each.
+                let mut writes: Vec<(String, Vec<u8>)> = Vec::new();
+                let mut next = Some(first);
+                while let Some((stream, bytes)) = next.take() {
+                    if let Ok(frame) = framed(&bytes) {
+                        match writes.iter_mut().find(|(s, _)| *s == stream) {
+                            Some((_, buf)) => buf.extend_from_slice(&frame),
+                            None => writes.push((stream, frame)),
                         }
-                        Err(_) => continue,
                     }
+                    next = queue.try_recv().ok();
                 }
-                let send = open.get_mut(&stream).expect("opened above");
-                if write_frame(send, &bytes).await.is_err() {
-                    open.remove(&stream);
+                let mut open = writers.lock().await;
+                for (stream, bytes) in writes {
+                    if !open.contains_key(&stream) {
+                        if !dialled {
+                            eprintln!(
+                                "hive-net: no stream {stream} on connection {conn}; frame dropped"
+                            );
+                            continue;
+                        }
+                        match connection.open_bi().await {
+                            Ok((mut send, recv)) => {
+                                if write_frame(&mut send, stream.as_bytes()).await.is_err() {
+                                    continue;
+                                }
+                                open.insert(stream.clone(), send);
+                                let reader = daemon.clone();
+                                let name = stream.clone();
+                                tokio::spawn(
+                                    async move { reader.read_stream(conn, name, recv).await },
+                                );
+                            }
+                            Err(_) => continue,
+                        }
+                    }
+                    let send = open.get_mut(&stream).expect("opened above");
+                    if send.write_all(&bytes).await.is_err() {
+                        open.remove(&stream);
+                    }
                 }
             }
         });

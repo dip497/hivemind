@@ -169,10 +169,9 @@ export class Terminals {
     opened.add(from);
     // A session the host starts takes the size it is opened at, until someone sizes it.
     if (!this.sizes.has(tile) && isHost(from) && !opts.attachOnly) this.sizes.set(tile, { cols: opts.cols, rows: opts.rows });
-    // Whoever opens it is told who holds its keyboard, when someone other than the host does, and
-    // its size.
-    const holder = this.keyboards.holder(tile);
-    if (holder) emit(from, "terminal.keyboard", tile, holder);
+    // Whoever opens it is told who holds its keyboard (null: the host), which it may have missed
+    // while away, and its size.
+    emit(from, "terminal.keyboard", tile, this.keyboards.holder(tile));
     const size = this.sizes.get(tile);
     if (size) emit(from, "terminal.size", tile, size.cols, size.rows);
     return this.relay.open(tile, this.viewerOf(from), start, () => this.opts.backend.screen(tile));

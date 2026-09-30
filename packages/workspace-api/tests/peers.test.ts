@@ -13,7 +13,7 @@ import type { Access } from "@hivemind/workspace-host/access";
 import { WorkspaceClient } from "../src/client.ts";
 import { WorkspaceServer, type Connection } from "../src/server.ts";
 import { ApiError } from "../src/protocol.ts";
-import { peerTransport, servePeer, workspaceUrl, type TextChannel } from "../src/peers.ts";
+import { PEER_FRAME_MS, peerTransport, servePeer, workspaceUrl, type TextChannel } from "../src/peers.ts";
 
 let tmp: string;
 beforeEach(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), "peers-")); });
@@ -28,7 +28,12 @@ const domain = {
     "file.read": (from: Connection, repo: unknown, file: unknown) => { ran.push({ what: "file.read", by: from.actor, args: [repo, file] }); return `${String(file)} in ${String(repo)}`; },
     "store.setCore": (from: Connection, repo: unknown) => { ran.push({ what: "store.setCore", by: from.actor, args: [repo] }); },
     "git.commit": (from: Connection, repo: unknown) => { ran.push({ what: "git.commit", by: from.actor, args: [repo] }); return { sha: "x" }; },
-    "terminal.open": (from: Connection, opts: unknown) => { ran.push({ what: "terminal.open", by: from.actor, args: [opts] }); return { pid: 1, joined: false }; },
+    "terminal.open": (from: Connection, opts: unknown) => {
+      ran.push({ what: "terminal.open", by: from.actor, args: [opts] });
+      // Opening a terminal tells the opener its size first, as the host's does.
+      from.send({ event: "terminal.size", params: [(opts as { tileId: string }).tileId, 80, 24] });
+      return { pid: 1, joined: false };
+    },
     "plan.list": (from: Connection, repo: unknown) => { ran.push({ what: "plan.list", by: from.actor, args: [repo] }); return []; },
     "plan.decide": (from: Connection, tile: unknown) => { ran.push({ what: "plan.decide", by: from.actor, args: [tile] }); return { answered: true, by: null }; },
   },
@@ -65,7 +70,7 @@ function connect(access: Access) {
   const actor = { kind: "peer", person: "p".repeat(64), device: "d".repeat(64), access } as const;
   servePeer(server, host, { actor, workspace: W, repo: REPO, holds: (t) => t.startsWith("in-") });
   const client = new WorkspaceClient(peerTransport(guest));
-  return { server, client, close, actor };
+  return { server, client, close, actor, guest };
 }
 const code = async (p: Promise<unknown>) => { try { await p; return "ok"; } catch (e) { return (e as ApiError).code; } };
 
@@ -173,6 +178,58 @@ test("a plan an agent waits on: anyone with access sees those of the workspace; 
   }
   await Bun.sleep(10);
   expect(heard).toEqual(["review in-1", "decided in-1"]);
+});
+
+test("the events of one moment reach a peer as one frame, and each is heard", async () => {
+  const { server, client, guest } = connect("view");
+  const frames: string[] = [];
+  guest.on((text) => frames.push(text));
+  const heard: string[] = [];
+  client.on("terminal.data", (tile, data) => heard.push(`${tile}:${data}`));
+  await client.call("file.read", workspaceUrl(W), "a.ts"); // connected
+  frames.length = 0;
+  for (let n = 0; n < 10; n++) server.publish("terminal.data", `in-${n}`, `out ${n}`);
+  server.publish("terminal.data", "out-1", "secret");
+  await Bun.sleep(10);
+  expect(frames).toHaveLength(1);
+  expect(heard).toEqual(Array.from({ length: 10 }, (_, n) => `in-${n}:out ${n}`));
+  // One event alone is sent as itself.
+  server.publish("terminal.data", "in-1", "alone");
+  await Bun.sleep(PEER_FRAME_MS + 15);
+  expect(JSON.parse(frames[1]!)).toEqual({ event: "terminal.data", params: ["in-1", "alone"] });
+});
+
+test("while events stream a peer is sent a frame at most every 25 ms, each heard; after a quiet spell the next goes at once", async () => {
+  const { server, client, guest } = connect("view");
+  const frames: number[] = [];
+  guest.on(() => frames.push(Date.now()));
+  const heard: string[] = [];
+  client.on("terminal.data", (_tile, data) => heard.push(data));
+  await client.call("file.read", workspaceUrl(W), "a.ts"); // connected
+  await Bun.sleep(PEER_FRAME_MS * 2);
+  frames.length = 0;
+  const start = Date.now();
+  for (let n = 0; n < 20; n++) {
+    server.publish("terminal.data", "in-1", `${n}`);
+    await Bun.sleep(5);
+  }
+  await Bun.sleep(PEER_FRAME_MS * 2);
+  // A hundred milliseconds of output, every 5 ms: four or five frames, not twenty.
+  expect(frames.length).toBeGreaterThanOrEqual(3);
+  expect(frames.length).toBeLessThanOrEqual(7);
+  expect(frames[0]! - start).toBeLessThan(15);
+  expect(heard).toEqual(Array.from({ length: 20 }, (_, n) => `${n}`));
+});
+
+test("an answer comes after the events its call brought", async () => {
+  const driver = connect("agents");
+  const order: string[] = [];
+  driver.client.on("terminal.size", () => order.push("size"));
+  await driver.client.call("file.read", workspaceUrl(W), "a.ts"); // connected
+  driver.server.publish("terminal.data", "in-1", "streaming"); // a frame just went: the next waits its turn
+  await driver.client.call("terminal.open", { tileId: "in-2", cwd: workspaceUrl(W), attachOnly: true } as never);
+  order.push("answer");
+  expect(order).toEqual(["size", "answer"]);
 });
 
 test("a call waiting when the connection goes fails, and the host lets go of the peer", async () => {

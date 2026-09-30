@@ -23,12 +23,20 @@ pub async fn read_frame<R: AsyncRead + Unpin>(r: &mut R) -> Result<Option<Vec<u8
     Ok(Some(buf))
 }
 
-pub async fn write_frame<W: AsyncWrite + Unpin>(w: &mut W, bytes: &[u8]) -> Result<()> {
+/// `bytes` as a frame: its length, then it.
+pub fn framed(bytes: &[u8]) -> Result<Vec<u8>> {
     if bytes.len() > MAX_FRAME {
         bail!("a frame of {} bytes is over the limit", bytes.len());
     }
-    w.write_all(&(bytes.len() as u32).to_be_bytes()).await?;
-    w.write_all(bytes).await?;
+    let mut frame = Vec::with_capacity(4 + bytes.len());
+    frame.extend_from_slice(&(bytes.len() as u32).to_be_bytes());
+    frame.extend_from_slice(bytes);
+    Ok(frame)
+}
+
+/// One write per frame: on a QUIC stream each write can be a packet of its own.
+pub async fn write_frame<W: AsyncWrite + Unpin>(w: &mut W, bytes: &[u8]) -> Result<()> {
+    w.write_all(&framed(bytes)?).await?;
     w.flush().await?;
     Ok(())
 }
