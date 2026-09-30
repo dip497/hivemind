@@ -71,7 +71,7 @@ const NoteNode = memo(function NoteNode({ id, data, selected }: BoxNodeProps<Not
         {editing
           ? <TextArea value={o.text} of={o} autoFocus aria-label="note text" placeholder="Write something"
               className="h-full w-full text-[14px] leading-snug placeholder:opacity-50"
-              onCommit={(text) => board.update(id, (x) => (x.kind === "note" ? { ...x, text } : x))} />
+              onCommit={(edit) => board.update(id, (x) => (x.kind === "note" ? { ...x, text: edit(x.text) } : x))} />
           : <div className="h-full w-full overflow-hidden whitespace-pre-wrap break-words text-[14px] leading-snug" data-board-text>
               {o.text || <span className="opacity-50">Write something</span>}
             </div>}
@@ -90,7 +90,7 @@ const TextNode = memo(function TextNode({ id, data, selected }: BoxNodeProps<Tex
         {editing
           ? <TextArea value={o.text} of={o} autoFocus aria-label="text" placeholder="Text"
               className="h-full w-full text-[20px] font-semibold leading-tight placeholder:opacity-50"
-              onCommit={(text) => board.update(id, (x) => (x.kind === "text" ? { ...x, text } : x))} />
+              onCommit={(edit) => board.update(id, (x) => (x.kind === "text" ? { ...x, text: edit(x.text) } : x))} />
           : <div className="h-full w-full overflow-hidden whitespace-pre-wrap break-words text-[20px] font-semibold leading-tight" data-board-text>
               {o.text || <span className="opacity-50">Text</span>}
             </div>}
@@ -152,7 +152,7 @@ const ChecklistNode = memo(function ChecklistNode({ id, data, selected }: BoxNod
         {editing
           ? <TextLine value={o.text} of={o} autoFocus={focusLine === null} aria-label="checklist title" placeholder="Checklist"
               className="text-[13px] font-semibold"
-              onCommit={(text) => board.update(id, (x) => (x.kind === "checklist" ? { ...x, text } : x))}
+              onCommit={(edit) => board.update(id, (x) => (x.kind === "checklist" ? { ...x, text: edit(x.text) } : x))}
               onKey={(e, commit) => {
                 if (e.key !== "Enter") return false;
                 e.preventDefault();
@@ -176,7 +176,7 @@ const ChecklistNode = memo(function ChecklistNode({ id, data, selected }: BoxNod
               </button>
               {editing
                 ? <TextLine value={item.text} of={item} autoFocus={focusLine === item.id} aria-label="item" className="flex-1 text-[13px]"
-                    onCommit={(text) => setItems((items) => items.map((it) => (it.id === item.id ? { ...it, text } : it)))}
+                    onCommit={(edit) => setItems((items) => items.map((it) => (it.id === item.id ? { ...it, text: edit(it.text) } : it)))}
                     onKey={(e, commit) => {
                       if (e.key === "Enter") { e.preventDefault(); commit(); addAfter(index); return true; }
                       if (e.key === "Backspace" && e.currentTarget.value === "") {

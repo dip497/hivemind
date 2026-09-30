@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: two people writing in the same sticky note, checklist, text or arrow label at once no longer lose each other's words: what each typed is merged into the text as it is when they pause, where one of them used to put back the whole text they had.
 - New: invite people on other networks. On a network with its own servers, an invite link carries what their computer needs to get onto it, and once you let them in your computer vouches for theirs. On the local network, **Share → Invite someone elsewhere…** asks how to reach them: hivemind's servers, your own (a network link), or not now.
 - New: **Settings → Network**. A fresh install is on the **Local network**: devices find each other where they are, and nothing leaves it. **Change…** puts this computer on hivemind's servers or on a network someone runs (paste its network link, signed by its admin); **Check** says whether its relays answer. `hive network show | use | doctor` does the same from a terminal. For people who run a network: `hive-net serve --relay --access` admits only the devices you enrol or vouch for (`hive-net access …`), or any that register with a little work.
 - New: the update check can be turned off (Settings → Network → Updates); off, the app asks nothing of GitHub or of the plugin catalog (whose check for new agents at each launch it also covers), and About says so. With it off, a fresh install on the local network reaches nothing outside it.

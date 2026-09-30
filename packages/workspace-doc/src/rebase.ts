@@ -10,6 +10,7 @@
  * so it merges them one by one. A view's layout and the board are written and read the same way.
  */
 import { isObject, type Fields } from "./input.js";
+import { mergeText } from "./text-merge.js";
 import type { CoreLayout, ViewLayout } from "./shapes.js";
 
 type Layout = Required<CoreLayout>;
@@ -30,7 +31,12 @@ export function rebaseCore(base: Layout, next: Layout, current: Layout): Layout 
  * removed goes; one another writer removed since stays gone; one another writer added since
  * stays. In the writer's order, then what others added.
  */
-export function rebaseRecords<T extends { id: string }>(base: readonly T[], next: readonly T[], current: readonly T[]): T[] {
+export function rebaseRecords<T extends { id: string }>(
+  base: readonly T[],
+  next: readonly T[],
+  current: readonly T[],
+  merge: (before: T, mine: T, theirs: T) => T = (before, mine, theirs) => rebaseFields(before as unknown as Fields, mine as unknown as Fields, theirs as unknown as Fields) as unknown as T,
+): T[] {
   const was = new Map(base.map((r) => [r.id, r]));
   const now = new Map(current.map((r) => [r.id, r]));
   const out: T[] = [];
@@ -38,7 +44,7 @@ export function rebaseRecords<T extends { id: string }>(base: readonly T[], next
     const before = was.get(record.id);
     const theirs = now.get(record.id);
     if (!before) out.push(record);
-    else if (theirs) out.push(rebaseFields(before as unknown as Fields, record as unknown as Fields, theirs as unknown as Fields) as unknown as T);
+    else if (theirs) out.push(merge(before, record, theirs));
   }
   const known = new Set([...was.keys(), ...next.map((r) => r.id)]);
   for (const record of current) if (!known.has(record.id)) out.push(record);
@@ -61,6 +67,30 @@ export function rebaseFields<T extends Fields>(base: T, next: T, current: T, dep
     else out[key] = mine;
   }
   return out as T;
+}
+
+/**
+ * The board: its objects by id, as records; each object's text and label merged with what
+ * someone else typed since (`mergeText`), so two people writing in one note both keep their
+ * characters; a checklist's items by id, each item's text merged the same way.
+ */
+export function rebaseBoard<T extends { id: string }>(base: readonly T[], next: readonly T[], current: readonly T[]): T[] {
+  return rebaseRecords(base, next, current, (before, mine, theirs) => mergeRecord(before as Fields, mine as Fields, theirs as Fields) as T);
+}
+
+const TEXTS = ["text", "label"];
+
+function mergeRecord(before: Fields, mine: Fields, theirs: Fields): Fields {
+  const out = rebaseFields(before, mine, theirs);
+  for (const key of TEXTS) {
+    const [b, m, t] = [before[key], mine[key], theirs[key]];
+    if (typeof b === "string" && typeof m === "string" && typeof t === "string") out[key] = mergeText(b, m, t);
+  }
+  const [bi, mi, ti] = [before.items, mine.items, theirs.items];
+  if (Array.isArray(bi) && Array.isArray(mi) && Array.isArray(ti) && !sameJson(bi, mi)) {
+    out.items = rebaseRecords(bi as { id: string }[], mi as { id: string }[], ti as { id: string }[], (b, m, t) => mergeRecord(b as Fields, m as Fields, t as Fields) as { id: string });
+  }
+  return out;
 }
 
 /**

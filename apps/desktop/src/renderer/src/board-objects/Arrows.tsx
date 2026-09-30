@@ -89,7 +89,7 @@ function ArrowLabel({ arrow }: { arrow: ArrowObject }) {
       data-arrow-label={arrow.id} onDoubleClick={() => board.edit(arrow.id)}>
       {editing
         ? <TextLine value={arrow.label} of={arrow} autoFocus aria-label="arrow label" placeholder="Label" className="w-32"
-            onCommit={(label) => board.update(arrow.id, (x) => (x.kind === "arrow" ? { ...x, label } : x))}
+            onCommit={(edit) => board.update(arrow.id, (x) => (x.kind === "arrow" ? { ...x, label: edit(x.label) } : x))}
             onKey={(e, commit) => {
               if (e.key !== "Enter") return false;
               e.preventDefault();

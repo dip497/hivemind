@@ -2,7 +2,9 @@
  * Writing in a board object: the text is a draft here while you type, and reaches the board when
  * you stop for a moment, leave the field or ask to undo, so a keystroke re-renders this field
  * alone. What the board holds replaces the draft whenever the draft has nothing unsaved and the
- * board is read again (an undo, a redo). ⌘Z and ⌘⇧Z are the board's here, not the field's own, so
+ * board is read again (an undo, a redo, someone else's writing). What reaches the board is what
+ * was typed here, made to the text as the board holds it then (`mergeText`, from the text the
+ * draft began with): someone else writing in the same text meanwhile keeps their words (§4.4). ⌘Z and ⌘⇧Z are the board's here, not the field's own, so
  * they take back what you typed the way they take back every other board edit. Leaving the object
  * ends the writing.
  *
@@ -11,6 +13,7 @@
  * before it has focus would be lost, or be a canvas shortcut.
  */
 import { useEffect, useLayoutEffect, useRef, useState, type FocusEvent, type KeyboardEvent } from "react";
+import { mergeText } from "@hivemind/workspace-doc/text-merge";
 import { useBoardContext } from "./board-context";
 
 const IDLE_MS = 400;
@@ -20,7 +23,8 @@ interface DraftProps {
   value: string;
   /** What `value` was read from (the object, the item): a new one is a new reading of the board. */
   of: object;
-  onCommit: (text: string) => void;
+  /** What was typed: given the text as it is now, the text with it made. */
+  onCommit: (edit: (now: string) => string) => void;
   /** Keys the field handles before the defaults: return true when handled. */
   onKey?: (e: KeyboardEvent<HTMLTextAreaElement | HTMLInputElement>, commit: () => void) => boolean;
   autoFocus?: boolean;
@@ -34,10 +38,16 @@ function useDraft<E extends HTMLTextAreaElement | HTMLInputElement>({ value, of,
   const board = useBoardContext();
   const [draft, setDraft] = useState(value);
   const dirty = useRef(false);
+  /** The text the draft began with: what was typed is the change from it. */
+  const began = useRef(value);
   const ref = useRef<E>(null);
   // On `of`, not only `value`: undoing what was typed here gives back the very text last shown,
   // and the draft still holds what was typed.
-  useEffect(() => { if (!dirty.current) setDraft(value); }, [value, of]);
+  useEffect(() => {
+    if (dirty.current) return;
+    setDraft(value);
+    began.current = value;
+  }, [value, of]);
   useLayoutEffect(() => {
     if (!autoFocus) return undefined;
     let frame = 0;
@@ -55,7 +65,9 @@ function useDraft<E extends HTMLTextAreaElement | HTMLInputElement>({ value, of,
   commitRef.current = () => {
     if (!dirty.current) return;
     dirty.current = false;
-    onCommit(draft);
+    const [from, typed] = [began.current, draft];
+    onCommit((now) => mergeText(from, typed, now));
+    began.current = typed;
   };
   useEffect(() => {
     if (!dirty.current) return undefined;

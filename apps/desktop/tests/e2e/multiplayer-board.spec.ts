@@ -64,3 +64,26 @@ test("each sees where the other is: the guest's pointer, named, and the tile the
   await expect(cursor).toHaveCount(0, { timeout: 10_000 });
   await expect(host.locator(`[data-people-here] [data-person="${me.personId}"]`)).toBeVisible();
 });
+
+test("two people typing in one note at once both keep what they typed, and end with the same text", async () => {
+  test.skip(!hiveNetBuilt(), "build hive-net first: cargo build in crates/hive-net");
+  const { host, guest } = await sharedWorkspace("edit");
+  await note(host, "shared");
+  await expect.poll(() => notes(guest), { timeout: 10_000 }).toEqual(["shared"]);
+  const open = async (w: typeof host) => {
+    await w.locator(".react-flow__node-note [data-board-text]").dblclick();
+    await w.keyboard.press("End");
+  };
+  await open(host);
+  await open(guest);
+  // The guest is still typing (nothing saved yet) when the host's words arrive.
+  const guestTyping = guest.keyboard.type(" guestword", { delay: 250 });
+  await host.keyboard.type(" hostword", { delay: 20 });
+  await host.keyboard.press("Escape");
+  await guestTyping;
+  await guest.keyboard.press("Escape");
+  const both = (texts: string[]) => texts.length === 1 && texts[0]!.includes("hostword") && texts[0]!.includes("guestword") && texts[0]!.startsWith("shared");
+  await expect.poll(async () => both(await notes(host)), { timeout: 10_000 }).toBe(true);
+  await expect.poll(async () => both(await notes(guest)), { timeout: 10_000 }).toBe(true);
+  expect(await notes(guest)).toEqual(await notes(host));
+});

@@ -14,7 +14,7 @@ import type { LoroDoc, LoroMap } from "loro-crdt";
 import { isContainer, isMap, writeFields } from "./fields.js";
 import { firstOfEachId, isObject, type Fields } from "./input.js";
 import { readOrder, writeOrder } from "./order.js";
-import { rebaseRecords } from "./rebase.js";
+import { rebaseBoard } from "./rebase.js";
 import { OBJECTS, stampSchema } from "./schema.js";
 import { BOARD_OBJECT_KINDS, SIDES, type BoardObject, type ChecklistItem } from "./shapes.js";
 
@@ -34,7 +34,7 @@ const ITEM_CONTAINERS: ReadonlySet<string> = new Set([TEXT]);
  */
 export function writeObjects(doc: LoroDoc, value: unknown, base?: unknown): void {
   const next = toBoard(value);
-  const board = base === undefined ? next : rebaseRecords(base === null ? [] : toBoard(base), next, readObjects(doc));
+  const board = base === undefined ? next : rebaseBoard(base === null ? [] : toBoard(base), next, readObjects(doc));
   stampSchema(doc);
   const objects = doc.getMap(OBJECTS);
   const kept = new Set<string>();

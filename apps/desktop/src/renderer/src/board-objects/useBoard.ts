@@ -6,7 +6,7 @@
  * to undo and redo board edits. What an edit does to the board is board-model's; this holds it.
  */
 import { useCallback, useMemo, useRef, useState, type MutableRefObject } from "react";
-import { rebaseRecords } from "@hivemind/workspace-doc/rebase";
+import { rebaseBoard } from "@hivemind/workspace-doc/rebase";
 import type { BoardObject } from "@hivemind/workspace-doc/shapes";
 import { mintId } from "../../../shared/tile-id";
 import type { FrameState } from "../canvas-persistence";
@@ -65,7 +65,7 @@ export interface Board {
  */
 export function reloadBoardObjects(repo: string, frames: FrameState[]): (mine: BoardObject[]) => BoardObject[] {
   const { base, board } = rereadBoard(repo);
-  return (mine) => toCanvas(rebaseRecords(base, toStored(mine, frames), board), frames);
+  return (mine) => toCanvas(rebaseBoard(base, toStored(mine, frames), board), frames);
 }
 
 export function useBoard({ persistKey, frames, framesRef, onSelect }: {
