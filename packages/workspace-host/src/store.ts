@@ -26,7 +26,7 @@
 import { UndoManager, type LoroDoc } from "loro-crdt";
 import { addTile, hasCore, holdsTile, readCore, removeTile, writeCore, writeTileName } from "@hivemind/workspace-doc/core";
 import { readObjects, writeObjects } from "@hivemind/workspace-doc/objects";
-import { readView, writeView } from "@hivemind/workspace-doc/views";
+import { readView, readViews, writeView } from "@hivemind/workspace-doc/views";
 import { stampSchema } from "@hivemind/workspace-doc/schema";
 import type { BoardObject, CoreLayout, TileRecord, ViewLayout } from "@hivemind/workspace-doc/shapes";
 import type { LegacyLayout, WorkspaceChange } from "./layout.js";
@@ -77,6 +77,11 @@ export class WorkspaceStore {
   /** One view's layout, or null. A fresh copy each call. */
   getView(repo: string, viewId: string): ViewLayout | null {
     return readView(this.workspace(repo).doc, viewId);
+  }
+
+  /** Every view's layout, by view id. A fresh copy each call. */
+  getViews(repo: string): Record<string, ViewLayout> {
+    return readViews(this.workspace(repo).doc);
   }
 
   /** The board's objects, or none. A fresh copy each call. */

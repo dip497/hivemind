@@ -37,6 +37,16 @@ export function readView(doc: LoroDoc, viewId: string): ViewLayout | null {
   return isViewLayout(layout) ? layout : null;
 }
 
+/** Every view's layout in `doc`, by view id. */
+export function readViews(doc: LoroDoc): Record<string, ViewLayout> {
+  const views: Record<string, ViewLayout> = {};
+  for (const viewId of doc.getMap(VIEWS).keys()) {
+    const layout = readView(doc, viewId);
+    if (layout) views[viewId] = layout;
+  }
+  return views;
+}
+
 function isViewId(x: unknown): x is string {
   return typeof x === "string" && x.length > 0 && x.length <= MAX_VIEW_ID;
 }

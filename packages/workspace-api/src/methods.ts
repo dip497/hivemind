@@ -8,6 +8,15 @@ import type { ReviewComment } from "@hivemind/core/review";
 import type { DiffPayload, DiffScope, GitBranchList, GitRevision, GitStatusSnapshot, WorktreeCreateOpts, WorktreeEntry } from "./git.js";
 import type { Links, PipeChange, SpawnChange, StatusChange, TileOpened } from "./agents.js";
 import type { ActivityLevels, ExitInfo, TerminalOpts } from "./terminals.js";
+import type { BoardObject, CoreLayout, ViewLayout } from "@hivemind/workspace-doc/shapes";
+import type { LegacyLayout, WorkspaceChange } from "@hivemind/workspace-host/layout";
+
+/** A workspace's layouts as a client that holds them opens it. */
+export interface StoreSnapshot {
+  core: CoreLayout | null;
+  views: Record<string, ViewLayout>;
+  objects: BoardObject[];
+}
 
 export interface WorkspaceMethods {
   "git.status": (repo: string) => GitStatusSnapshot;
@@ -58,6 +67,22 @@ export interface WorkspaceMethods {
   /** Show a terminal: the first to open a session starts it; one that opens it after joins it,
    *  its screen first. `joined`: another client started it. Its output and exit are events. */
   "terminal.open": (opts: TerminalOpts) => { pid: number; joined: boolean };
+  /** A workspace's layouts, for a client that holds them: every read after it answers from what
+   *  it holds, and each `store.changed` says what to read again. */
+  "store.open": (repo: string) => StoreSnapshot;
+  "store.core": (repo: string) => CoreLayout | null;
+  "store.view": (repo: string, viewId: string) => ViewLayout | null;
+  "store.objects": (repo: string) => BoardObject[];
+  /** Each write names the layout it was made from (`base`; null: none was read), so only what
+   *  the client changed is written and another writer's change is kept. */
+  "store.setCore": (repo: string, core: unknown, base?: unknown) => void;
+  "store.setView": (repo: string, viewId: string, layout: ViewLayout, base?: ViewLayout | null) => void;
+  "store.setObjects": (repo: string, objects: BoardObject[], base?: BoardObject[] | null) => void;
+  /** What a client kept before the store: the store keeps only what it lacks. */
+  "store.import": (repo: string, legacy: LegacyLayout) => void;
+  /** Take back the client's last board edit, or make it again: whether there was one. */
+  "store.undo": (repo: string) => boolean;
+  "store.redo": (repo: string) => boolean;
 }
 
 /** What a client tells a host and asks no answer to: a host never answers a notice. */
@@ -79,6 +104,8 @@ export interface WorkspaceNotices {
   "terminal.detach": (tile: string) => void;
   /** The terminals whose activity the client wants (`terminal.activity`). */
   "terminal.watchActivity": (tiles: string[]) => void;
+  /** The workspace the client shows now (null: none), and the frame its user is in there. */
+  "store.shown": (repo: string | null, frame: string | null) => void;
 }
 
 /** What a host sends each client it holds a connection to, unasked. */
@@ -95,6 +122,8 @@ export interface WorkspaceEvents {
   "terminal.activity": (levels: ActivityLevels) => void;
   /** Files changed in a repo the client watches (at most one event every 300 ms). */
   "file.changed": (repo: string, change: { paths: string[] }) => void;
+  /** Another writer changed a workspace's layouts: `part` is `core`, `board` or `view:<id>`. */
+  "store.changed": (change: Pick<WorkspaceChange, "repo" | "part">) => void;
 }
 
 export type Method = keyof WorkspaceMethods;

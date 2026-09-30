@@ -1,89 +1,48 @@
 /**
- * Main's side of the workspace store (docs/design/multiplayer-2026-09-28.md, R1, R5, R15): the
- * app's one `WorkspaceStore`, under `<userData>/workspaces`, the synchronous IPC the window uses,
- * telling each window what another writer changed, and knowing which workspace each window
- * shows (for the control plane, when its caller is in no tile).
- *
- * Only transport lives here. The store checks every argument and writes each change through,
- * so a handler forwards what it was sent and always answers: a synchronous request left
- * unanswered would hang the window. A window writes as `window:<its web contents' id>`, and
- * main's own writers (the control plane) as themselves; every window but the writer hears of a
- * change, and one not showing that workspace ignores it. A window that closes is forgotten: what
- * it showed, and its board history. `flushWorkspaceStore` retries failed writes on quit, because
- * `app.exit` skips every later handler.
+ * The workspace store on Electron (docs/design/multiplayer-2026-09-28.md, R1, R5, R15, R8): the
+ * app's one `WorkspaceStore`, under `<userData>/workspaces`, and the synchronous channels a
+ * window reads and writes it on, so it builds its first state in one pass and a save made while
+ * it unloads is kept. What each channel answers is the workspace API's (`workspace/store.ts`), as
+ * the window's own connection: a window writes as itself, and every other window is told of its
+ * change (`store.changed`). A channel always answers, null for what the API refuses, because a
+ * synchronous request left unanswered would hang the window. `flushWorkspaceStore` retries failed
+ * writes on quit, because `app.exit` skips every later handler.
  */
 import path from "node:path";
-import { app, BrowserWindow, type IpcMainEvent, type WebContents } from "electron";
-import { answer, on } from "./app-ipc.js";
-import { WorkspaceStore, type LegacyLayout, type ViewLayout } from "@hivemind/workspace-host/store";
+import { app, type IpcMainEvent, type WebContents } from "electron";
+import type { Connection } from "@hivemind/workspace-api/server";
+import { WorkspaceStore, type WorkspaceChange } from "@hivemind/workspace-host/store";
+import { answer } from "./app-ipc.js";
+import type { Layouts } from "./workspace/store.js";
 
 let store: WorkspaceStore | null = null;
-/** The workspace each window shows, and the frame the user is in there, by its web contents' id. */
-const shown = new Map<number, { repo: string; frame: string | null }>();
-/** Windows whose closing is watched, by their web contents' id. */
-const watched = new Set<number>();
+/** Who hears of each change: set when the channels are installed. */
+let tell: (change: WorkspaceChange) => void = () => {};
 
-const writerOf = (wc: WebContents): string => `window:${wc.id}`;
-
-/** Forget a window once it closes: what it showed, and its board history (its id never comes back). */
-function watch(wc: WebContents): void {
-  const id = wc.id;
-  if (watched.has(id)) return;
-  watched.add(id);
-  const writer = writerOf(wc);
-  wc.once("destroyed", () => {
-    watched.delete(id);
-    shown.delete(id);
-    store?.forgetWriter(writer);
-  });
-}
-
-/** The app's one store: the window's, through the IPC below, and main's own writers'. */
+/** The app's one store: the windows', and main's own writers' (the control plane). */
 export function workspaceStore(): WorkspaceStore {
   return (store ??= new WorkspaceStore({
     dir: path.join(app.getPath("userData"), "workspaces"),
     onWarn: (m) => console.warn(`[workspace-store] ${m}`),
-    onChange: ({ repo, part, writer }) => {
-      for (const w of BrowserWindow.getAllWindows()) {
-        if (w.isDestroyed() || writerOf(w.webContents) === writer) continue;
-        try { w.webContents.send("workspace:changed", { repo, part }); } catch { /* torn down */ }
-      }
-    },
+    onChange: (change) => tell(change),
   }));
 }
 
-export function installWorkspaceStoreIpc(): void {
-  const s = workspaceStore();
-  const from = (e: IpcMainEvent) => { watch(e.sender); return { writer: writerOf(e.sender) }; };
-  // Cast, not checked: the store refuses a bad argument with a TypeError.
-  answer("workspace:core-sync", (_e, repo) => s.getCore(repo as string));
-  answer("workspace:view-sync", (_e, repo, viewId) => s.getView(repo as string, viewId as string));
-  answer("workspace:set-core-sync", (e, repo, core, base) => s.setCore(repo as string, core, { ...from(e), base }));
-  answer("workspace:set-view-sync", (e, repo, viewId, layout, base) => s.setView(repo as string, viewId as string, layout as ViewLayout, { ...from(e), base }));
-  answer("workspace:import-sync", (_e, repo, legacy) => s.importLegacy(repo as string, legacy as LegacyLayout));
-  answer("workspace:objects-sync", (_e, repo) => s.getObjects(repo as string));
-  answer("workspace:set-objects-sync", (e, repo, objects, base) => s.setObjects(repo as string, objects, { ...from(e), base }));
-  answer("workspace:undo-sync", (e, repo) => s.undo(repo as string, from(e)));
-  answer("workspace:redo-sync", (e, repo) => s.redo(repo as string, from(e)));
-  on("workspace:shown", (e, repo: unknown, frame: unknown) => {
-    const id = e.sender.id;
-    watch(e.sender);
-    if (typeof repo === "string" && repo) shown.set(id, { repo, frame: typeof frame === "string" && frame ? frame : null });
-    else shown.delete(id);
-  });
-}
-
-/** The workspace the window with this page shows, or null. */
-export function workspaceShownBy(wc: WebContents): string | null {
-  return shown.get(wc.id)?.repo ?? null;
-}
-
-/** The workspace the window the user is at shows, and the frame the user is in there: the
- *  focused window's, else any window's. */
-export function shownWorkspace(): { repo: string; frame: string | null } | null {
-  const focused = BrowserWindow.getFocusedWindow();
-  const mine = focused ? shown.get(focused.webContents.id) : undefined;
-  return mine ?? shown.values().next().value ?? null;
+/** Serve the store's synchronous channels from `layouts`, each window as its `connection`, and
+ *  hand each change the store makes to `changed`. */
+export function installWorkspaceStoreIpc(layouts: Layouts, connection: (window: WebContents) => Connection, changed: (change: WorkspaceChange) => void): void {
+  tell = changed;
+  const { answers } = layouts.domain;
+  const as = (e: IpcMainEvent) => connection(e.sender);
+  answer("workspace:core-sync", (e, repo) => answers["store.core"](as(e), repo));
+  answer("workspace:view-sync", (e, repo, viewId) => answers["store.view"](as(e), repo, viewId));
+  answer("workspace:objects-sync", (e, repo) => answers["store.objects"](as(e), repo));
+  answer("workspace:set-core-sync", (e, repo, core, base) => answers["store.setCore"](as(e), repo, core, base));
+  answer("workspace:set-view-sync", (e, repo, viewId, layout, base) => answers["store.setView"](as(e), repo, viewId, layout, base));
+  answer("workspace:set-objects-sync", (e, repo, objects, base) => answers["store.setObjects"](as(e), repo, objects, base));
+  answer("workspace:import-sync", (e, repo, legacy) => answers["store.import"](as(e), repo, legacy));
+  answer("workspace:undo-sync", (e, repo) => answers["store.undo"](as(e), repo));
+  answer("workspace:redo-sync", (e, repo) => answers["store.redo"](as(e), repo));
 }
 
 /** Retry writes that failed. Safe to call more than once, and before the store exists. */

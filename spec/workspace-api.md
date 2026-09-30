@@ -113,8 +113,24 @@ log.
 | `link.list` | | `{pipes: [{src, dst}], spawns: [{parent, child}]}` | read |
 | `terminal.open` | `{tileId, cwd, cmd, args?, cols, rows, env?, initialPrompt?, attachOnly?, liveOnly?}` | `{pid, joined}`: the first client to open a session starts it; one that opens it after joins it (`joined`), sent the host's screen of it first | target the tile, detail the program, when it starts a session the host did not ask for itself and the client did not only attach to |
 
+| `store.open` | `repo` | `{core, views: {[viewId]: layout}, objects}`: a workspace's layouts, for a client that holds them | read |
+| `store.core` | `repo` | the core layout (frames, tiles, their names), or null | read |
+| `store.view` | `repo`, `viewId` | `{v, data}`, or null | read |
+| `store.objects` | `repo` | the board's objects | read |
+| `store.setCore` | `repo`, `core`, `base`? | `null` | not an intent: the document's own edit, by its writer |
+| `store.setView` | `repo`, `viewId`, `{v, data}`, `base`? | `null` | likewise |
+| `store.setObjects` | `repo`, `objects`, `base`? | `null` | likewise |
+| `store.import` | `repo`, `{core?, views?}` | `null`: what the client kept before the store; the host keeps only what it lacks | likewise |
+| `store.undo` | `repo` | whether the client's last board edit was taken back | likewise |
+| `store.redo` | `repo` | whether it was made again | likewise |
+
 A terminal is named by its session id, `hm:<tile>`; the audit log names it by its tile. `pid` is -1
 when `attachOnly` finds no session.
+
+Each client writes the store as a writer of its own, one per connection: a write names the layout
+it was made from (`base`; null: none was read), so the host writes only what that client changed
+and keeps another writer's change; `store.undo` takes back that client's own board edits only. A
+layout the store cannot hold is `BAD_REQUEST`.
 
 ## Notices
 
@@ -127,6 +143,7 @@ when `attachOnly` finds no session.
 | `terminal.close` | `tile` | ends the session for good; recorded (target the tile) unless it had already ended |
 | `terminal.detach` | `tile` | the client shows it no more; a session no client shows is let go of (a daemon keeps it running, one the host runs itself ends) |
 | `terminal.watchActivity` | `tiles` | the terminals whose activity the client is sent (`terminal.activity`), at most 1024 |
+| `store.shown` | `repo` or null, `frame` or null | the workspace the client shows now, and the frame its user is in there (the control plane opens a tile there) |
 
 A diff's `scope` is one of `{"kind": "working", "staged"?}`, `{"kind": "branch", "base"?,
 "head"?}` (what `head`, HEAD by default, adds since it left `base`), `{"kind": "unpushed",
@@ -144,10 +161,32 @@ A diff's `scope` is one of `{"kind": "working", "staged"?}`, `{"kind": "branch",
 | `terminal.exit` | `tile`, `{code, signal?}` | to each client that showed it, as its session ends |
 | `terminal.activity` | `{[tile]: 0..3}` | to every client, as watched terminals' output gets busier or quieter |
 | `file.changed` | `repo`, `{paths}` | to each client watching the repo (the app's window watches the one it opens), at most one every 300 ms |
+| `store.changed` | `{repo, part}` (`core`, `board` or `view:<id>`) | to every client but the one whose write it was, on each change to a workspace's layouts |
+
+## A client that holds the layouts
+
+A window over Electron reads and writes the store synchronously, on `sendSync` channels
+(`workspace:core-sync`, `workspace:set-core-sync`, …) that answer what `store.*` answers. A client
+over anything slower holds the layouts of each workspace it opens (`store.open`) and answers its
+own reads from them, so it never waits on the network to draw:
+
+- A write changes what it holds at once, and goes to the host after every earlier one, with its
+  `base`.
+- On `store.changed` it reads that part again once its own earlier writes have landed, so what it
+  holds has both; and if it writes that part again while the reading is on its way, the reading is
+  thrown away and made again after the write. It tells its window of the change only once it holds
+  it.
+- An undo or redo answers false at once; when the host took something back, the board is read
+  again and arrives as a change.
+- A read of a workspace it has not opened answers nothing and opens it; its parts then arrive as
+  changes.
+
+TypeScript: `StoreReplica` (`packages/workspace-api/src/store-replica.ts`).
 
 ## Implementations
 
 TypeScript: `packages/workspace-api` (the methods' types, a client over any transport, and the
-server that answers them); the host's domains in `apps/desktop/src/main/workspace/` (git and
-worktrees, files, issues, reviews, agents, terminals), which the app's main process and the
-dev-bridge both serve, each over its own way of running a session.
+server that answers them, and a replica of the store for a client over a stream); the host's
+domains in `apps/desktop/src/main/workspace/` (git and worktrees, files, issues, reviews, agents,
+terminals, the store), which the app's main process and the dev-bridge both serve, each over its
+own way of running a session and its own store.

@@ -322,6 +322,15 @@ exactly as today. They are ordered by dependency.
   `ptyKill`. File changes are events over the connection that watches the repo; the window's
   watch still starts where it did, so no new watchers appear, and a peer will ask for one with a
   `file.watch` when it needs it.
+- **Decided while building it, step 4 (2026-09-30).** A window over Electron keeps reading the
+  store synchronously: the channels answer from the store's API domain, as the window's
+  connection, so there is one owner of what a write means and who hears of it. A client over a
+  stream holds what it opened instead (`StoreReplica`), since it cannot read in the same tick; its
+  rules are the spec's, written for the next implementation (a Rust client, the phone), and M1
+  replaces the whole of it with a Loro replica syncing on `hive/ws/1`. A writer is a connection,
+  not a window: the store's history per writer then works for any client. The dev-bridge's page
+  became a bundled TypeScript client so it can use the package's client and replica rather than
+  a copy of them in a string.
 
 ### R9. Machines by id, not by ssh uri
 

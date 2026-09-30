@@ -76,7 +76,7 @@ import { holderOf, readOrCreateToken, hcpSockPath } from "@hivemind/agent-host/h
 import { HcpError } from "./hcp/protocol.js";
 import { handleViewProtocol, listViewPackages, registerViewScheme, startViewWatchdog } from "./view-packages.js";
 import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, settingsFile, settingsBusy, settingsSettled } from "./settings-store.js";
-import { flushWorkspaceStore, installWorkspaceStoreIpc, shownWorkspace, workspaceShownBy, workspaceStore } from "./workspace-store-ipc.js";
+import { flushWorkspaceStore, installWorkspaceStoreIpc, workspaceStore } from "./workspace-store-ipc.js";
 import { appWindowOf, broadcast, openWindows, registerWindow, userWindow } from "./windows.js";
 import { patchSettingsExtras } from "@hivemind/core/settings";
 import { PipeManager } from "./hcp/pipes.js";
@@ -87,6 +87,7 @@ import { WorkspaceServer, named } from "@hivemind/workspace-api/server";
 import { workspaceDomains } from "./workspace/domains.js";
 import { agents } from "./workspace/agents.js";
 import { Terminals, type SessionOutput } from "./workspace/terminals.js";
+import { Layouts, type Shown } from "./workspace/store.js";
 import type { TerminalOpts } from "@hivemind/workspace-api/terminals";
 import { serveWorkspaceApi } from "./workspace-ipc.js";
 import { fileIn } from "./workspace/repo-paths.js";
@@ -1123,11 +1124,15 @@ async function startSession(opts: TerminalOpts, out: SessionOutput): Promise<{ p
   return spawnPty(opts, callbacks);
 }
 
+/** The workspace store, through the workspace API: each window writes as itself. */
+const layouts = new Layouts(workspaceStore);
+
 // The workspace API (R8): git and worktrees, files, issues, review comments, agents' status and
-// links, and terminals. Each window is a connection to it (workspace-ipc.ts), which is answered as
-// the person at the window, and sent its events.
+// links, terminals and the store. Each window is a connection to it (workspace-ipc.ts), which is
+// answered as the person at the window, and sent its events.
 const workspaceServer = new WorkspaceServer([
   ...workspaceDomains,
+  layouts.domain,
   agents({
     statuses: () => hcpStatus.all(),
     links: () => ({
@@ -1138,6 +1143,19 @@ const workspaceServer = new WorkspaceServer([
   terminals.domain,
 ], hostIntents(), (m) => console.warn(`[workspace] ${m}`));
 const workspaceIpc = serveWorkspaceApi(workspaceServer);
+
+/** The workspace a window shows, or null. */
+const workspaceShownBy = (wc: WebContents): string | null => {
+  const connection = workspaceIpc.find(wc);
+  return (connection && layouts.shownBy(connection)?.repo) ?? null;
+};
+/** The workspace the window the user is at shows, and the frame the user is in there: the
+ *  focused window's, else any window's. */
+function shownWorkspace(): Shown | null {
+  const focused = BrowserWindow.getFocusedWindow();
+  const connection = focused ? workspaceIpc.find(focused.webContents) : undefined;
+  return (connection && layouts.shownBy(connection)) ?? layouts.anyShown();
+}
 
 // ── lifecycle ─────────────────────────────────────────────────
 
@@ -1283,7 +1301,8 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     refreshWindowsStartMenuShortcut();
     handleViewProtocol();
     installSettingsIpc(broadcast);
-    installWorkspaceStoreIpc();
+    installWorkspaceStoreIpc(layouts, workspaceIpc.connect, (change) =>
+      workspaceServer.publishTo((c) => !layouts.made(c, change), "store.changed", { repo: change.repo, part: change.part }));
     void initMachines({
       send: (snap) => broadcast("machines:changed", snap),
       listLocalSessions: () => (PERSIST_PTY ? ptyDaemon.listSessions() : Promise.resolve([])),

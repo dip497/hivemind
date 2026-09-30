@@ -189,12 +189,8 @@ const api: HiveIpc & {
   workspaceSetObjectsSync: (repo, objects, base) => { ipcRenderer.sendSync("workspace:set-objects-sync", repo, objects, base); },
   workspaceUndoSync: (repo) => ipcRenderer.sendSync("workspace:undo-sync", repo),
   workspaceRedoSync: (repo) => ipcRenderer.sendSync("workspace:redo-sync", repo),
-  onWorkspaceChanged: (cb) => {
-    const listener = (_e: unknown, change: Parameters<typeof cb>[0]) => cb(change);
-    ipcRenderer.on("workspace:changed", listener);
-    return () => ipcRenderer.removeListener("workspace:changed", listener);
-  },
-  workspaceShown: (repo, frame) => ipcRenderer.send("workspace:shown", repo, frame),
+  onWorkspaceChanged: (cb) => workspace.on("store.changed", cb),
+  workspaceShown: (repo, frame) => workspace.notice("store.shown", repo, frame),
   settingsGet: () => ipcRenderer.invoke("settings:get"),
   settingsSet: (p, v) => ipcRenderer.invoke("settings:set", p, v),
   settingsPatch: (patches) => ipcRenderer.invoke("settings:patch", patches),

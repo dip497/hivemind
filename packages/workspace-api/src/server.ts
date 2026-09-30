@@ -75,8 +75,13 @@ export class WorkspaceServer {
 
   /** Send every connected client `event`. */
   publish<E extends Event>(event: E, ...params: EventParams<E>): void {
+    this.publishTo(() => true, event, ...params);
+  }
+
+  /** Send `event` to each connected client `to` picks. */
+  publishTo<E extends Event>(to: (connection: Connection) => boolean, event: E, ...params: EventParams<E>): void {
     const message: EventMessage = { event, params };
-    for (const connection of this.connections) connection.send(message);
+    for (const connection of this.connections) if (to(connection)) connection.send(message);
   }
 
   /** Answer a call of `method` with `params` that came over `from`. Never throws. */

@@ -8,7 +8,7 @@ import type { WebContents } from "electron";
 import type { Connection, WorkspaceServer } from "@hivemind/workspace-api/server";
 import { PERSON, handle, on } from "./app-ipc.js";
 
-export function serveWorkspaceApi(server: WorkspaceServer): { connect(window: WebContents): Connection } {
+export function serveWorkspaceApi(server: WorkspaceServer): { connect(window: WebContents): Connection; find(window: WebContents): Connection | undefined } {
   const connections = new WeakMap<WebContents, Connection>();
   /** A window's connection: made the first time it is asked for, closed when the window goes. */
   const connect = (wc: WebContents): Connection => {
@@ -30,5 +30,5 @@ export function serveWorkspaceApi(server: WorkspaceServer): { connect(window: We
   };
   handle("workspace", (e, method: unknown, params: unknown) => server.answer(method, params, connect(e.sender)));
   on("workspace:notice", (e, method: unknown, params: unknown) => server.notice(method, params, connect(e.sender)));
-  return { connect };
+  return { connect, find: (wc) => connections.get(wc) };
 }

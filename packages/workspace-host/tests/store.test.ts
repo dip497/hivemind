@@ -33,14 +33,17 @@ test("a workspace's layout is kept per repo and is there after a restart, as is 
   const s = new WorkspaceStore({ dir });
   s.setCore("/a", core("api"));
   s.setView("/a", "canvas", { v: 2, data: { positions: { t1: { x: 1, y: 2 } } } });
+  s.setView("/a", "windows", { v: 1, data: { tab: "t1" } });
   s.setObjects("/a", [note("ship it")]);
 
   const again = restart();
   expect(again.getCore("/a")).toEqual(core("api"));
   expect(again.getView("/a", "canvas")).toEqual({ v: 2, data: { positions: { t1: { x: 1, y: 2 } } } });
+  expect(again.getViews("/a")).toEqual({ canvas: { v: 2, data: { positions: { t1: { x: 1, y: 2 } } } }, windows: { v: 1, data: { tab: "t1" } } });
   expect(again.getObjects("/a")).toEqual([note("ship it")]);
-  expect(again.getView("/a", "windows")).toBeNull();
+  expect(again.getView("/a", "board")).toBeNull();
   expect(again.getCore("/b")).toBeNull();
+  expect(again.getViews("/b")).toEqual({});
   expect(again.getObjects("/b")).toEqual([]);
 
   again.setCore("/a", core("renamed"));

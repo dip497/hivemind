@@ -47,6 +47,9 @@ import { Intents } from "@hivemind/workspace-host/intents";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server";
 import { workspaceDomains } from "../main/workspace/domains";
+import { Layouts } from "../main/workspace/store";
+import { WorkspaceStore } from "@hivemind/workspace-host/store";
+import { computeRepoPath, findGitRoot, projectDir } from "../main/workspace-paths";
 import { agents } from "../main/workspace/agents";
 import { spawnPty, writePty, resizePty, killPty, pausePty, resumePty, detachPty } from "../main/pty-host";
 import { Terminals } from "../main/workspace/terminals";
@@ -97,10 +100,18 @@ const terminals = new Terminals({
     screen: () => null,
   },
 });
+// Layouts in a store of the bridge's own: the dev app's is in use while it runs.
+const store = new WorkspaceStore({
+  dir: path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config"), "hivemind-dev", "bridge", "workspaces"),
+  onWarn: (m) => console.warn(`[workspace-store] ${m}`),
+  onChange: (change) => workspaceServer.publishTo((c) => !layouts.made(c, change), "store.changed", { repo: change.repo, part: change.part }),
+});
+const layouts = new Layouts(() => store);
 const workspaceServer = new WorkspaceServer([
   ...workspaceDomains,
   agents({ statuses: () => [], links: () => ({ pipes: [], spawns: [] }) }),
   terminals.domain,
+  layouts.domain,
 ], intents, (m) => console.warn(`[workspace] ${m}`));
 /** Each page's connection, by the id its event stream was given. */
 const workspaceConnections = new Map<string, Connection>();
@@ -124,137 +135,31 @@ function ptySpawnAllowed(): boolean {
   return true;
 }
 
-const PREVIEW_SCRIPT = `
-(function() {
-  // Use the page's actual origin so localhost↔127.0.0.1 aren't cross-origin
-  // (the browser treats them as distinct origins). The server binds to
-  // 127.0.0.1 ONLY (loopback), so even if the user types either, every
-  // request lands here without going over the network.
-  const BRIDGE = window.location.origin;
-  // Fetch the per-process auth token ONCE on load. Same-origin = trusted;
-  // other apps on the same machine can't read it (CORS blocks cross-origin
-  // page reads of localhost in a normal browser context).
-  const tokenP = fetch(BRIDGE + "/auth-token", { credentials: "omit" })
-    .then((r) => r.json())
-    .then((d) => d.token)
-    .catch((e) => { console.error("[hivemind] auth-token fetch failed", e); return ""; });
-  async function authHeaders() {
-    return { "content-type": "application/json", "x-hive-token": await tokenP };
-  }
-  async function call(method, ...args) {
-    const r = await fetch(BRIDGE + "/rpc/" + method, {
-      method: "POST",
-      headers: await authHeaders(),
-      body: JSON.stringify(args),
-    });
-    if (!r.ok) throw new Error(await r.text());
-    const ct = r.headers.get("content-type") || "";
-    if (ct.includes("application/json")) return r.json();
-    return undefined;
-  }
-  // The workspace API: this page's connection is its event stream, which names it; a call's
-  // answer is a result or an error with a code; a notice is answered with nothing.
-  const workspaceListeners = {};
-  const connection = tokenP.then((token) => new Promise((resolve) => {
-    const es = new EventSource(BRIDGE + "/workspace/events?token=" + encodeURIComponent(token));
-    es.addEventListener("connection", (ev) => resolve(JSON.parse(ev.data).id));
-    es.onmessage = (ev) => {
-      const { event, params } = JSON.parse(ev.data);
-      for (const cb of workspaceListeners[event] || []) {
-        try { cb(...params); } catch (e) { console.error("[workspace] a listener for " + event + " failed:", e); }
-      }
-    };
-  }));
-  async function workspaceHeaders() {
-    return { ...(await authHeaders()), "x-hive-connection": await connection };
-  }
-  async function api(method, ...params) {
-    const r = await fetch(BRIDGE + "/workspace", {
-      method: "POST",
-      headers: await workspaceHeaders(),
-      body: JSON.stringify({ method, params }),
-    });
-    if (!r.ok) throw new Error(await r.text());
-    const answer = await r.json();
-    if (answer.error) throw Object.assign(new Error(answer.error.message), { code: answer.error.code });
-    return answer.result;
-  }
-  function apiNotice(method, ...params) {
-    workspaceHeaders().then((headers) => fetch(BRIDGE + "/workspace/notice", {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ method, params }),
-    })).catch((e) => console.error("[workspace] " + method + ":", e));
-  }
-  function onEvent(event, cb) {
-    return subscribe(workspaceListeners, event, cb);
-  }
-  function subscribe(map, key, cb) {
-    if (!map[key]) map[key] = [];
-    map[key].push(cb);
-    return () => { map[key] = map[key].filter(x => x !== cb); };
-  }
-  window.hive = {
-    resolveProject:    (h) => call("resolveProject", h),
-    listIssues:        (r) => api("issue.list", r),
-    readIssue:         (r,i) => api("issue.read", r, i),
-    updateIssueState:  (r,i,s,n) => api("issue.setState", r, i, s, n),
-    createIssue:       (r,o) => api("issue.create", r, o),
-    updateIssue:       (r,i,p) => api("issue.update", r, i, p),
-    commentOnIssue:    (r,i,m) => api("issue.comment", r, i, m),
-    deleteIssue:       (r,i) => api("issue.delete", r, i),
-    linkIssue:         (r,i,o,t) => api("issue.link", r, i, o, t),
-    unlinkIssue:       (r,i,o) => api("issue.unlink", r, i, o),
-    moveIssue:         (r,i,p,m) => api("issue.move", r, i, p, m),
-    reviewList:        (r) => api("review.list", r),
-    reviewSave:        (r,c) => api("review.save", r, c),
-    fileRead:          (r,f) => api("file.read", r, f),
-    fileWrite:         (r,f,c) => api("file.write", r, f, c),
-    hcpStatusAll:      () => api("status.all"),
-    hcpLinks:          () => api("link.list"),
-    onHcpStatus:       (cb) => onEvent("status.changed", cb),
-    onHcpPipe:         (cb) => onEvent("link.pipe", cb),
-    onHcpSpawn:        (cb) => onEvent("link.spawn", cb),
-    onHcpSpawned:      (cb) => onEvent("tile.opened", cb),
-    gitStatus:         (r) => api("git.status", r),
-    gitListFiles:      (r) => api("git.listFiles", r),
-    gitListBranches:   (r) => api("git.listBranches", r),
-    gitDiff:           (r,s,f) => api("git.diff", r, s, f),
-    gitFileContents:   (r,f,v) => api("git.fileContents", r, f, v),
-    gitStage:          (r,f) => api("git.stage", r, f),
-    gitUnstage:        (r,f) => api("git.unstage", r, f),
-    gitDiscard:        (r,f) => api("git.discard", r, f),
-    gitCommit:         (r,m,a) => api("git.commit", r, m, a),
-    gitPush:           (r,u) => api("git.push", r, u),
-    gitPull:           (r) => api("git.pull", r),
-    gitConflictedFile: (r,f) => api("git.conflictedFile", r, f),
-    gitWriteResolved:  (r,f,c) => api("git.writeResolved", r, f, c),
-    worktreeList:      (r) => api("worktree.list", r),
-    worktreeCreate:    (r,o) => api("worktree.create", r, o),
-    worktreeRemove:    (r,p,f) => api("worktree.remove", r, p, f),
-    worktreePrune:     (r) => api("worktree.prune", r),
-    ptySpawn:          (o) => api("terminal.open", o),
-    ptyWrite:          (t,d,p) => apiNotice("terminal.write", t, d, p),
-    ptyInterest:       (t,s) => apiNotice("terminal.show", t, s),
-    ptyResize:         (t,c,r) => apiNotice("terminal.resize", t, c, r),
-    ptyKill:           (t) => apiNotice("terminal.close", t),
-    ptyDetach:         (t) => apiNotice("terminal.detach", t),
-    ptyFlow:           (t,p) => apiNotice("terminal.flow", t, p),
-    ptyActivityWatch:  (ts) => apiNotice("terminal.watchActivity", ts),
-    onPtyActivity:     (cb) => onEvent("terminal.activity", cb),
-    onPtyData:         (tile, cb) => onEvent("terminal.data", (t, d) => { if (t === tile) cb(d); }),
-    onPtyExit:         (tile, cb) => onEvent("terminal.exit", (t, e) => { if (t === tile) cb(e); }),
-    onFsChanged:       (repo, cb) => onEvent("file.changed", (r, c) => { if (r === repo) cb(c); }),
-  };
-  console.info("[hivemind] dev-bridge installed at " + BRIDGE);
-})();
-`;
+/** The page's `window.hive` (page.ts), bundled for the browser as the bridge starts. */
+async function bundlePage(): Promise<string> {
+  const { build } = await import("vite");
+  const out = await build({
+    configFile: false,
+    logLevel: "warn",
+    build: {
+      write: false,
+      minify: false,
+      lib: { entry: path.join(__dirname, "page.ts"), formats: ["iife"], name: "hiveBridge", fileName: () => "hive-bridge.js" },
+    },
+  });
+  const first = (Array.isArray(out) ? out[0] : out) as { output: Array<{ type: string; code?: string }> };
+  const chunk = first.output.find((o) => o.type === "chunk");
+  if (!chunk?.code) throw new Error("the page did not bundle");
+  return chunk.code;
+}
+const pageScript = bundlePage();
 
 const RPC: Record<string, (...args: unknown[]) => Promise<unknown> | unknown> = {
+  // As main answers it: the folder, its workspace, and the git repo its tiles run in.
   resolveProject: async (rootHint?: unknown) => {
-    const cwd = typeof rootHint === "string" && rootHint ? path.resolve(rootHint) : REPO_PATH;
+    const cwd = await projectDir(typeof rootHint === "string" && rootHint ? rootHint : undefined, REPO_PATH);
     const root = await findRoot(cwd);
-    return { root, cwd };
+    return { root, cwd, repoPath: computeRepoPath(root, await findGitRoot(cwd)) };
   },
 };
 
@@ -300,7 +205,7 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse): Prom
   // Static renderer + dev-bridge preload script.
   if (url.pathname === "/hive-bridge.js") {
     res.writeHead(200, { "content-type": "application/javascript" });
-    res.end(PREVIEW_SCRIPT);
+    res.end(await pageScript);
     return;
   }
   if (req.method === "GET" && !url.pathname.startsWith("/rpc/") && !url.pathname.startsWith("/workspace/")) {
@@ -442,6 +347,7 @@ server.listen(PORT, HOST, () => {
 
 process.on("SIGINT", () => {
   console.log("\nshutting down dev-bridge");
+  store.flush();
   server.close();
   process.exit(0);
 });
