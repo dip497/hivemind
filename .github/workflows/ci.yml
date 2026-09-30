@@ -81,3 +81,10 @@ jobs:
 
       - name: Test
         run: cargo test --locked
+
+      - name: Two machines (network namespaces)
+        # R10's "Done when" on one runner: one network with no internet (mDNS, direct), and two
+        # networks that reach each other only through a relay hive-net serves.
+        run: |
+          cargo build --locked
+          sudo HIVE_NET_BIN="$PWD/target/debug/hive-net" bash tests/two-machines.sh
