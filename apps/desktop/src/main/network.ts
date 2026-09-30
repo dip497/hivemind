@@ -11,17 +11,17 @@ import os from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { HiveNet } from "@hivemind/workspace-host/hive-net";
-import { AccessLists, LINK_ROLES, type LinkRole } from "@hivemind/workspace-host/access";
+import { AccessLists, LINK_ROLES, ROLES, type LinkRole, type Role } from "@hivemind/workspace-host/access";
 import { Sharing, type JoinRequest, type PairReply } from "@hivemind/workspace-host/sharing";
 import { formatJoinLink, parseJoinLink } from "@hivemind/workspace-host/join-link";
 import { JoinedList } from "@hivemind/workspace-host/joined";
 import { handle, handleEffect, on } from "./app-ipc.js";
 import { displayName, machineIdentity } from "./identity.js";
 import { getSettings } from "./settings-store.js";
-import { userWindow } from "./windows.js";
+import { broadcast, userWindow } from "./windows.js";
 import { workspaceStore } from "./workspace-store-ipc.js";
-import { servePeerLink } from "./peers-host.js";
-import { openShared } from "./shared-workspaces.js";
+import { connectedTo, disconnect, servePeerLink } from "./peers-host.js";
+import { leaveShared, openShared, sharedStatus, type SharedStatus } from "./shared-workspaces.js";
 import type { WorkspaceServer } from "@hivemind/workspace-api/server";
 import type { EventMessage } from "@hivemind/workspace-api/protocol";
 
@@ -115,16 +115,45 @@ export function stopNetwork(): void {
 }
 
 /** Open the workspace `workspace` that this person joined: its host dialled, its replica kept in
- *  sync, its events published to the windows with `publish`. */
+ *  sync, its events published to the windows with `publish`. One they left, or were removed from,
+ *  opens as the last copy kept here, and nothing is dialled. */
 export async function openJoined(workspace: string, publish: (event: EventMessage) => void): Promise<void> {
   const joined = joinedList().list().find((j) => j.workspace === workspace);
   if (!joined) throw new Error("that workspace was not joined here: open its invite link");
+  if (joined.ended) return;
   const hn = await network();
-  await openShared(workspace, () => hn.dial(joined.host, joined.where), publish);
+  await openShared(workspace, joined.role, {
+    dial: () => hn.dial(joined.host, joined.where),
+    publish,
+    told: (ws, status) => {
+      if (status.state === "removed") joinedList().update(ws, { ended: "removed" });
+      else if (status.state === "connected" && status.access !== "owner") joinedList().update(ws, { role: status.access });
+      broadcast("net:shared-status", ws, status);
+    },
+  });
+}
+
+/** How a joined workspace is: whose it is, and where its connection is (or how it ended). */
+function joinedStatus(workspace: string): ({ names: { workspace: string; host: string } } & SharedStatus) | null {
+  const joined = joinedList().list().find((j) => j.workspace === workspace);
+  if (!joined) return null;
+  const live = joined.ended ? null : sharedStatus(workspace);
+  return { names: joined.names, state: joined.ended ?? live?.state ?? "offline", access: live?.access ?? joined.role };
+}
+
+/** The workspace id of `repo` here, which this person owns: what the People panel manages. */
+function ownedWorkspace(repo: unknown): string {
+  const own = typeof repo === "string" ? workspaceStore().ownership(repo) : null;
+  if (!own) throw new Error("people: this workspace is not shared from here");
+  return own.workspaceId;
 }
 
 export function installNetworkIpc(server: WorkspaceServer): void {
   apiServer = server;
+  // Something is shared from here already: be where the people let in can reach it.
+  if (accessLists().workspaces().some((ws) => accessLists().people(ws).length > 0)) {
+    void network().catch((e: unknown) => console.warn(`[network] ${e instanceof Error ? e.message : String(e)}`));
+  }
   // An invite link to the workspace `repo`, for `role`, for `expiresIn` ms, used once unless `reusable`.
   handleEffect("net:share", (repo: unknown) => ({ target: typeof repo === "string" ? repo : undefined }), async (_e, repo: unknown, role: unknown, expiresIn: unknown, reusable: unknown) => {
     if (typeof repo !== "string" || !repo) throw new Error("share: which workspace?");
@@ -160,12 +189,46 @@ export function installNetworkIpc(server: WorkspaceServer): void {
   // The person here answers someone asking to join.
   on("net:join-answer", (_e, req: unknown, allow: unknown) => asking.get(Number(req))?.(allow === true));
 
-  // Who is on the workspace `repo`'s list.
+  // Who is on the workspace `repo`'s list, and whether each is connected now.
   handle("net:people", (_e, repo: unknown) => {
     const own = typeof repo === "string" ? workspaceStore().ownership(repo) : null;
-    return own ? accessLists().people(own.workspaceId) : [];
+    if (!own) return [];
+    const here = connectedTo(own.workspaceId);
+    return accessLists().people(own.workspaceId).map((p) => ({ ...p, present: here.has(p.person) }));
+  });
+
+  // Give someone on the list another role. They are reconnected, to work under it at once.
+  // Driving agents runs commands on this machine: it is given only to someone connected now.
+  handleEffect("net:set-role", (repo: unknown, person: unknown, role: unknown) => ({ target: typeof repo === "string" ? repo : undefined, detail: `${String(person).slice(0, 8)}… → ${String(role)}` }), (_e, repo: unknown, person: unknown, role: unknown) => {
+    const ws = ownedWorkspace(repo);
+    if (!ROLES.includes(role as Role)) throw new Error(`people: ${String(role)} is not a role`);
+    const current = accessLists().people(ws).find((p) => p.person === person);
+    if (!current) throw new Error("people: they are not on this workspace's list");
+    if (role === "agents" && !connectedTo(ws).has(current.person)) throw new Error("people: Can drive agents is given only to someone here now");
+    accessLists().grant(ws, current.person, role as Role, current.expires);
+    disconnect(ws, current.person, "role changed");
+  });
+
+  // Take someone off the list: their connections close at once, and the link they came in by
+  // lets nobody in again.
+  handleEffect("net:remove", (repo: unknown, person: unknown) => ({ target: typeof repo === "string" ? repo : undefined, detail: String(person).slice(0, 8) }), async (_e, repo: unknown, person: unknown) => {
+    const ws = ownedWorkspace(repo);
+    if (typeof person !== "string" || !accessLists().revoke(ws, person)) throw new Error("people: they are not on this workspace's list");
+    disconnect(ws, person, "removed");
+    (await current)?.admit(accessLists().admitted());
   });
 
   // The workspaces this person joined elsewhere.
   handle("net:joined", () => joinedList().list());
+
+  // How a workspace joined here is: whose, and where its connection is.
+  handle("net:shared-status", (_e, workspace: unknown) => (typeof workspace === "string" ? joinedStatus(workspace) : null));
+
+  // Leave a workspace joined here: its connection closes, and the last copy is kept, to read.
+  handleEffect("net:leave", (workspace: unknown) => ({ target: typeof workspace === "string" ? `hive://${workspace}` : undefined }), (_e, workspace: unknown) => {
+    if (typeof workspace !== "string" || !joinedStatus(workspace)) throw new Error("leave: that workspace was not joined here");
+    leaveShared(workspace);
+    joinedList().update(workspace, { ended: "left" });
+    broadcast("net:shared-status", workspace, { state: "left", access: joinedStatus(workspace)!.access });
+  });
 }

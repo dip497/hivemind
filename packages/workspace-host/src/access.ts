@@ -63,6 +63,9 @@ export type Access = Role | "owner";
 /** A person on a workspace's list, as the owner's People panel shows them. */
 export interface Person {
   person: string;
+  /** The name and colour they joined with ("" when none was given). */
+  name: string;
+  color: string;
   role: Role;
   grantedAt: number;
   expires: number | null;
@@ -117,12 +120,18 @@ export class AccessLists {
     return grant;
   }
 
-  /** Take `person` off `workspace`'s list, with the devices they showed. False when they were not on it. */
+  /** Take `person` off `workspace`'s list, with the devices they showed; the invite they joined by
+   *  lets nobody in again, even a reusable one. False when they were not on it. */
   revoke(workspace: string, person: string): boolean {
     const doc = this.doc(workspace);
     if (doc.getMap("grants").get(person) === undefined) return false;
     this.edit(workspace, (d) => {
       d.getMap("grants").delete(person);
+      d.getMap("profiles").delete(person);
+      const via = d.getMap("via").get(person);
+      const invite = typeof via === "string" ? (d.getMap("invites").get(via) as Invite | undefined) : undefined;
+      if (invite) d.getMap("invites").set(via as string, { ...invite, used: true });
+      d.getMap("via").delete(person);
       const devices = d.getMap("devices");
       for (const [id, cert] of Object.entries(devices.toJSON() as Record<string, DeviceCertificate>)) {
         if (cert.person === person) devices.delete(id);
@@ -157,7 +166,7 @@ export class AccessLists {
     return (this.doc(workspace).getMap("devices").get(device) as DeviceCertificate).person;
   }
 
-  /** The people on `workspace`'s list whose grant holds now. */
+  /** The people on `workspace`'s list whose grant holds now, in the order they were let in. */
   people(workspace: string): Person[] {
     const doc = this.doc(workspace);
     const certs = Object.values(doc.getMap("devices").toJSON() as Record<string, DeviceCertificate>);
@@ -165,9 +174,18 @@ export class AccessLists {
     for (const person of Object.keys(doc.getMap("grants").toJSON() as Record<string, unknown>)) {
       const g = this.grantOf(workspace, person);
       if (!g) continue;
-      out.push({ person, role: g.role, grantedAt: g.grantedAt, expires: g.expires, devices: certs.filter((c) => c.person === person).map((c) => c.device).sort() });
+      const profile = doc.getMap("profiles").get(person) as { name?: unknown; color?: unknown } | undefined;
+      out.push({
+        person,
+        name: typeof profile?.name === "string" ? profile.name : "",
+        color: typeof profile?.color === "string" ? profile.color : "",
+        role: g.role,
+        grantedAt: g.grantedAt,
+        expires: g.expires,
+        devices: certs.filter((c) => c.person === person).map((c) => c.device).sort(),
+      });
     }
-    return out;
+    return out.sort((a, b) => a.grantedAt - b.grantedAt || a.person.localeCompare(b.person));
   }
 
   /** A new invite to `workspace` (the repo `repo` here) for `role`, for `expiresIn` ms, used once
@@ -194,12 +212,21 @@ export class AccessLists {
     return invite.role;
   }
 
-  /** Use the invite with `secret`: it offers nothing more unless it is reusable. */
-  redeem(workspace: string, secret: string): void {
+  /** `person` used the invite with `secret`: it offers nothing more unless it is reusable, and
+   *  nothing more at all once they are removed. */
+  redeem(workspace: string, secret: string, person: string): void {
     const key = hashOf(secret);
     const invite = this.doc(workspace).getMap("invites").get(key) as Invite | undefined;
-    if (!invite || invite.reusable) return;
-    this.edit(workspace, (doc) => doc.getMap("invites").set(key, { ...invite, used: true }));
+    if (!invite) return;
+    this.edit(workspace, (doc) => {
+      doc.getMap("via").set(person, key);
+      if (!invite.reusable) doc.getMap("invites").set(key, { ...invite, used: true });
+    });
+  }
+
+  /** The name and colour `person` goes by, as the People panel shows them. */
+  remember(workspace: string, person: string, profile: { name: string; color: string }): void {
+    this.edit(workspace, (doc) => doc.getMap("profiles").set(person, { name: profile.name, color: profile.color }));
   }
 
   /** The repo here that `workspace` is, as its first invite recorded. */

@@ -1,6 +1,7 @@
 // The workspace store through the workspace API (workspace/store.ts): each client writes as
 // itself, so its undo takes back its own board edits only; it is told of every other writer's
-// change and never of its own; and it says which workspace it shows, until it goes.
+// change and never of its own; a workspace it may only read takes no write, and the client is told
+// to read the part again; and it says which workspace it shows, until it goes.
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -18,10 +19,10 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hm-layouts-"));
 after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 const note = (id: string, text: string) => ({ id, kind: "note" as const, x: 0, y: 0, w: 200, h: 160, text });
 
-function host() {
+function host(mayWrite?: (repo: string) => boolean) {
   let server: WorkspaceServer;
   const store = new WorkspaceStore({ dir: tmp, person: newSeed(), onChange: (c) => server.publishTo((conn) => !layouts.made(conn, c), "store.changed", { repo: c.repo, part: c.part }) });
-  const layouts = new Layouts(() => store);
+  const layouts = new Layouts(() => store, mayWrite);
   server = new WorkspaceServer([layouts.domain], new Intents(new AuditLog({ file: path.join(tmp, "audit.jsonl") })));
   const client = () => {
     const closing = new AbortController();
@@ -70,4 +71,22 @@ test("a client says which workspace it shows, and where its user is there, until
   a.close();
   assert.equal(h.layouts.shownBy(a), null);
   assert.equal(h.layouts.anyShown(), null);
+});
+
+test("a workspace the host may only read takes no write, and the client is told to read the part again", async () => {
+  const h = host((repo) => repo !== "hive://copy");
+  const a = h.client();
+  await h.call(a, "store.setObjects", "hive://copy", [note("n1", "mine")], []);
+  await h.call(a, "store.setView", "hive://copy", "canvas", { data: { zoom: 2 } }, null);
+  assert.deepEqual(h.store.getObjects("hive://copy"), []);
+  assert.equal(h.store.getView("hive://copy", "canvas"), null);
+  assert.equal(await h.call(a, "store.undo", "hive://copy"), false);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.deepEqual(a.told, [
+    { event: "store.changed", params: [{ repo: "hive://copy", part: "board" }] },
+    { event: "store.changed", params: [{ repo: "hive://copy", part: "view:canvas" }] },
+  ]);
+  // Elsewhere it writes as before.
+  await h.call(a, "store.setObjects", "/mine", [note("n1", "mine")], []);
+  assert.deepEqual(h.store.getObjects("/mine").map((o) => o.id), ["n1"]);
 });

@@ -91,9 +91,12 @@ export function PresenceLayer({ repo, pane, selection }: { repo: string; pane: R
     el.addEventListener("pointermove", move, { passive: true });
     el.addEventListener("pointerleave", leave);
     window.addEventListener("pagehide", gone);
+    // A host reconnected to has forgotten this window: say where it is again.
+    const offBack = window.hive.onSharedStatus((ws, s) => { if (`hive://${ws}` === repo && s.state === "connected") send(); });
     const still = setInterval(send, STILL_HERE_EVERY_MS);
     send();
     return () => {
+      offBack();
       el.removeEventListener("pointermove", move);
       el.removeEventListener("pointerleave", leave);
       window.removeEventListener("pagehide", gone);
@@ -156,13 +159,19 @@ function SelectionRing({ id, who }: { id: string; who: Participant }) {
   );
 }
 
-/** The faces of everyone else in `repo`, one per person, by Share. */
-export function PeopleHere({ repo }: { repo: string }) {
+/** The faces of everyone else in `repo`, one per person, by Share; `onManage`, when given, opens
+ *  the People panel from them. */
+export function PeopleHere({ repo, onManage }: { repo: string; onManage?: () => void }) {
   const people = usePeopleHere(repo);
   const persons = useMemo(() => [...new Map(people.map((p) => [p.person, p])).values()], [people]);
   if (persons.length === 0) return null;
   return (
-    <div className="pointer-events-auto flex items-center -space-x-1.5 pr-1" data-people-here>
+    <div
+      className={`pointer-events-auto flex items-center -space-x-1.5 pr-1 ${onManage ? "cursor-pointer" : ""}`}
+      data-people-here
+      onClick={onManage}
+      title={onManage ? "People" : undefined}
+    >
       {persons.slice(0, 5).map((p) => (
         <span
           key={p.person}

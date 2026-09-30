@@ -30,7 +30,7 @@ function guest() {
 const hello = (ws: string, secret: string, g: ReturnType<typeof guest>, name = "Priya") =>
   ({ v: 1, workspace: ws, secret, certificate: g.certificate, profile: { name, color: "#14B8A6" } });
 
-test("someone with an invite whom the host lets in gets its role for their device, and a single-use invite is spent", async () => {
+test("someone with an invite whom the host lets in gets its role for their device, under the name they gave; a single-use invite is spent, and one they are removed from lets nobody in", async () => {
   const { lists, sharing, asked, admitted } = host();
   const ws = newWorkspaceId();
   const secret = lists.invite(ws, "/work/api", "edit", 60_000);
@@ -47,8 +47,17 @@ test("someone with an invite whom the host lets in gets its role for their devic
   const open = lists.invite(ws, "/work/api", "view", 60_000, true);
   expect((await sharing.answer(sam.device, hello(ws, open, sam))).ok).toBe(true);
   const kim = guest();
-  expect((await sharing.answer(kim.device, hello(ws, open, kim))).ok).toBe(true);
+  expect((await sharing.answer(kim.device, hello(ws, open, kim, "Kim"))).ok).toBe(true);
   expect(admitted.at(-1)).toEqual([priya.device, sam.device, kim.device].sort());
+  const names = () => lists.people(ws).map((p) => `${p.name} ${p.color} ${p.role}`).sort();
+  expect(names()).toEqual(["Kim #14b8a6 view", "Priya #14b8a6 edit", "Priya #14b8a6 view"]);
+
+  // Removed, the link they came in by lets nobody in again, reusable or not; the others keep theirs.
+  lists.revoke(ws, sam.person);
+  expect(lists.offered(ws, open)).toBeNull();
+  expect(await sharing.answer(sam.device, hello(ws, open, sam))).toEqual({ ok: false, error: "expired" });
+  expect(lists.accessOf(ws, kim.device)).toBe("view");
+  expect(names()).toEqual(["Kim #14b8a6 view", "Priya #14b8a6 edit"]);
 });
 
 test("a declined request, an expired invite, a certificate for another device or a malformed request gets nothing", async () => {

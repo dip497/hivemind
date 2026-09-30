@@ -79,7 +79,7 @@ import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, sett
 import { flushWorkspaceStore, installWorkspaceStoreIpc, storeFor, workspaceStore } from "./workspace-store-ipc.js";
 import { installIdentityIpc, machineIdentity } from "./identity.js";
 import { installNetworkIpc, openJoined, stopNetwork } from "./network.js";
-import { elsewhere } from "./shared-workspaces.js";
+import { elsewhere, mayWriteShared } from "./shared-workspaces.js";
 import { appWindowOf, broadcast, openWindows, registerWindow, userWindow } from "./windows.js";
 import { patchSettingsExtras } from "@hivemind/core/settings";
 import { PipeManager } from "./hcp/pipes.js";
@@ -1135,7 +1135,9 @@ async function startSession(opts: TerminalOpts, out: SessionOutput): Promise<{ p
 }
 
 /** The workspace store, through the workspace API: each window writes as itself. */
-const layouts = new Layouts(storeFor);
+// A copy of a workspace shared from elsewhere is written only while its host lets this person
+// edit its board (M1).
+const layouts = new Layouts(storeFor, (repo) => !repo.startsWith("hive://") || mayWriteShared(repo.slice("hive://".length)));
 
 // The workspace API (R8): git and worktrees, files, issues, review comments, agents' status and
 // links, terminals, the store and who is where on it (M1). Each window is a connection to it (workspace-ipc.ts), which is

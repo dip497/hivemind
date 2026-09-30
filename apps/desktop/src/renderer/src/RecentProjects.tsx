@@ -1,7 +1,7 @@
-/** Ctrl+R — VS Code's Open Recent: the projects opened before, a way to browse for another, and
- *  another window on this one. */
-import { useState } from "react";
-import { AppWindow, FolderOpen, History, LogIn } from "lucide-react";
+/** Ctrl+R — VS Code's Open Recent: the projects opened before, the workspaces shared with this
+ *  person (M1), a way to browse for another, and another window on this one. */
+import { useEffect, useState } from "react";
+import { AppWindow, FolderOpen, History, LogIn, Users } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "./components/ui/dialog";
 import { MenuItem } from "./components/ui/menu-item";
 import { JoinForm } from "./multiplayer/join-form";
@@ -18,9 +18,14 @@ export function RecentProjects({ open, recents, current, onOpen, onBrowse, onNew
   onNewWindow: () => void;
   onClose: () => void;
 }) {
-  const others = recents.filter((p) => p !== current);
+  // A workspace shared from elsewhere is listed under its name, with the others shared.
+  const others = recents.filter((p) => p !== current && !p.startsWith("hive://"));
   // Joining a shared workspace is this dialog's second page, not a dialog of its own.
   const [joining, setJoining] = useState(false);
+  const [shared, setShared] = useState<Awaited<ReturnType<typeof window.hive.joined>>>([]);
+  useEffect(() => {
+    if (open) void window.hive.joined().then((all) => setShared((all ?? []).filter((j) => `hive://${j.workspace}` !== current)), () => {});
+  }, [open, current]);
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) { onClose(); setJoining(false); } }}>
       <DialogContent padding="none" className="sm:max-w-[480px] overflow-hidden">
@@ -42,6 +47,22 @@ export function RecentProjects({ open, recents, current, onOpen, onBrowse, onNew
           ))}
           {others.length === 0 && (
             <p className="px-2.5 py-2 text-[12px] text-[var(--color-fg3)]">No other project opened yet.</p>
+          )}
+          {shared.length > 0 && (
+            <>
+              <div className="px-2.5 pb-1 pt-2 text-[11px] font-medium text-[var(--color-fg3)]">Shared with you</div>
+              {shared.map((j) => (
+                <MenuItem key={j.workspace} data-shared-workspace={j.workspace} onClick={() => { onClose(); onOpen(`hive://${j.workspace}`); }}>
+                  <Users />
+                  <span className="flex-1 min-w-0">
+                    <span className="block truncate text-[13px] text-[var(--color-fg)]">{j.names.workspace}</span>
+                    <span className="block truncate text-[11px] text-[var(--color-fg3)]">
+                      {j.ended === "left" ? "You left · the last copy" : j.ended === "removed" ? "Removed · the last copy" : `on ${j.names.host}'s machine`}
+                    </span>
+                  </span>
+                </MenuItem>
+              ))}
+            </>
           )}
           <div className="my-1 border-t border-[var(--color-line)]" />
           <MenuItem autoFocus={others.length === 0} onClick={() => { onClose(); onBrowse(); }}>

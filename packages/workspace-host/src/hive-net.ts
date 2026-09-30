@@ -29,7 +29,8 @@ export interface Link {
   send(stream: string, data: string): void;
   /** Hear each frame that arrives on `stream`. */
   on(stream: string, listener: (data: string) => void): () => void;
-  close(): void;
+  /** Close it, saying why to the other side ("removed", "left", …). */
+  close(reason?: string): void;
   /** Resolves, with why, when the connection is gone. */
   readonly closed: Promise<string>;
 }
@@ -69,8 +70,8 @@ class DaemonLink implements Link {
     set.add(listener);
     return () => { set!.delete(listener); };
   }
-  close(): void {
-    this.tell({ t: "close", conn: this.conn });
+  close(reason?: string): void {
+    this.tell({ t: "close", conn: this.conn, reason });
   }
   receive(stream: string, data: string): void {
     for (const l of this.listeners.get(stream) ?? []) l(data);
@@ -146,11 +147,15 @@ export class HiveNet {
     return answer.reply;
   }
 
+  /** Stop the daemon: it is told by its socket closing, and closes its connections so the devices
+   *  at their other ends hear at once; one still running after a few seconds is killed. */
   stop(): void {
     this.stopped = true;
     this.socket.destroy();
     this.server.close();
-    this.child.kill();
+    const kill = setTimeout(() => this.child.kill(), 3_000);
+    kill.unref();
+    this.child.once("exit", () => clearTimeout(kill));
   }
 
   private ask(message: Message): Promise<Message> {

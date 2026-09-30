@@ -1,11 +1,11 @@
 /**
  * The workspaces this person joined elsewhere (M1; design §4.2 B, F): where each one's host is,
- * the role they were given, and the names to show, kept in one private file so the app can open
- * them again ("Recent shared").
+ * the role they were last given, the names to show, and whether they left or were removed, kept
+ * in one private file so the app can open them again ("Recent shared").
  */
 import fs from "node:fs";
 import path from "node:path";
-import type { LinkRole } from "./access.js";
+import type { Role } from "./access.js";
 import type { Where } from "./hive-net.js";
 
 export interface JoinedWorkspace {
@@ -13,9 +13,12 @@ export interface JoinedWorkspace {
   /** The host's device id. */
   host: string;
   where: Where;
-  role: LinkRole;
+  /** The role the host last gave. */
+  role: Role;
   names: { workspace: string; host: string };
   joinedAt: number;
+  /** Set when this person left it, or the host removed them: what is kept here is the last copy. */
+  ended?: "left" | "removed";
 }
 
 export class JoinedList {
@@ -35,8 +38,9 @@ export class JoinedList {
     this.write([joined, ...this.list().filter((j) => j.workspace !== joined.workspace)]);
   }
 
-  remove(workspace: string): void {
-    this.write(this.list().filter((j) => j.workspace !== workspace));
+  /** Change what is kept of `workspace`'s join. */
+  update(workspace: string, change: Partial<Pick<JoinedWorkspace, "role" | "ended">>): void {
+    this.write(this.list().map((j) => (j.workspace === workspace ? { ...j, ...change } : j)));
   }
 
   private write(all: JoinedWorkspace[]): void {

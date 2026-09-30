@@ -129,7 +129,7 @@ fn temp() -> PathBuf {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn a_device_the_host_admits_connects_and_frames_pass_both_ways_on_named_streams_in_order() {
+async fn an_admitted_device_connects_frames_pass_both_ways_in_order_and_main_closes_saying_why() {
     let root = temp();
     let mut host = Main::start(&root, "host").await;
     let mut guest = Main::start(&root, "guest").await;
@@ -182,7 +182,18 @@ async fn a_device_the_host_admits_connects_and_frames_pass_both_ways_on_named_st
             back["stream"].clone(),
             back["data"].clone()
         ),
-        (conn, json!("api"), json!("answer"))
+        (conn.clone(), json!("api"), json!("answer"))
+    );
+
+    // Main closes a connection saying why, and the other side reads it.
+    host.send(json!({ "t": "close", "conn": host_conn, "reason": "removed" }))
+        .await;
+    assert_eq!(host.next("closed").await["reason"], json!("removed"));
+    let closed = guest.next("closed").await;
+    assert_eq!(closed["conn"], conn);
+    assert!(
+        closed["reason"].as_str().unwrap().contains("removed"),
+        "{closed}"
     );
     fs::remove_dir_all(root).unwrap();
 }
@@ -269,5 +280,40 @@ async fn anyone_may_ask_to_pair_and_the_hosts_main_answers() {
         (paired["req"].clone(), paired["reply"].clone()),
         (json!(7), reply)
     );
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn when_main_goes_the_daemon_closes_its_connections_so_the_other_side_hears_at_once_and_exits(
+) {
+    use tokio::io::AsyncWriteExt;
+    let root = temp();
+    let mut host = Main::start(&root, "host").await;
+    let mut guest = Main::start(&root, "guest").await;
+    host.send(json!({ "t": "admit", "devices": [guest.id] }))
+        .await;
+    guest
+        .send(json!({ "t": "dial", "req": 1, "peer": host.id, "addrs": host.addr_list() }))
+        .await;
+    let conn = guest.next("dialed").await["conn"].clone();
+    guest
+        .send(json!({ "t": "send", "conn": conn, "stream": "api", "data": "hello" }))
+        .await;
+    host.next("recv").await;
+
+    let gone = Instant::now();
+    host.stream.shutdown().await.unwrap();
+    let closed = guest.next("closed").await;
+    assert_eq!(closed["conn"], conn);
+    assert!(
+        gone.elapsed() < Duration::from_secs(2),
+        "heard after {:?}: {closed}",
+        gone.elapsed()
+    );
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while host.daemon.try_wait().unwrap().is_none() {
+        assert!(Instant::now() < deadline, "the daemon outlived main");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
     fs::remove_dir_all(root).unwrap();
 }

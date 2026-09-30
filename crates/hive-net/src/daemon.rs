@@ -5,7 +5,7 @@
 //!
 //! - main → daemon: `admit {devices}` (the devices the access lists let in, which the gate
 //!   enforces), `dial {req, peer, addrs, relay}` (a workspace's host, on `hive/ws/1`),
-//!   `send {conn, stream, data}`, `close {conn}`, `pair {req, peer, addrs, relay, hello}` (first
+//!   `send {conn, stream, data}`, `close {conn, reason?}`, `pair {req, peer, addrs, relay, hello}` (first
 //!   contact with a host) and `pair-reply {req, reply}` (the answer to someone's `pair-request`).
 //! - daemon → main: `ready {id, addrs, relay}`, `incoming {conn, peer}`, `dialed {req, conn}`,
 //!   `failed {req, error}`, `recv {conn, stream, data}`, `closed {conn, reason}`,
@@ -71,6 +71,9 @@ enum FromMain {
     },
     Close {
         conn: u64,
+        /// Why, as the other side reads it ("removed", "left", …); "closed" when not given.
+        #[serde(default)]
+        reason: Option<String>,
     },
     Pair {
         req: u64,
@@ -304,14 +307,12 @@ impl Daemon {
                     let _ = link.out.send((stream, data.into_bytes()));
                 }
             }
-            FromMain::Close { conn } => {
+            FromMain::Close { conn, reason } => {
                 let link = self.links.lock().unwrap().remove(&conn);
                 if let Some(link) = link {
-                    link.connection.close(0u32.into(), b"closed");
-                    self.tell(ToMain::Closed {
-                        conn,
-                        reason: "closed".into(),
-                    });
+                    let reason = reason.unwrap_or_else(|| "closed".into());
+                    link.connection.close(0u32.into(), reason.as_bytes());
+                    self.tell(ToMain::Closed { conn, reason });
                 }
             }
             FromMain::Pair {

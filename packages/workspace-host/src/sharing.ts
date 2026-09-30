@@ -54,8 +54,9 @@ export class Sharing {
     if (!(await this.ask(request))) return { ok: false, error: "declined" };
     // Asked again after the answer: the invite may have been used or expired while the person decided.
     if (this.lists.offered(h.workspace, h.secret) !== role) return { ok: false, error: "expired" };
-    this.lists.redeem(h.workspace, h.secret);
     this.lists.grant(h.workspace, request.person, role);
+    this.lists.redeem(h.workspace, h.secret, request.person);
+    this.lists.remember(h.workspace, request.person, request.profile);
     this.lists.addDevice(h.workspace, h.certificate);
     this.admittedChanged(this.lists.admitted());
     return { ok: true, role, workspace: h.workspace };

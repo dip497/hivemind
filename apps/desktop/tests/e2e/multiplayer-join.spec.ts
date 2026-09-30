@@ -69,7 +69,7 @@ test("a person with an invite link asks to join; denied they are not let in, all
   await expect(guest.locator('[data-join-result="in"]')).toContainText("api · Can edit board");
   const me = await guest.evaluate(() => window.hive.identity());
   expect(await host.evaluate((r) => window.hive.people(r), repo)).toEqual([
-    { person: me.personId, role: "edit", grantedAt: expect.any(Number), expires: null, devices: [me.deviceId] },
+    { person: me.personId, name: me.suggestedName, color: "", role: "edit", grantedAt: expect.any(Number), expires: null, devices: [me.deviceId], present: false },
   ]);
   await guest.keyboard.press("Escape");
 

@@ -1,11 +1,16 @@
 /**
- * Workspaces shared with this person, open here (M1; design §4.2 B–C): each one's host dialled
+ * Workspaces shared with this person, open here (M1; design §4.2 B–C, F): each one's host dialled
  * over hive-net, its document kept in a replica (`sharedStore`, named `hive://<id>`) in sync, and
  * its host's workspace API for everything else a window asks about it. A window's call is routed
  * by what it names: the workspace (or a path in it), or a tile the replica holds.
+ *
+ * The connection comes back by itself: when it drops, or the host cannot be reached, it is dialled
+ * again, sooner at first and then every 15 s, while the window keeps showing the replica (edits
+ * made meanwhile go to the host when it is back). It ends when this person leaves, or the host
+ * removes them; what is kept then is the last copy, which may no longer be written.
  */
 import type { Access } from "@hivemind/workspace-host/access";
-import { replicate } from "@hivemind/workspace-host/doc-sync";
+import { mayEdit, replicate } from "@hivemind/workspace-host/doc-sync";
 import type { Link } from "@hivemind/workspace-host/hive-net";
 import { peerTransport, workspaceUrl } from "@hivemind/workspace-api/peers";
 import type { ClientTransport } from "@hivemind/workspace-api/client";
@@ -14,15 +19,35 @@ import type { Elsewhere } from "./workspace-ipc.js";
 import { streamOf } from "./peers-host.js";
 import { onWorkspaceChange, sharedStore } from "./workspace-store-ipc.js";
 
+/** Where the connection to a workspace's host is. */
+export type SharedState = "connecting" | "connected" | "reconnecting" | "offline" | "left" | "removed";
+
+export interface SharedStatus {
+  state: SharedState;
+  /** What the host last gave this person. */
+  access: Access;
+}
+
+/** How a workspace is reached, and what is heard from it. */
+export interface Reach {
+  dial(): Promise<Link>;
+  /** Its host's events, for the windows. */
+  publish(event: EventMessage): void;
+  /** Its connection changed, or the host gave another role. */
+  told(workspace: string, status: SharedStatus): void;
+}
+
 interface Open {
-  link: Link;
-  api: ClientTransport;
-  /** The access the host gave, once it has welcomed this replica. */
-  access: Access | null;
-  stop(): void;
+  status: SharedStatus;
+  api: ClientTransport | null;
+  link: Link | null;
+  retry: ReturnType<typeof setTimeout> | null;
+  tries: number;
 }
 
 const open = new Map<string, Open>();
+/** The next dial after `tries` failed ones: 0.5 s, 1 s, 2 s … then every 15 s. */
+const backoff = (tries: number): number => Math.min(15_000, 500 * 2 ** tries);
 
 /** The workspace id a `hive://` name is of, or null. */
 const idOf = (v: unknown): string | null => {
@@ -30,29 +55,78 @@ const idOf = (v: unknown): string | null => {
   return v.slice("hive://".length).split("/")[0] || null;
 };
 
-/** Connect to the host of `workspace` (one joined here, at `host` and `where`), unless connected. */
-export async function openShared(
-  workspace: string,
-  dial: () => Promise<Link>,
-  publish: (event: EventMessage) => void,
-): Promise<void> {
+/**
+ * Keep this person connected to the host of `workspace`, where they were last given `access`,
+ * unless they are already. Resolves after the first try, connected or not: the window shows the
+ * replica either way.
+ */
+export async function openShared(workspace: string, access: Access, reach: Reach): Promise<void> {
   if (open.has(workspace)) return;
-  const link = await dial();
   const repo = workspaceUrl(workspace);
-  const api = peerTransport(streamOf(link, "api"));
-  api.events(publish);
-  const entry: Open = { link, api, access: null, stop: () => {} };
+  const entry: Open = { status: { state: "connecting", access }, api: null, link: null, retry: null, tries: 0 };
   open.set(workspace, entry);
-  entry.stop = replicate(sharedStore(), repo, streamOf(link, "sync"), {
-    workspace,
-    changes: onWorkspaceChange,
-    onWelcome: (access) => { entry.access = access; },
-    onFailed: (why) => console.warn(`[shared] ${workspace}: ${why}`),
-  });
-  void link.closed.then(() => {
-    entry.stop();
-    if (open.get(workspace) === entry) open.delete(workspace);
-  });
+  const set = (state: SharedState, given = entry.status.access): void => {
+    entry.status = { state, access: given };
+    reach.told(workspace, entry.status);
+  };
+  const again = (state: SharedState): void => {
+    set(state);
+    entry.retry = setTimeout(() => void connect(), backoff(entry.tries++));
+  };
+  const connect = async (): Promise<void> => {
+    entry.retry = null;
+    let link: Link;
+    try {
+      link = await reach.dial();
+    } catch {
+      if (open.get(workspace) === entry) again("offline");
+      return;
+    }
+    if (open.get(workspace) !== entry) return link.close("left");
+    entry.link = link;
+    entry.api = peerTransport(streamOf(link, "api"));
+    entry.api.events(reach.publish);
+    const stop = replicate(sharedStore(), repo, streamOf(link, "sync"), {
+      workspace,
+      changes: onWorkspaceChange,
+      onWelcome: (given) => { entry.tries = 0; set("connected", given); },
+      onFailed: (why) => console.warn(`[shared] ${workspace}: ${why}`),
+    });
+    void link.closed.then((why) => {
+      stop();
+      entry.link = null;
+      entry.api = null;
+      if (open.get(workspace) !== entry) return;
+      // Taken off the list, or refused at the door: nothing comes of dialling again.
+      if (/removed|not admitted/.test(why)) {
+        open.delete(workspace);
+        return set("removed");
+      }
+      again("reconnecting");
+    });
+  };
+  await connect();
+}
+
+/** Stop being connected to `workspace`'s host: this person left it. */
+export function leaveShared(workspace: string): void {
+  const entry = open.get(workspace);
+  if (!entry) return;
+  open.delete(workspace);
+  if (entry.retry) clearTimeout(entry.retry);
+  entry.link?.close("left");
+}
+
+/** Where the connection to `workspace`'s host is, while it is open here. */
+export function sharedStatus(workspace: string): SharedStatus | null {
+  return open.get(workspace)?.status ?? null;
+}
+
+/** Whether this person may change their copy of `workspace` here: while it is open, and the host
+ *  last let them edit its board. A copy kept after it ended is only read. */
+export function mayWriteShared(workspace: string): boolean {
+  const entry = open.get(workspace);
+  return !!entry && mayEdit(entry.status.access);
 }
 
 /** The workspace a window's call is about, when it is one shared from elsewhere. */
@@ -76,20 +150,15 @@ export const elsewhere: Elsewhere = {
     if (typeof method === "string" && method.startsWith("store.")) return null;
     const ws = workspaceOf(method, params);
     if (!ws) return null;
-    const entry = open.get(ws);
-    if (!entry) return Promise.resolve({ error: { code: "FAILED", message: "not connected to this workspace's host" } });
-    return entry.api.call(method as string, params as unknown[]);
+    const api = open.get(ws)?.api;
+    if (!api) return Promise.resolve({ error: { code: "FAILED", message: "not connected to this workspace's host" } });
+    return api.call(method as string, params as unknown[]);
   },
   notice(method, params): boolean {
     if (typeof method === "string" && method.startsWith("store.")) return false;
     const ws = workspaceOf(method, params);
     if (!ws) return false;
-    open.get(ws)?.api.notice(method as string, params as unknown[]);
+    open.get(ws)?.api?.notice(method as string, params as unknown[]);
     return true;
   },
 };
-
-/** The access the host of `workspace` gave this person, while connected. */
-export function sharedAccess(workspace: string): Access | null {
-  return open.get(workspace)?.access ?? null;
-}

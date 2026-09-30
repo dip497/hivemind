@@ -3,7 +3,7 @@
  * single-use unless made reusable; the person here is asked before anyone joins with it.
  */
 import { useState } from "react";
-import { Check, Copy, Share2 } from "lucide-react";
+import { Check, Copy, Share2, Users } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../components/ui/dialog";
 import { Button } from "../components/ui/button";
 
@@ -13,7 +13,7 @@ export const ROLE_LABELS: Record<string, string> = {
 };
 const EXPIRIES: Array<[string, number]> = [["1 hour", 3_600_000], ["24 hours", 86_400_000], ["7 days", 604_800_000]];
 
-export function ShareDialog({ repo, open, onClose }: { repo: string; open: boolean; onClose: () => void }) {
+export function ShareDialog({ repo, open, onClose, onPeople }: { repo: string; open: boolean; onClose: () => void; onPeople: () => void }) {
   const [role, setRole] = useState<LinkRole>("view");
   const [expiresIn, setExpiresIn] = useState(86_400_000);
   const [reusable, setReusable] = useState(false);
@@ -71,6 +71,7 @@ export function ShareDialog({ repo, open, onClose }: { repo: string; open: boole
           <Button onClick={() => void create()} disabled={busy} data-share-create>{busy ? "Making the link…" : "Make a link"}</Button>
         )}
         {error && <p className="text-[12px] text-[var(--color-err)]" role="alert">{error}</p>}
+        <Button variant="ghost" size="sm" className="self-start" onClick={onPeople} data-share-people><Users /> People with access…</Button>
       </DialogContent>
     </Dialog>
   );

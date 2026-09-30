@@ -1,8 +1,8 @@
 // The daemon client (hive-net.ts) with the real daemon (crates/hive-net, built with `cargo build`):
 // two devices in one process. Someone asks to pair and the host's answer reaches them; a device
 // the host admits connects, and text passes both ways, each frame on the stream it was sent on; one
-// no longer admitted is
-// cut off, and the host hears it go.
+// no longer admitted is cut off, and the host hears it go; a link closed saying why is read so on
+// the other side, and a device that stops is heard going at once.
 import { test, expect, afterEach } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -67,6 +67,35 @@ test.skipIf(!built)("pairing, then a connection the host admits, text both ways 
     host.admit([]);
     expect(await link.closed).toContain("removed");
     expect(await there.closed).toBeString();
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}, 30_000);
+
+test.skipIf(!built)("a link closed saying why is read so on the other side; a device that stops is heard going at once", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hn-client-"));
+  try {
+    const arrivals: Link[] = [];
+    const host = await device(root, "host", { incoming: (l) => arrivals.push(l) });
+    const guest = await device(root, "guest");
+    const where = { addrs: host.ready.addrs, relay: null };
+    host.admit([guest.ready.id]);
+    const dialled = async () => {
+      const link = await guest.dial(host.ready.id, where);
+      link.send("api", "hello");
+      while (arrivals.length === 0) await Bun.sleep(20);
+      return { link, there: arrivals.shift()! };
+    };
+
+    const first = await dialled();
+    first.there.close("role changed");
+    expect(await first.link.closed).toContain("role changed");
+
+    const second = await dialled();
+    const stopped = Date.now();
+    host.stop();
+    expect(await second.link.closed).toBeString();
+    expect(Date.now() - stopped).toBeLessThan(2_000);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

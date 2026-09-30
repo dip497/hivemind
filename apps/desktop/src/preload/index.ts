@@ -189,6 +189,16 @@ const api: HiveIpc & {
   },
   answerJoin: (req, allow) => ipcRenderer.send("net:join-answer", req, allow),
   people: (repo) => ipcRenderer.invoke("net:people", repo),
+  setRole: (repo, person, role) => ipcRenderer.invoke("net:set-role", repo, person, role),
+  removePerson: (repo, person) => ipcRenderer.invoke("net:remove", repo, person),
+  joined: () => ipcRenderer.invoke("net:joined"),
+  sharedStatus: (workspace) => ipcRenderer.invoke("net:shared-status", workspace),
+  onSharedStatus: (cb) => {
+    const h = (_e: Electron.IpcRendererEvent, workspace: string, status: Parameters<typeof cb>[1]) => cb(workspace, status);
+    ipcRenderer.on("net:shared-status", h);
+    return () => { ipcRenderer.removeListener("net:shared-status", h); };
+  },
+  leave: (workspace) => ipcRenderer.invoke("net:leave", workspace),
   getAppVersion: () => ipcRenderer.invoke("getAppVersion"),
   settingsSync: () => ipcRenderer.sendSync("settings:get-sync"),
   workspaceCoreSync: (repo) => ipcRenderer.sendSync("workspace:core-sync", repo),

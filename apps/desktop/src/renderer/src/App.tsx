@@ -3,6 +3,8 @@ import { ThemePanel } from "./ThemePanel";
 import { RecentProjects } from "./RecentProjects";
 import { ShareDialog, ROLE_LABELS } from "./multiplayer/share-dialog";
 import { PeopleHere } from "./multiplayer/presence";
+import { PeopleDialog } from "./multiplayer/people-dialog";
+import { SharedBanner } from "./multiplayer/shared-banner";
 import { setWorkspaceOccluded } from "./workspace-occlusion";
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -200,6 +202,7 @@ export function App() {
   // Ctrl+O / Ctrl+R on the canvas (useCanvasShortcuts): VS Code's Open Folder and Open Recent.
   const [recentOpen, setRecentOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [peopleOpen, setPeopleOpen] = useState(false);
   // Someone asks to join a workspace shared from here: the person here lets them in, or not.
   useEffect(() => window.hive.onJoinRequest((r) => {
     const who = r.profile.name || "Someone";
@@ -409,7 +412,8 @@ export function App() {
           upgrading={update.upgrading}
         />
         <div className="absolute top-0 right-0 z-40 flex items-start gap-2 px-3 py-2.5 pointer-events-none">
-          {repoPath && <PeopleHere repo={repoPath} />}
+          {repoPath?.startsWith("hive://") && <SharedBanner repo={repoPath} />}
+          {repoPath && <PeopleHere repo={repoPath} onManage={repoPath.startsWith("hive://") ? undefined : () => setPeopleOpen(true)} />}
           {/* A workspace joined from elsewhere is its owner's to share. */}
           {repoPath && !repoPath.startsWith("hive://") && (
             <Button
@@ -463,7 +467,8 @@ export function App() {
         onNewWindow={() => void window.hive.newWindow()}
         onClose={() => setRecentOpen(false)}
       />
-      {repoPath && <ShareDialog repo={repoPath} open={shareOpen} onClose={() => setShareOpen(false)} />}
+      {repoPath && <ShareDialog repo={repoPath} open={shareOpen} onClose={() => setShareOpen(false)} onPeople={() => { setShareOpen(false); setPeopleOpen(true); }} />}
+      {repoPath && !repoPath.startsWith("hive://") && <PeopleDialog repo={repoPath} open={peopleOpen} onClose={() => setPeopleOpen(false)} />}
       <NewIssueModal
         root={root}
         open={newOpen}

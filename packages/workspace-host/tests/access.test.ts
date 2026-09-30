@@ -45,7 +45,7 @@ test("a person's certified devices have the role granted to them; the owner's ar
   expect(a.addDevice(ws, { ...certifyDevice(priya.person, idOf(newSeed())), issuedAt: 1 })).toBe(false);
   // Another workspace of the same owner: nothing carries over.
   expect(a.accessOf(newWorkspaceId(), priya.cert.device)).toBeNull();
-  expect(a.people(ws)).toEqual([{ person: priya.id, role: "edit", grantedAt: expect.any(Number), expires: null, devices: [priya.cert.device, laptop.device].sort() }]);
+  expect(a.people(ws)).toEqual([{ person: priya.id, name: "", color: "", role: "edit", grantedAt: expect.any(Number), expires: null, devices: [priya.cert.device, laptop.device].sort() }]);
 });
 
 test("the list is the same after a restart; a grant changed on disk, or made by someone else, counts for nothing", () => {

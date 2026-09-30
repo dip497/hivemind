@@ -7,6 +7,25 @@ import type { NotificationSettings } from "./notification-settings.js";
 import type { ReviewComment } from "@hivemind/core/review";
 import type { LegacyLayout, WorkspaceChange } from "@hivemind/workspace-host/layout";
 import type { Participant, PresenceState } from "@hivemind/workspace-host/presence";
+
+/** Someone on a workspace's access list, as the People panel shows them. */
+export interface SharedPerson {
+  person: string;
+  name: string;
+  color: string;
+  role: string;
+  grantedAt: number;
+  expires: number | null;
+  devices: string[];
+  /** Connected now. */
+  present: boolean;
+}
+
+/** Where the connection to a joined workspace's host is, and what the host last gave. */
+export interface SharedStatus {
+  state: "connecting" | "connected" | "reconnecting" | "offline" | "left" | "removed";
+  access: string;
+}
 import type { BoardObject, CoreLayout, ViewLayout } from "@hivemind/workspace-doc/shapes";
 export type { NotificationSettings };
 
@@ -244,8 +263,21 @@ export interface HiveIpc {
   /** Someone asks to join a workspace shared from here; answer with `answerJoin`. */
   onJoinRequest(cb: (r: { req: number; profile: { name: string; color: string }; role: string; workspace: string }) => void): () => void;
   answerJoin(req: number, allow: boolean): void;
-  /** Who is on the workspace `repo`'s access list. */
-  people(repo: string): Promise<Array<{ person: string; role: string; grantedAt: number; expires: number | null; devices: string[] }>>;
+  /** Who is on the workspace `repo`'s access list, under the names they joined with, and whether
+   *  each is connected now. */
+  people(repo: string): Promise<SharedPerson[]>;
+  /** Give someone on `repo`'s list another role; they are reconnected under it. */
+  setRole(repo: string, person: string, role: string): Promise<void>;
+  /** Take someone off `repo`'s list: they are disconnected, and their link spent. */
+  removePerson(repo: string, person: string): Promise<void>;
+  /** The workspaces this person joined elsewhere, newest first. */
+  joined(): Promise<Array<{ workspace: string; names: { workspace: string; host: string }; role: string; joinedAt: number; ended?: "left" | "removed" }>>;
+  /** How the joined workspace `workspace` is: whose, and where its connection is. */
+  sharedStatus(workspace: string): Promise<({ names: { workspace: string; host: string } } & SharedStatus) | null>;
+  /** A joined workspace's connection changed. */
+  onSharedStatus(cb: (workspace: string, status: SharedStatus) => void): () => void;
+  /** Leave a joined workspace: its connection closes, and the last copy is kept to read. */
+  leave(workspace: string): Promise<void>;
   // ── app version + self-update ─────────────────────────────
   /** This app's version string (from apps/desktop/package.json). */
   getAppVersion(): Promise<string>;

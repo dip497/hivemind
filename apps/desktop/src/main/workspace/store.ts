@@ -9,7 +9,9 @@
  * one over their own store.
  *
  * The store checks the layouts it is given (a TypeError refuses one); what is checked here is
- * that the names are text.
+ * that the names are text. A workspace the host may only read (a copy of one shared from
+ * elsewhere, as a viewer or after it ended, M1) takes no write: the client is told the part
+ * changed, so it reads it again and its own change is put back.
  */
 import { ApiError, text } from "@hivemind/workspace-api/protocol";
 import type { Connection, Domain } from "@hivemind/workspace-api/server";
@@ -30,9 +32,15 @@ export class Layouts {
   private writersMade = 0;
 
   /** `store`: the store that holds a repo's layout (the host's own, or its replicas of others'
-   *  workspaces, M1), made when it is first needed. */
-  constructor(store: (repo: string) => WorkspaceStore) {
+   *  workspaces, M1), made when it is first needed. `mayWrite`: whether a repo's may be written. */
+  constructor(store: (repo: string) => WorkspaceStore, mayWrite: (repo: string) => boolean = () => true) {
     const repoOf = (v: unknown) => text(v, "repo");
+    /** Whether `from` may write `part` of `repo`; when not, it is told the part changed. */
+    const writable = (from: Connection, repo: string, part: string): boolean => {
+      if (mayWrite(repo)) return true;
+      setTimeout(() => from.send({ event: "store.changed", params: [{ repo, part }] }), 0);
+      return false;
+    };
     const as = (from: Connection) => ({ writer: this.writerOf(from) });
     /** The store `from` writes `repo` in, remembered so its history there goes with it. */
     const writing = (from: Connection, repo: string): WorkspaceStore => {
@@ -56,15 +64,22 @@ export class Layouts {
         "store.core": (_, repo) => { const r = repoOf(repo); return store(r).getCore(r); },
         "store.view": (_, repo, viewId) => { const r = repoOf(repo); return store(r).getView(r, text(viewId, "viewId")); },
         "store.objects": (_, repo) => { const r = repoOf(repo); return store(r).getObjects(r); },
-        "store.setCore": (from, repo, core, base) => { const r = repoOf(repo); return refused(() => writing(from, r).setCore(r, core, { ...as(from), base })); },
+        "store.setCore": (from, repo, core, base) => {
+          const r = repoOf(repo);
+          if (writable(from, r, "core")) refused(() => writing(from, r).setCore(r, core, { ...as(from), base }));
+        },
         "store.setView": (from, repo, viewId, layout, base) => {
           const r = repoOf(repo);
-          return refused(() => writing(from, r).setView(r, text(viewId, "viewId"), layout as ViewLayout, { ...as(from), base }));
+          const id = text(viewId, "viewId");
+          if (writable(from, r, `view:${id}`)) refused(() => writing(from, r).setView(r, id, layout as ViewLayout, { ...as(from), base }));
         },
-        "store.setObjects": (from, repo, objects, base) => { const r = repoOf(repo); return refused(() => writing(from, r).setObjects(r, objects, { ...as(from), base })); },
-        "store.import": (_, repo, legacy) => { const r = repoOf(repo); return refused(() => store(r).importLegacy(r, legacy as LegacyLayout)); },
-        "store.undo": (from, repo) => { const r = repoOf(repo); return writing(from, r).undo(r, as(from)); },
-        "store.redo": (from, repo) => { const r = repoOf(repo); return writing(from, r).redo(r, as(from)); },
+        "store.setObjects": (from, repo, objects, base) => {
+          const r = repoOf(repo);
+          if (writable(from, r, "board")) refused(() => writing(from, r).setObjects(r, objects, { ...as(from), base }));
+        },
+        "store.import": (_, repo, legacy) => { const r = repoOf(repo); if (mayWrite(r)) refused(() => store(r).importLegacy(r, legacy as LegacyLayout)); },
+        "store.undo": (from, repo) => { const r = repoOf(repo); return mayWrite(r) && writing(from, r).undo(r, as(from)); },
+        "store.redo": (from, repo) => { const r = repoOf(repo); return mayWrite(r) && writing(from, r).redo(r, as(from)); },
       },
       effects: {},
       notices: {
