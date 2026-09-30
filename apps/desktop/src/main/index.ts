@@ -61,7 +61,7 @@ const PERSIST_PTY = process.env.HIVEMIND_PTY_DAEMON !== "0";
 const ptyMod = PERSIST_PTY ? ptyDaemon : ptyHost;
 const { spawnPty, writePty, resizePty, killPty, detachPty, hasSession, pausePty, resumePty } = ptyMod;
 const killAllPtys = ptyMod.killAll;
-import { applyShellEnvToProcess } from "./shell-env.js";
+import { applyShellEnvToProcess, refreshShellEnv } from "./shell-env.js";
 import {
   gitCommit,
   gitConflictedFile,
@@ -1532,7 +1532,16 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     ipcMain.handle("agents:verify", wrap(async (_e, id: string) => {
       await applyShellEnvToProcess();
       const def = knownDef(String(id));
-      return def ? verifyAgent(def) : { path: null };
+      if (!def) return { path: null, searchedPath: process.env.PATH };
+      let v = await verifyAgent(def);
+      // Not found may mean "installed a minute ago": re-interrogate the login
+      // shell's PATH once before giving up, so Check again recovers a fresh
+      // install without an app restart.
+      if (!v.path) {
+        await refreshShellEnv();
+        v = await verifyAgent(def);
+      }
+      return v.path ? v : { ...v, searchedPath: process.env.PATH };
     }));
     // Browser-tile extensions (prototype): load every UNPACKED extension in
     // <userData>/browser-extensions/<name>/ into the SAME session the <webview>

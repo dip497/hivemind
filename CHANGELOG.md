@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Agents whose CLIs live in user-install dirs (`~/.npm-global/bin`, `~/.local/bin`, `~/bin`) are now found even when Hivemind's PATH missed them: those dirs are rescued into every lookup and spawn, a failed check re-interrogates the login shell once before giving up, and Settings ▸ Agents shows where Hivemind looked when a CLI is reported missing.
 - Agents can now launch in YOLO / skip-permissions mode across all providers; Antigravity (`agy`) now exposes its launch mode (`yolo`, `bypassPermissions`, `skip-permissions`, `acceptEdits`) and model options properly, with automatic alias normalization across agents.
 - The Add Machine dialog now features an (i) info button on hover explaining the purpose of adding a remote machine and the steps to connect it.
 

@@ -20,6 +20,7 @@
  * anyone who starts the app from a terminal and wants exactly that shell's env.
  */
 import { execFile } from "node:child_process";
+import path from "node:path";
 import { promisify } from "node:util";
 
 const execFileP = promisify(execFile);
@@ -46,6 +47,7 @@ let processPatched = false;
  *  AND inside an ENOENT retry — second call is a no-op when patched.
  *  Returns the env map for tests; production callers can ignore the return. */
 export async function applyShellEnvToProcess(): Promise<Record<string, string>> {
+  rescueProcessEnv();
   if (process.env.HIVEMIND_SHELL_ENV === "0") {
     processPatched = true;
     return { ...process.env } as Record<string, string>;
@@ -55,7 +57,22 @@ export async function applyShellEnvToProcess(): Promise<Record<string, string>> 
     processPatched = true;
     mergeIntoProcessEnv(result.env);
   }
+  // The merge overwrote PATH with the shell's value — re-apply the rescue on
+  // top of it (idempotent: dirs already present are left in place).
+  rescueProcessEnv();
   return result.env;
+}
+
+/** Re-interrogate the login shell NOW and overwrite process.env.PATH with what
+ *  it reports. For the "Check again" path: the user just installed an agent and
+ *  the one-shot patch would otherwise serve a stale PATH forever. */
+export async function refreshShellEnv(): Promise<void> {
+  if (process.env.HIVEMIND_SHELL_ENV === "0") return;
+  rescueProcessEnv();
+  cache = null;
+  const env = await resolveShellEnv();
+  mergeIntoProcessEnv(env.env);
+  rescueProcessEnv();
 }
 
 async function resolveShellEnv(): Promise<CachedResult> {
@@ -190,6 +207,42 @@ function mergeIntoProcessEnv(env: Record<string, string>): void {
   if (env.PATH) process.env.PATH = env.PATH;
 }
 
+/** Harness location rescue: when hivemind is desktop-launched it inherits
+ *  /etc/environment's PATH, and login-shell rc guards can drop user install
+ *  dirs even when the shell resolves — so bare agent commands (`claude`,
+ *  `codex`, …) in npm-global prefixes are invisible to lookup. Prepend the
+ *  dirs user-level installs actually write to when missing; existing entries
+ *  never move, so a correctly resolved PATH is untouched. Applied BOTH to tile
+ *  spawn envs (sanitizeShellEnv) and to process.env (rescueProcessPath) — the
+ *  latter is what every `findBin`/probe/exec in main reads. */
+const RESCUE_DIRS = ["bin", ".local/bin", ".npm-global/bin"] as const;
+
+function rescuePath(p: string | undefined, home: string | undefined): string | undefined {
+  if (!home || !p?.includes(":")) return p;
+  const have = new Set(p.split(":"));
+  const missing = RESCUE_DIRS.map((d) => path.join(home, d)).filter((d) => !have.has(d));
+  return missing.length ? [...missing, p].join(":") : p;
+}
+
+/** The rescue applied to process.env itself — `findBin` and every agent probe
+ *  in main read it directly, so an env with HIVEMIND_SHELL_ENV=0 (CI/e2e,
+ *  launcher-controlled PATH) stays untouched and everything else gets the
+ *  user-install dirs even before the login shell has answered. */
+function rescueProcessEnv(): void {
+  if (process.env.HIVEMIND_SHELL_ENV === "0") return;
+  const p = rescuePath(process.env.PATH, process.env.HOME);
+  if (p) process.env.PATH = p;
+}
+
+export function sanitizeShellEnv(env: Record<string, string>): Record<string, string> {
+  for (const k of ELECTRON_INTERNAL_ENV) delete env[k];
+  delete env[CLAUDE_CHILD_SESSION_MARKER];
+  if (!env[CLAUDE_FORCE_PERSISTENCE]) env[CLAUDE_FORCE_PERSISTENCE] = "1";
+  const p = rescuePath(env.PATH, env.HOME);
+  if (p) env.PATH = p;
+  return env;
+}
+
 /**
  * Strip Electron-internal runtime vars from the env handed to a USER-FACING
  * terminal shell (a tile PTY). The persistence daemon runs as electron-as-node
@@ -217,9 +270,3 @@ const ELECTRON_INTERNAL_ENV = ["ELECTRON_RUN_AS_NODE", "ELECTRON_NO_ATTACH_CONSO
 const CLAUDE_CHILD_SESSION_MARKER = "CLAUDE_CODE_CHILD_SESSION";
 const CLAUDE_FORCE_PERSISTENCE = "CLAUDE_CODE_FORCE_SESSION_PERSISTENCE";
 
-export function sanitizeShellEnv(env: Record<string, string>): Record<string, string> {
-  for (const k of ELECTRON_INTERNAL_ENV) delete env[k];
-  delete env[CLAUDE_CHILD_SESSION_MARKER];
-  if (!env[CLAUDE_FORCE_PERSISTENCE]) env[CLAUDE_FORCE_PERSISTENCE] = "1";
-  return env;
-}

@@ -216,6 +216,14 @@ function Requirement({ def }: { def: AgentProviderDef }) {
         <p>{found.path
           ? <>Found <code>{found.path}</code>, but it is not {def.label}: it did not answer <code>--version</code> like a CLI.</>
           : <>{def.label} is not installed. Hivemind looks for <code>{def.bin}</code> on your PATH.</>}</p>
+        {/* The PATH actually searched, so "not installed" is checkable when the CLI
+            sits in a dir Hivemind's PATH missed (npm-global prefixes, version managers). */}
+        {found.searchedPath && (
+          <details className="agent-req-where">
+            <summary>Where Hivemind looked</summary>
+            <code>{found.searchedPath}</code>
+          </details>
+        )}
         <div className="agent-req-actions">
           {def.install && <Button asChild size="sm"><a href={def.install.url} target="_blank" rel="noreferrer">Get {def.label}<ExternalLink /></a></Button>}
           {def.install?.command && <CopyCommand command={def.install.command} />}
