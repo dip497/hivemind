@@ -318,3 +318,4 @@ spawn wires not being drawn, and two issues found while verifying R1.
   `registry.test.ts`'s "the catalog starts empty" failed in the package's full run. CI runs on
   main and on pull requests only, so no run showed it. Each file that seeds the catalog now does
   so in `beforeAll` and empties it in `afterAll`.
+  Full e2e on the step 1 commit (`a59ec1e`): 159 passed, 10 skipped.
