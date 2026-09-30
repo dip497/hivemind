@@ -221,6 +221,31 @@ test("while events stream a peer is sent a frame at most every 25 ms, each heard
   expect(heard).toEqual(Array.from({ length: 20 }, (_, n) => `${n}`));
 });
 
+test("while events stream to several peers, a moment's frames to each go out together", async () => {
+  const [one, two] = [connect("view"), connect("view")];
+  const at: Record<"one" | "two", number[]> = { one: [], two: [] };
+  one.guest.on(() => at.one.push(performance.now()));
+  two.guest.on(() => at.two.push(performance.now()));
+  await one.client.call("file.read", workspaceUrl(W), "a.ts"); // connected
+  await two.client.call("file.read", workspaceUrl(W), "a.ts");
+  await Bun.sleep(PEER_FRAME_MS * 2);
+  at.one.length = 0;
+  at.two.length = 0;
+  // Output for the two, a few milliseconds apart, for a tenth of a second.
+  for (let n = 0; n < 12; n++) {
+    one.server.publish("terminal.data", "in-1", `${n}`);
+    await Bun.sleep(4);
+    two.server.publish("terminal.data", "in-1", `${n}`);
+    await Bun.sleep(4);
+  }
+  await Bun.sleep(PEER_FRAME_MS * 2);
+  // After the first to each, which goes at once, the frames to the two go at the same moments:
+  // all but those a tick fell between their first or their last outputs.
+  const [ones, twos] = [at.one.slice(1), at.two.slice(1)];
+  expect(twos.length).toBeGreaterThanOrEqual(3);
+  expect(twos.filter((t) => ones.some((o) => Math.abs(o - t) < 1)).length).toBeGreaterThanOrEqual(twos.length - 2);
+});
+
 test("an answer comes after the events its call brought", async () => {
   const driver = connect("agents");
   const order: string[] = [];

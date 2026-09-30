@@ -71,6 +71,20 @@ function tilesOf(event: EventMessage): string[] | null {
 /** While events stream to a peer, a frame at most this often. */
 export const PEER_FRAME_MS = 25;
 
+/** The peers with a frame waiting for the next tick of the one clock they all keep: a moment's
+ *  frames to every peer go out together, in one write to the network daemon. */
+const waiting = new Set<() => void>();
+let ticking: ReturnType<typeof setTimeout> | null = null;
+function atNextTick(flush: () => void): void {
+  waiting.add(flush);
+  ticking ??= setTimeout(() => {
+    ticking = null;
+    const due = [...waiting];
+    waiting.clear();
+    for (const f of due) f();
+  }, PEER_FRAME_MS - (Date.now() % PEER_FRAME_MS));
+}
+
 /** Each event as JSON, once for however many peers it goes to. */
 const encoded = new WeakMap<EventMessage, string>();
 function json(event: EventMessage): string {
@@ -106,10 +120,9 @@ export function servePeer(server: WorkspaceServer, channel: TextChannel, peer: P
   const gone = new AbortController();
   let queued: EventMessage[] = [];
   let sentAt = -Infinity;
-  let due: ReturnType<typeof setTimeout> | "now" | null = null;
+  let due = false;
   const flush = (): void => {
-    if (due !== null && due !== "now") clearTimeout(due);
-    due = null;
+    due = false;
     if (queued.length === 0) return;
     sentAt = Date.now();
     const events = queued;
@@ -122,11 +135,11 @@ export function servePeer(server: WorkspaceServer, channel: TextChannel, peer: P
       const out = outbound(event);
       if (!out) return;
       queued.push(out);
-      if (due !== null) return;
-      // With whatever else this moment brings: at once after a quiet spell, else when it is time.
-      const wait = PEER_FRAME_MS - (Date.now() - sentAt);
-      if (wait > 0) due = setTimeout(flush, wait);
-      else { due = "now"; queueMicrotask(flush); }
+      if (due) return;
+      due = true;
+      // With whatever else this moment brings: at once after a quiet spell, else at the next tick.
+      if (Date.now() - sentAt >= PEER_FRAME_MS) queueMicrotask(flush);
+      else atNextTick(flush);
     },
     closed: gone.signal,
   };

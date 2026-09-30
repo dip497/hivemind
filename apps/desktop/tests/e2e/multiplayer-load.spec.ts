@@ -27,7 +27,12 @@ test.afterEach(async () => {
   for (const g of guests.splice(0)) g.stop();
   const reap = () => { try { execSync(`pkill -f "out/main/pty-daemon.js ${root}/"`, { stdio: "ignore" }); } catch { /* none */ } };
   reap();
-  for (const a of apps.splice(0)) await a.close().catch(() => {});
+  // A host of a hundred terminals can take its time to quit: past that, it is stopped.
+  for (const a of apps.splice(0)) {
+    const pid = a.process().pid!;
+    await Promise.race([a.close().catch(() => {}), new Promise((r) => setTimeout(r, 15_000))]);
+    try { process.kill(pid, "SIGKILL"); } catch { /* gone */ }
+  }
   reap();
   fs.rmSync(root, { recursive: true, force: true });
 });
@@ -101,8 +106,11 @@ async function load(pid: number, ms: number): Promise<{ share: number; parts: st
 }
 const said = (label: string, l: { share: number; parts: string }) => `${label} ${(l.share * 100).toFixed(1)}% of a core (${l.parts})`;
 
-/** A line every 20 ms, with nothing forked per line (bash's `read -t` on a pipe nobody writes). */
-const STREAM = `f=$(mktemp -u); mkfifo $f; exec 3<>$f; rm $f; while :; do printf 'stream %s the quick brown fox jumps over the lazy dog %s\\n' $SECONDS $RANDOM; read -t 0.02 -u 3; done\r`;
+/** A line every 20 ms, with nothing forked per line (bash's `read -t` on a pipe nobody writes,
+ *  which times out); a loop whose wait fails at once stops rather than floods. */
+const STREAM = `f=$(mktemp -u); mkfifo $f; exec 3<>$f; rm $f; while :; do printf 'stream %s the quick brown fox jumps over the lazy dog %s\\n' $SECONDS $RANDOM; read -t 0.02 -u 3; [ $? -gt 128 ] || break; done\r`;
+/** A screen whose last lines are the stream's: its lines, not the command that starts it. */
+const streams = (screen: string) => /stream \d+ the quick/.test(screen.split("\n").filter((l) => l.trim()).slice(-3).join("\n"));
 
 test("with four people watching ten streaming terminals of 100 tiles the host works at most 20% more; with their pointers moving, 20 points of a core more", async () => {
   test.skip(!fs.existsSync(HIVE_NET), "build hive-net for release first: cargo build --release in crates/hive-net");
@@ -124,8 +132,9 @@ test("with four people watching ten streaming terminals of 100 tiles the host wo
   }).map((node) => node.getAttribute("data-id")!));
   await expect.poll(async () => (await inView()).length, { timeout: 10_000 }).toBeGreaterThanOrEqual(STREAMING);
   const streaming = (await inView()).slice(0, STREAMING);
-  // Each of the ten streams, as the host shows it: one whose shell was not up yet when it was
-  // told is told again.
+  // Each of the ten streams, as the host shows it. One whose shell was not up yet when it was
+  // told, or took half of it, is interrupted and told again: its screen changing is not enough,
+  // as the command echoing changes it too.
   const screens = () => host.evaluate((ids) => ids.map((id) => {
     const node = document.querySelector(`.react-flow__node[data-id="${id}"]`);
     const shown = node && ([node, ...node.querySelectorAll("*")].find((e) => "__hmScreen" in e) as (Element & { __hmScreen(): string }) | undefined);
@@ -135,8 +144,13 @@ test("with four people watching ten streaming terminals of 100 tiles the host wo
     const before = await screens();
     await host.waitForTimeout(500);
     const after = await screens();
-    const still = streaming.filter((_, i) => before[i] === after[i]);
-    for (const tile of still) await host.evaluate(([t, s]) => window.hive.ptyWrite(`hm:${t}`, s), [tile, STREAM] as const);
+    const still = streaming.filter((_, i) => before[i] === after[i] || !streams(after[i]!));
+    for (const tile of still) {
+      // The interrupt alone first: a terminal drops what is typed behind one.
+      await host.evaluate((t) => window.hive.ptyWrite(`hm:${t}`, "\x03"), tile);
+      await host.waitForTimeout(100);
+      await host.evaluate(([t, s]) => window.hive.ptyWrite(`hm:${t}`, s), [tile, STREAM] as const);
+    }
     return still.length;
   }, { timeout: 60_000, intervals: [1_000] }).toBe(0);
   await host.waitForTimeout(15_000); // settled: the hundred starts are done with
@@ -162,7 +176,7 @@ test("with four people watching ten streaming terminals of 100 tiles the host wo
   heard.clear();
   const watching = await load(pid, MEASURE_MS);
   // Each of them was sent each of the ten streams.
-  expect([...heard.values()].map((seen) => seen.size)).toEqual(Array(GUESTS).fill(STREAMING));
+  expect([...heard.values()].map((seen) => [...seen].sort()), "the streams each guest heard").toEqual(Array(GUESTS).fill(streaming.map((t) => `hm:${t}`).sort()));
 
   // Now their pointers move, 20 times a second each.
   let step = 0;

@@ -28,7 +28,7 @@
  * writer is gone (`forgetWriter`: a window closed).
  */
 import { UndoManager, VersionVector, type LoroDoc } from "loro-crdt";
-import { addTile, hasCore, holdsTile, readCore, removeTile, writeCore, writeTileName } from "@hivemind/workspace-doc/core";
+import { addTile, hasCore, readCore, removeTile, tileIds, writeCore, writeTileName } from "@hivemind/workspace-doc/core";
 import { readObjects, writeObjects } from "@hivemind/workspace-doc/objects";
 import { readView, readViews, writeView } from "@hivemind/workspace-doc/views";
 import { readOwnership, stampOwnership, stampSchema, type Ownership } from "@hivemind/workspace-doc/schema";
@@ -73,6 +73,10 @@ export interface WorkspaceStoreOptions {
 
 export class WorkspaceStore {
   private readonly workspaces = new Map<string, Workspace>();
+  /** The tiles of each open workspace, read from its document when first asked and again after a
+   *  change that can open or close one: which workspace holds a tile is asked for every moment of
+   *  a terminal's output, for each person watching it. */
+  private readonly tiles = new Map<string, Set<string>>();
   /** Repos whose file is behind their document because a write failed. */
   private readonly unsaved = new Set<string>();
 
@@ -130,7 +134,7 @@ export class WorkspaceStore {
   /** The workspace this store has open that holds the tile `tileId`, or null: the control plane
    *  knows a tile by its id alone. */
   workspaceOf(tileId: string): string | null {
-    for (const [repo, { doc }] of this.workspaces) if (holdsTile(doc, tileId)) return repo;
+    for (const repo of this.workspaces.keys()) if (this.tilesOf(repo).has(tileId)) return repo;
     return null;
   }
 
@@ -223,6 +227,7 @@ export class WorkspaceStore {
     const before = JSON.stringify(doc.frontiers());
     doc.import(bytes);
     if (JSON.stringify(doc.frontiers()) === before) return;
+    this.tiles.delete(repo);
     this.persist(repo, doc);
     const parts: WorkspaceChange["part"][] = ["core", "board", ...Object.keys(readViews(doc)).map((v) => `view:${v}` as const)];
     for (const part of parts) this.opts.onChange?.({ repo, part, writer: from.writer ?? "" });
@@ -293,7 +298,14 @@ export class WorkspaceStore {
 
   private commit(repo: string, doc: LoroDoc, origin: string): void {
     doc.commit({ origin });
+    this.tiles.delete(repo);
     this.persist(repo, doc);
+  }
+
+  private tilesOf(repo: string): Set<string> {
+    let tiles = this.tiles.get(repo);
+    if (!tiles) this.tiles.set(repo, (tiles = new Set(tileIds(this.workspace(repo).doc))));
+    return tiles;
   }
 
   /**
@@ -306,6 +318,7 @@ export class WorkspaceStore {
     edit(doc);
     doc.commit({ origin });
     if (JSON.stringify(doc.frontiers()) === before) return;
+    if (part === "core") this.tiles.delete(repo);
     this.persist(repo, doc);
     this.opts.onChange?.({ repo, part, writer: from.writer ?? "" });
   }

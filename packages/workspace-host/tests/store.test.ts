@@ -370,6 +370,24 @@ test("a tile closed by the control plane is gone after a restart, and stays clos
   ]);
 });
 
+test("the workspace that holds a tile is the one whose document holds it now: as tiles open and close, and as another replica's changes bring one", () => {
+  const s = new WorkspaceStore({ dir, person });
+  s.setCore("/a", core("api"));
+  s.getCore("/b");
+  expect([s.workspaceOf("t1"), s.workspaceOf("t2")]).toEqual(["/a", null]);
+  s.addTile("/b", { id: "t2", kind: "shell", label: "shell #1" });
+  expect(s.workspaceOf("t2")).toBe("/b");
+  s.removeTile("t1");
+  expect(s.workspaceOf("t1")).toBeNull();
+  // Another replica of /b opens t3, and its changes come here.
+  const replica = new WorkspaceStore({ dir: path.join(tmp, "replica") });
+  replica.importFrom("/b", s.exportSince("/b", null));
+  const saw = s.version("/b");
+  replica.addTile("/b", { id: "t3", kind: "shell", label: "shell #2" });
+  s.importFrom("/b", replica.exportSince("/b", saw));
+  expect(s.workspaceOf("t3")).toBe("/b");
+});
+
 test("a tile the control plane opens is kept, told with its writer, and stays when a window then writes what it read before", () => {
   const told: unknown[] = [];
   const s = new WorkspaceStore({ dir, person, onChange: (c) => told.push(c) });
