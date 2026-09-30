@@ -146,6 +146,22 @@ without a restart. `hive ctl spawn --agent` and `hive ctl workflow` accept agent
 this way, and refuse any agent switched off in Settings. See
 [Add your own agent](../agent-providers/) for the file format.
 
+## `hive host` — an always-on host
+
+A machine with no desktop (a server, a VPS, a box in the office) can host its workspaces for
+your other devices, and keep their agents running while your laptop sleeps. `hive host` serves
+the workspaces in this machine's app data folder, runs their terminals in the machine's PTY
+daemon, and reaches the network through hive-net (installed beside `hive`).
+
+```text
+hive host run       # serve until stopped (what a service runs); one host per machine
+hive host status    # whether it runs, as which device, where it is reached, its workspaces
+hive host stop      # stop serving; the terminals keep running in the daemon
+```
+
+The host is the same device the app would be on that machine (it uses the app's keys), so it
+does not run while the app does.
+
 ## Optional tools
 
 Browser is an optional bundled tool. Switch it on in **Settings > Tools**, or set

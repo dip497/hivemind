@@ -31,6 +31,7 @@ import { toolsCmd } from "./commands/tools.js";
 import { configCmd, themeCmd } from "./commands/config.js";
 import { networkCmd } from "./commands/network.js";
 import { daemonCmd } from "./commands/daemon.js";
+import { hostCmd } from "./commands/host.js";
 import { psCmd } from "./commands/ps.js";
 import { attachCmd } from "./commands/attach.js";
 import { runCmd } from "./commands/run.js";
@@ -83,6 +84,7 @@ const main = defineCommand({
     config: configCmd,
     theme: themeCmd,
     daemon: daemonCmd,
+    host: hostCmd,
     ps: psCmd,
     attach: attachCmd,
     run: runCmd,

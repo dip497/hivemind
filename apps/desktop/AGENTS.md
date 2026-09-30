@@ -18,8 +18,8 @@ src/shared/     types shared main↔renderer
 src/renderer/src/   React app (see "Renderer" below)
 tests/unit/     node:test (pure logic)   tests/e2e/  Playwright
 
-packages/host/src/   the workspace API answered on this machine (R14): what main and the
-                     dev-bridge serve (its tests: tsx --test)
+packages/host/src/   the workspace API answered on this machine (R14): what main, the
+                     dev-bridge and the headless `hive host` serve (its tests: tsx --test)
   domains.ts · store.ts · terminals.ts · plans.ts · presence.ts · agents.ts
   git-adapter.ts  git ops (simple-git + raw spawn); rawGit() is the low-level seam
   remote/         ssh transport — conn (pool) · fs · exec · git · ssh · targets · catalog

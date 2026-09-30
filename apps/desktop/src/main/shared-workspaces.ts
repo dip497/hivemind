@@ -16,7 +16,7 @@ import { peerTransport, workspaceUrl } from "@hivemind/workspace-api/peers";
 import type { ClientTransport } from "@hivemind/workspace-api/client";
 import type { Answer, EventMessage } from "@hivemind/workspace-api/protocol";
 import type { Elsewhere } from "./workspace-ipc.js";
-import { streamOf } from "./peers-host.js";
+import { streamOf } from "@hivemind/host/peer-links";
 import { onWorkspaceChange, sharedStore } from "./workspace-store-ipc.js";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
 

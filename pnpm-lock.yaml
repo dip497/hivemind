@@ -157,6 +157,9 @@ importers:
       '@hivemind/core':
         specifier: workspace:*
         version: link:../../packages/hive-core
+      '@hivemind/host':
+        specifier: workspace:*
+        version: link:../../packages/host
       '@hivemind/view-sdk':
         specifier: workspace:*
         version: link:../../packages/hive-view-sdk

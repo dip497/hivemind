@@ -61,7 +61,7 @@ import type { AppErrorEvent, MachineAddRequest } from "../shared/ipc.js";
 import { startPlanBridge, type PlanRequest } from "./plan-bridge.js";
 import { randomUUID } from "node:crypto";
 import { startHcpServer } from "./hcp/hcp-server.js";
-import { makeSpawnPacer } from "./spawn-pacer.js";
+import { makeSpawnPacer } from "@hivemind/host/spawn-pacer";
 import { makeDispatch, type Dispatcher } from "./hcp/methods.js";
 import { PERSON, handle, handleEffect, on, performed } from "./app-ipc.js";
 import { hostIntents } from "./audit.js";

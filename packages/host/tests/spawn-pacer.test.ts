@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { makeSpawnPacer } from "../../src/main/spawn-pacer.js";
+import { makeSpawnPacer } from "../src/spawn-pacer.ts";
 
 test("a burst past the limit waits for room instead of failing", async () => {
   const acquire = makeSpawnPacer({ windowMs: 120, max: 2, queueMax: 10 });

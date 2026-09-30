@@ -20,14 +20,15 @@ import { handle, handleEffect, on } from "./app-ipc.js";
 import { displayName, machineIdentity } from "./identity.js";
 import { getSettings } from "./settings-store.js";
 import { broadcast, userWindow } from "./windows.js";
-import { workspaceStore } from "./workspace-store-ipc.js";
-import { connectedTo, disconnect, servePeerLink } from "./peers-host.js";
+import { onWorkspaceChange, workspaceStore } from "./workspace-store-ipc.js";
+import { PeerLinks } from "@hivemind/host/peer-links";
 import { leaveShared, openShared, sharedStatus, type SharedStatus } from "./shared-workspaces.js";
 import type { WorkspaceServer } from "@hivemind/workspace-api/server";
 import type { EventMessage } from "@hivemind/workspace-api/protocol";
 
-/** The host's workspace API, which peers are served from: set when the IPC is installed. */
-let apiServer: WorkspaceServer | null = null;
+/** The workspaces shared from here, served to peers from the host's workspace API: set when the
+ *  IPC is installed. */
+let peers: PeerLinks | null = null;
 
 const exe = process.platform === "win32" ? "hive-net.exe" : "hive-net";
 
@@ -137,8 +138,8 @@ export function network(): Promise<HiveNet> {
       socket: socketPath(),
       profile: networkProfiles().arg(),
       onIncoming: (link) => {
-        if (!apiServer) return link.close();
-        servePeerLink(link, accessLists(), apiServer);
+        if (!peers) return link.close();
+        peers.serve(link);
         void vouchFor(link.peer);
       },
       onPairRequest: (peer, hello) => sharingOf().answer(peer, hello),
@@ -213,7 +214,7 @@ function ownedWorkspace(repo: unknown): string {
 type JoinReply = PairReply | { ok: false; error: "not-admitted"; message: string };
 
 export function installNetworkIpc(server: WorkspaceServer): void {
-  apiServer = server;
+  peers = new PeerLinks({ store: workspaceStore(), changes: onWorkspaceChange, lists: accessLists(), server, onWarn: (m) => console.warn(`[peers] ${m}`) });
   // The network in use, changed here or by `hive network use`: the daemon starts again on it.
   try {
     fs.watchFile(networkProfiles().file, { interval: 2_000 }, (now, before) => { if (now.mtimeMs !== before.mtimeMs) restartNetwork(); });
@@ -288,7 +289,7 @@ export function installNetworkIpc(server: WorkspaceServer): void {
   handle("net:people", (_e, repo: unknown) => {
     const own = typeof repo === "string" ? workspaceStore().ownership(repo) : null;
     if (!own) return [];
-    const here = connectedTo(own.workspaceId);
+    const here = peers?.connectedTo(own.workspaceId) ?? new Set<string>();
     return accessLists().people(own.workspaceId).map((p) => ({ ...p, present: here.has(p.person) }));
   });
 
@@ -299,9 +300,9 @@ export function installNetworkIpc(server: WorkspaceServer): void {
     if (!ROLES.includes(role as Role)) throw new Error(`people: ${String(role)} is not a role`);
     const current = accessLists().people(ws).find((p) => p.person === person);
     if (!current) throw new Error("people: they are not on this workspace's list");
-    if (role === "agents" && !connectedTo(ws).has(current.person)) throw new Error("people: Can drive agents is given only to someone here now");
+    if (role === "agents" && !peers?.connectedTo(ws).has(current.person)) throw new Error("people: Can drive agents is given only to someone here now");
     accessLists().grant(ws, current.person, role as Role, current.expires);
-    disconnect(ws, current.person, "role changed");
+    peers?.disconnect(ws, current.person, "role changed");
   });
 
   // Take someone off the list: their connections close at once, and the link they came in by
@@ -309,7 +310,7 @@ export function installNetworkIpc(server: WorkspaceServer): void {
   handleEffect("net:remove", (repo: unknown, person: unknown) => ({ target: typeof repo === "string" ? repo : undefined, detail: String(person).slice(0, 8) }), async (_e, repo: unknown, person: unknown) => {
     const ws = ownedWorkspace(repo);
     if (typeof person !== "string" || !accessLists().revoke(ws, person)) throw new Error("people: they are not on this workspace's list");
-    disconnect(ws, person, "removed");
+    peers?.disconnect(ws, person, "removed");
     (await current)?.admit(accessLists().admitted());
   });
 

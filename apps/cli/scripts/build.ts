@@ -22,9 +22,19 @@ function ptyAddon(): string | undefined {
 const addon = process.platform === "win32" ? undefined : ptyAddon();
 if (!addon) console.warn(`[build] no node-pty addon for ${plat} — this hive builds without \`hive daemon\` PTY support`);
 
+// loro-crdt's Node build reads its .wasm from beside it when it loads, which a compiled binary has
+// no file for; its base64 build carries the .wasm inline (`hive host` runs the workspace store).
+const loroInline: import("bun").BunPlugin = {
+  name: "loro-inline-wasm",
+  setup(build) {
+    build.onResolve({ filter: /^loro-crdt$/ }, (args) => ({ path: Bun.resolveSync("loro-crdt/base64", path.dirname(args.importer)) }));
+  },
+};
+
 const result = await Bun.build({
   entrypoints: [path.join(import.meta.dir, "..", "src", "index.ts")],
   compile: { outfile },
+  plugins: [loroInline],
   define: {
     ...(addon ? { HIVE_PTY_NATIVE: JSON.stringify(addon) } : {}),
     HIVE_VIEW_SDK: JSON.stringify(Object.fromEntries(SDK_FILES.map((f) =>

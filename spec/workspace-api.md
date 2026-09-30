@@ -222,5 +222,5 @@ TypeScript: `StoreReplica` (`packages/workspace-api/src/store-replica.ts`).
 TypeScript: `packages/workspace-api` (the methods' types, a client over any transport, and the
 server that answers them, and a replica of the store for a client over a stream); the host's
 domains in `packages/host` (git and worktrees, files, issues, reviews, agents, terminals, plans,
-presence, the store), which the app's main process and the dev-bridge both serve, each over its own
-way of running a session and its own store.
+presence, the store), which the app's main process, the dev-bridge and `hive host` serve, each over its
+own way of running a session and its own store.

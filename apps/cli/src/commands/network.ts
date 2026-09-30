@@ -9,35 +9,13 @@
  *   hive network doctor               whether its relays answer this computer
  */
 import { defineCommand } from "citty";
-import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { NetworkProfiles, type NetworkProfile } from "@hivemind/workspace-host/network-profile";
 import { err, ok } from "../format.js";
-import { configDir, win32UserDataDir } from "../hcp.js";
-
-/** The app's data folder, where its keys and network are kept (`HIVEMIND_APP_DATA` names another). */
-function appData(): string {
-  const named = process.env.HIVEMIND_APP_DATA;
-  if (named) return named;
-  if (process.platform === "win32") return win32UserDataDir() ?? path.join(os.homedir(), "AppData", "Roaming", "hivemind");
-  if (process.platform === "darwin") return path.join(os.homedir(), "Library", "Application Support", "hivemind");
-  return path.join(configDir(), "hivemind");
-}
-
-/** hive-net: named by HIVEMIND_HIVE_NET, else where the installers put it, else on PATH. */
-function hiveNet(): string | null {
-  const exe = process.platform === "win32" ? "hive-net.exe" : "hive-net";
-  const candidates = [
-    process.env.HIVEMIND_HIVE_NET,
-    path.join(os.homedir(), ".hivemind-app", exe),
-    ...(process.env.PATH ?? "").split(path.delimiter).filter(Boolean).map((d) => path.join(d, exe)),
-  ];
-  return candidates.find((c): c is string => !!c && fs.existsSync(c)) ?? null;
-}
+import { appData, hiveNetBin } from "../app-data.js";
 
 function profiles(ctx: { json: boolean }): NetworkProfiles | null {
-  const bin = hiveNet();
+  const bin = hiveNetBin();
   if (!bin) {
     err(ctx, "not_installed", "hive-net is not installed here: reinstall hivemind (install.sh puts it beside hive)");
     return null;

@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- New: `hive host run` serves this machine's workspaces with no desktop (a server, a VPS, a box in the office), their terminals in the machine's PTY daemon so agents keep running, on the network through hive-net; `hive host status` says as which device and where it is reached, and `hive host stop` stops it and leaves the terminals running. It is the same device the app would be on that machine, so it does not run while the app does.
+- Fixed: the compiled `hive daemon` could take the socket of a daemon already running (leaving its terminals unreachable) or delete a file that was at the socket's path; it now leaves both alone.
 - **Breaking:** a frame on a saved machine now names the machine rather than its address: its folder is `machine://<machine id>/path` (in `hive ctl frames` too), not `ssh://user@host/path`. Editing a machine's address or login moves its frames with nothing to redo; removing a machine puts its frames back at its address, where they still run, and saving a machine at an address puts the frames there on it. A workspace from before moves onto its machines when it opens.
 - New: views can show who else is in a workspace you share (view protocol 1.5): each person's name and colour, the tile their pointer is over and what they selected, as they move. A view also learns whether it is on a touch screen or a phone's, and `hive views new` comes with a fake host to test a view without the app, which says what the app would refuse and why.
 - Fixed: switching a shared workspace from the canvas to another view no longer looks, to the people in it, as if you left. What you select there still shows to them.
