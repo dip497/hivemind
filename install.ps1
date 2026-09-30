@@ -98,6 +98,7 @@ if (`$Purge) {
   Write-Host "hivemind: kept user data - pass -Purge to remove it too"
 }
 Remove-Item -Force "$(Join-Path $BinDir 'hive.exe')"
+Remove-Item -Force "$(Join-Path $BinDir 'hive-net.exe')"
 Remove-Item -Force "$(Join-Path $BinDir 'hivemind.cmd')"
 Write-Host "hivemind: uninstalled."
 "@ | Set-Content -Path $script -Encoding UTF8
@@ -205,8 +206,10 @@ function Install-Prebuilt {
 
   $bare = $tag.TrimStart("v")
   $cliUrl = "https://github.com/$Repo/releases/download/$tag/hive-windows-x64.exe"
+  $netUrl = "https://github.com/$Repo/releases/download/$tag/hive-net-windows-x64.exe"
   $appUrl = "https://github.com/$Repo/releases/download/$tag/hivemind-$bare-x64-win.zip"
   $tmpCli = Join-Path $AppDir "hive.$PID.new"
+  $tmpNet = Join-Path $AppDir "hive-net.$PID.new"
   $tmpApp = Join-Path $AppDir "app.$PID.zip"
 
   try {
@@ -217,6 +220,16 @@ function Install-Prebuilt {
     Invoke-WebRequest -Uri $cliUrl -OutFile $tmpCli -UseBasicParsing
     Move-Item -Force $tmpCli (Join-Path $BinDir "hive.exe")
     Ok "installed $(Join-Path $BinDir 'hive.exe')"
+
+    # hive-net, beside hive: this machine's device on the network (R10). Its release build is
+    # allowed to fail on its own, so a release without it installs the rest.
+    try {
+      Invoke-WebRequest -Uri $netUrl -OutFile $tmpNet -UseBasicParsing
+      Move-Item -Force $tmpNet (Join-Path $BinDir "hive-net.exe")
+      Ok "installed $(Join-Path $BinDir 'hive-net.exe')"
+    } catch {
+      Warn "hive-net is not in $tag; the rest is installed without it"
+    }
 
     Say "downloading desktop app"
     Invoke-WebRequest -Uri $appUrl -OutFile $tmpApp -UseBasicParsing
@@ -231,7 +244,7 @@ function Install-Prebuilt {
   } catch {
     Die "install failed: $($_.Exception.Message)"
   } finally {
-    Remove-Item -Force $tmpCli, $tmpApp -ErrorAction SilentlyContinue
+    Remove-Item -Force $tmpCli, $tmpNet, $tmpApp -ErrorAction SilentlyContinue
   }
 }
 

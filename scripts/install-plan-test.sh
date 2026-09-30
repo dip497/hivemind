@@ -21,10 +21,12 @@ expect() { # os arch key value
 expect Linux  x86_64 platform  linux-x86_64
 expect Linux  x86_64 cli_asset hive-linux-x86_64
 expect Linux  x86_64 app_asset hivemind-9.9.9-x86_64.AppImage
+expect Linux  x86_64 net_asset hive-net-linux-x86_64
 expect Darwin arm64  os_kind   mac
 expect Darwin arm64  platform  darwin-arm64
 expect Darwin arm64  cli_asset hive-darwin-arm64
 expect Darwin arm64  app_asset hivemind-9.9.9-arm64-mac.zip
+expect Darwin arm64  net_asset hive-net-darwin-arm64
 # No prebuilt, but --dev must still be reachable: OS resolves, platform doesn't.
 expect Darwin x86_64 os_kind   mac
 expect Darwin x86_64 platform  none
@@ -32,8 +34,10 @@ expect Darwin x86_64 platform  none
 expect Linux  aarch64 platform  linux-arm64
 expect Linux  aarch64 cli_asset hive-linux-arm64
 expect Linux  aarch64 app_asset none
+expect Linux  aarch64 net_asset hive-net-linux-arm64
 expect Linux  arm64   cli_asset hive-linux-arm64
 expect Linux  riscv64 platform  none
+expect Linux  riscv64 net_asset none
 
 # Git Bash reports MINGW64_NT-*; such a user must be sent to install.ps1, not
 # told "unsupported OS" — they are on a supported platform, wrong installer.

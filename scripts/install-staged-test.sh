@@ -53,6 +53,9 @@ case "$url" in
   *api.github.com*)
     if [ "$(cat "$TMP_API_403" 2>/dev/null || echo 0)" = 1 ]; then printf '\n403'; exit 22; fi
     printf '{"tag_name": "%s"}\n' "$want";;
+  *hive-net*)
+    [ "$(cat "$TMP_NO_NET" 2>/dev/null || echo 0)" = 1 ] && exit 22
+    printf '#!/usr/bin/env bash\necho hive-net %s\n' "$want" > "$out"; chmod +x "$out";;
   *AppImage*)
     cat > "$out" <<IMG
 #!/usr/bin/env bash
@@ -71,7 +74,7 @@ cat > "$TMP/shims/pgrep" <<'SHIM'
 SHIM
 chmod +x "$TMP/shims"/*
 export PATH="$TMP/shims:$PATH"
-export TMP_LATEST="$TMP/latest" TMP_RUNNING="$TMP/running" TMP_URLS="$TMP/urls" TMP_API_403="$TMP/api403" TMP_NO_REDIRECT="$TMP/noredirect"
+export TMP_LATEST="$TMP/latest" TMP_RUNNING="$TMP/running" TMP_URLS="$TMP/urls" TMP_API_403="$TMP/api403" TMP_NO_REDIRECT="$TMP/noredirect" TMP_NO_NET="$TMP/nonet"
 echo v9.9.9 > "$TMP_LATEST"
 echo 0 > "$TMP_RUNNING"
 
@@ -82,6 +85,7 @@ run_installer > "$TMP/out1"
 check "first install stamps what runs" "v9.9.9" "$(stamp .installed-version)"
 check "nothing is waiting" "(none)" "$(stamp .staged-version)"
 check "the build is in place" "yes" "$([ -f "$APP/hivemind-extracted/AppRun" ] && echo yes || echo no)"
+check "hive-net is on PATH beside hive" "hive-net v9.9.9" "$("$HIVEMIND_BIN_DIR/hive-net" 2>&1)"
 # A shared cache answers with the release before this one for its first minute, so the
 # question has to be one nobody has stored.
 # The tag comes from the redirect, which no cache and no hourly limit stands in front of.
@@ -130,5 +134,14 @@ echo 0 > "$TMP_NO_REDIRECT"
 # ── 6. and now there is nothing to do ────────────────────────────────────
 run_installer > "$TMP/out6"
 check "an up-to-date install is a no-op" "yes" "$(grep -qi "already on v9.9.12" "$TMP/out6" && echo yes || echo no)"
+
+# ── 7. a release without hive-net (its build may fail on its own) ────────
+echo 1 > "$TMP_NO_NET"
+echo v9.9.13 > "$TMP_LATEST"
+run_installer > "$TMP/out7" || true   # a failed install is this step's finding, not a crash of the test
+check "the rest of it is installed" "v9.9.13" "$(stamp .installed-version)"
+check "it says hive-net is not in it" "yes" "$(grep -qi "hive-net is not in v9.9.13" "$TMP/out7" && echo yes || echo no)"
+check "the hive-net there before stays" "hive-net v9.9.12" "$("$HIVEMIND_BIN_DIR/hive-net" 2>&1)"
+echo 0 > "$TMP_NO_NET"
 
 if [ "$fail" = 0 ]; then echo "staged upgrade: all ok"; else echo "staged upgrade: FAILED"; exit 1; fi

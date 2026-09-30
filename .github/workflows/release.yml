@@ -6,6 +6,8 @@ name: release
 #   3. packages the AppImage (electron-builder --linux AppImage)
 # and, in a parallel job on a macOS arm64 runner, the same two artifacts for
 # Apple Silicon (`hive-darwin-arm64` + an ad-hoc-signed `hivemind.app` zip).
+# `build-hive-net` builds the network binary (crates/hive-net, Rust) for every
+# target; it may fail on its own, and the installers go on without it.
 # A final `publish` job downloads both jobs' assets and creates the GitHub
 # Release from the tag.
 #
@@ -606,9 +608,69 @@ jobs:
           name: windows-x64
           path: release-assets/
 
+  # hive-net (crates/hive-net, R10): this machine's device on the network, and the relay role.
+  # New and not yet proven on a release, so a failed target ships the release without that
+  # binary, and the installers install the rest (they treat hive-net as optional).
+  build-hive-net:
+    name: build ${{ matrix.asset }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, asset: hive-net-linux-x86_64, exe: hive-net }
+          - { os: ubuntu-24.04-arm, asset: hive-net-linux-arm64, exe: hive-net }
+          - { os: macos-14, asset: hive-net-darwin-arm64, exe: hive-net }
+          - { os: windows-latest, asset: hive-net-windows-x64.exe, exe: hive-net.exe }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Rust (stable)
+        run: |
+          if command -v rustup >/dev/null 2>&1; then
+            rustup update stable --no-self-update && rustup default stable
+          else
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
+            echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          fi
+
+      - name: Build
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo build --release --locked --manifest-path crates/hive-net/Cargo.toml
+
+      - name: Smoke-test the binary
+        # The id it gives a device key is the one the app shows for it (conformance/identity.json):
+        # proof the binary runs on this target and reads keys as the app writes them.
+        run: |
+          set -euo pipefail
+          dir=$(mktemp -d)
+          jq -r '.ed25519[0].seed' conformance/identity.json > "$dir/device.key"
+          want=$(jq -r '.ed25519[0].id' conformance/identity.json)
+          got=$("crates/hive-net/target/release/${{ matrix.exe }}" id --identity "$dir")
+          [ "$got" = "$want" ] || { echo "hive-net id gave $got, want $want"; exit 1; }
+
+      - name: Stage release artifact
+        run: |
+          mkdir -p release-assets
+          cp "crates/hive-net/target/release/${{ matrix.exe }}" "release-assets/${{ matrix.asset }}"
+          chmod +x "release-assets/${{ matrix.asset }}"
+
+      - name: Upload artifacts (workflow result)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: release-assets/
+
   publish:
     name: publish github release
-    needs: [build-linux, build-linux-arm64, build-macos, build-windows]
+    needs: [build-linux, build-linux-arm64, build-macos, build-windows, build-hive-net]
     # A tag push always publishes. A MANUAL run only publishes when it explicitly
     # asks to — the default is build-only, so dispatching to smoke-test a build
     # can never cut an accidental release.
@@ -667,3 +729,7 @@ jobs:
             release-assets/hive-windows-x64.exe
             release-assets/*-win.zip
             release-assets/hivemind-windows-x64.zip
+            release-assets/hive-net-linux-x86_64
+            release-assets/hive-net-linux-arm64
+            release-assets/hive-net-darwin-arm64
+            release-assets/hive-net-windows-x64.exe

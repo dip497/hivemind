@@ -337,6 +337,7 @@ resolve_assets() {
     darwin-arm64) CLI_ASSET="hive-darwin-arm64"; APP_ASSET="hivemind-${v}-arm64-mac.zip" ;;
     *)            CLI_ASSET=""; APP_ASSET="" ;;
   esac
+  NET_ASSET="${PLATFORM:+hive-net-$PLATFORM}"
 }
 
 # Test seam: `HIVEMIND_LIB_ONLY=1 source install.sh` stops here, leaving every
@@ -369,6 +370,7 @@ if [ "${HIVEMIND_PRINT_PLAN:-0}" = "1" ]; then
   echo "platform=${PLATFORM:-none}"
   echo "cli_asset=${CLI_ASSET:-none}"
   echo "app_asset=${APP_ASSET:-none}"
+  echo "net_asset=${NET_ASSET:-none}"
   exit 0
 fi
 
@@ -383,11 +385,27 @@ mkdir -p "$BIN_DIR" "$APP_DIR"
 # `*.new` (up to ~115MB). On a near-full disk those orphans snowball into ENOSPC
 # and wedge every future upgrade. CLI_TMP/APPIMG_TMP are assigned later in
 # install_prebuilt; declared here so the trap can always see them.
-CLI_TMP=""; APPIMG_TMP=""
-cleanup_tmp() { rm -f "$CLI_TMP" "$APPIMG_TMP" 2>/dev/null || true; }
+CLI_TMP=""; APPIMG_TMP=""; NET_TMP=""
+cleanup_tmp() { rm -f "$CLI_TMP" "$APPIMG_TMP" "$NET_TMP" 2>/dev/null || true; }
 trap cleanup_tmp EXIT INT TERM
 # Sweep orphans a PREVIOUS killed run may have left (the bug above, pre-fix).
-rm -f "$APP_DIR"/hive.*.new "$APP_DIR"/hivemind.AppImage.*.new "$APP_DIR"/hivemind.app.*.new 2>/dev/null || true
+rm -f "$APP_DIR"/hive.*.new "$APP_DIR"/hive-net.*.new "$APP_DIR"/hivemind.AppImage.*.new "$APP_DIR"/hivemind.app.*.new 2>/dev/null || true
+
+# hive-net, beside hive: this machine's device on the network (R10). Its release build is
+# allowed to fail on its own, so a release without it installs the rest, and one installed
+# before stays.
+install_net() {
+  NET_TMP="$APP_DIR/hive-net.$$.new"
+  if curl -fsL -o "$NET_TMP" "https://github.com/$REPO/releases/download/$TAG/$NET_ASSET" && [ -s "$NET_TMP" ]; then
+    chmod +x "$NET_TMP"
+    mv -f "$NET_TMP" "$APP_DIR/hive-net"
+    ln -sf "$APP_DIR/hive-net" "$BIN_DIR/hive-net"
+    ok "linked $BIN_DIR/hive-net → $APP_DIR/hive-net"
+  else
+    rm -f "$NET_TMP"
+    warn "hive-net is not in $TAG; the rest is installed without it"
+  fi
+}
 
 # ── PREBUILT path ─────────────────────────────────────────────────────────
 install_prebuilt() {
@@ -480,6 +498,7 @@ install_prebuilt() {
   mv -f "$CLI_TMP" "$APP_DIR/hive"
   ln -sf "$APP_DIR/hive" "$BIN_DIR/hive"
   ok "linked $BIN_DIR/hive → $APP_DIR/hive"
+  install_net
 
   if [ -z "$APP_ASSET" ]; then
     echo "$TAG" > "$INSTALLED_FILE"
