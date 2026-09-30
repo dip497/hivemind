@@ -70,8 +70,7 @@ test("each effect the window asks for is recorded as the person's, with what it 
     await h.listIssues(root);
     await h.readIssue(root, first.id);
     await h.fileRead(repo, "a.txt");
-    // One that is refused is recorded as asked, and as failed; a git one with its code, and the
-    // window is told why.
+    // One that is refused is recorded as asked, and as failed, with its code; the window is told why.
     const escaped = await h.fileWrite(repo, "../escaped.txt", "x").then(() => "written", () => "refused");
     const outside = await h.gitStage(repo, ["../escaped.txt"]).then(() => "staged", (e: Error) => e.message);
     return { first: first.id, second: second.id, worktree: wt.path, escaped, outside };
@@ -81,15 +80,15 @@ test("each effect the window asks for is recorded as the person's, with what it 
 
   expect(audited().slice(before)).toEqual([
     { actor: person, verb: "initWorkspace", target: repo, detail: "AUD", outcome: "ok" },
-    { actor: person, verb: "createIssue", target: done.first, outcome: "ok" },
-    { actor: person, verb: "createIssue", target: done.second, outcome: "ok" },
-    { actor: person, verb: "updateIssueState", target: done.first, detail: "in_progress", outcome: "ok" },
-    { actor: person, verb: "commentOnIssue", target: done.first, outcome: "ok" },
-    { actor: person, verb: "updateIssue", target: done.first, outcome: "ok" },
-    { actor: person, verb: "linkIssue", target: `${done.first}->${done.second}`, detail: "blocks", outcome: "ok" },
-    { actor: person, verb: "unlinkIssue", target: `${done.first}->${done.second}`, outcome: "ok" },
-    { actor: person, verb: "deleteIssue", target: done.second, outcome: "ok" },
-    { actor: person, verb: "fileWrite", target: path.join(repo, "a.txt"), outcome: "ok" },
+    { actor: person, verb: "issue.create", target: done.first, outcome: "ok" },
+    { actor: person, verb: "issue.create", target: done.second, outcome: "ok" },
+    { actor: person, verb: "issue.setState", target: done.first, detail: "in_progress", outcome: "ok" },
+    { actor: person, verb: "issue.comment", target: done.first, outcome: "ok" },
+    { actor: person, verb: "issue.update", target: done.first, outcome: "ok" },
+    { actor: person, verb: "issue.link", target: `${done.first}->${done.second}`, detail: "blocks", outcome: "ok" },
+    { actor: person, verb: "issue.unlink", target: `${done.first}->${done.second}`, outcome: "ok" },
+    { actor: person, verb: "issue.delete", target: done.second, outcome: "ok" },
+    { actor: person, verb: "file.write", target: path.join(repo, "a.txt"), outcome: "ok" },
     { actor: person, verb: "git.stage", target: repo, detail: "1 file", outcome: "ok" },
     { actor: person, verb: "git.unstage", target: repo, detail: "1 file", outcome: "ok" },
     { actor: person, verb: "git.stage", target: repo, detail: "1 file", outcome: "ok" },
@@ -97,9 +96,9 @@ test("each effect the window asks for is recorded as the person's, with what it 
     { actor: person, verb: "worktree.create", target: repo, detail: "audit-branch", outcome: "ok" },
     { actor: person, verb: "worktree.remove", target: done.worktree, outcome: "ok" },
     { actor: person, verb: "worktree.prune", target: repo, outcome: "ok" },
-    { actor: person, verb: "reviewSave", target: repo, outcome: "ok" },
+    { actor: person, verb: "review.save", target: repo, outcome: "ok" },
     { actor: person, verb: "settings:set", target: "agents.autoInstall", outcome: "ok" },
-    { actor: person, verb: "fileWrite", target: path.join(root, "escaped.txt"), outcome: "error" },
+    { actor: person, verb: "file.write", target: path.join(root, "escaped.txt"), outcome: "error", code: "BAD_REQUEST" },
     { actor: person, verb: "git.stage", target: repo, detail: "1 file", outcome: "error", code: "BAD_REQUEST" },
   ]);
 });

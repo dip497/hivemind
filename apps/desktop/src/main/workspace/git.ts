@@ -1,11 +1,10 @@
 /**
  * Git and worktrees on a workspace's host: the workspace API's `git.*` and `worktree.*`. Each
  * method checks its call's params (text where text is taken, files inside the repo, nothing git
- * would read as an option) and hands them to the git adapter. Electron-free: the app's windows and
- * the dev-bridge answer from this same module.
+ * would read as an option) and hands them to the git adapter.
  */
 import path from "node:path";
-import { ApiError, fields, flag, oneOf, text, texts } from "@hivemind/workspace-api/protocol";
+import { ApiError, fields, flag, oneOf, text, texts, written } from "@hivemind/workspace-api/protocol";
 import { howMany, named, type Domain } from "@hivemind/workspace-api/server";
 import type { Method } from "@hivemind/workspace-api/methods";
 import type { DiffScope, WorktreeCreateOpts } from "@hivemind/workspace-api/git";
@@ -27,7 +26,7 @@ import {
   worktreeList,
   worktreePrune,
   worktreeRemove,
-} from "./git-adapter.js";
+} from "../git-adapter.js";
 import { allInRepo, fileIn, inRepo } from "./repo-paths.js";
 
 type GitMethod = Extract<Method, `git.${string}` | `worktree.${string}`>;
@@ -96,11 +95,7 @@ export const git: Domain<GitMethod> = {
     "git.push": (repo, setUpstream) => gitPush(repoOf(repo), flag(setUpstream, "setUpstream")),
     "git.pull": (repo) => gitPull(repoOf(repo)),
     "git.conflictedFile": (repo, file) => { const r = repoOf(repo); return gitConflictedFile(r, fileOf(r, file)); },
-    "git.writeResolved": (repo, file, contents) => {
-      const r = repoOf(repo);
-      if (typeof contents !== "string") bad("contents must be text");
-      return gitWriteResolved(r, fileOf(r, file), contents as string);
-    },
+    "git.writeResolved": (repo, file, contents) => { const r = repoOf(repo); return gitWriteResolved(r, fileOf(r, file), written(contents, "contents")); },
     "worktree.list": (repo) => worktreeList(repoOf(repo)),
     "worktree.create": (repo, opts) => worktreeCreate(repoOf(repo), worktreeOptsOf(opts)),
     "worktree.remove": (repo, worktree, force) => worktreeRemove(repoOf(repo), notOption(worktree, "worktree"), flag(force, "force")),

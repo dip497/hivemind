@@ -33,6 +33,20 @@ export function text(value: unknown, name: string): string {
   return value;
 }
 
+/** A param that is what someone wrote (a file's contents, a note): text, and it may be empty. */
+export function written(value: unknown, name: string): string {
+  if (typeof value !== "string") throw new ApiError("BAD_REQUEST", `${name} must be text`);
+  return value;
+}
+
+/** A param checked against a schema (one of core's zod schemas): what it parses to. */
+export function shaped<T>(schema: { safeParse(value: unknown): { success: true; data: T } | { success: false; error: { issues: Array<{ path: Array<string | number>; message: string }> } } }, value: unknown, name: string): T {
+  const parsed = schema.safeParse(value);
+  if (parsed.success) return parsed.data;
+  const why = parsed.error.issues.map((i) => `${[name, ...i.path].join(".")}: ${i.message}`).join("; ");
+  throw new ApiError("BAD_REQUEST", why);
+}
+
 /** A param that must be a list of text. */
 export function texts(value: unknown, name: string): string[] {
   if (!Array.isArray(value) || !value.every((v) => typeof v === "string" && v)) throw new ApiError("BAD_REQUEST", `${name} must be a list of text`);

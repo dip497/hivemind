@@ -5,8 +5,9 @@
  *
  * Nothing here is mocked. The handlers import the same files Electron
  * loads in production; the only difference is the transport (HTTP/SSE
- * instead of Electron IPC). The workspace API (git, worktrees) is the same
- * server main answers with, at POST /workspace.
+ * instead of Electron IPC). The workspace API (git and worktrees, files,
+ * issues, review comments) is the same server main answers with, at
+ * POST /workspace.
  *
  * MUST run under Node (via tsx) — NOT bun. bun's loader silently swallows
  * @lydell/node-pty output on Linux (PTYs spawn but stdout never reaches
@@ -41,24 +42,11 @@ import * as http from "node:http";
 import * as path from "node:path";
 import * as fs from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import {
-  appendActivity,
-  commentOnIssue,
-  createIssue,
-  deleteIssue as deleteIssueCore,
-  findRoot,
-  listIssues,
-  readIssue,
-  updateIssue,
-  writeAgentContext,
-  writeIssue,
-  type IssueState,
-} from "@hivemind/core";
-import type { IssuePatch } from "@hivemind/core/storage";
+import { findRoot } from "@hivemind/core";
 import { Intents } from "@hivemind/workspace-host/intents";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import { WorkspaceServer } from "@hivemind/workspace-api/server";
-import { git } from "../main/workspace-git";
+import { workspaceDomains } from "../main/workspace/domains";
 import { spawnPty, writePty, resizePty, killPty, pausePty, resumePty } from "../main/pty-host";
 import { applyShellEnvToProcess } from "@hivemind/agent-host/shell-env";
 import chokidar from "chokidar";
@@ -83,16 +71,11 @@ const AUTH_TOKEN = randomBytes(32).toString("hex");
 // execution) so we require the auth token on it AND any other write methods.
 const PROTECTED_METHODS = new Set([
   "ptySpawn",
-  "createIssue",
-  "updateIssue",
-  "deleteIssue",
-  "commentOnIssue",
-  "updateIssueState",
 ]);
 
 // The workspace API (R8): the same server main answers the app's windows with, as the person at
 // this machine, and recorded in the dev app's audit log. Every call needs the token.
-const workspaceServer = new WorkspaceServer([git], new Intents(new AuditLog({
+const workspaceServer = new WorkspaceServer(workspaceDomains, new Intents(new AuditLog({
   file: path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config"), "hivemind-dev", "audit.jsonl"),
   onWarn: (m) => console.warn(`[audit] ${m}`),
 })));
@@ -202,13 +185,20 @@ const PREVIEW_SCRIPT = `
   }
   window.hive = {
     resolveProject:    (h) => call("resolveProject", h),
-    listIssues:        (r) => call("listIssues", r),
-    readIssue:         (r,i) => call("readIssue", r, i),
-    updateIssueState:  (r,i,s,n) => call("updateIssueState", r, i, s, n),
-    createIssue:       (r,o) => call("createIssue", r, o),
-    updateIssue:       (r,i,p) => call("updateIssue", r, i, p),
-    commentOnIssue:    (r,i,m) => call("commentOnIssue", r, i, m),
-    deleteIssue:       (r,i) => call("deleteIssue", r, i),
+    listIssues:        (r) => api("issue.list", r),
+    readIssue:         (r,i) => api("issue.read", r, i),
+    updateIssueState:  (r,i,s,n) => api("issue.setState", r, i, s, n),
+    createIssue:       (r,o) => api("issue.create", r, o),
+    updateIssue:       (r,i,p) => api("issue.update", r, i, p),
+    commentOnIssue:    (r,i,m) => api("issue.comment", r, i, m),
+    deleteIssue:       (r,i) => api("issue.delete", r, i),
+    linkIssue:         (r,i,o,t) => api("issue.link", r, i, o, t),
+    unlinkIssue:       (r,i,o) => api("issue.unlink", r, i, o),
+    moveIssue:         (r,i,p,m) => api("issue.move", r, i, p, m),
+    reviewList:        (r) => api("review.list", r),
+    reviewSave:        (r,c) => api("review.save", r, c),
+    fileRead:          (r,f) => api("file.read", r, f),
+    fileWrite:         (r,f,c) => api("file.write", r, f, c),
     gitStatus:         (r) => api("git.status", r),
     gitListFiles:      (r) => api("git.listFiles", r),
     gitListBranches:   (r) => api("git.listBranches", r),
@@ -244,36 +234,6 @@ const RPC: Record<string, (...args: unknown[]) => Promise<unknown> | unknown> = 
     const cwd = rootHint ? path.resolve(String(rootHint)) : REPO_PATH;
     const root = await findRoot(cwd);
     return { root, cwd };
-  },
-  listIssues: (root: string) => listIssues(root),
-  readIssue: (root: string, id: string) => readIssue(root, id),
-  updateIssueState: async (root: string, id: string, state: IssueState, note?: string) => {
-    const issue = await readIssue(root, id);
-    appendActivity(issue, "ui", `state ${issue.state} → ${state}${note ? ` · ${note}` : ""}`);
-    issue.state = state;
-    await writeIssue(issue);
-    await writeAgentContext(root);
-    return issue;
-  },
-  createIssue: async (root: string, opts: Parameters<typeof createIssue>[1]) => {
-    const issue = await createIssue(root, opts);
-    await writeAgentContext(root);
-    return issue;
-  },
-  updateIssue: async (root: string, id: string, patch: IssuePatch) => {
-    const issue = await updateIssue(root, id, patch, "ui");
-    await writeAgentContext(root);
-    return issue;
-  },
-  commentOnIssue: async (root: string, id: string, message: string) => {
-    const issue = await commentOnIssue(root, id, message, "ui");
-    await writeAgentContext(root);
-    return issue;
-  },
-  deleteIssue: async (root: string, id: string) => {
-    await deleteIssueCore(root, id);
-    await writeAgentContext(root);
-    return null;
   },
   ptySpawn: async (opts: Parameters<typeof spawnPty>[0]) => {
     if (!ptySpawnAllowed()) {

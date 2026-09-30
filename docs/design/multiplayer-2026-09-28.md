@@ -295,6 +295,14 @@ exactly as today. They are ordered by dependency.
   and the dev-bridge both serve, so the dev-bridge can no longer drift from main's checks, and
   there is one channel (`workspace`) instead of one per method. The window's `window.hive` keeps
   its names (`gitStage`) as the client's: the renderer does not change.
+- **Decided while building it, step 2 (2026-09-30).** A call that only the machine at hand can
+  answer is not in the API, even where it reads a workspace: opening a folder, making a workspace
+  in one, and the machine's own list of workspaces, which a peer who joined one workspace has no
+  business reading. A method that takes a shape (a new issue, a patch) checks it against the
+  schema its store reads back with (core's zod schemas beside `IssueFrontmatterZ`), so the check
+  and the file cannot drift apart; a field it does not know is dropped, so a caller cannot sign
+  an issue's activity with a name of its choosing. Until M1 names people, every change through the
+  API is signed `ui` there, and who asked is the audit log's to say.
 
 ### R9. Machines by id, not by ssh uri
 

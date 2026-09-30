@@ -16,36 +16,20 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import {
-  commentOnIssue,
-  createIssue,
-  deleteIssue as deleteIssueCore,
   findRoot,
-  normalizeComments,
-  readComments,
-  reviewRoot,
-  writeComments,
-  linkIssues,
-  listIssues,
   listWorkspaces,
-  readIssue,
   registerWorkspace,
   resolveRootForIssue,
-  transferIssue,
-  unlinkIssues,
-  updateIssue,
   writeAgentContext,
   writeConfig,
   WORKSPACE_FORMAT,
   installAgenticStack as coreInstallAgenticStack,
-  type IssueState,
-  type LinkType,
 } from "@hivemind/core";
 import os from "node:os";
 import { AGENT_EVENT_METHOD, cleanName, agentById, agentForCmd, getCatalog, parseAgentEvent, preferredAgent, setCatalog, type AgentProviderDef } from "@hivemind/agents";
 import { agentPresence, discoverOptions, findBin, verifyAgent } from "@hivemind/agents/discover";
 import { TILE_SESSIONS_DIR, listSessions, writeTrackedSession } from "@hivemind/agents/node";
 import { agentAllowedIn, loadAgents, toWire } from "@hivemind/agents/load";
-import type { IssuePatch } from "@hivemind/core/types";
 import * as ptyHost from "./pty-host.js";
 import * as ptyDaemon from "./daemon-client.js";
 import { isRemote, parseRemote } from "../shared/remote-uri.js";
@@ -55,7 +39,6 @@ import {
   spawnRemotePty, writeRemotePty, resizeRemotePty, killRemotePty, hasRemotePty, screenRemotePty, remoteKeepsScreen,
   pauseRemotePty, resumeRemotePty, detachRemotePty, setRemoteEventSink,
 } from "./remote/pty.js";
-import { readRemoteFile, writeRemoteFile } from "./remote/git.js";
 import { remoteConns } from "./remote/conn.js";
 import { findGitRoot, computeRepoPath, projectDir } from "./workspace-paths.js";
 // tmux-style persistence is ON by default — terminal sessions live in a
@@ -101,8 +84,8 @@ import { toBareId, toPtyId } from "../shared/tile-id.js";
 import { SUBMIT_DELAY_MS } from "../shared/agent-io.js";
 import { INITIAL_PROMPT_ENV } from "@hivemind/agent-host/initial-prompt";
 import { WorkspaceServer, named } from "@hivemind/workspace-api/server";
-import { git } from "./workspace-git.js";
-import { fileIn, remoteRel, resolveInRepo } from "./repo-paths.js";
+import { workspaceDomains } from "./workspace/domains.js";
+import { fileIn } from "./workspace/repo-paths.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -819,102 +802,17 @@ handleEffect(
     return { ok: true as const };
   }),
 );
-handle("listIssues", wrap(async (_e, root: string) => listIssues(root)));
 // ── cross-repo: registry + transfer + links ─────────────────────────────
 handle("listWorkspaces", wrap(async () => listWorkspaces({ persistPrune: true })));
 handle(
   "resolveIssueRoot",
   wrap(async (_e, id: string) => ({ root: await resolveRootForIssue(id) })),
 );
-handleEffect(
-  "moveIssue",
-  (_root, id, prefix, mode) => ({ target: named(id), detail: `${mode === "copy" ? "copy" : "move"} to ${String(prefix).toUpperCase()}` }),
-  wrap(async (_e, root: string, id: string, destPrefix: string, mode: "move" | "copy") =>
-    transferIssue(root, id, String(destPrefix).toUpperCase(), { mode, actor: "ui" }),
-  ),
-);
-handleEffect(
-  "linkIssue",
-  (_root, id, other, type) => ({ target: named(id) && named(other) ? `${id}->${other}` : undefined, detail: named(type) }),
-  wrap(async (_e, root: string, id: string, otherId: string, type: LinkType) =>
-    linkIssues(root, id, otherId, type, "ui"),
-  ),
-);
-handleEffect(
-  "unlinkIssue",
-  (_root, id, other) => ({ target: named(id) && named(other) ? `${id}->${other}` : undefined }),
-  wrap(async (_e, root: string, id: string, otherId: string) => ({
-    removed: await unlinkIssues(root, id, otherId, "ui"),
-  })),
-);
-handle("readIssue", wrap(async (_e, root: string, id: string) => readIssue(root, id)));
-handleEffect(
-  "updateIssueState",
-  (_root, id, state) => ({ target: named(id), detail: named(state) }),
-  wrap(async (_e, root: string, id: string, state: IssueState, note?: string) => {
-    // Route through core (like createIssue/updateIssue/commentOnIssue) instead
-    // of hand-rolling the state change + a divergent activity string. The note,
-    // if any, is appended in the SAME write.
-    const issue = await updateIssue(root, id, { state }, "ui", note);
-    await writeAgentContext(root);
-    return issue;
-  })
-);
-handleEffect(
-  "createIssue",
-  () => ({ target: (issue: { id?: string } | undefined) => issue?.id }),
-  wrap(async (_e, root: string, opts: Parameters<typeof createIssue>[1]) => {
-    const issue = await createIssue(root, opts);
-    await writeAgentContext(root);
-    return issue;
-  })
-);
-handleEffect(
-  "updateIssue",
-  (_root, id) => ({ target: named(id) }),
-  wrap(async (_e, root: string, id: string, patch: IssuePatch) => {
-    const issue = await updateIssue(root, id, patch, "ui");
-    await writeAgentContext(root);
-    return issue;
-  })
-);
-handleEffect(
-  "commentOnIssue",
-  (_root, id) => ({ target: named(id) }),
-  wrap(async (_e, root: string, id: string, message: string) => {
-    const issue = await commentOnIssue(root, id, message, "ui");
-    await writeAgentContext(root);
-    return issue;
-  })
-);
-handleEffect("deleteIssue", (_root, id) => ({ target: named(id) }), wrap(async (_e, root: string, id: string) => {
-  await deleteIssueCore(root, id);
-  await writeAgentContext(root);
-}));
-
-// review comments — the workspace owns them, so the CLI and an agent see the
-// same list the diff tile is showing.
-handle("reviewList", wrap(async (_e, repoPath: string) =>
-  readComments(await reviewRoot(repoPath))));
-handleEffect("reviewSave", (repo) => ({ target: named(repo) }), wrap(async (_e, repoPath: string, comments: unknown) =>
-  writeComments(await reviewRoot(repoPath), normalizeComments(comments))));
-
-// git and worktrees: the workspace API (R8), one channel for every method, answered as the person
-// at the window. Its answer is a result or an error with a code; it never throws.
-const workspaceServer = new WorkspaceServer([git], hostIntents());
+// git and worktrees, files, issues and review comments: the workspace API (R8), one channel for
+// every method, answered as the person at the window. Its answer is a result or an error with a
+// code; it never throws.
+const workspaceServer = new WorkspaceServer(workspaceDomains, hostIntents());
 handle("workspace", (_e, method: unknown, params: unknown) => workspaceServer.answer(method, params, PERSON));
-
-// plain filesystem (editor tile): a path outside the repo is refused (repo-paths.ts).
-handle("fileRead", wrap((_e, repoPath: string, relPath: string) =>
-  isRemote(repoPath)
-    ? readRemoteFile(repoPath, remoteRel(relPath))
-    : fsp.readFile(resolveInRepo(repoPath, relPath), "utf8")
-));
-handleEffect("fileWrite", (repo, rel) => ({ target: fileIn(repo, rel) }), wrap((_e, repoPath: string, relPath: string, contents: string) =>
-  isRemote(repoPath)
-    ? writeRemoteFile(repoPath, remoteRel(relPath), contents)
-    : fsp.writeFile(resolveInRepo(repoPath, relPath), contents, "utf8")
-));
 
 // Files the terminal will hand to the OS opener — a VIEWABLE allowlist, not a
 // denylist, so executables / installers / shortcuts (.exe .desktop .lnk .msi

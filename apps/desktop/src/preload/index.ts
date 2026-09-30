@@ -53,27 +53,22 @@ const api: HiveIpc & {
   pickProjectFolder: () => ipcRenderer.invoke("pickProjectFolder"),
   initWorkspace: (dir, prefix) => ipcRenderer.invoke("initWorkspace", dir, prefix),
   installAgentic: (dir) => ipcRenderer.invoke("installAgentic", dir),
-  listIssues: (root) => ipcRenderer.invoke("listIssues", root),
-  readIssue: (root, id) => ipcRenderer.invoke("readIssue", root, id),
-  updateIssueState: (root, id, state, note) =>
-    ipcRenderer.invoke("updateIssueState", root, id, state, note),
-  createIssue: (root, opts) => ipcRenderer.invoke("createIssue", root, opts),
-  updateIssue: (root, id, patch) => ipcRenderer.invoke("updateIssue", root, id, patch),
-  commentOnIssue: (root, id, message) =>
-    ipcRenderer.invoke("commentOnIssue", root, id, message),
-  deleteIssue: (root, id) => ipcRenderer.invoke("deleteIssue", root, id),
+  listIssues: (root) => workspace.call("issue.list", root),
+  readIssue: (root, id) => workspace.call("issue.read", root, id),
+  updateIssueState: (root, id, state, note) => workspace.call("issue.setState", root, id, state, note),
+  createIssue: (root, opts) => workspace.call("issue.create", root, opts),
+  updateIssue: (root, id, patch) => workspace.call("issue.update", root, id, patch),
+  commentOnIssue: (root, id, message) => workspace.call("issue.comment", root, id, message),
+  deleteIssue: (root, id) => workspace.call("issue.delete", root, id),
 
   listWorkspaces: () => ipcRenderer.invoke("listWorkspaces"),
   resolveIssueRoot: (id) => ipcRenderer.invoke("resolveIssueRoot", id),
-  moveIssue: (root, id, destPrefix, mode) =>
-    ipcRenderer.invoke("moveIssue", root, id, destPrefix, mode),
-  linkIssue: (root, id, otherId, type) =>
-    ipcRenderer.invoke("linkIssue", root, id, otherId, type),
-  unlinkIssue: (root, id, otherId) =>
-    ipcRenderer.invoke("unlinkIssue", root, id, otherId),
+  moveIssue: (root, id, destPrefix, mode) => workspace.call("issue.move", root, id, destPrefix, mode),
+  linkIssue: (root, id, otherId, type) => workspace.call("issue.link", root, id, otherId, type),
+  unlinkIssue: (root, id, otherId) => workspace.call("issue.unlink", root, id, otherId),
 
-  reviewList: (repoPath) => ipcRenderer.invoke("reviewList", repoPath),
-  reviewSave: (repoPath, comments) => ipcRenderer.invoke("reviewSave", repoPath, comments),
+  reviewList: (repo) => workspace.call("review.list", repo),
+  reviewSave: (repo, comments) => workspace.call("review.save", repo, comments),
 
   gitStatus: (repo) => workspace.call("git.status", repo),
   gitListFiles: (repo) => workspace.call("git.listFiles", repo),
@@ -89,9 +84,8 @@ const api: HiveIpc & {
   gitConflictedFile: (repo, file) => workspace.call("git.conflictedFile", repo, file),
   gitWriteResolved: (repo, file, contents) => workspace.call("git.writeResolved", repo, file, contents),
 
-  fileRead: (repoPath, relPath) => ipcRenderer.invoke("fileRead", repoPath, relPath),
-  fileWrite: (repoPath, relPath, contents) =>
-    ipcRenderer.invoke("fileWrite", repoPath, relPath, contents),
+  fileRead: (repo, file) => workspace.call("file.read", repo, file),
+  fileWrite: (repo, file, contents) => workspace.call("file.write", repo, file, contents),
   openPathInApp: (cwd, target) => ipcRenderer.invoke("openPathInApp", cwd, target),
 
   diagLog: (line) => ipcRenderer.invoke("diagLog", line),

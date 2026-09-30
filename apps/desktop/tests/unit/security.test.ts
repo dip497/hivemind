@@ -12,11 +12,11 @@ import { shq } from "@hivemind/agents/node";
 import { Intents } from "@hivemind/workspace-host/intents";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import { WorkspaceServer } from "@hivemind/workspace-api/server";
-import { git } from "../../src/main/workspace-git.ts";
+import { workspaceDomains } from "../../src/main/workspace/domains.ts";
 
 const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "hm-security-")));
 after(() => fs.rmSync(tmp, { recursive: true, force: true }));
-const server = new WorkspaceServer([git], new Intents(new AuditLog({ file: path.join(tmp, "audit.jsonl") })));
+const server = new WorkspaceServer(workspaceDomains, new Intents(new AuditLog({ file: path.join(tmp, "audit.jsonl") })));
 /** A call as the app's window makes it; the answer as it comes back. */
 const ask = (method: string, ...params: unknown[]) => server.answer(method, params, { kind: "person" });
 const codeOf = async (method: string, ...params: unknown[]) => {
@@ -52,12 +52,15 @@ test("a file a call names outside its repo is a bad request: nothing outside is 
     assert.equal(await codeOf("git.conflictedFile", repo, file), "BAD_REQUEST", file);
     assert.equal(await codeOf("git.writeResolved", repo, file, "clobbered"), "BAD_REQUEST", file);
     assert.equal(await codeOf("git.discard", repo, [file]), "BAD_REQUEST", file);
+    assert.equal(await codeOf("file.read", repo, file), "BAD_REQUEST", file);
+    assert.equal(await codeOf("file.write", repo, file, "clobbered"), "BAD_REQUEST", file);
   }
   assert.equal(await codeOf("git.stage", repo, ["a.txt", "../secret.txt"]), "BAD_REQUEST");
   assert.equal(fs.readFileSync(path.join(tmp, "secret.txt"), "utf8"), "outside");
   // Inside the repo, the same calls are answered.
   fs.writeFileSync(path.join(repo, "a.txt"), "inside");
   assert.deepEqual(await ask("git.fileContents", repo, "a.txt", "WORKING"), { result: "inside" });
+  assert.deepEqual(await ask("file.read", repo, "a.txt"), { result: "inside" });
 });
 
 test("a revision a diff names may not be an option: git would write the diff to a file of the caller's choosing", async () => {

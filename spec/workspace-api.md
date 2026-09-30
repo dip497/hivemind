@@ -2,7 +2,8 @@
 
 What a workspace's host is asked for, and what it answers. The host is the machine the
 workspace's repo is on; today its callers are the app's windows and the dev-bridge, and later a
-peer or another device. Every transport carries the same messages. Design: R8 in
+peer or another device. What only the machine at hand is asked for (a folder picker, the list of
+the machine's workspaces, opening a file in another app) is not part of it. Every transport carries the same messages. Design: R8 in
 `docs/design/multiplayer-2026-09-28.md`.
 
 ## Messages
@@ -43,6 +44,10 @@ not recorded. What someone wrote (a commit message, a file's contents) is never 
   `-`, where git would read it as an option.
 - A branch a worktree is made on is `[A-Za-z0-9._/-]+` with no `..`; its `path`, `sparse` roots
   and `includeFiles` are relative to the repo with no `..`.
+- An issue as a call asks for it has each field as the issue's file holds it (a title that is not
+  empty, a state from the list, a positive `github` number, …); a field the method does not name
+  is dropped. An issue id is `PREFIX-N` or a sub-issue's `PREFIX-N.M`.
+- Review comments are saved as a list; anything else would replace every comment with none.
 
 ## Methods
 
@@ -68,6 +73,28 @@ not recorded. What someone wrote (a commit message, a file's contents) is never 
 | `worktree.remove` | `repo`, `worktree`, `force`? | `null` | target the worktree |
 | `worktree.prune` | `repo` | `{removed}` | target `repo` |
 
+| `file.read` | `repo`, `file` | the file's text | read |
+| `file.write` | `repo`, `file`, `contents` | `null` | target the file |
+| `issue.list` | `root` | `[{id, title, state, parent, labels, assignee, github, created, updated, path}]` | read |
+| `issue.read` | `root`, `id` | the issue, with its `sections` (`description`, `acceptanceCriteria`, `activity`, `extra`) | read |
+| `issue.create` | `root`, `{title, state?, parent?, labels?, assignee?, description?, acceptanceCriteria?, github?}` | the issue | target its id |
+| `issue.update` | `root`, `id`, a patch of `title`, `state`, `parent`, `labels`, `assignee`, `github`, `description`, `acceptanceCriteria`, `extra` | the issue | target `id` |
+| `issue.setState` | `root`, `id`, `state`, `note`? | the issue | target `id`, detail the state |
+| `issue.comment` | `root`, `id`, `message` | the issue | target `id` |
+| `issue.delete` | `root`, `id` | `null` | target `id` |
+| `issue.link` | `root`, `id`, `other`, `type` | `{from, to, type, reciprocal}` | target `id->other`, detail the type |
+| `issue.unlink` | `root`, `id`, `other` | `{removed}` | target `id->other` |
+| `issue.move` | `root`, `id`, `prefix`, `mode` (`move` \| `copy`) | `{newId, newIssue, mode, from}` | target `id`, detail `move to PREFIX` |
+| `review.list` | `repo` | `[{id, file, startLine, endLine, side, body, author, at, resolved?, summary?, replies?}]` | read |
+| `review.save` | `repo`, `comments` | `null` (the list replaces the repo's comments) | target `repo` |
+
+`root` is a workspace's `.hivemind` directory. An issue's `state` is one of `backlog`, `todo`,
+`in_progress`, `in_review`, `done`, `cancelled`; a link's `type` one of `relates`, `blocks`,
+`blocked-by`, `duplicates`, `parent-of`, `child-of`, `moved-to`, `moved-from` (the other issue is
+given the reciprocal). `other` and `prefix` may name another workspace of the
+host's. A change is signed `ui` in the issue's activity, whoever calls: who asked is in the audit
+log.
+
 A diff's `scope` is one of `{"kind": "working", "staged"?}`, `{"kind": "branch", "base"?,
 "head"?}` (what `head`, HEAD by default, adds since it left `base`), `{"kind": "unpushed",
 "base"?}` and `{"kind": "commit", "sha"}`, each with `ignoreWhitespace`?.
@@ -75,5 +102,5 @@ A diff's `scope` is one of `{"kind": "working", "staged"?}`, `{"kind": "branch",
 ## Implementations
 
 TypeScript: `packages/workspace-api` (the methods' types, a client over any transport, and the
-server that answers them); the host's git and worktrees in `apps/desktop/src/main/workspace-git.ts`,
-which the app's main process and the dev-bridge both serve.
+server that answers them); the host's domains in `apps/desktop/src/main/workspace/` (git and
+worktrees, files, issues, reviews), which the app's main process and the dev-bridge both serve.
