@@ -1,7 +1,9 @@
 /**
  * Saved machines for the app: the same catalog as `hive machine` (machines.json), plus each
- * host's live connection state. Frames stay bound by ssh:// uri; a frame finds its machine by
- * host id, so a machine is a name and a status over hosts the app already talks to.
+ * host's live connection state. A frame is bound to a machine by its id (`machine://<id>/path`,
+ * R9) and reaches it through `remoteTarget` (targets.ts), so an address edited here moves every
+ * frame on it.
+ * Connections and their state are kept by host id, the address's key.
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -12,11 +14,12 @@ import {
   PUBLISHED_PLATFORMS, installCopyCommand, installFetchCommand, localPlatform, machinesPath, newMachineId,
   releaseAssetUrl, validateLabel, validateTarget, type Machine, type ProbeResult,
 } from "@hivemind/core";
-import { machineHostId, machineUri, parseRemote, type RemoteTarget } from "../../shared/remote-uri.js";
+import { machineHostId, parseRemote, sshUri, type RemoteTarget } from "../../shared/remote-uri.js";
 import type { MachineAddRequest, MachineAddResult, MachineInfo, MachineProbe, MachineState, MachineStatus, MachinesSnapshot, SessionSummary } from "../../shared/ipc.js";
 import type { SessionInfo } from "@hivemind/agent-host/pty-protocol";
 import { remoteConns } from "./conn.js";
-import { Catalog } from "./catalog.js";
+import { machines as catalog, onMachinesChange } from "./catalog.js";
+import { remoteTarget } from "./targets.js";
 import { needsAttention, probeCommand, probeRemote } from "./ssh.js";
 import { closeIdle, endpointFor, hostConnected, hostFailure, hostServingTiles, readyEndpoints, reconnectHost, resetHost, setHostPaused, setRemoteStatusSink, sshPaths } from "./pty.js";
 import { forgetSavedHost, passwordState, saveHost } from "./saved-hosts.js";
@@ -28,7 +31,7 @@ const CHECK_PARALLEL = 4;
 const run = promisify(execFile);
 
 // Off in the catalog (here or `hive machine`) means disconnected.
-const catalog = new Catalog(machinesPath(), () => { for (const m of catalog.list) setHostPaused(machineHostId(m.target), !m.enabled); emit(); });
+onMachinesChange(() => { for (const m of catalog.list) setHostPaused(machineHostId(m.target), !m.enabled); emit(); });
 const status = new Map<string, MachineStatus>();
 let sink: ((s: MachinesSnapshot) => void) | undefined;
 let emitTimer: ReturnType<typeof setTimeout> | null = null;
@@ -36,7 +39,7 @@ let listSessionsLocal: () => Promise<SessionInfo[]> = async () => [];
 let appVersion = "0.0.0";
 
 const info = (m: Machine): MachineInfo => ({ ...m, hostId: machineHostId(m.target) });
-const targetOf = (m: Machine): RemoteTarget => parseRemote(machineUri(m.target));
+const targetOf = (m: Machine): RemoteTarget => parseRemote(sshUri(m.target));
 
 export function snapshot(): MachinesSnapshot {
   return { machines: catalog.list.map(info), status: Object.fromEntries(status), ...(catalog.error ? { catalogError: catalog.error } : {}) };
@@ -191,7 +194,7 @@ const clashWith = (list: Machine[], target: string, hostId: string) => {
 
 export async function addMachine(req: MachineAddRequest): Promise<MachineAddResult> {
   const target = validateTarget(req.target);
-  const t = parseRemote(machineUri(target));
+  const t = parseRemote(sshUri(target));
   clashWith(catalog.list, target, t.hostId);
   const label = validateLabel(req.label?.trim() || t.host);
   if (req.password) remoteConns.setAuth(t.hostId, { ...remoteConns.resolveAuthFor(t.hostId), password: req.password });
@@ -261,12 +264,12 @@ export async function updateMachine(id: string, patch: { label?: string; enabled
 }
 
 /** Point a saved machine somewhere else. A new address is reached before it is saved, so a typo
- *  never replaces a working one. Returns the old host id, for re-pointing the frames that ran there. */
-export async function editMachine(id: string, patch: { target: string; label?: string; password?: string }): Promise<{ machine: MachineInfo; oldHostId: string }> {
+ *  never replaces a working one. The frames on it follow: they name the machine, not its address. */
+export async function editMachine(id: string, patch: { target: string; label?: string; password?: string }): Promise<{ machine: MachineInfo }> {
   const m = byId(id);
   const oldHostId = machineHostId(m.target);
   const target = validateTarget(patch.target);
-  const t = parseRemote(machineUri(target));
+  const t = parseRemote(sshUri(target));
   const label = patch.label?.trim() ? validateLabel(patch.label) : m.label;
   const moved = target !== m.target;
   if (moved) clashWith(catalog.list.filter((x) => x.id !== id), target, t.hostId);
@@ -294,7 +297,7 @@ export async function editMachine(id: string, patch: { target: string; label?: s
   });
   if (found) { resetHost(t.hostId); setStatus(t.hostId, found.daemon ? "online" : "no-hive"); }
   if (moved && t.hostId !== oldHostId) forgetSavedHost(oldHostId);
-  return { machine: info(byId(id)), oldHostId };
+  return { machine: info(byId(id)) };
 }
 
 export async function removeMachine(id: string): Promise<void> {
@@ -321,7 +324,7 @@ const summary = ({ pid: _pid, ...s }: SessionInfo): SessionSummary => ({
 
 export async function machineSessions(uri: string | null): Promise<SessionSummary[]> {
   if (!uri) return (await listSessionsLocal()).slice(0, MAX_SESSIONS).map(summary);
-  const t = parseRemote(uri);
+  const t = remoteTarget(uri);
   const ep = await endpointFor(t);
   if (!ep) throw new Error(hostFailure(t.hostId) ?? "hive is not installed there (or is too old) — install it from Machines");
   return (await ep.sessions()).slice(0, MAX_SESSIONS).map(summary);

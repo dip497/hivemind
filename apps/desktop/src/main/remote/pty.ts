@@ -220,11 +220,10 @@ const remoteEnv = (env?: Record<string, string>) => {
   return rest;
 };
 
-/** Spawn a remote PTY for an ssh:// cwd. Returns a synthetic negative pid (the
- *  renderer uses pid only as an opaque liveness token). */
-export async function spawnRemotePty(opts: SpawnOpts, cb: Callbacks): Promise<{ pid: number }> {
+/** Spawn a remote PTY at `target` (its cwd, on the host it names). Returns a synthetic negative
+ *  pid (the renderer uses pid only as an opaque liveness token). */
+export async function spawnRemotePty(opts: SpawnOpts, target: RemoteTarget, cb: Callbacks): Promise<{ pid: number }> {
   if (remotePtys.has(opts.tileId)) killRemotePty(opts.tileId);
-  const target = parseRemote(opts.cwd);
   const release = hold(target.hostId);
   try {
     return await spawnThroughDaemon(opts, target, cb);

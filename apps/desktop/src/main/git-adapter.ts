@@ -54,7 +54,7 @@ const GIT_TIMEOUTS: Record<string, number> = {
 
 async function rawGit(repoPath: string, args: string[]): Promise<string> {
   const timeoutMs = GIT_TIMEOUTS[args[0] ?? ""] ?? GIT_DEFAULT_TIMEOUT_MS;
-  // Remote repo (ssh:// uri): run git over ssh exec instead of a local spawn.
+  // Remote repo (a machine:// or ssh:// uri): run git over ssh exec instead of a local spawn.
   // Every porcelain op built on rawGit (status, ls-files, diff, show, rev-parse,
   // commit, push, branch, worktree…) becomes remote-capable for free.
   if (isRemote(repoPath)) return runRemoteGit(repoPath, args, timeoutMs);

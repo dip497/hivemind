@@ -8,18 +8,21 @@ import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { FolderOpen, Loader2, RefreshCw, Server, Settings2, SquareTerminal, Unplug } from "lucide-react";
 import type { SessionSummary } from "../../../shared/ipc";
-import { parseRemote, remoteBasename, sshTargetOf } from "../../../shared/remote-uri";
-import { errText, hostIdOfUri, machineByHost, openMachines, statusOf, useMachines } from "./store";
+import { parseRemote, remoteBasename, remotePath, sshTargetOf, REMOTE_SCHEME } from "../../../shared/remote-uri";
+import { GONE_MACHINE, errText, openMachines, placeOf, statusOf, useMachines, type Place } from "./store";
+
+/** What a frame's machine is called: its saved name, else the host an ssh folder is on, else
+ *  one no longer saved. */
+const nameOf = (uri: string, { machine, hostId }: Place) =>
+  machine?.label ?? (hostId && uri.startsWith(REMOTE_SCHEME) ? parseRemote(uri).host : GONE_MACHINE);
 import { AttentionNote, MachineDot, statusWords } from "./status";
 import { openSessionIds } from "./open-sessions";
 
 export function MachineChip({ uri, frameId, onUnbind }: { uri: string; frameId: string; onUnbind: () => void }) {
   const snap = useMachines();
-  const hostId = hostIdOfUri(uri);
-  const machine = machineByHost(snap, hostId);
-  const status = statusOf(snap, hostId);
-  const t = parseRemote(uri);
-  const name = machine?.label ?? t.host;
+  const place = placeOf(snap, uri);
+  const status = statusOf(snap, place.hostId);
+  const name = nameOf(uri, place);
   const btn = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   return (
@@ -29,7 +32,7 @@ export function MachineChip({ uri, frameId, onUnbind }: { uri: string; frameId: 
         onClick={() => setOpen((x) => !x)}
         className="nodrag flex items-center gap-1.5 min-w-0 max-w-[60%] rounded px-1.5 py-0.5 text-[10px] font-mono cursor-pointer hover:brightness-110"
         style={{ background: "color-mix(in oklab, var(--color-brand) 18%, transparent)", color: "var(--color-fg)" }}
-        title={`${name} · ${t.path} — ${statusWords(status)}`}
+        title={`${name} · ${remotePath(uri)} — ${statusWords(status)}`}
         aria-label={`machine ${name}`}
         data-machine-state={status.state}
       >
@@ -57,14 +60,14 @@ export function MachineChip({ uri, frameId, onUnbind }: { uri: string; frameId: 
 
 function MachinePanel({ anchor, uri, frameId, onUnbind, onClose }: { anchor: DOMRect; uri: string; frameId: string; onUnbind: () => void; onClose: () => void }) {
   const snap = useMachines();
-  const hostId = hostIdOfUri(uri);
-  const machine = machineByHost(snap, hostId);
+  const place = placeOf(snap, uri);
+  const { machine, hostId } = place;
   const status = statusOf(snap, hostId);
-  const t = parseRemote(uri);
   const [sessions, setSessions] = useState<SessionSummary[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const target = machine?.target ?? sshTargetOf(t);
+  // An ssh folder no machine is saved for can be saved as one; a machine no longer saved cannot.
+  const target = machine?.target ?? (hostId && uri.startsWith(REMOTE_SCHEME) ? sshTargetOf(parseRemote(uri)) : undefined);
 
   async function loadSessions() {
     setLoading(true);
@@ -86,12 +89,12 @@ function MachinePanel({ anchor, uri, frameId, onUnbind, onClose }: { anchor: DOM
       <div className="px-2 pt-1.5 pb-1 grid gap-0.5">
         <span className="flex items-center gap-2 text-[13px] font-medium text-[var(--color-fg)]">
           <MachineDot status={status} size={8} />
-          <span className="truncate">{machine?.label ?? t.host}</span>
+          <span className="truncate">{nameOf(uri, place)}</span>
           <span className="ml-auto text-[11px] font-normal text-[var(--color-fg2)] tabular-nums">{statusWords(status)}</span>
         </span>
-        <span className="text-[11px] font-mono text-[var(--color-fg3)] truncate" title={uri}>{t.path}</span>
+        <span className="text-[11px] font-mono text-[var(--color-fg3)] truncate" title={uri}>{remotePath(uri)}</span>
       </div>
-      {status.state === "attention" && (
+      {status.state === "attention" && target && (
         <div className="px-1">
           <AttentionNote
             target={target}
@@ -144,13 +147,17 @@ function MachinePanel({ anchor, uri, frameId, onUnbind, onClose }: { anchor: DOM
       )}
       {error && <p className="px-2 text-[11px] text-[var(--color-err)] break-words">{error}</p>}
       <div className="h-px bg-[var(--color-line2)] my-0.5" />
-      {machine && (
+      {machine ? (
         <MenuItem onClick={() => { onClose(); openMachines({ kind: "pick", frameId, machineId: machine.id }); }}>
           <FolderOpen size={13} /> Change folder…
         </MenuItem>
+      ) : !target && (
+        <MenuItem onClick={() => { onClose(); openMachines({ kind: "pick", frameId }); }}>
+          <FolderOpen size={13} /> Choose where it runs…
+        </MenuItem>
       )}
-      <MenuItem onClick={() => { onClose(); openMachines(machine ? { kind: "manage" } : { kind: "add", target }); }}>
-        {machine ? <Settings2 size={13} /> : <Server size={13} />} {machine ? "Machines…" : "Save as a machine…"}
+      <MenuItem onClick={() => { onClose(); openMachines(machine || !target ? { kind: "manage" } : { kind: "add", target }); }}>
+        {machine || !target ? <Settings2 size={13} /> : <Server size={13} />} {machine || !target ? "Machines…" : "Save as a machine…"}
       </MenuItem>
       <MenuItem onClick={onUnbind} variant="destructive">
         <Unplug size={13} /> Disconnect this frame

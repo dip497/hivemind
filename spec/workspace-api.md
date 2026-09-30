@@ -74,7 +74,7 @@ sends, and one participant per device.
 ## Params a host refuses
 
 - A file is relative to the repo and stays inside it: an absolute path, or one whose `..` leaves
-  the repo, is `BAD_REQUEST`. In an `ssh://` repo a file is a POSIX path with no `..` at all.
+  the repo, is `BAD_REQUEST`. In a remote repo (`machine://` or `ssh://`) a file is a POSIX path with no `..` at all.
 - A value git takes as an argument of its own — a revision (`scope.sha`, `scope.base`,
   `scope.head`), a branch, a worktree, a sparse root or an included file — may not begin with
   `-`, where git would read it as an option.
@@ -87,7 +87,7 @@ sends, and one participant per device.
 
 ## Methods
 
-`repo` is the repo's path on the host, or an `ssh://` URI.
+`repo` is the repo's path on the host, or a remote one: `machine://<machine id>/path` on a saved machine, `ssh://` on a host none is saved for.
 
 | Method | Params | Result | Recorded as |
 |---|---|---|---|

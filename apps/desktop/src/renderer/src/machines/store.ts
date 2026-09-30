@@ -1,7 +1,7 @@
 /** Live machines + per-host connection state, pushed from main; one subscription for the whole renderer. */
 import { useSyncExternalStore } from "react";
 import type { MachineInfo, MachineStatus, MachinesSnapshot } from "../../../shared/ipc";
-import { isRemote, parseRemote } from "../../../shared/remote-uri";
+import { isRemote, parseMachineUri, parseRemote } from "../../../shared/remote-uri";
 
 let snap: MachinesSnapshot = { machines: [], status: {} };
 const listeners = new Set<() => void>();
@@ -25,13 +25,22 @@ export function useMachines(): MachinesSnapshot {
   return useSyncExternalStore(subscribe, () => snap);
 }
 
-export function hostIdOfUri(uri: string | null | undefined): string | null {
-  if (!isRemote(uri)) return null;
-  try { return parseRemote(uri).hostId; } catch { return null; }
-}
-
-export function machineByHost(s: MachinesSnapshot, hostId: string | null): MachineInfo | undefined {
-  return hostId ? s.machines.find((m) => m.hostId === hostId) : undefined;
+/** Where a remote folder is: its saved machine — the one it names (machine://), or one saved at
+ *  its address (ssh://) — and the host its connection is kept by. No machine for a folder on one
+ *  no longer saved, or on a host never saved; no host for a machine no longer saved, or a local
+ *  folder. */
+export interface Place { machine?: MachineInfo; hostId: string | null }
+export function placeOf(s: MachinesSnapshot, uri: string | null | undefined): Place {
+  if (!isRemote(uri)) return { hostId: null };
+  const at = parseMachineUri(uri);
+  if (at) {
+    const machine = s.machines.find((m) => m.id === at.machineId);
+    return machine ? { machine, hostId: machine.hostId } : { hostId: null };
+  }
+  let hostId: string;
+  try { hostId = parseRemote(uri).hostId; } catch { return { hostId: null }; }
+  const machine = s.machines.find((m) => m.hostId === hostId);
+  return machine ? { machine, hostId } : { hostId };
 }
 
 const IDLE: MachineStatus = { state: "idle", at: 0 };
@@ -39,18 +48,21 @@ export function statusOf(s: MachinesSnapshot, hostId: string | null): MachineSta
   return (hostId && s.status[hostId]) || IDLE;
 }
 
+/** What a machine no longer saved is called where a frame ran on it. */
+export const GONE_MACHINE = "a machine no longer saved";
+
 /** Where a frame runs, as every view sees it (the view protocol's `ViewFrame.machine`, 1.1): the
- *  saved machine's name — else the host itself, so a frame on a removed or never-saved machine
- *  still says where it is — and the link's state. A local frame gets nothing. */
+ *  saved machine's name — else the host itself, so a frame on a host never saved still says where
+ *  it is — and the link's state. A local frame gets nothing. */
 export function frameMachine(
   s: MachinesSnapshot,
   workspacePath: string | null | undefined,
 ): { name: string; state: MachineStatus["state"]; rttMs?: number } | undefined {
-  const hostId = hostIdOfUri(workspacePath);
-  if (!hostId) return undefined;
+  if (!isRemote(workspacePath)) return undefined;
+  const { machine, hostId } = placeOf(s, workspacePath);
   const st = statusOf(s, hostId);
-  const name = machineByHost(s, hostId)?.label ?? hostId.replace(/:22$/, "");
-  return { name, state: st.state, ...(st.rttMs !== undefined ? { rttMs: st.rttMs } : {}) };
+  const name = machine?.label ?? hostId?.replace(/:22$/, "") ?? GONE_MACHINE;
+  return { name, state: hostId ? st.state : "offline", ...(st.rttMs !== undefined ? { rttMs: st.rttMs } : {}) };
 }
 
 /** An IPC rejection's own message, without Electron's wrapper. */

@@ -1,5 +1,5 @@
 /**
- * Paths a call names inside a repo, a local one or an ssh:// one: each is refused (BAD_REQUEST)
+ * Paths a call names inside a repo, a local one or a remote one: each is refused (BAD_REQUEST)
  * when it would reach outside the repo — an absolute path, `..`. Every file a window, a peer or
  * the dev-bridge names goes through here before it reaches git or the disk.
  */
@@ -19,7 +19,7 @@ export function resolveInRepo(repoPath: string, rel: string): string {
   return abs;
 }
 
-/** `rel` inside an ssh:// repo: POSIX-relative, no `..`. */
+/** `rel` inside a remote repo: POSIX-relative, no `..`. */
 export function remoteRel(rel: string): string {
   const norm = rel.replace(/\\/g, "/");
   if (norm.startsWith("/") || norm.split("/").includes("..")) escapes(rel);

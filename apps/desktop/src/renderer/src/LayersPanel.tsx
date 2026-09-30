@@ -11,7 +11,7 @@
  */
 import { statusColor } from "./workspace/tile-status-bucket";
 import { MachineDot, statusWords } from "./machines/status";
-import { hostIdOfUri, machineByHost, openMachines, statusOf, useMachines } from "./machines/store";
+import { GONE_MACHINE, openMachines, placeOf, statusOf, useMachines } from "./machines/store";
 import type { MachineInfo } from "../../shared/ipc";
 import { memo, useEffect, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
@@ -138,10 +138,10 @@ const muted = (color: string) => `color-mix(in oklab, ${color} 62%, var(--color-
 
 function RemoteIcon({ color, uri }: { color: string; uri?: string }) {
   const snap = useMachines();
-  const hostId = hostIdOfUri(uri);
+  const { machine, hostId } = placeOf(snap, uri);
   const s = statusOf(snap, hostId);
   return (
-    <span className="relative shrink-0 grid place-items-center" title={machineByHost(snap, hostId)?.label ?? hostId ?? undefined}>
+    <span className="relative shrink-0 grid place-items-center" title={machine?.label ?? hostId ?? GONE_MACHINE}>
       <Server size={15} style={{ color: muted(color) }} />
       {s.state !== "idle" && <span className="absolute -right-0.5 -bottom-0.5 rounded-full ring-2 ring-[var(--color-bg2)] leading-[0]"><MachineDot status={s} size={6} /></span>}
     </span>
@@ -287,12 +287,13 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
   // another one; a local-only canvas stays a plain list. Same names the views get (frameMachine).
   // Every saved machine is a group, frames or not, so this rail is where machines live.
   const machineGroups: MachineGroup[] = [{ key: "local", label: "This computer", frames: [] }];
-  for (const m of machineSnap.machines) machineGroups.push({ key: m.hostId, label: m.label, hostId: m.hostId, machine: m, frames: [] });
+  for (const m of machineSnap.machines) machineGroups.push({ key: m.id, label: m.label, hostId: m.hostId, machine: m, frames: [] });
   for (const f of topFrames) {
-    const hostId = hostIdOfUri(f.remoteUri) ?? "local";
-    let g = machineGroups.find((x) => x.key === hostId);
-    // A frame on a machine that is not saved (removed, or never added) still says where it is.
-    if (!g) machineGroups.push(g = { key: hostId, label: hostId.replace(/:22$/, ""), hostId, frames: [] });
+    const { machine, hostId } = placeOf(machineSnap, f.remoteUri);
+    const key = !f.remoteUri ? "local" : machine?.id ?? hostId ?? "gone";
+    let g = machineGroups.find((x) => x.key === key);
+    // A frame on a host no machine is saved for, or on one no longer saved, still says where it is.
+    if (!g) machineGroups.push(g = { key, label: hostId?.replace(/:22$/, "") ?? GONE_MACHINE, ...(hostId ? { hostId } : {}), frames: [] });
     g.frames.push(f);
   }
   const groupByMachine = machineGroups.length > 1;

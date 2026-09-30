@@ -15,7 +15,8 @@ import { MenuItem } from "./components/ui/menu-item";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { WorktreePicker } from "./WorktreePicker";
 import { useGitBranch } from "./queries";
-import { isRemote, parseRemote, remoteBasename, remoteDisplay } from "../../shared/remote-uri";
+import { isRemote, remoteBasename, remoteDisplay } from "../../shared/remote-uri";
+import { frameMachine, useMachines } from "./machines/store";
 import { MachineChip } from "./machines/MachineChip";
 import { useAgents } from "./agents";
 import type { ArrangeMode } from "./frame-layout";
@@ -134,10 +135,9 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
   const wsBound = !!data.workspacePath;
   const wsName = data.workspacePath?.split("/").filter(Boolean).pop();
   const isRemoteWs = isRemote(data.workspacePath);
-  // `host:dir` for the remote pill (e.g. 10.20.40.84:app).
-  const remoteHostLabel = isRemoteWs
-    ? `${parseRemote(data.workspacePath!).host}:${remoteBasename(data.workspacePath!)}`
-    : "";
+  // `machine:dir` for the remote pill (e.g. build-box:app): the saved machine's name, or the host.
+  const machineName = frameMachine(useMachines(), data.workspacePath)?.name;
+  const remoteHostLabel = isRemoteWs ? `${machineName}:${remoteBasename(data.workspacePath!)}` : "";
   // Current branch of this repo frame (base or workspace zone) — shown as a
   // badge like Zed's title bar. Uses the dedicated long-staleTime git:branch
   // query (NOT git:status), so it stays off the 200ms fs-invalidation storm:
@@ -270,7 +270,7 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
           <span
             className="flex items-center gap-1 max-w-[60%] rounded px-1.5 py-0.5 text-[10px] font-mono"
             style={{ background: isRemoteWs ? "color-mix(in oklab, var(--color-brand) 22%, transparent)" : "var(--color-bg3)", color: "var(--color-fg)" }}
-            title={isRemoteWs ? `remote ${remoteDisplay(data.workspacePath!)}` : `workspace ${data.workspacePath}`}
+            title={isRemoteWs ? `remote ${remoteDisplay(data.workspacePath!, machineName)}` : `workspace ${data.workspacePath}`}
           >
             {isRemoteWs
               ? <Server size={11} className="shrink-0 text-[var(--color-brand)]" />

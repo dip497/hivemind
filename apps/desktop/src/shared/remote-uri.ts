@@ -1,12 +1,20 @@
 /**
- * Remote target URI scheme — `ssh://[user@]host[:port]/abs/posix/path`.
+ * Where a folder is when it is not on this computer, as one path string.
  *
  * The entire IPC surface is keyed by a single path string (repoPath / cwd).
  * Rather than thread a separate "host" field through every channel and every
- * tile's data, a REMOTE target is encoded into that one string as an ssh:// URI.
- * It flows through canvas-node-build → tile data unchanged; each backend helper
- * branches once on isRemote(). This module is the pure parse/format core, shared
- * by main (transport routing) and renderer (display + frame binding). No deps.
+ * tile's data, a REMOTE folder is encoded into that one string. It flows through
+ * canvas-node-build → tile data unchanged; each backend helper branches once on
+ * isRemote(). Two forms:
+ *
+ * - `machine://<machineId>/abs/posix/path` (R9): on a saved machine, by its id. What the
+ *   machine is and how it is reached is its record's, so editing its address or login never
+ *   touches the frames on it.
+ * - `ssh://[user@]host[:port]/abs/posix/path`: on a host no saved machine names — one removed,
+ *   or a workspace from before R9 whose machine is not known here — reached over ssh as written.
+ *
+ * This module is the pure parse/format core, shared by main (transport routing) and the
+ * renderer (display + frame binding). No deps.
  */
 
 export interface RemoteTarget {
@@ -23,10 +31,30 @@ export interface RemoteTarget {
 }
 
 export const REMOTE_SCHEME = "ssh://";
+export const MACHINE_SCHEME = "machine://";
 
-/** True when a path string denotes a remote (ssh://) target. */
+/** True when a path string denotes a folder on another computer (machine:// or ssh://). */
 export function isRemote(p: string | null | undefined): p is string {
-  return typeof p === "string" && p.startsWith(REMOTE_SCHEME);
+  return typeof p === "string" && (p.startsWith(MACHINE_SCHEME) || p.startsWith(REMOTE_SCHEME));
+}
+
+/** `machine://<machineId>/path`'s machine and path (a missing path is "/"); null for any other uri. */
+export function parseMachineUri(uri: string): { machineId: string; path: string } | null {
+  if (!uri.startsWith(MACHINE_SCHEME)) return null;
+  const rest = uri.slice(MACHINE_SCHEME.length);
+  const slash = rest.indexOf("/");
+  const machineId = slash === -1 ? rest : rest.slice(0, slash);
+  return machineId ? { machineId, path: slash === -1 ? "/" : rest.slice(slash) } : null;
+}
+
+/** `path` on the saved machine `machineId`. */
+export function machineUri(machineId: string, path = "/"): string {
+  return `${MACHINE_SCHEME}${machineId}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
+/** The path a remote uri names on its machine or host. */
+export function remotePath(uri: string): string {
+  return parseMachineUri(uri)?.path ?? parseRemote(uri).path;
 }
 
 /** Build the pool key for a host triple. */
@@ -41,7 +69,7 @@ export function hostIdOf(user: string | null, host: string, port: number): strin
  * a missing path defaults to "/".
  */
 export function parseRemote(uri: string): RemoteTarget {
-  if (!isRemote(uri)) throw new Error(`not a remote uri: ${uri}`);
+  if (!uri.startsWith(REMOTE_SCHEME)) throw new Error(`not an ssh uri: ${uri}`);
   const rest = uri.slice(REMOTE_SCHEME.length);
   // authority is up to the FIRST slash; the rest (incl. that slash) is the path.
   const slash = rest.indexOf("/");
@@ -83,8 +111,8 @@ export function formatRemote(t: {
   return `${REMOTE_SCHEME}${user}${t.host}${port}${path}`;
 }
 
-/** A saved machine's ssh target (`alias`, `user@host`, `ssh://user@host:port`) as a remote uri at `path`. */
-export function machineUri(target: string, path = "/"): string {
+/** A saved machine's ssh target (`alias`, `user@host`, `ssh://user@host:port`) as an ssh uri at `path`. */
+export function sshUri(target: string, path = "/"): string {
   const authority = target.startsWith(REMOTE_SCHEME) ? target.slice(REMOTE_SCHEME.length).replace(/\/.*$/, "") : target;
   return `${REMOTE_SCHEME}${authority}${path.startsWith("/") ? path : `/${path}`}`;
 }
@@ -95,9 +123,9 @@ export function sshTargetOf(t: { host: string; port: number; user: string | null
   return t.port !== 22 ? `${REMOTE_SCHEME}${u}${t.host}:${t.port}` : `${u}${t.host}`;
 }
 
-/** The connection key a machine's frames resolve to, so a frame finds its machine by host. */
+/** The connection key of a machine's address: every connection to it is kept by this. */
 export function machineHostId(target: string): string {
-  return parseRemote(machineUri(target)).hostId;
+  return parseRemote(sshUri(target)).hostId;
 }
 
 /** Join a remote uri's host authority with a new absolute path (for navigation). */
@@ -106,8 +134,10 @@ export function withRemotePath(uri: string, newPath: string): string {
   return formatRemote({ host: t.host, port: t.port, user: t.user, path: newPath });
 }
 
-/** Short human label: `user@host:/path` (for chips, titles, tooltips). */
-export function remoteDisplay(uri: string): string {
+/** Short human label: `user@host:/path` for an ssh uri, `<name>:/path` given its machine's name. */
+export function remoteDisplay(uri: string, machineName?: string): string {
+  const m = parseMachineUri(uri);
+  if (m) return `${machineName ?? m.machineId}:${m.path}`;
   const t = parseRemote(uri);
   const u = t.user ? `${t.user}@` : "";
   return `${u}${t.host}:${t.path}`;
@@ -115,7 +145,7 @@ export function remoteDisplay(uri: string): string {
 
 /** The basename of a remote uri's path — for a frame title. */
 export function remoteBasename(uri: string): string {
-  const { path } = parseRemote(uri);
+  const path = remotePath(uri);
   const trimmed = path.replace(/\/+$/, "");
   const idx = trimmed.lastIndexOf("/");
   return idx === -1 ? trimmed || "/" : trimmed.slice(idx + 1) || "/";
@@ -132,9 +162,21 @@ export function posixJoin(a: string, b: string): string {
   return a.endsWith("/") ? a + b : `${a}/${b}`;
 }
 
-/** `uri` moved to `target` when it was on `oldHostId` (a machine whose address was edited); else unchanged. */
-export function repointUri<T extends string | null | undefined>(uri: T, oldHostId: string, target: string): T | string {
-  if (!isRemote(uri)) return uri;
-  const t = parseRemote(uri);
-  return t.hostId === oldHostId ? machineUri(target, t.path) : uri;
+/** A saved machine, as a frame's binding knows it. */
+export interface BindableMachine { id: string; target: string; hostId: string }
+
+/** `uri` bound to the saved machine at its address, when it is an ssh uri one of `machines` is at
+ *  (a workspace from before R9, or a host saved as a machine since); else as it was. */
+export function bindToMachine<T extends string | null | undefined>(uri: T, machines: readonly BindableMachine[]): T | string {
+  if (typeof uri !== "string" || !uri.startsWith(REMOTE_SCHEME)) return uri;
+  let t: RemoteTarget;
+  try { t = parseRemote(uri); } catch { return uri; }
+  const m = machines.find((x) => x.hostId === t.hostId);
+  return m ? machineUri(m.id, t.path) : uri;
+}
+
+/** `uri` on `machine`, which is no longer saved, back at its address: it still runs there. */
+export function unbindFromMachine<T extends string | null | undefined>(uri: T, machine: BindableMachine): T | string {
+  const m = typeof uri === "string" ? parseMachineUri(uri) : null;
+  return m && m.machineId === machine.id ? sshUri(machine.target, m.path) : uri;
 }

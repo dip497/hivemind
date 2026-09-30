@@ -10,7 +10,7 @@
 import { mintId } from "../../shared/tile-id";
 import { useCallback, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import { frameColorFor } from "./frame-color";
-import { remoteBasename, repointUri } from "../../shared/remote-uri";
+import { remoteBasename } from "../../shared/remote-uri";
 import { nextSlotInFrame, FRAME_ROW_MAX, FRAME_GAP } from "./frame-layout";
 import { defaultSizeForKind, FRAME_PAD, FRAME_HEADER, FRAME_EMPTY_W, FRAME_EMPTY_H } from "./canvas-sizing";
 import type { FrameState, TileInstance } from "./canvas-persistence";
@@ -197,7 +197,7 @@ export function useWorktrees(ctx: WorktreesCtx) {
     setFrames((fs) => fs.map((f) => (f.id === frameId ? { ...f, workspacePath: undefined, workspaceRoot: undefined } : f)));
   }, [setFrames]);
 
-  // Bind a REMOTE (ssh://) target as the frame's workspace. The uri flows
+  // Bind a REMOTE folder (machine://, R9) as the frame's workspace. The uri flows
   // through mkTile into every tile's cwd/repoPath exactly like a local
   // workspacePath — so the frame's terminals/editor/diff all run on the remote.
   // workspaceRoot stays null (issues remain the local project's — MVP).
@@ -208,14 +208,5 @@ export function useWorktrees(ctx: WorktreesCtx) {
     );
   }, [setFrames]);
 
-  /** A machine's address was edited: its frames follow it. */
-  const repointHost = useCallback((oldHostId: string, target: string) => {
-    const move = <T extends string | null | undefined>(p: T) => repointUri(p, oldHostId, target) as T;
-    setFrames((fs) => fs.map((f) => {
-      const next = { ...f, workspacePath: move(f.workspacePath), worktreePath: move(f.worktreePath), workspaceRoot: move(f.workspaceRoot) };
-      return next.workspacePath === f.workspacePath && next.worktreePath === f.worktreePath && next.workspaceRoot === f.workspaceRoot ? f : next;
-    }));
-  }, [setFrames]);
-
-  return { frameRepo, spawnWorktreeFrame, onAttachWorktree, onCreateWorktree, unbindBranch, bindWorkspace, unbindWorkspace, bindRemote, repointHost };
+  return { frameRepo, spawnWorktreeFrame, onAttachWorktree, onCreateWorktree, unbindBranch, bindWorkspace, unbindWorkspace, bindRemote };
 }

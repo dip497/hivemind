@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- **Breaking:** a frame on a saved machine now names the machine rather than its address: its folder is `machine://<machine id>/path` (in `hive ctl frames` too), not `ssh://user@host/path`. Editing a machine's address or login moves its frames with nothing to redo; removing a machine puts its frames back at its address, where they still run, and saving a machine at an address puts the frames there on it. A workspace from before moves onto its machines when it opens.
 - New: views can show who else is in a workspace you share (view protocol 1.5): each person's name and colour, the tile their pointer is over and what they selected, as they move. A view also learns whether it is on a touch screen or a phone's, and `hive views new` comes with a fake host to test a view without the app, which says what the app would refuse and why.
 - Fixed: switching a shared workspace from the canvas to another view no longer looks, to the people in it, as if you left. What you select there still shows to them.
 - Fixed: a view that restored a docked terminal whose tile is gone, or kept one for a tile closed a moment before, was counted as misbehaving and could be switched off. It now waits until the tile is there.

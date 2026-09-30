@@ -16,7 +16,7 @@ src/main/      Node main process — owns IPC, PTY daemon, git, fs, windows
 src/preload/index.ts   window.hive bridge (1:1 with shared/ipc.ts HiveIpc)
 src/shared/     types shared main↔renderer
   ipc.ts          HiveIpc interface — the contract
-  remote-uri.ts   ssh:// URI parse/format (pure, shared)
+  remote-uri.ts   machine:// and ssh:// URI parse/format (pure, shared)
 src/renderer/src/   React app (see "Renderer" below)
 tests/unit/     node:test (pure logic)   tests/e2e/  Playwright
 
@@ -61,9 +61,10 @@ don't know the difference. When gating editor/diff on "has a repo", gate on this
 
 ## Remote (SSH) frames
 
-A remote frame = a frame whose `workspacePath` is an `ssh://user@host:port/path`
-URI. It flows through `buildTileSurfaces` into every tile's `cwd`/`repoPath`
-unchanged; each
+A remote frame = a frame whose `workspacePath` is a `machine://<machineId>/path`
+URI (R9: the saved machine, by id; main reaches it through `remoteTarget`), or an
+`ssh://user@host:port/path` one for a host no machine is saved for. It flows through
+`buildTileSurfaces` into every tile's `cwd`/`repoPath` unchanged; each
 backend helper branches once on `isRemote()`:
 
 - PTY → `main/remote/pty.ts` (in-main, ssh exec+pty), routed from the `ptySpawn`

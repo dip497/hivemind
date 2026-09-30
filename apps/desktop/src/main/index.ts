@@ -32,9 +32,10 @@ import { TILE_SESSIONS_DIR, listSessions, writeTrackedSession } from "@hivemind/
 import { agentAllowedIn, loadAgents, toWire } from "@hivemind/agents/load";
 import * as ptyHost from "./pty-host.js";
 import * as ptyDaemon from "./daemon-client.js";
-import { isRemote, parseRemote } from "../shared/remote-uri.js";
+import { isRemote } from "../shared/remote-uri.js";
 import { savedAuth } from "./remote/saved-hosts.js";
 import { addMachine, checkMachine, editMachine, initMachines, installOnMachine, machineSessions, reconnectMachineHost, removeMachine, setMachinePassword, snapshot as machinesSnapshot, updateMachine } from "./remote/machines.js";
+import { remoteTarget } from "./remote/targets.js";
 import {
   spawnRemotePty, writeRemotePty, resizeRemotePty, killRemotePty, hasRemotePty, screenRemotePty, remoteKeepsScreen,
   pauseRemotePty, resumeRemotePty, detachRemotePty, setRemoteEventSink,
@@ -932,7 +933,7 @@ handle("machines:sessions", wrap(async (_e, uri: string | null) => machineSessio
 handleEffect("machines:reconnect", (id) => ({ target: named(id) }), wrap(async (_e, hostId: string) => { reconnectMachineHost(String(hostId)); }));
 // List a remote directory for the folder picker. `dir` empty → the host's home.
 handle("sshListDir", wrap(async (_e, uri: string, dir: string) => {
-  const target = parseRemote(uri);
+  const target = remoteTarget(String(uri));
   const fs = await remoteConns.fs(target);
   const start = dir && dir.trim() ? dir : await fs.home();
   const real = await fs.realpath(start).catch(() => start);
@@ -1129,10 +1130,10 @@ async function startSession(opts: TerminalOpts, out: SessionOutput): Promise<{ p
     // What is pending (recorded and shipped), then the exit, BEFORE the HCP teardown forgets the tile.
     onExit: (code: number, signal?: number) => { out.exit(code, signal); onPtyExit(opts.tileId); },
   };
-  // Remote frame (ssh:// cwd): run the PTY over ssh, in-main. Skip the local
+  // Remote frame (a machine:// or ssh:// cwd): run the PTY over ssh, in-main. Skip the local
   // cwd stat + shell-env patch (those are for the LOCAL host). The data/exit
   // plumbing is identical.
-  if (isRemote(opts.cwd)) return spawnRemotePty(opts, callbacks);
+  if (isRemote(opts.cwd)) return spawnRemotePty(opts, remoteTarget(opts.cwd), callbacks);
   if (opts.cwd) {
     const st = await fsp.stat(opts.cwd).catch(() => null);
     if (!st?.isDirectory()) throw new Error(`pty cwd is not a directory: ${opts.cwd}`);

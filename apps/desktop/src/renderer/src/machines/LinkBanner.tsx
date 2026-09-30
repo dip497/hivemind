@@ -1,7 +1,7 @@
 /** Over a remote terminal while its machine's link is down: the screen is stale, and why. */
 import { Button } from "../components/ui/button";
 import { useEffect, useState } from "react";
-import { hostIdOfUri, machineByHost, openMachines, statusOf, useMachines } from "./store";
+import { openMachines, placeOf, statusOf, useMachines } from "./store";
 import { MachineDot } from "./status";
 
 /** A blip reconnects in milliseconds; only a break long enough to notice is worth a banner. */
@@ -9,9 +9,8 @@ const GRACE_MS = 1200;
 
 export function LinkBanner({ cwd }: { cwd: string }) {
   const snap = useMachines();
-  const hostId = hostIdOfUri(cwd);
+  const { machine, hostId } = placeOf(snap, cwd);
   const s = statusOf(snap, hostId);
-  const machine = machineByHost(snap, hostId);
   const off = machine?.enabled === false;
   const down = off || s.state === "reconnecting" || s.state === "attention";
   const [show, setShow] = useState(false);

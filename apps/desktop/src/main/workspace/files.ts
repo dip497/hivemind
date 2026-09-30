@@ -1,6 +1,6 @@
 /**
  * Files in a workspace's repo (the workspace API's `file.*`): a local repo's on this machine's
- * disk, an ssh:// one's over its connection. A file outside the repo is refused.
+ * disk, a remote one's (machine:// or ssh://) over its connection. A file outside the repo is refused.
  */
 import fsp from "node:fs/promises";
 import { text, written } from "@hivemind/workspace-api/protocol";

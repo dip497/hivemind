@@ -11,10 +11,13 @@ One canvas per project. **Frames** are named zones on it, each bound to a direct
 |---|---|
 | Local repo | Default; tiles run in that directory. |
 | Git worktree | A nested sub-frame scoped to one branch (frame header → **worktree**). Arrange a frame's tiles and worktrees as Columns / Rows / Grid. |
-| Remote SSH | A directory on a saved machine, as `ssh://user@host:port/abs/path`. Terminals run in `hive` on that machine and keep running when the connection drops or the app closes; the editor and diff work over the same connection. One ssh connection per machine, using your keys, agent and `~/.ssh/config` (or a password kept in the OS keychain). |
+| Remote SSH | A directory on a saved machine, as `machine://<machine id>/abs/path`: the frame names the machine, and the machine says where it is. Terminals run in `hive` on that machine and keep running when the connection drops or the app closes; the editor and diff work over the same connection. One ssh connection per machine, using your keys, agent and `~/.ssh/config` (or a password kept in the OS keychain). |
 
-Remote frames are path-keyed: the `ssh://` URI is the workspace path, so tiles go
-remote without per-tile changes (`docs/design/remote-frames.md`).
+Remote frames are path-keyed: the `machine://` URI is the workspace path, so tiles go
+remote without per-tile changes (`docs/design/remote-frames.md`). A frame on a host no machine is
+saved for — one you removed — is `ssh://user@host:port/abs/path` and still runs there; saving a
+machine at that address puts the frame on it, as it does for a workspace from before machines had
+ids.
 
 ## Machines
 
@@ -28,8 +31,9 @@ it. From a machine's heading:
   tiles keep their screen; **Turn on** (there, or on any of its tiles) reconnects them.
 - **⋯ → Manage machines…** adds, edits and removes. **Edit** changes the name, address,
   user or port; a new address is reached before it is saved, and the frames on the machine
-  move with it. **Remove** says what uses the machine first and leaves its terminals running
-  unless you tick “also end”.
+  move with it (they name the machine, not the address). **Remove** says what uses the machine
+  first and leaves its terminals running unless you tick “also end”; its frames go back to its
+  address, where they still run, and can be saved as a machine again.
 
 The list is the same one `hive machine` edits in a terminal.
 

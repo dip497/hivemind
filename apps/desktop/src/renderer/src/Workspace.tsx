@@ -58,8 +58,9 @@ import { defaultTileSize, snapToGrid } from "./canvas-sizing";
 import { useWorktrees } from "./useWorktrees";
 // Loaded when it is first opened: the dialog (add form, machine list, folder picker) is not startup work.
 const MachinesHub = lazy(() => import("./machines/MachinesHub").then((m) => ({ default: m.MachinesHub })));
-import { frameMachine, hostIdOfUri, useMachines, type MachinesRequest } from "./machines/store";
-import type { SessionSummary } from "../../shared/ipc";
+import { frameMachine, placeOf, useMachines, type MachinesRequest } from "./machines/store";
+import { rebindFrames } from "./machines/frame-binding";
+import type { MachineInfo, SessionSummary } from "../../shared/ipc";
 import type { PlanReview } from "@hivemind/workspace-api/plans";
 import { toBareId } from "../../shared/tile-id";
 import { isRemote } from "../../shared/remote-uri";
@@ -76,6 +77,7 @@ import { createTileSurfaceBuilder } from "./workspace/tile-surfaces";
 import { TileHost } from "./workspace/tile-host";
 import { ViewHost } from "./workspace/view-host";
 import { SayHere } from "./multiplayer/presence";
+import { joinedId } from "./multiplayer/shown";
 import { HostChrome } from "./workspace/host-chrome";
 import { loadCommunityViews } from "./workspace/views/community/registry";
 import { syncAgentPlugins } from "./agent-plugins";
@@ -305,7 +307,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     let cancelled = false;
     void (async () => {
       const todo = framesRef.current.filter(
-        (f) => f.workspacePath && !f.workspacePath.startsWith("ssh://") && !f.workspaceRoot,
+        (f) => f.workspacePath && !isRemote(f.workspacePath) && !f.workspaceRoot,
       );
       for (const f of todo) {
         try {
@@ -331,19 +333,30 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   useEffect(() => { if (selectedTileId) selectObject(null); }, [selectedTileId, selectObject]);
   // What a machine is in use by, for the remove dialog: frames bound to a folder on it, and the
   // terminals in them.
-  const terminalsOnHost = useCallback((hostId: string) => {
-    const frames = new Set(framesRef.current.filter((f) => hostIdOfUri(f.workspacePath) === hostId).map((f) => f.id));
+  const machinesSnap = useMachines();
+  const terminalsOn = useCallback((machineId: string) => {
+    const frames = new Set(framesRef.current.filter((f) => placeOf(machinesSnap, f.workspacePath).machine?.id === machineId).map((f) => f.id));
     return { frames, terminals: tilesRef.current.filter((t) => isTerminalKind(t.kind) && frames.has(frameOfRef.current[t.id] ?? "")) };
-  }, [framesRef, tilesRef, frameOfRef]);
-  const machineUsage = useCallback((hostId: string) => {
-    const { frames, terminals } = terminalsOnHost(hostId);
+  }, [framesRef, tilesRef, frameOfRef, machinesSnap]);
+  const machineUsage = useCallback((machineId: string) => {
+    const { frames, terminals } = terminalsOn(machineId);
     return { frames: frames.size, terminals: terminals.length };
-  }, [terminalsOnHost]);
+  }, [terminalsOn]);
   // End them: closing a tile ends its session. A tile showing someone else's job (`hive run`,
   // another device) is only let go of — it is not ours to end.
-  const endTerminalsOn = useCallback((hostId: string) => {
-    for (const t of terminalsOnHost(hostId).terminals) closeTile(t.id);
-  }, [terminalsOnHost, closeTile]);
+  const endTerminalsOn = useCallback((machineId: string) => {
+    for (const t of terminalsOn(machineId).terminals) closeTile(t.id);
+  }, [terminalsOn, closeTile]);
+  // A frame on a saved machine names it (R9): one bound by a machine's address is bound to the
+  // machine, and one on a machine removed goes back to its address. A workspace joined from
+  // elsewhere is its host's to bind: the machines are the host's, not these.
+  const machinesKnown = useRef<MachineInfo[]>([]);
+  useEffect(() => {
+    const gone = machinesKnown.current.filter((m) => !machinesSnap.machines.some((x) => x.id === m.id));
+    machinesKnown.current = machinesSnap.machines;
+    if (!repoPath || joinedId(repoPath)) return;
+    setFrames((fs) => rebindFrames(fs, machinesSnap.machines, gone));
+  }, [machinesSnap, repoPath, setFrames]);
   // The frame the user most recently touched (spawned into / dragged). The
   // collision-separation pass keeps THIS frame fixed and pushes neighbours.
   const lastActiveFrameRef = useRef<string | null>(null);
@@ -478,7 +491,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
 
   // Worktree + workspace-zone lifecycle (IPC, in-flight guard, detach confirm).
   const {
-    onAttachWorktree, onCreateWorktree, unbindBranch, bindWorkspace, unbindWorkspace, bindRemote, repointHost,
+    onAttachWorktree, onCreateWorktree, unbindBranch, bindWorkspace, unbindWorkspace, bindRemote,
   } = useWorktrees({
     framesRef, tilesRef, positionsRef, sizesRef, frameOfRef, repoPathRef,
     lastActiveFrameRef, pushToastRef, setFrames, setFrameOf, setSelectedFrameId,
@@ -602,7 +615,6 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     void import("./workspace/view-services").then((m) => { m.startViewHost(); if (live) setViewHost(m); });
     return () => { live = false; };
   }, []);
-  const machinesSnap = useMachines();
   useEffect(() => {
     if (!viewHost) return;
     viewHost.viewEvents.setWorkspace(persistKey, tiles.map((t) => {
@@ -1231,7 +1243,6 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
             // Opened from a machine rather than a frame: the folder you chose is the
             // point, so give it a frame instead of dropping it.
             onPick={(frameId, uri) => bindRemote(frameId ?? addFrame(), uri)}
-            onRepoint={repointHost}
           />
         </Suspense>
       )}

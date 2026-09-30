@@ -425,8 +425,8 @@ export interface HiveIpc {
   machineCheck(id: string): Promise<MachineProbe>;
   machineInstall(id: string): Promise<MachineProbe>;
   machineUpdate(id: string, patch: { label?: string; enabled?: boolean }): Promise<void>;
-  /** Change where a machine is (tested before it is saved). `oldHostId`: re-point the frames that ran there. */
-  machineEdit(id: string, patch: { target: string; label?: string; password?: string }): Promise<{ machine: MachineInfo; oldHostId: string }>;
+  /** Change where a machine is (tested before it is saved). The frames on it follow: they name the machine. */
+  machineEdit(id: string, patch: { target: string; label?: string; password?: string }): Promise<{ machine: MachineInfo }>;
   /** View protocol 1.3: status ledger lines (see workspace/view-events.ts). */
   viewLedgerAppend(lines: unknown[]): void;
   viewLedgerSnapshot(): Promise<LedgerSince[]>;

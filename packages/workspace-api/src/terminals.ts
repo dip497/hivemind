@@ -6,7 +6,7 @@
 export interface TerminalOpts {
   /** The session's id: `hm:<tile>`. */
   tileId: string;
-  /** Where it runs: a directory on the host, or an `ssh://` one. */
+  /** Where it runs: a directory on the host, or a remote one (`machine://` or `ssh://`). */
   cwd: string;
   cmd: string;
   args?: string[];

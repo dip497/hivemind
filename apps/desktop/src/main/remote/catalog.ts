@@ -36,3 +36,11 @@ export class Catalog {
     return next;
   }
 }
+
+const heard = new Set<() => void>();
+/** The app's machines, as machines.json has them: one catalog for all of main. */
+export const machines = new Catalog(machinesPath(), () => { for (const l of heard) l(); });
+/** Hear each change to the machines: a reload, an edit here, or one `hive machine` made. */
+export function onMachinesChange(listener: () => void): void {
+  heard.add(listener);
+}

@@ -7,8 +7,9 @@ const {
   remoteBasename, posixJoin, hostIdOf,
 } = await import("../../src/shared/remote-uri.ts");
 
-test("isRemote distinguishes ssh:// from local paths", () => {
+test("isRemote distinguishes a folder on a machine or an ssh host from local paths", () => {
   assert.equal(isRemote("ssh://h/x"), true);
+  assert.equal(isRemote("machine://m_1/x"), true);
   assert.equal(isRemote("/home/u/proj"), false);
   assert.equal(isRemote(null), false);
   assert.equal(isRemote(undefined), false);
@@ -67,7 +68,9 @@ test("withRemotePath swaps the path, keeps the authority", () => {
 
 test("remoteDisplay + remoteBasename", () => {
   assert.equal(remoteDisplay("ssh://u@h:2222/srv/app"), "u@h:/srv/app");
+  assert.equal(remoteDisplay("machine://m_1/srv/app", "build-box"), "build-box:/srv/app");
   assert.equal(remoteBasename("ssh://u@h/srv/app/"), "app");
+  assert.equal(remoteBasename("machine://m_1/srv/app"), "app");
   assert.equal(remoteBasename("ssh://u@h/"), "/");
 });
 

@@ -20,16 +20,15 @@ const CHECK_AFTER_MS = 60_000;
 const CHECK_PARALLEL = 4;
 
 /** What a machine is used by on this canvas: frames bound to a folder on it, and their terminals. */
-export type MachineUsage = (hostId: string) => { frames: number; terminals: number };
+/** What a saved machine is in use by here: the frames on it, and the terminals in them. */
+export type MachineUsage = (machineId: string) => { frames: number; terminals: number };
 
-export function MachinesHub({ request, onClose, onPick, onRepoint, usageOf, onEndTerminals }: {
+export function MachinesHub({ request, onClose, onPick, usageOf, onEndTerminals }: {
   request: MachinesRequest | null;
-  /** A machine's address changed: move the frames that ran on `oldHostId` to `target`. */
-  onRepoint: (oldHostId: string, target: string) => void;
   onClose: () => void;
   usageOf: MachineUsage;
   /** Kill the terminals running on a machine and close their tiles. */
-  onEndTerminals: (hostId: string) => void;
+  onEndTerminals: (machineId: string) => void;
   /** A folder was chosen — for `request.frameId`, or for a new frame when nothing asked. */
   onPick: (frameId: string | null, uri: string) => void;
 }) {
@@ -106,7 +105,6 @@ export function MachinesHub({ request, onClose, onPick, onRepoint, usageOf, onEn
             editing={view.machine}
             onCancel={() => setView({ kind: "list" })}
             onAdded={() => setView({ kind: "list" })}
-            onRepoint={onRepoint}
           />
         )}
         {view.kind === "browse" && (
@@ -123,7 +121,7 @@ export function MachinesHub({ request, onClose, onPick, onRepoint, usageOf, onEn
 
 function MachineList({ picking, onChoose, onEdit, onAdd, usageOf, onEndTerminals }: {
   picking: boolean; onChoose: (m: MachineInfo) => void; onEdit: (m: MachineInfo) => void; onAdd: () => void;
-  usageOf: MachineUsage; onEndTerminals: (hostId: string) => void;
+  usageOf: MachineUsage; onEndTerminals: (machineId: string) => void;
 }) {
   const snap = useMachines();
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -196,7 +194,7 @@ function MachineList({ picking, onChoose, onEdit, onAdd, usageOf, onEndTerminals
       ) : selected && (() => {
         const m = selected;
         const s = statusOf(snap, m.hostId);
-        const u = usageOf(m.hostId);
+        const u = usageOf(m.id);
         const doing = busy[m.id];
         return (
           <section className="min-w-0 overflow-y-auto overflow-x-hidden p-5 grid grid-cols-[minmax(0,1fr)] content-start gap-4" aria-label={`${m.label} details`} data-machine-detail={m.label}>
@@ -286,7 +284,7 @@ function MachineList({ picking, onChoose, onEdit, onAdd, usageOf, onEndTerminals
                     const end = removing.end;
                     setRemoving(null);
                     setSelectedId(null);
-                    if (end) onEndTerminals(m.hostId);
+                    if (end) onEndTerminals(m.id);
                     void run(m, "removing", () => window.hive.machineRemove(m.id));
                   }}>Remove</Button>
                 </div>
@@ -301,13 +299,12 @@ function MachineList({ picking, onChoose, onEdit, onAdd, usageOf, onEndTerminals
   );
 }
 
-function AddMachine({ initialTarget, editing, onCancel, onAdded, onRepoint }: {
+function AddMachine({ initialTarget, editing, onCancel, onAdded }: {
   initialTarget?: string;
-  /** Edit this machine instead of adding one. */
+  /** Edit this machine instead of adding one. The frames on it follow: they name the machine. */
   editing?: MachineInfo;
   onCancel: () => void;
   onAdded: (m: MachineInfo) => void;
-  onRepoint?: (oldHostId: string, target: string) => void;
 }) {
   const [target, setTarget] = useState(editing?.target ?? initialTarget ?? "");
   const [label, setLabel] = useState(editing?.label ?? "");
@@ -327,7 +324,6 @@ function AddMachine({ initialTarget, editing, onCancel, onAdded, onRepoint }: {
     try {
       if (editing) {
         const r = await window.hive.machineEdit(editing.id, { target: target.trim(), label: label.trim() || undefined, password: usePassword && password ? password : undefined });
-        if (r.machine.hostId !== r.oldHostId) onRepoint?.(r.oldHostId, r.machine.target);
         onAdded(r.machine);
         return;
       }
@@ -400,7 +396,7 @@ function pushRecent(m: MachineInfo, dir: string): void {
 const parentOf = (d: string) => (d === "/" ? "/" : d.replace(/\/[^/]+\/?$/, "") || "/");
 
 function FolderPicker({ machine, onPick, actionLabel }: { machine: MachineInfo; onPick: (uri: string) => void; actionLabel: string }) {
-  const base = useMemo(() => machineUri(machine.target), [machine.target]);
+  const base = useMemo(() => machineUri(machine.id), [machine.id]);
   const [dir, setDir] = useState("");
   const [home, setHome] = useState("");
   const [entries, setEntries] = useState<RemoteDirEntry[]>([]);
@@ -434,7 +430,7 @@ function FolderPicker({ machine, onPick, actionLabel }: { machine: MachineInfo; 
   }
   useEffect(() => { void list(""); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [base]);
 
-  const open = (d: string) => { pushRecent(machine, d); onPick(machineUri(machine.target, d)); };
+  const open = (d: string) => { pushRecent(machine, d); onPick(machineUri(machine.id, d)); };
   const expand = (p: string) => (p === "~" ? home : p.startsWith("~/") && home ? posixJoin(home, p.slice(2)) : p);
   const q = filter.trim().toLowerCase();
   const shown = entries.filter((e) => (q.startsWith(".") || !e.name.startsWith(".")) && (!q || e.name.toLowerCase().includes(q)));
