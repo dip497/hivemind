@@ -2,7 +2,9 @@
  * Share (design §4.2 A): an invite link to this workspace, for a role, that expires. The link is
  * single-use unless made reusable; the person here is asked before anyone joins with it.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import type { NetworkProfile } from "@hivemind/workspace-host/network-profile";
+import { ReachChooser } from "./reach-chooser";
 import { Check, Copy, Share2, Users } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../components/ui/dialog";
 import { Button } from "../components/ui/button";
@@ -21,6 +23,9 @@ export function ShareDialog({ repo, open, onClose, onPeople }: { repo: string; o
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [net, setNet] = useState<NetworkProfile | null>(null);
+  const [reaching, setReaching] = useState(false);
+  useEffect(() => { if (open) void window.hive.network().then(setNet, () => setNet(null)); }, [open]);
   const name = repo.split(/[\\/]/).filter(Boolean).pop() ?? repo;
 
   const create = async () => {
@@ -43,7 +48,12 @@ export function ShareDialog({ repo, open, onClose, onPeople }: { repo: string; o
     <Dialog open={open} onOpenChange={(o) => { if (!o) { onClose(); setLink(null); setError(null); } }}>
       <DialogContent className="sm:max-w-[460px]" data-share-dialog>
         <DialogTitle className="flex items-center gap-2"><Share2 size={15} /> Invite people to {name}</DialogTitle>
-        <DialogDescription>Works for people on this network. You are asked before anyone joins.</DialogDescription>
+        <DialogDescription>
+          {net && net.builtin !== "local" ? `Works for people on this network, and through ${net.profile.name}'s servers.` : "Works for people on this network."} You are asked before anyone joins.
+        </DialogDescription>
+        {net?.builtin === "local" && (reaching
+          ? <ReachChooser current={net} onChosen={(n) => { setNet(n); setReaching(false); setLink(null); }} onCancel={() => { setReaching(false); setError("Stays on this network: the link works only here."); }} />
+          : <Button size="sm" variant="ghost" className="self-start" onClick={() => setReaching(true)} data-invite-elsewhere>Invite someone elsewhere…</Button>)}
         <div className="settings-row">
           <label htmlFor="share-role">They can</label>
           <select id="share-role" value={role} onChange={(e) => { setRole(e.target.value as LinkRole); setLink(null); }}>

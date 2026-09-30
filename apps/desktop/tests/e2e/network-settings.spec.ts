@@ -66,8 +66,16 @@ test("a fresh install is on the local network; a network's link is used from the
     const r = (JSON.parse(Buffer.from(invite.split("#")[1]!, "base64url").toString("utf8")) as { r: string | null }).r;
     return r ? r.replace(/\/$/, "") : null;
   };
-  // On the local network the app's network runs, and names no server.
+  // On the local network the app's network runs, and names no server; Share says the link works
+  // here only, and inviting someone elsewhere asks for a way through, which can wait.
   expect(await inviteRelay()).toBeNull();
+  await page.locator("[data-share]").click();
+  await expect(page.locator("[data-share-dialog]")).toContainText("Works for people on this network.");
+  await page.locator("[data-invite-elsewhere]").click();
+  await expect(page.locator("[data-reach-chooser]")).toBeVisible();
+  await page.locator("[data-reach-not-now]").click();
+  await expect(page.locator("[data-share-dialog]")).toContainText("Stays on this network: the link works only here.");
+  await page.keyboard.press("Escape");
   await openSettings(page, "network");
   await expect(page.locator("[data-network-name]")).toHaveText("Local network");
   await expect(page.locator("[data-relay]")).toHaveCount(0);

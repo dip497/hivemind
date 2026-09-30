@@ -262,7 +262,7 @@ export interface HiveIpc {
   /** What an invite link offers, to show before joining; null when the text is not one. */
   joinPreview(text: string): Promise<{ workspace: string; host: string } | null>;
   /** Ask the host a link names to let this person in: the role they were given, or why not. */
-  join(text: string): Promise<{ ok: true; role: string; workspace: string } | { ok: false; error: string }>;
+  join(text: string): Promise<{ ok: true; role: string; workspace: string } | { ok: false; error: string; message?: string }>;
   /** Someone asks to join a workspace shared from here; answer with `answerJoin`. */
   onJoinRequest(cb: (r: { req: number; profile: { name: string; color: string }; role: string; workspace: string }) => void): () => void;
   answerJoin(req: number, allow: boolean): void;

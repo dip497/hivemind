@@ -42,7 +42,7 @@ function profiles(ctx: { json: boolean }): NetworkProfiles | null {
     err(ctx, "not_installed", "hive-net is not installed here: reinstall hivemind (install.sh puts it beside hive)");
     return null;
   }
-  return new NetworkProfiles({ dir: path.join(appData(), "network"), bin });
+  return new NetworkProfiles({ dir: path.join(appData(), "network"), bin, identity: path.join(appData(), "identity") });
 }
 
 function describe(net: NetworkProfile): string {
@@ -81,7 +81,7 @@ const useCmd = defineCommand({
     if (!p) return;
     try {
       const net = await p.use(String(args.network));
-      return ok(ctx, net, () => `now on ${describe(net)}\n(a running app starts its network again)`);
+      return ok(ctx, net, () => `now on ${describe(net)}\nadmission: ${net.admission}\n(a running app starts its network again)`);
     } catch (e) { return err(ctx, "refused", message(e)); }
   },
 });
@@ -94,7 +94,7 @@ const doctorCmd = defineCommand({
     const p = profiles(ctx);
     if (!p) return;
     try {
-      const health = await p.health(path.join(appData(), "identity"));
+      const health = await p.health();
       const down = health.relays.filter((r) => !r.ok);
       if (down.length) return err(ctx, "unreachable", `no answer from ${down.map((r) => r.url).join(", ")}`);
       return ok(ctx, health, () => (health.relays.length ? health.relays.map((r) => `✓ ${r.url}`).join("\n") : "no servers to check: this is the local network"));

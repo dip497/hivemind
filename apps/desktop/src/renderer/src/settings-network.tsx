@@ -8,10 +8,10 @@ import { useEffect, useState } from "react";
 import { Check, X } from "lucide-react";
 import type { NetworkHealth, NetworkProfile } from "@hivemind/workspace-host/network-profile";
 import { Button } from "./components/ui/button";
-import { Input } from "./components/ui/input";
 import { Switch } from "./components/ui/switch";
 import { Section } from "./appearance-controls";
 import { patchSettings, useSettings } from "./settings-store";
+import { ReachChooser } from "./multiplayer/reach-chooser";
 
 const messageOf = (e: unknown): string => (e instanceof Error ? e.message : String(e)).replace(/^Error invoking remote method '[^']+': (Error: )?/, "");
 
@@ -29,7 +29,6 @@ export function NetworkPrefs() {
   const [health, setHealth] = useState<NetworkHealth | null>(null);
   const [checking, setChecking] = useState(false);
   const [changing, setChanging] = useState(false);
-  const [link, setLink] = useState("");
   const [error, setError] = useState<string | null>(null);
   useEffect(() => { void window.hive.network().then((n) => setNet(n ?? null), (e: unknown) => { setNet(null); setError(messageOf(e)); }); }, []);
 
@@ -38,16 +37,12 @@ export function NetworkPrefs() {
     setError(null);
     try { setHealth(await window.hive.networkHealth()); } catch (e) { setError(messageOf(e)); } finally { setChecking(false); }
   };
-  const use = async (given: string) => {
-    setError(null);
-    try {
-      setNet(await window.hive.useNetwork(given));
-      setHealth(null);
-      setChanging(false);
-      setLink("");
-    } catch (e) {
-      setError(messageOf(e));
-    }
+  const [admission, setAdmission] = useState<string | null>(null);
+  const chosen = (next: NetworkProfile & { admission?: string }) => {
+    setNet(next);
+    setHealth(null);
+    setChanging(false);
+    setAdmission(next.admission && next.admission !== "none needed" ? `This computer: ${next.admission}.` : null);
   };
   const ok = (url: string) => health?.relays.find((r) => r.url.replace(/\/$/, "") === url.replace(/\/$/, ""))?.ok;
 
@@ -78,20 +73,8 @@ export function NetworkPrefs() {
               {net.profile.relays.length > 0 && <Button size="sm" variant="outline" onClick={() => void check()} disabled={checking} data-network-check>{checking ? "Checking…" : "Check"}</Button>}
               <Button size="sm" variant="outline" onClick={() => setChanging((c) => !c)} data-network-change>Change…</Button>
             </div>
-            {changing && (
-              <div className="flex flex-col gap-2 rounded-md border border-[var(--color-line)] p-3" data-network-chooser>
-                <Button size="sm" variant="ghost" className="justify-start" disabled={net.builtin === "local"} onClick={() => void use("local")} data-use-network="local">
-                  Local network — no servers
-                </Button>
-                <Button size="sm" variant="ghost" className="justify-start" disabled={net.builtin === "hosted"} onClick={() => void use("hosted")} data-use-network="hosted">
-                  hivemind's servers
-                </Button>
-                <div className="flex gap-2">
-                  <Input value={link} onChange={(e) => setLink(e.target.value)} placeholder="hivemind://network/… from your network's admin" className="flex-1" data-network-link />
-                  <Button size="sm" onClick={() => void use(link)} disabled={!link.trim()} data-use-network="link">Use</Button>
-                </div>
-              </div>
-            )}
+            {changing && <ReachChooser current={net} onChosen={chosen} onCancel={() => setChanging(false)} />}
+            {admission && <p className="text-[12px] text-[var(--color-fg3)]" data-network-admission>{admission}</p>}
           </div>
         )}
         {net && error && <p className="text-[12px] text-[var(--color-err)]" role="alert">{error}</p>}

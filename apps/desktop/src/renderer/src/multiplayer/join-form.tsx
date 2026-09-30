@@ -29,7 +29,9 @@ export function JoinForm({ onOpen }: { onOpen: (workspace: string) => void }) {
     setState({ kind: "asking" });
     try {
       const reply = await window.hive.join(text);
-      setState(reply.ok ? { kind: "in", role: reply.role, workspace: reply.workspace } : { kind: "out", why: WHY[reply.error] ?? reply.error });
+      setState(reply.ok ? { kind: "in", role: reply.role, workspace: reply.workspace }
+        : reply.error === "not-admitted" ? { kind: "out", why: `This device could not get onto the host's network: ${reply.message ?? "refused"}` }
+        : { kind: "out", why: WHY[reply.error] ?? reply.error });
     } catch (e) {
       setState({ kind: "out", why: e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, "") : String(e) });
     }

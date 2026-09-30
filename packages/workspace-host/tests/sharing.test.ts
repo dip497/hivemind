@@ -82,11 +82,19 @@ test("a declined request, an expired invite, a certificate for another device or
   expect(() => lists.invite(ws, "/work/api", "agents" as never, 60_000)).toThrow(TypeError);
 });
 
-test("an invite link carries the host, the workspace, the secret and where to reach the host; anything else is not one", () => {
-  const link = { host: "a".repeat(64), workspace: "b".repeat(32), secret: "c".repeat(64), where: { addrs: ["192.168.1.4:51820"], relay: null }, names: { workspace: "api", host: "Adarsh" } };
+test("an invite link carries the host, the workspace, the secret, where to reach the host and how to get onto its network; anything else is not one", () => {
+  const link = { host: "a".repeat(64), workspace: "b".repeat(32), secret: "c".repeat(64), where: { addrs: ["192.168.1.4:51820"], relay: null }, names: { workspace: "api", host: "Adarsh" }, admission: null };
   const text = formatJoinLink(link);
   expect(text).toMatch(/^hivemind:\/\/join\/a{64}#[A-Za-z0-9_-]+$/);
   expect(parseJoinLink(`  ${text}\n`)).toEqual(link);
+  // From a network with an access service: where it is, and the voucher for the guest's device.
+  const across = { ...link, where: { addrs: [], relay: "https://relay.example.com/" }, admission: { access: "https://access.example.com", voucher: { v: 1, kind: "visit", nonce: "ab" } } };
+  expect(parseJoinLink(formatJoinLink(across))).toEqual(across);
+  const open = { ...across, admission: { access: "https://access.example.com", voucher: null } };
+  expect(parseJoinLink(formatJoinLink(open))).toEqual(open);
+  // An access service that is not a server's URL is not taken.
+  const odd = formatJoinLink({ ...across, admission: { access: "javascript:alert(1)", voucher: null } });
+  expect(parseJoinLink(odd)!.admission).toBeNull();
   for (const bad of ["", "https://example.com", `hivemind://join/${"a".repeat(64)}`, `hivemind://join/${"a".repeat(63)}#e30`, `hivemind://join/${"a".repeat(64)}#e30`]) {
     expect(parseJoinLink(bad)).toBeNull();
   }

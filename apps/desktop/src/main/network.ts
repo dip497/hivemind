@@ -84,7 +84,27 @@ function askPerson(request: JoinRequest): Promise<boolean> {
 
 let sharing: Sharing | null = null;
 function sharingOf(): Sharing {
-  return (sharing ??= new Sharing(accessLists(), askPerson, (devices) => { void current?.then((n) => n.admit(devices)); }));
+  return (sharing ??= new Sharing(accessLists(), askPerson, (devices) => {
+    void current?.then((n) => n.admit(devices));
+    for (const device of devices) void vouchFor(device);
+  }));
+}
+
+/** When this network has an access service that admits only who it is told to, the devices this
+ *  person let in are vouched for on it, so they reach its relays; and again each day they
+ *  connect, before it lapses (R16, §13.3 D). */
+const MEMBER_FOR_S = 30 * 24 * 3600;
+const vouched = new Map<string, number>();
+async function vouchFor(device: string): Promise<void> {
+  if (Date.now() - (vouched.get(device) ?? 0) < 24 * 3600_000) return;
+  try {
+    const access = (await networkProfiles().active()).profile.access;
+    if (access?.policy !== "closed") return;
+    await networkProfiles().vouch(access.url, await networkProfiles().voucher({ device, expiresIn: MEMBER_FOR_S, uses: 1 }));
+    vouched.set(device, Date.now());
+  } catch (e) {
+    console.warn(`[network] could not vouch for ${device.slice(0, 8)}…: ${e instanceof Error ? e.message : String(e)}`);
+  }
 }
 
 let current: Promise<HiveNet> | null = null;
@@ -99,7 +119,11 @@ function hiveNet(): string {
 let profiles: NetworkProfiles | null = null;
 /** This device's network profile (R16), kept in `<userData>/network`. */
 function networkProfiles(): NetworkProfiles {
-  return (profiles ??= new NetworkProfiles({ dir: path.join(app.getPath("userData"), "network"), bin: hiveNet() }));
+  return (profiles ??= new NetworkProfiles({
+    dir: path.join(app.getPath("userData"), "network"),
+    bin: hiveNet(),
+    identity: path.join(app.getPath("userData"), "identity"),
+  }));
 }
 
 /** This machine's daemon, started if it is not running, on the network in use. */
@@ -112,7 +136,11 @@ export function network(): Promise<HiveNet> {
       identity: path.join(app.getPath("userData"), "identity"),
       socket: socketPath(),
       profile: networkProfiles().arg(),
-      onIncoming: (link) => (apiServer ? servePeerLink(link, accessLists(), apiServer) : link.close()),
+      onIncoming: (link) => {
+        if (!apiServer) return link.close();
+        servePeerLink(link, accessLists(), apiServer);
+        void vouchFor(link.peer);
+      },
       onPairRequest: (peer, hello) => sharingOf().answer(peer, hello),
       onExit: (why) => { current = null; console.warn(`[network] ${why}`); },
     });
@@ -171,6 +199,10 @@ function ownedWorkspace(repo: unknown): string {
   return own.workspaceId;
 }
 
+/** What asking to join answers: the host's reply, or that this device could not get onto the
+ *  host network's relays. */
+type JoinReply = PairReply | { ok: false; error: "not-admitted"; message: string };
+
 export function installNetworkIpc(server: WorkspaceServer): void {
   apiServer = server;
   // The network in use, changed here or by `hive network use`: the daemon starts again on it.
@@ -181,7 +213,7 @@ export function installNetworkIpc(server: WorkspaceServer): void {
   // This device's network (Settings → Network): which it is, whether its servers answer, and
   // another to use.
   handle("net:network", () => networkProfiles().active());
-  handle("net:network-health", () => networkProfiles().health(path.join(app.getPath("userData"), "identity")));
+  handle("net:network-health", () => networkProfiles().health());
   handleEffect("net:use-network", (given: unknown) => ({ detail: typeof given === "string" ? given.slice(0, 40) : undefined }), async (_e, given: unknown) => {
     if (typeof given !== "string" || !given.trim()) throw new Error("network: which one?");
     // The file changes, and the daemon starts again on it (watched above).
@@ -201,7 +233,14 @@ export function installNetworkIpc(server: WorkspaceServer): void {
     const secret = accessLists().invite(own.workspaceId, repo, role as LinkRole, Number(expiresIn), reusable === true);
     const hn = await network();
     const host = await displayName(getSettings().profile.name);
-    return formatJoinLink({ host: hn.ready.id, workspace: own.workspaceId, secret, where: { addrs: hn.ready.addrs, relay: hn.ready.relay }, names: { workspace: path.basename(repo), host } });
+    // On a network whose relays admit only who they are told to, the link carries a voucher for
+    // the guest's device, for as long as the link lasts; on an open one, where to register.
+    const access = (await networkProfiles().active()).profile.access;
+    const admission = !access ? null : {
+      access: access.url,
+      voucher: access.policy === "closed" ? await networkProfiles().voucher({ expiresIn: Number(expiresIn) / 1000, uses: reusable === true ? 100 : 1 }) : null,
+    };
+    return formatJoinLink({ host: hn.ready.id, workspace: own.workspaceId, secret, where: { addrs: hn.ready.addrs, relay: hn.ready.relay }, names: { workspace: path.basename(repo), host }, admission });
   });
 
   // What a link offers, to show before joining: null when it is not one.
@@ -211,10 +250,19 @@ export function installNetworkIpc(server: WorkspaceServer): void {
   });
 
   // Ask the host a link names to let this person in.
-  handleEffect("net:join", () => ({}), async (_e, text: unknown): Promise<PairReply> => {
+  handleEffect("net:join", () => ({}), async (_e, text: unknown): Promise<JoinReply> => {
     const link = typeof text === "string" ? parseJoinLink(text) : null;
     if (!link) throw new Error("join: that is not an invite link");
     const hn = await network();
+    // Onto the host network's relays first, as its link says.
+    if (link.admission) {
+      try {
+        if (link.admission.voucher) await networkProfiles().redeem(link.admission.access, link.admission.voucher);
+        else await networkProfiles().register(link.admission.access);
+      } catch (e) {
+        return { ok: false, error: "not-admitted", message: e instanceof Error ? e.message : String(e) };
+      }
+    }
     const { certificate } = machineIdentity();
     const profile = { name: await displayName(getSettings().profile.name), color: getSettings().profile.color };
     const reply = (await hn.pair(link.host, link.where, { v: 1, workspace: link.workspace, secret: link.secret, certificate, profile })) as PairReply;
