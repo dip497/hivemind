@@ -328,3 +328,4 @@ spawn wires not being drawn, and two issues found while verifying R1.
   first run missed and a test now catches, a vague late message, every caller the person, no
   abort on close, any token accepted), 1 on the standalone daemon (the install's token only) and
   1 through the e2e (agents given the install's token).
+  Full e2e on the step 2 commit (`fa1c5a9`): 159 passed, 10 skipped.
