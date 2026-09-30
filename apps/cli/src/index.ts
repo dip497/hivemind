@@ -29,6 +29,7 @@ import { viewsCmd } from "./commands/views.js";
 import { reviewCmd } from "./commands/review.js";
 import { toolsCmd } from "./commands/tools.js";
 import { configCmd, themeCmd } from "./commands/config.js";
+import { networkCmd } from "./commands/network.js";
 import { daemonCmd } from "./commands/daemon.js";
 import { psCmd } from "./commands/ps.js";
 import { attachCmd } from "./commands/attach.js";
@@ -86,6 +87,7 @@ const main = defineCommand({
     attach: attachCmd,
     run: runCmd,
     machine: machineCmd,
+    network: networkCmd,
     kill: killCmd,
     push: pushCmd,
   },

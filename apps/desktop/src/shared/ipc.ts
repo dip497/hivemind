@@ -7,6 +7,7 @@ import type { NotificationSettings } from "./notification-settings.js";
 import type { ReviewComment } from "@hivemind/core/review";
 import type { LegacyLayout, WorkspaceChange } from "@hivemind/workspace-host/layout";
 import type { Participant, PresenceState } from "@hivemind/workspace-host/presence";
+import type { NetworkHealth, NetworkProfile } from "@hivemind/workspace-host/network-profile";
 
 /** Someone on a workspace's access list, as the People panel shows them. */
 export interface SharedPerson {
@@ -143,6 +144,8 @@ export interface UpdateStatus {
    *  False on offline / timeout / rate-limit — the renderer must NOT treat a
    *  false-ok result as "up to date" or persist it over a known-good state. */
   ok: boolean;
+  /** The check is off (Settings → Network): nothing was asked. */
+  off?: boolean;
   /** A version already downloaded and waiting for a restart to become the one that
    *  runs (the installer could not replace a live app), when it is newer than this one.
    *  Restarting is then the whole of what is left to do — never another download. */
@@ -278,6 +281,13 @@ export interface HiveIpc {
   onSharedStatus(cb: (workspace: string, status: SharedStatus) => void): () => void;
   /** Leave a joined workspace: its connection closes, and the last copy is kept to read. */
   leave(workspace: string): Promise<void>;
+  // ── this device's network (R16) ───────────────────────────
+  /** The network profile in use: a built-in one (`local`, `hosted`) or one its admin signed. */
+  network(): Promise<NetworkProfile>;
+  /** Whether its relays answer this device. */
+  networkHealth(): Promise<NetworkHealth>;
+  /** Use another network: a built-in's name, a network link, or a signed profile. */
+  useNetwork(given: string): Promise<NetworkProfile>;
   // ── app version + self-update ─────────────────────────────
   /** This app's version string (from apps/desktop/package.json). */
   getAppVersion(): Promise<string>;

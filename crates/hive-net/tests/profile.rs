@@ -45,6 +45,13 @@ fn text(out: &Output) -> String {
     )
 }
 
+/// The public key of the seed kept in `file`.
+fn profile_admin_id(file: &std::path::Path) -> String {
+    seed(fs::read_to_string(file).unwrap().trim())
+        .public()
+        .to_string()
+}
+
 fn temp() -> PathBuf {
     let dir = std::env::temp_dir().join(format!(
         "hive-net-profile-{}-{:08x}",
@@ -138,6 +145,51 @@ fn the_cli_verifies_signs_and_links_profiles_and_the_built_in_ones_need_no_signa
         "{}",
         text(&out)
     );
+    // In place of the network in use, an update from another admin is refused.
+    let stranger = dir.join("stranger.key");
+    fs::write(&stranger, format!("{}\n", "55".repeat(32))).unwrap();
+    let theirs =
+        serde_json::json!({ "v": 1, "name": "Example Corp", "admin": profile_admin_id(&stranger) })
+            .to_string();
+    let theirs_file = dir.join("theirs.json");
+    fs::write(&theirs_file, &theirs).unwrap();
+    let out = hive_net(&[
+        "profile",
+        "sign",
+        theirs_file.to_str().unwrap(),
+        "--admin",
+        stranger.to_str().unwrap(),
+    ]);
+    let theirs_signed = dir.join("theirs-signed.json");
+    fs::write(&theirs_signed, &out.stdout).unwrap();
+    let mine = dir.join("mine.json");
+    fs::write(
+        &mine,
+        serde_json::to_string(&cases["valid"][0]["file"]).unwrap(),
+    )
+    .unwrap();
+    let out = hive_net(&[
+        "profile",
+        "verify",
+        theirs_signed.to_str().unwrap(),
+        "--replacing",
+        mine.to_str().unwrap(),
+    ]);
+    assert!(!out.status.success(), "{}", text(&out));
+    assert!(
+        text(&out).contains("not signed by its admin"),
+        "{}",
+        text(&out)
+    );
+    assert!(hive_net(&[
+        "profile",
+        "verify",
+        "local",
+        "--replacing",
+        mine.to_str().unwrap()
+    ])
+    .status
+    .success());
     // A key the profile does not name as its admin cannot sign it.
     let other = dir.join("other.key");
     fs::write(&other, format!("{}\n", "11".repeat(32))).unwrap();

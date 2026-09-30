@@ -301,6 +301,12 @@ export interface ProfileSettings {
   /** `#rrggbb`, lowercase. */
   color: string;
 }
+/** Settings → Network (R16): what this app reaches outside the network profile's servers. */
+export interface NetworkSettings {
+  /** Ask GitHub, now and then, whether a newer release is out. Off: the app reaches nothing the
+   *  network profile does not name. */
+  updateCheck: boolean;
+}
 export interface Settings {
   v: 1;
   appearance: Appearance;
@@ -309,6 +315,7 @@ export interface Settings {
   tools: ToolsSettings;
   agents: AgentsSettings;
   profile: ProfileSettings;
+  network: NetworkSettings;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -322,6 +329,7 @@ export const DEFAULT_SETTINGS: Settings = {
   // @hivemind/agents, and the renderer resolves an unknown id to defaultAgent().
   agents: { disabled: [], defaultAgent: "", options: {}, autoInstall: true, declined: [], fromCatalog: [] },
   profile: { name: "", color: "" },
+  network: { updateCheck: true },
 };
 
 // ── validation / merge ───────────────────────────────────────────────────────
@@ -488,6 +496,7 @@ export function mergeSettings(raw: unknown, base: Settings = DEFAULT_SETTINGS): 
         .filter((x): x is string => typeof x === "string" && AGENT_KEY_RE.test(x)).slice(0, 200),
     },
     profile: profileOf(p.profile, base.profile),
+    network: { updateCheck: bool((isObj(p.network) ? p.network : {}).updateCheck, base.network.updateCheck) },
   };
 }
 

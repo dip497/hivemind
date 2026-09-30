@@ -209,6 +209,15 @@ describe("settings schema", () => {
     expect("extra" in s).toBe(false);
   });
 
+  test("network: the update check is on until turned off, and only a yes or a no changes it", () => {
+    expect(mergeSettings({}).network).toEqual({ updateCheck: true });
+    const off = mergeSettings({ network: { updateCheck: false } });
+    expect(off.network.updateCheck).toBe(false);
+    expect(mergeSettings({ network: { updateCheck: "no" } }, off).network.updateCheck).toBe(false);
+    expect(mergeSettings({ network: {} }, off).network.updateCheck).toBe(false);
+    expect(mergeSettings({ network: { updateCheck: true } }, off).network.updateCheck).toBe(true);
+  });
+
   test("profile: a name and colour are kept as given and cleared by empty; a bad one keeps what was there", () => {
     expect(mergeSettings({}).profile).toEqual({ name: "", color: "" });
     const set = mergeSettings({ profile: { name: "  Priya Shah  ", color: "#3B82F6" } });

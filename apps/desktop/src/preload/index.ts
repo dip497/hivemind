@@ -199,6 +199,9 @@ const api: HiveIpc & {
     return () => { ipcRenderer.removeListener("net:shared-status", h); };
   },
   leave: (workspace) => ipcRenderer.invoke("net:leave", workspace),
+  network: () => ipcRenderer.invoke("net:network"),
+  networkHealth: () => ipcRenderer.invoke("net:network-health"),
+  useNetwork: (given) => ipcRenderer.invoke("net:use-network", given),
   getAppVersion: () => ipcRenderer.invoke("getAppVersion"),
   settingsSync: () => ipcRenderer.sendSync("settings:get-sync"),
   workspaceCoreSync: (repo) => ipcRenderer.sendSync("workspace:core-sync", repo),

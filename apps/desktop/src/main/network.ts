@@ -15,6 +15,7 @@ import { AccessLists, LINK_ROLES, ROLES, type LinkRole, type Role } from "@hivem
 import { Sharing, type JoinRequest, type PairReply } from "@hivemind/workspace-host/sharing";
 import { formatJoinLink, parseJoinLink } from "@hivemind/workspace-host/join-link";
 import { JoinedList } from "@hivemind/workspace-host/joined";
+import { NetworkProfiles } from "@hivemind/workspace-host/network-profile";
 import { handle, handleEffect, on } from "./app-ipc.js";
 import { displayName, machineIdentity } from "./identity.js";
 import { getSettings } from "./settings-store.js";
@@ -88,16 +89,29 @@ function sharingOf(): Sharing {
 
 let current: Promise<HiveNet> | null = null;
 
-/** This machine's daemon, started if it is not running. */
+/** hive-net's executable, or why there is none. */
+function hiveNet(): string {
+  const bin = hiveNetBin();
+  if (!bin) throw new Error("hive-net is not installed here: reinstall hivemind to share or join workspaces");
+  return bin;
+}
+
+let profiles: NetworkProfiles | null = null;
+/** This device's network profile (R16), kept in `<userData>/network`. */
+function networkProfiles(): NetworkProfiles {
+  return (profiles ??= new NetworkProfiles({ dir: path.join(app.getPath("userData"), "network"), bin: hiveNet() }));
+}
+
+/** This machine's daemon, started if it is not running, on the network in use. */
 export function network(): Promise<HiveNet> {
   current ??= (async () => {
-    const bin = hiveNetBin();
-    if (!bin) throw new Error("hive-net is not installed here: reinstall hivemind to share or join workspaces");
+    const bin = hiveNet();
     machineIdentity();
     const hn = await HiveNet.start({
       bin,
       identity: path.join(app.getPath("userData"), "identity"),
       socket: socketPath(),
+      profile: networkProfiles().arg(),
       onIncoming: (link) => (apiServer ? servePeerLink(link, accessLists(), apiServer) : link.close()),
       onPairRequest: (peer, hello) => sharingOf().answer(peer, hello),
       onExit: (why) => { current = null; console.warn(`[network] ${why}`); },
@@ -114,6 +128,14 @@ export function stopNetwork(): void {
   current = null;
 }
 
+/** The network in use changed: a running daemon starts again on it. Connections drop and come
+ *  back by themselves (shared-workspaces.ts). */
+function restartNetwork(): void {
+  if (!current) return;
+  stopNetwork();
+  void network().catch((e: unknown) => console.warn(`[network] ${e instanceof Error ? e.message : String(e)}`));
+}
+
 /** Open the workspace `workspace` that this person joined: its host dialled, its replica kept in
  *  sync, its events published to the windows with `publish`. One they left, or were removed from,
  *  opens as the last copy kept here, and nothing is dialled. */
@@ -121,9 +143,10 @@ export async function openJoined(workspace: string, publish: (event: EventMessag
   const joined = joinedList().list().find((j) => j.workspace === workspace);
   if (!joined) throw new Error("that workspace was not joined here: open its invite link");
   if (joined.ended) return;
-  const hn = await network();
+  await network();
   await openShared(workspace, joined.role, {
-    dial: () => hn.dial(joined.host, joined.where),
+    // The daemon in use when dialling: it starts again when the network changes.
+    dial: async () => (await network()).dial(joined.host, joined.where),
     publish,
     told: (ws, status) => {
       if (status.state === "removed") joinedList().update(ws, { ended: "removed" });
@@ -150,6 +173,21 @@ function ownedWorkspace(repo: unknown): string {
 
 export function installNetworkIpc(server: WorkspaceServer): void {
   apiServer = server;
+  // The network in use, changed here or by `hive network use`: the daemon starts again on it.
+  try {
+    fs.watchFile(networkProfiles().file, { interval: 2_000 }, (now, before) => { if (now.mtimeMs !== before.mtimeMs) restartNetwork(); });
+  } catch { /* hive-net is not installed: there is no network to change */ }
+
+  // This device's network (Settings → Network): which it is, whether its servers answer, and
+  // another to use.
+  handle("net:network", () => networkProfiles().active());
+  handle("net:network-health", () => networkProfiles().health(path.join(app.getPath("userData"), "identity")));
+  handleEffect("net:use-network", (given: unknown) => ({ detail: typeof given === "string" ? given.slice(0, 40) : undefined }), async (_e, given: unknown) => {
+    if (typeof given !== "string" || !given.trim()) throw new Error("network: which one?");
+    // The file changes, and the daemon starts again on it (watched above).
+    return networkProfiles().use(given);
+  });
+
   // Something is shared from here already: be where the people let in can reach it.
   if (accessLists().workspaces().some((ws) => accessLists().people(ws).length > 0)) {
     void network().catch((e: unknown) => console.warn(`[network] ${e instanceof Error ? e.message : String(e)}`));

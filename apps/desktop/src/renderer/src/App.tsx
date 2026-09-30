@@ -27,7 +27,7 @@ import { Workspace } from "./Workspace";
 import { IssuePeek } from "./components/IssuePeek";
 import { NewIssueModal } from "./components/NewIssueModal";
 import { resolveSettingsPage } from "./settings-registry";
-import { flushSettings } from "./settings-store";
+import { flushSettings, patchSettings, saveSettingsNow } from "./settings-store";
 import { useExpandedGroups, useSettingsNav } from "./settings-nav";
 import { getNotificationSettings, setNotificationSettingsCache, subscribeNotificationSettings, saveNotificationSettings } from "./notification-settings";
 import type { NotificationSettings } from "../../shared/ipc";
@@ -490,7 +490,7 @@ export function App() {
         version={update.version}
         update={update.status}
         checking={update.checking}
-        onCheck={() => { void update.check(); }}
+        onCheck={(opts) => { void update.check(opts); }}
         onUpgrade={update.upgrade}
         upgrading={update.upgrading}
         progress={update.progress}
@@ -758,6 +758,16 @@ function SettingsModal({
                   Update available{update.latest ? ` — v${update.latest}` : ""}
                 </span>
                 <Button onClick={onUpgrade} size="xs" title="Download the latest release">Update</Button>
+              </>
+            ) : update?.off ? (
+              <>
+                <span className="inline-flex items-center gap-1.5 text-[12px] text-[var(--color-fg2)]" data-update-off>
+                  <span className="size-2 rounded-full bg-[var(--color-fg3)]" aria-hidden />
+                  The update check is off
+                </span>
+                <Button variant="outline" onClick={() => { patchSettings("network.updateCheck", true); void saveSettingsNow().then(() => onCheck({ force: true })); }}>
+                  Turn it on
+                </Button>
               </>
             ) : (
               <>

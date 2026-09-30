@@ -646,6 +646,8 @@ function stagedVersion(current: string): string | null {
 handle("checkForUpdate", async () => {
   const current = app.getVersion();
   const staged = stagedVersion(current);
+  // Settings → Network: with the update check off, nothing is asked of GitHub (R16).
+  if (!getAppSettings().network.updateCheck) return { current, latest: null, updateAvailable: false, ok: true, staged, off: true };
   // Test seam: the update affordances are driven by what GitHub answers, which an e2e cannot
   // arrange. Gated to non-packaged builds — in a shipped binary an env var must not be able
   // to tell the app an update exists (the same rule as the folder picker below).

@@ -42,8 +42,8 @@ export interface HiveNetOptions {
   identity: string;
   /** Where to listen for the daemon: a path (or a named pipe's name on Windows). */
   socket: string;
-  /** Relays to reach and be reached through; none: the local network only. */
-  relays?: string[];
+  /** The network profile to use (what hive-net's `--profile` takes); none: the local network. */
+  profile?: string;
   /** Someone connected; they are a device the daemon was told to admit. */
   onIncoming(link: Link): void;
   /** Someone asks to pair: what to answer them. */
@@ -105,7 +105,7 @@ export class HiveNet {
       server.listen(opts.socket, () => resolve());
     });
     if (process.platform !== "win32") fs.chmodSync(opts.socket, 0o600);
-    const args = ["daemon", "--socket", opts.socket, "--identity", opts.identity, ...(opts.relays ?? []).flatMap((r) => ["--relay", r])];
+    const args = ["daemon", "--socket", opts.socket, "--identity", opts.identity, ...(opts.profile ? ["--profile", opts.profile] : [])];
     const child = spawn(opts.bin, args, { stdio: ["ignore", "ignore", "pipe"] });
     let stderr = "";
     child.stderr!.on("data", (d: Buffer) => { stderr = (stderr + d.toString()).slice(-4000); });

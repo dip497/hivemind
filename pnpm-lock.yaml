@@ -160,6 +160,9 @@ importers:
       '@hivemind/view-sdk':
         specifier: workspace:*
         version: link:../../packages/hive-view-sdk
+      '@hivemind/workspace-host':
+        specifier: workspace:*
+        version: link:../../packages/workspace-host
       citty:
         specifier: 'catalog:'
         version: 0.1.6

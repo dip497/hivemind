@@ -12,7 +12,8 @@
 //!   hive-net access revoke <url> <id>  take a device's admission back
 //!   hive-net daemon --socket <path>  the app's network (`daemon.rs`); main starts it
 //!   hive-net doctor                whether the network's servers answer, as JSON
-//!   hive-net profile verify <profile>        the profile, if it is one this may use, as JSON
+//!   hive-net profile verify <profile> [--replacing <profile>]  the profile, if it is one this
+//!                                  may use (and may replace the one named), as JSON
 //!   hive-net profile sign <file> --admin <key>  sign a profile's text as its network's admin
 //!   hive-net profile link <file>   the link that carries a signed profile
 //!
@@ -64,6 +65,7 @@ struct Args {
     device: Option<String>,
     expires_in: Option<u64>,
     uses: Option<u32>,
+    replacing: Option<String>,
 }
 
 fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args> {
@@ -93,6 +95,7 @@ fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args> {
             "--device" => args.device = Some(value(&mut argv, &arg)?),
             "--expires-in" => args.expires_in = Some(value(&mut argv, &arg)?.parse()?),
             "--uses" => args.uses = Some(value(&mut argv, &arg)?.parse()?),
+            "--replacing" => args.replacing = Some(value(&mut argv, &arg)?),
             flag if flag.starts_with("--") => bail!("unknown option {flag}\n{USAGE}"),
             _ if args.command.is_empty() => args.command = arg,
             _ if args.target.is_none() => args.target = Some(arg),
@@ -309,7 +312,14 @@ fn read_profile(given: &str) -> Result<String> {
 fn profile_command(args: &Args) -> Result<()> {
     let what = args.rest.first().context(USAGE)?;
     match args.target.as_deref() {
-        Some("verify") => println!("{}", profile::load(&read_profile(what)?)?.describe()),
+        Some("verify") => {
+            let next = profile::load(&read_profile(what)?)?;
+            // Replacing the network in use: an update to it must come from its admin.
+            if let Some(current) = &args.replacing {
+                profile::same_admin(&profile::load(&read_profile(current)?)?, &next)?;
+            }
+            println!("{}", next.describe());
+        }
         Some("sign") => {
             let admin = args
                 .admin
