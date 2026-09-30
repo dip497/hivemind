@@ -84,6 +84,12 @@ export class WorkspaceServer {
     for (const connection of this.connections) if (to(connection)) connection.send(message);
   }
 
+  /** Send every connected client `message`, an event another host sent (M1: a workspace shared
+   *  from elsewhere). */
+  relay(message: EventMessage): void {
+    for (const connection of this.connections) connection.send(message);
+  }
+
   /** Answer a call of `method` with `params` that came over `from`. Never throws. */
   async answer(method: unknown, params: unknown, from: Connection): Promise<Answer> {
     const domain = typeof method === "string" ? this.domains.find((d) => Object.hasOwn(d.answers, method)) : undefined;

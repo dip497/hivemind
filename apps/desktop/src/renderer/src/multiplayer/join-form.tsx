@@ -1,10 +1,9 @@
 /**
  * Join (design §4.2 B): paste an invite link, see whose workspace it is, and ask to join. The host
- * is asked; the answer (a role, or why not) shows here.
+ * is asked; the answer (a role, or why not) shows here. Shown inside Open recent, so there is one
+ * dialog, never one opening over another closing.
  */
 import { useEffect, useState } from "react";
-import { LogIn } from "lucide-react";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../components/ui/dialog";
 import { Button } from "../components/ui/button";
 import { ROLE_LABELS } from "./share-dialog";
 
@@ -15,10 +14,10 @@ const WHY: Record<string, string> = {
   malformed: "The host did not understand the request.",
 };
 
-export function JoinDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function JoinForm({ onOpen }: { onOpen: (workspace: string) => void }) {
   const [text, setText] = useState("");
   const [preview, setPreview] = useState<{ workspace: string; host: string } | null>(null);
-  const [state, setState] = useState<{ kind: "idle" } | { kind: "asking" } | { kind: "in"; role: string } | { kind: "out"; why: string }>({ kind: "idle" });
+  const [state, setState] = useState<{ kind: "idle" } | { kind: "asking" } | { kind: "in"; role: string; workspace: string } | { kind: "out"; why: string }>({ kind: "idle" });
 
   useEffect(() => {
     let live = true;
@@ -30,17 +29,15 @@ export function JoinDialog({ open, onClose }: { open: boolean; onClose: () => vo
     setState({ kind: "asking" });
     try {
       const reply = await window.hive.join(text);
-      setState(reply.ok ? { kind: "in", role: reply.role } : { kind: "out", why: WHY[reply.error] ?? reply.error });
+      setState(reply.ok ? { kind: "in", role: reply.role, workspace: reply.workspace } : { kind: "out", why: WHY[reply.error] ?? reply.error });
     } catch (e) {
       setState({ kind: "out", why: e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, "") : String(e) });
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) { onClose(); setText(""); setState({ kind: "idle" }); } }}>
-      <DialogContent className="sm:max-w-[460px]" data-join-dialog>
-        <DialogTitle className="flex items-center gap-2"><LogIn size={15} /> Join a shared workspace</DialogTitle>
-        <DialogDescription>Paste the invite link someone sent you.</DialogDescription>
+    <div className="flex flex-col gap-2 px-4 pb-4" data-join-dialog>
+        <p className="text-[12px] text-[var(--color-fg2)]">Paste the invite link someone sent you.</p>
         <textarea
           aria-label="Invite link"
           className="min-h-[64px] rounded border border-[var(--color-line)] bg-[var(--color-bg2)] p-2 font-mono text-[11px]"
@@ -51,14 +48,16 @@ export function JoinDialog({ open, onClose }: { open: boolean; onClose: () => vo
         />
         {preview && <p className="text-[12px]" data-join-preview>{preview.workspace} on {preview.host || "their"}{preview.host ? "'s" : ""} machine</p>}
         {state.kind === "in" ? (
-          <p className="text-[12px] text-[var(--color-ok)]" role="status" data-join-result="in">You're in: {preview?.workspace} · {ROLE_LABELS[state.role] ?? state.role}</p>
+          <>
+            <p className="text-[12px] text-[var(--color-ok)]" role="status" data-join-result="in">You're in: {preview?.workspace} · {ROLE_LABELS[state.role] ?? state.role}</p>
+            <Button onClick={() => onOpen(state.workspace)} data-join-open>Open {preview?.workspace}</Button>
+          </>
         ) : (
           <Button onClick={() => void join()} disabled={!preview || state.kind === "asking"} data-join-go>
             {state.kind === "asking" ? `Waiting for ${preview?.host || "the host"} to let you in…` : "Join"}
           </Button>
         )}
         {state.kind === "out" && <p className="text-[12px] text-[var(--color-err)]" role="alert" data-join-result="out">{state.why}</p>}
-      </DialogContent>
-    </Dialog>
+    </div>
   );
 }

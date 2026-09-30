@@ -9,6 +9,8 @@ export type ErrorCode =
   /** The params are not what the method takes, or name something it may not reach (a path outside its repo). */
   | "BAD_REQUEST"
   | "UNKNOWN_METHOD"
+  /** The caller may not do this: their role on this workspace does not allow it (M1). */
+  | "FORBIDDEN"
   /** It ran and failed: git refused, a file could not be written. */
   | "FAILED";
 

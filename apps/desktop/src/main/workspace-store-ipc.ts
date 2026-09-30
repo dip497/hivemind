@@ -17,8 +17,15 @@ import { machineIdentity } from "./identity.js";
 import type { Layouts } from "./workspace/store.js";
 
 let store: WorkspaceStore | null = null;
+let shared: WorkspaceStore | null = null;
 /** Who hears of each change: set when the channels are installed. */
 let tell: (change: WorkspaceChange) => void = () => {};
+/** Who else hears of each change (a workspace's peers, M1). */
+const listeners = new Set<(change: WorkspaceChange) => void>();
+const told = (change: WorkspaceChange): void => {
+  tell(change);
+  for (const l of listeners) l(change);
+};
 
 /** The app's one store: the windows', and main's own writers' (the control plane). */
 export function workspaceStore(): WorkspaceStore {
@@ -26,8 +33,28 @@ export function workspaceStore(): WorkspaceStore {
     dir: path.join(app.getPath("userData"), "workspaces"),
     person: machineIdentity().person,
     onWarn: (m) => console.warn(`[workspace-store] ${m}`),
-    onChange: (change) => tell(change),
+    onChange: told,
   }));
+}
+
+/** The replicas of workspaces others share with this person (M1), each named `hive://<id>`. */
+export function sharedStore(): WorkspaceStore {
+  return (shared ??= new WorkspaceStore({
+    dir: path.join(app.getPath("userData"), "shared"),
+    onWarn: (m) => console.warn(`[shared-store] ${m}`),
+    onChange: told,
+  }));
+}
+
+/** The store that holds `repo`'s layout: a replica for a workspace shared from elsewhere. */
+export function storeFor(repo: string): WorkspaceStore {
+  return repo.startsWith("hive://") ? sharedStore() : workspaceStore();
+}
+
+/** Hear each change either store makes; the function returned stops. */
+export function onWorkspaceChange(listener: (change: WorkspaceChange) => void): () => void {
+  listeners.add(listener);
+  return () => { listeners.delete(listener); };
 }
 
 /** Serve the store's synchronous channels from `layouts`, each window as its `connection`, and
@@ -49,5 +76,5 @@ export function installWorkspaceStoreIpc(layouts: Layouts, connection: (window: 
 
 /** Retry writes that failed. Safe to call more than once, and before the store exists. */
 export function flushWorkspaceStore(): void {
-  try { store?.flush(); } catch (err) { console.warn("[workspace-store] flush failed:", err); }
+  try { store?.flush(); shared?.flush(); } catch (err) { console.warn("[workspace-store] flush failed:", err); }
 }

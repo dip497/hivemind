@@ -20,6 +20,13 @@ import { displayName, machineIdentity } from "./identity.js";
 import { getSettings } from "./settings-store.js";
 import { userWindow } from "./windows.js";
 import { workspaceStore } from "./workspace-store-ipc.js";
+import { servePeerLink } from "./peers-host.js";
+import { openShared } from "./shared-workspaces.js";
+import type { WorkspaceServer } from "@hivemind/workspace-api/server";
+import type { EventMessage } from "@hivemind/workspace-api/protocol";
+
+/** The host's workspace API, which peers are served from: set when the IPC is installed. */
+let apiServer: WorkspaceServer | null = null;
 
 const exe = process.platform === "win32" ? "hive-net.exe" : "hive-net";
 
@@ -91,7 +98,7 @@ export function network(): Promise<HiveNet> {
       bin,
       identity: path.join(app.getPath("userData"), "identity"),
       socket: socketPath(),
-      onIncoming: (link) => link.close(),
+      onIncoming: (link) => (apiServer ? servePeerLink(link, accessLists(), apiServer) : link.close()),
       onPairRequest: (peer, hello) => sharingOf().answer(peer, hello),
       onExit: (why) => { current = null; console.warn(`[network] ${why}`); },
     });
@@ -107,7 +114,17 @@ export function stopNetwork(): void {
   current = null;
 }
 
-export function installNetworkIpc(): void {
+/** Open the workspace `workspace` that this person joined: its host dialled, its replica kept in
+ *  sync, its events published to the windows with `publish`. */
+export async function openJoined(workspace: string, publish: (event: EventMessage) => void): Promise<void> {
+  const joined = joinedList().list().find((j) => j.workspace === workspace);
+  if (!joined) throw new Error("that workspace was not joined here: open its invite link");
+  const hn = await network();
+  await openShared(workspace, () => hn.dial(joined.host, joined.where), publish);
+}
+
+export function installNetworkIpc(server: WorkspaceServer): void {
+  apiServer = server;
   // An invite link to the workspace `repo`, for `role`, for `expiresIn` ms, used once unless `reusable`.
   handleEffect("net:share", (repo: unknown) => ({ target: typeof repo === "string" ? repo : undefined }), async (_e, repo: unknown, role: unknown, expiresIn: unknown, reusable: unknown) => {
     if (typeof repo !== "string" || !repo) throw new Error("share: which workspace?");

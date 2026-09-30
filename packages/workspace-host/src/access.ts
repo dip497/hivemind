@@ -151,6 +151,12 @@ export class AccessLists {
     return this.grantOf(workspace, cert.person)?.role ?? null;
   }
 
+  /** The person whose device `device` is, when it may reach `workspace` now. */
+  personOf(workspace: string, device: string): string | null {
+    if (!this.accessOf(workspace, device)) return null;
+    return (this.doc(workspace).getMap("devices").get(device) as DeviceCertificate).person;
+  }
+
   /** The people on `workspace`'s list whose grant holds now. */
   people(workspace: string): Person[] {
     const doc = this.doc(workspace);

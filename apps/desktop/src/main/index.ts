@@ -76,9 +76,10 @@ import { holderOf, readOrCreateToken, hcpSockPath } from "@hivemind/agent-host/h
 import { HcpError } from "./hcp/protocol.js";
 import { handleViewProtocol, listViewPackages, registerViewScheme, startViewWatchdog } from "./view-packages.js";
 import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, settingsFile, settingsBusy, settingsSettled } from "./settings-store.js";
-import { flushWorkspaceStore, installWorkspaceStoreIpc, workspaceStore } from "./workspace-store-ipc.js";
+import { flushWorkspaceStore, installWorkspaceStoreIpc, storeFor, workspaceStore } from "./workspace-store-ipc.js";
 import { installIdentityIpc } from "./identity.js";
-import { installNetworkIpc, stopNetwork } from "./network.js";
+import { installNetworkIpc, openJoined, stopNetwork } from "./network.js";
+import { elsewhere } from "./shared-workspaces.js";
 import { appWindowOf, broadcast, openWindows, registerWindow, userWindow } from "./windows.js";
 import { patchSettingsExtras } from "@hivemind/core/settings";
 import { PipeManager } from "./hcp/pipes.js";
@@ -449,6 +450,12 @@ function wrap<A extends unknown[], R>(
 
 // hive-core
 handle("resolveProject", wrap(async (e, rootHint?: string) => {
+  // A workspace shared with this person from elsewhere (M1): its host is dialled, and the window
+  // shows its replica. It has no issues or folder here.
+  if (typeof rootHint === "string" && rootHint.startsWith("hive://")) {
+    await openJoined(rootHint.slice("hive://".length), (event) => workspaceServer.relay(event));
+    return { root: null, cwd: rootHint, repoPath: rootHint };
+  }
   const cwd = await projectDir(rootHint, process.cwd());
   const root = await findRoot(cwd);
   // The repo a frame's tiles run in. THREE cases, in priority order:
@@ -1127,7 +1134,7 @@ async function startSession(opts: TerminalOpts, out: SessionOutput): Promise<{ p
 }
 
 /** The workspace store, through the workspace API: each window writes as itself. */
-const layouts = new Layouts(workspaceStore);
+const layouts = new Layouts(storeFor);
 
 // The workspace API (R8): git and worktrees, files, issues, review comments, agents' status and
 // links, terminals and the store. Each window is a connection to it (workspace-ipc.ts), which is
@@ -1144,7 +1151,7 @@ const workspaceServer = new WorkspaceServer([
   }),
   terminals.domain,
 ], hostIntents(), (m) => console.warn(`[workspace] ${m}`));
-const workspaceIpc = serveWorkspaceApi(workspaceServer);
+const workspaceIpc = serveWorkspaceApi(workspaceServer, elsewhere);
 
 /** The workspace a window shows, or null. */
 const workspaceShownBy = (wc: WebContents): string | null => {
@@ -1304,7 +1311,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     handleViewProtocol();
     installSettingsIpc(broadcast);
     installIdentityIpc();
-    installNetworkIpc();
+    installNetworkIpc(workspaceServer);
     installWorkspaceStoreIpc(layouts, workspaceIpc.connect, (change) =>
       workspaceServer.publishTo((c) => !layouts.made(c, change), "store.changed", { repo: change.repo, part: change.part }));
     void initMachines({

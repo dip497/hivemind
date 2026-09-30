@@ -2,7 +2,6 @@ import * as SettingsDialog from "@radix-ui/react-dialog";
 import { ThemePanel } from "./ThemePanel";
 import { RecentProjects } from "./RecentProjects";
 import { ShareDialog, ROLE_LABELS } from "./multiplayer/share-dialog";
-import { JoinDialog } from "./multiplayer/join-dialog";
 import { setWorkspaceOccluded } from "./workspace-occlusion";
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -200,7 +199,6 @@ export function App() {
   // Ctrl+O / Ctrl+R on the canvas (useCanvasShortcuts): VS Code's Open Folder and Open Recent.
   const [recentOpen, setRecentOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
-  const [joinOpen, setJoinOpen] = useState(false);
   // Someone asks to join a workspace shared from here: the person here lets them in, or not.
   useEffect(() => window.hive.onJoinRequest((r) => {
     const who = r.profile.name || "Someone";
@@ -461,10 +459,8 @@ export function App() {
         onBrowse={() => void pickFolder()}
         onNewWindow={() => void window.hive.newWindow()}
         onClose={() => setRecentOpen(false)}
-        onJoin={() => setJoinOpen(true)}
       />
       {repoPath && <ShareDialog repo={repoPath} open={shareOpen} onClose={() => setShareOpen(false)} />}
-      <JoinDialog open={joinOpen} onClose={() => setJoinOpen(false)} />
       <NewIssueModal
         root={root}
         open={newOpen}

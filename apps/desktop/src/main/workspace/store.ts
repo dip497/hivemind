@@ -24,13 +24,24 @@ export interface Shown { repo: string; frame: string | null }
 export class Layouts {
   readonly domain: Domain<StoreMethod, "store.shown">;
   private readonly writers = new WeakMap<Connection, string>();
+  /** The stores each client has written to: its history goes from each when it goes. */
+  private readonly wroteTo = new WeakMap<Connection, Set<WorkspaceStore>>();
   private readonly shown = new Map<Connection, Shown>();
   private writersMade = 0;
 
-  /** `store`: the host's store, made when it is first needed. */
-  constructor(store: () => WorkspaceStore) {
+  /** `store`: the store that holds a repo's layout (the host's own, or its replicas of others'
+   *  workspaces, M1), made when it is first needed. */
+  constructor(store: (repo: string) => WorkspaceStore) {
     const repoOf = (v: unknown) => text(v, "repo");
     const as = (from: Connection) => ({ writer: this.writerOf(from) });
+    /** The store `from` writes `repo` in, remembered so its history there goes with it. */
+    const writing = (from: Connection, repo: string): WorkspaceStore => {
+      const s = store(repo);
+      let stores = this.wroteTo.get(from);
+      if (!stores) this.wroteTo.set(from, (stores = new Set()));
+      stores.add(s);
+      return s;
+    };
     // The store refuses a malformed layout with a TypeError: that is the caller's, not a failure.
     const refused = <R>(run: () => R): R => {
       try { return run(); } catch (e) { throw e instanceof TypeError ? new ApiError("BAD_REQUEST", e.message) : e; }
@@ -39,18 +50,21 @@ export class Layouts {
       answers: {
         "store.open": (_, repo) => {
           const r = repoOf(repo);
-          return { core: store().getCore(r), views: store().getViews(r), objects: store().getObjects(r) };
+          const s = store(r);
+          return { core: s.getCore(r), views: s.getViews(r), objects: s.getObjects(r) };
         },
-        "store.core": (_, repo) => store().getCore(repoOf(repo)),
-        "store.view": (_, repo, viewId) => store().getView(repoOf(repo), text(viewId, "viewId")),
-        "store.objects": (_, repo) => store().getObjects(repoOf(repo)),
-        "store.setCore": (from, repo, core, base) => refused(() => store().setCore(repoOf(repo), core, { ...as(from), base })),
-        "store.setView": (from, repo, viewId, layout, base) =>
-          refused(() => store().setView(repoOf(repo), text(viewId, "viewId"), layout as ViewLayout, { ...as(from), base })),
-        "store.setObjects": (from, repo, objects, base) => refused(() => store().setObjects(repoOf(repo), objects, { ...as(from), base })),
-        "store.import": (_, repo, legacy) => refused(() => store().importLegacy(repoOf(repo), legacy as LegacyLayout)),
-        "store.undo": (from, repo) => store().undo(repoOf(repo), as(from)),
-        "store.redo": (from, repo) => store().redo(repoOf(repo), as(from)),
+        "store.core": (_, repo) => { const r = repoOf(repo); return store(r).getCore(r); },
+        "store.view": (_, repo, viewId) => { const r = repoOf(repo); return store(r).getView(r, text(viewId, "viewId")); },
+        "store.objects": (_, repo) => { const r = repoOf(repo); return store(r).getObjects(r); },
+        "store.setCore": (from, repo, core, base) => { const r = repoOf(repo); return refused(() => writing(from, r).setCore(r, core, { ...as(from), base })); },
+        "store.setView": (from, repo, viewId, layout, base) => {
+          const r = repoOf(repo);
+          return refused(() => writing(from, r).setView(r, text(viewId, "viewId"), layout as ViewLayout, { ...as(from), base }));
+        },
+        "store.setObjects": (from, repo, objects, base) => { const r = repoOf(repo); return refused(() => writing(from, r).setObjects(r, objects, { ...as(from), base })); },
+        "store.import": (_, repo, legacy) => { const r = repoOf(repo); return refused(() => store(r).importLegacy(r, legacy as LegacyLayout)); },
+        "store.undo": (from, repo) => { const r = repoOf(repo); return writing(from, r).undo(r, as(from)); },
+        "store.redo": (from, repo) => { const r = repoOf(repo); return writing(from, r).redo(r, as(from)); },
       },
       effects: {},
       notices: {
@@ -62,7 +76,7 @@ export class Layouts {
       gone: (connection) => {
         this.shown.delete(connection);
         const writer = this.writers.get(connection);
-        if (writer) store().forgetWriter(writer);
+        if (writer) for (const s of this.wroteTo.get(connection) ?? []) s.forgetWriter(writer);
       },
     };
   }

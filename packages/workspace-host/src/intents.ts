@@ -9,11 +9,16 @@
  * The policy: an intent that only one tile may ask for is refused to any other tile. A person
  * at this machine may ask for anything.
  */
+import type { Access } from "./access.js";
 import type { AuditLog } from "./audit-log.js";
 
 /** Who asks: whoever runs in a tile (an agent, or a person at a shell tile), named by the tile;
- *  or a person at this machine, outside any tile. */
-export type Actor = { kind: "tile"; tile: string } | { kind: "person" };
+ *  a person at this machine, outside any tile; or someone on another device, reaching a workspace
+ *  shared from here (M1), named by their person and device keys, with what their access allows. */
+export type Actor =
+  | { kind: "tile"; tile: string }
+  | { kind: "person" }
+  | { kind: "peer"; person: string; device: string; access: Access };
 
 /** What is asked. `R` is what carrying it out returns. */
 export interface Intent<R = unknown> {

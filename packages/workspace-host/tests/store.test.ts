@@ -112,6 +112,46 @@ test("a workspace from before workspaces had owners is this person's from its ne
   expect(ownership("/work/api")).toEqual(mine);
 });
 
+test("a replica catches up from what it has seen, edits merge both ways, and a replica never marks the document its own", () => {
+  const host = new WorkspaceStore({ dir, person });
+  const told: string[] = [];
+  const replicas = path.join(tmp, "shared");
+  const guest = new WorkspaceStore({ dir: replicas, onChange: (c) => told.push(`${c.part} by ${c.writer}`) });
+  const R = "hive://api";
+  host.setCore("/a", core("api"));
+  guest.importFrom(R, host.exportSince("/a", null), { writer: "host" });
+  expect(guest.getCore(R)).toEqual(core("api"));
+  expect(told).toContain("core by host");
+  expect(guest.ownership(R)).toEqual(host.ownership("/a"));
+  // The replica has exactly what the host has: nothing of its own that could go back to the host.
+  expect(guest.version(R)).toEqual(host.version("/a"));
+
+  // Each side edits; each takes the other's changes since what it last saw.
+  const hostSaw = host.version("/a");
+  const guestSaw = guest.version(R);
+  guest.setObjects(R, [note("from the guest")]);
+  host.setView("/a", "canvas", { v: 2, data: { positions: { t1: { x: 5, y: 6 } } } });
+  host.importFrom("/a", guest.exportSince(R, hostSaw), { writer: "guest" });
+  guest.importFrom(R, host.exportSince("/a", guestSaw), { writer: "host" });
+  for (const [s, r] of [[host, "/a"], [guest, R]] as const) {
+    expect(s.getObjects(r)).toEqual([note("from the guest")]);
+    expect(s.getView(r, "canvas")).toEqual({ v: 2, data: { positions: { t1: { x: 5, y: 6 } } } });
+  }
+  // The replica did not mark it: the owner is still the host's person, on both.
+  expect(host.ownership("/a")!.owner).toBe(idOf(person));
+  expect(guest.ownership(R)).toEqual(host.ownership("/a"));
+
+  // After the host restarts (its history trimmed on disk), a replica that saw everything gets only what is new.
+  const seen = guest.version(R);
+  const again = restart();
+  again.setCore("/a", core("api, renamed"));
+  guest.importFrom(R, again.exportSince("/a", seen), { writer: "host" });
+  expect(guest.getCore(R)).toEqual(core("api, renamed"));
+  // What is not a document's changes is refused and changes nothing.
+  expect(() => guest.importFrom(R, new Uint8Array([1, 2, 3]))).toThrow();
+  expect(guest.getCore(R)).toEqual(core("api, renamed"));
+});
+
 test("files are private, leave no temp files, and stay inside the directory whatever the repo", () => {
   const s = new WorkspaceStore({ dir, person });
   s.setCore("/a", core("x"));

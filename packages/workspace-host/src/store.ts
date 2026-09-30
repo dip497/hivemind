@@ -27,7 +27,7 @@
  * as one — so edits made a moment apart are never taken back together. A history lasts until its
  * writer is gone (`forgetWriter`: a window closed).
  */
-import { UndoManager, type LoroDoc } from "loro-crdt";
+import { UndoManager, VersionVector, type LoroDoc } from "loro-crdt";
 import { addTile, hasCore, holdsTile, readCore, removeTile, writeCore, writeTileName } from "@hivemind/workspace-doc/core";
 import { readObjects, writeObjects } from "@hivemind/workspace-doc/objects";
 import { readView, readViews, writeView } from "@hivemind/workspace-doc/views";
@@ -62,8 +62,9 @@ export interface WorkspaceStoreOptions {
   /** Directory with one file per workspace; created (0700) on the first write. */
   dir: string;
   /** The person key this machine holds. A workspace whose document does not say whose it is yet is
-   *  this person's: it is made here, or was before workspaces had owners. */
-  person: Seed;
+   *  this person's: it is made here, or was before workspaces had owners. None for a store of
+   *  replicas of others' workspaces (M1), which never marks a document: its host's says whose it is. */
+  person?: Seed;
   /** Hears what the embedder should log: a file set aside, a failed write, an import skipped. */
   onWarn?: (message: string) => void;
   /** Hears each write that changed something, and who wrote it. */
@@ -197,6 +198,36 @@ export class WorkspaceStore {
     if (took) this.commit(repo, doc, IMPORT);
   }
 
+  /** The document's version: what a replica of it has seen, encoded (M1's sync). */
+  version(repo: string): Uint8Array {
+    return this.workspace(repo).doc.oplogVersion().encode();
+  }
+
+  /** What a replica that has seen `since` (an encoded version; null: nothing) needs to catch up: the
+   *  updates after it, or the whole document when it is from before the history this one keeps. */
+  exportSince(repo: string, since: Uint8Array | null): Uint8Array {
+    const { doc } = this.workspace(repo);
+    if (since) {
+      const seen = VersionVector.decode(since);
+      const kept = doc.isShallow() ? seen.compare(doc.shallowSinceVV()) : 1;
+      if (kept !== undefined && kept >= 0) return doc.export({ mode: "update", from: seen });
+    }
+    return doc.export({ mode: "snapshot" });
+  }
+
+  /** Take another replica's changes (updates or a whole document, as `exportSince` gives them) as
+   *  `from`'s edit: written, and told like any other change. Throws for bytes that are not a
+   *  document's. */
+  importFrom(repo: string, bytes: Uint8Array, from: Writer = {}): void {
+    const { doc } = this.workspace(repo);
+    const before = JSON.stringify(doc.frontiers());
+    doc.import(bytes);
+    if (JSON.stringify(doc.frontiers()) === before) return;
+    this.persist(repo, doc);
+    const parts: WorkspaceChange["part"][] = ["core", "board", ...Object.keys(readViews(doc)).map((v) => `view:${v}` as const)];
+    for (const part of parts) this.opts.onChange?.({ repo, part, writer: from.writer ?? "" });
+  }
+
   /** Write every repo whose last write failed. The embedder calls it on quit. */
   flush(): void {
     for (const repo of [...this.unsaved]) this.persist(repo, this.workspaces.get(repo)!.doc);
@@ -209,12 +240,15 @@ export class WorkspaceStore {
       const doc = readDoc(this.opts.dir, repo, this.warn);
       // Stamped before the history starts: a stamp is nobody's edit, so no undo takes it back. It
       // is on disk with the next write.
-      stampSchema(doc);
-      stampOwnership(doc, () => {
-        const workspaceId = newWorkspaceId();
-        return { workspaceId, owner: idOf(this.opts.person), workspacePublicKey: idOf(workspaceSeed(this.opts.person, workspaceId)) };
-      });
-      doc.commit();
+      const person = this.opts.person;
+      if (person) {
+        stampSchema(doc);
+        stampOwnership(doc, () => {
+          const workspaceId = newWorkspaceId();
+          return { workspaceId, owner: idOf(person), workspacePublicKey: idOf(workspaceSeed(person, workspaceId)) };
+        });
+        doc.commit();
+      }
       workspace = { doc, histories: new Map() };
       this.workspaces.set(repo, workspace);
     }

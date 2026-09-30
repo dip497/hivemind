@@ -1,4 +1,4 @@
-# Workspace API (0.1)
+# Workspace API (0.2)
 
 What a workspace's host is asked for, and what it answers. The host is the machine the
 workspace's repo is on; today its callers are the app's windows and the dev-bridge, and later a
@@ -18,6 +18,7 @@ every call, and a method that returns nothing answers `{"result": null}`. `code`
 |---|---|
 | `BAD_REQUEST` | The params are not what the method takes, or name something it may not reach (see below). It never ran. |
 | `UNKNOWN_METHOD` | No such method on this host. |
+| `FORBIDDEN` | The caller may not do this: a peer's role on the workspace does not allow it (below). It never ran. |
 | `FAILED` | It ran and failed: git refused, a file could not be written. `message` says why, ending in the system's code when there is one (`… (ENOENT)`). |
 
 A **notice** is a call that asks for no answer, `{method, params}` sent one way: the hot path (a
@@ -37,6 +38,8 @@ for it.
 | Electron IPC | the app's windows | the window, from when it opens until it closes | `invoke("workspace", method, params)` → the answer | `send("workspace:notice", method, params)` | `workspace:event`, one `{event, params}` each |
 | HTTP | the dev-bridge's page | its event stream: `GET /workspace/events?token=…`, whose first event, `connection`, carries `{id}` | `POST /workspace`, body `{"method", "params"}` → 200 with the answer | `POST /workspace/notice`, same body → 204 | the stream's `data:` lines, one `{event, params}` each |
 
+| hive-net | a peer on another device, reaching a workspace shared from here (M1) | its `hive/ws/1` connection | a frame on the `api` stream, `{"id", "method", "params"}` → a frame `{"id", "result"}` or `{"id", "error"}` | a frame without `id` | frames `{event, params}` on the same stream |
+
 Over Electron only the main frame of an app window is heard; anything else is rejected. Over HTTP
 every request carries the token (`x-hive-token`, or `token` on the stream) and a call or notice
 names its connection (`x-hive-connection`): 401 without the token, 400 without a connection.
@@ -48,6 +51,16 @@ method with an effect is carried out through the host's intents and recorded in 
 (`audit.jsonl`, one JSON line each), its verb the method's name: who asked, what it acted on
 (`target`), a `detail`, and how it ended (`ok`, `error` with the code it failed with). A read is
 not recorded. What someone wrote (a commit message, a file's contents) is never recorded.
+
+## Peers
+
+A peer names the workspace by its id, `hive://<workspaceId>`, wherever a call takes a repo (or a
+`cwd` inside it); the host reads that as its repo. Each call and notice is checked against the
+peer's role on the workspace (design §6) before it runs, and one the role does not allow is
+`FORBIDDEN` (a notice is dropped): reads and watching terminals are anyone's with access; the
+board's edits need *Can edit board*; typing into and resizing a terminal, *Can use terminals*;
+opening and closing tiles, *Can drive agents*; anything else is the owner's. A peer is sent only
+the events about its workspace's tiles, and a tile outside the workspace is refused to it.
 
 ## Params a host refuses
 

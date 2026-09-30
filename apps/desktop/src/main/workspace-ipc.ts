@@ -6,9 +6,18 @@
  */
 import type { WebContents } from "electron";
 import type { Connection, WorkspaceServer } from "@hivemind/workspace-api/server";
+import type { Answer } from "@hivemind/workspace-api/protocol";
 import { PERSON, handle, on } from "./app-ipc.js";
 
-export function serveWorkspaceApi(server: WorkspaceServer): { connect(window: WebContents): Connection; find(window: WebContents): Connection | undefined } {
+/** Calls and notices another host answers: a workspace shared from elsewhere (M1). */
+export interface Elsewhere {
+  /** The answer from the host of the workspace the call names; null when it names none. */
+  call(method: unknown, params: unknown): Promise<Answer> | null;
+  /** Whether the notice went to such a host. */
+  notice(method: unknown, params: unknown): boolean;
+}
+
+export function serveWorkspaceApi(server: WorkspaceServer, elsewhere?: Elsewhere): { connect(window: WebContents): Connection; find(window: WebContents): Connection | undefined } {
   const connections = new WeakMap<WebContents, Connection>();
   /** A window's connection: made the first time it is asked for, closed when the window goes. */
   const connect = (wc: WebContents): Connection => {
@@ -28,7 +37,13 @@ export function serveWorkspaceApi(server: WorkspaceServer): { connect(window: We
     server.connect(connection);
     return connection;
   };
-  handle("workspace", (e, method: unknown, params: unknown) => server.answer(method, params, connect(e.sender)));
-  on("workspace:notice", (e, method: unknown, params: unknown) => server.notice(method, params, connect(e.sender)));
+  handle("workspace", (e, method: unknown, params: unknown) => {
+    const conn = connect(e.sender);
+    return elsewhere?.call(method, params) ?? server.answer(method, params, conn);
+  });
+  on("workspace:notice", (e, method: unknown, params: unknown) => {
+    const conn = connect(e.sender);
+    if (!elsewhere?.notice(method, params)) server.notice(method, params, conn);
+  });
   return { connect, find: (wc) => connections.get(wc) };
 }

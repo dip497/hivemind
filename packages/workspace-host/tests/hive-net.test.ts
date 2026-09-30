@@ -1,6 +1,7 @@
 // The daemon client (hive-net.ts) with the real daemon (crates/hive-net, built with `cargo build`):
 // two devices in one process. Someone asks to pair and the host's answer reaches them; a device
-// the host admits connects, and text passes both ways on named streams; one no longer admitted is
+// the host admits connects, and text passes both ways, each frame on the stream it was sent on; one
+// no longer admitted is
 // cut off, and the host hears it go.
 import { test, expect, afterEach } from "bun:test";
 import fs from "node:fs";
@@ -48,11 +49,17 @@ test.skipIf(!built)("pairing, then a connection the host admits, text both ways 
     host.admit([guest.ready.id]);
     const link = await guest.dial(host.ready.id, where);
     expect(link.peer).toBe(host.ready.id);
+    link.send("sync", "first on sync");
     link.send("api", "hello");
     const there = await arrived;
     expect(there.peer).toBe(guest.ready.id);
+    // Each stream's frames reach that stream's listeners, and no other's.
+    const onSync: string[] = [];
+    there.on("sync", (t) => onSync.push(t));
     const heard = await next<string>((r) => there.on("api", r));
     expect(heard).toBe("hello");
+    await Bun.sleep(50);
+    expect(onSync).toEqual(["first on sync"]);
     const back = next<string>((r) => link.on("api", r));
     there.send("api", "hi");
     expect(await back).toBe("hi");
