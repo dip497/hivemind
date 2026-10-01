@@ -1,16 +1,16 @@
 import { agentById } from "@hivemind/agents";
 /**
  * Delay (ms) between typing text into an agent's TUI and the SEPARATE Enter
- * keystroke. claude's input loop drops a newline that arrives in the same write
+ * keystroke. A TUI's input loop can drop a newline that arrives in the same write
  * as the text, so Enter must be its own write this long after (the tmux
  * `send-keys` pattern). One constant so the delivery sites — HCP agent.send /
- * agent.report / pipe-forward (main) and the renderer's prompt delivery — can't
+ * agent.report / pipe-forward (the host) and the window's prompt delivery — can't
  * drift apart.
  */
 export const SUBMIT_DELAY_MS = 90;
 
 /**
- * Backstop delay (ms) for the INITIAL spawn prompt only. A freshly-booted claude
+ * Backstop delay (ms) for the INITIAL spawn prompt only. A freshly-booted agent
  * TUI sometimes drops the first Enter — it arrives before the paste-debounce of
  * the just-rendered input settles, so the prompt is typed but never submitted and
  * the user has to press Enter by hand. We re-send Enter once at this longer delay,

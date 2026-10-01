@@ -15,14 +15,14 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { makeDispatch } from "../../src/main/hcp/methods.js";
+import { makeDispatch } from "@hivemind/host/control/methods";
 import { useAuthoredAgents } from "./authored-agents.ts";
 
 // Spawn/supervise policy reads the live catalog: load the published fixtures.
 useAuthoredAgents();
-import { Mailbox } from "../../src/main/hcp/mailbox.js";
-import { TurnTracker } from "../../src/main/hcp/turn-tracker.js";
-import { OutputRecorder } from "../../src/main/hcp/output-recorder.js";
+import { Mailbox } from "@hivemind/host/control/mailbox";
+import { TurnTracker } from "@hivemind/host/control/turn-tracker";
+import { OutputRecorder } from "@hivemind/host/control/output-recorder";
 import { workspaceDeps, PERSON, fromTile } from "./hcp-workspace.ts";
 
 test("an approval for a BUSY supervisor is held, then delivered when it hits its prompt", async () => {

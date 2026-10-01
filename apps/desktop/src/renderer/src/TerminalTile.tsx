@@ -18,8 +18,8 @@ import { registerAgentTile, unregisterAgentTile, shouldDeliver, type SendToAgent
 import { peekWork, claimWork } from "./work-queue";
 import { publishStatus, clearStatus, setLabel, statusOf, subscribeTileStatus, type TileStatusKind } from "./agent-status-bus";
 import { mayDismiss, newDismissState } from "./dismiss-startup";
-import { keyBytes, KEY_GAP_MS } from "../../shared/keys";
-import { SUBMIT_DELAY_MS, SPAWN_SUBMIT_RETRY_MS, deliversPromptViaArgv } from "../../shared/agent-io";
+import { keyBytes, KEY_GAP_MS } from "@hivemind/agent-host/keys";
+import { SUBMIT_DELAY_MS, SPAWN_SUBMIT_RETRY_MS, deliversPromptViaArgv } from "@hivemind/agent-host/agent-io";
 import { Pencil, GripVertical } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";

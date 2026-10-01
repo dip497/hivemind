@@ -8,7 +8,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Mailbox } from "../../src/main/hcp/mailbox.js";
+import { Mailbox } from "@hivemind/host/control/mailbox";
 
 const PID = "hm:tile-claude-1";
 

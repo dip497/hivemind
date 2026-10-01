@@ -20,7 +20,7 @@ structured results. We want the same developer experience, but:
 
 ## What already exists (and what's missing)
 
-Shipped in HCP (`apps/desktop/src/main/hcp/methods.ts`):
+Shipped in HCP (`packages/host/src/control/methods.ts`):
 
 | Primitive | Verb / mechanism |
 |---|---|
@@ -181,8 +181,8 @@ on the canvas/board, and is queryable by other agents. v1 can ship without it
 
 | File | Change |
 |---|---|
-| `apps/desktop/src/main/hcp/methods.ts` | new `workflow.run` verb + concurrency cap |
-| `apps/desktop/src/main/hcp/protocol.ts` | (none — reuses req/res) |
+| `packages/host/src/control/methods.ts` | new `workflow.run` verb + concurrency cap |
+| `packages/host/src/control/protocol.ts` | (none — reuses req/res) |
 | `packages/hive-mcp/src/index.ts` | `hive_workflow` tool def + handler + `CANVAS_TOOLS` |
 | `apps/cli/src/commands/ctl.ts` | `hive ctl workflow` subcommand |
 | `templates/agentic/.claude/skills/hive-workflow/SKILL.md` | new skill |

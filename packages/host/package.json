@@ -14,6 +14,7 @@
     "@hivemind/agent-host": "workspace:*",
     "@hivemind/agents": "workspace:*",
     "@hivemind/core": "workspace:*",
+    "@hivemind/view-sdk": "workspace:*",
     "@hivemind/workspace-api": "workspace:*",
     "@hivemind/workspace-doc": "workspace:*",
     "@hivemind/workspace-host": "workspace:*",

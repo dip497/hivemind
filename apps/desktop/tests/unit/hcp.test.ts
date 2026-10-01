@@ -6,19 +6,19 @@ import net from "node:net";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { takeLines, HCP_MAX_LINE, HcpError } from "../../src/main/hcp/protocol.ts";
-import { TurnTracker } from "../../src/main/hcp/turn-tracker.ts";
-import { OutputRecorder, stripAnsi } from "../../src/main/hcp/output-recorder.ts";
-import { makeDispatch } from "../../src/main/hcp/methods.ts";
+import { takeLines, HCP_MAX_LINE, HcpError } from "@hivemind/host/control/protocol";
+import { TurnTracker } from "@hivemind/host/control/turn-tracker";
+import { OutputRecorder, stripAnsi } from "@hivemind/host/control/output-recorder";
+import { makeDispatch } from "@hivemind/host/control/methods";
 import { useAuthoredAgents } from "./authored-agents.ts";
 
 // Spawn policy, supervise policy and prompt delivery read the live catalog: load the
 // published fixtures the way an installed machine has them.
 useAuthoredAgents();
-import { startHcpServer } from "../../src/main/hcp/hcp-server.ts";
-import { PipeManager } from "../../src/main/hcp/pipes.ts";
-import { Mailbox } from "../../src/main/hcp/mailbox.ts";
-import { SUBMIT_DELAY_MS } from "../../src/shared/agent-io.ts";
+import { startHcpServer } from "@hivemind/host/control/hcp-server";
+import { PipeManager } from "@hivemind/host/control/pipes";
+import { Mailbox } from "@hivemind/host/control/mailbox";
+import { SUBMIT_DELAY_MS } from "@hivemind/agent-host/agent-io";
 import { WorkspaceStore } from "@hivemind/workspace-host/store";
 import { newSeed } from "@hivemind/workspace-host/identity";
 import { StatusStore } from "@hivemind/agent-host/status-store";

@@ -2,13 +2,13 @@
 // agent declares as `unattended` — never a mode borrowed from another agent.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { makeDispatch } from "../../src/main/hcp/methods.js";
+import { makeDispatch } from "@hivemind/host/control/methods";
 import { useAuthoredAgents } from "./authored-agents.ts";
 
 // Unattended modes are a catalog capability: load the published fixtures.
 useAuthoredAgents();
-import { TurnTracker } from "../../src/main/hcp/turn-tracker.js";
-import { OutputRecorder } from "../../src/main/hcp/output-recorder.js";
+import { TurnTracker } from "@hivemind/host/control/turn-tracker";
+import { OutputRecorder } from "@hivemind/host/control/output-recorder";
 import { REPO, workspaceDeps, PERSON } from "./hcp-workspace.ts";
 
 /** What the worker a spawn with `params` opens runs with: its arguments, as written into the

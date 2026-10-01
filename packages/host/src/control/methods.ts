@@ -9,7 +9,7 @@
  *     they need no window (docs/design/multiplayer-2026-09-28.md, R5).
  */
 import { randomUUID } from "node:crypto";
-import { keyBytes, KEY_GAP_MS } from "../../shared/keys.js";
+import { keyBytes, KEY_GAP_MS } from "@hivemind/agent-host/keys";
 import { HcpError, type HcpCall } from "./protocol.js";
 import type { TurnTracker } from "./turn-tracker.js";
 import type { OutputRecorder } from "./output-recorder.js";
@@ -19,7 +19,7 @@ import { agentById, agentForCmd, agentLaunch, agentOption, cleanName, isSessionI
 import { canListSessions, listSessions } from "@hivemind/agents/node";
 import { BROWSER_TOOL_ID, tileKindAvailability } from "@hivemind/core/tool-plugins";
 import type { ToolsSettings } from "@hivemind/core/settings-schema";
-import { SUBMIT_DELAY_MS } from "../../shared/agent-io.js";
+import { SUBMIT_DELAY_MS } from "@hivemind/agent-host/agent-io";
 import { customDataProblem, isCustomEventName } from "@hivemind/view-sdk/protocol";
 import { AGENT_TILE_KIND, isTerminalKind, type CoreLayout, type FrameRecord, type TileRecord } from "@hivemind/workspace-doc/shapes";
 import { defaultFrame, frameFor, listFrames, listTiles, type TileFacts } from "@hivemind/workspace-doc/tile-list";

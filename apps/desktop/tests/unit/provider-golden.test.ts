@@ -20,14 +20,14 @@ import { composeResume, composeResumeFrom, hookPathsFor, providers as registry, 
 import { authoredDef, authoredAsset, useAuthoredAgents } from "./authored-agents.ts";
 import { workspaceDeps, PERSON } from "./hcp-workspace.ts";
 import type { SpawnSpec } from "@hivemind/agent-host/pty-session-manager";
-import { deliversPromptViaArgv } from "../../src/shared/agent-io.ts";
+import { deliversPromptViaArgv } from "@hivemind/agent-host/agent-io";
 import { applyInitialPrompt, INITIAL_PROMPT_ENV } from "@hivemind/agent-host/initial-prompt";
 import { identifyAgent, detectTileStatus, type Agent } from "../../src/renderer/src/agent-state.ts";
-import { makeDispatch } from "../../src/main/hcp/methods.ts";
-import { TurnTracker } from "../../src/main/hcp/turn-tracker.ts";
-import { OutputRecorder } from "../../src/main/hcp/output-recorder.ts";
-import { Mailbox } from "../../src/main/hcp/mailbox.ts";
-import { SUBMIT_DELAY_MS } from "../../src/shared/agent-io.ts";
+import { makeDispatch } from "@hivemind/host/control/methods";
+import { TurnTracker } from "@hivemind/host/control/turn-tracker";
+import { OutputRecorder } from "@hivemind/host/control/output-recorder";
+import { Mailbox } from "@hivemind/host/control/mailbox";
+import { SUBMIT_DELAY_MS } from "@hivemind/agent-host/agent-io";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURE = path.join(__dirname, "fixtures", "provider-golden.json");

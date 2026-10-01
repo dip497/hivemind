@@ -7,14 +7,14 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { makeDispatch } from "../../src/main/hcp/methods.ts";
+import { makeDispatch } from "@hivemind/host/control/methods";
 import { useAuthoredAgents } from "./authored-agents.ts";
 
 // Spawn reads the live catalog: load the published fixtures.
 useAuthoredAgents();
-import { Mailbox } from "../../src/main/hcp/mailbox.ts";
-import { TurnTracker } from "../../src/main/hcp/turn-tracker.ts";
-import { OutputRecorder } from "../../src/main/hcp/output-recorder.ts";
+import { Mailbox } from "@hivemind/host/control/mailbox";
+import { TurnTracker } from "@hivemind/host/control/turn-tracker";
+import { OutputRecorder } from "@hivemind/host/control/output-recorder";
 import type { AuditRecord } from "@hivemind/workspace-host/intents";
 import { PERSON, fromTile, workspaceDeps } from "./hcp-workspace.ts";
 

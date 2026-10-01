@@ -1,6 +1,6 @@
 /**
  * The workspace side of the control plane's dependencies, for tests of its dispatch
- * (src/main/hcp/methods.ts): a real store with one workspace open and shown in the user's
+ * (@hivemind/host/control/methods): a real store with one workspace open and shown in the user's
  * window, a real status store, no saved launch options, a record of every spawn the windows
  * would have been told of, and the host's intents writing a real audit log (`audited()` reads
  * it back).
@@ -14,7 +14,7 @@ import { newSeed } from "@hivemind/workspace-host/identity";
 import { Intents, type AuditRecord } from "@hivemind/workspace-host/intents";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import type { HcpSpawnedEvent } from "../../src/shared/ipc.ts";
-import type { HcpCall } from "../../src/main/hcp/protocol.ts";
+import type { HcpCall } from "@hivemind/host/control/protocol";
 
 /** Who makes a test's call: the person at a terminal, or the agent in a tile. */
 export const PERSON: HcpCall = { actor: { kind: "person" } };

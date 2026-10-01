@@ -15,11 +15,11 @@ import path from "node:path";
 import { StatusStore } from "@hivemind/agent-host/status-store";
 import { WorkspaceStore } from "@hivemind/workspace-host/store";
 import { newSeed } from "@hivemind/workspace-host/identity";
-import { labelOf } from "../../src/main/hcp/names.js";
+import { labelOf } from "@hivemind/host/control/names";
 import { REPO, workspaceDeps, PERSON } from "./hcp-workspace.ts";
-import { makeDispatch } from "../../src/main/hcp/methods.js";
-import { TurnTracker } from "../../src/main/hcp/turn-tracker.js";
-import { OutputRecorder } from "../../src/main/hcp/output-recorder.js";
+import { makeDispatch } from "@hivemind/host/control/methods";
+import { TurnTracker } from "@hivemind/host/control/turn-tracker";
+import { OutputRecorder } from "@hivemind/host/control/output-recorder";
 import { useAuthoredAgents } from "./authored-agents.ts";
 
 // The spawn path reads the live catalog: load the published fixtures.

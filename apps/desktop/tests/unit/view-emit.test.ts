@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { EMIT_RATE, makeDispatch, parseEmit, tokenBucket } from "../../src/main/hcp/methods.ts";
+import { EMIT_RATE, makeDispatch, parseEmit, tokenBucket } from "@hivemind/host/control/methods";
 import { PERSON } from "./hcp-workspace.ts";
 
 test("parseEmit: a dotted name, plain JSON within limits, and who sent it", () => {

@@ -6,9 +6,9 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { startHcpServer, type HcpServer } from "../../desktop/src/main/hcp/hcp-server.js";
-import { OutputRecorder } from "../../desktop/src/main/hcp/output-recorder.js";
-import { HcpError } from "../../desktop/src/main/hcp/protocol.js";
+import { startHcpServer, type HcpServer } from "@hivemind/host/control/hcp-server";
+import { OutputRecorder } from "@hivemind/host/control/output-recorder";
+import { HcpError } from "@hivemind/host/control/protocol";
 import { hiveAsync as hive } from "./helpers.js";
 import { fixtureXDG } from "./agents-fixtures.js";
 
