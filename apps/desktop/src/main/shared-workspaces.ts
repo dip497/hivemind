@@ -32,7 +32,7 @@ import path from "node:path";
 import { app } from "electron";
 import { parseDeviceUri } from "@hivemind/core/remote-uri";
 import { MachinePlaces, type Placed } from "@hivemind/host/machine-places";
-import { serveMachine } from "@hivemind/host/machine-share";
+import { serveMachine, type Grant } from "@hivemind/host/machine-share";
 import type { Duplex } from "node:stream";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
 
@@ -143,6 +143,8 @@ export async function openShared(workspace: string, access: Access, reach: Reach
         stopMachine = given !== "owner" && reach.daemon ? serveMachine(streamOf(link, "machine"), {
           daemon: reach.daemon,
           shows: (session) => placesHere().placed(workspace, toBareId(session)) !== null,
+          grant: () => placesHere().grant(workspace),
+          granted: (listener) => placesHere().onGrant((changed) => { if (changed === workspace) listener(); }),
           onWarn: (m) => console.warn(`[shared] ${workspace}: ${m}`),
         }) : () => {};
       },
@@ -232,6 +234,17 @@ const placesHere = (): MachinePlaces => (places ??= new MachinePlaces({
   device: machineIdentity().deviceId,
   onWarn: (m) => console.warn(`[placed] ${m}`),
 }));
+
+/** What this person lets the people in `workspace` do on this machine (M4). */
+export function machineGrant(workspace: string): Grant {
+  return placesHere().grant(workspace);
+}
+
+/** Let the people in `workspace` do `grant` on this machine from now on: its host is told at once,
+ *  and what this machine lets through follows it. */
+export function setMachineGrant(workspace: string, grant: Grant): void {
+  placesHere().setGrant(workspace, grant);
+}
 
 /** A window here changed its copy `repo` from `before` to `after`: what it placed on this machine. */
 export function wroteShared(repo: string, before: CoreLayout | null, after: CoreLayout): void {

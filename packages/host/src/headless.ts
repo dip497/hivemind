@@ -203,7 +203,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     publish: (event, ...params) => api.publish(event, ...params),
     who,
     // A terminal on a participant's machine is typed into and sized there, by its person (M4).
-    machineOf: (opts) => participantAt(opts.cwd, { self: keys.deviceId, mine, lists, nameOf }),
+    machineOf: (opts) => participantAt(opts, { self: keys.deviceId, mine, lists, nameOf, shown: (device, tile) => peers.shownFrom(device, tile) }),
     onError: o.onWarn,
     backend,
   });
@@ -320,6 +320,8 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     // The person's devices run terminals here, in frames on this machine (M3).
     daemon: o.daemon,
     hosting,
+    // A participant who lends their machine's keyboards, or keeps them again (M4).
+    granted: (device) => terminals.machineChanged(`peer:${device}`),
     onWarn: o.onWarn,
   });
   /** The workspaces shared with someone that are hosted here, as their records are filed. */

@@ -202,6 +202,8 @@ const api: HiveIpc & {
     return () => { ipcRenderer.removeListener("net:shared-status", h); };
   },
   leave: (workspace) => ipcRenderer.invoke("net:leave", workspace),
+  machineGrant: (workspace) => ipcRenderer.invoke("net:machine-grant", workspace),
+  setMachineGrant: (workspace, grant) => ipcRenderer.invoke("net:set-machine-grant", workspace, grant),
   devices: () => ipcRenderer.invoke("net:devices"),
   onDevicesChanged: (cb) => {
     const h = () => cb();

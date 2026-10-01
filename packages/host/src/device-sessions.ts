@@ -20,10 +20,10 @@ import { INITIAL_PROMPT_ENV } from "@hivemind/agent-host/initial-prompt";
 import type { Link } from "@hivemind/workspace-host/hive-net";
 import type { AccessLists } from "@hivemind/workspace-host/access";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
-import type { Typist } from "@hivemind/workspace-api/terminals";
-import type { SessionBackend } from "./terminals.js";
+import type { TerminalOpts } from "@hivemind/workspace-api/terminals";
+import type { SessionBackend, TerminalMachine } from "./terminals.js";
 import type { ShownMachine } from "./peer-links.js";
-import { SHOWN_WAIT_MS } from "./machine-share.js";
+import { SHOWN_WAIT_MS, grants } from "./machine-share.js";
 
 export interface DeviceSessionsOptions {
   /** Connect to one of the person's devices. */
@@ -212,14 +212,21 @@ export function deviceSessions(o: DeviceSessionsOptions): DeviceSessions {
   };
 }
 
-/** Whose machine the frame folder `cwd` is on, as a terminal's keyboard names them, when it is a
- *  participant's (M4): neither this device (`self`) nor one of the person's. The person whose
- *  device it is, as a workspace here lists them, and their name. */
-export function participantAt(cwd: string, o: { self: string; mine(device: string): boolean; lists: Pick<AccessLists, "workspaces" | "personOf">; nameOf(person: string): string }): Typist | null {
-  const at = parseDeviceUri(cwd);
+/** Whose machine the session `opts` runs on, when its frame is on a participant's (M4): neither
+ *  this device (`self`) nor one of the person's. The person whose device it is, as a workspace here
+ *  lists them, and whether they lend its keyboard, as their machine says (`shown`). */
+export function participantAt(opts: TerminalOpts, o: {
+  self: string;
+  mine(device: string): boolean;
+  lists: Pick<AccessLists, "workspaces" | "personOf">;
+  nameOf(person: string): string;
+  shown(device: string, tile: string): ShownMachine | null;
+}): TerminalMachine | null {
+  const at = parseDeviceUri(opts.cwd);
   if (!at || at.device === o.self || o.mine(at.device)) return null;
   const person = o.lists.workspaces().map((ws) => o.lists.personOf(ws, at.device)).find((p): p is string => !!p) ?? "";
-  return { id: `peer:${at.device}`, person, name: person ? o.nameOf(person) : "" };
+  const shown = o.shown(at.device, opts.tile ?? toBareId(opts.tileId));
+  return { who: { id: `peer:${at.device}`, person, name: person ? o.nameOf(person) : "" }, lends: () => grants(shown?.grant() ?? "watch", "terminals") };
 }
 
 /**

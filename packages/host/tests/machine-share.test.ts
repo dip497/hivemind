@@ -4,7 +4,9 @@
 // host watches what this machine's person placed here as it runs, at the size it has here, and one
 // placed that does not run yet once it does; what it sends to type, size, hold back or end a
 // session goes nowhere, as does anything else it asks of the daemon; it hears nothing of anything
-// else here; and when the daemon is replaced, the machine is shown afresh and watched again.
+// else here; when the daemon is replaced, the machine is shown afresh and watched again; and when
+// this machine's person lets them type, what the host types reaches what it watches, until they
+// take it back.
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
@@ -14,7 +16,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { DaemonEndpoint } from "@hivemind/agent-host/daemon-endpoint";
 import type { Link } from "@hivemind/workspace-host/hive-net";
-import { MACHINE_OFFER, SHOWN_WAIT_MS, serveMachine } from "../src/machine-share.ts";
+import { MACHINE_OFFER, SHOWN_WAIT_MS, grantOf, serveMachine, type Grant } from "../src/machine-share.ts";
 import { deviceSessions, linkDuplex } from "../src/device-sessions.ts";
 import { streamOf } from "../src/peer-links.ts";
 
@@ -101,7 +103,16 @@ async function machine(placed: string[]) {
 
   const [hostEnd, machineEnd] = linkPair();
   const shown = new Set(placed);
-  stops.push(serveMachine(streamOf(machineEnd, "machine"), { daemon: connect, shows: (id) => shown.has(id) }));
+  let granted: Grant = "watch";
+  const toldOfGrant = new Set<() => void>();
+  stops.push(serveMachine(streamOf(machineEnd, "machine"), {
+    daemon: connect,
+    shows: (id) => shown.has(id),
+    grant: () => granted,
+    granted: (l) => { toldOfGrant.add(l); return () => { toldOfGrant.delete(l); }; },
+  }));
+  /** Its person lets the people in the workspace do `g` here. */
+  const grant = (g: Grant) => { granted = g; for (const l of toldOfGrant) l(); };
   /** Everything the host is sent on the `machine` stream. */
   const heard: string[] = [];
   let offered = false;
@@ -136,7 +147,7 @@ async function machine(placed: string[]) {
   const raw = (msg: unknown) => hostEnd.send("machine", `${JSON.stringify(msg)}\n`);
   /** A session's size here, as the daemon keeps it. */
   const size = async (id: string) => { const s = (await own.sessions()).find((x) => x.id === id); return s && [s.cols, s.rows]; };
-  return { dir, own, host, watch, run, raw, size, replace, heard, events };
+  return { dir, own, host, watch, run, raw, size, replace, grant, heard, events };
 }
 
 test("the host watches what this machine's person placed here, as it runs and at the size it has here: its attach starts, sizes and holds back nothing, and a size given here reaches it", { skip: !unix, timeout: 60_000 }, async () => {
@@ -235,4 +246,31 @@ test("when this machine's daemon is replaced, the machine is shown to the host a
   m.own.write("hm:shell", "echo after-$((40+2))\n");
   assert.ok(await until(() => w.seen.data.includes("after-42"), 30_000), w.seen.data.slice(-300));
   assert.deepEqual(w.seen.exits, [], "never told it ended");
+});
+
+test("let type by this machine's person, what the host types reaches what it watches here, at the size it has here; taken back, it goes nowhere again; the host is told each change", { skip: !unix, timeout: 60_000 }, async () => {
+  const m = await machine(["hm:shell"]);
+  const mine = await m.run("hm:shell");
+  await m.run("hm:other");
+  const w = m.watch("hm:shell");
+  assert.ok((await w.started).pid > 0);
+  const told = () => m.heard.map(grantOf).filter((g) => g !== null);
+  assert.deepEqual(told(), ["watch"], "told what it grants as it is shown");
+
+  m.grant("terminals");
+  assert.ok(await until(() => told().at(-1) === "terminals"));
+  m.host.write("hm:shell", `touch ${m.dir}/typed-granted\n`);
+  m.host.resize("hm:shell", 20, 5);
+  m.raw({ t: "write", id: "hm:other", data: `touch ${m.dir}/typed-unwatched\n` });
+  assert.ok(await until(() => fs.existsSync(path.join(m.dir, "typed-granted"))), "typed");
+  assert.deepEqual(await m.size("hm:shell"), [100, 30], "sized here still");
+
+  m.grant("watch");
+  assert.ok(await until(() => told().at(-1) === "watch"));
+  m.host.write("hm:shell", `touch ${m.dir}/typed-after\n`);
+  m.own.write("hm:shell", "echo done > done.txt\n");
+  assert.ok(await until(() => read(path.join(m.dir, "done.txt")) === "done"));
+  assert.ok(await until(() => mine.data.includes("done.txt")));
+  await wait(300);
+  assert.equal(fs.existsSync(path.join(m.dir, "typed-after")) || fs.existsSync(path.join(m.dir, "typed-unwatched")), false);
 });

@@ -11,6 +11,10 @@
  * list of them, this machine's control plane and shutting its daemon down are this machine's
  * person's: dropped, or refused. A session the host asks for before it runs (its window opened the
  * tile as this machine's started it) is waited for a while.
+ *
+ * Unless this machine's person grants more (`Grant`, theirs to give and take back at any moment,
+ * which the host is told on the stream): with `terminals`, what the host types into those
+ * sessions reaches them (the host lends its keyboards as for its own), at the size they have here.
  */
 import type { Duplex } from "node:stream";
 import { frame, makeLineDecoder, type ClientMsg, type ServerMsg } from "@hivemind/agent-host/pty-protocol";
@@ -19,6 +23,24 @@ import type { TextChannel } from "@hivemind/workspace-api/peers";
 /** What opens the `machine` stream, and opens it again once this machine's daemon is back: what the
  *  host watched before is to be attached afresh. */
 export const MACHINE_OFFER = `{"t":"machine"}`;
+
+/** What the people in a workspace may do on this machine, as its person grants it: watch what they
+ *  placed here; also type into it, as the workspace's host lends its keyboards; also run terminals
+ *  and agents here. */
+export type Grant = "watch" | "terminals" | "agents";
+export const GRANTS: readonly Grant[] = ["watch", "terminals", "agents"];
+/** Whether `grant` lets them do what `least` does. */
+export const grants = (grant: Grant, least: Grant): boolean => GRANTS.indexOf(grant) >= GRANTS.indexOf(least);
+
+/** The grant a line on the `machine` stream says, `{"t":"grant","grant"}`; null when it says none. */
+export function grantOf(text: string): Grant | null {
+  try {
+    const m = JSON.parse(text) as { t?: unknown; grant?: unknown } | null;
+    return m?.t === "grant" && GRANTS.includes(m.grant as Grant) ? (m.grant as Grant) : null;
+  } catch {
+    return null;
+  }
+}
 
 /** How long a session the host asks to watch is waited for, while it does not run yet. */
 export const SHOWN_WAIT_MS = 15_000;
@@ -32,6 +54,10 @@ export interface MachineShareOptions {
   /** Whether this machine shows the host the session `id`: one its person placed here, in the
    *  host's workspace. */
   shows(id: string): boolean;
+  /** What its person lets the people in the host's workspace do here, now. */
+  grant(): Grant;
+  /** Hear each change of `grant`. */
+  granted(listener: () => void): () => void;
   onWarn?(message: string): void;
 }
 
@@ -146,6 +172,12 @@ export function serveMachine(channel: Pick<TextChannel, "send" | "on">, o: Machi
         const none = (): void => toHost({ t: "viewport", reqId: m.reqId as string, id: m.id as string, text: null });
         return watched.has(m.id) ? toDaemon({ t: "viewport", reqId: m.reqId, id: m.id }, none) : none();
       }
+      case "write":
+        // Typed by whoever the host lends the keyboard to, when this machine's person lets them.
+        if (grants(o.grant(), "terminals") && isText(m.id) && watched.has(m.id) && isText(m.data)) {
+          toDaemon({ t: "write", id: m.id, data: m.data, ...(m.paste === true ? { paste: true } : {}) });
+        }
+        return;
       case "ping":
         if (isText(m.reqId)) toDaemon({ t: "ping", reqId: m.reqId });
         return;
@@ -156,7 +188,7 @@ export function serveMachine(channel: Pick<TextChannel, "send" | "on">, o: Machi
         if (isText(m.reqId)) toHost({ t: "control", reqId: m.reqId, error: "this machine's control plane is its own" });
         return;
       default:
-        // Typing, sizing, pausing, ending a session, shutting the daemon down: its person's.
+        // Sizing, pausing, ending a session, shutting the daemon down: its person's.
         return;
     }
   }
@@ -199,10 +231,14 @@ export function serveMachine(channel: Pick<TextChannel, "send" | "on">, o: Machi
   }
 
   const off = channel.on(makeLineDecoder(fromHost));
+  const tellGrant = (): void => channel.send(JSON.stringify({ t: "grant", grant: o.grant() }));
   channel.send(MACHINE_OFFER);
+  tellGrant();
+  const offGrant = o.granted(tellGrant);
   return () => {
     stopped = true;
     off();
+    offGrant();
     waiting.clear();
     watched.clear();
     daemon?.destroy();

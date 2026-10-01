@@ -18,7 +18,8 @@
  *
  * A participant's app shows the sessions its person placed on their own machine, in frames of
  * theirs in a workspace here (M4), on the `machine` stream it opens to this host: the host watches
- * them through it, as `shownFrom` gives them, and never dials that machine.
+ * them through it, as `shownFrom` gives them, and never dials that machine. It says there what its
+ * person lets the people here do on it (`Grant`), as they change it.
  */
 import path from "node:path";
 import { StringDecoder } from "node:string_decoder";
@@ -33,7 +34,7 @@ import type { WorkspaceServer } from "@hivemind/workspace-api/server";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
 import type { Moved } from "@hivemind/workspace-host/doc-sync";
 import type { Hosting } from "./hosting.js";
-import { MACHINE_OFFER } from "./machine-share.js";
+import { MACHINE_OFFER, grantOf, type Grant } from "./machine-share.js";
 import { linkDuplex } from "./device-sessions.js";
 
 /** A link's named stream as a channel of text frames. */
@@ -56,6 +57,8 @@ export interface PeerLinksOptions {
   /** Where the workspaces here are hosted, and taking one another of the owner's devices hands
    *  over. None: this device takes none. */
   hosting?: Hosting;
+  /** A participant's machine `device` says it lets the people here do something else on it (M4). */
+  granted?(device: string): void;
   onWarn?(message: string): void;
 }
 
@@ -100,17 +103,20 @@ export function heldWorkspaces(link: Link, timeoutMs = 10_000): Promise<HeldWork
 }
 
 /** A participant's machine as this host shows what runs there (M4): the workspace a tile is in
- *  (`key`, the same for each tile of that workspace there), and that machine's sessions, while its
- *  app shows them (`open`: null while it does not). */
+ *  (`key`, the same for each tile of that workspace there), that machine's sessions, while its
+ *  app shows them (`open`: null while it does not), and what its person lets the people here do
+ *  on it now (watch, while it is not connected). */
 export interface ShownMachine {
   key: string;
   open(): Duplex | null;
+  grant(): Grant;
 }
 
 export class PeerLinks {
   private readonly served = new Set<Served>();
-  /** The links whose app shows its machine's sessions here (M4), and the workspace each is for. */
-  private readonly machines = new Map<Link, string>();
+  /** The links whose app shows its machine's sessions here (M4), the workspace each is for, and
+   *  what its person lets the people here do on it. */
+  private readonly machines = new Map<Link, { workspace: string; grant: Grant }>();
 
   constructor(private readonly o: PeerLinksOptions) {}
 
@@ -118,10 +124,17 @@ export class PeerLinks {
   serve(link: Link): void {
     const { store, lists, server, hosting } = this.o;
     this.bridgePty(link);
-    // Offered once the workspace is served (the app offers it once welcomed), for that workspace.
+    // Offered once the workspace is served (the app offers it once welcomed), for that workspace,
+    // and what it grants, then as that changes.
     link.on("machine", (text) => {
-      const served = text.trim() === MACHINE_OFFER && [...this.served].find((s) => s.link === link);
-      if (served) this.machines.set(link, served.workspace);
+      const shown = this.machines.get(link);
+      const grant = grantOf(text);
+      if (grant && shown && shown.grant !== grant) {
+        shown.grant = grant;
+        this.o.granted?.(link.peer);
+      }
+      const served = !shown && text.trim() === MACHINE_OFFER && [...this.served].find((s) => s.link === link);
+      if (served) this.machines.set(link, { workspace: served.workspace, grant: "watch" });
     });
     link.on("hosting", (text) => {
       let message: unknown;
@@ -185,15 +198,24 @@ export class PeerLinks {
     const repo = this.o.store.workspaceOf(toBareId(tile));
     const workspace = repo ? this.o.store.ownership(repo)?.workspaceId : null;
     if (typeof workspace !== "string") return null;
-    return { key: `${device}/${workspace}`, open: () => this.machine(device, workspace) };
+    return {
+      key: `${device}/${workspace}`,
+      open: () => {
+        const link = this.machine(device, workspace);
+        return link ? linkDuplex(link, "machine", { borrowed: true, endsAt: MACHINE_OFFER }) : null;
+      },
+      grant: () => {
+        const link = this.machine(device, workspace);
+        return (link && this.machines.get(link)?.grant) || "watch";
+      },
+    };
   }
 
-  /** What the app at `device` shows of its machine for `workspace`: its daemon's protocol, through
-   *  the app's filter, on that connection's `machine` stream. It ends when the connection goes, or
-   *  the app shows it afresh (its daemon came back). */
-  private machine(device: string, workspace: string): Duplex | null {
-    const link = [...this.machines].find(([l, ws]) => l.peer === device && ws === workspace)?.[0];
-    return link ? linkDuplex(link, "machine", { borrowed: true, endsAt: MACHINE_OFFER }) : null;
+  /** The connection of the app at `device` that shows its machine for `workspace`, if one does: its
+   *  daemon's protocol, through the app's filter, is on that connection's `machine` stream, ended
+   *  when the connection goes or the app shows it afresh (its daemon came back). */
+  private machine(device: string, workspace: string): Link | null {
+    return [...this.machines].find(([l, m]) => l.peer === device && m.workspace === workspace)?.[0] ?? null;
   }
 
   /** Carry the `pty` stream an owner's device opens to this machine's PTY daemon, and the daemon's

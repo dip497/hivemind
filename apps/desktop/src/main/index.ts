@@ -75,7 +75,7 @@ import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, sett
 import { flushWorkspaceStore, installWorkspaceStoreIpc, storeFor, workspaceStore } from "./workspace-store-ipc.js";
 import { installIdentityIpc, machineIdentity } from "./identity.js";
 import { defaultShellFor } from "@hivemind/agent-host/shell-spec";
-import { dialDevice, installNetworkIpc, isYourDevice, movedAway, openJoined, participantOf, peopleHere, personName, shownFrom, stopNetwork } from "./network.js";
+import { dialDevice, installNetworkIpc, isYourDevice, movedAway, openJoined, peopleHere, personName, shownFrom, stopNetwork, terminalMachine } from "./network.js";
 import { elsewhere, mayWriteShared, placedRun, refusedShared, wroteShared } from "./shared-workspaces.js";
 import { appWindowOf, broadcast, openWindows, registerWindow, userWindow } from "./windows.js";
 import { patchSettingsExtras } from "@hivemind/core/settings";
@@ -1063,7 +1063,7 @@ const terminals = new Terminals({
   publish: (event, ...params) => workspaceServer.publish(event, ...params),
   who: whoIs,
   // A terminal on a participant's machine is typed into and sized there, by its person (M4).
-  machineOf: (opts) => participantOf(opts.cwd),
+  machineOf: terminalMachine,
   watchActivity: (tiles) => ptyActivity.setWatched(tiles),
   onError: (m) => console.warn(`[terminals] ${m}`),
   backend: {
@@ -1354,7 +1354,8 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     installSettingsIpc(broadcast);
     installIdentityIpc();
     // The person's other devices run terminals here in this computer's daemon, when it has one.
-    installNetworkIpc(workspaceServer, PERSIST_PTY ? ptyDaemon.connectDaemon : undefined);
+    // A participant who lends their machine's keyboards, or keeps them again (M4).
+    installNetworkIpc(workspaceServer, PERSIST_PTY ? ptyDaemon.connectDaemon : undefined, (device) => terminals.machineChanged(`peer:${device}`));
     installWorkspaceStoreIpc(layouts, workspaceIpc.connect, (change) =>
       workspaceServer.publishTo((c) => !layouts.made(c, change), "store.changed", { repo: change.repo, part: change.part }));
     void initMachines({

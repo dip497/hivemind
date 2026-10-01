@@ -2,7 +2,8 @@
 // a tile a window here puts in a frame on this machine is theirs, with what it runs, kept as they
 // put it whatever the workspace's document later says; one someone else put there is never made
 // theirs by a window here keeping it; one taken away, or out to a frame elsewhere, is forgotten;
-// and it is all kept on this machine, for its person alone, across restarts.
+// what its person lets the people in each workspace do here is theirs to say, watch until they
+// say more; and it is all kept on this machine, for its person alone, across restarts.
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -59,13 +60,33 @@ test("taken away by a window here, or put in a frame elsewhere, it is forgotten"
   assert.equal(places.placed(WS, "s2"), null);
 });
 
-test("kept on this machine for its person alone, across restarts; a record that cannot be read places nothing, and says so", () => {
+test("what its person lets the people in a workspace do here: watch until they say more, in that workspace alone; each change is told", () => {
+  const { places } = mine();
+  const told: string[] = [];
+  places.onGrant((ws) => told.push(`${ws}:${places.grant(ws)}`));
+  assert.equal(places.grant(WS), "watch");
+  places.setGrant(WS, "terminals");
+  places.setGrant(WS, "terminals");
+  assert.equal(places.grant(WS), "terminals");
+  assert.equal(places.grant("cd".repeat(16)), "watch", "only in the workspace it was given for");
+  // What they placed there stays theirs whatever they let the others do.
+  places.wrote(WS, layout([], {}), layout([shell], { s1: "here" }));
+  places.wrote(WS, layout([shell], { s1: "here" }), layout([], {}));
+  assert.equal(places.grant(WS), "terminals");
+  places.setGrant(WS, "watch");
+  assert.deepEqual(told, [`${WS}:terminals`, `${WS}:watch`]);
+});
+
+test("kept on this machine for its person alone, across restarts; a record that cannot be read places nothing, lets nobody do more than watch, and says so", () => {
   const { file, places } = mine();
   places.wrote(WS, layout([], {}), layout([shell], { s1: "here" }));
+  places.setGrant(WS, "terminals");
   assert.equal(fs.statSync(file).mode & 0o777, 0o600);
   assert.deepEqual(mine(file).places.placed(WS, "s1"), { kind: "shell", cmd: "/bin/zsh", args: ["-l"] });
+  assert.equal(mine(file).places.grant(WS), "terminals");
   fs.writeFileSync(file, "{not json");
   const again = mine(file);
   assert.equal(again.places.placed(WS, "s1"), null);
+  assert.equal(again.places.grant(WS), "watch");
   assert.match(again.warned.join(), /could not be read/);
 });

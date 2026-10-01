@@ -75,8 +75,10 @@ of their own on their own device (`machine://<their device id>/path`, and nothin
 where it runs), and place, change or take away the tiles in it: those run on their machine, as
 they placed them there, never on the host's (M4). Their app shows those sessions to the host
 over its own connection, and every client watches them through the host: a terminal on a
-participant's machine is typed into and sized there, by them, and by no client of the host's
-(`terminal.keyboard` names its machine's person, for good). A peer's `terminal.open` of a
+participant's machine is sized there, and typed into there, by them, and by no client of the
+host's (`terminal.keyboard` names its machine's person) until they let the others type there;
+then its keyboard goes as the host's own terminals' do, until they take that back. A peer's
+`terminal.open` of a
 session already running shows it (`attachOnly`), whatever its role. A peer is sent only the
 events about its workspace's tiles, and a tile outside the workspace is refused to it. A
 terminal is named by its session, `hm:<tile>`; the tile is the workspace's. Events reach a peer
@@ -216,7 +218,7 @@ A diff's `scope` is one of `{"kind": "working", "staged"?}`, `{"kind": "branch",
 | `terminal.data` | `tile`, `data` | to each client that shows the terminal, its output in batches; a screen the host sends in place of what the client shows starts with `ESC c` |
 | `terminal.exit` | `tile`, `{code, signal?}` | to each client that showed it, as its session ends |
 | `terminal.activity` | `{[tile]: 0..3}` | to every client, as watched terminals' output gets busier or quieter |
-| `terminal.keyboard` | `tile`, `{id, person, name}` or null | to every client, as a terminal's keyboard changes hands (null: back with the host); to a client that opens the terminal while someone else holds it. A terminal on a participant's machine (M4) is held by that machine's person (`id` `peer:<their device id>`) for good: asking for it, giving it and taking it do nothing |
+| `terminal.keyboard` | `tile`, `{id, person, name}` or null | to every client, as a terminal's keyboard changes hands (null: back with the host); to a client that opens the terminal while someone else holds it. A terminal on a participant's machine (M4) is held by that machine's person (`id` `peer:<their device id>`), and asking for it, giving it and taking it do nothing, until they let the others type there: then as any terminal of the host's, until they take that back, when whoever holds it gives it up |
 | `terminal.keyboard.asked` | `tile`, `{id, person, name}` | to the keyboard's holder, as someone asks for it: `id` is who to give it to |
 | `terminal.size` | `tile`, `cols`, `rows` | to every client, as a terminal's session takes a size (on a participant's machine, as that machine says it), and to one that opens it: a client whose own differs draws it at this size |
 | `terminal.typing` | `tile`, `{id, person, name}` | to each client that opened the terminal but the one typing, as someone types into it: at most once a second while the same one types on. A client says so on the terminal for a moment, and does not draw that person's pointer meanwhile |

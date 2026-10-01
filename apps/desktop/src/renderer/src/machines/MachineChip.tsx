@@ -1,14 +1,17 @@
 /**
  * The machine a remote frame runs on, in its header: live dot, name, folder, round trip.
- * Clicking opens its status, the sessions already running there, and the frame's actions.
+ * Clicking opens its status, the sessions already running there, and the frame's actions. On a
+ * frame of this person's on this computer, in someone else's workspace (M4), what the others there
+ * may do on this computer.
  */
 import { MenuItem } from "../components/ui/menu-item";
 import { Button } from "../components/ui/button";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { FolderOpen, Loader2, RefreshCw, Server, Settings2, SquareTerminal, Unplug } from "lucide-react";
-import type { SessionSummary } from "../../../shared/ipc";
-import { parseRemote, remoteBasename, remotePath, sshTargetOf, REMOTE_SCHEME } from "@hivemind/core/remote-uri";
+import { Check, FolderOpen, Loader2, RefreshCw, Server, Settings2, SquareTerminal, Unplug } from "lucide-react";
+import type { Grant, SessionSummary } from "../../../shared/ipc";
+import { parseDeviceUri, parseRemote, remoteBasename, remotePath, sshTargetOf, REMOTE_SCHEME } from "@hivemind/core/remote-uri";
+import { joinedId, useShown } from "../multiplayer/shown";
 import { A_DEVICE, GONE_MACHINE, errText, openMachines, placeOf, statusOf, useMachines, type Place } from "./store";
 
 /** What a frame's machine is called: its saved name, or the device's (M3), else the host an ssh
@@ -68,6 +71,10 @@ function MachinePanel({ anchor, uri, frameId, onUnbind, onClose }: { anchor: DOM
   const [error, setError] = useState<string | null>(null);
   // An ssh folder no machine is saved for can be saved as one; a machine no longer saved cannot.
   const target = machine?.target ?? (hostId && uri.startsWith(REMOTE_SCHEME) ? sshTargetOf(parseRemote(uri)) : undefined);
+  // This person's own frame on this computer, in someone else's workspace (M4).
+  const { repo, shared } = useShown();
+  const theirs = joinedId(repo);
+  const othersHere = theirs && shared && shared.access !== "owner" && !!snap.self && parseDeviceUri(uri)?.device === snap.self ? theirs : null;
 
   async function loadSessions() {
     setLoading(true);
@@ -116,6 +123,7 @@ function MachinePanel({ anchor, uri, frameId, onUnbind, onClose }: { anchor: DOM
         </p>
       )}
       <div className="h-px bg-[var(--color-line2)] my-0.5" />
+      {othersHere && <OthersHere workspace={othersHere} />}
       {/* A device's own sessions are its windows' to show. */}
       {place.device || hostId?.startsWith("device:") ? null : sessions === null ? (
         <MenuItem onClick={() => void loadSessions()} disabled={loading}>
@@ -163,6 +171,37 @@ function MachinePanel({ anchor, uri, frameId, onUnbind, onClose }: { anchor: DOM
       <MenuItem onClick={onUnbind} variant="destructive">
         <Unplug size={13} /> Disconnect this frame
       </MenuItem>
+    </div>
+  );
+}
+
+/** What the others in a workspace may do on this computer, in this person's frames here (M4):
+ *  theirs to give, and take back at any moment. Everyone there watches what runs here. */
+const OTHERS: Array<[Grant, string]> = [
+  ["watch", "Only watch what runs here"],
+  ["terminals", "Type into it, as its host lets them"],
+];
+
+function OthersHere({ workspace }: { workspace: string }) {
+  const [grant, setGrant] = useState<Grant | null>(null);
+  useEffect(() => {
+    let live = true;
+    void window.hive.machineGrant(workspace).then((g) => { if (live) setGrant(g); }, () => {});
+    return () => { live = false; };
+  }, [workspace]);
+  const choose = (g: Grant) => {
+    setGrant(g);
+    void window.hive.setMachineGrant(workspace, g).catch(() => { void window.hive.machineGrant(workspace).then(setGrant, () => {}); });
+  };
+  return (
+    <div className="grid gap-0.5" role="group" aria-label="what others may do here">
+      <span className="px-2 pt-1 u-eyebrow">Others in this workspace may</span>
+      {OTHERS.map(([g, label]) => (
+        <MenuItem key={g} onClick={() => choose(g)} role="menuitemradio" aria-checked={grant === g} data-machine-grant={g}>
+          {grant === g ? <Check size={13} /> : <span className="inline-block w-[13px]" />} {label}
+        </MenuItem>
+      ))}
+      <div className="h-px bg-[var(--color-line2)] my-0.5" />
     </div>
   );
 }

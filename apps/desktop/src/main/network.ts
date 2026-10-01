@@ -33,8 +33,10 @@ import { broadcast, userWindow } from "./windows.js";
 import { onWorkspaceChange, sharedStore, workspaceStore } from "./workspace-store-ipc.js";
 import { PeerLinks, type ShownMachine } from "@hivemind/host/peer-links";
 import { participantAt } from "@hivemind/host/device-sessions";
-import type { Typist } from "@hivemind/workspace-api/terminals";
-import { forgetShared, leaveShared, openShared, sharedStatus, type SharedStatus } from "./shared-workspaces.js";
+import type { TerminalMachine } from "@hivemind/host/terminals";
+import type { TerminalOpts } from "@hivemind/workspace-api/terminals";
+import { forgetShared, leaveShared, machineGrant, openShared, setMachineGrant, sharedStatus, type SharedStatus } from "./shared-workspaces.js";
+import { GRANTS, type Grant } from "@hivemind/host/machine-share";
 import type { WorkspaceServer } from "@hivemind/workspace-api/server";
 import type { EventMessage } from "@hivemind/workspace-api/protocol";
 
@@ -243,9 +245,9 @@ export function personName(person: string): string {
   return "";
 }
 
-/** Whose machine the frame folder `cwd` is on, when it is a participant's (M4). */
-export function participantOf(cwd: string): Typist | null {
-  return participantAt(cwd, { self: machineIdentity().deviceId, mine: isYourDevice, lists: accessLists(), nameOf: personName });
+/** Whose machine a session runs on, when it is a participant's (M4), and whether they lend it. */
+export function terminalMachine(opts: TerminalOpts): TerminalMachine | null {
+  return participantAt(opts, { self: machineIdentity().deviceId, mine: isYourDevice, lists: accessLists(), nameOf: personName, shown: shownFrom });
 }
 
 /** What a participant's app shows of their machine `device`, for the workspace `tile` is in (M4). */
@@ -378,10 +380,10 @@ let apiServer: WorkspaceServer | null = null;
 /** This computer's PTY daemon, once the IPC is installed: none without one. */
 let daemonHere: (() => Promise<Duplex>) | undefined;
 
-export function installNetworkIpc(server: WorkspaceServer, daemon?: () => Promise<Duplex>): void {
+export function installNetworkIpc(server: WorkspaceServer, daemon?: () => Promise<Duplex>, granted?: (device: string) => void): void {
   apiServer = server;
   daemonHere = daemon;
-  peers = new PeerLinks({ store: workspaceStore(), changes: onWorkspaceChange, lists: accessLists(), server, daemon, hosting: hostingHere(), onWarn: (m) => console.warn(`[peers] ${m}`) });
+  peers = new PeerLinks({ store: workspaceStore(), changes: onWorkspaceChange, lists: accessLists(), server, daemon, hosting: hostingHere(), granted, onWarn: (m) => console.warn(`[peers] ${m}`) });
   // The network in use, changed here or by `hive network use`: the daemon starts again on it.
   try {
     fs.watchFile(networkProfiles().file, { interval: 2_000 }, (now, before) => { if (now.mtimeMs !== before.mtimeMs) restartNetwork(); });
@@ -549,6 +551,15 @@ export function installNetworkIpc(server: WorkspaceServer, daemon?: () => Promis
     if (sharedStatus(workspace as string)?.state === "connected") throw new Error("take over: its host answers; move it here instead");
     hostingHere().takeOver(workspace as string, folder, sharedStore().exportSince(`hive://${workspace as string}`, null));
     return folder;
+  });
+
+  // What this person lets the people in a workspace joined here do on this computer (M4), and
+  // letting them do something else: its host is told at once.
+  handle("net:machine-grant", (_e, workspace: unknown) => (typeof workspace === "string" ? machineGrant(workspace) : "watch"));
+  handleEffect("net:set-machine-grant", (workspace: unknown, grant: unknown) => ({ target: typeof workspace === "string" ? `hive://${workspace}` : undefined, detail: typeof grant === "string" ? grant.slice(0, 16) : undefined }), (_e, workspace: unknown, grant: unknown) => {
+    if (typeof workspace !== "string" || !joinedStatus(workspace)) throw new Error("machine: that workspace was not joined here");
+    if (!GRANTS.includes(grant as Grant)) throw new Error("machine: watch, terminals or agents");
+    setMachineGrant(workspace, grant as Grant);
   });
 
   // Leave a workspace joined here: its connection closes, and the last copy is kept, to read.

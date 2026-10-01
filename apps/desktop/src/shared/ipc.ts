@@ -8,6 +8,8 @@ import type { ReviewComment } from "@hivemind/core/review";
 import type { LegacyLayout, WorkspaceChange } from "@hivemind/workspace-host/layout";
 import type { Participant, PresenceState } from "@hivemind/workspace-host/presence";
 import type { NetworkHealth, NetworkProfile } from "@hivemind/workspace-host/network-profile";
+import type { Grant } from "@hivemind/host/machine-share";
+export type { Grant };
 
 /** One of the person's other devices, as Settings → Devices lists it (R14, spec/pairing.md). */
 export interface PairedDeviceSummary {
@@ -304,6 +306,11 @@ export interface HiveIpc {
   onSharedStatus(cb: (workspace: string, status: SharedStatus) => void): () => void;
   /** Leave a joined workspace: its connection closes, and the last copy is kept to read. */
   leave(workspace: string): Promise<void>;
+  /** What this person lets the people in the joined workspace `workspace` do on this computer, in
+   *  frames of theirs here (M4): watch, type into what runs here, or run agents here too. */
+  machineGrant(workspace: string): Promise<Grant>;
+  /** Let them do `grant` here from now on; the workspace's host is told at once. */
+  setMachineGrant(workspace: string, grant: Grant): Promise<void>;
   // ── your devices (R14, M3, spec/pairing.md) ───────────────
   /** The person's devices this app paired with. */
   devices(): Promise<PairedDeviceSummary[]>;

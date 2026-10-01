@@ -76,9 +76,16 @@ export interface TerminalsOptions {
   /** Who is at a client, for the keyboard's holder and whoever asks for it. */
   who?(connection: Connection): { person: string; name: string };
   /** Whose machine a session runs on, when it is a participant's (M4): its person types into it
-   *  there and sizes it, and nobody does from here. Null: it runs where the host runs it. Asked as
-   *  it opens. */
-  machineOf?(opts: TerminalOpts): Typist | null;
+   *  there and sizes it, and nobody here types into it until they lend its keyboard. Null: it runs
+   *  where the host runs it. Asked as it opens. */
+  machineOf?(opts: TerminalOpts): TerminalMachine | null;
+}
+
+/** A participant's machine a session runs on (M4): whose it is, and whether they lend its keyboard
+ *  now (they grant typing there). */
+export interface TerminalMachine {
+  who: Typist;
+  lends(): boolean;
 }
 
 /** A pause is a short lease, not a latch: a session paused when its program exits would lose
@@ -116,7 +123,7 @@ export class Terminals {
   /** Each session's size, as last given: whoever opens it is told. */
   private readonly sizes = new Map<string, { cols: number; rows: number }>();
   /** The sessions that run on a participant's machine (M4), and whose it is. */
-  private readonly machines = new Map<string, Typist>();
+  private readonly machines = new Map<string, TerminalMachine>();
   private readonly keyboards: Keyboards;
 
   constructor(private readonly opts: TerminalsOptions) {
@@ -126,7 +133,10 @@ export class Terminals {
       tell: (to, event, ...params) => emit(to, event, ...params),
       who: (c) => opts.who?.(c) ?? { person: "", name: "" },
       hostWindows: (tile) => [...(this.openers.get(tile) ?? [])].filter((c) => isHost(c) && !c.closed.aborted),
-      elsewhere: (tile) => this.machines.get(tile) ?? null,
+      elsewhere: (tile) => {
+        const machine = this.machines.get(tile);
+        return machine ? { who: machine.who, lends: machine.lends() } : null;
+      },
     });
     const tileOf = (v: unknown) => text(v, "tile");
     this.domain = {
@@ -177,6 +187,16 @@ export class Terminals {
     if (!this.sizes.has(tile)) this.sizes.set(tile, { cols: opts.cols, rows: opts.rows });
     const { pid } = await this.relay.open(tile, host, () => this.opts.backend.start(opts, out), () => this.opts.backend.screen(tile));
     return { pid };
+  }
+
+  /** The participant `who` (`peer:<device>`) lends their machine's keyboards, or keeps them, from
+   *  now on (M4): whoever holds one there gives it up, and everyone is told who holds each now. */
+  machineChanged(who: string): void {
+    for (const [tile, machine] of this.machines) {
+      if (machine.who.id !== who) continue;
+      this.keyboards.forget(tile);
+      this.opts.publish?.("terminal.keyboard", tile, this.keyboards.holder(tile));
+    }
   }
 
   /** End a session for good, as the host asks (the control plane closing its tile). */

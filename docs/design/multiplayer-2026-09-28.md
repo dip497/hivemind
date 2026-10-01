@@ -791,6 +791,10 @@ each one's terminals stream from where they run.
    and on to the others, or directly peer to peer; see §5.5).
 4. Priya is the **owner** of that frame's machine: she alone can grant keyboard or agent
    driving in it, even to the workspace host. Her machine's ACL decides.
+   *As built (M4 step 2):* her grant, per workspace, kept on her machine (`MachinePlaces`), set
+   on her frame's machine chip and said to the host on the `machine` stream: *Only watch*
+   (everyone watches), *Type into it* (the host's keyboards then go as for its own terminals;
+   her machine lets typing through only then, and the size stays hers).
 5. Getting the work into the host's project: the frame's toolbar has **Hand off** →
    *Push a branch* (git push to a remote both can reach, or a git bundle sent over
    hive-net into the host's repo as a new branch) or *Open a review* (a Diff tile on the

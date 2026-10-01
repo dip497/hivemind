@@ -6,8 +6,9 @@
  * and their size is the session's. The host takes it back whenever it likes, it comes back by
  * itself after five idle minutes, and it comes back when its holder goes. Everyone is told who
  * holds each keyboard, and the holder of an ask. A terminal on a participant's machine (M4) is
- * typed into there, by its person, who holds its keyboard: nobody types into it, sizes it, gives it
- * or takes it from here. Electron-free.
+ * typed into there, by its person, who holds its keyboard: nobody types into it, gives it or takes
+ * it from here, until its person lends it (they grant typing there), and then it goes as the
+ * host's own do; nobody sizes it from here either way. Electron-free.
  */
 import type { Connection } from "@hivemind/workspace-api/server";
 import type { EventParams } from "@hivemind/workspace-api/methods";
@@ -22,8 +23,9 @@ export interface KeyboardOptions {
   who(connection: Connection): { person: string; name: string };
   /** The host's windows showing `tile`: they are asked while the host holds its keyboard. */
   hostWindows(tile: string): Connection[];
-  /** Whose machine `tile` runs on, when it is a participant's (M4): theirs is its keyboard. */
-  elsewhere?(tile: string): Typist | null;
+  /** Whose machine `tile` runs on, when it is a participant's (M4), and whether they lend its
+   *  keyboard: theirs it is until they do. */
+  elsewhere?(tile: string): { who: Typist; lends: boolean } | null;
 }
 
 /** A keyboard left this long by the one it was given to comes back to the host. */
@@ -50,16 +52,23 @@ export class Keyboards {
 
   /** Whether `from` may type into `tile` now. */
   mayType(tile: string, from: Connection): boolean {
-    if (this.opts.elsewhere?.(tile)) return false;
+    if (this.kept(tile)) return false;
     const lease = this.leases.get(tile);
     return lease ? lease.holder === from : isHost(from);
   }
 
-  /** Whether `from`'s size is the session's: the holder's, when someone else holds it. */
+  /** Whether `from`'s size is the session's: the holder's, when someone else holds it. One on a
+   *  participant's machine is sized there. */
   sizes(tile: string, from: Connection): boolean | "host" {
     if (this.opts.elsewhere?.(tile)) return false;
     const lease = this.leases.get(tile);
     return lease ? lease.holder === from : isHost(from) ? "host" : false;
+  }
+
+  /** The participant whose machine `tile` runs on, while they keep its keyboard (M4). */
+  private kept(tile: string): Typist | null {
+    const machine = this.opts.elsewhere?.(tile);
+    return machine && !machine.lends ? machine.who : null;
   }
 
   /** `from` typed: its lease, if it holds one, is not idle. */
@@ -73,7 +82,7 @@ export class Keyboards {
   /** `from` asks for `tile`'s keyboard: whoever holds it is asked (the host's windows while the
    *  host does). */
   ask(tile: string, from: Connection): void {
-    if (this.mayType(tile, from) || this.opts.elsewhere?.(tile)) return;
+    if (this.mayType(tile, from) || this.kept(tile)) return;
     let asked = this.asks.get(tile);
     if (!asked) this.asks.set(tile, (asked = new Map()));
     const asker = this.typist(from);
@@ -102,7 +111,7 @@ export class Keyboards {
   /** Who holds `tile`'s keyboard: null while the host does. */
   holder(tile: string): Typist | null {
     const lease = this.leases.get(tile);
-    return this.opts.elsewhere?.(tile) ?? (lease ? this.typist(lease.holder) : null);
+    return this.kept(tile) ?? (lease ? this.typist(lease.holder) : null);
   }
 
   /** A connection went: the keyboards it held come back to the host, and its asks are dropped. */

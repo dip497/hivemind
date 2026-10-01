@@ -3,8 +3,9 @@
 // board puts a frame of their own on their own computer (the only place the chooser offers them),
 // and a shell they open in it runs there, in their folder. The host watches it, live, through the
 // guest's own connection, and its keyboard is the guest's machine's: the host's keys never reach
-// it. A shell the host puts in the guest's frame runs nowhere: the guest's machine runs only what
-// its person placed, and shows the host nothing else.
+// it, until the guest lets the others type there, and then not once they take that back. A shell
+// the host puts in the guest's frame runs nowhere: the guest's machine runs only what its person
+// placed, and shows the host nothing else.
 import { test, expect, type ElectronApplication, type Page } from "@playwright/test";
 import { execSync } from "node:child_process";
 import fs from "node:fs";
@@ -48,10 +49,22 @@ async function focusTile(w: Page, tile: string): Promise<void> {
     return w.locator(`.react-flow__node[data-id="${tile}"] .hm-node-selected`).count();
   }, { timeout: 20_000, intervals: [500] }).toBe(1);
 }
-/** `w` clicks into the terminal of `tile`. */
+/** `w` puts its keyboard on the terminal of `tile` (selected, its own keys go to it), wherever on
+ *  the board the tile is. */
 async function clickInto(w: Page, tile: string): Promise<void> {
   await focusTile(w, tile);
-  await w.locator(`.react-flow__node-terminal[data-id="${tile}"] .xterm-screen`).click();
+  const keys = w.locator(`.react-flow__node-terminal[data-id="${tile}"] textarea.xterm-helper-textarea`);
+  await keys.evaluate((t) => (t as HTMLElement).focus());
+  await expect(keys).toBeFocused({ timeout: 10_000 });
+}
+/** `w` makes the letters of the terminal of `tile` bigger, by its button. */
+const fontUp = (w: Page, tile: string) => w.locator(`.react-flow__node-terminal[data-id="${tile}"]`).getByRole("button", { name: "increase font size" }).evaluate((b) => (b as HTMLElement).click());
+/** On the guest's own frame `frame`, what the others in the workspace may do on their computer. */
+async function letOthers(w: Page, frame: string, grant: "watch" | "terminals"): Promise<void> {
+  await w.locator(`.react-flow__node-frame[data-id="${frame}"] [aria-label="machine This computer"]`).evaluate((b) => (b as HTMLElement).click());
+  await w.locator(`[data-machine-grant="${grant}"]`).evaluate((b) => (b as HTMLElement).click());
+  await expect(w.locator(`[data-machine-grant="${grant}"]`)).toHaveAttribute("aria-checked", "true");
+  await w.locator(".fixed.inset-0.z-\\[9998\\]").evaluate((b) => (b as HTMLElement).click());
 }
 /** The tile `w` opened in `frame` by asking for a shell there. */
 async function openShell(w: Page, frame: string): Promise<string> {
@@ -98,8 +111,7 @@ test("a guest puts a frame of their own on their computer: a shell they open in 
   await expect(watched.locator("[data-keyboard-take]")).toHaveCount(0);
   // At the size it has on the guest's computer: the host, whose letters are bigger, draws it
   // scaled down to its tile, and does not size it.
-  await focusTile(host, shell);
-  for (let i = 0; i < 4; i++) await watched.getByRole("button", { name: "increase font size" }).click({ force: true });
+  for (let i = 0; i < 4; i++) await fontUp(host, shell);
   await expect.poll(() => drawnScale(host, shell).then(Number), { timeout: 10_000 }).toBeLessThan(1);
 
   // What the host types goes nowhere.
@@ -112,6 +124,30 @@ test("a guest puts a frame of their own on their computer: a shell they open in 
   }, { timeout: 20_000, intervals: [1_000] }).toBe("done");
   await host.waitForTimeout(1_000); // anything the host's window sent has long arrived
   expect(fs.existsSync(path.join(folder, "host-was-here"))).toBe(false);
+
+  // The guest lets the others type there: the host's keys reach it, at its size there.
+  await letOthers(guest, frame, "terminals");
+  await expect(watched.locator("[data-keyboard-machine]")).toHaveCount(0, { timeout: 10_000 });
+  await expect.poll(async () => {
+    if (!fs.existsSync(path.join(folder, "host-typed"))) {
+      await clickInto(host, shell);
+      await host.keyboard.type(`touch ${folder}/host-typed\n`);
+    }
+    return fs.existsSync(path.join(folder, "host-typed"));
+  }, { timeout: 30_000, intervals: [2_000] }).toBe(true);
+  expect(Number(await drawnScale(host, shell))).toBeLessThan(1);
+  // Taken back: the host's keys go nowhere again.
+  await letOthers(guest, frame, "watch");
+  await expect(watched.locator("[data-keyboard-machine]")).toHaveCount(1, { timeout: 10_000 });
+  await clickInto(host, shell);
+  await host.keyboard.type(`touch ${folder}/host-again\n`);
+  await clickInto(guest, shell);
+  await expect.poll(async () => {
+    if (!read(path.join(folder, "done2.txt"))) await guest.keyboard.type("echo done > done2.txt\n");
+    return read(path.join(folder, "done2.txt"));
+  }, { timeout: 20_000, intervals: [1_000] }).toBe("done");
+  await host.waitForTimeout(1_000);
+  expect(fs.existsSync(path.join(folder, "host-again"))).toBe(false);
 
   // Opened again (the window reloads), it is theirs to run on their computer, as they placed it.
   await guest.reload();

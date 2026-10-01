@@ -5,7 +5,8 @@
 // sizes the session, and everyone is told who holds it; it comes back to the host when taken,
 // after five idle minutes, and when its holder goes; and everyone is told a session's size. Whoever
 // types is named to the others showing it (R4), and a guest's typing is marked in the audit log.
-// A terminal on a participant's machine (M4) is theirs: nobody here types into it or sizes it.
+// A terminal on a participant's machine (M4) is theirs: nobody here types into it or sizes it,
+// until they lend its keyboard, and then it goes as the host's own do; sized there either way.
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -24,9 +25,10 @@ const PRIYA = "b".repeat(64);
 let made = 0;
 
 /** A host; with `machine`, one whose terminals in `machine://` frames run on Priya's machine, which
- *  says each one's size as it opens. */
+ *  says each one's size as it opens, and lends their keyboards while `lends` is set. */
 function host({ machine = false } = {}) {
   const calls: string[] = [];
+  const lending = { lends: false };
   let server!: WorkspaceServer;
   const audit = path.join(tmp, `audit-${made++}.jsonl`);
   const terminals = new Terminals({
@@ -34,7 +36,7 @@ function host({ machine = false } = {}) {
     relay: { record: () => {}, screenPrefix: "" },
     publish: (event, ...params) => server.publish(event, ...params),
     who: (c) => (c.actor.kind === "peer" ? { person: c.actor.person, name: "Priya" } : { person: "a".repeat(64), name: "Adarsh" }),
-    ...(machine ? { machineOf: (o: { cwd: string }) => (o.cwd.startsWith("machine://") ? PRIYAS_MACHINE : null) } : {}),
+    ...(machine ? { machineOf: (o: { cwd: string }) => (o.cwd.startsWith("machine://") ? { who: PRIYAS_MACHINE, lends: () => lending.lends } : null) } : {}),
     backend: {
       start: async (o, out) => {
         if (machine && o.cwd.startsWith("machine://")) out.size?.(120, 40);
@@ -59,7 +61,7 @@ function host({ machine = false } = {}) {
   const notice = (from: Connection, method: string, ...params: unknown[]) => server.notice(method, params, from);
   const told = (c: { received: EventMessage[] }, event: string) => c.received.filter((m) => m.event === event).map((m) => m.params);
   const audited = () => (fs.existsSync(audit) ? fs.readFileSync(audit, "utf8") : "").split("\n").filter(Boolean).map((l) => JSON.parse(l) as { verb: string; target?: string; actor: Actor; outcome: string });
-  return { calls, client, open, notice, told, audited };
+  return { calls, client, open, notice, told, audited, terminals, lending };
 }
 const guestActor: Actor = { kind: "peer", person: PRIYA, device: "d".repeat(64), access: "terminals" };
 const PRIYAS_MACHINE = { id: `peer:${"d".repeat(64)}`, person: PRIYA, name: "Priya" };
@@ -86,6 +88,43 @@ test("a terminal on a participant's machine is theirs (M4): whoever opens it is 
   assert.deepEqual(h.calls, [], "no keys, no size");
   assert.deepEqual(h.told(win, "terminal.keyboard.asked"), [], "nobody here to ask");
   for (const c of [win, laptop, guest]) assert.equal(h.told(c, "terminal.keyboard").length, 1, "it never moves");
+});
+
+test("one on a participant's machine whose person lends its keyboard goes as the host's own do: the host's windows type, a guest asks the host; never sized from here; kept again, whoever held it gives it up", async () => {
+  const h = host({ machine: true });
+  const [win, guest] = [h.client({ kind: "person" }), h.client(guestActor)];
+  const there = `machine://${"d".repeat(64)}/home/priya/api`;
+  await h.open(win, true, there);
+  await h.open(guest, false, there);
+  h.lending.lends = true;
+  h.terminals.machineChanged(PRIYAS_MACHINE.id);
+  for (const c of [win, guest]) assert.deepEqual(h.told(c, "terminal.keyboard").at(-1), ["hm:t1", null], "the host's now");
+  h.notice(win, "terminal.write", "hm:t1", "ls\r");
+  h.notice(guest, "terminal.write", "hm:t1", "rm -rf ~\r");
+  h.notice(win, "terminal.resize", "hm:t1", 100, 30);
+  await new Promise((r) => setTimeout(r, 20));
+  assert.deepEqual(h.calls, ["write ls\r"], "the host's window types; nobody sizes it from here");
+
+  h.notice(guest, "terminal.keyboard.ask", "hm:t1");
+  const asker = (h.told(win, "terminal.keyboard.asked")[0] as [string, { id: string }])[1];
+  h.notice(win, "terminal.keyboard.give", "hm:t1", asker.id);
+  h.notice(guest, "terminal.write", "hm:t1", "guest keys\r");
+  assert.deepEqual(h.calls.at(-1), "write guest keys\r");
+
+  // Kept again: the guest's lease ends, and it is the machine's person's.
+  h.lending.lends = false;
+  h.terminals.machineChanged(PRIYAS_MACHINE.id);
+  for (const c of [win, guest]) assert.deepEqual(h.told(c, "terminal.keyboard").at(-1), ["hm:t1", PRIYAS_MACHINE]);
+  h.calls.length = 0;
+  h.notice(guest, "terminal.write", "hm:t1", "still guest\r");
+  h.notice(win, "terminal.write", "hm:t1", "host\r");
+  assert.deepEqual(h.calls, []);
+  // Lent again, it is the host's, not the guest's of before.
+  h.lending.lends = true;
+  h.terminals.machineChanged(PRIYAS_MACHINE.id);
+  assert.deepEqual(h.told(guest, "terminal.keyboard").at(-1), ["hm:t1", null]);
+  h.notice(guest, "terminal.write", "hm:t1", "old lease\r");
+  assert.deepEqual(h.calls, []);
 });
 
 test("a device of the owner's types as the host's own windows do, and a guest's keys still never reach the session", async () => {

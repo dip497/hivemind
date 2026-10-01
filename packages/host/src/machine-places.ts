@@ -9,12 +9,17 @@
  * workspace, never from the host's: a tile a window here adds to a frame on this machine is this
  * person's, with what it runs; what runs in it changes only by a window here too; and it is
  * forgotten when a window here takes it away, or puts it in a frame that is not on this machine.
- * Kept in a file of this machine's (0600), so it holds across restarts.
+ *
+ * And what this person lets the people in that workspace do on this machine (`Grant`): watch what
+ * they placed here, as everyone may; type into it too; or run terminals and agents here as well.
+ * Theirs alone to give and take back, here. Kept in a file of this machine's (0600), so it holds
+ * across restarts.
  */
 import fs from "node:fs";
 import path from "node:path";
 import { parseDeviceUri } from "@hivemind/core/remote-uri";
 import type { CoreLayout, FrameRecord, TileRecord } from "@hivemind/workspace-doc/shapes";
+import { GRANTS, type Grant } from "./machine-share.js";
 
 /** What a tile runs, as its person placed it here. */
 export interface Placed {
@@ -34,18 +39,45 @@ export interface MachinePlacesOptions {
 /** Tiles that run nothing. */
 const INERT = new Set(["editor", "diff", "issues", "planReview", "workbench"]);
 
-type Kept = Record<string, Record<string, Placed>>;
+interface Kept {
+  /** By workspace, by tile. */
+  placed: Record<string, Record<string, Placed>>;
+  /** By workspace; watch where none is said. */
+  grants: Record<string, Grant>;
+}
 
 export class MachinePlaces {
   private kept: Kept | null = null;
+  private readonly granted = new Set<(workspace: string) => void>();
 
   constructor(private readonly o: MachinePlacesOptions) {}
+
+  /** What the people in `workspace` may do on this machine. */
+  grant(workspace: string): Grant {
+    return this.read().grants[workspace] ?? "watch";
+  }
+
+  /** Let the people in `workspace` do `grant` on this machine from now on; each listener is told. */
+  setGrant(workspace: string, grant: Grant): void {
+    const kept = this.read();
+    if (this.grant(workspace) === grant) return;
+    if (grant === "watch") delete kept.grants[workspace];
+    else kept.grants[workspace] = grant;
+    this.write(kept);
+    for (const l of this.granted) l(workspace);
+  }
+
+  /** Hear each workspace whose grant changes. */
+  onGrant(listener: (workspace: string) => void): () => void {
+    this.granted.add(listener);
+    return () => { this.granted.delete(listener); };
+  }
 
   /** A window here changed its copy of `workspace` from `before` to `after`: what it placed in a
    *  frame on this machine is this person's; what it took away, or out of this machine, is not. */
   wrote(workspace: string, before: CoreLayout | null, after: CoreLayout): void {
     const kept = this.read();
-    const mine = { ...(kept[workspace] ?? {}) };
+    const mine = { ...(kept.placed[workspace] ?? {}) };
     const frames = new Map((Array.isArray(after.frames) ? after.frames : []).map((f: FrameRecord) => [f.id, f]));
     const was = new Set((Array.isArray(before?.tiles) ? before!.tiles : []).map((t: TileRecord) => t.id));
     const here = (tile: TileRecord): boolean => {
@@ -73,25 +105,27 @@ export class MachinePlaces {
       changed = true;
     }
     if (!changed) return;
-    if (Object.keys(mine).length > 0) kept[workspace] = mine;
-    else delete kept[workspace];
+    if (Object.keys(mine).length > 0) kept.placed[workspace] = mine;
+    else delete kept.placed[workspace];
     this.write(kept);
   }
 
   /** What this person placed as `tile` of `workspace` here, to run as they placed it; null when
    *  nobody here placed it. */
   placed(workspace: string, tile: string): Placed | null {
-    return this.read()[workspace]?.[tile] ?? null;
+    return this.read().placed[workspace]?.[tile] ?? null;
   }
 
   private read(): Kept {
     if (this.kept) return this.kept;
+    const map = (v: unknown): Record<string, never> => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, never>) : {});
     try {
-      const parsed = JSON.parse(fs.readFileSync(this.o.file, "utf8")) as unknown;
-      this.kept = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Kept) : {};
+      const parsed = map(JSON.parse(fs.readFileSync(this.o.file, "utf8")));
+      const grants = Object.fromEntries(Object.entries(map(parsed.grants)).filter(([, g]) => GRANTS.includes(g)));
+      this.kept = { placed: map(parsed.placed), grants };
     } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== "ENOENT") this.o.onWarn?.(`what was placed here could not be read (${e instanceof Error ? e.message : String(e)}): nothing placed here runs until it is placed again`);
-      this.kept = {};
+      if ((e as NodeJS.ErrnoException).code !== "ENOENT") this.o.onWarn?.(`what was placed here could not be read (${e instanceof Error ? e.message : String(e)}): nothing placed here runs until it is placed again, and nobody else may do more than watch`);
+      this.kept = { placed: {}, grants: {} };
     }
     return this.kept;
   }
