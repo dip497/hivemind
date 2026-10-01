@@ -1,20 +1,21 @@
 /**
  * Machines — every saved ssh machine with its live state, adding one, and choosing where a
- * frame runs (machine → folder). The list is the same one `hive machine` edits.
+ * frame runs (machine → folder, or one of your devices → one of its folders, M3). The list is the
+ * same one `hive machine` edits.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ChevronRight, Folder, History, Loader2, Plus, RefreshCw, Server } from "lucide-react";
+import { ArrowLeft, ChevronRight, Folder, History, Laptop, Loader2, Plus, RefreshCw, Server } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Switch } from "../components/ui/switch";
-import type { MachineInfo, RemoteDirEntry } from "../../../shared/ipc";
+import type { DeviceWorkspace, MachineInfo, PairedDeviceSummary, RemoteDirEntry } from "../../../shared/ipc";
 import { machineUri, posixJoin } from "@hivemind/core/remote-uri";
 import { errText, machineForRequest, statusOf, useMachines, type MachinesRequest } from "./store";
 import { AttentionNote, MachineDot, statusWords } from "./status";
 
-type View = { kind: "list" } | { kind: "add" } | { kind: "edit"; machine: MachineInfo } | { kind: "browse"; machine: MachineInfo };
+type View = { kind: "list" } | { kind: "add" } | { kind: "edit"; machine: MachineInfo } | { kind: "browse"; machine: MachineInfo } | { kind: "device"; device: PairedDeviceSummary };
 
 const CHECK_AFTER_MS = 60_000;
 const CHECK_PARALLEL = 4;
@@ -67,7 +68,7 @@ export function MachinesHub({ request, onClose, onPick, usageOf, onEndTerminals 
     for (let i = 0; i < CHECK_PARALLEL; i++) void next();
   }, [request, snap]);
 
-  const title = view.kind === "add" ? "Add a machine" : view.kind === "edit" ? `Edit ${view.machine.label}` : view.kind === "browse" ? view.machine.label : picking ? "Run this frame on…" : "Machines";
+  const title = view.kind === "add" ? "Add a machine" : view.kind === "edit" ? `Edit ${view.machine.label}` : view.kind === "browse" ? view.machine.label : view.kind === "device" ? view.device.name : picking ? "Run this frame on…" : "Machines";
 
   return (
     <Dialog open={!!request} onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -89,6 +90,7 @@ export function MachinesHub({ request, onClose, onPick, usageOf, onEndTerminals 
             onEndTerminals={onEndTerminals}
             picking={!!picking}
             onChoose={(m) => setView({ kind: "browse", machine: m })}
+            onChooseDevice={(device) => setView({ kind: "device", device })}
             onEdit={(m) => setView({ kind: "edit", machine: m })}
             onAdd={() => setView({ kind: "add" })}
           />
@@ -114,13 +116,16 @@ export function MachinesHub({ request, onClose, onPick, usageOf, onEndTerminals 
             actionLabel="Open here"
           />
         )}
+        {view.kind === "device" && (
+          <DeviceFolders device={view.device} onPick={(uri) => { onPick(picking?.frameId ?? null, uri); onClose(); }} />
+        )}
       </DialogContent>
     </Dialog>
   );
 }
 
-function MachineList({ picking, onChoose, onEdit, onAdd, usageOf, onEndTerminals }: {
-  picking: boolean; onChoose: (m: MachineInfo) => void; onEdit: (m: MachineInfo) => void; onAdd: () => void;
+function MachineList({ picking, onChoose, onChooseDevice, onEdit, onAdd, usageOf, onEndTerminals }: {
+  picking: boolean; onChoose: (m: MachineInfo) => void; onChooseDevice: (d: PairedDeviceSummary) => void; onEdit: (m: MachineInfo) => void; onAdd: () => void;
   usageOf: MachineUsage; onEndTerminals: (machineId: string) => void;
 }) {
   const snap = useMachines();
@@ -141,7 +146,9 @@ function MachineList({ picking, onChoose, onEdit, onAdd, usageOf, onEndTerminals
     setBusy(({ [m.id]: _drop, ...rest }) => rest);
   };
 
-  if (snap.machines.length === 0) {
+  // Your devices are places a frame can run (M3): listed when choosing one.
+  const devices = picking ? snap.devices ?? [] : [];
+  if (snap.machines.length === 0 && devices.length === 0) {
     return (
       <div className="px-6 py-12 grid gap-3 place-items-center text-center">
         {snap.catalogError && <p className="text-[11.5px] text-[var(--color-err)]">machines.json could not be read: {snap.catalogError}</p>}
@@ -159,6 +166,27 @@ function MachineList({ picking, onChoose, onEdit, onAdd, usageOf, onEndTerminals
   return (
     <div className="grid grid-cols-[260px_minmax(0,1fr)] h-[520px] border-t border-[var(--color-line)]">
       <aside className="flex flex-col min-h-0 border-r border-[var(--color-line)] bg-[var(--color-bg2)]">
+        {devices.length > 0 && (
+          <ul className="p-2 pb-0 grid grid-cols-[minmax(0,1fr)] content-start gap-0.5" aria-label="your devices">
+            <li className="px-2.5 pb-0.5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-[var(--color-fg3)]">Your devices</li>
+            {devices.map((d) => (
+              <li key={d.device}>
+                <button
+                  onClick={() => onChooseDevice(d)}
+                  data-pick-device={d.device}
+                  className="w-full min-w-0 flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left cursor-pointer transition-colors hover:bg-[var(--color-bg3)]"
+                  title={`Open a folder on ${d.name}`}
+                >
+                  {d.kind === "host" ? <Server size={14} className="shrink-0 text-[var(--color-fg3)]" /> : <Laptop size={14} className="shrink-0 text-[var(--color-fg3)]" />}
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-[13px] font-medium text-[var(--color-fg)] truncate">{d.name}</span>
+                    <span className="block text-[11px] text-[var(--color-fg3)] truncate">{d.kind === "host" ? "always on" : "your computer"}</span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
         <ul className="flex-1 overflow-y-auto overflow-x-hidden p-2 grid grid-cols-[minmax(0,1fr)] content-start gap-0.5" aria-label="machines">
           {snap.machines.map((m) => {
             const s = statusOf(snap, m.hostId);
@@ -394,6 +422,63 @@ function pushRecent(m: MachineInfo, dir: string): void {
   try { localStorage.setItem(recentKey(m), JSON.stringify([dir, ...readRecent(m).filter((d) => d !== dir)].slice(0, RECENT_MAX))); } catch { /* private mode */ }
 }
 const parentOf = (d: string) => (d === "/" ? "/" : d.replace(/\/[^/]+\/?$/, "") || "/");
+
+/** The folders of one of your devices a frame can run in (M3): those its workspaces are in, or one
+ *  named by its path. */
+function DeviceFolders({ device, onPick }: { device: PairedDeviceSummary; onPick: (uri: string) => void }) {
+  const [folders, setFolders] = useState<DeviceWorkspace[] | null | "offline">(null);
+  const [typed, setTyped] = useState("");
+  useEffect(() => {
+    let live = true;
+    window.hive.deviceWorkspaces().then((all) => {
+      const at = all.find((x) => x.device === device.device);
+      if (live) setFolders(at?.workspaces ?? "offline");
+    }).catch(() => { if (live) setFolders("offline"); });
+    return () => { live = false; };
+  }, [device.device]);
+  const open = (path: string) => onPick(machineUri(device.device, path));
+  return (
+    <div className="flex flex-col" data-device-folders={device.device}>
+      <div className="h-[300px] overflow-y-auto p-1.5" role="listbox" aria-label="folders">
+        {folders === null ? (
+          <div className="px-3 py-8 text-center text-[11.5px] text-[var(--color-fg3)]">Asking {device.name}…</div>
+        ) : folders === "offline" ? (
+          <p className="px-3 py-4 text-[11.5px] text-[var(--color-fg2)]">{device.name} does not answer: is it on, with hivemind (or `hive host`) running?</p>
+        ) : folders.length === 0 ? (
+          <p className="px-3 py-4 text-[11.5px] text-[var(--color-fg2)]">No workspaces on {device.name} yet: name a folder there below.</p>
+        ) : folders.map((w) => (
+          <button
+            key={w.workspace}
+            onClick={() => open(w.repo)}
+            data-device-folder={w.repo}
+            title={`Run this frame in ${w.repo} on ${device.name}`}
+            className="w-full flex items-center gap-2 px-2 h-8 rounded-md text-left text-[12.5px] text-[var(--color-fg2)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)] cursor-pointer"
+          >
+            <Folder size={14} className="shrink-0 text-[var(--color-fg3)]" />
+            <span className="truncate flex-1">{w.name}</span>
+            <span className="truncate max-w-[50%] font-mono text-[11px] text-[var(--color-fg3)]">{w.repo}</span>
+          </button>
+        ))}
+      </div>
+      <form
+        className="flex items-center gap-2 px-3 py-2.5 border-t border-[var(--color-line2)]"
+        onSubmit={(e) => { e.preventDefault(); if (typed.trim().startsWith("/")) open(typed.trim()); }}
+      >
+        <Input
+          aria-label={`a folder on ${device.name}`}
+          placeholder={`/path/to/a/folder on ${device.name}`}
+          value={typed}
+          onChange={(e) => setTyped(e.target.value)}
+          data-escape-local=""
+          font="mono"
+          spellCheck={false}
+          className="h-8 flex-1"
+        />
+        <Button type="submit" size="sm" disabled={!typed.trim().startsWith("/")}>Open here</Button>
+      </form>
+    </div>
+  );
+}
 
 function FolderPicker({ machine, onPick, actionLabel }: { machine: MachineInfo; onPick: (uri: string) => void; actionLabel: string }) {
   const base = useMemo(() => machineUri(machine.id), [machine.id]);

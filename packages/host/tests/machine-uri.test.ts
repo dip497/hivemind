@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { bindToMachine, machineHostId, machineUri, parseMachineUri, parseRemote, sshTargetOf, sshUri, unbindFromMachine } from "@hivemind/core/remote-uri";
+import { bindToMachine, machineHostId, machineUri, parseDeviceUri, parseMachineUri, parseRemote, sshTargetOf, sshUri, unbindFromMachine } from "@hivemind/core/remote-uri";
 import { needsAttention } from "../src/remote/ssh.ts";
 
 test("a folder on a saved machine is named by the machine's id; its path is the rest", () => {
@@ -10,6 +10,15 @@ test("a folder on a saved machine is named by the machine's id; its path is the 
   assert.deepEqual(parseMachineUri("machine://m_1"), { machineId: "m_1", path: "/" });
   assert.equal(parseMachineUri("machine:///srv"), null);
   assert.equal(parseMachineUri("ssh://m_1/srv"), null);
+});
+
+test("a folder on one of the person's devices is named by the device's key; a saved machine's id is never one", () => {
+  const device = "ab".repeat(32);
+  assert.deepEqual(parseDeviceUri(machineUri(device, "/srv/api")), { device, path: "/srv/api" });
+  assert.deepEqual(parseDeviceUri(`machine://${device}`), { device, path: "/" });
+  for (const other of ["machine://m_3f9a0c12b7de/srv", `machine://${"AB".repeat(32)}/srv`, `machine://${"ab".repeat(31)}/srv`, `ssh://${device}/srv`, "/srv/api"]) {
+    assert.equal(parseDeviceUri(other), null, other);
+  }
 });
 
 test("a machine's address becomes the ssh uri it is reached at, for every target form", () => {

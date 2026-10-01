@@ -9,9 +9,13 @@
  * headless host each serve their own store's workspaces this way.
  *
  * One of the owner's own devices (paired, spec/pairing.md) is the owner of every workspace here,
- * shared or not, and may ask on the `device` stream which ones there are (design §5.3).
+ * shared or not, and may ask on the `device` stream which ones there are (design §5.3), and run
+ * terminals in this machine's PTY daemon on the `pty` stream, for frames it hosts on this machine
+ * (M3, §5.1): the stream is the daemon's own protocol, carried to the daemon and back.
  */
 import path from "node:path";
+import { StringDecoder } from "node:string_decoder";
+import type { Duplex } from "node:stream";
 import type { Link } from "@hivemind/workspace-host/hive-net";
 import type { AccessLists } from "@hivemind/workspace-host/access";
 import { parseSync, serveReplica, type Changes } from "@hivemind/workspace-host/doc-sync";
@@ -34,6 +38,9 @@ export interface PeerLinksOptions {
   changes: Changes;
   lists: AccessLists;
   server: WorkspaceServer;
+  /** This machine's PTY daemon, for the owner's devices running terminals in frames here: a new
+   *  connection to it, started if it is not running. None: nobody runs terminals here. */
+  daemon?(): Promise<Duplex>;
   onWarn?(message: string): void;
 }
 
@@ -85,6 +92,7 @@ export class PeerLinks {
   /** Serve the device on `link` the workspace it names, if its person may reach it. */
   serve(link: Link): void {
     const { store, lists, server } = this.o;
+    this.bridgePty(link);
     link.on("device", (text) => {
       if (!lists.ownersDevice(link.peer)) return link.close("removed");
       const asked = parseDevice(text);
@@ -121,6 +129,37 @@ export class PeerLinks {
       const entry: Served = { workspace: hello.workspace, person, link };
       this.served.add(entry);
       void link.closed.then(() => { this.served.delete(entry); stop(); });
+    });
+  }
+
+  /** Carry the `pty` stream an owner's device opens to this machine's PTY daemon, and the daemon's
+   *  answers back, until either goes. Anyone else is closed out. */
+  private bridgePty(link: Link): void {
+    let daemon: Duplex | null = null;
+    let opening = false;
+    const early: string[] = [];
+    link.on("pty", (text) => {
+      if (!this.o.daemon || !this.o.lists.ownersDevice(link.peer)) return link.close("removed");
+      if (daemon) return void daemon.write(text);
+      early.push(text);
+      if (opening) return;
+      opening = true;
+      this.o.daemon().then((d) => {
+        daemon = d;
+        // The daemon's bytes go on as text: one character split across two reads stays whole.
+        const utf8 = new StringDecoder("utf8");
+        d.on("data", (chunk: Buffer | string) => {
+          const out = typeof chunk === "string" ? chunk : utf8.write(chunk);
+          if (out) link.send("pty", out);
+        });
+        d.on("error", () => {});
+        d.on("close", () => link.close("this machine's terminals went"));
+        for (const t of early.splice(0)) d.write(t);
+        void link.closed.then(() => d.destroy());
+      }, (e: unknown) => {
+        this.o.onWarn?.(`terminals for ${link.peer.slice(0, 8)}…: ${e instanceof Error ? e.message : String(e)}`);
+        link.close("no terminals here");
+      });
     });
   }
 

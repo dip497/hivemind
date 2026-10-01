@@ -9,12 +9,12 @@ import { createPortal } from "react-dom";
 import { FolderOpen, Loader2, RefreshCw, Server, Settings2, SquareTerminal, Unplug } from "lucide-react";
 import type { SessionSummary } from "../../../shared/ipc";
 import { parseRemote, remoteBasename, remotePath, sshTargetOf, REMOTE_SCHEME } from "@hivemind/core/remote-uri";
-import { GONE_MACHINE, errText, openMachines, placeOf, statusOf, useMachines, type Place } from "./store";
+import { A_DEVICE, GONE_MACHINE, errText, openMachines, placeOf, statusOf, useMachines, type Place } from "./store";
 
-/** What a frame's machine is called: its saved name, else the host an ssh folder is on, else
- *  one no longer saved. */
-const nameOf = (uri: string, { machine, hostId }: Place) =>
-  machine?.label ?? (hostId && uri.startsWith(REMOTE_SCHEME) ? parseRemote(uri).host : GONE_MACHINE);
+/** What a frame's machine is called: its saved name, or the device's (M3), else the host an ssh
+ *  folder is on, else one no longer saved or paired. */
+const nameOf = (uri: string, { machine, device, hostId }: Place) =>
+  machine?.label ?? device?.name ?? (hostId?.startsWith("device:") ? A_DEVICE : hostId && uri.startsWith(REMOTE_SCHEME) ? parseRemote(uri).host : GONE_MACHINE);
 import { AttentionNote, MachineDot, statusWords } from "./status";
 import { openSessionIds } from "./open-sessions";
 
@@ -116,7 +116,8 @@ function MachinePanel({ anchor, uri, frameId, onUnbind, onClose }: { anchor: DOM
         </p>
       )}
       <div className="h-px bg-[var(--color-line2)] my-0.5" />
-      {sessions === null ? (
+      {/* A device's own sessions are its windows' to show. */}
+      {place.device || hostId?.startsWith("device:") ? null : sessions === null ? (
         <MenuItem onClick={() => void loadSessions()} disabled={loading}>
           {loading ? <Loader2 size={13} className="animate-spin" /> : <SquareTerminal size={13} />} Sessions running there…
         </MenuItem>

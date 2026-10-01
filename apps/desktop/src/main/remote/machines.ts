@@ -76,6 +76,12 @@ function setStatus(hostId: string, state: MachineState, detail?: string): void {
   emit();
 }
 
+/** How the connection to one of the person's devices is doing, for the frames on it (M3): kept
+ *  beside the machines' as `device:<id>`. */
+export function deviceStatus(device: string, state: MachineState, detail?: string): void {
+  setStatus(`device:${device}`, state, detail);
+}
+
 function pingAll(): void {
   closeIdle(IDLE_CLOSE_MS);
   for (const [hostId, ep] of readyEndpoints()) {

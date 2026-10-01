@@ -148,6 +148,12 @@ async function doConnect(): Promise<net.Socket> {
   throw new Error("pty-daemon unreachable");
 }
 
+/** A connection of its own to this computer's daemon, started if it is not running: for another
+ *  of the person's devices running terminals in frames here (M3), through hive-net. */
+export function connectDaemon(): Promise<net.Socket> {
+  return doConnect();
+}
+
 let eventSink: ((topic: string, data: unknown) => void) | null = null;
 /** Where this computer's daemon's events go: its sessions' screen readings. */
 export function setDaemonEventSink(fn: (topic: string, data: unknown) => void): void { eventSink = fn; }

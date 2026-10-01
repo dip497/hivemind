@@ -1,7 +1,7 @@
 /** Live machines + per-host connection state, pushed from main; one subscription for the whole renderer. */
 import { useSyncExternalStore } from "react";
-import type { MachineInfo, MachineStatus, MachinesSnapshot } from "../../../shared/ipc";
-import { isRemote, parseMachineUri, parseRemote } from "@hivemind/core/remote-uri";
+import type { MachineInfo, MachineStatus, MachinesSnapshot, PairedDeviceSummary } from "../../../shared/ipc";
+import { isRemote, parseDeviceUri, parseMachineUri, parseRemote } from "@hivemind/core/remote-uri";
 
 let snap: MachinesSnapshot = { machines: [], status: {} };
 const listeners = new Set<() => void>();
@@ -10,9 +10,15 @@ let started = false;
 function start(): void {
   if (started || !window.hive?.machinesGet) return;
   started = true;
-  const set = (s: MachinesSnapshot) => { snap = s; for (const l of listeners) l(); };
+  const tell = () => { for (const l of listeners) l(); };
+  // Main's snapshot is the machines'; the person's devices come from Settings → Devices' list.
+  const set = (s: MachinesSnapshot) => { snap = { ...s, ...(snap.devices ? { devices: snap.devices } : {}) }; tell(); };
+  const setDevices = (devices: PairedDeviceSummary[]) => { snap = { ...snap, devices }; tell(); };
   window.hive.onMachines(set);
   window.hive.machinesGet().then(set).catch(() => { /* main not ready: the push brings it */ });
+  const devices = () => window.hive.devices?.().then(setDevices).catch(() => { /* none to list */ });
+  window.hive.onDevicesChanged?.(() => void devices());
+  void devices();
 }
 
 function subscribe(l: () => void): () => void {
@@ -26,12 +32,17 @@ export function useMachines(): MachinesSnapshot {
 }
 
 /** Where a remote folder is: its saved machine — the one it names (machine://), or one saved at
- *  its address (ssh://) — and the host its connection is kept by. No machine for a folder on one
- *  no longer saved, or on a host never saved; no host for a machine no longer saved, or a local
- *  folder. */
-export interface Place { machine?: MachineInfo; hostId: string | null }
+ *  its address (ssh://) — and the host its connection is kept by; or one of the person's devices
+ *  (M3), its connection kept as `device:<id>`. No machine for a folder on one no longer saved, or
+ *  on a host never saved; no host for a machine no longer saved, or a local folder. */
+export interface Place { machine?: MachineInfo; device?: PairedDeviceSummary; hostId: string | null }
 export function placeOf(s: MachinesSnapshot, uri: string | null | undefined): Place {
   if (!isRemote(uri)) return { hostId: null };
+  const onDevice = parseDeviceUri(uri);
+  if (onDevice) {
+    const device = s.devices?.find((d) => d.device === onDevice.device);
+    return { ...(device ? { device } : {}), hostId: `device:${onDevice.device}` };
+  }
   const at = parseMachineUri(uri);
   if (at) {
     const machine = s.machines.find((m) => m.id === at.machineId);
@@ -50,6 +61,8 @@ export function statusOf(s: MachinesSnapshot, hostId: string | null): MachineSta
 
 /** What a machine no longer saved is called where a frame ran on it. */
 export const GONE_MACHINE = "a machine no longer saved";
+/** What a device no longer paired with this one is called where a frame runs on it. */
+export const A_DEVICE = "a device not paired here";
 
 /** Where a frame runs, as every view sees it (the view protocol's `ViewFrame.machine`, 1.1): the
  *  saved machine's name — else the host itself, so a frame on a host never saved still says where
@@ -59,9 +72,9 @@ export function frameMachine(
   workspacePath: string | null | undefined,
 ): { name: string; state: MachineStatus["state"]; rttMs?: number } | undefined {
   if (!isRemote(workspacePath)) return undefined;
-  const { machine, hostId } = placeOf(s, workspacePath);
+  const { machine, device, hostId } = placeOf(s, workspacePath);
   const st = statusOf(s, hostId);
-  const name = machine?.label ?? hostId?.replace(/:22$/, "") ?? GONE_MACHINE;
+  const name = machine?.label ?? device?.name ?? (hostId?.startsWith("device:") ? A_DEVICE : hostId?.replace(/:22$/, "")) ?? GONE_MACHINE;
   return { name, state: hostId ? st.state : "offline", ...(st.rttMs !== undefined ? { rttMs: st.rttMs } : {}) };
 }
 

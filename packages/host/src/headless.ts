@@ -33,6 +33,7 @@ import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server
 import { toBareId } from "@hivemind/workspace-api/tile-id";
 import { agents } from "./agents.js";
 import { daemonSessions } from "./daemon-sessions.js";
+import { deviceSessions, onDevices } from "./device-sessions.js";
 import { workspaceDomains } from "./domains.js";
 import { PeerLinks } from "./peer-links.js";
 import { Plans } from "./plans.js";
@@ -131,17 +132,30 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     return "";
   };
   const who = (c: Connection) => (c.actor.kind === "peer" ? { person: c.actor.person, name: nameOf(c.actor.person) } : { person: keys.personId, name: "" });
+  // Frames on the person's other devices run their terminals there (M3), in each device's daemon.
+  const elsewhere = deviceSessions({
+    dial: async (device) => {
+      if (!net) throw new Error("this host is not on the network yet");
+      const d = devices.list().find((x) => x.device === device);
+      return net.dial(device, d ? { addrs: d.addrs, relay: d.relay } : undefined);
+    },
+    onEvent: (topic, data) => {
+      if (topic !== "agent.status") return;
+      const r = data as { tileId?: unknown; status?: unknown };
+      if (typeof r.tileId === "string" && isSessionStatus(r.status)) statuses.mirror(toBareId(r.tileId), r.status);
+    },
+  });
   const terminals = new Terminals({
     intents,
     relay: { record: () => {}, screenPrefix: REATTACH_RESET },
     publish: (event, ...params) => api.publish(event, ...params),
     who,
     onError: o.onWarn,
-    backend: daemonSessions({
+    backend: onDevices(keys.deviceId, daemonSessions({
       endpoint,
       pace: makeSpawnPacer({ windowMs: 10_000, max: 24, queueMax: 128 }),
       ended: (tile) => statuses.forget(toBareId(tile)),
-    }),
+    }), elsewhere),
   });
   const plans = new Plans({ publish: (event, ...params) => api.publish(event, ...params), who, repoOf: (bare) => store.workspaceOf(bare) });
   const api: WorkspaceServer = new WorkspaceServer([
@@ -161,6 +175,8 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     changes: (listener) => { heard.add(listener); return () => { heard.delete(listener); }; },
     lists,
     server: api,
+    // The person's devices run terminals here, in frames on this machine (M3).
+    daemon: o.daemon,
     onWarn: o.onWarn,
   });
   let net: HiveNet | null = null;
@@ -280,8 +296,9 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       if (again) clearTimeout(again);
       if (watching) fs.unwatchFile(watching);
       net?.stop();
-      // The sessions stay in the daemon; only this host's connection to it goes.
+      // The sessions stay in the daemons; only this host's connections to them go.
       endpoint.close();
+      elsewhere.close();
       store.flush();
     },
   };

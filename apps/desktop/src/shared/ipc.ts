@@ -104,9 +104,12 @@ export interface MachineInfo {
 }
 export interface MachinesSnapshot {
   machines: MachineInfo[];
-  /** By host id, including hosts of frames that are not saved machines. */
+  /** By host id, including hosts of frames that are not saved machines, and the person's devices
+   *  frames run on (`device:<id>`, M3). */
   status: Record<string, MachineStatus>;
   catalogError?: string;
+  /** The person's other devices, where a frame can run too (M3); the window adds them. */
+  devices?: PairedDeviceSummary[];
 }
 export interface MachineProbe {
   platform: string;

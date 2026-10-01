@@ -12,7 +12,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
-import { HiveNet } from "@hivemind/workspace-host/hive-net";
+import type { Duplex } from "node:stream";
+import { HiveNet, type Link } from "@hivemind/workspace-host/hive-net";
 import { AccessLists, LINK_ROLES, ROLES, type LinkRole, type Role } from "@hivemind/workspace-host/access";
 import { Sharing, type JoinRequest, type PairReply } from "@hivemind/workspace-host/sharing";
 import { formatJoinLink, parseJoinLink } from "@hivemind/workspace-host/join-link";
@@ -290,8 +291,17 @@ function keepPaired(device: PairedDevice): void {
  *  host network's relays. */
 type JoinReply = PairReply | { ok: false; error: "not-admitted"; message: string };
 
-export function installNetworkIpc(server: WorkspaceServer): void {
-  peers = new PeerLinks({ store: workspaceStore(), changes: onWorkspaceChange, lists: accessLists(), server, onWarn: (m) => console.warn(`[peers] ${m}`) });
+/** Connect to one of the person's devices, where it said it is reached when it paired. */
+export async function dialDevice(device: string): Promise<Link> {
+  const d = pairedDevices().list().find((x) => x.device === device);
+  if (!d) throw new Error("that device is not one of yours: pair it under Settings → Devices");
+  return (await network()).dial(device, { addrs: d.addrs, relay: d.relay });
+}
+
+/** Serve this computer's workspaces to whom the access lists let in. `daemon`: this computer's PTY
+ *  daemon, where the person's other devices run terminals in frames here (none without one). */
+export function installNetworkIpc(server: WorkspaceServer, daemon?: () => Promise<Duplex>): void {
+  peers = new PeerLinks({ store: workspaceStore(), changes: onWorkspaceChange, lists: accessLists(), server, daemon, onWarn: (m) => console.warn(`[peers] ${m}`) });
   // The network in use, changed here or by `hive network use`: the daemon starts again on it.
   try {
     fs.watchFile(networkProfiles().file, { interval: 2_000 }, (now, before) => { if (now.mtimeMs !== before.mtimeMs) restartNetwork(); });

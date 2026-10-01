@@ -9,7 +9,8 @@
  *
  * - `machine://<machineId>/abs/posix/path` (R9): on a saved machine, by its id. What the
  *   machine is and how it is reached is its record's, so editing its address or login never
- *   touches the frames on it.
+ *   touches the frames on it. A machine id of 64 hex digits is a device's (M3): one of the
+ *   person's own devices, reached over hive-net by its key, not over ssh.
  * - `ssh://[user@]host[:port]/abs/posix/path`: on a host no saved machine names — one removed,
  *   or a workspace from before R9 whose machine is not known here — reached over ssh as written.
  *
@@ -45,6 +46,16 @@ export function parseMachineUri(uri: string): { machineId: string; path: string 
   const slash = rest.indexOf("/");
   const machineId = slash === -1 ? rest : rest.slice(0, slash);
   return machineId ? { machineId, path: slash === -1 ? "/" : rest.slice(slash) } : null;
+}
+
+/** A device's id: its public key in lowercase hex. A saved machine's id is never one. */
+const DEVICE_ID = /^[0-9a-f]{64}$/;
+
+/** A folder on one of the person's own devices (M3): `machine://<device id>/path`'s device and
+ *  path; null for any other uri, a saved machine's included. */
+export function parseDeviceUri(uri: string): { device: string; path: string } | null {
+  const m = parseMachineUri(uri);
+  return m && DEVICE_ID.test(m.machineId) ? { device: m.machineId, path: m.path } : null;
 }
 
 /** `path` on the saved machine `machineId`. */

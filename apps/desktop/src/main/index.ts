@@ -32,9 +32,10 @@ import { TILE_SESSIONS_DIR, listSessions, writeTrackedSession } from "@hivemind/
 import { agentAllowedIn, loadAgents, toWire } from "@hivemind/agents/load";
 import * as ptyHost from "./pty-host.js";
 import * as ptyDaemon from "./daemon-client.js";
-import { isRemote } from "@hivemind/core/remote-uri";
+import { isRemote, parseDeviceUri } from "@hivemind/core/remote-uri";
 import { savedAuth } from "./remote/saved-hosts.js";
-import { addMachine, checkMachine, editMachine, initMachines, installOnMachine, machineSessions, reconnectMachineHost, removeMachine, setMachinePassword, snapshot as machinesSnapshot, updateMachine } from "./remote/machines.js";
+import { addMachine, checkMachine, deviceStatus, editMachine, initMachines, installOnMachine, machineSessions, reconnectMachineHost, removeMachine, setMachinePassword, snapshot as machinesSnapshot, updateMachine } from "./remote/machines.js";
+import { deviceSessions } from "@hivemind/host/device-sessions";
 import { remoteTarget } from "@hivemind/host/remote/targets";
 import {
   spawnRemotePty, writeRemotePty, resizeRemotePty, killRemotePty, hasRemotePty, screenRemotePty, remoteKeepsScreen,
@@ -79,7 +80,7 @@ import { handleViewProtocol, listViewPackages, registerViewScheme, startViewWatc
 import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, settingsFile, settingsBusy, settingsSettled } from "./settings-store.js";
 import { flushWorkspaceStore, installWorkspaceStoreIpc, storeFor, workspaceStore } from "./workspace-store-ipc.js";
 import { installIdentityIpc, machineIdentity } from "./identity.js";
-import { installNetworkIpc, openJoined, personName, stopNetwork } from "./network.js";
+import { dialDevice, installNetworkIpc, openJoined, personName, stopNetwork } from "./network.js";
 import { elsewhere, mayWriteShared } from "./shared-workspaces.js";
 import { appWindowOf, broadcast, openWindows, registerWindow, userWindow } from "./windows.js";
 import { patchSettingsExtras } from "@hivemind/core/settings";
@@ -988,6 +989,7 @@ const hcpSupervise = new Map<string, string>();
 let hcpBroadcast: ((tileId: string, chunk: string) => void) | null = null;
 // Resolve writeToTile once (used by HCP agent.send AND pipe forwarding).
 const hcpWriteToTile = (tileId: string, data: string, paste?: boolean): boolean => {
+  if (onYourDevices.holds(tileId)) { onYourDevices.write(tileId, data, paste); return true; }
   if (hasRemotePty(tileId)) { writeRemotePty(tileId, data, paste); return true; }
   if (hasSession(tileId)) { writePty(tileId, data, paste); return true; }
   return false; // dead/unknown tile → agent.send surfaces TILE_NOT_FOUND
@@ -1021,13 +1023,24 @@ const onPtyExit = (tileId: string): void => {
 // @hivemind/agent-host/session-relay): main holds one attach per session, and a window that mounts
 // a tile another window already shows joins it, its screen first. How a session runs is main's:
 // the daemon or this process, or ssh for a remote frame.
+/** Where a machine's daemon's events go (an agent's status there, R6), once the control plane is up. */
+let machineEvent: ((topic: string, data: unknown) => void) | null = null;
+/** Terminals in frames on the person's other devices (M3): in each device's daemon, over hive-net. */
+const onYourDevices = deviceSessions({
+  dial: dialDevice,
+  onEvent: (topic, data) => machineEvent?.(topic, data),
+  onStatus: (device, state, detail) => deviceStatus(device, state, detail),
+});
+
 /** The host's screen for a session, read in order with its output; null when it keeps none. */
 function screenOf(tileId: string): ReadScreen | null {
+  if (onYourDevices.holds(tileId)) return onYourDevices.screen(tileId);
   if (hasRemotePty(tileId)) return remoteKeepsScreen(tileId) ? (cb) => screenRemotePty(tileId, cb) : null;
   return PERSIST_PTY && hasSession(tileId) ? (cb) => ptyDaemon.screenPty(tileId, cb) : null;
 }
 function setPtyPaused(tileId: string, paused: boolean): void {
-  if (hasRemotePty(tileId)) { if (paused) pauseRemotePty(tileId); else resumeRemotePty(tileId); }
+  if (onYourDevices.holds(tileId)) { if (paused) onYourDevices.pause(tileId); else onYourDevices.resume(tileId); }
+  else if (hasRemotePty(tileId)) { if (paused) pauseRemotePty(tileId); else resumeRemotePty(tileId); }
   else if (paused) pausePty(tileId);
   else resumePty(tileId);
 }
@@ -1075,10 +1088,14 @@ const terminals = new Terminals({
     // interrupt key here is the user stopping the agent's turn.
     write: (tileId, data, paste) => {
       hcpStatus.input(toBareId(tileId), data);
-      if (hasRemotePty(tileId)) writeRemotePty(tileId, data, paste); else writePty(tileId, data, paste);
+      if (onYourDevices.holds(tileId)) onYourDevices.write(tileId, data, paste);
+      else if (hasRemotePty(tileId)) writeRemotePty(tileId, data, paste); else writePty(tileId, data, paste);
     },
-    echoes: (tileId) => !hasRemotePty(tileId),
-    resize: (tileId, cols, rows) => { if (hasRemotePty(tileId)) resizeRemotePty(tileId, cols, rows); else resizePty(tileId, cols, rows); },
+    echoes: (tileId) => !hasRemotePty(tileId) && !onYourDevices.holds(tileId),
+    resize: (tileId, cols, rows) => {
+      if (onYourDevices.holds(tileId)) onYourDevices.resize(tileId, cols, rows);
+      else if (hasRemotePty(tileId)) resizeRemotePty(tileId, cols, rows); else resizePty(tileId, cols, rows);
+    },
     pause: (tileId) => setPtyPaused(tileId, true),
     resume: (tileId) => setPtyPaused(tileId, false),
     // A daemon tells its killer nothing of the exit, so the teardown runs here: anything waiting on
@@ -1087,12 +1104,16 @@ const terminals = new Terminals({
     kill: (tileId) => {
       const bare = toBareId(tileId);
       controlSpawned.delete(bare);
-      if (hasRemotePty(tileId)) killRemotePty(tileId); else killPty(tileId);
+      if (onYourDevices.holds(tileId)) onYourDevices.kill(tileId);
+      else if (hasRemotePty(tileId)) killRemotePty(tileId); else killPty(tileId);
       onPtyExit(tileId);
       hcpStatus.forget(bare);
       hcpAgentOf.delete(bare);
     },
-    detach: (tileId) => { if (hasRemotePty(tileId)) detachRemotePty(tileId); else detachPty(tileId); },
+    detach: (tileId) => {
+      if (onYourDevices.holds(tileId)) onYourDevices.detach(tileId);
+      else if (hasRemotePty(tileId)) detachRemotePty(tileId); else detachPty(tileId);
+    },
     screen: screenOf,
   },
 });
@@ -1130,10 +1151,17 @@ async function startSession(opts: TerminalOpts, out: SessionOutput): Promise<{ p
     // What is pending (recorded and shipped), then the exit, BEFORE the HCP teardown forgets the tile.
     onExit: (code: number, signal?: number) => { out.exit(code, signal); onPtyExit(opts.tileId); },
   };
-  // Remote frame (a machine:// or ssh:// cwd): run the PTY over ssh, in-main. Skip the local
+  // A frame on this device named by its id is a frame here, at its path.
+  const onDevice = parseDeviceUri(opts.cwd);
+  if (onDevice?.device === machineIdentity().deviceId) opts = { ...opts, cwd: onDevice.path };
+  // Remote frame (a machine:// or ssh:// cwd): on another of the person's devices, in its daemon
+  // over hive-net (M3); on a saved machine or an ssh host, over ssh, in-main. Skip the local
   // cwd stat + shell-env patch (those are for the LOCAL host). The data/exit
   // plumbing is identical.
-  if (isRemote(opts.cwd)) return spawnRemotePty(opts, remoteTarget(opts.cwd), callbacks);
+  if (isRemote(opts.cwd)) {
+    if (onDevice) return onYourDevices.start(opts, { data: callbacks.onData, exit: callbacks.onExit });
+    return spawnRemotePty(opts, remoteTarget(opts.cwd), callbacks);
+  }
   if (opts.cwd) {
     const st = await fsp.stat(opts.cwd).catch(() => null);
     if (!st?.isDirectory()) throw new Error(`pty cwd is not a directory: ${opts.cwd}`);
@@ -1336,7 +1364,8 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     handleViewProtocol();
     installSettingsIpc(broadcast);
     installIdentityIpc();
-    installNetworkIpc(workspaceServer);
+    // The person's other devices run terminals here in this computer's daemon, when it has one.
+    installNetworkIpc(workspaceServer, PERSIST_PTY ? ptyDaemon.connectDaemon : undefined);
     installWorkspaceStoreIpc(layouts, workspaceIpc.connect, (change) =>
       workspaceServer.publishTo((c) => !layouts.made(c, change), "store.changed", { repo: change.repo, part: change.part }));
     void initMachines({
@@ -1861,11 +1890,12 @@ function startHcpControlPlane(): void {
   });
   // A machine's daemon keeps the status of the sessions it runs (R6): shown here as it has it.
   // Only a machine's own report does that: from then on the session's local reports are ignored.
-  setRemoteEventSink((topic, data) => {
+  machineEvent = (topic, data) => {
     if (topic !== "agent.status") { server.injectEvent(topic, data); return; }
     const r = data as { tileId?: unknown; status?: unknown };
     if (typeof r.tileId === "string" && isSessionStatus(r.status)) hcpStatus.mirror(toBareId(r.tileId), r.status);
-  });
+  };
+  setRemoteEventSink(machineEvent);
   ptyMod.setDaemonEventSink(server.injectEvent);
   hcpBroadcast = server.broadcast;
 }

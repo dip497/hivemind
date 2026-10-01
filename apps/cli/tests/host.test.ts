@@ -21,6 +21,8 @@ import type { Access } from "@hivemind/workspace-host/access";
 import { peerTransport, workspaceUrl } from "@hivemind/workspace-api/peers";
 import { WorkspaceClient } from "@hivemind/workspace-api/client";
 import { heldWorkspaces, streamOf } from "@hivemind/host/peer-links";
+import { deviceSessions } from "@hivemind/host/device-sessions";
+import { machineUri } from "@hivemind/core/remote-uri";
 
 setDefaultTimeout(90_000);
 const HIVE_NET = path.resolve(import.meta.dir, "../../../crates/hive-net/target/debug/hive-net");
@@ -204,6 +206,63 @@ describe.skipIf(!built)("hive host", () => {
       expect(now.devices).toEqual([{ device: keys.deviceId, name: "laptop", kind: "app" }]);
     } finally {
       laptop.stop();
+      hive(["host", "stop"], { env: own });
+      hive(["daemon", "stop"], { env: own });
+    }
+  });
+
+  test("runs terminals for the person's devices in frames on its folders: a shell a laptop starts there runs here, on after the laptop goes; a device not paired cannot", async () => {
+    const own = { ...env, HIVEMIND_APP_DATA: path.join(dir, "data3"), HIVEMIND_PTY_SOCK: path.join(dir, "d3.sock") };
+    runHost(own);
+    await until(() => status(own)?.running || null, "the host to answer");
+    const builds = path.join(dir, "builds");
+    fs.mkdirSync(builds);
+    const read = (file: string) => (fs.existsSync(file) ? fs.readFileSync(file, "utf8").trim() : "");
+    const standIn = async (name: string) => {
+      const identity = path.join(dir, name, "identity");
+      return { keys: machineKeys(identity), net: await HiveNet.start({ bin: HIVE_NET, identity, socket: path.join(dir, `${name}.sock`), onIncoming: (l) => l.close(), onPairRequest: async () => ({ ok: false, error: "declined" }) }) };
+    };
+    const { keys, net: laptop } = await standIn("laptop3");
+    const { net: stranger } = await standIn("stranger3");
+    try {
+      // Paired by the host's link, as above.
+      const pairing = spawn(...cmd(["host", "pair", "--json"]), { env: { ...process.env, ...own } });
+      running.push(pairing);
+      const printed = lines(pairing.stdout!);
+      const link = parsePairLink((JSON.parse(await printed()) as { data: { offer: { link: string } } }).data.offer.link)!;
+      const where = { addrs: link.addrs, relay: link.relay };
+      await enterPairing({
+        me: { device: keys.deviceId, name: "laptop", kind: "app", certificate: keys.certificate, person: keys.person, addrs: laptop.ready.addrs, relay: laptop.ready.relay },
+        code: link.code, offering: link.device, ask: (hello) => laptop.pair(link.device, where, hello),
+      });
+      await until(() => status(own)?.person === keys.personId || null, "the host to be the laptop's person");
+
+      // A shell in a frame on the host's folder, started from the laptop: it runs on the host.
+      const frame = machineUri(link.device, builds);
+      const sessions = deviceSessions({ dial: (device) => laptop.dial(device, where) });
+      // What it is given to run with goes along, but never this machine's control-plane credentials.
+      const shell = {
+        tileId: "hm:t-build", cwd: frame, cmd: "sh", args: ["-c", 'pwd > ran.txt; echo "$HCP_TOKEN|$HIVE_HCP_SOCK|$BUILD" > env.txt; sleep 2; echo finished > after.txt; sleep 30'], cols: 80, rows: 24,
+        env: { HCP_TOKEN: "secret", HIVE_HCP_SOCK: "/laptop/hcp.sock", BUILD: "release" },
+      };
+      const started = await sessions.start(shell, { data: () => {}, exit: () => {} });
+      expect(started.pid).toBeGreaterThan(0);
+      expect(sessions.holds("hm:t-build")).toBe(true);
+      expect(await until(() => read(path.join(builds, "ran.txt")), "the shell to run on the host")).toBe(builds);
+      expect(await until(() => read(path.join(builds, "env.txt")), "the shell's environment")).toBe("||release");
+      // The laptop goes; the shell does not.
+      sessions.close();
+      laptop.stop();
+      expect(await until(() => read(path.join(builds, "after.txt")), "the shell to run on")).toBe("finished");
+
+      // A device that is not the person's is not let in to start one.
+      const theirs = deviceSessions({ dial: (device) => stranger.dial(device, where) });
+      await expect(theirs.start({ ...shell, tileId: "hm:t-theirs", args: ["-c", "touch theirs.txt"] }, { data: () => {}, exit: () => {} })).rejects.toThrow();
+      expect(fs.existsSync(path.join(builds, "theirs.txt"))).toBe(false);
+      theirs.close();
+    } finally {
+      laptop.stop();
+      stranger.stop();
       hive(["host", "stop"], { env: own });
       hive(["daemon", "stop"], { env: own });
     }
