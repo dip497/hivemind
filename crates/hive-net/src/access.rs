@@ -2,31 +2,28 @@
 //! allowed while it is enrolled (by the admin, or by an enrolled device), registered (an
 //! `open-pow` network: it proved its key and did a little work) or visiting (until the voucher
 //! that admitted it expires). Every change is signed, so there are no accounts; what is allowed
-//! is kept in one file, and nothing else is. The relay asks it about each device that connects
-//! (`AccessControl`), and a stock relay can ask over HTTP (`GET /allowed/<id>`).
+//! is kept in one file, and nothing else is. A relay beside it asks it about each device that
+//! connects (`AccessControl`); a relay elsewhere asks over HTTP (`GET /allowed/<id>`, `Remote`),
+//! as a stock relay can. `serve.rs` serves its requests under `/access`.
 
 use std::{
-    collections::BTreeMap,
-    convert::Infallible,
+    collections::{BTreeMap, HashMap},
     fs,
-    net::SocketAddr,
     path::{Path, PathBuf},
     str::FromStr,
     sync::{Arc, Mutex},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::{bail, ensure, Context, Result};
 use bytes::Bytes;
 use http_body_util::{BodyExt, Full, Limited};
-use hyper::{body::Incoming, server::conn::http1, service::service_fn, Request, Response};
-use hyper_util::rt::TokioIo;
+use hyper::{body::Incoming, Request, Response};
 use iroh::{PublicKey, SecretKey, Signature};
 use iroh_relay::server::{Access, AccessControl, ClientRequest};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use tokio::net::TcpListener;
 
 use crate::profile::Policy;
 
@@ -397,7 +394,8 @@ impl Service {
         }
     }
 
-    async fn handle(&self, req: Request<Incoming>) -> Response<Full<Bytes>> {
+    /// Answer one request, its path relative to the service's URL.
+    pub(crate) async fn handle(&self, req: Request<Incoming>) -> Response<Full<Bytes>> {
         let answer = |status: u16, body: String| {
             Response::builder()
                 .status(status)
@@ -438,29 +436,6 @@ impl Service {
             _ => answer(404, "not found".into()),
         }
     }
-
-    /// Answer requests on `addr` until the process ends. Returns where it listens.
-    pub async fn serve(self, addr: SocketAddr) -> Result<SocketAddr> {
-        let listener = TcpListener::bind(addr)
-            .await
-            .with_context(|| format!("cannot listen on {addr}"))?;
-        let bound = listener.local_addr()?;
-        tokio::spawn(async move {
-            while let Ok((stream, _)) = listener.accept().await {
-                let service = self.clone();
-                tokio::spawn(async move {
-                    let handler = service_fn(move |req| {
-                        let service = service.clone();
-                        async move { Ok::<_, Infallible>(service.handle(req).await) }
-                    });
-                    let _ = http1::Builder::new()
-                        .serve_connection(TokioIo::new(stream), handler)
-                        .await;
-                });
-            }
-        });
-        Ok(bound)
-    }
 }
 
 impl AccessControl for Service {
@@ -475,13 +450,101 @@ impl AccessControl for Service {
     }
 }
 
+/// How long a relay keeps a "yes" from an access service elsewhere (§12.1): a short outage of the
+/// service locks nobody out who was let in, and a revocation takes this long to reach the relay.
+pub const REMEMBER: Duration = Duration::from_secs(5 * 60);
+/// How long it keeps a "no": short, so a device let in just after it was turned away (one that
+/// connected while it registered) is soon let in, and a crowd of strangers asks the service only
+/// this often each.
+pub const REMEMBER_NO: Duration = Duration::from_secs(10);
+
+/// The access role, asked by a relay that runs apart from it (§12.1: the hosted network's relays
+/// ask its access service): `GET <access>/allowed/<id>`, a yes kept for [`REMEMBER`] (or what the
+/// relay's operator chose) and a no for [`REMEMBER_NO`]. While the service does not answer, a yes kept from before still stands,
+/// however old; a device it never said yes to is refused.
+#[derive(Debug, Clone)]
+pub struct Remote {
+    url: String,
+    http: reqwest::Client,
+    answers: Arc<Mutex<HashMap<PublicKey, (bool, Instant)>>>,
+    /// How long a yes is kept ([`REMEMBER`], unless the relay's operator says otherwise).
+    remember: Duration,
+}
+
+impl Remote {
+    pub fn new(url: &str, remember: Duration) -> Result<Self> {
+        Ok(Self {
+            url: url.trim_end_matches('/').to_string(),
+            http: client::http()?,
+            answers: Arc::default(),
+            remember,
+        })
+    }
+
+    async fn ask(&self, device: &PublicKey) -> Result<bool> {
+        let response = self
+            .http
+            .get(format!("{}/allowed/{device}", self.url))
+            .timeout(Duration::from_secs(10))
+            .send()
+            .await?;
+        ensure!(
+            response.status().is_success(),
+            "{} answered {}",
+            self.url,
+            response.status()
+        );
+        Ok(response.text().await?.trim() == "true")
+    }
+}
+
+impl AccessControl for Remote {
+    async fn on_connect(&self, request: &ClientRequest) -> Access {
+        let device = request.endpoint_id();
+        let kept = self.answers.lock().unwrap().get(&device).copied();
+        let fresh = |allowed: bool, at: Instant| {
+            at.elapsed()
+                < if allowed {
+                    self.remember
+                } else {
+                    REMEMBER_NO.min(self.remember)
+                }
+        };
+        let allowed = match kept {
+            Some((allowed, at)) if fresh(allowed, at) => allowed,
+            _ => match self.ask(&device).await {
+                Ok(allowed) => {
+                    self.answers
+                        .lock()
+                        .unwrap()
+                        .insert(device, (allowed, Instant::now()));
+                    allowed
+                }
+                Err(_) => kept.is_some_and(|(allowed, _)| allowed),
+            },
+        };
+        if allowed {
+            Access::Allow
+        } else {
+            Access::Deny {
+                reason: Some("not allowed on this network".into()),
+            }
+        }
+    }
+}
+
 /// A device asking a network's access service, as the app and the admin's command line do.
 pub mod client {
     use super::*;
 
-    fn http() -> Result<reqwest::Client> {
+    /// A client trusting what this device's endpoint trusts (`net::trusted`).
+    pub(crate) fn http() -> Result<reqwest::Client> {
+        let provider = Arc::new(rustls::crypto::ring::default_provider());
         let _ = rustls::crypto::ring::default_provider().install_default();
-        Ok(reqwest::Client::builder().build()?)
+        let tls = crate::net::trusted().client_config(provider)?;
+        Ok(reqwest::Client::builder()
+            .tls_backend_preconfigured(tls)
+            .build()?)
     }
 
     fn at(access: &str, path: &str) -> String {

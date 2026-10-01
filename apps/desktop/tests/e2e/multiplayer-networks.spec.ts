@@ -29,7 +29,7 @@ async function closedNetwork(): Promise<{ relay: string; access: string; link: s
   const voucher = (kind: string) => execFileSync(HIVE_NET, ["access", "voucher", "--kind", kind, "--admin", admin], { encoding: "utf8" }).trim();
   const adminId = (JSON.parse(voucher("enrol")) as { by: string }).by;
   const data = path.join(root, "network");
-  server = spawn(HIVE_NET, ["serve", "--relay", "--access", "--admin-id", adminId, "--policy", "closed", "--data", data, "--bind", "127.0.0.1:0", "--access-bind", "127.0.0.1:0"], { stdio: ["ignore", "pipe", "ignore"] });
+  server = spawn(HIVE_NET, ["serve", "--relay", "--access", "--admin-id", adminId, "--policy", "closed", "--data", data, "--bind", "127.0.0.1:0"], { stdio: ["ignore", "pipe", "ignore"] });
   const lines: string[] = [];
   await new Promise<void>((resolve) => server!.stdout!.on("data", (d: Buffer) => { lines.push(...d.toString().trim().split("\n")); if (lines.length >= 2) resolve(); }));
   const relay = lines[0]!.replace("relay serving on ", "");

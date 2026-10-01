@@ -29,6 +29,10 @@ JSON text:
   by mDNS, whatever else the profile names.
 - `access.policy` is `open-pow` (any device may register its key with a small proof of work) or
   `closed` (devices the admin enrolled, or an enrolled device did, and those vouched for).
+- `lookup` is a pkarr relay: a device on the network publishes there which relay it is reached
+  through, signed by its key (`PUT <lookup>/<z-base-32 of its id>`), and finds another by its id
+  alone; workspaces' host records are kept there too (`host-record.md`). `hive-net serve` serves
+  it at `/pkarr`, beside the relay, and the access service at `/access`.
 - A reader ignores a field it does not know (a minor version adds them).
 
 ## The signed file
@@ -54,6 +58,12 @@ Another network is the person's choice to make, shown with who signed it.
 ## A link
 
 `hivemind://network/<the signed file's JSON, base64url without padding>`.
+
+An **enrolment link** is the same, its file carrying one more field, `enrol`: a voucher of kind
+`enrol` signed by the admin that names no device (`network-access.md`). The device that uses the
+link redeems it at the network's access service, and is enrolled. `hive-net access enrol-link
+<signed profile> --admin <key>` makes one (for one device, for seven days, unless told
+otherwise).
 
 ## Built in
 

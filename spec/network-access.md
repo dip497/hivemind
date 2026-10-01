@@ -70,3 +70,17 @@ for.
 | `GET /healthz` | `ok` |
 
 What it allows is kept across restarts, and nothing else: no addresses, no traffic.
+
+Paths are under the service's URL: `hive-net serve` serves it at `/access` on the port it serves
+everything on, so a network at `https://hive.example.com` has its access service at
+`https://hive.example.com/access`.
+
+## A relay that asks
+
+A relay beside the access role asks it in the same process. A relay elsewhere (`hive-net serve
+--relay --access-url <service>`, as the hosted network's relays are) asks `GET /allowed/<device>`
+when the device connects, and keeps the answer: a yes for five minutes (`--access-cache`), so a
+short outage of the service locks out nobody it let in, and a revocation takes that long to reach
+the relay; a no for ten seconds, so a device let in just after it was turned away is soon let in.
+While the service does not answer, a yes kept from before stands, however old; a device the relay
+never had a yes for is refused.

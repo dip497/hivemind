@@ -450,6 +450,29 @@ exactly as today. They are ordered by dependency.
   and directly; a device that never registered is refused by the relays; lookup of a
   published endpoint and of a host record works from a third network; a relay restart is
   survived by reconnecting clients; the same checks pass against the compose stack.
+- **Decided while building it, step 1 (2026-10-01).** `hive-net serve` runs every role on **one
+  port**, so a self-hosted network needs one name and one certificate: the lookup server at
+  `/pkarr` and `/dns-query`, the access role at `/access`, the relay on the rest (iroh's
+  `RelayService`, which is made to be embedded; `--access-bind` is gone). HTTPS is Let's Encrypt
+  over TLS-ALPN-01 for `--domain` (so the port is 443), or a certificate in files (`--cert`,
+  `--key`, read again every hour); with HTTPS the relay also answers QUIC address discovery
+  (7842/udp) and the captive-portal check (80), as iroh's own server does. Flags, not a TOML
+  file: there were few enough. The lookup role embeds `iroh-dns-server` 1.3 on this machine
+  only, without the DHT, and its DNS side only where asked (`--dns-bind`). How often an address
+  may publish is held back in the front, by the address it saw (five at once, then one every two
+  seconds; `--lookup-limit off` for an office behind one NAT): `iroh-dns-server`'s own "smart"
+  limit discards its client-address extractor, so behind any proxy every device shares one
+  limit. Devices use the profile's `lookup` (`PkarrPublisher`, relay URL only, and
+  `PkarrResolver`) and trust the web's authorities plus this machine's (`SSL_CERT_FILE`, a
+  company's CA), for relays, lookup and access alike. A relay apart from the access service
+  (`--access-url`) keeps a yes five minutes but a no only ten seconds, else a device that
+  connected while it registered would wait five minutes. `serve --all` makes the network's
+  admin key in `--data` the first time (hive-net never makes device or person keys; this one is
+  the network's) and keeps the signed profile as `network.json`, printing its link;
+  `access enrol-link` makes the admin's links for devices. Host records are built here
+  (`host_record.rs`, `spec/host-record.md`), the workspace key derived in Rust too (held to
+  `conformance/identity.json`); publishing them as hosting moves is M3's. `hive-net doctor`
+  says whether the lookup and access services answer, and why a relay turned a device away.
 
 ### R14. Headless host: `hive host`
 

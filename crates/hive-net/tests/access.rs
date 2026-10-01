@@ -28,7 +28,7 @@ impl Drop for Running {
     }
 }
 
-/// A relay with the access role, and where each serves.
+/// A relay with the access role beside it, on one port, and where each serves.
 fn serve(root: &Path, admin: &str, policy: &str, bits: &str) -> (Running, String, String) {
     let mut child = Command::new(BIN)
         .args([
@@ -44,8 +44,6 @@ fn serve(root: &Path, admin: &str, policy: &str, bits: &str) -> (Running, String
             "--data",
             root.join("access").to_str().unwrap(),
             "--bind",
-            "127.0.0.1:0",
-            "--access-bind",
             "127.0.0.1:0",
         ])
         .stdout(Stdio::piped())
@@ -116,11 +114,15 @@ fn device(root: &Path, name: &str) -> (String, String) {
 }
 
 /// A request to the access service, as a stock relay or anyone would make it: status and body.
+/// `path` is under the service's URL, which has a path of its own (`…/access`).
 fn http(access: &str, method: &str, path: &str, body: Option<&str>) -> (u16, String) {
-    let addr = access.trim_start_matches("http://");
+    let (addr, under) = access
+        .trim_start_matches("http://")
+        .split_once('/')
+        .unwrap();
     let mut stream = TcpStream::connect(addr).unwrap();
     let body = body.unwrap_or("");
-    write!(stream, "{method} {path} HTTP/1.1\r\nHost: {addr}\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}", body.len()).unwrap();
+    write!(stream, "{method} /{under}{path} HTTP/1.1\r\nHost: {addr}\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}", body.len()).unwrap();
     let mut response = String::new();
     stream.read_to_string(&mut response).unwrap();
     let status = response[9..12].parse().unwrap();

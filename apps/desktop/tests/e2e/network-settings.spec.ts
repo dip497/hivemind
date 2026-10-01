@@ -1,7 +1,7 @@
-// Settings → Network (R16, design §13.2–13.3): a fresh install is on the local network, with no
-// servers; a network link from its admin is used from then on, its relay answers, and the app's
-// network reaches out through it (an invite link names it); and the update check, when off, asks
-// GitHub nothing until it is turned on again.
+// Settings → Network (R16, R13, design §13.2–13.3): a fresh install is on the local network, with
+// no servers; a network link from its admin is used from then on, its relay and its lookup server
+// answer, and the app's network reaches out through it (an invite link names it); and the update
+// check, when off, asks GitHub nothing until it is turned on again.
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
@@ -39,23 +39,27 @@ async function openSettings(page: Page, which: string): Promise<void> {
   await page.locator(`[data-settings-page="${which}"]`).click();
 }
 
-/** A relay, and a network profile naming it, signed by its admin, as a link. */
-async function network(): Promise<{ url: string; link: string }> {
-  relay = spawn(HIVE_NET, ["serve", "--relay", "--bind", "127.0.0.1:0"], { stdio: ["ignore", "pipe", "ignore"] });
-  const url = await new Promise<string>((resolve) => relay!.stdout!.once("data", (d: Buffer) => resolve(d.toString().trim().replace("relay serving on ", ""))));
+/** A relay and a lookup server, and a network profile naming them, signed by its admin, as a link. */
+async function network(): Promise<{ url: string; lookup: string; link: string }> {
+  relay = spawn(HIVE_NET, ["serve", "--relay", "--lookup", "--data", path.join(root, "server"), "--bind", "127.0.0.1:0"], { stdio: ["ignore", "pipe", "ignore"] });
+  let printed = "";
+  await new Promise<void>((resolve) => relay!.stdout!.on("data", (d: Buffer) => { printed += d.toString(); if (printed.includes("lookup serving on ")) resolve(); }));
+  const after = (prefix: string) => printed.split("\n").find((l) => l.startsWith(prefix))!.slice(prefix.length).trim();
+  const url = after("relay serving on ");
+  const lookup = after("lookup serving on ");
   const admin = path.join(root, "admin.key");
   fs.writeFileSync(admin, `${"ab".repeat(32)}\n`);
   const id = JSON.parse(execFileSync(HIVE_NET, ["access", "voucher", "--kind", "enrol", "--admin", admin], { encoding: "utf8" })).by as string;
   const text = path.join(root, "profile.json");
-  fs.writeFileSync(text, JSON.stringify({ v: 1, name: "Test network", relays: [{ url }], admin: id, local: { mdns: true } }));
+  fs.writeFileSync(text, JSON.stringify({ v: 1, name: "Test network", relays: [{ url }], lookup, admin: id, local: { mdns: true } }));
   const signed = path.join(root, "signed.json");
   fs.writeFileSync(signed, execFileSync(HIVE_NET, ["profile", "sign", text, "--admin", admin]));
-  return { url, link: execFileSync(HIVE_NET, ["profile", "link", signed], { encoding: "utf8" }).trim() };
+  return { url, lookup, link: execFileSync(HIVE_NET, ["profile", "link", signed], { encoding: "utf8" }).trim() };
 }
 
-test("a fresh install is on the local network; a network's link is used from then on, its relay answers, and invites reach out through it", async () => {
+test("a fresh install is on the local network; a network's link is used from then on, its relay and lookup server answer, and invites reach out through it", async () => {
   test.skip(!hiveNetBuilt(), "build hive-net first: cargo build in crates/hive-net");
-  const { url, link } = await network();
+  const { url, lookup, link } = await network();
   const page = await launch();
   /** The relay an invite from here names: where the app's network waits for others. */
   const inviteRelay = async (): Promise<string | null> => {
@@ -86,6 +90,7 @@ test("a fresh install is on the local network; a network's link is used from the
   await expect(page.locator("[data-network-name]")).toHaveText("Test network");
   await page.locator("[data-network-check]").click();
   await expect(page.locator(`[data-relay="${url}"]`)).toHaveAttribute("data-ok", "true", { timeout: 20_000 });
+  await expect(page.locator(`[data-lookup="${lookup}"]`)).toHaveAttribute("data-ok", "true");
   await page.keyboard.press("Escape");
 
   // The running network started again on it: an invite now names its relay.

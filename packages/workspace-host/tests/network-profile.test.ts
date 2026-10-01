@@ -38,7 +38,7 @@ test.skipIf(!built)("none kept is the local network; a built-in one, or a signed
   expect([used.builtin, used.admin, used.profile.name]).toEqual([null, idOf(admin), "Example Corp"]);
   expect((await new NetworkProfiles({ dir: path.join(dir, "network"), bin: BIN, identity: dir }).active()).profile.name).toBe("Example Corp");
   fs.writeFileSync(path.join(dir, "device.key"), `${Buffer.from(newSeed()).toString("hex")}\n`);
-  expect(await profiles.health()).toEqual({ relays: [], mdns: true });
+  expect(await profiles.health()).toEqual({ relays: [], lookup: null, access: null, mdns: true });
 });
 
 test.skipIf(!built)("an update signed by someone else, or what is not a profile, is refused and changes nothing", async () => {
@@ -60,7 +60,7 @@ test.skipIf(!built)("an update signed by someone else, or what is not a profile,
 
 /** hive-net's access role, for the network `admin` runs, under `policy`: where it serves. */
 async function accessService(root: string, admin: Seed, policy: "closed" | "open-pow") {
-  const child = Bun.spawn([BIN, "serve", "--access", "--admin-id", idOf(admin), "--policy", policy, "--pow-bits", "8", "--data", path.join(root, `access-${policy}`), "--access-bind", "127.0.0.1:0"], { stdout: "pipe", stderr: "ignore" });
+  const child = Bun.spawn([BIN, "serve", "--access", "--admin-id", idOf(admin), "--policy", policy, "--pow-bits", "8", "--data", path.join(root, `access-${policy}`), "--bind", "127.0.0.1:0"], { stdout: "pipe", stderr: "ignore" });
   const reader = child.stdout.getReader();
   let text = "";
   while (!text.includes("\n")) text += new TextDecoder().decode((await reader.read()).value);

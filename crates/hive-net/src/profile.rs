@@ -134,7 +134,8 @@ impl Profile {
     }
 
     /// How a device on this network is reached: through its relays (none: the local network
-    /// only), and by mDNS among devices on the same network whatever else it names.
+    /// only), found by its id alone through its lookup server, and by mDNS among devices on the
+    /// same network whatever else it names.
     pub fn reach(&self) -> Result<Reach> {
         Ok(Reach {
             relays: self
@@ -142,6 +143,12 @@ impl Profile {
                 .iter()
                 .map(|r| RelayUrl::from_str(&r.url))
                 .collect::<Result<_, _>>()?,
+            lookup: self
+                .lookup
+                .as_deref()
+                .map(url::Url::parse)
+                .transpose()
+                .context("the lookup server's URL")?,
             mdns: self.local.mdns,
         })
     }
@@ -242,10 +249,15 @@ pub fn verify(file: &Signed) -> Result<Verified> {
 
 /// A profile from what someone gave: a built-in name, a link, or a signed file's text.
 pub fn load(given: &str) -> Result<Verified> {
-    let given = given.trim();
-    if let Some(found) = builtin(given) {
-        return Ok(found);
+    match builtin(given.trim()) {
+        Some(found) => Ok(found),
+        None => verify(&signed(given)?),
     }
+}
+
+/// The signed file a link carries, or a signed file's text, not yet verified.
+pub fn signed(given: &str) -> Result<Signed> {
+    let given = given.trim();
     let text = if let Some(encoded) = given.strip_prefix(LINK_PREFIX) {
         let bytes = URL_SAFE_NO_PAD
             .decode(encoded.trim_end_matches('/'))
@@ -254,14 +266,21 @@ pub fn load(given: &str) -> Result<Verified> {
     } else {
         given.to_string()
     };
-    let file: Signed = serde_json::from_str(&text).context("not a signed profile")?;
-    verify(&file)
+    serde_json::from_str(&text).context("not a signed profile")
 }
 
 /// The link that carries `file`.
 pub fn link(file: &Signed) -> String {
     let json = serde_json::to_string(file).expect("a profile file serializes");
     format!("{LINK_PREFIX}{}", URL_SAFE_NO_PAD.encode(json))
+}
+
+/// The link that carries `file` and an enrolment voucher (`access.rs`): the device that uses it
+/// redeems the voucher, and is enrolled on the network's relays.
+pub fn enrolment_link(file: &Signed, enrol: serde_json::Value) -> String {
+    let json =
+        serde_json::json!({ "profile": file.profile, "signature": file.signature, "enrol": enrol });
+    format!("{LINK_PREFIX}{}", URL_SAFE_NO_PAD.encode(json.to_string()))
 }
 
 impl Verified {

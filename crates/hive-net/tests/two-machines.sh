@@ -6,6 +6,9 @@
 #      each other by mDNS and connect directly, knowing only the other's id.
 #   2. Two networks: a machine on each, and a relay (`hive-net serve --relay`) with a leg on both
 #      that routes nothing between them. They reach each other through it; directly they cannot.
+#   3. R13's: a server on one public address that every network reaches, with a relay and a
+#      lookup server on one port. A machine says where it is; from a third network another finds
+#      it by its id alone, and reads the host record of a workspace it hosts.
 #
 # Needs root and iproute2 (`ip netns`). Builds hive-net first, unless HIVE_NET_BIN names one
 # (CI builds it as its own user and runs this with sudo).
@@ -17,7 +20,7 @@ if [ -z "${HIVE_NET_BIN:-}" ]; then cargo build --quiet --locked; fi
 BIN="${HIVE_NET_BIN:-$PWD/target/debug/hive-net}"
 
 TMP=$(mktemp -d)
-NS=(hm-a hm-b hm-c hm-d hm-lan hm-relay)
+NS=(hm-a hm-b hm-c hm-d hm-e hm-lan hm-relay)
 cleanup() {
   for ns in "${NS[@]}"; do ip netns pids "$ns" 2>/dev/null | xargs -r kill 2>/dev/null || true; done
   for ns in "${NS[@]}"; do ip netns del "$ns" 2>/dev/null || true; done
@@ -83,5 +86,29 @@ direct_c=$(grep -o "direct 10\.1\.0\.2:[0-9]*" "$TMP/hm-c.out" | head -1 | cut -
 check "it has a direct address" "yes" "$([ -n "$direct_c" ] && echo yes || echo no)"
 out=$(in_ns hm-d "$BIN" ping "$id_c" --identity "$D" --addr "$direct_c" 2>&1 || true)
 check "and is not reached at it directly" "yes" "$(grep -q "answered" <<<"$out" && echo "no: $out" || echo yes)"
+
+# ── 3. three networks, and a server on one address all of them reach ──────
+# The server's own address, 192.0.2.1, is on its loopback; each network's default route leads to
+# its leg of the server, which forwards nothing, so each machine reaches the server and no other.
+wire hm-e hm-relay 10.3.0.2 10.3.0.1
+in_ns hm-e ip route add default via 10.3.0.1
+in_ns hm-relay ip addr add 192.0.2.1/32 dev lo
+SERVER=http://192.0.2.1:3341
+start hm-relay serve --relay --lookup --data "$TMP/server" --bind 0.0.0.0:3341 --lookup-limit off >/dev/null
+E=$(key e); openssl rand -hex 32 > "$C/person.key"
+in_ns hm-c pkill -f -- "--identity $C" || true
+id_c=$(start hm-c run --identity "$C" --relay "$SERVER" --lookup "$SERVER/pkarr")
+check "the server is reachable from the third network" "yes" "$(in_ns hm-e timeout 2 bash -c "exec 3<>/dev/tcp/192.0.2.1/3341" 2>/dev/null && echo yes || echo no)"
+found=no
+for _ in $(seq 1 20); do
+  out=$(in_ns hm-e "$BIN" ping "$id_c" --identity "$E" --relay "$SERVER" --lookup "$SERVER/pkarr" 2>&1 || true)
+  if grep -q "^$id_c answered" <<<"$out"; then found=yes; break; fi
+  sleep 1
+done
+check "from a third network, found by its id through the lookup server" "yes" "$found"
+published=$(in_ns hm-c "$BIN" host-record publish --identity "$C" --lookup "$SERVER/pkarr" --workspace ws-1 --seq 1 2>&1 || true)
+workspace=$(grep -o '"workspace":"[0-9a-f]*"' <<<"$published" | cut -d'"' -f4)
+read_back=$(in_ns hm-e "$BIN" host-record resolve "$workspace" --lookup "$SERVER/pkarr" 2>&1 || true)
+check "and the host record of a workspace it hosts is read there" "yes" "$(grep -q "\"host\":\"$id_c\"" <<<"$read_back" && echo yes || echo "no: $published / $read_back")"
 
 if [ "$fail" = 0 ]; then echo "two machines: all ok"; else echo "two machines: FAILED"; exit 1; fi

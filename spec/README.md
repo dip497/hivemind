@@ -17,6 +17,7 @@ these; the cases in `../conformance/` decide whether they do. Design:
 | `network-profile.md` | Where a network's servers are, signed by its admin | 0.1 |
 | `network-access.md` | Who may use a network's relays: enrolment, vouchers, registration | 0.1 |
 | `pairing.md` | Two devices of one person: the code, the proofs, the person key handed over | 0.1 |
+| `host-record.md` | Which device hosts a workspace now, signed by the workspace's key | 0.1 |
 
 Versions are `major.minor`: a minor adds optional fields or enum values a reader may ignore; a
 major changes or removes something. Until 1.0 anything may change.

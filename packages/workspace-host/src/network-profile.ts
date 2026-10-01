@@ -30,7 +30,12 @@ export interface NetworkProfile {
 
 /** Whether the network's servers answer this device. */
 export interface NetworkHealth {
-  relays: { url: string; ok: boolean }[];
+  /** Each relay, tried alone; one that turned this device away says why. */
+  relays: { url: string; ok: boolean; refused?: string }[];
+  /** The network's lookup server, when it names one. */
+  lookup: { url: string; ok: boolean } | null;
+  /** Its access service, when it names one. */
+  access: { url: string; ok: boolean } | null;
   mdns: boolean;
 }
 

@@ -4,7 +4,8 @@
 # points there, so anything it sends anywhere else is counted by nft on its way out, and dropped.
 #
 #   1. On the local network (the default), hive-net sends nothing off it.
-#   2. On a network someone runs, it talks to that network's relay and to nothing else.
+#   2. On a network someone runs, it talks to that network's servers (its relay, and the lookup
+#      server where it says where it is) and to nothing else.
 #   3. The app, with its update check off, reaches nothing outside the network (skipped unless the
 #      app is built: `pnpm build` in apps/desktop).
 #
@@ -74,8 +75,9 @@ table inet hm {
 NFT
 }
 packets() { in_ns hm-dev nft list counter inet hm "$1" | awk '/packets/ {print $2}'; }
-# Run `$@` in the device for `$1` seconds, then stop it.
-for_a_while() { local secs=$1; shift; (in_ns hm-dev "$@" >"$TMP/run.out" 2>&1 & echo $! >"$TMP/run.pid"); sleep "$secs"; kill "$(cat "$TMP/run.pid")" 2>/dev/null || true; in_ns hm-dev pkill -f "^$BIN " 2>/dev/null || true; sleep 0.5; }
+# Run `$@` in the device for `$1` seconds, then stop it (and only what runs in the device: the
+# servers run on).
+for_a_while() { local secs=$1; shift; (in_ns hm-dev "$@" >"$TMP/run.out" 2>&1 & echo $! >"$TMP/run.pid"); sleep "$secs"; kill "$(cat "$TMP/run.pid")" 2>/dev/null || true; ip netns pids hm-dev | xargs -r kill 2>/dev/null || true; sleep 0.5; }
 
 echo "1. the local network"
 count_from_scratch
@@ -85,15 +87,23 @@ in_ns hm-dev "$BIN" ping "$(in_ns hm-dev "$BIN" id --identity "$(key other)")" -
 check "packets sent off the local network" 0 "$(packets elsewhere)"
 
 echo "2. a network someone runs"
-in_ns hm-srv "$BIN" serve --relay --bind 10.20.0.1:3340 >"$TMP/relay.out" 2>&1 &
+in_ns hm-srv "$BIN" serve --relay --lookup --data "$TMP/server" --bind 10.20.0.1:3340 >"$TMP/relay.out" 2>&1 &
 for _ in $(seq 1 50); do [ -s "$TMP/relay.out" ] && break; sleep 0.1; done
 ADMIN=$(openssl rand -hex 32); echo "$ADMIN" > "$TMP/admin.key"
 ADMIN_ID=$(in_ns hm-dev "$BIN" access voucher --kind enrol --admin "$TMP/admin.key" | sed -E 's/.*"by":"([0-9a-f]+)".*/\1/')
-printf '{"v":1,"name":"Office","relays":[{"url":"http://10.20.0.1:3340"}],"admin":"%s","local":{"mdns":true}}' "$ADMIN_ID" > "$TMP/office.json"
+printf '{"v":1,"name":"Office","relays":[{"url":"http://10.20.0.1:3340"}],"lookup":"http://10.20.0.1:3340/pkarr","admin":"%s","local":{"mdns":true}}' "$ADMIN_ID" > "$TMP/office.json"
 "$BIN" profile sign "$TMP/office.json" --admin "$TMP/admin.key" > "$TMP/office-signed.json"
 count_from_scratch
 for_a_while 8 "$BIN" run --identity "$DEV" --profile "$TMP/office-signed.json"
-check "talked to the network's relay" yes "$([ "$(packets servers)" -gt 0 ] && echo yes || echo no)"
+check "talked to the network's servers" yes "$([ "$(packets servers)" -gt 0 ] && echo yes || echo no)"
+# Its record, filed under its key in z-base-32 (as iroh names it).
+z32() { python3 -c 'import sys
+a = "ybndrfg8ejkmcpqxot1uwisza345h769"; b = bytes.fromhex(sys.argv[1]); n = int.from_bytes(b, "big")
+bits = len(b) * 8; pad = (5 - bits % 5) % 5; n <<= pad; bits += pad
+print("".join(a[(n >> (bits - 5 * (i + 1))) & 31] for i in range(bits // 5)))' "$1"; }
+record=$(z32 "$(in_ns hm-dev "$BIN" id --identity "$DEV")")
+said=$(in_ns hm-dev timeout 5 bash -c "exec 3<>/dev/tcp/10.20.0.1/3340; printf 'GET /pkarr/$record HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n' >&3; head -1 <&3" 2>/dev/null || true)
+check "said where it is, at the network's lookup server" yes "$(grep -q ' 200 ' <<<"$said" && echo yes || echo "no: $said")"
 check "packets sent anywhere else" 0 "$(packets elsewhere)"
 
 echo "3. the app, its update check off"
