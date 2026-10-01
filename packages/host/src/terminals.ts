@@ -227,10 +227,19 @@ export class Terminals {
     else if (!this.sizes.has(tile) && isHost(from) && !opts.attachOnly) this.sizes.set(tile, { cols: opts.cols, rows: opts.rows });
     // Whoever opens it is told who holds its keyboard (null: the host), which it may have missed
     // while away, and its size.
-    emit(from, "terminal.keyboard", tile, this.keyboards.holder(tile));
+    const holder = this.keyboards.holder(tile);
+    emit(from, "terminal.keyboard", tile, holder);
     const size = this.sizes.get(tile);
     if (size) emit(from, "terminal.size", tile, size.cols, size.rows);
-    return this.relay.open(tile, this.viewerOf(from), start, () => this.opts.backend.screen(tile));
+    const shown = this.relay.open(tile, this.viewerOf(from), start, () => this.opts.backend.screen(tile));
+    if (!machine) return shown;
+    // Whether its machine lends its keyboard is known once it runs (one a window has just placed
+    // is in its workspace here only then): told again, if that changes who holds it.
+    return shown.then((r) => {
+      const now = this.keyboards.holder(tile);
+      if (now?.id !== holder?.id && !from.closed.aborted) emit(from, "terminal.keyboard", tile, now);
+      return r;
+    });
   }
 
   /** Where a session's output, exit and size go: to every client that shows it. */

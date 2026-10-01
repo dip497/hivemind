@@ -180,7 +180,13 @@ function MachinePanel({ anchor, uri, frameId, onUnbind, onClose }: { anchor: DOM
 const OTHERS: Array<[Grant, string]> = [
   ["watch", "Only watch what runs here"],
   ["terminals", "Type into it, as its host lets them"],
+  ["agents", "Run terminals and agents here too"],
 ];
+/** What a grant beyond watching means for this computer, said under the choice. */
+const GIVEN: Partial<Record<Grant, string>> = {
+  terminals: "What they type runs on this computer, as you.",
+  agents: "What they start runs on this computer, as you, in your frames' folders.",
+};
 
 function OthersHere({ workspace }: { workspace: string }) {
   const [grant, setGrant] = useState<Grant | null>(null);
@@ -201,6 +207,7 @@ function OthersHere({ workspace }: { workspace: string }) {
           {grant === g ? <Check size={13} /> : <span className="inline-block w-[13px]" />} {label}
         </MenuItem>
       ))}
+      {grant && GIVEN[grant] ? <span className="px-2 pb-1 text-[11px] text-muted-foreground">{GIVEN[grant]}</span> : null}
       <div className="h-px bg-[var(--color-line2)] my-0.5" />
     </div>
   );

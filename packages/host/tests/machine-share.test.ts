@@ -6,7 +6,8 @@
 // session goes nowhere, as does anything else it asks of the daemon; it hears nothing of anything
 // else here; when the daemon is replaced, the machine is shown afresh and watched again; and when
 // this machine's person lets them type, what the host types reaches what it watches, until they
-// take it back.
+// take it back; and when they let them run agents here, the host starts and ends the sessions of
+// their frames here, in those frames' folders, running what the document says, and no other.
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
@@ -56,9 +57,14 @@ function linkPair(): [host: Link, machine: Link] {
   return [end(0, PRIYA), end(1, HOST)];
 }
 
+/** What a shell runs: `script`. */
+const sh = (script: string) => ["/bin/sh", "-c", script];
+
 /** Priya's machine: its daemon with a throwaway agent it reads the title of, her app's own
- *  connection to it, the sessions she placed, shown to the host; and the host, watching. */
-async function machine(placed: string[]) {
+ *  connection to it, the sessions she placed, shown to the host, and the tiles someone else put
+ *  in her frames here (`framed`, by session: the program each runs, in her folder); and the host,
+ *  watching. */
+async function machine(placed: string[], framed: Record<string, string[]> = {}) {
   const dir = fs.mkdtempSync("/tmp/hm-ms-");
   dirs.push(dir);
   const agent = path.join(dir, "xdg", "hivemind", "agents", "probe");
@@ -103,16 +109,21 @@ async function machine(placed: string[]) {
 
   const [hostEnd, machineEnd] = linkPair();
   const shown = new Set(placed);
+  const inFrames = new Map(Object.entries(framed).map(([id, run]) => [id, { run, cwd: "" }]));
   let granted: Grant = "watch";
   const toldOfGrant = new Set<() => void>();
   stops.push(serveMachine(streamOf(machineEnd, "machine"), {
     daemon: connect,
     shows: (id) => shown.has(id),
+    runs: (id) => { const f = inFrames.get(id); return f ? { cwd: f.cwd || dir, cmd: f.run[0]!, args: f.run.slice(1) } : null; },
     grant: () => granted,
     granted: (l) => { toldOfGrant.add(l); return () => { toldOfGrant.delete(l); }; },
   }));
   /** Its person lets the people in the workspace do `g` here. */
   const grant = (g: Grant) => { granted = g; for (const l of toldOfGrant) l(); };
+  /** Someone else puts the tile of session `id` in a frame of Priya's here, to run `run` in its
+   *  folder (`cwd`, hers by default): her copy of the workspace holds it from now on. */
+  const frame = (id: string, run: string[], cwd = "") => { inFrames.set(id, { run, cwd }); };
   /** Everything the host is sent on the `machine` stream. */
   const heard: string[] = [];
   let offered = false;
@@ -121,17 +132,22 @@ async function machine(placed: string[]) {
   const host = deviceSessions({
     dial: () => Promise.reject(new Error("a participant's machine is never dialled")),
     mine: () => false,
-    // Reached once its app shows it, as the host's links give it.
-    shown: () => ({ key: `${PRIYA}/ws`, open: () => (offered ? linkDuplex(hostEnd, "machine", { borrowed: true, endsAt: MACHINE_OFFER }) : null) }),
+    // Reached once its app shows it, with what it last said it grants, as the host's links give it.
+    shown: () => ({
+      key: `${PRIYA}/ws`,
+      open: () => (offered ? linkDuplex(hostEnd, "machine", { borrowed: true, endsAt: MACHINE_OFFER }) : null),
+      grant: () => heard.map(grantOf).filter((g): g is Grant => g !== null).at(-1) ?? "watch",
+    }),
     onEvent: (topic, data) => events.push({ topic, data }),
   });
   stops.push(() => host.close());
   assert.ok(await until(() => offered), "the machine is shown to the host");
-  /** The host's window opens tile `id`'s terminal, as it would start it: what it is shown. */
-  const watch = (id: string) => {
+  /** The host's window opens tile `id`'s terminal, as it would start it (with `env`, and a task
+   *  for an agent), or only to show it (`attachOnly`): what it is shown. */
+  const watch = (id: string, o: { env?: Record<string, string>; initialPrompt?: string; attachOnly?: boolean } = {}) => {
     const seen = { data: "", sizes: [] as Array<[number, number]>, exits: [] as number[] };
     const started = host.start(
-      { tileId: id, tile: id.slice(3), cwd: `machine://${PRIYA}/home/priya/api`, cmd: "/bin/sh", cols: 50, rows: 10 },
+      { tileId: id, tile: id.slice(3), cwd: `machine://${PRIYA}/home/priya/api`, cmd: "/bin/sh", args: ["-c", "touch host-cmd-ran"], cols: 50, rows: 10, ...o },
       { data: (d) => { seen.data += d; }, exit: (code) => { seen.exits.push(code); }, size: (cols, rows) => { seen.sizes.push([cols, rows]); } },
     );
     return { seen, started };
@@ -147,7 +163,9 @@ async function machine(placed: string[]) {
   const raw = (msg: unknown) => hostEnd.send("machine", `${JSON.stringify(msg)}\n`);
   /** A session's size here, as the daemon keeps it. */
   const size = async (id: string) => { const s = (await own.sessions()).find((x) => x.id === id); return s && [s.cols, s.rows]; };
-  return { dir, own, host, watch, run, raw, size, replace, grant, heard, events };
+  /** What the host was told this machine grants, in turn. */
+  const told = () => heard.map(grantOf).filter((g) => g !== null);
+  return { dir, own, host, watch, run, raw, size, replace, grant, frame, told, heard, events };
 }
 
 test("the host watches what this machine's person placed here, as it runs and at the size it has here: its attach starts, sizes and holds back nothing, and a size given here reaches it", { skip: !unix, timeout: 60_000 }, async () => {
@@ -254,11 +272,10 @@ test("let type by this machine's person, what the host types reaches what it wat
   await m.run("hm:other");
   const w = m.watch("hm:shell");
   assert.ok((await w.started).pid > 0);
-  const told = () => m.heard.map(grantOf).filter((g) => g !== null);
-  assert.deepEqual(told(), ["watch"], "told what it grants as it is shown");
+  assert.deepEqual(m.told(), ["watch"], "told what it grants as it is shown");
 
   m.grant("terminals");
-  assert.ok(await until(() => told().at(-1) === "terminals"));
+  assert.ok(await until(() => m.told().at(-1) === "terminals"));
   m.host.write("hm:shell", `touch ${m.dir}/typed-granted\n`);
   m.host.resize("hm:shell", 20, 5);
   m.raw({ t: "write", id: "hm:other", data: `touch ${m.dir}/typed-unwatched\n` });
@@ -266,11 +283,74 @@ test("let type by this machine's person, what the host types reaches what it wat
   assert.deepEqual(await m.size("hm:shell"), [100, 30], "sized here still");
 
   m.grant("watch");
-  assert.ok(await until(() => told().at(-1) === "watch"));
+  assert.ok(await until(() => m.told().at(-1) === "watch"));
   m.host.write("hm:shell", `touch ${m.dir}/typed-after\n`);
   m.own.write("hm:shell", "echo done > done.txt\n");
   assert.ok(await until(() => read(path.join(m.dir, "done.txt")) === "done"));
   assert.ok(await until(() => mine.data.includes("done.txt")));
   await wait(300);
   assert.equal(fs.existsSync(path.join(m.dir, "typed-after")) || fs.existsSync(path.join(m.dir, "typed-unwatched")), false);
+});
+
+test("let run agents here by this machine's person, the host starts the session of a tile it put in a frame of theirs here, in that frame's folder, running what the document says, hears of it and ends it; one their copy holds a moment later is waited for; it starts nothing it only watches, nor what is in no frame of theirs, nor once that is taken back", { skip: !unix, timeout: 90_000 }, async () => {
+  const m = await machine([], {
+    "hm:planted": sh("echo planted-$((40+2)) $X | tee planted.txt; echo token-$HCP_TOKEN > token.txt; exec sleep 60"),
+    "hm:watched": sh("touch watched-ran; exec sleep 60"),
+    "hm:later": sh("touch later-ran; exec sleep 60"),
+  });
+  m.frame("hm:agent", [path.join(m.dir, "probe-agent")]);
+  m.frame("hm:no-folder", sh("exec sleep 60"), path.join(m.dir, "gone"));
+  // Before: the host starts nothing here.
+  const before = m.watch("hm:planted");
+  assert.equal((await before.started).pid, -1);
+  assert.deepEqual((await m.own.sessions()).map((s) => s.id), []);
+
+  m.grant("agents");
+  assert.ok(await until(() => m.told().at(-1) === "agents"), "the host is told");
+  // Asked for at once: what the host only shows, and what is in no frame of theirs, start nothing.
+  const watching = m.watch("hm:watched", { attachOnly: true });
+  const elsewhere = m.watch("hm:not-framed");
+  const w = m.watch("hm:planted", { env: { X: "from-host", HCP_TOKEN: "host-secret" } });
+  assert.ok((await w.started).pid > 0, "started here");
+  assert.ok(await until(() => read(path.join(m.dir, "planted.txt")) === "planted-42 from-host"), "in its folder, as the document says, with what the host gives it");
+  assert.ok(await until(() => w.seen.data.includes("planted-42 from-host")), "watched from the host");
+  assert.equal(fs.existsSync(path.join(m.dir, "host-cmd-ran")), false, "never the host's own command");
+  assert.ok(await until(() => read(path.join(m.dir, "token.txt")).startsWith("token-")));
+  assert.equal(read(path.join(m.dir, "token.txt")).includes("host-secret"), false, "never the host's control-plane credentials");
+  // An agent the host gives a task to starts on it.
+  const agent = m.watch("hm:agent", { initialPrompt: "Host work" });
+  assert.ok((await agent.started).pid > 0);
+  assert.ok(await until(() => m.events.some((e) => e.topic === "agent.title" && JSON.stringify(e.data).includes("Host work"))), "what the daemon says of it");
+  // One that ends as it starts (its folder is gone) is told so at once.
+  const asked = Date.now();
+  const gone = m.watch("hm:no-folder");
+  assert.ok((await gone.started).pid > 0);
+  assert.ok(await until(() => gone.seen.exits.length === 1), "told it ended");
+  assert.ok(Date.now() - asked < SHOWN_WAIT_MS / 3, "at once");
+
+  // One the host puts there that their copy of the workspace holds only a moment later.
+  const late = m.watch("hm:late");
+  await wait(1_000);
+  m.frame("hm:late", sh("echo late-$((40+2)); exec sleep 60"));
+  assert.ok((await late.started).pid > 0, "started once held here");
+  assert.ok(await until(() => late.seen.data.includes("late-42")));
+
+  m.host.kill("hm:planted");
+  for (let t = 0; t < 5_000 && (await m.own.sessions()).some((s) => s.id === "hm:planted"); t += 100) await wait(100);
+  assert.equal((await m.own.sessions()).some((s) => s.id === "hm:planted"), false, "ended from the host");
+
+  assert.equal((await watching.started).pid, -1, "what the host only shows, it does not start");
+  assert.equal((await elsewhere.started).pid, -1, "nor what is in no frame of theirs");
+  assert.equal(fs.existsSync(path.join(m.dir, "watched-ran")), false);
+
+  // Taken back: the host starts and ends nothing more here, whatever it asks.
+  m.grant("watch");
+  m.raw({ t: "attach", reqId: "r1", id: "hm:later", spec: { cwd: m.dir, cmd: "/bin/sh", args: [], cols: 80, rows: 24 } });
+  m.host.kill("hm:late");
+  assert.ok(await until(() => m.told().at(-1) === "watch"));
+  assert.equal((await m.watch("hm:later").started).pid, -1);
+  assert.ok(await until(() => m.heard.some((l) => l.includes('"r1"') && l.includes('"pid":-1'))), "refused at once");
+  await wait(300);
+  assert.equal(fs.existsSync(path.join(m.dir, "later-ran")), false);
+  assert.ok((await m.own.sessions()).some((s) => s.id === "hm:late"), "nor ended");
 });

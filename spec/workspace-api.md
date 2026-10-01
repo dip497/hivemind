@@ -77,7 +77,13 @@ they placed them there, never on the host's (M4). Their app shows those sessions
 over its own connection, and every client watches them through the host: a terminal on a
 participant's machine is sized there, and typed into there, by them, and by no client of the
 host's (`terminal.keyboard` names its machine's person) until they let the others type there;
-then its keyboard goes as the host's own terminals' do, until they take that back. A peer's
+then its keyboard goes as the host's own terminals' do, until they take that back. When they let
+the others run terminals and agents there too, a terminal or agent tile someone else places in a
+frame of theirs on their machine is started there by the `terminal.open` that would start it on
+the host (not `attachOnly`), in that frame's folder, running what the workspace's document says,
+with the opener's environment (never the host's control-plane credentials) and task, and ended
+there by `terminal.close`; their machine decides, and starts or ends nothing more once they take
+that back. What they placed there themselves is theirs alone to start and end. A peer's
 `terminal.open` of a
 session already running shows it (`attachOnly`), whatever its role. A peer is sent only the
 events about its workspace's tiles, and a tile outside the workspace is refused to it. A

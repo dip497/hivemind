@@ -32,7 +32,8 @@ import path from "node:path";
 import { app } from "electron";
 import { parseDeviceUri } from "@hivemind/core/remote-uri";
 import { MachinePlaces, type Placed } from "@hivemind/host/machine-places";
-import { serveMachine, type Grant } from "@hivemind/host/machine-share";
+import { SHOWN_WAIT_MS, serveMachine, type Grant } from "@hivemind/host/machine-share";
+import { defaultShellFor } from "@hivemind/agent-host/shell-spec";
 import type { Duplex } from "node:stream";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
 
@@ -119,11 +120,11 @@ export async function openShared(workspace: string, access: Access, reach: Reach
     if (open.get(workspace) !== entry) return link.close("left");
     entry.link = link;
     entry.api = peerTransport(streamOf(link, "api"));
-    // A tile this person placed on this machine runs here: what is said of it (a task for it, its
-    // keyboard, its size) is this machine's, never its host's (M4).
+    // A tile in a frame of this person's on this machine runs here, whoever put it there: what is
+    // said of it (a task for it, its keyboard, its size) is this machine's, never its host's (M4).
     entry.api.events((event) => {
       const tile = tileNamed(event.params);
-      if (tile && guestIn(workspace) && placesHere().placed(workspace, tile)) return;
+      if (tile && guestIn(workspace) && (placesHere().placed(workspace, tile) || onThisMachine(repo, tile))) return;
       reach.publish(event);
     });
     let following: Promise<boolean> = Promise.resolve(false);
@@ -143,6 +144,7 @@ export async function openShared(workspace: string, access: Access, reach: Reach
         stopMachine = given !== "owner" && reach.daemon ? serveMachine(streamOf(link, "machine"), {
           daemon: reach.daemon,
           shows: (session) => placesHere().placed(workspace, toBareId(session)) !== null,
+          runs: (session) => othersRun(workspace, toBareId(session)),
           grant: () => placesHere().grant(workspace),
           granted: (listener) => placesHere().onGrant((changed) => { if (changed === workspace) listener(); }),
           onWarn: (m) => console.warn(`[shared] ${workspace}: ${m}`),
@@ -261,6 +263,30 @@ const guestIn = (workspace: string | null): boolean => !!workspace && open.get(w
 export function placedRun(bareTile: string): Placed | null | undefined {
   const workspace = idOf(sharedStore().workspaceOf(bareTile));
   return workspace && guestIn(workspace) ? placesHere().placed(workspace, bareTile) : undefined;
+}
+
+/** Whether tile `bare` is one someone else put in a frame of this person's here, in a workspace
+ *  shared from elsewhere whose people they let run agents on this machine (M4): its host starts
+ *  it, with what it gives it to do, and a window here shows it once it runs. */
+export function startedByOthers(bare: string): boolean {
+  const workspace = idOf(sharedStore().workspaceOf(bare));
+  return !!workspace && guestIn(workspace) && othersRun(workspace, bare) !== null;
+}
+
+/** The session of a tile `startedByOthers`, as `attach` (which never starts one) attaches to it
+ *  once it runs: tried again a while, as its host gets to starting it. */
+export async function onceStarted(attach: () => Promise<{ pid: number }>): Promise<{ pid: number }> {
+  for (const until = Date.now() + SHOWN_WAIT_MS; ; await new Promise((r) => setTimeout(r, 300))) {
+    const r = await attach();
+    if (r.pid !== -1 || Date.now() >= until) return r;
+  }
+}
+
+/** What tile `bare` of `workspace` runs on this machine when someone else put it in a frame of
+ *  this person's here, as they let the people there run agents here (`MachinePlaces.othersRun`,
+ *  from this machine's copy of the workspace). */
+function othersRun(workspace: string, bare: string): { cwd: string; cmd: string; args: string[] } | null {
+  return placesHere().othersRun(workspace, sharedStore().getCore(workspaceUrl(workspace)), bare, defaultShellFor());
 }
 
 /** The tiles of each copy here that are in a frame on this machine, made again as it changes. */

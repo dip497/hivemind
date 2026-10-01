@@ -18,6 +18,8 @@ import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server
 import type { EventMessage } from "@hivemind/workspace-api/protocol";
 import type { Actor } from "@hivemind/workspace-host/intents";
 import { TYPED_BURST_MS, TYPING_EVERY_MS, Terminals } from "../src/terminals.ts";
+import { participantAt } from "../src/device-sessions.ts";
+import type { Grant } from "../src/machine-share.ts";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hm-keyboard-"));
 after(() => fs.rmSync(tmp, { recursive: true, force: true }));
@@ -25,8 +27,9 @@ const PRIYA = "b".repeat(64);
 let made = 0;
 
 /** A host; with `machine`, one whose terminals in `machine://` frames run on Priya's machine, which
- *  says each one's size as it opens, and lends their keyboards while `lends` is set. */
-function host({ machine = false } = {}) {
+ *  says each one's size as it opens, and lends their keyboards while `lends` is set (from when one
+ *  starts, with `lentOnceStarted`: its workspace here holds it only then). */
+function host({ machine = false, lentOnceStarted = false } = {}) {
   const calls: string[] = [];
   const lending = { lends: false };
   let server!: WorkspaceServer;
@@ -40,6 +43,7 @@ function host({ machine = false } = {}) {
     backend: {
       start: async (o, out) => {
         if (machine && o.cwd.startsWith("machine://")) out.size?.(120, 40);
+        if (lentOnceStarted) lending.lends = true;
         return { pid: 7 };
       },
       write: (t, d) => calls.push(`write ${d}`),
@@ -125,6 +129,38 @@ test("one on a participant's machine whose person lends its keyboard goes as the
   assert.deepEqual(h.told(guest, "terminal.keyboard").at(-1), ["hm:t1", null]);
   h.notice(guest, "terminal.write", "hm:t1", "old lease\r");
   assert.deepEqual(h.calls, []);
+});
+
+test("one on a participant's machine that a window opens as it places it, before the host's copy of its workspace holds it, is told lent once it runs, its person lending it: the window types", async () => {
+  const h = host({ machine: true, lentOnceStarted: true });
+  const win = h.client({ kind: "person" });
+  await h.open(win, true, `machine://${"d".repeat(64)}/home/priya/api`);
+  assert.deepEqual(h.told(win, "terminal.keyboard"), [["hm:t1", PRIYAS_MACHINE], ["hm:t1", null]], "told again once it runs");
+  h.notice(win, "terminal.write", "hm:t1", "ls\r");
+  await new Promise((r) => setTimeout(r, 20));
+  assert.deepEqual(h.calls, ["write ls\r"]);
+});
+
+test("whose machine a terminal in a frame on a participant's machine is on, and whether it lends its keyboard: as that machine grants, once this host's copy of the tile's workspace holds it", () => {
+  let held = false;
+  let granted: Grant = "terminals";
+  const at = (cwd: string) => participantAt({ tileId: "hm:t1", tile: "t1", cwd, cmd: "/bin/sh", cols: 80, rows: 24 }, {
+    self: "c".repeat(64),
+    mine: (device) => device === "e".repeat(64),
+    lists: { workspaces: () => ["w"], personOf: (_w, device) => (device === "d".repeat(64) ? PRIYA : null) },
+    nameOf: () => "Priya",
+    shown: () => (held ? { key: "k", open: () => null, grant: () => granted } : null),
+  });
+  const machine = at(`machine://${"d".repeat(64)}/home/priya/api`);
+  assert.deepEqual(machine?.who, PRIYAS_MACHINE);
+  assert.equal(machine?.lends(), false, "not while its workspace here does not hold it");
+  held = true;
+  assert.equal(machine?.lends(), true, "then as granted");
+  granted = "watch";
+  assert.equal(machine?.lends(), false, "and taken back");
+  assert.equal(at(`machine://${"c".repeat(64)}/home/me`), null, "a frame on this machine");
+  assert.equal(at(`machine://${"e".repeat(64)}/home/me`), null, "on one of the person's own devices");
+  assert.equal(at("/home/me/api"), null);
 });
 
 test("a device of the owner's types as the host's own windows do, and a guest's keys still never reach the session", async () => {

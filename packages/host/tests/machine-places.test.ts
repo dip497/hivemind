@@ -3,7 +3,9 @@
 // put it whatever the workspace's document later says; one someone else put there is never made
 // theirs by a window here keeping it; one taken away, or out to a frame elsewhere, is forgotten;
 // what its person lets the people in each workspace do here is theirs to say, watch until they
-// say more; and it is all kept on this machine, for its person alone, across restarts.
+// say more, and only when they let them run terminals and agents here does a tile someone else put
+// in their frame run here; and it is all kept on this machine, for its person alone, across
+// restarts.
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -48,6 +50,33 @@ test("what runs in it is as a window here put it, and changes only by a window h
   // A window here changes what its own tile runs.
   places.wrote(WS, now, { ...now, tiles: [{ ...shell, args: ["-i"] }, planted] });
   assert.deepEqual(places.placed(WS, "s1"), { kind: "shell", cmd: "/bin/zsh", args: ["-i"] });
+});
+
+test("a terminal or agent someone else put in a frame of this person's here runs only while they let the people there run terminals and agents here: in that frame's folder, as the document says (the shell where it names none); never one they placed, one showing a session it did not start, another kind of tile, or one in a frame elsewhere", () => {
+  const { places } = mine();
+  const own = { id: "m1", kind: "shell", label: "sh", cmd: "/bin/zsh" };
+  places.wrote(WS, layout([], {}), layout([own], { m1: "here" }));
+  const doc = layout([
+    own,
+    { id: "h1", kind: "shell", label: "sh" },
+    { id: "a1", kind: "claude", label: "agent", cmd: "claude", args: ["--model", "x"] },
+    { id: "v1", kind: "shell", label: "sh", session: "hm:another" },
+    { id: "e1", kind: "editor", label: "README" },
+    { id: "b1", kind: "browser", label: "page" },
+    { id: "t1", kind: "shell", label: "sh" },
+    { id: "o1", kind: "shell", label: "sh" },
+  ], { m1: "here", h1: "here", a1: "here", v1: "here", e1: "here", b1: "here", t1: "there", o1: "host" });
+  const sh = { cmd: "/bin/bash", args: ["-l"] };
+  assert.equal(places.othersRun(WS, doc, "h1", sh), null, "not while they only watch");
+  places.setGrant(WS, "terminals");
+  assert.equal(places.othersRun(WS, doc, "h1", sh), null, "nor while they only let them type");
+  places.setGrant(WS, "agents");
+  assert.deepEqual(places.othersRun(WS, doc, "h1", sh), { cwd: "/home/priya/api", cmd: "/bin/bash", args: ["-l"] });
+  assert.deepEqual(places.othersRun(WS, doc, "a1", sh), { cwd: "/home/priya/api", cmd: "claude", args: ["--model", "x"] });
+  for (const tile of ["m1", "v1", "e1", "b1", "t1", "o1", "gone"]) assert.equal(places.othersRun(WS, doc, tile, sh), null, tile);
+  assert.equal(places.othersRun("cd".repeat(16), doc, "h1", sh), null, "only where they let them");
+  places.setGrant(WS, "watch");
+  assert.equal(places.othersRun(WS, doc, "h1", sh), null, "and no longer once taken back");
 });
 
 test("taken away by a window here, or put in a frame elsewhere, it is forgotten", () => {

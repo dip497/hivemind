@@ -5,7 +5,9 @@
 // guest's own connection, and its keyboard is the guest's machine's: the host's keys never reach
 // it, until the guest lets the others type there, and then not once they take that back. A shell
 // the host puts in the guest's frame runs nowhere: the guest's machine runs only what its person
-// placed, and shows the host nothing else.
+// placed, and shows the host nothing else; until they let the others run terminals and agents
+// there, when one the host puts there runs on their computer, in their folder, started by the
+// host, and their window shows it.
 import { test, expect, type ElectronApplication, type Page } from "@playwright/test";
 import { execSync } from "node:child_process";
 import fs from "node:fs";
@@ -60,7 +62,7 @@ async function clickInto(w: Page, tile: string): Promise<void> {
 /** `w` makes the letters of the terminal of `tile` bigger, by its button. */
 const fontUp = (w: Page, tile: string) => w.locator(`.react-flow__node-terminal[data-id="${tile}"]`).getByRole("button", { name: "increase font size" }).evaluate((b) => (b as HTMLElement).click());
 /** On the guest's own frame `frame`, what the others in the workspace may do on their computer. */
-async function letOthers(w: Page, frame: string, grant: "watch" | "terminals"): Promise<void> {
+async function letOthers(w: Page, frame: string, grant: "watch" | "terminals" | "agents"): Promise<void> {
   await w.locator(`.react-flow__node-frame[data-id="${frame}"] [aria-label="machine This computer"]`).evaluate((b) => (b as HTMLElement).click());
   await w.locator(`[data-machine-grant="${grant}"]`).evaluate((b) => (b as HTMLElement).click());
   await expect(w.locator(`[data-machine-grant="${grant}"]`)).toHaveAttribute("aria-checked", "true");
@@ -75,7 +77,7 @@ async function openShell(w: Page, frame: string): Promise<string> {
   return tile;
 }
 
-test("a guest puts a frame of their own on their computer: a shell they open in it runs there, in their folder, and the host watches it without typing into it; a shell the host puts there runs nowhere", async () => {
+test("a guest puts a frame of their own on their computer: a shell they open in it runs there, in their folder, and the host watches it without typing into it; a shell the host puts there runs nowhere, until they let the others run terminals there", async () => {
   test.skip(!hiveNetBuilt(), "build hive-net first: cargo build in crates/hive-net");
   test.setTimeout(180_000);
   const { host, guest } = await sharedWorkspace(root, apps, "edit", { env: DAEMON, names: { host: "Adarsh", guest: "Priya" } });
@@ -164,4 +166,36 @@ test("a guest puts a frame of their own on their computer: a shell they open in 
   await expect.poll(() => screenOf(guest, planted), { timeout: 15_000 }).toContain("someone else placed this tile on your computer");
   // (Refused as the host starts it, or, once the host's board holds it, as their machine shows it not.)
   await expect.poll(() => screenOf(host, planted), { timeout: 20_000 }).toMatch(/what runs there is theirs to start|not running on the machine it belongs to/);
+
+  // The guest lets the others run terminals and agents there: a shell the host puts in their frame
+  // now runs on their computer, in their folder, started by the host, and their window shows it.
+  await letOthers(guest, frame, "agents");
+  // The one the host put there before, opened again: their window, opening it first, shows it once
+  // the host's window starts it.
+  await guest.reload();
+  await expect(guest.locator(`.react-flow__node-terminal[data-id="${planted}"] .xterm`)).toHaveCount(1, { timeout: 20_000 });
+  await host.reload();
+  await focusTile(guest, planted);
+  await expect.poll(() => screenOf(guest, planted), { timeout: 30_000 }).toContain(`${folder}#`);
+  expect(await screenOf(guest, planted)).not.toMatch(/someone else placed|not running/);
+  const started = await openShell(host, frame);
+  await expect.poll(() => tiles(guest), { timeout: 15_000 }).toContain(started);
+  await expect.poll(async () => {
+    if (!read(path.join(folder, "host-shell.txt"))) {
+      await clickInto(host, started);
+      await host.keyboard.type("pwd > host-shell.txt; echo started-$((6*7))\n");
+    }
+    return read(path.join(folder, "host-shell.txt"));
+  }, { timeout: 40_000, intervals: [2_000] }).toBe(folder);
+  await focusTile(guest, started);
+  await expect.poll(() => screenOf(guest, started), { timeout: 20_000 }).toContain("started-42");
+  expect(await screenOf(guest, started)).not.toContain("someone else placed");
+  // Theirs to type into on their computer, as ever.
+  await expect.poll(async () => {
+    if (!read(path.join(folder, "guest-typed.txt"))) {
+      await clickInto(guest, started);
+      await guest.keyboard.type("echo guest-$((6*7)) > guest-typed.txt\n");
+    }
+    return read(path.join(folder, "guest-typed.txt"));
+  }, { timeout: 30_000, intervals: [2_000] }).toBe("guest-42");
 });

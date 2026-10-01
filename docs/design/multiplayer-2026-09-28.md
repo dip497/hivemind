@@ -794,7 +794,8 @@ each one's terminals stream from where they run.
    *As built (M4 step 2):* her grant, per workspace, kept on her machine (`MachinePlaces`), set
    on her frame's machine chip and said to the host on the `machine` stream: *Only watch*
    (everyone watches), *Type into it* (the host's keyboards then go as for its own terminals;
-   her machine lets typing through only then, and the size stays hers).
+   her machine lets typing through only then, and the size stays hers), *Run terminals and
+   agents here too* (the reverse journey, below).
 5. Getting the work into the host's project: the frame's toolbar has **Hand off** →
    *Push a branch* (git push to a remote both can reach, or a git bundle sent over
    hive-net into the host's repo as a new branch) or *Open a review* (a Diff tile on the
@@ -806,6 +807,15 @@ The reverse — "their agent works on **my** project" — is the same journey wi
 swapped: the host creates a frame on a guest's machine only if that guest's ACL grants
 the host **Can drive agents** on it. Nobody's code runs on your machine unless you
 granted it.
+*As built (M4 step 2b):* the frame stays hers to make (only she puts a frame on her machine);
+with *Run terminals and agents here too*, a terminal or agent that someone who may drive agents
+in the workspace puts in one of her frames runs on her machine. The host's `terminal.open`
+starts it through her filter, in that frame's folder, running what her copy of the workspace's
+document says, with the opener's environment and task (never the host's control-plane
+credentials), and the host may end it. Whoever places a tile starts it: her window shows one
+the host placed once it runs and never starts it (a task given to an agent is the host's to
+give), and what she placed is hers alone to start and end. Her filter decides, whatever the
+host asks: taken back, nothing more is started or ended there.
 
 ### 5.5 How it works
 

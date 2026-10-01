@@ -121,11 +121,21 @@ export function deviceSessions(o: DeviceSessionsOptions): DeviceSessions {
     });
     return linkDuplex(link, "pty");
   });
+  /** The machine `device` as it shows tile `tile` here (M4), once this host's copy of the tile's
+   *  workspace holds it: one a window has just placed (`waits`) reaches it a moment after the
+   *  window opens it, so it is waited for a while. */
+  const shownOnceHeld = async (device: string, tile: string, waits: boolean): Promise<ShownMachine | null> => {
+    for (const until = Date.now() + SHOWN_WAIT_MS; ; await new Promise((r) => setTimeout(r, 100))) {
+      const shown = o.shown?.(device, tile) ?? null;
+      if (shown || !waits || !o.shown || Date.now() >= until) return shown;
+    }
+  };
   /** A session in a frame on a participant's machine (M4): watched through what its app shows of
-   *  it, never started, sized or typed into from here; it waits a while for one its window there
-   *  is starting. */
+   *  it, never sized from here; it waits a while for one its window there is starting. One opened
+   *  to be started (not only shown) is started there when they let the others run agents there:
+   *  their machine decides. */
   const watch = async (opts: Parameters<SessionBackend["start"]>[0], out: Parameters<SessionBackend["start"]>[1], device: string): Promise<{ pid: number }> => {
-    const shown = o.shown?.(device, opts.tile ?? toBareId(opts.tileId));
+    const shown = await shownOnceHeld(device, opts.tile ?? toBareId(opts.tileId), !opts.attachOnly);
     if (!shown) {
       if (opts.attachOnly) return { pid: -1 };
       throw new Error("this frame runs on someone else's machine: what runs there is theirs to start");
@@ -136,9 +146,10 @@ export function deviceSessions(o: DeviceSessionsOptions): DeviceSessions {
       return d;
     }, SHOWN_WAIT_MS + 5_000);
     tiles.set(opts.tileId, ep);
+    const env = opts.initialPrompt ? { ...(opts.env ?? {}), [INITIAL_PROMPT_ENV]: opts.initialPrompt } : opts.env;
     try {
       const r = await ep.spawn(
-        { tileId: opts.tileId, cwd: "", cmd: opts.cmd, cols: opts.cols, rows: opts.rows, noSpawn: true, liveOnly: true },
+        { tileId: opts.tileId, cwd: "", cmd: opts.cmd, cols: opts.cols, rows: opts.rows, ...(opts.attachOnly ? { noSpawn: true, liveOnly: true } : { env: ownEnvGone(env) }) },
         {
           onData: (data, replay) => out.data(data, replay),
           onExit: (code, signal) => { tiles.delete(opts.tileId); out.exit(code, signal); },
@@ -225,8 +236,11 @@ export function participantAt(opts: TerminalOpts, o: {
   const at = parseDeviceUri(opts.cwd);
   if (!at || at.device === o.self || o.mine(at.device)) return null;
   const person = o.lists.workspaces().map((ws) => o.lists.personOf(ws, at.device)).find((p): p is string => !!p) ?? "";
-  const shown = o.shown(at.device, opts.tile ?? toBareId(opts.tileId));
-  return { who: { id: `peer:${at.device}`, person, name: person ? o.nameOf(person) : "" }, lends: () => grants(shown?.grant() ?? "watch", "terminals") };
+  // Found once this host's copy of its workspace holds the tile: a window opens one it has just
+  // placed before then.
+  let shown: ShownMachine | null = null;
+  const lends = (): boolean => grants((shown ??= o.shown(at.device, opts.tile ?? toBareId(opts.tileId)))?.grant() ?? "watch", "terminals");
+  return { who: { id: `peer:${at.device}`, person, name: person ? o.nameOf(person) : "" }, lends };
 }
 
 /**

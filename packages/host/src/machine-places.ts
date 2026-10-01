@@ -3,7 +3,8 @@
  * tiles they put in a frame of theirs on this machine, and what each runs, as they put it there.
  * Nothing in a workspace's document starts anything on this machine: the document is its host's,
  * whose owner may change it. A tile in a frame here runs only as this person placed it, and one
- * someone else put there does not run at all (until it is theirs to start: M4 step 2).
+ * someone else put there does not run at all, until this person lets the people in that workspace
+ * run terminals and agents here: then it is theirs to start (`othersRun`), as the document says.
  *
  * What is placed is learned from this machine's own windows' writes to their copy of the
  * workspace, never from the host's: a tile a window here adds to a frame on this machine is this
@@ -18,8 +19,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { parseDeviceUri } from "@hivemind/core/remote-uri";
-import type { CoreLayout, FrameRecord, TileRecord } from "@hivemind/workspace-doc/shapes";
-import { GRANTS, type Grant } from "./machine-share.js";
+import { isTerminalKind, type CoreLayout, type FrameRecord, type TileRecord } from "@hivemind/workspace-doc/shapes";
+import { GRANTS, grants, type Grant } from "./machine-share.js";
 
 /** What a tile runs, as its person placed it here. */
 export interface Placed {
@@ -108,6 +109,23 @@ export class MachinePlaces {
     if (Object.keys(mine).length > 0) kept.placed[workspace] = mine;
     else delete kept.placed[workspace];
     this.write(kept);
+  }
+
+  /** What `tile` of `workspace` runs on this machine when someone else put it in a frame of this
+   *  person's here, while they let the people there run terminals and agents here: that frame's
+   *  folder, and the program `core` (this machine's copy of the workspace's document) says, `shell`
+   *  where it names none. Null for any other: one this person placed (it runs as they placed it),
+   *  one that shows a session it did not start, one that is not a terminal's or an agent's, one in
+   *  a frame elsewhere, and any while they do not let them. */
+  othersRun(workspace: string, core: CoreLayout | null, tile: string, shell: { cmd: string; args: string[] }): { cwd: string; cmd: string; args: string[] } | null {
+    if (!core || !grants(this.grant(workspace), "agents") || this.placed(workspace, tile)) return null;
+    const t = (Array.isArray(core.tiles) ? core.tiles : []).find((x: TileRecord) => x.id === tile);
+    const frame = (Array.isArray(core.frames) ? core.frames : []).find((f: FrameRecord) => f.id === core.frameOf?.[tile]);
+    const at = typeof frame?.workspacePath === "string" ? parseDeviceUri(frame.workspacePath) : null;
+    if (!t || !isTerminalKind(t.kind) || t.session || at?.device !== this.o.device) return null;
+    const args = (t as TileRecord & { args?: unknown }).args;
+    const cmd = typeof t.cmd === "string" ? t.cmd : null;
+    return { cwd: at.path, cmd: cmd ?? shell.cmd, args: Array.isArray(args) && args.every((a) => typeof a === "string") ? args : cmd ? [] : shell.args };
   }
 
   /** What this person placed as `tile` of `workspace` here, to run as they placed it; null when

@@ -76,7 +76,7 @@ import { flushWorkspaceStore, installWorkspaceStoreIpc, storeFor, workspaceStore
 import { installIdentityIpc, machineIdentity } from "./identity.js";
 import { defaultShellFor } from "@hivemind/agent-host/shell-spec";
 import { dialDevice, installNetworkIpc, isYourDevice, movedAway, openJoined, peopleHere, personName, shownFrom, stopNetwork, terminalMachine } from "./network.js";
-import { elsewhere, mayWriteShared, placedRun, refusedShared, wroteShared } from "./shared-workspaces.js";
+import { elsewhere, mayWriteShared, onceStarted, placedRun, refusedShared, startedByOthers, wroteShared } from "./shared-workspaces.js";
 import { appWindowOf, broadcast, openWindows, registerWindow, userWindow } from "./windows.js";
 import { patchSettingsExtras } from "@hivemind/core/settings";
 import { toBareId, toPtyId } from "@hivemind/workspace-api/tile-id";
@@ -1103,8 +1103,12 @@ const terminals = new Terminals({
 async function startSession(opts: TerminalOpts, out: SessionOutput): Promise<{ pid: number }> {
   // A tile of a workspace shared from elsewhere runs on this machine only as its person placed it
   // here (M4): never with what the workspace's document says, which its host's owner may change.
+  // One someone else put in a frame of theirs here is that one's to start, when they let the
+  // people there run agents here: a window here shows it once it runs, and never starts it.
   const placed = placedRun(opts.tile ?? toBareId(opts.tileId));
-  if (placed === null && !opts.attachOnly) throw new Error("someone else placed this tile on your computer: it runs here only if you place it");
+  const theirs = placed === null && !opts.attachOnly && PERSIST_PTY && startedByOthers(opts.tile ?? toBareId(opts.tileId));
+  if (placed === null && !opts.attachOnly && !theirs) throw new Error("someone else placed this tile on your computer: it runs here only if you place it");
+  if (theirs) opts = { ...opts, attachOnly: true, liveOnly: true };
   if (placed) {
     const shell = defaultShellFor();
     opts = { ...opts, cmd: placed.cmd ?? shell.cmd, args: placed.args ?? (placed.cmd ? [] : shell.args) };
@@ -1161,7 +1165,7 @@ async function startSession(opts: TerminalOpts, out: SessionOutput): Promise<{ p
   await applyShellEnvToProcess();
   // A PTY can outlive its windows and emit data/exit after they are gone: the relay skips a
   // viewer whose window is destroyed.
-  return spawnPty(opts, callbacks);
+  return theirs ? onceStarted(() => spawnPty(opts, callbacks)) : spawnPty(opts, callbacks);
 }
 
 /** The workspace store, through the workspace API: each window writes as itself. */
