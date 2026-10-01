@@ -31,7 +31,9 @@ import { idOf, workspaceSeed, type Seed } from "@hivemind/workspace-host/identit
 import { getSettings } from "./settings-store.js";
 import { broadcast, userWindow } from "./windows.js";
 import { onWorkspaceChange, sharedStore, workspaceStore } from "./workspace-store-ipc.js";
-import { PeerLinks } from "@hivemind/host/peer-links";
+import { PeerLinks, type ShownMachine } from "@hivemind/host/peer-links";
+import { participantAt } from "@hivemind/host/device-sessions";
+import type { Typist } from "@hivemind/workspace-api/terminals";
 import { forgetShared, leaveShared, openShared, sharedStatus, type SharedStatus } from "./shared-workspaces.js";
 import type { WorkspaceServer } from "@hivemind/workspace-api/server";
 import type { EventMessage } from "@hivemind/workspace-api/protocol";
@@ -241,6 +243,16 @@ export function personName(person: string): string {
   return "";
 }
 
+/** Whose machine the frame folder `cwd` is on, when it is a participant's (M4). */
+export function participantOf(cwd: string): Typist | null {
+  return participantAt(cwd, { self: machineIdentity().deviceId, mine: isYourDevice, lists: accessLists(), nameOf: personName });
+}
+
+/** What a participant's app shows of their machine `device`, for the workspace `tile` is in (M4). */
+export function shownFrom(device: string, tile: string): ShownMachine | null {
+  return peers?.shownFrom(device, tile) ?? null;
+}
+
 /** Stop the daemon (the app is quitting). */
 export function stopNetwork(): void {
   records?.stop();
@@ -287,6 +299,8 @@ export async function openJoined(workspace: string, publish: (event: EventMessag
     publish,
     // A workspace of the person's hosted on another of their devices: its list, kept in step (M3).
     lists: accessLists(),
+    // Someone else's: the sessions this person placed on this computer, shown to its host (M4).
+    daemon: daemonHere,
     // The workspace moved to another of its owner's devices (M3): where it is now, as the record
     // its key signed says, is where the next dial goes.
     moved: async (notice) => joinedList().follow(workspace, notice, await network()),
@@ -361,9 +375,12 @@ export const peopleHere = new People({
 });
 /** The workspace API every window and device is answered by, once it is set up. */
 let apiServer: WorkspaceServer | null = null;
+/** This computer's PTY daemon, once the IPC is installed: none without one. */
+let daemonHere: (() => Promise<Duplex>) | undefined;
 
 export function installNetworkIpc(server: WorkspaceServer, daemon?: () => Promise<Duplex>): void {
   apiServer = server;
+  daemonHere = daemon;
   peers = new PeerLinks({ store: workspaceStore(), changes: onWorkspaceChange, lists: accessLists(), server, daemon, hosting: hostingHere(), onWarn: (m) => console.warn(`[peers] ${m}`) });
   // The network in use, changed here or by `hive network use`: the daemon starts again on it.
   try {

@@ -15,6 +15,10 @@
  * this device a workspace to host, or ask for one hosted here, on the `hosting` stream (M3,
  * spec/hosting.md). A device that comes for a workspace hosted elsewhere now is told where
  * (`moved`), and closed.
+ *
+ * A participant's app shows the sessions its person placed on their own machine, in frames of
+ * theirs in a workspace here (M4), on the `machine` stream it opens to this host: the host watches
+ * them through it, as `shownFrom` gives them, and never dials that machine.
  */
 import path from "node:path";
 import { StringDecoder } from "node:string_decoder";
@@ -29,6 +33,8 @@ import type { WorkspaceServer } from "@hivemind/workspace-api/server";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
 import type { Moved } from "@hivemind/workspace-host/doc-sync";
 import type { Hosting } from "./hosting.js";
+import { MACHINE_OFFER } from "./machine-share.js";
+import { linkDuplex } from "./device-sessions.js";
 
 /** A link's named stream as a channel of text frames. */
 export const streamOf = (link: Link, stream: string): TextChannel => ({
@@ -93,8 +99,18 @@ export function heldWorkspaces(link: Link, timeoutMs = 10_000): Promise<HeldWork
   });
 }
 
+/** A participant's machine as this host shows what runs there (M4): the workspace a tile is in
+ *  (`key`, the same for each tile of that workspace there), and that machine's sessions, while its
+ *  app shows them (`open`: null while it does not). */
+export interface ShownMachine {
+  key: string;
+  open(): Duplex | null;
+}
+
 export class PeerLinks {
   private readonly served = new Set<Served>();
+  /** The links whose app shows its machine's sessions here (M4), and the workspace each is for. */
+  private readonly machines = new Map<Link, string>();
 
   constructor(private readonly o: PeerLinksOptions) {}
 
@@ -102,6 +118,11 @@ export class PeerLinks {
   serve(link: Link): void {
     const { store, lists, server, hosting } = this.o;
     this.bridgePty(link);
+    // Offered once the workspace is served (the app offers it once welcomed), for that workspace.
+    link.on("machine", (text) => {
+      const served = text.trim() === MACHINE_OFFER && [...this.served].find((s) => s.link === link);
+      if (served) this.machines.set(link, served.workspace);
+    });
     link.on("hosting", (text) => {
       let message: unknown;
       try { message = JSON.parse(text); } catch { return; }
@@ -154,8 +175,25 @@ export class PeerLinks {
       });
       const entry: Served = { workspace: hello.workspace, person, link, stop };
       this.served.add(entry);
-      void link.closed.then(() => { this.served.delete(entry); stop(); });
+      void link.closed.then(() => { this.served.delete(entry); this.machines.delete(link); stop(); });
     });
+  }
+
+  /** The sessions on the participant's machine `device` (M4), for the workspace here that `tile`
+   *  is in; null when no workspace here holds `tile`. */
+  shownFrom(device: string, tile: string): ShownMachine | null {
+    const repo = this.o.store.workspaceOf(toBareId(tile));
+    const workspace = repo ? this.o.store.ownership(repo)?.workspaceId : null;
+    if (typeof workspace !== "string") return null;
+    return { key: `${device}/${workspace}`, open: () => this.machine(device, workspace) };
+  }
+
+  /** What the app at `device` shows of its machine for `workspace`: its daemon's protocol, through
+   *  the app's filter, on that connection's `machine` stream. It ends when the connection goes, or
+   *  the app shows it afresh (its daemon came back). */
+  private machine(device: string, workspace: string): Duplex | null {
+    const link = [...this.machines].find(([l, ws]) => l.peer === device && ws === workspace)?.[0];
+    return link ? linkDuplex(link, "machine", { borrowed: true, endsAt: MACHINE_OFFER }) : null;
   }
 
   /** Carry the `pty` stream an owner's device opens to this machine's PTY daemon, and the daemon's

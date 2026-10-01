@@ -47,7 +47,7 @@ import { agents } from "./agents.js";
 import { ControlPlane } from "./control/plane.js";
 import { HcpError } from "./control/protocol.js";
 import { daemonSessions } from "./daemon-sessions.js";
-import { deviceSessions, onDevices } from "./device-sessions.js";
+import { deviceSessions, onDevices, participantAt } from "./device-sessions.js";
 import { Hosting } from "./hosting.js";
 import { workspaceDomains } from "./domains.js";
 import { PeerLinks } from "./peer-links.js";
@@ -166,9 +166,12 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     const d = devices.list().find((x) => x.device === device);
     return net.dial(device, d ? { addrs: d.addrs, relay: d.relay } : undefined);
   };
+  const mine = (device: string): boolean => devices.list().some((d) => d.device === device);
   const elsewhere = deviceSessions({
     dial: dialDevice,
-    mine: (device) => devices.list().some((d) => d.device === device),
+    mine,
+    // A participant's machine (M4): watched, as their app shows it here.
+    shown: (device, tile) => peers.shownFrom(device, tile),
     onEvent: (topic, data) => control.fromMachine(topic, data),
   });
   const sessions = onDevices(keys.deviceId, daemonSessions({ endpoint, pace: makeSpawnPacer({ windowMs: 10_000, max: 24, queueMax: 128 }) }), elsewhere);
@@ -186,6 +189,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       return sessions.start(supervise ? { ...opts, env: { ...opts.env, HIVE_SUPERVISE: supervise } } : opts, {
         data: (data, replay) => { control.output(bare, data); out.data(data, replay); },
         exit: (code, signal) => { out.exit(code, signal); control.exited(opts.tileId); },
+        size: out.size,
       });
     },
     write: (tile, data, paste) => { control.status.input(toBareId(tile), data); sessions.write(tile, data, paste); },
@@ -198,6 +202,8 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     askedByHost: (bare) => control.takeSpawned(bare),
     publish: (event, ...params) => api.publish(event, ...params),
     who,
+    // A terminal on a participant's machine is typed into and sized there, by its person (M4).
+    machineOf: (opts) => participantAt(opts.cwd, { self: keys.deviceId, mine, lists, nameOf }),
     onError: o.onWarn,
     backend,
   });

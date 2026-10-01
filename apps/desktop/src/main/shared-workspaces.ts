@@ -10,6 +10,10 @@
  * owner's devices (M3), the host says where, and it is dialled there at once. It ends when this
  * person leaves, or the host removes them; what is kept then is the last copy, which may no
  * longer be written.
+ *
+ * In someone else's workspace, the sessions this person placed in frames of theirs on this machine
+ * (M4) are shown to its host over this connection (`machine-share.ts`), for everyone there to
+ * watch: the host never dials this machine, and starts, types or sizes nothing here.
  */
 import type { Access, AccessLists } from "@hivemind/workspace-host/access";
 import { mayEdit, replicate, type Moved } from "@hivemind/workspace-host/doc-sync";
@@ -28,6 +32,8 @@ import path from "node:path";
 import { app } from "electron";
 import { parseDeviceUri } from "@hivemind/core/remote-uri";
 import { MachinePlaces, type Placed } from "@hivemind/host/machine-places";
+import { serveMachine } from "@hivemind/host/machine-share";
+import type { Duplex } from "node:stream";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
 
 /** Where the connection to a workspace's host is. */
@@ -52,6 +58,9 @@ export interface Reach {
   /** Where the person keeps their workspaces' lists: welcomed as the owner's, the list is kept in
    *  step with the host's (M3), which sends it to the owner's devices alone. */
   lists?: Pick<AccessLists, "follow">;
+  /** This machine's PTY daemon, where the sessions this person placed here run (M4): a new
+   *  connection to it. None: nothing here is shown to the host. */
+  daemon?(): Promise<Duplex>;
 }
 
 interface Open {
@@ -65,6 +74,14 @@ interface Open {
 const open = new Map<string, Open>();
 /** The next dial after `tries` failed ones: 0.5 s, 1 s, 2 s … then every 15 s. */
 const backoff = (tries: number): number => Math.min(15_000, 500 * 2 ** tries);
+
+/** The tile an event is about, by its first word: the tile, its session (`hm:<tile>`), or what
+ *  names it (`{tileId}`). */
+const tileNamed = (params: unknown[]): string | null => {
+  const [first] = params;
+  const id = typeof first === "string" ? first : (first as { tileId?: unknown } | null)?.tileId;
+  return typeof id === "string" ? toBareId(id) : null;
+};
 
 /** The workspace id a `hive://` name is of, or null. */
 const idOf = (v: unknown): string | null => {
@@ -102,14 +119,16 @@ export async function openShared(workspace: string, access: Access, reach: Reach
     if (open.get(workspace) !== entry) return link.close("left");
     entry.link = link;
     entry.api = peerTransport(streamOf(link, "api"));
-    // A tile this person placed on this machine is theirs: no task its host announces for it (M4).
+    // A tile this person placed on this machine runs here: what is said of it (a task for it, its
+    // keyboard, its size) is this machine's, never its host's (M4).
     entry.api.events((event) => {
-      const opened = event.event === "tile.opened" ? (event.params[0] as { tileId?: unknown } | undefined)?.tileId : undefined;
-      if (typeof opened === "string" && guestIn(workspace) && placesHere().placed(workspace, toBareId(opened))) return;
+      const tile = tileNamed(event.params);
+      if (tile && guestIn(workspace) && placesHere().placed(workspace, tile)) return;
       reach.publish(event);
     });
     let following: Promise<boolean> = Promise.resolve(false);
     let stopList = (): void => {};
+    let stopMachine = (): void => {};
     const stop = replicate(sharedStore(), repo, streamOf(link, "sync"), {
       workspace,
       changes: onWorkspaceChange,
@@ -119,6 +138,13 @@ export async function openShared(workspace: string, access: Access, reach: Reach
         // Welcomed as the owner's: the list is kept in step with the host's (M3).
         stopList();
         if (given === "owner" && reach.lists) stopList = followList(reach.lists, workspace, streamOf(link, "list"), (why) => console.warn(`[shared] ${workspace}: ${why}`));
+        // As a guest: what this person placed on this machine is shown to the host, to watch (M4).
+        stopMachine();
+        stopMachine = given !== "owner" && reach.daemon ? serveMachine(streamOf(link, "machine"), {
+          daemon: reach.daemon,
+          shows: (session) => placesHere().placed(workspace, toBareId(session)) !== null,
+          onWarn: (m) => console.warn(`[shared] ${workspace}: ${m}`),
+        }) : () => {};
       },
       onMoved: (notice) => {
         following = (reach.moved?.(notice) ?? Promise.resolve(false)).catch((e: unknown) => {
@@ -131,6 +157,7 @@ export async function openShared(workspace: string, access: Access, reach: Reach
     void link.closed.then(async (why) => {
       stop();
       stopList();
+      stopMachine();
       entry.link = null;
       entry.api = null;
       if (open.get(workspace) !== entry) return;

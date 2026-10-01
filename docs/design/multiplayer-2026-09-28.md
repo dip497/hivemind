@@ -807,6 +807,14 @@ granted it.
 
 - Peers can connect directly (A ↔ Priya) when both ACLs allow; otherwise terminal streams
   are relayed by the workspace host. Direct is tried first.
+  *As built (M4 step 1b):* relayed by the host. Priya's app shows the host the sessions she
+  placed on her machine over her own connection to it (a `machine` stream she opens, so the host
+  never dials her), through a filter of her PTY daemon's protocol on her machine
+  (`machine-share.ts`): the host may watch those sessions (attach without starting, restoring,
+  sizing or pausing them, read their screens, let go) and nothing else, and hears what her daemon
+  says of those alone. The host relays them to every client as its own, at her size (her daemon
+  says it), with the keyboard hers: nobody types into them from the host until she grants it
+  (step 2).
 - Frame record carries `machine: EndpointId` and `path`. Fs and git for that frame go to
   that machine's hive-net (a `hive/fs/1` ALPN replacing one-ssh-command-per-call), with
   the same path containment rules as `remote/fs.ts` and Zeron's owning-engine checks.
@@ -946,6 +954,14 @@ Rules:
 All ALPNs except `hive/pair/1` are rejected in `after_handshake` unless the peer's
 `EndpointId` is on the ACL (R11). Versioned by ALPN suffix; a peer offers every version it
 speaks.
+
+*As built (M1–M4):* one `hive/ws/1` connection carries named streams, each opened by the side
+that dialled sending on it first: `sync` (the workspace document), `api` (the workspace API,
+presence included), `list` (the access list, kept in step on the owner's devices), `device` (the
+workspaces a device holds), `pty` (the PTY daemon's protocol, for the owner's devices), `hosting`
+(moving a workspace), and `machine` (a participant's sessions on their own machine, shown to the
+host through a filter of the same daemon protocol; the participant opens it, so the host never
+dials a participant).
 
 ---
 

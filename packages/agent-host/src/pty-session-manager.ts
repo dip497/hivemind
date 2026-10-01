@@ -74,6 +74,8 @@ export interface SessionClient {
   /** `seq`: the session's output position after `data` (for resuming a viewer from where it left off). */
   onData: (data: string, seq?: number) => void;
   onExit: (code: number, signal: number | undefined) => void;
+  /** The session's size changed, whoever sized it. */
+  onSize?: (cols: number, rows: number) => void;
 }
 
 export interface AttachResult {
@@ -84,6 +86,9 @@ export interface AttachResult {
   /** Output position the replay covers, within this session instance (`epoch`). */
   seq: number;
   epoch: string;
+  /** The session's size after the attach. */
+  cols: number;
+  rows: number;
 }
 
 /** Output kept per session so a returning viewer gets only what it missed. */
@@ -279,19 +284,15 @@ export class SessionManager {
     return t ? `\x1b]0;${t}\x07${withMouse}` : withMouse;
   }
 
-  async createOrAttach(id: string, spec: SpawnSpec, client: SessionClient): Promise<AttachResult> {
+  /** `view`: the client only watches (M4): a running session keeps its size and its pauses. */
+  async createOrAttach(id: string, spec: SpawnSpec, client: SessionClient, view = false): Promise<AttachResult> {
     const existing = this.sessions.get(id);
     if (existing && !existing.exited) {
       existing.clients.add(client);
-      // A viewer that paused and then lost its link may never resume, so a fresh attach clears every pause.
-      existing.pausedBy.clear();
-      this.applyPause(existing);
-      // Attaching is interacting: the new viewer's size wins.
-      this.touch(existing, client, { cols: spec.cols, rows: spec.rows });
-      this.applySize(existing, spec.cols, spec.rows);
+      if (!view) this.interacts(existing, client, spec.cols, spec.rows);
       this.cancelIdle();
       const snap = await this.serializeDrained(existing);
-      return { pid: existing.pty.pid, isNew: false, replay: this.withTitle(existing, snap.replay), seq: snap.seq, epoch: existing.epoch };
+      return { pid: existing.pty.pid, isNew: false, replay: this.withTitle(existing, snap.replay), seq: snap.seq, epoch: existing.epoch, cols: existing.spec.cols, rows: existing.spec.rows };
     }
 
     // Reboot-restore path: snapshot on disk but no live PTY → spawn a fresh
@@ -399,7 +400,7 @@ export class SessionManager {
     // `isNew` = a fresh PTY was just spawned (vs attached to a live one). Both
     // brand-new sessions AND reboot-restored ones produce a new PTY — the only
     // !isNew path is the early-return up top for a still-live existing session.
-    return { pid: p.pid, isNew: true, replay: this.withTitle(session, snap.replay), seq: snap.seq, epoch: session.epoch };
+    return { pid: p.pid, isNew: true, replay: this.withTitle(session, snap.replay), seq: snap.seq, epoch: session.epoch, cols: session.spec.cols, rows: session.spec.rows };
   }
   /** Fire the one-shot restore retry for a session whose `--resume` failed.
    *  Returns true if a retry was launched (caller should NOT proceed to the
@@ -509,18 +510,24 @@ export class SessionManager {
 
   /** Re-attach a returning viewer with only the output it missed; null when that can't be exact
    *  (other session instance, or the gap is older than the ring) — then attach normally. */
-  attachDelta(id: string, client: SessionClient, since: { seq: number; epoch: string }, cols: number, rows: number): AttachResult | null {
+  attachDelta(id: string, client: SessionClient, since: { seq: number; epoch: string }, cols: number, rows: number, view = false): AttachResult | null {
     const s = this.sessions.get(id);
     if (!s || s.exited || s.epoch !== since.epoch || since.seq > s.seq) return null;
     const replay = this.ringSince(s, since.seq);
     if (replay === null) return null;
     s.clients.add(client);
+    if (!view) this.interacts(s, client, cols, rows);
+    this.cancelIdle();
+    return { pid: s.pty.pid, isNew: false, replay, seq: s.seq, epoch: s.epoch, cols: s.spec.cols, rows: s.spec.rows };
+  }
+
+  /** A viewer attaching is interacting: every pause is cleared (one that paused and then lost its
+   *  link may never resume), and its size wins. */
+  private interacts(s: Session, client: SessionClient, cols: number, rows: number): void {
     s.pausedBy.clear();
     this.applyPause(s);
     this.touch(s, client, { cols, rows });
     this.applySize(s, cols, rows);
-    this.cancelIdle();
-    return { pid: s.pty.pid, isNew: false, replay, seq: s.seq, epoch: s.epoch };
   }
 
   /** The current screen, for a viewer that fell too far behind to be sent every byte. */
@@ -586,6 +593,7 @@ export class SessionManager {
     this.applySize(s, cols, rows);
   }
   private applySize(s: Session, cols: number, rows: number): void {
+    const changed = cols !== s.spec.cols || rows !== s.spec.rows;
     s.spec = { ...s.spec, cols, rows };
     try {
       s.pty.resize(cols, rows);
@@ -597,6 +605,8 @@ export class SessionManager {
     } catch {
       /* ignore */
     }
+    // Every viewer is told: one that only watches draws the session at its size.
+    if (changed) for (const c of s.clients) c.onSize?.(cols, rows);
   }
 
   /** Stop streaming to a viewer but keep the process alive; no `client` drops every viewer. */

@@ -1,10 +1,12 @@
-// Agents on your machine in someone else's workspace (M4, design §5.4), with two app instances: a
-// guest who may edit the board puts a frame of their own on their own computer (the only place
-// the chooser offers them), and a shell they open in it runs there, in their folder. The host's
-// board has the frame and the shell, and the host starts nothing on the guest's machine; nor does
-// a shell the host puts in the guest's frame run there: on a guest's machine, only what its person
-// placed runs.
+// Agents on your machine in someone else's workspace (M4, design §5.4), with two app instances,
+// each running its terminals in its own PTY daemon, as outside tests: a guest who may edit the
+// board puts a frame of their own on their own computer (the only place the chooser offers them),
+// and a shell they open in it runs there, in their folder. The host watches it, live, through the
+// guest's own connection, and its keyboard is the guest's machine's: the host's keys never reach
+// it. A shell the host puts in the guest's frame runs nowhere: the guest's machine runs only what
+// its person placed, and shows the host nothing else.
 import { test, expect, type ElectronApplication, type Page } from "@playwright/test";
+import { execSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -13,8 +15,20 @@ import { hiveNetBuilt, sharedWorkspace, tiles } from "./helpers/multiplayer";
 let root: string;
 const apps: ElectronApplication[] = [];
 test.beforeEach(() => { root = fs.mkdtempSync(path.join(os.tmpdir(), "hm-guest-machine-")); });
+const DAEMON = { HIVEMIND_PTY_DAEMON: "1" };
 test.afterEach(async () => {
-  for (const a of apps.splice(0)) await a.close().catch(() => {});
+  // These two people's daemons only (`[.]`: the pattern matches no shell that runs it), before the
+  // apps close, as they close (closing waits on them, and an app that still shows a session there
+  // starts its daemon again), and after.
+  const reap = () => { try { execSync(`pkill -f "out/main/pty-daemon[.]js ${root}/"`, { stdio: "ignore" }); } catch { /* none */ } };
+  reap();
+  const reaping = setInterval(reap, 500);
+  try {
+    for (const a of apps.splice(0)) await a.close().catch(() => {});
+  } finally {
+    clearInterval(reaping);
+  }
+  reap();
   fs.rmSync(root, { recursive: true, force: true });
 });
 
@@ -25,6 +39,20 @@ const screenOf = (w: Page, tile: string) => w.locator(`.react-flow__node-termina
   return host?.__hmScreen() ?? "";
 }).catch(() => "");
 const read = (file: string) => (fs.existsSync(file) ? fs.readFileSync(file, "utf8").trim() : "");
+/** The scale `w` draws the terminal of `tile` at in its tile: 1 when it fills it. */
+const drawnScale = (w: Page, tile: string) => w.locator(`.react-flow__node-terminal[data-id="${tile}"] .xterm`).evaluate((el) => (el as HTMLElement).style.transform.match(/scale\(([\d.]+)\)/)?.[1] ?? "1");
+/** `w` brings the tile `tile` into view, selected: one someone else placed may be anywhere. */
+async function focusTile(w: Page, tile: string): Promise<void> {
+  await expect.poll(async () => {
+    await w.evaluate((id) => window.dispatchEvent(new CustomEvent("hivemind:focus-tile", { detail: id })), tile);
+    return w.locator(`.react-flow__node[data-id="${tile}"] .hm-node-selected`).count();
+  }, { timeout: 20_000, intervals: [500] }).toBe(1);
+}
+/** `w` clicks into the terminal of `tile`. */
+async function clickInto(w: Page, tile: string): Promise<void> {
+  await focusTile(w, tile);
+  await w.locator(`.react-flow__node-terminal[data-id="${tile}"] .xterm-screen`).click();
+}
 /** The tile `w` opened in `frame` by asking for a shell there. */
 async function openShell(w: Page, frame: string): Promise<string> {
   const before = await tiles(w);
@@ -34,10 +62,10 @@ async function openShell(w: Page, frame: string): Promise<string> {
   return tile;
 }
 
-test("a guest puts a frame of their own on their computer: a shell they open in it runs there, in their folder; the host starts nothing there, nor does a shell the host puts in it run", async () => {
+test("a guest puts a frame of their own on their computer: a shell they open in it runs there, in their folder, and the host watches it without typing into it; a shell the host puts there runs nowhere", async () => {
   test.skip(!hiveNetBuilt(), "build hive-net first: cargo build in crates/hive-net");
-  test.setTimeout(150_000);
-  const { host, guest } = await sharedWorkspace(root, apps, "edit");
+  test.setTimeout(180_000);
+  const { host, guest } = await sharedWorkspace(root, apps, "edit", { env: DAEMON, names: { host: "Adarsh", guest: "Priya" } });
   const folder = path.join(root, "priya-api");
   fs.mkdirSync(folder);
 
@@ -52,30 +80,52 @@ test("a guest puts a frame of their own on their computer: a shell they open in 
 
   // A shell they open in it runs on their computer, in their folder.
   const shell = await openShell(guest, frame);
-  const terminal = guest.locator(`.react-flow__node-terminal[data-id="${shell}"]`);
-  await expect.poll(async () => {
-    await guest.evaluate((id) => window.dispatchEvent(new CustomEvent("hivemind:focus-tile", { detail: id })), shell);
-    return terminal.locator(".hm-node-selected").count();
-  }, { timeout: 20_000, intervals: [500] }).toBe(1);
-  await expect(terminal.locator("textarea.xterm-helper-textarea")).toBeFocused({ timeout: 10_000 });
+  await focusTile(guest, shell);
+  await expect(guest.locator(`.react-flow__node-terminal[data-id="${shell}"] textarea.xterm-helper-textarea`)).toBeFocused({ timeout: 10_000 });
   await expect.poll(async () => {
     if (!read(path.join(folder, "where.txt"))) await guest.keyboard.type("pwd > where.txt\n");
     return read(path.join(folder, "where.txt"));
   }, { timeout: 30_000, intervals: [1_000] }).toBe(folder);
 
-  // Opened again (the window reloads), it starts on their computer again, as they placed it.
+  // The host's board has it, and the host watches it as it runs, through the guest's connection:
+  // its keyboard is the guest's machine's, which nobody takes from the host.
+  await guest.keyboard.type("echo watched-$((6*7))\n");
+  await expect.poll(() => tiles(host), { timeout: 15_000 }).toContain(shell);
+  await expect.poll(() => screenOf(host, shell), { timeout: 30_000 }).toContain("watched-42");
+  const watched = host.locator(`.react-flow__node-terminal[data-id="${shell}"]`);
+  await expect(watched.locator("[data-keyboard-holder]")).toHaveAttribute("data-keyboard-holder", "Priya");
+  await expect(watched.locator("[data-keyboard-machine]")).toHaveCount(1);
+  await expect(watched.locator("[data-keyboard-take]")).toHaveCount(0);
+  // At the size it has on the guest's computer: the host, whose letters are bigger, draws it
+  // scaled down to its tile, and does not size it.
+  await focusTile(host, shell);
+  for (let i = 0; i < 4; i++) await watched.getByRole("button", { name: "increase font size" }).click({ force: true });
+  await expect.poll(() => drawnScale(host, shell).then(Number), { timeout: 10_000 }).toBeLessThan(1);
+
+  // What the host types goes nowhere.
+  await clickInto(host, shell);
+  await host.keyboard.type(`touch ${folder}/host-was-here\n`);
+  await clickInto(guest, shell);
+  await expect.poll(async () => {
+    if (!read(path.join(folder, "done.txt"))) await guest.keyboard.type("echo done > done.txt\n");
+    return read(path.join(folder, "done.txt"));
+  }, { timeout: 20_000, intervals: [1_000] }).toBe("done");
+  await host.waitForTimeout(1_000); // anything the host's window sent has long arrived
+  expect(fs.existsSync(path.join(folder, "host-was-here"))).toBe(false);
+
+  // Opened again (the window reloads), it is theirs to run on their computer, as they placed it.
   await guest.reload();
   await expect.poll(() => screenOf(guest, shell), { timeout: 20_000 }).toContain(folder);
   expect(await screenOf(guest, shell)).not.toContain("someone else placed");
 
-  // The host's board has it, and the host started nothing on the guest's machine.
-  await expect.poll(() => tiles(host), { timeout: 15_000 }).toContain(shell);
-  await expect.poll(() => screenOf(host, shell), { timeout: 15_000 }).toContain("someone else's machine");
-
-  // A shell the host puts in the guest's frame reaches the guest's board, and does not run there.
+  // A shell the host puts in the guest's frame reaches the guest's board, and runs nowhere: not
+  // there, where its person did not place it, nor through the host, which their machine does not
+  // show it.
   const had2 = await tiles(guest);
   const planted = await openShell(host, frame);
   await expect.poll(() => tiles(guest), { timeout: 15_000 }).toContain(planted);
   expect(had2).not.toContain(planted);
   await expect.poll(() => screenOf(guest, planted), { timeout: 15_000 }).toContain("someone else placed this tile on your computer");
+  // (Refused as the host starts it, or, once the host's board holds it, as their machine shows it not.)
+  await expect.poll(() => screenOf(host, planted), { timeout: 20_000 }).toMatch(/what runs there is theirs to start|not running on the machine it belongs to/);
 });

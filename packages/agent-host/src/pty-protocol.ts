@@ -33,8 +33,10 @@ export interface SessionInfo {
 export type ClientMsg =
   /** noSpawn: a viewer must never create a session by guessing an id.
    *  liveOnly: with noSpawn, a running session only; a frozen one is not restored.
-   *  since: resume from this output position (same epoch) instead of a full replay. */
-  | { t: "attach"; reqId: string; id: string; spec: SpawnSpecWire; noSpawn?: boolean; liveOnly?: boolean; since?: { seq: number; epoch: string } }
+   *  since: resume from this output position (same epoch) instead of a full replay.
+   *  view: a viewer that only watches (a workspace's host, shown a session on someone else's
+   *  machine, M4): the session keeps its size and its other viewers' pauses. */
+  | { t: "attach"; reqId: string; id: string; spec: SpawnSpecWire; noSpawn?: boolean; liveOnly?: boolean; since?: { seq: number; epoch: string }; view?: boolean }
   /** Capabilities of this client; "resync" = may be sent a fresh screen instead of every byte when behind. */
   | { t: "hello"; caps: string[] }
   | { t: "write"; id: string; data: string; /** A message pasted into the TUI, not keystrokes (see paste.ts). */ paste?: boolean }
@@ -63,9 +65,12 @@ export type ClientMsg =
 
 /** daemon → client */
 export type ServerMsg =
-  /** delta: `replay` is only the output after the requested position, not a redraw. */
-  | { t: "attached"; reqId: string; id: string; pid: number; isNew: boolean; replay: string; error?: string; seq?: number; epoch?: string; delta?: boolean }
+  /** delta: `replay` is only the output after the requested position, not a redraw.
+   *  cols/rows: the session's size, which a viewer that only watches draws it at. */
+  | { t: "attached"; reqId: string; id: string; pid: number; isNew: boolean; replay: string; error?: string; seq?: number; epoch?: string; delta?: boolean; cols?: number; rows?: number }
   | { t: "data"; id: string; data: string; seq?: number }
+  /** The session's size changed: to each of its viewers. */
+  | { t: "size"; id: string; cols: number; rows: number }
   /** The viewer fell behind: its missed output was dropped; this is the screen now. */
   | { t: "resync"; id: string; replay: string; seq: number; epoch: string }
   /** An agent hook event from a daemon running without the desktop, to viewers that asked for "events". */

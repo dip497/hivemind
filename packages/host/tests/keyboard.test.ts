@@ -5,6 +5,7 @@
 // sizes the session, and everyone is told who holds it; it comes back to the host when taken,
 // after five idle minutes, and when its holder goes; and everyone is told a session's size. Whoever
 // types is named to the others showing it (R4), and a guest's typing is marked in the audit log.
+// A terminal on a participant's machine (M4) is theirs: nobody here types into it or sizes it.
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -22,7 +23,9 @@ after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 const PRIYA = "b".repeat(64);
 let made = 0;
 
-function host() {
+/** A host; with `machine`, one whose terminals in `machine://` frames run on Priya's machine, which
+ *  says each one's size as it opens. */
+function host({ machine = false } = {}) {
   const calls: string[] = [];
   let server!: WorkspaceServer;
   const audit = path.join(tmp, `audit-${made++}.jsonl`);
@@ -31,8 +34,12 @@ function host() {
     relay: { record: () => {}, screenPrefix: "" },
     publish: (event, ...params) => server.publish(event, ...params),
     who: (c) => (c.actor.kind === "peer" ? { person: c.actor.person, name: "Priya" } : { person: "a".repeat(64), name: "Adarsh" }),
+    ...(machine ? { machineOf: (o: { cwd: string }) => (o.cwd.startsWith("machine://") ? PRIYAS_MACHINE : null) } : {}),
     backend: {
-      start: async () => ({ pid: 7 }),
+      start: async (o, out) => {
+        if (machine && o.cwd.startsWith("machine://")) out.size?.(120, 40);
+        return { pid: 7 };
+      },
       write: (t, d) => calls.push(`write ${d}`),
       echoes: () => false,
       resize: (t, c, r) => calls.push(`resize ${c}x${r}`),
@@ -48,13 +55,38 @@ function host() {
     server.connect(c);
     return c;
   };
-  const open = (from: Connection, starts = false) => server.answer("terminal.open", [{ tileId: "hm:t1", cwd: tmp, cmd: "/bin/sh", cols: 80, rows: 24, ...(starts ? {} : { attachOnly: true }) }], from);
+  const open = (from: Connection, starts = false, cwd = tmp) => server.answer("terminal.open", [{ tileId: "hm:t1", cwd, cmd: "/bin/sh", cols: 80, rows: 24, ...(starts ? {} : { attachOnly: true }) }], from);
   const notice = (from: Connection, method: string, ...params: unknown[]) => server.notice(method, params, from);
   const told = (c: { received: EventMessage[] }, event: string) => c.received.filter((m) => m.event === event).map((m) => m.params);
   const audited = () => (fs.existsSync(audit) ? fs.readFileSync(audit, "utf8") : "").split("\n").filter(Boolean).map((l) => JSON.parse(l) as { verb: string; target?: string; actor: Actor; outcome: string });
   return { calls, client, open, notice, told, audited };
 }
 const guestActor: Actor = { kind: "peer", person: PRIYA, device: "d".repeat(64), access: "terminals" };
+const PRIYAS_MACHINE = { id: `peer:${"d".repeat(64)}`, person: PRIYA, name: "Priya" };
+
+test("a terminal on a participant's machine is theirs (M4): whoever opens it is told its machine's person holds its keyboard, and the size it has there; nobody here types into it or sizes it, nor asks for, gives or takes its keyboard", async () => {
+  const h = host({ machine: true });
+  const [win, laptop, guest] = [h.client({ kind: "person" }), h.client({ kind: "peer", person: "a".repeat(64), device: "e".repeat(64), access: "owner" }), h.client({ ...guestActor, access: "agents" })];
+  const there = `machine://${"d".repeat(64)}/home/priya/api`;
+  await h.open(win, true, there);
+  await h.open(laptop, false, there);
+  await h.open(guest, false, there);
+  for (const c of [win, laptop, guest]) assert.deepEqual(h.told(c, "terminal.keyboard"), [["hm:t1", PRIYAS_MACHINE]]);
+  assert.deepEqual(h.told(win, "terminal.size"), [["hm:t1", 120, 40]], "its size there, never the opener's");
+  assert.deepEqual(h.told(guest, "terminal.size").at(-1), ["hm:t1", 120, 40]);
+
+  for (const c of [win, laptop, guest]) {
+    h.notice(c, "terminal.write", "hm:t1", "ls\r");
+    h.notice(c, "terminal.resize", "hm:t1", 100, 30);
+  }
+  h.notice(guest, "terminal.keyboard.ask", "hm:t1");
+  h.notice(win, "terminal.keyboard.give", "hm:t1", `peer:${"d".repeat(64)}`);
+  h.notice(win, "terminal.keyboard.take", "hm:t1");
+  await new Promise((r) => setTimeout(r, 20));
+  assert.deepEqual(h.calls, [], "no keys, no size");
+  assert.deepEqual(h.told(win, "terminal.keyboard.asked"), [], "nobody here to ask");
+  for (const c of [win, laptop, guest]) assert.equal(h.told(c, "terminal.keyboard").length, 1, "it never moves");
+});
 
 test("a device of the owner's types as the host's own windows do, and a guest's keys still never reach the session", async () => {
   const h = host();

@@ -6,6 +6,10 @@
  * session there is first started or shown and made again when it drops; each session is that
  * daemon's, so it outlives this host as it does the device's own windows.
  *
+ * A frame on a participant's machine (M4) runs what its person placed there, on their machine:
+ * nothing is started there from here, nor is it dialled. Its sessions are watched, from what its
+ * app shows of them on its own connection here (`shown`), never sized or typed into from here.
+ *
  * `onDevices` puts them beside the host's own: a session in a frame on another device goes there,
  * one on this device or any other machine goes where it went before.
  */
@@ -14,7 +18,12 @@ import { parseDeviceUri } from "@hivemind/core/remote-uri";
 import { DaemonEndpoint, type EndpointState } from "@hivemind/agent-host/daemon-endpoint";
 import { INITIAL_PROMPT_ENV } from "@hivemind/agent-host/initial-prompt";
 import type { Link } from "@hivemind/workspace-host/hive-net";
+import type { AccessLists } from "@hivemind/workspace-host/access";
+import { toBareId } from "@hivemind/workspace-api/tile-id";
+import type { Typist } from "@hivemind/workspace-api/terminals";
 import type { SessionBackend } from "./terminals.js";
+import type { ShownMachine } from "./peer-links.js";
+import { SHOWN_WAIT_MS } from "./machine-share.js";
 
 export interface DeviceSessionsOptions {
   /** Connect to one of the person's devices. */
@@ -23,6 +32,9 @@ export interface DeviceSessionsOptions {
    *  person placed there, on their machine (M4): nothing is started there from here, and no
    *  connection is made to it. */
   mine(device: string): boolean;
+  /** What a participant's app shows of their machine `device` (M4), for the workspace `tile` is
+   *  in: its sessions are watched through it. None: they are not shown here. */
+  shown?(device: string, tile: string): ShownMachine | null;
   /** An event from a device's daemon about a session this host runs there (an agent's status). */
   onEvent?(topic: string, data: unknown): void;
   /** How the connection to a device is doing. */
@@ -44,8 +56,9 @@ const ownEnvGone = (env?: Record<string, string>): Record<string, string> | unde
 };
 
 /** `stream` on `link` as a duplex of text: what is written goes out in frames, what comes in is
- *  read; it ends with the link. */
-export function linkDuplex(link: Link, stream: string): Duplex {
+ *  read; it ends with the link, or at the frame `endsAt`. Destroyed, it closes the link, unless it
+ *  only borrows it (`borrowed`: the link carries more than this stream). */
+export function linkDuplex(link: Link, stream: string, o: { borrowed?: boolean; endsAt?: string } = {}): Duplex {
   const d = new Duplex({
     read() {},
     write(chunk: Buffer | string, _encoding, done) {
@@ -53,12 +66,13 @@ export function linkDuplex(link: Link, stream: string): Duplex {
       done();
     },
     destroy(error, done) {
-      link.close();
+      off();
+      if (!o.borrowed) link.close();
       done(error);
     },
   });
-  const off = link.on(stream, (text) => d.push(text));
-  void link.closed.then(() => { off(); d.push(null); d.destroy(); });
+  const off = link.on(stream, (text) => (o.endsAt !== undefined && text.trim() === o.endsAt ? d.destroy() : void d.push(text)));
+  void link.closed.then(() => { if (!d.destroyed) { d.push(null); d.destroy(); } });
   return d;
 }
 
@@ -70,37 +84,78 @@ export function deviceSessions(o: DeviceSessionsOptions): DeviceSessions {
   const tiles = new Map<string, DaemonEndpoint>();
   /** Starts waiting on each device, told if it turns this one away. */
   const waiting = new Map<string, Set<(why: string) => void>>();
-  const letGo = (device: string): void => {
-    const ep = endpoints.get(device);
+  const letGo = (key: string): void => {
+    const ep = endpoints.get(key);
     if (!ep) return;
-    endpoints.delete(device);
+    endpoints.delete(key);
     for (const [tile, at] of tiles) if (at === ep) tiles.delete(tile);
     ep.close();
   };
-  const endpointFor = (device: string): DaemonEndpoint => {
-    let ep = endpoints.get(device);
+  /** The connection to the daemon `key` names (a device, or a participant's machine for one
+   *  workspace), made by `connect`, the first time it is wanted. */
+  const endpointFor = (key: string, device: string, connect: (made: DaemonEndpoint) => Promise<Duplex>, attachTimeoutMs?: number): DaemonEndpoint => {
+    let ep = endpoints.get(key);
     if (!ep) {
       const made: DaemonEndpoint = new DaemonEndpoint({
-        connect: async () => {
-          const link = await o.dial(device);
-          // Turned away: dialling again changes nothing until something is started there anew.
-          void link.closed.then((why) => {
-            if (!TURNED_AWAY.test(why) || endpoints.get(device) !== made) return;
-            for (const tell of waiting.get(device) ?? []) tell(why);
-            letGo(device);
-          });
-          return linkDuplex(link, "pty");
-        },
-        // Only what is about a session this host runs there: the device's own are its own.
+        connect: () => connect(made),
+        // Only what is about a session this host runs or watches there: the machine's own are its own.
         onEvent: (topic, data) => {
           const tile = (data as { tileId?: unknown } | null)?.tileId;
           if (typeof tile === "string" && tiles.get(tile) === made) o.onEvent?.(topic, data);
         },
         onStatus: (state, detail) => o.onStatus?.(device, state, detail),
+        ...(attachTimeoutMs ? { attachTimeoutMs } : {}),
       });
-      endpoints.set(device, (ep = made));
+      endpoints.set(key, (ep = made));
     }
     return ep;
+  };
+  /** One of the person's devices, dialled. */
+  const deviceEndpoint = (device: string): DaemonEndpoint => endpointFor(device, device, async (made) => {
+    const link = await o.dial(device);
+    // Turned away: dialling again changes nothing until something is started there anew.
+    void link.closed.then((why) => {
+      if (!TURNED_AWAY.test(why) || endpoints.get(device) !== made) return;
+      for (const tell of waiting.get(device) ?? []) tell(why);
+      letGo(device);
+    });
+    return linkDuplex(link, "pty");
+  });
+  /** A session in a frame on a participant's machine (M4): watched through what its app shows of
+   *  it, never started, sized or typed into from here; it waits a while for one its window there
+   *  is starting. */
+  const watch = async (opts: Parameters<SessionBackend["start"]>[0], out: Parameters<SessionBackend["start"]>[1], device: string): Promise<{ pid: number }> => {
+    const shown = o.shown?.(device, opts.tile ?? toBareId(opts.tileId));
+    if (!shown) {
+      if (opts.attachOnly) return { pid: -1 };
+      throw new Error("this frame runs on someone else's machine: what runs there is theirs to start");
+    }
+    const ep = endpointFor(shown.key, device, async () => {
+      const d = shown.open();
+      if (!d) throw new Error("its machine is not connected");
+      return d;
+    }, SHOWN_WAIT_MS + 5_000);
+    tiles.set(opts.tileId, ep);
+    try {
+      const r = await ep.spawn(
+        { tileId: opts.tileId, cwd: "", cmd: opts.cmd, cols: opts.cols, rows: opts.rows, noSpawn: true, liveOnly: true },
+        {
+          onData: (data, replay) => out.data(data, replay),
+          onExit: (code, signal) => { tiles.delete(opts.tileId); out.exit(code, signal); },
+          onSize: (cols, rows) => out.size?.(cols, rows),
+        },
+      );
+      if (r.pid === -1) {
+        ep.detach(opts.tileId);
+        tiles.delete(opts.tileId);
+        // Its machine answered: it does not run there. Otherwise, it was not reached.
+        if (!ep.connected) throw new Error("this frame runs on someone else's machine, which is not connected: what runs there is shown here while it is");
+      }
+      return r;
+    } catch (e) {
+      tiles.delete(opts.tileId);
+      throw e;
+    }
   };
   const on = (tile: string) => tiles.get(tile);
   return {
@@ -108,11 +163,8 @@ export function deviceSessions(o: DeviceSessionsOptions): DeviceSessions {
     start: async (opts, out) => {
       const at = parseDeviceUri(opts.cwd);
       if (!at) throw new Error(`${opts.cwd} is not a folder on one of your devices`);
-      if (!o.mine(at.device)) {
-        if (opts.attachOnly) return { pid: -1 };
-        throw new Error("this frame runs on someone else's machine: what runs there is theirs to start");
-      }
-      const ep = endpointFor(at.device);
+      if (!o.mine(at.device)) return watch(opts, out, at.device);
+      const ep = deviceEndpoint(at.device);
       tiles.set(opts.tileId, ep);
       const env = opts.initialPrompt ? { ...(opts.env ?? {}), [INITIAL_PROMPT_ENV]: opts.initialPrompt } : opts.env;
       let tell!: (why: string) => void;
@@ -155,9 +207,19 @@ export function deviceSessions(o: DeviceSessionsOptions): DeviceSessions {
       return ep?.has(tile) ? (cb) => { if (!ep.has(tile)) return false; ep.screen(tile, cb); return true; } : null;
     },
     close: () => {
-      for (const device of [...endpoints.keys()]) letGo(device);
+      for (const key of [...endpoints.keys()]) letGo(key);
     },
   };
+}
+
+/** Whose machine the frame folder `cwd` is on, as a terminal's keyboard names them, when it is a
+ *  participant's (M4): neither this device (`self`) nor one of the person's. The person whose
+ *  device it is, as a workspace here lists them, and their name. */
+export function participantAt(cwd: string, o: { self: string; mine(device: string): boolean; lists: Pick<AccessLists, "workspaces" | "personOf">; nameOf(person: string): string }): Typist | null {
+  const at = parseDeviceUri(cwd);
+  if (!at || at.device === o.self || o.mine(at.device)) return null;
+  const person = o.lists.workspaces().map((ws) => o.lists.personOf(ws, at.device)).find((p): p is string => !!p) ?? "";
+  return { id: `peer:${at.device}`, person, name: person ? o.nameOf(person) : "" };
 }
 
 /**

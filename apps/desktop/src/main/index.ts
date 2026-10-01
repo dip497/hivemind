@@ -75,7 +75,7 @@ import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, sett
 import { flushWorkspaceStore, installWorkspaceStoreIpc, storeFor, workspaceStore } from "./workspace-store-ipc.js";
 import { installIdentityIpc, machineIdentity } from "./identity.js";
 import { defaultShellFor } from "@hivemind/agent-host/shell-spec";
-import { dialDevice, installNetworkIpc, isYourDevice, movedAway, openJoined, peopleHere, personName, stopNetwork } from "./network.js";
+import { dialDevice, installNetworkIpc, isYourDevice, movedAway, openJoined, participantOf, peopleHere, personName, shownFrom, stopNetwork } from "./network.js";
 import { elsewhere, mayWriteShared, placedRun, refusedShared, wroteShared } from "./shared-workspaces.js";
 import { appWindowOf, broadcast, openWindows, registerWindow, userWindow } from "./windows.js";
 import { patchSettingsExtras } from "@hivemind/core/settings";
@@ -1010,10 +1010,12 @@ const onPtyExit = (tileId: string): void => control.exited(tileId);
 // @hivemind/agent-host/session-relay): main holds one attach per session, and a window that mounts
 // a tile another window already shows joins it, its screen first. How a session runs is main's:
 // the daemon or this process, or ssh for a remote frame.
-/** Terminals in frames on the person's other devices (M3): in each device's daemon, over hive-net. */
+/** Terminals in frames on the person's other devices (M3): in each device's daemon, over hive-net.
+ *  One on a participant's machine (M4) is watched, as their app shows it. */
 const onYourDevices = deviceSessions({
   dial: dialDevice,
   mine: isYourDevice,
+  shown: shownFrom,
   onEvent: (topic, data) => control.fromMachine(topic, data),
   onStatus: (device, state, detail) => deviceStatus(device, state, detail),
 });
@@ -1060,6 +1062,8 @@ const terminals = new Terminals({
   // Who holds each terminal's keyboard, and each session's size, told to every client (M2).
   publish: (event, ...params) => workspaceServer.publish(event, ...params),
   who: whoIs,
+  // A terminal on a participant's machine is typed into and sized there, by its person (M4).
+  machineOf: (opts) => participantOf(opts.cwd),
   watchActivity: (tiles) => ptyActivity.setWatched(tiles),
   onError: (m) => console.warn(`[terminals] ${m}`),
   backend: {
@@ -1144,7 +1148,7 @@ async function startSession(opts: TerminalOpts, out: SessionOutput): Promise<{ p
   // cwd stat + shell-env patch (those are for the LOCAL host). The data/exit
   // plumbing is identical.
   if (isRemote(opts.cwd)) {
-    if (onDevice) return onYourDevices.start(opts, { data: callbacks.onData, exit: callbacks.onExit });
+    if (onDevice) return onYourDevices.start(opts, { data: callbacks.onData, exit: callbacks.onExit, size: out.size });
     return spawnRemotePty(opts, remoteTarget(opts.cwd), callbacks);
   }
   if (opts.cwd) {

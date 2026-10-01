@@ -530,22 +530,26 @@ const server = net.createServer((sock) => {
             behind.delete(msg.id);
             lastSeq.delete(msg.id);
           },
+          // Sized by another viewer: one that only watches draws it at that size. Its bytes so far
+          // were drawn at the size before.
+          onSize: (cols, rows) => { outBuf.flush(msg.id); send({ t: "size", id: msg.id, cols, rows }); },
         };
         viewers.set(msg.id, viewer);
-        const delta = msg.since ? manager.attachDelta(msg.id, viewer, msg.since, msg.spec.cols, msg.spec.rows) : null;
+        const view = msg.view === true;
+        const delta = msg.since ? manager.attachDelta(msg.id, viewer, msg.since, msg.spec.cols, msg.spec.rows, view) : null;
         if (delta) {
           ready = true;
           lastSeq.set(msg.id, delta.seq);
-          send({ t: "attached", reqId: msg.reqId, id: msg.id, pid: delta.pid, isNew: false, replay: delta.replay, seq: delta.seq, epoch: delta.epoch, delta: true });
+          send({ t: "attached", reqId: msg.reqId, id: msg.id, pid: delta.pid, isNew: false, replay: delta.replay, seq: delta.seq, epoch: delta.epoch, delta: true, cols: delta.cols, rows: delta.rows });
           break;
         }
         // The spawn/restore checkpoint: an agent installed after boot is wired here,
         // before its spec is transformed.
         void ensureAgentsCurrent()
-          .then(() => manager.createOrAttach(msg.id, msg.spec, viewer))
+          .then(() => manager.createOrAttach(msg.id, msg.spec, viewer, view))
           .then((r) => {
             ready = true;
-            send({ t: "attached", reqId: msg.reqId, id: msg.id, pid: r.pid, isNew: r.isNew, replay: r.replay, seq: r.seq, epoch: r.epoch });
+            send({ t: "attached", reqId: msg.reqId, id: msg.id, pid: r.pid, isNew: r.isNew, replay: r.replay, seq: r.seq, epoch: r.epoch, cols: r.cols, rows: r.rows });
           })
           .catch((e: unknown) => {
             // Bad cwd / node-pty ABI / ENOENT cmd. Without this catch the

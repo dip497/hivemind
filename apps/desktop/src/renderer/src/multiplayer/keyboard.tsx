@@ -7,7 +7,8 @@
  *
  * A terminal draws its part from `useTerminalKeyboard`: who has the keyboard, in its title bar,
  * once the workspace is shared; whether this window's keys reach it; asking for it (a guest who
- * may use terminals), giving it to whoever asks, and taking it back (the host).
+ * may use terminals), giving it to whoever asks, and taking it back (the host). A terminal on a
+ * participant's machine (M4) is theirs: its keyboard is the machine's, typed into there alone.
  */
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
@@ -82,8 +83,9 @@ function drop(tile: string, asker: string): void {
 }
 
 export interface TerminalKeyboard {
-  /** Who has it, as this window names them; null while nobody else is in the workspace. */
-  holder: { name: string; you: boolean } | null;
+  /** Who has it, as this window names them; null while nobody else is in the workspace.
+   *  `machine`: the terminal runs on their machine, and is typed into there (M4). */
+  holder: { name: string; you: boolean; machine?: boolean } | null;
   /** Whether this window's keys reach the terminal. */
   mayType: boolean;
   /** A guest who may use terminals, without it: they may ask for it. */
@@ -105,7 +107,12 @@ export function useTerminalKeyboard(tile: string, cwd?: string): TerminalKeyboar
   const { holder, size } = now;
   // In a frame of this person's on this machine (M4), the terminal runs here: this window is where
   // it runs, as in a workspace of its own.
-  const here = !!cwd && !!myDevice && parseDeviceUri(cwd)?.device === myDevice;
+  const at = cwd ? parseDeviceUri(cwd)?.device : undefined;
+  const here = !!at && !!myDevice && at === myDevice;
+  // In a frame on a participant's machine (M4), its keyboard is that machine's: typed into there.
+  if (holder && at && !here && holder.id === `peer:${at}`) {
+    return { holder: { name: holder.name || "Someone", you: false, machine: true }, mayType: false, mayAsk: false, mayTake: false, asks: [], size };
+  }
   // A workspace of this person's own on a host of theirs (R14): here as the host, not as a guest.
   if (joined && shared?.access !== "owner" && !here) {
     const you = !!holder && holder.id === me;
@@ -144,8 +151,8 @@ export function KeyboardChip({ tile, name, kb }: { tile: string; name: string; k
   const typing = useTyping(tile);
   if (!kb.holder) return null;
   return (
-    <span className="nodrag inline-flex shrink-0 items-center gap-1 text-[10.5px] text-[var(--color-fg3)]" data-keyboard={tile} data-keyboard-holder={kb.holder.name}>
-      <span className="inline-flex items-center gap-1 rounded bg-[var(--color-bg)] px-1 py-px" title={kb.holder.you ? "You have the keyboard" : `${kb.holder.name} has the keyboard`}>
+    <span className="nodrag inline-flex shrink-0 items-center gap-1 text-[10.5px] text-[var(--color-fg3)]" data-keyboard={tile} data-keyboard-holder={kb.holder.name} data-keyboard-machine={kb.holder.machine ? "" : undefined}>
+      <span className="inline-flex items-center gap-1 rounded bg-[var(--color-bg)] px-1 py-px" title={kb.holder.you ? "You have the keyboard" : kb.holder.machine ? `Runs on ${kb.holder.name}'s machine: typed into there` : `${kb.holder.name} has the keyboard`}>
         <Keyboard size={11} aria-hidden /> {kb.holder.name}
       </span>
       {typing && <span className="animate-pulse text-[var(--color-fg2)]" data-typing={tile}>{typing} is typing</span>}

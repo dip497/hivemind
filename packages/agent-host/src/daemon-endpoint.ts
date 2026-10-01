@@ -19,6 +19,8 @@ export interface Callbacks {
   /** `replay`: a redraw of output already seen, not new output. */
   onData: (data: string, replay?: boolean) => void;
   onExit: (code: number, signal: number | undefined) => void;
+  /** The session's size, as its daemon says it on attaching and whenever it changes. */
+  onSize?: (cols: number, rows: number) => void;
 }
 type AttachSpec = Extract<ClientMsg, { t: "attach" }>["spec"];
 
@@ -86,6 +88,8 @@ export class DaemonEndpoint {
         }
         if (msg.pid > 0) this.live.add(msg.id);
         if (msg.seq !== undefined && msg.epoch) this.pos.set(msg.id, { seq: msg.seq, epoch: msg.epoch });
+        // The size first: the replay is drawn at it.
+        if (msg.pid > 0 && msg.cols && msg.rows) this.cbs.get(msg.id)?.onSize?.(msg.cols, msg.rows);
         // A delta continues the stream exactly; a redraw of a tile that shows the old screen starts from a reset.
         const redraw = msg.reqId.startsWith("re") && !msg.delta;
         if (msg.replay) this.cbs.get(msg.id)?.onData(redraw ? REATTACH_RESET + msg.replay : msg.replay, true);
@@ -99,6 +103,9 @@ export class DaemonEndpoint {
         this.cbs.get(msg.id)?.onData(msg.data);
         break;
       }
+      case "size":
+        this.cbs.get(msg.id)?.onSize?.(msg.cols, msg.rows);
+        break;
       case "resync":
         this.pos.set(msg.id, { seq: msg.seq, epoch: msg.epoch });
         this.cbs.get(msg.id)?.onData(REATTACH_RESET + msg.replay, true);

@@ -13,7 +13,9 @@
  * session; a guest holding its keyboard sizes it. Every client is told a session's size when it
  * changes, so one whose own differs draws it at that size. A pause is a short lease: see
  * PAUSE_MAX_MS. Whoever types is named to the others showing the session (`terminal.typing`,
- * R4), and a guest's typing is marked in the audit log once a burst (never what was typed).
+ * R4), and a guest's typing is marked in the audit log once a burst (never what was typed). A
+ * session on a participant's machine (M4) is typed into and sized there, by its person
+ * (`machineOf`): nobody here types into it, and its size is the one that machine says.
  *
  * Starting a session is the intent of whoever opens it, unless the host asked for it itself (a
  * control-plane spawn) or the client only shows one the host holds; ending one is the intent of
@@ -24,7 +26,7 @@ import { SessionRelay, type ReadScreen, type SessionRelayOptions, type Viewer } 
 import type { Intents } from "@hivemind/workspace-host/intents";
 import { fields, flag, text, texts, whole, written } from "@hivemind/workspace-api/protocol";
 import { emit, named, type Connection, type Domain } from "@hivemind/workspace-api/server";
-import type { TerminalOpts } from "@hivemind/workspace-api/terminals";
+import type { TerminalOpts, Typist } from "@hivemind/workspace-api/terminals";
 import type { EventParams } from "@hivemind/workspace-api/methods";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
 import { Keyboards, isHost } from "./keyboard.js";
@@ -34,6 +36,8 @@ export interface SessionOutput {
   /** `replay`: a redraw of output already seen, not new output. */
   data(data: string, replay?: boolean): void;
   exit(code: number, signal?: number): void;
+  /** Its size, as where it runs says it: a session on a participant's machine (M4) is sized there. */
+  size?(cols: number, rows: number): void;
 }
 
 /** How the host runs a session. */
@@ -71,6 +75,10 @@ export interface TerminalsOptions {
   publish?<E extends "terminal.keyboard" | "terminal.size">(event: E, ...params: EventParams<E>): void;
   /** Who is at a client, for the keyboard's holder and whoever asks for it. */
   who?(connection: Connection): { person: string; name: string };
+  /** Whose machine a session runs on, when it is a participant's (M4): its person types into it
+   *  there and sizes it, and nobody does from here. Null: it runs where the host runs it. Asked as
+   *  it opens. */
+  machineOf?(opts: TerminalOpts): Typist | null;
 }
 
 /** A pause is a short lease, not a latch: a session paused when its program exits would lose
@@ -107,6 +115,8 @@ export class Terminals {
   private readonly openers = new Map<string, Set<Connection>>();
   /** Each session's size, as last given: whoever opens it is told. */
   private readonly sizes = new Map<string, { cols: number; rows: number }>();
+  /** The sessions that run on a participant's machine (M4), and whose it is. */
+  private readonly machines = new Map<string, Typist>();
   private readonly keyboards: Keyboards;
 
   constructor(private readonly opts: TerminalsOptions) {
@@ -116,6 +126,7 @@ export class Terminals {
       tell: (to, event, ...params) => emit(to, event, ...params),
       who: (c) => opts.who?.(c) ?? { person: "", name: "" },
       hostWindows: (tile) => [...(this.openers.get(tile) ?? [])].filter((c) => isHost(c) && !c.closed.aborted),
+      elsewhere: (tile) => this.machines.get(tile) ?? null,
     });
     const tileOf = (v: unknown) => text(v, "tile");
     this.domain = {
@@ -161,10 +172,7 @@ export class Terminals {
    */
   async own(opts: TerminalOpts, watch: { data(data: string): void; exit(): void }): Promise<{ pid: number }> {
     const tile = opts.tileId;
-    const out: SessionOutput = {
-      data: (data) => this.relay.push(tile, data),
-      exit: (code, signal) => this.relay.exit(tile, { code, signal }),
-    };
+    const out = this.outputOf(tile);
     const host: Viewer = { data: (_, data) => watch.data(data), exit: () => watch.exit(), alive: () => true };
     if (!this.sizes.has(tile)) this.sizes.set(tile, { cols: opts.cols, rows: opts.rows });
     const { pid } = await this.relay.open(tile, host, () => this.opts.backend.start(opts, out), () => this.opts.backend.screen(tile));
@@ -184,10 +192,7 @@ export class Terminals {
   private open(opts: TerminalOpts, from: Connection): Promise<{ pid: number; joined: boolean }> {
     const tile = opts.tileId;
     const bare = toBareId(tile);
-    const out: SessionOutput = {
-      data: (data) => this.relay.push(tile, data),
-      exit: (code, signal) => this.relay.exit(tile, { code, signal }),
-    };
+    const out = this.outputOf(tile);
     const run = () => this.opts.backend.start(opts, out);
     const start = () => opts.attachOnly || this.opts.askedByHost?.(bare)
       ? run()
@@ -195,14 +200,31 @@ export class Terminals {
     let opened = this.openers.get(tile);
     if (!opened) this.openers.set(tile, (opened = new Set()));
     opened.add(from);
+    // On a participant's machine, its keyboard and its size are theirs.
+    const machine = this.machines.get(tile) ?? this.opts.machineOf?.(opts) ?? null;
+    if (machine) this.machines.set(tile, machine);
     // A session the host starts takes the size it is opened at, until someone sizes it.
-    if (!this.sizes.has(tile) && isHost(from) && !opts.attachOnly) this.sizes.set(tile, { cols: opts.cols, rows: opts.rows });
+    else if (!this.sizes.has(tile) && isHost(from) && !opts.attachOnly) this.sizes.set(tile, { cols: opts.cols, rows: opts.rows });
     // Whoever opens it is told who holds its keyboard (null: the host), which it may have missed
     // while away, and its size.
     emit(from, "terminal.keyboard", tile, this.keyboards.holder(tile));
     const size = this.sizes.get(tile);
     if (size) emit(from, "terminal.size", tile, size.cols, size.rows);
     return this.relay.open(tile, this.viewerOf(from), start, () => this.opts.backend.screen(tile));
+  }
+
+  /** Where a session's output, exit and size go: to every client that shows it. */
+  private outputOf(tile: string): SessionOutput {
+    return {
+      data: (data) => this.relay.push(tile, data),
+      exit: (code, signal) => this.relay.exit(tile, { code, signal }),
+      size: (cols, rows) => {
+        const was = this.sizes.get(tile);
+        if (was?.cols === cols && was.rows === rows) return;
+        this.sizes.set(tile, { cols, rows });
+        this.opts.publish?.("terminal.size", tile, cols, rows);
+      },
+    };
   }
 
   private write(tile: string, data: string, paste: boolean | undefined, from: Connection): void {
@@ -282,6 +304,7 @@ export class Terminals {
     this.openers.delete(tile);
     this.sizes.delete(tile);
     this.keyboards.forget(tile);
+    this.machines.delete(tile);
     const lease = this.pauses.get(tile);
     if (lease) { clearTimeout(lease); this.pauses.delete(tile); }
   }
