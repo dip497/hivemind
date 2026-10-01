@@ -16,6 +16,7 @@ import type { Actor } from "@hivemind/workspace-host/intents";
 import type { ClientTransport } from "./client.js";
 import { mayCall } from "./roles.js";
 import type { Answer, EventMessage } from "./protocol.js";
+import type { Links } from "./agents.js";
 import type { Connection, WorkspaceServer } from "./server.js";
 
 /** Text frames, both ways, until it closes. */
@@ -174,6 +175,16 @@ export function servePeer(server: Pick<WorkspaceServer, "connect" | "answer" | "
     return null;
   };
 
+  /** What the host answers of every agent it runs, narrowed to those of this workspace: a peer
+   *  learns nothing of another workspace's agents, their statuses, titles or links. */
+  const scoped = (method: unknown, answer: Answer): Answer => {
+    if ("error" in answer) return answer;
+    if (method === "status.all") return { result: (answer.result as Array<{ tileId: string }>).filter((s) => peer.holds(s.tileId)) };
+    if (method !== "link.list") return answer;
+    const { pipes, spawns } = answer.result as Links;
+    return { result: { pipes: pipes.filter((p) => peer.holds(p.src) && peer.holds(p.dst)), spawns: spawns.filter((s) => peer.holds(s.parent) && peer.holds(s.child)) } };
+  };
+
   channel.on((text) => {
     let m: { id?: unknown; method?: unknown; params?: unknown };
     try {
@@ -190,7 +201,7 @@ export function servePeer(server: Pick<WorkspaceServer, "connect" | "answer" | "
     const id = m.id;
     void (why ? Promise.resolve(refused(why)) : server.answer(m.method, params, connection)).then((answer) => {
       flush();
-      channel.send(JSON.stringify({ id, ...answer }));
+      channel.send(JSON.stringify({ id, ...scoped(m.method, answer) }));
     });
   });
 }

@@ -62,7 +62,9 @@ A peer names the workspace by its id, `hive://<workspaceId>`, wherever a call ta
 (`store.*`, `git.*`, `worktree.*`, `file.*`, `issue.*`, `review.*`, `people.*`, `plan.list`,
 `presence.set`) names this one, or a place in it, and nothing else on the host: another folder, a
 path out of it (`..`), another workspace or a machine is `FORBIDDEN` (a notice is dropped). The
-person's own devices are the owner, there as here. Each call and notice is checked against the
+person's own devices are the owner, there as here. What the host answers of every agent it runs
+(`status.all`, `link.list`) a peer is answered for the workspace's own agents alone, as it hears
+only their events. Each call and notice is checked against the
 peer's role on the workspace (design §6) before it runs, and one the role does not allow is
 `FORBIDDEN` (a notice is dropped): reads and watching terminals are anyone's with access; typing
 into and resizing a terminal, and asking for its keyboard or handing it on, *Can use terminals*;

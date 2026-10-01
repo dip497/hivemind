@@ -35,6 +35,12 @@ const domain = {
       return { pid: 1, joined: false };
     },
     "plan.list": (from: Connection, repo: unknown) => { ran.push({ what: "plan.list", by: from.actor, args: [repo] }); return []; },
+    // Machine-wide, as the host's are: every agent it runs, in whichever workspace.
+    "status.all": () => ["in-1", "out-1"].map((tileId) => ({ tileId, status: { state: "working", title: `${tileId}'s work` } })),
+    "link.list": () => ({
+      pipes: [{ src: "in-1", dst: "in-2" }, { src: "in-1", dst: "out-1" }, { src: "out-1", dst: "in-2" }],
+      spawns: [{ parent: "in-1", child: "in-2" }, { parent: "out-1", child: "in-1" }],
+    }),
     "plan.decide": (from: Connection, tile: unknown) => { ran.push({ what: "plan.decide", by: from.actor, args: [tile] }); return { answered: true, by: null }; },
   },
   effects: { "git.commit": () => ({}), "terminal.open": () => ({}) },
@@ -137,6 +143,12 @@ test("a peer hears only the events about its workspace, and is refused a tile ou
   client.notice("presence.set", workspaceUrl(W), { name: "Priya", color: "", cursor: null, selection: [] });
   await Bun.sleep(10);
   expect(ran.map((r) => r.args[0])).toEqual(["in-1", REPO]);
+});
+
+test("a peer is answered the statuses and links of its workspace's own agents, never another's", async () => {
+  const { client } = connect("view");
+  expect(await client.call("status.all")).toEqual([{ tileId: "in-1", status: { state: "working", title: "in-1's work" } } as never]);
+  expect(await client.call("link.list")).toEqual({ pipes: [{ src: "in-1", dst: "in-2" }], spawns: [{ parent: "in-1", child: "in-2" }] });
 });
 
 test("a terminal's keyboard: one who may use terminals asks for it and hands it on, for the workspace's terminals only; taking it back is the host's; one who only watches may stop", async () => {

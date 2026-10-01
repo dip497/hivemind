@@ -599,3 +599,7 @@ guest who may edit the board could start a command on the host (see the log).
 - 2026-10-01 — Security, found right after M5 step 2 and fixed before it shipped: a paired phone
   was served as any of the person's computers (its `pty` stream started processes there). It is
   served the `device` stream's question alone now.
+- 2026-10-01 — Security, found reading `servePeer` for M5 step 3: it narrowed the events a peer hears
+  to its workspace's tiles, but not the answers to `status.all` and `link.list`, so a guest was told
+  every agent's status on the host, in every workspace, with its title. Both answers are narrowed
+  to the workspace's own agents now (`peers.test.ts`, 3 mutations caught).
