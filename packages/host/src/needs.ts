@@ -4,6 +4,10 @@
  * device's documents, its agents' statuses and the plans they hand off in, the list out.
  */
 import type { InputKind } from "@hivemind/agents";
+
+/** What an agent can wait on the person for. One waiting for an `approval` waits on the agent
+ *  that supervises it, not on the person. */
+const ON_THE_PERSON: readonly InputKind[] = ["permission", "question", "plan", "other"];
 import type { CoreLayout } from "@hivemind/workspace-doc/shapes";
 import type { PlanReview } from "@hivemind/workspace-api/plans";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
@@ -44,7 +48,7 @@ export interface WaitingStatus {
 export function needsOf(held: HeldBoard[], statuses: WaitingStatus[], plans: PlanReview[]): Need[] {
   const needs: Need[] = [];
   for (const { tileId, status } of statuses) {
-    if (status.state !== "waiting" || !status.kind) continue;
+    if (status.state !== "waiting" || !status.kind || !ON_THE_PERSON.includes(status.kind)) continue;
     const tile = toBareId(tileId);
     const board = held.find((h) => h.core?.tiles.some((t) => t.id === tile));
     const record = board?.core?.tiles.find((t) => t.id === tile);

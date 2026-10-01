@@ -16,7 +16,7 @@ use crate::pairing::PairedWith;
 const ANSWER_WITHIN: Duration = Duration::from_secs(10);
 
 /// What an agent can wait on the person for.
-const KINDS: [&str; 5] = ["permission", "question", "plan", "approval", "other"];
+const KINDS: [&str; 4] = ["permission", "question", "plan", "other"];
 
 /// An agent waiting on the person.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

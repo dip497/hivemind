@@ -223,7 +223,7 @@
    ]
   },
   {
-   "about": "waiting on an approval, with no plan handed off: no plan",
+   "about": "an agent waiting on an approval waits on the agent that supervises it, not on the person: not listed",
    "held": [
     {
      "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
@@ -255,16 +255,7 @@
     }
    ],
    "plans": [],
-   "needs": [
-    {
-     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
-     "name": "api",
-     "tile": "t7",
-     "agent": "Claude",
-     "kind": "approval",
-     "since": 1790000000000
-    }
-   ]
+   "needs": []
   },
   {
    "about": "an agent doing anything else, or waiting with no kind, is not listed",
@@ -609,7 +600,7 @@
    ]
   },
   {
-   "about": "an item missing what it must say, or with another kind, is left out",
+   "about": "an item missing what it must say, or with a kind not on the person, is left out",
    "answers": [
     {
      "t": "needs",
@@ -635,6 +626,14 @@
        "tile": "t2",
        "agent": "Nav fix",
        "kind": "coffee",
+       "since": 1790000002000
+      },
+      {
+       "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+       "name": "api",
+       "tile": "t6",
+       "agent": "Nav fix",
+       "kind": "approval",
        "since": 1790000002000
       },
       {

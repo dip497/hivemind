@@ -9,7 +9,8 @@ this.
 ## What waits on the person
 
 An agent waits on the person while its status (`status.md`) is `waiting`, with a `kind`:
-`permission`, `question`, `plan`, `approval` or `other`. Each such agent in a workspace the device
+`permission`, `question`, `plan` or `other`. (One waiting for an `approval` waits on the agent that
+supervises it, which answers it, not on the person.) Each such agent in a workspace the device
 holds is one item:
 
 ```json
