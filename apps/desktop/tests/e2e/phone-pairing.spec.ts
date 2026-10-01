@@ -2,13 +2,18 @@
 // QR code of this computer's link, and the phone (`hive-phone`: the phone's Rust core, in a
 // terminal) pairs with it over hive/pair/1. The phone is given a certificate naming it as the
 // person's and never the person key; each lists the other; the phone is never a place to open a
-// workspace on, move one to or run a frame on; and unpairing it on the computer forgets it.
+// workspace on, move one to or run a frame on; let in by the computer as the person's device, it
+// is served what a phone does and nothing more (what it sends to start a terminal there starts
+// nothing); and unpairing it on the computer forgets it.
 import { test, expect, type ElectronApplication } from "@playwright/test";
 import { execFile, execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
-import { hiveNetBuilt, person } from "./helpers/multiplayer";
+import { HiveNet } from "@hivemind/workspace-host/hive-net";
+import { parsePairLink } from "@hivemind/workspace-host/pairing";
+import { heldWorkspaces } from "@hivemind/host/peer-links";
+import { HIVE_NET, hiveNetBuilt, person } from "./helpers/multiplayer";
 
 const HIVE_PHONE = path.resolve("../../crates/hive-phone/target/debug/hive-phone");
 const run = promisify(execFile);
@@ -36,7 +41,8 @@ test("a phone scans the computer's code and is certified as the person's: each l
   const repo = path.join(root, "api");
   fs.mkdirSync(repo);
   execSync("git init -q", { cwd: repo });
-  const desktop = await person(root, "desktop", repo, apps);
+  // Its terminals in a daemon, as outside tests: one a phone might try to start something in.
+  const desktop = await person(root, "desktop", repo, apps, { HIVEMIND_PTY_DAEMON: "1" });
   const me = await desktop.evaluate(() => window.hive.identity());
   const devices = () => desktop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "devices" } })));
 
@@ -76,6 +82,21 @@ test("a phone scans the computer's code and is certified as the person's: each l
   await expect(desktop.getByText("Run this frame on…")).toBeVisible();
   await expect(desktop.locator(`[data-pick-device="${phoneId}"]`)).toHaveCount(0);
   await desktop.keyboard.press("Escape");
+
+  // On its own connection to the computer, with its own key: answered which workspaces are there,
+  // and what it sends to start a terminal in the computer's daemon starts nothing.
+  const where = parsePairLink(link)!;
+  const net = await HiveNet.start({ bin: HIVE_NET, identity: phone, socket: path.join(root, "phone-net.sock"), onIncoming: (l) => l.close(), onPairRequest: async () => ({ ok: false }) });
+  try {
+    const conn = await net.dial(me.deviceId, { addrs: where.addrs, relay: where.relay });
+    const ran = path.join(root, "ran");
+    conn.send("pty", `${JSON.stringify({ t: "attach", reqId: "p1", id: "hm:from-phone", spec: { cwd: root, cmd: "/bin/sh", args: ["-c", `touch ${ran}`], cols: 80, rows: 24 } })}\n`);
+    expect((await heldWorkspaces(conn)).map((w) => w.repo)).toContain(repo);
+    await new Promise((r) => setTimeout(r, 1_500));
+    expect(fs.existsSync(ran)).toBe(false);
+  } finally {
+    net.stop();
+  }
 
   // Unpaired on the computer: forgotten there.
   await devices();

@@ -20,6 +20,10 @@
  * theirs in a workspace here (M4), on the `machine` stream it opens to this host: the host watches
  * them through it, as `shownFrom` gives them, and never dials that machine. It says there what its
  * person lets the people here do on it (`Grant`), as they change it.
+ *
+ * One of the owner's phones (spec/pairing.md 0.3) is let in, as their device, for what a phone
+ * does: it may ask on the `device` stream which workspaces there are, and nothing of the rest
+ * (no terminals in this machine's daemon, no workspace's board, files or calls, no hosting).
  */
 import path from "node:path";
 import { StringDecoder } from "node:string_decoder";
@@ -60,6 +64,9 @@ export interface PeerLinksOptions {
   hosting?: Hosting;
   /** A participant's machine `device` says it lets the people here do something else on it (M4). */
   granted?(device: string): void;
+  /** Whether `device` is one of the owner's phones, which is served what a phone does alone. None:
+   *  no phone pairs with this device. */
+  phone?(device: string): boolean;
   onWarn?(message: string): void;
 }
 
@@ -123,6 +130,11 @@ export class PeerLinks {
 
   /** Serve the device on `link` the workspace it names, if its person may reach it. */
   serve(link: Link): void {
+    // A phone runs nothing and holds nothing here: it is answered what it asks, no more.
+    if (this.o.phone?.(link.peer)) {
+      link.on("device", (text) => this.answerDevice(link, text));
+      return;
+    }
     const { store, lists, server, hosting } = this.o;
     this.bridgePty(link);
     // The files and git of frames on this machine, for the owner's other devices (M4).
@@ -145,16 +157,7 @@ export class PeerLinks {
       const answered = hosting ? hosting.answer(link.peer, message) : Promise.resolve({ ok: false, error: "this device hosts nothing it is handed" });
       void answered.then((answer) => link.send("hosting", JSON.stringify(answer)));
     });
-    link.on("device", (text) => {
-      if (!lists.ownersDevice(link.peer)) return link.close("removed");
-      const asked = parseDevice(text);
-      if (!asked || asked.workspaces) return;
-      const workspaces = store.repos().flatMap((repo) => {
-        const workspace = store.ownership(repo)?.workspaceId;
-        return workspace ? [{ workspace, name: path.basename(repo), repo }] : [];
-      });
-      link.send("device", JSON.stringify({ t: "workspaces", workspaces } satisfies DeviceMessage));
-    });
+    link.on("device", (text) => this.answerDevice(link, text));
     const off = link.on("sync", (text) => {
       const hello = parseSync(text);
       if (hello?.t !== "hello") return;
@@ -193,6 +196,19 @@ export class PeerLinks {
       this.served.add(entry);
       void link.closed.then(() => { this.served.delete(entry); this.machines.delete(link); stop(); });
     });
+  }
+
+  /** Answer one of the owner's devices asking on the `device` stream which workspaces are here. */
+  private answerDevice(link: Link, text: string): void {
+    const { store, lists } = this.o;
+    if (!lists.ownersDevice(link.peer)) return link.close("removed");
+    const asked = parseDevice(text);
+    if (!asked || asked.workspaces) return;
+    const workspaces = store.repos().flatMap((repo) => {
+      const workspace = store.ownership(repo)?.workspaceId;
+      return workspace ? [{ workspace, name: path.basename(repo), repo }] : [];
+    });
+    link.send("device", JSON.stringify({ t: "workspaces", workspaces } satisfies DeviceMessage));
   }
 
   /** The sessions on the participant's machine `device` (M4), for the workspace here that `tile`

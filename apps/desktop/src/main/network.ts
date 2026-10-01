@@ -387,7 +387,11 @@ let daemonHere: (() => Promise<Duplex>) | undefined;
 export function installNetworkIpc(server: WorkspaceServer, daemon?: () => Promise<Duplex>, granted?: (device: string) => void): void {
   apiServer = server;
   daemonHere = daemon;
-  peers = new PeerLinks({ store: workspaceStore(), changes: onWorkspaceChange, lists: accessLists(), server, daemon, hosting: hostingHere(), granted, onWarn: (m) => console.warn(`[peers] ${m}`) });
+  peers = new PeerLinks({
+    store: workspaceStore(), changes: onWorkspaceChange, lists: accessLists(), server, daemon, hosting: hostingHere(), granted,
+    phone: (device) => pairedDevices().list().some((d) => d.device === device && d.kind === "phone"),
+    onWarn: (m) => console.warn(`[peers] ${m}`),
+  });
   // The network in use, changed here or by `hive network use`: the daemon starts again on it.
   try {
     fs.watchFile(networkProfiles().file, { interval: 2_000 }, (now, before) => { if (now.mtimeMs !== before.mtimeMs) restartNetwork(); });
