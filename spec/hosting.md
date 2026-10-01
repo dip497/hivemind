@@ -1,11 +1,12 @@
-# Hosting (0.1)
+# Hosting (0.2)
 
-Moving a workspace's hosting from one of its owner's devices to another (§5.7 B and §5.8 in
+Moving a workspace's hosting from one of its owner's devices to another (§5.7 B, F and §5.8 in
 `docs/design/multiplayer-2026-09-28.md`, M3): the device hosting it (the **old host**) hands the
 new one (the **new host**) the workspace's document and its access list; whoever is connected to
 it is told where it went, with a host record (`host-record.md`), and follows by themselves, with
 no new invite. Frames stay where they are: their terminals keep running on the machine they ran
-on.
+on. Another of the owner's devices may ask the device hosting a workspace to hand it over to it
+(**move**): how a workspace comes back to the computer it was moved from.
 
 ## Who may
 
@@ -15,6 +16,8 @@ on.
   `owner` its person's id, `workspaceId` the workspace's).
 - Only the device hosting it moves it: one whose list says the workspace is hosted on another
   device refuses, and so does one with a workspace whose document does not say whose it is yet.
+- Only the owner's devices ask for it (**move**); anyone else, a guest in it among them, is
+  refused.
 
 ## The `hosting` stream
 
@@ -42,7 +45,10 @@ connection's `hosting` stream, one JSON message per text frame.
    `machine://<old host's device id>/<root>` (where a tile in no frame of its own runs, and what
    `hive://<workspaceId>` reads as there), and the list as that workspace's; records that it hosts
    it, at `seq`; lets in whom the list lets in; and says its host record, at `seq`, where there is
-   a lookup server.
+   a lookup server. A `root` that names a device already (`machine://<device id>/<path>`: the
+   workspace was moved before) is kept as it is, unless it names the new host itself: then the
+   workspace is back at its own folder, `path`, merged into what the new host kept of it there,
+   and every folder of a frame named by the new host's id is plainly its own again (`/path`).
 
 3. The old host, once it is taken:
    - records in its list that the new host hosts it, at `seq`, with the record it signed;
@@ -54,6 +60,13 @@ connection's `hosting` stream, one JSON message per text frame.
 
    From then on the old host no longer says the workspace's record, and opens the workspace as
    any of the owner's devices does: by its id, from the new host.
+
+**move**, from one of the owner's devices to the device hosting the workspace:
+`{ "t": "move", "workspace": "<id>" }`, answered as **take** is, once the workspace is moved: the
+device hosting it moves it to the one asking, as above (it dials it and hands it over), and
+answers `{ "ok": true }`, or `{ "ok": false, "error": "<why>" }` when it does not (the asker is not
+one of the owner's devices, the workspace is not here or is hosted elsewhere, the asker refused
+it). The asker waits 30 s.
 
 ## Frames stay where they are
 
@@ -87,5 +100,5 @@ same notice and closed with `moved`.
 
 ## Not yet
 
-Moving it back, taking over from a host that is gone (§5.7 E and F), and the owner's other
-devices keeping the document and the list in step (§5.8, Replicas) come later.
+Taking over from a host that is gone (§5.7 E), and the owner's other devices keeping the document
+and the list in step (§5.8, Replicas), come later.

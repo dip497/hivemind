@@ -320,6 +320,12 @@ export interface HiveIpc {
   /** Move the workspace `repo`, hosted here, to another of your devices (M3): whoever is in it
    *  follows, and its frames here stay here. Its `hive://` name, to open it by from now on. */
   moveHosting(repo: string, device: string): Promise<string>;
+  /** This computer's folder of `workspace`, when it was moved from here to another of your devices
+   *  (M3); null for any other. */
+  folderHere(workspace: string): Promise<string | null>;
+  /** Move `workspace`, moved from here, back from the device hosting it (M3): whoever is in it
+   *  follows. Its folder, to open it by again. */
+  moveHostingHere(workspace: string): Promise<string>;
   // ── this device's network (R16) ───────────────────────────
   /** The network profile in use: a built-in one (`local`, `hosted`) or one its admin signed. */
   network(): Promise<NetworkProfile>;

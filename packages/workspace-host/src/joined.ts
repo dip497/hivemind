@@ -48,6 +48,11 @@ export class JoinedList {
     this.write([joined, ...this.list().filter((j) => j.workspace !== joined.workspace)]);
   }
 
+  /** Forget `workspace`'s join: it is hosted here now (M3). */
+  remove(workspace: string): void {
+    this.write(this.list().filter((j) => j.workspace !== workspace));
+  }
+
   /** Change what is kept of `workspace`'s join. */
   update(workspace: string, change: Partial<Pick<JoinedWorkspace, "role" | "ended" | "host" | "where" | "seq">>): void {
     this.write(this.list().map((j) => (j.workspace === workspace ? { ...j, ...change } : j)));

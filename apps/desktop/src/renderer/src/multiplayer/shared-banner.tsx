@@ -2,9 +2,11 @@
  * The slim banner over a workspace joined from elsewhere (design §4.2 B, F): whose it is and what
  * this person may do there while connected; amber while it reconnects; grey while its host cannot
  * be reached, with the last board shown; and how it ended (left, or removed), when what is shown
- * is the last copy, which is only read. Leave is here.
+ * is the last copy, which is only read. Leave is here, and, on a workspace of yours that was moved
+ * from this computer to another of your devices, Move here (§5.7 F).
  */
-import { LogOut } from "lucide-react";
+import { useEffect, useState } from "react";
+import { House, LogOut } from "lucide-react";
 import type { SharedStatus } from "../../../shared/ipc";
 import { Button } from "../components/ui/button";
 import { ROLE_LABELS } from "./people";
@@ -31,11 +33,32 @@ const TONE: Record<SharedStatus["state"], string> = {
   removed: "border-[var(--color-err)] text-[var(--color-err)]",
 };
 
-export function SharedBanner() {
+export function SharedBanner({ onMoved }: { onMoved: (folder: string) => void }) {
   const { repo, shared: status } = useShown();
   const workspace = joinedId(repo);
+  // Its folder on this computer, when it was moved from here: it can come back.
+  const [home, setHome] = useState<string | null>(null);
+  const [moving, setMoving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const owner = status?.access === "owner";
+  useEffect(() => {
+    setHome(null);
+    setError(null);
+    if (workspace && owner) void window.hive.folderHere(workspace).then(setHome, () => setHome(null));
+  }, [workspace, owner]);
   if (!workspace || !status) return null;
   const ended = status.state === "left" || status.state === "removed";
+  const moveHere = async () => {
+    setMoving(true);
+    setError(null);
+    try {
+      onMoved(await window.hive.moveHostingHere(workspace));
+    } catch (e) {
+      setError(e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, "") : String(e));
+    } finally {
+      setMoving(false);
+    }
+  };
   return (
     <div
       className={`pointer-events-auto flex items-center gap-2 rounded-md border bg-[var(--color-bg2)] px-2.5 py-1 text-[12px] shadow-sm ${TONE[status.state]}`}
@@ -45,6 +68,12 @@ export function SharedBanner() {
       role="status"
     >
       <span className="max-w-[520px] truncate">{says(status)}</span>
+      {error && <span className="max-w-[260px] truncate text-[var(--color-err)]" role="alert" title={error}>{error}</span>}
+      {home && status.state === "connected" && (
+        <Button size="sm" variant="ghost" disabled={moving} onClick={() => void moveHere()} title={`Host it on this computer again, from ${home}`} data-move-here>
+          <House aria-hidden /> {moving ? "Moving…" : "Move here"}
+        </Button>
+      )}
       {!ended && (
         <Button size="sm" variant="ghost" onClick={() => void window.hive.leave(workspace)} data-leave>
           <LogOut aria-hidden /> Leave

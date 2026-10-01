@@ -5,8 +5,9 @@
 // laptop's person, the workspaces it held moving with it, lists them to the laptop and opens one to
 // it as its owner; a terminal the laptop starts there runs on after the laptop is gone. The laptop
 // moves a workspace it shares to the host (spec/hosting.md): the host takes it, says so at the
-// network's lookup server, and the guest in it follows. Here the laptop is this test, with keys and
-// a hive-net of its own. Needs crates/hive-net's build.
+// network's lookup server, and the guest in it follows; then it asks for it back, and the guest
+// follows it home. Here the laptop is this test, with keys and a hive-net of its own. Needs
+// crates/hive-net's build.
 import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -15,7 +16,7 @@ import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { cmd, hive, hiveAsync } from "./helpers.js";
 import { idOf, newSeed, workspaceSeed, type DeviceCertificate } from "@hivemind/workspace-host/identity";
 import { machineKeys } from "@hivemind/workspace-host/keyring";
-import { HiveNet } from "@hivemind/workspace-host/hive-net";
+import { HiveNet, type Where } from "@hivemind/workspace-host/hive-net";
 import { enterPairing, pairAnnouncement, PairingOffer, parsePairLink, type Pairing } from "@hivemind/workspace-host/pairing";
 import { WorkspaceStore, type WorkspaceChange } from "@hivemind/workspace-host/store";
 import { replicate } from "@hivemind/workspace-host/doc-sync";
@@ -302,7 +303,7 @@ describe.skipIf(!built)("hive host", () => {
     }
   });
 
-  test("takes a workspace a laptop moves to it: the guest in it is told where, by the workspace's key, and follows here; one who comes back to the laptop is told too", async () => {
+  test("takes a workspace a laptop moves to it: the guest in it is told where, by the workspace's key, and follows here; one who comes back to the laptop is told too; and hands it back when the laptop asks", async () => {
     const own = { ...env, HIVEMIND_APP_DATA: path.join(dir, "data4"), HIVEMIND_PTY_SOCK: path.join(dir, "d4.sock") };
     // All three on a network with a lookup server, where a workspace's host says it hosts it.
     const profile = await lookupNetwork(path.join(dir, "network4"));
@@ -327,7 +328,14 @@ describe.skipIf(!built)("hive host", () => {
     lists.invite(workspace, repo, "edit", 60_000);
     lists.grant(workspace, guestKeys.personId, "edit");
     lists.addDevice(workspace, guestKeys.certificate);
-    const hosting = new Hosting({ self: () => keys.deviceId, person: () => keys.personId, store, lists, took: () => {} });
+    // Where the host is, once it has paired; how the laptop signs a record of where its workspace is.
+    let where: Where | undefined;
+    let sign = (w: string, seq: number, host: string) => laptop.signHost(w, seq, host);
+    const hosting = new Hosting({
+      self: () => keys.deviceId, person: () => keys.personId, store, lists,
+      dial: (device) => laptop.dial(device, where), sign: (w, seq, host) => sign(w, seq, host), moved: (w, notice) => peers.moved(w, notice),
+      took: () => laptop.admit(lists.admitted()),
+    });
     const server = new WorkspaceServer([], new Intents(new AuditLog({ file: path.join(laptopDir, "audit.jsonl") })));
     const peers = new PeerLinks({ store, changes, lists, server, hosting });
     const laptop = await HiveNet.start({ bin: HIVE_NET, identity: path.join(laptopDir, "identity"), socket: path.join(dir, "l4.sock"), profile, onIncoming: (l) => peers.serve(l), onPairRequest: async () => ({ ok: false }) });
@@ -337,7 +345,7 @@ describe.skipIf(!built)("hive host", () => {
       const pairing = spawn(...cmd(["host", "pair", "--json"]), { env: { ...process.env, ...own } });
       running.push(pairing);
       const offered = parsePairLink((JSON.parse(await lines(pairing.stdout!)()) as { data: { offer: { link: string } } }).data.offer.link)!;
-      const where = { addrs: offered.addrs, relay: offered.relay };
+      where = { addrs: offered.addrs, relay: offered.relay };
       const paired = await enterPairing({
         me: { device: keys.deviceId, name: "laptop", kind: "app", certificate: keys.certificate, person: keys.person, addrs: laptop.ready.addrs, relay: laptop.ready.relay },
         code: offered.code, offering: offered.device, ask: (hello) => laptop.pair(offered.device, where, hello),
@@ -346,14 +354,18 @@ describe.skipIf(!built)("hive host", () => {
       await until(() => status(own)?.person === keys.personId || null, "the host to be the laptop's person");
       laptop.admit(lists.admitted());
 
-      // The guest is in, on the laptop.
-      const follow = (at: string, addrs: string[]) => new Promise<{ moved: Moved | null; access: string | null; why: Promise<string>; replica: WorkspaceStore }>((resolve) => {
-        const replica = new WorkspaceStore({ dir: path.join(dir, "guest4", `shared-${at.slice(0, 6)}-${Date.now()}`) });
+      // The guest is in, on the laptop. Each connection keeps a copy of its own, and is told where
+      // the workspace went when it moves.
+      const follow = (at: string, addrs: string[]) => new Promise<{ moved: Moved | null; access: string | null; why: Promise<string>; told: Promise<Moved>; replica: WorkspaceStore }>((resolve) => {
+        const edits = new Set<(change: WorkspaceChange) => void>();
+        const replica = new WorkspaceStore({ dir: path.join(dir, "guest4", `shared-${at.slice(0, 6)}-${Date.now()}`), onChange: (c) => { for (const l of edits) l(c); } });
+        let tell!: (moved: Moved) => void;
+        const told = new Promise<Moved>((r) => { tell = r; });
         void guest.dial(at, { addrs, relay: null }).then((link) => {
           replicate(replica, workspaceUrl(workspace), streamOf(link, "sync"), {
-            workspace, changes: () => () => {},
-            onWelcome: (access) => resolve({ moved: null, access, why: link.closed, replica }),
-            onMoved: (moved) => resolve({ moved, access: null, why: link.closed, replica }),
+            workspace, changes: (l) => { edits.add(l); return () => { edits.delete(l); }; },
+            onWelcome: (access) => resolve({ moved: null, access, why: link.closed, told, replica }),
+            onMoved: (moved) => { tell(moved); resolve({ moved, access: null, why: link.closed, told, replica }); },
           });
         });
       });
@@ -374,18 +386,18 @@ describe.skipIf(!built)("hive host", () => {
       const theirs = path.join(dir, "theirs");
       fs.mkdirSync(theirs);
       new WorkspaceStore({ dir: path.join(laptopDir, "workspaces"), person: newSeed() }).setCore(theirs, { frames: [{ id: "f9", title: "theirs", workspacePath: theirs }], tiles: [] });
-      const refused = await laptop.dial(offered.device, where);
-      await expect(hosting.moveTo(theirs, refused, (w, seq, host) => laptop.signHost(w, seq, host), () => {})).rejects.toThrow(/not a workspace of this device's person/);
-      refused.close();
+      await expect(hosting.moveTo(theirs, offered.device)).rejects.toThrow(/not a workspace of this device's person/);
       expect(status(own)?.workspaces.some((w) => w.repo.endsWith(theirs))).toBe(false);
       expect(store.getCore(theirs)!.frames[0]!.workspacePath).toBe(theirs);
 
       // The laptop moves it to the host. A move it cannot sign is not made: nothing is handed over,
       // and the frame is its own folder still.
-      const toHost = await laptop.dial(offered.device, where);
-      await expect(hosting.moveTo(repo, toHost, () => Promise.reject(new Error("no key to sign with")), (w, n) => peers.moved(w, n))).rejects.toThrow(/no key to sign with/);
+      const signing = sign;
+      sign = () => Promise.reject(new Error("no key to sign with"));
+      await expect(hosting.moveTo(repo, offered.device)).rejects.toThrow(/no key to sign with/);
+      sign = signing;
       expect(store.getCore(repo)!.frames[0]!.workspacePath).toBe(repo);
-      const notice = await hosting.moveTo(repo, toHost, (w, seq, host) => laptop.signHost(w, seq, host), (w, n) => peers.moved(w, n));
+      const notice = await hosting.moveTo(repo, offered.device);
       expect(notice).toMatchObject({ host: offered.device, seq: 2 });
       // The guest is told where it is now, and the connection to the laptop closes.
       expect(await onLaptop.closed).toContain("moved");
@@ -407,6 +419,33 @@ describe.skipIf(!built)("hive host", () => {
       const back = await follow(keys.deviceId, laptop.ready.addrs);
       expect(back.moved).toEqual(notice);
       expect(await back.why).toContain("moved");
+
+      // The guest changes it at the host.
+      const atHost = followed.replica.getCore(workspaceUrl(workspace))!;
+      followed.replica.setCore(workspaceUrl(workspace), { ...atHost, frames: atHost.frames.map((f) => ({ ...f, title: "built at the host" })) }, { base: atHost });
+      await until(() => follow(offered.device, offered.addrs).then((r) => r.replica.getCore(workspaceUrl(workspace))?.frames[0]?.title === "built at the host"), "the host to have the guest's change");
+
+      // Only the owner's devices ask for it: the guest, who is in it, is refused.
+      const asking = await guest.dial(offered.device, where);
+      const refusal = await new Promise<unknown>((resolve) => {
+        asking.on("hosting", (text) => resolve(JSON.parse(text)));
+        asking.send("hosting", JSON.stringify({ t: "move", workspace }));
+      });
+      asking.close();
+      expect(refusal).toEqual({ ok: false, error: expect.stringMatching(/owner's devices/) });
+
+      // The laptop asks for it back: hosted there again, at its own folder, with what was done at the
+      // host; its frame is plainly the laptop's again.
+      await hosting.moveHere(workspace, offered.device);
+      expect(lists.hosting(workspace)).toEqual({ host: keys.deviceId, seq: 3, record: null });
+      expect(store.getCore(repo)!.frames[0]).toMatchObject({ workspacePath: repo, title: "built at the host" });
+      // The guest at the host is told where it went, by the workspace's key, and follows it home.
+      const home = await followed.told;
+      expect(home).toMatchObject({ host: keys.deviceId, seq: 3 });
+      expect(await guest.verifyHost(key, home.record)).toEqual({ host: keys.deviceId, seq: 3 });
+      const again = await until(() => follow(keys.deviceId, laptop.ready.addrs).then((r) => (r.access ? r : null)), "the guest to be let in at the laptop again");
+      expect(again.access).toBe("edit");
+      expect(again.replica.getCore(workspaceUrl(workspace))!.frames[0]!.workspacePath).toBe(repo);
     } finally {
       laptop.stop();
       guest.stop();

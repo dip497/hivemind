@@ -12,8 +12,9 @@
  * shared or not, and may ask on the `device` stream which ones there are (design §5.3), run
  * terminals in this machine's PTY daemon on the `pty` stream, for frames it hosts on this machine
  * (M3, §5.1): the stream is the daemon's own protocol, carried to the daemon and back; and hand
- * this device a workspace to host on the `hosting` stream (M3, spec/hosting.md). A device that
- * comes for a workspace hosted elsewhere now is told where (`moved`), and closed.
+ * this device a workspace to host, or ask for one hosted here, on the `hosting` stream (M3,
+ * spec/hosting.md). A device that comes for a workspace hosted elsewhere now is told where
+ * (`moved`), and closed.
  */
 import path from "node:path";
 import { StringDecoder } from "node:string_decoder";
@@ -103,8 +104,8 @@ export class PeerLinks {
     link.on("hosting", (text) => {
       let message: unknown;
       try { message = JSON.parse(text); } catch { return; }
-      const answer = hosting ? hosting.take(link.peer, message) : { ok: false, error: "this device hosts nothing it is handed" };
-      if (answer) link.send("hosting", JSON.stringify(answer));
+      const answered = hosting ? hosting.answer(link.peer, message) : Promise.resolve({ ok: false, error: "this device hosts nothing it is handed" });
+      void answered.then((answer) => { if (answer) link.send("hosting", JSON.stringify(answer)); });
     });
     link.on("device", (text) => {
       if (!lists.ownersDevice(link.peer)) return link.close("removed");

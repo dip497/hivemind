@@ -24,7 +24,7 @@ import { AccessLists } from "@hivemind/workspace-host/access";
 import { Devices, type PairedDevice } from "@hivemind/workspace-host/devices";
 import { enterPairing, formatPairLink, offeringNearby, pairAnnouncement, PairingOffer, parseCode, parsePairLink, type Pairing, type PairingDevice } from "@hivemind/workspace-host/pairing";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
-import { HiveNet, type Ready } from "@hivemind/workspace-host/hive-net";
+import { HiveNet, type Link, type Ready } from "@hivemind/workspace-host/hive-net";
 import { HostRecords, type Hosted } from "@hivemind/workspace-host/host-records";
 import { idOf, workspaceSeed } from "@hivemind/workspace-host/identity";
 import { Intents } from "@hivemind/workspace-host/intents";
@@ -136,12 +136,14 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
   };
   const who = (c: Connection) => (c.actor.kind === "peer" ? { person: c.actor.person, name: nameOf(c.actor.person) } : { person: keys.personId, name: "" });
   // Frames on the person's other devices run their terminals there (M3), in each device's daemon.
+  /** One of the person's devices, where it is said to be when it paired. */
+  const dialDevice = async (device: string): Promise<Link> => {
+    if (!net) throw new Error("this host is not on the network yet");
+    const d = devices.list().find((x) => x.device === device);
+    return net.dial(device, d ? { addrs: d.addrs, relay: d.relay } : undefined);
+  };
   const elsewhere = deviceSessions({
-    dial: async (device) => {
-      if (!net) throw new Error("this host is not on the network yet");
-      const d = devices.list().find((x) => x.device === device);
-      return net.dial(device, d ? { addrs: d.addrs, relay: d.relay } : undefined);
-    },
+    dial: dialDevice,
     onEvent: (topic, data) => {
       if (topic !== "agent.status") return;
       const r = data as { tileId?: unknown; status?: unknown };
@@ -173,12 +175,19 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
 
   // On the network: hive-net admits the devices the access lists let in, and each is served the
   // workspace it names. hive-net that stops is started again, as is one whose network changed.
-  // Workspaces the person's other devices hand over to be hosted here (M3, spec/hosting.md).
+  // Workspaces the person's other devices hand over to be hosted here, and ask back (M3,
+  // spec/hosting.md).
   const hosting = new Hosting({
     self: () => keys.deviceId,
     person: () => keys.personId,
     store,
     lists,
+    dial: dialDevice,
+    sign: async (workspace, seq, host) => {
+      if (!net) throw new Error("this host is not on the network yet");
+      return net.signHost(workspace, seq, host);
+    },
+    moved: (workspace, notice) => peers.moved(workspace, notice),
     took: () => {
       net?.admit(lists.admitted());
       void records?.start();

@@ -176,6 +176,7 @@ A workspace on your computer moves to the host from **Share → Move there**, so
 while your computer sleeps: the board, notes, the people in it and their invite links go to the
 host, whoever is in it follows by themselves, and your computer opens it from the host from then
 on. Terminals and agents in frames on your computer keep running there, reached through the host.
+**Move here**, on the workspace's banner, brings it back to your computer the same way.
 
 `hive host install` writes a systemd user unit (`~/.config/systemd/user/hive-host.service`) and
 enables it. To start it with the machine, before anyone logs in, it turns lingering on

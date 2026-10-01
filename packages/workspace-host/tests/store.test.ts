@@ -442,6 +442,19 @@ test("the workspace that holds a tile is the one whose document holds it now: as
   expect(s.workspaceOf("t3")).toBe("/b");
 });
 
+test("a workspace forgotten is gone, here and after a restart: its tiles are no workspace's, and the others stay", () => {
+  const s = new WorkspaceStore({ dir, person });
+  s.setCore("hive://a", core("api"));
+  s.setCore("/b", { ...core("web"), tiles: [{ id: "t2", kind: "shell" }], frameOf: { t2: "f1" } });
+  expect(s.workspaceOf("t1")).toBe("hive://a");
+  s.forget("hive://a");
+  expect([s.workspaceOf("t1"), s.workspaceOf("t2")]).toEqual([null, "/b"]);
+  expect(restart().repos()).toEqual(["/b"]);
+  // Asked for again, it starts empty, with no tiles.
+  expect(s.getCore("hive://a")).toBeNull();
+  expect(s.workspaceOf("t1")).toBeNull();
+});
+
 test("a tile the control plane opens is kept, told with its writer, and stays when a window then writes what it read before", () => {
   const told: unknown[] = [];
   const s = new WorkspaceStore({ dir, person, onChange: (c) => told.push(c) });

@@ -138,6 +138,13 @@ export function leaveShared(workspace: string): void {
   entry.link?.close("left");
 }
 
+/** `workspace` is hosted here now (M3): its connection goes, and its copy, whose tiles are the
+ *  workspace's own here. */
+export function forgetShared(workspace: string): void {
+  leaveShared(workspace);
+  sharedStore().forget(workspaceUrl(workspace));
+}
+
 /** Where the connection to `workspace`'s host is, while it is open here. */
 export function sharedStatus(workspace: string): SharedStatus | null {
   return open.get(workspace)?.status ?? null;

@@ -24,7 +24,6 @@ import { enterPairing, formatPairLink, offeringNearby, pairAnnouncement, Pairing
 import { heldWorkspaces } from "@hivemind/host/peer-links";
 import { HostRecords, type Hosted } from "@hivemind/workspace-host/host-records";
 import { Hosting } from "@hivemind/host/hosting";
-import type { Moved } from "@hivemind/workspace-host/doc-sync";
 import { handle, handleEffect, on } from "./app-ipc.js";
 import { displayName, machineIdentity, takePerson } from "./identity.js";
 import { idOf, workspaceSeed, type Seed } from "@hivemind/workspace-host/identity";
@@ -32,7 +31,7 @@ import { getSettings } from "./settings-store.js";
 import { broadcast, userWindow } from "./windows.js";
 import { onWorkspaceChange, workspaceStore } from "./workspace-store-ipc.js";
 import { PeerLinks } from "@hivemind/host/peer-links";
-import { leaveShared, openShared, sharedStatus, type SharedStatus } from "./shared-workspaces.js";
+import { forgetShared, leaveShared, openShared, sharedStatus, type SharedStatus } from "./shared-workspaces.js";
 import type { WorkspaceServer } from "@hivemind/workspace-api/server";
 import type { EventMessage } from "@hivemind/workspace-api/protocol";
 
@@ -111,12 +110,26 @@ function hostingHere(): Hosting {
     person: () => machineIdentity().personId,
     store: workspaceStore(),
     lists: accessLists(),
-    took: () => {
+    dial: dialDevice,
+    sign: async (workspace, seq, host) => (await network()).signHost(workspace, seq, host),
+    moved: (workspace, notice) => peers?.moved(workspace, notice),
+    // Hosted here again: opened from its folder, not from where it was.
+    took: (workspace) => {
       admitNow();
       void records?.start();
+      forgetShared(workspace);
+      joinedList().remove(workspace);
     },
     onWarn: (m) => console.warn(`[hosting] ${m}`),
   }));
+}
+
+/** This computer's folder of `workspace`, when it was moved from here to another of the person's
+ *  devices (M3): where it is kept again once it moves back. Null for any other. */
+function folderHere(workspace: string): string | null {
+  const folder = workspaceStore().repoOf(workspace);
+  const h = accessLists().hosting(workspace);
+  return folder?.startsWith("/") && h && h.host !== machineIdentity().deviceId ? folder : null;
 }
 
 /** Where the workspaces shared from here say they are hosted, on a network with a lookup server
@@ -528,21 +541,26 @@ export function installNetworkIpc(server: WorkspaceServer, daemon?: () => Promis
     const to = pairedDevices().list().find((d) => d.device === device);
     if (typeof repo !== "string" || !repo || repo.startsWith("hive://")) throw new Error("move: only a workspace hosted here moves from here");
     if (!to) throw new Error("move: that is not one of your devices");
-    const hn = await network();
-    const link = await hn.dial(to.device, { addrs: to.addrs, relay: to.relay });
-    let notice: Moved;
-    try {
-      notice = await hostingHere().moveTo(repo, link, (ws, seq, host) => hn.signHost(ws, seq, host), (ws, told) => peers?.moved(ws, told));
-    } finally {
-      // What changed while it went follows on the same connection: closed once that has gone.
-      setTimeout(() => link.close("moved"), 2_000).unref?.();
-    }
+    const notice = await hostingHere().moveTo(repo, to.device);
     const workspace = workspaceStore().ownership(repo)!.workspaceId as string;
     joinedList().add({
       workspace, host: to.device, where: { addrs: to.addrs, relay: to.relay }, role: "owner",
       names: { workspace: path.basename(repo), host: to.name }, joinedAt: Date.now(), hosting: { key: hostedAs(workspace).key, lookup: null }, seq: notice.seq,
     });
     return `hive://${workspace}`;
+  });
+
+  // This computer's folder of a workspace moved from here, which it moves back to (M3).
+  handle("net:folder-here", (_e, workspace: unknown) => (typeof workspace === "string" ? folderHere(workspace) : null));
+
+  // Ask the device hosting `workspace`, moved from here, to hand it back (M3, spec/hosting.md):
+  // whoever is in it follows. Its folder, which this computer opens it by again.
+  handleEffect("net:move-hosting-here", (workspace: unknown) => ({ target: typeof workspace === "string" ? `hive://${workspace}` : undefined }), async (_e, workspace: unknown) => {
+    const folder = typeof workspace === "string" ? folderHere(workspace) : null;
+    const host = folder ? accessLists().hosting(workspace as string)!.host : null;
+    if (!folder || !host) throw new Error("move: only a workspace moved from this computer moves back to it");
+    await hostingHere().moveHere(workspace as string, host);
+    return folder;
   });
 
   // Leave a workspace joined here: its connection closes, and the last copy is kept, to read.

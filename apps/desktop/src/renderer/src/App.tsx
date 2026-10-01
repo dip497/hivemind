@@ -232,6 +232,12 @@ export function App() {
 
   const update = useUpdateCheck();
   const qc = useQueryClient();
+  /** Open `path` where it is now, after its hosting moved (M3): the same folder may open from
+   *  elsewhere than it did a moment ago. */
+  const openMoved = (path: string) => {
+    openRecent(path);
+    void qc.invalidateQueries({ queryKey: ["project", path] });
+  };
 
   // Initialize a .hivemind/ workspace in the current folder (no terminal).
   // NOTE: Electron disables window.prompt() (returns null), so the prefix is
@@ -416,7 +422,7 @@ export function App() {
             upgrading={update.upgrading}
           />
           <div className="absolute top-0 right-0 z-40 flex items-start gap-2 px-3 py-2.5 pointer-events-none">
-            <SharedBanner />
+            <SharedBanner onMoved={openMoved} />
             {repoPath && <PeopleHere repo={repoPath} onManage={repoPath.startsWith("hive://") ? undefined : () => setPeopleOpen(true)} />}
             {/* A workspace joined from elsewhere is its owner's to share. */}
             {repoPath && !repoPath.startsWith("hive://") && (
@@ -472,7 +478,7 @@ export function App() {
           onClose={() => setRecentOpen(false)}
         />
         <Suspense fallback={null}>
-          {repoPath && shareOpen && <ShareDialog repo={repoPath} open onClose={() => setShareOpen(false)} onPeople={() => { setShareOpen(false); setPeopleOpen(true); }} onMoved={(uri) => { setShareOpen(false); openRecent(uri); }} />}
+          {repoPath && shareOpen && <ShareDialog repo={repoPath} open onClose={() => setShareOpen(false)} onPeople={() => { setShareOpen(false); setPeopleOpen(true); }} onMoved={(uri) => { setShareOpen(false); openMoved(uri); }} />}
           {repoPath && peopleOpen && !repoPath.startsWith("hive://") && <PeopleDialog repo={repoPath} open onClose={() => setPeopleOpen(false)} />}
         </Suspense>
         <NewIssueModal

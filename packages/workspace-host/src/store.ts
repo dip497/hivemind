@@ -34,7 +34,7 @@ import { readView, readViews, writeView } from "@hivemind/workspace-doc/views";
 import { readOwnership, replaceOwnership, stampOwnership, stampSchema, type Ownership } from "@hivemind/workspace-doc/schema";
 import type { BoardObject, CoreLayout, TileRecord, ViewLayout } from "@hivemind/workspace-doc/shapes";
 import type { LegacyLayout, WorkspaceChange } from "./layout.js";
-import { readDoc, storedKeys, writeDoc } from "./doc-file.js";
+import { readDoc, removeDoc, storedKeys, writeDoc } from "./doc-file.js";
 import { idOf, newWorkspaceId, workspaceSeed, type Seed } from "./identity.js";
 
 export type { LegacyLayout, WorkspaceChange } from "./layout.js";
@@ -281,6 +281,15 @@ export class WorkspaceStore {
     this.persist(repo, doc);
     const parts: WorkspaceChange["part"][] = ["core", "board", ...Object.keys(readViews(doc)).map((v) => `view:${v}` as const)];
     for (const part of parts) this.opts.onChange?.({ repo, part, writer: from.writer ?? "" });
+  }
+
+  /** Forget the workspace at `repo`, here and on disk: a copy of one kept elsewhere that is not
+   *  wanted any more (M3: a replica of a workspace that is hosted here again). */
+  forget(repo: string): void {
+    this.workspaces.delete(repo);
+    this.tiles.delete(repo);
+    this.unsaved.delete(repo);
+    removeDoc(this.opts.dir, repo);
   }
 
   /** Write every repo whose last write failed. The embedder calls it on quit. */

@@ -90,6 +90,11 @@ export function storedKeys(dir: string): string[] {
   return keys;
 }
 
+/** Take away the document stored for `repo`, if there is one. */
+export function removeDoc(dir: string, repo: string): void {
+  fs.rmSync(workspaceFile(dir, repo), { force: true });
+}
+
 /** Replace the stored document: a private temp file renamed over the old one. Throws when it cannot. */
 export function writeDoc(dir: string, repo: string, doc: LoroDoc): void {
   const file = workspaceFile(dir, repo);

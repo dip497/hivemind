@@ -4,7 +4,9 @@
 // the host: its window opens it from there, as its owner; the guest is told where it went and
 // follows within seconds, with no new invite; the board is the same for both and what one writes
 // the other sees; the shell the laptop had in it is the same process, on the laptop, in its
-// folder; and the laptop opening its folder again opens it from the host.
+// folder; and the laptop opening its folder again opens it from the host. Then the laptop moves it
+// back (Move here, on its banner): its window opens the folder as before, the guest follows it home,
+// what was done at the host is there, and the shell is the same process still.
 import { test, expect, type ElectronApplication } from "@playwright/test";
 import { execSync, spawn, spawnSync, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
@@ -42,7 +44,7 @@ test.afterEach(async () => {
   fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 });
 
-test("a laptop moves a shared workspace to its host: its window and the guest follow, the board is one, and its shell runs on the laptop still", async () => {
+test("a laptop moves a shared workspace to its host: its window and the guest follow, the board is one, and its shell runs on the laptop still; moved back, all of it comes home", async () => {
   test.skip(!hiveNetBuilt() || !hostable, "needs hive-net (cargo build in crates/hive-net) and a current apps/cli/dist/hive (cd apps/cli && bun scripts/build.ts)");
   test.setTimeout(240_000);
   const host = spawn(HIVE, ["host", "run"], { env: hostEnv(), stdio: "ignore" });
@@ -134,4 +136,22 @@ test("a laptop moves a shared workspace to its host: its window and the guest fo
   await laptop.reload();
   await expect(laptop.locator('[data-shared-banner][data-state="connected"]')).toHaveAttribute("data-access", "owner", { timeout: 20_000 });
   await expect.poll(() => notes(laptop), { timeout: 20_000 }).toContain("after the move");
+
+  // Moved back: the laptop's window is on its folder again, a workspace of its own, not one joined.
+  const laptopDevice = (await laptop.evaluate(() => window.hive.identity())).deviceId;
+  await laptop.locator("[data-move-here]").click();
+  await expect(laptop.locator("[data-shared-banner]")).toHaveCount(0, { timeout: 20_000 });
+  expect(await laptop.evaluate(() => window.hive.joined())).toEqual([]);
+  // The guest follows it home with no new invite.
+  await expect.poll(async () => ((await guest.evaluate(() => window.hive.joined()))[0] as { host?: string } | undefined)?.host, { timeout: 10_000 }).toBe(laptopDevice);
+  await expect(guest.locator('[data-shared-banner][data-state="connected"]')).toHaveAttribute("data-access", "edit", { timeout: 10_000 });
+  // The board is the one from the host, and still one.
+  await expect.poll(() => tiles(laptop), { timeout: 20_000 }).toEqual(before);
+  await expect.poll(() => tiles(guest), { timeout: 20_000 }).toEqual(before);
+  await expect.poll(() => notes(laptop), { timeout: 20_000 }).toContain("after the move");
+  await note(guest, "back home");
+  await expect.poll(() => notes(laptop), { timeout: 20_000 }).toContain("back home");
+  // The shell is the same process, in its folder, the laptop's own again.
+  expect(await type("pid-home.txt", "echo $$")).toBe(pid);
+  expect(await type("where-home.txt", "pwd")).toBe(api);
 });

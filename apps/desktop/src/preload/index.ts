@@ -215,6 +215,8 @@ const api: HiveIpc & {
   deviceWorkspaces: () => ipcRenderer.invoke("net:device-workspaces"),
   openDeviceWorkspace: (device, workspace, name) => ipcRenderer.invoke("net:open-device-workspace", device, workspace, name),
   moveHosting: (repo, device) => ipcRenderer.invoke("net:move-hosting", repo, device),
+  folderHere: (workspace) => ipcRenderer.invoke("net:folder-here", workspace),
+  moveHostingHere: (workspace) => ipcRenderer.invoke("net:move-hosting-here", workspace),
   network: () => ipcRenderer.invoke("net:network"),
   networkHealth: () => ipcRenderer.invoke("net:network-health"),
   useNetwork: (given) => ipcRenderer.invoke("net:use-network", given),
