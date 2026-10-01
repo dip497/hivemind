@@ -569,3 +569,17 @@ guest who may edit the board could start a command on the host (see the log).
 - 2026-10-01 — M4 step 2c: a participant's machine is named by its person on everyone's board
   ("Priya's computer"), offline while they are away, from presence and the owner's list. Desktop
   units green; touched e2e specs 35 of 35 (11 files).
+- 2026-10-01 — M4 step 3: hand off by bundle: a participant's branch lands in the host's
+  repository as `handoff/<who>/<branch>` with a Diff tile on the board (the gate's third line).
+  The machine chip's panel is now a chunk of its own, loaded when it opens: with the grant and the
+  hand-off on it, the renderer's entry chunk had grown past its margin (1 012 323 bytes; now
+  999 828). Units green; touched e2e specs 27 of 27 (9 files).
+- 2026-10-01 — Security, found while building M4 step 3 and fixed on its own: since M1 a guest of
+  any role could name any folder on the host where a call takes its workspace (`file.read("/etc",
+  "passwd")`, `git.*` on any repository, `ssh://` and `machine://` places the host reaches, another
+  workspace's `hive://` board): `servePeer` mapped the workspace's own id to its repo and passed
+  every other name through. Now a guest's call about a workspace must name this one or a place in
+  it (`BY_WORKSPACE`, `inWorkspace`: no `..`, no other folder, workspace or machine), else
+  `FORBIDDEN` before any domain runs; the person's own devices, the owner, as before. Test:
+  `peers.test.ts` (1 more; three mutations caught: the check gone, applied to the owner's devices,
+  `..` let through); peer-facing e2e specs 23 of 23 (13 files).

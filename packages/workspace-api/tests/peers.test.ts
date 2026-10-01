@@ -96,6 +96,21 @@ test("a peer's calls run as the peer, with the workspace it names read as its re
   expect(await code(driver.client.call("git.commit", workspaceUrl(W), "m"))).toBe("FORBIDDEN");
 });
 
+test("a guest names this workspace, by its id, and nothing else on the host: another folder, a way out of it, another workspace or a machine is refused and never runs; the person's own devices are the owner", async () => {
+  const viewer = connect("view");
+  const url = workspaceUrl(W);
+  const elsewhere = ["/etc", "/work/apix", `${url}/../../etc`, "/work/api/../../etc", "../etc", "relative", `hive://${"f".repeat(32)}`, "ssh://box/etc", `machine://${"e".repeat(64)}/home`];
+  for (const repo of elsewhere) expect(await code(viewer.client.call("file.read", repo, "passwd"))).toBe("FORBIDDEN");
+  viewer.client.notice("presence.set", `hive://${"f".repeat(32)}`, null);
+  await new Promise((r) => setTimeout(r, PEER_FRAME_MS * 2));
+  expect(ran).toEqual([]);
+  expect(await viewer.client.call("file.read", `${url}/src`, "a.ts")).toBe("a.ts in /work/api/src");
+  expect(await viewer.client.call("file.read", "/work/api", "a.ts")).toBe("a.ts in /work/api");
+
+  const mine = connect("owner");
+  expect(await mine.client.call("file.read", "/elsewhere", "a.ts")).toBe("a.ts in /elsewhere");
+});
+
 test("a peer hears only the events about its workspace, and is refused a tile outside it", async () => {
   const { server, client } = connect("view");
   const heard: string[] = [];
