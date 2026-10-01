@@ -5,7 +5,7 @@
 import type { Issue, IssuePatch, IssueState, IssueSummary, LinkType, NewIssue } from "@hivemind/core/types";
 import type { LinkResult, TransferResult } from "@hivemind/core/cross-repo";
 import type { ReviewComment } from "@hivemind/core/review";
-import type { DiffPayload, DiffScope, GitBranchList, GitRevision, GitStatusSnapshot, WorktreeCreateOpts, WorktreeEntry } from "./git.js";
+import type { DiffPayload, DiffScope, GitBranchList, GitRevision, GitStatusSnapshot, HandedOff, WorktreeCreateOpts, WorktreeEntry } from "./git.js";
 import type { Links, PipeChange, SpawnChange, StatusChange, TileOpened } from "./agents.js";
 import type { ActivityLevels, ExitInfo, TerminalOpts, Typist } from "./terminals.js";
 import type { Answerer, PlanDecided, PlanReview } from "./plans.js";
@@ -39,6 +39,9 @@ export interface WorkspaceMethods {
   "git.pull": (repo: string) => void;
   "git.conflictedFile": (repo: string, file: string) => { raw: string; conflicts: number };
   "git.writeResolved": (repo: string, file: string, contents: string) => void;
+  /** A participant's branch, as a git bundle (base64), landed as `handoff/<who>/<branch>`, with a
+   *  Diff tile on the board showing it against the branch checked out here (M4). */
+  "git.handOff": (repo: string, branch: string, bundle: string) => HandedOff;
   "worktree.list": (repo: string) => WorktreeEntry[];
   "worktree.create": (repo: string, opts: WorktreeCreateOpts) => { path: string; branch: string };
   "worktree.remove": (repo: string, worktree: string, force?: boolean) => void;

@@ -804,6 +804,13 @@ each one's terminals stream from where they run.
    *Push a branch* (git push to a remote both can reach, or a git bundle sent over
    hive-net into the host's repo as a new branch) or *Open a review* (a Diff tile on the
    host showing the branch). No live file sync.
+   *As built (M4 step 3):* *Hand off its branch to the host* on her frame's machine chip sends the
+   branch checked out in that frame's folder as a git bundle of what it adds to the branches her
+   clone tracks (its whole history when the host lacks what that builds on), over the workspace
+   API (`git.handOff`, *Can edit board*). The host checks it against its repository and fetches it
+   as `handoff/<who>/<branch>`, touching none of its files or branches (a person updates only a
+   hand-off of their own), then opens a Diff tile comparing it with the branch it has checked out.
+   Pushing to a remote both can reach needs nothing of hivemind's.
 6. Priya leaves → her frame shows "Runs on Priya's laptop — offline", grey. Her agents
    keep running on her machine; she can open them locally.
 

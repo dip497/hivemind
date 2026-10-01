@@ -29,7 +29,8 @@ import {
 } from "./git-adapter.js";
 import { allInRepo, fileIn, inRepo } from "./repo-paths.js";
 
-type GitMethod = Extract<Method, `git.${string}` | `worktree.${string}`>;
+/** A hand-off is its own domain's (`hand-off.ts`): it places a tile, and needs who calls. */
+type GitMethod = Exclude<Extract<Method, `git.${string}` | `worktree.${string}`>, "git.handOff">;
 
 const bad = (message: string): never => {
   throw new ApiError("BAD_REQUEST", message);

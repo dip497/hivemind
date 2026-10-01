@@ -204,6 +204,7 @@ const api: HiveIpc & {
   leave: (workspace) => ipcRenderer.invoke("net:leave", workspace),
   machineGrant: (workspace) => ipcRenderer.invoke("net:machine-grant", workspace),
   setMachineGrant: (workspace, grant) => ipcRenderer.invoke("net:set-machine-grant", workspace, grant),
+  handOff: (workspace, uri) => ipcRenderer.invoke("net:hand-off", workspace, uri),
   devices: () => ipcRenderer.invoke("net:devices"),
   onDevicesChanged: (cb) => {
     const h = () => cb();

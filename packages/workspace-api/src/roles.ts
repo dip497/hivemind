@@ -24,6 +24,9 @@ const LEAST: Record<string, Role> = {
   "issue.list": "view",
   "issue.read": "view",
   "review.list": "view",
+  // Handing a branch of one's own to the host: it lands as a branch of its own, and a Diff tile
+  // shows it (M4). Nothing of the host's is changed.
+  "git.handOff": "edit",
   // Being there: where one's pointer is, and what one has selected.
   "presence.set": "view",
   // Watching terminals, and no longer watching one.

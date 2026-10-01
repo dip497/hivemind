@@ -50,6 +50,7 @@ import { daemonSessions } from "./daemon-sessions.js";
 import { deviceSessions, onDevices, participantAt } from "./device-sessions.js";
 import { Hosting } from "./hosting.js";
 import { workspaceDomains } from "./domains.js";
+import { HANDED_OFF, handOff } from "./hand-off.js";
 import { PeerLinks } from "./peer-links.js";
 import { People } from "./people.js";
 import { Plans } from "./plans.js";
@@ -234,6 +235,8 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     plans.domain,
     presence(() => api, () => keys.personId),
     peopleHere.domain,
+    // A participant's branch, handed off from their machine (M4).
+    handOff({ who, place: (repo, tile, name) => { store.addTile(repo, tile, { name }, HANDED_OFF); } }),
   ], intents, o.onWarn);
 
   // The control plane (`hive ctl`): the verbs that need no window, for the agents here and for

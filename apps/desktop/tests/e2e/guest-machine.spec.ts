@@ -7,9 +7,10 @@
 // the host puts in the guest's frame runs nowhere: the guest's machine runs only what its person
 // placed, and shows the host nothing else; until they let the others run terminals and agents
 // there, when one the host puts there runs on their computer, in their folder, started by the
-// host, and their window shows it. The host's board names their computer by them, there or not.
+// host, and their window shows it. The host's board names their computer by them, there or not. A
+// branch of theirs, handed off, lands in the host's repository, and a Diff tile shows it there.
 import { test, expect, type ElectronApplication, type Page } from "@playwright/test";
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -42,6 +43,7 @@ const screenOf = (w: Page, tile: string) => w.locator(`.react-flow__node-termina
   return host?.__hmScreen() ?? "";
 }).catch(() => "");
 const read = (file: string) => (fs.existsSync(file) ? fs.readFileSync(file, "utf8").trim() : "");
+const git = (cwd: string, ...args: string[]) => execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=T", ...args], { cwd, encoding: "utf8" }).trim();
 /** The scale `w` draws the terminal of `tile` at in its tile: 1 when it fills it. */
 const drawnScale = (w: Page, tile: string) => w.locator(`.react-flow__node-terminal[data-id="${tile}"] .xterm`).evaluate((el) => (el as HTMLElement).style.transform.match(/scale\(([\d.]+)\)/)?.[1] ?? "1");
 /** `w` brings the tile `tile` into view, selected: one someone else placed may be anywhere. */
@@ -80,9 +82,11 @@ async function openShell(w: Page, frame: string): Promise<string> {
 test("a guest puts a frame of their own on their computer: a shell they open in it runs there, in their folder, and the host watches it without typing into it; a shell the host puts there runs nowhere, until they let the others run terminals there", async () => {
   test.skip(!hiveNetBuilt(), "build hive-net first: cargo build in crates/hive-net");
   test.setTimeout(180_000);
-  const { host, guest } = await sharedWorkspace(root, apps, "edit", { env: DAEMON, names: { host: "Adarsh", guest: "Priya" } });
+  const { host, guest, repo } = await sharedWorkspace(root, apps, "edit", { env: DAEMON, names: { host: "Adarsh", guest: "Priya" } });
+  // The guest's folder is a clone of the host's repository.
+  git(repo, "commit", "-q", "--allow-empty", "-m", "start");
   const folder = path.join(root, "priya-api");
-  fs.mkdirSync(folder);
+  git(root, "clone", "-q", repo, folder);
 
   // In someone else's workspace, where a frame runs is this computer, a folder of theirs.
   const had = await frames(guest);
@@ -201,6 +205,25 @@ test("a guest puts a frame of their own on their computer: a shell they open in 
     }
     return read(path.join(folder, "guest-typed.txt"));
   }, { timeout: 30_000, intervals: [2_000] }).toBe("guest-42");
+
+  // They hand off a branch of theirs: it lands in the host's repository as a branch of its own, at
+  // their tip, and a Diff tile on the host's board shows what it adds.
+  git(folder, "checkout", "-q", "-b", "feature");
+  fs.writeFileSync(path.join(folder, "feature.txt"), "from priya\n");
+  git(folder, "add", "feature.txt");
+  git(folder, "commit", "-q", "-m", "feature");
+  const before = await tiles(host);
+  const hostsOwn = { head: git(repo, "rev-parse", "HEAD"), status: git(repo, "status", "--porcelain") };
+  await guest.locator(`.react-flow__node-frame[data-id="${frame}"] [aria-label="machine This computer"]`).evaluate((b) => (b as HTMLElement).click());
+  await guest.locator("[data-hand-off]").evaluate((b) => (b as HTMLElement).click());
+  await expect(guest.locator("[data-hand-off-landed]")).toHaveAttribute("data-hand-off-landed", "handoff/priya/feature", { timeout: 30_000 });
+  await guest.locator(".fixed.inset-0.z-\\[9998\\]").evaluate((b) => (b as HTMLElement).click());
+  expect(git(repo, "rev-parse", "handoff/priya/feature")).toBe(git(folder, "rev-parse", "feature"));
+  expect({ head: git(repo, "rev-parse", "HEAD"), status: git(repo, "status", "--porcelain") }).toEqual(hostsOwn);
+  let review = "";
+  await expect.poll(async () => (review = (await tiles(host)).find((t) => !before.includes(t) && t!.startsWith("tile-diff")) ?? ""), { timeout: 15_000 }).not.toBe("");
+  await focusTile(host, review);
+  await expect(host.locator(`.react-flow__node[data-id="${review}"] [data-diff-file="feature.txt"]`)).toHaveCount(1, { timeout: 30_000 });
 
   // They leave: it is still their computer on the host's board, which says they are not there.
   await guest.locator("[data-leave]").click();

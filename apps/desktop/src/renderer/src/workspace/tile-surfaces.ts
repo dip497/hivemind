@@ -47,6 +47,7 @@ export type DiffTileData = {
   repoPath: string;
   initialMode?: "working" | "branch";
   initialBase?: string;
+  initialHead?: string;
   onClose?: () => void;
   pinned?: boolean;
   onTogglePin?: (id: string, rect: PinRect) => void;
@@ -236,7 +237,10 @@ export function buildTileSurfaces(ctx: TileSurfaceCtx): TileSurface[] {
       case "diff":
         out.push({
           id: t.id, kind: t.kind, type: "diff",
-          data: { repoPath: effRepo!, initialMode: "working", initialBase: "origin/main", onClose: () => closeTile(t.id), ...pin },
+          // One opened to compare two branches (a hand-off, M4) opens on them.
+          data: t.compare
+            ? { repoPath: effRepo!, initialMode: "branch", initialBase: t.compare.base, initialHead: t.compare.head, onClose: () => closeTile(t.id), ...pin }
+            : { repoPath: effRepo!, initialMode: "working", initialBase: "origin/main", onClose: () => closeTile(t.id), ...pin },
         });
         break;
       case "issues":

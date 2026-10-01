@@ -49,6 +49,8 @@ const GIT_TIMEOUTS: Record<string, number> = {
   fetch: 5 * 60_000,
   pull: 5 * 60_000,
   clone: 10 * 60_000,
+  // A hand-off's whole history (M4) can be a large pack to write or check.
+  bundle: 5 * 60_000,
   diff: 60_000, // large diffs on big repos take a beat
 };
 
@@ -783,4 +785,42 @@ export async function worktreePrune(repoPath: string): Promise<{ removed: string
   const afterSet = new Set(after.map((w) => w.path));
   const removed = before.filter((w) => !afterSet.has(w.path)).map((w) => w.path);
   return { removed };
+}
+
+/** A bundle at `file` of the branch `branch` in `repo`: of what it adds to the branches `repo`
+ *  tracks from elsewhere, or of its whole history (`whole`). False when it adds nothing to them. */
+export async function gitBundleCreate(repo: string, file: string, branch: string, whole: boolean): Promise<boolean> {
+  try {
+    await rawGit(repo, ["bundle", "create", file, `refs/heads/${branch}`, ...(whole ? [] : ["--not", "--remotes"])]);
+    return true;
+  } catch (e) {
+    if (!whole && /empty bundle/i.test(e instanceof Error ? e.message : String(e))) return false;
+    throw e;
+  }
+}
+
+/** Whether `repo` holds what the bundle at `file` builds on: "lacks" when it does not, "bad" when
+ *  it is no bundle git reads. */
+export async function gitBundleVerify(repo: string, file: string): Promise<"ok" | "lacks" | "bad"> {
+  try {
+    await rawGit(repo, ["bundle", "verify", file]);
+    return "ok";
+  } catch (e) {
+    return /lacks these prerequisite/i.test(e instanceof Error ? e.message : String(e)) ? "lacks" : "bad";
+  }
+}
+
+/** Land the branch `branch` of the bundle at `file` in `repo` as the branch `as`, for the person
+ *  `by`: over a branch `by` landed there before, never over anyone else's or one of `repo`'s own.
+ *  Its tip. */
+export async function gitLandBranch(repo: string, file: string, branch: string, as: string, by: string): Promise<string> {
+  const ref = `refs/heads/${as}`;
+  const landedBy = await rawGit(repo, ["config", "--get", `branch.${as}.handedoffby`]).then((s) => s.trim(), () => "");
+  const there = await rawGit(repo, ["show-ref", "--verify", "--quiet", ref]).then(() => true, () => false);
+  if (there && landedBy !== by) {
+    throw new Error(`${as} is ${landedBy ? "someone else's hand-off" : "a branch of this repository's own"}: hand it off from a branch of another name`);
+  }
+  await rawGit(repo, ["fetch", "--no-tags", file, `+refs/heads/${branch}:${ref}`]);
+  await rawGit(repo, ["config", `branch.${as}.handedoffby`, by]);
+  return (await rawGit(repo, ["rev-parse", "--verify", `${ref}^{commit}`])).trim();
 }

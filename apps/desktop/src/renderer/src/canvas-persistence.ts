@@ -45,6 +45,8 @@ export interface TileInstance extends TileRecord {
    *  routes the decision to the plan-bridge hook; `hcpCmdId` routes it to a
    *  blocked HCP `review.open` caller instead (one or the other is set). */
   review?: { requestId?: string; plan: string; cwd: string; hcpCmdId?: string; agentTileId?: string };
+  /** diff only — the two branches it opened comparing (a branch handed off to this host, M4). */
+  compare?: { base: string; head: string };
 }
 
 /** A frame as the window keeps it: the layout's record (FrameRecord: its id, title and where its

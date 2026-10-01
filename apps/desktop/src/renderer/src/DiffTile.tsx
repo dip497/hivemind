@@ -71,6 +71,9 @@ interface Props {
   repoPath: string;
   initialMode?: Mode;
   initialBase?: string;
+  /** What branch mode compares with the base until another is picked: the checkout's HEAD, or a
+   *  branch (one handed off, M4). */
+  initialHead?: string;
   onClose?: () => void;
   /** Pin state + toggle (injected via node data) — docked in the header. */
   pinned?: boolean;
@@ -111,7 +114,7 @@ function fileForLineEl(lineEl: HTMLElement | null, container: HTMLElement | null
   return file;
 }
 
-export function DiffTile({ repoPath, initialMode = "working", initialBase = "origin/main", onClose, pinned, onTogglePin }: Props) {
+export function DiffTile({ repoPath, initialMode = "working", initialBase = "origin/main", initialHead, onClose, pinned, onTogglePin }: Props) {
   // Per-tile font size (A−/A+ + Ctrl/Cmd +/−/0) — overrides --diffs-font-size.
   const font = useTileFont(`diff:${repoPath}`, 13);
   // Fullscreen: the Pierre CodeView is React-rendered (not an imperative node), so
@@ -338,8 +341,8 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
   // ── build CodeView items per mode ───────────────────────────────────────
   const workingItems = useWorkingItems(repoPath, mode === "working" ? status?.files ?? [] : [], staged);
   const branchScope: DiffScope = useMemo(
-    () => ({ kind: "branch", base: branchBase ?? initialBase, head: branchHead, ignoreWhitespace }),
-    [branchBase, branchHead, initialBase, ignoreWhitespace],
+    () => ({ kind: "branch", base: branchBase ?? initialBase, head: branchHead ?? initialHead, ignoreWhitespace }),
+    [branchBase, branchHead, initialBase, initialHead, ignoreWhitespace],
   );
   const branch = useBranchItems(repoPath, branchScope, mode === "branch");
   // Branch inventory for the base/head pickers — only fetched in branch mode.
@@ -692,7 +695,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
     disabled?: boolean;
   }[] = [
     { id: "working", label: "working", title: "uncommitted working-tree changes" },
-    { id: "branch", label: "branch", title: `compare ${branchBase ?? initialBase} … ${branchHead ?? "HEAD"}` },
+    { id: "branch", label: "branch", title: `compare ${branchBase ?? initialBase} … ${branchHead ?? initialHead ?? "HEAD"}` },
     {
       id: "unpushed",
       label: "unpushed",
@@ -766,7 +769,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
               value={branchHead}
               onChange={setBranchHead}
               branches={branchesQ.data}
-              autoLabel="HEAD (checkout)"
+              autoLabel={initialHead ?? "HEAD (checkout)"}
             />
           </div>
         )}

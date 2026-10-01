@@ -62,6 +62,7 @@ A peer names the workspace by its id, `hive://<workspaceId>`, wherever a call ta
 peer's role on the workspace (design §6) before it runs, and one the role does not allow is
 `FORBIDDEN` (a notice is dropped): reads and watching terminals are anyone's with access; typing
 into and resizing a terminal, and asking for its keyboard or handing it on, *Can use terminals*;
+handing a branch of one's own to the host (`git.handOff`, M4), *Can edit board*;
 answering an agent's plan, and opening and closing tiles, *Can drive agents*; anything else is the
 owner's (taking a keyboard back among them, and the `store.*` writes). A peer edits the board
 through the workspace document's own sync (the connection's `sync` stream), where the host takes
@@ -127,6 +128,7 @@ sends, and one participant per device.
 | `git.pull` | `repo` | `null` (fast-forward only) | target `repo` |
 | `git.conflictedFile` | `repo`, `file` | `{raw, conflicts}` | read |
 | `git.writeResolved` | `repo`, `file`, `contents` | `null` | target the file |
+| `git.handOff` | `repo`, `branch`, `bundle` (a git bundle of it, base64, 32 MB at most) | `{branch, base}`: the branch it landed as, `handoff/<who>/<branch>` (`who` the caller's name, made plain), and the branch checked out here that a Diff tile on the board now shows it against. The bundle is checked against the repo first (`FAILED`, saying the repo lacks commits it builds on, when it does: send its whole history); the repo's working tree, index and own branches are untouched, and a branch lands only over a hand-off of the same person's | target `repo`, detail the branch |
 | `worktree.list` | `repo` | `[{path, branch, head, locked, prunable, bare}]` | read |
 | `worktree.create` | `repo`, `{branch, path?, sparse?, partial?, includeFiles?}` | `{path, branch}` | target `repo`, detail the branch |
 | `worktree.remove` | `repo`, `worktree`, `force`? | `null` | target the worktree |

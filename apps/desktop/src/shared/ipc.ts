@@ -70,7 +70,7 @@ export type {
   WorktreeCreateOpts,
   WorktreeEntry,
 } from "@hivemind/workspace-api/git";
-import type { DiffPayload, DiffScope, GitBranchList, GitStatusSnapshot, WorktreeCreateOpts, WorktreeEntry } from "@hivemind/workspace-api/git";
+import type { DiffPayload, DiffScope, GitBranchList, GitStatusSnapshot, HandedOff, WorktreeCreateOpts, WorktreeEntry } from "@hivemind/workspace-api/git";
 import type { Typist } from "@hivemind/workspace-api/terminals";
 import type { Answerer, PlanDecided, PlanReview } from "@hivemind/workspace-api/plans";
 
@@ -311,6 +311,10 @@ export interface HiveIpc {
   machineGrant(workspace: string): Promise<Grant>;
   /** Let them do `grant` here from now on; the workspace's host is told at once. */
   setMachineGrant(workspace: string, grant: Grant): Promise<void>;
+  /** Hand off the branch checked out in this person's frame `uri` on this computer to the host of
+   *  the joined workspace `workspace` (M4): the branch it landed as there, which a Diff tile on the
+   *  board shows against the host's. */
+  handOff(workspace: string, uri: string): Promise<HandedOff>;
   // ── your devices (R14, M3, spec/pairing.md) ───────────────
   /** The person's devices this app paired with. */
   devices(): Promise<PairedDeviceSummary[]>;

@@ -33,6 +33,8 @@ import { app } from "electron";
 import { parseDeviceUri } from "@hivemind/core/remote-uri";
 import { MachinePlaces, type Placed } from "@hivemind/host/machine-places";
 import { SHOWN_WAIT_MS, serveMachine, type Grant } from "@hivemind/host/machine-share";
+import { handOffFrom } from "@hivemind/host/hand-off";
+import type { HandedOff } from "@hivemind/workspace-api/git";
 import { defaultShellFor } from "@hivemind/agent-host/shell-spec";
 import type { Duplex } from "node:stream";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
@@ -236,6 +238,20 @@ const placesHere = (): MachinePlaces => (places ??= new MachinePlaces({
   device: machineIdentity().deviceId,
   onWarn: (m) => console.warn(`[placed] ${m}`),
 }));
+
+/** Hand off the branch checked out in this person's frame `uri` on this machine to the host of
+ *  `workspace` (M4): what lands there. */
+export async function handOffTo(workspace: string, uri: string): Promise<HandedOff> {
+  const at = parseDeviceUri(uri);
+  if (!at || at.device !== machineIdentity().deviceId) throw new Error("hand off: only a frame on this computer hands off from here");
+  return handOffFrom(at.path, async (branch, bundle) => {
+    const api = open.get(workspace)?.api;
+    if (!api) throw new Error("not connected to this workspace's host");
+    const answer = await api.call("git.handOff", [workspaceUrl(workspace), branch, bundle]);
+    if ("error" in answer) throw new Error(answer.error.message);
+    return answer.result as HandedOff;
+  });
+}
 
 /** What this person lets the people in `workspace` do on this machine (M4). */
 export function machineGrant(workspace: string): Grant {

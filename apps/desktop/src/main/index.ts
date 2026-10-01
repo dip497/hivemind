@@ -83,6 +83,7 @@ import { toBareId, toPtyId } from "@hivemind/workspace-api/tile-id";
 import { INITIAL_PROMPT_ENV } from "@hivemind/agent-host/initial-prompt";
 import { WorkspaceServer, named, type Connection } from "@hivemind/workspace-api/server";
 import { workspaceDomains } from "@hivemind/host/domains";
+import { HANDED_OFF, handOff } from "@hivemind/host/hand-off";
 import { agents } from "@hivemind/host/agents";
 import { Terminals, type SessionOutput } from "@hivemind/host/terminals";
 import { Layouts, type Shown } from "@hivemind/host/store";
@@ -1196,6 +1197,8 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
   plans.domain,
   presence(() => workspaceServer, () => machineIdentity().personId),
   peopleHere.domain,
+  // A participant's branch, handed off from their machine (M4).
+  handOff({ who: whoIs, place: (repo, tile, name) => { workspaceStore().addTile(repo, tile, { name }, HANDED_OFF); } }),
 ], hostIntents(), (m) => console.warn(`[workspace] ${m}`));
 const workspaceIpc = serveWorkspaceApi(workspaceServer, elsewhere);
 

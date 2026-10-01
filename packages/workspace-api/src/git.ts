@@ -74,6 +74,13 @@ export interface DiffPayload {
 }
 
 /** Branch inventory for the diff tile's base/head pickers. */
+/** A branch handed off to a workspace's host (M4): the branch it landed as there, and the host's
+ *  branch the Diff tile it opened shows it against. */
+export interface HandedOff {
+  branch: string;
+  base: string;
+}
+
 export interface GitBranchList {
   /** Current local branch, or null when detached. */
   current: string | null;

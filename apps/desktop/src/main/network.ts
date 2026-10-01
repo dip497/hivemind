@@ -35,7 +35,7 @@ import { PeerLinks, type ShownMachine } from "@hivemind/host/peer-links";
 import { participantAt } from "@hivemind/host/device-sessions";
 import type { TerminalMachine } from "@hivemind/host/terminals";
 import type { TerminalOpts } from "@hivemind/workspace-api/terminals";
-import { forgetShared, leaveShared, machineGrant, openShared, setMachineGrant, sharedStatus, type SharedStatus } from "./shared-workspaces.js";
+import { forgetShared, handOffTo, leaveShared, machineGrant, openShared, setMachineGrant, sharedStatus, type SharedStatus } from "./shared-workspaces.js";
 import { GRANTS, type Grant } from "@hivemind/host/machine-share";
 import type { WorkspaceServer } from "@hivemind/workspace-api/server";
 import type { EventMessage } from "@hivemind/workspace-api/protocol";
@@ -560,6 +560,13 @@ export function installNetworkIpc(server: WorkspaceServer, daemon?: () => Promis
     if (typeof workspace !== "string" || !joinedStatus(workspace)) throw new Error("machine: that workspace was not joined here");
     if (!GRANTS.includes(grant as Grant)) throw new Error("machine: watch, terminals or agents");
     setMachineGrant(workspace, grant as Grant);
+  });
+  // Hand off the branch of a frame of this person's on this computer to the host of a workspace
+  // joined here (M4): what lands there.
+  handleEffect("net:hand-off", (workspace: unknown) => ({ target: typeof workspace === "string" ? `hive://${workspace}` : undefined }), (_e, workspace: unknown, uri: unknown) => {
+    if (typeof workspace !== "string" || !joinedStatus(workspace)) throw new Error("hand off: that workspace was not joined here");
+    if (typeof uri !== "string") throw new Error("hand off: which frame?");
+    return handOffTo(workspace, uri);
   });
 
   // Leave a workspace joined here: its connection closes, and the last copy is kept, to read.
