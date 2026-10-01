@@ -465,6 +465,23 @@ exactly as today. They are ordered by dependency.
 - **Done when.** A Linux VPS runs `hive host` after a reboot with no desktop session; a
   laptop pairs with it and opens a workspace hosted there; agents started in its frames
   keep running with the laptop closed.
+- **Decided while building it (2026-10-01).** What a machine answers about its workspaces is one
+  package, `packages/host` (`@hivemind/host`): the domains the app's main process served, moved
+  unchanged, and the headless host that composes them (`headless.ts`), with peers served by
+  `PeerLinks` for both. `hive host` uses the app's data folder on that machine, so it is the
+  device the app would be there, and it refuses to run while the app does; holding a socket in
+  that folder makes it the one host. Its terminals run in the machine's PTY daemon, started as
+  `hive daemon` does, whose status of each session the host mirrors (R6), so the daemon's own
+  control-plane socket answers the agents' hooks; the control plane's verbs (`hive ctl` from an
+  agent on the host) wait for a window there, which a headless host never has. Pairing is
+  `spec/pairing.md`: six words (48 bits, five minutes, three tries) or a link, an HMAC proof from
+  each side bound to both devices' keys, the app giving its person key and the host taking it;
+  the words find the host on the local network through a tag in its mDNS user data. The owner's
+  paired devices are the owner in every workspace on the host, ask it which workspaces it holds
+  on a `device` stream of `hive/ws/1`, and type into its terminals as the host's own windows do.
+  The service is a systemd user unit with `KillMode=process`, so a restart leaves the daemon's
+  sessions running; lingering starts it at boot. macOS and Windows hosts wait on the compiled
+  `hive` hosting a daemon there.
 
 ### R15. The canvas renders board objects
 

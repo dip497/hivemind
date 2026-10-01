@@ -711,6 +711,7 @@ esac
 # ── next steps ────────────────────────────────────────────────────────────
 if [ "$MODE" = "prebuilt" ] && [ "$PLATFORM" = "linux-arm64" ]; then
   printf '\n%b✓ hive ready.%b From your desktop:  hive machine add %s@%s\n' "$GREEN" "$NC" "$(id -un)" "$(hostname)"
+  printf '  Or keep this machine serving your workspaces, always on:  hive host install && hive host pair\n'
   exit 0
 fi
 cat <<EOF

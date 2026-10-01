@@ -161,6 +161,8 @@ hive host pair        # print six words, a link and a QR code for your app to en
 hive host pair <code> # or enter the words (quoted) or the link your app shows
                       #   (Settings → Devices → Show a code)
 hive host add <dir>   # serve a folder on this machine as one of its workspaces
+hive host install     # run it as a service of yours (systemd): at boot, and again if it stops
+hive host uninstall   # stop running it as a service; its terminals keep running
 ```
 
 The host is the same device the app would be on that machine (it uses the app's keys), so it
@@ -169,6 +171,11 @@ with a host** takes the six words `hive host pair` prints, which find the host o
 its link, which finds it from anywhere; from then on **Open recent → On your hosts** lists the
 workspaces it serves. A workspace opened from there is yours; its terminals and
 agents run on the host and keep running whatever your computer does.
+
+`hive host install` writes a systemd user unit (`~/.config/systemd/user/hive-host.service`) and
+enables it. To start it with the machine, before anyone logs in, it turns lingering on
+(`loginctl enable-linger`); whatever it cannot do itself, it prints the command for. Restarting
+or upgrading the host leaves its terminals and agents running.
 
 ## Optional tools
 

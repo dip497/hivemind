@@ -11,20 +11,24 @@
  *                       for your app to enter, or `hive host pair <words or link>` to enter one
  *                       it shows
  *   hive host add <dir> serve a folder on this machine as one of its workspaces
+ *   hive host install   run it as a service of yours (systemd, Linux): at boot, and again if it stops
+ *   hive host uninstall stop running it as a service
  */
 import { defineCommand } from "citty";
 import { renderUnicodeCompact } from "uqr";
 import net from "node:net";
 import path from "node:path";
 import { applyShellEnvToProcess } from "@hivemind/agent-host/shell-env";
-import { startHeadlessHost, type HeadlessHost, type HeadlessHostOptions } from "@hivemind/host/headless";
+// The host itself is loaded when `hive host run` starts it, not by every `hive` command.
+import type { HeadlessHost, HeadlessHostOptions } from "@hivemind/host/headless";
 import type { PairedDevice } from "@hivemind/workspace-host/devices";
 import { appData, hiveNetBin } from "../app-data.js";
 import { err, ok } from "../format.js";
 import { EXIT } from "../hcp.js";
 import { appRunning, askHost, controlSocket, HostNotRunning, serveControl } from "../host-control.js";
 import { defaultSocket } from "../pty-client.js";
-import { checkSocketPath, daemonUnsupported, ensureDaemon } from "./daemon.js";
+import { checkSocketPath, daemonUnsupported, ensureDaemon, selfArgv } from "./daemon.js";
+import { install, uninstall } from "../host-service.js";
 
 /** What `hive host status` reports of a running host. */
 interface HostStatus {
@@ -91,7 +95,7 @@ const runCmd = defineCommand({
       const was = host;
       host = null;
       await was?.stop();
-      host = await startHeadlessHost(opts);
+      host = await (await import("@hivemind/host/headless")).startHeadlessHost(opts);
       process.stdout.write(`hive host: paired with ${named(paired)}; serving as its person\n`);
       return paired;
     };
@@ -124,7 +128,7 @@ const runCmd = defineCommand({
       // A service starts with a bare environment: agents need the login shell's PATH and tokens,
       // and the daemon started below passes on what this process has.
       await applyShellEnvToProcess();
-      host = await startHeadlessHost(opts);
+      host = await (await import("@hivemind/host/headless")).startHeadlessHost(opts);
     } catch (e) {
       control.server.close();
       return err(ctx, "host_start_failed", e instanceof Error ? e.message : String(e));
@@ -248,7 +252,42 @@ const addCmd = defineCommand({
   },
 });
 
+const installCmd = defineCommand({
+  meta: { name: "install", description: "Run hive host as a service of yours: at boot, and again if it stops (systemd, Linux)" },
+  args: { json: { type: "boolean" } },
+  async run({ args }) {
+    const ctx = { json: !!args.json };
+    if (process.platform !== "linux") {
+      return err(ctx, "unsupported", "hive host install sets up a systemd user service, on Linux: elsewhere, run `hive host run` from your own service manager", EXIT.unavailable);
+    }
+    const unsupported = daemonUnsupported();
+    if (unsupported) return err(ctx, "daemon_unsupported", unsupported, EXIT.unavailable);
+    // The service finds what this shell finds: hive-net, and the data folder it was told of.
+    const env: Record<string, string> = {};
+    const bin = hiveNetBin();
+    if (bin) env.HIVEMIND_HIVE_NET = bin;
+    for (const k of ["HIVEMIND_APP_DATA", "XDG_CONFIG_HOME", "HIVEMIND_PTY_SOCK"]) if (process.env[k]) env[k] = process.env[k]!;
+    const done = install(selfArgv(), env);
+    return ok(ctx, done, () => [
+      `wrote ${done.unit}`,
+      ...(done.started ? ["hive host runs now, and starts again by itself if it stops"] : []),
+      ...(done.lingers ? ["it starts when this machine does, before anyone logs in"] : []),
+      ...done.todo.map((t) => `still to do: ${t}`),
+    ].join("\n"));
+  },
+});
+
+const uninstallCmd = defineCommand({
+  meta: { name: "uninstall", description: "Stop running hive host as a service; the terminals keep running in the daemon" },
+  args: { json: { type: "boolean" } },
+  async run({ args }) {
+    const ctx = { json: !!args.json };
+    const removed = uninstall();
+    return ok(ctx, { removed }, () => (removed ? "hive host no longer runs as a service" : "hive host was not installed as a service"));
+  },
+});
+
 export const hostCmd = defineCommand({
   meta: { name: "host", description: "This machine as an always-on host of its workspaces, with no desktop" },
-  subCommands: { run: runCmd, status: statusCmd, stop: stopCmd, pair: pairCmd, add: addCmd },
+  subCommands: { run: runCmd, status: statusCmd, stop: stopCmd, pair: pairCmd, add: addCmd, install: installCmd, uninstall: uninstallCmd },
 });
