@@ -18,6 +18,15 @@ export interface Where {
 /** This device on the network, as the daemon found it. */
 export interface Ready extends Where {
   id: string;
+  /** The network's lookup server, when it has one: where devices say which workspaces they host
+   *  (M3, spec/host-record.md). */
+  lookup: string | null;
+}
+
+/** Which device hosts a workspace, and how many moves brought it there (spec/host-record.md). */
+export interface HostRecord {
+  host: string;
+  seq: number;
 }
 
 /** One connection to another device, on `hive/ws/1`: frames of text on named streams. */
@@ -128,7 +137,7 @@ export class HiveNet {
     exited.catch(() => {});
     child.removeAllListeners("exit");
     child.removeAllListeners("error");
-    const hn = new HiveNet(opts, server, socket, child, { id: r.id, addrs: r.addrs, relay: r.relay ?? null });
+    const hn = new HiveNet(opts, server, socket, child, { id: r.id, addrs: r.addrs, relay: r.relay ?? null, lookup: r.lookup ?? null });
     child.once("exit", (code) => hn.gone(`hive-net exited (${code}): ${stderr.trim()}`));
     child.on("error", (e) => hn.gone(`hive-net: ${e.message}`));
     void hn.read(frames);
@@ -163,6 +172,21 @@ export class HiveNet {
   async nearby(): Promise<Nearby[]> {
     const answer = await this.ask({ t: "nearby" });
     return Array.isArray(answer.devices) ? (answer.devices as Nearby[]) : [];
+  }
+
+  /** Say at the network's lookup server that this device hosts the person's workspace `workspace`,
+   *  the `seq`th to (spec/host-record.md): the daemon signs it with the workspace's key. */
+  async publishHost(workspace: string, seq: number): Promise<void> {
+    const answer = await this.ask({ t: "host-record", workspace, seq });
+    if (answer.t === "failed") throw new Error(String(answer.error));
+  }
+
+  /** Which device hosts the workspace whose public key is `key`, as the lookup server `lookup` (or
+   *  this network's) has it, its signature checked; null when it names none. */
+  async resolveHost(key: string, lookup?: string | null): Promise<HostRecord | null> {
+    const answer = await this.ask({ t: "resolve-host", key, ...(lookup ? { lookup } : {}) });
+    if (answer.t === "failed") throw new Error(String(answer.error));
+    return typeof answer.host === "string" && typeof answer.seq === "number" ? { host: answer.host, seq: answer.seq } : null;
   }
 
   /** Stop the daemon: it is told by its socket closing, and closes its connections so the devices

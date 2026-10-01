@@ -1,8 +1,9 @@
 // Inviting across networks (M1 step 5, R16, design §13.3 D): a host on a network whose relays admit
 // only the devices it is told to shares a workspace; the invite carries the network's relay, its
-// access service and a voucher the host signed; a guest on their own local network joins with it:
-// their device is let onto the host's network, the host vouches for it once they are let in (for
-// weeks, not only as long as the invite), and they work in the workspace.
+// access service and a voucher the host signed, and the workspace's key and the network's lookup
+// server, where the host has said it hosts the workspace (M3, §5.8); a guest on their own local
+// network joins with it: their device is let onto the host's network, the host vouches for it once
+// they are let in (for weeks, not only as long as the invite), and they work in the workspace.
 import { test, expect, type ElectronApplication } from "@playwright/test";
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
@@ -21,24 +22,24 @@ test.afterEach(async () => {
   fs.rmSync(root, { recursive: true, force: true });
 });
 
-/** A closed network: a relay and its access service, run by `admin.key`; its link, with an
- *  enrolment voucher for one device. */
-async function closedNetwork(): Promise<{ relay: string; access: string; link: string; data: string }> {
+/** A closed network: a relay, a lookup server and its access service, run by `admin.key`; its
+ *  link, with an enrolment voucher for one device. */
+async function closedNetwork(): Promise<{ relay: string; lookup: string; access: string; link: string; data: string }> {
   const admin = path.join(root, "admin.key");
   fs.writeFileSync(admin, `${"cd".repeat(32)}\n`);
   const voucher = (kind: string) => execFileSync(HIVE_NET, ["access", "voucher", "--kind", kind, "--admin", admin], { encoding: "utf8" }).trim();
   const adminId = (JSON.parse(voucher("enrol")) as { by: string }).by;
   const data = path.join(root, "network");
-  server = spawn(HIVE_NET, ["serve", "--relay", "--access", "--admin-id", adminId, "--policy", "closed", "--data", data, "--bind", "127.0.0.1:0"], { stdio: ["ignore", "pipe", "ignore"] });
+  server = spawn(HIVE_NET, ["serve", "--relay", "--lookup", "--access", "--admin-id", adminId, "--policy", "closed", "--data", data, "--bind", "127.0.0.1:0"], { stdio: ["ignore", "pipe", "ignore"] });
   const lines: string[] = [];
-  await new Promise<void>((resolve) => server!.stdout!.on("data", (d: Buffer) => { lines.push(...d.toString().trim().split("\n")); if (lines.length >= 2) resolve(); }));
-  const relay = lines[0]!.replace("relay serving on ", "");
-  const access = lines[1]!.replace("access serving on ", "");
+  await new Promise<void>((resolve) => server!.stdout!.on("data", (d: Buffer) => { lines.push(...d.toString().trim().split("\n")); if (lines.length >= 3) resolve(); }));
+  const serving = (role: string) => lines.find((l) => l.startsWith(`${role} serving on `))!.replace(`${role} serving on `, "");
+  const [relay, lookup, access] = [serving("relay"), serving("lookup"), serving("access")];
   const text = path.join(root, "profile.json");
-  fs.writeFileSync(text, JSON.stringify({ v: 1, name: "Example Corp", relays: [{ url: relay }], access: { url: access, policy: "closed" }, admin: adminId, local: { mdns: true } }));
+  fs.writeFileSync(text, JSON.stringify({ v: 1, name: "Example Corp", relays: [{ url: relay }], lookup, access: { url: access, policy: "closed" }, admin: adminId, local: { mdns: true } }));
   const signed = JSON.parse(execFileSync(HIVE_NET, ["profile", "sign", text, "--admin", admin], { encoding: "utf8" })) as object;
   const link = `hivemind://network/${Buffer.from(JSON.stringify({ ...signed, enrol: JSON.parse(voucher("enrol")) })).toString("base64url")}`;
-  return { relay, access, link, data };
+  return { relay, lookup, access, link, data };
 }
 
 test("a guest on another network joins with the invite's voucher, is vouched for once let in, and works in the workspace", async () => {
@@ -60,12 +61,19 @@ test("a guest on another network joins with the invite's voucher, is vouched for
   const allowed = async () => (await fetch(`${net.access}/allowed/${me.deviceId}`)).text();
   expect(await allowed()).toBe("false");
 
-  // The invite names the network's relay and access service, and carries the host's voucher.
+  // The invite names the network's relay and access service, and carries the host's voucher; and
+  // the workspace's key and the lookup server, where the host says it hosts the workspace.
   const link = await share(host, "edit");
-  const carried = JSON.parse(Buffer.from(link.split("#")[1]!, "base64url").toString("utf8")) as { r: string; x: string; v: { kind: string; by: string } };
+  const carried = JSON.parse(Buffer.from(link.split("#")[1]!, "base64url").toString("utf8")) as { r: string; x: string; v: { kind: string; by: string }; k: string; l: string };
   expect(carried.r.replace(/\/$/, "")).toBe(net.relay.replace(/\/$/, ""));
   expect(carried.x).toBe(net.access);
   expect(carried.v.kind).toBe("visit");
+  expect(carried.l).toBe(net.lookup);
+  const hostId = (await host.evaluate(() => window.hive.identity())).deviceId;
+  const record = () => {
+    try { return JSON.parse(execFileSync(HIVE_NET, ["host-record", "resolve", carried.k, "--lookup", carried.l], { encoding: "utf8" })) as { host: string | null }; } catch { return { host: null }; }
+  };
+  await expect.poll(() => record().host, { timeout: 15_000 }).toBe(hostId);
 
   await join(guest, host, link);
   expect(await allowed()).toBe("true");

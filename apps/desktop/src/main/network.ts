@@ -21,9 +21,10 @@ import { NetworkProfiles } from "@hivemind/workspace-host/network-profile";
 import { Devices, type PairedDevice } from "@hivemind/workspace-host/devices";
 import { enterPairing, formatPairLink, offeringNearby, pairAnnouncement, PairingOffer, parseCode, parsePairLink, type PairingDevice } from "@hivemind/workspace-host/pairing";
 import { heldWorkspaces } from "@hivemind/host/peer-links";
+import { HostRecords, type Hosted } from "@hivemind/workspace-host/host-records";
 import { handle, handleEffect, on } from "./app-ipc.js";
 import { displayName, machineIdentity, takePerson } from "./identity.js";
-import type { Seed } from "@hivemind/workspace-host/identity";
+import { idOf, workspaceSeed, type Seed } from "@hivemind/workspace-host/identity";
 import { getSettings } from "./settings-store.js";
 import { broadcast, userWindow } from "./windows.js";
 import { onWorkspaceChange, workspaceStore } from "./workspace-store-ipc.js";
@@ -86,6 +87,13 @@ function admitNow(): void {
 const sharesWorkspaces = (): boolean =>
   accessLists().workspaces().some((ws) => accessLists().people(ws).length > 0)
   || joinedList().list().some((j) => j.role !== "owner" && !j.ended);
+
+/** A workspace this person owns, as its host record is filed: its id, and its key. */
+const hostedAs = (workspace: string): Hosted => ({ workspace, key: idOf(workspaceSeed(machineIdentity().person, workspace)) });
+
+/** Where the workspaces shared from here say they are hosted, on a network with a lookup server
+ *  (M3, spec/host-record.md): kept while the daemon runs. */
+let records: HostRecords | null = null;
 
 /** This app is the person `person` from now on: it entered another computer's code (spec/pairing.md).
  *  Its keys, its workspaces, and the access lists it keeps are that person's. */
@@ -181,9 +189,12 @@ export function network(): Promise<HiveNet> {
       onPairRequest: async (peer, hello) => ((hello as { pair?: unknown } | null)?.pair
         ? (offered?.open() ? offered.answer(peer, hello) : { ok: false, error: "expired" })
         : sharingOf().answer(peer, hello)),
-      onExit: (why) => { current = null; console.warn(`[network] ${why}`); },
+      onExit: (why) => { current = null; records?.stop(); records = null; console.warn(`[network] ${why}`); },
     });
     hn.admit(accessLists().admitted());
+    records?.stop();
+    records = new HostRecords({ net: hn, hosted: () => accessLists().workspaces().map(hostedAs), onWarn: (m) => console.warn(`[hosting] ${m}`) });
+    records.start();
     return hn;
   })().catch((e: unknown) => { current = null; throw e; });
   return current;
@@ -200,6 +211,8 @@ export function personName(person: string): string {
 
 /** Stop the daemon (the app is quitting). */
 export function stopNetwork(): void {
+  records?.stop();
+  records = null;
   void current?.then((n) => n.stop(), () => {});
   current = null;
 }
@@ -221,8 +234,14 @@ export async function openJoined(workspace: string, publish: (event: EventMessag
   if (joined.ended) return;
   await network();
   await openShared(workspace, joined.role, {
-    // The daemon in use when dialling: it starts again when the network changes.
-    dial: async () => (await network()).dial(joined.host, joined.where),
+    // The daemon in use when dialling (it starts again when the network changes), to the device
+    // the workspace's host record names now (M3).
+    dial: async () => {
+      const hn = await network();
+      const at = await joinedList().hostOf(workspace, hn);
+      if (!at) throw new Error("that workspace is no longer joined here");
+      return hn.dial(at.host, at.where);
+    },
     publish,
     told: (ws, status) => {
       if (status.state === "removed") joinedList().update(ws, { ended: "removed" });
@@ -308,7 +327,11 @@ export function installNetworkIpc(server: WorkspaceServer): void {
       access: access.url,
       voucher: access.policy === "closed" ? await networkProfiles().voucher({ expiresIn: Number(expiresIn) / 1000, uses: reusable === true ? 100 : 1 }) : null,
     };
-    return formatJoinLink({ host: hn.ready.id, workspace: own.workspaceId, secret, where: { addrs: hn.ready.addrs, relay: hn.ready.relay }, names: { workspace: path.basename(repo), host }, admission });
+    // On a network with a lookup server, the link says where to look for the workspace's host
+    // record: the guest finds its host there wherever it is by then. (The record is said when the
+    // daemon starts and every hour; until the workspace moves, it names the device the link does.)
+    const hosting = hn.ready.lookup ? { key: hostedAs(own.workspaceId).key, lookup: hn.ready.lookup } : null;
+    return formatJoinLink({ host: hn.ready.id, workspace: own.workspaceId, secret, where: { addrs: hn.ready.addrs, relay: hn.ready.relay }, names: { workspace: path.basename(repo), host }, admission, hosting });
   });
 
   // What a link offers, to show before joining: null when it is not one.
@@ -335,7 +358,10 @@ export function installNetworkIpc(server: WorkspaceServer): void {
     const profile = { name: await displayName(getSettings().profile.name), color: getSettings().profile.color };
     const reply = (await hn.pair(link.host, link.where, { v: 1, workspace: link.workspace, secret: link.secret, certificate, profile })) as PairReply;
     if (reply?.ok) {
-      joinedList().add({ workspace: link.workspace, host: link.host, where: link.where, role: reply.role, names: link.names, joinedAt: Date.now() });
+      joinedList().add({
+        workspace: link.workspace, host: link.host, where: link.where, role: reply.role, names: link.names, joinedAt: Date.now(),
+        ...(link.hosting ? { hosting: link.hosting } : {}),
+      });
     }
     return reply;
   });
@@ -439,7 +465,8 @@ export function installNetworkIpc(server: WorkspaceServer): void {
     const host = pairedDevices().list().find((d) => d.device === device);
     if (!host || typeof workspace !== "string" || !/^[0-9a-f]{32}$/.test(workspace)) throw new Error("open: that is not a workspace of one of your devices");
     const names = { workspace: typeof name === "string" && name ? name.slice(0, 200) : "workspace", host: host.name };
-    joinedList().add({ workspace, host: host.device, where: { addrs: host.addrs, relay: host.relay }, role: "owner", names, joinedAt: Date.now() });
+    // The person's own: its key is theirs to derive, and its record is on their network.
+    joinedList().add({ workspace, host: host.device, where: { addrs: host.addrs, relay: host.relay }, role: "owner", names, joinedAt: Date.now(), hosting: { key: hostedAs(workspace).key, lookup: null } });
     return `hive://${workspace}`;
   });
 

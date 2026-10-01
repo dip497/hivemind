@@ -8,18 +8,23 @@
 //!   `send {conn, stream, data}`, `close {conn, reason?}`, `pair {req, peer, addrs, relay, hello}`
 //!   (first contact with a host), `pair-reply {req, reply}` (the answer to someone's
 //!   `pair-request`), `advertise {data}` (what this device announces to the devices nearby, by
-//!   mDNS; null for nothing) and `nearby {req}` (the devices nearby, and what each announces). A
-//!   host on another network is dialled through the relay its link names.
-//! - daemon → main: `ready {id, addrs, relay}`, `incoming {conn, peer}`, `dialed {req, conn}`,
+//!   mDNS; null for nothing), `nearby {req}` (the devices nearby, and what each announces),
+//!   `host-record {req, workspace, seq}` (this device hosts the person's workspace `workspace`:
+//!   say so at the network's lookup server, signed by the workspace's key, M3) and `resolve-host
+//!   {req, key, lookup?}` (which device hosts the workspace whose key is `key`, as the lookup
+//!   server `lookup`, or the network's, says). A host on another network is dialled through the
+//!   relay its link names.
+//! - daemon → main: `ready {id, addrs, relay, lookup}`, `incoming {conn, peer}`, `dialed {req, conn}`,
 //!   `failed {req, error}`, `recv {conn, stream, data}`, `closed {conn, reason}`,
-//!   `pair-request {req, peer, hello}`, `paired {req, reply}` and `nearby {req, devices}`.
+//!   `pair-request {req, peer, hello}`, `paired {req, reply}`, `nearby {req, devices}`,
+//!   `published {req}` and `host {req, host, seq}` (null for both when no record is kept).
 //!
 //! A stream is named by its first frame and opened by the device that dialled; `data` is the
 //! frame's bytes as text, which is all main sends. What the frames mean is main's.
 
 use std::{
     collections::{HashMap, HashSet},
-    path::Path,
+    path::{Path, PathBuf},
     str::FromStr,
     sync::{
         atomic::{AtomicU64, Ordering},
@@ -47,6 +52,8 @@ use tokio_stream::StreamExt;
 use crate::{
     frames::{framed, read_frame, write_frame},
     gate::Gate,
+    host_record::{self, HostRecord},
+    key,
     net::{self, Reach},
     pair,
     ping::{self, Pong},
@@ -101,6 +108,17 @@ enum FromMain {
     Nearby {
         req: u64,
     },
+    HostRecord {
+        req: u64,
+        workspace: String,
+        seq: u64,
+    },
+    ResolveHost {
+        req: u64,
+        key: String,
+        #[serde(default)]
+        lookup: Option<String>,
+    },
 }
 
 #[derive(Debug, Serialize)]
@@ -110,6 +128,9 @@ enum ToMain {
         id: String,
         addrs: Vec<String>,
         relay: Option<String>,
+        /// The network's lookup server, if it has one: where this device says which workspaces
+        /// it hosts, and where an invite says to look.
+        lookup: Option<String>,
     },
     Incoming {
         conn: u64,
@@ -145,6 +166,14 @@ enum ToMain {
         req: u64,
         devices: Vec<NearbyDevice>,
     },
+    Published {
+        req: u64,
+    },
+    Host {
+        req: u64,
+        host: Option<String>,
+        seq: Option<u64>,
+    },
 }
 
 /// A device on the local network, as mDNS found it: its id, and what it announces.
@@ -170,6 +199,11 @@ struct Daemon {
     pairs: Arc<std::sync::Mutex<HashMap<u64, oneshot::Sender<Value>>>>,
     /// The devices mDNS found on the local network, by id, with what each announces.
     nearby: Arc<std::sync::Mutex<HashMap<String, Option<String>>>>,
+    /// Where this machine's keys are: the person key a host record is signed with is read there
+    /// when it is needed (pairing may have replaced it).
+    identity: PathBuf,
+    /// The network's lookup server, if it has one.
+    lookup: Option<url::Url>,
 }
 
 impl Daemon {
@@ -391,7 +425,71 @@ impl Daemon {
                     .collect();
                 self.tell(ToMain::Nearby { req, devices });
             }
+            FromMain::HostRecord {
+                req,
+                workspace,
+                seq,
+            } => {
+                let d = self.clone();
+                tokio::spawn(async move {
+                    match d.publish_host(&workspace, seq).await {
+                        Ok(()) => d.tell(ToMain::Published { req }),
+                        Err(e) => d.tell(ToMain::Failed {
+                            req,
+                            error: format!("{e:#}"),
+                        }),
+                    }
+                });
+            }
+            FromMain::ResolveHost { req, key, lookup } => {
+                let d = self.clone();
+                tokio::spawn(async move {
+                    match d.resolve_host(&key, lookup.as_deref()).await {
+                        Ok(found) => d.tell(ToMain::Host {
+                            req,
+                            host: found.map(|r| r.host.to_string()),
+                            seq: found.map(|r| r.seq),
+                        }),
+                        Err(e) => d.tell(ToMain::Failed {
+                            req,
+                            error: format!("{e:#}"),
+                        }),
+                    }
+                });
+            }
         }
+    }
+
+    /// Say at the network's lookup server that this device hosts the person's workspace
+    /// `workspace`, the `seq`th to: signed by the workspace's key, derived from the person key
+    /// kept here now.
+    async fn publish_host(&self, workspace: &str, seq: u64) -> Result<()> {
+        let lookup = self
+            .lookup
+            .as_ref()
+            .context("this network has no lookup server")?;
+        let person = key::person_key(&self.identity)?;
+        let signer = key::workspace_key(&person, workspace)?;
+        let record = HostRecord {
+            host: self.endpoint.id(),
+            seq,
+        };
+        host_record::publish(lookup, &signer, record).await
+    }
+
+    /// Which device hosts the workspace whose key is `key`, as the lookup server `lookup` (or the
+    /// network's) has it.
+    async fn resolve_host(&self, key: &str, lookup: Option<&str>) -> Result<Option<HostRecord>> {
+        let workspace =
+            iroh::PublicKey::from_str(key).with_context(|| format!("{key} is not a key"))?;
+        let lookup = match lookup {
+            Some(url) => url::Url::parse(url).context("the lookup server's URL")?,
+            None => self
+                .lookup
+                .clone()
+                .context("no lookup server to ask: this network has none")?,
+        };
+        host_record::resolve(&lookup, workspace).await
     }
 }
 
@@ -500,8 +598,9 @@ impl ProtocolHandler for PairHost {
     }
 }
 
-/// Run the daemon for main, whose socket is at `socket`, until main goes.
-pub async fn run(socket: &Path, key: SecretKey, reach: Reach) -> Result<()> {
+/// Run the daemon for main, whose socket is at `socket`, until main goes; this machine's keys
+/// are in `identity`.
+pub async fn run(socket: &Path, identity: &Path, key: SecretKey, reach: Reach) -> Result<()> {
     let (reader, writer) = connect(socket)
         .await
         .with_context(|| format!("cannot reach main at {}", socket.display()))?;
@@ -526,6 +625,8 @@ pub async fn run(socket: &Path, key: SecretKey, reach: Reach) -> Result<()> {
         next: Arc::new(AtomicU64::new(1)),
         pairs: Arc::default(),
         nearby,
+        identity: identity.to_path_buf(),
+        lookup: reach.lookup.clone(),
     };
     let router = Router::builder(endpoint.clone())
         .accept(ws::ALPN, WsHost(daemon.clone()))
@@ -568,6 +669,7 @@ pub async fn run(socket: &Path, key: SecretKey, reach: Reach) -> Result<()> {
                 None
             }
         }),
+        lookup: daemon.lookup.as_ref().map(|u| u.to_string()),
     });
 
     let mut reader = reader;

@@ -180,7 +180,7 @@ impl Args {
                 mdns: false,
             });
         }
-        Ok(self.network()?.reach()?)
+        self.network()?.reach()
     }
 
     /// The network profile in use: the one given, or the local network.
@@ -258,7 +258,13 @@ async fn run(args: Args) -> Result<()> {
         }
         "daemon" => {
             let socket = args.socket.clone().context(USAGE)?;
-            hive_net::daemon::run(&socket, args.device_key()?, args.reach()?).await?;
+            hive_net::daemon::run(
+                &socket,
+                &args.identity_dir()?,
+                args.device_key()?,
+                args.reach()?,
+            )
+            .await?;
         }
         "profile" => profile_command(&args)?,
         "doctor" => {

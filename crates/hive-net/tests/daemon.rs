@@ -2,8 +2,11 @@
 // guest, over the local socket (`daemon.rs`). A device the host admits connects, and frames pass
 // both ways on named streams, in order; one it does not admit is refused, and one it stops
 // admitting loses its connection within a second and cannot come back; anyone may ask to pair,
-// and the host's main answers.
+// and the host's main answers. A host says at its network's lookup server which workspaces it
+// hosts (M3), and a device on another network reads it there.
 #![cfg(unix)]
+
+mod support;
 
 use std::{
     collections::VecDeque,
@@ -28,6 +31,8 @@ struct Main {
     held: VecDeque<Value>,
     id: String,
     addrs: Vec<String>,
+    /// The network's lookup server, as the daemon said when it was ready.
+    lookup: Option<String>,
 }
 
 impl Drop for Main {
@@ -75,6 +80,7 @@ impl Main {
             held: VecDeque::new(),
             id: String::new(),
             addrs: vec![],
+            lookup: None,
         };
         let ready = main.next("ready").await;
         main.id = ready["id"].as_str().unwrap().to_string();
@@ -84,6 +90,7 @@ impl Main {
             .iter()
             .map(|a| a.as_str().unwrap().to_string())
             .collect();
+        main.lookup = ready["lookup"].as_str().map(str::to_string);
         main
     }
 
@@ -409,4 +416,68 @@ async fn a_device_on_the_local_network_reaches_a_host_elsewhere_through_the_rela
     assert_eq!(host.next("recv").await["data"], "hello");
     drop(relay);
     fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_host_says_at_its_lookup_server_that_it_hosts_a_workspace_and_a_device_elsewhere_reads_it_there(
+) {
+    let root = temp();
+    let relay = support::start(&["serve", "--relay", "--bind", "127.0.0.1:0"], &[]);
+    let relay = (relay.after("relay serving on "), relay);
+    let lookup = support::start(
+        &[
+            "serve",
+            "--lookup",
+            "--data",
+            root.join("server").to_str().unwrap(),
+            "--bind",
+            "127.0.0.1:0",
+            "--lookup-limit",
+            "off",
+        ],
+        &[],
+    );
+    let lookup = (lookup.after("lookup serving on "), lookup);
+    let mut host =
+        Main::start_with(&root, "host", &["--relay", &relay.0, "--lookup", &lookup.0]).await;
+    assert_eq!(host.lookup.as_deref(), Some(lookup.0.as_str()));
+    // The host holds the person key whose workspace it is; the workspace's key derives from it.
+    let person: [u8; 32] = rand::random();
+    let hex: String = person.iter().map(|b| format!("{b:02x}")).collect();
+    fs::write(root.join("host/identity/person.key"), format!("{hex}\n")).unwrap();
+    let workspace = "00112233445566778899aabbccddeeff";
+    let key = hive_net::key::workspace_key(&iroh::SecretKey::from_bytes(&person), workspace)
+        .unwrap()
+        .public()
+        .to_string();
+
+    // A device on the local network alone, with no lookup server of its own: it asks the one an
+    // invite names. Nothing said yet, nobody hosts the workspace.
+    let mut guest = Main::start(&root, "guest").await;
+    assert_eq!(guest.lookup, None);
+    let ask = |req: u64| json!({ "t": "resolve-host", "req": req, "key": key, "lookup": lookup.0 });
+    guest.send(ask(1)).await;
+    let none = guest.next("host").await;
+    assert!(none["host"].is_null() && none["seq"].is_null(), "{none}");
+
+    host.send(json!({ "t": "host-record", "req": 2, "workspace": workspace, "seq": 1 }))
+        .await;
+    let said = host.next_of(&["published", "failed"]).await;
+    assert_eq!(said["t"], "published", "{said}");
+    guest.send(ask(3)).await;
+    let found = guest.next("host").await;
+    assert_eq!(found["host"], host.id.as_str());
+    assert_eq!(found["seq"], 1);
+
+    // Asked with no lookup server named, and none on its network, it cannot say.
+    guest
+        .send(json!({ "t": "resolve-host", "req": 4, "key": key }))
+        .await;
+    let cannot = guest.next_of(&["host", "failed"]).await;
+    assert_eq!(cannot["t"], "failed", "{cannot}");
+    assert!(cannot["error"]
+        .as_str()
+        .unwrap()
+        .contains("no lookup server"));
+    let _ = fs::remove_dir_all(&root);
 }

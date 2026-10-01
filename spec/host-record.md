@@ -35,6 +35,18 @@ not published again for seven days, so the host publishes again every hour and a
 **A reader checks the signature itself**, against the workspace's public key it already knows
 (an invite carries it), and uses nothing a server says it did not sign.
 
+## Who says it, and who reads it
+
+- The host says the record of each workspace shared from it when its network starts and every
+  hour after: a workspace not said yet with `seq` 1, one whose record names it as the record
+  is, and one whose record names another device not at all (that device hosts it now).
+- An invite made on a network with a lookup server carries the workspace's public key and that
+  server (`k` and `l` in the link's fragment). Before each dial the guest reads the record there
+  and dials the device it names, keeping it as the workspace's host from then on; with no
+  record, or no answer, it dials the device it knows.
+- The owner's own devices derive the workspace's key and read the record at their own network's
+  lookup server.
+
 ## What it reveals
 
 Which device hosts the workspace, which iroh treats as public anyway. Who may come in is still

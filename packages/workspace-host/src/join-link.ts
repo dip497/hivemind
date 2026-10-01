@@ -3,8 +3,10 @@
  * (never sent anywhere by a browser) is base64url JSON: the workspace's id, the invite's secret,
  * where the host can be reached, the names to show before joining, and, from a network with an
  * access service (R16, §13.3 D), how the guest's device is let onto its relays: the service, and a
- * voucher the host signed for this invite (none on an `open-pow` network: the device registers). A
- * link is not authorisation: the host checks the secret, once, on `hive/pair/1`.
+ * voucher the host signed for this invite (none on an `open-pow` network: the device registers).
+ * From a network with a lookup server (M3, §5.8), the workspace's public key and that server: the
+ * guest finds the workspace's host there, wherever it is now. A link is not authorisation: the
+ * host checks the secret, once, on `hive/pair/1`.
  */
 import type { Where } from "./hive-net.js";
 
@@ -19,13 +21,18 @@ export interface JoinLink {
   /** How the guest's device is let onto the host network's relays; null on a network without an
    *  access service. */
   admission: { access: string; voucher: Record<string, unknown> | null } | null;
+  /** Where the guest finds the workspace's host, wherever it is now (spec/host-record.md): the
+   *  workspace's public key, and the lookup server its record is at; null on a network without
+   *  one. */
+  hosting: { key: string; lookup: string } | null;
 }
 
 const HEX = (bytes: number) => new RegExp(`^[0-9a-f]{${bytes * 2}}$`);
 
 export function formatJoinLink(link: JoinLink): string {
   const admission = link.admission ? { x: link.admission.access, ...(link.admission.voucher ? { v: link.admission.voucher } : {}) } : {};
-  const fragment = Buffer.from(JSON.stringify({ w: link.workspace, s: link.secret, a: link.where.addrs, r: link.where.relay, n: link.names, ...admission }), "utf8").toString("base64url");
+  const hosting = link.hosting ? { k: link.hosting.key, l: link.hosting.lookup } : {};
+  const fragment = Buffer.from(JSON.stringify({ w: link.workspace, s: link.secret, a: link.where.addrs, r: link.where.relay, n: link.names, ...admission, ...hosting }), "utf8").toString("base64url");
   return `hivemind://join/${link.host}#${fragment}`;
 }
 
@@ -47,6 +54,7 @@ export function parseJoinLink(text: string): JoinLink | null {
       admission: typeof f.x === "string" && /^https?:\/\//.test(f.x)
         ? { access: f.x, voucher: f.v && typeof f.v === "object" && !Array.isArray(f.v) ? (f.v as Record<string, unknown>) : null }
         : null,
+      hosting: typeof f.k === "string" && HEX(32).test(f.k) && typeof f.l === "string" && /^https?:\/\//.test(f.l) ? { key: f.k, lookup: f.l } : null,
     };
   } catch {
     return null;
