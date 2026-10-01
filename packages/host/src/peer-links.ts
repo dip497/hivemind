@@ -24,8 +24,9 @@
  * One of the owner's phones (spec/pairing.md 0.3) is let in, as their device, for what a phone
  * does: it may ask on the `device` stream which workspaces there are and what waits on the person
  * in them (`needs`, spec/needs.md), and open one workspace's API on the `api` stream (its first
- * frame `{t:"open", workspace}`) to watch its terminals (`PHONE_CALLS`), and nothing of the rest
- * (no terminals started in this machine's daemon, no workspace's board or files, no hosting).
+ * frame `{t:"open", workspace}`), as the owner, to watch its terminals and answer its agents
+ * (`phoneMay`), and nothing of the rest (no terminals started or typed into, no workspace's board
+ * or files, no hosting).
  */
 import path from "node:path";
 import { StringDecoder } from "node:string_decoder";
@@ -46,9 +47,11 @@ import { needsOf, type Need, type WaitingStatus } from "./needs.js";
 import type { PlanReview } from "@hivemind/workspace-api/plans";
 import { linkDuplex } from "./device-sessions.js";
 
-/** What a phone may ask of a workspace it opens: to watch a terminal, its screen and then its output
- *  as it comes, until it goes (M5). */
-export const PHONE_CALLS = ["terminal.open"] as const;
+/** What a phone may ask of a workspace it opens (M5): to watch a terminal that runs there (its
+ *  screen, then its output as it comes), and to answer what an agent there waits on the person
+ *  for (`agent.answer`). Never to start or type into one. */
+export const phoneMay = (method: string, params: unknown[]): boolean =>
+  (method === "terminal.open" && (params[0] as { attachOnly?: unknown } | null)?.attachOnly === true) || method === "agent.answer";
 
 /** The workspace a phone's `api` stream opens, as its first frame names it; null for anything else. */
 function opened(text: string): string | null {
@@ -166,11 +169,12 @@ export class PeerLinks {
         const person = workspace ? lists.personOf(workspace, link.peer) : null;
         if (!workspace || !repo || !person) return link.close("removed");
         servePeer(server, streamOf(link, "api"), {
-          actor: { kind: "peer", person, device: link.peer, access: "view" },
+          // The owner's device, held to what a phone does.
+          actor: { kind: "peer", person, device: link.peer, access: "owner" },
           workspace,
           repo,
           holds: (tile) => store.workspaceOf(toBareId(tile)) === repo,
-          only: PHONE_CALLS,
+          allows: phoneMay,
         });
       });
       return;

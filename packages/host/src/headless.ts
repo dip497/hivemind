@@ -51,6 +51,7 @@ import { deviceSessions, onDevices, participantAt } from "./device-sessions.js";
 import { Hosting } from "./hosting.js";
 import { workspaceDomains } from "./domains.js";
 import { HANDED_OFF, handOff } from "./hand-off.js";
+import { answers } from "./answers.js";
 import { PeerLinks } from "./peer-links.js";
 import { People } from "./people.js";
 import { Plans } from "./plans.js";
@@ -177,6 +178,12 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
   });
   const sessions = onDevices(keys.deviceId, daemonSessions({ endpoint, pace: makeSpawnPacer({ windowMs: 10_000, max: 24, queueMax: 128 }) }), elsewhere);
   const holds = (tile: string): boolean => endpoint.has(tile) || elsewhere.holds(tile);
+  /** Type into a session held here now; false when none is. */
+  const writeTile = (ptyId: string, data: string, paste?: boolean): boolean => {
+    if (!holds(ptyId)) return false;
+    sessions.write(ptyId, data, paste);
+    return true;
+  };
   // Every session as the control plane needs it: which agent runs in it, a supervised worker's
   // policy in its environment, its output for whoever streams it, its end, and a person's keys.
   const backend: SessionBackend = {
@@ -237,6 +244,8 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     peopleHere.domain,
     // A participant's branch, handed off from their machine (M4).
     handOff({ who, place: (repo, tile, name) => { store.addTile(repo, tile, { name }, HANDED_OFF); } }),
+    // What an agent here waits on the person for, answered from another of their devices (M5).
+    answers({ status: (bare) => control.status.get(bare), type: (bare, data) => writeTile(`hm:${bare}`, data), plans }),
   ], intents, o.onWarn);
 
   // The control plane (`hive ctl`): the verbs that need no window, for the agents here and for
@@ -246,11 +255,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
   const control: ControlPlane = new ControlPlane({
     dir: () => o.dir,
     publish: (event, ...params) => api.publish(event, ...params),
-    write: (ptyId, data, paste) => {
-      if (!holds(ptyId)) return false;
-      sessions.write(ptyId, data, paste);
-      return true;
-    },
+    write: writeTile,
     // Nobody lays a spawned tile out: the host starts it, once it is in its workspace.
     spawned: (spawn) => {
       control.takeSpawned(spawn.tileId);

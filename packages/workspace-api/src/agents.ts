@@ -36,6 +36,10 @@ export interface TileOpened {
   background: boolean;
 }
 
+/** What a person answers an agent waiting on them (M5): a plan's decision, or one line typed into
+ *  its terminal. */
+export type AgentAnswer = { text: string } | { decision: "allow" | "deny"; feedback?: string };
+
 /** Every link there is now. */
 export interface Links {
   pipes: Array<{ src: string; dst: string }>;

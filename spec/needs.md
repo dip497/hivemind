@@ -34,6 +34,22 @@ several devices shows them as one, in the same order. An item is left out when i
 above (`plan` may be missing), has one that is not text (`since`: not a number), or has a `kind`
 not listed here.
 
+## Answering
+
+`agent.answer(tile, since, answer)`, a method of the workspace API (`workspace-api.md`), answers
+what the agent of `tile` waits on the person for, naming the wait as the list does (`since`). It
+answers `{ "answered": true }` only while that agent still waits on the person with that `since`,
+and once: an answer for a wait that is over, or one answered already, does nothing and answers
+`{ "answered": false }`. The answer is
+
+- for a `plan`, `{ "decision": "allow" | "deny", "feedback"?: "<what to change>" }`: the plan is
+  decided as at the desktop (`plan.decide`), and everyone is told who decided it;
+- for anything else, `{ "text": "<one line>" }`: typed into the agent's terminal, Enter after it.
+  It is one line of at most 1000 characters, with no control characters.
+
+Anything else is `BAD_REQUEST`. One may answer who may drive the workspace's agents, and the
+person's own devices, a phone among them.
+
 ## Asking
 
 One of the person's devices asks another on the `device` stream of a connection on `hive/ws/1`

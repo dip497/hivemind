@@ -1,9 +1,9 @@
 // One of the owner's phones on the links a device serves (peer-links.ts, spec/pairing.md 0.3): let
 // in as the person's device, it is answered which workspaces the device holds and what waits on
-// the person there (spec/needs.md), and may open one workspace to watch its terminals, as a viewer
-// does; it is served nothing else the owner's computers are: no terminals started in this
-// machine's daemon, no workspace's board, files or other calls, no hosting. The owner's laptop, on
-// the same links, is served each of them.
+// the person there (spec/needs.md), and may open one workspace to watch its terminals and answer
+// its agents, as the owner's device; it is served nothing else the owner's computers are: no
+// terminals started or typed into, no workspace's board, files or other calls, no hosting. The
+// owner's laptop, on the same links, is served each of them.
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -57,10 +57,14 @@ function computer() {
   const lists = new AccessLists({ dir: path.join(dir, "access"), owner: person, devices: () => [certifyDevice(person, phone), certifyDevice(person, laptop)] });
   /** Each terminal a connection opened, and as whom: what the host's terminals would show. */
   const watched: Array<{ by: Actor; opts: unknown }> = [];
-  /** What was typed into a terminal, and by whom. */
+  /** What was typed into a terminal, and by whom; each agent answered, and by whom. */
   const typed: Array<{ by: Actor; tile: unknown }> = [];
+  const answered: Array<{ by: Actor; tile: unknown }> = [];
   const terminals = {
-    answers: { "terminal.open": (from: Connection, opts: unknown) => { watched.push({ by: from.actor, opts }); return { pid: 1, joined: true }; } },
+    answers: {
+      "terminal.open": (from: Connection, opts: unknown) => { watched.push({ by: from.actor, opts }); return { pid: 1, joined: true }; },
+      "agent.answer": (from: Connection, tile: unknown) => { answered.push({ by: from.actor, tile }); return { answered: true }; },
+    },
     effects: {},
     notices: { "terminal.write": (from: Connection, tile: unknown) => { typed.push({ by: from.actor, tile }); } },
   };
@@ -88,7 +92,7 @@ function computer() {
     }
     return { heard, send: (stream: string, m: unknown) => deviceEnd.send(stream, JSON.stringify(m)), closed: computerEnd.closed };
   };
-  return { repo, workspace, phone, laptop, person: idOf(person), daemons, watched, typed, connect };
+  return { repo, workspace, phone, laptop, person: idOf(person), daemons, watched, typed, answered, connect };
 }
 const until = async (done: () => boolean) => { for (let t = 0; t < 5_000 && !done(); t += 20) await wait(20); };
 
@@ -122,7 +126,7 @@ test("a phone is answered which workspaces its computer holds and what waits on 
   assert.equal(c.daemons.length, 1, "no connection to the daemon for the phone");
 });
 
-test("a phone opens a workspace to watch its terminals, as a viewer and as the owner's device; anything else there, typing included, is refused, and one opened without naming a workspace here is closed", async () => {
+test("a phone opens a workspace to watch its terminals and answer its agents, as the owner's device; anything else there, typing included, is refused, and one opened without naming a workspace here is closed", async () => {
   const c = computer();
   const phone = c.connect(c.phone);
   phone.send("api", { t: "open", workspace: c.workspace });
@@ -131,13 +135,18 @@ test("a phone opens a workspace to watch its terminals, as a viewer and as the o
   phone.send("api", { id: 2, method: "terminal.open", params: [{ ...watch, attachOnly: false }] });
   phone.send("api", { id: 3, method: "file.read", params: [`hive://${c.workspace}`, "README.md"] });
   phone.send("api", { id: 4, method: "terminal.open", params: [{ ...watch, tileId: "hm:elsewhere", tile: "elsewhere" }] });
+  phone.send("api", { id: 5, method: "agent.answer", params: ["t1", 1_790_000_000_000, { text: "1" }] });
+  phone.send("api", { id: 6, method: "agent.answer", params: ["elsewhere", 1_790_000_000_000, { text: "1" }] });
   // Typing is not among what a phone asks: it is dropped, as any notice it may not send.
   phone.send("api", { method: "terminal.write", params: ["hm:t1", "rm -rf ~\n"] });
-  await until(() => phone.heard.get("api")!.length >= 4);
+  await until(() => phone.heard.get("api")!.length >= 6);
   const answers = Object.fromEntries(phone.heard.get("api")!.map((m) => JSON.parse(m) as { id: number; result?: unknown; error?: { code: string } }).map((a) => [a.id, a]));
   assert.deepEqual(answers[1]!.result, { pid: 1, joined: true });
-  assert.deepEqual([2, 3, 4].map((id) => answers[id]?.error?.code), ["FORBIDDEN", "FORBIDDEN", "FORBIDDEN"]);
-  assert.deepEqual(c.watched, [{ by: { kind: "peer", person: c.person, device: c.phone, access: "view" }, opts: { ...watch, cwd: c.repo } }]);
+  assert.deepEqual([2, 3, 4, 6].map((id) => answers[id]?.error?.code), ["FORBIDDEN", "FORBIDDEN", "FORBIDDEN", "FORBIDDEN"]);
+  const asPhone = { kind: "peer", person: c.person, device: c.phone, access: "owner" };
+  assert.deepEqual(c.watched, [{ by: asPhone, opts: { ...watch, cwd: c.repo } }]);
+  assert.deepEqual(answers[5]!.result, { answered: true });
+  assert.deepEqual(c.answered, [{ by: asPhone, tile: "t1" }]);
   await wait(100);
   assert.deepEqual(c.typed, []);
 

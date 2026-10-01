@@ -90,6 +90,7 @@ import { Terminals, type SessionOutput } from "@hivemind/host/terminals";
 import { Layouts, type Shown } from "@hivemind/host/store";
 import { presence } from "@hivemind/host/presence";
 import { Plans } from "@hivemind/host/plans";
+import { answers } from "@hivemind/host/answers";
 import type { TerminalOpts } from "@hivemind/workspace-api/terminals";
 import { serveWorkspaceApi } from "./workspace-ipc.js";
 import { fileIn } from "@hivemind/host/repo-paths";
@@ -950,16 +951,19 @@ const recordPtySpawn = makeSpawnPacer({ windowMs: 10_000, max: 24, queueMax: 128
 // — output, turns, statuses, pipes, held messages — fed from the SAME pty data main relays to the
 // windows, so an agent's output and turns are captured with no window showing it. Its socket
 // opens in startHcpControlPlane().
+/** Type into a session wherever it runs, now; false when no session is held for `tileId`. */
+function writeTile(tileId: string, data: string, paste?: boolean): boolean {
+  if (onYourDevices.holds(tileId)) { onYourDevices.write(tileId, data, paste); return true; }
+  if (hasRemotePty(tileId)) { writeRemotePty(tileId, data, paste); return true; }
+  if (hasSession(tileId)) { writePty(tileId, data, paste); return true; }
+  return false; // dead/unknown tile → agent.send surfaces TILE_NOT_FOUND
+}
+
 const control: ControlPlane = new ControlPlane({
   dir: () => app.getPath("userData"),
   publish: (event, ...params) => workspaceServer.publish(event, ...params),
   // Used by agent.send and pipe forwarding.
-  write: (tileId, data, paste) => {
-    if (onYourDevices.holds(tileId)) { onYourDevices.write(tileId, data, paste); return true; }
-    if (hasRemotePty(tileId)) { writeRemotePty(tileId, data, paste); return true; }
-    if (hasSession(tileId)) { writePty(tileId, data, paste); return true; }
-    return false; // dead/unknown tile → agent.send surfaces TILE_NOT_FOUND
-  },
+  write: writeTile,
   // A window lays a spawned tile out, and starts its session.
   spawned: () => {},
   windowsUp: () => openWindows().length > 0,
@@ -1196,6 +1200,8 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
   agents({ statuses: () => control.status.all(), links: () => control.links() }),
   terminals.domain,
   plans.domain,
+  // What an agent here waits on the person for, answered from another of their devices (M5).
+  answers({ status: (bare) => control.status.get(bare), type: (bare, data) => writeTile(`hm:${bare}`, data), plans }),
   presence(() => workspaceServer, () => machineIdentity().personId),
   peopleHere.domain,
   // A participant's branch, handed off from their machine (M4).

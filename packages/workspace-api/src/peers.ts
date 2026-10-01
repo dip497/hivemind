@@ -36,15 +36,15 @@ export interface PeerOf {
   repo: string;
   /** Whether a tile is in the workspace. */
   holds(tile: string): boolean;
-  /** The methods and notices this peer may use at all, whatever its role: a phone watches the
-   *  workspace's terminals and does nothing else there (M5). None: what its role allows. */
-  only?: readonly string[];
+  /** What this peer may ask at all, whatever its role: a phone watches the workspace's terminals and
+   *  answers its agents, and does nothing else there (M5). None: what its role allows. */
+  allows?(method: string, params: unknown[]): boolean;
 }
 
 const refused = (message: string): Answer => ({ error: { code: "FORBIDDEN", message } });
 
 /** Methods and notices whose first param names a tile. */
-const BY_TILE = /^(terminal\.(write|show|resize|flow|close|detach|keyboard\.(ask|give|take))|plan\.decide)$/;
+const BY_TILE = /^(terminal\.(write|show|resize|flow|close|detach|keyboard\.(ask|give|take))|plan\.decide|agent\.answer)$/;
 /** Methods and notices whose first param names the workspace, or a place in it (its `.hivemind`). */
 const BY_WORKSPACE = /^(store|git|worktree|file|issue|review|people)\.|^(plan\.list|presence\.set)$/;
 
@@ -166,7 +166,7 @@ export function servePeer(server: Pick<WorkspaceServer, "connect" | "answer" | "
   const check = (method: unknown, params: unknown[]): string | null => {
     // Showing a terminal that is running already is watching it; starting one is not.
     const attaching = method === "terminal.open" && (params[0] as { attachOnly?: unknown } | null)?.attachOnly === true;
-    if (peer.only && !(typeof method === "string" && peer.only.includes(method))) return `${String(method)} is not open to this device`;
+    if (peer.allows && !(typeof method === "string" && peer.allows(method, params))) return `${String(method)} is not open to this device`;
     if (attaching && !peer.holds(String((params[0] as { tileId?: unknown }).tileId))) return "that tile is not of this workspace";
     if (typeof method !== "string" || !(attaching || mayCall(peer.actor.access, method))) return `${String(method)} is not open to your role on this workspace`;
     if (BY_TILE.test(method) && !peer.holds(String(params[0]))) return `${String(params[0])} is not a tile of this workspace`;

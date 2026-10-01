@@ -80,7 +80,8 @@ export class Plans {
     this.opts.publish("plan.decided", { requestId, tileId: waiting.review.tileId, decision: null, by: null });
   }
 
-  private decide(from: Connection, tile: string, requestId: string, decision: Decision, feedback: string | undefined): { answered: boolean; by: Answerer | null } {
+  /** Answer the plan `requestId` of `tile`, as `from`: the first answer is the one the agent gets. */
+  decide(from: Connection, tile: string, requestId: string, decision: Decision, feedback: string | undefined): { answered: boolean; by: Answerer | null } {
     const waiting = this.waiting.get(requestId);
     // Answered already, or not the plan of this tile (whose workspace was checked).
     if (!waiting || toBareId(waiting.review.tileId) !== toBareId(tile)) return { answered: false, by: this.answered.get(requestId) ?? null };

@@ -6,7 +6,7 @@ import type { Issue, IssuePatch, IssueState, IssueSummary, LinkType, NewIssue } 
 import type { LinkResult, TransferResult } from "@hivemind/core/cross-repo";
 import type { ReviewComment } from "@hivemind/core/review";
 import type { DiffPayload, DiffScope, GitBranchList, GitRevision, GitStatusSnapshot, HandedOff, WorktreeCreateOpts, WorktreeEntry } from "./git.js";
-import type { Links, PipeChange, SpawnChange, StatusChange, TileOpened } from "./agents.js";
+import type { AgentAnswer, Links, PipeChange, SpawnChange, StatusChange, TileOpened } from "./agents.js";
 import type { ActivityLevels, ExitInfo, TerminalOpts, Typist } from "./terminals.js";
 import type { Answerer, PlanDecided, PlanReview } from "./plans.js";
 import type { JoinQuestion, PersonHere } from "./people.js";
@@ -80,6 +80,9 @@ export interface WorkspaceMethods {
   /** Answer the plan `requestId` the agent in `tile` handed off: the first answer is the one the
    *  agent gets. `answered` false: someone answered first (`by`), or it is no longer waited on. */
   "plan.decide": (tile: string, requestId: string, decision: "allow" | "deny", feedback?: string) => { answered: boolean; by: Answerer | null };
+  /** Answer what the agent in `tile` waits on the person for, the wait that began at `since` (as
+   *  the needs list says): only while it still waits on that, and once (M5). */
+  "agent.answer": (tile: string, since: number, answer: AgentAnswer) => { answered: boolean };
   "people.list": (repo: string) => PersonHere[];
   "people.role": (repo: string, person: string, role: Role) => void;
   "people.remove": (repo: string, person: string) => void;

@@ -9,10 +9,14 @@
 //!   hive-phone watch <workspace> <tile>
 //!                               an agent's terminal, read-only: its screen, then its output as
 //!                               it comes, until it ends (or Ctrl+C)
+//!   hive-phone answer <workspace> <tile> <since> --text <line> | --approve | --changes <what>
+//!                               answer what an agent waits on you for (`needs --json` names the
+//!                               wait): a line typed into its terminal, or its plan approved or
+//!                               sent back; only while it still waits on that, and once
 //!
 //! Options: `--identity <dir>` (default: `hivemind-phone/identity` in this user's data folder),
 //! `--name <name>` (pair: what the app lists this phone as; default `Phone`), `--json` (pair,
-//! devices, needs: as JSON).
+//! devices, needs, answer: as JSON).
 
 use std::{path::PathBuf, process::ExitCode, time::SystemTime};
 
@@ -21,21 +25,24 @@ use hive_net::net::{self, Reach};
 use hive_phone::{
     identity::Identity,
     needs::{self, Need},
-    pairing, watch,
+    pairing, workspace,
 };
-use serde_json::json;
+use serde_json::{json, Value};
 
-const USAGE: &str = "usage: hive-phone id | pair <link> | devices | needs | watch <workspace> <tile>  [--identity <dir>] [--name <name>] [--json]";
+const USAGE: &str = "usage: hive-phone id | pair <link> | devices | needs | watch <workspace> <tile> | answer <workspace> <tile> <since> --text <line>|--approve|--changes <what>  [--identity <dir>] [--name <name>] [--json]";
 
 #[derive(Default)]
 struct Args {
     command: String,
-    target: Option<String>,
-    /// What follows the target: `watch`'s tile.
-    second: Option<String>,
+    /// What follows the command: `pair`'s link; `watch`'s and `answer`'s workspace, tile, …
+    rest: Vec<String>,
     identity: Option<PathBuf>,
     name: Option<String>,
     json: bool,
+    /// `answer`'s: a line to type, or a plan's decision and what to change.
+    text: Option<String>,
+    approve: bool,
+    changes: Option<String>,
 }
 
 fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args> {
@@ -47,11 +54,12 @@ fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args> {
             }
             "--name" => args.name = Some(argv.next().context("--name needs a value")?),
             "--json" => args.json = true,
+            "--text" => args.text = Some(argv.next().context("--text needs a value")?),
+            "--approve" => args.approve = true,
+            "--changes" => args.changes = Some(argv.next().context("--changes needs a value")?),
             flag if flag.starts_with("--") => bail!("{flag} is not an option\n{USAGE}"),
             _ if args.command.is_empty() => args.command = arg,
-            _ if args.target.is_none() => args.target = Some(arg),
-            _ if args.second.is_none() => args.second = Some(arg),
-            _ => bail!("{arg}: one too many\n{USAGE}"),
+            _ => args.rest.push(arg),
         }
     }
     Ok(args)
@@ -100,7 +108,11 @@ async fn run(args: Args) -> Result<()> {
     match args.command.as_str() {
         "id" => println!("{}", phone.id()),
         "pair" => {
-            let text = args.target.as_deref().context("pair: which link?")?;
+            let text = args
+                .rest
+                .first()
+                .map(String::as_str)
+                .context("pair: which link?")?;
             let link = pairing::parse_link(text).context(
                 "that is not a pairing link: it is the one under Settings → Devices on your computer",
             )?;
@@ -184,16 +196,15 @@ async fn run(args: Args) -> Result<()> {
             }
         }
         "watch" => {
-            let (Some(workspace), Some(tile)) = (args.target.as_deref(), args.second.as_deref())
-            else {
+            let [ws, tile] = &args.rest[..] else {
                 bail!("watch: which workspace and tile? (`hive-phone needs --json` names them)");
             };
             let devices: Vec<_> = phone.devices().into_iter().map(|d| d.with).collect();
             let endpoint = net::endpoint(phone.key().clone(), &Reach::local(), vec![]).await?;
             let watched = async {
-                let connection = watch::holder(&endpoint, &devices, workspace).await?;
+                let connection = workspace::holder(&endpoint, &devices, ws).await?;
                 let mut stdout = std::io::stdout();
-                watch::watch(&connection, workspace, tile, |data| {
+                workspace::watch(&connection, ws, tile, |data| {
                     let _ = std::io::Write::write_all(&mut stdout, data.as_bytes());
                     let _ = std::io::Write::flush(&mut stdout);
                 })
@@ -203,6 +214,36 @@ async fn run(args: Args) -> Result<()> {
             endpoint.close().await;
             if let Some(ended) = ended? {
                 eprintln!("\nhive-phone: the session ended ({})", ended.code);
+            }
+        }
+        "answer" => {
+            let [ws, tile, since] = &args.rest[..] else {
+                bail!("answer: which workspace, tile and wait? (`hive-phone needs --json` names them)");
+            };
+            let since: u64 = since
+                .parse()
+                .context("answer: the wait is when it began, a number")?;
+            let answer: Value = match (&args.text, args.approve, &args.changes) {
+                (Some(text), false, None) => json!({ "text": text }),
+                (None, true, None) => json!({ "decision": "allow" }),
+                (None, false, Some(changes)) => json!({ "decision": "deny", "feedback": changes }),
+                _ => bail!("answer: --text <line>, --approve or --changes <what>, one of them"),
+            };
+            let devices: Vec<_> = phone.devices().into_iter().map(|d| d.with).collect();
+            let endpoint = net::endpoint(phone.key().clone(), &Reach::local(), vec![]).await?;
+            let answered = async {
+                let connection = workspace::holder(&endpoint, &devices, ws).await?;
+                workspace::answer(&connection, ws, tile, since, answer).await
+            };
+            let answered = answered.await;
+            endpoint.close().await;
+            let answered = answered?;
+            if args.json {
+                println!("{}", json!({ "answered": answered }));
+            } else if answered {
+                println!("answered");
+            } else {
+                println!("not answered: it waits on that no more, or it was answered already");
             }
         }
         "" => bail!("{USAGE}"),

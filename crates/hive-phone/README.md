@@ -10,6 +10,8 @@ hive-phone pair 'hivemind://pair/…'   # the link under Settings → Devices on
 hive-phone devices                    # the person's devices this phone paired with
 hive-phone needs                      # what waits on you on them, the one waiting longest first
 hive-phone watch <workspace> <tile>   # an agent's terminal, read-only, until it ends (or Ctrl+C)
+hive-phone answer <workspace> <tile> <since> --text 1   # answer what it waits on (or --approve,
+                                      # --changes '<what>' for a plan); once, while it still waits
 ```
 
 Options: `--identity <dir>` (default: `hivemind-phone/identity` in this user's data folder),

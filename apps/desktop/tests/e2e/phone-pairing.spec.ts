@@ -117,7 +117,7 @@ test("a phone scans the computer's code and is certified as the person's: each l
   await expect(desktop.locator(`[data-device="${phoneId}"]`)).toHaveCount(0);
 });
 
-test("the phone asks the computer what needs the person: an agent there waiting on a permission, by what it says it is doing, in its workspace; watches its terminal, read-only; and nothing waits once it works again", async () => {
+test("the phone asks the computer what needs the person: an agent there waiting on a permission, by what it says it is doing, in its workspace; watches its terminal, read-only; answers it, once; and nothing waits once it works again", async () => {
   test.skip(!hiveNetBuilt() || !fs.existsSync(HIVE_PHONE), "build hive-net and hive-phone first: cargo build in crates/hive-net and crates/hive-phone");
   test.setTimeout(120_000);
   // A stand-in agent, read from its screen: it says what it is doing in its title, and asks to
@@ -164,10 +164,11 @@ test("the phone asks the computer what needs the person: an agent there waiting 
   watching.stdout!.on("data", (b: Buffer) => { seen += b.toString(); });
   await expect.poll(() => seen, { timeout: 20_000 }).toContain("Allow edit to Nav.tsx?");
 
-  // Answered at the desktop, it works again: the phone sees it, and nothing waits.
-  await d.desktop.evaluate((id) => window.dispatchEvent(new CustomEvent("hivemind:focus-tile", { detail: id })), tile);
-  await d.desktop.locator(`.react-flow__node[data-id="${tile}"] .xterm-helper-textarea`).focus();
-  await d.desktop.keyboard.type("y\n");
+  // Answered from the phone: the line goes into the agent's terminal, and it works again; the
+  // phone sees it, and nothing waits. The same answer again does nothing: that wait is over.
+  const answer = async () => JSON.parse((await run(HIVE_PHONE, ["answer", waiting!.workspace as string, tile, String(waiting!.since), "--text", "y", "--identity", phone, "--json"], { timeout: 30_000 })).stdout) as unknown;
+  expect(await answer()).toEqual({ answered: true });
   await expect.poll(() => seen, { timeout: 20_000 }).toContain("probe is thinking");
   await expect.poll(async () => (await needs()).needs.length, { timeout: 30_000 }).toBe(0);
+  expect(await answer()).toEqual({ answered: false });
 });

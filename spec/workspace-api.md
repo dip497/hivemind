@@ -66,14 +66,16 @@ person's own devices are the owner, there as here. What the host answers of ever
 (`status.all`, `link.list`) a peer is answered for the workspace's own agents alone, as it hears
 only their events. One of the owner's phones (`pairing.md` 0.3) opens a workspace's API on its own
 connection, the `api` stream's first frame naming it (`{ "t": "open", "workspace": "<id>" }`; any
-other first frame, or a workspace not held there, closes the connection), as a viewer that may
-call `terminal.open` with `attachOnly` and nothing else: it watches a terminal, its screen and then
-its output, and never types into one (M5). Each call and notice is checked against the
+other first frame, or a workspace not held there, closes the connection), as the owner, and may
+call nothing there but `terminal.open` with `attachOnly` (it watches a terminal, its screen and
+then its output) and `agent.answer` (it answers what an agent waits on the person for): it never
+starts or types into a terminal (M5). Each call and notice is checked against the
 peer's role on the workspace (design §6) before it runs, and one the role does not allow is
 `FORBIDDEN` (a notice is dropped): reads and watching terminals are anyone's with access; typing
 into and resizing a terminal, and asking for its keyboard or handing it on, *Can use terminals*;
 handing a branch of one's own to the host (`git.handOff`, M4), *Can edit board*;
-answering an agent's plan, and opening and closing tiles, *Can drive agents*; anything else is the
+answering an agent's plan or what it waits on (`agent.answer`), and opening and closing tiles,
+*Can drive agents*; anything else is the
 owner's (taking a keyboard back among them, and the `store.*` writes). A peer edits the board
 through the workspace document's own sync (the connection's `sync` stream), where the host takes
 only what the peer's role allows, and drops a change that does more, whole: moving, sizing,
@@ -170,6 +172,7 @@ log.
 | `link.list` | | `{pipes: [{src, dst}], spawns: [{parent, child}]}` | read |
 | `terminal.open` | `{tileId, tile?, cwd, cmd, args?, cols, rows, env?, initialPrompt?, attachOnly?, liveOnly?}` (`tile`: the tile it is the session of, when `tileId` is not `hm:<tile>`) | `{pid, joined}`: the first client to open a session starts it; one that opens it after joins it (`joined`), sent the host's screen of it first | target the tile, detail the program, when it starts a session the host did not ask for itself and the client did not only attach to |
 | `plan.list` | `repo` | the plans the workspace's agents wait on a person for: `[{requestId, tileId, plan, cwd}]`; each after it is a `plan.review` event | |
+| `agent.answer` | `tile`, `since`, `{text}` or `{decision, feedback?}` | `{answered}`: what the agent waits on the person for is answered, a plan decided or a line typed into its terminal, only while it still waits on that wait (`since`) and once (`needs.md`, "Answering") | target the agent's tile |
 | `plan.decide` | `tile`, `requestId`, `"allow"` or `"deny"`, `feedback`? | `{answered, by}`: the first answer is the one the agent gets; a later one, or one about another tile's plan, answers nothing (`by`: who answered first) | target the agent's tile, detail the answer |
 
 | `people.list` | `repo` | who is on the workspace's access list: `[{person, name, color, role, grantedAt, expires, devices, present}]`, `present` whether they are connected now; `[]` for a workspace that does not say whose it is yet | read |

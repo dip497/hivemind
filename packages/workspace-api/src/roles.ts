@@ -46,6 +46,8 @@ const LEAST: Record<string, Role> = {
   // runs on the host, is driving agents.
   "plan.list": "view",
   "plan.decide": "agents",
+  // Answering what an agent waits on the person for, from wherever they are (M5).
+  "agent.answer": "agents",
   "terminal.open": "agents",
   "terminal.close": "agents",
 };

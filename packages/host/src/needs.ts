@@ -8,6 +8,10 @@ import type { InputKind } from "@hivemind/agents";
 /** What an agent can wait on the person for. One waiting for an `approval` waits on the agent
  *  that supervises it, not on the person. */
 const ON_THE_PERSON: readonly InputKind[] = ["permission", "question", "plan", "other"];
+
+/** Whether an agent whose status is `status` waits on the person now. */
+export const waitsOnThePerson = (status: { state: string; kind?: InputKind }): boolean =>
+  status.state === "waiting" && !!status.kind && ON_THE_PERSON.includes(status.kind);
 import type { CoreLayout } from "@hivemind/workspace-doc/shapes";
 import type { PlanReview } from "@hivemind/workspace-api/plans";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
@@ -48,7 +52,7 @@ export interface WaitingStatus {
 export function needsOf(held: HeldBoard[], statuses: WaitingStatus[], plans: PlanReview[]): Need[] {
   const needs: Need[] = [];
   for (const { tileId, status } of statuses) {
-    if (status.state !== "waiting" || !status.kind || !ON_THE_PERSON.includes(status.kind)) continue;
+    if (!waitsOnThePerson(status) || !status.kind) continue;
     const tile = toBareId(tileId);
     const board = held.find((h) => h.core?.tiles.some((t) => t.id === tile));
     const record = board?.core?.tiles.find((t) => t.id === tile);

@@ -1083,6 +1083,13 @@ agents.
    **Allow** / **Deny** actions on the notification itself; tap opens the item.
 5. **Answer.** Permission → Allow once / Always / Deny. Question → the options as buttons,
    plus a text box. Plan → the plan as text, Approve / Ask for changes.
+
+   *As built (M5 step 4, `spec/needs.md` "Answering"):* `agent.answer(tile, since, answer)` on the
+   device that runs the agent: a plan is decided as at the desktop; anything else is one line typed
+   into the agent's terminal (the choice as its prompt takes it: the phone shows the screen, from
+   *Watch*). It lands only while the agent still waits on that wait (`since`), and once, so a late
+   or repeated answer, a notification's included, does nothing. The buttons per agent (which key
+   is *Allow once*) are the phone app's to draw from the screen; not built here.
 6. **Watch.** Tap an agent → a live terminal, read-only by default, scaled to width;
    pinch to zoom. **Type** asks for the keyboard like a guest; the reply box sends one
    line through the task-delivery path, which is easier than typing into a TUI.
