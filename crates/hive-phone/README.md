@@ -8,7 +8,10 @@ terminal what the phone does, so it can be tried and tested without one. A phone
 hive-phone id                         # this phone's id (its device key, made the first time)
 hive-phone pair 'hivemind://pair/…'   # the link under Settings → Devices on your computer
 hive-phone devices                    # the person's devices this phone paired with
-hive-phone needs                      # what waits on you on them, the one waiting longest first
+hive-phone unpair <device>            # unpair from one (its id or name): each forgets the other
+hive-phone needs                      # what waits on you on them, the one waiting longest first,
+                                      # how many agents are at work, and of a device that is
+                                      # away, what it last answered and when
 hive-phone watch <workspace> <tile>   # an agent's terminal, read-only, until it ends (or Ctrl+C)
 hive-phone answer <workspace> <tile> <since> --text 1   # answer what it waits on (or --approve,
                                       # --changes '<what>' for a plan); once, while it still waits
@@ -21,8 +24,10 @@ Options: `--identity <dir>` (default: `hivemind-phone/identity` in this user's d
 
 A phone pairs with the app on one of your computers (`spec/pairing.md` 0.3): it scans the link,
 proves it holds the code, and is given a certificate naming it as yours, signed by your person key.
-It never holds that key, so a lost phone gives none away; unpair it on the computer. It pairs on
-the local network for now: the link says where the app is.
+It never holds that key, so a lost phone gives none away; unpair it on the computer, or unpair the
+computer from the phone (`spec/pairing.md`, "Unpairing"). It pairs on the local network for now:
+the link says where the app is. What each device last answered is kept beside its keys
+(`heard.json`), to show while that device is away.
 
 A phone is told what happens while you are away (`spec/push.md`): it gives each device it paired
 with a Web Push subscription (an endpoint, and a P-256 push key and a secret of its own, kept as

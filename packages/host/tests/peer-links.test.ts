@@ -1,10 +1,11 @@
 // One of the owner's phones on the links a device serves (peer-links.ts, spec/pairing.md 0.3): let
 // in as the person's device, it is answered which workspaces the device holds and what waits on
-// the person there (spec/needs.md), gives where it is told what happens there (spec/push.md), and
-// may open one workspace to watch its terminals and answer its agents, as the owner's device; it
-// is served nothing else the owner's computers are: no terminals started or typed into, no
-// workspace's board, files or other calls, no hosting. The owner's laptop, on the same links, is
-// served each of them, and is told nothing on a phone's behalf.
+// the person there (spec/needs.md), gives where it is told what happens there (spec/push.md),
+// unpairs itself (spec/pairing.md), and may open one workspace to watch its terminals and answer
+// its agents, as the owner's device; it is served nothing else the owner's computers are: no
+// terminals started or typed into, no workspace's board, files or other calls, no hosting. The
+// owner's laptop, on the same links, is served each of them, and is told nothing on a phone's
+// behalf, nor unpaired by asking.
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { createECDH } from "node:crypto";
@@ -27,7 +28,8 @@ after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 let made = 0;
 
-/** Two ends of one connection: frames arrive in order, a moment after they are sent. */
+/** Two ends of one connection: frames arrive in order, a moment after they are sent, and what
+ *  was sent before it closed arrives before the close, as on hive-net. */
 function linkPair(device: string, computer: string): [Link, Link] {
   const heard = [new Map<string, Set<(t: string) => void>>(), new Map<string, Set<(t: string) => void>>()];
   let close!: (why: string) => void;
@@ -40,7 +42,7 @@ function linkPair(device: string, computer: string): [Link, Link] {
       heard[i]!.set(stream, set.add(l));
       return () => { set.delete(l); };
     },
-    close: (why = "closed") => close(why),
+    close: (why = "closed") => void setImmediate(() => close(why)),
     closed,
   });
   // The computer's end hears from the device, its peer, and the other way.
@@ -62,8 +64,9 @@ function computer() {
   /** What was typed into a terminal, and by whom; each agent answered, and by whom. */
   const typed: Array<{ by: Actor; tile: unknown }> = [];
   const answered: Array<{ by: Actor; tile: unknown }> = [];
-  /** Where each device is told what happens here. */
+  /** Where each device is told what happens here; each device forgotten. */
   const subscribed: Array<{ device: string; sub: unknown }> = [];
+  const unpaired: string[] = [];
   const terminals = {
     answers: {
       "terminal.open": (from: Connection, opts: unknown) => { watched.push({ by: from.actor, opts }); return { pid: 1, joined: true }; },
@@ -85,6 +88,7 @@ function computer() {
       { tileId: "t2", status: { state: "working", since: 1_790_000_000_000 } },
     ],
     subscribe: (device, sub) => subscribed.push({ device, sub }),
+    unpair: (device) => unpaired.push(device),
   });
   /** `device` connects: what it hears on each stream, and its end of the link. */
   const connect = (device: string) => {
@@ -95,9 +99,9 @@ function computer() {
       heard.set(stream, []);
       deviceEnd.on(stream, (t) => heard.get(stream)!.push(t));
     }
-    return { heard, send: (stream: string, m: unknown) => deviceEnd.send(stream, JSON.stringify(m)), closed: computerEnd.closed };
+    return { heard, send: (stream: string, m: unknown) => deviceEnd.send(stream, JSON.stringify(m)), closed: computerEnd.closed, hangUp: () => deviceEnd.close("done") };
   };
-  return { repo, workspace, phone, laptop, person: idOf(person), daemons, watched, typed, answered, subscribed, connect };
+  return { repo, workspace, phone, laptop, person: idOf(person), daemons, watched, typed, answered, subscribed, unpaired, connect };
 }
 const until = async (done: () => boolean) => { for (let t = 0; t < 5_000 && !done(); t += 20) await wait(20); };
 
@@ -124,7 +128,7 @@ test("a phone is answered which workspaces its computer holds and what waits on 
   await until(() => phone.heard.get("device")!.length >= 2);
   assert.deepEqual(phone.heard.get("device")!.map((m) => JSON.parse(m) as unknown), [
     { t: "workspaces", workspaces: [{ workspace: c.workspace, name: "api", repo: c.repo }] },
-    { t: "needs", needs: [{ workspace: c.workspace, name: "api", tile: "t1", agent: "Editing Nav.tsx", kind: "permission", since: 1_790_000_000_000 }] },
+    { t: "needs", needs: [{ workspace: c.workspace, name: "api", tile: "t1", agent: "Editing Nav.tsx", kind: "permission", since: 1_790_000_000_000 }], working: 1 },
   ]);
   await wait(200);
   assert.deepEqual([...phone.heard].filter(([s, h]) => s !== "device" && h.length > 0).map(([s]) => s), [], "the phone hears on no other stream");
@@ -181,4 +185,36 @@ test("a phone gives where it is told what happens here and is answered that it w
   await wait(100);
   assert.deepEqual(laptop.heard.get("device")!.map((m) => (JSON.parse(m) as { t: string }).t), ["workspaces"]);
   assert.deepEqual(c.subscribed, [{ device: c.phone, sub }]);
+});
+
+test("a phone unpairs itself: it is told so and forgotten once it hangs up, or let go a moment later; the owner's laptop asking the same is answered nothing", async () => {
+  const c = computer();
+  const laptop = c.connect(c.laptop);
+  laptop.send("device", { t: "unpair" });
+  laptop.send("device", { t: "workspaces" });
+  await until(() => laptop.heard.get("device")!.length >= 1);
+  await wait(100);
+  assert.deepEqual(laptop.heard.get("device")!.map((m) => (JSON.parse(m) as { t: string }).t), ["workspaces"]);
+  assert.deepEqual(c.unpaired, []);
+
+  // Told once, however often it asks, and forgotten only once it has hung up: forgetting it
+  // would cut the answer short.
+  const phone = c.connect(c.phone);
+  phone.send("device", { t: "unpair" });
+  phone.send("device", { t: "unpair" });
+  await until(() => phone.heard.get("device")!.length >= 1);
+  await wait(100);
+  assert.deepEqual(phone.heard.get("device")!.map((m) => JSON.parse(m) as unknown), [{ t: "unpair", ok: true }]);
+  await wait(100);
+  assert.deepEqual(c.unpaired, []);
+  phone.hangUp();
+  await until(() => c.unpaired.length > 0);
+  assert.deepEqual(c.unpaired, [c.phone]);
+
+  // One that does not hang up is let go, and forgotten all the same.
+  const again = c.connect(c.phone);
+  again.send("device", { t: "unpair" });
+  assert.equal(await Promise.race([again.closed, wait(4_000).then(() => "open")]), "removed");
+  await until(() => c.unpaired.length > 1);
+  assert.deepEqual(c.unpaired, [c.phone, c.phone]);
 });

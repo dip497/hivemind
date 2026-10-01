@@ -1,13 +1,14 @@
 //! What waits on the person (spec/needs.md), held to conformance/needs.json's cases for a phone:
 //! the answers the person's devices give, shown as one list, the one waiting longest first, with
-//! an item that does not say all it must left out. A device's side is held to the same file in
-//! packages/host.
+//! an item that does not say all it must left out, and the agents at work on them counted
+//! together. A device's side is held to the same file in packages/host.
 
 use hive_phone::needs::{as_one, read_answer, Need};
 use serde_json::Value;
 
 #[test]
-fn the_answers_of_the_persons_devices_are_shown_as_one_list_the_one_waiting_longest_first() {
+fn the_answers_of_the_persons_devices_are_shown_as_one_list_the_one_waiting_longest_first_with_the_agents_at_work(
+) {
     let cases: Value =
         serde_json::from_str(include_str!("../../../conformance/needs.json")).unwrap();
     let cases = cases["phone"].as_array().unwrap();
@@ -22,6 +23,7 @@ fn the_answers_of_the_persons_devices_are_shown_as_one_list_the_one_waiting_long
                 .collect(),
         );
         let expected: Vec<Need> = serde_json::from_value(c["needs"].clone()).unwrap();
-        assert_eq!(shown, expected, "{}", c["about"]);
+        assert_eq!(shown.needs, expected, "{}", c["about"]);
+        assert_eq!(Some(shown.working), c["working"].as_u64(), "{}", c["about"]);
     }
 }

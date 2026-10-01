@@ -3,13 +3,15 @@
 //! with another of the person's devices keeps both, and with another person's device the phone is
 //! that person, the first one's devices forgotten. Only an entry whose certificate verifies, names
 //! its device and is the phone's person's is listed; a certificate that does not name the phone is
-//! not its own.
+//! not its own. What each device last answered is kept, and forgotten with the device
+//! (spec/needs.md "Asking", spec/pairing.md "Unpairing").
 
 use std::{fs, path::PathBuf};
 
 use hive_phone::{
     devices::PairedDevice,
     identity::{DeviceCertificate, Identity},
+    needs::{Answer, Heard, Need},
     pairing::{Paired, PairedWith},
 };
 use iroh::SecretKey;
@@ -172,5 +174,75 @@ fn only_what_checks_out_is_listed_and_a_certificate_for_another_device_is_not_th
     .unwrap();
     assert!(phone.certificate().is_none());
     assert!(phone.devices().is_empty());
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn what_each_device_last_answered_is_kept_until_it_is_forgotten_and_another_person_forgets_all_of_it(
+) {
+    let dir = tmp("heard");
+    let phone = Identity::open(&dir.join("id")).unwrap();
+    let (priya, sam) = (key(1), key(2));
+    let (a, b) = (paired(&phone, 10, &priya), paired(&phone, 11, &priya));
+    phone.keep(&a, 1).unwrap();
+    phone.keep(&b, 2).unwrap();
+    let waiting = Need {
+        workspace: "a1".repeat(16),
+        name: "api".into(),
+        tile: "t1".into(),
+        agent: "Nav fix".into(),
+        kind: "permission".into(),
+        since: 4,
+        plan: None,
+    };
+    let said = |needs: Vec<Need>, working| Answer { needs, working };
+    let (from_a, from_b) = (a.with.device.clone(), b.with.device.clone());
+    phone
+        .hear(
+            &[
+                (from_a.clone(), said(vec![], 1)),
+                (from_b.clone(), said(vec![], 2)),
+            ],
+            5,
+        )
+        .unwrap();
+    // What a device says next is kept in place of what it said before.
+    phone
+        .hear(&[(from_a.clone(), said(vec![waiting.clone()], 3))], 6)
+        .unwrap();
+    let heard = phone.heard();
+    assert_eq!(
+        heard[&from_a],
+        Heard {
+            at: 6,
+            answer: said(vec![waiting], 3)
+        }
+    );
+    assert_eq!(
+        heard[&from_b],
+        Heard {
+            at: 5,
+            answer: said(vec![], 2)
+        }
+    );
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let file = dir.join("id").join("heard.json");
+        assert_eq!(
+            fs::metadata(file).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+    }
+
+    // A device forgotten: no longer one of the person's to the phone, nor what it said kept.
+    assert!(phone.forget(&from_a).unwrap());
+    assert_eq!(names(&phone.devices()), ["app 11"]);
+    assert_eq!(phone.heard().into_keys().collect::<Vec<_>>(), [from_b]);
+    assert!(!phone.forget(&from_a).unwrap(), "not one of them any more");
+
+    // Another person's device: what the first person's devices said goes with them.
+    phone.keep(&paired(&phone, 20, &sam), 7).unwrap();
+    assert!(phone.heard().is_empty());
     fs::remove_dir_all(&dir).unwrap();
 }

@@ -24,10 +24,10 @@
  * One of the owner's phones (spec/pairing.md 0.3) is let in, as their device, for what a phone
  * does: it may ask on the `device` stream which workspaces there are and what waits on the person
  * in them (`needs`, spec/needs.md), give where it is told what happens there (`push`,
- * spec/push.md), and open one workspace's API on the `api` stream (its first
- * frame `{t:"open", workspace}`), as the owner, to watch its terminals and answer its agents
- * (`phoneMay`), and nothing of the rest (no terminals started or typed into, no workspace's board
- * or files, no hosting).
+ * spec/push.md) and unpair itself (spec/pairing.md), and open one workspace's API on the `api`
+ * stream (its first frame `{t:"open", workspace}`), as the owner, to watch its terminals and
+ * answer its agents (`phoneMay`), and nothing of the rest (no terminals started or typed into, no
+ * workspace's board or files, no hosting).
  */
 import { StringDecoder } from "node:string_decoder";
 import type { Duplex } from "node:stream";
@@ -43,10 +43,13 @@ import type { Moved } from "@hivemind/workspace-host/doc-sync";
 import type { Hosting } from "./hosting.js";
 import { MACHINE_OFFER, grantOf, type Grant } from "./machine-share.js";
 import { serveFiles } from "./device-files.js";
-import { heldBoards, needsOf, type Need, type WaitingStatus } from "./needs.js";
+import { heldBoards, needsOf, workingIn, type Need, type WaitingStatus } from "./needs.js";
 import type { PlanReview } from "@hivemind/workspace-api/plans";
 import { subscriptionOf, type Subscription } from "./web-push.js";
 import { linkDuplex } from "./device-sessions.js";
+
+/** How long a phone that unpaired itself has to hang up before it is let go. */
+const LET_GO_MS = 2_000;
 
 /** What a phone may ask of a workspace it opens (M5): to watch a terminal that runs there (its
  *  screen, then its output as it comes), and to answer what an agent there waits on the person
@@ -96,6 +99,9 @@ export interface PeerLinksOptions {
   /** One of the owner's phones gives where it is told what happens here (its push subscription,
    *  spec/push.md). None: nobody is told. */
   subscribe?(device: string, sub: Subscription): void;
+  /** One of the owner's phones unpairs itself: it is forgotten here (spec/pairing.md,
+   *  "Unpairing"). None: no phone is kept here to forget. */
+  unpair?(device: string): void;
   onWarn?(message: string): void;
 }
 
@@ -105,13 +111,14 @@ interface Served { workspace: string; person: string; link: Link; stop(): void }
 export interface HeldWorkspace { workspace: string; name: string; repo: string }
 
 /** What the `device` stream carries: a question (no list), and the host's answer: which workspaces
- *  it holds, or what waits on the person in them; and where a phone is told what happens here,
- *  and whether it was taken. */
+ *  it holds, or what waits on the person in them and how many agents are at work there; where a
+ *  phone is told what happens here, and whether it was taken; and a phone unpairing itself. */
 export type DeviceMessage =
   | { t: "workspaces"; workspaces?: HeldWorkspace[] }
-  | { t: "needs"; needs?: Need[] }
+  | { t: "needs"; needs?: Need[]; working?: number }
   | { t: "push"; sub: Subscription | null }
-  | { t: "push"; ok: boolean; error?: string };
+  | { t: "push"; ok: boolean; error?: string }
+  | { t: "unpair"; ok?: boolean; error?: string };
 
 function parseDevice(text: string): DeviceMessage | null {
   try {
@@ -120,6 +127,8 @@ function parseDevice(text: string): DeviceMessage | null {
     if (m.t === "needs" && m.needs === undefined) return { t: "needs" };
     // Given where to tell a phone what happens (spec/push.md).
     if (m.t === "push" && m.ok === undefined) return { t: "push", sub: subscriptionOf(m) };
+    // A phone unpairing itself (spec/pairing.md).
+    if (m.t === "unpair" && m.ok === undefined) return { t: "unpair" };
     if (m.t !== "workspaces") return null;
     if (!Array.isArray(m.workspaces)) return { t: "workspaces" };
     const workspaces = m.workspaces.filter((w): w is HeldWorkspace => {
@@ -161,6 +170,8 @@ export interface ShownMachine {
 
 export class PeerLinks {
   private readonly served = new Set<Served>();
+  /** The links of phones that unpaired themselves, forgotten once they are gone. */
+  private readonly letGo = new WeakSet<Link>();
   /** The links whose app shows its machine's sessions here (M4), the workspace each is for, and
    *  what its person lets the people here do on it. */
   private readonly machines = new Map<Link, { workspace: string; grant: Grant }>();
@@ -253,14 +264,16 @@ export class PeerLinks {
   }
 
   /** Answer one of the owner's devices asking on the `device` stream which workspaces are here, or
-   *  what waits on the person in them; and take where a phone, `phone`, is told what happens here. */
+   *  what waits on the person in them; take where a phone, `phone`, is told what happens here; and
+   *  let a phone unpair itself. */
   private answerDevice(link: Link, text: string, phone: boolean): void {
     const { store, lists } = this.o;
     if (!lists.ownersDevice(link.peer)) return link.close("removed");
     const asked = parseDevice(text);
     if (asked?.t === "needs") {
-      const needs = needsOf(heldBoards(store), this.o.statuses?.() ?? [], this.o.plans?.() ?? []);
-      return link.send("device", JSON.stringify({ t: "needs", needs } satisfies DeviceMessage));
+      const [held, statuses] = [heldBoards(store), this.o.statuses?.() ?? []];
+      const needs = needsOf(held, statuses, this.o.plans?.() ?? []);
+      return link.send("device", JSON.stringify({ t: "needs", needs, working: workingIn(held, statuses) } satisfies DeviceMessage));
     }
     // Only a phone is told what happens here: a computer of the person's shows it.
     if (asked?.t === "push" && "sub" in asked && phone) {
@@ -268,6 +281,19 @@ export class PeerLinks {
       if (taken) this.o.subscribe!(link.peer, asked.sub!);
       const answer: DeviceMessage = taken ? { t: "push", ok: true } : { t: "push", ok: false, error: asked.sub ? "this device tells nobody" : "not a push subscription" };
       return link.send("device", JSON.stringify(answer));
+    }
+    // A phone unpairing itself is told so, and forgotten once it hangs up, or is let go after a
+    // moment: forgetting it cuts its connection at once, which would take the answer with it.
+    if (asked?.t === "unpair" && phone) {
+      if (!this.o.unpair) return link.send("device", JSON.stringify({ t: "unpair", ok: false, error: "this device keeps no phone" } satisfies DeviceMessage));
+      if (this.letGo.has(link)) return;
+      this.letGo.add(link);
+      link.send("device", JSON.stringify({ t: "unpair", ok: true } satisfies DeviceMessage));
+      const timer = setTimeout(() => link.close("removed"), LET_GO_MS);
+      void link.closed.then(() => {
+        clearTimeout(timer);
+        this.o.unpair!(link.peer);
+      });
     }
     if (asked?.t !== "workspaces" || asked.workspaces) return;
     const workspaces = heldBoards(store).map(({ workspace, name, repo }) => ({ workspace, name, repo }));

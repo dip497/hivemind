@@ -1078,7 +1078,8 @@ agents.
    its title, else its task, else its label, with the plan when it waits on one), and answers its
    owner's devices on the `device` stream; the phone asks each device it paired with, shows the
    lists as one, the one waiting longest first, and names a device that does not answer as away.
-   Not yet: the machine column, and "4 agents working".
+   Each device also says how many agents are at work there (M5 step 6), and the phone adds them
+   up for the empty state. Not yet: the machine column.
 4. **Push notification.** "*api · Fix nav overflow* needs permission: Edit Nav.tsx" with
    **Allow** / **Deny** actions on the notification itself; tap opens the item.
 
@@ -1110,7 +1111,17 @@ agents.
    tiles) · community views that declare phone support (R12 `hello.device.compact`).
 8. **Offline host.** "Desktop is asleep. You'll get a notification when it's back." The
    last known state is shown with its age.
+
+   *As built (M5 step 6):* the phone keeps what each device last answered, and when
+   (`heard.json`), and shows it for a device that is away. Not built: the notification when it is
+   back.
 9. **Unpair.** Settings on the phone or on the desktop → the phone → Unpair.
+
+   *As built (M5 step 6, `spec/pairing.md` "Unpairing"):* from the desktop, as for any device,
+   which also stops telling the phone (step 5); from the phone, `{t:"unpair"}` on the `device`
+   stream, answered, the phone forgotten once it hangs up, and recorded in the desktop's audit log
+   as the phone. A desktop the phone cannot reach is
+   forgotten by the phone alone and still lists the phone until it is unpaired there.
 
 ### 9.3 How it works
 

@@ -11,7 +11,7 @@ use iroh::{
 };
 use serde_json::{json, Value};
 
-use crate::pairing::PairedWith;
+use crate::{devices, pairing::PairedWith};
 
 /// The size a phone watches at: a viewer's never changes the session's.
 const COLS: u32 = 80;
@@ -19,19 +19,12 @@ const ROWS: u32 = 24;
 
 /// Whether the device on `connection` holds `workspace`, as it says on its `device` stream.
 async fn holds(connection: &Connection, workspace: &str) -> Result<bool> {
-    let (mut send, mut recv) = hive_net::ws::open(connection, "device").await?;
-    write_frame(&mut send, br#"{"t":"workspaces"}"#).await?;
-    loop {
-        let frame = read_frame(&mut recv)
-            .await?
-            .context("the device closed without answering")?;
-        let answer: Value = serde_json::from_slice(&frame)?;
-        if let Some(held) = answer.get("workspaces").and_then(Value::as_array) {
-            return Ok(held
-                .iter()
-                .any(|w| w.get("workspace").and_then(Value::as_str) == Some(workspace)));
-        }
-    }
+    let answer = devices::ask(connection, &json!({ "t": "workspaces" })).await?;
+    let held = answer.get("workspaces").and_then(Value::as_array);
+    Ok(held.is_some_and(|held| {
+        held.iter()
+            .any(|w| w.get("workspace").and_then(Value::as_str) == Some(workspace))
+    }))
 }
 
 /// A connection to the one of `devices` that holds `workspace`.

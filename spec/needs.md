@@ -1,4 +1,4 @@
-# Needs you (0.1)
+# Needs you (0.2)
 
 What waits on the person (M5, design §9.2 "Home: Needs you"): each agent waiting on them, in the
 workspaces one of their devices holds, as their phone lists it. The device that runs the agents
@@ -54,6 +54,12 @@ person's own devices, a phone among them.
 
 One of the person's devices asks another on the `device` stream of a connection on `hive/ws/1`
 (the stream it asks which workspaces are there on): `{ "t": "needs" }`, and is answered
-`{ "t": "needs", "needs": [ … ] }`. A phone may ask this and which workspaces there are, and give
-where it is told what happens there (`push.md`), and nothing else there (`pairing.md`). A device that does not answer within a few seconds, or cannot
-be reached, is said to be away; what it last said is not kept.
+`{ "t": "needs", "needs": [ … ], "working": 3 }`: the list above, and how many agents in the
+workspaces the device holds are at work now (their status `working`, 0.2). A phone may ask this
+and which workspaces there are, give where it is told what happens there (`push.md`) and unpair
+itself (`pairing.md`), and nothing else there.
+
+A phone shows the lists of the devices that answered as one, and how many agents are at work on
+them together; an answer that does not say how many, or says it as anything but a whole number of
+none or more, counts none. A device that does not answer within a few seconds, or cannot be
+reached, is said to be away, with what it last answered the phone and when, if it ever did (0.2).

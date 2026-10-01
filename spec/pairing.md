@@ -1,4 +1,4 @@
-# Pairing (0.3)
+# Pairing (0.4)
 
 Two devices become one person's (R14 and §5.2 in `docs/design/multiplayer-2026-09-28.md`): the
 device being added receives the person key and certifies itself with it (`identity.md`), or, a
@@ -125,6 +125,17 @@ taking another person would make that workspace no longer its owner's.
   (`network-access.md`).
 - A phone is listed as one of the person's devices, and is never a place to run a frame, to host a
   workspace or to move one to.
+
+## Unpairing
+
+A device forgets another when the person unpairs it there: it is no longer among the person's
+devices to it, is let in no more, and is told nothing more (`push.md`). A phone may also unpair
+itself (0.4): on the `device` stream of its connection to the device (`needs.md`, "Asking") it
+sends `{ "t": "unpair" }`, the device answers `{ "t": "unpair", "ok": true }`, and the phone hangs
+up. The device forgets it once it has (forgetting it first would cut the connection, and the answer
+with it), or lets it go after a few seconds and forgets it then. The phone forgets the device
+whether or not it could tell it; a device it could not tell still lists the phone until the phone
+is unpaired there too. Unpairing is recorded in the device's audit log, as whoever asked for it.
 
 The cases in `../conformance/pairing.json` (proofs, codes, links, and a phone pairing with an app,
 message by message) decide whether an implementation follows this.

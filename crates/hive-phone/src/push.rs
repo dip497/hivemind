@@ -8,14 +8,13 @@ use std::{fs, path::Path};
 use aes_gcm::{aead::Aead, Aes128Gcm, KeyInit as _, Nonce};
 use anyhow::{bail, ensure, Context, Result};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use hive_net::frames::{read_frame, write_frame};
 use hmac::{Hmac, KeyInit as _, Mac};
 use iroh::endpoint::Connection;
 use p256::{elliptic_curve::sec1::ToEncodedPoint, PublicKey, SecretKey};
 use serde_json::{json, Value};
 use sha2::Sha256;
 
-use crate::identity::write_private;
+use crate::{devices, identity::write_private};
 
 fn hmac(key: &[u8], data: &[&[u8]]) -> [u8; 32] {
     let mut mac = Hmac::<Sha256>::new_from_slice(key).expect("HMAC takes any key");
@@ -124,27 +123,11 @@ impl PushKeys {
 
 /// Give the device on `connection` where this phone is told what happens there, `subscription`.
 pub async fn subscribe(connection: &Connection, subscription: &Value) -> Result<()> {
-    let (mut send, mut recv) = hive_net::ws::open(connection, "device").await?;
     let mut given = subscription.clone();
     given["t"] = json!("push");
-    write_frame(&mut send, given.to_string().as_bytes()).await?;
-    loop {
-        let frame = read_frame(&mut recv)
-            .await?
-            .context("the device closed without answering")?;
-        let answer: Value = serde_json::from_slice(&frame)?;
-        if answer.get("t").and_then(Value::as_str) != Some("push") {
-            continue;
-        }
-        if answer.get("ok").and_then(Value::as_bool) == Some(true) {
-            return Ok(());
-        }
-        bail!(
-            "{}",
-            answer
-                .get("error")
-                .and_then(Value::as_str)
-                .unwrap_or("the device refused")
-        );
+    let answer = devices::ask(connection, &given).await?;
+    if answer.get("ok").and_then(Value::as_bool) != Some(true) {
+        bail!("{}", devices::refusal(&answer));
     }
+    Ok(())
 }

@@ -26,6 +26,7 @@ import { HostRecords, type Hosted } from "@hivemind/workspace-host/host-records"
 import { Hosting } from "@hivemind/host/hosting";
 import { People } from "@hivemind/host/people";
 import { handle, handleEffect } from "./app-ipc.js";
+import { hostIntents } from "./audit.js";
 import { displayName, machineIdentity, takePerson } from "./identity.js";
 import { idOf, workspaceSeed, type Seed } from "@hivemind/workspace-host/identity";
 import { getSettings } from "./settings-store.js";
@@ -79,6 +80,15 @@ function pushSubscriptions(): PushSubscriptions {
 /** The person's other devices this app paired with, kept beside its keys. */
 function pairedDevices(): Devices {
   return (paired ??= new Devices(path.join(app.getPath("userData"), "identity", "devices.json")));
+}
+/** Forget one of the person's devices: it is let in no more, its workspaces are no longer listed
+ *  here, and a phone is told nothing more. False when it was not paired here. */
+function forgetDevice(device: string): boolean {
+  if (!pairedDevices().remove(device)) return false;
+  pushSubscriptions().remove(device);
+  admitNow();
+  broadcast("net:devices-changed");
+  return true;
 }
 
 function accessLists(): AccessLists {
@@ -412,6 +422,11 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
     phone: (device) => pairedDevices().list().some((d) => d.device === device && d.kind === "phone"),
     statuses, plans,
     subscribe: (device, sub) => pushSubscriptions().set(device, sub),
+    // A phone unpairing itself, recorded as that phone.
+    unpair: (device) => {
+      const phone = { kind: "peer", person: accessLists().personOf("", device) ?? "", device, access: "owner" } as const;
+      void hostIntents().perform(phone, { verb: "net:unpair", detail: device.slice(0, 8) }, () => forgetDevice(device));
+    },
     onWarn: (m) => console.warn(`[peers] ${m}`),
   });
   // The person's phones are told what happens here, encrypted to each (M5).
@@ -523,10 +538,7 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
 
   // Forget one of the person's devices: its workspaces are no longer listed here.
   handleEffect("net:unpair", (device: unknown) => ({ detail: String(device).slice(0, 8) }), (_e, device: unknown) => {
-    if (typeof device !== "string" || !pairedDevices().remove(device)) throw new Error("unpair: that device is not paired with this one");
-    pushSubscriptions().remove(device);
-    admitNow();
-    broadcast("net:devices-changed");
+    if (typeof device !== "string" || !forgetDevice(device)) throw new Error("unpair: that device is not paired with this one");
   });
 
   // The workspaces each of the person's other devices holds; null for one that does not answer.

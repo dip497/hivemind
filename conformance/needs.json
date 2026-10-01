@@ -1,5 +1,5 @@
 {
- "about": "Cases every implementation of needs-you must pass (spec/needs.md): what a device answers waits on the person ('computer': its boards, its agents' statuses and the plans they hand off, in; the list out), and what a phone shows of the answers it is given ('phone'). Written by hand from the spec.",
+ "about": "Cases every implementation of needs-you must pass (spec/needs.md): what a device answers waits on the person ('computer': its boards, its agents' statuses and the plans they hand off, in; the list, and how many agents are at work, out), and what a phone shows of the answers it is given ('phone'). Written by hand from the spec.",
  "computer": [
   {
    "about": "an agent waiting on a permission, called what the person named its tile",
@@ -48,7 +48,8 @@
      "kind": "permission",
      "since": 1790000000000
     }
-   ]
+   ],
+   "working": 0
   },
   {
    "about": "unnamed, an agent is called what it says it is doing, else what it was started to do, else its tile's label",
@@ -146,7 +147,8 @@
      "kind": "other",
      "since": 1790000000002
     }
-   ]
+   ],
+   "working": 0
   },
   {
    "about": "a plan waiting on review carries the plan; a plan of an agent no longer waiting on one is not listed",
@@ -220,7 +222,8 @@
      "since": 1790000000000,
      "plan": "1. Read the routes\n2. Split them"
     }
-   ]
+   ],
+   "working": 1
   },
   {
    "about": "an agent waiting on an approval waits on the agent that supervises it, not on the person: not listed",
@@ -255,7 +258,8 @@
     }
    ],
    "plans": [],
-   "needs": []
+   "needs": [],
+   "working": 0
   },
   {
    "about": "an agent doing anything else, or waiting with no kind, is not listed",
@@ -369,7 +373,8 @@
     }
    ],
    "plans": [],
-   "needs": []
+   "needs": [],
+   "working": 1
   },
   {
    "about": "an agent in no workspace the device holds is not listed",
@@ -409,7 +414,8 @@
     }
    ],
    "plans": [],
-   "needs": []
+   "needs": [],
+   "working": 0
   },
   {
    "about": "the one waiting longest first, across workspaces; of two since the same moment, the one whose tile comes first",
@@ -512,7 +518,96 @@
      "kind": "permission",
      "since": 1790000003000
     }
-   ]
+   ],
+   "working": 0
+  },
+  {
+   "about": "agents at work are counted in the workspaces the device holds, and only there",
+   "held": [
+    {
+     "workspace": "c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3",
+     "name": "site",
+     "core": {
+      "frames": [],
+      "tiles": [
+       {
+        "id": "w1",
+        "kind": "claude",
+        "label": "Claude"
+       },
+       {
+        "id": "w2",
+        "kind": "codex",
+        "label": "Codex"
+       },
+       {
+        "id": "w3",
+        "kind": "claude",
+        "label": "Claude"
+       }
+      ]
+     }
+    }
+   ],
+   "statuses": [
+    {
+     "tileId": "hm:w1",
+     "status": {
+      "state": "working",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000000000
+     }
+    },
+    {
+     "tileId": "w2",
+     "status": {
+      "state": "working",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000001000
+     }
+    },
+    {
+     "tileId": "w3",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000002000,
+      "kind": "question"
+     }
+    },
+    {
+     "tileId": "hm:elsewhere",
+     "status": {
+      "state": "working",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000003000
+     }
+    }
+   ],
+   "plans": [],
+   "needs": [
+    {
+     "workspace": "c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3",
+     "name": "site",
+     "tile": "w3",
+     "agent": "Claude",
+     "kind": "question",
+     "since": 1790000002000
+    }
+   ],
+   "working": 2
   }
  ],
  "phone": [
@@ -538,7 +633,8 @@
        "kind": "question",
        "since": 1790000002000
       }
-     ]
+     ],
+     "working": 2
     },
     {
      "t": "needs",
@@ -560,7 +656,8 @@
        "since": 1790000003000,
        "plan": "1. Split it"
       }
-     ]
+     ],
+     "working": 1
     }
    ],
    "needs": [
@@ -597,7 +694,8 @@
      "since": 1790000003000,
      "plan": "1. Split it"
     }
-   ]
+   ],
+   "working": 3
   },
   {
    "about": "an item missing what it must say, or with a kind not on the person, is left out",
@@ -662,7 +760,8 @@
        "plan": 9
       },
       "not an item"
-     ]
+     ],
+     "working": 4
     }
    ],
    "needs": [
@@ -674,7 +773,8 @@
      "kind": "permission",
      "since": 1790000002000
     }
-   ]
+   ],
+   "working": 4
   },
   {
    "about": "an answer that is not one says nothing",
@@ -690,7 +790,8 @@
        "kind": "permission",
        "since": 1790000002000
       }
-     ]
+     ],
+     "working": 5
     },
     {
      "t": "workspaces",
@@ -701,7 +802,8 @@
     },
     {
      "t": "needs",
-     "needs": "none"
+     "needs": "none",
+     "working": 2
     },
     [
      {
@@ -714,7 +816,44 @@
      }
     ]
    ],
-   "needs": []
+   "needs": [],
+   "working": 0
+  },
+  {
+   "about": "agents at work on several devices: counted together; an answer that does not say how many, or says it as anything but a whole number of none or more, counts none",
+   "answers": [
+    {
+     "t": "needs",
+     "needs": [],
+     "working": 2
+    },
+    {
+     "t": "needs",
+     "needs": []
+    },
+    {
+     "t": "needs",
+     "needs": [],
+     "working": -1
+    },
+    {
+     "t": "needs",
+     "needs": [],
+     "working": 1.5
+    },
+    {
+     "t": "needs",
+     "needs": [],
+     "working": "3"
+    },
+    {
+     "t": "needs",
+     "needs": [],
+     "working": 3
+    }
+   ],
+   "needs": [],
+   "working": 5
   }
  ]
 }

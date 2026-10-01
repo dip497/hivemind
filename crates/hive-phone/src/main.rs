@@ -4,8 +4,12 @@
 //!   hive-phone pair <link>      pair with the app that shows this link (Settings → Devices on a
 //!                               computer): this phone is that app's person from then on
 //!   hive-phone devices          the person's devices this phone paired with
+//!   hive-phone unpair <device>  unpair from one of them (by its id or its name): it forgets
+//!                               this phone, and this phone forgets it
 //!   hive-phone needs            what waits on the person: each agent waiting on them, on the
-//!                               devices this phone paired with, the one waiting longest first
+//!                               devices this phone paired with, the one waiting longest first,
+//!                               and how many are at work; of a device that is away, what it last
+//!                               answered and when
 //!   hive-phone watch <workspace> <tile>
 //!                               an agent's terminal, read-only: its screen, then its output as
 //!                               it comes, until it ends (or Ctrl+C)
@@ -21,7 +25,7 @@
 //!
 //! Options: `--identity <dir>` (default: `hivemind-phone/identity` in this user's data folder),
 //! `--name <name>` (pair: what the app lists this phone as; default `Phone`), `--json` (pair,
-//! devices, needs, answer, push: as JSON, a notice a line).
+//! devices, unpair, needs, answer, push: as JSON, a notice a line).
 
 use std::{path::PathBuf, process::ExitCode, sync::Arc, time::SystemTime};
 
@@ -36,7 +40,7 @@ use hive_phone::{
 };
 use serde_json::{json, Value};
 
-const USAGE: &str = "usage: hive-phone id | pair <link> | devices | needs | watch <workspace> <tile> | answer <workspace> <tile> <since> --text <line>|--approve|--changes <what> | push --listen <ip:port>  [--identity <dir>] [--name <name>] [--json]";
+const USAGE: &str = "usage: hive-phone id | pair <link> | devices | unpair <device> | needs | watch <workspace> <tile> | answer <workspace> <tile> <since> --text <line>|--approve|--changes <what> | push --listen <ip:port>  [--identity <dir>] [--name <name>] [--json]";
 
 #[derive(Default)]
 struct Args {
@@ -94,6 +98,39 @@ fn what(n: &Need) -> &'static str {
         "plan" => "has a plan for you to review",
         "approval" => "waits on your approval",
         _ => "needs you",
+    }
+}
+
+/// What waits, and how many agents are at work, as a person says it.
+fn summary(needs: &[Need], working: u64, now: u64) -> Vec<String> {
+    let mut lines: Vec<String> = needs
+        .iter()
+        .map(|n| {
+            let waits = format!("{} · {}", what(n), waited(n.since, now));
+            format!("{} · {} — {waits}", n.agent, n.name)
+        })
+        .collect();
+    let at_work = match working {
+        0 => None,
+        1 => Some("1 agent working.".to_string()),
+        n => Some(format!("{n} agents working.")),
+    };
+    match (lines.is_empty(), at_work) {
+        (true, Some(w)) => lines.push(format!("Nothing needs you. {w}")),
+        (true, None) => lines.push("Nothing needs you.".into()),
+        (false, Some(w)) => lines.push(w),
+        (false, None) => {}
+    }
+    lines
+}
+
+/// How long ago `at` was, as a person says it.
+fn ago(at: u64, now: u64) -> String {
+    let s = now.saturating_sub(at) / 1000;
+    match s {
+        0..=59 => "just now".into(),
+        60..=3599 => format!("{} min ago", s / 60),
+        _ => format!("{} h ago", s / 3600),
     }
 }
 
@@ -172,37 +209,77 @@ async fn run(args: Args) -> Result<()> {
                 let endpoint = endpoint.clone();
                 asking.spawn(async move { (needs::ask(&endpoint, &d.with).await, d.with) });
             }
-            let (mut lists, mut away) = (vec![], vec![]);
+            let (mut answers, mut away) = (vec![], vec![]);
             while let Some(Ok((answer, device))) = asking.join_next().await {
                 match answer {
-                    Ok(list) => lists.push(list),
+                    Ok(answer) => answers.push((device.device, answer)),
                     Err(_) => away.push(device),
                 }
             }
             endpoint.close().await;
-            let all = needs::as_one(lists);
+            let now = now_ms();
+            // What each device answered is kept, for when it is away.
+            phone.hear(&answers, now)?;
+            let heard = phone.heard();
+            let all = needs::as_one(answers.into_iter().map(|(_, a)| a).collect());
             if args.json {
                 let away: Vec<_> = away
                     .iter()
-                    .map(|d| json!({ "device": d.device, "name": d.name }))
+                    .map(|d| json!({ "device": d.device, "name": d.name, "heard": heard.get(&d.device) }))
                     .collect();
-                println!("{}", json!({ "needs": all, "away": away }));
+                println!(
+                    "{}",
+                    json!({ "needs": all.needs, "working": all.working, "away": away })
+                );
             } else {
-                if all.is_empty() {
-                    println!("Nothing needs you.");
-                }
-                for n in &all {
-                    println!(
-                        "{} · {} — {} · {}",
-                        n.agent,
-                        n.name,
-                        what(n),
-                        waited(n.since, now_ms())
-                    );
+                for line in summary(&all.needs, all.working, now) {
+                    println!("{line}");
                 }
                 for d in &away {
-                    println!("{} is away: what waits there is not known.", d.name);
+                    let Some(last) = heard.get(&d.device) else {
+                        println!("{} is away: what waits there is not known.", d.name);
+                        continue;
+                    };
+                    println!("{} is away. Last heard {}:", d.name, ago(last.at, now));
+                    for line in summary(&last.answer.needs, last.answer.working, now) {
+                        println!("  {line}");
+                    }
                 }
+            }
+        }
+        "unpair" => {
+            let which = args
+                .rest
+                .first()
+                .context("unpair: which device? `hive-phone devices` lists them")?;
+            let devices: Vec<_> = phone.devices().into_iter().map(|d| d.with).collect();
+            let named: Vec<_> = devices.iter().filter(|d| d.name == *which).collect();
+            let device = match devices.iter().find(|d| d.device == *which) {
+                Some(device) => device,
+                None if named.len() == 1 => named[0],
+                None if named.len() > 1 => {
+                    bail!("several devices are called {which}: name it by its id")
+                }
+                None => bail!("{which} is not a device this phone is paired with"),
+            };
+            let endpoint = net::endpoint(phone.key().clone(), &Reach::local(), vec![]).await?;
+            let told = phone.unpair(&endpoint, device).await?;
+            endpoint.close().await;
+            if args.json {
+                println!(
+                    "{}",
+                    json!({ "device": device.device, "name": device.name, "told": told })
+                );
+            } else if told {
+                println!(
+                    "Unpaired from {}: it forgot this phone, and this phone forgot it.",
+                    device.name
+                );
+            } else {
+                println!(
+                    "This phone forgot {0}, but {0} is away and still lists this phone: unpair it there too (Settings → Devices).",
+                    device.name
+                );
             }
         }
         "watch" => {

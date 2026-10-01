@@ -66,6 +66,11 @@ export interface WaitingStatus {
   status: { state: string; kind?: InputKind; since: number; title?: string };
 }
 
+/** How many agents of `held` are at work now. */
+export function workingIn(held: HeldBoard[], statuses: WaitingStatus[]): number {
+  return statuses.filter(({ tileId, status }) => status.state === "working" && agentOf(held, tileId) !== null).length;
+}
+
 /** The agents of `held` waiting on the person, the one waiting longest first (and of two waiting
  *  since the same moment, the one whose tile comes first). An agent is called what the person
  *  named its tile, else what it says it is doing, else what it was started to do, else its tile's
