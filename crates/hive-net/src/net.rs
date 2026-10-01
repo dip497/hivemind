@@ -36,38 +36,60 @@ impl Reach {
 
 /// This device's endpoint, answering `alpns`.
 pub async fn endpoint(key: SecretKey, reach: &Reach, alpns: Vec<Vec<u8>>) -> Result<Endpoint> {
+    let nearby = local_lookup(&key, reach)?;
     bind(
         Endpoint::builder(presets::Minimal)
             .secret_key(key)
             .alpns(alpns),
         reach,
+        nearby,
     )
     .await
 }
 
-/// This device's endpoint, answering `alpns` for the devices `gate` admits.
+/// This device's endpoint, answering `alpns` for the devices `gate` admits; and, when it looks on
+/// the local network, what it finds there (the devices nearby and what each announces).
 pub async fn endpoint_with(
     key: SecretKey,
     reach: &Reach,
     alpns: Vec<Vec<u8>>,
     gate: impl EndpointHooks + 'static,
-) -> Result<Endpoint> {
-    bind(
+) -> Result<(Endpoint, Option<MdnsAddressLookup>)> {
+    let nearby = local_lookup(&key, reach)?;
+    let endpoint = bind(
         Endpoint::builder(presets::Minimal)
             .secret_key(key)
             .alpns(alpns)
             .hooks(gate),
         reach,
+        nearby.clone(),
     )
-    .await
+    .await?;
+    Ok((endpoint, nearby))
 }
 
-async fn bind(builder: iroh::endpoint::Builder, reach: &Reach) -> Result<Endpoint> {
+/// mDNS among the devices on this network, when the network uses it.
+fn local_lookup(key: &SecretKey, reach: &Reach) -> Result<Option<MdnsAddressLookup>> {
+    if !reach.mdns {
+        return Ok(None);
+    }
+    Ok(Some(
+        MdnsAddressLookup::builder()
+            .service_name(MDNS_SERVICE)
+            .build(key.public())?,
+    ))
+}
+
+async fn bind(
+    builder: iroh::endpoint::Builder,
+    reach: &Reach,
+    nearby: Option<MdnsAddressLookup>,
+) -> Result<Endpoint> {
     let mut builder = builder.relay_mode(RelayMode::Custom(RelayMap::from_iter(
         reach.relays.iter().cloned(),
     )));
-    if reach.mdns {
-        builder = builder.address_lookup(MdnsAddressLookup::builder().service_name(MDNS_SERVICE));
+    if let Some(lookup) = nearby {
+        builder = builder.address_lookup(lookup);
     }
     Ok(builder.bind().await?)
 }

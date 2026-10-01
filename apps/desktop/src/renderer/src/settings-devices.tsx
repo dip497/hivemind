@@ -1,8 +1,9 @@
 /**
  * Settings → Devices (R14, spec/pairing.md): the person's other devices this computer is paired
  * with, and pairing another. A host (`hive host` on a server, a VPS, a box in the office) takes
- * your person, so the workspaces it holds are yours and open from Open recent: enter the link its
- * `hive host pair` prints, or show it a code from here for `hive host pair <link>`.
+ * your person, so the workspaces it holds are yours and open from Open recent: enter the six words
+ * its `hive host pair` prints (found on this network) or its link (from anywhere), or show it a
+ * code from here for `hive host pair <words or link>`.
  */
 import { useEffect, useMemo, useState } from "react";
 import { Check, Copy, Laptop, Server } from "lucide-react";
@@ -40,7 +41,7 @@ export function DevicesPrefs() {
       <Section title="Pair with a host" hint="On the host: hive host pair">
         <EnterLink />
       </Section>
-      <Section title="Or show a host a code" hint="On the host: hive host pair <link>">
+      <Section title="Or show a host a code" hint="On the host: hive host pair <words or link>">
         <OfferCode />
       </Section>
     </div>
@@ -68,7 +69,7 @@ function DeviceRow({ device }: { device: PairedDeviceSummary }) {
   );
 }
 
-/** The link a host's `hive host pair` prints, entered here: the host takes this person. */
+/** The words or the link a host's `hive host pair` prints, entered here: the host takes this person. */
 function EnterLink() {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -91,7 +92,7 @@ function EnterLink() {
       <div className="flex gap-2">
         <Input
           value={text}
-          placeholder="hivemind://pair/…"
+          placeholder="six words, or hivemind://pair/…"
           spellCheck={false}
           autoComplete="off"
           className="flex-1 font-mono text-[12px]"
@@ -102,7 +103,7 @@ function EnterLink() {
         <Button size="sm" disabled={!text.trim() || busy} data-pair-go onClick={() => void pair()}>{busy ? "Pairing…" : "Pair"}</Button>
       </div>
       <p className="text-[12px] text-[var(--color-fg3)]">
-        The host becomes you: it can open, and run agents in, every workspace you own there.
+        The six words find a host on this network; the link finds it from anywhere. The host becomes you: it can open, and run agents in, every workspace you own there.
       </p>
       {result && (
         <p className={`text-[12px] ${result.ok ? "text-[var(--color-ok)]" : "text-[var(--color-err)]"}`} role={result.ok ? "status" : "alert"} data-pair-result={result.ok ? "paired" : "failed"}>
@@ -136,7 +137,7 @@ function OfferCode() {
       <div className="flex min-w-0 flex-col gap-2">
         <p className="font-mono text-[14px] tracking-wide" data-pair-code>{offer.code.split("-").join(" ")}</p>
         <p className="text-[12px] text-[var(--color-fg3)]">
-          On the host, run <code className="font-mono">hive host pair</code> with this link. It works once, until {new Date(offer.expires).toLocaleTimeString()}.
+          On the host, run <code className="font-mono">hive host pair</code> with these words (on this network) or the link. It works once, until {new Date(offer.expires).toLocaleTimeString()}.
         </p>
         <div>
           <Button size="sm" variant="outline" data-pair-copy title={offer.link}

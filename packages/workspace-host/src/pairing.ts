@@ -68,9 +68,31 @@ export function parseCode(text: string): string | null {
   return words.join("-");
 }
 
-/** What the offering device announces on the local network while `code` is open. */
+/** The tag of `code`, which its device announces on the local network while it is open. */
 export function pairTag(code: string): string {
   return createHash("sha256").update(`hive/pair-tag/1\n${code}`).digest("hex").slice(0, 8);
+}
+
+/** What the offering device announces (its mDNS user data) while `code` is open. */
+export const pairAnnouncement = (code: string): string => `hive-pair=${pairTag(code)}`;
+
+/** How long the devices nearby are looked through for the one offering a code. */
+export const FIND_WITHIN_MS = 10_000;
+
+/**
+ * The device on this network offering `code`, from the words alone: the one announcing its tag
+ * among the devices `nearby` (hive-net's mDNS) finds, looked for until `withinMs`. None is "not
+ * found on this network"; two are refused, since a device that copied the announcement would be
+ * one of them.
+ */
+export async function offeringNearby(code: string, nearby: () => Promise<Array<{ id: string; data: string | null }>>, withinMs = FIND_WITHIN_MS): Promise<string> {
+  const announced = pairAnnouncement(code);
+  for (const end = Date.now() + withinMs; ; await new Promise((r) => setTimeout(r, 250))) {
+    const offering = (await nearby()).filter((d) => d.data === announced);
+    if (offering.length > 1) throw new PairingFailed("two devices on this network offer that code: ask for a new one");
+    if (offering.length === 1) return offering[0]!.id;
+    if (Date.now() >= end) throw new PairingFailed("no device on this network offers that code: check the words, or enter the link");
+  }
 }
 
 type Label = "entering" | "offering" | "give";

@@ -100,3 +100,24 @@ test.skipIf(!built)("a link closed saying why is read so on the other side; a de
     fs.rmSync(root, { recursive: true, force: true });
   }
 }, 30_000);
+
+test.skipIf(!built)("a device announces what it wants found, and the devices nearby find it with that, then without it", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hn-nearby-"));
+  try {
+    const offering = await device(root, "offering");
+    const entering = await device(root, "entering");
+    offering.advertise("hive-pair=0a1b2c3d");
+    const seen = async (want: string | null) => {
+      for (const end = Date.now() + 20_000; Date.now() < end; await new Promise((r) => setTimeout(r, 250))) {
+        const found = (await entering.nearby()).find((d) => d.id === offering.ready.id);
+        if (found && found.data === want) return found;
+      }
+      throw new Error(`the offering device was not seen announcing ${String(want)}`);
+    };
+    expect(await seen("hive-pair=0a1b2c3d")).toEqual({ id: offering.ready.id, data: "hive-pair=0a1b2c3d" });
+    offering.advertise(null);
+    expect(await seen(null)).toEqual({ id: offering.ready.id, data: null });
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}, 60_000);

@@ -1,8 +1,8 @@
 // An always-on host (R14), end to end on one machine: `hive host` (the built binary, with its own
 // data folder, as on a server) serves a folder as a workspace; the app pairs with it from
-// Settings → Devices, entering the link `hive host pair` prints; Open recent lists the workspace on
-// the host and opens it; a shell started there runs on the host, in its folder, and goes on after
-// the app has quit.
+// Settings → Devices, entering the six words `hive host pair` prints (the host found by them on
+// this network) or its link; Open recent lists the workspace on the host and opens it; a shell
+// started there runs on the host, in its folder, and goes on after the app has quit.
 import { test, expect, type ElectronApplication } from "@playwright/test";
 import { execSync, spawn, spawnSync, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
@@ -53,7 +53,7 @@ test.afterEach(async () => {
   fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 });
 
-test("the app pairs with a host, opens the workspace it holds, and a shell started there runs on after the app quits", async () => {
+for (const entered of ["words", "link"] as const) test(`the app pairs with a host by its ${entered === "words" ? "six words, found on this network" : "link"}, opens the workspace it holds, and a shell started there runs on after the app quits`, async () => {
   test.skip(!hiveNetBuilt() || !hostable, "needs hive-net (cargo build in crates/hive-net) and a current apps/cli/dist/hive (cd apps/cli && bun scripts/build.ts)");
   const api = path.join(root, "api");
   fs.mkdirSync(api);
@@ -72,9 +72,10 @@ test("the app pairs with a host, opens the workspace it holds, and a shell start
   const pairing = spawn(HIVE, ["host", "pair", "--json"], { env: hostEnv() });
   procs.push(pairing);
   const printed = lines(pairing.stdout!);
-  const link = (JSON.parse(await printed()) as { data: { offer: { link: string } } }).data.offer.link;
+  const offer = (JSON.parse(await printed()) as { data: { offer: { code: string; link: string } } }).data.offer;
   await laptop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "devices" } })));
-  await laptop.locator("[data-pair-link]").fill(link);
+  // The words as a person reads them off the host's screen, or its link.
+  await laptop.locator("[data-pair-link]").fill(entered === "words" ? offer.code.split("-").join(" ") : offer.link);
   await laptop.locator("[data-pair-go]").click();
   await expect(laptop.locator('[data-pair-result="paired"]')).toBeVisible({ timeout: 20_000 });
   await expect(laptop.locator('[data-device-kind="host"]')).toHaveCount(1);

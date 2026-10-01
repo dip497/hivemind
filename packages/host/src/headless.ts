@@ -22,7 +22,7 @@ import { DaemonEndpoint, REATTACH_RESET } from "@hivemind/agent-host/daemon-endp
 import { StatusStore, isSessionStatus } from "@hivemind/agent-host/status-store";
 import { AccessLists } from "@hivemind/workspace-host/access";
 import { Devices, type PairedDevice } from "@hivemind/workspace-host/devices";
-import { enterPairing, formatPairLink, PairingOffer, parseCode, parsePairLink, type Pairing, type PairingDevice } from "@hivemind/workspace-host/pairing";
+import { enterPairing, formatPairLink, offeringNearby, pairAnnouncement, PairingOffer, parseCode, parsePairLink, type Pairing, type PairingDevice } from "@hivemind/workspace-host/pairing";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import { HiveNet, type Ready } from "@hivemind/workspace-host/hive-net";
 import { Intents } from "@hivemind/workspace-host/intents";
@@ -246,24 +246,30 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       const settled = new Promise<Pairing>((resolve) => { settle = resolve; });
       const made = new PairingOffer(me(), (pairing) => settle(pairing));
       offer = made;
+      // Found from its words by the devices on this network, while the code is open.
+      net?.advertise(pairAnnouncement(made.code));
       const paired = new Promise<PairedDevice>((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error("the code expired before a device entered it")), made.expires - Date.now());
         void settled.then((pairing) => { clearTimeout(timer); resolve(keep(pairing)); });
-      }).finally(() => { if (offer === made) offer = null; });
+      }).finally(() => {
+        if (offer !== made) return;
+        offer = null;
+        net?.advertise(null);
+      });
       const link = formatPairLink({ device: keys.deviceId, addrs: ready.addrs, relay: ready.relay, code: made.code, name: deviceName(), kind: "host" });
       return { code: made.code, link, expires: made.expires, paired };
     },
     enterPairing: async (text) => {
       mayTake();
       const link = parsePairLink(text);
-      if (!link) {
-        if (parseCode(text)) throw new Error("the words alone find a device on this network only: enter the link the other device shows");
-        throw new Error("that is not a pairing code or link");
-      }
+      const code = link?.code ?? parseCode(text);
+      if (!code) throw new Error("that is not a pairing code or link");
       if (!net) throw new Error("this host is not on the network yet: is hive-net installed beside hive?");
       const on = net;
-      const where = { addrs: link.addrs, relay: link.relay };
-      return keep(await enterPairing({ me: me(), code: link.code, offering: link.device, ask: (hello) => on.pair(link.device, where, hello) }));
+      // From the words alone, the device offering them on this network; a link says where it is.
+      const offering = link?.device ?? (await offeringNearby(code, () => on.nearby()));
+      const where = link ? { addrs: link.addrs, relay: link.relay } : { addrs: [], relay: null };
+      return keep(await enterPairing({ me: me(), code, offering, ask: (hello) => on.pair(offering, where, hello) }));
     },
     stop: async () => {
       stopping = true;

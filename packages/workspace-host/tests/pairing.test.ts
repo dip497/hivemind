@@ -9,8 +9,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { certificateVerifies, certifyDevice, idOf, newSeed, type Seed } from "../src/identity.ts";
 import {
-  CODE_TRIES, PairingFailed, PairingOffer, enterPairing, formatPairLink, newCode, pairProof, pairTag, parseCode, parsePairLink,
-  type DeviceKind, type Pairing, type PairingDevice,
+  CODE_TRIES, PairingFailed, PairingOffer, enterPairing, formatPairLink, newCode, offeringNearby, pairAnnouncement, pairProof, pairTag,
+  parseCode, parsePairLink, type DeviceKind, type Pairing, type PairingDevice,
 } from "../src/pairing.ts";
 import { PAIRING_WORDS } from "../src/pairing-words.ts";
 
@@ -171,6 +171,19 @@ describe("codes and links", () => {
   test("the tag announced for a code is the spec's: SHA-256 of its label and the code, four bytes", () => {
     // spec/pairing.md, "Finding the offering device from the words alone".
     expect(pairTag("acorn-actor-adobe-agent-alarm-album")).toBe("ef49cd5e");
+  });
+
+  test("from the words alone, the device nearby announcing the code is the one; none is not found, and two are refused", async () => {
+    const code = newCode();
+    const someoneElse = { id: "a".repeat(64), data: pairAnnouncement(newCode()) };
+    const quiet = { id: "b".repeat(64), data: null };
+    const offering = { id: "c".repeat(64), data: pairAnnouncement(code) };
+    expect(await offeringNearby(code, async () => [someoneElse, quiet, offering], 0)).toBe(offering.id);
+    // It may take a moment to be seen.
+    let asked = 0;
+    expect(await offeringNearby(code, async () => (++asked < 3 ? [quiet] : [quiet, offering]), 5_000)).toBe(offering.id);
+    await expect(offeringNearby(code, async () => [someoneElse, quiet], 0)).rejects.toThrow(/no device on this network offers that code/);
+    await expect(offeringNearby(code, async () => [offering, { id: "d".repeat(64), data: offering.data }], 0)).rejects.toThrow(/two devices/);
   });
 
   test("the words are the spec's list: 256 of them, no two alike in their first four letters", () => {

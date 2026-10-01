@@ -8,7 +8,8 @@
  *   hive host status    whether it runs, as which device, where it is reached, its workspaces
  *   hive host stop      stop serving; the terminals keep running in the daemon
  *   hive host pair      make it one of your devices (spec/pairing.md): print a code, QR and link
- *                       for your app to enter, or `hive host pair <link>` to enter one it shows
+ *                       for your app to enter, or `hive host pair <words or link>` to enter one
+ *                       it shows
  *   hive host add <dir> serve a folder on this machine as one of its workspaces
  */
 import { defineCommand } from "citty";
@@ -163,9 +164,9 @@ const statusCmd = defineCommand({
 });
 
 const pairCmd = defineCommand({
-  meta: { name: "pair", description: "Make this host one of your devices: print a code for your app, or enter the link it shows" },
+  meta: { name: "pair", description: "Make this host one of your devices: print a code for your app, or enter the code it shows" },
   args: {
-    link: { type: "positional", required: false, description: "the pairing link your app shows (Settings → Devices → Pair a device)" },
+    link: { type: "positional", required: false, description: "the six words (quoted) or the link your app shows (Settings → Devices → Show a code)" },
     json: { type: "boolean" },
   },
   async run({ args }) {
@@ -190,7 +191,7 @@ const pairCmd = defineCommand({
     if (ctx.json) console.log(JSON.stringify({ ok: true, data: { offer } }));
     else {
       process.stdout.write([
-        "On your computer: Settings → Devices → Pair with a device, and enter",
+        "On your computer: Settings → Devices → Pair with a host, and enter",
         "",
         `  ${offer.code.split("-").join(" ")}`,
         "",

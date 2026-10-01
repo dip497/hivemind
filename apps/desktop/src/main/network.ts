@@ -19,7 +19,7 @@ import { formatJoinLink, parseJoinLink } from "@hivemind/workspace-host/join-lin
 import { JoinedList } from "@hivemind/workspace-host/joined";
 import { NetworkProfiles } from "@hivemind/workspace-host/network-profile";
 import { Devices, type PairedDevice } from "@hivemind/workspace-host/devices";
-import { enterPairing, formatPairLink, PairingOffer, parseCode, parsePairLink, type PairingDevice } from "@hivemind/workspace-host/pairing";
+import { enterPairing, formatPairLink, offeringNearby, pairAnnouncement, PairingOffer, parseCode, parsePairLink, type PairingDevice } from "@hivemind/workspace-host/pairing";
 import { heldWorkspaces } from "@hivemind/host/peer-links";
 import { handle, handleEffect, on } from "./app-ipc.js";
 import { displayName, machineIdentity } from "./identity.js";
@@ -359,21 +359,26 @@ export function installNetworkIpc(server: WorkspaceServer): void {
   // A code for one of the person's hosts to enter (`hive host pair <link>`): this app gives its person.
   handleEffect("net:pair-offer", () => ({}), async () => {
     const me = await pairingMe();
-    const offer = new PairingOffer(me, ({ with: other }) => keepPaired({ ...other, pairedAt: Date.now() }));
+    const hn = await network();
+    // Found from its words by the devices on this network, until it is used or expires.
+    const withdraw = () => { if (offered !== offer) return; offered = null; hn.advertise(null); };
+    const offer = new PairingOffer(me, ({ with: other }) => { withdraw(); keepPaired({ ...other, pairedAt: Date.now() }); });
     offered = offer;
+    hn.advertise(pairAnnouncement(offer.code));
+    setTimeout(withdraw, offer.expires - Date.now()).unref();
     return { code: offer.code, link: formatPairLink({ device: me.device, addrs: me.addrs, relay: me.relay, code: offer.code, name: me.name, kind: "app" }), expires: offer.expires };
   });
 
   // Enter the code or link one of the person's hosts shows (`hive host pair`): it takes this person.
   handleEffect("net:pair-enter", () => ({}), async (_e, text: unknown) => {
     const link = typeof text === "string" ? parsePairLink(text) : null;
-    if (!link) {
-      if (typeof text === "string" && parseCode(text)) throw new Error("pair: the words alone find a device on this network only; enter the link the host shows");
-      throw new Error("pair: that is not a pairing code or link");
-    }
+    const code = link?.code ?? (typeof text === "string" ? parseCode(text) : null);
+    if (!code) throw new Error("pair: that is not a pairing code or link");
     const hn = await network();
-    const where = { addrs: link.addrs, relay: link.relay };
-    const done = await enterPairing({ me: await pairingMe(), code: link.code, offering: link.device, ask: (hello) => hn.pair(link.device, where, hello) });
+    // From the words alone, the device offering them on this network; a link says where it is.
+    const offering = link?.device ?? (await offeringNearby(code, () => hn.nearby()));
+    const where = link ? { addrs: link.addrs, relay: link.relay } : { addrs: [], relay: null };
+    const done = await enterPairing({ me: await pairingMe(), code, offering, ask: (hello) => hn.pair(offering, where, hello) });
     const device = { ...done.with, pairedAt: Date.now() };
     keepPaired(device);
     return summary(device);

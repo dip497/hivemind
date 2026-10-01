@@ -35,6 +35,13 @@ export interface Link {
   readonly closed: Promise<string>;
 }
 
+/** A device on this network, as mDNS found it. */
+export interface Nearby {
+  id: string;
+  /** What it announces; null for nothing. */
+  data: string | null;
+}
+
 export interface HiveNetOptions {
   /** The daemon's executable. */
   bin: string;
@@ -145,6 +152,17 @@ export class HiveNet {
     const answer = await this.ask({ t: "pair", peer, addrs: where.addrs, relay: where.relay, hello });
     if (answer.t === "failed") throw new Error(String(answer.error));
     return answer.reply;
+  }
+
+  /** Announce `data` to the devices on this network (in this device's mDNS record), or nothing. */
+  advertise(data: string | null): void {
+    this.tell({ t: "advertise", data });
+  }
+
+  /** The devices on this network mDNS has found, with what each announces. */
+  async nearby(): Promise<Nearby[]> {
+    const answer = await this.ask({ t: "nearby" });
+    return Array.isArray(answer.devices) ? (answer.devices as Nearby[]) : [];
   }
 
   /** Stop the daemon: it is told by its socket closing, and closes its connections so the devices

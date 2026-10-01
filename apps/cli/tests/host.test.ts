@@ -10,11 +10,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawn, type ChildProcess } from "node:child_process";
-import { cmd, hive } from "./helpers.js";
+import { cmd, hive, hiveAsync } from "./helpers.js";
 import { idOf } from "@hivemind/workspace-host/identity";
 import { machineKeys } from "@hivemind/workspace-host/keyring";
 import { HiveNet } from "@hivemind/workspace-host/hive-net";
-import { enterPairing, parsePairLink } from "@hivemind/workspace-host/pairing";
+import { enterPairing, pairAnnouncement, PairingOffer, parsePairLink, type Pairing } from "@hivemind/workspace-host/pairing";
 import { WorkspaceStore, type WorkspaceChange } from "@hivemind/workspace-host/store";
 import { replicate } from "@hivemind/workspace-host/doc-sync";
 import type { Access } from "@hivemind/workspace-host/access";
@@ -34,8 +34,8 @@ const env = { HIVEMIND_APP_DATA: appData, HIVEMIND_HIVE_NET: HIVE_NET, HIVEMIND_
 const data = <T>(r: ReturnType<typeof hive>) => (r.json as { data: T }).data;
 const running: ChildProcess[] = [];
 
-function runHost(): ChildProcess {
-  const c = spawn(...cmd(["host", "run"]), { env: { ...process.env, ...env }, stdio: "ignore" });
+function runHost(on: Record<string, string> = env): ChildProcess {
+  const c = spawn(...cmd(["host", "run"]), { env: { ...process.env, ...on }, stdio: "ignore" });
   running.push(c);
   return c;
 }
@@ -62,7 +62,7 @@ interface Status {
   devices: Array<{ device: string; name: string; kind: string }>;
 }
 /** The host's status; undefined while it is starting. */
-const status = () => data<Status | undefined>(hive(["host", "status", "--json"], { env }));
+const status = (on: Record<string, string> = env) => data<Status | undefined>(hive(["host", "status", "--json"], { env: on }));
 
 /** The lines a process prints, one at a time. */
 function lines(stream: NodeJS.ReadableStream): () => Promise<string> {
@@ -171,6 +171,39 @@ describe.skipIf(!built)("hive host", () => {
     } finally {
       laptop.stop();
       hive(["host", "stop"], { env });
+    }
+  });
+
+  test("the app shows a code and the host enters its six words: found on this network, the host becomes the app's person", async () => {
+    // A host of its own, with its own data and daemon.
+    const own = { ...env, HIVEMIND_APP_DATA: path.join(dir, "data2"), HIVEMIND_PTY_SOCK: path.join(dir, "d2.sock") };
+    runHost(own);
+    await until(() => status(own)?.running || null, "the host to answer");
+    // The laptop shows a code, and announces it on this network.
+    const identity = path.join(dir, "laptop2", "identity");
+    const keys = machineKeys(identity);
+    let offer: PairingOffer | null = null;
+    const laptop = await HiveNet.start({
+      bin: HIVE_NET, identity, socket: path.join(dir, "l2.sock"),
+      onIncoming: (link) => link.close(), onPairRequest: async (peer, hello) => offer!.answer(peer, hello),
+    });
+    try {
+      const settled: Pairing[] = [];
+      offer = new PairingOffer(
+        { device: keys.deviceId, name: "laptop", kind: "app", certificate: keys.certificate, person: keys.person, addrs: laptop.ready.addrs, relay: laptop.ready.relay },
+        (p) => settled.push(p),
+      );
+      laptop.advertise(pairAnnouncement(offer.code));
+      // The host enters the words, as a person reads them (the laptop answers it from this process).
+      const entered = await hiveAsync(["host", "pair", offer.code.split("-").join(" "), "--json"], { env: own });
+      expect(entered.json).toMatchObject({ ok: true, data: { paired: { device: keys.deviceId, name: "laptop", kind: "app" } } });
+      expect(settled[0]?.with).toMatchObject({ kind: "host", certificate: { person: keys.personId } });
+      const now = await until(() => { const s = status(own); return s?.running && s.person === keys.personId ? s : null; }, "the host to be the laptop's person");
+      expect(now.devices).toEqual([{ device: keys.deviceId, name: "laptop", kind: "app" }]);
+    } finally {
+      laptop.stop();
+      hive(["host", "stop"], { env: own });
+      hive(["daemon", "stop"], { env: own });
     }
   });
 

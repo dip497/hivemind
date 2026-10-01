@@ -6,11 +6,13 @@
 //! - main → daemon: `admit {devices}` (the devices the access lists let in, which the gate
 //!   enforces), `dial {req, peer, addrs, relay}` (a workspace's host, on `hive/ws/1`),
 //!   `send {conn, stream, data}`, `close {conn, reason?}`, `pair {req, peer, addrs, relay, hello}`
-//!   (first contact with a host) and `pair-reply {req, reply}` (the answer to someone's
-//!   `pair-request`). A host on another network is dialled through the relay its link names.
+//!   (first contact with a host), `pair-reply {req, reply}` (the answer to someone's
+//!   `pair-request`), `advertise {data}` (what this device announces to the devices nearby, by
+//!   mDNS; null for nothing) and `nearby {req}` (the devices nearby, and what each announces). A
+//!   host on another network is dialled through the relay its link names.
 //! - daemon → main: `ready {id, addrs, relay}`, `incoming {conn, peer}`, `dialed {req, conn}`,
 //!   `failed {req, error}`, `recv {conn, stream, data}`, `closed {conn, reason}`,
-//!   `pair-request {req, peer, hello}` and `paired {req, reply}`.
+//!   `pair-request {req, peer, hello}`, `paired {req, reply}` and `nearby {req, devices}`.
 //!
 //! A stream is named by its first frame and opened by the device that dialled; `data` is the
 //! frame's bytes as text, which is all main sends. What the frames mean is main's.
@@ -29,15 +31,18 @@ use std::{
 use anyhow::{Context, Result};
 use iroh::{
     endpoint::{Connection, RecvStream, SendStream},
+    endpoint_info::UserData,
     protocol::{AcceptError, ProtocolHandler, Router},
     Endpoint, EndpointAddr, EndpointId, SecretKey, TransportAddr,
 };
+use iroh_mdns_address_lookup::{DiscoveryEvent, MdnsAddressLookup};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     sync::{mpsc, oneshot, Mutex},
 };
+use tokio_stream::StreamExt;
 
 use crate::{
     frames::{framed, read_frame, write_frame},
@@ -89,6 +94,13 @@ enum FromMain {
         req: u64,
         reply: Value,
     },
+    Advertise {
+        #[serde(default)]
+        data: Option<String>,
+    },
+    Nearby {
+        req: u64,
+    },
 }
 
 #[derive(Debug, Serialize)]
@@ -129,6 +141,17 @@ enum ToMain {
         req: u64,
         reply: Value,
     },
+    Nearby {
+        req: u64,
+        devices: Vec<NearbyDevice>,
+    },
+}
+
+/// A device on the local network, as mDNS found it: its id, and what it announces.
+#[derive(Debug, Clone, Serialize)]
+struct NearbyDevice {
+    id: String,
+    data: Option<String>,
 }
 
 /// One peer connection: what it is, and the queue its frames are written from, in order.
@@ -145,6 +168,8 @@ struct Daemon {
     links: Arc<std::sync::Mutex<HashMap<u64, Link>>>,
     next: Arc<AtomicU64>,
     pairs: Arc<std::sync::Mutex<HashMap<u64, oneshot::Sender<Value>>>>,
+    /// The devices mDNS found on the local network, by id, with what each announces.
+    nearby: Arc<std::sync::Mutex<HashMap<String, Option<String>>>>,
 }
 
 impl Daemon {
@@ -348,6 +373,47 @@ impl Daemon {
                     let _ = answer.send(reply);
                 }
             }
+            FromMain::Advertise { data } => {
+                // Too long to announce is the same as nothing to announce.
+                let data = data.and_then(|d| UserData::try_from(d).ok());
+                self.endpoint.set_user_data_for_address_lookup(data);
+            }
+            FromMain::Nearby { req } => {
+                let devices = self
+                    .nearby
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .map(|(id, data)| NearbyDevice {
+                        id: id.clone(),
+                        data: data.clone(),
+                    })
+                    .collect();
+                self.tell(ToMain::Nearby { req, devices });
+            }
+        }
+    }
+}
+
+/// Keep `nearby` to the devices mDNS finds on the local network, and what each announces.
+async fn watch_nearby(
+    lookup: MdnsAddressLookup,
+    nearby: Arc<std::sync::Mutex<HashMap<String, Option<String>>>>,
+) {
+    let mut events = lookup.subscribe().await;
+    while let Some(event) = events.next().await {
+        match event {
+            DiscoveryEvent::Discovered { endpoint_info, .. } => {
+                let data = endpoint_info.data.user_data().map(|d| d.to_string());
+                nearby
+                    .lock()
+                    .unwrap()
+                    .insert(endpoint_info.endpoint_id.to_string(), data);
+            }
+            DiscoveryEvent::Expired { endpoint_id } => {
+                nearby.lock().unwrap().remove(&endpoint_id.to_string());
+            }
+            _ => {}
         }
     }
 }
@@ -440,13 +506,17 @@ pub async fn run(socket: &Path, key: SecretKey, reach: Reach) -> Result<()> {
         .await
         .with_context(|| format!("cannot reach main at {}", socket.display()))?;
     let gate = Gate::default();
-    let endpoint = net::endpoint_with(
+    let (endpoint, lookup) = net::endpoint_with(
         key,
         &reach,
         vec![ws::ALPN.to_vec(), pair::ALPN.to_vec(), ping::ALPN.to_vec()],
         gate.clone(),
     )
     .await?;
+    let nearby: Arc<std::sync::Mutex<HashMap<String, Option<String>>>> = Arc::default();
+    if let Some(lookup) = lookup {
+        tokio::spawn(watch_nearby(lookup, nearby.clone()));
+    }
     let (to_main, mut outbox) = mpsc::unbounded_channel::<ToMain>();
     let daemon = Daemon {
         endpoint: endpoint.clone(),
@@ -455,6 +525,7 @@ pub async fn run(socket: &Path, key: SecretKey, reach: Reach) -> Result<()> {
         links: Arc::default(),
         next: Arc::new(AtomicU64::new(1)),
         pairs: Arc::default(),
+        nearby,
     };
     let router = Router::builder(endpoint.clone())
         .accept(ws::ALPN, WsHost(daemon.clone()))
