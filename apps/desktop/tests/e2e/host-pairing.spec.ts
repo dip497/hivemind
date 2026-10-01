@@ -4,7 +4,8 @@
 // this network) or its link; Open recent lists the workspace on the host and opens it; a shell
 // started there runs on the host, in its folder, and goes on after the app has quit. And a frame
 // of the app's own workspace runs on the host (M3): placed on one of the host's folders, its
-// shells run in the host's daemon, and go on after the app has quit.
+// shells run in the host's daemon, and go on after the app has quit; and its files and git are the
+// host's folder's, read there (M4).
 import { test, expect, type ElectronApplication } from "@playwright/test";
 import { execSync, spawn, spawnSync, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
@@ -116,11 +117,15 @@ for (const entered of ["words", "link"] as const) test(`the app pairs with a hos
   await expect.poll(() => read(path.join(api, "after.txt")), { timeout: 30_000 }).toBe("finished");
 });
 
-test("a frame of the app's own workspace runs on the paired host: placed on one of its folders, a shell there runs in the host's daemon, on after the app quits", async () => {
+test("a frame of the app's own workspace runs on the paired host: placed on one of its folders, a shell there runs in the host's daemon, on after the app quits, and a Diff tile there shows the host's folder's changes", async () => {
   test.skip(!hiveNetBuilt() || !hostable, "needs hive-net (cargo build in crates/hive-net) and a current apps/cli/dist/hive (cd apps/cli && bun scripts/build.ts)");
   test.setTimeout(120_000);
   const builds = path.join(root, "builds");
   fs.mkdirSync(builds);
+  // A repository, with a change not yet committed.
+  fs.writeFileSync(path.join(builds, "notes.md"), "one\n");
+  execSync("git init -q && git add notes.md && git -c user.email=t@t -c user.name=T commit -q -m one", { cwd: builds });
+  fs.writeFileSync(path.join(builds, "notes.md"), "one\ntwo\n");
   const host = spawn(HIVE, ["host", "run"], { env: hostEnv(), stdio: "ignore" });
   procs.push(host);
   await expect.poll(() => status()?.running ?? false, { timeout: 30_000 }).toBe(true);
@@ -152,6 +157,14 @@ test("a frame of the app's own workspace runs on the paired host: placed on one 
   await laptop.locator(`[data-device-folder="${builds}"]`).click({ timeout: 20_000 });
   // The frame says where it runs: the host, by its name.
   await expect(laptop.locator('.react-flow__node-frame button[aria-label^="machine "]')).toBeVisible({ timeout: 10_000 });
+
+  // Its files and git are the host's folder's: a Diff tile in it shows the change made there.
+  const shown = await tiles(laptop);
+  await laptop.evaluate((id) => window.dispatchEvent(new CustomEvent("hivemind:frame-open", { detail: { frameId: id, kind: "diff" } })), frameId);
+  let diff = "";
+  await expect.poll(async () => (diff = (await tiles(laptop)).find((t) => !shown.includes(t)) ?? ""), { timeout: 20_000 }).not.toBe("");
+  await laptop.evaluate((id) => window.dispatchEvent(new CustomEvent("hivemind:focus-tile", { detail: id })), diff);
+  await expect(laptop.locator(`.react-flow__node[data-id="${diff}"] [data-diff-file="notes.md"]`)).toHaveCount(1, { timeout: 30_000 });
 
   // A shell in it runs in the host's daemon, in the host's folder.
   const before = await tiles(laptop);

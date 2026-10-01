@@ -107,7 +107,7 @@ function json(event: EventMessage): string {
 }
 
 /** Serve the workspace API to a peer over `channel`, from `server`. */
-export function servePeer(server: WorkspaceServer, channel: TextChannel, peer: PeerOf): void {
+export function servePeer(server: Pick<WorkspaceServer, "connect" | "answer" | "notice">, channel: TextChannel, peer: PeerOf): void {
   const url = workspaceUrl(peer.workspace);
   const inbound = (v: unknown): unknown => {
     if (v === url) return peer.repo;

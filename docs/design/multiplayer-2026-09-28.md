@@ -843,6 +843,12 @@ host asks: taken back, nothing more is started or ended there.
 - Frame record carries `machine: EndpointId` and `path`. Fs and git for that frame go to
   that machine's hive-net (a `hive/fs/1` ALPN replacing one-ssh-command-per-call), with
   the same path containment rules as `remote/fs.ts` and Zeron's owning-engine checks.
+  *As built (M4 step 4, the person's own devices):* no ALPN of its own, a `files` stream on the
+  link the app already keeps to its device: the device answers the workspace API's calls about
+  its own folders (`git.*`, `worktree.*`, `file.*`, `issue.*`, `review.*`) for the person's other
+  devices alone, and nothing else on that stream (`device-files.ts`); a window's call naming
+  `machine://<device>/path` goes there, the folder read as its path on the device. A
+  participant's machine is not reached for its files this way yet.
 - Remote file watching: the executor machine watches and sends `fs:changed` for frames it
   owns (fixes today's "no remote watch" gap).
 - Your own devices share one person identity; pairing stores each other's keys with role
@@ -983,7 +989,8 @@ speaks.
 *As built (M1–M4):* one `hive/ws/1` connection carries named streams, each opened by the side
 that dialled sending on it first: `sync` (the workspace document), `api` (the workspace API,
 presence included), `list` (the access list, kept in step on the owner's devices), `device` (the
-workspaces a device holds), `pty` (the PTY daemon's protocol, for the owner's devices), `hosting`
+workspaces a device holds), `pty` (the PTY daemon's protocol, for the owner's devices), `files`
+(the workspace API's calls about a device's own folders, for the owner's devices), `hosting`
 (moving a workspace), and `machine` (a participant's sessions on their own machine, shown to the
 host through a filter of the same daemon protocol; the participant opens it, so the host never
 dials a participant).

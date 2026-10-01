@@ -84,6 +84,7 @@ import { INITIAL_PROMPT_ENV } from "@hivemind/agent-host/initial-prompt";
 import { WorkspaceServer, named, type Connection } from "@hivemind/workspace-api/server";
 import { workspaceDomains } from "@hivemind/host/domains";
 import { HANDED_OFF, handOff } from "@hivemind/host/hand-off";
+import { deviceFolders } from "@hivemind/host/device-files";
 import { agents } from "@hivemind/host/agents";
 import { Terminals, type SessionOutput } from "@hivemind/host/terminals";
 import { Layouts, type Shown } from "@hivemind/host/store";
@@ -1200,7 +1201,13 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
   // A participant's branch, handed off from their machine (M4).
   handOff({ who: whoIs, place: (repo, tile, name) => { workspaceStore().addTile(repo, tile, { name }, HANDED_OFF); } }),
 ], hostIntents(), (m) => console.warn(`[workspace] ${m}`));
-const workspaceIpc = serveWorkspaceApi(workspaceServer, elsewhere);
+// A folder on another of the person's devices is answered there (M4); one of a workspace joined
+// from elsewhere, by its host.
+const onDevices = deviceFolders({ mine: isYourDevice, dial: dialDevice });
+const workspaceIpc = serveWorkspaceApi(workspaceServer, {
+  call: (method, params) => elsewhere.call(method, params) ?? onDevices.call(method, params),
+  notice: (method, params) => elsewhere.notice(method, params) || onDevices.notice(method, params),
+});
 
 /** The workspace a window shows, or null. */
 const workspaceShownBy = (wc: WebContents): string | null => {

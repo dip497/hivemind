@@ -35,6 +35,7 @@ import { toBareId } from "@hivemind/workspace-api/tile-id";
 import type { Moved } from "@hivemind/workspace-host/doc-sync";
 import type { Hosting } from "./hosting.js";
 import { MACHINE_OFFER, grantOf, type Grant } from "./machine-share.js";
+import { serveFiles } from "./device-files.js";
 import { linkDuplex } from "./device-sessions.js";
 
 /** A link's named stream as a channel of text frames. */
@@ -124,6 +125,8 @@ export class PeerLinks {
   serve(link: Link): void {
     const { store, lists, server, hosting } = this.o;
     this.bridgePty(link);
+    // The files and git of frames on this machine, for the owner's other devices (M4).
+    serveFiles(link, server, (device) => (lists.ownersDevice(device) ? lists.personOf("", device) : null));
     // Offered once the workspace is served (the app offers it once welcomed), for that workspace,
     // and what it grants, then as that changes.
     link.on("machine", (text) => {
