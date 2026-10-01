@@ -31,11 +31,11 @@
 //! through this lookup server), `--addr <ip:port>` (ping: where the device is, when mDNS cannot
 //! find it).
 //!
-//! Serving: `--bind <ip:port>` (default [::]:3340, or [::]:443 with HTTPS); HTTPS with
+//! Serving: `--bind <ip:port>` (default port 3340 on every address, or 443 with HTTPS); HTTPS with
 //! `--domain <name>` (a certificate from Let's Encrypt; `--contact <email>`), or `--cert <pem>
 //! --key <pem>` (files, read again every hour; `--domain` then only names the server); with
-//! HTTPS, `--quic-bind` (QUIC address discovery, default [::]:7842) and `--http-bind` (the
-//! captive-portal check, default [::]:80). `--data <dir>` keeps the roles' state. The access
+//! HTTPS, `--quic-bind` (QUIC address discovery, default port 7842) and `--http-bind` (the
+//! captive-portal check, default port 80). `--data <dir>` keeps the roles' state. The access
 //! role: `--admin-id <key>` (default: the admin key kept in `--data`, made there the first time),
 //! `--policy closed|open-pow` (default closed), `--pow-bits <n>` (default 20). A relay without
 //! the access role beside it asks one elsewhere: `--access-url <url>`, keeping a yes for
@@ -137,7 +137,8 @@ fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args> {
             "--data" => args.data = Some(value(&mut argv, &arg)?.into()),
             "--pow-bits" => args.pow_bits = Some(value(&mut argv, &arg)?.parse()?),
             "--domain" => args.domain = Some(value(&mut argv, &arg)?),
-            "--contact" => args.contact = Some(value(&mut argv, &arg)?),
+            // Empty is none: a compose file passes a variable left unset as "".
+            "--contact" => args.contact = Some(value(&mut argv, &arg)?).filter(|v| !v.is_empty()),
             "--cert" => args.cert = Some(value(&mut argv, &arg)?.into()),
             "--key" => args.key = Some(value(&mut argv, &arg)?.into()),
             "--http-bind" => args.http_bind = Some(value(&mut argv, &arg)?.parse()?),
@@ -146,7 +147,7 @@ fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args> {
             "--access-url" => args.access_url = Some(value(&mut argv, &arg)?),
             "--access-cache" => args.access_cache = Some(value(&mut argv, &arg)?.parse()?),
             "--url" => args.url = Some(value(&mut argv, &arg)?),
-            "--name" => args.name = Some(value(&mut argv, &arg)?),
+            "--name" => args.name = Some(value(&mut argv, &arg)?).filter(|v| !v.is_empty()),
             "--lookup-limit" => args.lookup_limit = Some(value(&mut argv, &arg)?),
             "--workspace" => args.workspace = Some(value(&mut argv, &arg)?),
             "--host" => args.host = Some(value(&mut argv, &arg)?),
@@ -361,16 +362,20 @@ async fn serve(args: &Args) -> Result<()> {
     } else {
         None
     };
-    let default_bind = if https { "[::]:443" } else { "[::]:3340" };
+    // Every address, IPv6 and IPv4 where the machine has IPv6, else IPv4 (a container often has
+    // none).
+    let any = hive_net::serve::any_address();
+    let on = |port: u16| SocketAddr::new(any, port);
     let serving = Serving::spawn(Options {
-        bind: args.bind.unwrap_or_else(|| default_bind.parse().unwrap()),
+        bind: args
+            .bind
+            .unwrap_or_else(|| on(if https { 443 } else { 3340 })),
         certificate,
         relay,
-        quic_bind: args
-            .quic_bind
-            .unwrap_or_else(|| "[::]:7842".parse().unwrap()),
-        http_bind: args.http_bind.unwrap_or_else(|| "[::]:80".parse().unwrap()),
+        quic_bind: args.quic_bind.unwrap_or_else(|| on(7842)),
+        http_bind: args.http_bind.unwrap_or_else(|| on(80)),
         lookup,
+        domain: args.domain.clone(),
         access: access.clone(),
     })
     .await?;

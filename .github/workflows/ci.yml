@@ -109,3 +109,40 @@ jobs:
         run: |
           command -v nft >/dev/null || sudo apt-get install -y nftables
           sudo HIVE_NET_BIN="$PWD/target/debug/hive-net" bash ../../scripts/traffic-test.sh
+
+  compose:
+    # R13: the stack self-hosters run (infra/compose.yml), built from this commit, and its checks:
+    # the network's link, admission, a device found by id through the lookup server, a host
+    # record, and a restart survived.
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust (stable)
+        run: rustup update stable --no-self-update && rustup default stable
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            crates/hive-net/target
+          key: hive-net-${{ runner.os }}-${{ hashFiles('crates/hive-net/Cargo.lock') }}
+
+      - name: Build hive-net (the devices the checks run)
+        run: cargo build --locked --manifest-path crates/hive-net/Cargo.toml
+
+      - name: Start the stack
+        run: docker compose -f infra/compose.yml up -d --build
+
+      - name: Check it
+        run: bash infra/check.sh
+
+      - name: What the server said
+        if: failure()
+        run: docker compose -f infra/compose.yml logs
+
+      - name: Stop it
+        if: always()
+        run: docker compose -f infra/compose.yml down -v

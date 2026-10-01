@@ -83,6 +83,8 @@ pub struct Options {
     /// The lookup server: where it keeps its records, where it answers DNS, and whether it holds
     /// back publishing from one address.
     pub lookup: Option<(PathBuf, Option<SocketAddr>, bool)>,
+    /// The server's name, when it has one: the zone its lookup server answers DNS for.
+    pub domain: Option<String>,
     /// The access role.
     pub access: Option<access::Service>,
 }
@@ -94,6 +96,16 @@ pub struct Serving {
     relay: Option<RelayServer>,
     lookup: Option<Lookup>,
     front: JoinHandle<()>,
+}
+
+/// The address that is every address: IPv6's, which takes IPv4 as well, where this machine has
+/// IPv6; IPv4's where it has none (a container often has none).
+pub fn any_address() -> IpAddr {
+    let v6 = IpAddr::from(std::net::Ipv6Addr::UNSPECIFIED);
+    match std::net::UdpSocket::bind(SocketAddr::new(v6, 0)) {
+        Ok(_) => v6,
+        Err(_) => IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+    }
 }
 
 /// How a connection's bytes are read.
@@ -193,7 +205,9 @@ impl Serving {
         };
         let lookup = match &opts.lookup {
             None => None,
-            Some((dir, dns, limited)) => Some(Lookup::spawn(dir, *dns, *limited).await?),
+            Some((dir, dns, limited)) => {
+                Some(Lookup::spawn(dir, *dns, opts.domain.as_deref(), *limited).await?)
+            }
         };
 
         let listener = TcpListener::bind(opts.bind)

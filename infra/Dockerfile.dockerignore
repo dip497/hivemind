@@ -1,0 +1,4 @@
+# The build needs hive-net's crate and nothing else of the repository.
+*
+!crates/hive-net
+crates/hive-net/target

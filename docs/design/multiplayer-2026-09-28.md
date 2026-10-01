@@ -473,6 +473,15 @@ exactly as today. They are ordered by dependency.
   (`host_record.rs`, `spec/host-record.md`), the workspace key derived in Rust too (held to
   `conformance/identity.json`); publishing them as hosting moves is M3's. `hive-net doctor`
   says whether the lookup and access services answer, and why a relay turned a device away.
+- **Decided while building it, step 2 (2026-10-01).** `infra/compose.yml` is the stack on plain
+  HTTP (port 3340, `HIVE_URL` naming how devices reach it): a network inside a building, and
+  what CI checks; `infra/compose.public.yml` over it is a server with a public name (HTTPS on
+  443 from Let's Encrypt, 80, 7842/udp). The image is hive-net built from the repository on a
+  distroless base: no shell, no package manager. `infra/check.sh` runs R13's checks against
+  the running stack with hive-net devices on the host, and CI's `compose` job builds the image
+  from the commit and runs them. Binding "every address" falls back to IPv4 where the machine
+  has no IPv6, as a container often has none. The deployment of hivemind's own network (VMs,
+  DNS, `infra.yml`) waits on its cloud accounts.
 
 ### R14. Headless host: `hive host`
 

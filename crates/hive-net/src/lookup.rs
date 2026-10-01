@@ -65,10 +65,16 @@ pub struct Lookup {
 }
 
 impl Lookup {
-    /// A lookup server keeping its records in `dir`, answering DNS on `dns` if given, holding
-    /// back publishing from one address unless `limited` is false (a network whose devices share
-    /// one address: an office behind one NAT).
-    pub async fn spawn(dir: &Path, dns: Option<SocketAddr>, limited: bool) -> Result<Self> {
+    /// A lookup server keeping its records in `dir`, answering DNS on `dns` if given (for the
+    /// zone `domain` too, when it is delegated to it), holding back publishing from one address
+    /// unless `limited` is false (a network whose devices share one address: an office behind
+    /// one NAT).
+    pub async fn spawn(
+        dir: &Path,
+        dns: Option<SocketAddr>,
+        domain: Option<&str>,
+        limited: bool,
+    ) -> Result<Self> {
         std::fs::create_dir_all(dir).with_context(|| format!("cannot make {}", dir.display()))?;
         let dns = dns.unwrap_or(SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 0));
         // Its HTTP side listens on this machine only: what reaches it comes through the front.
@@ -80,7 +86,7 @@ impl Lookup {
                 "bind_addr": dns.ip(),
                 "default_soa": "hive-net hostmaster.hive-net 0 10800 3600 604800 3600",
                 "default_ttl": 30,
-                "origins": ["."],
+                "origins": domain.map(|d| format!("{}.", d.trim_end_matches('.'))).into_iter().chain([".".to_string()]).collect::<Vec<_>>(),
                 "rr_a": null,
                 "rr_aaaa": null,
                 "rr_ns": null,

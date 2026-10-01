@@ -1,0 +1,13 @@
+# The stack in compose.yml on a server with a public name: HTTPS on 443 with a certificate from
+# Let's Encrypt (which reaches the server on 443 to give it), the captive-portal check on 80, and
+# QUIC address discovery on 7842/udp. Open those three to the internet.
+#
+#   HIVE_DOMAIN=hive.example.com HIVE_CONTACT=you@example.com \
+#     docker compose -f infra/compose.yml -f infra/compose.public.yml up -d
+services:
+  hive-net:
+    command: [serve, --all, --data, /data, --domain, "${HIVE_DOMAIN:?name the server: HIVE_DOMAIN=hive.example.com}", --contact, "${HIVE_CONTACT:-}", --name, "${HIVE_NAME:-}"]
+    ports: !override
+      - "443:443"
+      - "80:80"
+      - "7842:7842/udp"
