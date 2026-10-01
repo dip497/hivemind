@@ -80,7 +80,7 @@ import { handleViewProtocol, listViewPackages, registerViewScheme, startViewWatc
 import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, settingsFile, settingsBusy, settingsSettled } from "./settings-store.js";
 import { flushWorkspaceStore, installWorkspaceStoreIpc, storeFor, workspaceStore } from "./workspace-store-ipc.js";
 import { installIdentityIpc, machineIdentity } from "./identity.js";
-import { dialDevice, installNetworkIpc, openJoined, personName, stopNetwork } from "./network.js";
+import { dialDevice, installNetworkIpc, movedAway, openJoined, personName, stopNetwork } from "./network.js";
 import { elsewhere, mayWriteShared } from "./shared-workspaces.js";
 import { appWindowOf, broadcast, openWindows, registerWindow, userWindow } from "./windows.js";
 import { patchSettingsExtras } from "@hivemind/core/settings";
@@ -481,6 +481,12 @@ handle("resolveProject", wrap(async (e, rootHint?: string) => {
   // issues while its terminals/editor/diff run in the child repo.
   const gitRoot = await findGitRoot(cwd);
   const repoPath = computeRepoPath(root, gitRoot);
+  // Moved to another of the person's devices (M3): opened from there, as its owner.
+  const moved = repoPath ? movedAway(repoPath) : null;
+  if (moved) {
+    await openJoined(moved.slice("hive://".length), (event) => workspaceServer.relay(event));
+    return { root: null, cwd: moved, repoPath: moved };
+  }
   if (repoPath) watchRepo(repoPath, workspaceIpc.connect(e.sender));
   // Index this workspace so cross-repo move/link/open can resolve its prefix.
   if (root) await registerWorkspace(root).catch(() => {});

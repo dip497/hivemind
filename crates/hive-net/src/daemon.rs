@@ -10,14 +10,17 @@
 //!   `pair-request`), `advertise {data}` (what this device announces to the devices nearby, by
 //!   mDNS; null for nothing), `nearby {req}` (the devices nearby, and what each announces),
 //!   `host-record {req, workspace, seq}` (this device hosts the person's workspace `workspace`:
-//!   say so at the network's lookup server, signed by the workspace's key, M3) and `resolve-host
+//!   say so at the network's lookup server, signed by the workspace's key, M3), `resolve-host
 //!   {req, key, lookup?}` (which device hosts the workspace whose key is `key`, as the lookup
-//!   server `lookup`, or the network's, says). A host on another network is dialled through the
-//!   relay its link names.
+//!   server `lookup`, or the network's, says), `sign-host {req, workspace, seq, host}` (that record
+//!   naming `host`, signed here, to hand to another device in a move) and `verify-host {req, key,
+//!   packet}` (what a record handed over says, checked against the workspace's key). A host on
+//!   another network is dialled through the relay its link names.
 //! - daemon → main: `ready {id, addrs, relay, lookup}`, `incoming {conn, peer}`, `dialed {req, conn}`,
 //!   `failed {req, error}`, `recv {conn, stream, data}`, `closed {conn, reason}`,
 //!   `pair-request {req, peer, hello}`, `paired {req, reply}`, `nearby {req, devices}`,
-//!   `published {req}` and `host {req, host, seq}` (null for both when no record is kept).
+//!   `published {req}`, `signed {req, packet}` and `host {req, host, seq}` (null for both when no
+//!   record is kept).
 //!
 //! A stream is named by its first frame and opened by the device that dialled; `data` is the
 //! frame's bytes as text, which is all main sends. What the frames mean is main's.
@@ -119,6 +122,17 @@ enum FromMain {
         #[serde(default)]
         lookup: Option<String>,
     },
+    SignHost {
+        req: u64,
+        workspace: String,
+        seq: u64,
+        host: String,
+    },
+    VerifyHost {
+        req: u64,
+        key: String,
+        packet: String,
+    },
 }
 
 #[derive(Debug, Serialize)]
@@ -169,6 +183,10 @@ enum ToMain {
     Published {
         req: u64,
     },
+    Signed {
+        req: u64,
+        packet: String,
+    },
     Host {
         req: u64,
         host: Option<String>,
@@ -185,9 +203,19 @@ struct NearbyDevice {
 
 /// One peer connection: what it is, and the queue its frames are written from, in order.
 struct Link {
-    connection: Connection,
-    out: mpsc::UnboundedSender<(String, Vec<u8>)>,
+    out: mpsc::UnboundedSender<Out>,
 }
+
+/// What goes out on a connection, in the order main said it.
+enum Out {
+    /// A frame on a named stream.
+    Frame(String, Vec<u8>),
+    /// Close it, saying why, once everything before has reached the other side.
+    Close(String),
+}
+
+/// How long a close waits for what went before it to be taken by the other side.
+const CLOSE_WAIT: Duration = Duration::from_secs(2);
 
 #[derive(Clone)]
 struct Daemon {
@@ -221,27 +249,30 @@ impl Daemon {
     ) -> (u64, Arc<Mutex<HashMap<String, SendStream>>>) {
         let conn = self.next.fetch_add(1, Ordering::Relaxed);
         let streams: Arc<Mutex<HashMap<String, SendStream>>> = Arc::default();
-        let (out, mut queue) = mpsc::unbounded_channel::<(String, Vec<u8>)>();
-        self.links.lock().unwrap().insert(
-            conn,
-            Link {
-                connection: connection.clone(),
-                out,
-            },
-        );
+        let (out, mut queue) = mpsc::unbounded_channel::<Out>();
+        self.links.lock().unwrap().insert(conn, Link { out });
         let daemon = self.clone();
         let writers = streams.clone();
         tokio::spawn(async move {
             while let Some(first) = queue.recv().await {
                 // What main sent meanwhile goes in the same write, each stream's frames in order:
-                // one packet for a moment's frames, not one for each.
+                // one packet for a moment's frames, not one for each. A close ends it, after them.
                 let mut writes: Vec<(String, Vec<u8>)> = Vec::new();
+                let mut closing = None;
                 let mut next = Some(first);
-                while let Some((stream, bytes)) = next.take() {
-                    if let Ok(frame) = framed(&bytes) {
-                        match writes.iter_mut().find(|(s, _)| *s == stream) {
-                            Some((_, buf)) => buf.extend_from_slice(&frame),
-                            None => writes.push((stream, frame)),
+                while let Some(item) = next.take() {
+                    match item {
+                        Out::Frame(stream, bytes) => {
+                            if let Ok(frame) = framed(&bytes) {
+                                match writes.iter_mut().find(|(s, _)| *s == stream) {
+                                    Some((_, buf)) => buf.extend_from_slice(&frame),
+                                    None => writes.push((stream, frame)),
+                                }
+                            }
+                        }
+                        Out::Close(reason) => {
+                            closing = Some(reason);
+                            break;
                         }
                     }
                     next = queue.try_recv().ok();
@@ -274,6 +305,21 @@ impl Daemon {
                     if send.write_all(&bytes).await.is_err() {
                         open.remove(&stream);
                     }
+                }
+                if let Some(reason) = closing {
+                    // What went before the close reaches the other side first: each stream
+                    // finished and taken there (or given up on after a moment), then closed.
+                    let _ = tokio::time::timeout(CLOSE_WAIT, async {
+                        for send in open.values_mut() {
+                            let _ = send.finish();
+                        }
+                        for send in open.values_mut() {
+                            let _ = send.stopped().await;
+                        }
+                    })
+                    .await;
+                    connection.close(0u32.into(), reason.as_bytes());
+                    break;
                 }
             }
         });
@@ -381,14 +427,14 @@ impl Daemon {
             }
             FromMain::Send { conn, stream, data } => {
                 if let Some(link) = self.links.lock().unwrap().get(&conn) {
-                    let _ = link.out.send((stream, data.into_bytes()));
+                    let _ = link.out.send(Out::Frame(stream, data.into_bytes()));
                 }
             }
             FromMain::Close { conn, reason } => {
                 let link = self.links.lock().unwrap().remove(&conn);
                 if let Some(link) = link {
                     let reason = reason.unwrap_or_else(|| "closed".into());
-                    link.connection.close(0u32.into(), reason.as_bytes());
+                    let _ = link.out.send(Out::Close(reason.clone()));
                     self.tell(ToMain::Closed { conn, reason });
                 }
             }
@@ -441,6 +487,34 @@ impl Daemon {
                     }
                 });
             }
+            FromMain::SignHost {
+                req,
+                workspace,
+                seq,
+                host,
+            } => match self.sign_host(&workspace, seq, &host) {
+                Ok(packet) => self.tell(ToMain::Signed { req, packet }),
+                Err(e) => self.tell(ToMain::Failed {
+                    req,
+                    error: format!("{e:#}"),
+                }),
+            },
+            FromMain::VerifyHost { req, key, packet } => {
+                let checked = iroh::PublicKey::from_str(&key)
+                    .with_context(|| format!("{key} is not a key"))
+                    .and_then(|key| host_record::from_text(&key, &packet));
+                match checked {
+                    Ok(r) => self.tell(ToMain::Host {
+                        req,
+                        host: Some(r.host.to_string()),
+                        seq: Some(r.seq),
+                    }),
+                    Err(e) => self.tell(ToMain::Failed {
+                        req,
+                        error: format!("{e:#}"),
+                    }),
+                }
+            }
             FromMain::ResolveHost { req, key, lookup } => {
                 let d = self.clone();
                 tokio::spawn(async move {
@@ -475,6 +549,17 @@ impl Daemon {
             seq,
         };
         host_record::publish(lookup, &signer, record).await
+    }
+
+    /// A record saying that `host` hosts the person's workspace `workspace`, the `seq`th to, signed
+    /// by the workspace's key, as one device hands it to another (a move).
+    fn sign_host(&self, workspace: &str, seq: u64, host: &str) -> Result<String> {
+        let person = key::person_key(&self.identity)?;
+        let signer = key::workspace_key(&person, workspace)?;
+        let host = EndpointId::from_str(host).with_context(|| format!("{host} is not a device"))?;
+        Ok(host_record::to_text(
+            &HostRecord { host, seq }.sign(&signer)?,
+        ))
     }
 
     /// Which device hosts the workspace whose key is `key`, as the lookup server `lookup` (or the

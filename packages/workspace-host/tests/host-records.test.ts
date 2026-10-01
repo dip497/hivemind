@@ -3,7 +3,8 @@
 // server says there that it hosts each workspace shared from it, and says it again as it is;
 // someone with the invite, on a network of their own, finds the host there; a record another of
 // the person's devices said is that device's, left alone, and a guest's joins list follows it
-// there; on a network without a lookup server nothing is said.
+// there; a guest follows a workspace that moved as the record in its host's notice says, and an
+// older record does not take it back; on a network without a lookup server nothing is said.
 import { test, expect, afterEach, beforeEach } from "bun:test";
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
@@ -95,7 +96,7 @@ test.skipIf(!built)("a device says at its network's lookup server that it hosts 
   }
 }, 60_000);
 
-test.skipIf(!built)("a record another of the person's devices said is that device's: left alone, and a guest's next dial goes to it", async () => {
+test.skipIf(!built)("a record another of the person's devices said is that device's, left alone, unless this one took the workspace later; a guest's next dial goes where it names", async () => {
   const { lookup, profile } = await network();
   const keys = machineKeys(path.join(root, "desktop", "identity"));
   machineKeys(path.join(root, "server", "identity"));
@@ -112,6 +113,11 @@ test.skipIf(!built)("a record another of the person's devices said is that devic
   expect(await guest.resolveHost(key, lookup)).toEqual({ host: server.ready.id, seq: 3 });
   expect(warned).toEqual([`workspace ${workspace.slice(0, 8)}… is hosted by ${server.ready.id.slice(0, 8)}… now`]);
 
+  // Taken back by the desktop, a move later than the server's record knows, it says so over it.
+  await new HostRecords({ net: desktop, hosted: () => [{ workspace, key, seq: 4 }], onWarn: (m) => warned.push(m) }).start();
+  expect(await guest.resolveHost(key, lookup)).toEqual({ host: desktop.ready.id, seq: 4 });
+  await server.publishHost(workspace, 3);
+
   // A guest who joined at the desktop dials the server, and keeps it so.
   const joins = new JoinedList(path.join(root, "guest", "joined.json"));
   const at = { workspace, host: desktop.ready.id, where: { addrs: desktop.ready.addrs, relay: null }, role: "edit" as const, names: { workspace: "api", host: "Adarsh" }, joinedAt: 1 };
@@ -123,6 +129,39 @@ test.skipIf(!built)("a record another of the person's devices said is that devic
   joins.add({ ...at, workspace: other });
   expect(await joins.hostOf(other, guest)).toEqual({ host: desktop.ready.id, where: at.where });
   expect(await joins.hostOf(newWorkspaceId(), guest)).toBeNull();
+}, 60_000);
+
+test.skipIf(!built)("a guest follows a workspace that moved as the record its host's notice carries says, and no older record takes it back", async () => {
+  const { lookup, profile } = await network();
+  const keys = machineKeys(path.join(root, "desktop", "identity"));
+  machineKeys(path.join(root, "server", "identity"));
+  adoptPerson(path.join(root, "server", "identity"), keys.person);
+  const [desktop, server, guest] = await Promise.all([device("desktop", profile), device("server", profile), device("guest", profile)]);
+  const workspace = newWorkspaceId();
+  const key = idOf(workspaceSeed(keys.person, workspace));
+  // The desktop hosts it, and said so; it moves it to the server, the first move.
+  await desktop.publishHost(workspace, 1);
+  const notice = { t: "moved" as const, host: server.ready.id, seq: 2, record: await desktop.signHost(workspace, 2, server.ready.id) };
+  const joins = new JoinedList(path.join(root, "guest", "joined.json"));
+  const at = { workspace, host: desktop.ready.id, where: { addrs: desktop.ready.addrs, relay: null }, role: "edit" as const, names: { workspace: "api", host: "Adarsh" }, joinedAt: 1 };
+  joins.add({ ...at, hosting: { key, lookup } });
+
+  // A notice whose record is another workspace's, or names another device than it does, is not.
+  expect(await joins.follow(workspace, { ...notice, record: await desktop.signHost(newWorkspaceId(), 2, server.ready.id) }, guest)).toBe(false);
+  expect(await joins.follow(workspace, { ...notice, host: guest.ready.id }, guest)).toBe(false);
+  expect(joins.list()[0]!.host).toBe(desktop.ready.id);
+  // The one the workspace's key signed is: the server hosts it, after one move.
+  expect(await joins.follow(workspace, notice, guest)).toBe(true);
+  expect(joins.list()[0]).toMatchObject({ host: server.ready.id, where: { addrs: [], relay: null }, seq: 2 });
+  // The desktop's record from before, at the lookup server still, does not take the guest back.
+  expect(await guest.resolveHost(key, lookup)).toEqual({ host: desktop.ready.id, seq: 1 });
+  expect(await joins.hostOf(workspace, guest)).toEqual({ host: server.ready.id, where: { addrs: [], relay: null } });
+
+  // One joined before invites carried the key follows on its host's word.
+  const before = newWorkspaceId();
+  joins.add({ ...at, workspace: before });
+  expect(await joins.follow(before, { ...notice, record: "" }, guest)).toBe(true);
+  expect(joins.list().find((j) => j.workspace === before)!.host).toBe(server.ready.id);
 }, 60_000);
 
 test.skipIf(!built)("on a network without a lookup server nothing is said, and nothing goes wrong", async () => {

@@ -189,6 +189,23 @@ export class HiveNet {
     return typeof answer.host === "string" && typeof answer.seq === "number" ? { host: answer.host, seq: answer.seq } : null;
   }
 
+  /** A record saying that `host` hosts the person's workspace `workspace`, the `seq`th to, signed by
+   *  the workspace's key here: what a move hands to the people in it (spec/hosting.md). */
+  async signHost(workspace: string, seq: number, host: string): Promise<string> {
+    const answer = await this.ask({ t: "sign-host", workspace, seq, host });
+    if (answer.t === "failed") throw new Error(String(answer.error));
+    return String(answer.packet);
+  }
+
+  /** What a record handed over says, its signature checked against the workspace's key `key`. */
+  async verifyHost(key: string, packet: string): Promise<HostRecord> {
+    const answer = await this.ask({ t: "verify-host", key, packet });
+    if (answer.t === "failed" || typeof answer.host !== "string" || typeof answer.seq !== "number") {
+      throw new Error(answer.t === "failed" ? String(answer.error) : "not a host record");
+    }
+    return { host: answer.host, seq: answer.seq };
+  }
+
   /** Stop the daemon: it is told by its socket closing, and closes its connections so the devices
    *  at their other ends hear at once; one still running after a few seconds is killed. */
   stop(): void {

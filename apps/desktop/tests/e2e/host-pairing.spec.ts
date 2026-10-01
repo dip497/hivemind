@@ -159,11 +159,13 @@ test("a frame of the app's own workspace runs on the paired host: placed on one 
   let tile = "";
   await expect.poll(async () => (tile = (await tiles(laptop)).find((t) => !before.includes(t)) ?? ""), { timeout: 20_000 }).not.toBe("");
   const terminal = laptop.locator(`.react-flow__node-terminal[data-id="${tile}"]`);
-  // Flown to and selected, as a notification does, which puts the keyboard in it.
+  // Flown to and selected, as a notification does, which puts the keyboard in it (once the tile
+  // has drawn as selected: keys typed before then are the board's).
   await expect.poll(async () => {
     await laptop.evaluate((id) => window.dispatchEvent(new CustomEvent("hivemind:focus-tile", { detail: id })), tile);
     return terminal.locator(".hm-node-selected").count();
   }, { timeout: 20_000, intervals: [500] }).toBe(1);
+  await expect(terminal.locator("textarea.xterm-helper-textarea")).toBeFocused({ timeout: 10_000 });
   await expect.poll(async () => {
     if (!read(path.join(builds, "where.txt"))) await laptop.keyboard.type('echo "$(pwd) $HIVEMIND_APP_DATA" > where.txt\n');
     return read(path.join(builds, "where.txt"));

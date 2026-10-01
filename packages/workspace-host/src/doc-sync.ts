@@ -4,7 +4,8 @@
  * the host answers with what it lacks (`welcome`), and from then on each side sends its changes as
  * they are made (`update`), from what the other has seen, so each sends only what the other
  * lacks. The host takes a replica's changes only when its access lets it edit the board: a
- * viewer's are dropped.
+ * viewer's are dropped. A device the workspace has moved away from says where it is now
+ * (`moved`, M3) and closes.
  */
 import { ROLES, type Access } from "./access.js";
 import type { WorkspaceChange, WorkspaceStore } from "./store.js";
@@ -21,7 +22,12 @@ export type Changes = (listener: (change: WorkspaceChange) => void) => () => voi
 export type SyncMessage =
   | { t: "hello"; workspace: string; seen: string | null }
   | { t: "welcome"; access: Access; data: string; seen: string }
-  | { t: "update"; data: string };
+  | { t: "update"; data: string }
+  | Moved;
+
+/** The workspace is hosted elsewhere now (M3, spec/hosting.md): by `host`, the `seq`th to, as
+ *  `record` says, signed by the workspace's key. The connection closes after it. */
+export interface Moved { t: "moved"; host: string; seq: number; record: string }
 
 const b64 = (bytes: Uint8Array): string => Buffer.from(bytes).toString("base64");
 const fromB64 = (text: string): Uint8Array => new Uint8Array(Buffer.from(text, "base64"));
@@ -32,6 +38,7 @@ export function parseSync(text: string): SyncMessage | null {
     if (m?.t === "hello" && typeof m.workspace === "string") return { t: "hello", workspace: m.workspace, seen: typeof m.seen === "string" ? m.seen : null };
     if (m?.t === "welcome" && typeof m.data === "string" && typeof m.seen === "string") return m as SyncMessage;
     if (m?.t === "update" && typeof m.data === "string") return m as SyncMessage;
+    if (m?.t === "moved" && typeof m.host === "string" && typeof m.seq === "number" && typeof m.record === "string") return { t: "moved", host: m.host, seq: m.seq, record: m.record };
     return null;
   } catch {
     return null;
@@ -87,12 +94,13 @@ export function replicate(
   store: WorkspaceStore,
   repo: string,
   channel: SyncChannel,
-  opts: { workspace: string; changes: Changes; onWelcome?: (access: Access) => void; onFailed?: (why: string) => void },
+  opts: { workspace: string; changes: Changes; onWelcome?: (access: Access) => void; onMoved?: (moved: Moved) => void; onFailed?: (why: string) => void },
 ): () => void {
   const HOST = "host";
   let hostHas = store.version(repo);
   const stopFrames = channel.on((text) => {
     const m = parseSync(text);
+    if (m?.t === "moved") return opts.onMoved?.(m);
     if (m?.t !== "welcome" && m?.t !== "update") return;
     try {
       store.importFrom(repo, fromB64(m.data), { writer: HOST });

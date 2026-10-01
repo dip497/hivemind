@@ -95,12 +95,14 @@ test("an invite link carries the host, the workspace, the secret, where to reach
   // An access service that is not a server's URL is not taken.
   const odd = formatJoinLink({ ...across, admission: { access: "javascript:alert(1)", voucher: null } });
   expect(parseJoinLink(odd)!.admission).toBeNull();
-  // From a network with a lookup server: the workspace's key, and the server its host record is at.
+  // The workspace's key, which a record of where it is hosted is checked against; and from a
+  // network with a lookup server, the server its record is at.
   const findable = { ...across, hosting: { key: "d".repeat(64), lookup: "https://hive.example.com/pkarr" } };
   expect(parseJoinLink(formatJoinLink(findable))).toEqual(findable);
-  for (const hosting of [{ key: "d".repeat(63), lookup: "https://hive.example.com/pkarr" }, { key: "d".repeat(64), lookup: "file:///etc" }]) {
-    expect(parseJoinLink(formatJoinLink({ ...across, hosting }))!.hosting).toBeNull();
-  }
+  const local = { ...link, hosting: { key: "d".repeat(64), lookup: null } };
+  expect(parseJoinLink(formatJoinLink(local))).toEqual(local);
+  expect(parseJoinLink(formatJoinLink({ ...across, hosting: { key: "d".repeat(63), lookup: "https://hive.example.com/pkarr" } }))!.hosting).toBeNull();
+  expect(parseJoinLink(formatJoinLink({ ...across, hosting: { key: "d".repeat(64), lookup: "file:///etc" } }))!.hosting).toEqual({ key: "d".repeat(64), lookup: null });
   for (const bad of ["", "https://example.com", `hivemind://join/${"a".repeat(64)}`, `hivemind://join/${"a".repeat(63)}#e30`, `hivemind://join/${"a".repeat(64)}#e30`]) {
     expect(parseJoinLink(bad)).toBeNull();
   }

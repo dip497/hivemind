@@ -1,8 +1,11 @@
 /**
  * Share (design §4.2 A): an invite link to this workspace, for a role, that expires. The link is
- * single-use unless made reusable; the person here is asked before anyone joins with it.
+ * single-use unless made reusable; the person here is asked before anyone joins with it. And
+ * where the workspace is hosted (§5.7 B): this computer, until it is moved to one of your hosts,
+ * which keeps it open while this computer sleeps.
  */
 import { useEffect, useState } from "react";
+import type { PairedDeviceSummary } from "../../../shared/ipc";
 import type { NetworkProfile } from "@hivemind/workspace-host/network-profile";
 import { ReachChooser } from "./reach-chooser";
 import { ROLE_LABELS } from "./people";
@@ -14,7 +17,7 @@ type LinkRole = "view" | "edit" | "terminals";
 
 const EXPIRIES: Array<[string, number]> = [["1 hour", 3_600_000], ["24 hours", 86_400_000], ["7 days", 604_800_000]];
 
-export function ShareDialog({ repo, open, onClose, onPeople }: { repo: string; open: boolean; onClose: () => void; onPeople: () => void }) {
+export function ShareDialog({ repo, open, onClose, onPeople, onMoved }: { repo: string; open: boolean; onClose: () => void; onPeople: () => void; onMoved: (uri: string) => void }) {
   const [role, setRole] = useState<LinkRole>("view");
   const [expiresIn, setExpiresIn] = useState(86_400_000);
   const [reusable, setReusable] = useState(false);
@@ -81,7 +84,52 @@ export function ShareDialog({ repo, open, onClose, onPeople }: { repo: string; o
         )}
         {error && <p className="text-[12px] text-[var(--color-err)]" role="alert">{error}</p>}
         <Button variant="ghost" size="sm" className="self-start" onClick={onPeople} data-share-people><Users /> People with access…</Button>
+        {!repo.startsWith("hive://") && <Hosting repo={repo} onMoved={onMoved} />}
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Where this workspace is hosted: here, until it is moved to one of the person's hosts. */
+function Hosting({ repo, onMoved }: { repo: string; onMoved: (uri: string) => void }) {
+  const [hosts, setHosts] = useState<PairedDeviceSummary[]>([]);
+  const [to, setTo] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    void window.hive.devices().then((all) => {
+      const always = all.filter((d) => d.kind === "host");
+      setHosts(always);
+      setTo((t) => t || always[0]?.device || "");
+    }, () => setHosts([]));
+  }, []);
+  const move = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      onMoved(await window.hive.moveHosting(repo, to));
+    } catch (e) {
+      setError(e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, "") : String(e));
+      setBusy(false);
+    }
+  };
+  return (
+    <section className="flex flex-col gap-2 border-t border-[var(--color-line)] pt-3" data-hosting>
+      <p className="text-[12px] text-[var(--color-fg2)]">Hosted on this computer: it goes offline when this computer sleeps.</p>
+      {hosts.length === 0 ? (
+        <p className="text-[12px] text-[var(--color-fg3)]">Pair a host under Settings → Devices to keep it, and the people in it, going while this computer sleeps.</p>
+      ) : (
+        <div className="flex items-center gap-2">
+          <select aria-label="move to" value={to} onChange={(e) => setTo(e.target.value)} data-move-to className="min-w-0 flex-1">
+            {hosts.map((h) => <option key={h.device} value={h.device}>{h.name}</option>)}
+          </select>
+          <Button size="sm" variant="outline" disabled={!to || busy} onClick={() => void move()} data-move-hosting>
+            {busy ? "Moving…" : "Move there"}
+          </Button>
+        </div>
+      )}
+      <p className="text-[11.5px] text-[var(--color-fg3)]">The board, notes, people and invite links move; whoever is in it follows. Terminals and agents keep running where they are.</p>
+      {error && <p className="text-[12px] text-[var(--color-err)]" role="alert">{error}</p>}
+    </section>
   );
 }

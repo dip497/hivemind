@@ -172,6 +172,11 @@ its link, which finds it from anywhere; from then on **Open recent → On your d
 workspaces it serves. A workspace opened from there is yours; its terminals and
 agents run on the host and keep running whatever your computer does.
 
+A workspace on your computer moves to the host from **Share → Move there**, so it stays open
+while your computer sleeps: the board, notes, the people in it and their invite links go to the
+host, whoever is in it follows by themselves, and your computer opens it from the host from then
+on. Terminals and agents in frames on your computer keep running there, reached through the host.
+
 `hive host install` writes a systemd user unit (`~/.config/systemd/user/hive-host.service`) and
 enables it. To start it with the machine, before anyone logs in, it turns lingering on
 (`loginctl enable-linger`); whatever it cannot do itself, it prints the command for. Restarting

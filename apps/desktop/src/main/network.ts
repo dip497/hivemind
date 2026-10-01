@@ -23,6 +23,8 @@ import { Devices, type PairedDevice } from "@hivemind/workspace-host/devices";
 import { enterPairing, formatPairLink, offeringNearby, pairAnnouncement, PairingOffer, parseCode, parsePairLink, type PairingDevice } from "@hivemind/workspace-host/pairing";
 import { heldWorkspaces } from "@hivemind/host/peer-links";
 import { HostRecords, type Hosted } from "@hivemind/workspace-host/host-records";
+import { Hosting } from "@hivemind/host/hosting";
+import type { Moved } from "@hivemind/workspace-host/doc-sync";
 import { handle, handleEffect, on } from "./app-ipc.js";
 import { displayName, machineIdentity, takePerson } from "./identity.js";
 import { idOf, workspaceSeed, type Seed } from "@hivemind/workspace-host/identity";
@@ -89,8 +91,33 @@ const sharesWorkspaces = (): boolean =>
   accessLists().workspaces().some((ws) => accessLists().people(ws).length > 0)
   || joinedList().list().some((j) => j.role !== "owner" && !j.ended);
 
-/** A workspace this person owns, as its host record is filed: its id, and its key. */
-const hostedAs = (workspace: string): Hosted => ({ workspace, key: idOf(workspaceSeed(machineIdentity().person, workspace)) });
+/** A workspace this person owns, as its host record is filed: its id, its key, and the moves that
+ *  brought it here (M3). */
+const hostedAs = (workspace: string): Hosted => {
+  const moved = accessLists().hosting(workspace);
+  return { workspace, key: idOf(workspaceSeed(machineIdentity().person, workspace)), ...(moved ? { seq: moved.seq } : {}) };
+};
+/** The workspaces shared from here that are hosted here still, not moved to another device. */
+const hostedHere = (): Hosted[] => accessLists().workspaces()
+  .filter((ws) => { const h = accessLists().hosting(ws); return !h || h.host === machineIdentity().deviceId; })
+  .map(hostedAs);
+
+let hosting: Hosting | null = null;
+/** Moving the workspaces hosted here to another of the person's devices, and taking them back
+ *  (M3, spec/hosting.md). */
+function hostingHere(): Hosting {
+  return (hosting ??= new Hosting({
+    self: () => machineIdentity().deviceId,
+    person: () => machineIdentity().personId,
+    store: workspaceStore(),
+    lists: accessLists(),
+    took: () => {
+      admitNow();
+      void records?.start();
+    },
+    onWarn: (m) => console.warn(`[hosting] ${m}`),
+  }));
+}
 
 /** Where the workspaces shared from here say they are hosted, on a network with a lookup server
  *  (M3, spec/host-record.md): kept while the daemon runs. */
@@ -194,7 +221,7 @@ export function network(): Promise<HiveNet> {
     });
     hn.admit(accessLists().admitted());
     records?.stop();
-    records = new HostRecords({ net: hn, hosted: () => accessLists().workspaces().map(hostedAs), onWarn: (m) => console.warn(`[hosting] ${m}`) });
+    records = new HostRecords({ net: hn, hosted: hostedHere, onWarn: (m) => console.warn(`[hosting] ${m}`) });
     records.start();
     return hn;
   })().catch((e: unknown) => { current = null; throw e; });
@@ -226,6 +253,16 @@ function restartNetwork(): void {
   void network().catch((e: unknown) => console.warn(`[network] ${e instanceof Error ? e.message : String(e)}`));
 }
 
+/** The `hive://` name of the workspace at `repo` when it was moved to another of the person's
+ *  devices (M3): it is opened from there, as its owner; null while it is hosted here. */
+export function movedAway(repo: string): string | null {
+  if (!workspaceStore().repos().includes(repo)) return null;
+  const workspace = workspaceStore().ownership(repo)?.workspaceId;
+  if (typeof workspace !== "string" || !accessLists().workspaces().includes(workspace)) return null;
+  const h = accessLists().hosting(workspace);
+  return h && h.host !== machineIdentity().deviceId && joinedList().list().some((j) => j.workspace === workspace) ? `hive://${workspace}` : null;
+}
+
 /** Open the workspace `workspace` that this person joined: its host dialled, its replica kept in
  *  sync, its events published to the windows with `publish`. One they left, or were removed from,
  *  opens as the last copy kept here, and nothing is dialled. */
@@ -244,6 +281,9 @@ export async function openJoined(workspace: string, publish: (event: EventMessag
       return hn.dial(at.host, at.where);
     },
     publish,
+    // The workspace moved to another of its owner's devices (M3): where it is now, as the record
+    // its key signed says, is where the next dial goes.
+    moved: async (notice) => joinedList().follow(workspace, notice, await network()),
     told: (ws, status) => {
       if (status.state === "removed") joinedList().update(ws, { ended: "removed" });
       else if (status.state === "connected" && status.access !== "owner") joinedList().update(ws, { role: status.access });
@@ -301,7 +341,7 @@ export async function dialDevice(device: string): Promise<Link> {
 /** Serve this computer's workspaces to whom the access lists let in. `daemon`: this computer's PTY
  *  daemon, where the person's other devices run terminals in frames here (none without one). */
 export function installNetworkIpc(server: WorkspaceServer, daemon?: () => Promise<Duplex>): void {
-  peers = new PeerLinks({ store: workspaceStore(), changes: onWorkspaceChange, lists: accessLists(), server, daemon, onWarn: (m) => console.warn(`[peers] ${m}`) });
+  peers = new PeerLinks({ store: workspaceStore(), changes: onWorkspaceChange, lists: accessLists(), server, daemon, hosting: hostingHere(), onWarn: (m) => console.warn(`[peers] ${m}`) });
   // The network in use, changed here or by `hive network use`: the daemon starts again on it.
   try {
     fs.watchFile(networkProfiles().file, { interval: 2_000 }, (now, before) => { if (now.mtimeMs !== before.mtimeMs) restartNetwork(); });
@@ -337,10 +377,11 @@ export function installNetworkIpc(server: WorkspaceServer, daemon?: () => Promis
       access: access.url,
       voucher: access.policy === "closed" ? await networkProfiles().voucher({ expiresIn: Number(expiresIn) / 1000, uses: reusable === true ? 100 : 1 }) : null,
     };
-    // On a network with a lookup server, the link says where to look for the workspace's host
-    // record: the guest finds its host there wherever it is by then. (The record is said when the
-    // daemon starts and every hour; until the workspace moves, it names the device the link does.)
-    const hosting = hn.ready.lookup ? { key: hostedAs(own.workspaceId).key, lookup: hn.ready.lookup } : null;
+    // The link carries the workspace's key, which a record of where it is hosted is checked
+    // against, and on a network with a lookup server where to look for that record: the guest
+    // finds its host there wherever it is by then. (The record is said when the daemon starts and
+    // every hour; until the workspace moves, it names the device the link does.)
+    const hosting = { key: hostedAs(own.workspaceId).key, lookup: hn.ready.lookup };
     return formatJoinLink({ host: hn.ready.id, workspace: own.workspaceId, secret, where: { addrs: hn.ready.addrs, relay: hn.ready.relay }, names: { workspace: path.basename(repo), host }, admission, hosting });
   });
 
@@ -477,6 +518,30 @@ export function installNetworkIpc(server: WorkspaceServer, daemon?: () => Promis
     const names = { workspace: typeof name === "string" && name ? name.slice(0, 200) : "workspace", host: host.name };
     // The person's own: its key is theirs to derive, and its record is on their network.
     joinedList().add({ workspace, host: host.device, where: { addrs: host.addrs, relay: host.relay }, role: "owner", names, joinedAt: Date.now(), hosting: { key: hostedAs(workspace).key, lookup: null } });
+    return `hive://${workspace}`;
+  });
+
+  // Move the workspace `repo`, hosted here, to another of the person's devices (M3, spec/hosting.md):
+  // whoever is in it follows; its frames here stay here. Its `hive://` name, which this computer
+  // opens it by from now on, as its owner, from the device it is on.
+  handleEffect("net:move-hosting", (repo: unknown) => ({ target: typeof repo === "string" ? repo : undefined }), async (_e, repo: unknown, device: unknown) => {
+    const to = pairedDevices().list().find((d) => d.device === device);
+    if (typeof repo !== "string" || !repo || repo.startsWith("hive://")) throw new Error("move: only a workspace hosted here moves from here");
+    if (!to) throw new Error("move: that is not one of your devices");
+    const hn = await network();
+    const link = await hn.dial(to.device, { addrs: to.addrs, relay: to.relay });
+    let notice: Moved;
+    try {
+      notice = await hostingHere().moveTo(repo, link, (ws, seq, host) => hn.signHost(ws, seq, host), (ws, told) => peers?.moved(ws, told));
+    } finally {
+      // What changed while it went follows on the same connection: closed once that has gone.
+      setTimeout(() => link.close("moved"), 2_000).unref?.();
+    }
+    const workspace = workspaceStore().ownership(repo)!.workspaceId as string;
+    joinedList().add({
+      workspace, host: to.device, where: { addrs: to.addrs, relay: to.relay }, role: "owner",
+      names: { workspace: path.basename(repo), host: to.name }, joinedAt: Date.now(), hosting: { key: hostedAs(workspace).key, lookup: null }, seq: notice.seq,
+    });
     return `hive://${workspace}`;
   });
 

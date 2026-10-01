@@ -14,7 +14,7 @@
  * The §8 container without a writer yet, `machines` (R9), arrives with it: a root container
  * added later needs no migration.
  */
-import type { LoroDoc } from "loro-crdt";
+import { LoroDoc } from "loro-crdt";
 
 export const META = "meta";
 export const FRAMES = "frames";
@@ -46,6 +46,18 @@ export function readOwnership(doc: LoroDoc): Ownership | null {
   const [workspaceId, owner, workspacePublicKey] = [meta.get("workspaceId"), meta.get("owner"), meta.get("workspacePublicKey")];
   if (typeof workspaceId !== "string" || typeof owner !== "string" || typeof workspacePublicKey !== "string") return null;
   return { workspaceId, owner, workspacePublicKey };
+}
+
+/** Whose a workspace is, as a document's bytes (a snapshot, or updates) say; null when they do not
+ *  say, or are not a document's. */
+export function ownershipIn(bytes: Uint8Array): Ownership | null {
+  const doc = new LoroDoc();
+  try {
+    doc.import(bytes);
+  } catch {
+    return null;
+  }
+  return readOwnership(doc);
 }
 
 /** Record that the workspace is `ownership.owner`'s now: the device that owned it took another

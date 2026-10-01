@@ -110,6 +110,8 @@ export interface MachinesSnapshot {
   catalogError?: string;
   /** The person's other devices, where a frame can run too (M3); the window adds them. */
   devices?: PairedDeviceSummary[];
+  /** This device's id, which a frame on it in a workspace hosted elsewhere names (M3). */
+  self?: string;
 }
 export interface MachineProbe {
   platform: string;
@@ -315,6 +317,9 @@ export interface HiveIpc {
   deviceWorkspaces(): Promise<Array<{ device: string; name: string; workspaces: DeviceWorkspace[] | null }>>;
   /** Open a workspace another of your devices holds, as yours: its `hive://` name, to open. */
   openDeviceWorkspace(device: string, workspace: string, name: string): Promise<string>;
+  /** Move the workspace `repo`, hosted here, to another of your devices (M3): whoever is in it
+   *  follows, and its frames here stay here. Its `hive://` name, to open it by from now on. */
+  moveHosting(repo: string, device: string): Promise<string>;
   // ── this device's network (R16) ───────────────────────────
   /** The network profile in use: a built-in one (`local`, `hosted`) or one its admin signed. */
   network(): Promise<NetworkProfile>;

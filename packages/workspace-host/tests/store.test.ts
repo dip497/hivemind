@@ -152,6 +152,20 @@ test("a machine that takes another person moves the workspaces it owned to that 
   expect(watched.takePerson(taken)).toEqual([]);
 });
 
+test("a workspace handed over by another of the owner's devices keeps whose it is, every time: it is never stamped as a new one here", () => {
+  // Each time with stores of their own: which of two stamps Loro would keep is down to chance.
+  for (let i = 0; i < 24; i++) {
+    const there = new WorkspaceStore({ dir: path.join(tmp, `there-${i}`), person });
+    there.setCore("/work/api", core("api"));
+    const theirs = there.ownership("/work/api");
+    const here = new WorkspaceStore({ dir: path.join(tmp, `here-${i}`), person });
+    here.adopt("machine://laptop/work/api", there.exportSince("/work/api", null), { writer: "host:laptop" });
+    expect(here.ownership("machine://laptop/work/api")).toEqual(theirs);
+    expect(here.getCore("machine://laptop/work/api")!.frames[0]!.title).toBe("api");
+    expect(new WorkspaceStore({ dir: path.join(tmp, `here-${i}`), person }).ownership("machine://laptop/work/api")).toEqual(theirs);
+  }
+});
+
 test("a replica catches up from what it has seen, edits merge both ways, and a replica never marks the document its own", () => {
   const host = new WorkspaceStore({ dir, person });
   const told: string[] = [];

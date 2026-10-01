@@ -6,15 +6,18 @@
  * a week. Someone with an invite finds the host by it, wherever the host is now.
  *
  * A record counts the moves that brought the workspace where it is: one not said yet is said with
- * 1, one naming this device is said again as it is, and one naming another device is that
- * device's to say (the workspace moved there) and is left alone.
+ * the count this device knows (1, for a workspace never moved), one naming this device is said
+ * again as it is, and one naming another device is that device's to say (the workspace moved
+ * there), unless this device knows of a later move: it took the workspace from that device.
  */
 import type { HiveNet } from "./hive-net.js";
 
-/** A workspace this device hosts: its id, and its public key (what its record is filed under). */
+/** A workspace this device hosts: its id, its public key (what its record is filed under), and the
+ *  moves that brought it here, as its access list says (none: never moved). */
 export interface Hosted {
   workspace: string;
   key: string;
+  seq?: number;
 }
 
 /** How often each record is said again: the lookup server forgets one after a week. */
@@ -57,14 +60,15 @@ export class HostRecords {
     }
   }
 
-  /** Say `ws`'s record, unless another device's names it. */
+  /** Say `ws`'s record, unless another device's names it after as many moves or more. */
   private async say(ws: Hosted): Promise<void> {
     const { net } = this.o;
+    const mine = ws.seq ?? 1;
     const now = await net.resolveHost(ws.key);
-    if (now && now.host !== net.ready.id) {
+    if (now && now.host !== net.ready.id && now.seq >= mine) {
       this.o.onWarn?.(`workspace ${ws.workspace.slice(0, 8)}… is hosted by ${now.host.slice(0, 8)}… now`);
       return;
     }
-    await net.publishHost(ws.workspace, now?.seq ?? 1);
+    await net.publishHost(ws.workspace, Math.max(mine, now?.host === net.ready.id ? now.seq : 0));
   }
 }

@@ -6,11 +6,13 @@
  *
  * The connection comes back by itself: when it drops, or the host cannot be reached, it is dialled
  * again, sooner at first and then every 15 s, while the window keeps showing the replica (edits
- * made meanwhile go to the host when it is back). It ends when this person leaves, or the host
- * removes them; what is kept then is the last copy, which may no longer be written.
+ * made meanwhile go to the host when it is back). When the workspace moves to another of its
+ * owner's devices (M3), the host says where, and it is dialled there at once. It ends when this
+ * person leaves, or the host removes them; what is kept then is the last copy, which may no
+ * longer be written.
  */
 import type { Access } from "@hivemind/workspace-host/access";
-import { mayEdit, replicate } from "@hivemind/workspace-host/doc-sync";
+import { mayEdit, replicate, type Moved } from "@hivemind/workspace-host/doc-sync";
 import type { Link } from "@hivemind/workspace-host/hive-net";
 import { peerTransport, workspaceUrl } from "@hivemind/workspace-api/peers";
 import type { ClientTransport } from "@hivemind/workspace-api/client";
@@ -36,6 +38,9 @@ export interface Reach {
   publish(event: EventMessage): void;
   /** Its connection changed, or the host gave another role. */
   told(workspace: string, status: SharedStatus): void;
+  /** It is hosted elsewhere now: keep where, so the next dial goes there. Whether it is followed
+   *  (a notice that does not hold up is not). */
+  moved?(notice: Moved): Promise<boolean>;
 }
 
 interface Open {
@@ -87,13 +92,20 @@ export async function openShared(workspace: string, access: Access, reach: Reach
     entry.link = link;
     entry.api = peerTransport(streamOf(link, "api"));
     entry.api.events(reach.publish);
+    let following: Promise<boolean> = Promise.resolve(false);
     const stop = replicate(sharedStore(), repo, streamOf(link, "sync"), {
       workspace,
       changes: onWorkspaceChange,
       onWelcome: (given) => { entry.tries = 0; set("connected", given); },
+      onMoved: (notice) => {
+        following = (reach.moved?.(notice) ?? Promise.resolve(false)).catch((e: unknown) => {
+          console.warn(`[shared] ${workspace}: not followed: ${e instanceof Error ? e.message : String(e)}`);
+          return false;
+        });
+      },
       onFailed: (why) => console.warn(`[shared] ${workspace}: ${why}`),
     });
-    void link.closed.then((why) => {
+    void link.closed.then(async (why) => {
       stop();
       entry.link = null;
       entry.api = null;
@@ -102,6 +114,14 @@ export async function openShared(workspace: string, access: Access, reach: Reach
       if (/removed|not admitted/.test(why)) {
         open.delete(workspace);
         return set("removed");
+      }
+      // Moved: where it is now is kept by then, and dialled at once. (Told by a notice that did not
+      // hold up, it is dialled again as after any drop, not at once.)
+      if (/\bmoved\b/.test(why) && (await following)) {
+        if (open.get(workspace) !== entry) return;
+        entry.tries = 0;
+        set("reconnecting");
+        return void connect();
       }
       again("reconnecting");
     });

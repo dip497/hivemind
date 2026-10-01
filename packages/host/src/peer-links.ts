@@ -9,9 +9,11 @@
  * headless host each serve their own store's workspaces this way.
  *
  * One of the owner's own devices (paired, spec/pairing.md) is the owner of every workspace here,
- * shared or not, and may ask on the `device` stream which ones there are (design §5.3), and run
+ * shared or not, and may ask on the `device` stream which ones there are (design §5.3), run
  * terminals in this machine's PTY daemon on the `pty` stream, for frames it hosts on this machine
- * (M3, §5.1): the stream is the daemon's own protocol, carried to the daemon and back.
+ * (M3, §5.1): the stream is the daemon's own protocol, carried to the daemon and back; and hand
+ * this device a workspace to host on the `hosting` stream (M3, spec/hosting.md). A device that
+ * comes for a workspace hosted elsewhere now is told where (`moved`), and closed.
  */
 import path from "node:path";
 import { StringDecoder } from "node:string_decoder";
@@ -23,6 +25,8 @@ import type { WorkspaceStore } from "@hivemind/workspace-host/store";
 import { servePeer, type TextChannel } from "@hivemind/workspace-api/peers";
 import type { WorkspaceServer } from "@hivemind/workspace-api/server";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
+import type { Moved } from "@hivemind/workspace-host/doc-sync";
+import type { Hosting } from "./hosting.js";
 
 /** A link's named stream as a channel of text frames. */
 export const streamOf = (link: Link, stream: string): TextChannel => ({
@@ -41,10 +45,13 @@ export interface PeerLinksOptions {
   /** This machine's PTY daemon, for the owner's devices running terminals in frames here: a new
    *  connection to it, started if it is not running. None: nobody runs terminals here. */
   daemon?(): Promise<Duplex>;
+  /** Where the workspaces here are hosted, and taking one another of the owner's devices hands
+   *  over. None: this device takes none. */
+  hosting?: Hosting;
   onWarn?(message: string): void;
 }
 
-interface Served { workspace: string; person: string; link: Link }
+interface Served { workspace: string; person: string; link: Link; stop(): void }
 
 /** A workspace a host holds, as it tells one of its owner's devices. */
 export interface HeldWorkspace { workspace: string; name: string; repo: string }
@@ -91,8 +98,14 @@ export class PeerLinks {
 
   /** Serve the device on `link` the workspace it names, if its person may reach it. */
   serve(link: Link): void {
-    const { store, lists, server } = this.o;
+    const { store, lists, server, hosting } = this.o;
     this.bridgePty(link);
+    link.on("hosting", (text) => {
+      let message: unknown;
+      try { message = JSON.parse(text); } catch { return; }
+      const answer = hosting ? hosting.take(link.peer, message) : { ok: false, error: "this device hosts nothing it is handed" };
+      if (answer) link.send("hosting", JSON.stringify(answer));
+    });
     link.on("device", (text) => {
       if (!lists.ownersDevice(link.peer)) return link.close("removed");
       const asked = parseDevice(text);
@@ -107,6 +120,12 @@ export class PeerLinks {
       const hello = parseSync(text);
       if (hello?.t !== "hello") return;
       off();
+      // Hosted elsewhere now: said where, as the workspace's key signed it.
+      const moved = hosting?.movedFrom(hello.workspace);
+      if (moved) {
+        link.send("sync", JSON.stringify(moved));
+        return link.close("moved");
+      }
       const access = lists.accessOf(hello.workspace, link.peer);
       const person = lists.personOf(hello.workspace, link.peer);
       // A workspace shared by invite is named in its list; any of the owner's is in the store.
@@ -126,7 +145,7 @@ export class PeerLinks {
         // A terminal is named by its session (`hm:<tile>`), the document by the tile.
         holds: (tile) => store.workspaceOf(toBareId(tile)) === repo,
       });
-      const entry: Served = { workspace: hello.workspace, person, link };
+      const entry: Served = { workspace: hello.workspace, person, link, stop };
       this.served.add(entry);
       void link.closed.then(() => { this.served.delete(entry); stop(); });
     });
@@ -166,6 +185,17 @@ export class PeerLinks {
   /** The people connected to `workspace` now. */
   connectedTo(workspace: string): Set<string> {
     return new Set([...this.served].filter((s) => s.workspace === workspace).map((s) => s.person));
+  }
+
+  /** `workspace` is hosted elsewhere now: each device connected to it here is told `notice`, its
+   *  changes taken no more, and its connection closed. */
+  moved(workspace: string, notice: Moved): void {
+    for (const s of [...this.served]) {
+      if (s.workspace !== workspace) continue;
+      s.stop();
+      s.link.send("sync", JSON.stringify(notice));
+      s.link.close("moved");
+    }
   }
 
   /** Close each connection `person` has to `workspace`, telling them `reason`. */

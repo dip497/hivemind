@@ -3,7 +3,8 @@
 // both ways on named streams, in order; one it does not admit is refused, and one it stops
 // admitting loses its connection within a second and cannot come back; anyone may ask to pair,
 // and the host's main answers. A host says at its network's lookup server which workspaces it
-// hosts (M3), and a device on another network reads it there.
+// hosts (M3), and a device on another network reads it there; a record one device signs naming
+// another, as a move hands it over, is checked against the workspace's key alone.
 #![cfg(unix)]
 
 mod support;
@@ -165,7 +166,8 @@ fn temp() -> PathBuf {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn an_admitted_device_connects_frames_pass_both_ways_in_order_and_main_closes_saying_why() {
+async fn an_admitted_device_connects_frames_pass_both_ways_in_order_and_main_closes_saying_why_after_them(
+) {
     let root = temp();
     let mut host = Main::start(&root, "host").await;
     let mut guest = Main::start(&root, "guest").await;
@@ -221,11 +223,31 @@ async fn an_admitted_device_connects_frames_pass_both_ways_in_order_and_main_clo
         (conn.clone(), json!("api"), json!("answer"))
     );
 
-    // Main closes a connection saying why, and the other side reads it.
+    // Main closes a connection saying why, and the other side reads it, after everything sent
+    // before the close (a workspace's host says where it moved, then closes: M3): more than goes
+    // out at once, so some of it is still on its way when main asks.
+    let pad = "x".repeat(128 * 1024);
+    for i in 0..50 {
+        host.send(json!({ "t": "send", "conn": host_conn, "stream": "sync", "data": format!("last {i:02} {pad}") }))
+            .await;
+    }
     host.send(json!({ "t": "close", "conn": host_conn, "reason": "removed" }))
         .await;
     assert_eq!(host.next("closed").await["reason"], json!("removed"));
-    let closed = guest.next("closed").await;
+    let mut last = vec![];
+    let closed = loop {
+        let m = guest.next_of(&["recv", "closed"]).await;
+        if m["t"] == "closed" {
+            break m;
+        }
+        let data = m["data"].as_str().unwrap();
+        assert_eq!(data.len(), "last 00 ".len() + pad.len());
+        last.push(data[..7].to_string());
+    };
+    assert_eq!(
+        last,
+        (0..50).map(|i| format!("last {i:02}")).collect::<Vec<_>>()
+    );
     assert_eq!(closed["conn"], conn);
     assert!(
         closed["reason"].as_str().unwrap().contains("removed"),
@@ -479,5 +501,56 @@ async fn a_host_says_at_its_lookup_server_that_it_hosts_a_workspace_and_a_device
         .as_str()
         .unwrap()
         .contains("no lookup server"));
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_record_signed_for_a_move_names_the_new_host_and_holds_only_for_its_workspace() {
+    let root = temp();
+    let mut host = Main::start(&root, "host").await;
+    let mut guest = Main::start(&root, "guest").await;
+    let person: [u8; 32] = rand::random();
+    let hex: String = person.iter().map(|b| format!("{b:02x}")).collect();
+    fs::write(root.join("host/identity/person.key"), format!("{hex}\n")).unwrap();
+    let workspace = "00112233445566778899aabbccddeeff";
+    let key_of = |id: &str| {
+        hive_net::key::workspace_key(&iroh::SecretKey::from_bytes(&person), id)
+            .unwrap()
+            .public()
+            .to_string()
+    };
+    // The device it moves to: the guest's own, as good as any.
+    let new_host = guest.id.clone();
+
+    host.send(
+        json!({ "t": "sign-host", "req": 1, "workspace": workspace, "seq": 4, "host": new_host }),
+    )
+    .await;
+    let signed = host.next_of(&["signed", "failed"]).await;
+    assert_eq!(signed["t"], "signed", "{signed}");
+    let packet = signed["packet"].as_str().unwrap().to_string();
+
+    // Anyone with the workspace's key reads it, with no lookup server between them.
+    let check = |req: u64, key: &str, packet: &str| json!({ "t": "verify-host", "req": req, "key": key, "packet": packet });
+    guest.send(check(2, &key_of(workspace), &packet)).await;
+    let read = guest.next_of(&["host", "failed"]).await;
+    assert_eq!(read["host"], new_host.as_str(), "{read}");
+    assert_eq!(read["seq"], 4);
+
+    // Not another workspace's, and not once a byte of it is changed.
+    guest
+        .send(check(
+            3,
+            &key_of("ffeeddccbbaa99887766554433221100"),
+            &packet,
+        ))
+        .await;
+    assert_eq!(guest.next_of(&["host", "failed"]).await["t"], "failed");
+    let mut bytes = base64::Engine::decode(&base64::prelude::BASE64_STANDARD, &packet).unwrap();
+    let last = bytes.len() - 1;
+    bytes[last] ^= 1;
+    let changed = base64::Engine::encode(&base64::prelude::BASE64_STANDARD, &bytes);
+    guest.send(check(4, &key_of(workspace), &changed)).await;
+    assert_eq!(guest.next_of(&["host", "failed"]).await["t"], "failed");
     let _ = fs::remove_dir_all(&root);
 }

@@ -12,12 +12,13 @@ these; the cases in `../conformance/` decide whether they do. Design:
 | `status.md` | How events and host facts fold into that status | 0.1 |
 | `hook-protocol.md` | What a hook sends the host, and the environment it gets | 0.2 |
 | `wire-protocol.md` | What any client speaks to the host (JSON-RPC 2.0) | 2 |
-| `workspace-api.md` | What a workspace's host is asked for, over any transport | 0.3 |
+| `workspace-api.md` | What a workspace's host is asked for, over any transport | 0.4 |
 | `identity.md` | Device, person and workspace keys, and device certificates | 0.1 |
 | `network-profile.md` | Where a network's servers are, signed by its admin | 0.1 |
 | `network-access.md` | Who may use a network's relays: enrolment, vouchers, registration | 0.1 |
 | `pairing.md` | Two devices of one person: the code, the proofs, the person key handed over | 0.2 |
 | `host-record.md` | Which device hosts a workspace now, signed by the workspace's key | 0.1 |
+| `hosting.md` | Moving a workspace's hosting between the owner's devices, and who follows it | 0.1 |
 
 Versions are `major.minor`: a minor adds optional fields or enum values a reader may ignore; a
 major changes or removes something. Until 1.0 anything may change.

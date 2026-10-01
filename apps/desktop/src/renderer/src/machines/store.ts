@@ -12,14 +12,19 @@ function start(): void {
   started = true;
   const tell = () => { for (const l of listeners) l(); };
   // Main's snapshot is the machines'; the person's devices come from Settings → Devices' list.
-  const set = (s: MachinesSnapshot) => { snap = { ...s, ...(snap.devices ? { devices: snap.devices } : {}) }; tell(); };
+  const set = (s: MachinesSnapshot) => { snap = { ...s, ...(snap.devices ? { devices: snap.devices } : {}), ...(snap.self ? { self: snap.self } : {}) }; tell(); };
   const setDevices = (devices: PairedDeviceSummary[]) => { snap = { ...snap, devices }; tell(); };
   window.hive.onMachines(set);
   window.hive.machinesGet().then(set).catch(() => { /* main not ready: the push brings it */ });
   const devices = () => window.hive.devices?.().then(setDevices).catch(() => { /* none to list */ });
   window.hive.onDevicesChanged?.(() => void devices());
   void devices();
+  void window.hive.identity?.().then((me) => { snap = { ...snap, self: me.deviceId }; tell(); }, () => { /* no keys yet */ });
 }
+
+/** This computer, where a frame on it is named by its id: in a workspace hosted elsewhere, the
+ *  frames it moved away with (M3). */
+const THIS_COMPUTER = "This computer";
 
 function subscribe(l: () => void): () => void {
   start();
@@ -40,7 +45,9 @@ export function placeOf(s: MachinesSnapshot, uri: string | null | undefined): Pl
   if (!isRemote(uri)) return { hostId: null };
   const onDevice = parseDeviceUri(uri);
   if (onDevice) {
-    const device = s.devices?.find((d) => d.device === onDevice.device);
+    const device = onDevice.device === s.self
+      ? { device: onDevice.device, name: THIS_COMPUTER, kind: "app" as const, pairedAt: 0 }
+      : s.devices?.find((d) => d.device === onDevice.device);
     return { ...(device ? { device } : {}), hostId: `device:${onDevice.device}` };
   }
   const at = parseMachineUri(uri);

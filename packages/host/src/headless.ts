@@ -25,6 +25,8 @@ import { Devices, type PairedDevice } from "@hivemind/workspace-host/devices";
 import { enterPairing, formatPairLink, offeringNearby, pairAnnouncement, PairingOffer, parseCode, parsePairLink, type Pairing, type PairingDevice } from "@hivemind/workspace-host/pairing";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import { HiveNet, type Ready } from "@hivemind/workspace-host/hive-net";
+import { HostRecords, type Hosted } from "@hivemind/workspace-host/host-records";
+import { idOf, workspaceSeed } from "@hivemind/workspace-host/identity";
 import { Intents } from "@hivemind/workspace-host/intents";
 import { adoptPerson, machineKeys } from "@hivemind/workspace-host/keyring";
 import { NetworkProfiles } from "@hivemind/workspace-host/network-profile";
@@ -34,6 +36,7 @@ import { toBareId } from "@hivemind/workspace-api/tile-id";
 import { agents } from "./agents.js";
 import { daemonSessions } from "./daemon-sessions.js";
 import { deviceSessions, onDevices } from "./device-sessions.js";
+import { Hosting } from "./hosting.js";
 import { workspaceDomains } from "./domains.js";
 import { PeerLinks } from "./peer-links.js";
 import { Plans } from "./plans.js";
@@ -170,6 +173,18 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
 
   // On the network: hive-net admits the devices the access lists let in, and each is served the
   // workspace it names. hive-net that stops is started again, as is one whose network changed.
+  // Workspaces the person's other devices hand over to be hosted here (M3, spec/hosting.md).
+  const hosting = new Hosting({
+    self: () => keys.deviceId,
+    person: () => keys.personId,
+    store,
+    lists,
+    took: () => {
+      net?.admit(lists.admitted());
+      void records?.start();
+    },
+    onWarn: o.onWarn,
+  });
   const peers = new PeerLinks({
     store,
     changes: (listener) => { heard.add(listener); return () => { heard.delete(listener); }; },
@@ -177,8 +192,16 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     server: api,
     // The person's devices run terminals here, in frames on this machine (M3).
     daemon: o.daemon,
+    hosting,
     onWarn: o.onWarn,
   });
+  /** The workspaces shared with someone that are hosted here, as their records are filed. */
+  const hostedHere = (): Hosted[] => lists.workspaces().flatMap((workspace) => {
+    const h = lists.hosting(workspace);
+    if (h && h.host !== keys.deviceId) return [];
+    return [{ workspace, key: idOf(workspaceSeed(keys.person, workspace)), ...(h ? { seq: h.seq } : {}) }];
+  });
+  let records: HostRecords | null = null;
   let net: HiveNet | null = null;
   let stopping = false;
   let again: ReturnType<typeof setTimeout> | null = null;
@@ -197,6 +220,8 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
         onPairRequest: async (peer, hello) => ((hello as { pair?: unknown } | null)?.pair && offer ? offer.answer(peer, hello) : { ok: false, error: "declined" }),
         onExit: (why) => {
           net = null;
+          records?.stop();
+          records = null;
           if (stopping) return;
           o.onWarn(`hive-net: ${why}; starting it again`);
           again = setTimeout(() => void startNet(), 2_000);
@@ -205,6 +230,9 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       if (stopping) return started.stop();
       started.admit(lists.admitted());
       net = started;
+      // On a network with a lookup server, where the workspaces hosted here are.
+      records = new HostRecords({ net: started, hosted: hostedHere, onWarn: o.onWarn });
+      void records.start();
     } catch (e) {
       o.onWarn(`hive-net did not start: ${e instanceof Error ? e.message : String(e)}; trying again`);
       again = setTimeout(() => void startNet(), 5_000);
@@ -295,6 +323,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       stopping = true;
       if (again) clearTimeout(again);
       if (watching) fs.unwatchFile(watching);
+      records?.stop();
       net?.stop();
       // The sessions stay in the daemons; only this host's connections to them go.
       endpoint.close();

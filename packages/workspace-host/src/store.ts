@@ -254,6 +254,21 @@ export class WorkspaceStore {
     return doc.export({ mode: "snapshot" });
   }
 
+  /**
+   * Keep a workspace another of the owner's devices handed over (a move, spec/hosting.md): its
+   * document, as `exportSince` gives it, under `repo` here, merged into what is kept for `repo`
+   * already. It says whose it is: it is never stamped as a new workspace of this one's person,
+   * which would have two workspace ids for Loro to pick one of.
+   */
+  adopt(repo: string, bytes: Uint8Array, from: Writer = {}): void {
+    if (this.workspaces.has(repo)) return this.importFrom(repo, bytes, from);
+    const doc = readDoc(this.opts.dir, repo, this.warn);
+    doc.import(bytes);
+    this.workspaces.set(repo, { doc, histories: new Map() });
+    this.persist(repo, doc);
+    this.opts.onChange?.({ repo, part: "core", writer: from.writer ?? "" });
+  }
+
   /** Take another replica's changes (updates or a whole document, as `exportSince` gives them) as
    *  `from`'s edit: written, and told like any other change. Throws for bytes that are not a
    *  document's. */

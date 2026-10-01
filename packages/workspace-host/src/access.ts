@@ -254,6 +254,43 @@ export class AccessLists {
     return typeof repo === "string" ? repo : null;
   }
 
+  /** Which of the owner's devices hosts `workspace` now, the moves that brought it there, and the
+   *  record saying so that the device it moved from hands on (M3, spec/hosting.md); null for one
+   *  never moved, which the device keeping the list hosts. */
+  hosting(workspace: string): { host: string; seq: number; record: string | null } | null {
+    const meta = this.doc(workspace).getMap("meta");
+    const host = meta.get("host");
+    const seq = meta.get("seq");
+    const record = meta.get("record");
+    return typeof host === "string" && typeof seq === "number" ? { host, seq, record: typeof record === "string" ? record : null } : null;
+  }
+
+  /** `host` hosts `workspace` from now on, the `seq`th to, as `record` says when there is one. */
+  setHosting(workspace: string, host: string, seq: number, record: string | null = null): void {
+    if (!isHex(host, 32) || !Number.isSafeInteger(seq) || seq < 1) throw new TypeError("access: a host is a device, and its count a whole number from 1");
+    this.edit(workspace, (doc) => {
+      const meta = doc.getMap("meta");
+      meta.set("host", host);
+      meta.set("seq", seq);
+      if (record) meta.set("record", record); else meta.delete("record");
+    });
+  }
+
+  /** The list of `workspace` as it is, to hand to another of the owner's devices. */
+  exportList(workspace: string): Uint8Array {
+    return this.doc(workspace).export({ mode: "snapshot" });
+  }
+
+  /** Keep the list of `workspace` another of the owner's devices handed over (a move), as the list
+   *  of the repo `repo` here. What it signed counts as it did there: the owner is one person. */
+  adoptList(workspace: string, list: Uint8Array, repo: string): void {
+    if (!isHex(workspace, 16)) throw new TypeError("access: a workspace is named by its 16-byte id in hex");
+    this.edit(workspace, (doc) => {
+      doc.import(list);
+      doc.getMap("meta").set("repo", repo);
+    });
+  }
+
   /** The workspaces with a list here. */
   workspaces(): string[] {
     return storedKeys(this.opts.dir).filter((k) => isHex(k, 16));

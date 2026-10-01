@@ -472,7 +472,7 @@ export function App() {
           onClose={() => setRecentOpen(false)}
         />
         <Suspense fallback={null}>
-          {repoPath && shareOpen && <ShareDialog repo={repoPath} open onClose={() => setShareOpen(false)} onPeople={() => { setShareOpen(false); setPeopleOpen(true); }} />}
+          {repoPath && shareOpen && <ShareDialog repo={repoPath} open onClose={() => setShareOpen(false)} onPeople={() => { setShareOpen(false); setPeopleOpen(true); }} onMoved={(uri) => { setShareOpen(false); openRecent(uri); }} />}
           {repoPath && peopleOpen && !repoPath.startsWith("hive://") && <PeopleDialog repo={repoPath} open onClose={() => setPeopleOpen(false)} />}
         </Suspense>
         <NewIssueModal

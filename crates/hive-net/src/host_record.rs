@@ -8,6 +8,7 @@
 use std::str::FromStr;
 
 use anyhow::{bail, Context, Result};
+use base64::{prelude::BASE64_STANDARD, Engine};
 use iroh::{EndpointId, PublicKey, SecretKey};
 use iroh_dns::pkarr::SignedPacket;
 use serde::Serialize;
@@ -64,6 +65,22 @@ impl HostRecord {
             _ => bail!("the packet holds more than one host record"),
         }
     }
+}
+
+/// A signed record as one device hands it to another, with no lookup server between them (a
+/// move, §5.8): its relay payload, in base64.
+pub fn to_text(packet: &SignedPacket) -> String {
+    BASE64_STANDARD.encode(packet.to_relay_payload())
+}
+
+/// The record `text` holds, its signature checked against `workspace`'s key.
+pub fn from_text(workspace: &PublicKey, text: &str) -> Result<HostRecord> {
+    let bytes = BASE64_STANDARD
+        .decode(text.trim())
+        .context("a host record is base64")?;
+    let packet = SignedPacket::from_relay_payload(workspace, &bytes)
+        .context("the record is not signed by the workspace's key")?;
+    HostRecord::of(&packet)
 }
 
 /// Where the lookup server `lookup` files what `key` signs.

@@ -38,12 +38,16 @@ not published again for seven days, so the host publishes again every hour and a
 ## Who says it, and who reads it
 
 - The host says the record of each workspace shared from it when its network starts and every
-  hour after: a workspace not said yet with `seq` 1, one whose record names it as the record
-  is, and one whose record names another device not at all (that device hosts it now).
-- An invite made on a network with a lookup server carries the workspace's public key and that
-  server (`k` and `l` in the link's fragment). Before each dial the guest reads the record there
-  and dials the device it names, keeping it as the workspace's host from then on; with no
-  record, or no answer, it dials the device it knows.
+  hour after, and when a workspace is moved to it: a workspace not said yet with the count of
+  moves it knows (1 for one never moved), one whose record names it as the record is, and one
+  whose record names another device not at all (that device hosts it now) unless it knows of a
+  later move (it took the workspace from that device, `hosting.md`).
+- An invite carries the workspace's public key (`k` in the link's fragment) and, made on a
+  network with a lookup server, that server (`l`). Before each dial the guest reads the record
+  there and, when it names another device after more moves than the guest knows of, dials that
+  device, keeping it as the workspace's host from then on; with no such record, or no answer, it
+  dials the device it knows. A move tells the guests connected at the time where the workspace
+  went (`hosting.md`).
 - The owner's own devices derive the workspace's key and read the record at their own network's
   lookup server.
 
