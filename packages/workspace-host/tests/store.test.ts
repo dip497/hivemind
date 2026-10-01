@@ -124,6 +124,34 @@ test("a workspace from before workspaces had owners is this person's from its ne
   expect(ownership("/work/api")).toEqual(mine);
 });
 
+test("a machine that takes another person moves the workspaces it owned to that person, and nobody else's; told, kept, and new ones are that person's", () => {
+  const s = new WorkspaceStore({ dir, person });
+  s.setCore("/mine", core("api"));
+  s.setCore("/also-mine", core("web"));
+  // Someone else's, on this disk: a workspace whose document says it is theirs.
+  const someone = newSeed();
+  new WorkspaceStore({ dir, person: someone }).setCore("/theirs", core("theirs"));
+  const told: string[] = [];
+  const watched = new WorkspaceStore({ dir, person, onChange: (c) => told.push(c.repo) });
+  const before = { mine: ownership("/mine"), theirs: ownership("/theirs") };
+
+  const taken = newSeed();
+  expect(watched.takePerson(taken).sort()).toEqual(["/also-mine", "/mine"]);
+  const after = ownership("/mine");
+  expect(after.workspaceId).toBe(before.mine.workspaceId);
+  expect(after.owner).toBe(idOf(taken));
+  expect(after.workspacePublicKey).toBe(idOf(workspaceSeed(taken, after.workspaceId as string)));
+  expect(ownership("/also-mine").owner).toBe(idOf(taken));
+  expect(ownership("/theirs")).toEqual(before.theirs);
+  // Told, so a replica of it hears; and on disk, so the store next started finds it so.
+  expect(told.sort()).toEqual(["/also-mine", "/mine"]);
+  expect(new WorkspaceStore({ dir, person: taken }).ownership("/mine")!.owner).toBe(idOf(taken));
+  // A workspace made from here on is the new person's; taking the same person again moves nothing.
+  watched.setCore("/new", core("new"));
+  expect(ownership("/new").owner).toBe(idOf(taken));
+  expect(watched.takePerson(taken)).toEqual([]);
+});
+
 test("a replica catches up from what it has seen, edits merge both ways, and a replica never marks the document its own", () => {
   const host = new WorkspaceStore({ dir, person });
   const told: string[] = [];

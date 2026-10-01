@@ -159,7 +159,7 @@ hive host status      # whether it runs, as which device, where it is reached, i
 hive host stop        # stop serving; the terminals keep running in the daemon
 hive host pair        # print six words, a link and a QR code for your app to enter
 hive host pair <code> # or enter the words (quoted) or the link your app shows
-                      #   (Settings → Devices → Show a code)
+                      #   (Settings → Devices → Or show a code)
 hive host add <dir>   # serve a folder on this machine as one of its workspaces
 hive host install     # run it as a service of yours (systemd): at boot, and again if it stops
 hive host uninstall   # stop running it as a service; its terminals keep running
@@ -167,8 +167,8 @@ hive host uninstall   # stop running it as a service; its terminals keep running
 
 The host is the same device the app would be on that machine (it uses the app's keys), so it
 does not run while the app does. Pairing makes it you: in the app, **Settings → Devices → Pair
-with a host** takes the six words `hive host pair` prints, which find the host on your network, or
-its link, which finds it from anywhere; from then on **Open recent → On your hosts** lists the
+with a device** takes the six words `hive host pair` prints, which find the host on your network, or
+its link, which finds it from anywhere; from then on **Open recent → On your devices** lists the
 workspaces it serves. A workspace opened from there is yours; its terminals and
 agents run on the host and keep running whatever your computer does.
 

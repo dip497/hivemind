@@ -31,7 +31,7 @@ import { UndoManager, VersionVector, type LoroDoc } from "loro-crdt";
 import { addTile, hasCore, readCore, removeTile, tileIds, writeCore, writeTileName } from "@hivemind/workspace-doc/core";
 import { readObjects, writeObjects } from "@hivemind/workspace-doc/objects";
 import { readView, readViews, writeView } from "@hivemind/workspace-doc/views";
-import { readOwnership, stampOwnership, stampSchema, type Ownership } from "@hivemind/workspace-doc/schema";
+import { readOwnership, replaceOwnership, stampOwnership, stampSchema, type Ownership } from "@hivemind/workspace-doc/schema";
 import type { BoardObject, CoreLayout, TileRecord, ViewLayout } from "@hivemind/workspace-doc/shapes";
 import type { LegacyLayout, WorkspaceChange } from "./layout.js";
 import { readDoc, storedKeys, writeDoc } from "./doc-file.js";
@@ -46,6 +46,7 @@ const boardOf = (writer: string): string => `board:${encodeURIComponent(writer)}
 const LAYOUT = "sys:layout";
 const VIEW = "sys:view";
 const IMPORT = "sys:import";
+const OWNER = "sys:owner";
 
 interface Workspace {
   doc: LoroDoc;
@@ -100,6 +101,30 @@ export class WorkspaceStore {
   /** Whose the workspace `repo` is: its id, its owner and its workspace key (R3). */
   ownership(repo: string): Ownership | null {
     return readOwnership(this.workspace(repo).doc);
+  }
+
+  /**
+   * This machine holds `person` now (pairing gave it, spec/pairing.md): a workspace the person
+   * held before owned is `person`'s from here on, its document naming `person` as its owner, with
+   * the workspace key derived from it; and one made from here on is `person`'s. A workspace
+   * someone else owns stays theirs. The folders of the workspaces that moved.
+   */
+  takePerson(person: Seed): string[] {
+    const before = this.opts.person ? idOf(this.opts.person) : null;
+    this.opts.person = person;
+    if (!before || before === idOf(person)) return [];
+    const moved: string[] = [];
+    for (const repo of this.repos()) {
+      const own = this.ownership(repo);
+      if (own?.owner !== before) continue;
+      this.write(repo, "core", OWNER, {}, (doc) => replaceOwnership(doc, {
+        workspaceId: own.workspaceId,
+        owner: idOf(person),
+        workspacePublicKey: idOf(workspaceSeed(person, own.workspaceId)),
+      }));
+      moved.push(repo);
+    }
+    return moved;
   }
 
   /** The workspaces this store holds, open or on disk: each one's folder. */

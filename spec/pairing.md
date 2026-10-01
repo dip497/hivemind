@@ -1,4 +1,4 @@
-# Pairing (0.1)
+# Pairing (0.2)
 
 Two devices become one person's (R14 and §5.2 in `docs/design/multiplayer-2026-09-28.md`): the
 device being added receives the person key and certifies itself with it (`identity.md`), so it is
@@ -8,9 +8,18 @@ runs over `hive/pair/1`, the one protocol a device answers for devices it does n
 ## The two sides
 
 Each device is of a **kind**: `app` (the desktop app, someone's own computer) or `host` (`hive
-host`, a machine that serves workspaces with nobody at it). The app **gives** the person it holds;
-the host **takes** it. Its own person key, made when it first ran, owned nothing: it is set aside
-(`person.key.<its id>.old`), not deleted. Two apps, or two hosts, do not pair yet.
+host`, a machine that serves workspaces with nobody at it). One device **gives** the person it
+holds and the other **takes** it:
+
+- an app and a host: the app gives, the host takes;
+- two apps: the one entering the code is the device being added, and takes (§5.2);
+- two hosts do not pair.
+
+The taker's own person key is set aside (`person.key.<its id>.old`), not deleted, and the
+workspaces it owned are the new person's from then on: each one's document names the new person
+as its owner, with the workspace key derived from it (`identity.md`). A device that shares a
+workspace with anyone does not take another person: those it let into its own, and those who let
+it into theirs, know it as its old one.
 
 Either side may show the code. The one that shows it is the **offering** device; the one that
 enters it dials the other and is the **entering** device.
@@ -51,12 +60,17 @@ is good only between those two devices.
 
    ```json
    { "v": 1, "pair": "prove", "proof": "<proof(\"entering\")>", "name": "<its name>", "kind": "app" | "host",
-     "certificate": { … its device certificate … }, "addrs": ["<ip:port>", …], "relay": "<url>" | null }
+     "certificate": { … its device certificate … }, "addrs": ["<ip:port>", …], "relay": "<url>" | null,
+     "shares": true }
    ```
+
+   `shares` (0.2, optional) says the entering device shares a workspace with someone, its own or
+   someone else's: it must not take another person, so an offering app refuses it.
 
    The offering device checks that a code is open, that the proof is right (compared in constant
    time; a wrong one counts against the code), that the certificate verifies and names the device
-   that connected, and that one of the two is a host and the other an app. It answers
+   that connected, that the two are not both hosts, and, when it is an app, that the entering
+   device does not share. It answers
 
    ```json
    { "ok": true, "proof": "<proof(\"offering\")>", "name": "<its name>", "kind": "app" | "host", "certificate": { … },
@@ -71,7 +85,9 @@ is good only between those two devices.
    and the offering device, which proved itself in step 1, checks the proof and that the person is
    the one that signed the certificate the giver showed, and answers `{ "ok": true }`.
 
-A failure answers `{ "ok": false, "error": "expired" | "wrong-code" | "malformed" | "not-this-device" | "same-kind" }`.
+A failure answers `{ "ok": false, "error": "expired" | "wrong-code" | "malformed" | "not-this-device" | "same-kind" | "shares" }`
+(`same-kind`: both are hosts; `shares`: the entering device would take the person, and shares a
+workspace).
 A host that already owns a workspace someone else was let into does not offer or enter a code:
 taking another person would make that workspace no longer its owner's.
 

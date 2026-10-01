@@ -65,9 +65,9 @@ export function RecentProjects({ open, recents, current, onOpen, onBrowse, onNew
           )}
           {hosts.length > 0 && (
             <>
-              <div className="px-2.5 pb-1 pt-2 text-[11px] font-medium text-[var(--color-fg3)]">On your hosts</div>
+              <div className="px-2.5 pb-1 pt-2 text-[11px] font-medium text-[var(--color-fg3)]">On your devices</div>
               {hosts.map((h) => h.workspaces === null ? (
-                <p key={h.device} className="px-2.5 py-1 text-[12px] text-[var(--color-fg3)]" data-host-offline={h.device}>{h.name} does not answer. Is `hive host` running there?</p>
+                <p key={h.device} className="px-2.5 py-1 text-[12px] text-[var(--color-fg3)]" data-host-offline={h.device}>{h.name} does not answer: is it on, with hivemind (or `hive host`) running?</p>
               ) : h.workspaces.filter((w) => `hive://${w.workspace}` !== current).map((w) => (
                 <MenuItem key={w.workspace} data-host-workspace={w.workspace} title={w.repo} onClick={() => openOnHost(h.device, w.workspace, w.name)}>
                   <Server />

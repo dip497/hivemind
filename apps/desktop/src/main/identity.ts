@@ -7,14 +7,24 @@ import { app } from "electron";
 import { execFile } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
-import { machineKeys, type MachineKeys } from "@hivemind/workspace-host/keyring";
+import { adoptPerson, machineKeys, type MachineKeys } from "@hivemind/workspace-host/keyring";
+import type { Seed } from "@hivemind/workspace-host/identity";
 import { handle } from "./app-ipc.js";
 
 let keys: MachineKeys | null = null;
+const dir = () => path.join(app.getPath("userData"), "identity");
+const warn = (m: string) => console.warn(`[identity] ${m}`);
 
 /** This machine's keys, made on first use. */
 export function machineIdentity(): MachineKeys {
-  keys ??= machineKeys(path.join(app.getPath("userData"), "identity"), (m) => console.warn(`[identity] ${m}`));
+  keys ??= machineKeys(dir(), warn);
+  return keys;
+}
+
+/** Hold `person` from now on: pairing gave it (spec/pairing.md). The person held before is set
+ *  aside, and this device certified again. The keys as they are now. */
+export function takePerson(person: Seed): MachineKeys {
+  keys = adoptPerson(dir(), person, warn);
   return keys;
 }
 

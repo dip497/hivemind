@@ -2,16 +2,16 @@
 // are the app's, in the app's data folder), on the network as that device; it is the only host on
 // the machine — a second one, or one while the app runs, is refused and the first keeps serving;
 // and it stops when asked. A laptop pairs with it (spec/pairing.md), after which the host is the
-// laptop's person, lists the workspaces it holds to the laptop and opens one to it as its owner;
-// a terminal the laptop starts there runs on after the laptop is gone. Here the laptop is this
-// test, with keys and a hive-net of its own. Needs crates/hive-net's build.
+// laptop's person, the workspaces it held moving with it, lists them to the laptop and opens one to
+// it as its owner; a terminal the laptop starts there runs on after the laptop is gone. Here the
+// laptop is this test, with keys and a hive-net of its own. Needs crates/hive-net's build.
 import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawn, type ChildProcess } from "node:child_process";
 import { cmd, hive, hiveAsync } from "./helpers.js";
-import { idOf } from "@hivemind/workspace-host/identity";
+import { idOf, workspaceSeed } from "@hivemind/workspace-host/identity";
 import { machineKeys } from "@hivemind/workspace-host/keyring";
 import { HiveNet } from "@hivemind/workspace-host/hive-net";
 import { enterPairing, pairAnnouncement, PairingOffer, parsePairLink, type Pairing } from "@hivemind/workspace-host/pairing";
@@ -159,6 +159,8 @@ describe.skipIf(!built)("hive host", () => {
         });
       });
       expect(access).toBe("owner");
+      // Added before the host was the laptop's person, it moved with the host: its document says so.
+      expect(replicas.ownership(url)).toEqual({ workspaceId: added.workspace, owner: keys.personId, workspacePublicKey: idOf(workspaceSeed(keys.person, added.workspace)) });
 
       // A shell in it, started on the host, outlives the laptop's connection.
       replicas.addTile(url, { id: "t-sh", kind: "shell", label: "sh", cmd: "sh" });

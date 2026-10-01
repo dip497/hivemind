@@ -218,7 +218,11 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     }
   };
   const keep = (pairing: Pairing): PairedDevice => {
-    if (pairing.person) adoptPerson(identity, pairing.person, o.onWarn);
+    if (pairing.person) {
+      adoptPerson(identity, pairing.person, o.onWarn);
+      // Its workspaces are the person's now: their documents name them, and their keys derive from them.
+      store.takePerson(pairing.person);
+    }
     const paired: PairedDevice = { ...pairing.with, pairedAt: Date.now() };
     devices.add(paired);
     return paired;

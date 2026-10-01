@@ -1,6 +1,8 @@
 /**
- * Pairing two devices of one person (spec/pairing.md; design §5.2, R14): the app gives the person
- * key it holds, and `hive host` takes it, so the host is that person too. One device offers a code
+ * Pairing two devices of one person (spec/pairing.md; design §5.2, R14, M3): one device gives the
+ * person key it holds and the other takes it, so both are that person. An app gives to a host; of
+ * two apps, the one entering the code is the device being added, and takes; two hosts do not pair.
+ * A device that shares workspaces with others, either way, never takes. One device offers a code
  * (six words, or a link carrying them and where the device is); the other enters it and dials. Over
  * `hive/pair/1` each proves it holds the code, bound to the two devices' keys, before anything is
  * handed over: a device that only copied what was announced learns nothing it can use.
@@ -28,8 +30,11 @@ export interface PairingDevice extends Reached {
   name: string;
   kind: DeviceKind;
   certificate: DeviceCertificate;
-  /** The person key it holds: given away by an app, replaced in a host. */
+  /** The person key it holds: given away, or replaced when this device takes another. */
   person: Seed;
+  /** People know it as its person: it let someone into a workspace of its own, or was let into
+   *  someone else's. It must not take another. */
+  shares?: boolean;
 }
 
 /** The other device, once paired. */
@@ -53,7 +58,7 @@ export const CODE_TTL_MS = 5 * 60_000;
 /** Wrong proofs a code survives; the next one voids it. */
 export const CODE_TRIES = 3;
 
-export type PairError = "expired" | "wrong-code" | "malformed" | "not-this-device" | "same-kind";
+export type PairError = "expired" | "wrong-code" | "malformed" | "not-this-device" | "same-kind" | "shares";
 
 /** A new code: six words, one per random byte. */
 export function newCode(): string {
@@ -196,10 +201,12 @@ export class PairingOffer {
     const name = nameOf(h.name);
     if (!name || !isKind(h.kind) || !certificateVerifies(h.certificate)) return fail("malformed");
     if (h.certificate.device !== peer) return fail("not-this-device");
-    if (h.kind === me.kind) return fail("same-kind");
+    if (h.kind === "host" && me.kind === "host") return fail("same-kind");
     const proof = pairProof(this.code, "offering", me.device, peer);
     const mine = { ok: true, proof, name: me.name, kind: me.kind, certificate: me.certificate, addrs: me.addrs, relay: me.relay };
     if (me.kind === "app") {
+      // The entering device would take this person, and cannot: those it shares with know it as another.
+      if (h.shares === true) return fail("shares");
       // This device gives: the person goes with the answer, to the device that proved it holds the code.
       this.over = true;
       this.settled({ with: { device: peer, name, kind: h.kind, certificate: certifyDevice(me.person, peer), ...reachedOf(h) }, person: null });
@@ -229,7 +236,8 @@ const MESSAGES: Record<string, string> = {
   expired: "that code has expired, or was used: ask the other device for a new one",
   "wrong-code": "the other device has a different code: check the words",
   "not-this-device": "the other device refused this one's certificate",
-  "same-kind": "both devices are apps, or both are hosts: pair an app with a host",
+  "same-kind": "both devices are hosts: pair a host with an app",
+  shares: "this computer shares workspaces as the person it is now: show a code here, and enter it on the other device instead",
   malformed: "the other device did not understand this one",
 };
 
@@ -241,17 +249,18 @@ export async function enterPairing(o: { me: PairingDevice; code: string; offerin
   const { me, code, offering } = o;
   const reply = (await o.ask({
     v: 1, pair: "prove", proof: pairProof(code, "entering", offering, me.device), name: me.name, kind: me.kind, certificate: me.certificate,
-    addrs: me.addrs, relay: me.relay,
+    addrs: me.addrs, relay: me.relay, ...(me.shares ? { shares: true } : {}),
   })) as Record<string, unknown> | null;
   if (!reply?.ok) throw new PairingFailed(MESSAGES[String(reply?.error)] ?? `the other device refused: ${String(reply?.error)}`);
   if (!sameProof(reply.proof, pairProof(code, "offering", offering, me.device))) throw new PairingFailed("the other device does not hold this code");
   const name = nameOf(reply.name);
   const cert = reply.certificate;
-  if (!name || !isKind(reply.kind) || reply.kind === me.kind || !certificateVerifies(cert) || cert.device !== offering) {
+  if (!name || !isKind(reply.kind) || (reply.kind === "host" && me.kind === "host") || !certificateVerifies(cert) || cert.device !== offering) {
     throw new PairingFailed(MESSAGES.malformed);
   }
-  if (me.kind === "host") {
-    // This device takes: the person given must be the one that certified the giver.
+  if (me.kind === "host" || reply.kind === "app") {
+    // This device takes (a host does; an app does when it enters another app's code): the person
+    // given must be the one that certified the giver.
     const person = seedOf(reply.person);
     if (!person || idOf(person) !== cert.person) throw new PairingFailed(MESSAGES.malformed);
     return { with: { device: offering, name, kind: reply.kind, certificate: cert, ...reachedOf(reply) }, person };

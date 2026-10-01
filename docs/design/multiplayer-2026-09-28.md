@@ -763,7 +763,10 @@ each one's terminals stream from where they run.
 3. Both show: "Pair *Adarsh's MacBook* with *Adarsh's desktop*? Both will be able to
    see and control everything on each other." **Pair**. Behind the scenes the new device
    receives your person key and a device certificate (R3), so it is "you" everywhere, and
-   starts replicating the workspaces and access lists you own.
+   starts replicating the workspaces and access lists you own. The workspaces it had are
+   yours from then on. A computer that shares a workspace with someone, its own or theirs,
+   is known to them as the person it is, so it is never the one added: pair the other way
+   round (`spec/pairing.md`).
 4. Device B appears under **Machines** on A (and vice versa) with a "Your device" badge.
 5. Unpair: Devices → the device → **Unpair**. Both sides forget each other immediately.
 

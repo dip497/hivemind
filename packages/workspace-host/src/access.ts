@@ -103,10 +103,18 @@ export interface AccessListsOptions {
 /** The access lists of the workspaces this person owns. */
 export class AccessLists {
   private readonly docs = new Map<string, LoroDoc>();
-  private readonly ownerId: string;
+  private ownerId: string;
 
   constructor(private readonly opts: AccessListsOptions) {
     this.ownerId = idOf(opts.owner);
+  }
+
+  /** This machine holds `person` now (pairing gave it, spec/pairing.md): the lists are theirs from
+   *  here on, their devices the owner and their key signing. What the person held before signed
+   *  counts no more; a device takes another person only while nobody is on its lists. */
+  takePerson(person: Seed): void {
+    this.opts.owner = person;
+    this.ownerId = idOf(person);
   }
 
   /** Give `person` `role` in `workspace` (replacing what they had), until `expires` if given. */

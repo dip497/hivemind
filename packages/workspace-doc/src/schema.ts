@@ -48,6 +48,15 @@ export function readOwnership(doc: LoroDoc): Ownership | null {
   return { workspaceId, owner, workspacePublicKey };
 }
 
+/** Record that the workspace is `ownership.owner`'s now: the device that owned it took another
+ *  person (spec/pairing.md), and its workspaces went with it. Only the owner's device does this. */
+export function replaceOwnership(doc: LoroDoc, ownership: Ownership): void {
+  const meta = doc.getMap(META);
+  meta.set("workspaceId", ownership.workspaceId);
+  meta.set("owner", ownership.owner);
+  meta.set("workspacePublicKey", ownership.workspacePublicKey);
+}
+
 /** Record whose the workspace is, as `ownership()` says, on a document that does not say yet. One
  *  that does keeps what it says: it is someone's, and stays theirs. */
 export function stampOwnership(doc: LoroDoc, ownership: () => Ownership): void {

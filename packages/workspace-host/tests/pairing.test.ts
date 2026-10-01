@@ -1,9 +1,10 @@
 // Pairing two devices of one person (pairing.ts, spec/pairing.md): whichever of an app and a host
-// shows the code, the host ends up holding the app's person and each keeps a certificate for the
-// other that names it; the person goes only to a device that proved it holds the code, and a proof
-// is good only between the two devices it was made for; wrong proofs void the code; two devices of
-// one kind do not pair. Here the channel `hive/pair/1` gives is the call to the offering device with
-// the entering device's key as the peer, which is what hive-net vouches for.
+// shows the code, the host ends up holding the app's person, and of two apps the one entering the
+// code takes the other's; each keeps a certificate for the other that names it; the person goes
+// only to a device that proved it holds the code, never to one that shares workspaces as someone
+// else, and a proof is good only between the two devices it was made for; wrong proofs void the
+// code; two hosts do not pair. Here the channel `hive/pair/1` gives is the call to the offering
+// device with the entering device's key as the peer, which is what hive-net vouches for.
 import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -145,7 +146,38 @@ describe("the person goes only to a device that holds the code", () => {
     const app = { ...device("app", "laptop"), certificate: other.certificate };
     await expect(enter(app, host, offer)).rejects.toThrow(/refused this one's certificate/);
     const { offer: second } = offered(host);
-    await expect(enter(device("host", "another host"), host, second)).rejects.toThrow(/an app with a host/);
+    await expect(enter(device("host", "another host"), host, second)).rejects.toThrow(/both devices are hosts/);
+  });
+});
+
+describe("two apps pair", () => {
+  test("the app entering the other's code is the one added: it takes that person, and each is certified to the other by it", async () => {
+    const desktop = device("app", "desktop");
+    const laptop = device("app", "laptop");
+    const { offer, settled } = offered(desktop);
+    const atLaptop = await enter(laptop, desktop, offer);
+
+    // The laptop now holds the desktop's person; the desktop keeps its own.
+    expect(atLaptop.person && idOf(atLaptop.person)).toBe(idOf(desktop.person));
+    expect(atLaptop.with).toMatchObject({ device: desktop.device, name: "desktop", kind: "app", certificate: desktop.certificate });
+    expect(settled).toHaveLength(1);
+    expect(settled[0]!.person).toBeNull();
+    expect(settled[0]!.with).toMatchObject({ device: laptop.device, name: "laptop", kind: "app" });
+    expect(certificateVerifies(settled[0]!.with.certificate)).toBe(true);
+    expect(settled[0]!.with.certificate).toMatchObject({ person: idOf(desktop.person), device: laptop.device });
+  });
+
+  test("an app that shares workspaces as its own person is not made to take another: the code is refused, and nothing is given", async () => {
+    const desktop = device("app", "desktop");
+    const laptop = { ...device("app", "laptop"), shares: true };
+    const { offer, settled } = offered(desktop);
+    await expect(enter(laptop, desktop, offer)).rejects.toThrow(/shares workspaces/);
+    expect(settled).toHaveLength(0);
+    // The other way round it gives, and that is allowed.
+    const { offer: back, settled: atLaptop } = offered(laptop);
+    const atDesktop = await enter(desktop, laptop, back);
+    expect(atDesktop.person && idOf(atDesktop.person)).toBe(idOf(laptop.person));
+    expect(atLaptop).toHaveLength(1);
   });
 });
 

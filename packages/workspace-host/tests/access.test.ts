@@ -120,6 +120,27 @@ test("the owner's other devices, paired with this one, are the owner in every wo
   expect(a.admitted()).toEqual([]);
 });
 
+test("lists that take another person are theirs: that person's devices are the owner, the old one's are nobody, and a grant is signed by the new key", () => {
+  const ws = newWorkspaceId();
+  const desktop = newSeed();
+  // The desktop's device, certified by its person: what this machine is paired with.
+  const theDesktop = certifyDevice(desktop, idOf(newSeed()));
+  const a = new AccessLists({ dir, owner, devices: () => [theDesktop] });
+  expect(a.accessOf(ws, theDesktop.device)).toBeNull();
+
+  a.takePerson(desktop);
+  expect(a.accessOf(ws, theDesktop.device)).toBe("owner");
+  expect(a.admitted()).toEqual([theDesktop.device]);
+  // A device of the person this machine held before is nobody here now.
+  const oldLaptop = certifyDevice(owner, idOf(newSeed()));
+  expect(a.addDevice(ws, oldLaptop)).toBe(false);
+  // Someone let in from here on is let in by the desktop's person, and the list holds.
+  const priya = someone();
+  a.grant(ws, priya.id, "edit");
+  expect(a.addDevice(ws, priya.cert)).toBe(true);
+  expect(new AccessLists({ dir, owner: desktop }).accessOf(ws, priya.cert.device)).toBe("edit");
+});
+
 test("what cannot be granted is refused", () => {
   const ws = newWorkspaceId();
   const a = lists();

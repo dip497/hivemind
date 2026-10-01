@@ -3,9 +3,9 @@
  * something is shared or joined (or at start when something already is), and what the app
  * decides on it. Sharing: a workspace's invite links, who asks to join and whom the person here
  * lets in (the access lists, `Sharing`); the daemon admits only the devices the lists do.
- * Joining: this person's joins elsewhere (`JoinedList`). Devices (R14, spec/pairing.md): the
- * person's hosts this app paired with, which took this person, and whose workspaces this app opens
- * as this person's.
+ * Joining: this person's joins elsewhere (`JoinedList`). Devices (R14, M3, spec/pairing.md): the
+ * person's other devices this app paired with (hosts, and other computers), which this app lets in
+ * as the owner of everything here, and whose workspaces it opens as this person's.
  */
 import { app } from "electron";
 import fs from "node:fs";
@@ -22,7 +22,8 @@ import { Devices, type PairedDevice } from "@hivemind/workspace-host/devices";
 import { enterPairing, formatPairLink, offeringNearby, pairAnnouncement, PairingOffer, parseCode, parsePairLink, type PairingDevice } from "@hivemind/workspace-host/pairing";
 import { heldWorkspaces } from "@hivemind/host/peer-links";
 import { handle, handleEffect, on } from "./app-ipc.js";
-import { displayName, machineIdentity } from "./identity.js";
+import { displayName, machineIdentity, takePerson } from "./identity.js";
+import type { Seed } from "@hivemind/workspace-host/identity";
 import { getSettings } from "./settings-store.js";
 import { broadcast, userWindow } from "./windows.js";
 import { onWorkspaceChange, workspaceStore } from "./workspace-store-ipc.js";
@@ -68,8 +69,31 @@ function accessLists(): AccessLists {
   return (lists ??= new AccessLists({
     dir: path.join(app.getPath("userData"), "access"),
     owner: machineIdentity().person,
+    // The person's other devices are the owner of every workspace here.
+    devices: () => pairedDevices().list().map((d) => d.certificate),
     onWarn: (m) => console.warn(`[access] ${m}`),
   }));
+}
+
+/** Let in, from now on, whom the access lists let in: someone added or removed, or a device paired
+ *  or unpaired. */
+function admitNow(): void {
+  void current?.then((n) => n.admit(accessLists().admitted()), () => {});
+}
+
+/** Whether people know this app as its person: it let someone into a workspace of its own, or was
+ *  let into someone else's. Then it does not take another person. */
+const sharesWorkspaces = (): boolean =>
+  accessLists().workspaces().some((ws) => accessLists().people(ws).length > 0)
+  || joinedList().list().some((j) => j.role !== "owner" && !j.ended);
+
+/** This app is the person `person` from now on: it entered another computer's code (spec/pairing.md).
+ *  Its keys, its workspaces, and the access lists it keeps are that person's. */
+function becomePerson(person: Seed): void {
+  takePerson(person);
+  workspaceStore().takePerson(person);
+  accessLists().takePerson(person);
+  admitNow();
 }
 
 let joined: JoinedList | null = null;
@@ -236,9 +260,10 @@ async function pairingMe(): Promise<PairingDevice> {
 /** A device, as Settings lists it. */
 const summary = (d: PairedDevice) => ({ device: d.device, name: d.name, kind: d.kind, pairedAt: d.pairedAt });
 
-/** Keep a device just paired with, and tell the windows. */
+/** Keep a device just paired with, let it in, and tell the windows. */
 function keepPaired(device: PairedDevice): void {
   pairedDevices().add(device);
+  admitNow();
   broadcast("net:devices-changed");
 }
 
@@ -344,7 +369,7 @@ export function installNetworkIpc(server: WorkspaceServer): void {
     const ws = ownedWorkspace(repo);
     if (typeof person !== "string" || !accessLists().revoke(ws, person)) throw new Error("people: they are not on this workspace's list");
     peers?.disconnect(ws, person, "removed");
-    (await current)?.admit(accessLists().admitted());
+    admitNow();
   });
 
   // The workspaces this person joined elsewhere.
@@ -356,7 +381,8 @@ export function installNetworkIpc(server: WorkspaceServer): void {
   // The person's devices this app paired with (Settings → Devices).
   handle("net:devices", () => pairedDevices().list().map(summary));
 
-  // A code for one of the person's hosts to enter (`hive host pair <link>`): this app gives its person.
+  // A code for another of the person's devices to enter (a host's `hive host pair <link>`, or
+  // another computer's Settings → Devices): this app gives its person.
   handleEffect("net:pair-offer", () => ({}), async () => {
     const me = await pairingMe();
     const hn = await network();
@@ -369,7 +395,8 @@ export function installNetworkIpc(server: WorkspaceServer): void {
     return { code: offer.code, link: formatPairLink({ device: me.device, addrs: me.addrs, relay: me.relay, code: offer.code, name: me.name, kind: "app" }), expires: offer.expires };
   });
 
-  // Enter the code or link one of the person's hosts shows (`hive host pair`): it takes this person.
+  // Enter the code or link another of the person's devices shows: a host (`hive host pair`) takes
+  // this person; another computer gives its own, and this app becomes that person.
   handleEffect("net:pair-enter", () => ({}), async (_e, text: unknown) => {
     const link = typeof text === "string" ? parsePairLink(text) : null;
     const code = link?.code ?? (typeof text === "string" ? parseCode(text) : null);
@@ -378,21 +405,23 @@ export function installNetworkIpc(server: WorkspaceServer): void {
     // From the words alone, the device offering them on this network; a link says where it is.
     const offering = link?.device ?? (await offeringNearby(code, () => hn.nearby()));
     const where = link ? { addrs: link.addrs, relay: link.relay } : { addrs: [], relay: null };
-    const done = await enterPairing({ me: await pairingMe(), code, offering, ask: (hello) => hn.pair(offering, where, hello) });
+    const done = await enterPairing({ me: { ...(await pairingMe()), shares: sharesWorkspaces() }, code, offering, ask: (hello) => hn.pair(offering, where, hello) });
+    if (done.person) becomePerson(done.person);
     const device = { ...done.with, pairedAt: Date.now() };
     keepPaired(device);
-    return summary(device);
+    return { ...summary(device), took: done.person !== null };
   });
 
   // Forget one of the person's devices: its workspaces are no longer listed here.
   handleEffect("net:unpair", (device: unknown) => ({ detail: String(device).slice(0, 8) }), (_e, device: unknown) => {
     if (typeof device !== "string" || !pairedDevices().remove(device)) throw new Error("unpair: that device is not paired with this one");
+    admitNow();
     broadcast("net:devices-changed");
   });
 
-  // The workspaces each of the person's hosts holds; null for one that does not answer.
+  // The workspaces each of the person's other devices holds; null for one that does not answer.
   handle("net:device-workspaces", async () => {
-    const hosts = pairedDevices().list().filter((d) => d.kind === "host");
+    const hosts = pairedDevices().list();
     if (hosts.length === 0) return [];
     const hn = await network();
     return Promise.all(hosts.map(async (d) => {
@@ -405,7 +434,7 @@ export function installNetworkIpc(server: WorkspaceServer): void {
     }));
   });
 
-  // Open a workspace one of the person's hosts holds: as theirs, a joined workspace this person owns.
+  // Open a workspace another of the person's devices holds: a joined workspace this person owns.
   handle("net:open-device-workspace", (_e, device: unknown, workspace: unknown, name: unknown) => {
     const host = pairedDevices().list().find((d) => d.device === device);
     if (!host || typeof workspace !== "string" || !/^[0-9a-f]{32}$/.test(workspace)) throw new Error("open: that is not a workspace of one of your devices");
