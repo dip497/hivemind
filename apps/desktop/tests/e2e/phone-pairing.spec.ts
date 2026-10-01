@@ -35,30 +35,40 @@ test.afterEach(async () => {
   fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 });
 
-test("a phone scans the computer's code and is certified as the person's: each lists the other, it holds no person key, and nothing is opened, moved or run on it", async () => {
-  test.skip(!hiveNetBuilt() || !fs.existsSync(HIVE_PHONE), "build hive-net and hive-phone first: cargo build in crates/hive-net and crates/hive-phone");
-  test.setTimeout(120_000);
+/** The desktop, the person's computer, with the workspace `api` open and its terminals in a
+ *  daemon, as outside tests (one a phone might try to start something in); `env` more of its
+ *  environment. */
+async function desktopWith(env: Record<string, string> = {}) {
   const repo = path.join(root, "api");
   fs.mkdirSync(repo);
   execSync("git init -q", { cwd: repo });
-  // Its terminals in a daemon, as outside tests: one a phone might try to start something in.
-  const desktop = await person(root, "desktop", repo, apps, { HIVEMIND_PTY_DAEMON: "1" });
+  const desktop = await person(root, "desktop", repo, apps, { HIVEMIND_PTY_DAEMON: "1", ...env });
   const me = await desktop.evaluate(() => window.hive.identity());
   const devices = () => desktop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "devices" } })));
+  return { repo, desktop, me, devices };
+}
 
-  // Settings → Devices → Pair a phone: a QR code of the computer's link (read here off its Copy
-  // button, as the phone reads it off the code).
-  await devices();
-  await desktop.locator("[data-pair-phone]").click();
-  await expect(desktop.locator('[data-pair-offered="phone"] [data-pair-qr]')).toBeVisible();
-  const link = (await desktop.locator("[data-pair-copy]").getAttribute("title"))!;
+/** Settings → Devices → Pair a phone, on `d`: a QR code of the computer's link (read here off its
+ *  Copy button, as the phone reads it off the code), which the phone scans, and pairs. */
+async function pairPhone(d: Awaited<ReturnType<typeof desktopWith>>) {
+  await d.devices();
+  await d.desktop.locator("[data-pair-phone]").click();
+  await expect(d.desktop.locator('[data-pair-offered="phone"] [data-pair-qr]')).toBeVisible();
+  const link = (await d.desktop.locator("[data-pair-copy]").getAttribute("title"))!;
   expect(link).toMatch(/^hivemind:\/\/pair\//);
-
-  // The phone scans it, and pairs.
   const phone = path.join(root, "phone");
   const paired = JSON.parse((await run(HIVE_PHONE, ["pair", link, "--identity", phone, "--name", "Priya's phone", "--json"], { timeout: 60_000 })).stdout) as Record<string, unknown>;
-  expect(paired).toMatchObject({ device: me.deviceId, kind: "app", person: me.personId });
   const phoneId = (await run(HIVE_PHONE, ["id", "--identity", phone])).stdout.trim();
+  return { link, phone, paired, phoneId };
+}
+
+test("a phone scans the computer's code and is certified as the person's: each lists the other, it holds no person key, and nothing is opened, moved or run on it", async () => {
+  test.skip(!hiveNetBuilt() || !fs.existsSync(HIVE_PHONE), "build hive-net and hive-phone first: cargo build in crates/hive-net and crates/hive-phone");
+  test.setTimeout(120_000);
+  const d = await desktopWith();
+  const { repo, desktop, me, devices } = d;
+  const { link, phone, paired, phoneId } = await pairPhone(d);
+  expect(paired).toMatchObject({ device: me.deviceId, kind: "app", person: me.personId });
 
   // The computer lists it as a phone; the phone lists the computer, and holds a certificate
   // naming it as the person's, and no person key.
@@ -102,4 +112,51 @@ test("a phone scans the computer's code and is certified as the person's: each l
   await devices();
   await desktop.locator(`[data-device="${phoneId}"] [data-unpair]`).click();
   await expect(desktop.locator(`[data-device="${phoneId}"]`)).toHaveCount(0);
+});
+
+test("the phone asks the computer what needs the person: an agent there waiting on a permission, by what it says it is doing, in its workspace; and nothing once it works again", async () => {
+  test.skip(!hiveNetBuilt() || !fs.existsSync(HIVE_PHONE), "build hive-net and hive-phone first: cargo build in crates/hive-net and crates/hive-phone");
+  test.setTimeout(120_000);
+  // A stand-in agent, read from its screen: it says what it is doing in its title, and asks to
+  // edit a file until it is answered, then draws its screen afresh, working.
+  const bin = path.join(root, "bin");
+  fs.mkdirSync(bin);
+  fs.writeFileSync(path.join(bin, "probe-agent"), [
+    "#!/bin/bash",
+    "printf '\\033]0;Editing Nav.tsx\\007Allow edit to Nav.tsx? (y/n) '",
+    "read -r answer",
+    "printf '\\033[2J\\033[Hprobe is thinking\\n'",
+    "exec sleep 600",
+  ].join("\n"), { mode: 0o755 });
+  const agent = path.join(root, "desktop", "hivemind", "agents", "probe");
+  fs.mkdirSync(agent, { recursive: true });
+  fs.writeFileSync(path.join(agent, "agent.yaml"), [
+    "manifestVersion: 2", "id: probe", "label: Probe", "bin: probe-agent", "enabled: true",
+    "caps: { promptDelivery: typed, turnSignal: false, resume: none, supervise: human, blockedDetection: true }",
+    "detect:", "  default: idle", "  rules:",
+    "  - when: { contains: 'Allow edit to Nav.tsx?' }", "    then: permission",
+    "  - when: { contains: probe is thinking }", "    then: working", "",
+  ].join("\n"));
+  const d = await desktopWith({ PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` });
+  const { phone } = await pairPhone(d);
+  await d.desktop.keyboard.press("Escape");
+  const needs = async () => JSON.parse((await run(HIVE_PHONE, ["needs", "--identity", phone, "--json"], { timeout: 30_000 })).stdout) as { needs: Array<Record<string, unknown>>; away: unknown[] };
+  expect(await needs()).toEqual({ needs: [], away: [] });
+
+  // The agent starts on the desktop, and asks.
+  await d.desktop.evaluate(() => window.hive.settingsSet("agents.defaultAgent", "probe"));
+  await d.desktop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:shortcut", { detail: "agent" })));
+  const terminal = d.desktop.locator(".react-flow__node-terminal");
+  await expect(terminal).toHaveCount(1, { timeout: 20_000 });
+  const tile = (await terminal.getAttribute("data-id"))!;
+  let waiting: Record<string, unknown> | undefined;
+  await expect.poll(async () => (waiting = (await needs()).needs[0])?.kind, { timeout: 30_000 }).toBe("permission");
+  expect(waiting).toMatchObject({ name: "api", tile, agent: "Editing Nav.tsx", kind: "permission" });
+  expect(Date.now() - (waiting!.since as number)).toBeLessThan(60_000);
+
+  // Answered at the desktop, it works again: nothing waits.
+  await d.desktop.evaluate((id) => window.dispatchEvent(new CustomEvent("hivemind:focus-tile", { detail: id })), tile);
+  await d.desktop.locator(`.react-flow__node[data-id="${tile}"] .xterm-helper-textarea`).focus();
+  await d.desktop.keyboard.type("y\n");
+  await expect.poll(async () => (await needs()).needs.length, { timeout: 30_000 }).toBe(0);
 });

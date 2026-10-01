@@ -325,6 +325,9 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     hosting,
     // A participant who lends their machine's keyboards, or keeps them again (M4).
     granted: (device) => terminals.machineChanged(`peer:${device}`),
+    // What waits on the person here, for their devices to ask (M5).
+    statuses: () => control.status.all(),
+    plans: () => plans.reviews(),
     onWarn: o.onWarn,
   });
   /** The workspaces shared with someone that are hosted here, as their records are filed. */

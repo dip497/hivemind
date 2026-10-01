@@ -8,6 +8,7 @@ terminal what the phone does, so it can be tried and tested without one. A phone
 hive-phone id                         # this phone's id (its device key, made the first time)
 hive-phone pair 'hivemind://pair/…'   # the link under Settings → Devices on your computer
 hive-phone devices                    # the person's devices this phone paired with
+hive-phone needs                      # what waits on you on them, the one waiting longest first
 ```
 
 Options: `--identity <dir>` (default: `hivemind-phone/identity` in this user's data folder),
@@ -19,5 +20,5 @@ It never holds that key, so a lost phone gives none away; unpair it on the compu
 the local network for now: the link says where the app is.
 
 ```bash
-cargo test --locked   # conformance/pairing.json (the phone's side), and what a phone keeps
+cargo test --locked   # conformance/pairing.json and needs.json (the phone's side), and what a phone keeps
 ```

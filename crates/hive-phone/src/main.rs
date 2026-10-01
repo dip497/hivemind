@@ -4,20 +4,25 @@
 //!   hive-phone pair <link>      pair with the app that shows this link (Settings → Devices on a
 //!                               computer): this phone is that app's person from then on
 //!   hive-phone devices          the person's devices this phone paired with
+//!   hive-phone needs            what waits on the person: each agent waiting on them, on the
+//!                               devices this phone paired with, the one waiting longest first
 //!
 //! Options: `--identity <dir>` (default: `hivemind-phone/identity` in this user's data folder),
 //! `--name <name>` (pair: what the app lists this phone as; default `Phone`), `--json` (pair,
-//! devices: as JSON).
+//! devices, needs: as JSON).
 
 use std::{path::PathBuf, process::ExitCode, time::SystemTime};
 
 use anyhow::{bail, Context, Result};
 use hive_net::net::{self, Reach};
-use hive_phone::{identity::Identity, pairing};
+use hive_phone::{
+    identity::Identity,
+    needs::{self, Need},
+    pairing,
+};
 use serde_json::json;
 
-const USAGE: &str =
-    "usage: hive-phone id | pair <link> | devices  [--identity <dir>] [--name <name>] [--json]";
+const USAGE: &str = "usage: hive-phone id | pair <link> | devices | needs  [--identity <dir>] [--name <name>] [--json]";
 
 #[derive(Default)]
 struct Args {
@@ -54,6 +59,27 @@ fn identity_dir(args: &Args) -> Result<PathBuf> {
             .context("no data folder here: name one with --identity <dir>")?
             .join("hivemind-phone")
             .join("identity")),
+    }
+}
+
+/// What an agent waits on the person for, in words.
+fn what(n: &Need) -> &'static str {
+    match n.kind.as_str() {
+        "permission" => "needs permission",
+        "question" => "asks you something",
+        "plan" => "has a plan for you to review",
+        "approval" => "waits on your approval",
+        _ => "needs you",
+    }
+}
+
+/// How long since `since`, as a person says it.
+fn waited(since: u64, now: u64) -> String {
+    let s = now.saturating_sub(since) / 1000;
+    match s {
+        0..=59 => "just now".into(),
+        60..=3599 => format!("waiting {} min", s / 60),
+        _ => format!("waiting {} h", s / 3600),
     }
 }
 
@@ -103,6 +129,51 @@ async fn run(args: Args) -> Result<()> {
             } else {
                 for d in devices {
                     println!("{}  {}  {}…", d.with.name, d.with.kind, &d.with.device[..8]);
+                }
+            }
+        }
+        "needs" => {
+            let devices = phone.devices();
+            if devices.is_empty() {
+                bail!("this phone is paired with nothing yet: `hive-phone pair <link>`");
+            }
+            // Each asked at once: one away holds up none of the others.
+            let endpoint = net::endpoint(phone.key().clone(), &Reach::local(), vec![]).await?;
+            let mut asking = tokio::task::JoinSet::new();
+            for d in devices {
+                let endpoint = endpoint.clone();
+                asking.spawn(async move { (needs::ask(&endpoint, &d.with).await, d.with) });
+            }
+            let (mut lists, mut away) = (vec![], vec![]);
+            while let Some(Ok((answer, device))) = asking.join_next().await {
+                match answer {
+                    Ok(list) => lists.push(list),
+                    Err(_) => away.push(device),
+                }
+            }
+            endpoint.close().await;
+            let all = needs::as_one(lists);
+            if args.json {
+                let away: Vec<_> = away
+                    .iter()
+                    .map(|d| json!({ "device": d.device, "name": d.name }))
+                    .collect();
+                println!("{}", json!({ "needs": all, "away": away }));
+            } else {
+                if all.is_empty() {
+                    println!("Nothing needs you.");
+                }
+                for n in &all {
+                    println!(
+                        "{} · {} — {} · {}",
+                        n.agent,
+                        n.name,
+                        what(n),
+                        waited(n.since, now_ms())
+                    );
+                }
+                for d in &away {
+                    println!("{} is away: what waits there is not known.", d.name);
                 }
             }
         }

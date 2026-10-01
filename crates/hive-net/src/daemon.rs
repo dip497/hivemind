@@ -289,11 +289,8 @@ impl Daemon {
                             );
                             continue;
                         }
-                        match connection.open_bi().await {
-                            Ok((mut send, recv)) => {
-                                if write_frame(&mut send, stream.as_bytes()).await.is_err() {
-                                    continue;
-                                }
+                        match ws::open(&connection, &stream).await {
+                            Ok((send, recv)) => {
                                 open.insert(stream.clone(), send);
                                 let reader = daemon.clone();
                                 let name = stream.clone();

@@ -1369,7 +1369,12 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     installIdentityIpc();
     // The person's other devices run terminals here in this computer's daemon, when it has one.
     // A participant who lends their machine's keyboards, or keeps them again (M4).
-    installNetworkIpc(workspaceServer, PERSIST_PTY ? ptyDaemon.connectDaemon : undefined, (device) => terminals.machineChanged(`peer:${device}`));
+    installNetworkIpc(workspaceServer, {
+      daemon: PERSIST_PTY ? ptyDaemon.connectDaemon : undefined,
+      granted: (device) => terminals.machineChanged(`peer:${device}`),
+      statuses: () => control.status.all(),
+      plans: () => plans.reviews(),
+    });
     installWorkspaceStoreIpc(layouts, workspaceIpc.connect, (change) =>
       workspaceServer.publishTo((c) => !layouts.made(c, change), "store.changed", { repo: change.repo, part: change.part }));
     void initMachines({

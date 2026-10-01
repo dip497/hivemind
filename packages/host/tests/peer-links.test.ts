@@ -1,7 +1,8 @@
 // One of the owner's phones on the links a device serves (peer-links.ts, spec/pairing.md 0.3): let
-// in as the person's device, it is answered which workspaces the device holds, and served nothing
-// else the owner's computers are: no terminals in this machine's daemon, no workspace's board or
-// calls, no files, no hosting. The owner's laptop, on the same links, is served each of them.
+// in as the person's device, it is answered which workspaces the device holds and what waits on
+// the person there (spec/needs.md), and served nothing else the owner's computers are: no
+// terminals in this machine's daemon, no workspace's board or calls, no files, no hosting. The
+// owner's laptop, on the same links, is served each of them.
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -47,7 +48,7 @@ function linkPair(device: string, computer: string): [Link, Link] {
 function computer() {
   const person = newSeed();
   const store = new WorkspaceStore({ dir: path.join(tmp, "workspaces"), person });
-  store.setCore(REPO, { v: 1, frames: [], tiles: [{ id: "t1", kind: "terminal" }] });
+  store.setCore(REPO, { v: 1, frames: [], tiles: [{ id: "t1", kind: "claude", label: "Claude" }, { id: "t2", kind: "claude", label: "Claude" }] });
   const workspace = store.ownership(REPO)!.workspaceId as string;
   const [phone, laptop, self] = [idOf(newSeed()), idOf(newSeed()), idOf(newSeed())];
   const lists = new AccessLists({ dir: path.join(tmp, "access"), owner: person, devices: () => [certifyDevice(person, phone), certifyDevice(person, laptop)] });
@@ -58,6 +59,11 @@ function computer() {
     store, changes: () => () => {}, lists, server,
     daemon: async () => { const d = new PassThrough(); daemons.push(d); return d; },
     phone: (device) => device === phone,
+    // The agent of t1 waits on the person; t2's works.
+    statuses: () => [
+      { tileId: "t1", status: { state: "waiting", kind: "permission", since: 1_790_000_000_000, title: "Editing Nav.tsx" } },
+      { tileId: "t2", status: { state: "working", since: 1_790_000_000_000 } },
+    ],
   });
   /** `device` connects: what it hears on each stream, and its end of the link. */
   const connect = (device: string) => {
@@ -76,13 +82,14 @@ function computer() {
       deviceEnd.send("files", JSON.stringify({ id: 1, method: "file.read", params: [REPO, "README.md"] }));
       deviceEnd.send("hosting", JSON.stringify({ t: "take", workspace }));
       deviceEnd.send("device", JSON.stringify({ t: "workspaces" }));
+      deviceEnd.send("device", JSON.stringify({ t: "needs" }));
     };
     return { heard, askEverything };
   };
   return { workspace, phone, laptop, daemons, connect };
 }
 
-test("a phone is answered which workspaces its computer holds, and served nothing else: no terminals, board, calls, files or hosting there", async () => {
+test("a phone is answered which workspaces its computer holds and what waits on the person there, and served nothing else: no terminals, board, calls, files or hosting", async () => {
   const c = computer();
   // The owner's laptop is served each.
   const laptop = c.connect(c.laptop);
@@ -93,8 +100,11 @@ test("a phone is answered which workspaces its computer holds, and served nothin
 
   const phone = c.connect(c.phone);
   phone.askEverything();
-  for (let t = 0; t < 5_000 && phone.heard.get("device")!.length === 0; t += 20) await wait(20);
-  assert.deepEqual(JSON.parse(phone.heard.get("device")![0]!), { t: "workspaces", workspaces: [{ workspace: c.workspace, name: "api", repo: REPO }] });
+  for (let t = 0; t < 5_000 && phone.heard.get("device")!.length < 2; t += 20) await wait(20);
+  assert.deepEqual(phone.heard.get("device")!.map((m) => JSON.parse(m) as unknown), [
+    { t: "workspaces", workspaces: [{ workspace: c.workspace, name: "api", repo: REPO }] },
+    { t: "needs", needs: [{ workspace: c.workspace, name: "api", tile: "t1", agent: "Editing Nav.tsx", kind: "permission", since: 1_790_000_000_000 }] },
+  ]);
   await wait(200);
   assert.deepEqual([...phone.heard].filter(([s, h]) => s !== "device" && h.length > 0).map(([s]) => s), [], "the phone hears on no other stream");
   assert.equal(c.daemons.length, 1, "no connection to the daemon for the phone");

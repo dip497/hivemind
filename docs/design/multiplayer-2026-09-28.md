@@ -1072,6 +1072,13 @@ agents.
 3. **Home: Needs you.** A list, most urgent first: agent, workspace, machine, reason
    (permission · question · plan), how long it has waited. Empty state: "Nothing needs
    you. 4 agents working."
+
+   *As built (M5 step 3, `spec/needs.md`):* the device that runs the agents works the list out
+   (`needs.ts`: each agent whose status waits with a kind, called what the person named it, else
+   its title, else its task, else its label, with the plan when it waits on one), and answers its
+   owner's devices on the `device` stream; the phone asks each device it paired with, shows the
+   lists as one, the one waiting longest first, and names a device that does not answer as away.
+   Not yet: the machine column, and "4 agents working".
 4. **Push notification.** "*api · Fix nav overflow* needs permission: Edit Nav.tsx" with
    **Allow** / **Deny** actions on the notification itself; tap opens the item.
 5. **Answer.** Permission → Allow once / Always / Deny. Question → the options as buttons,

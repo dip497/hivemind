@@ -60,6 +60,11 @@ export class Plans {
     };
   }
 
+  /** The plans waiting on a person now, in every workspace here. */
+  reviews(): PlanReview[] {
+    return [...this.waiting.values()].map((w) => w.review);
+  }
+
   /** An agent handed off a plan: everyone is told, and `reply` gives it the first answer. */
   ask(review: PlanReview, reply: (decision: Decision, feedback?: string) => void): void {
     this.waiting.set(review.requestId, { review, reply });

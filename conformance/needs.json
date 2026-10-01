@@ -1,0 +1,721 @@
+{
+ "about": "Cases every implementation of needs-you must pass (spec/needs.md): what a device answers waits on the person ('computer': its boards, its agents' statuses and the plans they hand off, in; the list out), and what a phone shows of the answers it is given ('phone'). Written by hand from the spec.",
+ "computer": [
+  {
+   "about": "an agent waiting on a permission, called what the person named its tile",
+   "held": [
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "core": {
+      "frames": [],
+      "tiles": [
+       {
+        "id": "t1",
+        "kind": "claude",
+        "label": "Claude",
+        "task": "fix the nav"
+       }
+      ],
+      "tileNames": {
+       "t1": "Nav fix"
+      }
+     }
+    }
+   ],
+   "statuses": [
+    {
+     "tileId": "hm:t1",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000000000,
+      "kind": "permission",
+      "title": "Editing Nav.tsx"
+     }
+    }
+   ],
+   "plans": [],
+   "needs": [
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t1",
+     "agent": "Nav fix",
+     "kind": "permission",
+     "since": 1790000000000
+    }
+   ]
+  },
+  {
+   "about": "unnamed, an agent is called what it says it is doing, else what it was started to do, else its tile's label",
+   "held": [
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "core": {
+      "frames": [],
+      "tiles": [
+       {
+        "id": "t2",
+        "kind": "claude",
+        "label": "Claude",
+        "task": "tests"
+       },
+       {
+        "id": "t3",
+        "kind": "claude",
+        "label": "Claude",
+        "task": "Refactor auth"
+       },
+       {
+        "id": "t4",
+        "kind": "claude",
+        "label": "Codex"
+       }
+      ]
+     }
+    }
+   ],
+   "statuses": [
+    {
+     "tileId": "t2",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000000000,
+      "kind": "question",
+      "title": "Writing tests"
+     }
+    },
+    {
+     "tileId": "t3",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000000001,
+      "kind": "question"
+     }
+    },
+    {
+     "tileId": "t4",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000000002,
+      "kind": "other",
+      "title": ""
+     }
+    }
+   ],
+   "plans": [],
+   "needs": [
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t2",
+     "agent": "Writing tests",
+     "kind": "question",
+     "since": 1790000000000
+    },
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t3",
+     "agent": "Refactor auth",
+     "kind": "question",
+     "since": 1790000000001
+    },
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t4",
+     "agent": "Codex",
+     "kind": "other",
+     "since": 1790000000002
+    }
+   ]
+  },
+  {
+   "about": "a plan waiting on review carries the plan; a plan of an agent no longer waiting on one is not listed",
+   "held": [
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "core": {
+      "frames": [],
+      "tiles": [
+       {
+        "id": "t5",
+        "kind": "claude",
+        "label": "Claude"
+       },
+       {
+        "id": "t6",
+        "kind": "claude",
+        "label": "Claude"
+       }
+      ]
+     }
+    }
+   ],
+   "statuses": [
+    {
+     "tileId": "t5",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000000000,
+      "kind": "plan"
+     }
+    },
+    {
+     "tileId": "t6",
+     "status": {
+      "state": "working",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000000000
+     }
+    }
+   ],
+   "plans": [
+    {
+     "requestId": "r5",
+     "tileId": "hm:t5",
+     "plan": "1. Read the routes\n2. Split them",
+     "cwd": "/work/api"
+    },
+    {
+     "requestId": "r6",
+     "tileId": "hm:t6",
+     "plan": "stale",
+     "cwd": "/work/api"
+    }
+   ],
+   "needs": [
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t5",
+     "agent": "Claude",
+     "kind": "plan",
+     "since": 1790000000000,
+     "plan": "1. Read the routes\n2. Split them"
+    }
+   ]
+  },
+  {
+   "about": "waiting on an approval, with no plan handed off: no plan",
+   "held": [
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "core": {
+      "frames": [],
+      "tiles": [
+       {
+        "id": "t7",
+        "kind": "claude",
+        "label": "Claude"
+       }
+      ]
+     }
+    }
+   ],
+   "statuses": [
+    {
+     "tileId": "t7",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000000000,
+      "kind": "approval"
+     }
+    }
+   ],
+   "plans": [],
+   "needs": [
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t7",
+     "agent": "Claude",
+     "kind": "approval",
+     "since": 1790000000000
+    }
+   ]
+  },
+  {
+   "about": "an agent doing anything else, or waiting with no kind, is not listed",
+   "held": [
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "core": {
+      "frames": [],
+      "tiles": [
+       {
+        "id": "s0",
+        "kind": "claude",
+        "label": "Claude"
+       },
+       {
+        "id": "s1",
+        "kind": "claude",
+        "label": "Claude"
+       },
+       {
+        "id": "s2",
+        "kind": "claude",
+        "label": "Claude"
+       },
+       {
+        "id": "s3",
+        "kind": "claude",
+        "label": "Claude"
+       },
+       {
+        "id": "s4",
+        "kind": "claude",
+        "label": "Claude"
+       },
+       {
+        "id": "s5",
+        "kind": "claude",
+        "label": "Claude"
+       }
+      ]
+     }
+    }
+   ],
+   "statuses": [
+    {
+     "tileId": "s0",
+     "status": {
+      "state": "working",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000000000
+     }
+    },
+    {
+     "tileId": "s1",
+     "status": {
+      "state": "done",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000000000
+     }
+    },
+    {
+     "tileId": "s2",
+     "status": {
+      "state": "failed",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000000000
+     }
+    },
+    {
+     "tileId": "s3",
+     "status": {
+      "state": "idle",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000000000
+     }
+    },
+    {
+     "tileId": "s4",
+     "status": {
+      "state": "exited",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000000000
+     }
+    },
+    {
+     "tileId": "s5",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000000000
+     }
+    }
+   ],
+   "plans": [],
+   "needs": []
+  },
+  {
+   "about": "an agent in no workspace the device holds is not listed",
+   "held": [
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "core": {
+      "frames": [],
+      "tiles": [
+       {
+        "id": "t1",
+        "kind": "claude",
+        "label": "Claude"
+       }
+      ]
+     }
+    },
+    {
+     "workspace": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+     "name": "web",
+     "core": null
+    }
+   ],
+   "statuses": [
+    {
+     "tileId": "elsewhere",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000000000,
+      "kind": "permission"
+     }
+    }
+   ],
+   "plans": [],
+   "needs": []
+  },
+  {
+   "about": "the one waiting longest first, across workspaces; of two since the same moment, the one whose tile comes first",
+   "held": [
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "core": {
+      "frames": [],
+      "tiles": [
+       {
+        "id": "t8",
+        "kind": "claude",
+        "label": "Claude"
+       },
+       {
+        "id": "t10",
+        "kind": "claude",
+        "label": "Claude"
+       }
+      ]
+     }
+    },
+    {
+     "workspace": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+     "name": "web",
+     "core": {
+      "frames": [],
+      "tiles": [
+       {
+        "id": "t9",
+        "kind": "claude",
+        "label": "Claude"
+       }
+      ]
+     }
+    }
+   ],
+   "statuses": [
+    {
+     "tileId": "t9",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000003000,
+      "kind": "permission"
+     }
+    },
+    {
+     "tileId": "t8",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000001000,
+      "kind": "question"
+     }
+    },
+    {
+     "tileId": "t10",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000001000,
+      "kind": "other"
+     }
+    }
+   ],
+   "plans": [],
+   "needs": [
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t10",
+     "agent": "Claude",
+     "kind": "other",
+     "since": 1790000001000
+    },
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t8",
+     "agent": "Claude",
+     "kind": "question",
+     "since": 1790000001000
+    },
+    {
+     "workspace": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+     "name": "web",
+     "tile": "t9",
+     "agent": "Claude",
+     "kind": "permission",
+     "since": 1790000003000
+    }
+   ]
+  }
+ ],
+ "phone": [
+  {
+   "about": "two of the person's devices answer: shown as one list, the one waiting longest first, and of two since the same moment, the one whose tile comes first",
+   "answers": [
+    {
+     "t": "needs",
+     "needs": [
+      {
+       "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+       "name": "api",
+       "tile": "t1",
+       "agent": "Nav fix",
+       "kind": "permission",
+       "since": 1790000002000
+      },
+      {
+       "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+       "name": "api",
+       "tile": "t0",
+       "agent": "Docs",
+       "kind": "question",
+       "since": 1790000002000
+      }
+     ]
+    },
+    {
+     "t": "needs",
+     "needs": [
+      {
+       "workspace": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+       "name": "web",
+       "tile": "t2",
+       "agent": "Writing tests",
+       "kind": "question",
+       "since": 1790000001000
+      },
+      {
+       "workspace": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+       "name": "web",
+       "tile": "t3",
+       "agent": "Codex",
+       "kind": "plan",
+       "since": 1790000003000,
+       "plan": "1. Split it"
+      }
+     ]
+    }
+   ],
+   "needs": [
+    {
+     "workspace": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+     "name": "web",
+     "tile": "t2",
+     "agent": "Writing tests",
+     "kind": "question",
+     "since": 1790000001000
+    },
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t0",
+     "agent": "Docs",
+     "kind": "question",
+     "since": 1790000002000
+    },
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t1",
+     "agent": "Nav fix",
+     "kind": "permission",
+     "since": 1790000002000
+    },
+    {
+     "workspace": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+     "name": "web",
+     "tile": "t3",
+     "agent": "Codex",
+     "kind": "plan",
+     "since": 1790000003000,
+     "plan": "1. Split it"
+    }
+   ]
+  },
+  {
+   "about": "an item missing what it must say, or with another kind, is left out",
+   "answers": [
+    {
+     "t": "needs",
+     "needs": [
+      {
+       "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+       "name": "api",
+       "tile": "t1",
+       "agent": "Nav fix",
+       "kind": "permission",
+       "since": 1790000002000
+      },
+      {
+       "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+       "name": "api",
+       "agent": "Nav fix",
+       "kind": "permission",
+       "since": 1790000002000
+      },
+      {
+       "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+       "name": "api",
+       "tile": "t2",
+       "agent": "Nav fix",
+       "kind": "coffee",
+       "since": 1790000002000
+      },
+      {
+       "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+       "name": "api",
+       "tile": "t3",
+       "agent": "Nav fix",
+       "kind": "permission",
+       "since": "soon"
+      },
+      {
+       "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+       "name": "api",
+       "tile": "t4",
+       "agent": 7,
+       "kind": "permission",
+       "since": 1790000002000
+      },
+      {
+       "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+       "name": "api",
+       "tile": "t5",
+       "agent": "Nav fix",
+       "kind": "permission",
+       "since": 1790000002000,
+       "plan": 9
+      },
+      "not an item"
+     ]
+    }
+   ],
+   "needs": [
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t1",
+     "agent": "Nav fix",
+     "kind": "permission",
+     "since": 1790000002000
+    }
+   ]
+  },
+  {
+   "about": "an answer that is not one says nothing",
+   "answers": [
+    {
+     "t": "workspaces",
+     "needs": [
+      {
+       "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+       "name": "api",
+       "tile": "t1",
+       "agent": "Nav fix",
+       "kind": "permission",
+       "since": 1790000002000
+      }
+     ]
+    },
+    {
+     "t": "workspaces",
+     "workspaces": []
+    },
+    {
+     "t": "needs"
+    },
+    {
+     "t": "needs",
+     "needs": "none"
+    },
+    [
+     {
+      "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "name": "api",
+      "tile": "t1",
+      "agent": "Nav fix",
+      "kind": "permission",
+      "since": 1790000002000
+     }
+    ]
+   ],
+   "needs": []
+  }
+ ]
+}

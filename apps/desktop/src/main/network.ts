@@ -32,6 +32,8 @@ import { getSettings } from "./settings-store.js";
 import { broadcast, userWindow } from "./windows.js";
 import { onWorkspaceChange, sharedStore, workspaceStore } from "./workspace-store-ipc.js";
 import { PeerLinks, type ShownMachine } from "@hivemind/host/peer-links";
+import type { WaitingStatus } from "@hivemind/host/needs";
+import type { PlanReview } from "@hivemind/workspace-api/plans";
 import { participantAt } from "@hivemind/host/device-sessions";
 import type { TerminalMachine } from "@hivemind/host/terminals";
 import type { TerminalOpts } from "@hivemind/workspace-api/terminals";
@@ -384,12 +386,24 @@ let apiServer: WorkspaceServer | null = null;
 /** This computer's PTY daemon, once the IPC is installed: none without one. */
 let daemonHere: (() => Promise<Duplex>) | undefined;
 
-export function installNetworkIpc(server: WorkspaceServer, daemon?: () => Promise<Duplex>, granted?: (device: string) => void): void {
+/** What the network's links are served from besides the workspace API: this computer's PTY daemon,
+ *  where the person's other devices run terminals in frames here (none without one); a participant
+ *  lending their machine anew (M4); and this computer's agents' statuses and the plans they wait
+ *  on, for what waits on the person (M5). */
+export interface NetworkSources {
+  daemon?: () => Promise<Duplex>;
+  granted?: (device: string) => void;
+  statuses: () => WaitingStatus[];
+  plans: () => PlanReview[];
+}
+
+export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, statuses, plans }: NetworkSources): void {
   apiServer = server;
   daemonHere = daemon;
   peers = new PeerLinks({
     store: workspaceStore(), changes: onWorkspaceChange, lists: accessLists(), server, daemon, hosting: hostingHere(), granted,
     phone: (device) => pairedDevices().list().some((d) => d.device === device && d.kind === "phone"),
+    statuses, plans,
     onWarn: (m) => console.warn(`[peers] ${m}`),
   });
   // The network in use, changed here or by `hive network use`: the daemon starts again on it.

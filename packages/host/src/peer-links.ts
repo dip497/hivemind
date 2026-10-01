@@ -22,8 +22,9 @@
  * person lets the people here do on it (`Grant`), as they change it.
  *
  * One of the owner's phones (spec/pairing.md 0.3) is let in, as their device, for what a phone
- * does: it may ask on the `device` stream which workspaces there are, and nothing of the rest
- * (no terminals in this machine's daemon, no workspace's board, files or calls, no hosting).
+ * does: it may ask on the `device` stream which workspaces there are and what waits on the person
+ * in them (`needs`, spec/needs.md), and nothing of the rest (no terminals in this machine's
+ * daemon, no workspace's board, files or calls, no hosting).
  */
 import path from "node:path";
 import { StringDecoder } from "node:string_decoder";
@@ -40,6 +41,8 @@ import type { Moved } from "@hivemind/workspace-host/doc-sync";
 import type { Hosting } from "./hosting.js";
 import { MACHINE_OFFER, grantOf, type Grant } from "./machine-share.js";
 import { serveFiles } from "./device-files.js";
+import { needsOf, type Need, type WaitingStatus } from "./needs.js";
+import type { PlanReview } from "@hivemind/workspace-api/plans";
 import { linkDuplex } from "./device-sessions.js";
 
 /** A link's named stream as a channel of text frames. */
@@ -67,6 +70,10 @@ export interface PeerLinksOptions {
   /** Whether `device` is one of the owner's phones, which is served what a phone does alone. None:
    *  no phone pairs with this device. */
   phone?(device: string): boolean;
+  /** Its agents' statuses, and the plans they wait on a person for: what the owner's devices are
+   *  told waits on the person here. None: nothing does. */
+  statuses?(): WaitingStatus[];
+  plans?(): PlanReview[];
   onWarn?(message: string): void;
 }
 
@@ -75,12 +82,15 @@ interface Served { workspace: string; person: string; link: Link; stop(): void }
 /** A workspace a host holds, as it tells one of its owner's devices. */
 export interface HeldWorkspace { workspace: string; name: string; repo: string }
 
-/** What the `device` stream carries: the question (no list), and the host's answer. */
-export interface DeviceMessage { t: "workspaces"; workspaces?: HeldWorkspace[] }
+/** What the `device` stream carries: a question (no list), and the host's answer: which workspaces
+ *  it holds, or what waits on the person in them. */
+export type DeviceMessage = { t: "workspaces"; workspaces?: HeldWorkspace[] } | { t: "needs"; needs?: Need[] };
 
 function parseDevice(text: string): DeviceMessage | null {
   try {
-    const m = JSON.parse(text) as { t?: unknown; workspaces?: unknown };
+    const m = JSON.parse(text) as { t?: unknown; workspaces?: unknown; needs?: unknown };
+    // Asked what waits on the person; its answer is read by the person's phone (spec/needs.md).
+    if (m.t === "needs" && m.needs === undefined) return { t: "needs" };
     if (m.t !== "workspaces") return null;
     if (!Array.isArray(m.workspaces)) return { t: "workspaces" };
     const workspaces = m.workspaces.filter((w): w is HeldWorkspace => {
@@ -99,7 +109,7 @@ export function heldWorkspaces(link: Link, timeoutMs = 10_000): Promise<HeldWork
   return new Promise((resolve, reject) => {
     const off = link.on("device", (text) => {
       const m = parseDevice(text);
-      if (!m?.workspaces) return;
+      if (m?.t !== "workspaces" || !m.workspaces) return;
       clearTimeout(timer);
       off();
       resolve(m.workspaces);
@@ -198,17 +208,28 @@ export class PeerLinks {
     });
   }
 
-  /** Answer one of the owner's devices asking on the `device` stream which workspaces are here. */
+  /** Answer one of the owner's devices asking on the `device` stream which workspaces are here, or
+   *  what waits on the person in them. */
   private answerDevice(link: Link, text: string): void {
     const { store, lists } = this.o;
     if (!lists.ownersDevice(link.peer)) return link.close("removed");
     const asked = parseDevice(text);
-    if (!asked || asked.workspaces) return;
-    const workspaces = store.repos().flatMap((repo) => {
+    if (asked?.t === "needs") {
+      const boards = this.held().map(({ workspace, name, repo }) => ({ workspace, name, core: store.getCore(repo) }));
+      const needs = needsOf(boards, this.o.statuses?.() ?? [], this.o.plans?.() ?? []);
+      return link.send("device", JSON.stringify({ t: "needs", needs } satisfies DeviceMessage));
+    }
+    if (asked?.t !== "workspaces" || asked.workspaces) return;
+    link.send("device", JSON.stringify({ t: "workspaces", workspaces: this.held() } satisfies DeviceMessage));
+  }
+
+  /** The workspaces this device holds. */
+  private held(): HeldWorkspace[] {
+    const { store } = this.o;
+    return store.repos().flatMap((repo) => {
       const workspace = store.ownership(repo)?.workspaceId;
       return workspace ? [{ workspace, name: path.basename(repo), repo }] : [];
     });
-    link.send("device", JSON.stringify({ t: "workspaces", workspaces } satisfies DeviceMessage));
   }
 
   /** The sessions on the participant's machine `device` (M4), for the workspace here that `tile`
