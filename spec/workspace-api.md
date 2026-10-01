@@ -64,7 +64,11 @@ A peer names the workspace by its id, `hive://<workspaceId>`, wherever a call ta
 path out of it (`..`), another workspace or a machine is `FORBIDDEN` (a notice is dropped). The
 person's own devices are the owner, there as here. What the host answers of every agent it runs
 (`status.all`, `link.list`) a peer is answered for the workspace's own agents alone, as it hears
-only their events. Each call and notice is checked against the
+only their events. One of the owner's phones (`pairing.md` 0.3) opens a workspace's API on its own
+connection, the `api` stream's first frame naming it (`{ "t": "open", "workspace": "<id>" }`; any
+other first frame, or a workspace not held there, closes the connection), as a viewer that may
+call `terminal.open` with `attachOnly` and nothing else: it watches a terminal, its screen and then
+its output, and never types into one (M5). Each call and notice is checked against the
 peer's role on the workspace (design §6) before it runs, and one the role does not allow is
 `FORBIDDEN` (a notice is dropped): reads and watching terminals are anyone's with access; typing
 into and resizing a terminal, and asking for its keyboard or handing it on, *Can use terminals*;

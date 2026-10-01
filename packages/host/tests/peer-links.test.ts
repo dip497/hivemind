@@ -1,8 +1,9 @@
 // One of the owner's phones on the links a device serves (peer-links.ts, spec/pairing.md 0.3): let
 // in as the person's device, it is answered which workspaces the device holds and what waits on
-// the person there (spec/needs.md), and served nothing else the owner's computers are: no
-// terminals in this machine's daemon, no workspace's board or calls, no files, no hosting. The
-// owner's laptop, on the same links, is served each of them.
+// the person there (spec/needs.md), and may open one workspace to watch its terminals, as a viewer
+// does; it is served nothing else the owner's computers are: no terminals started in this
+// machine's daemon, no workspace's board, files or other calls, no hosting. The owner's laptop, on
+// the same links, is served each of them.
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -12,17 +13,17 @@ import { PassThrough } from "node:stream";
 import { AccessLists } from "@hivemind/workspace-host/access";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import { certifyDevice, idOf, newSeed } from "@hivemind/workspace-host/identity";
-import { Intents } from "@hivemind/workspace-host/intents";
+import { Intents, type Actor } from "@hivemind/workspace-host/intents";
 import type { Link } from "@hivemind/workspace-host/hive-net";
 import { WorkspaceStore } from "@hivemind/workspace-host/store";
-import { WorkspaceServer } from "@hivemind/workspace-api/server";
+import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server";
 import { workspaceDomains } from "../src/domains.ts";
 import { PeerLinks } from "../src/peer-links.ts";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hm-peer-links-"));
 after(() => fs.rmSync(tmp, { recursive: true, force: true }));
-const REPO = path.join(tmp, "api");
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+let made = 0;
 
 /** Two ends of one connection: frames arrive in order, a moment after they are sent. */
 function linkPair(device: string, computer: string): [Link, Link] {
@@ -44,15 +45,26 @@ function linkPair(device: string, computer: string): [Link, Link] {
   return [end(0, device), end(1, computer)];
 }
 
-/** The person's computer, holding the workspace in `REPO`, with their phone and laptop paired. */
+/** The person's computer, holding the workspace `api`, with their phone and laptop paired. */
 function computer() {
+  const dir = path.join(tmp, String(made++));
+  const repo = path.join(dir, "api");
   const person = newSeed();
-  const store = new WorkspaceStore({ dir: path.join(tmp, "workspaces"), person });
-  store.setCore(REPO, { v: 1, frames: [], tiles: [{ id: "t1", kind: "claude", label: "Claude" }, { id: "t2", kind: "claude", label: "Claude" }] });
-  const workspace = store.ownership(REPO)!.workspaceId as string;
+  const store = new WorkspaceStore({ dir: path.join(dir, "workspaces"), person });
+  store.setCore(repo, { v: 1, frames: [], tiles: [{ id: "t1", kind: "claude", label: "Claude" }, { id: "t2", kind: "claude", label: "Claude" }] });
+  const workspace = store.ownership(repo)!.workspaceId as string;
   const [phone, laptop, self] = [idOf(newSeed()), idOf(newSeed()), idOf(newSeed())];
-  const lists = new AccessLists({ dir: path.join(tmp, "access"), owner: person, devices: () => [certifyDevice(person, phone), certifyDevice(person, laptop)] });
-  const server = new WorkspaceServer(workspaceDomains, new Intents(new AuditLog({ file: path.join(tmp, "audit.jsonl") })));
+  const lists = new AccessLists({ dir: path.join(dir, "access"), owner: person, devices: () => [certifyDevice(person, phone), certifyDevice(person, laptop)] });
+  /** Each terminal a connection opened, and as whom: what the host's terminals would show. */
+  const watched: Array<{ by: Actor; opts: unknown }> = [];
+  /** What was typed into a terminal, and by whom. */
+  const typed: Array<{ by: Actor; tile: unknown }> = [];
+  const terminals = {
+    answers: { "terminal.open": (from: Connection, opts: unknown) => { watched.push({ by: from.actor, opts }); return { pid: 1, joined: true }; } },
+    effects: {},
+    notices: { "terminal.write": (from: Connection, tile: unknown) => { typed.push({ by: from.actor, tile }); } },
+  };
+  const server = new WorkspaceServer([...workspaceDomains, terminals], new Intents(new AuditLog({ file: path.join(dir, "audit.jsonl") })));
   /** The connections made to this machine's terminal daemon: each echoes what it is sent. */
   const daemons: PassThrough[] = [];
   const links = new PeerLinks({
@@ -74,38 +86,64 @@ function computer() {
       heard.set(stream, []);
       deviceEnd.on(stream, (t) => heard.get(stream)!.push(t));
     }
-    /** Ask on each stream what an owner's computer asks. */
-    const askEverything = () => {
-      deviceEnd.send("pty", JSON.stringify({ t: "attach", reqId: 1, id: "hm:t1", spec: { cwd: REPO, cmd: "/bin/sh", args: [], cols: 80, rows: 24 } }));
-      deviceEnd.send("sync", JSON.stringify({ t: "hello", workspace, seen: null }));
-      deviceEnd.send("api", JSON.stringify({ id: 1, method: "status.all", params: [] }));
-      deviceEnd.send("files", JSON.stringify({ id: 1, method: "file.read", params: [REPO, "README.md"] }));
-      deviceEnd.send("hosting", JSON.stringify({ t: "take", workspace }));
-      deviceEnd.send("device", JSON.stringify({ t: "workspaces" }));
-      deviceEnd.send("device", JSON.stringify({ t: "needs" }));
-    };
-    return { heard, askEverything };
+    return { heard, send: (stream: string, m: unknown) => deviceEnd.send(stream, JSON.stringify(m)), closed: computerEnd.closed };
   };
-  return { workspace, phone, laptop, daemons, connect };
+  return { repo, workspace, phone, laptop, person: idOf(person), daemons, watched, typed, connect };
 }
+const until = async (done: () => boolean) => { for (let t = 0; t < 5_000 && !done(); t += 20) await wait(20); };
 
-test("a phone is answered which workspaces its computer holds and what waits on the person there, and served nothing else: no terminals, board, calls, files or hosting", async () => {
+test("a phone is answered which workspaces its computer holds and what waits on the person there, and served nothing else an owner's computer is: no terminals started, board, files or hosting", async () => {
   const c = computer();
+  /** Ask on each stream what an owner's computer asks. */
+  const askEverything = (d: ReturnType<typeof c.connect>) => {
+    d.send("device", { t: "workspaces" });
+    d.send("device", { t: "needs" });
+    d.send("pty", { t: "attach", reqId: 1, id: "hm:t1", spec: { cwd: c.repo, cmd: "/bin/sh", args: [], cols: 80, rows: 24 } });
+    d.send("sync", { t: "hello", workspace: c.workspace, seen: null });
+    d.send("files", { id: 1, method: "file.read", params: [c.repo, "README.md"] });
+    d.send("hosting", { t: "take", workspace: c.workspace });
+  };
   // The owner's laptop is served each.
   const laptop = c.connect(c.laptop);
-  laptop.askEverything();
-  for (let t = 0; t < 5_000 && [...laptop.heard.values()].some((h) => h.length === 0); t += 20) await wait(20);
-  assert.deepEqual([...laptop.heard].filter(([, h]) => h.length === 0).map(([s]) => s), [], "the laptop hears on every stream");
+  askEverything(laptop);
+  await until(() => [...laptop.heard].every(([s, h]) => s === "api" || h.length > 0));
+  assert.deepEqual([...laptop.heard].filter(([s, h]) => s !== "api" && h.length === 0).map(([s]) => s), [], "the laptop hears on every stream");
   assert.equal(c.daemons.length, 1);
 
   const phone = c.connect(c.phone);
-  phone.askEverything();
-  for (let t = 0; t < 5_000 && phone.heard.get("device")!.length < 2; t += 20) await wait(20);
+  askEverything(phone);
+  await until(() => phone.heard.get("device")!.length >= 2);
   assert.deepEqual(phone.heard.get("device")!.map((m) => JSON.parse(m) as unknown), [
-    { t: "workspaces", workspaces: [{ workspace: c.workspace, name: "api", repo: REPO }] },
+    { t: "workspaces", workspaces: [{ workspace: c.workspace, name: "api", repo: c.repo }] },
     { t: "needs", needs: [{ workspace: c.workspace, name: "api", tile: "t1", agent: "Editing Nav.tsx", kind: "permission", since: 1_790_000_000_000 }] },
   ]);
   await wait(200);
   assert.deepEqual([...phone.heard].filter(([s, h]) => s !== "device" && h.length > 0).map(([s]) => s), [], "the phone hears on no other stream");
   assert.equal(c.daemons.length, 1, "no connection to the daemon for the phone");
+});
+
+test("a phone opens a workspace to watch its terminals, as a viewer and as the owner's device; anything else there, typing included, is refused, and one opened without naming a workspace here is closed", async () => {
+  const c = computer();
+  const phone = c.connect(c.phone);
+  phone.send("api", { t: "open", workspace: c.workspace });
+  const watch = { tileId: "hm:t1", tile: "t1", cwd: `hive://${c.workspace}`, cmd: "", cols: 80, rows: 24, attachOnly: true };
+  phone.send("api", { id: 1, method: "terminal.open", params: [watch] });
+  phone.send("api", { id: 2, method: "terminal.open", params: [{ ...watch, attachOnly: false }] });
+  phone.send("api", { id: 3, method: "file.read", params: [`hive://${c.workspace}`, "README.md"] });
+  phone.send("api", { id: 4, method: "terminal.open", params: [{ ...watch, tileId: "hm:elsewhere", tile: "elsewhere" }] });
+  // Typing is not among what a phone asks: it is dropped, as any notice it may not send.
+  phone.send("api", { method: "terminal.write", params: ["hm:t1", "rm -rf ~\n"] });
+  await until(() => phone.heard.get("api")!.length >= 4);
+  const answers = Object.fromEntries(phone.heard.get("api")!.map((m) => JSON.parse(m) as { id: number; result?: unknown; error?: { code: string } }).map((a) => [a.id, a]));
+  assert.deepEqual(answers[1]!.result, { pid: 1, joined: true });
+  assert.deepEqual([2, 3, 4].map((id) => answers[id]?.error?.code), ["FORBIDDEN", "FORBIDDEN", "FORBIDDEN"]);
+  assert.deepEqual(c.watched, [{ by: { kind: "peer", person: c.person, device: c.phone, access: "view" }, opts: { ...watch, cwd: c.repo } }]);
+  await wait(100);
+  assert.deepEqual(c.typed, []);
+
+  for (const first of [{ t: "open", workspace: "f".repeat(32) }, { id: 1, method: "terminal.open", params: [watch] }]) {
+    const other = c.connect(c.phone);
+    other.send("api", first);
+    assert.equal(await Promise.race([other.closed, wait(2_000).then(() => "open")]), "removed", JSON.stringify(first));
+  }
 });

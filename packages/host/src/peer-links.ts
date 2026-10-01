@@ -23,8 +23,9 @@
  *
  * One of the owner's phones (spec/pairing.md 0.3) is let in, as their device, for what a phone
  * does: it may ask on the `device` stream which workspaces there are and what waits on the person
- * in them (`needs`, spec/needs.md), and nothing of the rest (no terminals in this machine's
- * daemon, no workspace's board, files or calls, no hosting).
+ * in them (`needs`, spec/needs.md), and open one workspace's API on the `api` stream (its first
+ * frame `{t:"open", workspace}`) to watch its terminals (`PHONE_CALLS`), and nothing of the rest
+ * (no terminals started in this machine's daemon, no workspace's board or files, no hosting).
  */
 import path from "node:path";
 import { StringDecoder } from "node:string_decoder";
@@ -44,6 +45,20 @@ import { serveFiles } from "./device-files.js";
 import { needsOf, type Need, type WaitingStatus } from "./needs.js";
 import type { PlanReview } from "@hivemind/workspace-api/plans";
 import { linkDuplex } from "./device-sessions.js";
+
+/** What a phone may ask of a workspace it opens: to watch a terminal, its screen and then its output
+ *  as it comes, until it goes (M5). */
+export const PHONE_CALLS = ["terminal.open"] as const;
+
+/** The workspace a phone's `api` stream opens, as its first frame names it; null for anything else. */
+function opened(text: string): string | null {
+  try {
+    const m = JSON.parse(text) as { t?: unknown; workspace?: unknown };
+    return m.t === "open" && typeof m.workspace === "string" && /^[0-9a-f]{32}$/.test(m.workspace) ? m.workspace : null;
+  } catch {
+    return null;
+  }
+}
 
 /** A link's named stream as a channel of text frames. */
 export const streamOf = (link: Link, stream: string): TextChannel => ({
@@ -140,12 +155,26 @@ export class PeerLinks {
 
   /** Serve the device on `link` the workspace it names, if its person may reach it. */
   serve(link: Link): void {
-    // A phone runs nothing and holds nothing here: it is answered what it asks, no more.
+    const { store, lists, server, hosting } = this.o;
+    // A phone runs nothing and holds nothing here: it is answered what it asks, and watches.
     if (this.o.phone?.(link.peer)) {
       link.on("device", (text) => this.answerDevice(link, text));
+      const off = link.on("api", (text) => {
+        off();
+        const workspace = opened(text);
+        const repo = workspace ? store.repoOf(workspace) : null;
+        const person = workspace ? lists.personOf(workspace, link.peer) : null;
+        if (!workspace || !repo || !person) return link.close("removed");
+        servePeer(server, streamOf(link, "api"), {
+          actor: { kind: "peer", person, device: link.peer, access: "view" },
+          workspace,
+          repo,
+          holds: (tile) => store.workspaceOf(toBareId(tile)) === repo,
+          only: PHONE_CALLS,
+        });
+      });
       return;
     }
-    const { store, lists, server, hosting } = this.o;
     this.bridgePty(link);
     // The files and git of frames on this machine, for the owner's other devices (M4).
     serveFiles(link, server, (device) => (lists.ownersDevice(device) ? lists.personOf("", device) : null));

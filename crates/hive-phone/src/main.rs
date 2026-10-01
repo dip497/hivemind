@@ -6,6 +6,9 @@
 //!   hive-phone devices          the person's devices this phone paired with
 //!   hive-phone needs            what waits on the person: each agent waiting on them, on the
 //!                               devices this phone paired with, the one waiting longest first
+//!   hive-phone watch <workspace> <tile>
+//!                               an agent's terminal, read-only: its screen, then its output as
+//!                               it comes, until it ends (or Ctrl+C)
 //!
 //! Options: `--identity <dir>` (default: `hivemind-phone/identity` in this user's data folder),
 //! `--name <name>` (pair: what the app lists this phone as; default `Phone`), `--json` (pair,
@@ -18,16 +21,18 @@ use hive_net::net::{self, Reach};
 use hive_phone::{
     identity::Identity,
     needs::{self, Need},
-    pairing,
+    pairing, watch,
 };
 use serde_json::json;
 
-const USAGE: &str = "usage: hive-phone id | pair <link> | devices | needs  [--identity <dir>] [--name <name>] [--json]";
+const USAGE: &str = "usage: hive-phone id | pair <link> | devices | needs | watch <workspace> <tile>  [--identity <dir>] [--name <name>] [--json]";
 
 #[derive(Default)]
 struct Args {
     command: String,
     target: Option<String>,
+    /// What follows the target: `watch`'s tile.
+    second: Option<String>,
     identity: Option<PathBuf>,
     name: Option<String>,
     json: bool,
@@ -45,6 +50,7 @@ fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args> {
             flag if flag.starts_with("--") => bail!("{flag} is not an option\n{USAGE}"),
             _ if args.command.is_empty() => args.command = arg,
             _ if args.target.is_none() => args.target = Some(arg),
+            _ if args.second.is_none() => args.second = Some(arg),
             _ => bail!("{arg}: one too many\n{USAGE}"),
         }
     }
@@ -175,6 +181,28 @@ async fn run(args: Args) -> Result<()> {
                 for d in &away {
                     println!("{} is away: what waits there is not known.", d.name);
                 }
+            }
+        }
+        "watch" => {
+            let (Some(workspace), Some(tile)) = (args.target.as_deref(), args.second.as_deref())
+            else {
+                bail!("watch: which workspace and tile? (`hive-phone needs --json` names them)");
+            };
+            let devices: Vec<_> = phone.devices().into_iter().map(|d| d.with).collect();
+            let endpoint = net::endpoint(phone.key().clone(), &Reach::local(), vec![]).await?;
+            let watched = async {
+                let connection = watch::holder(&endpoint, &devices, workspace).await?;
+                let mut stdout = std::io::stdout();
+                watch::watch(&connection, workspace, tile, |data| {
+                    let _ = std::io::Write::write_all(&mut stdout, data.as_bytes());
+                    let _ = std::io::Write::flush(&mut stdout);
+                })
+                .await
+            };
+            let ended = watched.await;
+            endpoint.close().await;
+            if let Some(ended) = ended? {
+                eprintln!("\nhive-phone: the session ended ({})", ended.code);
             }
         }
         "" => bail!("{USAGE}"),

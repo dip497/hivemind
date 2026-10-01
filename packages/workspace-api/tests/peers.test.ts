@@ -68,13 +68,13 @@ function channel(): [TextChannel, TextChannel, (why: string) => void] {
   return [end(toA, toB), end(toB, toA), close];
 }
 
-function connect(access: Access) {
+function connect(access: Access, only?: readonly string[]) {
   ran.length = 0;
   gone.length = 0;
   const server = new WorkspaceServer([domain], new Intents(new AuditLog({ file: path.join(tmp, "audit.jsonl") })));
   const [host, guest, close] = channel();
   const actor = { kind: "peer", person: "p".repeat(64), device: "d".repeat(64), access } as const;
-  servePeer(server, host, { actor, workspace: W, repo: REPO, holds: (t) => t.startsWith("in-") });
+  servePeer(server, host, { actor, workspace: W, repo: REPO, holds: (t) => t.startsWith("in-"), ...(only ? { only } : {}) });
   const client = new WorkspaceClient(peerTransport(guest));
   return { server, client, close, actor, guest };
 }
@@ -149,6 +149,23 @@ test("a peer is answered the statuses and links of its workspace's own agents, n
   const { client } = connect("view");
   expect(await client.call("status.all")).toEqual([{ tileId: "in-1", status: { state: "working", title: "in-1's work" } } as never]);
   expect(await client.call("link.list")).toEqual({ pipes: [{ src: "in-1", dst: "in-2" }], spawns: [{ parent: "in-1", child: "in-2" }] });
+});
+
+test("a peer let use only some calls is refused any other, whatever its role allows; and those still as its role allows", async () => {
+  const phone = connect("view", ["terminal.open", "terminal.show"]);
+  expect(await code(phone.client.call("file.read", workspaceUrl(W), "a.ts"))).toBe("FORBIDDEN");
+  expect(await code(phone.client.call("status.all"))).toBe("FORBIDDEN");
+  phone.client.notice("presence.set", workspaceUrl(W), null);
+  // Watching a terminal of the workspace, as its role allows; never starting one, nor another's.
+  await phone.client.call("terminal.open", { tileId: "in-1", cwd: "", cmd: "", cols: 80, rows: 24, attachOnly: true });
+  expect(await code(phone.client.call("terminal.open", { tileId: "in-2", cwd: "", cmd: "", cols: 80, rows: 24 }))).toBe("FORBIDDEN");
+  expect(await code(phone.client.call("terminal.open", { tileId: "out-1", cwd: "", cmd: "", cols: 80, rows: 24, attachOnly: true }))).toBe("FORBIDDEN");
+  phone.client.notice("terminal.show", "in-1", true);
+  await new Promise((r) => setTimeout(r, PEER_FRAME_MS * 2));
+  expect(ran.map((r) => `${r.what} ${JSON.stringify(r.args[0])}`)).toEqual([
+    `terminal.open ${JSON.stringify({ tileId: "in-1", cwd: "", cmd: "", cols: 80, rows: 24, attachOnly: true })}`,
+    "terminal.show \"in-1\"",
+  ]);
 });
 
 test("a terminal's keyboard: one who may use terminals asks for it and hands it on, for the workspace's terminals only; taking it back is the host's; one who only watches may stop", async () => {

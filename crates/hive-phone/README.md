@@ -9,6 +9,7 @@ hive-phone id                         # this phone's id (its device key, made th
 hive-phone pair 'hivemind://pair/…'   # the link under Settings → Devices on your computer
 hive-phone devices                    # the person's devices this phone paired with
 hive-phone needs                      # what waits on you on them, the one waiting longest first
+hive-phone watch <workspace> <tile>   # an agent's terminal, read-only, until it ends (or Ctrl+C)
 ```
 
 Options: `--identity <dir>` (default: `hivemind-phone/identity` in this user's data folder),

@@ -1086,6 +1086,12 @@ agents.
 6. **Watch.** Tap an agent → a live terminal, read-only by default, scaled to width;
    pinch to zoom. **Type** asks for the keyboard like a guest; the reply box sends one
    line through the task-delivery path, which is easier than typing into a TUI.
+
+   *As built (M5 step 3b):* read-only only, for now: the phone opens the workspace's API on its own
+   connection to the device holding it and may call nothing there but `terminal.open` with
+   `attachOnly` (it gets the screen, then the output as it comes). **Type** and the reply box come
+   with step 4's answers.
+
 7. **Views.** A tab bar: *Needs you* · *Working* · *Board* (a compact list of frames and
    tiles) · community views that declare phone support (R12 `hello.device.compact`).
 8. **Offline host.** "Desktop is asleep. You'll get a notification when it's back." The

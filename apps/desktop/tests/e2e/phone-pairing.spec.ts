@@ -6,7 +6,7 @@
 // is served what a phone does and nothing more (what it sends to start a terminal there starts
 // nothing); and unpairing it on the computer forgets it.
 import { test, expect, type ElectronApplication } from "@playwright/test";
-import { execFile, execSync } from "node:child_process";
+import { execFile, execSync, spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -20,8 +20,11 @@ const run = promisify(execFile);
 
 let root: string;
 const apps: ElectronApplication[] = [];
+/** What the phone runs that keeps running: stopped after each test. */
+const procs: ChildProcess[] = [];
 test.beforeEach(() => { root = fs.mkdtempSync("/tmp/hm-phone-"); });
 test.afterEach(async () => {
+  for (const p of procs.splice(0)) p.kill("SIGKILL");
   // The app's daemons only, before it closes (closing waits on them) and after. An app not gone
   // after a while is killed, and the processes it started with it.
   const reap = () => { try { execSync(`pkill -f "out/main/pty-daemon.js ${root}/"`, { stdio: "ignore" }); } catch { /* none */ } };
@@ -114,7 +117,7 @@ test("a phone scans the computer's code and is certified as the person's: each l
   await expect(desktop.locator(`[data-device="${phoneId}"]`)).toHaveCount(0);
 });
 
-test("the phone asks the computer what needs the person: an agent there waiting on a permission, by what it says it is doing, in its workspace; and nothing once it works again", async () => {
+test("the phone asks the computer what needs the person: an agent there waiting on a permission, by what it says it is doing, in its workspace; watches its terminal, read-only; and nothing waits once it works again", async () => {
   test.skip(!hiveNetBuilt() || !fs.existsSync(HIVE_PHONE), "build hive-net and hive-phone first: cargo build in crates/hive-net and crates/hive-phone");
   test.setTimeout(120_000);
   // A stand-in agent, read from its screen: it says what it is doing in its title, and asks to
@@ -154,9 +157,17 @@ test("the phone asks the computer what needs the person: an agent there waiting 
   expect(waiting).toMatchObject({ name: "api", tile, agent: "Editing Nav.tsx", kind: "permission" });
   expect(Date.now() - (waiting!.since as number)).toBeLessThan(60_000);
 
-  // Answered at the desktop, it works again: nothing waits.
+  // Watched from the phone: its screen as it is, then what it prints as it comes.
+  const watching = spawn(HIVE_PHONE, ["watch", waiting!.workspace as string, tile, "--identity", phone]);
+  procs.push(watching);
+  let seen = "";
+  watching.stdout!.on("data", (b: Buffer) => { seen += b.toString(); });
+  await expect.poll(() => seen, { timeout: 20_000 }).toContain("Allow edit to Nav.tsx?");
+
+  // Answered at the desktop, it works again: the phone sees it, and nothing waits.
   await d.desktop.evaluate((id) => window.dispatchEvent(new CustomEvent("hivemind:focus-tile", { detail: id })), tile);
   await d.desktop.locator(`.react-flow__node[data-id="${tile}"] .xterm-helper-textarea`).focus();
   await d.desktop.keyboard.type("y\n");
+  await expect.poll(() => seen, { timeout: 20_000 }).toContain("probe is thinking");
   await expect.poll(async () => (await needs()).needs.length, { timeout: 30_000 }).toBe(0);
 });

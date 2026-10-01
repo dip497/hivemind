@@ -7,3 +7,4 @@ pub mod devices;
 pub mod identity;
 pub mod needs;
 pub mod pairing;
+pub mod watch;
