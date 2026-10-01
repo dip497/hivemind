@@ -16,11 +16,9 @@ export interface DaemonSessionsOptions {
   endpoint: DaemonEndpoint;
   /** Resolves when another session may start; throws when too many wait. */
   pace(): Promise<void>;
-  /** A session ended for good by the host (killed): what it keeps for it can go. */
-  ended?(tile: string): void;
 }
 
-export function daemonSessions({ endpoint, pace, ended }: DaemonSessionsOptions): SessionBackend {
+export function daemonSessions({ endpoint, pace }: DaemonSessionsOptions): SessionBackend {
   return {
     start: async (opts, out) => {
       if (isRemote(opts.cwd)) throw new Error("this host runs terminals on its own machine only");
@@ -45,7 +43,7 @@ export function daemonSessions({ endpoint, pace, ended }: DaemonSessionsOptions)
     resize: (tile, cols, rows) => endpoint.resize(tile, cols, rows),
     pause: (tile) => endpoint.pause(tile),
     resume: (tile) => endpoint.resume(tile),
-    kill: (tile) => { endpoint.kill(tile); ended?.(tile); },
+    kill: (tile) => endpoint.kill(tile),
     detach: (tile) => endpoint.detach(tile),
     // Asked for when read: false once the daemon no longer holds the session.
     screen: (tile) => (endpoint.has(tile) ? (cb) => { if (!endpoint.has(tile)) return false; endpoint.screen(tile, cb); return true; } : null),

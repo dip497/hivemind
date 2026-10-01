@@ -5,13 +5,16 @@
  * domains, `domains.ts` and the rest of this package) from the data folder the app would use on
  * this machine: its keys, workspaces, access lists, network and audit log. Its terminals run in
  * the machine's PTY daemon, which keeps each agent's status (R6): the host mirrors it. Devices the
- * access lists admit reach it over hive-net.
+ * access lists admit reach it over hive-net. Its agents are driven by its control plane (`hive
+ * ctl`, `control/plane.ts`), as the app's are: the daemon passes the machine's control-plane
+ * socket on to it, and the host starts the sessions of the tiles it spawns itself.
  *
  * Nobody sits at it, so it asks nobody anything: someone asking to join is declined (the owner
- * invites from one of their devices), and an agent's approvals fall back to the agent's own
- * prompt, answered by whoever drives it. It becomes someone's by pairing with one of their
- * devices (spec/pairing.md): it takes their person, after which it is started again as them, and
- * each of their devices it was paired with is the owner of every workspace it holds.
+ * invites from one of their devices), an agent's approvals go to the agent that supervises it or
+ * fall back to the agent's own prompt, answered by whoever drives it, and a verb that needs a
+ * window (focus, a plan's review, a view) is refused. It becomes someone's by pairing with one of
+ * their devices (spec/pairing.md): it takes their person, after which it is started again as them,
+ * and each of their devices it was paired with is the owner of every workspace it holds.
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -19,7 +22,13 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import type { Duplex } from "node:stream";
 import { DaemonEndpoint, REATTACH_RESET } from "@hivemind/agent-host/daemon-endpoint";
-import { StatusStore, isSessionStatus } from "@hivemind/agent-host/status-store";
+import { hcpSockPath } from "@hivemind/agent-host/hooks/token";
+import { tileStatusOf } from "@hivemind/agent-host/tile-status";
+import { agentForCmd, preferredAgent, setCatalog } from "@hivemind/agents";
+import { findBin } from "@hivemind/agents/discover";
+import { loadAgents, userAgentsDir } from "@hivemind/agents/load";
+import { readSettings } from "@hivemind/core/settings";
+import type { Settings } from "@hivemind/core/settings-schema";
 import { AccessLists } from "@hivemind/workspace-host/access";
 import { Devices, type PairedDevice } from "@hivemind/workspace-host/devices";
 import { enterPairing, formatPairLink, offeringNearby, pairAnnouncement, PairingOffer, parseCode, parsePairLink, type Pairing, type PairingDevice } from "@hivemind/workspace-host/pairing";
@@ -34,6 +43,8 @@ import { WorkspaceStore, type WorkspaceChange } from "@hivemind/workspace-host/s
 import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
 import { agents } from "./agents.js";
+import { ControlPlane } from "./control/plane.js";
+import { HcpError } from "./control/protocol.js";
 import { daemonSessions } from "./daemon-sessions.js";
 import { deviceSessions, onDevices } from "./device-sessions.js";
 import { Hosting } from "./hosting.js";
@@ -42,8 +53,9 @@ import { PeerLinks } from "./peer-links.js";
 import { Plans } from "./plans.js";
 import { presence } from "./presence.js";
 import { makeSpawnPacer } from "./spawn-pacer.js";
+import { startSpawned } from "./spawned.js";
 import { Layouts } from "./store.js";
-import { Terminals } from "./terminals.js";
+import { Terminals, type SessionBackend } from "./terminals.js";
 
 export interface HeadlessHostOptions {
   /** The data folder, laid out as the app's on this machine. */
@@ -81,12 +93,31 @@ export interface HeadlessHost {
 /** This machine's name, as the person's other devices list it. */
 const deviceName = (): string => os.hostname() || "host";
 
-/** hive-net's socket: in the data folder, unless the path is too long for a socket. */
-function netSocket(dir: string): string {
-  const tag = createHash("sha256").update(dir).digest("hex").slice(0, 12);
-  if (process.platform === "win32") return `\\\\.\\pipe\\hivemind-net-${tag}`;
-  const inData = path.join(dir, "hive-net.sock");
-  return inData.length < 100 ? inData : path.join(os.tmpdir(), `hivemind-net-${tag}.sock`);
+/** A socket of this host's: `file` in the data folder, unless the path is too long for a socket
+ *  (then `hivemind-<tag>` in the temporary folder); a named pipe on Windows. */
+function socketIn(dir: string, file: string, tag: string): string {
+  const hash = createHash("sha256").update(dir).digest("hex").slice(0, 12);
+  if (process.platform === "win32") return `\\\\.\\pipe\\hivemind-${tag}-${hash}`;
+  const inData = path.join(dir, file);
+  return inData.length < 100 ? inData : path.join(os.tmpdir(), `hivemind-${tag}-${hash}.sock`);
+}
+
+/** The agents this machine has and the person's settings for them, as the app reads them: read
+ *  at the start, and again before a verb once an agent was installed or removed. */
+function agentCatalog(settingsFile: string): { current(): Promise<void>; settings(): Settings } {
+  let settings: Settings | null = null;
+  let stamp: number | undefined;
+  let reading: Promise<void> | null = null;
+  const dirStamp = () => fs.statSync(userAgentsDir(), { throwIfNoEntry: false })?.mtimeMs;
+  const read = async () => {
+    stamp = dirStamp();
+    settings = await readSettings(settingsFile);
+    setCatalog((await loadAgents({ disabled: settings.agents.disabled })).defs);
+  };
+  return {
+    current: () => (settings && dirStamp() === stamp ? Promise.resolve() : (reading ??= read().finally(() => { reading = null; }))),
+    settings: () => settings ?? (() => { throw new Error("the agents are not read yet"); })(),
+  };
 }
 
 export async function startHeadlessHost(o: HeadlessHostOptions): Promise<HeadlessHost> {
@@ -114,18 +145,9 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
   });
   const layouts = new Layouts(() => store);
 
-  // Each session's status as the daemon that runs it keeps it (R6).
-  const statuses = new StatusStore();
-  const endpoint = new DaemonEndpoint({
-    connect: o.daemon,
-    onEvent: (topic, data) => {
-      if (topic !== "agent.status") return;
-      const r = data as { tileId?: unknown; status?: unknown };
-      if (typeof r.tileId === "string" && isSessionStatus(r.status)) statuses.mirror(toBareId(r.tileId), r.status);
-    },
-  });
-  // Connected now, so the statuses of the sessions already running arrive before anyone asks.
-  await endpoint.sessions();
+  // What the daemon tells of its sessions: each one's status as it keeps it (R6), what their hooks
+  // reported while no control plane held its socket, what it reads of their screens.
+  const endpoint = new DaemonEndpoint({ connect: o.daemon, onEvent: (topic, data) => control.fromMachine(topic, data) });
 
   const nameOf = (person: string): string => {
     for (const ws of lists.workspaces()) {
@@ -142,36 +164,101 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     const d = devices.list().find((x) => x.device === device);
     return net.dial(device, d ? { addrs: d.addrs, relay: d.relay } : undefined);
   };
-  const elsewhere = deviceSessions({
-    dial: dialDevice,
-    onEvent: (topic, data) => {
-      if (topic !== "agent.status") return;
-      const r = data as { tileId?: unknown; status?: unknown };
-      if (typeof r.tileId === "string" && isSessionStatus(r.status)) statuses.mirror(toBareId(r.tileId), r.status);
+  const elsewhere = deviceSessions({ dial: dialDevice, onEvent: (topic, data) => control.fromMachine(topic, data) });
+  const sessions = onDevices(keys.deviceId, daemonSessions({ endpoint, pace: makeSpawnPacer({ windowMs: 10_000, max: 24, queueMax: 128 }) }), elsewhere);
+  const holds = (tile: string): boolean => endpoint.has(tile) || elsewhere.holds(tile);
+  // Every session as the control plane needs it: which agent runs in it, a supervised worker's
+  // policy in its environment, its output for whoever streams it, its end, and a person's keys.
+  const backend: SessionBackend = {
+    ...sessions,
+    start: (opts, out) => {
+      const bare = toBareId(opts.tileId);
+      const def = agentForCmd(opts.cmd);
+      if (def) control.agentOf.set(bare, def.id);
+      else control.agentOf.delete(bare);
+      const supervise = control.supervise.get(bare);
+      return sessions.start(supervise ? { ...opts, env: { ...opts.env, HIVE_SUPERVISE: supervise } } : opts, {
+        data: (data, replay) => { control.output(bare, data); out.data(data, replay); },
+        exit: (code, signal) => { out.exit(code, signal); control.exited(opts.tileId); },
+      });
     },
-  });
+    write: (tile, data, paste) => { control.status.input(toBareId(tile), data); sessions.write(tile, data, paste); },
+    // A daemon tells its killer nothing of the exit: what waits on the session is answered now.
+    kill: (tile) => { sessions.kill(tile); control.exited(tile); control.forget(tile); },
+  };
   const terminals = new Terminals({
     intents,
-    relay: { record: () => {}, screenPrefix: REATTACH_RESET },
+    relay: { record: (tile, data) => control.recorder.record(tile, data), screenPrefix: REATTACH_RESET },
+    askedByHost: (bare) => control.takeSpawned(bare),
     publish: (event, ...params) => api.publish(event, ...params),
     who,
     onError: o.onWarn,
-    backend: onDevices(keys.deviceId, daemonSessions({
-      endpoint,
-      pace: makeSpawnPacer({ windowMs: 10_000, max: 24, queueMax: 128 }),
-      ended: (tile) => statuses.forget(toBareId(tile)),
-    }), elsewhere),
+    backend,
   });
   const plans = new Plans({ publish: (event, ...params) => api.publish(event, ...params), who, repoOf: (bare) => store.workspaceOf(bare) });
   const api: WorkspaceServer = new WorkspaceServer([
     ...workspaceDomains,
     layouts.domain,
-    agents({ statuses: () => statuses.all(), links: () => ({ pipes: [], spawns: [] }) }),
+    agents({ statuses: () => control.status.all(), links: () => control.links() }),
     terminals.domain,
     plans.domain,
     presence(() => api, () => keys.personId),
   ], intents, o.onWarn);
-  statuses.subscribe((change) => api.publish("status.changed", change));
+
+  // The control plane (`hive ctl`): the verbs that need no window, for the agents here and for
+  // whoever is at this machine. The agents and settings are the app's, read from this data folder.
+  const catalog = agentCatalog(path.join(o.dir, "settings.json"));
+  await catalog.current();
+  const control: ControlPlane = new ControlPlane({
+    dir: () => o.dir,
+    publish: (event, ...params) => api.publish(event, ...params),
+    write: (ptyId, data, paste) => {
+      if (!holds(ptyId)) return false;
+      sessions.write(ptyId, data, paste);
+      return true;
+    },
+    // Nobody lays a spawned tile out: the host starts it, once it is in its workspace.
+    spawned: (spawn) => {
+      control.takeSpawned(spawn.tileId);
+      queueMicrotask(() => void startSpawned({
+        store, terminals, holds,
+        write: (ptyId, data, paste) => sessions.write(ptyId, data, paste),
+        status: (bare) => { const s = control.status.get(bare); return s && tileStatusOf(s).status; },
+        screen: (ptyId) => (endpoint.has(ptyId) ? endpoint.viewport(ptyId) : Promise.resolve(null)),
+        onWarn: o.onWarn,
+      }, spawn));
+    },
+    windowsUp: () => false,
+    ready: () => catalog.current(),
+    methods: () => ({
+      callRenderer: () => Promise.reject(new HcpError("APP_NO_RENDERER", "there is no window here: hive host runs none")),
+      reloadSettings: () => catalog.current().then(() => ({ ok: true })),
+      defaultAgentId: () => preferredAgent(catalog.settings().agents.defaultAgent, (d) => !!findBin(d.bin))?.id,
+      agentInstalled: (def) => !!findBin(def.bin),
+      workspaces: store,
+      // A caller in no tile acts on the one workspace this host serves, when it serves one.
+      shownWorkspace: () => { const repos = store.repos(); return repos.length === 1 ? { repo: repos[0]!, frame: null } : null; },
+      launchOptions: (agentId) => catalog.settings().agents.options[agentId] ?? {},
+      endSession: (ptyId) => terminals.end(ptyId),
+      sessionHeld: holds,
+      intents,
+    }),
+  });
+  // Connected now, so the statuses of the sessions already running arrive before anyone asks.
+  await endpoint.sessions();
+  // The machine's control-plane socket stays the daemon's, which passes each connection on to this
+  // host's own. A daemon the app started serves none (nor does one from before this), and this host
+  // serves the machine's itself.
+  const hcpWarn = (e: Error) => o.onWarn(`the control plane is off: ${e.message}. \`hive ctl\` cannot reach this host`);
+  const ownSocket = socketIn(o.dir, "hcp-host.sock", "hcp-host");
+  let hcp = control.listen(ownSocket, hcpWarn);
+  try {
+    await endpoint.control(ownSocket);
+  } catch (e) {
+    o.onWarn(`the terminal daemon keeps no control-plane socket to hand over (${e instanceof Error ? e.message : String(e)}): serving the machine's here`);
+    hcp.close();
+    hcp = control.listen(hcpSockPath(o.dir), hcpWarn);
+  }
 
   // On the network: hive-net admits the devices the access lists let in, and each is served the
   // workspace it names. hive-net that stops is started again, as is one whose network changed.
@@ -222,7 +309,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       const started = await HiveNet.start({
         bin: o.hiveNet,
         identity,
-        socket: netSocket(o.dir),
+        socket: socketIn(o.dir, "hive-net.sock", "net"),
         profile: profiles.arg(),
         onIncoming: (link) => peers.serve(link),
         // A device of a person entering the code offered here; nobody here can let anyone else in.
@@ -340,7 +427,9 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       if (watching) fs.unwatchFile(watching);
       records?.stop();
       net?.stop();
-      // The sessions stay in the daemons; only this host's connections to them go.
+      // The sessions stay in the daemons; only this host's connections to them go, and the daemon
+      // answers on the control-plane socket again.
+      hcp.close();
       endpoint.close();
       elsewhere.close();
       store.flush();

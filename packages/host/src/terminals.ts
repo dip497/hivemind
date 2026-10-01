@@ -143,6 +143,24 @@ export class Terminals {
     };
   }
 
+  /**
+   * Start a session the host asked for itself (a control-plane spawn on a host with no window),
+   * watched by the host from its first byte: its output is recorded whoever shows it, it runs on
+   * while nobody does, and a client that opens it joins it. `watch` hears its output, a batch at a
+   * time, and its end.
+   */
+  async own(opts: TerminalOpts, watch: { data(data: string): void; exit(): void }): Promise<{ pid: number }> {
+    const tile = opts.tileId;
+    const out: SessionOutput = {
+      data: (data) => this.relay.push(tile, data),
+      exit: (code, signal) => this.relay.exit(tile, { code, signal }),
+    };
+    const host: Viewer = { data: (_, data) => watch.data(data), exit: () => watch.exit(), alive: () => true };
+    if (!this.sizes.has(tile)) this.sizes.set(tile, { cols: opts.cols, rows: opts.rows });
+    const { pid } = await this.relay.open(tile, host, () => this.opts.backend.start(opts, out), () => this.opts.backend.screen(tile));
+    return { pid };
+  }
+
   /** End a session for good, as the host asks (the control plane closing its tile). */
   end(tile: string): void {
     const bare = toBareId(tile);

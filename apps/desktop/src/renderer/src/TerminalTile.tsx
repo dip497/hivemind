@@ -17,9 +17,9 @@ import { agentById } from "@hivemind/agents";
 import { registerAgentTile, unregisterAgentTile, shouldDeliver, type SendToAgentDetail } from "./agent-send";
 import { peekWork, claimWork } from "./work-queue";
 import { publishStatus, clearStatus, setLabel, statusOf, subscribeTileStatus, type TileStatusKind } from "./agent-status-bus";
-import { mayDismiss, newDismissState } from "./dismiss-startup";
 import { keyBytes, KEY_GAP_MS } from "@hivemind/agent-host/keys";
-import { SUBMIT_DELAY_MS, SPAWN_SUBMIT_RETRY_MS, deliversPromptViaArgv } from "@hivemind/agent-host/agent-io";
+import { SUBMIT_DELAY_MS, deliversPromptViaArgv } from "@hivemind/agent-host/agent-io";
+import { AgentStart, START_TICK_MS, typeTask } from "@hivemind/agent-host/agent-start";
 import { Pencil, GripVertical } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
@@ -355,8 +355,8 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     };
 
     // The viewport as text, for tests (a WebGL terminal renders none into the DOM).
-    // Startup screens the manifest says the launch flags already answered (see dismiss-startup).
-    const dismissState = newDismissState(Date.now());
+    // The agent's first seconds: a startup screen its launch flags answered, its first task.
+    const starting = new AgentStart(agent ? agentById(agent) : undefined, Date.now());
     const readScreen = (): string => {
       const buf = term.buffer.active;
       const out: string[] = [];
@@ -791,7 +791,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
         }
         return;
       }
-      dismissState.touched = true; // the person is driving now: nothing is sent for them
+      starting.touch(); // the person is driving now: nothing is sent for them
       window.hive.ptyWrite(ptyId, d);
     });
     term.onResize(() => syncPtySize());
@@ -950,19 +950,11 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
         if (agent && !agentPoll) {
           // Queued-prompt ("Work on this" / workflow) delivery: deliver EXACTLY
           // ONCE, when the agent's screen has SETTLED (boot/splash output stopped
-          // = it's at a ready input prompt), then consume it. Delivering on the
-          // first scrape-"idle" raced droid's ~6s boot (its splash scrapes as idle
-          // the WHOLE time, before the input is interactive); re-delivering on each
-          // idle poll caused DUPLICATE submissions (droid buffers them all). The
-          // "settled" signal = N consecutive QUIET ticks (no new pty output) —
-          // robust for any agent (claude/codex/droid/…), not tied to scrape status.
-          let workQuietTicks = 0;
-          let workTicks = 0;
-          const WORK_SETTLE_TICKS = 2; // ~2.4s of quiet after boot → ready prompt
-          // An agent that never goes quiet — one that keeps a tip, a clock or a spinner
-          // ticking in its composer — would hold the task for ever. Deliver anyway once it
-          // has had this long to boot, as long as it is not waiting on the user.
-          const WORK_DEADLINE_TICKS = 8;
+          // = it's at a ready input prompt), then consume it (agent-start.ts).
+          // Delivering on the first scrape-"idle" raced droid's ~6s boot (its splash
+          // scrapes as idle the WHOLE time, before the input is interactive);
+          // re-delivering on each idle poll caused DUPLICATE submissions (droid
+          // buffers them all).
           void window.hive.diagLog?.(`[work-poll] start tile=${tileId} agent=${agent} peek=${!!peekWork(tileId)}`);
           agentPoll = setInterval(() => {
             // One-shot delivery — runs BEFORE the agentDirty early-return so it can
@@ -970,43 +962,24 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
             // consumes, so the prompt can never be submitted twice.
             // A screen this agent opens before it will take anything, which our own launch
             // flags already answered: skip it once so the tile reaches its prompt.
-            const toDismiss = agentById(agent)?.dismiss;
-            if (toDismiss?.length && mayDismiss(dismissState, Date.now())) {
-              const screen = readScreen();
-              const hit = toDismiss.find((d) => d.match(screen));
-              if (hit) {
-                dismissState.left--;
-                hit.keys.forEach((k, i) => setTimeout(() => window.hive.ptyWrite(ptyId, keyBytes(k)), KEY_GAP_MS * i));
-              }
-            }
-            if (agent && peekWork(tileId)) {
-              // Quiet alone is not ready: a first run can open a trust or update chooser and
-              // sit there, and a task typed into a chooser picks an option instead. Only a
-              // screen that WAITS holds the task back — a booting agent has no status yet, and
-              // its own splash can read as working; neither means a chooser is up.
-              const st = statusOf(tileId);
-              const waiting = st === "blocked" || st === "permission" || st === "question";
-              workTicks++;
-              if (agentDirty || waiting) workQuietTicks = 0; else workQuietTicks++;
-              if (!waiting && (workQuietTicks >= WORK_SETTLE_TICKS || workTicks >= WORK_DEADLINE_TICKS)) {
-                const work = claimWork(tileId);
-                if (work) {
-                  window.hive.ptyWrite(ptyId, work, true); // a prompt is pasted, not typed
-                  setTimeout(() => window.hive.ptyWrite(ptyId, "\r"), SUBMIT_DELAY_MS);
-                  // Backstop: a fresh claude TUI can drop that first Enter, leaving
-                  // the prompt typed-but-unsubmitted (the "I had to press Enter"
-                  // bug). Re-send Enter ONCE, but only if the agent is STILL idle —
-                  // i.e. it never submitted. If the first Enter landed, the agent is
-                  // "working" by now and this no-ops (no stray empty submit).
-                  setTimeout(() => {
-                    if (statusOf(tileId) === "idle") window.hive.ptyWrite(ptyId, "\r");
-                  }, SPAWN_SUBMIT_RETRY_MS);
-                  void window.hive.diagLog?.(`[work-deliver] tile=${tileId} agent=${agent} settled`);
-                }
+            const now = Date.now();
+            const keys = starting.mayDismiss(now) ? starting.dismiss(readScreen(), now) : null;
+            keys?.forEach((k, i) => setTimeout(() => window.hive.ptyWrite(ptyId, keyBytes(k)), KEY_GAP_MS * i));
+            // Quiet alone is not ready: a first run can open a trust or update chooser and
+            // sit there, and a task typed into a chooser picks an option instead. Only a
+            // screen that WAITS holds the task back — a booting agent has no status yet, and
+            // its own splash can read as working; neither means a chooser is up.
+            if (agent && peekWork(tileId) && starting.settled(agentDirty, statusOf(tileId))) {
+              const work = claimWork(tileId);
+              if (work) {
+                // Pasted, Enter on its own, and once more if the agent is still idle: a fresh
+                // claude TUI can drop that first Enter (the "I had to press Enter" bug).
+                typeTask((data, paste) => window.hive.ptyWrite(ptyId, data, paste), work, () => statusOf(tileId) === "idle");
+                void window.hive.diagLog?.(`[work-deliver] tile=${tileId} agent=${agent} settled`);
               }
             }
             agentDirty = false;
-          }, 1200);
+          }, START_TICK_MS);
         }
       } catch (e) {
         attachedRef.current = false;

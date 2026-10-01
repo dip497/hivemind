@@ -311,6 +311,12 @@ const factory = (spec: SpawnSpec): ManagedPty => {
 
 /** Connections that asked for events: agent reports and screen readings (desktops viewing this machine). */
 const eventViewers = new Set<(m: ServerMsg) => void>();
+/** The connection serving this machine's control plane (`hive host`), and the socket it serves it
+ *  on (`control`): while it lasts, every connection to the control-plane socket goes on to it, and
+ *  this daemon stays up with no session to run, for the verbs that start one. */
+let controller: { send: (m: ServerMsg) => void; sock: string } | null = null;
+/** Exit 8 s after the last session ends — no orphans — unless a control plane holds this daemon. */
+const IDLE_EXIT_MS = 8000;
 // With no desktop on this machine (one others connect to), it is its sessions' host: the hooks
 // report here, so the status of each session is kept here and every viewer mirrors it as
 // `agent.status` (docs/design/multiplayer-2026-09-28.md, R6). A desktop's own daemon leaves
@@ -351,8 +357,9 @@ const manager = new SessionManager(factory, {
   // An ended session is gone for good: its readings go with it, or a desktop that connects later
   // is told of a screen nothing shows any more.
   onEnd: (id) => { titles.forget(id); screens.forget(id); statuses?.exited(id); statuses?.forget(id); },
-  idleMs: 8000, // exit 8s after the last session is killed/exits — no orphans
+  idleMs: IDLE_EXIT_MS,
   onEmpty: () => {
+    if (controller) return;
     try {
       server.close();
     } catch {
@@ -586,6 +593,9 @@ const server = net.createServer((sock) => {
       case "resume":
         manager.resume(msg.id, viewers.get(msg.id));
         break;
+      case "viewport":
+        send({ t: "viewport", reqId: msg.reqId, id: msg.id, text: manager.viewport(msg.id)?.screen ?? null });
+        break;
       case "list":
         send({ t: "sessions", reqId: msg.reqId, ids: manager.list(), ...(msg.detail ? { detail: manager.info() } : {}) });
         break;
@@ -599,6 +609,15 @@ const server = net.createServer((sock) => {
           for (const { id, title } of titles.current()) send({ t: "event", topic: "agent.title", data: { tileId: id, title } });
           for (const [tileId, state] of screens.current()) send({ t: "event", topic: "agent.screen", data: { tileId, state } });
           for (const { tileId, status } of statuses?.all() ?? []) send({ t: "event", topic: "agent.status", data: { tileId, status } });
+        }
+        break;
+      case "control":
+        // A daemon the app started leaves the control-plane socket to the app.
+        if (!STANDALONE) send({ t: "control", reqId: msg.reqId, error: "the app serves this machine's control plane" });
+        else if (typeof msg.sock !== "string" || !path.isAbsolute(msg.sock)) send({ t: "control", reqId: msg.reqId, error: "control needs the absolute path of a socket" });
+        else {
+          controller = { send, sock: msg.sock };
+          send({ t: "control", reqId: msg.reqId });
         }
         break;
       case "shutdown":
@@ -618,6 +637,15 @@ const server = net.createServer((sock) => {
     outBuf.clear();
     // Never kill on disconnect.
     for (const id of Array.from(viewers.keys())) leave(id);
+    if (controller?.send !== send) return;
+    // The control plane went: this daemon answers on its socket again, and with no session to run
+    // goes as it would have.
+    controller = null;
+    if (manager.size() === 0) {
+      setTimeout(() => {
+        if (!controller && manager.size() === 0) void flushOnExit().finally(() => process.exit(0));
+      }, IDLE_EXIT_MS).unref?.();
+    }
   });
 });
 
@@ -633,41 +661,81 @@ if (claim === "taken") {
 try { fs.chmodSync(socketPath, 0o600); } catch { /* named pipe on Windows */ }
 
 if (STANDALONE) {
-  // No desktop here owns the control-plane socket, so hook events come to us and go on to viewers and push.
-  const hcp = net.createServer((c) => {
-    c.on("error", () => { /* hook gone */ });
-    const answer = (id: unknown, body: Record<string, unknown>) => { try { c.write(`${JSON.stringify({ jsonrpc: "2.0", id, ...body })}\n`); } catch { /* gone */ } };
+  // No desktop here owns the control-plane socket: this daemon does. Hook events come to it and go
+  // on to viewers and push; what only a control plane can answer is answered by the one serving
+  // this machine's (`control`, a `hive host`), or refused at once.
+  /** What an agent reported on the control-plane socket, whoever answers it: its session's status,
+   *  and every viewer told but `heard`, the control plane that heard it itself. */
+  const reported = (method: string, params: unknown, heard?: (m: ServerMsg) => void): void => {
+    if (method === "agent.reply") {
+      // A reply goes to the desktops watching this machine, never to push.
+      for (const push of eventViewers) if (push !== heard) push({ t: "event", topic: "agent.reply", data: params });
+      return;
+    }
+    const evt = parseAgentEvent(params);
+    if (!evt) return;
+    // The session an agent reports from is the one its tile resumes.
+    if (evt.sessionId) try { writeTrackedSession(tileSessionsDir, evt.tileId, evt.sessionId); } catch { /* best-effort */ }
+    statuses?.event(evt.tileId, evt);
+    for (const push of eventViewers) if (push !== heard) push({ t: "event", topic: AGENT_EVENT_METHOD, data: evt });
+    void notifyPush(evt);
+  };
+  /** One connection's lines: what it reports is heard; what it asks is answered with `answer`, or
+   *  left to the control plane it goes on to (`heard`). */
+  const lines = (answer: ((id: unknown, body: Record<string, unknown>) => void) | null, heard?: (m: ServerMsg) => void) => {
     let authed = false;
-    c.on("data", makeLineDecoder((line) => {
+    return (line: string): void => {
       let m: { jsonrpc?: unknown; id?: unknown; method?: unknown; params?: unknown };
       try { m = JSON.parse(line); } catch { return; }
       if (m.jsonrpc !== "2.0" || typeof m.method !== "string") return;
       const params = (m.params ?? {}) as Record<string, unknown>;
       if (m.id === undefined) {
-        if (m.method !== AGENT_EVENT_METHOD) return;
-        const evt = parseAgentEvent(m.params);
-        if (!evt) return;
-        // The session an agent reports from is the one its tile resumes.
-        if (evt.sessionId) try { writeTrackedSession(tileSessionsDir, evt.tileId, evt.sessionId); } catch { /* best-effort */ }
-        statuses?.event(evt.tileId, evt);
-        for (const push of eventViewers) push({ t: "event", topic: AGENT_EVENT_METHOD, data: evt });
-        void notifyPush(evt);
+        if (m.method === AGENT_EVENT_METHOD) reported(m.method, m.params, heard);
         return;
       }
       if (m.method === "initialize") {
-        if (!holderOf(installToken, params.token)) return answer(m.id, { error: { code: -32000, message: "bad or missing token", data: { code: "UNAUTHORIZED" } } });
-        authed = true;
-        return answer(m.id, { result: { protocolVersion: 2, capabilities: { status: false } } });
+        authed = !!holderOf(installToken, params.token);
+        if (!authed) return answer?.(m.id, { error: { code: -32000, message: "bad or missing token", data: { code: "UNAUTHORIZED" } } });
+        return answer?.(m.id, { result: { protocolVersion: 2, capabilities: { status: false } } });
       }
-      if (!authed) return answer(m.id, { error: { code: -32000, message: "call initialize with the token first", data: { code: "UNAUTHORIZED" } } });
+      if (!authed) return answer?.(m.id, { error: { code: -32000, message: "call initialize with the token first", data: { code: "UNAUTHORIZED" } } });
       if (m.method === "agent.reply") {
-        // A reply goes to the desktops watching this machine, never to push.
-        for (const push of eventViewers) push({ t: "event", topic: "agent.reply", data: m.params });
-        return answer(m.id, { result: { ok: true } });
+        reported(m.method, m.params, heard);
+        return answer?.(m.id, { result: { ok: true } });
       }
       // Only a desktop can decide (e.g. approvals): answer at once so the agent falls back to its own prompt.
-      answer(m.id, { error: { code: -32000, message: "no desktop on this machine", data: { code: "UNAVAILABLE" } } });
-    }));
+      answer?.(m.id, { error: { code: -32000, message: "no desktop on this machine", data: { code: "UNAVAILABLE" } } });
+    };
+  };
+  /** Answer a connection's lines here: what takes each chunk it sends. */
+  const here = (c: net.Socket): ((chunk: Buffer) => void) => {
+    const answer = (id: unknown, body: Record<string, unknown>) => { try { c.write(`${JSON.stringify({ jsonrpc: "2.0", id, ...body })}\n`); } catch { /* gone */ } };
+    return makeLineDecoder(lines(answer));
+  };
+  const hcp = net.createServer((c) => {
+    c.on("error", () => { /* hook gone */ });
+    const to = controller;
+    if (!to) { c.on("data", here(c)); return; }
+    // What the caller sends waits here until the control plane is reached: a hook writes its line
+    // and goes at once, before then. One that cannot be reached is answered for here.
+    const early: Buffer[] = [];
+    let take: ((chunk: Buffer) => void) | null = null;
+    let reached = false;
+    let ended = false;
+    const go = (path: (chunk: Buffer) => void): void => { take = path; for (const chunk of early.splice(0)) path(chunk); };
+    const up = net.connect(to.sock);
+    c.on("data", (chunk: Buffer) => { if (take) take(chunk); else early.push(chunk); });
+    c.on("end", () => { ended = true; if (reached) up.end(); });
+    c.on("close", () => { ended = true; if (reached) up.end(); });
+    up.once("connect", () => {
+      reached = true;
+      const heard = makeLineDecoder(lines(null, to.send));
+      go((chunk) => { heard(chunk); up.write(chunk); });
+      if (ended) up.end();
+      up.on("data", (d: Buffer) => { try { c.write(d); } catch { /* gone */ } });
+    });
+    up.on("error", () => { if (!reached) go(here(c)); });
+    up.on("close", () => { if (reached) c.destroy(); });
   });
   void listenExclusive(hcp, hcpSock)
     .then((r) => { if (r === "listening") fs.chmodSync(hcpSock, 0o600); })
@@ -686,7 +754,7 @@ console.error(`[pty-daemon] listening on ${socketPath} (pid ${process.pid})`);
 // the next daemon boot reloads them. `manager.list().length` covers both
 // live AND frozen for fairness with other call sites.
 const bootGuard = setTimeout(() => {
-  if (manager.size() === 0) {
+  if (manager.size() === 0 && !controller) {
     // Flush any snapshots that were dirty (shouldn't be any — frozen aren't
     // dirty — but cheap insurance), then exit. Async-await so the snapshot
     // write completes before the process dies.

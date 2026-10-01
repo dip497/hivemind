@@ -18,6 +18,8 @@
  * Follow-up prompts arrive as stdin lines (`hive ctl send` types text + Enter).
  * Lines starting with "[hive]" are control-plane deliveries (reports, approvals):
  * echoed, never executed.
+ * With FAKE_GATE set it first shows that text, as an agent shows a startup screen
+ * before it takes anything, and the first line it reads only clears it.
  *
  * Invoked through thin shims named `claude` / `droid` on PATH:
  *   exec node fake-agent.cjs claude "$@"
@@ -102,11 +104,19 @@ function turn(prompt) {
 }
 
 const first = positionalPrompt();
-process.stdout.write(`fake ${provider} up (tile ${tile}, hooks: ${Object.keys(HOOKS).join(",") || "none"})\n${provider}> `);
+let gated = !!process.env.FAKE_GATE;
+if (gated) process.stdout.write(`${process.env.FAKE_GATE}\n`);
+else process.stdout.write(`fake ${provider} up (tile ${tile}, hooks: ${Object.keys(HOOKS).join(",") || "none"})\n${provider}> `);
 if (first) turn(first);
 
 const rl = readline.createInterface({ input: process.stdin, terminal: false });
 rl.on("line", (line) => {
+  if (gated) {
+    // Past the startup screen: it is gone, and the prompt is up.
+    gated = false;
+    process.stdout.write(`\x1b[2J\x1b[Hfake ${provider} up (tile ${tile}, hooks: ${Object.keys(HOOKS).join(",") || "none"})\n${provider}> `);
+    return;
+  }
   const text = line.trim();
   if (!text) { process.stdout.write(`${provider}> `); return; }
   if (text.startsWith("[hive]")) { process.stdout.write(`(delivered) ${text}\n${provider}> `); return; }

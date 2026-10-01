@@ -89,7 +89,8 @@ hive ctl disconnect <src> [<dst>]
 ```
 
 Run inside an agent's tile, `list` and `frames` answer for that tile's workspace; anywhere
-else, for the one the app's window shows. Neither needs the window: the app answers them itself.
+else, for the one the app's window shows (on a machine running `hive host`, the one it serves,
+when it serves one). Neither needs the window: the app answers them itself.
 
 ## `hive ctl` — workflows, supervision, review
 
@@ -180,6 +181,13 @@ on. Terminals and agents in frames on your computer keep running there, reached 
 host is gone, **Host it here** carries on from the board as your computer last saw it; on a
 network with a lookup server the people in it find it there, and the host, back, hands over what
 changed on it meanwhile.
+
+On the host, `hive ctl` drives its agents as it does the app's. Run on that machine, by you or by
+an agent in one of its terminals, `hive ctl spawn` starts an agent there with no window, in the
+caller's workspace or the one the host serves, and gives it its task: on its command line where
+the agent takes one, else typed once it is ready, a startup screen its launch flags already
+answered skipped. `read`, `send`, `stream`, `report`, `workflow`, `close`, pipes and supervision
+work as with the app; a verb that needs a window (`focus`, `open-review`, views) is refused (exit 3).
 
 `hive host install` writes a systemd user unit (`~/.config/systemd/user/hive-host.service`) and
 enables it. To start it with the machine, before anyone logs in, it turns lingering on

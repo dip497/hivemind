@@ -57,6 +57,9 @@ export class DaemonEndpoint {
   private readonly screens = new Map<string, (replay: string | null) => void>();
   private seq = 0;
   private retry: ReturnType<typeof setTimeout> | null = null;
+  /** The socket this process serves the machine's control plane on (`control`): claimed again on
+   *  each connection, which is kept up from then on. */
+  private controlSock: string | null = null;
   private attempts = 0;
   private closed = false;
   private state: EndpointState = "idle";
@@ -112,7 +115,9 @@ export class DaemonEndpoint {
         break;
       }
       case "pong":
-      case "sessions": {
+      case "sessions":
+      case "control":
+      case "viewport": {
         const reply = this.replies.get(msg.reqId);
         if (reply) { this.replies.delete(msg.reqId); reply(msg); }
         break;
@@ -132,6 +137,7 @@ export class DaemonEndpoint {
     this.conn = s;
     this.status("online");
     s.write(frame({ t: "hello", caps: this.o.onEvent ? ["resync", "events"] : ["resync"] }));
+    if (this.controlSock) s.write(frame({ t: "control", reqId: `c${++this.seq}`, sock: this.controlSock }));
     s.on("data", makeLineDecoder(
       (line) => { try { this.handle(JSON.parse(line) as ServerMsg); } catch { /* not a protocol line */ } },
       () => { this.status("reconnecting", "the daemon sent a line that never ended"); s.destroy(); },
@@ -177,7 +183,7 @@ export class DaemonEndpoint {
   }
 
   private scheduleReattach(): void {
-    if (this.retry || this.closed || this.cbs.size === 0 || this.o.isPaused?.()) return;
+    if (this.retry || this.closed || (this.cbs.size === 0 && !this.controlSock) || this.o.isPaused?.()) return;
     const base = this.o.retryInitialMs ?? 250;
     const max = this.o.retryMaxMs ?? 30_000;
     // Jittered, so several machines dropped by one network blip don't reconnect in lockstep.
@@ -234,6 +240,18 @@ export class DaemonEndpoint {
     return Math.round(performance.now() - t0);
   }
 
+  /**
+   * Serve the machine's control plane on `sock` from now on (`hive host`): the daemon passes each
+   * connection to its own control-plane socket on to `sock`, and this endpoint claims it again on
+   * every connection after, which it keeps up. Rejects when the daemon serves none (one the app
+   * started).
+   */
+  async control(sock: string, timeoutMs = 10_000): Promise<void> {
+    const r = await this.request<Extract<ServerMsg, { t: "control" }>>({ t: "control", reqId: `c${++this.seq}`, sock }, timeoutMs);
+    if (r.error) throw new Error(r.error);
+    this.controlSock = sock;
+  }
+
   /** Every session in the daemon, connecting if needed. */
   async sessions(timeoutMs = 15_000): Promise<SessionInfo[]> {
     const r = await this.request<Extract<ServerMsg, { t: "sessions" }>>({ t: "list", reqId: `l${++this.seq}`, detail: true }, timeoutMs);
@@ -274,6 +292,13 @@ export class DaemonEndpoint {
     const reqId = `sc${++this.seq}`;
     this.screens.set(reqId, cb);
     this.send({ t: "screen", reqId, id: tileId }).catch(() => { this.screens.delete(reqId); cb(null); });
+  }
+
+  /** The session's screen as text, line by line, as the daemon reads it; null when it is not
+   *  running. */
+  async viewport(tileId: string, timeoutMs = 5_000): Promise<string | null> {
+    const r = await this.request<Extract<ServerMsg, { t: "viewport" }>>({ t: "viewport", reqId: `v${++this.seq}`, id: tileId }, timeoutMs);
+    return r.text;
   }
 
   /** Terminate the session in the daemon. */
