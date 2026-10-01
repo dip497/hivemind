@@ -166,7 +166,11 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     const d = devices.list().find((x) => x.device === device);
     return net.dial(device, d ? { addrs: d.addrs, relay: d.relay } : undefined);
   };
-  const elsewhere = deviceSessions({ dial: dialDevice, onEvent: (topic, data) => control.fromMachine(topic, data) });
+  const elsewhere = deviceSessions({
+    dial: dialDevice,
+    mine: (device) => devices.list().some((d) => d.device === device),
+    onEvent: (topic, data) => control.fromMachine(topic, data),
+  });
   const sessions = onDevices(keys.deviceId, daemonSessions({ endpoint, pace: makeSpawnPacer({ windowMs: 10_000, max: 24, queueMax: 128 }) }), elsewhere);
   const holds = (tile: string): boolean => endpoint.has(tile) || elsewhere.holds(tile);
   // Every session as the control plane needs it: which agent runs in it, a supervised worker's

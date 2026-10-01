@@ -22,7 +22,7 @@ const note = (id: string, text: string) => ({ id, kind: "note" as const, x: 0, y
 function host(mayWrite?: (repo: string) => boolean) {
   let server: WorkspaceServer;
   const store = new WorkspaceStore({ dir: tmp, person: newSeed(), onChange: (c) => server.publishTo((conn) => !layouts.made(conn, c), "store.changed", { repo: c.repo, part: c.part }) });
-  const layouts = new Layouts(() => store, mayWrite);
+  const layouts = new Layouts(() => store, { mayWrite });
   server = new WorkspaceServer([layouts.domain], new Intents(new AuditLog({ file: path.join(tmp, "audit.jsonl") })));
   const client = () => {
     const closing = new AbortController();

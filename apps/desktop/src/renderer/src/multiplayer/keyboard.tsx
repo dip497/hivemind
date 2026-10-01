@@ -17,6 +17,7 @@ import type { PtySize } from "../pty-size-sync";
 import { Button } from "../components/ui/button";
 import { useFacesHere } from "./presence";
 import { joinedId, useShown } from "./shown";
+import { parseDeviceUri } from "@hivemind/core/remote-uri";
 import { useTyping } from "./typing";
 
 interface Heard {
@@ -33,6 +34,8 @@ const listeners = new Map<string, Set<() => void>>();
 let listening = false;
 /** This device as its host names it, `peer:<device>`; null until the app says. */
 let me: string | null = null;
+/** This device's id; null until the app says. */
+let myDevice: string | null = null;
 
 /** What `tile` heard changed; nothing is kept for a terminal no one here shows. */
 function change(tile: string, patch: Partial<Heard>): void {
@@ -47,6 +50,7 @@ function listen(): void {
   listening = true;
   void window.hive.identity().then((id) => {
     me = id ? `peer:${id.deviceId}` : null;
+    myDevice = id?.deviceId ?? null;
     for (const tile of listeners.keys()) change(tile, {});
   }, () => {});
   // The asks were to whoever held it: once it moves, they are the new holder's to hear.
@@ -92,15 +96,18 @@ export interface TerminalKeyboard {
   size: PtySize | null;
 }
 
-/** The keyboard of the terminal whose session is `tile`, as this window sees it. */
-export function useTerminalKeyboard(tile: string): TerminalKeyboard {
+/** The keyboard of the terminal whose session is `tile`, run in `cwd`, as this window sees it. */
+export function useTerminalKeyboard(tile: string, cwd?: string): TerminalKeyboard {
   const { repo, shared } = useShown();
   const joined = joinedId(repo);
   const others = useFacesHere(repo).length > 0;
   const now = useSyncExternalStore(useCallback((l: () => void) => subscribe(tile, l), [tile]), () => heard.get(tile) ?? NOTHING);
   const { holder, size } = now;
+  // In a frame of this person's on this machine (M4), the terminal runs here: this window is where
+  // it runs, as in a workspace of its own.
+  const here = !!cwd && !!myDevice && parseDeviceUri(cwd)?.device === myDevice;
   // A workspace of this person's own on a host of theirs (R14): here as the host, not as a guest.
-  if (joined && shared?.access !== "owner") {
+  if (joined && shared?.access !== "owner" && !here) {
     const you = !!holder && holder.id === me;
     const host = shared?.names.host || "The host";
     const drives = shared?.state === "connected" && (shared.access === "terminals" || shared.access === "agents");

@@ -23,6 +23,11 @@ import type { Answer, EventMessage } from "@hivemind/workspace-api/protocol";
 import type { Elsewhere } from "./workspace-ipc.js";
 import { streamOf } from "@hivemind/host/peer-links";
 import { onWorkspaceChange, sharedStore } from "./workspace-store-ipc.js";
+import { machineIdentity } from "./identity.js";
+import path from "node:path";
+import { app } from "electron";
+import { parseDeviceUri } from "@hivemind/core/remote-uri";
+import { MachinePlaces, type Placed } from "@hivemind/host/machine-places";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
 
 /** Where the connection to a workspace's host is. */
@@ -97,7 +102,12 @@ export async function openShared(workspace: string, access: Access, reach: Reach
     if (open.get(workspace) !== entry) return link.close("left");
     entry.link = link;
     entry.api = peerTransport(streamOf(link, "api"));
-    entry.api.events(reach.publish);
+    // A tile this person placed on this machine is theirs: no task its host announces for it (M4).
+    entry.api.events((event) => {
+      const opened = event.event === "tile.opened" ? (event.params[0] as { tileId?: unknown } | undefined)?.tileId : undefined;
+      if (typeof opened === "string" && guestIn(workspace) && placesHere().placed(workspace, toBareId(opened))) return;
+      reach.publish(event);
+    });
     let following: Promise<boolean> = Promise.resolve(false);
     let stopList = (): void => {};
     const stop = replicate(sharedStore(), repo, streamOf(link, "sync"), {
@@ -176,7 +186,7 @@ export function mayWriteShared(workspace: string): boolean {
  *  which would part the copy from the host's. */
 export function refusedShared(workspace: string, before: CoreLayout | null, after: CoreLayout): string | null {
   const entry = open.get(workspace);
-  return entry ? refusedEdit(before, after, entry.status.access) : "not connected to this workspace's host";
+  return entry ? refusedEdit(before, after, entry.status.access, machineIdentity().deviceId) : "not connected to this workspace's host";
 }
 
 /** A terminal a window opens in a workspace shared from elsewhere is shown, never started there,
@@ -188,7 +198,50 @@ function attaching(method: unknown, params: unknown[], access: Access): unknown[
   return [{ ...(opts as object), attachOnly: true }, ...rest];
 }
 
-/** The workspace a window's call is about, when it is one shared from elsewhere. */
+/** What this machine's person placed on it in workspaces shared from elsewhere (M4). */
+let places: MachinePlaces | null = null;
+const placesHere = (): MachinePlaces => (places ??= new MachinePlaces({
+  file: path.join(app.getPath("userData"), "placed.json"),
+  device: machineIdentity().deviceId,
+  onWarn: (m) => console.warn(`[placed] ${m}`),
+}));
+
+/** A window here changed its copy `repo` from `before` to `after`: what it placed on this machine. */
+export function wroteShared(repo: string, before: CoreLayout | null, after: CoreLayout): void {
+  const workspace = idOf(repo);
+  if (workspace) placesHere().wrote(workspace, before, after);
+}
+
+/** Whether this person is a guest in `workspace` (someone else's), not its owner at one of their
+ *  own devices' workspaces hosted elsewhere: only a guest's machine runs nothing it did not place. */
+const guestIn = (workspace: string | null): boolean => !!workspace && open.get(workspace)?.status.access !== "owner";
+
+/** For a tile of someone else's workspace, what this person placed it to run on this machine
+ *  (null: nobody here placed it, so nothing of it runs here); undefined for any other. */
+export function placedRun(bareTile: string): Placed | null | undefined {
+  const workspace = idOf(sharedStore().workspaceOf(bareTile));
+  return workspace && guestIn(workspace) ? placesHere().placed(workspace, bareTile) : undefined;
+}
+
+/** The tiles of each copy here that are in a frame on this machine, made again as it changes. */
+const local = new Map<string, Set<string>>();
+onWorkspaceChange((change) => { if (change.repo.startsWith("hive://")) local.delete(change.repo); });
+/** Whether tile `bare` of the copy `repo` is in a frame on this machine (M4): it runs here. */
+function onThisMachine(repo: string, bare: string): boolean {
+  let tiles = local.get(repo);
+  if (!tiles) {
+    const core = sharedStore().getCore(repo);
+    const self = machineIdentity().deviceId;
+    const here = new Set((core?.frames ?? []).filter((f) => typeof f.workspacePath === "string" && parseDeviceUri(f.workspacePath)?.device === self).map((f) => f.id));
+    tiles = new Set(Object.entries(core?.frameOf ?? {}).filter(([, frame]) => here.has(frame)).map(([tile]) => tile));
+    local.set(repo, tiles);
+  }
+  return tiles.has(bare);
+}
+
+/** The workspace a window's call is about, when it is one shared from elsewhere. A tile in a frame
+ *  of this person's on this machine, in someone else's workspace, is this machine's: its calls are
+ *  answered here. */
 function workspaceOf(method: unknown, params: unknown): string | null {
   if (typeof method !== "string" || !Array.isArray(params)) return null;
   const [first] = params as unknown[];
@@ -197,8 +250,10 @@ function workspaceOf(method: unknown, params: unknown): string | null {
   // A tile's methods name the tile (a terminal's, its session: `hm:<tile>`): it is shared from
   // elsewhere when a replica holds it.
   if (typeof first === "string" || typeof (first as { tileId?: unknown } | null)?.tileId === "string") {
-    const tile = typeof first === "string" ? first : (first as { tileId: string }).tileId;
-    return idOf(sharedStore().workspaceOf(toBareId(tile)));
+    const named = (first as { tile?: unknown } | null)?.tile;
+    const bare = typeof named === "string" ? named : toBareId(typeof first === "string" ? first : (first as { tileId: string }).tileId);
+    const repo = sharedStore().workspaceOf(bare);
+    return repo && !(guestIn(idOf(repo)) && onThisMachine(repo, bare)) ? idOf(repo) : null;
   }
   return null;
 }

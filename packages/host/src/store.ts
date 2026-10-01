@@ -26,6 +26,16 @@ type StoreMethod = Extract<Method, `store.${string}`>;
 /** Where a client is: the workspace it shows, and the frame its user is in there. */
 export interface Shown { repo: string; frame: string | null }
 
+export interface LayoutsOptions {
+  /** Whether a repo's layouts may be written. */
+  mayWrite?(repo: string): boolean;
+  /** Why a client may not change a repo's core layout from `before` to `after` here, or null. */
+  refuse?(repo: string, before: CoreLayout | null, after: CoreLayout): string | null;
+  /** A client changed a repo's core layout: from `before`, as the store had it, to `after`, as it
+   *  has it now. */
+  wrote?(repo: string, before: CoreLayout | null, after: CoreLayout): void;
+}
+
 export class Layouts {
   readonly domain: Domain<StoreMethod, "store.shown">;
   private readonly writers = new WeakMap<Connection, string>();
@@ -35,14 +45,9 @@ export class Layouts {
   private writersMade = 0;
 
   /** `store`: the store that holds a repo's layout (the host's own, or its replicas of others'
-   *  workspaces, M1), made when it is first needed. `mayWrite`: whether a repo's may be written.
-   *  `refuse`: why a change of a repo's core layout from `before` to `after` may not be made here,
-   *  or null. */
-  constructor(
-    store: (repo: string) => WorkspaceStore,
-    mayWrite: (repo: string) => boolean = () => true,
-    refuse: (repo: string, before: CoreLayout | null, after: CoreLayout) => string | null = () => null,
-  ) {
+   *  workspaces, M1), made when it is first needed. */
+  constructor(store: (repo: string) => WorkspaceStore, o: LayoutsOptions = {}) {
+    const { mayWrite = () => true, refuse = () => null, wrote = () => {} } = o;
     const repoOf = (v: unknown) => text(v, "repo");
     /** Tell `from` that `part` of `repo` changed: it reads it again, and its own change is put back. */
     const putBack = (from: Connection, repo: string, part: string): false => {
@@ -78,9 +83,13 @@ export class Layouts {
           const r = repoOf(repo);
           if (!writable(from, r, "core")) return;
           const s = writing(from, r);
+          const prior = s.getCore(r);
           // What the client changed: from the layout it read, else the one here.
-          if (refuse(r, (base ?? s.getCore(r)) as CoreLayout | null, core as CoreLayout)) return void putBack(from, r, "core");
+          if (refuse(r, (base ?? prior) as CoreLayout | null, core as CoreLayout)) return void putBack(from, r, "core");
           refused(() => s.setCore(r, core, { ...as(from), base }));
+          // What this write made of the store, not what the client says it read: one that read an
+          // older layout still brings nothing in that another writer put there meanwhile.
+          wrote(r, prior, s.getCore(r)!);
         },
         "store.setView": (from, repo, viewId, layout, base) => {
           const r = repoOf(repo);

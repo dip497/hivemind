@@ -74,8 +74,9 @@ import { handleViewProtocol, listViewPackages, registerViewScheme, startViewWatc
 import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, settingsFile, settingsBusy, settingsSettled } from "./settings-store.js";
 import { flushWorkspaceStore, installWorkspaceStoreIpc, storeFor, workspaceStore } from "./workspace-store-ipc.js";
 import { installIdentityIpc, machineIdentity } from "./identity.js";
-import { dialDevice, installNetworkIpc, movedAway, openJoined, peopleHere, personName, stopNetwork } from "./network.js";
-import { elsewhere, mayWriteShared, refusedShared } from "./shared-workspaces.js";
+import { defaultShellFor } from "@hivemind/agent-host/shell-spec";
+import { dialDevice, installNetworkIpc, isYourDevice, movedAway, openJoined, peopleHere, personName, stopNetwork } from "./network.js";
+import { elsewhere, mayWriteShared, placedRun, refusedShared, wroteShared } from "./shared-workspaces.js";
 import { appWindowOf, broadcast, openWindows, registerWindow, userWindow } from "./windows.js";
 import { patchSettingsExtras } from "@hivemind/core/settings";
 import { toBareId, toPtyId } from "@hivemind/workspace-api/tile-id";
@@ -1012,6 +1013,7 @@ const onPtyExit = (tileId: string): void => control.exited(tileId);
 /** Terminals in frames on the person's other devices (M3): in each device's daemon, over hive-net. */
 const onYourDevices = deviceSessions({
   dial: dialDevice,
+  mine: isYourDevice,
   onEvent: (topic, data) => control.fromMachine(topic, data),
   onStatus: (device, state, detail) => deviceStatus(device, state, detail),
 });
@@ -1095,6 +1097,14 @@ const terminals = new Terminals({
 
 /** Start (or, with a daemon, attach to) the session a tile runs. */
 async function startSession(opts: TerminalOpts, out: SessionOutput): Promise<{ pid: number }> {
+  // A tile of a workspace shared from elsewhere runs on this machine only as its person placed it
+  // here (M4): never with what the workspace's document says, which its host's owner may change.
+  const placed = placedRun(opts.tile ?? toBareId(opts.tileId));
+  if (placed === null && !opts.attachOnly) throw new Error("someone else placed this tile on your computer: it runs here only if you place it");
+  if (placed) {
+    const shell = defaultShellFor();
+    opts = { ...opts, cmd: placed.cmd ?? shell.cmd, args: placed.args ?? (placed.cmd ? [] : shell.args) };
+  }
   const spawning = agentForCmd(opts.cmd);
   // An agent a repository ships runs in that repository, not wherever a tile happens to be.
   if (spawning && !agentAllowedIn(spawning, opts.cwd)) {
@@ -1153,11 +1163,12 @@ async function startSession(opts: TerminalOpts, out: SessionOutput): Promise<{ p
 /** The workspace store, through the workspace API: each window writes as itself. */
 // A copy of a workspace shared from elsewhere is written only while its host lets this person
 // edit its board (M1), and only with what their role there allows.
-const layouts = new Layouts(
-  storeFor,
-  (repo) => !repo.startsWith("hive://") || mayWriteShared(repo.slice("hive://".length)),
-  (repo, before, after) => (repo.startsWith("hive://") ? refusedShared(repo.slice("hive://".length), before, after) : null),
-);
+const layouts = new Layouts(storeFor, {
+  mayWrite: (repo) => !repo.startsWith("hive://") || mayWriteShared(repo.slice("hive://".length)),
+  refuse: (repo, before, after) => (repo.startsWith("hive://") ? refusedShared(repo.slice("hive://".length), before, after) : null),
+  // What a window here places on this machine in a workspace shared from elsewhere (M4).
+  wrote: (repo, before, after) => { if (repo.startsWith("hive://")) wroteShared(repo, before, after); },
+});
 
 // The workspace API (R8): git and worktrees, files, issues, review comments, agents' status and
 /** Plans agents hand off, told to every client, answered by one who may drive agents (M2). */

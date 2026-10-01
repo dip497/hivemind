@@ -331,6 +331,11 @@ function keepPaired(device: PairedDevice): void {
 type JoinReply = PairReply | { ok: false; error: "not-admitted"; message: string };
 
 /** Connect to one of the person's devices, where it said it is reached when it paired. */
+/** Whether `device` is one of this person's, paired here. */
+export function isYourDevice(device: string): boolean {
+  return pairedDevices().list().some((d) => d.device === device);
+}
+
 export async function dialDevice(device: string): Promise<Link> {
   const d = pairedDevices().list().find((x) => x.device === device);
   if (!d) throw new Error("that device is not one of yours: pair it under Settings → Devices");

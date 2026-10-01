@@ -257,7 +257,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
   useEffect(() => trackOpenSession(ptyId), [ptyId]);
   // One keyboard per terminal (M2): who has it, whether this window's keys reach the session, and
   // the size the session was given. Heard before the session is opened, which tells it both.
-  const kb = useTerminalKeyboard(ptyId);
+  const kb = useTerminalKeyboard(ptyId, cwd);
   const kbRef = useRef<TerminalKeyboard>(kb);
   kbRef.current = kb;
   // What fits this tile, and the sizes this window last asked the session to take (drawnSize).
@@ -642,7 +642,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     reattachRef.current = () => {
       attachedRef.current = true;
       exited = false;
-      window.hive.ptySpawn({ tileId: ptyId, cwd, cmd, args: args ?? [], cols: term.cols, rows: term.rows, attachOnly: true })
+      window.hive.ptySpawn({ tileId: ptyId, tile: tileId, cwd, cmd, args: args ?? [], cols: term.cols, rows: term.rows, attachOnly: true })
         .then(({ pid }) => { if (pid === -1) attachedRef.current = false; }, () => { attachedRef.current = false; });
       if (interested) window.hive.ptyInterest(ptyId, true);
       sentSizeRef.current = null;
@@ -891,7 +891,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
           if (persistent) {
             // liveOnly: a session saved before a reboot restores on attach, which is the
             // start this queue is for; it must wait its turn like any other.
-            const probe = await window.hive.ptySpawn({ tileId: ptyId, cwd, cmd, args: args ?? [], cols: term.cols, rows: term.rows, attachOnly: true, liveOnly: true });
+            const probe = await window.hive.ptySpawn({ tileId: ptyId, tile: tileId, cwd, cmd, args: args ?? [], cols: term.cols, rows: term.rows, attachOnly: true, liveOnly: true });
             if (probe.pid !== -1) attachedPid = probe.pid;
           }
           if (attachedPid === undefined && !cancelled) {
@@ -902,6 +902,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
         attachedRef.current = true;
         const { pid, joined } = attachedPid !== undefined ? { pid: attachedPid, joined: false } : await window.hive.ptySpawn({
           tileId: ptyId,
+          tile: tileId,
           cwd,
           cmd,
           args: args ?? [],

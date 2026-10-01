@@ -308,6 +308,7 @@ function optsOf(value: unknown): TerminalOpts {
   if (env) for (const [k, v] of Object.entries(env)) written(v, `opts.env.${k}`);
   return {
     tileId: text(o.tileId, "opts.tileId"),
+    ...(o.tile == null ? {} : { tile: text(o.tile, "opts.tile") }),
     cwd: text(o.cwd, "opts.cwd"),
     cmd: written(o.cmd, "opts.cmd"),
     ...(o.args == null ? {} : { args: texts(o.args, "opts.args") }),

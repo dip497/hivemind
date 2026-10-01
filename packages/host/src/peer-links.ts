@@ -138,6 +138,8 @@ export class PeerLinks {
         access,
         changes: this.o.changes,
         writer: `peer:${link.peer}`,
+        // A frame of theirs on their own device is theirs to place (M4).
+        device: link.peer,
         onDropped: (why) => this.o.onWarn?.(`from ${link.peer.slice(0, 8)}…: ${why}`),
       });
       // The owner's other devices keep its list in step, to take it over with as it is (M3).

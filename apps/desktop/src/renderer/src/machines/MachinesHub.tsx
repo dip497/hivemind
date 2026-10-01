@@ -1,7 +1,8 @@
 /**
  * Machines — every saved ssh machine with its live state, adding one, and choosing where a
  * frame runs (machine → folder, or one of your devices → one of its folders, M3). The list is the
- * same one `hive machine` edits.
+ * same one `hive machine` edits. In someone else's workspace the only place a frame of yours may
+ * run is this computer (M4): there, choosing where it runs is choosing a folder here.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ChevronRight, Folder, History, Laptop, Loader2, Plus, RefreshCw, Server } from "lucide-react";
@@ -13,6 +14,7 @@ import { Switch } from "../components/ui/switch";
 import type { DeviceWorkspace, MachineInfo, PairedDeviceSummary, RemoteDirEntry } from "../../../shared/ipc";
 import { machineUri, posixJoin } from "@hivemind/core/remote-uri";
 import { errText, machineForRequest, statusOf, useMachines, type MachinesRequest } from "./store";
+import { joinedId, useShown } from "../multiplayer/shown";
 import { AttentionNote, MachineDot, statusWords } from "./status";
 
 type View = { kind: "list" } | { kind: "add" } | { kind: "edit"; machine: MachineInfo } | { kind: "browse"; machine: MachineInfo } | { kind: "device"; device: PairedDeviceSummary };
@@ -36,6 +38,9 @@ export function MachinesHub({ request, onClose, onPick, usageOf, onEndTerminals 
   const snap = useMachines();
   const [view, setView] = useState<View>({ kind: "list" });
   const picking = request?.kind === "pick" ? request : null;
+  const { repo, shared } = useShown();
+  // Someone else's workspace: a frame of yours runs on this computer, or nowhere.
+  const guest = !!joinedId(repo) && shared?.access !== "owner";
 
   // Which view this request opens on. Only the request moves it: a machine added or checked
   // mid-flow must not throw the user back to the list.
@@ -68,7 +73,7 @@ export function MachinesHub({ request, onClose, onPick, usageOf, onEndTerminals 
     for (let i = 0; i < CHECK_PARALLEL; i++) void next();
   }, [request, snap]);
 
-  const title = view.kind === "add" ? "Add a machine" : view.kind === "edit" ? `Edit ${view.machine.label}` : view.kind === "browse" ? view.machine.label : view.kind === "device" ? view.device.name : picking ? "Run this frame on…" : "Machines";
+  const title = view.kind === "add" ? "Add a machine" : view.kind === "edit" ? `Edit ${view.machine.label}` : view.kind === "browse" ? view.machine.label : view.kind === "device" ? view.device.name : picking && guest ? "Run this frame on this computer" : picking ? "Run this frame on…" : "Machines";
 
   return (
     <Dialog open={!!request} onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -84,7 +89,10 @@ export function MachinesHub({ request, onClose, onPick, usageOf, onEndTerminals 
           )}
           <DialogTitle className="h-7 flex items-center">{title}</DialogTitle>
         </header>
-        {view.kind === "list" && (
+        {picking && guest && (
+          <ThisComputer self={snap.self} onPick={(uri) => { onPick(picking.frameId ?? null, uri); onClose(); }} />
+        )}
+        {view.kind === "list" && !(picking && guest) && (
           <MachineList
             usageOf={usageOf}
             onEndTerminals={onEndTerminals}
@@ -422,6 +430,39 @@ function pushRecent(m: MachineInfo, dir: string): void {
   try { localStorage.setItem(recentKey(m), JSON.stringify([dir, ...readRecent(m).filter((d) => d !== dir)].slice(0, RECENT_MAX))); } catch { /* private mode */ }
 }
 const parentOf = (d: string) => (d === "/" ? "/" : d.replace(/\/[^/]+\/?$/, "") || "/");
+
+/** A folder on this computer for a frame of yours in someone else's workspace (M4): what you put in
+ *  it runs here, as you put it, and nowhere else. */
+function ThisComputer({ self, onPick }: { self: string | null | undefined; onPick: (uri: string) => void }) {
+  const [typed, setTyped] = useState("");
+  const open = (folder: string) => { if (self && folder.startsWith("/")) onPick(machineUri(self, folder)); };
+  return (
+    <form
+      className="grid gap-3 px-4 pb-4"
+      data-this-computer=""
+      onSubmit={(e) => { e.preventDefault(); open(typed.trim()); }}
+    >
+      <p className="text-[12px] leading-relaxed text-[var(--color-fg2)]">
+        Its terminals and agents run on this computer, with your logins, in a folder of yours. Everyone in the workspace sees them; nobody else starts anything here.
+      </p>
+      <div className="flex items-center gap-2">
+        <Input
+          aria-label="a folder on this computer"
+          placeholder="/path/to/a/folder"
+          value={typed}
+          onChange={(e) => setTyped(e.target.value)}
+          data-escape-local=""
+          data-this-computer-folder=""
+          font="mono"
+          spellCheck={false}
+          className="h-8 flex-1"
+        />
+        <Button type="button" size="sm" variant="ghost" onClick={() => void window.hive.pickProjectFolder().then((f) => { if (f) open(f); })}>Choose…</Button>
+        <Button type="submit" size="sm" disabled={!self || !typed.trim().startsWith("/")} data-this-computer-go="">Run it here</Button>
+      </div>
+    </form>
+  );
+}
 
 /** The folders of one of your devices a frame can run in (M3): those its workspaces are in, or one
  *  named by its path. */

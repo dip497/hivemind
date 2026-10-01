@@ -4,8 +4,10 @@
  */
 
 export interface TerminalOpts {
-  /** The session's id: `hm:<tile>`. */
+  /** The session's id: `hm:<tile>`, or one of its own for a window's session in this process. */
   tileId: string;
+  /** The tile it is the session of, which its id does not always say. */
+  tile?: string;
   /** Where it runs: a directory on the host, or a remote one (`machine://` or `ssh://`). */
   cwd: string;
   cmd: string;

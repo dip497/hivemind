@@ -60,7 +60,7 @@ export function serveReplica(
   store: WorkspaceStore,
   repo: string,
   channel: SyncChannel,
-  opts: { seen: string | null; access: Access; changes: Changes; writer: string; onDropped?: (why: string) => void },
+  opts: { seen: string | null; access: Access; changes: Changes; writer: string; onDropped?: (why: string) => void; device?: string },
 ): () => void {
   let theirs: Uint8Array | null = opts.seen ? fromB64(opts.seen) : null;
   const lacking = (): string => {
@@ -77,7 +77,7 @@ export function serveReplica(
     if (m?.t !== "update") return;
     if (!mayEdit(opts.access)) return opts.onDropped?.("a viewer's change");
     try {
-      store.importFrom(repo, fromB64(m.data), { writer: opts.writer }, (before, after) => refusedEdit(before, after, opts.access));
+      store.importFrom(repo, fromB64(m.data), { writer: opts.writer }, (before, after) => refusedEdit(before, after, opts.access, opts.device));
     } catch (e) {
       opts.onDropped?.(e instanceof RefusedImport ? `a change its role does not allow: ${e.message}` : `a change that is not a document's (${e instanceof Error ? e.message : String(e)})`);
     }

@@ -513,6 +513,8 @@ export interface HiveIpc {
   // ── PTY ───────────────────────────────────────────────────
   ptySpawn(opts: {
     tileId: string;
+    /** The tile it is the session of: its id is not always `hm:<tile>`. */
+    tile?: string;
     cwd: string;
     cmd: string;
     args?: string[];

@@ -19,6 +19,10 @@ import type { SessionBackend } from "./terminals.js";
 export interface DeviceSessionsOptions {
   /** Connect to one of the person's devices. */
   dial(device: string): Promise<Link>;
+  /** Whether `device` is one of the person's. A frame on anyone else's machine runs what its
+   *  person placed there, on their machine (M4): nothing is started there from here, and no
+   *  connection is made to it. */
+  mine(device: string): boolean;
   /** An event from a device's daemon about a session this host runs there (an agent's status). */
   onEvent?(topic: string, data: unknown): void;
   /** How the connection to a device is doing. */
@@ -104,6 +108,10 @@ export function deviceSessions(o: DeviceSessionsOptions): DeviceSessions {
     start: async (opts, out) => {
       const at = parseDeviceUri(opts.cwd);
       if (!at) throw new Error(`${opts.cwd} is not a folder on one of your devices`);
+      if (!o.mine(at.device)) {
+        if (opts.attachOnly) return { pid: -1 };
+        throw new Error("this frame runs on someone else's machine: what runs there is theirs to start");
+      }
       const ep = endpointFor(at.device);
       tiles.set(opts.tileId, ep);
       const env = opts.initialPrompt ? { ...(opts.env ?? {}), [INITIAL_PROMPT_ENV]: opts.initialPrompt } : opts.env;

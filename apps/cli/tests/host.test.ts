@@ -280,7 +280,7 @@ describe.skipIf(!built)("hive host", () => {
 
       // A shell in a frame on the host's folder, started from the laptop: it runs on the host.
       const frame = machineUri(link.device, builds);
-      const sessions = deviceSessions({ dial: (device) => laptop.dial(device, where) });
+      const sessions = deviceSessions({ dial: (device) => laptop.dial(device, where), mine: () => true });
       // What it is given to run with goes along, but never this machine's control-plane credentials.
       const shell = {
         tileId: "hm:t-build", cwd: frame, cmd: "sh", args: ["-c", 'pwd > ran.txt; echo "$HCP_TOKEN|$HIVE_HCP_SOCK|$BUILD" > env.txt; sleep 2; echo finished > after.txt; sleep 30'], cols: 80, rows: 24,
@@ -297,7 +297,7 @@ describe.skipIf(!built)("hive host", () => {
       expect(await until(() => read(path.join(builds, "after.txt")), "the shell to run on")).toBe("finished");
 
       // A device that is not the person's is not let in to start one.
-      const theirs = deviceSessions({ dial: (device) => stranger.dial(device, where) });
+      const theirs = deviceSessions({ dial: (device) => stranger.dial(device, where), mine: () => true });
       await expect(theirs.start({ ...shell, tileId: "hm:t-theirs", args: ["-c", "touch theirs.txt"] }, { data: () => {}, exit: () => {} })).rejects.toThrow();
       expect(fs.existsSync(path.join(builds, "theirs.txt"))).toBe(false);
       theirs.close();

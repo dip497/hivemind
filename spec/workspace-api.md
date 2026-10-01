@@ -1,4 +1,4 @@
-# Workspace API (0.7)
+# Workspace API (0.8)
 
 What a workspace's host is asked for, and what it answers. The host is the machine the
 workspace's repo is on; today its callers are the app's windows and the dev-bridge, and later a
@@ -70,7 +70,10 @@ naming and grouping what is on the board, *Can edit board*; placing, taking away
 a tile that runs something on the host runs (a terminal's, an agent's or a browser page's: its
 kind, command, arguments, session or page), or moving it to another frame, *Can drive agents*;
 and where a frame's tiles run (its folder, its worktree and branch, the frame it nests in), and
-taking away a frame that says so, the owner's. A peer's `terminal.open` of a
+taking away a frame that says so, the owner's. But anyone who may edit the board may put a frame
+of their own on their own device (`machine://<their device id>/path`, and nothing else said of
+where it runs), and place, change or take away the tiles in it: those run on their machine, as
+they placed them there, never on the host's (M4). A peer's `terminal.open` of a
 session already running shows it (`attachOnly`), whatever its role. A peer is sent only the
 events about its workspace's tiles, and a tile outside the workspace is refused to it. A
 terminal is named by its session, `hm:<tile>`; the tile is the workspace's. Events reach a peer
@@ -142,7 +145,7 @@ log.
 
 | `status.all` | | `[{tileId, status}]`, every agent session's status (`spec/status.md`) | read |
 | `link.list` | | `{pipes: [{src, dst}], spawns: [{parent, child}]}` | read |
-| `terminal.open` | `{tileId, cwd, cmd, args?, cols, rows, env?, initialPrompt?, attachOnly?, liveOnly?}` | `{pid, joined}`: the first client to open a session starts it; one that opens it after joins it (`joined`), sent the host's screen of it first | target the tile, detail the program, when it starts a session the host did not ask for itself and the client did not only attach to |
+| `terminal.open` | `{tileId, tile?, cwd, cmd, args?, cols, rows, env?, initialPrompt?, attachOnly?, liveOnly?}` (`tile`: the tile it is the session of, when `tileId` is not `hm:<tile>`) | `{pid, joined}`: the first client to open a session starts it; one that opens it after joins it (`joined`), sent the host's screen of it first | target the tile, detail the program, when it starts a session the host did not ask for itself and the client did not only attach to |
 | `plan.list` | `repo` | the plans the workspace's agents wait on a person for: `[{requestId, tileId, plan, cwd}]`; each after it is a `plan.review` event | |
 | `plan.decide` | `tile`, `requestId`, `"allow"` or `"deny"`, `feedback`? | `{answered, by}`: the first answer is the one the agent gets; a later one, or one about another tile's plan, answers nothing (`by`: who answered first) | target the agent's tile, detail the answer |
 
